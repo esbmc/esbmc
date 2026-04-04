@@ -1624,7 +1624,7 @@ void dereferencet::construct_struct_ref_from_const_offset_array(
   // not the case, just let the array recursive handler handle it. It'll bail
   // if access is unaligned, and reduces us to constructing a constant
   // reference from the base subtype, through the correct recursive handler.
-  if (base_subtype->get_width() != 8)
+  if (!is_byte_type(base_subtype))
   {
     construct_from_array(value, offset, type, guard, mode, alignment);
     return;
@@ -1808,7 +1808,7 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
   // Is this a non-byte-array array?
   if (
     is_array_type(value->type) &&
-    get_base_array_subtype(value->type)->get_width() != 8)
+    !is_byte_type(get_base_array_subtype(value->type)))
   {
     const array_type2t &arr_type = to_array_type(value->type);
     // We can legally access various offsets into arrays. Generate an index
@@ -1930,7 +1930,7 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
 
   if (
     is_array_type(value->type) &&
-    get_base_array_subtype(value->type)->get_width() == 8)
+    is_byte_type(get_base_array_subtype(value->type)))
   {
     // This is a byte array. We can reconstruct a structure from this, if
     // we don't overflow bounds. Start by encoding an assertion.
