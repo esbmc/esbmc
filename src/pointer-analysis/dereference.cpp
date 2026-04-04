@@ -1640,7 +1640,6 @@ void dereferencet::construct_struct_ref_from_const_offset_array(
     const union_type2t &uniontype = to_union_type(type);
     if (uniontype.members.empty())
     {
-      dereference_failure("Memory model", "Access to empty union type", guard);
       value = make_failed_symbol(type);
       return;
     }
@@ -1657,7 +1656,6 @@ void dereferencet::construct_struct_ref_from_const_offset_array(
   const struct_type2t &structtype = to_struct_type(type);
   if (structtype.members.empty())
   {
-    dereference_failure("Memory model", "Access to empty struct type", guard);
     value = make_failed_symbol(type);
     return;
   }
@@ -1772,6 +1770,14 @@ void dereferencet::construct_struct_ref_from_dyn_offset(
   const guardt &guard,
   modet mode)
 {
+  if (
+    (is_union_type(type) && to_union_type(type).members.empty()) ||
+    (is_struct_type(type) && to_struct_type(type).members.empty()))
+  {
+    value = make_failed_symbol(type);
+    return;
+  }
+
   // This is much more complicated -- because we don't know the offset here,
   // we need to go through all the possible fields that this might (legally)
   // resolve to and switch on them; then assert that one of them is accessed.
@@ -2002,6 +2008,8 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
     {
       // For unions from byte arrays, read the first member at offset
       const union_type2t &uniontype = to_union_type(type);
+      if (uniontype.members.empty())
+        return;
       expr2tc target = value; // The byte array
       expr2tc union_offs = offs;
       simplify(union_offs);
