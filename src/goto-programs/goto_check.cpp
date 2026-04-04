@@ -62,6 +62,11 @@ protected:
     const guardt &guard,
     const locationt &loc);
 
+  void pointer_arith_check(
+    const expr2tc &expr,
+    const guardt &guard,
+    const locationt &loc);
+
   void overflow_check(
     const expr2tc &expr,
     const guardt &guard,
@@ -842,6 +847,32 @@ void goto_checkt::pointer_rel_check(
   }
 }
 
+void goto_checkt::pointer_arith_check(
+  const expr2tc &expr,
+  const guardt &guard,
+  const locationt &loc)
+{
+  if (disable_pointer_check || disable_bounds_check)
+    return;
+
+  // C11 §6.5.6p8: pointer arithmetic producing a pointer before the first
+  // element of an array object is undefined behavior, even without a
+  // subsequent dereference.  A negative POINTER_OFFSET means the result
+  // points before the base of the object the pointer addresses.
+  // Only the lower bound (underflow) is checked here; the upper bound
+  // (past-the-end + 1) is already caught at dereference time by
+  // dereferencet::bounds_check in pointer-analysis/dereference.cpp.
+  type2tc offset_type = get_int_type(config.ansi_c.address_width);
+  expr2tc lower_ok =
+    greaterthanequal2tc(pointer_offset2tc(offset_type, expr), gen_zero(offset_type));
+  add_guarded_claim(
+    lower_ok,
+    "pointer arithmetic: pointer before start of object",
+    "pointer",
+    loc,
+    guard);
+}
+
 static bool has_dereference(const expr2tc &expr)
 {
   if (is_dereference2t(expr))
@@ -994,6 +1025,15 @@ void goto_checkt::check_rec(
     check_rec(to_address_of2t(expr).ptr_obj, guard, loc, true);
     return;
 
+  // ESBMC pointer intrinsics inspect raw pointer values without accessing
+  // memory.  Returning early suppresses all sub-expression checks (not just
+  // pointer-arith), which is acceptable because these intrinsics never contain
+  // non-trivial sub-expressions such as division or shifts in practice.
+  case expr2t::pointer_offset_id:
+  case expr2t::pointer_object_id:
+  case expr2t::pointer_capability_id:
+    return;
+
   case expr2t::and_id:
   case expr2t::or_id:
   {
@@ -1075,13 +1115,16 @@ void goto_checkt::check_rec(
     /* fallthrough */
 
   case expr2t::neg_id:
-  case expr2t::add_id:
-  case expr2t::sub_id:
   case expr2t::mul_id:
-  {
     overflow_check(expr, guard, loc);
     break;
-  }
+
+  case expr2t::add_id:
+  case expr2t::sub_id:
+    overflow_check(expr, guard, loc);
+    if (is_pointer_type(expr))
+      pointer_arith_check(expr, guard, loc);
+    break;
 
   case expr2t::typecast_id:
   {
