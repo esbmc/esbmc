@@ -434,7 +434,7 @@ static bool is_round_to_away(const expr2tc &rounding_mode)
          BigInt(ieee_floatt::ROUND_TO_AWAY);
 }
 
-std::pair<smt_astt, smt_astt> smt_convt::apply_ieee754_rne_interval_add(
+std::pair<smt_astt, smt_astt> smt_convt::apply_ieee754_rne_enclosure(
   smt_astt real_result,
   smt_astt lo_r,
   smt_astt hi_r,
@@ -456,7 +456,7 @@ std::pair<smt_astt, smt_astt> smt_convt::apply_ieee754_rne_interval_add(
   }
   else
   {
-    assert(!"apply_ieee754_rne_interval_add: unsupported FP format");
+    assert(!"apply_ieee754_rne_enclosure: unsupported FP format");
   }
 
   smt_sortt rs = mk_real_sort();
@@ -492,13 +492,13 @@ std::pair<smt_astt, smt_astt> smt_convt::apply_ieee754_rne_interval_add(
   return {ra_lo, ra_hi};
 }
 
-std::pair<smt_astt, smt_astt> smt_convt::apply_ieee754_rna_interval_add(
+std::pair<smt_astt, smt_astt> smt_convt::apply_ieee754_rna_enclosure(
   smt_astt real_result,
   smt_astt lo_r,
   smt_astt hi_r,
   const floatbv_type2t &fbv_type)
 {
-  // Parallel to apply_ieee754_rne_interval_add.
+  // Parallel to apply_ieee754_rne_enclosure.
   // ROUND_TO_AWAY uses the same B_near constants and formula shape as
   // ROUND_TO_EVEN (same unit roundoff); the only difference is the symbol
   // name prefix: ra_lo_aw:: / ra_hi_aw:: to match the RNA single-step path.
@@ -518,7 +518,7 @@ std::pair<smt_astt, smt_astt> smt_convt::apply_ieee754_rna_interval_add(
   }
   else
   {
-    assert(!"apply_ieee754_rna_interval_add: unsupported FP format");
+    assert(!"apply_ieee754_rna_enclosure: unsupported FP format");
   }
 
   smt_sortt rs = mk_real_sort();
@@ -1421,10 +1421,10 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
           std::pair<smt_astt, smt_astt> bounds;
           if (is_nearest_rounding_mode(rounding_mode))
             bounds =
-              apply_ieee754_rne_interval_add(real_result, lo_r, hi_r, fbv_type);
+              apply_ieee754_rne_enclosure(real_result, lo_r, hi_r, fbv_type);
           else if (is_round_to_away(rounding_mode))
             bounds =
-              apply_ieee754_rna_interval_add(real_result, lo_r, hi_r, fbv_type);
+              apply_ieee754_rna_enclosure(real_result, lo_r, hi_r, fbv_type);
           ir_ra_interval_map[real_result] = {bounds.first, bounds.second};
           a = real_result;
           interval_lifted = true;
@@ -1485,7 +1485,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
           smt_astt lo_r = mk_sub(iv1.lo, iv2.hi); // L_R = L_x - U_y
           smt_astt hi_r = mk_sub(iv1.hi, iv2.lo); // U_R = U_x - L_y
           auto bounds =
-            apply_ieee754_rne_interval_add(real_result, lo_r, hi_r, fbv_type);
+            apply_ieee754_rne_enclosure(real_result, lo_r, hi_r, fbv_type);
           ir_ra_interval_map[real_result] = {bounds.first, bounds.second};
           a = real_result;
           interval_lifted = true;

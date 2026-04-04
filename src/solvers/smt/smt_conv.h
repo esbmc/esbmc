@@ -1011,21 +1011,21 @@ private:
    *    Point-interval fallback (lo_r == hi_r == real_result) produces a
    *    formula structurally equivalent to the single-step RNE path.
    *  Returns: {ra_lo, ra_hi} for storage in ir_ra_interval_map. */
-  std::pair<smt_astt, smt_astt> apply_ieee754_rne_interval_add(
+  std::pair<smt_astt, smt_astt> apply_ieee754_rne_enclosure(
     smt_astt real_result,
     smt_astt lo_r,
     smt_astt hi_r,
     const floatbv_type2t &fbv_type);
 
   /** Interval-lifted RNA enclosure helper for ieee_add (--ir-ieee only).
-   *  Parallel to apply_ieee754_rne_interval_add; uses the same B_near
+   *  Parallel to apply_ieee754_rne_enclosure; uses the same B_near
    *  constants (eps_rel = 2^-53 double / 2^-24 single) and identical formula
    *  shape because ROUND_TO_AWAY is a nearest-rounding mode with the same
    *  unit roundoff as ROUND_TO_EVEN.
    *  Inputs / behavior / returns: identical to the RNE helper above,
    *  except fresh symbols are named ra_lo_aw::N / ra_hi_aw::N to match
    *  the RNA single-step naming convention. */
-  std::pair<smt_astt, smt_astt> apply_ieee754_rna_interval_add(
+  std::pair<smt_astt, smt_astt> apply_ieee754_rna_enclosure(
     smt_astt real_result,
     smt_astt lo_r,
     smt_astt hi_r,
