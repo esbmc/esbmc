@@ -1630,12 +1630,38 @@ void dereferencet::construct_struct_ref_from_const_offset_array(
     return;
   }
 
-  // Access is creating a structure reference from on top of a byte
+  // Access is creating a structure/union reference from on top of a byte
   // array. Clearly, this is an expensive operation, but it's necessary for
   // the implementation of malloc.
-  std::vector<expr2tc> fields;
-  assert(is_struct_type(type));
+  assert(is_struct_type(type) || is_union_type(type));
+
+  if (is_union_type(type))
+  {
+    const union_type2t &uniontype = to_union_type(type);
+    if (uniontype.members.empty())
+    {
+      dereference_failure("Memory model", "Access to empty union type", guard);
+      value = make_failed_symbol(type);
+      return;
+    }
+    // For unions all members overlap at the same offset; reconstruct using
+    // the first member, mirroring construct_struct_ref_from_dyn_offset.
+    expr2tc target = value;
+    build_reference_rec(
+      target, gen_ulong(intref.value), uniontype.members[0], guard, mode);
+    std::vector<expr2tc> fields = {target};
+    value = constant_union2tc(type, uniontype.member_names[0], fields);
+    return;
+  }
+
   const struct_type2t &structtype = to_struct_type(type);
+  if (structtype.members.empty())
+  {
+    dereference_failure("Memory model", "Access to empty struct type", guard);
+    value = make_failed_symbol(type);
+    return;
+  }
+  std::vector<expr2tc> fields;
   BigInt struct_offset = intref.value;
   for (const type2tc &target_type : structtype.members)
   {
