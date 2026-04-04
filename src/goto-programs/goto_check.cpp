@@ -863,8 +863,8 @@ void goto_checkt::pointer_arith_check(
   // (past-the-end + 1) is already caught at dereference time by
   // dereferencet::bounds_check in pointer-analysis/dereference.cpp.
   type2tc offset_type = get_int_type(config.ansi_c.address_width);
-  expr2tc lower_ok =
-    greaterthanequal2tc(pointer_offset2tc(offset_type, expr), gen_zero(offset_type));
+  expr2tc lower_ok = greaterthanequal2tc(
+    pointer_offset2tc(offset_type, expr), gen_zero(offset_type));
   add_guarded_claim(
     lower_ok,
     "pointer arithmetic: pointer before start of object",
