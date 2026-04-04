@@ -381,6 +381,26 @@ void goto_convertt::remove_sideeffects(
       expr.op0().is_symbol())
     {
       const symbolt *fsym = ns.lookup(expr.op0().identifier());
+
+      // In non-contract mode, drop all contract annotation calls entirely so
+      // they have zero effect on the GOTO program (no FUNCTION_CALL step, no
+      // side-effect processing of the argument).  The declarations remain in
+      // the unconditional intrinsics section so annotated files still compile.
+      if (
+        fsym && options.get_option("enforce-contract").empty() &&
+        options.get_option("replace-call-with-contract").empty() &&
+        !options.get_bool_option("enforce-all-contracts") &&
+        !options.get_bool_option("replace-all-contracts"))
+      {
+        const std::string &fname = id2string(fsym->name);
+        if (
+          fname == "__ESBMC_requires" || fname == "__ESBMC_ensures" ||
+          fname == "__ESBMC_assigns_impl")
+        {
+          expr.make_nil();
+          return;
+        }
+      }
       if (fsym && fsym->name == "__ESBMC_loop_invariant")
       {
         exprt::operandst &args = expr.op1().operands();
