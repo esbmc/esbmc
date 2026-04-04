@@ -12,7 +12,7 @@ namespace complex_utils
 namespace
 {
 
-std::string trim(std::string s)
+std::string trim(const std::string &s)
 {
   size_t b = 0;
   while (b < s.size() && std::isspace(static_cast<unsigned char>(s[b])))
