@@ -488,6 +488,15 @@ __ESBMC_HIDE:;
   return &__esbmc_errno;
 }
 
+/* macOS uses __error() instead of __errno_location() */
+#if defined(__APPLE__) || defined(__MACH__)
+int *__error(void)
+{
+__ESBMC_HIDE:;
+  return &__esbmc_errno;
+}
+#endif
+
 int pipe(int pipefd[2])
 {
 __ESBMC_HIDE:;

@@ -1,0 +1,4 @@
+CORE
+main.c
+--unwind 2
+\A(?=[\s\S]*VERIFICATION SUCCESSFUL)(?![\s\S]*extern variable with id)[\s\S]*\Z

@@ -103,8 +103,43 @@ bool clang_cpp_languaget::typecheck(contextt &context, const std::string &)
   return false;
 }
 
+/// Resolve extern/nil symbols in \p context using definitions from \p src.
+/// Only patches symbols that are extern with a nil value in \p context and
+/// have a non-extern definition in \p src.  Uses direct field assignment rather
+/// than c_link to avoid duplicate-symbol errors from shared class definitions.
+static void patch_extern_symbols(contextt &context, const contextt &src)
+{
+  context.Foreach_operand([&src](symbolt &s) {
+    if (!s.is_extern || !s.value.is_nil())
+      return;
+    const symbolt *src_sym = src.find_symbol(s.id);
+    if (!src_sym || src_sym->is_extern)
+      return;
+    s.is_extern = false;
+    if (!src_sym->value.is_nil())
+      s.value = src_sym->value;
+  });
+}
+
 bool clang_cpp_languaget::final(contextt &context)
 {
+  // Compile libstl.cpp to provide concrete definitions for std::cin, std::cout,
+  // std::cerr.  Only when we're using the abstracted C++ includes (same
+  // condition as build_include_args) so types are consistent.
+  if (
+    !config.options.get_bool_option("no-abstracted-cpp-includes") &&
+    !config.options.get_bool_option("no-library"))
+  {
+    const std::string stl_path =
+      esbmct::abstract_cpp_includes() + "/libstl.cpp";
+    clang_cpp_languaget stl_lang;
+    contextt stl_ctx;
+    if (stl_lang.parse(stl_path) || stl_lang.typecheck(stl_ctx, stl_path))
+      log_warning("Failed to compile libstl.cpp; cin/cout/cerr may be unresolved");
+    else
+      patch_extern_symbols(context, stl_ctx);
+  }
+
   add_cprover_library(context);
   clang_cpp_maint cpp_main(context);
   return cpp_main.clang_main();
