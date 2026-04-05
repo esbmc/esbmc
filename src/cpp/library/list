@@ -1165,10 +1165,6 @@ public:
 
   ~list()
   {
-    for (int i = 0; i < this->_size; i++)
-    {
-      this->_list[i] = T();
-    }
     this->_size = 0;
   }
 
