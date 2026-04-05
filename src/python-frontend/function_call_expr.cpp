@@ -1,5 +1,6 @@
 #include <python-frontend/function_call_expr.h>
 #include <python-frontend/cmath_lowering_policy.h>
+#include <python-frontend/complex_handler.h>
 #include <python-frontend/complex_handler_utils.h>
 #include <python-frontend/exception_utils.h>
 #include <python-frontend/json_utils.h>
@@ -1327,25 +1328,6 @@ function_call_expr::lookup_python_symbol(const std::string &var_name) const
 
 exprt function_call_expr::handle_abs(nlohmann::json &arg) const
 {
-  auto build_complex_abs = [&](const exprt &complex_expr) -> exprt {
-    exprt real = member_exprt(complex_expr, "real", double_type());
-    exprt imag = member_exprt(complex_expr, "imag", double_type());
-
-    exprt real_sq("ieee_mul", double_type());
-    real_sq.copy_to_operands(real, real);
-    exprt imag_sq("ieee_mul", double_type());
-    imag_sq.copy_to_operands(imag, imag);
-
-    exprt sum("ieee_add", double_type());
-    sum.copy_to_operands(real_sq, imag_sq);
-
-    exprt sqrt_expr("ieee_sqrt", double_type());
-    sqrt_expr.copy_to_operands(sum);
-    sqrt_expr.add("rounding_mode") =
-      symbol_exprt("c:@__ESBMC_rounding_mode", int_type());
-    return sqrt_expr;
-  };
-
   // Handle the case where the input is a unary minus applied to a literal
   // (e.g., abs(-5) becomes abs(5)).
   if (arg.contains("_type") && arg["_type"] == "UnaryOp")
@@ -1398,7 +1380,7 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
         return dunder_result;
 
       if (is_complex_type(inferred_type))
-        return build_complex_abs(inferred_expr);
+        return converter_.get_complex_handler().handle_abs(inferred_expr);
 
       // Build a symbolic abs() expression with the resolved operand type
       exprt abs_expr("abs", inferred_type);
@@ -1428,7 +1410,7 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
         return dunder_result;
 
       if (is_complex_type(operand_type))
-        return build_complex_abs(operand_expr);
+        return converter_.get_complex_handler().handle_abs(operand_expr);
 
       // Build a symbolic abs() expression with the resolved operand type
       exprt abs_expr("abs", operand_type);
@@ -1460,7 +1442,7 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
     return fallback_expr;
 
   if (is_complex_type(fallback_expr.type()))
-    return build_complex_abs(fallback_expr);
+    return converter_.get_complex_handler().handle_abs(fallback_expr);
 
   exprt abs_expr("abs", fallback_expr.type());
   abs_expr.copy_to_operands(fallback_expr);
@@ -1588,65 +1570,8 @@ exprt function_call_expr::handle_complex() const
       "ValueError", msg);
   };
   auto zero = []() -> exprt { return from_double(0.0, double_type()); };
-  auto promote_int_arith_to_double =
-    [&](const exprt &input_expr, auto &self, std::size_t depth) -> exprt {
-    if (depth > 64)
-      return typecast_exprt(input_expr, double_type());
-
-    if (is_cpp_throw_expr(input_expr))
-      return input_expr;
-
-    const irep_idt id = input_expr.id();
-    if (
-      (id == "+" || id == "-" || id == "*" || id == "/") &&
-      input_expr.operands().size() == 2)
-    {
-      exprt lhs = self(input_expr.op0(), self, depth + 1);
-      if (is_cpp_throw_expr(lhs))
-        return lhs;
-      exprt rhs = self(input_expr.op1(), self, depth + 1);
-      if (is_cpp_throw_expr(rhs))
-        return rhs;
-
-      exprt op_expr;
-      if (id == "+")
-        op_expr = exprt("ieee_add", double_type());
-      else if (id == "-")
-        op_expr = exprt("ieee_sub", double_type());
-      else if (id == "*")
-        op_expr = exprt("ieee_mul", double_type());
-      else
-        op_expr = exprt("ieee_div", double_type());
-
-      op_expr.copy_to_operands(lhs, rhs);
-      return op_expr;
-    }
-
-    if (input_expr.type() == double_type())
-      return input_expr;
-
-    const typet &expr_type = input_expr.type();
-    const bool numeric_like = expr_type.is_floatbv() ||
-                              expr_type.is_signedbv() ||
-                              expr_type.is_unsignedbv() || expr_type.is_bool();
-    if (!numeric_like)
-      return input_expr;
-
-    return typecast_exprt(input_expr, double_type());
-  };
-  auto normalize_numeric_expr_for_complex = [&](exprt value) -> exprt {
-    if (is_cpp_throw_expr(value))
-      return value;
-    if (is_complex_type(value.type()))
-      return value;
-
-    if (
-      value.type().is_signedbv() || value.type().is_unsignedbv() ||
-      value.type().is_bool())
-      return promote_int_arith_to_double(value, promote_int_arith_to_double, 0);
-
-    return value;
-  };
+  auto normalize_numeric_expr_for_complex = [this](exprt value) -> exprt
+  { return converter_.get_complex_handler().normalize_numeric_expr(value); };
   auto is_cpp_throw = [](const exprt &e) -> bool {
     return e.statement() == "cpp-throw";
   };
@@ -3548,11 +3473,6 @@ function_call_expr::get_dispatch_table()
                                 ? call_["keywords"]
                                 : nlohmann::json::array();
 
-       auto raise_type_error = [this](const std::string &msg) -> exprt {
-         return converter_.get_exception_handler().gen_exception_raise(
-           "TypeError", msg);
-       };
-
        // Budget guard: when the argument is structurally expensive and the
        // model symbol exists, delegate to avoid solver blow-up.
        if (args.size() == 1 && !cmath_lowering_policy::within_budget(args[0]))
@@ -3576,127 +3496,8 @@ function_call_expr::get_dispatch_table()
          }
        }
 
-       auto as_complex_or_throw = [&](const nlohmann::json &node) -> exprt {
-         exprt value = converter_.get_expr(node);
-         if (is_cpp_throw_expr(value))
-           return value;
-         return promote_to_complex(value);
-       };
-
-       auto ieee_bin =
-         [](const irep_idt &id, const exprt &lhs, const exprt &rhs) -> exprt {
-         exprt out(id, double_type());
-         out.copy_to_operands(lhs, rhs);
-         return out;
-       };
-
-       auto complex_div = [&](const exprt &num, const exprt &den) -> exprt {
-         exprt a = member_exprt(num, "real", double_type());
-         exprt b = member_exprt(num, "imag", double_type());
-         exprt c = member_exprt(den, "real", double_type());
-         exprt d = member_exprt(den, "imag", double_type());
-         exprt ac = ieee_bin("ieee_mul", a, c);
-         exprt bd = ieee_bin("ieee_mul", b, d);
-         exprt bc = ieee_bin("ieee_mul", b, c);
-         exprt ad = ieee_bin("ieee_mul", a, d);
-         exprt cc = ieee_bin("ieee_mul", c, c);
-         exprt dd = ieee_bin("ieee_mul", d, d);
-
-         exprt denom = ieee_bin("ieee_add", cc, dd);
-         exprt real_num = ieee_bin("ieee_add", ac, bd);
-         exprt imag_num = ieee_bin("ieee_sub", bc, ad);
-         exprt real_r = ieee_bin("ieee_div", real_num, denom);
-         exprt imag_r = ieee_bin("ieee_div", imag_num, denom);
-         exprt normal_result = make_complex(real_r, imag_r);
-         // P21: Runtime ZeroDivisionError guard — denom==0 iff c==0 AND d==0.
-         const typet &dt = cached_double_type();
-         exprt zero = from_double(0.0, dt);
-         exprt c_zero = equality_exprt(c, zero);
-         exprt d_zero = equality_exprt(d, zero);
-         exprt denom_is_zero = and_exprt(c_zero, d_zero);
-         exprt raise_zdiv =
-           converter_.get_exception_handler().gen_exception_raise(
-             "ZeroDivisionError", "complex division by zero");
-         locationt loc = converter_.get_location_from_decl(call_);
-         raise_zdiv.location() = loc;
-         raise_zdiv.location().user_provided(true);
-         code_expressiont raise_code(raise_zdiv);
-         raise_code.location() = loc;
-         code_ifthenelset guard;
-         guard.cond() = denom_is_zero;
-         guard.then_case() = raise_code;
-         guard.location() = loc;
-         converter_.current_block->copy_to_operands(guard);
-         return normal_result;
-       };
-
-       auto complex_log_or_throw = [&](const exprt &z) -> exprt {
-         exprt real = member_exprt(z, "real", double_type());
-         exprt imag = member_exprt(z, "imag", double_type());
-
-         exprt rr = ieee_bin("ieee_mul", real, real);
-         exprt ii = ieee_bin("ieee_mul", imag, imag);
-         exprt sum = ieee_bin("ieee_add", rr, ii);
-         exprt mag = converter_.get_math_handler().handle_sqrt(sum, call_);
-         if (is_cpp_throw_expr(mag))
-           return mag;
-
-         exprt ln_mag = converter_.get_math_handler().handle_log(mag, call_);
-         if (is_cpp_throw_expr(ln_mag))
-           return ln_mag;
-
-         exprt angle =
-           converter_.get_math_handler().handle_atan2(imag, real, call_);
-         if (is_cpp_throw_expr(angle))
-           return angle;
-
-         return make_complex(ln_mag, angle);
-       };
-
-       if (func_name == "log10")
-       {
-         if (!keywords.empty())
-           return raise_type_error("cmath.log10() takes no keyword arguments");
-         if (args.size() != 1)
-           return raise_type_error("log10() takes exactly 1 argument");
-         exprt z = as_complex_or_throw(args[0]);
-         if (is_cpp_throw_expr(z))
-           return z;
-         exprt ln_z = complex_log_or_throw(z);
-         if (is_cpp_throw_expr(ln_z))
-           return ln_z;
-         exprt ln10 = make_complex(
-           from_double(2.302585092994046, double_type()),
-           from_double(0.0, double_type()));
-         return complex_div(ln_z, ln10);
-       }
-
-       if (args.empty() || args.size() > 2)
-         return raise_type_error(
-           "log() takes from 1 to 2 positional arguments");
-       if (!keywords.empty())
-         return raise_type_error("cmath.log() takes no keyword arguments");
-
-       const nlohmann::json *base_json = nullptr;
-       if (args.size() == 2)
-         base_json = &args[1];
-
-       exprt z = as_complex_or_throw(args[0]);
-       if (is_cpp_throw_expr(z))
-         return z;
-       exprt ln_z = complex_log_or_throw(z);
-       if (is_cpp_throw_expr(ln_z))
-         return ln_z;
-       if (base_json == nullptr)
-         return ln_z;
-
-       exprt base = as_complex_or_throw(*base_json);
-       if (is_cpp_throw_expr(base))
-         return base;
-       exprt ln_base = complex_log_or_throw(base);
-       if (is_cpp_throw_expr(ln_base))
-         return ln_base;
-       return complex_div(ln_z, ln_base);
+       return converter_.get_complex_handler().handle_cmath_log(
+         func_name, call_, args, keywords);
      },
      "cmath log/log10"},
 
