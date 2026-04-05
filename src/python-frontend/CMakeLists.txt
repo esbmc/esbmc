@@ -29,6 +29,7 @@ add_library(pythonfrontend STATIC
             symbol_id.cpp
             type_handler.cpp
             cmath_lowering_policy.cpp
+            complex_handler.cpp
             complex_handler_utils.cpp
             function_call_expr.cpp
             numpy_call_expr.cpp
