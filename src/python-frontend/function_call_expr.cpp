@@ -709,6 +709,84 @@ exprt function_call_expr::handle_int_to_str(nlohmann::json &arg) const
     std::vector<uint8_t>(str_val.begin(), str_val.end()), t);
 }
 
+exprt function_call_expr::handle_int_to_bytes() const
+{
+  const auto &args = call_["args"];
+  // Python accepts both int.to_bytes(x, ...) and x.to_bytes(...).
+  const bool is_type_method_call = call_["func"]["_type"] == "Attribute" &&
+                                   call_["func"]["value"]["_type"] == "Name" &&
+                                   call_["func"]["value"]["id"] == "int";
+
+  // In the type-method form, the integer value is passed explicitly as the
+  // first argument. In the instance-method form, it comes from the receiver.
+  if (
+    args.size() < (is_type_method_call ? 3 : 2) ||
+    args.size() > (is_type_method_call ? 4 : 3))
+  {
+    throw std::runtime_error(
+      is_type_method_call ? "int.to_bytes() expects 3 or 4 positional "
+                            "arguments"
+                          : "int.to_bytes() expects 2 or 3 positional "
+                            "arguments");
+  }
+
+  exprt value = is_type_method_call
+                  ? converter_.get_expr(args[0])
+                  : converter_.get_expr(call_["func"]["value"]);
+  const nlohmann::json &length_arg = args[is_type_method_call ? 1 : 0];
+  const nlohmann::json &byteorder_arg = args[is_type_method_call ? 2 : 1];
+
+  if (
+    !length_arg.contains("value") || !length_arg["value"].is_number_unsigned())
+    throw std::runtime_error(
+      "int.to_bytes() currently expects a constant unsigned length");
+
+  const std::size_t length = length_arg["value"].get<std::size_t>();
+
+  bool big_endian = true;
+  if (byteorder_arg.contains("value"))
+  {
+    if (byteorder_arg["value"].is_boolean())
+      big_endian = byteorder_arg["value"].get<bool>();
+    else if (byteorder_arg["value"].is_string())
+      big_endian = byteorder_arg["value"].get<std::string>() == "big";
+  }
+
+  const typet bytes_type = type_handler_.get_typet("bytes", length);
+  exprt result = gen_zero(bytes_type);
+  const typet &elem_type = bytes_type.subtype();
+
+  if (!value.type().is_unsignedbv())
+  {
+    // Convert the source value to an unsigned integer type before extracting
+    // individual bytes with shifts and masks.
+    const unsigned width =
+      (value.type().is_signedbv() || value.type().is_unsignedbv())
+        ? std::max(1u, bv_width(value.type()))
+        : 64;
+    value = typecast_exprt(value, unsignedbv_typet(width));
+  }
+
+  // Fill the output array one byte at a time. For big-endian we start from the
+  // most significant byte; for little-endian we start from the least significant one.
+  for (std::size_t i = 0; i < length; ++i)
+  {
+    const std::size_t byte_index = big_endian ? (length - 1 - i) : i;
+
+    // Shift the selected byte down to the low 8 bits and mask everything else out.
+    const exprt shift_amount = from_integer(byte_index * 8, value.type());
+    exprt shifted("shr", value.type());
+    shifted.copy_to_operands(value, shift_amount);
+
+    exprt masked("bitand", value.type());
+    masked.copy_to_operands(shifted, from_integer(0xff, value.type()));
+
+    result.operands().at(i) = typecast_exprt(masked, elem_type);
+  }
+
+  return result;
+}
+
 exprt function_call_expr::handle_float_to_str(nlohmann::json &arg) const
 {
   std::string str_val = std::to_string(arg["value"].get<double>());
@@ -3354,6 +3432,21 @@ function_call_expr::get_dispatch_table()
      [this]() { return handle_any(); },
      "any()"},
 
+    // int.to_bytes()
+    {[this]() {
+       if (call_["func"]["_type"] != "Attribute")
+         return false;
+       if (function_id_.get_function() != "to_bytes")
+         return false;
+
+       const auto &obj = call_["func"]["value"];
+       return (obj["_type"] == "Name" && obj["id"] == "int") ||
+              (obj["_type"] == "Name" &&
+               type_handler_.get_var_type(obj["id"]) == "int");
+     },
+     [this]() { return handle_int_to_bytes(); },
+     "int.to_bytes()"},
+
     // Min/Max functions
     {[this]() { return is_min_max_call(); },
      [this]() {
@@ -4795,6 +4888,32 @@ exprt function_call_expr::handle_general_function_call()
           arg = symbol_expr(tmp);
         }
         arg = typecast_exprt(address_of_exprt(arg), param_type);
+      }
+
+      // General object-reference coercion:
+      // when a pointer parameter receives a struct object argument, pass the
+      // object's address (materializing temporaries when required).
+      if (
+        function_type_ == FunctionType::Constructor &&
+        param_type.is_pointer() && arg_followed_type.is_struct() &&
+        !arg.is_address_of())
+      {
+        if (!arg.is_symbol())
+        {
+          symbolt &tmp = converter_.create_tmp_symbol(
+            call_, "$ptr_arg$", arg.type(), gen_zero(arg.type()));
+          code_declt tmp_decl(symbol_expr(tmp));
+          tmp_decl.location() = location;
+          converter_.current_block->copy_to_operands(tmp_decl);
+          code_assignt tmp_assign(symbol_expr(tmp), arg);
+          tmp_assign.location() = location;
+          converter_.current_block->copy_to_operands(tmp_assign);
+          arg = symbol_expr(tmp);
+        }
+
+        arg = address_of_exprt(arg);
+        if (!base_type_eq(arg.type(), param_type, converter_.ns))
+          arg = typecast_exprt(arg, param_type);
       }
     }
 

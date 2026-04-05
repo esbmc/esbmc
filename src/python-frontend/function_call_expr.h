@@ -143,6 +143,8 @@ private:
    */
   exprt handle_int_to_str(nlohmann::json &arg) const;
 
+  exprt handle_int_to_bytes() const;
+
   /*
    * Extracts a string representation from a symbol's constant value.
    * Handles both character arrays (e.g., ['6', '5']) and single-character
