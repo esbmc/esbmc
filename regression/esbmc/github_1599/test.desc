@@ -1,0 +1,4 @@
+CORE
+main.c
+--unwind 1 --overflow --no-unwinding-assertions --multi-property
+^VERIFICATION FAILED$
