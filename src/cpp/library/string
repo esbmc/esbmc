@@ -172,6 +172,7 @@ public:
 
     iterator operator-(int n) const
     {
+    __ESBMC_HIDE:;
       iterator buffer;
       buffer.pointer = pointer - sizeof(char) * n;
       buffer.pos = pos - n;
@@ -210,6 +211,7 @@ public:
     //It's like "--c"
     iterator &operator--()
     {
+    __ESBMC_HIDE:;
       pointer = pointer - sizeof(char);
       pos--;
       return *this;
@@ -221,6 +223,7 @@ public:
     //It's like "c--"
     iterator operator--(int _b)
     {
+    __ESBMC_HIDE:;
       iterator buffer = *this;
       pointer = pointer - sizeof(char);
       pos--;

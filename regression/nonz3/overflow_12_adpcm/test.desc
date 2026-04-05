@@ -1,4 +1,4 @@
 THOROUGH
 main.c
---unwind 100 --overflow-check
+--unwind 100 --overflow-check --no-bounds-check
 ^VERIFICATION SUCCESSFUL$

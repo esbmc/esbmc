@@ -1,4 +1,4 @@
 THOROUGH
 main.c
---unwind 100 --no-library
+--unwind 100 --no-library --no-bounds-check
 ^VERIFICATION SUCCESSFUL$

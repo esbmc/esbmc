@@ -1,0 +1,6 @@
+CORE
+main.c
+--
+^VERIFICATION FAILED$
+pointer arithmetic: pointer before start of object
+0
