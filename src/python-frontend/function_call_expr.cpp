@@ -1570,8 +1570,9 @@ exprt function_call_expr::handle_complex() const
       "ValueError", msg);
   };
   auto zero = []() -> exprt { return from_double(0.0, double_type()); };
-  auto normalize_numeric_expr_for_complex = [this](exprt value) -> exprt
-  { return converter_.get_complex_handler().normalize_numeric_expr(value); };
+  auto normalize_numeric_expr_for_complex = [this](exprt value) -> exprt {
+    return converter_.get_complex_handler().normalize_numeric_expr(value);
+  };
   auto is_cpp_throw = [](const exprt &e) -> bool {
     return e.statement() == "cpp-throw";
   };

@@ -49,8 +49,10 @@ const symbolt *complex_handler::find_cached_symbol(const std::string &id) const
 // Shared IEEE / complex arithmetic helpers
 // -----------------------------------------------------------------------
 
-exprt
-complex_handler::ieee_binop(const irep_idt &id, const exprt &x, const exprt &y)
+exprt complex_handler::ieee_binop(
+  const irep_idt &id,
+  const exprt &x,
+  const exprt &y)
 {
   exprt out(id, cached_double_type());
   out.copy_to_operands(x, y);
@@ -106,9 +108,8 @@ exprt complex_handler::complex_div(
   exprt yi_zero = equality_exprt(yi, zero);
   exprt denom_is_zero = and_exprt(yr_zero, yi_zero);
 
-  exprt raise_zdiv =
-    converter_.get_exception_handler().gen_exception_raise(
-      "ZeroDivisionError", "complex division by zero");
+  exprt raise_zdiv = converter_.get_exception_handler().gen_exception_raise(
+    "ZeroDivisionError", "complex division by zero");
 
   locationt loc = converter_.get_location_from_decl(loc_source);
   raise_zdiv.location() = loc;
@@ -146,8 +147,7 @@ exprt complex_handler::complex_log(
   if (ln_abs.statement() == "cpp-throw")
     return ln_abs;
 
-  exprt arg_z =
-    converter_.get_math_handler().handle_atan2(zi, zr, loc_source);
+  exprt arg_z = converter_.get_math_handler().handle_atan2(zi, zr, loc_source);
   if (arg_z.statement() == "cpp-throw")
     return arg_z;
 
@@ -225,8 +225,7 @@ exprt complex_handler::promote_int_arith_to_double(
     return input_expr;
 
   const typet &expr_type = input_expr.type();
-  const bool numeric_like = expr_type.is_floatbv() ||
-                            expr_type.is_signedbv() ||
+  const bool numeric_like = expr_type.is_floatbv() || expr_type.is_signedbv() ||
                             expr_type.is_unsignedbv() || expr_type.is_bool();
   if (!numeric_like)
     return input_expr;
@@ -338,8 +337,7 @@ exprt complex_handler::handle_binary_op(
         resolved_rhs = s->value;
     }
     else if (
-      rhs.id() == "+" || rhs.id() == "-" || rhs.id() == "*" ||
-      rhs.id() == "/")
+      rhs.id() == "+" || rhs.id() == "-" || rhs.id() == "*" || rhs.id() == "/")
     {
       resolved_rhs = converter_.get_math_handler().compute_expr(rhs);
     }
@@ -458,8 +456,8 @@ exprt complex_handler::handle_binary_op(
       if (!is_compatible_numeric(lhs) || !is_compatible_numeric(rhs))
         return raise_complex_type_error(
           "unsupported operand type(s) for " + op_symbol(op) + ": '" +
-          expr_python_type_name(lhs) + "' and '" +
-          expr_python_type_name(rhs) + "'");
+          expr_python_type_name(lhs) + "' and '" + expr_python_type_name(rhs) +
+          "'");
     }
 
     exprt lhs_complex = promote_to_complex(lhs);
@@ -482,10 +480,12 @@ exprt complex_handler::handle_binary_op(
         not_exprt(equality_exprt(a, c)), not_exprt(equality_exprt(b, d)));
 
     if (op == "Add")
-      return make_complex(ieee_binop("ieee_add", a, c), ieee_binop("ieee_add", b, d));
+      return make_complex(
+        ieee_binop("ieee_add", a, c), ieee_binop("ieee_add", b, d));
 
     if (op == "Sub")
-      return make_complex(ieee_binop("ieee_sub", a, c), ieee_binop("ieee_sub", b, d));
+      return make_complex(
+        ieee_binop("ieee_sub", a, c), ieee_binop("ieee_sub", b, d));
 
     if (op == "Mult")
     {
@@ -501,8 +501,7 @@ exprt complex_handler::handle_binary_op(
     return complex_div(lhs_complex, rhs_complex, element);
   }
 
-  return raise_complex_type_error(
-    "unsupported operation for complex operands");
+  return raise_complex_type_error("unsupported operation for complex operands");
 }
 
 // -----------------------------------------------------------------------
@@ -535,17 +534,15 @@ exprt complex_handler::handle_attribute(const nlohmann::json &element) const
   if (!(element.contains("func") && element["func"].contains("attr")))
     return nil_exprt();
 
-  const std::string &method_name =
-    element["func"]["attr"].get<std::string>();
+  const std::string &method_name = element["func"]["attr"].get<std::string>();
 
   if (method_name != "conjugate")
     return nil_exprt();
 
   const auto &args =
     element.contains("args") ? element["args"] : nlohmann::json::array();
-  const auto &keywords = element.contains("keywords")
-                           ? element["keywords"]
-                           : nlohmann::json::array();
+  const auto &keywords = element.contains("keywords") ? element["keywords"]
+                                                      : nlohmann::json::array();
 
   if (!args.empty() || !keywords.empty())
     return nil_exprt();
@@ -627,8 +624,8 @@ exprt complex_handler::handle_cmath_log(
       return ln_z;
 
     const typet &dt = cached_double_type();
-    exprt ln10 = make_complex(
-      from_double(2.302585092994046, dt), from_double(0.0, dt));
+    exprt ln10 =
+      make_complex(from_double(2.302585092994046, dt), from_double(0.0, dt));
     return complex_div(ln_z, ln10, call);
   }
 
