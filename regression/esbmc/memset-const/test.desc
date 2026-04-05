@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 memset-const.c
 
 ^VERIFICATION FAILED$
