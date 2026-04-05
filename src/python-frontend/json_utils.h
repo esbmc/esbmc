@@ -446,6 +446,30 @@ const JsonType find_var_decl(
 }
 
 template <typename JsonType>
+std::string get_annotation_type_name(const JsonType &annotation)
+{
+  if (annotation.contains("id"))
+    return annotation["id"];
+
+  if (
+    annotation.contains("_type") && annotation["_type"] == "Subscript" &&
+    annotation.contains("value") && annotation["value"].contains("id"))
+  {
+    std::string base_type =
+      annotation["value"]["id"].template get<std::string>();
+    if (annotation.contains("slice") && annotation["slice"].contains("id"))
+      return base_type + "[" +
+             annotation["slice"]["id"].template get<std::string>() + "]";
+    return base_type;
+  }
+
+  if (annotation.contains("value") && annotation["value"].contains("id"))
+    return annotation["value"]["id"];
+
+  return "";
+}
+
+template <typename JsonType>
 const JsonType get_var_value(
   const std::string &var_name,
   const std::string &function,

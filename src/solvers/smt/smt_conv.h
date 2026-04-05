@@ -572,7 +572,7 @@ public:
    *  subnormal range [4.941e-324, 2.225e-308). For single precision: overflow
    *  to ±3.403e+38, underflow below 1.401e-45, subnormal range [1.401e-45, 1.175e-38).
    *  Other formats return the original result unchanged.
-   *  Under --ir-ra, when rounding_mode is a concrete round-to-nearest constant
+   *  Under --ir-ieee, when rounding_mode is a concrete round-to-nearest constant
    *  (ROUND_TO_EVEN == 0), a tight symmetric epsilon enclosure is asserted.
    *  For symbolic or directed rounding modes the function falls back to a weak
    *  unconstrained enclosure (sound but imprecise); tight directed bounds are
@@ -977,7 +977,7 @@ private:
     const BigInt &numerator,
     const BigInt &denominator);
 
-  /** Interval metadata for the RNE ieee_add interval-lifting path (--ir-ra).
+  /** Interval metadata for the RNE ieee_add interval-lifting path (--ir-ieee).
    *  After each RNE ieee_add (double/single, int encoding), the {ra_lo, ra_hi}
    *  SMT symbols are stored here, keyed on the exact real_result AST pointer
    *  (pointer equality == SSA identity via smt_cache).  Subsequent RNE
@@ -996,7 +996,7 @@ private:
   };
   std::unordered_map<const smt_ast *, ra_interval_t> ir_ra_interval_map;
 
-  /** Interval-lifted RNE enclosure helper for ieee_add (--ir-ra only).
+  /** Interval-lifted RNE enclosure helper for ieee_add (--ir-ieee only).
    *  Called from ieee_add_id after verifying RNE mode + known format.
    *  Inputs:
    *    real_result  exact symbolic real for this addition (mk_add(side1,side2))
@@ -1011,7 +1011,21 @@ private:
    *    Point-interval fallback (lo_r == hi_r == real_result) produces a
    *    formula structurally equivalent to the single-step RNE path.
    *  Returns: {ra_lo, ra_hi} for storage in ir_ra_interval_map. */
-  std::pair<smt_astt, smt_astt> apply_ieee754_rne_interval_add(
+  std::pair<smt_astt, smt_astt> apply_ieee754_rne_enclosure(
+    smt_astt real_result,
+    smt_astt lo_r,
+    smt_astt hi_r,
+    const floatbv_type2t &fbv_type);
+
+  /** Interval-lifted RNA enclosure helper for ieee_add (--ir-ieee only).
+   *  Parallel to apply_ieee754_rne_enclosure; uses the same B_near
+   *  constants (eps_rel = 2^-53 double / 2^-24 single) and identical formula
+   *  shape because ROUND_TO_AWAY is a nearest-rounding mode with the same
+   *  unit roundoff as ROUND_TO_EVEN.
+   *  Inputs / behavior / returns: identical to the RNE helper above,
+   *  except fresh symbols are named ra_lo_aw::N / ra_hi_aw::N to match
+   *  the RNA single-step naming convention. */
+  std::pair<smt_astt, smt_astt> apply_ieee754_rna_enclosure(
     smt_astt real_result,
     smt_astt lo_r,
     smt_astt hi_r,
@@ -1021,10 +1035,11 @@ private:
 /** Given an array type, create a type2tc representing its domain. */
 type2tc make_array_domain_type(const array_type2t &arr);
 
-/** Given an array type, calculate the domain bitwidth it should have. For
- *  nondeterministically or infinite sized arrays, this defaults to the
- *  machine integer width. */
-unsigned long calculate_array_domain_width(const array_type2t &arr);
+/** Return the SMT domain bit-width for an array type.
+ *  For constant-size arrays this is the minimum bit-width needed to represent
+ *  every valid index.  For VLA, dynamic, or infinite arrays the size is not
+ *  statically known, so the machine word size is returned as a safe default. */
+unsigned long array_domain_width_or_word_size(const array_type2t &arr);
 
 // Define here to enable inlining
 inline smt_ast::smt_ast(smt_convt *ctx, smt_sortt s) : sort(s), context(ctx)

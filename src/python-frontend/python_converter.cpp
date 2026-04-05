@@ -554,7 +554,20 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
     if (!rhs_type.is_floatbv())
       rhs.type() = float_type;
   }
-  // Case 5: Align bit-widths between LHS and RHS if they differ
+  // Case 5 (P19): Promote real RHS to complex when LHS is complex.
+  // Must come BEFORE the width-alignment case: a complex struct is 128-bit
+  // while a scalar float is 64-bit, so width alignment would otherwise fire
+  // first and corrupt the float by assigning struct type to it.
+  // Handles: z = 1.0, z = n, z = True where z is declared as complex.
+  // Note: is_bool() must be explicit since is_integer_type() excludes bool.
+  else if (
+    is_complex_type(lhs_type) && !is_complex_type(rhs_type) &&
+    (rhs_type.is_floatbv() || type_utils::is_integer_type(rhs_type) ||
+     rhs_type.is_bool()))
+  {
+    rhs = promote_to_complex(rhs);
+  }
+  // Case 6: Align bit-widths between LHS and RHS if they differ
   else if (lhs_type.width() != rhs_type.width())
   {
     try
@@ -1769,6 +1782,8 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
       const exprt xi = member(x, "imag");
       const exprt yr = member(y, "real");
       const exprt yi = member(y, "imag");
+      const typet &dt = cached_double_type();
+      exprt zero = from_double(0.0, dt);
       exprt ac = ieee_binop("ieee_mul", xr, yr);
       exprt bd = ieee_binop("ieee_mul", xi, yi);
       exprt bc = ieee_binop("ieee_mul", xi, yr);
@@ -1778,9 +1793,26 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
       exprt numer_real = ieee_binop("ieee_add", ac, bd);
       exprt numer_imag = ieee_binop("ieee_sub", bc, ad);
       exprt denom = ieee_binop("ieee_add", c2, d2);
-      return make_complex(
+      exprt normal_result = make_complex(
         ieee_binop("ieee_div", numer_real, denom),
         ieee_binop("ieee_div", numer_imag, denom));
+      // P21: Runtime ZeroDivisionError guard — denom==0 iff yr==0 AND yi==0.
+      exprt yr_zero = equality_exprt(yr, zero);
+      exprt yi_zero = equality_exprt(yi, zero);
+      exprt denom_is_zero = and_exprt(yr_zero, yi_zero);
+      exprt raise_zdiv = get_exception_handler().gen_exception_raise(
+        "ZeroDivisionError", "complex division by zero");
+      locationt loc = get_location_from_decl(element);
+      raise_zdiv.location() = loc;
+      raise_zdiv.location().user_provided(true);
+      code_expressiont raise_code(raise_zdiv);
+      raise_code.location() = loc;
+      code_ifthenelset guard;
+      guard.cond() = denom_is_zero;
+      guard.then_case() = raise_code;
+      guard.location() = loc;
+      current_block->copy_to_operands(guard);
+      return normal_result;
     };
     auto complex_log = [&](const exprt &z) -> exprt {
       const exprt zr = member(z, "real");
@@ -1955,7 +1987,10 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
       exprt positive_power = pow_nonnegative(exponent_abs);
       exprt one = make_complex(
         from_double(1.0, double_type()), from_double(0.0, double_type()));
-      return complex_div(one, positive_power);
+      exprt result = complex_div(one, positive_power);
+      // P21: complex_div can return a ZeroDivisionError throw when divisor==0+0j.
+      // (z**n with n<0 and z==0+0j falls here.)
+      return result;
     }
 
     if (
@@ -2020,7 +2055,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
         return make_complex(real, imag);
       }
 
-      // op == "Div"
+      // op == "Div" (inline, mixed complex/real path)
       exprt ac = ieee_binop("ieee_mul", a, c);
       exprt bd = ieee_binop("ieee_mul", b, d);
       exprt bc = ieee_binop("ieee_mul", b, c);
@@ -2032,9 +2067,30 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
       exprt numer_imag = ieee_binop("ieee_sub", bc, ad);
       exprt denom = ieee_binop("ieee_add", c2, d2);
 
-      exprt real = ieee_binop("ieee_div", numer_real, denom);
-      exprt imag = ieee_binop("ieee_div", numer_imag, denom);
-      return make_complex(real, imag);
+      exprt real_div = ieee_binop("ieee_div", numer_real, denom);
+      exprt imag_div = ieee_binop("ieee_div", numer_imag, denom);
+      exprt normal_div_result = make_complex(real_div, imag_div);
+      // P21: Runtime ZeroDivisionError guard — denom==0 iff c==0 AND d==0.
+      {
+        const typet &dt = cached_double_type();
+        exprt zero = from_double(0.0, dt);
+        exprt c_zero = equality_exprt(c, zero);
+        exprt d_zero = equality_exprt(d, zero);
+        exprt denom_is_zero = and_exprt(c_zero, d_zero);
+        exprt raise_zdiv = get_exception_handler().gen_exception_raise(
+          "ZeroDivisionError", "complex division by zero");
+        locationt loc = get_location_from_decl(element);
+        raise_zdiv.location() = loc;
+        raise_zdiv.location().user_provided(true);
+        code_expressiont raise_code(raise_zdiv);
+        raise_code.location() = loc;
+        code_ifthenelset guard;
+        guard.cond() = denom_is_zero;
+        guard.then_case() = raise_code;
+        guard.location() = loc;
+        current_block->copy_to_operands(guard);
+        return normal_div_result;
+      }
     }
 
     return raise_complex_type_error(
@@ -2920,6 +2976,32 @@ python_converter::find_imported_symbol(const std::string &symbol_id) const
   return nullptr;
 }
 
+symbolt *
+python_converter::find_nested_function_symbol(const std::string &name) const
+{
+  if (name.empty() || current_func_name_.empty())
+    return nullptr;
+
+  for (std::string scope = current_func_name_; !scope.empty();)
+  {
+    ::symbol_id nested_func_sid(current_python_file, "", scope + "@F@" + name);
+    if (
+      symbolt *nested_func_symbol =
+        symbol_table_.find_symbol(nested_func_sid.to_string()))
+    {
+      if (nested_func_symbol->type.is_code())
+        return nested_func_symbol;
+    }
+
+    const std::size_t sep = scope.rfind("@F@");
+    if (sep == std::string::npos)
+      break;
+    scope.resize(sep);
+  }
+
+  return nullptr;
+}
+
 symbolt *python_converter::find_symbol(const std::string &sym_id) const
 {
   // When not loading models, check imports first so that user imports
@@ -3126,22 +3208,6 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
         member_exprt member(obj_expr, method_name, list_type);
         return member;
       }
-    }
-  }
-
-  // Handle str.join() method calls
-  // Python syntax: separator.join(iterable), e.g., " ".join(["a", "b"])
-  if (
-    element["func"]["_type"] == "Attribute" &&
-    element["func"]["attr"] == "join")
-  {
-    const auto &func = element["func"];
-    // Check if the caller is a string (Constant like " " or a Name variable)
-    if (
-      func.contains("value") && (func["value"]["_type"] == "Constant" ||
-                                 func["value"]["_type"] == "Name"))
-    {
-      return string_handler_.handle_str_join(element);
     }
   }
 
@@ -3381,6 +3447,13 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     // Create an empty set (modeled as list)
     python_set set_handler(*this, element);
     return set_handler.get_empty_set();
+  }
+
+  // TypeVar(...) is only used to build typing aliases and has no runtime
+  // effect in the frontend, so model it as an opaque placeholder value.
+  if (element["func"]["_type"] == "Name" && element["func"]["id"] == "TypeVar")
+  {
+    return gen_zero(any_type());
   }
 
   const std::string function = config.options.get_option("function");
@@ -4217,18 +4290,20 @@ exprt python_converter::create_member_expression(
 {
   typet clean_type = clean_attribute_type(attr_type);
   exprt source = symbol_exprt(symbol.id, symbol.type);
-  member_exprt member_expr(source, attr_name, clean_type);
-
-  // Apply adjust_member logic (from Clang frontend): insert dereference if source is pointer
-  exprt &base = member_expr.struct_op();
-  if (base.type().is_pointer())
+  if (source.type().is_pointer())
   {
     exprt deref("dereference");
-    deref.type() = base.type().subtype();
-    deref.move_to_operands(base);
-    base.swap(deref);
+    deref.type() = source.type().subtype();
+    deref.move_to_operands(source);
+    source = std::move(deref);
   }
+  typet source_type = source.type();
+  if (source_type.id() == "symbol")
+    source_type = ns.follow(source_type);
+  if (!source_type.is_struct() && !source_type.is_union())
+    return gen_zero(clean_type);
 
+  member_exprt member_expr(source, attr_name, clean_type);
   return member_expr;
 }
 
@@ -4470,7 +4545,15 @@ exprt python_converter::get_expr(const nlohmann::json &element)
             opt_st.has_component("value") && !opt_st.has_component(attr_name))
           {
             const typet &inner_raw = opt_st.get_component("value").type();
-            base_expr = member_exprt(base_expr, "value", inner_raw);
+            exprt optional_base = base_expr;
+            if (optional_base.type().is_pointer())
+            {
+              exprt deref("dereference");
+              deref.type() = optional_base.type().subtype();
+              deref.move_to_operands(optional_base);
+              optional_base = std::move(deref);
+            }
+            base_expr = member_exprt(optional_base, "value", inner_raw);
             base_type = inner_raw;
             if (base_type.is_pointer())
               base_type = base_type.subtype();
@@ -4500,19 +4583,16 @@ exprt python_converter::get_expr(const nlohmann::json &element)
             const typet &attr_type =
               struct_type.get_component(attr_name).type();
             typet clean_type = clean_attribute_type(attr_type);
-
-            member_exprt member_expr(base_expr, attr_name, clean_type);
-
-            // Insert dereference if needed
-            exprt &base = member_expr.struct_op();
-            if (base.type().is_pointer())
+            exprt member_base = base_expr;
+            if (member_base.type().is_pointer())
             {
               exprt deref("dereference");
-              deref.type() = base.type().subtype();
-              deref.move_to_operands(base);
-              base.swap(deref);
+              deref.type() = member_base.type().subtype();
+              deref.move_to_operands(member_base);
+              member_base = std::move(deref);
             }
 
+            member_exprt member_expr(member_base, attr_name, clean_type);
             expr = member_expr;
             break;
           }
@@ -4596,6 +4676,13 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         // Check if this Name refers to a function
         if (!is_class_attr && element["_type"] == "Name")
         {
+          if (
+            symbolt *nested_func_symbol = find_nested_function_symbol(var_name))
+          {
+            expr = symbol_expr(*nested_func_symbol);
+            break;
+          }
+
           symbol_id func_sid(current_python_file, "", var_name);
           symbolt *func_symbol =
             symbol_table_.find_symbol(func_sid.to_string());
@@ -4721,8 +4808,26 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         }
       }
 
-      // Get class definition from symbols table
-      symbolt *class_symbol = symbol_table_.find_symbol(obj_type_name);
+      // Get class definition from symbols table.
+      symbolt *class_symbol = obj_type_name.empty()
+                                ? nullptr
+                                : symbol_table_.find_symbol(obj_type_name);
+      if (!class_symbol)
+      {
+        std::string fallback_class_id;
+        symbol_table_.foreach_operand_in_order([&](const symbolt &s) {
+          if (!fallback_class_id.empty())
+            return;
+          if (s.id.as_string().find("tag-") == 0 && s.type.is_struct())
+          {
+            const struct_typet &st = to_struct_type(s.type);
+            if (st.has_component(attr_name))
+              fallback_class_id = s.id.as_string();
+          }
+        });
+        if (!fallback_class_id.empty())
+          class_symbol = symbol_table_.find_symbol(fallback_class_id);
+      }
       if (!class_symbol)
       {
         throw std::runtime_error("Class \"" + obj_type_name + "\" not found");
@@ -4730,6 +4835,36 @@ exprt python_converter::get_expr(const nlohmann::json &element)
 
       struct_typet &class_type =
         static_cast<struct_typet &>(class_symbol->type);
+      auto build_member_expr_from_class = [&](const typet &attr_type) -> exprt {
+        typet clean_type = clean_attribute_type(attr_type);
+        exprt base = symbol_expr(*symbol);
+        typet base_type = base.type();
+        if (base_type.id() == "symbol")
+          base_type = ns.follow(base_type);
+
+        bool points_to_struct = false;
+        if (base_type.is_pointer())
+        {
+          typet pointee = base_type.subtype();
+          if (pointee.id() == "symbol")
+            pointee = ns.follow(pointee);
+          points_to_struct = pointee.is_struct() || pointee.is_union();
+        }
+
+        if (!(base_type.is_struct() || base_type.is_union() ||
+              points_to_struct))
+          base = typecast_exprt(base, gen_pointer_type(class_type));
+
+        if (base.type().is_pointer())
+        {
+          exprt deref("dereference");
+          deref.type() = base.type().subtype();
+          deref.move_to_operands(base);
+          base = std::move(deref);
+        }
+
+        return member_exprt(base, attr_name, clean_type);
+      };
 
       if (is_converting_lhs)
       {
@@ -4760,7 +4895,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       if (is_converting_lhs && class_type.has_component(attr_name))
       {
         const typet &attr_type = class_type.get_component(attr_name).type();
-        expr = create_member_expression(*symbol, attr_name, attr_type);
+        expr = build_member_expr_from_class(attr_type);
 
         // Register as instance attribute
         register_instance_attribute(
@@ -4777,7 +4912,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
          is_complex_type(class_type)))
       {
         const typet &attr_type = class_type.get_component(attr_name).type();
-        expr = create_member_expression(*symbol, attr_name, attr_type);
+        expr = build_member_expr_from_class(attr_type);
       }
       // Otherwise use class attribute
       else
@@ -4821,7 +4956,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           if (class_type.has_component(attr_name))
           {
             const typet &attr_type = class_type.get_component(attr_name).type();
-            expr = create_member_expression(*symbol, attr_name, attr_type);
+            expr = build_member_expr_from_class(attr_type);
           }
           else
           {
@@ -6928,6 +7063,17 @@ void python_converter::get_compound_assign(
   // Reset RHS flag
   is_converting_rhs = false;
 
+  // P27: Promote real RHS to complex when LHS is complex (AugAssign path).
+  // adjust_statement_types() is NOT called on this path, so without this
+  // check, `z += 1.0` / `z *= 2` produce a struct/scalar type mismatch in IR.
+  if (
+    is_complex_type(lhs.type()) && !is_complex_type(rhs.type()) &&
+    (rhs.type().is_floatbv() || type_utils::is_integer_type(rhs.type()) ||
+     rhs.type().is_bool()))
+  {
+    rhs = promote_to_complex(rhs);
+  }
+
   code_assignt code_assign(lhs, rhs);
   code_assign.location() = loc;
   target_block.copy_to_operands(code_assign);
@@ -7368,17 +7514,14 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
     }
   }
 
-  // Python truthiness for complex in conditional contexts:
+  // P12: Python truthiness for complex in conditional contexts:
   // bool(z) == (z.real != 0.0 or z.imag != 0.0).
+  // Delegates to the single canonical implementation in type_handler.h.
   if (is_complex_type(cond.type()))
   {
-    exprt real = member_exprt(cond, "real", double_type());
-    exprt imag = member_exprt(cond, "imag", double_type());
-    exprt zero = from_double(0.0, double_type());
-    cond = or_exprt(
-      not_exprt(equality_exprt(real, zero)),
-      not_exprt(equality_exprt(imag, zero)));
-    cond.location() = get_location_from_decl(ast_node["test"]);
+    locationt loc = get_location_from_decl(ast_node["test"]);
+    cond = complex_to_bool_expr(cond);
+    cond.location() = loc;
   }
 
   // Recover type
@@ -7591,6 +7734,8 @@ typet python_converter::get_type_from_annotation(
     if (annotation_node.contains("id"))
     {
       std::string type_id = annotation_node["id"].get<std::string>();
+      if (type_id == "NoneType")
+        return any_type();
 
       if (type_id == "dict" || type_id == "Dict")
       {
@@ -8083,6 +8228,8 @@ typet python_converter::get_type_from_annotation(
   else if (annotation_node.contains("id"))
   {
     std::string type_id = annotation_node["id"].get<std::string>();
+    if (type_id == "NoneType")
+      return any_type();
 
     // Special handling for dict type — but only if not shadowed by a user class
     if (
@@ -8370,8 +8517,26 @@ size_t python_converter::register_function_argument(
   if (
     stored_param != nullptr && element.contains("annotation") &&
     !element["annotation"].is_null())
+  {
     get_typechecker().cache_annotation_types(
       *stored_param, element["annotation"]);
+
+    if (
+      element["annotation"].contains("_type") &&
+      element["annotation"]["_type"] == "Subscript" &&
+      element["annotation"].contains("value") &&
+      element["annotation"]["value"].contains("id"))
+    {
+      const std::string container_name =
+        element["annotation"]["value"]["id"].get<std::string>();
+      if (container_name == "List" || container_name == "list")
+      {
+        typet elem_type = type_handler_.get_list_type(element).subtype();
+        if (!elem_type.is_empty())
+          python_list::add_type_info_entry(arg_id, "", elem_type);
+      }
+    }
+  }
 
   // If the parameter is class-typed (e.g. Foo), copy instance attributes from
   // the class’ synthetic `self` symbol so method bodies can access members via
@@ -9032,8 +9197,8 @@ void python_converter::get_attributes_from_self(
           if (it != param_annotations.end())
             resolved = get_type_from_annotation(it->second, stmt);
         }
-        type = (!resolved.is_nil() && !resolved.is_empty()) ? resolved
-                                                            : pointer_type();
+        type =
+          (!resolved.is_nil() && !resolved.is_empty()) ? resolved : any_type();
       }
       else
         type = type_handler_.get_typet(annotated_type);

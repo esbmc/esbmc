@@ -1,8 +1,8 @@
-/* Regression test: theorem-driven tight enclosure under --ir-ra.
+/* Regression test: theorem-driven tight enclosure under --ir-ieee.
  *
  * PURPOSE
  * -------
- * Verifies that the SMT formula emitted by --ir-ra for a double-precision
+ * Verifies that the SMT formula emitted by --ir-ieee for a double-precision
  * addition contains the structural hallmarks of the NEW theorem-driven
  * encoding, NOT just the old containment-only (weak) encoding.
  *

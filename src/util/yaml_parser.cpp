@@ -97,12 +97,6 @@ bool yaml_parser::inject_loop_invariants(goto_functionst &goto_functions)
   expression_parser parser;
   for (const auto &inv : parsed_invariants_)
   {
-    if (inv.type != invariant::loop_invariant)
-    {
-      log_warning("currently, only loop invariants are supported");
-      continue;
-    }
-
     std::string func_id = "c:@F@" + inv.function;
     goto_functionst::function_mapt::iterator m_it =
       goto_functions.function_map.find(func_id);
@@ -112,7 +106,7 @@ bool yaml_parser::inject_loop_invariants(goto_functionst &goto_functions)
       Forall_goto_program_instructions (it, func)
       {
         int line = std::stoi(it->location.line().as_string());
-        if (it->is_goto() && !it->is_backwards_goto() && line == inv.line)
+        if (line == inv.line)
         {
           const expression_node *root = nullptr;
           if (parser.parse(inv.value, root))
@@ -141,14 +135,42 @@ bool yaml_parser::inject_loop_invariants(goto_functionst &goto_functions)
           expr2tc guard;
           migrate_expr(expr, guard);
 
-          goto_programt::targett t = func.insert(it);
-          t->type = LOOP_INVARIANT;
-          t->add_loop_invariant(guard);
-          t->location = it->location;
-          log_progress(
-            "Applied loop invariant: {} in line {}",
-            inv.value,
-            t->location.line());
+          switch (inv.type)
+          {
+          case invariant::loop_invariant:
+            if (it->is_goto() && !it->is_backwards_goto())
+            {
+              goto_programt::targett t = func.insert(it);
+              t->type = LOOP_INVARIANT;
+              t->add_loop_invariant(guard);
+              t->location = it->location;
+              log_progress(
+                "Applied loop invariant: {} in line {}",
+                inv.value,
+                t->location.line());
+            }
+            break;
+
+          case invariant::location_invariant:
+          {
+            goto_programt tmp;
+            goto_programt::targett t1 = tmp.add_instruction();
+            t1->make_assertion(guard);
+            t1->location = it->location;
+            func.destructive_insert(it, tmp);
+
+            log_progress(
+              "Applied location invariant: {} in line {}",
+              inv.value,
+              it->location.line());
+            break;
+          }
+
+          default:
+            log_error("unsupported invariant type: {}", inv.value);
+            break;
+          }
+
           break;
         }
       }

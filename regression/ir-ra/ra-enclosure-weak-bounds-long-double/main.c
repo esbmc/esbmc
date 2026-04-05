@@ -1,4 +1,4 @@
-/* Regression test: weak (unconstrained) enclosure for long double under --ir-ra.
+/* Regression test: weak (unconstrained) enclosure for long double under --ir-ieee.
  *
  * PURPOSE
  * -------

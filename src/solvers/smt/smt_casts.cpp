@@ -682,7 +682,7 @@ smt_astt smt_convt::convert_typecast(const expr2tc &expr)
 {
   const typecast2t &cast = to_typecast2t(expr);
 
-  // Under integer encoding (--ir/--ir-ra), fp values are represented as reals.
+  // Under integer encoding (--ir/--ir-ieee), fp values are represented as reals.
   // The following three cases handle fp<->int casts explicitly because the
   // generic bitvector-based path is incorrect when operands are real-encoded.
 

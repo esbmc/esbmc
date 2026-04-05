@@ -511,6 +511,11 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
   symbol.file_local = (vd.getStorageClass() == clang::SC_Static) ||
                       (!vd.isExternallyVisible() && !vd.hasGlobalStorage());
   symbol.is_thread_local = vd.getTLSKind() != clang::VarDecl::TLS_None;
+  // Preserve _Atomic qualifier so the data-race checker can skip this variable.
+  // get_type() strips _Atomic (see clang::Type::Atomic case), so we record it
+  // here on the symbol type instead.
+  if (vd.getType()->isAtomicType())
+    symbol.type.set("#atomic", true);
 
   if (
     symbol.static_lifetime && !symbol.is_extern &&
@@ -3224,10 +3229,12 @@ bool clang_c_convertert::get_cast_expr(
     break;
 #endif
 
+  case clang::CK_AtomicToNonAtomic:
   case clang::CK_NonAtomicToAtomic:
-    if (config.options.get_bool_option("dont-care-about-missing-extensions"))
-      break;
-    [[fallthrough]];
+    // get_type() strips _Atomic wrappers (clang::Type::Atomic case; see FIXME
+    // there about irep2 representation), so source and target types are already
+    // identical in ESBMC's IR. Both cast directions are no-ops.
+    break;
 
   default:
   {

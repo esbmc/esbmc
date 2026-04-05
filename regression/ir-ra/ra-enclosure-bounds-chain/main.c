@@ -1,4 +1,4 @@
-/* Regression: --ir-ra should process a small chain of double-precision
+/* Regression: --ir-ieee should process a small chain of double-precision
  * operations through the enclosure path. The assertion is intentionally false
  * so ESBMC produces a counterexample and exercises multiple enclosure sites. */
 #include <assert.h>

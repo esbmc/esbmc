@@ -73,6 +73,11 @@ extern "C"
 
 #define BT_BUF_SIZE 256
 
+// ANSI color/style escape sequences for terminal output
+#define CLR_BOLD_CYAN "\033[1;36m"
+#define CLR_BOLD "\033[1m"
+#define CLR_RESET "\033[0m"
+
 extern "C" const char buildidstring_buf[];
 extern "C" const unsigned int buildidstring_buf_size;
 
@@ -299,6 +304,9 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   options.cmdline(cmdline);
   set_verbosity_msg();
 
+  // Resolve --color option: validate and convert to boolean
+  options.set_option("color", resolve_color_option());
+
   if (cmdline.isset("git-hash"))
   {
     log_result("{}", esbmc_version_string());
@@ -322,10 +330,10 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   if (cmdline.isset("ir"))
     options.set_option("int-encoding", true);
 
-  if (cmdline.isset("ir-ra"))
+  if (cmdline.isset("ir-ieee"))
   {
     options.set_option("int-encoding", true);
-    options.set_option("ir-ra", true);
+    options.set_option("ir-ieee", true);
   }
   if (cmdline.isset("fixedbv"))
     options.set_option("fixedbv", true);
@@ -1896,6 +1904,21 @@ bool esbmc_parseoptionst::parse_goto_program(
         exit(0);
     }
 
+    // Expand --no-standard-checks into individual options before goto_convert,
+    // because VLA size checks are generated during goto conversion.
+    if (
+      cmdline.isset("no-standard-checks") ||
+      options.get_bool_option("no-standard-checks"))
+    {
+      options.set_option("no-pointer-check", true);
+      options.set_option("no-div-by-zero-check", true);
+      options.set_option("no-pointer-relation-check", true);
+      options.set_option("no-unlimited-scanf-check", true);
+      options.set_option("no-vla-size-check", true);
+      options.set_option("no-align-check", true);
+      options.set_option("no-bounds-check", true);
+    }
+
     log_progress("Generating GOTO Program");
     goto_convert(context, options, goto_functions);
   }
@@ -1961,7 +1984,9 @@ bool esbmc_parseoptionst::process_goto_program(
       for (size_t i = 1; i < cmdline.args.size(); i++)
         config.ansi_c.include_files.push_back(cmdline.args[i]);
 
-    // this should be before goto_check()
+    // Expand --no-standard-checks before goto_check (also expanded before
+    // goto_convert in parse_goto_program; re-expanding here is idempotent
+    // and covers the read_goto_binary path).
     if (
       cmdline.isset("no-standard-checks") ||
       options.get_bool_option("no-standard-checks"))
@@ -1973,9 +1998,6 @@ bool esbmc_parseoptionst::process_goto_program(
       options.set_option("no-vla-size-check", true);
       options.set_option("no-align-check", true);
       options.set_option("no-bounds-check", true);
-      //?
-      // options.set_option("no-abnormal-memory-leak", true);
-      // options.set_option("no-reachable-memory-leak", true);
     }
 
     // Start by removing all no-op instructions and unreachable code
@@ -2951,12 +2973,99 @@ void esbmc_parseoptionst::process_function_contracts(
   }
 }
 
+bool esbmc_parseoptionst::resolve_color_option() const
+{
+  const char *raw = cmdline.getval("color");
+  std::string val = (raw && *raw) ? raw : "auto";
+  if (val != "auto" && val != "always" && val != "never")
+  {
+    log_error(
+      "Invalid value for --color: '{}'. Must be auto, always, or never.", val);
+    exit(1);
+  }
+  return ENABLE_COLOR(val);
+}
+
+// Colorize --flag references found in description text with bold formatting.
+// Matches "--" followed by one or more alphanumeric/hyphen characters,
+// stopping at delimiters like '.', ',', ' ', ')', '\'', '"', or end of string.
+static std::string colorize_flag_refs(const std::string &text)
+{
+  std::string result;
+  size_t i = 0;
+  while (i < text.size())
+  {
+    if (
+      i + 2 < text.size() && text[i] == '-' && text[i + 1] == '-' &&
+      (std::isalnum(text[i + 2]) || text[i + 2] == '-'))
+    {
+      size_t start = i;
+      i += 2;
+      while (i < text.size() && (std::isalnum(text[i]) || text[i] == '-'))
+        i++;
+      result += CLR_BOLD;
+      result += text.substr(start, i - start);
+      result += CLR_RESET;
+    }
+    else
+    {
+      result += text[i];
+      i++;
+    }
+  }
+  return result;
+}
+
 // This prints the ESBMC version and a list of CMD options
 // available in ESBMC.
 void esbmc_parseoptionst::help()
 {
-  log_status("\n* * *           ESBMC {}          * * *", ESBMC_VERSION);
+  bool use_color = resolve_color_option();
+
+  // Print the "* * *     ESBMC x.y.z     * * *"
+  auto const esbmc_string = fmt::format(" ESBMC {} ", ESBMC_VERSION);
+  auto const title_start = std::string("* * * ");
+  auto const title_end = std::string(" * * *");
+  auto const inner =
+    80 - title_start.length() - title_end.length() - esbmc_string.length();
+  auto const left_pad = std::string(inner / 2, '=');
+  auto const right_pad = std::string(inner - inner / 2, '=');
+  log_status(
+    "\n{}{}{}{}{}", title_start, left_pad, esbmc_string, right_pad, title_end);
+
   std::ostringstream oss;
   oss << cmdline.cmdline_options;
-  log_status("{}", oss.str());
+
+  if (!use_color)
+  {
+    log_status("{}", oss.str());
+    return;
+  }
+
+  // Colorize: group headers in bold cyan, option names in bold,
+  // and --flag references in descriptions in bold
+  std::istringstream iss(oss.str());
+  std::string line;
+  while (std::getline(iss, line))
+  {
+    if (!line.empty() && line[0] != ' ' && line.back() == ':')
+      // Group header (e.g. "Printing options:")
+      fmt::print(stderr, CLR_BOLD_CYAN "{}" CLR_RESET "\n", line);
+    else if (
+      line.size() >= 3 && line[0] == ' ' && line[1] == ' ' && line[2] == '-')
+    {
+      // Option line: colorize the flag portion (up to the description)
+      auto desc_pos = line.find("  ", 4);
+      if (desc_pos != std::string::npos)
+        fmt::print(
+          stderr,
+          CLR_BOLD "{}" CLR_RESET "{}\n",
+          line.substr(0, desc_pos),
+          colorize_flag_refs(line.substr(desc_pos)));
+      else
+        fmt::print(stderr, CLR_BOLD "{}" CLR_RESET "\n", line);
+    }
+    else
+      fmt::print(stderr, "{}\n", colorize_flag_refs(line));
+  }
 }

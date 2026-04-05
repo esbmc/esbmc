@@ -100,6 +100,11 @@ void rw_sett::read_write_rec(
       {
         return; // ignore for now
       }
+
+      // C11 _Atomic variables are never involved in data races
+      // (§5.1.2.4p4: concurrent accesses to atomic objects are not races).
+      if (symbol->type.get_bool("#atomic"))
+        return;
     }
 
     irep_idt object = id2string(symbol_expr.get_identifier()) + suffix;

@@ -29,11 +29,13 @@ add_library(pythonfrontend STATIC
             symbol_id.cpp
             type_handler.cpp
             cmath_lowering_policy.cpp
+            complex_handler_utils.cpp
             function_call_expr.cpp
             numpy_call_expr.cpp
             function_call_builder.cpp
             string_builder.cpp
             string_handler.cpp
+            string_handler_utils.cpp
             exception_utils.cpp
             char_utils.cpp
             math_guard_utils.cpp

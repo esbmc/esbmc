@@ -537,6 +537,19 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   if (!is_defined)
     is_defined = converter_.is_imported_module(ast_type);
 
+  if (!is_defined)
+  {
+    const nlohmann::json &decl =
+      json_utils::find_var_decl(ast_type, "", converter_.ast());
+    if (
+      !decl.empty() && decl.contains("value") && decl["value"].is_object() &&
+      decl["value"].contains("_type") && decl["value"]["_type"] == "Call" &&
+      decl["value"].contains("func") && decl["value"]["func"].is_object() &&
+      decl["value"]["func"].contains("id") &&
+      decl["value"]["func"]["id"] == "TypeVar")
+      return any_type();
+  }
+
   // If still not found, it's a NameError
   if (!is_defined)
   {

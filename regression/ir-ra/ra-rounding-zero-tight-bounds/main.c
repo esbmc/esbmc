@@ -1,4 +1,4 @@
-/* Regression test: ROUND_TO_ZERO uses tight asymmetric enclosure under --ir-ra.
+/* Regression test: ROUND_TO_ZERO uses tight asymmetric enclosure under --ir-ieee.
  *
  * PURPOSE
  * -------

@@ -9,6 +9,7 @@
 #include <util/message.h>
 #include <nlohmann/json.hpp>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 // Forward declarations
@@ -224,6 +225,26 @@ public:
    * - "-".join(list_var) -> joined string
    */
   exprt handle_str_join(const nlohmann::json &call_json);
+
+  /**
+   * @brief Dispatch and handle string attribute method calls.
+   *
+   * Returns a non-nil expression when the attribute method is recognized as a
+   * supported string operation. Returns nil_exprt for non-string methods so
+   * callers can continue normal dispatch.
+   */
+  exprt handle_string_attribute_call(const nlohmann::json &call_json);
+
+  /**
+   * @brief Try fast-path folding for len() when argument is string-like.
+   *
+   * Returns non-nil when a compile-time or cheap symbolic shortcut is
+   * available. Returns nil_exprt when caller should fall back to the generic
+   * len() handling path.
+   */
+  exprt try_handle_len_string_fast_path(
+    const nlohmann::json &call_json,
+    const exprt &arg_expr);
 
   // String method operations
 
@@ -703,6 +724,11 @@ private:
   contextt &symbol_table_;
   type_handler &type_handler_;
   string_builder *string_builder_;
+  std::unordered_map<std::string, symbolt *> symbol_cache_;
+  std::unordered_map<std::string, int> assignment_count_cache_;
+  std::unordered_map<std::string, bool> assignment_has_augassign_cache_;
+  std::unordered_map<std::string, nlohmann::json> var_value_cache_;
+  std::string len_cache_scope_id_;
 
   // Helper methods for internal use
   bool try_extract_const_string_expr(const exprt &expr, std::string &out);
@@ -735,6 +761,11 @@ private:
     const typet &return_type,
     const std::vector<typet> &arg_types,
     const locationt &location);
+
+  symbolt *find_cached_symbol(const std::string &symbol_id);
+  symbolt *find_cached_c_function_symbol(const std::string &symbol_id);
+  exprt try_len_fast_path_from_constant_arg(const nlohmann::json &arg_json);
+  exprt try_len_fast_path_from_name_arg(const nlohmann::json &arg_json);
 
   /**
    * @brief Convert float bits to string representation
