@@ -1,8 +1,10 @@
 #include <python-frontend/function_call_expr.h>
 #include <python-frontend/cmath_lowering_policy.h>
+#include <python-frontend/complex_handler_utils.h>
 #include <python-frontend/exception_utils.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/math_guard_utils.h>
+#include <python-frontend/string_handler_utils.h>
 #include <python-frontend/python_exception_handler.h>
 #include <python-frontend/python_list.h>
 #include <python-frontend/string_builder.h>
@@ -60,18 +62,6 @@ std::string node_type_of(const nlohmann::json &node)
 bool is_cpp_throw_expr(const exprt &e)
 {
   return e.statement() == "cpp-throw";
-}
-
-exprt raise_math_real_type_error_expr(python_converter &converter)
-{
-  return converter.get_exception_handler().gen_exception_raise(
-    "TypeError", "must be real number, not complex");
-}
-
-exprt raise_math_int_type_error_expr(python_converter &converter)
-{
-  return converter.get_exception_handler().gen_exception_raise(
-    "TypeError", "'complex' object cannot be interpreted as an integer");
 }
 
 double round_ties_to_even(const double value)
@@ -1660,22 +1650,6 @@ exprt function_call_expr::handle_complex() const
   auto is_cpp_throw = [](const exprt &e) -> bool {
     return e.statement() == "cpp-throw";
   };
-  auto trim = [](std::string s) -> std::string {
-    size_t b = 0;
-    while (b < s.size() && std::isspace(static_cast<unsigned char>(s[b])))
-      ++b;
-    size_t e = s.size();
-    while (e > b && std::isspace(static_cast<unsigned char>(s[e - 1])))
-      --e;
-    return s.substr(b, e - b);
-  };
-  auto parse_double_strict = [](const std::string &s, double &out) -> bool {
-    if (s.empty())
-      return false;
-    char *end = nullptr;
-    out = std::strtod(s.c_str(), &end);
-    return end == s.c_str() + s.size();
-  };
   auto extract_constant_string =
     [&](const nlohmann::json &arg, std::string &out) -> bool {
     if (!arg.contains("value"))
@@ -1788,77 +1762,6 @@ exprt function_call_expr::handle_complex() const
     return subtype.is_unsignedbv() &&
            to_unsignedbv_type(subtype).get_width() == 8;
   };
-  auto parse_complex_string =
-    [&](const std::string &raw, double &real_out, double &imag_out) -> bool {
-    std::string s = trim(raw);
-    if (s.empty())
-      return false;
-
-    // Accept optional wrapping parentheses (possibly repeated).
-    while (s.size() > 2 && s.front() == '(' && s.back() == ')')
-      s = trim(s.substr(1, s.size() - 2));
-
-    auto lower_last = [](char c) {
-      return static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-    };
-
-    // No imaginary suffix: parse as real number.
-    if (lower_last(s.back()) != 'j')
-    {
-      double r = 0.0;
-      if (!parse_double_strict(s, r))
-        return false;
-      real_out = r;
-      imag_out = 0.0;
-      return true;
-    }
-
-    std::string body = trim(s.substr(0, s.size() - 1));
-    if (body.empty() || body == "+" || body == "-")
-    {
-      real_out = 0.0;
-      imag_out = (body == "-") ? -1.0 : 1.0;
-      return true;
-    }
-
-    size_t split = std::string::npos;
-    for (size_t i = 1; i < body.size(); ++i)
-    {
-      const char c = body[i];
-      if (c == '+' || c == '-')
-      {
-        const char prev = body[i - 1];
-        if (prev != 'e' && prev != 'E')
-          split = i;
-      }
-    }
-
-    if (split == std::string::npos)
-    {
-      double imag = 0.0;
-      if (!parse_double_strict(body, imag))
-        return false;
-      real_out = 0.0;
-      imag_out = imag;
-      return true;
-    }
-
-    const std::string real_part = trim(body.substr(0, split));
-    const std::string imag_part = trim(body.substr(split));
-    double real = 0.0;
-    if (!parse_double_strict(real_part, real))
-      return false;
-
-    double imag = 0.0;
-    if (imag_part == "+" || imag_part == "-")
-      imag = (imag_part == "-") ? -1.0 : 1.0;
-    else if (!parse_double_strict(imag_part, imag))
-      return false;
-
-    real_out = real;
-    imag_out = imag;
-    return true;
-  };
 
   if (arguments.size() > 2)
     return raise_type_error("complex() takes at most 2 arguments");
@@ -1871,33 +1774,35 @@ exprt function_call_expr::handle_complex() const
   if (arguments.size() >= 2)
     imag_json = &arguments[1];
 
-  if (keywords.is_array())
+  if (keywords.is_array() && !keywords.empty())
   {
-    for (const auto &kw : keywords)
+    try
     {
-      if (!kw.contains("arg") || kw["arg"].is_null() || !kw.contains("value"))
-        return raise_type_error("complex() does not support **kwargs");
+      auto kw_vals =
+        string_call_utils::collect_keyword_values("complex", keywords);
+      string_call_utils::ensure_allowed_keywords(
+        "complex", kw_vals, {"real", "imag"});
 
-      const std::string name = kw["arg"].get<std::string>();
-      if (name == "real")
+      if (
+        auto *real_kw = string_call_utils::find_keyword_value(kw_vals, "real"))
       {
         if (real_json != nullptr)
           return raise_type_error(
             "complex() got multiple values for argument 'real'");
-        real_json = &kw["value"];
+        real_json = real_kw;
       }
-      else if (name == "imag")
+      if (
+        auto *imag_kw = string_call_utils::find_keyword_value(kw_vals, "imag"))
       {
         if (imag_json != nullptr)
           return raise_type_error(
             "complex() got multiple values for argument 'imag'");
-        imag_json = &kw["value"];
+        imag_json = imag_kw;
       }
-      else
-      {
-        return raise_type_error(
-          "complex() got an unexpected keyword argument '" + name + "'");
-      }
+    }
+    catch (const std::runtime_error &e)
+    {
+      return raise_type_error(e.what());
     }
   }
 
@@ -1925,7 +1830,7 @@ exprt function_call_expr::handle_complex() const
     if (extract_constant_string(*real_json, text))
     {
       double real = 0.0, imag = 0.0;
-      if (!parse_complex_string(text, real, imag))
+      if (!complex_utils::parse_complex_string(text, real, imag))
         return raise_value_error("complex() arg is a malformed string");
       return make_complex(
         from_double(real, double_type()), from_double(imag, double_type()));
@@ -1973,7 +1878,7 @@ exprt function_call_expr::handle_complex() const
           if (value_opt)
           {
             double real = 0.0, imag = 0.0;
-            if (!parse_complex_string(*value_opt, real, imag))
+            if (!complex_utils::parse_complex_string(*value_opt, real, imag))
               return raise_value_error("complex() arg is a malformed string");
             return make_complex(
               from_double(real, double_type()),
@@ -3595,7 +3500,7 @@ function_call_expr::get_dispatch_table()
          if (is_cpp_throw_expr(arg_expr))
            return arg_expr;
          if (is_complex_type(arg_expr.type()))
-           return raise_math_real_type_error_expr(converter_);
+           return complex_utils::raise_math_real_type_error_expr(converter_);
          exprt isnan_expr("isnan", bool_typet());
          isnan_expr.copy_to_operands(arg_expr);
          return isnan_expr;
@@ -3609,7 +3514,7 @@ function_call_expr::get_dispatch_table()
          if (is_cpp_throw_expr(arg_expr))
            return arg_expr;
          if (is_complex_type(arg_expr.type()))
-           return raise_math_real_type_error_expr(converter_);
+           return complex_utils::raise_math_real_type_error_expr(converter_);
          exprt isinf_expr("isinf", bool_typet());
          isinf_expr.copy_to_operands(arg_expr);
          return isinf_expr;
@@ -3914,10 +3819,10 @@ function_call_expr::get_dispatch_table()
                                        : raw_func_name;
        const auto &args = call_["args"];
        auto raise_math_real_type_error = [this]() -> exprt {
-         return raise_math_real_type_error_expr(converter_);
+         return complex_utils::raise_math_real_type_error_expr(converter_);
        };
        auto raise_math_int_type_error = [this]() -> exprt {
-         return raise_math_int_type_error_expr(converter_);
+         return complex_utils::raise_math_int_type_error_expr(converter_);
        };
        auto has_complex_arg = [](const exprt &arg_expr) -> bool {
          return is_complex_type(arg_expr.type());
