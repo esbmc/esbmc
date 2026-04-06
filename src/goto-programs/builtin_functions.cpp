@@ -677,9 +677,10 @@ void goto_convertt::do_function_call_symbol(
       "Processing __ESBMC_assigns with {} arguments",
       arguments.size());
 
-    // Check for empty assigns: __ESBMC_assigns(0) means no side effects
-    // When user writes __ESBMC_assigns(0), macro expands to __ESBMC_assigns_impl(&(0))
-    // But &(0) is invalid, so we check for address_of(constant 0) pattern
+    // Check for empty assigns: __ESBMC_assigns_0() means no side effects.
+    // The macro expands to __ESBMC_assigns_impl((void*)0), which arrives here
+    // as a single argument: typecast(constant 0, void*). After stripping the
+    // typecast we check for a zero constant.
     if (arguments.size() == 1)
     {
       exprt first_arg = arguments[0];
@@ -689,8 +690,7 @@ void goto_convertt::do_function_call_symbol(
         first_arg = first_arg.op0();
       }
 
-      // Check if it's &(0) which would be address_of(constant 0) - but this is invalid C
-      // So also check for direct 0/NULL passed (shouldn't happen with macro, but be safe)
+      // Detect the zero constant produced by the (void*)0 macro expansion
       if (
         first_arg.is_zero() ||
         (first_arg.id() == "constant" && first_arg.get("value") == "0"))

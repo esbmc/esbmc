@@ -530,7 +530,7 @@ void __ESBMC_unroll(int);
 
 /* Function contract annotations: always available so annotated files compile
  * with any ESBMC mode (direct BMC, --enforce-contract, --replace-call-with-contract).
- * In direct BMC: requires/ensures become ASSUME; assigns/old are no-ops.
+ * In direct BMC: requires/ensures/assigns are dropped (no-ops) by goto_sideeffects.cpp.
  * Active contract enforcement only kicks in with --enforce-contract etc. */
 void __ESBMC_requires(_Bool);
 void __ESBMC_ensures(_Bool);
