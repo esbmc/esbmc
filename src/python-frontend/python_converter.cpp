@@ -3915,6 +3915,7 @@ exprt python_converter::dispatch_unary_dunder_operator(
 
   static const std::map<std::string, std::string> unary_dunder_map = {
     {"USub", "__neg__"},
+    {"UAdd", "__pos__"},
     {"abs", "__abs__"},
     {"complex", "__complex__"},
     {"float", "__float__"},
@@ -7110,6 +7111,48 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
   {
     // Normal path: no function call to materialize
     cond = get_expr(ast_node["test"]);
+  }
+
+  // Dispatch __bool__ for struct types used in boolean context
+  {
+    typet cond_type = cond.type();
+    if (cond.is_symbol())
+    {
+      const symbolt *csym = symbol_table_.find_symbol(cond.identifier());
+      if (csym)
+        cond_type = csym->type;
+    }
+    if (cond_type.id() == "symbol")
+      cond_type = ns.follow(cond_type);
+    if (cond_type.is_struct())
+    {
+      const struct_typet &st = to_struct_type(cond_type);
+      std::string tag = st.tag().as_string();
+      std::string cls = extract_class_name_from_tag(tag);
+      symbolt *bool_method = find_dunder_method(cls, "__bool__");
+      if (bool_method)
+      {
+        locationt loc = get_location_from_decl(ast_node["test"]);
+        const code_typet &mt = to_code_type(bool_method->type);
+        side_effect_expr_function_callt bool_call;
+        bool_call.function() = symbol_expr(*bool_method);
+        bool_call.type() = mt.return_type();
+        bool_call.arguments().push_back(gen_address_of(cond));
+        symbolt tmp = create_return_temp_variable(mt.return_type(), loc, "bool");
+        symbol_table_.add(tmp);
+        exprt tmp_expr = symbol_expr(tmp);
+        code_declt tmp_decl(tmp_expr);
+        tmp_decl.location() = loc;
+        if (!mt.return_type().is_empty())
+          bool_call.op0() = tmp_expr;
+        if (current_block)
+        {
+          current_block->copy_to_operands(tmp_decl);
+          current_block->copy_to_operands(bool_call);
+        }
+        cond = tmp_expr;
+      }
+    }
   }
 
   if (!(test_type == "BoolOp" && current_block && type != "While" &&

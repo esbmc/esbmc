@@ -2163,6 +2163,72 @@ exprt function_call_expr::build_constant_from_arg() const
       base_expr = converter_.get_expr(arguments[1]);
     }
 
+    // Dispatch to __int__ dunder for struct types (e.g. Decimal)
+    if (base_expr.is_nil())
+    {
+      // Try Name path first
+      if (first_arg["_type"] == "Name" && first_arg.contains("id"))
+      {
+        exprt operand_expr = converter_.get_expr(first_arg);
+        typet resolved = operand_expr.type();
+        if (resolved.id() == "symbol")
+          resolved = converter_.ns.follow(resolved);
+        if (resolved.is_struct())
+        {
+          const struct_typet &st = to_struct_type(resolved);
+          std::string tag = st.tag().as_string();
+          std::string cls =
+            converter_.extract_class_name_from_tag(tag);
+          symbolt *method =
+            converter_.find_dunder_method(cls, "__int__");
+          if (method)
+          {
+            const code_typet &mt = to_code_type(method->type);
+            side_effect_expr_function_callt call;
+            call.function() = symbol_expr(*method);
+            call.type() = mt.return_type();
+            call.arguments().push_back(
+              gen_address_of(operand_expr));
+            return call;
+          }
+        }
+      }
+      // Try inferred expression path for non-Name types
+      else if (!first_arg.contains("type"))
+      {
+        try
+        {
+          exprt inferred_expr = converter_.get_expr(first_arg);
+          typet resolved = inferred_expr.type();
+          if (resolved.id() == "symbol")
+            resolved = converter_.ns.follow(resolved);
+          if (resolved.is_struct())
+          {
+            const struct_typet &st = to_struct_type(resolved);
+            std::string tag = st.tag().as_string();
+            std::string cls =
+              converter_.extract_class_name_from_tag(tag);
+            symbolt *method =
+              converter_.find_dunder_method(cls, "__int__");
+            if (method)
+            {
+              const code_typet &mt = to_code_type(method->type);
+              side_effect_expr_function_callt call;
+              call.function() = symbol_expr(*method);
+              call.type() = mt.return_type();
+              call.arguments().push_back(
+                gen_address_of(inferred_expr));
+              return call;
+            }
+          }
+        }
+        catch (const std::exception &)
+        {
+          // Fall through to normal int() handling
+        }
+      }
+    }
+
     // Handle Name type (variable reference)
     if (first_arg["_type"] == "Name")
     {
@@ -2328,9 +2394,31 @@ exprt function_call_expr::build_constant_from_arg() const
     }
   }
 
-  // Handle float(): convert string (from symbol) to float
+  // Handle float(): dispatch __float__ dunder for struct types (e.g. Decimal)
   else if (func_name == "float" && arg["_type"] == "Name")
   {
+    exprt operand_expr = converter_.get_expr(arg);
+    typet resolved = operand_expr.type();
+    if (resolved.id() == "symbol")
+      resolved = converter_.ns.follow(resolved);
+    if (resolved.is_struct())
+    {
+      const struct_typet &st = to_struct_type(resolved);
+      std::string tag = st.tag().as_string();
+      std::string cls = converter_.extract_class_name_from_tag(tag);
+      symbolt *method = converter_.find_dunder_method(cls, "__float__");
+      if (method)
+      {
+        const code_typet &mt = to_code_type(method->type);
+        side_effect_expr_function_callt call;
+        call.function() = symbol_expr(*method);
+        call.type() = mt.return_type();
+        call.arguments().push_back(gen_address_of(operand_expr));
+        return call;
+      }
+    }
+
+    // Fall back to string-to-float conversion
     const symbolt *sym = lookup_python_symbol(arg["id"]);
     if (
       sym && sym->value.is_constant() &&
@@ -2338,9 +2426,7 @@ exprt function_call_expr::build_constant_from_arg() const
       return handle_str_symbol_to_float(sym);
     else
     {
-      // Try to get the expression type directly, even if symbol lookup failed
-      exprt expr = converter_.get_expr(arg);
-      if (type_utils::is_string_type(expr.type()))
+      if (type_utils::is_string_type(operand_expr.type()))
       {
         std::string var_name = arg["id"].get<std::string>();
         std::string m = "float() conversion may fail - variable " + var_name +

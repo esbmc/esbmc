@@ -18,10 +18,10 @@ def load_model_decimal():
     spec = importlib.util.spec_from_file_location("decimal_model", model_path)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
-    return mod.Decimal
+    return mod.Decimal, mod._decimal_from_int, mod._digit_count
 
 
-ModelDecimal = load_model_decimal()
+ModelDecimal, _decimal_from_int, _digit_count = load_model_decimal()
 
 
 def cpython_to_model(d):
@@ -581,5 +581,527 @@ class TestMod:
         ma = ModelDecimal(sa, ia, ea, spa)
         mb = ModelDecimal(sb, ib, eb, spb)
         result = ma.__mod__(mb)
+        expected = cpython_to_model(cpython_result)
+        assert values_equal(result, expected)
+
+
+class TestPos:
+    @given(d=all_decimals)
+    @settings(max_examples=200)
+    def test_pos_matches_cpython(self, d):
+        """__pos__ returns a copy with identical fields."""
+        s, i, e, sp = cpython_to_model(d)
+        m = ModelDecimal(s, i, e, sp)
+        result = m.__pos__()
+        assert result._sign == m._sign
+        assert result._int == m._int
+        assert result._exp == m._exp
+        assert result._is_special == m._is_special
+
+    def test_pos_nan(self):
+        nan = ModelDecimal(0, 0, 0, 2)
+        result = nan.__pos__()
+        assert result._is_special == 2
+
+    def test_pos_negative_preserves_sign(self):
+        neg = ModelDecimal(1, 42, -1, 0)
+        result = neg.__pos__()
+        assert result._sign == 1
+
+
+class TestIsNan:
+    @given(d=all_decimals)
+    @settings(max_examples=200)
+    def test_is_nan_matches_cpython(self, d):
+        s, i, e, sp = cpython_to_model(d)
+        m = ModelDecimal(s, i, e, sp)
+        assert m.is_nan() == d.is_nan()
+
+    def test_qnan_is_nan(self):
+        assert ModelDecimal(0, 0, 0, 2).is_nan() == True
+
+    def test_snan_is_nan(self):
+        assert ModelDecimal(0, 0, 0, 3).is_nan() == True
+
+    def test_finite_not_nan(self):
+        assert ModelDecimal(0, 42, 0, 0).is_nan() == False
+
+    def test_inf_not_nan(self):
+        assert ModelDecimal(0, 0, 0, 1).is_nan() == False
+
+
+class TestIsSnan:
+    @given(d=all_decimals)
+    @settings(max_examples=200)
+    def test_is_snan_matches_cpython(self, d):
+        s, i, e, sp = cpython_to_model(d)
+        m = ModelDecimal(s, i, e, sp)
+        assert m.is_snan() == d.is_snan()
+
+    def test_snan_true(self):
+        assert ModelDecimal(0, 0, 0, 3).is_snan() == True
+
+    def test_qnan_not_snan(self):
+        assert ModelDecimal(0, 0, 0, 2).is_snan() == False
+
+
+class TestIsQnan:
+    @given(d=all_decimals)
+    @settings(max_examples=200)
+    def test_is_qnan_matches_cpython(self, d):
+        s, i, e, sp = cpython_to_model(d)
+        m = ModelDecimal(s, i, e, sp)
+        assert m.is_qnan() == d.is_qnan()
+
+    def test_qnan_true(self):
+        assert ModelDecimal(0, 0, 0, 2).is_qnan() == True
+
+    def test_snan_not_qnan(self):
+        assert ModelDecimal(0, 0, 0, 3).is_qnan() == False
+
+    def test_finite_not_qnan(self):
+        assert ModelDecimal(0, 1, 0, 0).is_qnan() == False
+
+
+class TestIsInfinite:
+    @given(d=all_decimals)
+    @settings(max_examples=200)
+    def test_is_infinite_matches_cpython(self, d):
+        s, i, e, sp = cpython_to_model(d)
+        m = ModelDecimal(s, i, e, sp)
+        assert m.is_infinite() == d.is_infinite()
+
+    def test_pos_inf(self):
+        assert ModelDecimal(0, 0, 0, 1).is_infinite() == True
+
+    def test_neg_inf(self):
+        assert ModelDecimal(1, 0, 0, 1).is_infinite() == True
+
+    def test_finite_not_infinite(self):
+        assert ModelDecimal(0, 42, 0, 0).is_infinite() == False
+
+    def test_nan_not_infinite(self):
+        assert ModelDecimal(0, 0, 0, 2).is_infinite() == False
+
+
+class TestIsFinite:
+    @given(d=all_decimals)
+    @settings(max_examples=200)
+    def test_is_finite_matches_cpython(self, d):
+        s, i, e, sp = cpython_to_model(d)
+        m = ModelDecimal(s, i, e, sp)
+        assert m.is_finite() == d.is_finite()
+
+    def test_finite_value(self):
+        assert ModelDecimal(0, 42, -1, 0).is_finite() == True
+
+    def test_zero_is_finite(self):
+        assert ModelDecimal(0, 0, 0, 0).is_finite() == True
+
+    def test_inf_not_finite(self):
+        assert ModelDecimal(0, 0, 0, 1).is_finite() == False
+
+    def test_nan_not_finite(self):
+        assert ModelDecimal(0, 0, 0, 2).is_finite() == False
+
+
+class TestIsZero:
+    @given(d=all_decimals)
+    @settings(max_examples=200)
+    def test_is_zero_matches_cpython(self, d):
+        s, i, e, sp = cpython_to_model(d)
+        m = ModelDecimal(s, i, e, sp)
+        assert m.is_zero() == d.is_zero()
+
+    def test_zero(self):
+        assert ModelDecimal(0, 0, 0, 0).is_zero() == True
+
+    def test_neg_zero(self):
+        assert ModelDecimal(1, 0, 0, 0).is_zero() == True
+
+    def test_nonzero(self):
+        assert ModelDecimal(0, 1, 0, 0).is_zero() == False
+
+    def test_inf_not_zero(self):
+        assert ModelDecimal(0, 0, 0, 1).is_zero() == False
+
+    def test_nan_not_zero(self):
+        assert ModelDecimal(0, 0, 0, 2).is_zero() == False
+
+
+class TestIsSigned:
+    @given(d=all_decimals)
+    @settings(max_examples=200)
+    def test_is_signed_matches_cpython(self, d):
+        s, i, e, sp = cpython_to_model(d)
+        m = ModelDecimal(s, i, e, sp)
+        assert m.is_signed() == d.is_signed()
+
+    def test_negative_signed(self):
+        assert ModelDecimal(1, 42, 0, 0).is_signed() == True
+
+    def test_neg_zero_signed(self):
+        assert ModelDecimal(1, 0, 0, 0).is_signed() == True
+
+    def test_neg_inf_signed(self):
+        assert ModelDecimal(1, 0, 0, 1).is_signed() == True
+
+    def test_positive_not_signed(self):
+        assert ModelDecimal(0, 42, 0, 0).is_signed() == False
+
+    def test_pos_zero_not_signed(self):
+        assert ModelDecimal(0, 0, 0, 0).is_signed() == False
+
+
+class TestDigitCount:
+    def test_zero(self):
+        assert _digit_count(0) == 1
+
+    def test_single_digit(self):
+        for i in range(1, 10):
+            assert _digit_count(i) == 1
+
+    def test_multi_digit(self):
+        assert _digit_count(10) == 2
+        assert _digit_count(99) == 2
+        assert _digit_count(100) == 3
+        assert _digit_count(999) == 3
+        assert _digit_count(1000) == 4
+
+    @given(n=st.integers(min_value=1, max_value=10**15))
+    @settings(max_examples=200)
+    def test_matches_len_str(self, n):
+        assert _digit_count(n) == len(str(n))
+
+
+class TestCopyAbs:
+    @given(d=all_decimals)
+    @settings(max_examples=200)
+    def test_copy_abs_matches_cpython(self, d):
+        s, i, e, sp = cpython_to_model(d)
+        m = ModelDecimal(s, i, e, sp)
+        result = m.copy_abs()
+        expected = cpython_to_model(d.copy_abs())
+        assert (result._sign, result._int, result._exp, result._is_special) == expected
+
+    def test_copy_abs_clears_sign(self):
+        m = ModelDecimal(1, 42, -1, 0)
+        assert m.copy_abs()._sign == 0
+
+
+class TestCopyNegate:
+    @given(d=all_decimals)
+    @settings(max_examples=200)
+    def test_copy_negate_matches_cpython(self, d):
+        s, i, e, sp = cpython_to_model(d)
+        m = ModelDecimal(s, i, e, sp)
+        result = m.copy_negate()
+        expected = cpython_to_model(d.copy_negate())
+        assert (result._sign, result._int, result._exp, result._is_special) == expected
+
+
+class TestCopySign:
+    @given(a=all_decimals, b=all_decimals)
+    @settings(max_examples=200)
+    def test_copy_sign_matches_cpython(self, a, b):
+        sa, ia, ea, spa = cpython_to_model(a)
+        sb, ib, eb, spb = cpython_to_model(b)
+        ma = ModelDecimal(sa, ia, ea, spa)
+        mb = ModelDecimal(sb, ib, eb, spb)
+        result = ma.copy_sign(mb)
+        expected = cpython_to_model(a.copy_sign(b))
+        assert (result._sign, result._int, result._exp, result._is_special) == expected
+
+
+class TestAdjusted:
+    @given(d=finite_decimals)
+    @settings(max_examples=200)
+    def test_adjusted_matches_cpython(self, d):
+        s, i, e, sp = cpython_to_model(d)
+        m = ModelDecimal(s, i, e, sp)
+        assert m.adjusted() == d.adjusted()
+
+    def test_adjusted_zero(self):
+        assert ModelDecimal(0, 0, 0, 0).adjusted() == 0
+
+    def test_adjusted_special(self):
+        assert ModelDecimal(0, 0, 0, 1).adjusted() == 0
+        assert ModelDecimal(0, 0, 0, 2).adjusted() == 0
+
+
+class TestIsNormal:
+    @given(d=finite_decimals)
+    @settings(max_examples=200)
+    def test_is_normal_matches_cpython(self, d):
+        s, i, e, sp = cpython_to_model(d)
+        m = ModelDecimal(s, i, e, sp)
+        assert m.is_normal() == d.is_normal()
+
+    def test_zero_not_normal(self):
+        assert ModelDecimal(0, 0, 0, 0).is_normal() == False
+
+    def test_inf_not_normal(self):
+        assert ModelDecimal(0, 0, 0, 1).is_normal() == False
+
+    def test_nan_not_normal(self):
+        assert ModelDecimal(0, 0, 0, 2).is_normal() == False
+
+
+class TestIsSubnormal:
+    @given(d=finite_decimals)
+    @settings(max_examples=200)
+    def test_is_subnormal_matches_cpython(self, d):
+        s, i, e, sp = cpython_to_model(d)
+        m = ModelDecimal(s, i, e, sp)
+        assert m.is_subnormal() == d.is_subnormal()
+
+    def test_zero_not_subnormal(self):
+        assert ModelDecimal(0, 0, 0, 0).is_subnormal() == False
+
+    def test_inf_not_subnormal(self):
+        assert ModelDecimal(0, 0, 0, 1).is_subnormal() == False
+
+
+class TestCompare:
+    @given(a=finite_decimals, b=finite_decimals)
+    @settings(max_examples=200)
+    def test_compare_matches_cpython(self, a, b):
+        sa, ia, ea, spa = cpython_to_model(a)
+        sb, ib, eb, spb = cpython_to_model(b)
+        ma = ModelDecimal(sa, ia, ea, spa)
+        mb = ModelDecimal(sb, ib, eb, spb)
+        result = ma.compare(mb)
+        expected = cpython_to_model(a.compare(b))
+        assert values_equal(result, expected)
+
+    def test_compare_nan_returns_nan(self):
+        nan = ModelDecimal(0, 0, 0, 2)
+        val = ModelDecimal(0, 1, 0, 0)
+        assert nan.compare(val)._is_special == 2
+        assert val.compare(nan)._is_special == 2
+
+    def test_compare_equal(self):
+        a = ModelDecimal(0, 1, 0, 0)
+        b = ModelDecimal(0, 1, 0, 0)
+        result = a.compare(b)
+        assert result._int == 0 and result._is_special == 0
+
+    def test_compare_less(self):
+        a = ModelDecimal(0, 1, 0, 0)
+        b = ModelDecimal(0, 2, 0, 0)
+        result = a.compare(b)
+        assert result._sign == 1 and result._int == 1
+
+    def test_compare_greater(self):
+        a = ModelDecimal(0, 2, 0, 0)
+        b = ModelDecimal(0, 1, 0, 0)
+        result = a.compare(b)
+        assert result._sign == 0 and result._int == 1
+
+
+class TestCompareSignal:
+    @given(a=finite_decimals, b=finite_decimals)
+    @settings(max_examples=200)
+    def test_compare_signal_matches_compare_for_finite(self, a, b):
+        sa, ia, ea, spa = cpython_to_model(a)
+        sb, ib, eb, spb = cpython_to_model(b)
+        ma = ModelDecimal(sa, ia, ea, spa)
+        mb = ModelDecimal(sb, ib, eb, spb)
+        r1 = ma.compare(mb)
+        r2 = ma.compare_signal(mb)
+        assert (r1._sign, r1._int, r1._exp, r1._is_special) == \
+               (r2._sign, r2._int, r2._exp, r2._is_special)
+
+
+class TestMax:
+    @given(a=finite_decimals, b=finite_decimals)
+    @settings(max_examples=200)
+    def test_max_matches_cpython(self, a, b):
+        sa, ia, ea, spa = cpython_to_model(a)
+        sb, ib, eb, spb = cpython_to_model(b)
+        ma = ModelDecimal(sa, ia, ea, spa)
+        mb = ModelDecimal(sb, ib, eb, spb)
+        result = ma.max(mb)
+        expected = cpython_to_model(a.max(b))
+        assert values_equal(result, expected)
+
+    def test_max_nan_returns_other(self):
+        nan = ModelDecimal(0, 0, 0, 2)
+        val = ModelDecimal(0, 42, 0, 0)
+        result = nan.max(val)
+        assert result._int == 42 and result._is_special == 0
+        result2 = val.max(nan)
+        assert result2._int == 42 and result2._is_special == 0
+
+    def test_max_both_nan(self):
+        nan = ModelDecimal(0, 0, 0, 2)
+        assert nan.max(nan)._is_special == 2
+
+
+class TestMin:
+    @given(a=finite_decimals, b=finite_decimals)
+    @settings(max_examples=200)
+    def test_min_matches_cpython(self, a, b):
+        sa, ia, ea, spa = cpython_to_model(a)
+        sb, ib, eb, spb = cpython_to_model(b)
+        ma = ModelDecimal(sa, ia, ea, spa)
+        mb = ModelDecimal(sb, ib, eb, spb)
+        result = ma.min(mb)
+        expected = cpython_to_model(a.min(b))
+        assert values_equal(result, expected)
+
+    def test_min_nan_returns_other(self):
+        nan = ModelDecimal(0, 0, 0, 2)
+        val = ModelDecimal(0, 42, 0, 0)
+        result = nan.min(val)
+        assert result._int == 42 and result._is_special == 0
+
+    def test_min_both_nan(self):
+        nan = ModelDecimal(0, 0, 0, 2)
+        assert nan.min(nan)._is_special == 2
+
+
+class TestFma:
+    @given(a=finite_decimals, b=finite_decimals, c=finite_decimals)
+    @settings(max_examples=200)
+    def test_fma_matches_mul_add(self, a, b, c):
+        sa, ia, ea, spa = cpython_to_model(a)
+        sb, ib, eb, spb = cpython_to_model(b)
+        sc, ic, ec, spc = cpython_to_model(c)
+        ma = ModelDecimal(sa, ia, ea, spa)
+        mb = ModelDecimal(sb, ib, eb, spb)
+        mc = ModelDecimal(sc, ic, ec, spc)
+        result = ma.fma(mb, mc)
+        expected = ma.__mul__(mb).__add__(mc)
+        assert (result._sign, result._int, result._exp, result._is_special) == \
+               (expected._sign, expected._int, expected._exp, expected._is_special)
+
+
+class TestBool:
+    @given(d=finite_decimals)
+    @settings(max_examples=200)
+    def test_bool_matches_cpython(self, d):
+        s, i, e, sp = cpython_to_model(d)
+        m = ModelDecimal(s, i, e, sp)
+        assert m.__bool__() == bool(d)
+
+    def test_zero_is_false(self):
+        assert ModelDecimal(0, 0, 0, 0).__bool__() == False
+
+    def test_neg_zero_is_false(self):
+        assert ModelDecimal(1, 0, 0, 0).__bool__() == False
+
+    def test_nonzero_is_true(self):
+        assert ModelDecimal(0, 1, 0, 0).__bool__() == True
+
+    def test_nan_is_true(self):
+        assert ModelDecimal(0, 0, 0, 2).__bool__() == True
+
+    def test_inf_is_true(self):
+        assert ModelDecimal(0, 0, 0, 1).__bool__() == True
+
+
+class TestInt:
+    @given(d=finite_decimals)
+    @settings(max_examples=200, suppress_health_check=[HealthCheck.filter_too_much])
+    def test_int_matches_cpython(self, d):
+        assume(not d.is_zero() or d == cpython_decimal.Decimal(0))
+        s, i, e, sp = cpython_to_model(d)
+        m = ModelDecimal(s, i, e, sp)
+        assert m.__int__() == int(d)
+
+    def test_int_whole_number(self):
+        assert ModelDecimal(0, 42, 0, 0).__int__() == 42
+
+    def test_int_negative(self):
+        assert ModelDecimal(1, 42, 0, 0).__int__() == -42
+
+    def test_int_with_positive_exp(self):
+        assert ModelDecimal(0, 5, 2, 0).__int__() == 500
+
+    def test_int_truncates_fraction(self):
+        assert ModelDecimal(0, 105, -1, 0).__int__() == 10
+
+    def test_int_zero(self):
+        assert ModelDecimal(0, 0, 0, 0).__int__() == 0
+
+
+class TestReverseAdd:
+    @given(n=st.integers(min_value=-100, max_value=100), d=small_finite_decimals)
+    @settings(max_examples=200)
+    def test_radd_matches_cpython(self, n, d):
+        cpython_result = n + d
+        s, i, e, sp = cpython_to_model(d)
+        m = ModelDecimal(s, i, e, sp)
+        result = m.__radd__(n)
+        expected = cpython_to_model(cpython_result)
+        assert values_equal(result, expected)
+
+
+class TestReverseSub:
+    @given(n=st.integers(min_value=-100, max_value=100), d=small_finite_decimals)
+    @settings(max_examples=200)
+    def test_rsub_matches_cpython(self, n, d):
+        cpython_result = n - d
+        s, i, e, sp = cpython_to_model(d)
+        m = ModelDecimal(s, i, e, sp)
+        result = m.__rsub__(n)
+        expected = cpython_to_model(cpython_result)
+        assert values_equal(result, expected)
+
+
+class TestReverseMul:
+    @given(n=st.integers(min_value=-1000, max_value=1000), d=finite_decimals)
+    @settings(max_examples=200)
+    def test_rmul_matches_cpython(self, n, d):
+        s, i, e, sp = cpython_to_model(d)
+        m = ModelDecimal(s, i, e, sp)
+        result = m.__rmul__(n)
+        expected = cpython_to_model(n * d)
+        assert (result._sign, result._int, result._exp, result._is_special) == expected
+
+
+class TestReverseTrueDiv:
+    @given(n=st.integers(min_value=-1000, max_value=1000), d=small_nonzero_finite_decimals)
+    @settings(max_examples=200, suppress_health_check=[HealthCheck.filter_too_much])
+    def test_rtruediv_sign_matches_cpython(self, n, d):
+        assume(n != 0 or not d.is_zero())
+        s, i, e, sp = cpython_to_model(d)
+        m = ModelDecimal(s, i, e, sp)
+        result = m.__rtruediv__(n)
+        cpython_result = n / d
+        cp_sign, _, _, _ = cpython_to_model(cpython_result)
+        if result._int == 0:
+            pass
+        else:
+            assert result._sign == cp_sign
+
+
+class TestReverseFloorDiv:
+    @given(n=st.integers(min_value=-100, max_value=100), d=small_nonzero_finite_decimals)
+    @settings(max_examples=200, suppress_health_check=[HealthCheck.filter_too_much])
+    def test_rfloordiv_matches_cpython(self, n, d):
+        with cpython_decimal.localcontext() as ctx:
+            ctx.traps[cpython_decimal.InvalidOperation] = False
+            cpython_result = n // d
+            assume(not cpython_result.is_nan())
+        s, i, e, sp = cpython_to_model(d)
+        m = ModelDecimal(s, i, e, sp)
+        result = m.__rfloordiv__(n)
+        expected = cpython_to_model(cpython_result)
+        assert values_equal(result, expected)
+
+
+class TestReverseMod:
+    @given(n=st.integers(min_value=-100, max_value=100), d=small_nonzero_finite_decimals)
+    @settings(max_examples=200, suppress_health_check=[HealthCheck.filter_too_much])
+    def test_rmod_matches_cpython(self, n, d):
+        with cpython_decimal.localcontext() as ctx:
+            ctx.traps[cpython_decimal.InvalidOperation] = False
+            cpython_result = n % d
+            assume(not cpython_result.is_nan())
+        s, i, e, sp = cpython_to_model(d)
+        m = ModelDecimal(s, i, e, sp)
+        result = m.__rmod__(n)
         expected = cpython_to_model(cpython_result)
         assert values_equal(result, expected)

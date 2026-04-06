@@ -3472,6 +3472,39 @@ class Preprocessor(ast.NodeTransformer):
         return assign
 
 
+    def _decimal_to_4args(self, d):
+        """Convert a CPython Decimal to AST args [sign, int_val, exp, is_special]."""
+        t = d.as_tuple()
+        sign = t.sign
+        if t.exponent == 'n':
+            is_special = 2
+            int_val = 0
+            exp = 0
+        elif t.exponent == 'N':
+            is_special = 3
+            int_val = 0
+            exp = 0
+        elif t.exponent == 'F':
+            is_special = 1
+            int_val = 0
+            exp = 0
+        else:
+            is_special = 0
+            int_val = 0
+            power = 1
+            i = len(t.digits) - 1
+            while i >= 0:
+                int_val = int_val + t.digits[i] * power
+                power = power * 10
+                i = i - 1
+            exp = t.exponent
+        return [
+            ast.Constant(value=sign),
+            ast.Constant(value=int_val),
+            ast.Constant(value=exp),
+            ast.Constant(value=is_special),
+        ]
+
     # This method is responsible for visiting and transforming Call nodes in the AST.
     def visit_Call(self, node):
         # Rewrite g(args) → obj.method(args) for bound method variables
@@ -3515,39 +3548,37 @@ class Preprocessor(ast.NodeTransformer):
             else:
                 raise NotImplementedError("Decimal() with multiple arguments is not supported")
 
-            t = d.as_tuple()
-            sign = t.sign
-            if t.exponent == 'n':
-                is_special = 2
-                int_val = 0
-                exp = 0
-            elif t.exponent == 'N':
-                is_special = 3
-                int_val = 0
-                exp = 0
-            elif t.exponent == 'F':
-                is_special = 1
-                int_val = 0
-                exp = 0
-            else:
-                is_special = 0
-                int_val = 0
-                power = 1
-                i = len(t.digits) - 1
-                while i >= 0:
-                    int_val = int_val + t.digits[i] * power
-                    power = power * 10
-                    i = i - 1
-                exp = t.exponent
-
-            node.args = [
-                ast.Constant(value=sign),
-                ast.Constant(value=int_val),
-                ast.Constant(value=exp),
-                ast.Constant(value=is_special),
-            ]
+            node.args = self._decimal_to_4args(d)
             ast.fix_missing_locations(node)
             return node
+
+        # Rewrite Decimal.from_float(...) to internal 4-arg Decimal constructor
+        is_from_float = False
+        if (self.decimal_imported and isinstance(node.func, ast.Attribute) and
+                node.func.attr == "from_float" and isinstance(node.func.value, ast.Name) and
+                node.func.value.id == "Decimal"):
+            is_from_float = True
+        elif (self.decimal_module_imported and isinstance(node.func, ast.Attribute) and
+                node.func.attr == "from_float" and isinstance(node.func.value, ast.Attribute) and
+                isinstance(node.func.value.value, ast.Name) and node.func.value.value.id == "decimal" and
+                node.func.value.attr == "Decimal"):
+            is_from_float = True
+
+        if is_from_float and len(node.args) == 1:
+            arg = node.args[0]
+            float_val = None
+            if isinstance(arg, ast.Constant) and isinstance(arg.value, (int, float)):
+                float_val = float(arg.value)
+            elif (isinstance(arg, ast.UnaryOp) and isinstance(arg.op, ast.USub) and
+                    isinstance(arg.operand, ast.Constant) and isinstance(arg.operand.value, (int, float))):
+                float_val = float(-arg.operand.value)
+            if float_val is not None:
+                import decimal as _decimal_mod
+                d = _decimal_mod.Decimal.from_float(float_val)
+                node.func = ast.Name(id="Decimal", ctx=ast.Load())
+                node.args = self._decimal_to_4args(d)
+                ast.fix_missing_locations(node)
+                return node
 
         # Transformation for int.from_bytes calls
         if isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name) and node.func.value.id == "int" and node.func.attr == "from_bytes":
