@@ -2748,16 +2748,30 @@ class Preprocessor(ast.NodeTransformer):
         Convert them into individual assignments with proper type inference
         """
         assignments = []
+        def expand_unpacking(target_node, value_node):
+            if isinstance(target_node, ast.Name):
+                target_copy = copy.deepcopy(target_node)
+                value_copy = copy.deepcopy(value_node)
+                individual_assign = self._create_individual_assignment(
+                    target_copy, value_copy, source_node)
+                self._update_variable_types_simple(target_copy, value_copy)
+                assignments.append(individual_assign)
+                return True
 
-        if isinstance(value, ast.Tuple) and len(target.elts) == len(value.elts):
-            # Handle x, y = 1, 2 case - direct assignment of individual elements
-            for i, (target_elem, value_elem) in enumerate(zip(target.elts, value.elts)):
-                if isinstance(target_elem, ast.Name):
-                    individual_assign = self._create_individual_assignment(target_elem, value_elem, source_node)
-                    self._update_variable_types_simple(target_elem, value_elem)
-                    assignments.append(individual_assign)
-        else:
-            # Don't transform tuple unpacking from variables - let converter handle it
+            if not isinstance(target_node, (ast.Tuple, ast.List)):
+                return False
+            if not isinstance(value_node, (ast.Tuple, ast.List)):
+                return False
+            if len(target_node.elts) != len(value_node.elts):
+                return False
+
+            for target_elem, value_elem in zip(target_node.elts, value_node.elts):
+                if not expand_unpacking(target_elem, value_elem):
+                    return False
+            return True
+
+        if not expand_unpacking(target, value):
+            # Don't transform unsupported unpacking shapes - let converter handle it
             return source_node
 
         return assignments
