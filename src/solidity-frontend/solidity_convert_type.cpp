@@ -819,7 +819,6 @@ bool solidity_convertert::get_parameter_list(
 {
   // For Solidity rule parameter-list:
   //  - For non-empty param list, it may need to call get_elementary_type_name, since parameter-list is just a list of types
-  std::string c_type;
   SolidityGrammar::ParameterListT type =
     SolidityGrammar::get_parameter_list_t(type_name);
 
@@ -834,8 +833,7 @@ bool solidity_convertert::get_parameter_list(
   {
     // equivalent to clang's "void"
     new_type = empty_typet();
-    c_type = "void";
-    new_type.set("#cpp_type", c_type);
+    new_type.set("#cpp_type", "void");
     break;
   }
   case SolidityGrammar::ParameterListT::ONE_PARAM:
@@ -1403,17 +1401,3 @@ void solidity_convertert::convert_type_expr(
   }
 }
 
-static inline void static_lifetime_init(const contextt &context, codet &dest)
-{
-  dest = code_blockt();
-
-  // call designated "initialization" functions
-  context.foreach_operand_in_order([&dest](const symbolt &s) {
-    if (s.type.initialization() && s.type.is_code())
-    {
-      code_function_callt function_call;
-      function_call.function() = symbol_expr(s);
-      dest.move_to_operands(function_call);
-    }
-  });
-}

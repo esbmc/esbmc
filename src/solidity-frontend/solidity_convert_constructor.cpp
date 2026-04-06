@@ -984,8 +984,7 @@ bool solidity_convertert::get_implicit_ctor_ref(
   log_debug("solidity", "\t\tgetting implicit ctor call");
 
   // to obtain the type info
-  std::string name, id;
-  name = contract_name;
+  std::string id;
   id = get_implict_ctor_call_id(contract_name);
   if (context.find_symbol(id) == nullptr)
   {

@@ -351,7 +351,6 @@ bool solidity_convertert::construct_tuple_assigments(
 
   typet lt = lhs.type();
   typet rt = rhs.type();
-  std::string lt_sol = lt.get("#sol_type").as_string();
   std::string rt_sol = rt.get("#sol_type").as_string();
 
   assert(lt.is_code() && to_code(lhs).statement() == "block");

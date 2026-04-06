@@ -155,7 +155,6 @@ bool solidity_convertert::add_auxiliary_members(
     // populate reentry mutex flag
     std::string tx_name, tx_id;
     get_contract_mutex_name(contract_name, tx_name, tx_id);
-    std::string debug_modulename = get_modulename_from_path(absolute_path);
     typet _t = bool_t;
 
     get_builtin_symbol(tx_name, tx_id, _t, l, gen_zero(_t), contract_name);

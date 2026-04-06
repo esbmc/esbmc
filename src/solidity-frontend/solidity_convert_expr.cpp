@@ -231,8 +231,6 @@ bool solidity_convertert::get_expr(
       SolidityGrammar::ElementaryTypeNameT target_type =
         SolidityGrammar::get_elementary_type_name_t(literal_type);
 
-      std::string sol_type_str =
-        SolidityGrammar::elementary_type_name_to_str(target_type);
       if (type_name == SolidityGrammar::ElementaryTypeNameT::INT_LITERAL)
       {
         assert(is_static);
