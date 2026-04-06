@@ -1400,4 +1400,3 @@ void solidity_convertert::convert_type_expr(
       solidity_gen_typecast(ns, src_expr, dest_type);
   }
 }
-
