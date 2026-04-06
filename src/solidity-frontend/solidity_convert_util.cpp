@@ -750,10 +750,6 @@ bool solidity_convertert::get_empty_array_ref(
   locationt location_begin;
   get_location_from_node(callee_expr_json, location_begin);
 
-  // Get Debug Module Name
-  std::string debug_modulename =
-    get_modulename_from_path(location_begin.file().as_string());
-
   // Get Type
   // 1. get elem type
   typet elem_type;
