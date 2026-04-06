@@ -58,6 +58,13 @@ public:
   exprt handle_attribute(const nlohmann::json &element) const;
 
   /**
+   * Handles direct attribute access on a complex object: .real, .imag.
+   * @return The member expression, or nil_exprt for unrecognised attributes.
+   */
+  exprt
+  handle_attribute_access(const exprt &obj, const std::string &attr) const;
+
+  /**
    * Computes abs(z) = sqrt(real^2 + imag^2).
    */
   exprt handle_abs(const exprt &z) const;
@@ -89,10 +96,10 @@ private:
   contextt &symbol_table_;
   type_handler &type_handler_;
 
-  /// Intra-call symbol cache (cleared at each public entry point).
+  /// Intra-call symbol cache (cleared by methods that perform symbol lookups).
   mutable std::unordered_map<std::string, const symbolt *> symbol_cache_;
 
-  /// Clear the symbol cache at the beginning of each public method.
+  /// Clear the symbol cache (called by handle_binary_op and handle_cmath_log).
   void clear_cache() const;
 
   /// Cached symbol lookup.
