@@ -334,7 +334,8 @@ smt_astt smt_convt::get_double_min_normal()
 smt_astt smt_convt::get_double_min_subnormal()
 {
   // IEEE 754 double precision minimum positive subnormal value (2^-1074)
-  return mk_smt_real("4.9406564584124654e-324");
+  // Rounded UP at the last digit to ensure the enclosure is conservative.
+  return mk_smt_real("4.9406564584124655e-324");
 }
 
 smt_astt smt_convt::apply_ieee754_semantics(
@@ -344,16 +345,90 @@ smt_astt smt_convt::apply_ieee754_semantics(
 {
   if (this->options.get_bool_option("ir-ra"))
   {
-    smt_astt final_result = real_result;
+    // First step: attach a sound symmetric enclosure around the real semantic
+    // term `r` for nearest rounding mode.
+    //
+    // For an FP operation whose exact real value is r, the round-to-nearest
+    // error satisfies:
+    //   |fl(r) - r| <= eps_rel * |r| + eps_abs
+    //
+    // So we define:
+    //   B(r)  = eps_rel * |r| + eps_abs
+    //   ra_lo = r - B(r)
+    //   ra_hi = r + B(r)
+    //
+    // and assert  ra_lo <= result <= ra_hi  and  ra_lo <= ra_hi.
+    //
+    // TODO: add directed-rounding modes (up/down/zero) once the rounding mode
+    //       is threaded through apply_ieee754_semantics.
+    // TODO: extend to non-standard FP formats beyond single and double.
+
+    unsigned int fraction_bits = fbv_type.fraction;
+    unsigned int exponent_bits = fbv_type.exponent;
+
+    auto double_spec = ieee_float_spect::double_precision();
+    auto single_spec = ieee_float_spect::single_precision();
+
+    smt_astt eps_rel, eps_abs;
+
+    if (exponent_bits == double_spec.e && fraction_bits == double_spec.f)
+    {
+      eps_rel = get_double_eps_rel();       // 2^-53
+      eps_abs = get_double_min_subnormal(); // 2^-1074 (covers underflow region)
+    }
+    else if (exponent_bits == single_spec.e && fraction_bits == single_spec.f)
+    {
+      eps_rel = get_single_eps_rel();       // 2^-24
+      eps_abs = get_single_min_subnormal(); // 2^-149
+    }
+    else
+    {
+      // TODO: theorem-driven bounds for non-standard formats are not yet
+      // implemented; fall back to unconstrained enclosure (sound but weak).
+      smt_sortt rs = mk_real_sort();
+      smt_astt ra_lo = mk_fresh(rs, "ra_lo::", nullptr);
+      smt_astt ra_hi = mk_fresh(rs, "ra_hi::", nullptr);
+      assert_ast(mk_le(ra_lo, real_result));
+      assert_ast(mk_le(real_result, ra_hi));
+      assert_ast(mk_le(ra_lo, ra_hi));
+      return real_result;
+    }
+
     smt_sortt rs = mk_real_sort();
+    smt_astt zero = mk_smt_real("0.0");
+
+    // |r| = r >= 0 ? r : -r
+    smt_astt abs_r =
+      mk_ite(mk_lt(real_result, zero), mk_sub(zero, real_result), real_result);
+
+    // B(r) = eps_rel * |r| + eps_abs
+    smt_astt bound = mk_add(mk_mul(eps_rel, abs_r), eps_abs);
+
+    // ra_lo = r - B(r),  ra_hi = r + B(r)
+    smt_astt ra_lo_expr = mk_sub(real_result, bound);
+    smt_astt ra_hi_expr = mk_add(real_result, bound);
+
+    // Introduce named enclosure variables and pin them to the bound expressions
+    // via bidirectional inequalities.  A plain mk_eq(ra_lo, ra_lo_expr) is
+    // correct but the Z3 tactic pipeline (solve-eqs) eliminates definitional
+    // equalities from the visible assertion set, making them invisible in the
+    // SMT output.  Two mk_le assertions are logically equivalent and are not
+    // targeted by solve-eqs, so they survive in the final formula.
     smt_astt ra_lo = mk_fresh(rs, "ra_lo::", nullptr);
     smt_astt ra_hi = mk_fresh(rs, "ra_hi::", nullptr);
+    assert_ast(mk_le(ra_lo, ra_lo_expr)); // ra_lo <= r - B(r)
+    assert_ast(
+      mk_le(ra_lo_expr, ra_lo)); // r - B(r) <= ra_lo  =>  ra_lo == r - B(r)
+    assert_ast(mk_le(ra_hi, ra_hi_expr)); // ra_hi <= r + B(r)
+    assert_ast(
+      mk_le(ra_hi_expr, ra_hi)); // r + B(r) <= ra_hi  =>  ra_hi == r + B(r)
 
-    assert_ast(mk_le(ra_lo, final_result));
-    assert_ast(mk_le(final_result, ra_hi));
+    // Containment: ra_lo <= result <= ra_hi
+    assert_ast(mk_le(ra_lo, real_result));
+    assert_ast(mk_le(real_result, ra_hi));
     assert_ast(mk_le(ra_lo, ra_hi));
 
-    return final_result;
+    return real_result;
   }
   else
   {
@@ -470,6 +545,21 @@ smt_astt smt_convt::get_single_max_normal()
 {
   // IEEE 754 single precision maximum normal positive value (~(2-2^-23)*2^127)
   return mk_smt_real("3.4028234663852886e+38");
+}
+
+smt_astt smt_convt::get_double_eps_rel()
+{
+  // Relative error bound for IEEE 754 double under round-to-nearest:
+  // half machine epsilon = 2^-53; rounded UP at the last digit to ensure
+  // the enclosure is conservative.
+  return mk_smt_real("1.1102230246251566e-16");
+}
+
+smt_astt smt_convt::get_single_eps_rel()
+{
+  // Relative error bound for IEEE 754 single under round-to-nearest:
+  // half machine epsilon = 2^-24
+  return mk_smt_real("5.960464477539063e-08");
 }
 
 smt_astt smt_convt::convert_ast(const expr2tc &expr)

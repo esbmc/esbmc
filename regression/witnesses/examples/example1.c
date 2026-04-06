@@ -13,13 +13,13 @@ int bar() { return 5; };
 int pred(int p1, int by) { return p1 - by; };
 
 int main() {
-    int a = foo(), b = bar(); 
+    int a = foo(), b = bar();
     global = global + b;
 
     while(global > 1) {
         global = pred(global, bar() + a);
     }
-    
+
     a = 0;
 
     if (global != 0) {

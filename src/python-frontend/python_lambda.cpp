@@ -381,9 +381,10 @@ exprt python_lambda::get_lambda_expr(const nlohmann::json &element)
   {
     exprt lambda_body = process_lambda_body(element["body"], location);
 
-    // If the body returns a function pointer (nested lambda), update this
-    // lambda's return type to match the actual return value type so that
-    // callers (e.g. g = f(5); g(10)) receive the correct type.
+    // If the body returns a function pointer (nested lambda) or an Optional[T]
+    // struct (ternary with one None branch), update this lambda's declared
+    // return type to match the actual return value type so that callers
+    // (e.g. g = f(5); g(10)) receive the correct type.
     // The RETURN statement is lambda_body.operands()[0] at this point (before
     // we prepend the closure assignments below).
     if (!lambda_body.operands().empty())
@@ -394,7 +395,12 @@ exprt python_lambda::get_lambda_expr(const nlohmann::json &element)
         !ret_stmt.operands().empty())
       {
         const typet &actual_ret = ret_stmt.operands()[0].type();
-        if (actual_ret.is_pointer() && actual_ret.subtype().is_code())
+        bool is_optional_struct =
+          actual_ret.is_struct() && actual_ret.get("tag").as_string().find(
+                                      "Optional_") != std::string::npos;
+        if (
+          (actual_ret.is_pointer() && actual_ret.subtype().is_code()) ||
+          is_optional_struct)
           to_code_type(added_symbol->type).return_type() = actual_ret;
       }
     }

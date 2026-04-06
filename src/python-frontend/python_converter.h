@@ -406,6 +406,22 @@ private:
 
   void create_builtin_symbols();
 
+  bool import_module_into_block(
+    const nlohmann::json &import_node,
+    module_locator &locator,
+    code_blockt &code);
+
+  nlohmann::json build_dunder_call(
+    const nlohmann::json &object,
+    const std::string &dunder_name,
+    const nlohmann::json &args,
+    const nlohmann::json &source_node) const;
+
+  exprt store_call_result(
+    exprt call_expr,
+    const locationt &location,
+    const std::string &temp_prefix);
+
   void process_module_imports(
     const nlohmann::json &module_ast,
     module_locator &locator,
@@ -822,6 +838,7 @@ private:
   // =========================================================================
 
   static std::string op_to_dunder(const std::string &op);
+  static std::string op_to_reverse_dunder(const std::string &op);
   symbolt *find_dunder_method(
     const std::string &class_name,
     const std::string &dunder_name);

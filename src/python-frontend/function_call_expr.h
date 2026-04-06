@@ -131,6 +131,7 @@ private:
    * for error messages (e.g. "mylist" or "nested[0]").
    */
   const symbolt *get_object_list_symbol(std::string &display_name) const;
+  void materialize_list_symbol(const symbolt *sym) const;
 
   /*
    * Handles int-to-str conversions (e.g., str(65)) by generating

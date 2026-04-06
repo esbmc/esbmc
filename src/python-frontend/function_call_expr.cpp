@@ -2011,6 +2011,42 @@ exprt function_call_expr::build_constant_from_arg() const
       base_expr = converter_.get_expr(arguments[1]);
     }
 
+    // Dispatch to __int__ dunder for struct types (e.g. Decimal)
+    if (
+      base_expr.is_nil() &&
+      (first_arg["_type"] == "Name" || !first_arg.contains("type")))
+    {
+      exprt operand_expr = converter_.get_expr(first_arg);
+      typet resolved = operand_expr.type();
+      if (resolved.id() == "symbol")
+        resolved = converter_.ns.follow(resolved);
+      if (resolved.is_struct())
+      {
+        const struct_typet &st = to_struct_type(resolved);
+        std::string tag = st.tag().as_string();
+        std::string cls =
+          converter_.extract_class_name_from_tag(tag);
+        symbolt *method =
+          converter_.find_dunder_method(cls, "__int__");
+        if (method)
+        {
+          const code_typet &mt = to_code_type(method->type);
+          side_effect_expr_function_callt call;
+          call.function() = symbol_expr(*method);
+          call.type() = mt.return_type();
+          exprt int_object = operand_expr;
+          if (!int_object.is_symbol())
+          {
+            locationt loc = converter_.get_location_from_decl(call_);
+            int_object = converter_.store_call_result(
+              int_object, loc, "int_obj");
+          }
+          call.arguments().push_back(gen_address_of(int_object));
+          return call;
+        }
+      }
+    }
+
     // Handle Name type (variable reference)
     if (first_arg["_type"] == "Name")
     {
@@ -2398,23 +2434,39 @@ function_call_expr::get_object_list_symbol(std::string &display_name) const
   if (func_value["_type"] == "Attribute")
   {
     const exprt attr_expr = converter_.get_expr(func_value);
+    const typet list_type = converter_.get_type_handler().get_list_type();
+
+    if (
+      func_value.contains("value") && func_value["value"].contains("id") &&
+      func_value.contains("attr"))
+    {
+      display_name = func_value["value"]["id"].get<std::string>() + "." +
+                     func_value["attr"].get<std::string>();
+    }
+
     if (attr_expr.is_symbol())
     {
       const symbolt *sym =
         converter_.find_symbol(attr_expr.identifier().as_string());
-      const typet list_type = converter_.get_type_handler().get_list_type();
       if (sym && sym->type == list_type)
-      {
-        if (
-          func_value.contains("value") && func_value["value"].contains("id") &&
-          func_value.contains("attr"))
-        {
-          display_name = func_value["value"]["id"].get<std::string>() + "." +
-                         func_value["attr"].get<std::string>();
-        }
         return sym;
-      }
     }
+
+    // Instance attribute: attr_expr is a member_exprt (struct field access) of
+    // list pointer type. list_type is PyListObject*, so both the temp and the
+    // struct member point to the same PyListObject. All list mutations through
+    // the temp are visible via the original member (same pointer, same object).
+    //
+    // The temp symbol stores attr_expr as its value so that
+    // materialize_list_symbol() can emit the declaration lazily — only in
+    // handler methods, never inside discriminators (is_list_method_call, etc.).
+    if (attr_expr.type() == list_type)
+    {
+      symbolt &tmp = converter_.create_tmp_symbol(
+        call_, "$attr_list$", list_type, attr_expr);
+      return &tmp;
+    }
+
     return nullptr;
   }
 
@@ -2423,6 +2475,33 @@ function_call_expr::get_object_list_symbol(std::string &display_name) const
   symbol_id list_symbol_id = converter_.create_symbol_id();
   list_symbol_id.set_object(display_name);
   return converter_.find_symbol(list_symbol_id.to_string());
+}
+
+// Emit the IR declaration for an instance-attribute list temp symbol.
+//
+// get_object_list_symbol() creates a temp symbol (named "$attr_list$...") that
+// holds the member_exprt of an instance attribute list as its value.  This is
+// kept as a pure lookup so that discriminators (is_list_method_call, etc.) do
+// not emit IR as a side-effect.  Each list method handler calls this function
+// once, just after get_object_list_symbol(), to emit the actual code_declt that
+// initialises the temp pointer from the struct member.
+//
+// For non-instance-attribute symbols (global lists, class-level lists) the
+// function is a no-op.
+void function_call_expr::materialize_list_symbol(const symbolt *sym) const
+{
+  if (!sym || sym->value.is_nil())
+    return;
+  // Only emit a declaration for instance-attribute temp symbols produced by
+  // get_object_list_symbol().  These are identified by their name prefix
+  // "$attr_list$".  Regular list symbols have a nil value and are declared
+  // elsewhere; this guard prevents accidentally re-declaring them.
+  if (sym->name.as_string().find("$attr_list$") == std::string::npos)
+    return;
+  code_declt decl(symbol_expr(*sym));
+  decl.copy_to_operands(sym->value);
+  decl.location() = sym->location;
+  converter_.current_block->copy_to_operands(decl);
 }
 
 bool function_call_expr::is_min_max_call() const
@@ -2435,8 +2514,8 @@ bool function_call_expr::is_min_max_call() const
 
   const auto &args = call_["args"];
 
-  // Handle two-argument case: min(a, b) or max(a, b)
-  if (args.size() == 2)
+  // Handle N >= 2 direct arguments: min(a, b), min(a, b, c), etc.
+  if (args.size() >= 2)
     return true;
 
   // Handle single-argument case if it's a tuple
@@ -2536,50 +2615,55 @@ exprt function_call_expr::handle_min_max(
     }
   }
 
-  if (args.size() > 2)
-    throw std::runtime_error(
-      func_name + "() with more than 2 arguments not yet supported");
+  // N >= 2 direct arguments: min(a, b, c, ...) — build a comparison chain.
+  std::vector<exprt> exprs;
+  exprs.reserve(args.size());
+  for (const auto &arg : args)
+    exprs.push_back(to_value_expr(converter_.get_expr(arg), converter_.ns));
 
-  // Two arguments case: min/max(a, b)
-  exprt arg1 = to_value_expr(converter_.get_expr(args[0]), converter_.ns);
-  exprt arg2 = to_value_expr(converter_.get_expr(args[1]), converter_.ns);
-
-  // Determine result type (with type promotion)
-  typet result_type = arg1.type();
-  if (!base_type_eq(result_type, arg2.type(), converter_.ns))
+  // Determine common promoted type across all arguments.
+  typet result_type = exprs[0].type();
+  for (size_t i = 1; i < exprs.size(); ++i)
   {
-    if (result_type.is_signedbv() && arg2.type().is_floatbv())
-      result_type = arg2.type(); // Promote to float
-    else if (result_type.is_floatbv() && arg2.type().is_signedbv())
-      ; // Keep float type
+    const typet &t = exprs[i].type();
+    if (base_type_eq(result_type, t, converter_.ns))
+      continue;
+    if (result_type.is_floatbv() && t.is_signedbv())
+      continue; // keep float
+    else if (result_type.is_signedbv() && t.is_floatbv())
+      result_type = t; // promote int -> float
     else if (
-      (result_type.is_signedbv() && arg2.type().is_unsignedbv()) ||
-      (result_type.is_unsignedbv() && arg2.type().is_signedbv()))
+      (result_type.is_signedbv() || result_type.is_unsignedbv()) &&
+      (t.is_signedbv() || t.is_unsignedbv()))
     {
-      // Python integers are signed; normalize both operands to signedbv
-      const unsigned width = std::max(
-        result_type.is_signedbv() ? to_signedbv_type(result_type).get_width()
-                                  : to_unsignedbv_type(result_type).get_width(),
-        arg2.type().is_signedbv()
-          ? to_signedbv_type(arg2.type()).get_width()
-          : to_unsignedbv_type(arg2.type()).get_width());
-      result_type = signedbv_typet(width);
-      arg1 = typecast_exprt(arg1, result_type);
-      arg2 = typecast_exprt(arg2, result_type);
+      unsigned wa = result_type.is_signedbv()
+                      ? to_signedbv_type(result_type).get_width()
+                      : to_unsignedbv_type(result_type).get_width();
+      unsigned wb = t.is_signedbv() ? to_signedbv_type(t).get_width()
+                                    : to_unsignedbv_type(t).get_width();
+      result_type = signedbv_typet(std::max(wa, wb));
     }
     else
       throw std::runtime_error(
         func_name + "() arguments must be of comparable types: got " +
-        result_type.pretty() + " and " + arg2.type().pretty());
+        result_type.pretty() + " and " + t.pretty());
   }
 
-  // Create condition: arg1 < arg2 (for min) or arg1 > arg2 (for max)
-  exprt condition(comparison_op, type_handler_.get_typet("bool", 0));
-  condition.copy_to_operands(arg1, arg2);
+  // Cast all args to the common type.
+  for (auto &e : exprs)
+    if (!base_type_eq(e.type(), result_type, converter_.ns))
+      e = typecast_exprt(e, result_type);
 
-  // Create if expression: condition ? arg1 : arg2
-  if_exprt result(condition, arg1, arg2);
-  result.type() = result_type;
+  // Fold: result = exprs[0]; for each subsequent arg update via if-expr.
+  exprt result = exprs[0];
+  for (size_t i = 1; i < exprs.size(); ++i)
+  {
+    exprt condition(comparison_op, type_handler_.get_typet("bool", 0));
+    condition.copy_to_operands(exprs[i], result);
+    if_exprt update(condition, exprs[i], result);
+    update.type() = result_type;
+    result = update;
+  }
 
   return result;
 }
@@ -2593,6 +2677,7 @@ exprt function_call_expr::handle_list_insert() const
 
   std::string list_display_name;
   const symbolt *list_symbol = get_object_list_symbol(list_display_name);
+  materialize_list_symbol(list_symbol);
 
   if (!list_symbol)
     throw std::runtime_error("List variable not found: " + list_display_name);
@@ -2623,6 +2708,7 @@ exprt function_call_expr::handle_list_clear() const
 {
   std::string list_display_name;
   const symbolt *list_symbol = get_object_list_symbol(list_display_name);
+  materialize_list_symbol(list_symbol);
 
   if (!list_symbol)
     throw std::runtime_error("List variable not found: " + list_display_name);
@@ -2670,6 +2756,7 @@ exprt function_call_expr::handle_list_pop() const
   {
     std::string list_display_name;
     list_symbol = get_object_list_symbol(list_display_name);
+    materialize_list_symbol(list_symbol);
     if (!list_symbol)
       throw std::runtime_error("List variable not found: " + list_display_name);
   }
@@ -2763,6 +2850,7 @@ exprt function_call_expr::handle_list_copy() const
 
   std::string list_display_name;
   const symbolt *list_symbol = get_object_list_symbol(list_display_name);
+  materialize_list_symbol(list_symbol);
 
   if (!list_symbol)
     throw std::runtime_error("List variable not found: " + list_display_name);
@@ -2781,6 +2869,7 @@ exprt function_call_expr::handle_list_remove() const
 
   std::string list_display_name;
   const symbolt *list_symbol = get_object_list_symbol(list_display_name);
+  materialize_list_symbol(list_symbol);
 
   if (!list_symbol)
     throw std::runtime_error("List variable not found: " + list_display_name);
@@ -2804,6 +2893,7 @@ exprt function_call_expr::handle_list_sort() const
 
   std::string list_display_name;
   const symbolt *list_symbol = get_object_list_symbol(list_display_name);
+  materialize_list_symbol(list_symbol);
 
   if (!list_symbol)
     throw std::runtime_error("List variable not found: " + list_display_name);
@@ -2820,49 +2910,8 @@ exprt function_call_expr::handle_list_sort() const
 
   int type_flag = 0;
   size_t float_type_id = 0;
-
-  {
-    const type_handler &th = converter_.get_type_handler();
-    bool has_float = false;
-    bool has_int = false;
-    bool is_string = false;
-
-    const size_t map_size = python_list::get_list_type_map_size(list_id);
-
-    for (size_t k = 0; k < map_size; ++k)
-    {
-      const typet elem_type = python_list::get_list_element_type(list_id, k);
-
-      if (elem_type.is_floatbv())
-      {
-        if (!has_float)
-        {
-          // Same hash used by python_list::get_list_element_info:
-          //   std::hash<std::string>{}(type_handler_.type_to_string(elem))
-          const std::string type_name = th.type_to_string(elem_type);
-          float_type_id = std::hash<std::string>{}(type_name);
-          has_float = true;
-        }
-      }
-      else if (
-        (elem_type.is_pointer() && elem_type.subtype() == char_type()) ||
-        (elem_type.is_array() && elem_type.subtype() == char_type()))
-      {
-        is_string = true;
-      }
-      else
-        has_int = true;
-    }
-
-    if (is_string)
-      type_flag = 2;
-    else if (has_float && has_int)
-      type_flag = 3; // mixed → per-element dispatch in C model
-    else if (has_float)
-      type_flag = 1; // all-float
-    else
-      type_flag = 0; // all-integer (default, most common)
-  }
+  python_list::get_list_type_flags(
+    list_id, converter_.get_type_handler(), type_flag, float_type_id);
 
   // ── Locate the C model function ────────────────────────────────────────────
   const symbolt *sort_func =
@@ -2893,6 +2942,7 @@ exprt function_call_expr::handle_list_reverse() const
 
   std::string list_display_name;
   const symbolt *list_symbol = get_object_list_symbol(list_display_name);
+  materialize_list_symbol(list_symbol);
 
   if (!list_symbol)
     throw std::runtime_error("List variable not found: " + list_display_name);
@@ -2989,6 +3039,7 @@ exprt function_call_expr::handle_list_append() const
 
   std::string list_display_name;
   const symbolt *list_symbol = get_object_list_symbol(list_display_name);
+  materialize_list_symbol(list_symbol);
 
   if (!list_symbol)
     throw std::runtime_error("List variable not found: " + list_display_name);
@@ -3097,6 +3148,7 @@ exprt function_call_expr::handle_list_extend() const
 
   std::string list_display_name;
   const symbolt *list_symbol = get_object_list_symbol(list_display_name);
+  materialize_list_symbol(list_symbol);
 
   if (!list_symbol)
     throw std::runtime_error("List variable not found: " + list_display_name);

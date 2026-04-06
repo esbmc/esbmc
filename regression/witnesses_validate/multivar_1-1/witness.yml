@@ -1,0 +1,27 @@
+- entry_type: "invariant_set"
+  metadata:
+    format_version: "2.0"
+    uuid: "6761ac7f-b563-47de-bf95-fe9228d1e753"
+    creation_time: "2026-01-14T16:37:31+00:00"
+    producer:
+      name: "ESBMC kind"
+      version: "7.11.0"
+    task:
+      input_files:
+        - "main5.c"
+      input_file_hashes:
+        "main5.c": "869cba7a794600e8366162836dd834355bea5b7af09db35a4af15c6e6738346f"
+      specification: "G ! call(reach_error())"
+      data_model: "LP64"
+      language: "C"
+  content:
+    - invariant:
+        type: "loop_invariant"
+        location:
+          file_name: "main5.c"
+          line: 17
+          column: 3
+          function: "main"
+        value: "( x == y )"
+        format: "c_expression"
+

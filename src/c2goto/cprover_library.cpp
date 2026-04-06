@@ -244,7 +244,8 @@ const static std::vector<std::string> python_c_models = {
   "__ESBMC_list_remove",
   "__ESBMC_list_sort",
   "__ESBMC_list_reverse",
-  "__ESBMC_list_push_dict_ptr"};
+  "__ESBMC_list_push_dict_ptr",
+  "__ESBMC_list_lt"};
 } // namespace
 
 static void generate_symbol_deps(

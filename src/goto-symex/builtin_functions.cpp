@@ -2972,12 +2972,12 @@ void goto_symext::simplify_python_builtins(expr2tc &expr)
       rhs = to_typecast2t(rhs).from;
 
     auto is_none_type = [](const expr2tc &e) -> bool {
-      // Check for pointer to bool or pointer to empty (void*)
+      // Python None is represented as bool* (none_type()).
+      // void* (any_type) is for unannotated variables, not Python None.
       if (is_pointer_type(e))
       {
         const pointer_type2t &ptr_type = to_pointer_type(e->type);
-        return is_bool_type(ptr_type.subtype) ||
-               is_empty_type(ptr_type.subtype);
+        return is_bool_type(ptr_type.subtype);
       }
 
       return false;
@@ -2986,19 +2986,51 @@ void goto_symext::simplify_python_builtins(expr2tc &expr)
     const bool lhs_is_none = is_none_type(lhs);
     const bool rhs_is_none = is_none_type(rhs);
 
+    // Check if an expr2tc is an Optional struct and return its is_none field
+    auto optional_is_none_field =
+      [&](const expr2tc &val) -> std::optional<expr2tc> {
+      if (!is_struct_type(val))
+        return std::nullopt;
+      const struct_type2t &st = to_struct_type(val->type);
+      if (!st.name.as_string().starts_with("tag-Optional_"))
+        return std::nullopt;
+      return member2tc(get_bool_type(), val, "is_none");
+    };
+
     // Handle Optional[T] vs None
     auto handle_optional_side =
       [&](const expr2tc &side, bool other_is_none) -> std::optional<expr2tc> {
-      if (is_struct_type(side))
+      if (!other_is_none)
+        return std::nullopt;
+
+      // Direct Optional struct case
+      if (auto res = optional_is_none_field(side))
+        return res;
+
+      // Pointer case (Optional* or void*): resolve via value set to find the
+      // actual Optional struct the pointer points to. We return on the first
+      // Optional entry found; for single-assignment variables the value set
+      // has exactly one entry. The tag "tag-Optional_" is established by
+      // type_handler::build_optional_type.
+      if (is_pointer_type(side))
       {
-        const struct_type2t &struct_type = to_struct_type(side->type);
-        const std::string &tag = struct_type.name.as_string();
-        if (tag.starts_with("tag-Optional_") && other_is_none)
+        value_setst::valuest value_set;
+        cur_state->value_set.get_value_set(side, value_set);
+        for (const auto &obj : value_set)
         {
-          // Access is_none field from Optional struct
-          // isnone always checks equality, so return the field directly
-          return member2tc(get_bool_type(), side, "is_none");
+          if (!is_object_descriptor2t(obj))
+            continue;
+          expr2tc val = to_object_descriptor2t(obj).object;
+          cur_state->rename(val);
+          while (is_typecast2t(val))
+            val = to_typecast2t(val).from;
+          if (auto res = optional_is_none_field(val))
+            return res;
         }
+        // For void* (any_type) with no Optional in the value set,
+        // fall back to null-pointer check: x is None ↔ x == NULL.
+        if (is_empty_type(to_pointer_type(side->type).subtype))
+          return equality2tc(side, gen_zero(side->type));
       }
       return std::nullopt;
     };

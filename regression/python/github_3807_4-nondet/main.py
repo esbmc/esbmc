@@ -1,0 +1,6 @@
+def nondet_int() -> int: ...
+def nondet_str() -> str: ...
+
+d: dict[str, int] = {nondet_str(): nondet_int()}
+for item in d.items():
+    assert len(item) == 2

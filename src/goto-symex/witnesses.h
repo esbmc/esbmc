@@ -96,6 +96,26 @@ public:
   std::string function;
 };
 
+class invariant
+{
+public:
+  enum Type
+  {
+    loop_invariant,
+    loop_transition_invariant,
+    location_invariant,
+    location_transition_invariant
+  };
+
+  Type type;
+  std::string file;
+  std::string value;
+  std::string format;
+  BigInt line = c_nonset;
+  BigInt column = c_nonset;
+  std::string function;
+};
+
 class grapht
 {
 private:
@@ -131,6 +151,7 @@ public:
   typet witness_type;
   std::string verified_file;
   std::vector<waypoint> segments;
+  std::vector<invariant> invariants;
 
   yamlt(typet t)
   {

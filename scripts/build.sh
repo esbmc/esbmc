@@ -427,9 +427,9 @@ install_python_deps_macos() {
   export PATH="$py312_bin:$HOME/Library/Python/3.12/bin:$PATH"
 
   if [[ -n "${VIRTUAL_ENV:-}" ]]; then
-    pip install meson ast2json mypy pyparsing toml tomli jira
+    pip install meson ast2json mypy pyparsing toml tomli
   else
-    "$py312" -m pip install --user --break-system-packages meson ast2json mypy pyparsing toml tomli jira
+    "$py312" -m pip install --user --break-system-packages meson ast2json mypy pyparsing toml tomli
   fi
 
   meson --version

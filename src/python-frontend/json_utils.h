@@ -5,6 +5,7 @@
 #include <sstream>
 #include <string>
 #include <functional>
+#include <unordered_map>
 
 #define DUMP_OBJECT(obj) printf("%s\n", (obj).dump(2).c_str())
 
@@ -63,34 +64,49 @@ bool is_class(const std::string &name, const JsonType &ast_json)
   if (find_class(ast_json["body"], name) != JsonType())
     return true;
 
-  // Find class definition in imported modules
+  // Cache loaded module JSONs
+  // To avoid repeated filesystem reads across calls
+  static std::unordered_map<std::string, JsonType> module_cache;
+
+  // ast_output_dir may be absent in minimal/test JSON documents
+  // that have no imported modules;
+  // skip the import scan in that case.
+  if (!ast_json.contains("ast_output_dir"))
+    return false;
+
+  const std::string output_dir =
+    ast_json["ast_output_dir"].template get<std::string>();
+
+  // Check whether name is a class defined in an imported module
+  // Use continue after a negative result
+  // so that all Import&ImportFrom nodes are scanned
+  auto load_and_check = [&](const std::string &module_name) -> bool {
+    const std::string path = output_dir + "/" + module_name + ".json";
+    auto it = module_cache.find(path);
+    if (it == module_cache.end())
+    {
+      std::ifstream f(path);
+      if (!f.is_open())
+        return false;
+      JsonType j;
+      f >> j;
+      it = module_cache.emplace(path, std::move(j)).first;
+    }
+    return is_class(name, it->second);
+  };
+
   for (const auto &obj : ast_json["body"])
   {
-    auto is_imported_class = [&ast_json,
-                              &name](const std::string &module_name) {
-      std::stringstream module_path;
-      module_path << ast_json["ast_output_dir"].template get<std::string>()
-                  << "/" << module_name << ".json";
-      std::ifstream imported_file(module_path.str());
-      if (!imported_file.is_open())
-        return false;
-
-      JsonType imported_module_json;
-      imported_file >> imported_module_json;
-
-      if (is_class(name, imported_module_json))
-        return true;
-
-      return false;
-    };
     if (obj["_type"] == "ImportFrom")
-      return is_imported_class(obj["module"].template get<std::string>());
-
-    if (obj["_type"] == "Import")
+    {
+      if (load_and_check(obj["module"].template get<std::string>()))
+        return true;
+    }
+    else if (obj["_type"] == "Import")
     {
       for (const auto &imported : obj["names"])
       {
-        if (is_imported_class(imported["name"].template get<std::string>()))
+        if (load_and_check(imported["name"].template get<std::string>()))
           return true;
       }
     }

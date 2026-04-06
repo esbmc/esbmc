@@ -10,6 +10,8 @@
 class exprt;
 class symbolt;
 class python_converter;
+class type_handler;
+class codet;
 
 using TypeInfo = std::vector<std::pair<std::string, typet>>;
 
@@ -249,6 +251,19 @@ public:
    */
   static size_t get_list_type_map_size(const std::string &list_id);
 
+  /** Compute the type_flag and float_type_id for a list, using the same
+   *  encoding as __ESBMC_list_sort and __ESBMC_list_lt:
+   *    0 = all-integer, 1 = all-float, 2 = string, 3 = mixed int+float.
+   *  Only examines the element types recorded in list_type_map for list_id.
+   *  Note: currently only inspects a single list; for mixed-type comparisons
+   *  (e.g. int list vs float list) the caller should merge flags from both
+   *  operands. */
+  static void get_list_type_flags(
+    const std::string &list_id,
+    const type_handler &th,
+    int &type_flag,
+    size_t &float_type_id);
+
   /**
    * @brief Reverse the compile-time type-info vector for a list.
    *
@@ -264,6 +279,23 @@ public:
    *                 "c:main.py@42@F@main@lst").
    */
   static void reverse_type_info(const std::string &list_id);
+
+  /**
+   * @brief Unpack a list variable into multiple targets, supporting starred expressions.
+   *
+   * Handles assignments like `a, *b, c = lst` where `lst` is a list variable.
+   * Uses __ESBMC_list_at for element access and builds a new list for the starred target.
+   *
+   * @param ast_node The assignment AST node (for location info and value["id"])
+   * @param target   The tuple/list target node containing the target variables
+   * @param list_expr The expression representing the source list (pointer type)
+   * @param target_block The code block to append assignment instructions to
+   */
+  void handle_list_var_unpacking(
+    const nlohmann::json &ast_node,
+    const nlohmann::json &target,
+    const exprt &list_expr,
+    codet &target_block);
 
 private:
   friend class python_dict_handler;
