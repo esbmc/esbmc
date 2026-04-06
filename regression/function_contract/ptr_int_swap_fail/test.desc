@@ -1,4 +1,4 @@
 CORE
 main.c
---function swap --enforce-contract swap --assume-nonnull-valid
+--function swap --enforce-contract swap
 ^VERIFICATION FAILED$

@@ -670,7 +670,6 @@ void code_contractst::havoc_static_globals(
 
 void code_contractst::enforce_contracts(
   const std::set<std::string> &to_enforce,
-  bool assume_nonnull_valid,
   const std::string &entry_function,
   bool check_assigns_compliance)
 {
@@ -835,48 +834,14 @@ void code_contractst::enforce_contracts(
     // Reuse to avoid double scan.
     std::vector<expr2tc> assigns_targets = std::move(assigns_targets_early);
 
-    // Auto-detect whether pointer/array assigns targets are present.
-    // Phase 2B/2C (array element and pointer-dereference compliance) require
-    // that pointer parameters point to allocated memory so that ESBMC's
-    // value-set analysis can track writes through them.  Rather than making
-    // the user pass --assume-nonnull-valid manually, we enable the behaviour
-    // automatically whenever the assigns clause contains pointer or array
-    // element targets.
-    bool local_nonnull_valid = assume_nonnull_valid;
-    if (!local_nonnull_valid && !assigns_targets.empty())
-    {
-      auto classified_early =
-        frame_enforcert::classify_assigns_targets(assigns_targets);
-      if (
-        !classified_early.pointer_targets.empty() ||
-        !classified_early.ptr_field_targets.empty())
-      {
-        local_nonnull_valid = true;
-        log_debug(
-          "contracts",
-          "enforce_contracts: auto-enabling nonnull-valid for {} "
-          "(pointer/array assigns targets detected)",
-          function_name);
-      }
-    }
-
-    // Determine if this function needs pointer validity assumptions.
-    // Only the explicit --assume-nonnull-valid flag and the --function entry
-    // harness path trigger add_pointer_validity_assumptions.
-    // Auto-detected local_nonnull_valid (from pointer assigns targets) must NOT
-    // trigger it: when the function is called from real code (e.g. main()),
-    // add_pointer_validity_assumptions would overwrite the caller's pointer
-    // arguments (e.g. p = malloc(...) clobbering p = &pt from the caller).
-    bool needs_ptr_validity =
-      assume_nonnull_valid ||
-      (!entry_function.empty() && function_name == entry_function);
-
-    // use_malloc_for_ptrs: only use malloc (vs ASSUME(valid_object)) when the
-    // explicit --assume-nonnull-valid flag is set. For the entry-function path
-    // without the explicit flag, use ASSUME(valid_object) which produces
-    // vacuous ASSUME(false) for nil pointer args from the harness — the
-    // intended behaviour (vacuous pass when no memory is set up via is_fresh).
-    bool use_malloc_for_ptrs = assume_nonnull_valid;
+    // Allocate fresh malloc backing for pointer parameters when this function
+    // is the --function entry point. In that mode ESBMC's harness passes nil
+    // for all pointer args; without backing storage, dereferences in the body
+    // or ensures clause would be invalid. When called from real code (no
+    // entry_function, or a different function is the entry) the caller already
+    // provides real pointers, so we must not overwrite them.
+    bool alloc_ptr_params =
+      !entry_function.empty() && function_name == entry_function;
 
     // Generate wrapper function, passing the original body
     goto_programt wrapper = generate_checking_wrapper(
@@ -886,10 +851,9 @@ void code_contractst::enforce_contracts(
       original_name_id,
       original_body_copy,
       is_fresh_mappings,
-      needs_ptr_validity,
+      alloc_ptr_params,
       assigns_targets,
-      check_assigns_compliance,
-      use_malloc_for_ptrs);
+      check_assigns_compliance);
 
     // Create new function entry
     goto_functiont new_func;
@@ -914,10 +878,9 @@ goto_programt code_contractst::generate_checking_wrapper(
   const irep_idt &original_func_id,
   const goto_programt &original_body,
   const std::vector<is_fresh_mapping_t> &is_fresh_mappings,
-  bool assume_nonnull_valid,
+  bool alloc_ptr_params,
   const std::vector<expr2tc> &assigns_targets,
-  bool check_assigns_compliance,
-  bool use_malloc_for_ptrs)
+  bool check_assigns_compliance)
 {
   goto_programt wrapper;
   locationt location = original_func.location;
@@ -1045,15 +1008,10 @@ goto_programt code_contractst::generate_checking_wrapper(
     }
   }
 
-  // 1. Add pointer validity assumptions (if needed).
-  //    Comes after is_fresh allocation so that pointers declared via
-  //    __ESBMC_is_fresh already have valid_object == true here, preventing
-  //    their ASSUME(valid_object(p)) from becoming vacuous ASSUME(false).
-  //    For --function harnesses without is_fresh, nil pointer args still
-  //    produce ASSUME(valid_object(NULL)) == ASSUME(false), which kills all
-  //    paths and makes the wrapper vacuously pass (intended behaviour for
-  //    tests that do not declare memory via is_fresh).
-  if (assume_nonnull_valid)
+  // 1. Allocate fresh backing storage for pointer parameters (entry-function
+  //    harness mode only). Comes after is_fresh allocation so that pointers
+  //    declared via __ESBMC_is_fresh already have valid storage and are skipped.
+  if (alloc_ptr_params)
   {
     // Phase 2B: pre-classify assigns targets to identify array params that need
     // larger allocations (ARRAY_ALLOC_ELEMS elements instead of 1).
@@ -1077,7 +1035,6 @@ goto_programt code_contractst::generate_checking_wrapper(
       wrapper,
       original_func,
       location,
-      use_malloc_for_ptrs,
       array_param_ids,
       is_fresh_allocated_params);
   }
@@ -3620,7 +3577,6 @@ void code_contractst::add_pointer_validity_assumptions(
   goto_programt &wrapper,
   const symbolt &func,
   const locationt &location,
-  bool use_malloc,
   const std::set<irep_idt> &array_params,
   const std::set<irep_idt> &skip_params)
 {
@@ -3651,27 +3607,22 @@ void code_contractst::add_pointer_validity_assumptions(
       continue;
     }
 
-    if (use_malloc)
+    type2tc pointed_to_type = to_pointer_type(param_type).subtype;
+    if (is_empty_type(pointed_to_type))
+      pointed_to_type = get_uint8_type();
+
+    bool is_array_param = array_params.count(param.get_identifier()) > 0;
+
+    if (is_array_param)
     {
-      // --assume-nonnull-valid: allocate fresh heap memory so that
-      //   1. valid_object(p) = true (set by track_new_pointer after malloc)
-      //   2. *p is a fresh nondet value, further constrained by requires
-      // ASSUME(p != NULL) eliminates the null-malloc path.
-      type2tc pointed_to_type = to_pointer_type(param_type).subtype;
-      if (is_empty_type(pointed_to_type))
-        pointed_to_type = get_uint8_type();
-
-      // Phase 2B: for array params, allocate ARRAY_ALLOC_ELEMS elements so that
-      // the nondet-witness index j can address individual array elements.
-      bool is_array_param = array_params.count(param.get_identifier()) > 0;
-      expr2tc alloc_size;
-      if (is_array_param)
-        alloc_size = constant_int2tc(size_type2(), BigInt(ARRAY_ALLOC_ELEMS));
-
+      // Phase 2B: array params need ARRAY_ALLOC_ELEMS elements for nondet-witness
+      // addressing. Use malloc so we can allocate a variable-length range.
+      expr2tc alloc_size =
+        constant_int2tc(size_type2(), BigInt(ARRAY_ALLOC_ELEMS));
       expr2tc malloc_expr = sideeffect2tc(
         pointer_type2tc(pointed_to_type),
         expr2tc(),
-        alloc_size, // nil → 1 element; constant → N elements
+        alloc_size,
         std::vector<expr2tc>(),
         pointed_to_type,
         sideeffect2t::malloc);
@@ -3680,43 +3631,125 @@ void code_contractst::add_pointer_validity_assumptions(
       assign_inst->code = code_assign2tc(p, malloc_expr);
       assign_inst->location = location;
       assign_inst->location.comment(
-        is_array_param ? "assume-nonnull-valid: allocate array for pointer "
-                         "parameter (Phase 2B)"
-                       : "assume-nonnull-valid: allocate fresh object for "
-                         "pointer parameter");
+        "harness: allocate array backing for pointer parameter");
 
       expr2tc null_ptr = symbol2tc(param_type, "NULL");
       expr2tc not_null = notequal2tc(p, null_ptr);
       auto assume_inst = wrapper.add_instruction(ASSUME);
       assume_inst->guard = not_null;
       assume_inst->location = location;
-      assume_inst->location.comment(
-        "assume-nonnull-valid: pointer is non-null after allocation");
+      assume_inst->location.comment("harness: pointer is non-null after allocation");
 
       log_debug(
         "contracts",
-        "add_pointer_validity_assumptions: malloc for parameter {} "
-        "(is_array={})",
-        id2string(param.get_identifier()),
-        is_array_param);
+        "add_pointer_validity_assumptions: malloc (array) for parameter {}",
+        id2string(param.get_identifier()));
     }
     else
     {
-      // entry_function implicit case: ASSUME(valid_object(p)).
-      // For --function f harnesses the harness passes nil for pointer args,
-      // so valid_object(NULL) = false → ASSUME(false) → vacuous.  This is
-      // intentional: it keeps old snapshot materialization reachable for
-      // ordering purposes while still killing all nil-pointer paths.
-      expr2tc validity_check = valid_object2tc(p);
-      auto t = wrapper.add_instruction(ASSUME);
-      t->guard = validity_check;
-      t->location = location;
-      t->location.comment("assume non-null parameter is valid");
+      // Resolve symbol_type2t to get the concrete pointed-to type.
+      type2tc resolved_type = pointed_to_type;
+      if (is_symbol_type(pointed_to_type))
+        resolved_type = ns.follow(pointed_to_type);
 
-      log_debug(
-        "contracts",
-        "add_pointer_validity_assumptions: valid_object for parameter {}",
-        id2string(param.get_identifier()));
+      bool is_struct_param =
+        is_struct_type(resolved_type) || is_union_type(resolved_type);
+
+      if (is_struct_param)
+      {
+        // Struct/union params: use stack (DECL + address-of) for a single
+        // element. This is critical for correctness: ESBMC's symex correctly
+        // tracks conditional writes through stack-allocated structs (proper SSA
+        // phi-nodes at join points), but heap (malloc) objects lose ITE encoding
+        // for conditional field writes — causing ensures checks like
+        // "node->pending_value == old_value" to fail spuriously.
+        std::string param_id_str = id2string(param.get_identifier());
+        auto at_pos = param_id_str.rfind('@');
+        std::string short_name = (at_pos != std::string::npos)
+                                   ? param_id_str.substr(at_pos + 1)
+                                   : param_id_str;
+        std::string harness_var_name =
+          "__ESBMC_harness_ptr_" + id2string(func.name) + "_" + short_name;
+
+        // Register the harness variable as a symbol so symex can find it.
+        symbolt harness_sym;
+        harness_sym.name = harness_var_name;
+        harness_sym.id = harness_var_name;
+        harness_sym.type = migrate_type_back(resolved_type);
+        harness_sym.lvalue = true;
+        harness_sym.static_lifetime = false;
+        harness_sym.location = location;
+        harness_sym.mode = func.mode;
+        context.move_symbol_to_context(harness_sym);
+
+        // DECL: declare the local variable on the (virtual) stack.
+        goto_programt::targett decl_inst = wrapper.add_instruction(DECL);
+        decl_inst->code =
+          code_decl2tc(resolved_type, irep_idt(harness_var_name));
+        decl_inst->location = location;
+        decl_inst->location.comment("harness: stack backing for pointer parameter");
+
+        // ASSIGN harness_var = NONDET(T): initialize all fields to nondet.
+        // ESSENTIAL: symex needs initial SSA versions of all struct fields
+        // before any conditional write can create a new version (ITE phi-node).
+        expr2tc harness_expr = symbol2tc(resolved_type, harness_var_name);
+        expr2tc nondet_expr = gen_nondet(resolved_type);
+        auto init_inst = wrapper.add_instruction(ASSIGN);
+        init_inst->code = code_assign2tc(harness_expr, nondet_expr);
+        init_inst->location = location;
+        init_inst->location.comment(
+          "harness: initialize stack backing to nondet");
+
+        // ASSIGN p = &harness_var  (always non-null, no ASSUME needed)
+        expr2tc addr_expr =
+          address_of2tc(pointer_type2tc(resolved_type), harness_expr);
+        auto assign_inst = wrapper.add_instruction(ASSIGN);
+        assign_inst->code = code_assign2tc(p, addr_expr);
+        assign_inst->location = location;
+        assign_inst->location.comment(
+          "harness: point parameter to stack-backed object");
+
+        log_debug(
+          "contracts",
+          "add_pointer_validity_assumptions: stack backing for parameter {}",
+          id2string(param.get_identifier()));
+      }
+      else
+      {
+        // Primitive (int*, const char*, bool*, etc.) pointer params are
+        // typically used as arrays with arbitrary index. Allocate
+        // ARRAY_ALLOC_ELEMS elements via malloc so that any valid index
+        // access returns a consistent SMT variable.  (Single-element stack
+        // allocation causes out-of-bounds reads to produce fresh nondets on
+        // each access, making "return_value == arr[idx]" unprovable.)
+        expr2tc alloc_size =
+          constant_int2tc(size_type2(), BigInt(ARRAY_ALLOC_ELEMS));
+        expr2tc malloc_expr = sideeffect2tc(
+          pointer_type2tc(pointed_to_type),
+          expr2tc(),
+          alloc_size,
+          std::vector<expr2tc>(),
+          pointed_to_type,
+          sideeffect2t::malloc);
+
+        auto assign_inst = wrapper.add_instruction(ASSIGN);
+        assign_inst->code = code_assign2tc(p, malloc_expr);
+        assign_inst->location = location;
+        assign_inst->location.comment(
+          "harness: allocate primitive array backing for pointer parameter");
+
+        expr2tc null_ptr = symbol2tc(param_type, "NULL");
+        expr2tc not_null = notequal2tc(p, null_ptr);
+        auto assume_inst = wrapper.add_instruction(ASSUME);
+        assume_inst->guard = not_null;
+        assume_inst->location = location;
+        assume_inst->location.comment("harness: pointer is non-null after allocation");
+
+        log_debug(
+          "contracts",
+          "add_pointer_validity_assumptions: malloc (primitive) for parameter {}",
+          id2string(param.get_identifier()));
+      }
     }
   }
 }

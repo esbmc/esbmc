@@ -78,13 +78,12 @@ public:
   /// Renames function F to __ESBMC_contracts_original_F and generates a new wrapper function F
   /// Wrapper function: assume requires -> call original function -> assert ensures
   /// \param to_enforce Set of function names to enforce contracts for
-  /// \param assume_nonnull_valid If true, assume non-null pointer parameters are valid objects
   /// \param entry_function The --function entry point name (empty if using main).
-  ///        When a function is the entry point AND called from the harness with nil arguments,
-  ///        pointer parameters need valid_object assumptions for correct ensures checking.
+  ///        When non-empty AND matches the function being enforced, the wrapper
+  ///        allocates fresh backing storage for all pointer parameters so that
+  ///        the harness-generated nil args become valid dereferenceable objects.
   void enforce_contracts(
     const std::set<std::string> &to_enforce,
-    bool assume_nonnull_valid = false,
     const std::string &entry_function = "",
     bool check_assigns_compliance = false);
 
@@ -187,7 +186,8 @@ private:
   /// \param original_func_id ID of the renamed original function
   /// \param original_body Original function body (before renaming)
   /// \param is_fresh_mappings Mappings for is_fresh temp variables in ensures
-  /// \param assume_nonnull_valid If true, assume non-null pointer parameters are valid objects
+  /// \param alloc_ptr_params If true, allocate fresh malloc backing for all
+  ///        pointer parameters (used in --function entry harness mode).
   /// \return Generated wrapper function body
   goto_programt generate_checking_wrapper(
     const symbolt &original_func,
@@ -196,10 +196,9 @@ private:
     const irep_idt &original_func_id,
     const goto_programt &original_body,
     const std::vector<is_fresh_mapping_t> &is_fresh_mappings,
-    bool assume_nonnull_valid = false,
+    bool alloc_ptr_params = false,
     const std::vector<expr2tc> &assigns_targets = {},
-    bool check_assigns_compliance = false,
-    bool use_malloc_for_ptrs = false);
+    bool check_assigns_compliance = false);
 
   /// \brief Generate replacement code at function call site
   /// \param function_symbol Function symbol being called
@@ -512,18 +511,18 @@ private:
   /// \param location Location information
   void havoc_static_globals(goto_programt &dest, const locationt &location);
 
-  /// \brief Add pointer validity assumptions for non-null pointer parameters
-  /// Used with --assume-nonnull-valid flag in enforce-contract mode
+  /// \brief Allocate fresh malloc backing storage for all pointer parameters.
+  /// Called in --function entry harness mode so that pointer params point to
+  /// real heap objects instead of nil, enabling valid dereference in the body.
   /// \param wrapper Destination goto program (wrapper body)
   /// \param func Function symbol
   /// \param location Location information
-  /// \param use_malloc If true, allocate memory via malloc
   /// \param array_params Set of param IDs that need array allocation (ARRAY_ALLOC_ELEMS elements)
+  /// \param skip_params Set of param IDs already allocated by __ESBMC_is_fresh
   void add_pointer_validity_assumptions(
     goto_programt &wrapper,
     const symbolt &func,
     const locationt &location,
-    bool use_malloc = false,
     const std::set<irep_idt> &array_params = {},
     const std::set<irep_idt> &skip_params = {});
 };

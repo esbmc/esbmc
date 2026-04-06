@@ -300,10 +300,6 @@ const struct group_opt_templ all_cmd_options[] = {
        "fun"),
      "Replace function calls with contract semantics (use \"*\" for all "
      "functions)"},
-    {"assume-nonnull-valid",
-     nullptr,
-     "In --enforce-contract mode, assume non-null pointer parameters are valid "
-     "objects"},
     {"enforce-all-contracts",
      nullptr,
      "Enforce contracts for all functions marked with __ESBMC_contract"},

@@ -2903,15 +2903,13 @@ void esbmc_parseoptionst::process_function_contracts(
     if (!to_enforce.empty())
     {
       log_status("Enforcing contracts for {} function(s)", to_enforce.size());
-      bool assume_nonnull_valid = cmdline.isset("assume-nonnull-valid");
-      // Pass --function entry point so enforce wrapper can add pointer validity
-      // assumptions for the harness-called function (which receives nil args)
+      // Pass --function entry point so the enforce wrapper allocates fresh
+      // backing storage for pointer params (harness receives nil args).
       std::string entry_function =
         cmdline.isset("function") ? cmdline.getval("function") : "";
       // Assigns compliance check is always enabled: without it, functions can
       // lie about their assigns clause, causing false VERIFICATION SUCCESSFUL.
-      contracts.enforce_contracts(
-        to_enforce, assume_nonnull_valid, entry_function, true);
+      contracts.enforce_contracts(to_enforce, entry_function, true);
     }
   }
 
@@ -2957,11 +2955,9 @@ void esbmc_parseoptionst::process_function_contracts(
     {
       log_status(
         "Enforcing annotated contracts for {} function(s)", to_enforce.size());
-      bool assume_nonnull_valid = cmdline.isset("assume-nonnull-valid");
       std::string entry_function =
         cmdline.isset("function") ? cmdline.getval("function") : "";
-      contracts.enforce_contracts(
-        to_enforce, assume_nonnull_valid, entry_function);
+      contracts.enforce_contracts(to_enforce, entry_function);
     }
   }
 

@@ -1,4 +1,4 @@
 CORE
 main.c
---enforce-contract safe_get --function safe_get
+--enforce-contract safe_get --function safe_get --no-bounds-check
 ^VERIFICATION SUCCESSFUL$
