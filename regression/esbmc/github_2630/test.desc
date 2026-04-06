@@ -2,4 +2,4 @@ CORE
 main.c
 --multi-property
 ^VERIFICATION FAILED$
-✗ 3 failed
+3 failed
