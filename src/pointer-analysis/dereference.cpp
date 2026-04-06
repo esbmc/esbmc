@@ -1349,6 +1349,14 @@ void dereferencet::construct_from_const_struct_offset(
       continue;
     }
 
+    if (m_size > 0 && m_size < config.ansi_c.char_width)
+    {
+      // Skip sub-byte members (unnamed bitfields, padding bits): they are
+      // narrower than one byte and cannot hold a byte-aligned access.
+      i++;
+      continue;
+    }
+
     if (int_offset < m_offs)
     {
       // The offset is behind this field, but wasn't accepted by the previous
