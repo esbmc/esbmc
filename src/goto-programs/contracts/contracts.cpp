@@ -3638,7 +3638,8 @@ void code_contractst::add_pointer_validity_assumptions(
       auto assume_inst = wrapper.add_instruction(ASSUME);
       assume_inst->guard = not_null;
       assume_inst->location = location;
-      assume_inst->location.comment("harness: pointer is non-null after allocation");
+      assume_inst->location.comment(
+        "harness: pointer is non-null after allocation");
 
       log_debug(
         "contracts",
@@ -3687,7 +3688,8 @@ void code_contractst::add_pointer_validity_assumptions(
         decl_inst->code =
           code_decl2tc(resolved_type, irep_idt(harness_var_name));
         decl_inst->location = location;
-        decl_inst->location.comment("harness: stack backing for pointer parameter");
+        decl_inst->location.comment(
+          "harness: stack backing for pointer parameter");
 
         // ASSIGN harness_var = NONDET(T): initialize all fields to nondet.
         // ESSENTIAL: symex needs initial SSA versions of all struct fields
@@ -3743,11 +3745,13 @@ void code_contractst::add_pointer_validity_assumptions(
         auto assume_inst = wrapper.add_instruction(ASSUME);
         assume_inst->guard = not_null;
         assume_inst->location = location;
-        assume_inst->location.comment("harness: pointer is non-null after allocation");
+        assume_inst->location.comment(
+          "harness: pointer is non-null after allocation");
 
         log_debug(
           "contracts",
-          "add_pointer_validity_assumptions: malloc (primitive) for parameter {}",
+          "add_pointer_validity_assumptions: malloc (primitive) for parameter "
+          "{}",
           id2string(param.get_identifier()));
       }
     }
