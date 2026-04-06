@@ -4169,6 +4169,18 @@ exprt python_converter::get_expr(const nlohmann::json &element)
             base_type = pointed_to;
         }
 
+        // Delegate complex attribute access (.real, .imag) to the handler.
+        if (is_complex_type(base_type))
+        {
+          exprt result =
+            complex_handler_.handle_attribute_access(base_expr, attr_name);
+          if (!result.is_nil())
+          {
+            expr = result;
+            break;
+          }
+        }
+
         if (base_type.is_struct())
         {
           const struct_typet &struct_type = to_struct_type(base_type);
@@ -4332,6 +4344,18 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     if (!is_class_attr && element["_type"] == "Attribute")
     {
       const std::string &attr_name = element["attr"].get<std::string>();
+
+      // Delegate complex attribute access (.real, .imag) to the handler.
+      if (is_complex_type(symbol->type))
+      {
+        exprt result =
+          complex_handler_.handle_attribute_access(expr, attr_name);
+        if (!result.is_nil())
+        {
+          expr = result;
+          break;
+        }
+      }
 
       // Get object type name from symbol. e.g.: tag-MyClass
       std::string obj_type_name;
