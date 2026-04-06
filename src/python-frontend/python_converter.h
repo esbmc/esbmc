@@ -1,6 +1,7 @@
 #pragma once
 
 #include <nlohmann/json.hpp>
+#include <python-frontend/complex_handler.h>
 #include <python-frontend/function_call_cache.h>
 #include <python-frontend/global_scope.h>
 #include <python-frontend/python_dict_handler.h>
@@ -111,6 +112,11 @@ public:
   python_math &get_math_handler()
   {
     return math_handler_;
+  }
+
+  complex_handler &get_complex_handler()
+  {
+    return complex_handler_;
   }
 
   string_handler &get_string_handler()
@@ -230,6 +236,7 @@ public:
   const python_typechecking &get_typechecker() const;
 
 private:
+  friend class complex_handler;
   friend class function_call_expr;
   friend class numpy_call_expr;
   friend class function_call_builder;
@@ -898,6 +905,7 @@ private:
   exprt *current_lhs;
   string_handler string_handler_;
   python_math math_handler_;
+  complex_handler complex_handler_;
   tuple_handler *tuple_handler_;
   python_dict_handler *dict_handler_;
   python_typechecking *typechecker_ = nullptr;
