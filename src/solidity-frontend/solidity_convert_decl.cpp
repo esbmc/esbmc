@@ -1313,4 +1313,3 @@ void solidity_convertert::get_function_definition_name(
 
   log_debug("solidity", "\t\t@@@ got function name {}", name);
 }
-
