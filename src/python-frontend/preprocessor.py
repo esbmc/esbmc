@@ -2748,14 +2748,11 @@ class Preprocessor(ast.NodeTransformer):
         Convert them into individual assignments with proper type inference
         """
         assignments = []
-        def expand_unpacking(target_node, value_node):
+        leaf_pairs = []
+
+        def collect_unpacking_pairs(target_node, value_node):
             if isinstance(target_node, ast.Name):
-                target_copy = copy.deepcopy(target_node)
-                value_copy = copy.deepcopy(value_node)
-                individual_assign = self._create_individual_assignment(
-                    target_copy, value_copy, source_node)
-                self._update_variable_types_simple(target_copy, value_copy)
-                assignments.append(individual_assign)
+                leaf_pairs.append((target_node, value_node))
                 return True
 
             if not isinstance(target_node, (ast.Tuple, ast.List)):
@@ -2766,13 +2763,21 @@ class Preprocessor(ast.NodeTransformer):
                 return False
 
             for target_elem, value_elem in zip(target_node.elts, value_node.elts):
-                if not expand_unpacking(target_elem, value_elem):
+                if not collect_unpacking_pairs(target_elem, value_elem):
                     return False
             return True
 
-        if not expand_unpacking(target, value):
+        if not collect_unpacking_pairs(target, value):
             # Don't transform unsupported unpacking shapes - let converter handle it
             return source_node
+
+        for target_node, value_node in leaf_pairs:
+            target_copy = copy.deepcopy(target_node)
+            value_copy = copy.deepcopy(value_node)
+            individual_assign = self._create_individual_assignment(
+                target_copy, value_copy, source_node)
+            self._update_variable_types_simple(target_copy, value_copy)
+            assignments.append(individual_assign)
 
         return assignments
 
