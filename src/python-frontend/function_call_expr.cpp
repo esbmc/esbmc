@@ -1,8 +1,11 @@
 #include <python-frontend/function_call_expr.h>
 #include <python-frontend/cmath_lowering_policy.h>
+#include <python-frontend/complex_handler.h>
+#include <python-frontend/complex_handler_utils.h>
 #include <python-frontend/exception_utils.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/math_guard_utils.h>
+#include <python-frontend/string_handler_utils.h>
 #include <python-frontend/python_exception_handler.h>
 #include <python-frontend/python_list.h>
 #include <python-frontend/string_builder.h>
@@ -60,18 +63,6 @@ std::string node_type_of(const nlohmann::json &node)
 bool is_cpp_throw_expr(const exprt &e)
 {
   return e.statement() == "cpp-throw";
-}
-
-exprt raise_math_real_type_error_expr(python_converter &converter)
-{
-  return converter.get_exception_handler().gen_exception_raise(
-    "TypeError", "must be real number, not complex");
-}
-
-exprt raise_math_int_type_error_expr(python_converter &converter)
-{
-  return converter.get_exception_handler().gen_exception_raise(
-    "TypeError", "'complex' object cannot be interpreted as an integer");
 }
 
 double round_ties_to_even(const double value)
@@ -719,6 +710,84 @@ exprt function_call_expr::handle_int_to_str(nlohmann::json &arg) const
     std::vector<uint8_t>(str_val.begin(), str_val.end()), t);
 }
 
+exprt function_call_expr::handle_int_to_bytes() const
+{
+  const auto &args = call_["args"];
+  // Python accepts both int.to_bytes(x, ...) and x.to_bytes(...).
+  const bool is_type_method_call = call_["func"]["_type"] == "Attribute" &&
+                                   call_["func"]["value"]["_type"] == "Name" &&
+                                   call_["func"]["value"]["id"] == "int";
+
+  // In the type-method form, the integer value is passed explicitly as the
+  // first argument. In the instance-method form, it comes from the receiver.
+  if (
+    args.size() < (is_type_method_call ? 3 : 2) ||
+    args.size() > (is_type_method_call ? 4 : 3))
+  {
+    throw std::runtime_error(
+      is_type_method_call ? "int.to_bytes() expects 3 or 4 positional "
+                            "arguments"
+                          : "int.to_bytes() expects 2 or 3 positional "
+                            "arguments");
+  }
+
+  exprt value = is_type_method_call
+                  ? converter_.get_expr(args[0])
+                  : converter_.get_expr(call_["func"]["value"]);
+  const nlohmann::json &length_arg = args[is_type_method_call ? 1 : 0];
+  const nlohmann::json &byteorder_arg = args[is_type_method_call ? 2 : 1];
+
+  if (
+    !length_arg.contains("value") || !length_arg["value"].is_number_unsigned())
+    throw std::runtime_error(
+      "int.to_bytes() currently expects a constant unsigned length");
+
+  const std::size_t length = length_arg["value"].get<std::size_t>();
+
+  bool big_endian = true;
+  if (byteorder_arg.contains("value"))
+  {
+    if (byteorder_arg["value"].is_boolean())
+      big_endian = byteorder_arg["value"].get<bool>();
+    else if (byteorder_arg["value"].is_string())
+      big_endian = byteorder_arg["value"].get<std::string>() == "big";
+  }
+
+  const typet bytes_type = type_handler_.get_typet("bytes", length);
+  exprt result = gen_zero(bytes_type);
+  const typet &elem_type = bytes_type.subtype();
+
+  if (!value.type().is_unsignedbv())
+  {
+    // Convert the source value to an unsigned integer type before extracting
+    // individual bytes with shifts and masks.
+    const unsigned width =
+      (value.type().is_signedbv() || value.type().is_unsignedbv())
+        ? std::max(1u, bv_width(value.type()))
+        : 64;
+    value = typecast_exprt(value, unsignedbv_typet(width));
+  }
+
+  // Fill the output array one byte at a time. For big-endian we start from the
+  // most significant byte; for little-endian we start from the least significant one.
+  for (std::size_t i = 0; i < length; ++i)
+  {
+    const std::size_t byte_index = big_endian ? (length - 1 - i) : i;
+
+    // Shift the selected byte down to the low 8 bits and mask everything else out.
+    const exprt shift_amount = from_integer(byte_index * 8, value.type());
+    exprt shifted("shr", value.type());
+    shifted.copy_to_operands(value, shift_amount);
+
+    exprt masked("bitand", value.type());
+    masked.copy_to_operands(shifted, from_integer(0xff, value.type()));
+
+    result.operands().at(i) = typecast_exprt(masked, elem_type);
+  }
+
+  return result;
+}
+
 exprt function_call_expr::handle_float_to_str(nlohmann::json &arg) const
 {
   std::string str_val = std::to_string(arg["value"].get<double>());
@@ -1259,25 +1328,6 @@ function_call_expr::lookup_python_symbol(const std::string &var_name) const
 
 exprt function_call_expr::handle_abs(nlohmann::json &arg) const
 {
-  auto build_complex_abs = [&](const exprt &complex_expr) -> exprt {
-    exprt real = member_exprt(complex_expr, "real", double_type());
-    exprt imag = member_exprt(complex_expr, "imag", double_type());
-
-    exprt real_sq("ieee_mul", double_type());
-    real_sq.copy_to_operands(real, real);
-    exprt imag_sq("ieee_mul", double_type());
-    imag_sq.copy_to_operands(imag, imag);
-
-    exprt sum("ieee_add", double_type());
-    sum.copy_to_operands(real_sq, imag_sq);
-
-    exprt sqrt_expr("ieee_sqrt", double_type());
-    sqrt_expr.copy_to_operands(sum);
-    sqrt_expr.add("rounding_mode") =
-      symbol_exprt("c:@__ESBMC_rounding_mode", int_type());
-    return sqrt_expr;
-  };
-
   // Handle the case where the input is a unary minus applied to a literal
   // (e.g., abs(-5) becomes abs(5)).
   if (arg.contains("_type") && arg["_type"] == "UnaryOp")
@@ -1330,7 +1380,7 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
         return dunder_result;
 
       if (is_complex_type(inferred_type))
-        return build_complex_abs(inferred_expr);
+        return converter_.get_complex_handler().handle_abs(inferred_expr);
 
       // Build a symbolic abs() expression with the resolved operand type
       exprt abs_expr("abs", inferred_type);
@@ -1360,7 +1410,7 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
         return dunder_result;
 
       if (is_complex_type(operand_type))
-        return build_complex_abs(operand_expr);
+        return converter_.get_complex_handler().handle_abs(operand_expr);
 
       // Build a symbolic abs() expression with the resolved operand type
       exprt abs_expr("abs", operand_type);
@@ -1392,7 +1442,7 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
     return fallback_expr;
 
   if (is_complex_type(fallback_expr.type()))
-    return build_complex_abs(fallback_expr);
+    return converter_.get_complex_handler().handle_abs(fallback_expr);
 
   exprt abs_expr("abs", fallback_expr.type());
   abs_expr.copy_to_operands(fallback_expr);
@@ -1520,83 +1570,11 @@ exprt function_call_expr::handle_complex() const
       "ValueError", msg);
   };
   auto zero = []() -> exprt { return from_double(0.0, double_type()); };
-  auto promote_int_arith_to_double =
-    [&](const exprt &input_expr, auto &self, std::size_t depth) -> exprt {
-    if (depth > 64)
-      return typecast_exprt(input_expr, double_type());
-
-    if (is_cpp_throw_expr(input_expr))
-      return input_expr;
-
-    const irep_idt id = input_expr.id();
-    if (
-      (id == "+" || id == "-" || id == "*" || id == "/") &&
-      input_expr.operands().size() == 2)
-    {
-      exprt lhs = self(input_expr.op0(), self, depth + 1);
-      if (is_cpp_throw_expr(lhs))
-        return lhs;
-      exprt rhs = self(input_expr.op1(), self, depth + 1);
-      if (is_cpp_throw_expr(rhs))
-        return rhs;
-
-      exprt op_expr;
-      if (id == "+")
-        op_expr = exprt("ieee_add", double_type());
-      else if (id == "-")
-        op_expr = exprt("ieee_sub", double_type());
-      else if (id == "*")
-        op_expr = exprt("ieee_mul", double_type());
-      else
-        op_expr = exprt("ieee_div", double_type());
-
-      op_expr.copy_to_operands(lhs, rhs);
-      return op_expr;
-    }
-
-    if (input_expr.type() == double_type())
-      return input_expr;
-
-    const typet &expr_type = input_expr.type();
-    const bool numeric_like = expr_type.is_floatbv() ||
-                              expr_type.is_signedbv() ||
-                              expr_type.is_unsignedbv() || expr_type.is_bool();
-    if (!numeric_like)
-      return input_expr;
-
-    return typecast_exprt(input_expr, double_type());
-  };
-  auto normalize_numeric_expr_for_complex = [&](exprt value) -> exprt {
-    if (is_cpp_throw_expr(value))
-      return value;
-    if (is_complex_type(value.type()))
-      return value;
-
-    if (
-      value.type().is_signedbv() || value.type().is_unsignedbv() ||
-      value.type().is_bool())
-      return promote_int_arith_to_double(value, promote_int_arith_to_double, 0);
-
-    return value;
+  auto normalize_numeric_expr_for_complex = [this](exprt value) -> exprt {
+    return converter_.get_complex_handler().normalize_numeric_expr(value);
   };
   auto is_cpp_throw = [](const exprt &e) -> bool {
     return e.statement() == "cpp-throw";
-  };
-  auto trim = [](std::string s) -> std::string {
-    size_t b = 0;
-    while (b < s.size() && std::isspace(static_cast<unsigned char>(s[b])))
-      ++b;
-    size_t e = s.size();
-    while (e > b && std::isspace(static_cast<unsigned char>(s[e - 1])))
-      --e;
-    return s.substr(b, e - b);
-  };
-  auto parse_double_strict = [](const std::string &s, double &out) -> bool {
-    if (s.empty())
-      return false;
-    char *end = nullptr;
-    out = std::strtod(s.c_str(), &end);
-    return end == s.c_str() + s.size();
   };
   auto extract_constant_string =
     [&](const nlohmann::json &arg, std::string &out) -> bool {
@@ -1710,77 +1688,6 @@ exprt function_call_expr::handle_complex() const
     return subtype.is_unsignedbv() &&
            to_unsignedbv_type(subtype).get_width() == 8;
   };
-  auto parse_complex_string =
-    [&](const std::string &raw, double &real_out, double &imag_out) -> bool {
-    std::string s = trim(raw);
-    if (s.empty())
-      return false;
-
-    // Accept optional wrapping parentheses (possibly repeated).
-    while (s.size() > 2 && s.front() == '(' && s.back() == ')')
-      s = trim(s.substr(1, s.size() - 2));
-
-    auto lower_last = [](char c) {
-      return static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-    };
-
-    // No imaginary suffix: parse as real number.
-    if (lower_last(s.back()) != 'j')
-    {
-      double r = 0.0;
-      if (!parse_double_strict(s, r))
-        return false;
-      real_out = r;
-      imag_out = 0.0;
-      return true;
-    }
-
-    std::string body = trim(s.substr(0, s.size() - 1));
-    if (body.empty() || body == "+" || body == "-")
-    {
-      real_out = 0.0;
-      imag_out = (body == "-") ? -1.0 : 1.0;
-      return true;
-    }
-
-    size_t split = std::string::npos;
-    for (size_t i = 1; i < body.size(); ++i)
-    {
-      const char c = body[i];
-      if (c == '+' || c == '-')
-      {
-        const char prev = body[i - 1];
-        if (prev != 'e' && prev != 'E')
-          split = i;
-      }
-    }
-
-    if (split == std::string::npos)
-    {
-      double imag = 0.0;
-      if (!parse_double_strict(body, imag))
-        return false;
-      real_out = 0.0;
-      imag_out = imag;
-      return true;
-    }
-
-    const std::string real_part = trim(body.substr(0, split));
-    const std::string imag_part = trim(body.substr(split));
-    double real = 0.0;
-    if (!parse_double_strict(real_part, real))
-      return false;
-
-    double imag = 0.0;
-    if (imag_part == "+" || imag_part == "-")
-      imag = (imag_part == "-") ? -1.0 : 1.0;
-    else if (!parse_double_strict(imag_part, imag))
-      return false;
-
-    real_out = real;
-    imag_out = imag;
-    return true;
-  };
 
   if (arguments.size() > 2)
     return raise_type_error("complex() takes at most 2 arguments");
@@ -1793,33 +1700,35 @@ exprt function_call_expr::handle_complex() const
   if (arguments.size() >= 2)
     imag_json = &arguments[1];
 
-  if (keywords.is_array())
+  if (keywords.is_array() && !keywords.empty())
   {
-    for (const auto &kw : keywords)
+    try
     {
-      if (!kw.contains("arg") || kw["arg"].is_null() || !kw.contains("value"))
-        return raise_type_error("complex() does not support **kwargs");
+      auto kw_vals =
+        string_call_utils::collect_keyword_values("complex", keywords);
+      string_call_utils::ensure_allowed_keywords(
+        "complex", kw_vals, {"real", "imag"});
 
-      const std::string name = kw["arg"].get<std::string>();
-      if (name == "real")
+      if (
+        auto *real_kw = string_call_utils::find_keyword_value(kw_vals, "real"))
       {
         if (real_json != nullptr)
           return raise_type_error(
             "complex() got multiple values for argument 'real'");
-        real_json = &kw["value"];
+        real_json = real_kw;
       }
-      else if (name == "imag")
+      if (
+        auto *imag_kw = string_call_utils::find_keyword_value(kw_vals, "imag"))
       {
         if (imag_json != nullptr)
           return raise_type_error(
             "complex() got multiple values for argument 'imag'");
-        imag_json = &kw["value"];
+        imag_json = imag_kw;
       }
-      else
-      {
-        return raise_type_error(
-          "complex() got an unexpected keyword argument '" + name + "'");
-      }
+    }
+    catch (const std::runtime_error &e)
+    {
+      return raise_type_error(e.what());
     }
   }
 
@@ -1847,7 +1756,7 @@ exprt function_call_expr::handle_complex() const
     if (extract_constant_string(*real_json, text))
     {
       double real = 0.0, imag = 0.0;
-      if (!parse_complex_string(text, real, imag))
+      if (!complex_utils::parse_complex_string(text, real, imag))
         return raise_value_error("complex() arg is a malformed string");
       return make_complex(
         from_double(real, double_type()), from_double(imag, double_type()));
@@ -1895,7 +1804,7 @@ exprt function_call_expr::handle_complex() const
           if (value_opt)
           {
             double real = 0.0, imag = 0.0;
-            if (!parse_complex_string(*value_opt, real, imag))
+            if (!complex_utils::parse_complex_string(*value_opt, real, imag))
               return raise_value_error("complex() arg is a malformed string");
             return make_complex(
               from_double(real, double_type()),
@@ -3449,6 +3358,21 @@ function_call_expr::get_dispatch_table()
      [this]() { return handle_any(); },
      "any()"},
 
+    // int.to_bytes()
+    {[this]() {
+       if (call_["func"]["_type"] != "Attribute")
+         return false;
+       if (function_id_.get_function() != "to_bytes")
+         return false;
+
+       const auto &obj = call_["func"]["value"];
+       return (obj["_type"] == "Name" && obj["id"] == "int") ||
+              (obj["_type"] == "Name" &&
+               type_handler_.get_var_type(obj["id"]) == "int");
+     },
+     [this]() { return handle_int_to_bytes(); },
+     "int.to_bytes()"},
+
     // Min/Max functions
     {[this]() { return is_min_max_call(); },
      [this]() {
@@ -3502,7 +3426,7 @@ function_call_expr::get_dispatch_table()
          if (is_cpp_throw_expr(arg_expr))
            return arg_expr;
          if (is_complex_type(arg_expr.type()))
-           return raise_math_real_type_error_expr(converter_);
+           return complex_utils::raise_math_real_type_error_expr(converter_);
          exprt isnan_expr("isnan", bool_typet());
          isnan_expr.copy_to_operands(arg_expr);
          return isnan_expr;
@@ -3516,7 +3440,7 @@ function_call_expr::get_dispatch_table()
          if (is_cpp_throw_expr(arg_expr))
            return arg_expr;
          if (is_complex_type(arg_expr.type()))
-           return raise_math_real_type_error_expr(converter_);
+           return complex_utils::raise_math_real_type_error_expr(converter_);
          exprt isinf_expr("isinf", bool_typet());
          isinf_expr.copy_to_operands(arg_expr);
          return isinf_expr;
@@ -3550,11 +3474,6 @@ function_call_expr::get_dispatch_table()
                                 ? call_["keywords"]
                                 : nlohmann::json::array();
 
-       auto raise_type_error = [this](const std::string &msg) -> exprt {
-         return converter_.get_exception_handler().gen_exception_raise(
-           "TypeError", msg);
-       };
-
        // Budget guard: when the argument is structurally expensive and the
        // model symbol exists, delegate to avoid solver blow-up.
        if (args.size() == 1 && !cmath_lowering_policy::within_budget(args[0]))
@@ -3578,127 +3497,8 @@ function_call_expr::get_dispatch_table()
          }
        }
 
-       auto as_complex_or_throw = [&](const nlohmann::json &node) -> exprt {
-         exprt value = converter_.get_expr(node);
-         if (is_cpp_throw_expr(value))
-           return value;
-         return promote_to_complex(value);
-       };
-
-       auto ieee_bin =
-         [](const irep_idt &id, const exprt &lhs, const exprt &rhs) -> exprt {
-         exprt out(id, double_type());
-         out.copy_to_operands(lhs, rhs);
-         return out;
-       };
-
-       auto complex_div = [&](const exprt &num, const exprt &den) -> exprt {
-         exprt a = member_exprt(num, "real", double_type());
-         exprt b = member_exprt(num, "imag", double_type());
-         exprt c = member_exprt(den, "real", double_type());
-         exprt d = member_exprt(den, "imag", double_type());
-         exprt ac = ieee_bin("ieee_mul", a, c);
-         exprt bd = ieee_bin("ieee_mul", b, d);
-         exprt bc = ieee_bin("ieee_mul", b, c);
-         exprt ad = ieee_bin("ieee_mul", a, d);
-         exprt cc = ieee_bin("ieee_mul", c, c);
-         exprt dd = ieee_bin("ieee_mul", d, d);
-
-         exprt denom = ieee_bin("ieee_add", cc, dd);
-         exprt real_num = ieee_bin("ieee_add", ac, bd);
-         exprt imag_num = ieee_bin("ieee_sub", bc, ad);
-         exprt real_r = ieee_bin("ieee_div", real_num, denom);
-         exprt imag_r = ieee_bin("ieee_div", imag_num, denom);
-         exprt normal_result = make_complex(real_r, imag_r);
-         // P21: Runtime ZeroDivisionError guard — denom==0 iff c==0 AND d==0.
-         const typet &dt = cached_double_type();
-         exprt zero = from_double(0.0, dt);
-         exprt c_zero = equality_exprt(c, zero);
-         exprt d_zero = equality_exprt(d, zero);
-         exprt denom_is_zero = and_exprt(c_zero, d_zero);
-         exprt raise_zdiv =
-           converter_.get_exception_handler().gen_exception_raise(
-             "ZeroDivisionError", "complex division by zero");
-         locationt loc = converter_.get_location_from_decl(call_);
-         raise_zdiv.location() = loc;
-         raise_zdiv.location().user_provided(true);
-         code_expressiont raise_code(raise_zdiv);
-         raise_code.location() = loc;
-         code_ifthenelset guard;
-         guard.cond() = denom_is_zero;
-         guard.then_case() = raise_code;
-         guard.location() = loc;
-         converter_.current_block->copy_to_operands(guard);
-         return normal_result;
-       };
-
-       auto complex_log_or_throw = [&](const exprt &z) -> exprt {
-         exprt real = member_exprt(z, "real", double_type());
-         exprt imag = member_exprt(z, "imag", double_type());
-
-         exprt rr = ieee_bin("ieee_mul", real, real);
-         exprt ii = ieee_bin("ieee_mul", imag, imag);
-         exprt sum = ieee_bin("ieee_add", rr, ii);
-         exprt mag = converter_.get_math_handler().handle_sqrt(sum, call_);
-         if (is_cpp_throw_expr(mag))
-           return mag;
-
-         exprt ln_mag = converter_.get_math_handler().handle_log(mag, call_);
-         if (is_cpp_throw_expr(ln_mag))
-           return ln_mag;
-
-         exprt angle =
-           converter_.get_math_handler().handle_atan2(imag, real, call_);
-         if (is_cpp_throw_expr(angle))
-           return angle;
-
-         return make_complex(ln_mag, angle);
-       };
-
-       if (func_name == "log10")
-       {
-         if (!keywords.empty())
-           return raise_type_error("cmath.log10() takes no keyword arguments");
-         if (args.size() != 1)
-           return raise_type_error("log10() takes exactly 1 argument");
-         exprt z = as_complex_or_throw(args[0]);
-         if (is_cpp_throw_expr(z))
-           return z;
-         exprt ln_z = complex_log_or_throw(z);
-         if (is_cpp_throw_expr(ln_z))
-           return ln_z;
-         exprt ln10 = make_complex(
-           from_double(2.302585092994046, double_type()),
-           from_double(0.0, double_type()));
-         return complex_div(ln_z, ln10);
-       }
-
-       if (args.empty() || args.size() > 2)
-         return raise_type_error(
-           "log() takes from 1 to 2 positional arguments");
-       if (!keywords.empty())
-         return raise_type_error("cmath.log() takes no keyword arguments");
-
-       const nlohmann::json *base_json = nullptr;
-       if (args.size() == 2)
-         base_json = &args[1];
-
-       exprt z = as_complex_or_throw(args[0]);
-       if (is_cpp_throw_expr(z))
-         return z;
-       exprt ln_z = complex_log_or_throw(z);
-       if (is_cpp_throw_expr(ln_z))
-         return ln_z;
-       if (base_json == nullptr)
-         return ln_z;
-
-       exprt base = as_complex_or_throw(*base_json);
-       if (is_cpp_throw_expr(base))
-         return base;
-       exprt ln_base = complex_log_or_throw(base);
-       if (is_cpp_throw_expr(ln_base))
-         return ln_base;
-       return complex_div(ln_z, ln_base);
+       return converter_.get_complex_handler().handle_cmath_log(
+         func_name, call_, args, keywords);
      },
      "cmath log/log10"},
 
@@ -3821,10 +3621,10 @@ function_call_expr::get_dispatch_table()
                                        : raw_func_name;
        const auto &args = call_["args"];
        auto raise_math_real_type_error = [this]() -> exprt {
-         return raise_math_real_type_error_expr(converter_);
+         return complex_utils::raise_math_real_type_error_expr(converter_);
        };
        auto raise_math_int_type_error = [this]() -> exprt {
-         return raise_math_int_type_error_expr(converter_);
+         return complex_utils::raise_math_int_type_error_expr(converter_);
        };
        auto has_complex_arg = [](const exprt &arg_expr) -> bool {
          return is_complex_type(arg_expr.type());
@@ -4890,6 +4690,32 @@ exprt function_call_expr::handle_general_function_call()
           arg = symbol_expr(tmp);
         }
         arg = typecast_exprt(address_of_exprt(arg), param_type);
+      }
+
+      // General object-reference coercion:
+      // when a pointer parameter receives a struct object argument, pass the
+      // object's address (materializing temporaries when required).
+      if (
+        function_type_ == FunctionType::Constructor &&
+        param_type.is_pointer() && arg_followed_type.is_struct() &&
+        !arg.is_address_of())
+      {
+        if (!arg.is_symbol())
+        {
+          symbolt &tmp = converter_.create_tmp_symbol(
+            call_, "$ptr_arg$", arg.type(), gen_zero(arg.type()));
+          code_declt tmp_decl(symbol_expr(tmp));
+          tmp_decl.location() = location;
+          converter_.current_block->copy_to_operands(tmp_decl);
+          code_assignt tmp_assign(symbol_expr(tmp), arg);
+          tmp_assign.location() = location;
+          converter_.current_block->copy_to_operands(tmp_assign);
+          arg = symbol_expr(tmp);
+        }
+
+        arg = address_of_exprt(arg);
+        if (!base_type_eq(arg.type(), param_type, converter_.ns))
+          arg = typecast_exprt(arg, param_type);
       }
     }
 
