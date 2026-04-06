@@ -228,9 +228,6 @@ bool solidity_convertert::get_expr(
         expected_size = byte_t.get("#sol_bytesn_size").as_string();
       }
 
-      SolidityGrammar::ElementaryTypeNameT target_type =
-        SolidityGrammar::get_elementary_type_name_t(literal_type);
-
       if (type_name == SolidityGrammar::ElementaryTypeNameT::INT_LITERAL)
       {
         assert(is_static);
