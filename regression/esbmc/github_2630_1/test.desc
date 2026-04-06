@@ -1,0 +1,5 @@
+CORE
+main.c
+--multi-property --parallel-solving
+^VERIFICATION FAILED$
+✗ 3 failed
