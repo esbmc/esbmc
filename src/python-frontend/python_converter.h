@@ -866,6 +866,7 @@ private:
   // =========================================================================
 
   static std::string op_to_dunder(const std::string &op);
+  static std::string op_to_rdunder(const std::string &op);
   symbolt *find_dunder_method(
     const std::string &class_name,
     const std::string &dunder_name);

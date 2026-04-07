@@ -3667,6 +3667,20 @@ std::string python_converter::op_to_dunder(const std::string &op)
   return it != dunder_map.end() ? it->second : "";
 }
 
+std::string python_converter::op_to_rdunder(const std::string &op)
+{
+  static const std::map<std::string, std::string> rdunder_map = {
+    {"Add", "__radd__"},
+    {"Sub", "__rsub__"},
+    {"Mult", "__rmul__"},
+    {"Div", "__rtruediv__"},
+    {"FloorDiv", "__rfloordiv__"},
+    {"Mod", "__rmod__"},
+  };
+  auto it = rdunder_map.find(op);
+  return it != rdunder_map.end() ? it->second : "";
+}
+
 symbolt *python_converter::find_dunder_method(
   const std::string &class_name,
   const std::string &dunder_name)
@@ -3744,68 +3758,97 @@ exprt python_converter::store_call_result(
   return temp_var_expr;
 }
 
+static bool is_excluded_struct_tag(const std::string &tag)
+{
+  return tag.find("dict_") != std::string::npos ||
+         tag.find("tag-dict") != std::string::npos ||
+         tag.rfind("tag-Optional_", 0) == 0 ||
+         tag.rfind("tag-tuple", 0) == 0 || tag == "__python_dict__";
+}
+
+static typet resolve_operand_type(
+  const exprt &operand,
+  const contextt &symbol_table,
+  const namespacet &ns)
+{
+  typet t = operand.type();
+  if (operand.is_symbol())
+  {
+    const symbolt *sym = symbol_table.find_symbol(operand.identifier());
+    if (sym)
+      t = sym->type;
+  }
+  if (t.id() == "symbol")
+    t = ns.follow(t);
+  return t;
+}
+
 exprt python_converter::dispatch_dunder_operator(
   const std::string &op,
   exprt &lhs,
   exprt &rhs,
   const locationt &loc)
 {
-  typet lhs_type = lhs.type();
-  if (lhs.is_symbol())
+  typet lhs_type = resolve_operand_type(lhs, symbol_table_, ns);
+  typet rhs_type = resolve_operand_type(rhs, symbol_table_, ns);
+
+  // Try lhs.__add__(rhs)
+  if (lhs_type.is_struct())
   {
-    const symbolt *sym = symbol_table_.find_symbol(lhs.identifier());
-    if (sym)
-      lhs_type = sym->type;
+    const struct_typet &lhs_struct = to_struct_type(lhs_type);
+    std::string lhs_tag = lhs_struct.tag().as_string();
+
+    if (!is_excluded_struct_tag(lhs_tag))
+    {
+      std::string dunder = op_to_dunder(op);
+      if (!dunder.empty())
+      {
+        std::string class_name = extract_class_name_from_tag(lhs_tag);
+        symbolt *method = find_dunder_method(class_name, dunder);
+        if (method)
+        {
+          const code_typet &method_type = to_code_type(method->type);
+          side_effect_expr_function_callt call;
+          call.function() = symbol_expr(*method);
+          call.type() = method_type.return_type();
+          call.location() = loc;
+          call.arguments().push_back(gen_address_of(lhs));
+          call.arguments().push_back(gen_address_of(rhs));
+          return call;
+        }
+      }
+    }
   }
-  if (lhs_type.id() == "symbol")
-    lhs_type = ns.follow(lhs_type);
 
-  if (!lhs_type.is_struct())
-    return nil_exprt();
-
-  const struct_typet &struct_type = to_struct_type(lhs_type);
-  std::string tag = struct_type.tag().as_string();
-
-  if (
-    tag.find("dict_") != std::string::npos ||
-    tag.find("tag-dict") != std::string::npos ||
-    tag.rfind("tag-Optional_", 0) == 0 || tag.rfind("tag-tuple", 0) == 0 ||
-    tag == "__python_dict__")
-    return nil_exprt();
-
-  // Verify rhs is the same struct type
-  typet rhs_type = rhs.type();
-  if (rhs.is_symbol())
+  // try rhs.__radd__(lhs)
+  if (rhs_type.is_struct())
   {
-    const symbolt *sym = symbol_table_.find_symbol(rhs.identifier());
-    if (sym)
-      rhs_type = sym->type;
+    const struct_typet &rhs_struct = to_struct_type(rhs_type);
+    std::string rhs_tag = rhs_struct.tag().as_string();
+
+    if (!is_excluded_struct_tag(rhs_tag))
+    {
+      std::string rdunder = op_to_rdunder(op);
+      if (!rdunder.empty())
+      {
+        std::string class_name = extract_class_name_from_tag(rhs_tag);
+        symbolt *method = find_dunder_method(class_name, rdunder);
+        if (method)
+        {
+          const code_typet &method_type = to_code_type(method->type);
+          side_effect_expr_function_callt call;
+          call.function() = symbol_expr(*method);
+          call.type() = method_type.return_type();
+          call.location() = loc;
+          call.arguments().push_back(gen_address_of(rhs));
+          call.arguments().push_back(gen_address_of(lhs));
+          return call;
+        }
+      }
+    }
   }
-  if (rhs_type.id() == "symbol")
-    rhs_type = ns.follow(rhs_type);
-  if (!rhs_type.is_struct())
-    return nil_exprt();
-  const struct_typet &rhs_struct = to_struct_type(rhs_type);
-  if (rhs_struct.tag() != struct_type.tag())
-    return nil_exprt();
 
-  std::string dunder = op_to_dunder(op);
-  if (dunder.empty())
-    return nil_exprt();
-
-  std::string class_name = extract_class_name_from_tag(tag);
-  symbolt *method = find_dunder_method(class_name, dunder);
-  if (!method)
-    return nil_exprt();
-
-  const code_typet &method_type = to_code_type(method->type);
-  side_effect_expr_function_callt call;
-  call.function() = symbol_expr(*method);
-  call.type() = method_type.return_type();
-  call.location() = loc;
-  call.arguments().push_back(gen_address_of(lhs));
-  call.arguments().push_back(gen_address_of(rhs));
-  return call;
+  return nil_exprt();
 }
 
 exprt python_converter::dispatch_unary_dunder_operator(

@@ -1708,6 +1708,18 @@ private:
       return it->second;
     }
 
+    // Check if the name is a class constructor
+    // (e.g., A() returns an A instance)
+    {
+      const std::string resolved =
+        json_utils::get_object_alias(ast_, func_name);
+      if (json_utils::is_class(resolved, ast_))
+      {
+        functions_in_analysis_.erase(func_name);
+        return resolved;
+      }
+    }
+
     functions_in_analysis_.erase(func_name);
 
     std::ostringstream oss;
