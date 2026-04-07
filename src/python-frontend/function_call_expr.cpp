@@ -3133,6 +3133,14 @@ exprt function_call_expr::handle_print() const
   const auto &args = call_["args"];
   for (const auto &arg_node : args)
   {
+    // Direct call arguments (print(f(...))) are currently lowered through
+    // the regular expression flow and may trigger invalid cast paths when
+    // re-materialized as expression statements here.
+    // Keep them non-materialized for now and only materialize non-call
+    // expressions such as arithmetic operators (e.g., print(a + b)).
+    if (arg_node.contains("_type") && arg_node["_type"] == "Call")
+      continue;
+
     exprt arg_expr = converter_.get_expr(arg_node);
     if (arg_expr.is_nil())
       continue;
