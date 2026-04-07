@@ -1422,7 +1422,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
           if (is_nearest_rounding_mode(rounding_mode))
             bounds =
               apply_ieee754_rne_enclosure(real_result, lo_r, hi_r, fbv_type);
-          else if (is_round_to_away(rounding_mode))
+          else
             bounds =
               apply_ieee754_rna_enclosure(real_result, lo_r, hi_r, fbv_type);
           ir_ra_interval_map[real_result] = {bounds.first, bounds.second};
@@ -1455,16 +1455,21 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
       const expr2tc &rounding_mode = to_ieee_sub2t(expr).rounding_mode;
 
-      // Interval-lifted RNE enclosure for ieee_sub (--ir-ieee only).
-      // Subtraction interval hull:
+      // Interval-lifted nearest-mode enclosure for ieee_sub (--ir-ieee only).
+      // Covers both RNE (ROUND_TO_EVEN) and RNA (ROUND_TO_AWAY): both are
+      // nearest-rounding modes sharing the same B_near constants and the same
+      // subtraction interval hull:
       //   L_R = L_x - U_y,  U_R = U_x - L_y
       //   ra_lo = L_R - B_near^-(L_R),  ra_hi = U_R + B_near^+(U_R)
-      // Non-RNE modes, non-standard formats, and --ir-ieee disabled all
+      // For RNE the result is named ra_lo:: / ra_hi::; for RNA ra_lo_aw:: /
+      // ra_hi_aw::, matching the single-step naming convention.
+      // Non-nearest modes, non-standard formats, and --ir-ieee disabled all
       // fall through to apply_ieee754_semantics unchanged.
       bool interval_lifted = false;
       if (
         options.get_bool_option("ir-ieee") &&
-        is_nearest_rounding_mode(rounding_mode))
+        (is_nearest_rounding_mode(rounding_mode) ||
+         is_round_to_away(rounding_mode)))
       {
         const auto double_spec = ieee_float_spect::double_precision();
         const auto single_spec = ieee_float_spect::single_precision();
@@ -1484,8 +1489,13 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
           ra_interval_t iv2 = get_iv(side2);
           smt_astt lo_r = mk_sub(iv1.lo, iv2.hi); // L_R = L_x - U_y
           smt_astt hi_r = mk_sub(iv1.hi, iv2.lo); // U_R = U_x - L_y
-          auto bounds =
-            apply_ieee754_rne_enclosure(real_result, lo_r, hi_r, fbv_type);
+          std::pair<smt_astt, smt_astt> bounds;
+          if (is_nearest_rounding_mode(rounding_mode))
+            bounds =
+              apply_ieee754_rne_enclosure(real_result, lo_r, hi_r, fbv_type);
+          else
+            bounds =
+              apply_ieee754_rna_enclosure(real_result, lo_r, hi_r, fbv_type);
           ir_ra_interval_map[real_result] = {bounds.first, bounds.second};
           a = real_result;
           interval_lifted = true;
