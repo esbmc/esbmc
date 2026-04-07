@@ -738,7 +738,7 @@ void goto_convertt::convert_decl_block(const codet &code, goto_programt &dest)
 
 /// Returns true if @p expr is a direct reference to a C11 _Atomic-qualified
 /// variable (symbol with the "#atomic" flag set on its type).
-static bool is_atomic_symbol(const exprt &expr, const namespacet &ns)
+bool goto_convertt::is_atomic_symbol(const exprt &expr, const namespacet &ns)
 {
   if (expr.id() != "symbol")
     return false;
@@ -752,7 +752,7 @@ static bool has_atomic_read(const exprt &expr, const namespacet &ns)
 {
   if (expr.is_address_of())
     return false;
-  if (is_atomic_symbol(expr, ns))
+  if (goto_convertt::is_atomic_symbol(expr, ns))
     return true;
   forall_operands (it, expr)
     if (has_atomic_read(*it, ns))
@@ -770,7 +770,7 @@ static void collect_atomic_reads(
 {
   if (expr.is_address_of())
     return;
-  if (is_atomic_symbol(expr, ns))
+  if (goto_convertt::is_atomic_symbol(expr, ns))
   {
     out.emplace(expr.identifier(), expr.type());
     return;
@@ -825,6 +825,25 @@ void goto_convertt::convert_assign_atomic(
 
   if (lhs_atomic)
     dest.add_instruction(ATOMIC_END);
+}
+
+void goto_convertt::convert_assign_rmw_atomic(
+  const exprt &lhs,
+  const exprt &rhs,
+  const locationt &location,
+  goto_programt &dest)
+{
+  // RMW semantics: the entire load-modify-write is one indivisible atomic op.
+  // Unlike convert_assign_atomic, which splits into a separate atomic load and
+  // a separate atomic store (allowing a context switch between them), here the
+  // whole assignment is wrapped in a single ATOMIC_BEGIN/END.  This models
+  // C11 compound-assignment operators (+=, -=, ...) and pre/post-increment
+  // on _Atomic variables, which are sequentially-consistent RMW operations.
+  dest.add_instruction(ATOMIC_BEGIN);
+  code_assignt assign(lhs, rhs);
+  assign.location() = location;
+  copy(assign, ASSIGN, dest);
+  dest.add_instruction(ATOMIC_END);
 }
 
 void goto_convertt::convert_assign(
