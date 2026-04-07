@@ -28,7 +28,7 @@ jobs:
             > coverage.info
       - name: Filter out uninteresting paths
         run: |
-          lcov --ignore-errors range --ignore-errors inconsistent --ignore-errors corrupt \
+          lcov --ignore-errors inconsistent --ignore-errors corrupt \
                -ignore-errors unused --remove coverage.info \
                '/usr/*' \
                '*/build/*' \
