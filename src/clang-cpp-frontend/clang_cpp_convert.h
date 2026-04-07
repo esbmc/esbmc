@@ -8,12 +8,17 @@
 
 class clang_cpp_convertert : public clang_c_convertert
 {
+private:
+  std::unordered_map<const clang::CXXMethodDecl *, exprt>
+    method_reference_bindings; //track reference bindings
 public:
   clang_cpp_convertert(
     contextt &_context,
     std::unique_ptr<clang::ASTUnit> &_AST,
     irep_idt _mode);
   virtual ~clang_cpp_convertert() = default;
+
+  bool VisitUnaryOperator(clang::UnaryOperator *op, exprt &dest);
 
 protected:
   // this_map contains key-value pairs in the form of <method address, <identifier, type>>
