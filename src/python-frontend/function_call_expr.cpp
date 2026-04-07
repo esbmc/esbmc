@@ -3143,6 +3143,11 @@ exprt function_call_expr::handle_print() const
 
     exprt arg_expr = converter_.get_expr(arg_node);
     if (arg_expr.is_nil())
+      throw std::runtime_error(
+        "Failed to convert print() argument to expression");
+
+    // Trivial values have no side effects or checks to materialize.
+    if (arg_expr.is_constant() || arg_expr.id() == "symbol")
       continue;
 
     codet arg_code = converter_.convert_expression_to_code(arg_expr);
