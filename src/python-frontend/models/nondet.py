@@ -15,10 +15,14 @@ USAGE:
     d = nondet_dict(max_size=10, key_type=nondet_int(), value_type=nondet_bool())
 """
 
-from typing import Any
-
 # Shared default maximum size for nondet collections
 _DEFAULT_NONDET_SIZE: int = 8
+
+# Type flags (concrete constants, resolved before any loop)
+_T_INT: int = 0
+_T_FLOAT: int = 1
+_T_BOOL: int = 2
+_T_STR: int = 3
 
 
 def _nondet_size(max_size: int) -> int:
@@ -37,9 +41,21 @@ def _nondet_size(max_size: int) -> int:
     return size
 
 
-def nondet_list(max_size: int = _DEFAULT_NONDET_SIZE, elem_type: Any = None) -> list:
+def _type_flag(sample) -> int:
+    """Determine a concrete type flag from a sample nondet value.
+    Evaluated once before the loop; the result is a plain int constant."""
+    if isinstance(sample, float):
+        return _T_FLOAT
+    if isinstance(sample, bool):
+        return _T_BOOL
+    if isinstance(sample, str):
+        return _T_STR
+    return _T_INT
+
+
+def nondet_list(max_size: int = _DEFAULT_NONDET_SIZE, elem_type=None) -> list:
     """
-    Return a non-deterministic list with specified element type.
+    Return a non-deterministic list where each element is a fresh nondet value.
 
     Args:
         max_size: Maximum size of the list (default: 8).
@@ -56,26 +72,38 @@ def nondet_list(max_size: int = _DEFAULT_NONDET_SIZE, elem_type: Any = None) -> 
         x = nondet_list(elem_type=nondet_float())            # float list, size [0, 8]
         x = nondet_list(max_size=10, elem_type=nondet_bool())# bool list, size [0, 10]
     """
+    tf: int = _type_flag(elem_type)
+
     result: list = []
     size: int = _nondet_size(max_size)
+
+    # Each branch has its own loop with a single nondet call — no branching inside the loop.
     i: int = 0
-    while i < size:
-        if elem_type is None:
-            e: Any = nondet_int()
-            result.append(e)
-        else:
-            e: Any = elem_type
-            result.append(elem_type)
-        i = i + 1
+    if tf == _T_FLOAT:
+        while i < size:
+            result.append(nondet_float())
+            i = i + 1
+    elif tf == _T_BOOL:
+        while i < size:
+            result.append(nondet_bool())
+            i = i + 1
+    elif tf == _T_STR:
+        while i < size:
+            result.append(nondet_str())
+            i = i + 1
+    else:
+        while i < size:
+            result.append(nondet_int())
+            i = i + 1
 
     return result
 
 
 def nondet_dict(max_size: int = _DEFAULT_NONDET_SIZE,
-                key_type: Any = None,
-                value_type: Any = None) -> dict:
+                key_type=None,
+                value_type=None) -> dict:
     """
-    Return a non-deterministic dictionary with specified key and value types.
+    Return a non-deterministic dictionary where each entry has fresh nondet key and value.
 
     Args:
         max_size: Maximum size of the dictionary (default: 8).
@@ -94,38 +122,33 @@ def nondet_dict(max_size: int = _DEFAULT_NONDET_SIZE,
         d = nondet_dict(key_type=nondet_str(), value_type=nondet_float())
         d = nondet_dict(max_size=10, key_type=nondet_int(), value_type=nondet_bool())
     """
+    kt: int = _type_flag(key_type)
+    vt: int = _type_flag(value_type)
     result: dict = {}
     size: int = _nondet_size(max_size)
 
+    # The flag comparisons (kt == X, vt == X) use concrete int constants,
+    # so dead branches are trivially eliminated — only the matching
+    # nondet call survives in the unrolled loop body.
     i: int = 0
     while i < size:
-        # Generate new key each iteration
-        if key_type is None:
-            k: int = nondet_int()
+        if kt == _T_STR:
+            k = nondet_str()
+        elif kt == _T_BOOL:
+            k = nondet_bool()
         else:
-            k1: Any = key_type
-        # TODO here we should improve like
-        # elif key_type is bool:
-        #   k: Any = nondet_bool()
-        # elif key_type is float:
-        #   k: Any = nondet_float()
+            k = nondet_int()
 
-        # Generate new value each iteration
-        if value_type is None:
-            v: int = nondet_int()
+        if vt == _T_FLOAT:
+            v = nondet_float()
+        elif vt == _T_BOOL:
+            v = nondet_bool()
+        elif vt == _T_STR:
+            v = nondet_str()
         else:
-            v1: Any = value_type
+            v = nondet_int()
 
-        if key_type is None:
-            if value_type is None:
-                result[k] = v
-            else:
-                result[k] = v1
-        else:
-            if value_type is None:
-                result[k1] = v
-            else:
-                result[k1] = v1
+        result[k] = v
         i = i + 1
 
     return result
