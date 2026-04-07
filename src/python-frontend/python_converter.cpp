@@ -3762,8 +3762,8 @@ static bool is_excluded_struct_tag(const std::string &tag)
 {
   return tag.find("dict_") != std::string::npos ||
          tag.find("tag-dict") != std::string::npos ||
-         tag.rfind("tag-Optional_", 0) == 0 ||
-         tag.rfind("tag-tuple", 0) == 0 || tag == "__python_dict__";
+         tag.rfind("tag-Optional_", 0) == 0 || tag.rfind("tag-tuple", 0) == 0 ||
+         tag == "__python_dict__";
 }
 
 static typet resolve_operand_type(
