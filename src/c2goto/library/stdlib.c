@@ -10,7 +10,7 @@
 #include <assert.h>
 
 #undef errno
-_Thread_local int errno = 0;
+extern _Thread_local int errno;
 
 #undef exit
 #undef abort

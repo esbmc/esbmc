@@ -1,8 +1,5 @@
 #include <iostream>
 
-namespace std
-{
-istream cin;
-ostream cout;
-ostream cerr;
-} // namespace std
+std::istream cin(0);
+std::ostream cout(0);
+std::ostream cerr(1);

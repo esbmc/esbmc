@@ -6,6 +6,7 @@
 #include <boost/filesystem.hpp>
 #include <cstdlib>
 #include <fstream>
+#include <unordered_set>
 #include <goto-programs/goto_binary_reader.h>
 #include <goto-programs/goto_functions.h>
 #include <util/context.h>
@@ -499,14 +500,41 @@ void add_cprover_library(contextt &context, const languaget *language)
   // library. Only when linking to the libc library, we know that all unresolved extern symbols (those whose
   // value is nil) will stay unresolved. A normal linker would reject such files, but we provide some compatibility with
   // those and initialize the extern variables to nondet.
+  // Well-known IO globals pulled in transitively by headers like
+  // <list> -> <ostream> -> <ios> -> <stdio.h> are expected to be
+  // unresolved in ESBMC's bundled library.  Suppress the warning
+  // for these to avoid confusing users (GitHub #3973).
+  static const std::unordered_set<std::string> known_io_globals = {
+    // C stdio (Linux)
+    "c:@stdin",
+    "c:@stdout",
+    "c:@stderr",
+    // C stdio (macOS)
+    "c:@__stdinp",
+    "c:@__stdoutp",
+    "c:@__stderrp",
+    // BSD legacy
+    "c:@sys_nerr",
+    "c:@sys_errlist",
+    // errno
+    "c:@errno",
+    // C++ streams
+    "c:@N@std@cin",
+    "c:@N@std@cout",
+    "c:@N@std@cerr",
+  };
+
   context.Foreach_operand([&context](symbolt &s) {
     if (s.is_extern && !s.type.is_code() && s.value.is_nil())
     {
-      log_warning(
-        "extern variable with id {} not found, initializing value to "
-        "nondet! "
-        "This code would not compile with an actual compiler.",
-        s.id);
+      if (!known_io_globals.count(s.id.as_string()))
+      {
+        log_warning(
+          "extern variable with id {} not found, initializing value to "
+          "nondet! "
+          "This code would not compile with an actual compiler.",
+          s.id);
+      }
       exprt value =
         exprt("sideeffect", get_complete_type(s.type, namespacet{context}));
       value.statement("nondet");
