@@ -1472,6 +1472,14 @@ void dereferencet::construct_from_dyn_struct_offset(
     it = ns.follow(it);
     BigInt field_size = type_byte_size_bits(it, &ns);
 
+    // Skip sub-byte members (unnamed bitfields, padding bits): they are
+    // narrower than one byte and cannot hold a byte-aligned access.
+    if (field_size < config.ansi_c.char_width)
+    {
+      i++;
+      continue;
+    }
+
     // Round up to word size
     expr2tc field_offset = constant_int2tc(offset->type, offs);
     expr2tc field_top = constant_int2tc(offset->type, offs + field_size);

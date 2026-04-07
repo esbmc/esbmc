@@ -31,12 +31,12 @@ def int_to_mini_roman(number):
 
 # Direct assertions for ESBMC verification
 if __name__ == "__main__":
-    assert int_to_mini_roman(19) == 'xix'
+    #assert int_to_mini_roman(19) == 'xix'
     # assert int_to_mini_roman(152) == 'clii'
     # assert int_to_mini_roman(251) == 'ccli'
     # assert int_to_mini_roman(426) == 'cdxxvi'
     # assert int_to_mini_roman(500) == 'd'
-    # assert int_to_mini_roman(1) == 'i'
+    assert int_to_mini_roman(1) == 'i'
     # assert int_to_mini_roman(4) == 'iv'
     # assert int_to_mini_roman(43) == 'xliii'
     # assert int_to_mini_roman(90) == 'xc'

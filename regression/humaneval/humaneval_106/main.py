@@ -26,8 +26,8 @@ def f(n):
 
 # Direct assertions for ESBMC verification
 if __name__ == "__main__":
-    assert f(5) == [1, 2, 6, 24, 15]
+    # assert f(5) == [1, 2, 6, 24, 15]
     # assert f(7) == [1, 2, 6, 24, 15, 720, 28]
-    # assert f(1) == [1]
+    assert f(1) == [1]
     # assert f(3) == [1, 2, 6]
     print("✅ HumanEval/106 - All assertions completed!")

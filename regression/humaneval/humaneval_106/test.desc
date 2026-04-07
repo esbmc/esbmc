@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 main.py
---unwind 1 --no-bounds-check --no-pointer-check --no-align-check
+--unwind 6 --no-bounds-check --no-pointer-check --no-align-check --smt-during-symex --smt-symex-guard
 ^VERIFICATION SUCCESSFUL$
