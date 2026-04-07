@@ -1,4 +1,4 @@
 CORE
-wchar.c
+main.c
 
 ^VERIFICATION SUCCESSFUL$
