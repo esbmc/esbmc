@@ -1030,6 +1030,36 @@ private:
     smt_astt lo_r,
     smt_astt hi_r,
     const floatbv_type2t &fbv_type);
+
+  /** Interval-lifted RUP enclosure helper for ieee_sub (--ir-ieee only).
+   *  EbRUP([LR, UR]) = [LR, UR + B_dir(UR)]
+   *  fl_RUP(r) >= r always (directed mode rounds up), so the lower bound is
+   *  exact: ra_lo is pinned to lo_r with no B_dir adjustment.
+   *  The upper bound adds B_dir at the upper endpoint:
+   *    B_dir(r) = eps_rel_dir * |r| + eps_abs
+   *    eps_rel_dir = 2^-52 (double) or 2^-23 (single) -- full machine epsilon.
+   *  Fresh symbols named ra_lo_up::N / ra_hi_up::N to match the single-step
+   *  RUP naming convention in apply_ieee754_semantics. */
+  std::pair<smt_astt, smt_astt> apply_ieee754_rup_enclosure(
+    smt_astt real_result,
+    smt_astt lo_r,
+    smt_astt hi_r,
+    const floatbv_type2t &fbv_type);
+
+  /** Interval-lifted RDN enclosure helper for ieee_sub (--ir-ieee only).
+   *  EbRDN([LR, UR]) = [LR - B_dir(LR), UR]
+   *  fl_RDN(r) <= r always (directed mode rounds down), so the upper bound is
+   *  exact: ra_hi is pinned to hi_r with no B_dir adjustment.
+   *  The lower bound subtracts B_dir at the lower endpoint:
+   *    B_dir(r) = eps_rel_dir * |r| + eps_abs
+   *    eps_rel_dir = 2^-52 (double) or 2^-23 (single) -- full machine epsilon.
+   *  Fresh symbols named ra_lo_dn::N / ra_hi_dn::N to match the single-step
+   *  RDN naming convention in apply_ieee754_semantics. */
+  std::pair<smt_astt, smt_astt> apply_ieee754_rdn_enclosure(
+    smt_astt real_result,
+    smt_astt lo_r,
+    smt_astt hi_r,
+    const floatbv_type2t &fbv_type);
 };
 
 /** Given an array type, create a type2tc representing its domain. */
