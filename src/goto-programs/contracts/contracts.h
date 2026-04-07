@@ -39,6 +39,7 @@
 #define ESBMC_CONTRACTS_H
 
 #include <goto-programs/goto_functions.h>
+#include <goto-programs/frame_enforcer.h>
 #include <util/context.h>
 #include <util/namespace.h>
 #include <set>
@@ -77,14 +78,14 @@ public:
   /// Renames function F to __ESBMC_contracts_original_F and generates a new wrapper function F
   /// Wrapper function: assume requires -> call original function -> assert ensures
   /// \param to_enforce Set of function names to enforce contracts for
-  /// \param assume_nonnull_valid If true, assume non-null pointer parameters are valid objects
   /// \param entry_function The --function entry point name (empty if using main).
-  ///        When a function is the entry point AND called from the harness with nil arguments,
-  ///        pointer parameters need valid_object assumptions for correct ensures checking.
+  ///        When non-empty AND matches the function being enforced, the wrapper
+  ///        allocates fresh backing storage for all pointer parameters so that
+  ///        the harness-generated nil args become valid dereferenceable objects.
   void enforce_contracts(
     const std::set<std::string> &to_enforce,
-    bool assume_nonnull_valid = false,
-    const std::string &entry_function = "");
+    const std::string &entry_function = "",
+    bool check_assigns_compliance = false);
 
   /// \brief Replace function calls with contracts
   /// Replaces function calls with contract semantics:
@@ -110,10 +111,58 @@ public:
   /// \return True if function has the contract annotation
   bool is_annotated_contract_function(const symbolt &func_sym) const;
 
+  /// \brief Per-field snapshot for pointer-struct-field assigns compliance.
+  /// Captures the pre-call value of a field NOT in the assigns clause so that
+  /// the post-call assertion can verify it is unchanged.
+  struct ptr_field_snapshot_t
+  {
+    expr2tc ptr_sym;      ///< Pointer symbol (e.g. symbol2tc for "ctx")
+    type2tc pointee_type; ///< Resolved struct type pointed to by ptr_sym
+    irep_idt field_name;  ///< Field name not in assigns (e.g. "capacity")
+    type2tc field_type;   ///< Type of that field
+    expr2tc snapshot_sym; ///< Snapshot symbol holding pre-call field value
+  };
+
+  /// \brief Snapshot for pointer-parameter dereference assigns compliance (Phase 2C).
+  /// When a pointer param p is NOT declared in the assigns clause at all, its
+  /// pointed-to value (*p or p->field for structs) must remain unchanged.
+  struct ptr_deref_snapshot_t
+  {
+    expr2tc ptr_sym;      ///< Pointer parameter symbol
+    type2tc pointee_type; ///< Resolved type pointed to by ptr_sym
+    irep_idt field_name;  ///< Empty for scalars; field name for struct members
+    type2tc value_type;   ///< Type of the snapshotted value
+    expr2tc snapshot_sym; ///< Snapshot symbol holding the pre-call value
+  };
+
+  /// \brief Snapshot for array element assigns compliance (Phase 2B).
+  /// For __ESBMC_assigns(arr[declared_idx]), use a nondet witness index j
+  /// to check that no other element arr[j] (j != declared_idx) was modified.
+  struct arr_elem_snapshot_t
+  {
+    expr2tc arr_ptr;      ///< Array pointer symbol (e.g. symbol2tc for "arr")
+    type2tc arr_add_type; ///< Result type of (arr + j) pointer-arithmetic
+    type2tc elem_type;    ///< Element type (pointee of arr_ptr)
+    expr2tc declared_idx; ///< Declared index expression (from assigns clause)
+    expr2tc witness_idx;  ///< Nondet witness index symbol j
+    expr2tc snapshot_sym; ///< Snapshot symbol holding arr[j] pre-call value
+  };
+
 private:
   goto_functionst &goto_functions;
   contextt &context;
   const namespacet &ns;
+  frame_enforcert frame_enforcer;
+  size_t ptr_field_snap_counter =
+    0; ///< Counter for unique ptr-field snapshot names
+  size_t ptr_deref_snap_counter =
+    0; ///< Counter for unique ptr-deref snapshot names (Phase 2C)
+  size_t arr_elem_snap_counter =
+    0; ///< Counter for unique array-element snapshot names (Phase 2B)
+
+  /// Number of elements to allocate for pointer params that serve as arrays
+  /// (i.e., appear in array_elem_targets). Must match the ASSUME(j < N) bound.
+  static constexpr size_t ARRAY_ALLOC_ELEMS = 100;
 
   /// \brief Check if a function is compiler-generated and should be skipped
   /// \param function_name Function name or ID
@@ -137,7 +186,8 @@ private:
   /// \param original_func_id ID of the renamed original function
   /// \param original_body Original function body (before renaming)
   /// \param is_fresh_mappings Mappings for is_fresh temp variables in ensures
-  /// \param assume_nonnull_valid If true, assume non-null pointer parameters are valid objects
+  /// \param alloc_ptr_params If true, allocate fresh malloc backing for all
+  ///        pointer parameters (used in --function entry harness mode).
   /// \return Generated wrapper function body
   goto_programt generate_checking_wrapper(
     const symbolt &original_func,
@@ -146,7 +196,9 @@ private:
     const irep_idt &original_func_id,
     const goto_programt &original_body,
     const std::vector<is_fresh_mapping_t> &is_fresh_mappings,
-    bool assume_nonnull_valid = false);
+    bool alloc_ptr_params = false,
+    const std::vector<expr2tc> &assigns_targets = {},
+    bool check_assigns_compliance = false);
 
   /// \brief Generate replacement code at function call site
   /// \param function_symbol Function symbol being called
@@ -261,6 +313,94 @@ private:
   std::vector<old_snapshot_t>
   collect_old_snapshots_from_body(const goto_programt &function_body) const;
 
+  /// \brief Snapshot fields of pointed-to structs that are NOT in the assigns clause.
+  /// For each pointer symbol in classified.ptr_field_targets, enumerates the
+  /// pointed-to struct's fields, and for each field NOT in the assigned set
+  /// emits DECL+ASSIGN instructions capturing the pre-call value.
+  /// \param classified Classified assigns targets (provides ptr_field_targets)
+  /// \param original_func Original function symbol (provides parameter types)
+  /// \param wrapper GOTO program to append snapshot instructions to
+  /// \param location Source location for generated instructions
+  /// \param func_name Function name for unique snapshot naming
+  /// \return Vector of snapshot records for use in emit_ptr_field_assertions
+  std::vector<ptr_field_snapshot_t> materialize_ptr_field_snapshots(
+    const frame_enforcert::classified_assignst &classified,
+    const symbolt &original_func,
+    goto_programt &wrapper,
+    const locationt &location,
+    const std::string &func_name);
+
+  /// \brief Emit ASSERT instructions checking that ptr->field is unchanged.
+  /// For each snapshot in the vector, asserts ptr->field == snapshot_sym.
+  /// \param snapshots Snapshots produced by materialize_ptr_field_snapshots
+  /// \param wrapper GOTO program to append assertions to
+  /// \param location Source location for generated instructions
+  void emit_ptr_field_assertions(
+    const std::vector<ptr_field_snapshot_t> &snapshots,
+    goto_programt &wrapper,
+    const locationt &location);
+
+  // ========== Phase 2C: pointer-parameter dereference assigns compliance ==========
+
+  /// \brief Snapshot pointer params whose dereferenced value is NOT in the assigns clause.
+  /// For each pointer parameter p not covered by the assigns clause:
+  ///   - scalar pointee: snapshot *p
+  ///   - struct pointee: snapshot each field of *p
+  /// Called before the function call in the checking wrapper.
+  /// \param classified Classified assigns targets (provides pointer_targets, ptr_field_targets)
+  /// \param assigns_targets Full assigns target list (must be non-empty to enable check)
+  /// \param original_func Original function symbol (provides parameter types/names)
+  /// \param wrapper GOTO program to append snapshot instructions to
+  /// \param location Source location
+  /// \param func_name Function name for unique snapshot naming
+  /// \return Vector of snapshot records for use in emit_ptr_deref_assertions
+  std::vector<ptr_deref_snapshot_t> materialize_ptr_deref_snapshots(
+    const frame_enforcert::classified_assignst &classified,
+    const std::vector<expr2tc> &assigns_targets,
+    const symbolt &original_func,
+    goto_programt &wrapper,
+    const locationt &location,
+    const std::string &func_name);
+
+  /// \brief Emit ASSERT instructions for pointer-parameter dereference compliance.
+  /// For each snapshot: asserts *p == snapshot (scalar) or p->field == snapshot (struct).
+  /// \param snapshots Snapshots produced by materialize_ptr_deref_snapshots
+  /// \param wrapper GOTO program to append assertions to
+  /// \param location Source location
+  void emit_ptr_deref_assertions(
+    const std::vector<ptr_deref_snapshot_t> &snapshots,
+    goto_programt &wrapper,
+    const locationt &location);
+
+  // ========== Phase 2B: array element assigns compliance ==========
+
+  /// \brief Materialize nondet witness snapshots for array element assigns compliance.
+  /// For each dereference(add(arr, declared_idx)) in classified.pointer_targets:
+  ///   - Creates a nondet witness index j (same type as declared_idx)
+  ///   - Snapshots arr[j] before the function call
+  /// \param classified Classified assigns targets (provides pointer_targets)
+  /// \param assigns_targets Full assigns target list (must be non-empty to enable check)
+  /// \param wrapper GOTO program to append snapshot instructions to
+  /// \param location Source location
+  /// \param func_name Function name for unique snapshot naming
+  /// \return Vector of snapshot records for use in emit_arr_elem_assertions
+  std::vector<arr_elem_snapshot_t> materialize_arr_elem_snapshots(
+    const frame_enforcert::classified_assignst &classified,
+    const std::vector<expr2tc> &assigns_targets,
+    goto_programt &wrapper,
+    const locationt &location,
+    const std::string &func_name);
+
+  /// \brief Emit ASSERT instructions for array element assigns compliance.
+  /// For each snapshot: asserts (j == declared_idx) || (arr[j] == snapshot).
+  /// \param snapshots Snapshots produced by materialize_arr_elem_snapshots
+  /// \param wrapper GOTO program to append assertions to
+  /// \param location Source location
+  void emit_arr_elem_assertions(
+    const std::vector<arr_elem_snapshot_t> &snapshots,
+    goto_programt &wrapper,
+    const locationt &location);
+
   /// \brief Materialize old snapshots in wrapper function (enforce-contract mode)
   /// Creates DECL and ASSIGN instructions for snapshot variables before function call
   /// \param old_snapshots Vector of snapshots to materialize (modified in-place)
@@ -371,15 +511,20 @@ private:
   /// \param location Location information
   void havoc_static_globals(goto_programt &dest, const locationt &location);
 
-  /// \brief Add pointer validity assumptions for non-null pointer parameters
-  /// Used with --assume-nonnull-valid flag in enforce-contract mode
+  /// \brief Allocate fresh malloc backing storage for all pointer parameters.
+  /// Called in --function entry harness mode so that pointer params point to
+  /// real heap objects instead of nil, enabling valid dereference in the body.
   /// \param wrapper Destination goto program (wrapper body)
   /// \param func Function symbol
   /// \param location Location information
+  /// \param array_params Set of param IDs that need array allocation (ARRAY_ALLOC_ELEMS elements)
+  /// \param skip_params Set of param IDs already allocated by __ESBMC_is_fresh
   void add_pointer_validity_assumptions(
     goto_programt &wrapper,
     const symbolt &func,
-    const locationt &location);
+    const locationt &location,
+    const std::set<irep_idt> &array_params = {},
+    const std::set<irep_idt> &skip_params = {});
 };
 
 #endif // ESBMC_CONTRACTS_H
