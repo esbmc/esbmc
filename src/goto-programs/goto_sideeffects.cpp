@@ -55,7 +55,41 @@ void goto_convertt::remove_sideeffects_for_quantifier_body(
     return;
   }
 
-  // Leaf that is not a boolean connector: use the standard handler.
+  // If the leaf is a nested quantifier call, convert it to a quantifier
+  // expression inline instead of creating a temp variable.  This keeps the
+  // full expression tree intact so that goto_check's guard propagation from
+  // || / && correctly constrains array accesses within the nested quantifier
+  // body.  Without this, the temp assignment is a separate instruction
+  // without the enclosing quantifier's guard context, causing spurious
+  // array-bounds violations (GitHub #3995).
+  if (
+    expr->id() == "sideeffect" && expr->statement() == "function_call" &&
+    expr->operands().size() >= 2 && expr->op0().is_symbol())
+  {
+    const symbolt *fsym = ns.lookup(expr->op0().identifier());
+    if (
+      fsym &&
+      (fsym->name == "__ESBMC_forall" || fsym->name == "__ESBMC_exists"))
+    {
+      exprt::operandst &args = expr->op1().operands();
+      if (args.size() == 2)
+      {
+        if (has_sideeffect(args[1]))
+          remove_sideeffects_for_quantifier_body(args[1], dest);
+
+        bool is_forall = (fsym->name == "__ESBMC_forall");
+        exprt quant(is_forall ? "forall" : "exists", typet("bool"));
+        quant.copy_to_operands(args[0]);
+        quant.copy_to_operands(args[1]);
+        quant.location() = expr->find_location();
+        body = quant;
+        return;
+      }
+    }
+  }
+
+  // Leaf that is not a boolean connector or nested quantifier: use the
+  // standard handler.
   remove_sideeffects(body, dest, /*result_is_used=*/true);
 }
 
