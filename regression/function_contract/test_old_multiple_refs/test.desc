@@ -1,5 +1,5 @@
 CORE
 main.c
---function request --enforce-contract request --assume-nonnull-valid
+--function request --enforce-contract request
 ^VERIFICATION SUCCESSFUL$
 

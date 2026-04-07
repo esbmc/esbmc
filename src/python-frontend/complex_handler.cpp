@@ -271,6 +271,8 @@ exprt complex_handler::handle_binary_op(
       return "*";
     if (op_name == "Div")
       return "/";
+    if (op_name == "Pow")
+      return "**";
     return op_name;
   };
 
@@ -513,6 +515,8 @@ exprt complex_handler::handle_unary_op(
   if (op == "UAdd")
     return operand;
 
+  assert(op == "USub" && "handle_unary_op: unexpected operator");
+
   // USub: negate both components.
   const typet &dt = cached_double_type();
   exprt real = member_exprt(operand, "real", dt);
@@ -562,6 +566,21 @@ exprt complex_handler::handle_attribute(const nlohmann::json &element) const
   exprt neg_imag("ieee_sub", dt);
   neg_imag.copy_to_operands(zero, imag);
   return make_complex(real, neg_imag);
+}
+
+// -----------------------------------------------------------------------
+
+exprt complex_handler::handle_attribute_access(
+  const exprt &obj,
+  const std::string &attr) const
+{
+  if (attr == "real")
+    return member_exprt(obj, "real", cached_double_type());
+
+  if (attr == "imag")
+    return member_exprt(obj, "imag", cached_double_type());
+
+  return nil_exprt();
 }
 
 // -----------------------------------------------------------------------
