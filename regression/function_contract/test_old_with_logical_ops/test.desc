@@ -1,5 +1,5 @@
 CORE
 main.c
---function test_or --enforce-contract test_or --assume-nonnull-valid
+--function test_or --enforce-contract test_or
 ^VERIFICATION SUCCESSFUL$
 

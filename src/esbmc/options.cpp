@@ -300,10 +300,6 @@ const struct group_opt_templ all_cmd_options[] = {
        "fun"),
      "Replace function calls with contract semantics (use \"*\" for all "
      "functions)"},
-    {"assume-nonnull-valid",
-     nullptr,
-     "In --enforce-contract mode, assume non-null pointer parameters are valid "
-     "objects"},
     {"enforce-all-contracts",
      nullptr,
      "Enforce contracts for all functions marked with __ESBMC_contract"},
@@ -405,7 +401,11 @@ const struct group_opt_templ all_cmd_options[] = {
      "Verify using loop invariant + k-induction (combined mode)"},
     {"loop-invariant-check",
      NULL,
-     "Verify using loop invariant inductive check (standalone mode)"}}},
+     "Verify using loop invariant inductive check (standalone mode)"},
+    {"loop-frame-rule",
+     NULL,
+     "Enable frame rule for loop invariant checking "
+     "(snapshot-havoc-assume pattern, requires --loop-invariant-check)"}}},
   {"Concurrency and Scheduling",
    {{"schedule", NULL, "Use schedule recording approach"},
     {"context-bound",

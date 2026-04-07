@@ -1708,6 +1708,18 @@ private:
       return it->second;
     }
 
+    // Check if the name is a class constructor
+    // (e.g., A() returns an A instance)
+    {
+      const std::string resolved =
+        json_utils::get_object_alias(ast_, func_name);
+      if (json_utils::is_class(resolved, ast_))
+      {
+        functions_in_analysis_.erase(func_name);
+        return resolved;
+      }
+    }
+
     functions_in_analysis_.erase(func_name);
 
     std::ostringstream oss;
@@ -2268,6 +2280,8 @@ private:
         // Map specific class methods to their return types
         if (class_name == "int" && method_name == "from_bytes")
           return "int";
+        else if (class_name == "int" && method_name == "to_bytes")
+          return "bytes";
         else if (
           class_name == "str" &&
           (method_name == "join" || method_name == "format"))
@@ -3669,6 +3683,18 @@ private:
         ((elem["_type"] == "AnnAssign" && elem.contains("target") &&
           elem["target"].contains("id") &&
           elem["target"]["id"].template get<std::string>() == node_name) ||
+         (elem["_type"] == "Assign" && elem.contains("targets") &&
+          elem["targets"].is_array() && !elem["targets"].empty() &&
+          elem["targets"][0].contains("_type") &&
+          elem["targets"][0]["_type"] == "Name" &&
+          elem["targets"][0].contains("id") &&
+          elem["targets"][0]["id"].template get<std::string>() == node_name &&
+          elem.contains("value") && elem["value"].is_object() &&
+          elem["value"].contains("_type") &&
+          // Keep assign-based lookup for simple RHS forms used by frontend
+          // inference (e.g. Name/Attribute/BinOp), but avoid Call-based
+          // expressions that can trigger heavy paths in known buggy cases.
+          elem["value"]["_type"] != "Call") ||
          (elem["_type"] == "arg" && elem["arg"] == node_name)))
       {
         return elem;

@@ -2748,17 +2748,36 @@ class Preprocessor(ast.NodeTransformer):
         Convert them into individual assignments with proper type inference
         """
         assignments = []
+        leaf_pairs = []
 
-        if isinstance(value, ast.Tuple) and len(target.elts) == len(value.elts):
-            # Handle x, y = 1, 2 case - direct assignment of individual elements
-            for i, (target_elem, value_elem) in enumerate(zip(target.elts, value.elts)):
-                if isinstance(target_elem, ast.Name):
-                    individual_assign = self._create_individual_assignment(target_elem, value_elem, source_node)
-                    self._update_variable_types_simple(target_elem, value_elem)
-                    assignments.append(individual_assign)
-        else:
-            # Don't transform tuple unpacking from variables - let converter handle it
+        def collect_unpacking_pairs(target_node, value_node):
+            if isinstance(target_node, ast.Name):
+                leaf_pairs.append((target_node, value_node))
+                return True
+
+            if not isinstance(target_node, (ast.Tuple, ast.List)):
+                return False
+            if not isinstance(value_node, (ast.Tuple, ast.List)):
+                return False
+            if len(target_node.elts) != len(value_node.elts):
+                return False
+
+            for target_elem, value_elem in zip(target_node.elts, value_node.elts):
+                if not collect_unpacking_pairs(target_elem, value_elem):
+                    return False
+            return True
+
+        if not collect_unpacking_pairs(target, value):
+            # Don't transform unsupported unpacking shapes - let converter handle it
             return source_node
+
+        for target_node, value_node in leaf_pairs:
+            target_copy = copy.deepcopy(target_node)
+            value_copy = copy.deepcopy(value_node)
+            individual_assign = self._create_individual_assignment(
+                target_copy, value_copy, source_node)
+            self._update_variable_types_simple(target_copy, value_copy)
+            assignments.append(individual_assign)
 
         return assignments
 
@@ -3676,8 +3695,14 @@ class Preprocessor(ast.NodeTransformer):
                 node.args.append(keywords[expectedArgs[i]])
             elif (functionName, expectedArgs[i]) in self.functionDefaults:
                 default_val = self.functionDefaults[(functionName, expectedArgs[i])]
-                if isinstance(default_val, ast.Name):
-                    node.args.append(default_val)
+                if isinstance(default_val, (ast.List, ast.Dict, ast.Set)):
+                    node.args.append(ast.Constant(value=None))
+                    continue
+                if isinstance(default_val, ast.AST):
+                    default_expr = copy.deepcopy(default_val)
+                    if isinstance(default_expr, ast.Name):
+                        default_expr.ctx = ast.Load()
+                    node.args.append(default_expr)
                 else:
                     node.args.append(ast.Constant(value=default_val))
 
@@ -3742,6 +3767,8 @@ class Preprocessor(ast.NodeTransformer):
                     assignment_node, target_var = self.generate_variable_copy(qualified_name,node.args.args[-i],node.args.defaults[-i])
                     self.functionDefaults[(qualified_name, node.args.args[-i].arg)] = target_var
                     return_nodes.append(assignment_node)
+                else:
+                    self.functionDefaults[(qualified_name, node.args.args[-i].arg)] = node.args.defaults[-i]
 
         # Handle keyword-only defaults
         for i, default in enumerate(node.args.kw_defaults):
@@ -3753,6 +3780,8 @@ class Preprocessor(ast.NodeTransformer):
                     assignment_node, target_var = self.generate_variable_copy(qualified_name, node.args.kwonlyargs[i], default)
                     self.functionDefaults[(qualified_name, kwarg_name)] = target_var
                     return_nodes.append(assignment_node)
+                else:
+                    self.functionDefaults[(qualified_name, kwarg_name)] = default
 
         self.generic_visit(node)
         if is_generator:

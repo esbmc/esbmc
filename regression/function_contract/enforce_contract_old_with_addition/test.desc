@@ -1,5 +1,5 @@
 CORE
 main.c
---enforce-contract "compute" --function "compute" --assume-nonnull-valid
+--enforce-contract "compute" --function "compute"
 ^VERIFICATION SUCCESSFUL$
 

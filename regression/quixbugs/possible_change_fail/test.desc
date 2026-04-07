@@ -1,4 +1,4 @@
 CORE
 main.py
---unwind 1
+--unwind 1 --smt-during-symex --smt-symex-guard --bitwuzla
 ^VERIFICATION FAILED$
