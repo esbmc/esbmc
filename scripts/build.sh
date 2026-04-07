@@ -241,6 +241,7 @@ collect_ubuntu_packages() {
     cmake
     bison
     flex
+    llvm
     linux-libc-dev
     libboost-date-time-dev
     libboost-program-options-dev
@@ -617,6 +618,9 @@ while getopts "hb:s:e:r:dS:c:CB:x:k:" flag; do
       require_on_off "-k" "$OPTARG"
       COVERAGE="$OPTARG"
       BASE_ARGS+=("-DENABLE_COVERAGE=${OPTARG}")
+      if [[ "$OPTARG" == "ON" ]]; then
+        COMPILER_ENV=(CC=clang CXX=clang++)
+      fi
       ;;
     x)
       require_on_off "-x" "$OPTARG"
