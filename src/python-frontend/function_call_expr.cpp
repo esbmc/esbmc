@@ -483,12 +483,13 @@ exprt function_call_expr::handle_isinstance() const
     (obj_arg["value"].is_null() ||
      (obj_arg.contains("value") && obj_arg["value"] == nullptr)))
   {
-    std::string tname;
     if (type_arg["_type"] == "Name")
-      tname = type_arg["id"].get<std::string>();
-
-    if (tname != "NoneType")
-      return false_exprt();
+    {
+      const std::string tname = type_arg["id"].get<std::string>();
+      // NoneType and object are compatible with None
+      if (tname != "NoneType" && tname != "object")
+        return false_exprt();
+    }
   }
 
   // Check if the first argument is a type object (e.g., x = int; isinstance(x, str))
