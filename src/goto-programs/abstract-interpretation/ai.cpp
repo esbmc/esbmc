@@ -9,7 +9,6 @@
 #include <util/std_code.h>
 #include <util/std_expr.h>
 
-
 void ai_baset::entry_state(const goto_programt &goto_program)
 {
   // The first instruction of 'goto_program' is the entry point
