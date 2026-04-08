@@ -1853,6 +1853,39 @@ static inline expr2tc gen_value_by_byte(
   return gen_byte_expression(type, src, value, num_of_bytes, offset);
 }
 
+expr2tc goto_symex_utils::gen_byte_memcpy_byte_update(
+  const expr2tc &src,
+  const expr2tc &dst,
+  const size_t num_of_bytes,
+  const size_t src_offset,
+  const size_t dst_offset)
+{
+  // Very limited for now. Only char src arrays
+  if (
+    !is_array_type(src->type) ||
+    to_array_type(src->type).subtype->get_width() != 8)
+    return expr2tc();
+
+  expr2tc result = dst;
+  for (size_t counter = 0; counter < num_of_bytes; counter++)
+  {
+    const expr2tc src_index =
+      constant_int2tc(get_int32_type(), BigInt(src_offset + counter));
+    const expr2tc dst_index =
+      constant_int2tc(get_int32_type(), BigInt(dst_offset + counter));
+
+    // Extract src-byte at position (src_offset + counter)
+    expr2tc src_byte =
+      byte_extract2tc(get_int8_type(), src, src_index, false);
+
+    // Write src_byte into dst at position (dst_offset + counter)
+    result = byte_update2tc(dst->type, result, dst_index, src_byte, false);
+  }
+
+  simplify(result);
+  return result;
+}  
+
 expr2tc goto_symex_utils::gen_byte_memcpy(
   const expr2tc &src,
   const expr2tc &dst,
@@ -1933,8 +1966,7 @@ static inline expr2tc do_memcpy_expression(
     is_struct_type(dst->type) || is_union_type(dst->type) ||
     is_struct_type(src->type) || is_union_type(src->type))
   {
-    log_debug("memcpy", "Only primitives are supported for now");
-    return expr2tc();
+    return goto_symex_utils::gen_byte_memcpy_byte_update(src, dst, num_of_bytes, src_offset, dst_offset);
   }
 
   // Base-case. Primitives!
