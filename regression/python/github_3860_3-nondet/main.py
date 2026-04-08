@@ -1,8 +1,7 @@
 # Regression test for GitHub issue #3860 (variant 3):
 # Generator with nondet conditional yield converted to list.
 
-def nondet_bool() -> bool:
-    pass
+def nondet_bool() -> bool: ...
 
 def gen_cond():
     yield 10

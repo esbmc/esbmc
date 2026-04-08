@@ -111,8 +111,13 @@ bool yaml_parser::inject_loop_invariants(goto_functionst &goto_functions)
       goto_programt &func = m_it->second.body;
       Forall_goto_program_instructions (it, func)
       {
-        int line = std::stoi(it->location.line().as_string());
-        if (it->is_goto() && !it->is_backwards_goto() && line == inv.line)
+        if (!it->is_goto() || it->is_backwards_goto())
+          continue;
+        const std::string &line_str = it->location.line().as_string();
+        if (line_str.empty())
+          continue;
+        int line = std::stoi(line_str);
+        if (line == inv.line)
         {
           const expression_node *root = nullptr;
           if (parser.parse(inv.value, root))
