@@ -1,4 +1,4 @@
-CORE
+KNOWNBUG
 main.py
---incremental-bmc
+--incremental-bmc --max-k-step 10
 ^VERIFICATION SUCCESSFUL$

@@ -176,9 +176,10 @@ static std::string map_operator(const std::string &op, const typet &type)
   // Convert the operator to lowercase to allow case-insensitive comparison.
   std::string lower_op = op;
   std::transform(
-    lower_op.begin(), lower_op.end(), lower_op.begin(), [](unsigned char c) {
-      return std::tolower(c);
-    });
+    lower_op.begin(),
+    lower_op.end(),
+    lower_op.begin(),
+    [](unsigned char c) { return std::tolower(c); });
 
   // If the type is floating-point, use IEEE-specific operators.
   if (type.is_floatbv())
@@ -304,7 +305,8 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
   std::string op(element["op"]["_type"].get<std::string>());
   exprt logical_expr(map_operator(op, bool_type()), bool_type());
   bool contains_non_boolean = false;
-  auto get_truthy_condition = [&](const exprt &value_expr) -> exprt {
+  auto get_truthy_condition = [&](const exprt &value_expr) -> exprt
+  {
     typet list_type = type_handler_.get_list_type();
     if (
       value_expr.type() == list_type ||
@@ -646,9 +648,10 @@ exprt handle_float_vs_string(exprt &bin_expr, const std::string &op)
     // Python-style error: float < str → TypeError
     std::string lower_op = op;
     std::transform(
-      lower_op.begin(), lower_op.end(), lower_op.begin(), [](unsigned char c) {
-        return std::tolower(c);
-      });
+      lower_op.begin(),
+      lower_op.end(),
+      lower_op.begin(),
+      [](unsigned char c) { return std::tolower(c); });
 
     const auto &loc = bin_expr.location();
     const auto it = operator_map.find(lower_op);
@@ -698,7 +701,8 @@ bool python_converter::has_unsupported_side_effects_internal(
   const exprt &lhs,
   const exprt &rhs)
 {
-  auto has_unsupported_side_effect = [](const exprt &expr) {
+  auto has_unsupported_side_effect = [](const exprt &expr)
+  {
     return expr.id() == "sideeffect" &&
            expr.get("statement") != "function_call";
   };
@@ -912,7 +916,8 @@ exprt python_converter::handle_string_comparison(
   // This avoids introducing strcmp() calls that can inflate branch coverage counts.
   if (op == "Eq" || op == "NotEq")
   {
-    auto extract_single_char = [&](const exprt &expr, char &ch) -> bool {
+    auto extract_single_char = [&](const exprt &expr, char &ch) -> bool
+    {
       const exprt *candidate = &expr;
       if (
         expr.id() == "address_of" && expr.operands().size() == 1 &&
@@ -936,7 +941,8 @@ exprt python_converter::handle_string_comparison(
       return true;
     };
 
-    auto char_at_index = [&](const exprt &expr, int idx) -> exprt {
+    auto char_at_index = [&](const exprt &expr, int idx) -> exprt
+    {
       exprt index = from_integer(idx, index_type());
       if (expr.type().is_array())
         return index_exprt(expr, index, char_type());
@@ -1365,7 +1371,8 @@ void python_converter::convert_function_calls_to_side_effects(
   exprt &lhs,
   exprt &rhs)
 {
-  auto to_side_effect_call = [](exprt &expr) {
+  auto to_side_effect_call = [](exprt &expr)
+  {
     side_effect_expr_function_callt side_effect;
     code_function_callt &code = static_cast<code_function_callt &>(expr);
     side_effect.function() = code.function();
@@ -1561,7 +1568,8 @@ exprt python_converter::handle_type_identity_check(
   auto resolve_type_identifier = [&](
                                    const nlohmann::json &node,
                                    const exprt &expr,
-                                   std::string &out_name) -> bool {
+                                   std::string &out_name) -> bool
+  {
     if (node["_type"] == "Name" && node.contains("id"))
     {
       std::string name = node["id"].get<std::string>();
@@ -1775,12 +1783,10 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     return type_mismatch_result;
 
   // Detect any_type (void*) operands — unannotated Python parameters.
-  auto is_any_ptr = [](const exprt &e) {
-    return e.type().is_pointer() && e.type().subtype().id() == "empty";
-  };
-  auto is_integer = [](const exprt &e) {
-    return e.type().is_signedbv() || e.type().is_unsignedbv();
-  };
+  auto is_any_ptr = [](const exprt &e)
+  { return e.type().is_pointer() && e.type().subtype().id() == "empty"; };
+  auto is_integer = [](const exprt &e)
+  { return e.type().is_signedbv() || e.type().is_unsignedbv(); };
 
   // For arithmetic operations (Sub, Add, Mult, etc.) on an any_type (void*)
   // operand combined with an integer operand, cast the void* to the integer type.
@@ -1799,7 +1805,8 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     type_utils::is_ordered_comparison(op) || op == "Eq" || op == "NotEq" ||
     op == "Is" || op == "IsNot" || op == "In" || op == "NotIn")
   {
-    auto cast_to_void_ptr = [](exprt &e, const typet &ptr_type) {
+    auto cast_to_void_ptr = [](exprt &e, const typet &ptr_type)
+    {
       if (e.type().is_floatbv())
       {
         unsigned width = static_cast<const bv_typet &>(e.type()).get_width();
@@ -1935,7 +1942,8 @@ exprt python_converter::handle_list_operations(
   typet list_type = type_handler_.get_list_type();
 
   // Resolve function calls that return lists to temporary variables
-  auto resolve_list_call = [&](exprt &expr) -> bool {
+  auto resolve_list_call = [&](exprt &expr) -> bool
+  {
     // Check if this is a side effect function call
     if (expr.id().as_string() != "sideeffect")
       return false;
@@ -1992,9 +2000,8 @@ exprt python_converter::handle_list_operations(
   // List concatenation: also handle Any-typed (void*) right operand, which
   // occurs when iterating an untyped iterable (e.g. `for r in f()` with no
   // return annotation) and then concatenating with a typed list literal.
-  auto is_any_ptr = [](const typet &t) {
-    return t.is_pointer() && t.subtype().id() == "empty";
-  };
+  auto is_any_ptr = [](const typet &t)
+  { return t.is_pointer() && t.subtype().id() == "empty"; };
   if (
     lhs.type() == list_type && op == "Add" &&
     (rhs.type() == list_type || is_any_ptr(rhs.type())))
@@ -2172,10 +2179,10 @@ exprt python_converter::build_binary_expression(
       rhs = typecast_exprt(rhs, target_int);
   }
 
-  auto is_bv_or_bool = [](const typet &t) {
-    return t.is_signedbv() || t.is_unsignedbv() || t.is_bool();
-  };
-  auto bit_width = [](const typet &t) -> unsigned {
+  auto is_bv_or_bool = [](const typet &t)
+  { return t.is_signedbv() || t.is_unsignedbv() || t.is_bool(); };
+  auto bit_width = [](const typet &t) -> unsigned
+  {
     if (t.is_bool())
       return 1;
     return static_cast<const bv_typet &>(t).get_width();
@@ -2518,7 +2525,8 @@ python_converter::find_imported_symbol(const std::string &symbol_id) const
       : (parsed.get_function().empty() ? parsed.get_object()
                                        : parsed.get_function());
 
-  auto find_in_import = [&](const nlohmann::json &obj) -> symbolt * {
+  auto find_in_import = [&](const nlohmann::json &obj) -> symbolt *
+  {
     if (
       (obj["_type"] == "ImportFrom" || obj["_type"] == "Import") &&
       obj.contains("full_path") && !obj["full_path"].is_null())
@@ -2826,7 +2834,8 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
         can_fold = false;
     }
 
-    auto returns_list = [](const nlohmann::json &ret) -> bool {
+    auto returns_list = [](const nlohmann::json &ret) -> bool
+    {
       if (ret.is_null())
         return false;
       if (
@@ -2857,7 +2866,8 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       const std::string input = arg0["value"].get<std::string>();
       std::vector<long long> out;
       std::string token;
-      auto flush_token = [&](const std::string &tok) {
+      auto flush_token = [&](const std::string &tok)
+      {
         if (tok.empty())
           return;
         long long depth = 0;
@@ -3236,7 +3246,8 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     }
   }
 
-  auto handle_keywords = [&](exprt &call_expr) {
+  auto handle_keywords = [&](exprt &call_expr)
+  {
     if (!element.contains("keywords") || element["keywords"].empty())
       return;
 
@@ -3299,7 +3310,8 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     }
 
     // we need to check if the argument is provided despite being optional
-    auto is_optional_type = [&](const typet &param_type) {
+    auto is_optional_type = [&](const typet &param_type)
+    {
       if (!param_type.is_struct())
         return false;
       const struct_typet &struct_type = to_struct_type(param_type);
@@ -4450,17 +4462,19 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         symbolt *target_class_symbol = nullptr;
 
         // Search all class types in the symbol table to find one that has this attribute
-        symbol_table_.foreach_operand_in_order([&](const symbolt &s) {
-          if (target_class_symbol)
-            return; // Already found
-
-          if (s.id.as_string().find("tag-") == 0 && s.type.is_struct())
+        symbol_table_.foreach_operand_in_order(
+          [&](const symbolt &s)
           {
-            const struct_typet &struct_type = to_struct_type(s.type);
-            if (struct_type.has_component(attr_name))
-              target_class_symbol = const_cast<symbolt *>(&s);
-          }
-        });
+            if (target_class_symbol)
+              return; // Already found
+
+            if (s.id.as_string().find("tag-") == 0 && s.type.is_struct())
+            {
+              const struct_typet &struct_type = to_struct_type(s.type);
+              if (struct_type.has_component(attr_name))
+                target_class_symbol = const_cast<symbolt *>(&s);
+            }
+          });
 
         if (!target_class_symbol)
         {
@@ -4511,16 +4525,18 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       if (!class_symbol)
       {
         std::string fallback_class_id;
-        symbol_table_.foreach_operand_in_order([&](const symbolt &s) {
-          if (!fallback_class_id.empty())
-            return;
-          if (s.id.as_string().find("tag-") == 0 && s.type.is_struct())
+        symbol_table_.foreach_operand_in_order(
+          [&](const symbolt &s)
           {
-            const struct_typet &st = to_struct_type(s.type);
-            if (st.has_component(attr_name))
-              fallback_class_id = s.id.as_string();
-          }
-        });
+            if (!fallback_class_id.empty())
+              return;
+            if (s.id.as_string().find("tag-") == 0 && s.type.is_struct())
+            {
+              const struct_typet &st = to_struct_type(s.type);
+              if (st.has_component(attr_name))
+                fallback_class_id = s.id.as_string();
+            }
+          });
         if (!fallback_class_id.empty())
           class_symbol = symbol_table_.find_symbol(fallback_class_id);
       }
@@ -4531,7 +4547,8 @@ exprt python_converter::get_expr(const nlohmann::json &element)
 
       struct_typet &class_type =
         static_cast<struct_typet &>(class_symbol->type);
-      auto build_member_expr_from_class = [&](const typet &attr_type) -> exprt {
+      auto build_member_expr_from_class = [&](const typet &attr_type) -> exprt
+      {
         typet clean_type = clean_attribute_type(attr_type);
         exprt base = symbol_expr(*symbol);
         typet base_type = base.type();
@@ -5027,7 +5044,8 @@ void python_converter::handle_assignment_type_adjustments(
       !ast_node.value("_inferred_annotation", false) && has_annotation &&
       ast_node["annotation"].contains("id") &&
       ast_node["annotation"]["id"] == "Any" && lhs.type().is_pointer() &&
-      [this]() {
+      [this]()
+      {
         // Check if "from typing import Any" exists in the source file
         const auto &body = (*ast_json)["body"];
         for (const auto &stmt : body)
@@ -5713,8 +5731,9 @@ void python_converter::handle_function_call_rhs(
   {
     symbolt *func_symbol =
       symbol_table_.find_symbol(rhs.op1().identifier().c_str());
-    assert(func_symbol);
-    if (!static_cast<code_typet &>(func_symbol->type).return_type().is_empty())
+    if (
+      func_symbol && func_symbol->type.is_code() &&
+      !static_cast<code_typet &>(func_symbol->type).return_type().is_empty())
     {
       if (auto ret = get_return_from_func(func_symbol->id.c_str());
           !ret.is_nil())
@@ -6300,7 +6319,8 @@ void python_converter::get_var_assign(
 
   if (has_value && rhs != exprt("_init_undefined"))
   {
-    auto try_follow_symbol_type = [this](const typet &type) -> typet {
+    auto try_follow_symbol_type = [this](const typet &type) -> typet
+    {
       if (type.id() != "symbol")
         return type;
 
@@ -6314,8 +6334,9 @@ void python_converter::get_var_assign(
       return ns.follow(type);
     };
 
-    auto is_list_model_type = [this,
-                               &try_follow_symbol_type](const typet &in_type) {
+    auto is_list_model_type =
+      [this, &try_follow_symbol_type](const typet &in_type)
+    {
       typet t = in_type;
       t = try_follow_symbol_type(t);
       if (t.is_pointer())
@@ -6327,8 +6348,9 @@ void python_converter::get_var_assign(
              std::string::npos;
     };
 
-    auto resolve_runtime_type = [this,
-                                 &try_follow_symbol_type](const exprt &expr) {
+    auto resolve_runtime_type =
+      [this, &try_follow_symbol_type](const exprt &expr)
+    {
       typet t = expr.type();
       if (expr.is_symbol())
       {
@@ -6942,7 +6964,8 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
   const bool pytest_generation_mode = is_pytest_generation_mode();
   const bool model_mode = is_model_file(ast_node["test"]);
   auto to_bool_condition =
-    [&](const exprt &value_expr, const nlohmann::json &value_node) -> exprt {
+    [&](const exprt &value_expr, const nlohmann::json &value_node) -> exprt
+  {
     if (value_expr.type().is_bool())
       return value_expr;
 
@@ -7056,7 +7079,8 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
   {
     locationt location = get_location_from_decl(call_node);
 
-    auto apply_wrapped_unary = [&](const exprt &base_expr) -> exprt {
+    auto apply_wrapped_unary = [&](const exprt &base_expr) -> exprt
+    {
       if (!is_wrapped_in_unary)
         return base_expr;
 
@@ -7138,17 +7162,18 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
         bool_call.function() = symbol_expr(*bool_method);
         bool_call.type() = mt.return_type();
         bool_call.arguments().push_back(gen_address_of(cond));
-        symbolt tmp = create_return_temp_variable(mt.return_type(), loc, "bool");
+        symbolt tmp =
+          create_return_temp_variable(mt.return_type(), loc, "bool");
         symbol_table_.add(tmp);
         exprt tmp_expr = symbol_expr(tmp);
         code_declt tmp_decl(tmp_expr);
         tmp_decl.location() = loc;
-        if (!mt.return_type().is_empty())
-          bool_call.op0() = tmp_expr;
         if (current_block)
         {
           current_block->copy_to_operands(tmp_decl);
-          current_block->copy_to_operands(bool_call);
+          code_assignt assign(tmp_expr, bool_call);
+          assign.location() = loc;
+          current_block->copy_to_operands(assign);
         }
         cond = tmp_expr;
       }
@@ -7362,7 +7387,8 @@ std::string
 python_converter::extract_non_none_type(const nlohmann::json &annotation_node)
 {
   std::function<std::string(const nlohmann::json &)> extract_type =
-    [&](const nlohmann::json &node) -> std::string {
+    [&](const nlohmann::json &node) -> std::string
+  {
     if (
       node.contains("_type") && node["_type"] == "Constant" &&
       node.contains("value") && node["value"].is_null())
@@ -7498,7 +7524,8 @@ typet python_converter::get_type_from_annotation(
   if (annotation_node["_type"] == "Subscript")
   {
     // Helper to safely get id from value node
-    auto get_value_id = [&]() -> std::string {
+    auto get_value_id = [&]() -> std::string
+    {
       if (
         annotation_node.contains("value") &&
         annotation_node["value"].is_object() &&
@@ -7524,7 +7551,8 @@ typet python_converter::get_type_from_annotation(
     if (value_id == "Literal")
     {
       // Infer type from a literal constant value
-      auto infer_literal_type = [](const nlohmann::json &value) -> typet {
+      auto infer_literal_type = [](const nlohmann::json &value) -> typet
+      {
         if (value.is_string())
           return gen_pointer_type(char_type());
         else if (value.is_number_integer())
@@ -7541,7 +7569,8 @@ typet python_converter::get_type_from_annotation(
 
       // Resolve a slice element to a constant value
       auto resolve_to_constant =
-        [this](const nlohmann::json &elem) -> nlohmann::json {
+        [this](const nlohmann::json &elem) -> nlohmann::json
+      {
         // Guard: ensure elem is an object with _type
         if (!elem.is_object() || !elem.contains("_type"))
           return nlohmann::json();
@@ -7569,11 +7598,10 @@ typet python_converter::get_type_from_annotation(
       };
 
       // Track type flags from a resolved type
-      auto update_type_flags = [](
-                                 const typet &type,
-                                 TypeFlags &flags,
-                                 bool &has_string,
-                                 bool &has_none) {
+      auto update_type_flags =
+        [](
+          const typet &type, TypeFlags &flags, bool &has_string, bool &has_none)
+      {
         if (type == gen_pointer_type(char_type()))
           has_string = true;
         else if (type == double_type())
@@ -7601,8 +7629,8 @@ typet python_converter::get_type_from_annotation(
           return empty_typet();
 
         // Helper to safely check if node is a Literal subscript
-        auto is_literal_subscript_node =
-          [](const nlohmann::json &node) -> bool {
+        auto is_literal_subscript_node = [](const nlohmann::json &node) -> bool
+        {
           return node.is_object() && node.contains("_type") &&
                  node["_type"] == "Subscript" && node.contains("value") &&
                  node["value"].is_object() && node["value"].contains("id") &&
@@ -7777,7 +7805,8 @@ typet python_converter::get_type_from_annotation(
       const auto &right = annotation_node["right"];
 
       // Helper to check if a node is a Literal subscript
-      auto is_literal_subscript = [](const nlohmann::json &node) -> bool {
+      auto is_literal_subscript = [](const nlohmann::json &node) -> bool
+      {
         return node.contains("_type") && node["_type"] == "Subscript" &&
                node.contains("value") && node["value"].is_object() &&
                node["value"].contains("id") && node["value"]["id"] == "Literal";
@@ -7805,7 +7834,8 @@ typet python_converter::get_type_from_annotation(
     std::set<std::string> type_names;
     std::function<void(const nlohmann::json &)> collect_types;
     bool contains_none = false;
-    collect_types = [&](const nlohmann::json &node) {
+    collect_types = [&](const nlohmann::json &node)
+    {
       // Guard: only process objects
       if (!node.is_object())
         return;
@@ -7886,10 +7916,10 @@ typet python_converter::get_type_from_annotation(
     if (type_string.find('|') != std::string::npos)
     {
       // Split by '|' and trim whitespace
-      auto trim_ws = [](std::string s) -> std::string {
-        const auto not_space = [](unsigned char ch) {
-          return !std::isspace(ch);
-        };
+      auto trim_ws = [](std::string s) -> std::string
+      {
+        const auto not_space = [](unsigned char ch)
+        { return !std::isspace(ch); };
         s.erase(s.begin(), std::find_if(s.begin(), s.end(), not_space));
         s.erase(std::find_if(s.rbegin(), s.rend(), not_space).base(), s.end());
         return s;
@@ -8035,8 +8065,9 @@ python_converter::infer_types_from_returns(const nlohmann::json &function_body)
 {
   TypeFlags flags;
 
-  std::function<void(const nlohmann::json &)> scan = [&](const nlohmann::json
-                                                           &body) {
+  std::function<void(const nlohmann::json &)> scan =
+    [&](const nlohmann::json &body)
+  {
     for (const auto &stmt : body)
     {
       if (stmt["_type"] == "Return" && stmt["value"].is_null())
@@ -8468,7 +8499,8 @@ void python_converter::validate_return_paths(
 
 typet python_converter::infer_return_type_from_body(const nlohmann::json &body)
 {
-  auto infer_constant_type = [](const nlohmann::json &constant_value) -> typet {
+  auto infer_constant_type = [](const nlohmann::json &constant_value) -> typet
+  {
     if (constant_value.is_number_float())
       return double_type();
     if (constant_value.is_number_integer())
@@ -8665,9 +8697,11 @@ void python_converter::get_function_definition(
   // This applies even when the function has an explicit return annotation:
   // Python does not enforce annotations, so `-> int` with `return None` in
   // the body must be modelled as Optional[int].
-  auto body_has_none_return = [](const nlohmann::json &body) -> bool {
+  auto body_has_none_return = [](const nlohmann::json &body) -> bool
+  {
     std::function<bool(const nlohmann::json &)> scan =
-      [&](const nlohmann::json &stmts) -> bool {
+      [&](const nlohmann::json &stmts) -> bool
+    {
       for (const auto &s : stmts)
       {
         if (s["_type"] == "Return")
@@ -9342,7 +9376,8 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
       }
 
       // Attach assertion message if present
-      auto attach_assert_message = [&element](code_assertt &assert_code) {
+      auto attach_assert_message = [&element](code_assertt &assert_code)
+      {
         if (element.contains("msg") && !element["msg"].is_null())
         {
           std::string msg;
@@ -9805,9 +9840,9 @@ bool python_converter::import_module_into_block(
     nested_module_json, const_cast<global_scope &>(global_scope_));
   imported_annotator.add_type_annotation();
 
-  exprt imported_code = with_ast(&nested_module_json, [&]() {
-    return get_block(nested_module_json["body"]);
-  });
+  exprt imported_code = with_ast(
+    &nested_module_json,
+    [&]() { return get_block(nested_module_json["body"]); });
 
   convert_expression_to_code(imported_code);
 
@@ -10156,14 +10191,16 @@ void python_converter::convert()
   code_blockt main_body;
 
   // 1. Initialize static lifetime variables
-  symbol_table_.foreach_operand_in_order([&main_body](const symbolt &s) {
-    if (s.static_lifetime && !s.value.is_nil() && !s.type.is_code())
+  symbol_table_.foreach_operand_in_order(
+    [&main_body](const symbolt &s)
     {
-      code_assignt assign(symbol_expr(s), s.value);
-      assign.location() = s.location;
-      main_body.copy_to_operands(assign);
-    }
-  });
+      if (s.static_lifetime && !s.value.is_nil() && !s.type.is_code())
+      {
+        code_assignt assign(symbol_expr(s), s.value);
+        assign.location() = s.location;
+        main_body.copy_to_operands(assign);
+      }
+    });
 
   // 2. Call python_init for initialization
   if (!init_code.operands().empty())

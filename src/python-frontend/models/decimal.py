@@ -498,7 +498,8 @@ class Decimal:
         return Decimal(other._sign, other._int, other._exp, other._is_special)
 
     def fma(self, other: "Decimal", third: "Decimal") -> "Decimal":
-        return self.__mul__(other).__add__(third)
+        product: Decimal = self.__mul__(other)
+        return product.__add__(third)
 
     def normalize(self) -> "Decimal":
         if self._is_special == 3:
@@ -647,22 +648,58 @@ class Decimal:
         return result
 
     def __radd__(self, other: int) -> "Decimal":
-        return self.__add__(_decimal_from_int(other))
+        sign: int = 0
+        val: int = other
+        if other < 0:
+            sign = 1
+            val = 0 - other
+        tmp: Decimal = Decimal(sign, val, 0, 0)
+        return self.__add__(tmp)
 
     def __rsub__(self, other: int) -> "Decimal":
-        return _decimal_from_int(other).__sub__(self)
+        sign: int = 0
+        val: int = other
+        if other < 0:
+            sign = 1
+            val = 0 - other
+        tmp: Decimal = Decimal(sign, val, 0, 0)
+        return tmp.__sub__(self)
 
     def __rmul__(self, other: int) -> "Decimal":
-        return self.__mul__(_decimal_from_int(other))
+        sign: int = 0
+        val: int = other
+        if other < 0:
+            sign = 1
+            val = 0 - other
+        tmp: Decimal = Decimal(sign, val, 0, 0)
+        return self.__mul__(tmp)
 
     def __rtruediv__(self, other: int) -> "Decimal":
-        return _decimal_from_int(other).__truediv__(self)
+        sign: int = 0
+        val: int = other
+        if other < 0:
+            sign = 1
+            val = 0 - other
+        tmp: Decimal = Decimal(sign, val, 0, 0)
+        return tmp.__truediv__(self)
 
     def __rfloordiv__(self, other: int) -> "Decimal":
-        return _decimal_from_int(other).__floordiv__(self)
+        sign: int = 0
+        val: int = other
+        if other < 0:
+            sign = 1
+            val = 0 - other
+        tmp: Decimal = Decimal(sign, val, 0, 0)
+        return tmp.__floordiv__(self)
 
     def __rmod__(self, other: int) -> "Decimal":
-        return _decimal_from_int(other).__mod__(self)
+        sign: int = 0
+        val: int = other
+        if other < 0:
+            sign = 1
+            val = 0 - other
+        tmp: Decimal = Decimal(sign, val, 0, 0)
+        return tmp.__mod__(self)
 
 
 def _digit_count(n: int) -> int:

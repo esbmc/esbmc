@@ -9,7 +9,7 @@ d2: Decimal = Decimal("-7")
 assert int(d2) == -7
 
 # int() with positive exponent
-d3: Decimal = Decimal(0, 5, 2, 0)
+d3: Decimal = Decimal("500")
 assert int(d3) == 500
 
 # int() truncates fractional part

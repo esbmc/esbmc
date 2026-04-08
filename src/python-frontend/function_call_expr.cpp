@@ -85,7 +85,8 @@ double round_ties_to_even(const double value)
 
 double round_to_ndigits_ties_even(const double value, const int ndigits)
 {
-  auto round_ld_ties_even = [](const long double v) -> long double {
+  auto round_ld_ties_even = [](const long double v) -> long double
+  {
     const long double lower = std::floor(v);
     const long double diff = v - lower;
     constexpr long double tie_eps = 1e-15L;
@@ -499,7 +500,8 @@ exprt function_call_expr::handle_isinstance() const
       // Check if this constant value is a type name
       if (type_utils::is_type_identifier(value_str))
       {
-        auto extract_type_name = [](const nlohmann::json &node) -> std::string {
+        auto extract_type_name = [](const nlohmann::json &node) -> std::string
+        {
           const std::string node_type = node["_type"];
           if (node_type == "Name")
             return node["id"];
@@ -515,7 +517,8 @@ exprt function_call_expr::handle_isinstance() const
   }
 
   // Extract type name from various AST node formats
-  auto extract_type_name = [](const nlohmann::json &node) -> std::string {
+  auto extract_type_name = [](const nlohmann::json &node) -> std::string
+  {
     const std::string node_type = node["_type"];
 
     if (node_type == "Name")
@@ -576,7 +579,8 @@ exprt function_call_expr::handle_isinstance() const
   };
 
   // Build isinstance check for a given type name
-  auto build_isinstance = [&](const std::string &type_name) -> exprt {
+  auto build_isinstance = [&](const std::string &type_name) -> exprt
+  {
     // Special case: Check if object is None (null pointer)
     if (type_name == "NoneType")
     {
@@ -1352,7 +1356,8 @@ function_call_expr::extract_string_from_symbol(const symbolt *sym) const
   const exprt &val = sym->value;
   std::string result;
 
-  auto decode_char = [](const exprt &expr) -> std::optional<char> {
+  auto decode_char = [](const exprt &expr) -> std::optional<char>
+  {
     try
     {
       const auto &const_expr = to_constant_expr(expr);
@@ -1710,23 +1715,24 @@ exprt function_call_expr::handle_complex() const
   const nlohmann::json &keywords =
     call_.contains("keywords") ? call_["keywords"] : nlohmann::json::array();
 
-  auto raise_type_error = [this](const std::string &msg) -> exprt {
+  auto raise_type_error = [this](const std::string &msg) -> exprt
+  {
     return converter_.get_exception_handler().gen_exception_raise(
       "TypeError", msg);
   };
-  auto raise_value_error = [this](const std::string &msg) -> exprt {
+  auto raise_value_error = [this](const std::string &msg) -> exprt
+  {
     return converter_.get_exception_handler().gen_exception_raise(
       "ValueError", msg);
   };
   auto zero = []() -> exprt { return from_double(0.0, double_type()); };
-  auto normalize_numeric_expr_for_complex = [this](exprt value) -> exprt {
-    return converter_.get_complex_handler().normalize_numeric_expr(value);
-  };
-  auto is_cpp_throw = [](const exprt &e) -> bool {
-    return e.statement() == "cpp-throw";
-  };
+  auto normalize_numeric_expr_for_complex = [this](exprt value) -> exprt
+  { return converter_.get_complex_handler().normalize_numeric_expr(value); };
+  auto is_cpp_throw = [](const exprt &e) -> bool
+  { return e.statement() == "cpp-throw"; };
   auto extract_constant_string =
-    [&](const nlohmann::json &arg, std::string &out) -> bool {
+    [&](const nlohmann::json &arg, std::string &out) -> bool
+  {
     if (!arg.contains("value"))
       return false;
     if (!arg["value"].is_string())
@@ -1734,7 +1740,8 @@ exprt function_call_expr::handle_complex() const
     out = arg["value"].get<std::string>();
     return true;
   };
-  auto is_bytes_literal = [](const nlohmann::json &arg) -> bool {
+  auto is_bytes_literal = [](const nlohmann::json &arg) -> bool
+  {
     if (arg.contains("encoded_bytes"))
       return true;
     if (
@@ -1749,20 +1756,23 @@ exprt function_call_expr::handle_complex() const
       return true;
     return false;
   };
-  auto is_bytearray_call = [](const nlohmann::json &arg) -> bool {
+  auto is_bytearray_call = [](const nlohmann::json &arg) -> bool
+  {
     return (
       arg.contains("_type") && arg["_type"] == "Call" && arg.contains("func") &&
       arg["func"].contains("_type") && arg["func"]["_type"] == "Name" &&
       arg["func"].contains("id") && arg["func"]["id"] == "bytearray");
   };
-  auto byteslike_name = [&](const nlohmann::json &arg) -> std::string {
+  auto byteslike_name = [&](const nlohmann::json &arg) -> std::string
+  {
     if (is_bytes_literal(arg))
       return "bytes";
     if (is_bytearray_call(arg))
       return "bytearray";
     return "";
   };
-  auto is_bytes_annotated_name = [&](const nlohmann::json &arg) -> bool {
+  auto is_bytes_annotated_name = [&](const nlohmann::json &arg) -> bool
+  {
     if (!(arg.contains("_type") && arg["_type"] == "Name" &&
           arg.contains("id")))
       return false;
@@ -1779,12 +1789,14 @@ exprt function_call_expr::handle_complex() const
     return annotation.contains("id") && annotation["id"] == "bytes";
   };
   auto try_dispatch_numeric_dunder =
-    [&](const std::string &op, exprt &operand) -> exprt {
+    [&](const std::string &op, exprt &operand) -> exprt
+  {
     return converter_.dispatch_unary_dunder_operator(
       op, operand, converter_.get_location_from_decl(call_));
   };
   auto try_convert_via_numeric_dunders =
-    [&](exprt &value, bool require_complex_result) -> std::optional<exprt> {
+    [&](exprt &value, bool require_complex_result) -> std::optional<exprt>
+  {
     exprt complex_result = try_dispatch_numeric_dunder("complex", value);
     if (!complex_result.is_nil())
     {
@@ -1830,7 +1842,8 @@ exprt function_call_expr::handle_complex() const
 
     return std::nullopt;
   };
-  auto is_unsigned_byte_array = [](const typet &type) -> bool {
+  auto is_unsigned_byte_array = [](const typet &type) -> bool
+  {
     if (!type.is_array())
       return false;
     const typet &subtype = type.subtype();
@@ -2177,18 +2190,15 @@ exprt function_call_expr::build_constant_from_arg() const
         {
           const struct_typet &st = to_struct_type(resolved);
           std::string tag = st.tag().as_string();
-          std::string cls =
-            converter_.extract_class_name_from_tag(tag);
-          symbolt *method =
-            converter_.find_dunder_method(cls, "__int__");
+          std::string cls = converter_.extract_class_name_from_tag(tag);
+          symbolt *method = converter_.find_dunder_method(cls, "__int__");
           if (method)
           {
             const code_typet &mt = to_code_type(method->type);
             side_effect_expr_function_callt call;
             call.function() = symbol_expr(*method);
             call.type() = mt.return_type();
-            call.arguments().push_back(
-              gen_address_of(operand_expr));
+            call.arguments().push_back(gen_address_of(operand_expr));
             return call;
           }
         }
@@ -2206,18 +2216,15 @@ exprt function_call_expr::build_constant_from_arg() const
           {
             const struct_typet &st = to_struct_type(resolved);
             std::string tag = st.tag().as_string();
-            std::string cls =
-              converter_.extract_class_name_from_tag(tag);
-            symbolt *method =
-              converter_.find_dunder_method(cls, "__int__");
+            std::string cls = converter_.extract_class_name_from_tag(tag);
+            symbolt *method = converter_.find_dunder_method(cls, "__int__");
             if (method)
             {
               const code_typet &mt = to_code_type(method->type);
               side_effect_expr_function_callt call;
               call.function() = symbol_expr(*method);
               call.type() = mt.return_type();
-              call.arguments().push_back(
-                gen_address_of(inferred_expr));
+              call.arguments().push_back(gen_address_of(inferred_expr));
               return call;
             }
           }
@@ -2437,9 +2444,9 @@ exprt function_call_expr::build_constant_from_arg() const
       }
       // Numeric variable: emit a proper typecast to avoid mislabeled IR
       typet float_t = type_handler_.get_typet("float", 0);
-      if (!expr.type().is_floatbv())
-        return typecast_exprt(expr, float_t);
-      return expr;
+      if (!operand_expr.type().is_floatbv())
+        return typecast_exprt(operand_expr, float_t);
+      return operand_expr;
     }
   }
 
@@ -3623,7 +3630,8 @@ function_call_expr::get_dispatch_table()
 
     // Introspection functions (isinstance, hasattr)
     {[this]() { return is_introspection_call(); },
-     [this]() {
+     [this]()
+     {
        if (function_id_.get_function() == "isinstance")
          return handle_isinstance();
        else
@@ -3642,7 +3650,8 @@ function_call_expr::get_dispatch_table()
      "any()"},
 
     // int.to_bytes()
-    {[this]() {
+    {[this]()
+     {
        if (call_["func"]["_type"] != "Attribute")
          return false;
        if (function_id_.get_function() != "to_bytes")
@@ -3658,7 +3667,8 @@ function_call_expr::get_dispatch_table()
 
     // Min/Max functions
     {[this]() { return is_min_max_call(); },
-     [this]() {
+     [this]()
+     {
        const std::string &func_name = function_id_.get_function();
        if (func_name == "min")
          return handle_min_max("min", exprt::i_lt);
@@ -3670,7 +3680,8 @@ function_call_expr::get_dispatch_table()
     // __iter__ on builtin iterables (range, list, tuple, str, set, etc.)
     // Returns the object itself: we model iteration via index-based while
     // loops, so the iterable is the iterator.
-    {[this]() {
+    {[this]()
+     {
        if (call_["func"]["_type"] != "Attribute")
          return false;
        if (function_id_.get_function() != "__iter__")
@@ -3692,11 +3703,13 @@ function_call_expr::get_dispatch_table()
      "dict methods"},
 
     // Math module functions (isnan, isinf)
-    {[this]() {
+    {[this]()
+     {
        const std::string &func_name = function_id_.get_function();
        return func_name == "__ESBMC_isnan" || func_name == "__ESBMC_isinf";
      },
-     [this]() {
+     [this]()
+     {
        const std::string &func_name = function_id_.get_function();
        const auto &args = call_["args"];
 
@@ -3733,7 +3746,8 @@ function_call_expr::get_dispatch_table()
 
     // cmath.log / cmath.log10: lower directly to complex-safe IR to avoid
     // backend typing mismatches from model-level dispatch.
-    {[this]() {
+    {[this]()
+     {
        if (!(call_.contains("func") && call_["func"].contains("_type") &&
              call_["func"]["_type"] == "Attribute"))
          return false;
@@ -3743,7 +3757,8 @@ function_call_expr::get_dispatch_table()
        const std::string &func_name = function_id_.get_function();
        return func_name == "log" || func_name == "log10";
      },
-     [this]() -> exprt {
+     [this]() -> exprt
+     {
        const std::string &raw_func_name = function_id_.get_function();
        std::string func_name = raw_func_name;
        if (
@@ -3787,7 +3802,8 @@ function_call_expr::get_dispatch_table()
 
     // cmath inverse functions: use a fast path only on pure-imaginary inputs
     // and delegate all other cases to the Python cmath model implementation.
-    {[this]() {
+    {[this]()
+     {
        if (!(call_.contains("func") && call_["func"].contains("_type") &&
              call_["func"]["_type"] == "Attribute"))
          return false;
@@ -3799,7 +3815,8 @@ function_call_expr::get_dispatch_table()
          func_name == "asin" || func_name == "atan" || func_name == "asinh" ||
          func_name == "atanh");
      },
-     [this]() -> exprt {
+     [this]() -> exprt
+     {
        const std::string &raw_func_name = function_id_.get_function();
        const std::string func_name = raw_func_name.rfind("__ESBMC_", 0) == 0
                                        ? raw_func_name.substr(8)
@@ -3809,7 +3826,8 @@ function_call_expr::get_dispatch_table()
                                ? call_["keywords"]
                                : nlohmann::json::array();
 
-       auto raise_type_error = [this](const std::string &msg) -> exprt {
+       auto raise_type_error = [this](const std::string &msg) -> exprt
+       {
          return converter_.get_exception_handler().gen_exception_raise(
            "TypeError", msg);
        };
@@ -3884,7 +3902,8 @@ function_call_expr::get_dispatch_table()
      "cmath inverse pure-imag fast path"},
 
     // Math module functions (sin, cos, sqrt, exp, log, etc.)
-    {[this]() {
+    {[this]()
+     {
        const std::string &func_name = function_id_.get_function();
        std::string caller;
        if (
@@ -3897,43 +3916,45 @@ function_call_expr::get_dispatch_table()
        return converter_.get_math_handler().is_math_dispatch_target_cached(
          caller, func_name);
      },
-     [this]() -> exprt {
+     [this]() -> exprt
+     {
        const std::string &raw_func_name = function_id_.get_function();
        const std::string func_name = raw_func_name.rfind("__ESBMC_", 0) == 0
                                        ? raw_func_name.substr(8)
                                        : raw_func_name;
        const auto &args = call_["args"];
-       auto raise_math_real_type_error = [this]() -> exprt {
-         return complex_utils::raise_math_real_type_error_expr(converter_);
-       };
-       auto raise_math_int_type_error = [this]() -> exprt {
-         return complex_utils::raise_math_int_type_error_expr(converter_);
-       };
-       auto has_complex_arg = [](const exprt &arg_expr) -> bool {
-         return is_complex_type(arg_expr.type());
-       };
-       const auto call_has_complex = [&]() -> bool {
+       auto raise_math_real_type_error = [this]() -> exprt
+       { return complex_utils::raise_math_real_type_error_expr(converter_); };
+       auto raise_math_int_type_error = [this]() -> exprt
+       { return complex_utils::raise_math_int_type_error_expr(converter_); };
+       auto has_complex_arg = [](const exprt &arg_expr) -> bool
+       { return is_complex_type(arg_expr.type()); };
+       const auto call_has_complex = [&]() -> bool
+       {
          return math_guard_utils::call_has_complex_in_args_or_keywords(
            call_,
            converter_,
            type_handler_,
            converter_.current_function_name());
        };
-       auto require_one_arg = [&]() -> exprt {
+       auto require_one_arg = [&]() -> exprt
+       {
          if (args.size() != 1)
            throw std::runtime_error(
              func_name + "() expects exactly 1 argument");
          return converter_.get_expr(args[0]);
        };
 
-       auto require_two_args = [&]() -> std::pair<exprt, exprt> {
+       auto require_two_args = [&]() -> std::pair<exprt, exprt>
+       {
          if (args.size() != 2)
            throw std::runtime_error(
              func_name + "() expects exactly 2 arguments");
          return {converter_.get_expr(args[0]), converter_.get_expr(args[1])};
        };
        auto validate_real_arg =
-         [&](const exprt &arg_expr) -> std::optional<exprt> {
+         [&](const exprt &arg_expr) -> std::optional<exprt>
+       {
          if (is_cpp_throw_expr(arg_expr))
            return arg_expr;
          if (has_complex_arg(arg_expr))
@@ -3942,8 +3963,8 @@ function_call_expr::get_dispatch_table()
        };
        auto validate_real_args =
          [&](
-           const exprt &lhs_expr,
-           const exprt &rhs_expr) -> std::optional<exprt> {
+           const exprt &lhs_expr, const exprt &rhs_expr) -> std::optional<exprt>
+       {
          if (is_cpp_throw_expr(lhs_expr))
            return lhs_expr;
          if (is_cpp_throw_expr(rhs_expr))
@@ -4218,7 +4239,8 @@ function_call_expr::get_dispatch_table()
            // If either argument is a constant struct (tuple literal), store it
            // in a temporary local variable so that the GOTO IR has a proper
            // symbol whose address the solver can track.
-           auto materialize = [&](exprt &arg) {
+           auto materialize = [&](exprt &arg)
+           {
              if (arg.is_constant())
              {
                symbolt &tmp = converter_.create_tmp_symbol(
@@ -4261,7 +4283,8 @@ function_call_expr::get_dispatch_table()
      "math.comb"},
 
     // divmod function
-    {[this]() {
+    {[this]()
+     {
        const std::string &func_name = function_id_.get_function();
        return func_name == "divmod";
      },
@@ -4269,11 +4292,13 @@ function_call_expr::get_dispatch_table()
      "divmod"},
 
     // round() builtin function
-    {[this]() {
+    {[this]()
+     {
        const std::string &func_name = function_id_.get_function();
        return func_name == "round" && function_id_.get_prefix() == "py:";
      },
-     [this]() {
+     [this]()
+     {
        if (call_["args"].empty())
          return converter_.get_exception_handler().gen_exception_raise(
            "TypeError", "round() missing required argument");
@@ -4314,7 +4339,8 @@ function_call_expr::get_dispatch_table()
      "repr()"},
 
     // Built-in type constructors (int, float, str, bool, etc.)
-    {[this]() {
+    {[this]()
+     {
        const std::string &func_name = function_id_.get_function();
        return type_utils::is_builtin_type(func_name) ||
               type_utils::is_consensus_type(func_name);
@@ -4324,7 +4350,8 @@ function_call_expr::get_dispatch_table()
 
     // Regex module validation
     {[this]() { return is_re_module_call(); },
-     [this]() {
+     [this]()
+     {
        exprt validation_result = validate_re_module_args();
        if (!validation_result.is_nil())
          return validation_result;
@@ -4619,62 +4646,75 @@ exprt function_call_expr::handle_general_function_call()
 
         if (is_forward_reference)
         {
-          // Create a forward reference that can be resolved later
-          locationt location = converter_.get_location_from_decl(call_);
-
-          code_function_callt call;
-          call.location() = location;
-
-          // Create symbol expression for the function (forward reference)
-          symbol_exprt func_sym(function_id_.to_string(), code_typet());
-          call.function() = func_sym;
-
-          // Extract return type from function definition in AST
-          typet return_type = empty_typet();
+          // Eagerly define the forward-referenced function so that its
+          // parameters and body are properly registered in the symbol
+          // table with the correct context.
           const auto &func_node = find_function(
             converter_.ast()["body"], function_id_.get_function());
           if (!func_node.empty())
           {
-            if (
-              func_node.contains("returns") && !func_node["returns"].is_null())
-            {
-              const auto &returns = func_node["returns"];
-              if (returns.contains("id"))
-              {
-                return_type =
-                  type_handler_.get_typet(returns["id"].get<std::string>());
-              }
-            }
-            exprt body = converter_.get_block(func_node["body"]);
-            exprt const_return = converter_.get_function_constant_return(body);
-            if (!const_return.is_nil())
-              return const_return;
+            std::string saved_class = converter_.current_class_name_;
+            std::string saved_func = converter_.current_func_name_;
+            converter_.current_class_name_ = "";
+            converter_.get_function_definition(func_node);
+            converter_.current_class_name_ = saved_class;
+            converter_.current_func_name_ = saved_func;
           }
 
-          call.type() = return_type;
-
-          // Process arguments normally
-          for (const auto &arg_node : call_["args"])
+          // Now the function should be in the symbol table
+          func_symbol = converter_.find_symbol(function_id_.to_string());
+          if (!func_symbol)
           {
-            exprt arg = converter_.get_expr(arg_node);
-            if (arg.type().is_array())
+            // Still not found — create a forward-reference call
+            locationt location = converter_.get_location_from_decl(call_);
+
+            code_function_callt call;
+            call.location() = location;
+
+            symbol_exprt func_sym(function_id_.to_string(), code_typet());
+            call.function() = func_sym;
+
+            typet return_type = empty_typet();
+            if (!func_node.empty())
             {
               if (
-                arg_node["_type"] == "Constant" &&
-                arg_node["value"].is_string())
+                func_node.contains("returns") &&
+                !func_node["returns"].is_null())
               {
-                arg = string_constantt(
-                  arg_node["value"].get<std::string>(),
-                  arg.type(),
-                  string_constantt::k_default);
+                const auto &returns = func_node["returns"];
+                if (returns.contains("id"))
+                {
+                  return_type =
+                    type_handler_.get_typet(returns["id"].get<std::string>());
+                }
               }
-              call.arguments().push_back(address_of_exprt(arg));
             }
-            else
-              call.arguments().push_back(arg);
-          }
 
-          return call;
+            call.type() = return_type;
+
+            for (const auto &arg_node : call_["args"])
+            {
+              exprt arg = converter_.get_expr(arg_node);
+              if (arg.type().is_array())
+              {
+                if (
+                  arg_node["_type"] == "Constant" &&
+                  arg_node["value"].is_string())
+                {
+                  arg = string_constantt(
+                    arg_node["value"].get<std::string>(),
+                    arg.type(),
+                    string_constantt::k_default);
+                }
+                call.arguments().push_back(address_of_exprt(arg));
+              }
+              else
+                call.arguments().push_back(arg);
+            }
+
+            return call;
+          }
+          // Fall through: func_symbol is now set, continue normal path
         }
         else
         {
@@ -5535,7 +5575,8 @@ function_call_expr::find_possible_class_types(const symbolt *obj_symbol) const
       func_node["body"].is_array())
     {
       std::function<void(const nlohmann::json &)> find_returns;
-      find_returns = [&](const nlohmann::json &node) {
+      find_returns = [&](const nlohmann::json &node)
+      {
         if (
           !node.is_object() || !node.contains("_type") ||
           !node["_type"].is_string())
@@ -5775,7 +5816,8 @@ exprt function_call_expr::check_argument_types(
     }
   }
 
-  auto types_match = [&](const typet &expected, const typet &actual) {
+  auto types_match = [&](const typet &expected, const typet &actual)
+  {
     return base_type_eq(expected, actual, converter_.ns) ||
            (type_utils::is_string_type(expected) &&
             type_utils::is_string_type(actual));

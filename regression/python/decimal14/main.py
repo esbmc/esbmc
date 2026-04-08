@@ -28,17 +28,20 @@ assert r4._exp == 0
 
 # Negative preserves sign
 d5: Decimal = Decimal("-1.75")
-r5: Decimal = d5.quantize(Decimal("0.1"))
+q3: Decimal = Decimal("0.1")
+r5: Decimal = d5.quantize(q3)
 assert r5._sign == 1
 assert r5._int == 18
 assert r5._exp == -1
 
 # Inf + Inf -> Inf
 d6: Decimal = Decimal("Infinity")
-r6: Decimal = d6.quantize(Decimal("Infinity"))
+q_inf: Decimal = Decimal("Infinity")
+r6: Decimal = d6.quantize(q_inf)
 assert r6._is_special == 1
 
 # NaN propagation
 d7: Decimal = Decimal("NaN")
-r7: Decimal = d7.quantize(Decimal("1"))
+q_one: Decimal = Decimal("1")
+r7: Decimal = d7.quantize(q_one)
 assert r7._is_special == 2
