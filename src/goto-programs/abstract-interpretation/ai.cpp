@@ -5,46 +5,10 @@
 
 #include <cassert>
 #include <memory>
-#include <sstream>
 
 #include <util/std_code.h>
 #include <util/std_expr.h>
 
-void ai_baset::output(const goto_functionst &goto_functions, std::ostream &out)
-  const
-{
-  forall_goto_functions (f_it, goto_functions)
-  {
-    if (f_it->second.body_available)
-    {
-      out << "////\n";
-      out << "//// Function: " << f_it->first << "\n";
-      out << "////\n";
-      out << "\n";
-
-      forall_goto_program_instructions (i_it, f_it->second.body)
-      {
-        out << i_it->location_number << " " << i_it->location << "\n";
-
-        abstract_state_before(i_it)->output(out);
-        out << "\n";
-        i_it->output_instruction(*migrate_namespace_lookup, "", out);
-        out << "\n";
-      }
-    }
-  }
-}
-
-void ai_baset::entry_state(const goto_functionst &goto_functions)
-{
-  // find the 'entry function'
-
-  goto_functionst::function_mapt::const_iterator f_it =
-    goto_functions.function_map.find(goto_functions.main_id());
-
-  if (f_it != goto_functions.function_map.end())
-    entry_state(f_it->second.body);
-}
 
 void ai_baset::entry_state(const goto_programt &goto_program)
 {

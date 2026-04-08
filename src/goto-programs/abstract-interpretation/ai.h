@@ -7,10 +7,14 @@
 #include <iosfwd>
 #include <map>
 #include <memory>
+#include <ostream>
 #include <goto-programs/abstract-interpretation/ai_domain.h>
 #include <goto-programs/goto_functions.h>
 #include <util/xml.h>
 #include <util/expr.h>
+
+// Required for ai_baset::output() inline definition below.
+extern const namespacet *migrate_namespace_lookup;
 
 /**
  * This is the basic interface of the abstract interpreter with default
@@ -78,7 +82,29 @@ public:
   }
 
   virtual void
-  output(const goto_functionst &goto_functions, std::ostream &out) const;
+  output(const goto_functionst &goto_functions, std::ostream &out) const
+  {
+    forall_goto_functions(f_it, goto_functions)
+    {
+      if(f_it->second.body_available)
+      {
+        out << "////\n";
+        out << "//// Function: " << f_it->first << "\n";
+        out << "////\n";
+        out << "\n";
+
+        forall_goto_program_instructions(i_it, f_it->second.body)
+        {
+          out << i_it->location_number << " " << i_it->location << "\n";
+
+          abstract_state_before(i_it)->output(out);
+          out << "\n";
+          i_it->output_instruction(*migrate_namespace_lookup, "", out);
+          out << "\n";
+        }
+      }
+    }
+  }
 
 protected:
   // overload to add a factory
@@ -90,7 +116,13 @@ protected:
   virtual void finalize();
 
   void entry_state(const goto_programt &);
-  void entry_state(const goto_functionst &);
+  void entry_state(const goto_functionst &goto_functions)
+  {
+    goto_functionst::function_mapt::const_iterator f_it =
+      goto_functions.function_map.find(goto_functions.main_id());
+    if(f_it != goto_functions.function_map.end())
+      entry_state(f_it->second.body);
+  }
 
   /* The fixedpoint is computed through a Work set algorithm which
    * consists in adding nodes that have changed with the current merge
