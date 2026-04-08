@@ -1875,8 +1875,7 @@ expr2tc goto_symex_utils::gen_byte_memcpy_byte_update(
       constant_int2tc(get_int32_type(), BigInt(dst_offset + counter));
 
     // Extract src-byte at position (src_offset + counter)
-    expr2tc src_byte =
-      byte_extract2tc(get_int8_type(), src, src_index, false);
+    expr2tc src_byte = byte_extract2tc(get_int8_type(), src, src_index, false);
 
     // Write src_byte into dst at position (dst_offset + counter)
     result = byte_update2tc(dst->type, result, dst_index, src_byte, false);
@@ -1884,7 +1883,7 @@ expr2tc goto_symex_utils::gen_byte_memcpy_byte_update(
 
   simplify(result);
   return result;
-}  
+}
 
 expr2tc goto_symex_utils::gen_byte_memcpy(
   const expr2tc &src,
@@ -1966,7 +1965,8 @@ static inline expr2tc do_memcpy_expression(
     is_struct_type(dst->type) || is_union_type(dst->type) ||
     is_struct_type(src->type) || is_union_type(src->type))
   {
-    return goto_symex_utils::gen_byte_memcpy_byte_update(src, dst, num_of_bytes, src_offset, dst_offset);
+    return goto_symex_utils::gen_byte_memcpy_byte_update(
+      src, dst, num_of_bytes, src_offset, dst_offset);
   }
 
   // Base-case. Primitives!
