@@ -629,7 +629,11 @@ const struct group_opt_templ all_cmd_options[] = {
      "Assume integers will not overflow (Integers)"},
     {"interval-analysis-narrowing",
      NULL,
-     "Enable narrowing in abstract states (Integers and Reals)"}}},
+     "Enable narrowing in abstract states (Integers and Reals)"},
+    {"interval-symex-guard",
+     NULL,
+     "Use interval-based guard pruning during symbolic execution to stop "
+     "loop unrolling when the guard becomes provably unsatisfiable"}}},
   {"Coverage options",
    {
      {"assertion-coverage", NULL, "Show the coverage of assertion statements"},

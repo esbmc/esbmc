@@ -1493,6 +1493,10 @@ void interval_domaint::assume_rec(const expr2tc &cond, bool negation)
       apply_assume_symbol_truth<interval_domaint::real_intervalt>(
         to_symbol2t(cond), negation);
   }
+  else if (is_typecast2t(cond))
+  {
+    assume_rec(to_typecast2t(cond).from, negation);
+  }
   //added in case "cond = false" which happens when the ibex contractor results in empty set.
   else if (is_constant_bool2t(cond))
   {
@@ -1581,6 +1585,25 @@ void interval_domaint::set_options(const optionst &options)
   widening_under_approximate_bound =
     options.get_bool_option("interval-analysis-extrapolate-under-approximate");
   widening_narrowing = options.get_bool_option("interval-analysis-narrowing");
+}
+
+void interval_domaint::process_instruction(goto_programt::const_targett from)
+{
+  const goto_programt::instructiont &instruction = *from;
+  switch (instruction.type)
+  {
+  case DECL:
+    havoc_rec(instruction.code);
+    break;
+  case ASSIGN:
+    assign(instruction.code);
+    break;
+  case ASSUME:
+    assume(instruction.guard);
+    break;
+  default:
+    break;
+  }
 }
 
 // Options
