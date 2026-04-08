@@ -8,11 +8,11 @@ ESBMC (Efficient SMT-based Context-Bounded Model Checker) is a software model ch
 
 ## Build Commands
 
-**NEVER run cmake in the repo root (e.g., `cmake .` or `cmake -B. -H.`).** Always use `build/` or a subdirectory of it as the build directory (e.g., `-Bbuild`). The `.gitignore` only covers `build/` — in-tree builds pollute the source tree with hundreds of untracked artifacts.
+**NEVER run cmake in the repo root (e.g., `cmake .` or `cmake -B. -S.`).** Always use `build/` or a subdirectory of it as the build directory (e.g., `-Bbuild`). The `.gitignore` only covers `build/` — in-tree builds pollute the source tree with hundreds of untracked artifacts.
 
 ```sh
 # Minimal build with Z3 solver (at least one solver must be enabled for regression tests)
-cmake -GNinja -Bbuild -H. \
+cmake -GNinja -Bbuild -S . \
   -DDOWNLOAD_DEPENDENCIES=On \
   -DENABLE_PYTHON_FRONTEND=On \
   -DENABLE_Z3=On \
@@ -20,7 +20,7 @@ cmake -GNinja -Bbuild -H. \
   -DENABLE_REGRESSION=On \
   -DCMAKE_BUILD_TYPE=RelWithDebInfo
 
-# Build (778 targets, uses Ninja)
+# Build (uses Ninja)
 ninja -C build
 
 # Install
@@ -36,24 +36,24 @@ Additional optional CMake flags:
 
 See `scripts/build.sh` for full platform-specific dependency setup and solver configuration.
 
-Requires: CMake 3.18+, Ninja, Boost (date_time, program_options, iostreams, system, filesystem), LLVM 11-21+, Bison, Flex, Z3 (or another SMT solver).
+Requires: CMake 3.18+, Ninja, Boost (date_time, program_options, iostreams, system, filesystem), LLVM 11+ (tested up to 21), Bison, Flex, Z3 (or another SMT solver).
 
 ## Testing
 
-There are 236 unit tests and ~7200+ regression tests. Regression tests require at least one solver backend (e.g., Z3). All commands run from the `build/` directory.
+Regression tests require at least one solver backend (e.g., Z3). All commands run from the `build/` directory.
 
 ```sh
-# Run unit tests only (fast, ~4 seconds, tests 1-236)
-ctest -j$(nproc) -I 1,236 --timeout 60
+# Run unit tests only (fast, excludes regression-labeled tests)
+ctest -j$(nproc) -LE regression --timeout 60
 
 # Run all regression tests (slow, creates temp dirs in /tmp — see note below)
 ctest -j$(nproc) -L regression --timeout 120
 
 # Run a specific regression suite by label
-ctest -j$(nproc) -L esbmc --timeout 120          # core C tests (~1046 tests)
-ctest -j$(nproc) -L python --timeout 120          # Python tests (~2186 tests)
-ctest -j$(nproc) -L "esbmc-cpp/cpp" --timeout 120 # C++ tests (~420 tests)
-ctest -j$(nproc) -L floats --timeout 120          # floating-point tests (~141 tests)
+ctest -j$(nproc) -L esbmc --timeout 120          # core C tests
+ctest -j$(nproc) -L python --timeout 120          # Python tests
+ctest -j$(nproc) -L "esbmc-cpp/cpp" --timeout 120 # C++ tests
+ctest -j$(nproc) -L floats --timeout 120          # floating-point tests
 
 # List all available test labels
 ctest --print-labels
@@ -116,7 +116,7 @@ Tools:
 - `goto2c/` — Converts GOTO programs back to C
 
 Other top-level directories:
-- `unit/` — GoogleTest unit tests
+- `unit/` — Catch2 unit tests
 - `regression/` — regression test suites (60+ categories)
 - `scripts/` — build scripts and CMake modules (`scripts/cmake/`)
 - `docs/` — generated documentation
@@ -142,7 +142,7 @@ Look for the `python_user_main` function to see how Python source maps to GOTO i
 - `src/python-frontend/function_call_expr.cpp` — Method call handling
 - `src/c2goto/library/python/list.c` — C operational model for list operations
 
-**5. Hypothesis tests** — Property-based tests in `tests/python-frontend/` test ESBMC's models against CPython. Run with: `uv run python -m pytest tests/python-frontend/ -v`
+**5. Hypothesis tests** — Property-based tests in `unit/python-frontend/` test ESBMC's models against CPython. Run with: `uv run python -m pytest unit/python-frontend/ -v`
 
 ## Commit Conventions
 
