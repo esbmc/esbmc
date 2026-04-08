@@ -590,7 +590,7 @@ class Decimal:
                 return Decimal(0, 0, 0, 2)
             return Decimal(0, 0, 0, 1)
         if self._int == 0:
-            return Decimal(0, 0, 0, 0)
+            return Decimal(self._sign, 0, 0, 0)
         if self._sign == 1:
             return Decimal(0, 0, 0, 2)
         prec: int = 28

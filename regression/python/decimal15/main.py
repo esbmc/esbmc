@@ -31,8 +31,8 @@ d6: Decimal = Decimal("-Infinity")
 s6: Decimal = d6.sqrt()
 assert s6.is_nan()
 
-# sqrt(-0) should return positive 0
+# sqrt(-0) preserves sign (returns -0)
 d7: Decimal = Decimal("-0")
 s7: Decimal = d7.sqrt()
-assert s7._sign == 0
+assert s7._sign == 1
 assert s7._int == 0
