@@ -477,6 +477,20 @@ exprt function_call_expr::handle_isinstance() const
   const auto &obj_arg = args[0];
   const auto &type_arg = args[1];
 
+  // isinstance(None, ...) is always False
+  if (
+    obj_arg["_type"] == "Constant" &&
+    (obj_arg["value"].is_null() ||
+     (obj_arg.contains("value") && obj_arg["value"] == nullptr)))
+  {
+    std::string tname;
+    if (type_arg["_type"] == "Name")
+      tname = type_arg["id"].get<std::string>();
+
+    if (tname != "NoneType")
+      return false_exprt();
+  }
+
   // Check if the first argument is a type object (e.g., x = int; isinstance(x, str))
   // Type objects themselves are not instances of other types (except 'type')
   if (obj_arg["_type"] == "Name")
