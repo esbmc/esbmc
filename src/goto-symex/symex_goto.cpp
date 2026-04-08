@@ -50,7 +50,9 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
     }
   }
 
-  // Interval-based guard check (--interval-symex-guard)
+  // Interval-based guard check (default; disabled by --no-interval-symex-guard).
+  // The explicit flag check matters when only --interval-symex-assert is on:
+  // the domain exists for assertion pruning, but guard pruning must stay off.
   if (
     !new_guard_false && !new_guard_true && interval_domain_state &&
     options.get_bool_option("interval-symex-guard"))

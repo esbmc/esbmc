@@ -25,13 +25,14 @@ static void reset_interval_flags()
 // ---------------------------------------------------------------------------
 
 TEST_CASE(
-  "set_options: --interval-symex-guard implies enable_interval_arithmetic",
+  "set_options: interval-symex-guard on by default enables interval_arithmetic",
   "[interval][set_options]")
 {
   reset_interval_flags();
 
   optionst options;
   options.set_option("interval-analysis-arithmetic", false);
+  // symex_assign sets this to true before calling set_options when feature is active
   options.set_option("interval-symex-guard", true);
   // Supply defaults for all other options referenced by set_options
   options.set_option("interval-analysis-bitwise", false);
@@ -76,7 +77,7 @@ TEST_CASE(
 }
 
 TEST_CASE(
-  "set_options: neither flag leaves arithmetic disabled",
+  "set_options: --no-interval-symex-guard without arithmetic leaves it disabled",
   "[interval][set_options]")
 {
   reset_interval_flags();

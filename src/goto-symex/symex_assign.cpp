@@ -139,10 +139,16 @@ goto_symext::goto_symext(
 
   art1 = nullptr;
 
-  if (
-    options.get_bool_option("interval-symex-guard") ||
-    options.get_bool_option("interval-symex-assert"))
+  // Guard pruning is on by default (disable with --no-interval-symex-guard);
+  // assertion pruning is opt-in via --interval-symex-assert. Build the online
+  // interval domain when either is active.
+  const bool guard_enabled =
+    !options.get_bool_option("no-interval-symex-guard");
+  const bool assert_enabled = options.get_bool_option("interval-symex-assert");
+  if (guard_enabled || assert_enabled)
   {
+    if (guard_enabled)
+      options.set_option("interval-symex-guard", true);
     interval_domaint::set_options(options);
     interval_domain_state.emplace();
     interval_domain_state->make_top();
