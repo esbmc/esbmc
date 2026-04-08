@@ -79,6 +79,24 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
       first_loop);
   }
 
+  // Teach the interval domain the branch constraint for the continuing path.
+  // For a forward GOTO (exit check), the fall-through means the guard is false,
+  // so assume NOT old_guard. For a backward GOTO (loop-back), the jump means
+  // the guard is true, so assume old_guard.
+  if (interval_domain_state && !new_guard_false && !new_guard_true)
+  {
+    if (forward)
+    {
+      expr2tc neg_guard = old_guard;
+      make_not(neg_guard);
+      interval_domain_state->assume(neg_guard);
+    }
+    else
+    {
+      interval_domain_state->assume(old_guard);
+    }
+  }
+
   if (new_guard_false)
   {
     // reset unwinding counter

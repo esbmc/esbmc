@@ -142,7 +142,6 @@ goto_symext::goto_symext(
   if (options.get_bool_option("interval-symex-guard"))
   {
     interval_domaint::set_options(options);
-    interval_domaint::enable_interval_arithmetic = true;
     interval_domain_state.emplace();
     interval_domain_state->make_top();
   }

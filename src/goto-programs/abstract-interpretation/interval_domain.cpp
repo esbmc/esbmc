@@ -1493,7 +1493,7 @@ void interval_domaint::assume_rec(const expr2tc &cond, bool negation)
       apply_assume_symbol_truth<interval_domaint::real_intervalt>(
         to_symbol2t(cond), negation);
   }
-  else if (is_typecast2t(cond))
+  else if (is_typecast2t(cond) && is_bool_type(cond))
   {
     assume_rec(to_typecast2t(cond).from, negation);
   }
@@ -1559,7 +1559,8 @@ bool interval_domaint::ai_simplify(expr2tc &condition, const namespacet &ns)
 void interval_domaint::set_options(const optionst &options)
 {
   enable_interval_arithmetic =
-    options.get_bool_option("interval-analysis-arithmetic");
+    options.get_bool_option("interval-analysis-arithmetic") ||
+    options.get_bool_option("interval-symex-guard");
   enable_interval_bitwise_arithmetic =
     options.get_bool_option("interval-analysis-bitwise");
   enable_modular_intervals =
@@ -1593,6 +1594,7 @@ void interval_domaint::process_instruction(goto_programt::const_targett from)
   switch (instruction.type)
   {
   case DECL:
+  case DEAD:
     havoc_rec(instruction.code);
     break;
   case ASSIGN:
