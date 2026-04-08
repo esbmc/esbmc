@@ -1604,6 +1604,11 @@ void interval_domaint::process_instruction(goto_programt::const_targett from)
     assume(instruction.guard);
     break;
   default:
+    log_debug(
+      "interval",
+      "[process_instruction] Unhandled instruction type {}: {}",
+      fmt::underlying(instruction.type),
+      instruction.location);
     break;
   }
 }
