@@ -716,10 +716,17 @@ void goto_convertt::remove_assignment(
 
     exprt lhs(expr.op0());
 
-    code_assignt assignment(lhs, rhs);
-    assignment.location() = expr.location();
-
-    convert(assignment, dest);
+    // C11 compound assignments on _Atomic are RMW: the read and write must
+    // happen in a single indivisible atomic section (no context-switch window
+    // between the load and the store, unlike plain "x = x op y").
+    if (is_atomic_symbol(lhs, ns))
+      convert_assign_rmw_atomic(lhs, rhs, expr.location(), dest);
+    else
+    {
+      code_assignt assignment(lhs, rhs);
+      assignment.location() = expr.location();
+      convert(assignment, dest);
+    }
   }
 
   // revert assignment in the expression to its LHS
@@ -809,10 +816,16 @@ void goto_convertt::remove_pre(
     rhs.type() = expr.op0().type();
   }
 
-  code_assignt assignment(expr.op0(), rhs);
-  assignment.location() = expr.location();
-
-  convert(assignment, dest);
+  // C11 pre-increment/decrement on _Atomic is a sequentially-consistent RMW:
+  // the load and store must be indivisible.
+  if (is_atomic_symbol(expr.op0(), ns))
+    convert_assign_rmw_atomic(expr.op0(), rhs, expr.location(), dest);
+  else
+  {
+    code_assignt assignment(expr.op0(), rhs);
+    assignment.location() = expr.location();
+    convert(assignment, dest);
+  }
 
   if (result_is_used)
   {
@@ -898,6 +911,39 @@ void goto_convertt::remove_post(
     rhs.copy_to_operands(expr.op0());
     rhs.move_to_operands(constant);
     rhs.type() = expr.op0().type();
+  }
+
+  // C11 post-increment/decrement on _Atomic is a sequentially-consistent RMW.
+  // The old value and the store must be captured inside a single atomic section
+  // so no other thread can observe an intermediate state.
+  if (is_atomic_symbol(expr.op0(), ns))
+  {
+    if (result_is_used)
+    {
+      // Declare the "old value" temporary outside the atomic section.
+      symbolt &old_sym = new_tmp_symbol(expr.op0().type());
+      code_declt decl(symbol_expr(old_sym));
+      decl.location() = expr.location();
+      convert_decl(decl, dest);
+
+      dest.add_instruction(ATOMIC_BEGIN);
+      // Save old value then modify — all inside one atomic block.
+      code_assignt save(symbol_expr(old_sym), expr.op0());
+      save.location() = expr.location();
+      copy(save, ASSIGN, dest);
+      code_assignt modify(expr.op0(), rhs);
+      modify.location() = expr.location();
+      copy(modify, ASSIGN, dest);
+      dest.add_instruction(ATOMIC_END);
+
+      expr = symbol_expr(old_sym);
+    }
+    else
+    {
+      convert_assign_rmw_atomic(expr.op0(), rhs, expr.location(), dest);
+      expr.make_nil();
+    }
+    return;
   }
 
   code_assignt assignment(expr.op0(), rhs);

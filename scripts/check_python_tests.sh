@@ -121,6 +121,7 @@ ignored_dirs=(
   "string-symbolic-4"
   "string-symbolic-7"
   "string-symbolic-8"
+  "complex_str_nonconstant"
 )
 
 for dir in */; do

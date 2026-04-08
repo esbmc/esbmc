@@ -186,6 +186,12 @@ private:
   exprt handle_float_to_str(nlohmann::json &arg) const;
 
   /*
+   * Handles complex-to-str conversions (e.g., str(complex(1,2)) → "(1+2j)").
+   * Formats constant complex values using Python's repr rules.
+   */
+  exprt handle_complex_to_str(const exprt &complex_expr) const;
+
+  /*
    * Handles string arguments (e.g., str("abc")) by converting them
    * into character array expressions.
    */
