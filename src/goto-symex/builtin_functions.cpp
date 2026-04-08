@@ -2870,6 +2870,22 @@ void goto_symext::simplify_python_builtins(expr2tc &expr)
     expr2tc value = obj.side_1;
     expr2tc expect_type = obj.side_2;
 
+    // isinstance(None, ...) is always False
+    if (is_pointer_type(value->type))
+    {
+      const pointer_type2t &ptr = to_pointer_type(value->type);
+      if (is_bool_type(ptr.subtype))
+      {
+        if (
+          !is_struct_type(expect_type->type) &&
+          !is_pointer_type(expect_type->type))
+        {
+          expr = gen_false_expr();
+          return;
+        }
+      }
+    }
+
     value_setst::valuest value_set;
     cur_state->value_set.get_value_set(value, value_set);
 
