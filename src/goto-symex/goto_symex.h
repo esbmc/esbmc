@@ -2,9 +2,11 @@
 #define CPROVER_GOTO_SYMEX_GOTO_SYMEX_H
 
 #include <goto-programs/goto_functions.h>
+#include <goto-programs/abstract-interpretation/interval_domain.h>
 #include <goto-symex/goto_symex_state.h>
 #include <goto-symex/symex_target.h>
 #include <map>
+#include <optional>
 #include <pointer-analysis/dereference.h>
 #include <stack>
 #include <util/i2string.h>
@@ -1128,6 +1130,8 @@ protected:
   std::map<unsigned, std::pair<std::string, unsigned>> loop_id_to_func_index;
   /** Global maximum number of unwinds. */
   BigInt max_unwind;
+  /** Optional local interval domain for --interval-symex-guard guard pruning. */
+  std::optional<interval_domaint> interval_domain_state;
   /** Whether constant propagation is to be enabled. */
   bool constant_propagation;
   /** Namespace we're working in. */
