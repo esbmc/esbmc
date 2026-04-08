@@ -133,7 +133,7 @@ jobs:
       - name: Filter out uninteresting paths
         run: |
           lcov --ignore-errors inconsistent --ignore-errors corrupt \
-               -ignore-errors unused --remove coverage.info \
+               --ignore-errors unused --remove coverage.info \
                '/usr/*' \
                '*/build/*' \
                --output-file coverage.info
