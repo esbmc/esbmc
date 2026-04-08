@@ -50,25 +50,26 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
     }
   }
 
-  // Interval-based guard check (default; disabled by --no-interval-symex-guard).
-  // The explicit flag check matters when only --interval-symex-assert is on:
-  // the domain exists for assertion pruning, but guard pruning must stay off.
-  if (
-    !new_guard_false && !new_guard_true && interval_domain_state &&
-    options.get_bool_option("interval-symex-guard"))
-  {
-    tvt res = interval_domaint::eval_boolean_expression(
-      old_guard, *interval_domain_state);
-    if (res.is_false())
-      new_guard_false = true;
-    else if (res.is_true())
-      new_guard_true = true;
-  }
-
   goto_programt::const_targett goto_target = instruction.targets.front();
 
   bool forward =
     cur_state->source.pc->location_number < goto_target->location_number;
+
+  // Interval-based guard check (default, disabled by --no-interval-symex-guard).
+  // Only prune when the guard is provably TRUE (loop can be unwound no further).
+  // Never force-enter a loop (new_guard_false) via the interval domain: doing so
+  // omits the loop-entry guard from the path condition, which lets the SMT solver
+  // pick values outside the loop's feasible range and produce false positives.
+  // The flag check lets --interval-symex-assert keep the domain without pruning.
+  if (
+    !new_guard_false && !new_guard_true && interval_domain_state &&
+    options.get_bool_option("interval-symex-guard"))
+  {
+    tvt res =
+      interval_domaint::eval_boolean_expression(old_guard, *interval_domain_state);
+    if (res.is_true())
+      new_guard_true = true;
+  }
 
   if (
     options.get_option("witness-output-yaml") != "" && forward &&
