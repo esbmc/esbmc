@@ -2002,7 +2002,8 @@ private:
 
     assert(!rhs_var_name.empty());
 
-    auto extract_lhs_name = [](const Json &stmt) -> std::string {
+    auto extract_lhs_name = [](const Json &stmt) -> std::string
+    {
       if (
         stmt.contains("_type") && stmt["_type"] == "Assign" &&
         stmt.contains("targets") && !stmt["targets"].empty() &&
@@ -2679,8 +2680,8 @@ private:
       // Recursively resolve nested attribute chain (e.g., self.b.a -> [self, b, a])
       std::function<std::string(const Json &, std::vector<std::string> &)>
         extract_attr_chain =
-          [&](
-            const Json &node, std::vector<std::string> &chain) -> std::string {
+          [&](const Json &node, std::vector<std::string> &chain) -> std::string
+      {
         if (node["_type"] == "Attribute")
         {
           std::string attr = node["attr"].template get<std::string>();
@@ -3619,7 +3620,8 @@ private:
     element.erase("type_comment");
 
     // Update value fields with the correct offsets - with null safety
-    auto update_offsets = [&inferred_type](Json &value) {
+    auto update_offsets = [&inferred_type](Json &value)
+    {
       if (value.contains("col_offset") && !value["col_offset"].is_null())
       {
         value["col_offset"] =
