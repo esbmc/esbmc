@@ -1,8 +1,8 @@
 #define CATCH_CONFIG_MAIN
 #include <catch2/catch.hpp>
 
-#include "../testing-utils/goto_factory.h"
 #include <goto-programs/abstract-interpretation/interval_domain.h>
+#include <goto-programs/goto_program.h>
 #include <irep2/irep2_expr.h>
 #include <util/c_types.h>
 #include <util/options.h>
@@ -108,48 +108,28 @@ TEST_CASE(
   "process_instruction: ASSUME constrains the variable",
   "[interval][process_instruction]")
 {
-  // After processing ASSUME x >= 5, the domain must prove x >= 5.
-  std::string code =
-    "int main() {\n"
-    "  int x;\n"
-    "  __ESBMC_assume(x >= 5);\n"
-    "  return 0;\n"
-    "}";
-
+  // Construct an ASSUME instruction directly and verify the domain is updated.
   reset_interval_flags();
   interval_domaint::enable_interval_arithmetic = true;
 
-  auto arch = goto_factory::Architecture::BIT_32;
-  auto P = goto_factory::get_goto_functions(code, arch);
+  auto int_type = get_int32_type();
+  expr2tc x = symbol2tc(int_type, irep_idt("x"));
+  expr2tc five = constant_int2tc(int_type, BigInt(5));
+  expr2tc geq = greaterthanequal2tc(x, five);
+
+  // Build a minimal ASSUME instruction list so we have a valid iterator.
+  goto_programt::instructionst instrs;
+  instrs.emplace_back();
+  auto it = instrs.begin();
+  it->type = ASSUME;
+  it->guard = geq;
 
   interval_domaint domain;
   domain.make_top();
-  expr2tc assume_guard;
+  domain.process_instruction(it);
 
-  for (auto &[func_name, func] : P.functions.function_map)
-  {
-    if (!func.body_available)
-      continue;
-    if (func_name.as_string().find("main") == std::string::npos)
-      continue;
-
-    for (auto i_it = func.body.instructions.begin();
-         i_it != func.body.instructions.end();
-         ++i_it)
-    {
-      domain.process_instruction(i_it);
-      if (i_it->is_assume())
-      {
-        assume_guard = i_it->guard;
-        break;
-      }
-    }
-    break;
-  }
-
-  REQUIRE(!is_nil_expr(assume_guard));
-  // The guard IS the expression we assumed, so the domain must now prove it.
-  tvt result = interval_domaint::eval_boolean_expression(assume_guard, domain);
+  // After ASSUME x >= 5 the domain must prove x >= 5.
+  tvt result = interval_domaint::eval_boolean_expression(geq, domain);
   CHECK(result.is_true());
 }
 
@@ -157,119 +137,87 @@ TEST_CASE(
   "process_instruction: ASSIGN with arithmetic propagates interval",
   "[interval][process_instruction]")
 {
-  // After ASSUME x >= 3 and ASSIGN x = x + 1, the domain must prove x >= 4.
-  std::string code =
-    "int main() {\n"
-    "  int x;\n"
-    "  __ESBMC_assume(x >= 3);\n"
-    "  x = x + 1;\n"
-    "  return 0;\n"
-    "}";
-
+  // Construct ASSUME x >= 3 then ASSIGN x = x + 1; domain must prove x >= 4.
   reset_interval_flags();
   interval_domaint::enable_interval_arithmetic = true;
 
-  auto arch = goto_factory::Architecture::BIT_32;
-  auto P = goto_factory::get_goto_functions(code, arch);
+  auto int_type = get_int32_type();
+  expr2tc x = symbol2tc(int_type, irep_idt("x"));
+  expr2tc three = constant_int2tc(int_type, BigInt(3));
+  expr2tc four = constant_int2tc(int_type, BigInt(4));
+  expr2tc one = constant_int2tc(int_type, BigInt(1));
+
+  goto_programt::instructionst instrs;
+
+  // ASSUME x >= 3
+  instrs.emplace_back();
+  auto assume_it = instrs.begin();
+  assume_it->type = ASSUME;
+  assume_it->guard = greaterthanequal2tc(x, three);
+
+  // ASSIGN x = x + 1
+  instrs.emplace_back();
+  auto assign_it = std::next(instrs.begin());
+  assign_it->type = ASSIGN;
+  assign_it->code = code_assign2tc(x, add2tc(int_type, x, one));
 
   interval_domaint domain;
   domain.make_top();
-  expr2tc assume_guard;
+  domain.process_instruction(assume_it); // x ∈ [3, +∞)
+  domain.process_instruction(assign_it); // x ∈ [4, +∞)
 
-  for (auto &[func_name, func] : P.functions.function_map)
-  {
-    if (!func.body_available)
-      continue;
-    if (func_name.as_string().find("main") == std::string::npos)
-      continue;
+  // x >= 3 must still hold (x >= 4 implies x >= 3).
+  tvt geq3 = interval_domaint::eval_boolean_expression(
+    greaterthanequal2tc(x, three), domain);
+  CHECK(geq3.is_true());
 
-    bool past_assign = false;
-    for (auto i_it = func.body.instructions.begin();
-         i_it != func.body.instructions.end();
-         ++i_it)
-    {
-      // Capture the guard from the ASSUME to construct the shifted check later.
-      if (i_it->is_assume() && is_nil_expr(assume_guard))
-        assume_guard = i_it->guard;
-
-      domain.process_instruction(i_it);
-
-      if (i_it->is_assign() && !past_assign)
-      {
-        past_assign = true;
-        break;
-      }
-    }
-    break;
-  }
-
-  REQUIRE(!is_nil_expr(assume_guard));
-  // assume_guard is (x >= 3). After x = x+1, domain has x >= 4.
-  // eval(x >= 3) must still be true (x >= 4 implies x >= 3).
-  tvt result = interval_domaint::eval_boolean_expression(assume_guard, domain);
-  CHECK(result.is_true());
+  // x >= 4 must now hold.
+  tvt geq4 = interval_domaint::eval_boolean_expression(
+    greaterthanequal2tc(x, four), domain);
+  CHECK(geq4.is_true());
 }
 
 TEST_CASE(
   "process_instruction: DEAD havoces the variable",
   "[interval][process_instruction]")
 {
-  // Declare x in an inner block, assume x >= 5, then let it go DEAD.
-  // After DEAD the domain must no longer know x >= 5.
-  std::string code =
-    "int main() {\n"
-    "  {\n"
-    "    int x;\n"
-    "    __ESBMC_assume(x >= 5);\n"
-    "  }\n"  // x is DEAD here
-    "  return 0;\n"
-    "}";
-
+  // Establish x >= 5 via ASSUME, then invalidate it via DEAD.
+  // After DEAD the domain must no longer prove x >= 5.
   reset_interval_flags();
   interval_domaint::enable_interval_arithmetic = true;
 
-  auto arch = goto_factory::Architecture::BIT_32;
-  auto P = goto_factory::get_goto_functions(code, arch);
+  auto int_type = get_int32_type();
+  expr2tc x = symbol2tc(int_type, irep_idt("x"));
+  expr2tc five = constant_int2tc(int_type, BigInt(5));
+  expr2tc geq = greaterthanequal2tc(x, five);
+
+  goto_programt::instructionst instrs;
+
+  // ASSUME x >= 5
+  instrs.emplace_back();
+  auto assume_it = instrs.begin();
+  assume_it->type = ASSUME;
+  assume_it->guard = geq;
+
+  // DEAD x  (havoc_rec uses is_symbol2t to erase the entry)
+  instrs.emplace_back();
+  auto dead_it = std::next(instrs.begin());
+  dead_it->type = DEAD;
+  dead_it->code = x;
 
   interval_domaint domain;
   domain.make_top();
-  expr2tc assume_guard;
-  bool dead_found = false;
+  domain.process_instruction(assume_it);
 
-  for (auto &[func_name, func] : P.functions.function_map)
-  {
-    if (!func.body_available)
-      continue;
-    if (func_name.as_string().find("main") == std::string::npos)
-      continue;
+  // Before DEAD: the domain must guarantee x >= 5.
+  tvt before = interval_domaint::eval_boolean_expression(geq, domain);
+  REQUIRE(before.is_true());
 
-    for (auto i_it = func.body.instructions.begin();
-         i_it != func.body.instructions.end();
-         ++i_it)
-    {
-      // Capture ASSUME guard before processing the DEAD instruction.
-      if (i_it->is_assume() && is_nil_expr(assume_guard))
-        assume_guard = i_it->guard;
+  domain.process_instruction(dead_it);
 
-      domain.process_instruction(i_it);
-
-      if (i_it->type == DEAD)
-      {
-        dead_found = true;
-        break;
-      }
-    }
-    break;
-  }
-
-  // If the goto program didn't emit a DEAD instruction (some configurations
-  // may omit it), skip the check rather than fail.
-  if (!dead_found || is_nil_expr(assume_guard))
-    return;
-
-  // After DEAD x, the domain must no longer guarantee x >= 5.
-  tvt result = interval_domaint::eval_boolean_expression(assume_guard, domain);
-  CHECK(!result.is_true());
+  // After DEAD: x is havoced — the domain must not guarantee x >= 5.
+  tvt after = interval_domaint::eval_boolean_expression(geq, domain);
+  CHECK(!after.is_true());
 }
 
 // ---------------------------------------------------------------------------
