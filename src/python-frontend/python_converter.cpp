@@ -4067,10 +4067,10 @@ exprt python_converter::dispatch_dunder_operator(
     rcall.type() = rmt.return_type();
     rcall.location() = loc;
     rcall.arguments().push_back(gen_address_of(rhs));
-    if (lhs_type.is_array())
-      rcall.arguments().push_back(gen_address_of(lhs));
-    else
-      rcall.arguments().push_back(lhs);
+    exprt lhs_arg = lhs;
+    if (!lhs_arg.is_symbol())
+      lhs_arg = store_call_result(lhs_arg, loc, "rdunder_arg");
+    rcall.arguments().push_back(gen_address_of(lhs_arg));
     return rcall;
   }
 

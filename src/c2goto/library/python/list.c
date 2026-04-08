@@ -780,10 +780,12 @@ bool __ESBMC_list_lt(
     {
       double av = (a->type_id == float_type_id)
                     ? *(const double *)a->value
-                    : (double)(*(const int64_t *)a->value);
-      double bv = (b->type_id == float_type_id) ? *(const double *)b->value
-                  : (b->size == 1) ? (double)(*(const uint8_t *)b->value)
-                                   : (double)(*(const int64_t *)b->value);
+                    : (a->size == 1) ? (double)(*(const uint8_t *)a->value)
+                                     : (double)(*(const int64_t *)a->value);
+      double bv = (b->type_id == float_type_id)
+                    ? *(const double *)b->value
+                    : (b->size == 1) ? (double)(*(const uint8_t *)b->value)
+                                     : (double)(*(const int64_t *)b->value);
       if (av != bv)
         return av < bv;
     }
@@ -797,10 +799,22 @@ bool __ESBMC_list_lt(
     }
     else if (a->size == 1)
     {
-      uint8_t av = *(const uint8_t *)a->value;
-      uint8_t bv = *(const uint8_t *)b->value;
-      if (av != bv)
-        return av < bv;
+      if (b->size == 1)
+      {
+        uint8_t av = *(const uint8_t *)a->value;
+        uint8_t bv = *(const uint8_t *)b->value;
+        if (av != bv)
+          return av < bv;
+      }
+      else
+      {
+        double av = (double)(*(const uint8_t *)a->value);
+        double bv = (b->type_id == float_type_id)
+                      ? *(const double *)b->value
+                      : (double)(*(const int64_t *)b->value);
+        if (av != bv)
+          return av < bv;
+      }
     }
     else
     {
@@ -816,6 +830,19 @@ bool __ESBMC_list_lt(
 
   // All shared elements equal: shorter list is less.
   return l1->size < l2->size;
+}
+
+// Lexicographic less-than-or-equal for Python lists.
+// Uses list_lt || list_eq to correctly handle NaN (where negation of
+// the swapped strict-lt would give wrong results).
+bool __ESBMC_list_le(
+  const PyListObject *l1,
+  const PyListObject *l2,
+  int type_flag,
+  size_t float_type_id)
+{
+  return __ESBMC_list_lt(l1, l2, type_flag, float_type_id) ||
+         __ESBMC_list_eq(l1, l2, 0, 0);
 }
 
 void __ESBMC_list_reverse(PyListObject *l)

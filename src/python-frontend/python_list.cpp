@@ -2260,7 +2260,16 @@ exprt python_list::compare(
   //   GtE : !list_lt(l1, l2)    (i.e. !(l1 < l2))
   if (op == "Lt" || op == "LtE" || op == "Gt" || op == "GtE")
   {
-    // Look up or register the __ESBMC_list_lt symbol.
+    // Build the shared function type for list_lt / list_le.
+    code_typet cmp_func_type;
+    cmp_func_type.return_type() = bool_type();
+    typet list_ptr = converter_.get_type_handler().get_list_type();
+    cmp_func_type.arguments().push_back(code_typet::argumentt(list_ptr));
+    cmp_func_type.arguments().push_back(code_typet::argumentt(list_ptr));
+    cmp_func_type.arguments().push_back(code_typet::argumentt(int_type()));
+    cmp_func_type.arguments().push_back(code_typet::argumentt(size_type()));
+
+    // Look up or register __ESBMC_list_lt.
     const symbolt *list_lt_func_sym =
       converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_lt");
     if (!list_lt_func_sym)
@@ -2270,21 +2279,29 @@ exprt python_list::compare(
       new_symbol.id = "c:@F@__ESBMC_list_lt";
       new_symbol.mode = "C";
       new_symbol.is_extern = true;
-
-      code_typet func_type;
-      func_type.return_type() = bool_type();
-      typet list_ptr = converter_.get_type_handler().get_list_type();
-      func_type.arguments().push_back(code_typet::argumentt(list_ptr));
-      func_type.arguments().push_back(code_typet::argumentt(list_ptr));
-      func_type.arguments().push_back(code_typet::argumentt(int_type()));
-      func_type.arguments().push_back(code_typet::argumentt(size_type()));
-      new_symbol.type = func_type;
-
+      new_symbol.type = cmp_func_type;
       converter_.symbol_table().add(new_symbol);
       list_lt_func_sym =
         converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_lt");
     }
     assert(list_lt_func_sym);
+
+    // Look up or register __ESBMC_list_le (NaN-safe less-than-or-equal).
+    const symbolt *list_le_func_sym =
+      converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_le");
+    if (!list_le_func_sym)
+    {
+      symbolt new_symbol;
+      new_symbol.name = "__ESBMC_list_le";
+      new_symbol.id = "c:@F@__ESBMC_list_le";
+      new_symbol.mode = "C";
+      new_symbol.is_extern = true;
+      new_symbol.type = cmp_func_type;
+      converter_.symbol_table().add(new_symbol);
+      list_le_func_sym =
+        converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_le");
+    }
+    assert(list_le_func_sym);
 
     // Determine element type flags from both lists and merge them so that
     // cross-type comparisons like [1,2] < [1.0,2.0] are handled correctly.
@@ -2321,39 +2338,37 @@ exprt python_list::compare(
     else
       type_flag = 0;
 
-    // Emit: lt_ret = __ESBMC_list_lt(a, b, type_flag, float_type_id)
-    // Derivations (total order):
-    //   Lt  : list_lt(l1, l2) == true   → no swap, check true
-    //   LtE : !list_lt(l2, l1) == true  → swap,    check false
-    //   Gt  : list_lt(l2, l1) == true   → swap,    check true
-    //   GtE : !list_lt(l1, l2) == true  → no swap, check false
-    const bool swap = (op == "LtE" || op == "Gt");
+    // Emit: cmp_ret = __ESBMC_list_lt(a, b, ...) or list_le(a, b, ...)
+    //   Lt  : list_lt(l1, l2)
+    //   LtE : list_le(l1, l2)   (NaN-safe: lt || eq)
+    //   Gt  : list_lt(l2, l1)
+    //   GtE : list_le(l2, l1)   (NaN-safe: lt || eq)
+    const bool swap = (op == "Gt" || op == "GtE");
+    const bool use_le = (op == "LtE" || op == "GtE");
     const symbolt *a_sym = swap ? rhs_symbol : lhs_symbol;
     const symbolt *b_sym = swap ? lhs_symbol : rhs_symbol;
+    const symbolt *cmp_func =
+      use_le ? list_le_func_sym : list_lt_func_sym;
 
-    symbolt &lt_ret = converter_.create_tmp_symbol(
-      list_value_, "lt_tmp", bool_type(), gen_boolean(false));
-    code_declt lt_ret_decl(symbol_expr(lt_ret));
-    converter_.add_instruction(lt_ret_decl);
+    symbolt &cmp_ret = converter_.create_tmp_symbol(
+      list_value_, "cmp_tmp", bool_type(), gen_boolean(false));
+    code_declt cmp_ret_decl(symbol_expr(cmp_ret));
+    converter_.add_instruction(cmp_ret_decl);
 
-    code_function_callt lt_call;
-    lt_call.function() = symbol_expr(*list_lt_func_sym);
-    lt_call.lhs() = symbol_expr(lt_ret);
-    lt_call.arguments().push_back(symbol_expr(*a_sym));
-    lt_call.arguments().push_back(symbol_expr(*b_sym));
-    lt_call.arguments().push_back(from_integer(type_flag, int_type()));
-    lt_call.arguments().push_back(from_integer(float_type_id, size_type()));
-    lt_call.type() = bool_type();
-    lt_call.location() = converter_.get_location_from_decl(list_value_);
-    converter_.add_instruction(lt_call);
+    code_function_callt cmp_call;
+    cmp_call.function() = symbol_expr(*cmp_func);
+    cmp_call.lhs() = symbol_expr(cmp_ret);
+    cmp_call.arguments().push_back(symbol_expr(*a_sym));
+    cmp_call.arguments().push_back(symbol_expr(*b_sym));
+    cmp_call.arguments().push_back(from_integer(type_flag, int_type()));
+    cmp_call.arguments().push_back(from_integer(float_type_id, size_type()));
+    cmp_call.type() = bool_type();
+    cmp_call.location() = converter_.get_location_from_decl(list_value_);
+    converter_.add_instruction(cmp_call);
 
-    // Lt / Gt → lt_ret must be true; LtE / GtE → lt_ret must be false
     exprt cond("=", bool_type());
-    cond.copy_to_operands(symbol_expr(lt_ret));
-    if (op == "Lt" || op == "Gt")
-      cond.copy_to_operands(gen_boolean(true));
-    else
-      cond.copy_to_operands(gen_boolean(false));
+    cond.copy_to_operands(symbol_expr(cmp_ret));
+    cond.copy_to_operands(gen_boolean(true));
 
     return cond;
   }
