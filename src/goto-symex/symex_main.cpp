@@ -190,6 +190,7 @@ void goto_symext::symex_step(reachability_treet &art)
   assert(!cur_state->call_stack.empty());
 
   const goto_programt::instructiont &instruction = *cur_state->source.pc;
+  const goto_programt::const_targett pre_step_pc = cur_state->source.pc;
 
   // depth exceeded?
   {
@@ -446,6 +447,10 @@ void goto_symext::symex_step(reachability_treet &art)
       fmt::underlying(instruction.type));
     abort();
   }
+
+  // Update local interval domain for --interval-symex-guard
+  if (interval_domain_state)
+    interval_domain_state->process_instruction(pre_step_pc);
 }
 
 void goto_symext::symex_assume()

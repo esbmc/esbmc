@@ -3310,18 +3310,33 @@ bool function_call_expr::is_print_call() const
 
 exprt function_call_expr::handle_print() const
 {
-  // Process all arguments to ensure expressions are evaluated
+  // Materialize each argument as code so arithmetic checks and function-call
+  // side effects are preserved even though print itself has no runtime output.
   const auto &args = call_["args"];
-
   for (const auto &arg_node : args)
   {
-    // Evaluate each argument expression
-    // This ensures that any side effects or expressions are properly processed
-    converter_.get_expr(arg_node);
+    // Direct call arguments (print(f(...))) are currently lowered through
+    // the regular expression flow and may trigger invalid cast paths when
+    // re-materialized as expression statements here.
+    // Keep them non-materialized for now and only materialize non-call
+    // expressions such as arithmetic operators (e.g., print(a + b)).
+    if (arg_node.contains("_type") && arg_node["_type"] == "Call")
+      continue;
+
+    exprt arg_expr = converter_.get_expr(arg_node);
+    if (arg_expr.is_nil())
+      throw std::runtime_error(
+        "Failed to convert print() argument to expression");
+
+    // Trivial values have no side effects or checks to materialize.
+    if (arg_expr.is_constant() || arg_expr.id() == "symbol")
+      continue;
+
+    codet arg_code = converter_.convert_expression_to_code(arg_expr);
+    converter_.current_block->copy_to_operands(arg_code);
   }
 
-  // Print doesn't return a value, so return a nil expression
-  // This won't affect verification but ensures arguments are evaluated
+  // print() has no meaningful return value.
   return nil_exprt();
 }
 
