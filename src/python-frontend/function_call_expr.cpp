@@ -479,9 +479,8 @@ exprt function_call_expr::handle_isinstance() const
 
   // isinstance(None, ...) is always False
   if (
-    obj_arg["_type"] == "Constant" &&
-    (obj_arg["value"].is_null() ||
-     (obj_arg.contains("value") && obj_arg["value"] == nullptr)))
+    obj_arg["_type"] == "Constant" && obj_arg.contains("value") &&
+    obj_arg["value"].is_null())
   {
     if (type_arg["_type"] == "Name")
     {

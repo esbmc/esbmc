@@ -2833,7 +2833,7 @@ class Preprocessor(ast.NodeTransformer):
 
     @staticmethod
     def _nondet_call_to_type(call_node):
-        """Extract type name from nondet_call(nondet_list)."""
+        """Extract the type name from `nondet_*()` calls."""
         if isinstance(call_node, ast.Call) and isinstance(call_node.func, ast.Name):
             name = call_node.func.id
             if name.startswith('nondet_'):
