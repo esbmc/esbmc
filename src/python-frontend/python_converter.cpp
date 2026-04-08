@@ -3832,6 +3832,57 @@ exprt python_converter::dispatch_dunder_operator(
   typet lhs_type = resolve_operand_type(lhs, symbol_table_, ns);
   typet rhs_type = resolve_operand_type(rhs, symbol_table_, ns);
 
+  // Non-lvalue expressions (e.g. integer constants like 3) cannot be passed
+  // to gen_address_of directly.  Materialize them into a temp variable first.
+  auto ensure_addressable = [&](exprt &operand) {
+    if (operand.is_symbol() || operand.id() == "member" ||
+        operand.id() == "index")
+      return;
+    symbolt tmp =
+      create_return_temp_variable(operand.type(), loc, "dunder_arg");
+    symbol_table_.add(tmp);
+    exprt tmp_expr = symbol_expr(tmp);
+    code_declt tmp_decl(tmp_expr);
+    tmp_decl.location() = loc;
+    code_assignt tmp_assign(tmp_expr, operand);
+    tmp_assign.location() = loc;
+    if (current_block)
+    {
+      current_block->copy_to_operands(tmp_decl);
+      current_block->copy_to_operands(tmp_assign);
+    }
+    operand = tmp_expr;
+  };
+
+  // Build the argument for a method parameter: use gen_address_of when the
+  // parameter expects a pointer (struct self), pass by value otherwise (int).
+  auto make_arg = [&](exprt &operand, const typet &param_type) -> exprt {
+    if (param_type.is_pointer())
+    {
+      ensure_addressable(operand);
+      return gen_address_of(operand);
+    }
+    return operand;
+  };
+
+  // Build arguments for a 2-param dunder method (self, other).
+  auto build_dunder_call =
+    [&](symbolt *method, const code_typet &mt, exprt &self_op,
+        exprt &other_op) -> exprt {
+    const auto &params = mt.arguments();
+    side_effect_expr_function_callt call;
+    call.function() = symbol_expr(*method);
+    call.type() = mt.return_type();
+    call.location() = loc;
+    call.arguments().push_back(
+      params.size() > 0 ? make_arg(self_op, params[0].type())
+                        : gen_address_of(self_op));
+    call.arguments().push_back(
+      params.size() > 1 ? make_arg(other_op, params[1].type())
+                        : gen_address_of(other_op));
+    return call;
+  };
+
   // Try lhs.__add__(rhs)
   if (lhs_type.is_struct())
   {
@@ -3849,15 +3900,7 @@ exprt python_converter::dispatch_dunder_operator(
         {
           const code_typet &method_type = to_code_type(method->type);
           if (is_other_param_compatible(method_type, rhs_type, ns))
-          {
-            side_effect_expr_function_callt call;
-            call.function() = symbol_expr(*method);
-            call.type() = method_type.return_type();
-            call.location() = loc;
-            call.arguments().push_back(gen_address_of(lhs));
-            call.arguments().push_back(gen_address_of(rhs));
-            return call;
-          }
+            return build_dunder_call(method, method_type, lhs, rhs);
         }
       }
     }
@@ -3880,15 +3923,7 @@ exprt python_converter::dispatch_dunder_operator(
         {
           const code_typet &method_type = to_code_type(method->type);
           if (is_other_param_compatible(method_type, lhs_type, ns))
-          {
-            side_effect_expr_function_callt call;
-            call.function() = symbol_expr(*method);
-            call.type() = method_type.return_type();
-            call.location() = loc;
-            call.arguments().push_back(gen_address_of(rhs));
-            call.arguments().push_back(gen_address_of(lhs));
-            return call;
-          }
+            return build_dunder_call(method, method_type, rhs, lhs);
         }
       }
     }
