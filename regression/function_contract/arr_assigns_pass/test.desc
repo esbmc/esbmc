@@ -1,0 +1,4 @@
+CORE
+main.c
+--enforce-contract arr_write --function arr_write --no-pointer-check
+^VERIFICATION SUCCESSFUL$

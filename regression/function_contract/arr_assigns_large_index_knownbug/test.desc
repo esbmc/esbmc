@@ -1,0 +1,4 @@
+KNOWNBUG
+main.c
+--enforce-contract write_large_index --function write_large_index --no-pointer-check
+^VERIFICATION SUCCESSFUL$
