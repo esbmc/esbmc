@@ -67,6 +67,8 @@ function is tested against.
 When a function returns a value, use `__ESBMC_return_value` inside `ensures`:
 
 ```c
+#include <limits.h>
+
 int add_one(int n) {
     __ESBMC_requires(n < INT_MAX);
     __ESBMC_ensures(__ESBMC_return_value == n + 1);
