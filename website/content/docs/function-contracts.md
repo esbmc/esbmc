@@ -315,47 +315,10 @@ same callee at every call site is eliminated.
 
 ## Loop contracts and the frame rule
 
-Loop invariants tell ESBMC what remains true across every iteration. The
-**loop frame rule** adds a complementary claim: which variables a loop is
-allowed to change. Variables not listed are guaranteed to be untouched, and
-ESBMC checks this.
-
-```c
-int main(void) {
-    int i = 0;
-    int j = 42;
-
-    __ESBMC_loop_invariant(i >= 0 && i <= 10);
-    __ESBMC_loop_assigns(i);
-    while (i < 10)
-        i++;
-
-    /* j was not listed in loop_assigns — ESBMC can prove it is still 42 */
-    __ESBMC_assert(j == 42, "j unchanged");
-    return 0;
-}
-```
-
-Run with:
-
-```bash
-esbmc file.c --loop-invariant-check --loop-frame-rule
-```
-
-`--loop-invariant-check` activates the loop invariant checker.
-`--loop-frame-rule` additionally enforces the frame: after the loop havoc step,
-every variable not listed in `__ESBMC_loop_assigns` is constrained to its
-pre-loop value. Without this flag, the havoc step makes those variables
-nondeterministic, and the assertion on `j` would fail.
-
-The two macros must be placed **before the loop**, as statements ending with
-`;`. Both may list up to five targets; use `__ESBMC_loop_assigns()` with no
-arguments to declare that the loop modifies nothing.
-
-{{< callout type="info" >}}
-`--loop-frame-rule` requires `--loop-invariant-check`. It does not work with
-`--loop-invariant` (the combined k-induction mode).
-{{< /callout >}}
+`__ESBMC_loop_assigns` and `--loop-frame-rule` extend loop invariants with a
+frame claim — which variables a loop may change — and check that all others
+are untouched. These are documented in the
+[Loop Invariant Support](/docs/#loop-invariants) section.
 
 ## Quantified conditions
 
@@ -481,7 +444,7 @@ functions.
 | `--replace-call-with-contract <f>` | Replace calls to `f` with its contract |
 | `--enforce-all-contracts` | Enforce all `__ESBMC_contract`-annotated functions |
 | `--replace-all-contracts` | Replace calls to all `__ESBMC_contract`-annotated functions |
-| `--loop-invariant-check` | Enable loop invariant checking |
+| `--loop-invariant-check` | Enable loop invariant checking (see [Loop Invariant Support](/docs/#loop-invariants)) |
 | `--loop-frame-rule` | Enable loop frame rule (requires `--loop-invariant-check`) |
 
 ## Known limitations
