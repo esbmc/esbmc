@@ -1788,7 +1788,13 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     !type_utils::is_relational_op(op) && op != "Is" && op != "IsNot" &&
     op != "In" && op != "NotIn")
   {
-    if (is_any_ptr(lhs) && is_integer(rhs))
+    if (is_any_ptr(lhs) && is_any_ptr(rhs))
+    {
+      const typet int_type = type_handler_.get_typet("int", 0);
+      lhs = typecast_exprt(lhs, int_type);
+      rhs = typecast_exprt(rhs, int_type);
+    }
+    else if (is_any_ptr(lhs) && is_integer(rhs))
       lhs = typecast_exprt(lhs, rhs.type());
     else if (is_any_ptr(rhs) && is_integer(lhs))
       rhs = typecast_exprt(rhs, lhs.type());

@@ -41,6 +41,7 @@ class Preprocessor(ast.NodeTransformer):
         self.het_value_dict_literals = {}  # {var_name: dict AST node} for dicts with heterogeneous value types
         self.bound_method_vars = {}  # {var_name: ast.Attribute} for g = obj.method assignments
         self.called_names = set()  # names used as callees: g() → 'g' ∈ called_names
+        self.list_literal_values = {}  # {var_name: ast.List} for direct list literal assignments
 
     def _create_helper_functions(self):
         """Create the ESBMC helper function definitions"""
@@ -523,6 +524,12 @@ class Preprocessor(ast.NodeTransformer):
                 if prefix is not None:
                     self.statements.extend(prefix)
                     return result
+
+            lowered_sorted = self.preprocessor._lower_sorted_with_key_call(node)
+            if lowered_sorted is not None:
+                prefix, result = lowered_sorted
+                self.statements.extend(prefix)
+                return result
 
             return self.generic_visit(node)
 
@@ -1089,6 +1096,69 @@ class Preprocessor(ast.NodeTransformer):
         lowerer = self._ListCompExpressionLowerer(self)
         new_expr = lowerer.visit(expr)
         return lowerer.statements, new_expr
+
+    def _lower_sorted_with_key_call(self, call_node):
+        """Lower sorted(iterable, key=lambda x: x[K]) for literal-list iterables."""
+        if not (isinstance(call_node, ast.Call) and
+                isinstance(call_node.func, ast.Name) and
+                call_node.func.id == 'sorted' and
+                len(call_node.args) == 1):
+            return None
+
+        key_kw = None
+        for kw in call_node.keywords:
+            if kw.arg == 'key':
+                if key_kw is not None:
+                    return None
+                key_kw = kw
+            else:
+                return None
+
+        if key_kw is None or not isinstance(key_kw.value, ast.Lambda):
+            return None
+
+        key_lambda = key_kw.value
+        if len(key_lambda.args.args) != 1:
+            return None
+
+        param_name = key_lambda.args.args[0].arg
+        body = key_lambda.body
+        if not (isinstance(body, ast.Subscript) and
+                isinstance(body.value, ast.Name) and
+                body.value.id == param_name and
+                isinstance(body.slice, ast.Constant) and
+                isinstance(body.slice.value, int) and
+                body.slice.value >= 0):
+            return None
+
+        key_index = body.slice.value
+        iterable_expr = call_node.args[0]
+
+        iterable_literal = None
+        if isinstance(iterable_expr, ast.List):
+            iterable_literal = iterable_expr
+        elif isinstance(iterable_expr, ast.Name):
+            iterable_literal = self.list_literal_values.get(iterable_expr.id)
+
+        if iterable_literal is None:
+            return None
+
+        key_values = []
+        for elt in iterable_literal.elts:
+            if not (isinstance(elt, ast.Tuple) and key_index < len(elt.elts)):
+                return None
+            key_node = elt.elts[key_index]
+            if not isinstance(key_node, ast.Constant):
+                return None
+            key_values.append(key_node.value)
+
+        order = sorted(range(len(iterable_literal.elts)), key=lambda i: key_values[i])
+        folded_sorted = ast.List(
+            elts=[copy.deepcopy(iterable_literal.elts[i]) for i in order],
+            ctx=ast.Load())
+        self.ensure_all_locations(folded_sorted, call_node)
+        ast.fix_missing_locations(folded_sorted)
+        return [], folded_sorted
 
     def visit_Return(self, node):
         node = self.generic_visit(node)
@@ -3186,6 +3256,49 @@ class Preprocessor(ast.NodeTransformer):
         ast.fix_missing_locations(result)
         return result
 
+    def _try_transform_list_tuple_eq(self, left_side, literal_side, source_node):
+        """Transform x == [(a,b), ...] into len/index comparisons for x."""
+        if not isinstance(left_side, ast.Name):
+            return None
+        if not isinstance(literal_side, ast.List):
+            return None
+
+        tuple_rows = []
+        for elt in literal_side.elts:
+            if not isinstance(elt, ast.Tuple):
+                return None
+            tuple_rows.append(elt)
+
+        checks = [
+            ast.Compare(
+                left=ast.Call(
+                    func=ast.Name(id='len', ctx=ast.Load()),
+                    args=[ast.Name(id=left_side.id, ctx=ast.Load())],
+                    keywords=[]),
+                ops=[ast.Eq()],
+                comparators=[ast.Constant(value=len(tuple_rows))]
+            )
+        ]
+
+        for row_idx, tuple_node in enumerate(tuple_rows):
+            for col_idx, value_node in enumerate(tuple_node.elts):
+                lhs = ast.Subscript(
+                    value=ast.Subscript(
+                        value=ast.Name(id=left_side.id, ctx=ast.Load()),
+                        slice=ast.Constant(value=row_idx),
+                        ctx=ast.Load()),
+                    slice=ast.Constant(value=col_idx),
+                    ctx=ast.Load())
+                checks.append(ast.Compare(
+                    left=lhs,
+                    ops=[ast.Eq()],
+                    comparators=[copy.deepcopy(value_node)]))
+
+        result = ast.BoolOp(op=ast.And(), values=checks)
+        self.ensure_all_locations(result, source_node)
+        ast.fix_missing_locations(result)
+        return result
+
     def visit_Compare(self, node):
         """Transform set(d.items()) == {(k,v),...} comparisons to avoid tuple struct issues."""
         node = self.generic_visit(node)
@@ -3193,6 +3306,10 @@ class Preprocessor(ast.NodeTransformer):
             return node
         result = (self._try_transform_items_set_eq(
                       node.left, node.comparators[0], node) or
+                  self._try_transform_list_tuple_eq(
+                      node.left, node.comparators[0], node) or
+                  self._try_transform_list_tuple_eq(
+                      node.comparators[0], node.left, node) or
                   self._try_transform_items_set_eq(
                       node.comparators[0], node.left, node))
         if result is None:
@@ -3230,6 +3347,7 @@ class Preprocessor(ast.NodeTransformer):
                     return stmts
 
         prefix, lowered_value = self._lower_listcomp_in_expr(node.value)
+        node.value = lowered_value
         if prefix:
             if not all(isinstance(t, ast.Name) for t in node.targets):
                 raise NotImplementedError("List comprehension assignment requires simple target names")
@@ -3238,7 +3356,7 @@ class Preprocessor(ast.NodeTransformer):
             # semantics for chained assignments (a = b = expr evaluates expr once).
             assigns = []
             for target in node.targets:
-                assign = ast.Assign(targets=[target], value=lowered_value)
+                assign = ast.Assign(targets=[target], value=node.value)
                 self._copy_location_info(node, assign)
                 self.ensure_all_locations(assign, node)
                 ast.fix_missing_locations(assign)
@@ -3274,6 +3392,10 @@ class Preprocessor(ast.NodeTransformer):
                         self.variable_annotations[target.id] = annotation_node
                         if isinstance(node.value, ast.Subscript):
                             self._subscript_inferred_vars.add(target.id)
+                    if isinstance(node.value, ast.List):
+                        self.list_literal_values[target.id] = copy.deepcopy(node.value)
+                    else:
+                        self.list_literal_values.pop(target.id, None)
                     # Track dict literals with heterogeneous key/value types for loop unrolling
                     if isinstance(node.value, ast.Dict):
                         if self._has_heterogeneous_keys(node.value):
@@ -3365,10 +3487,10 @@ class Preprocessor(ast.NodeTransformer):
 
         if getattr(node, "value", None) is not None:
             prefix, lowered_value = self._lower_listcomp_in_expr(node.value)
+            node.value = lowered_value
             if prefix:
                 if not isinstance(node.target, ast.Name):
                     raise NotImplementedError("Annotated list comprehension assignment requires a simple target name")
-                node.value = lowered_value
                 lowered_assign = ast.AnnAssign(
                     target=node.target,
                     annotation=node.annotation,
@@ -3388,6 +3510,10 @@ class Preprocessor(ast.NodeTransformer):
             self.known_variable_types[var_name] = var_type
             # Store full annotation for generic type extraction
             self.variable_annotations[var_name] = node.annotation
+            if isinstance(node.value, ast.List):
+                self.list_literal_values[var_name] = copy.deepcopy(node.value)
+            else:
+                self.list_literal_values.pop(var_name, None)
 
             # Handle: d: dict = defaultdict(factory)  →  track factory, rewrite to d: dict = {}
             # Always rewrite any collections.defaultdict(...) call to {} so the
