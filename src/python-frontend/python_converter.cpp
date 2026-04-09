@@ -7170,26 +7170,19 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
           throw std::runtime_error(
             "__ESBMC_list_size not found for list condition check");
 
-        symbolt &size_result = create_tmp_symbol(
-          ast_node["test"], "$list_size$", size_type(), gen_zero(size_type()));
-        code_declt size_decl(symbol_expr(size_result));
-        size_decl.location() = location;
-        current_block->copy_to_operands(size_decl);
-
-        // Use `__ESBMC_list_size(cond) != 0` to evaluate the list condition.
-        code_function_callt size_call;
+        // Keep the size query inside the condition expression so constructs
+        // like `while heap:` re-evaluate the current list size every iteration.
+        side_effect_expr_function_callt size_call;
         size_call.function() = symbol_expr(*size_func);
-        size_call.lhs() = symbol_expr(size_result);
         if (cond.type().is_pointer())
           size_call.arguments().push_back(cond);
         else
           size_call.arguments().push_back(address_of_exprt(cond));
         size_call.type() = size_type();
         size_call.location() = location;
-        current_block->copy_to_operands(size_call);
 
         cond = exprt("notequal", bool_type());
-        cond.copy_to_operands(symbol_expr(size_result), gen_zero(size_type()));
+        cond.copy_to_operands(size_call, gen_zero(size_type()));
         cond.location() = location;
       }
 
