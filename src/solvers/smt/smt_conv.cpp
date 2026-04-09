@@ -1604,21 +1604,27 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
       const expr2tc &rounding_mode = to_ieee_add2t(expr).rounding_mode;
 
-      // Interval-lifted nearest-mode enclosure for ieee_add (--ir-ieee only).
-      // Covers both RNE (ROUND_TO_EVEN) and RNA (ROUND_TO_AWAY): both are
-      // nearest-rounding modes sharing the same B_near constants and the same
-      // symmetric interval-lifting formula:
-      //   L_R = lo1 + lo2,  U_R = hi1 + hi2
-      //   ra_lo = L_R - B_near^-(L_R),  ra_hi = U_R + B_near^+(U_R)
-      // For RNE the result is named ra_lo:: / ra_hi::; for RNA ra_lo_aw:: /
-      // ra_hi_aw::, matching the single-step naming convention.
-      // Non-nearest modes, non-standard formats, and --ir-ieee disabled all
-      // fall through to apply_ieee754_semantics unchanged.
+      // Interval-lifted enclosure for ieee_add (--ir-ieee only).
+      // Covers RNE, RNA (nearest modes) and RUP, RDN (directed modes).
+      // All share the same addition interval hull:
+      //   L_R = L_x + L_y,  U_R = U_x + U_y
+      // Nearest (RNE/RNA): symmetric B_near at both endpoints
+      //   ra_lo = L_R - B_near(L_R),  ra_hi = U_R + B_near(U_R)
+      // RUP: exact lower bound, B_dir at upper endpoint
+      //   ra_lo = L_R (exact),  ra_hi = U_R + B_dir(U_R)
+      // RDN: B_dir at lower endpoint, exact upper bound
+      //   ra_lo = L_R - B_dir(L_R),  ra_hi = U_R (exact)
+      // Symbol names: ra_lo:: / ra_hi:: (RNE), ra_lo_aw:: / ra_hi_aw::
+      // (RNA), ra_lo_up:: / ra_hi_up:: (RUP), ra_lo_dn:: / ra_hi_dn:: (RDN).
+      // RTZ, non-standard formats, and --ir-ieee disabled fall through to
+      // apply_ieee754_semantics unchanged.
       bool interval_lifted = false;
       if (
         options.get_bool_option("ir-ieee") &&
         (is_nearest_rounding_mode(rounding_mode) ||
-         is_round_to_away(rounding_mode)))
+         is_round_to_away(rounding_mode) ||
+         is_round_to_plus_inf(rounding_mode) ||
+         is_round_to_minus_inf(rounding_mode)))
       {
         const auto double_spec = ieee_float_spect::double_precision();
         const auto single_spec = ieee_float_spect::single_precision();
@@ -1642,9 +1648,15 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
           if (is_nearest_rounding_mode(rounding_mode))
             bounds =
               apply_ieee754_rne_enclosure(real_result, lo_r, hi_r, fbv_type);
-          else
+          else if (is_round_to_away(rounding_mode))
             bounds =
               apply_ieee754_rna_enclosure(real_result, lo_r, hi_r, fbv_type);
+          else if (is_round_to_plus_inf(rounding_mode))
+            bounds =
+              apply_ieee754_rup_enclosure(real_result, lo_r, hi_r, fbv_type);
+          else
+            bounds =
+              apply_ieee754_rdn_enclosure(real_result, lo_r, hi_r, fbv_type);
           ir_ra_interval_map[real_result] = {bounds.first, bounds.second};
           a = real_result;
           interval_lifted = true;
