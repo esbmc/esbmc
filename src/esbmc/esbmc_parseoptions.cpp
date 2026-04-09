@@ -443,6 +443,9 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   if (cmdline.isset("ub-shift-check"))
     options.set_option("ub-shift-check", true);
 
+  if (cmdline.isset("k-induction"))
+    options.set_option("no-interval-symex-guard", true);
+
   if (cmdline.isset("timeout"))
   {
 #ifdef _WIN32
