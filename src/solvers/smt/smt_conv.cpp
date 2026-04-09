@@ -674,6 +674,106 @@ std::pair<smt_astt, smt_astt> smt_convt::apply_ieee754_rdn_enclosure(
   return {ra_lo, ra_hi};
 }
 
+std::pair<smt_astt, smt_astt> smt_convt::apply_ieee754_rtz_enclosure(
+  smt_astt real_result,
+  smt_astt lo_r,
+  smt_astt hi_r,
+  const floatbv_type2t &fbv_type)
+{
+  // RTZ (truncation toward zero) is sign-dependent.
+  // For an interval hull [LR, UR] = [lo_r, hi_r]:
+  //
+  //   Case 1 -- LR >= 0 (all non-negative): fl_RTZ acts like RDN
+  //     EbRTZ([LR,UR]) = [LR - B_dir(LR), UR]   (exact upper bound)
+  //
+  //   Case 2 -- UR <= 0 (all non-positive): fl_RTZ acts like RUP
+  //     EbRTZ([LR,UR]) = [LR, UR + B_dir(UR)]   (exact lower bound)
+  //
+  //   Case 3 -- LR < 0 < UR (hull crosses zero): sign of actual result
+  //     is unknown at encode time; use conservative symmetric bound:
+  //     B_dir_max = eps_rel_dir * max(|LR|, |UR|) + eps_abs
+  //     EbRTZ([LR,UR]) = [LR - B_dir_max, UR + B_dir_max]
+  //
+  // The three cases are encoded as nested ITE on lo_nonneg / hi_nonpos.
+  // B_dir(r) = eps_rel_dir * |r| + eps_abs,
+  //   eps_rel_dir = 2^-52 (double) or 2^-23 (single) -- full machine epsilon.
+  const auto double_spec = ieee_float_spect::double_precision();
+  const auto single_spec = ieee_float_spect::single_precision();
+  smt_astt eps_rel_dir, eps_abs;
+  if (fbv_type.exponent == double_spec.e && fbv_type.fraction == double_spec.f)
+  {
+    eps_rel_dir = get_double_eps_up(); // 2^-52
+    eps_abs = get_double_min_subnormal();
+  }
+  else if (
+    fbv_type.exponent == single_spec.e && fbv_type.fraction == single_spec.f)
+  {
+    eps_rel_dir = get_single_eps_up(); // 2^-23
+    eps_abs = get_single_min_subnormal();
+  }
+  else
+  {
+    assert(!"apply_ieee754_rtz_enclosure: unsupported FP format");
+  }
+
+  smt_sortt rs = mk_real_sort();
+  smt_astt zero = mk_smt_real("0.0");
+
+  // |LR| and |UR|
+  smt_astt abs_lo = mk_ite(mk_lt(lo_r, zero), mk_sub(zero, lo_r), lo_r);
+  smt_astt abs_hi = mk_ite(mk_lt(hi_r, zero), mk_sub(zero, hi_r), hi_r);
+
+  // B_dir at each endpoint
+  smt_astt bound_lo = mk_add(mk_mul(eps_rel_dir, abs_lo), eps_abs); // B_dir(LR)
+  smt_astt bound_hi = mk_add(mk_mul(eps_rel_dir, abs_hi), eps_abs); // B_dir(UR)
+
+  // B_dir_max = eps_rel_dir * max(|LR|, |UR|) + eps_abs  (crossing-zero case)
+  smt_astt abs_max = mk_ite(mk_le(abs_lo, abs_hi), abs_hi, abs_lo);
+  smt_astt bound_max = mk_add(mk_mul(eps_rel_dir, abs_max), eps_abs);
+
+  // Case selectors
+  smt_astt lo_nonneg = mk_le(zero, lo_r); // LR >= 0
+  smt_astt hi_nonpos = mk_le(hi_r, zero); // UR <= 0
+
+  // ra_lo_expr:
+  //   LR >= 0 -> LR - B_dir(LR)    (truncate-down: lower gets error)
+  //   UR <= 0 -> LR                 (truncate-up: lower is exact)
+  //   else    -> LR - B_dir_max    (crossing zero: conservative)
+  smt_astt ra_lo_expr = mk_ite(
+    lo_nonneg,
+    mk_sub(lo_r, bound_lo),
+    mk_ite(hi_nonpos, lo_r, mk_sub(lo_r, bound_max)));
+
+  // ra_hi_expr:
+  //   LR >= 0 -> UR                 (truncate-down: upper is exact)
+  //   UR <= 0 -> UR + B_dir(UR)    (truncate-up: upper gets error)
+  //   else    -> UR + B_dir_max    (crossing zero: conservative)
+  smt_astt ra_hi_expr = mk_ite(
+    lo_nonneg,
+    hi_r,
+    mk_ite(hi_nonpos, mk_add(hi_r, bound_hi), mk_add(hi_r, bound_max)));
+
+  // RTZ-named enclosure variables, pinned via bidirectional inequalities to
+  // survive Z3's solve-eqs tactic (same technique as all other tight paths).
+  smt_astt ra_lo = mk_fresh(rs, "ra_lo_tz::", nullptr);
+  smt_astt ra_hi = mk_fresh(rs, "ra_hi_tz::", nullptr);
+
+  // Pin ra_lo = ra_lo_expr
+  assert_ast(mk_le(ra_lo, ra_lo_expr));
+  assert_ast(mk_le(ra_lo_expr, ra_lo));
+
+  // Pin ra_hi = ra_hi_expr
+  assert_ast(mk_le(ra_hi, ra_hi_expr));
+  assert_ast(mk_le(ra_hi_expr, ra_hi));
+
+  // Containment: ra_lo_tz <= real_result <= ra_hi_tz  and  ra_lo_tz <= ra_hi_tz
+  assert_ast(mk_le(ra_lo, real_result));
+  assert_ast(mk_le(real_result, ra_hi));
+  assert_ast(mk_le(ra_lo, ra_hi));
+
+  return {ra_lo, ra_hi};
+}
+
 smt_astt smt_convt::apply_ieee754_semantics(
   smt_astt real_result,
   const floatbv_type2t &fbv_type,
@@ -1576,7 +1676,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       const expr2tc &rounding_mode = to_ieee_sub2t(expr).rounding_mode;
 
       // Interval-lifted enclosure for ieee_sub (--ir-ieee only).
-      // Covers RNE, RNA (nearest modes) and RUP, RDN (directed modes).
+      // Covers RNE, RNA (nearest modes), RUP, RDN, and RTZ (directed modes).
       // All share the same subtraction interval hull:
       //   L_R = L_x - U_y,  U_R = U_x - L_y
       // Nearest (RNE/RNA): symmetric B_near at both endpoints
@@ -1585,9 +1685,15 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       //   ra_lo = L_R (exact),  ra_hi = U_R + B_dir(U_R)
       // RDN: B_dir at lower endpoint, exact upper bound
       //   ra_lo = L_R - B_dir(L_R),  ra_hi = U_R (exact)
-      // For symbol names: ra_lo:: / ra_hi:: (RNE), ra_lo_aw:: / ra_hi_aw::
-      // (RNA), ra_lo_up:: / ra_hi_up:: (RUP), ra_lo_dn:: / ra_hi_dn:: (RDN).
-      // RTZ, non-standard formats, and --ir-ieee disabled fall through to
+      // RTZ: sign-dependent three-way case on hull sign:
+      //   LR >= 0: ra_lo = LR - B_dir(LR), ra_hi = UR (exact upper)
+      //   UR <= 0: ra_lo = LR (exact lower), ra_hi = UR + B_dir(UR)
+      //   else:   ra_lo = LR - B_dir_max, ra_hi = UR + B_dir_max
+      //           where B_dir_max = eps_rel_dir * max(|LR|, |UR|) + eps_abs
+      // Symbol names: ra_lo:: / ra_hi:: (RNE), ra_lo_aw:: / ra_hi_aw::
+      // (RNA), ra_lo_up:: / ra_hi_up:: (RUP), ra_lo_dn:: / ra_hi_dn:: (RDN),
+      // ra_lo_tz:: / ra_hi_tz:: (RTZ).
+      // Non-standard formats and --ir-ieee disabled fall through to
       // apply_ieee754_semantics unchanged.
       bool interval_lifted = false;
       if (
@@ -1595,7 +1701,8 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
         (is_nearest_rounding_mode(rounding_mode) ||
          is_round_to_away(rounding_mode) ||
          is_round_to_plus_inf(rounding_mode) ||
-         is_round_to_minus_inf(rounding_mode)))
+         is_round_to_minus_inf(rounding_mode) ||
+         is_round_to_zero(rounding_mode)))
       {
         const auto double_spec = ieee_float_spect::double_precision();
         const auto single_spec = ieee_float_spect::single_precision();
@@ -1625,9 +1732,12 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
           else if (is_round_to_plus_inf(rounding_mode))
             bounds =
               apply_ieee754_rup_enclosure(real_result, lo_r, hi_r, fbv_type);
-          else
+          else if (is_round_to_minus_inf(rounding_mode))
             bounds =
               apply_ieee754_rdn_enclosure(real_result, lo_r, hi_r, fbv_type);
+          else
+            bounds =
+              apply_ieee754_rtz_enclosure(real_result, lo_r, hi_r, fbv_type);
           ir_ra_interval_map[real_result] = {bounds.first, bounds.second};
           a = real_result;
           interval_lifted = true;

@@ -2957,7 +2957,7 @@ void esbmc_parseoptionst::process_function_contracts(
         "Enforcing annotated contracts for {} function(s)", to_enforce.size());
       std::string entry_function =
         cmdline.isset("function") ? cmdline.getval("function") : "";
-      contracts.enforce_contracts(to_enforce, entry_function);
+      contracts.enforce_contracts(to_enforce, entry_function, true);
     }
   }
 
