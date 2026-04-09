@@ -4343,6 +4343,57 @@ exprt function_call_expr::handle_general_function_call()
     obj_symbol = symbol_table.find_symbol(obj_symbol_id.to_string());
   }
 
+  // Indirect call through variable holding a function pointer, e.g.:
+  // times3 = make_multiplier(3); times3(4)
+  if (call_["func"]["_type"] == "Name")
+  {
+    symbol_id var_sid = converter_.create_symbol_id();
+    var_sid.set_object(func_name);
+    symbolt *var_symbol = symbol_table.find_symbol(var_sid.to_string());
+    if (var_symbol && !var_symbol->type.is_code())
+    {
+      side_effect_expr_function_callt call;
+      call.location() = converter_.get_location_from_decl(call_);
+      exprt func_expr = symbol_expr(*var_symbol);
+      if (!var_symbol->type.is_pointer() || !var_symbol->type.subtype().is_code())
+        func_expr = typecast_exprt(func_expr, gen_pointer_type(code_typet()));
+      call.function() = func_expr;
+
+      bool resolved = false;
+      if (
+        var_symbol->value.is_address_of() &&
+        !var_symbol->value.operands().empty() &&
+        var_symbol->value.op0().is_symbol())
+      {
+        const symbolt *target_symbol =
+          symbol_table.find_symbol(var_symbol->value.op0().identifier());
+        if (target_symbol && target_symbol->type.is_code())
+        {
+          call.type() = to_code_type(target_symbol->type).return_type();
+          resolved = true;
+        }
+      }
+      if (
+        !resolved && var_symbol->type.is_pointer() &&
+        var_symbol->type.subtype().is_code())
+      {
+        call.type() = to_code_type(var_symbol->type.subtype()).return_type();
+        resolved = true;
+      }
+      if (!resolved)
+        call.type() = any_type();
+
+      for (const auto &arg_node : call_["args"])
+      {
+        exprt arg = converter_.get_expr(arg_node);
+        if (arg.type().is_code() && arg.is_symbol())
+          arg = address_of_exprt(arg);
+        call.arguments().push_back(arg);
+      }
+      return call;
+    }
+  }
+
   // Get function symbol id - use actual_func_name for typed dispatch
   std::string func_symbol_id;
   if (actual_func_name != func_name)
