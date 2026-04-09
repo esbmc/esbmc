@@ -1,5 +1,4 @@
 #include <cassert>
-#include <fstream>
 #include <goto-symex/goto_symex.h>
 #include <goto-symex/slice.h>
 #include <goto-symex/symex_target_equation.h>
@@ -61,6 +60,9 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
   // omits the loop-entry guard from the path condition, which lets the SMT solver
   // pick values outside the loop's feasible range and produce false positives.
   // The flag check lets --interval-symex-assert keep the domain without pruning.
+  //
+  // Note: eval_boolean_expression already returns TV_UNKNOWN for any guard
+  // containing floatbv-typed sub-expressions (via its contains_float check).
   if (
     !new_guard_false && !new_guard_true && interval_domain_state &&
     options.get_bool_option("interval-symex-guard"))
@@ -84,23 +86,12 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
       first_loop);
   }
 
-  // Teach the interval domain the branch constraint for the continuing path.
-  // For a forward GOTO (exit check), the fall-through means the guard is false,
-  // so assume NOT old_guard. For a backward GOTO (loop-back), the jump means
-  // the guard is true, so assume old_guard.
-  if (interval_domain_state && !new_guard_false && !new_guard_true)
-  {
-    if (forward)
-    {
-      expr2tc neg_guard = old_guard;
-      make_not(neg_guard);
-      interval_domain_state->assume(neg_guard);
-    }
-    else
-    {
-      interval_domain_state->assume(old_guard);
-    }
-  }
+  // Note: we intentionally do NOT call interval_domain_state->assume() here.
+  // The interval domain is a single shared instance (not forked per branch).
+  // Assuming the fall-through constraint would contaminate the taken path when
+  // it is explored later, causing unsound pruning.  The domain is still updated
+  // by process_instruction (ASSIGN / ASSUME / DEAD), which is sufficient for
+  // tracking loop counters.
 
   if (new_guard_false)
   {
