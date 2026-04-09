@@ -61,11 +61,16 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
   // pick values outside the loop's feasible range and produce false positives.
   // The flag check lets --interval-symex-assert keep the domain without pruning.
   //
+  // Restrict to loop GOTOs (loop_number != 0): the interval domain is a single
+  // shared instance, so ASSIGN instructions inside branches contaminate it.
+  // Non-loop if-statement GOTOs would be incorrectly pruned by stale values.
+  //
   // Note: eval_boolean_expression already returns TV_UNKNOWN for any guard
   // containing floatbv-typed sub-expressions (via its contains_float check).
   if (
     !new_guard_false && !new_guard_true && interval_domain_state &&
-    options.get_bool_option("interval-symex-guard"))
+    options.get_bool_option("interval-symex-guard") &&
+    instruction.loop_number != 0)
   {
     tvt res =
       interval_domaint::eval_boolean_expression(old_guard, *interval_domain_state);
