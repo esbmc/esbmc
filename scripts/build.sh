@@ -618,6 +618,7 @@ while getopts "hb:s:e:r:dS:c:CB:x:k:" flag; do
       require_on_off "-k" "$OPTARG"
       COVERAGE="$OPTARG"
       BASE_ARGS+=("-DENABLE_COVERAGE=${OPTARG}")
+      BASE_ARGS+=("-DCORE_REGRESSION_ONLY=${OPTARG}")
       if [[ "$OPTARG" == "ON" ]]; then
         COMPILER_ENV=(CC=clang CXX=clang++)
       fi
