@@ -4355,7 +4355,8 @@ exprt function_call_expr::handle_general_function_call()
       side_effect_expr_function_callt call;
       call.location() = converter_.get_location_from_decl(call_);
       exprt func_expr = symbol_expr(*var_symbol);
-      if (!var_symbol->type.is_pointer() || !var_symbol->type.subtype().is_code())
+      if (
+        !var_symbol->type.is_pointer() || !var_symbol->type.subtype().is_code())
         func_expr = typecast_exprt(func_expr, gen_pointer_type(code_typet()));
       call.function() = func_expr;
 
