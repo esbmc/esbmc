@@ -157,12 +157,27 @@ bool yaml_parser::inject_loop_invariants(goto_functionst &goto_functions)
             goto_programt::targett t1 = tmp.add_instruction();
             t1->make_assertion(guard);
             t1->location = it->location;
+            goto_programt::targett t2 = tmp.add_instruction();
+            t2->make_assumption(guard);
+            t2->location = it->location;
+            // Redirect only the forward gotos that come
+            // before t1 in the instruction list, preserving the original loop head.
             func.destructive_insert(it, tmp);
+            for (auto jt = func.instructions.begin(); jt != t1; ++jt)
+            {
+              if (!jt->is_goto())
+                continue;
+              for (auto &tgt : jt->targets)
+              {
+                if (tgt == it)
+                  tgt = t1;
+              }
+            }
 
             log_progress(
               "Applied location invariant: {} in line {}",
               inv.value,
-              it->location.line());
+              t1->location.line());
             break;
           }
 
