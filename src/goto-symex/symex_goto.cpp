@@ -51,7 +51,9 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
   }
 
   // Interval-based guard check (--interval-symex-guard)
-  if (!new_guard_false && !new_guard_true && interval_domain_state)
+  if (
+    !new_guard_false && !new_guard_true && interval_domain_state &&
+    options.get_bool_option("interval-symex-guard"))
   {
     tvt res = interval_domaint::eval_boolean_expression(
       old_guard, *interval_domain_state);

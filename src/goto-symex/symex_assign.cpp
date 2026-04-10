@@ -139,7 +139,9 @@ goto_symext::goto_symext(
 
   art1 = nullptr;
 
-  if (options.get_bool_option("interval-symex-guard"))
+  if (
+    options.get_bool_option("interval-symex-guard") ||
+    options.get_bool_option("interval-symex-assert"))
   {
     interval_domaint::set_options(options);
     interval_domain_state.emplace();
