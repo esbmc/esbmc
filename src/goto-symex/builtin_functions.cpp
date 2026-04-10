@@ -1874,8 +1874,8 @@ expr2tc goto_symex_utils::gen_byte_memcpy_byte_update(
     const expr2tc src_index =
       constant_int2tc(get_int32_type(), BigInt(src_offset));
     return byte_extract2tc(get_int8_type(), src, src_index, is_big_endian);
-  }    
-  
+  }
+
   expr2tc result = dst;
   for (size_t counter = 0; counter < num_of_bytes; counter++)
   {
@@ -1885,10 +1885,12 @@ expr2tc goto_symex_utils::gen_byte_memcpy_byte_update(
       constant_int2tc(get_int32_type(), BigInt(dst_offset + counter));
 
     // Extract src-byte at position (src_offset + counter)
-    expr2tc src_byte = byte_extract2tc(get_int8_type(), src, src_index, is_big_endian);
+    expr2tc src_byte =
+      byte_extract2tc(get_int8_type(), src, src_index, is_big_endian);
 
     // Write src_byte into dst at position (dst_offset + counter)
-    result = byte_update2tc(dst->type, result, dst_index, src_byte, is_big_endian);
+    result =
+      byte_update2tc(dst->type, result, dst_index, src_byte, is_big_endian);
   }
 
   simplify(result);
@@ -2222,7 +2224,8 @@ void goto_symext::intrinsic_memcpy(
         number_of_offset,
         src_item.object,
         src_offset,
-        number_of_bytes, config.ansi_c.endianess == config.ansi_c.IS_BIG_ENDIAN);
+        number_of_bytes,
+        config.ansi_c.endianess == config.ansi_c.IS_BIG_ENDIAN);
 
       if (!new_object)
       {
