@@ -4766,7 +4766,7 @@ exprt function_call_expr::handle_general_function_call()
 
           call.arguments().push_back(gen_address_of(symbol_expr(tmp)));
         }
-        else
+        else if (func_value["_type"] == "Call")
         {
           // Chained method call (e.g., B().g().f()): the receiver is the return
           // value of an inner method call. Create a temp to hold it and use
@@ -4800,6 +4800,13 @@ exprt function_call_expr::handle_general_function_call()
             exprt obj_expr = converter_.get_expr(func_value);
             call.arguments().push_back(gen_address_of(obj_expr));
           }
+        }
+        else
+        {
+          // Member/variable receiver (e.g., self.builder.build()): use the
+          // actual receiver expression instead of a nondet temporary.
+          exprt obj_expr = converter_.get_expr(func_value);
+          call.arguments().push_back(gen_address_of(obj_expr));
         }
       }
       else
