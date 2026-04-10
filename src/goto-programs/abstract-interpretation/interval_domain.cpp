@@ -1560,7 +1560,8 @@ void interval_domaint::set_options(const optionst &options)
 {
   enable_interval_arithmetic =
     options.get_bool_option("interval-analysis-arithmetic") ||
-    options.get_bool_option("interval-symex-guard");
+    options.get_bool_option("interval-symex-guard") ||
+    options.get_bool_option("interval-symex-assert");
   enable_interval_bitwise_arithmetic =
     options.get_bool_option("interval-analysis-bitwise");
   enable_modular_intervals =

@@ -1,0 +1,5 @@
+CORE
+main.c
+--interval-symex-assert
+^VERIFICATION SUCCESSFUL$
+^Generated 2 VCC\(s\), 0 remaining after simplification
