@@ -502,7 +502,8 @@ void add_cprover_library(contextt &context, const languaget *language)
   context.Foreach_operand([&context](symbolt &s) {
     if (s.is_extern && !s.type.is_code())
     {
-      log_warning(
+      log_debug(
+        "c2goto",
         "extern variable with id {} not found, initializing value to "
         "nondet! "
         "This code would not compile with an actual compiler.",
