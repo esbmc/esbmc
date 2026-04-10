@@ -590,13 +590,6 @@ void goto_loop_invariantt::insert_havoc_and_assume_before_condition(
   // =========================================================
   for (auto const &lhs : loop_vars)
   {
-    // do not assign nondeterministic value to pointers if we assume
-    // objects extracted from the value set analysis
-    if (
-      config.options.get_bool_option("add-symex-value-sets") &&
-      is_pointer_type(lhs))
-      continue;
-
     // Generate a nondeterministic value for the loop variable
     expr2tc rhs = gen_nondet(lhs->type);
 
@@ -802,11 +795,6 @@ void goto_loop_invariant_combinedt::insert_invariant_verification_branch(
   // [4b] HAVOC(loop_vars)
   for (const auto &var : loop_vars)
   {
-    if (
-      config.options.get_bool_option("add-symex-value-sets") &&
-      is_pointer_type(var))
-      continue;
-
     auto t = branch1.add_instruction(ASSIGN);
     t->code = code_assign2tc(var, gen_nondet(var->type));
     t->location = loop_head->location;

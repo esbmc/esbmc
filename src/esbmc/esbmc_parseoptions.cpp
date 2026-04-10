@@ -32,6 +32,7 @@ extern "C"
 #include <goto-programs/goto_inline.h>
 #include <goto-programs/goto_k_induction.h>
 #include <goto-programs/goto_loop_invariant.h>
+#include <goto-programs/goto_value_set_invariant.h>
 #include <goto-programs/abstract-interpretation/interval_analysis.h>
 #include <goto-programs/abstract-interpretation/gcse.h>
 #include <goto-programs/loop_numbers.h>
@@ -2109,11 +2110,49 @@ bool esbmc_parseoptionst::process_goto_program(
       goto_loop_invariant_combined(goto_functions);
     }
 
-    if (cmdline.isset("loop-invariant"))
+    // When --add-symex-value-sets is active with k-induction, automatically
+    // inject value-set derived pointer invariants and use the combined
+    // loop-invariant + k-induction mode to exploit them.
+    bool use_value_set_invariants =
+      cmdline.isset("add-symex-value-sets") && is_k_induction;
+
+    if (cmdline.isset("loop-invariant") || use_value_set_invariants)
     {
       // Combined mode: Branch 1 (invariant inductivity check) +
       // ASSUME(INV) injected at end of loop body + k-induction (Branch 2).
       remove_no_op(goto_functions);
+
+      if (use_value_set_invariants)
+      {
+        log_status(
+          "Computing value-set analysis for pointer loop invariant injection");
+        try
+        {
+          value_set_analysist vsa(ns);
+          vsa(goto_functions);
+          goto_inject_value_set_invariants(goto_functions, vsa, ns);
+        }
+        catch (const vsa_not_implemented_exception &)
+        {
+          log_warning(
+            "Value-set analysis not fully supported for this program; "
+            "skipping pointer loop invariant injection");
+        }
+        catch (const type2t::symbolic_type_excp &)
+        {
+          log_warning(
+            "Value-set analysis hit symbolic type; "
+            "skipping pointer loop invariant injection");
+        }
+        catch (const std::string &e)
+        {
+          log_warning(
+            "Value-set analysis failed ({}); "
+            "skipping pointer loop invariant injection",
+            e);
+        }
+      }
+
       goto_loop_invariant_combined(goto_functions);
       goto_k_induction(goto_functions);
     }
