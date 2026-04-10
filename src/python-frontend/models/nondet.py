@@ -104,7 +104,6 @@ def nondet_list(max_size: int = _DEFAULT_NONDET_SIZE, elem_type: Any = None) -> 
         x = nondet_list(max_size=10, elem_type=nondet_bool())# bool list, size [0, 10]
     """
     # Default to nondet_int if no type specified
-    assert elem_type is not None
     if elem_type is None:
         elem_type = nondet_int()
 
