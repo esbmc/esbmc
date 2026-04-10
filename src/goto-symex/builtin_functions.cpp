@@ -1296,11 +1296,13 @@ void goto_symext::intrinsic_get_thread_id(
   statet &state = art.get_cur_state().get_active_state();
 
   unsigned int thread_id = art.get_cur_state().get_active_state_number();
-  expr2tc tid = constant_int2tc(call.ret->type, BigInt(thread_id));
 
-  state.value_set.assign(call.ret, tid);
-
-  symex_assign(code_assign2tc(call.ret, tid), true);
+  if (!is_nil_expr(call.ret))
+  {
+    expr2tc tid = constant_int2tc(call.ret->type, BigInt(thread_id));
+    state.value_set.assign(call.ret, tid);
+    symex_assign(code_assign2tc(call.ret, tid), true);
+  }
 }
 
 void goto_symext::intrinsic_set_thread_data(
@@ -1321,7 +1323,8 @@ void goto_symext::intrinsic_set_thread_data(
 
   if (!is_constant_int2t(threadid))
   {
-    log_error("__ESBMC_set_start_data received nonconstant thread id");
+    log_error(
+      "__ESBMC_set_thread_internal_data received nonconstant thread id");
     abort();
   }
   unsigned int tid = to_constant_int2t(threadid).value.to_uint64();
@@ -1342,17 +1345,21 @@ void goto_symext::intrinsic_get_thread_data(
 
   if (!is_constant_int2t(threadid))
   {
-    log_error("__ESBMC_get_start_data received nonconstant thread id");
+    log_error(
+      "__ESBMC_get_thread_internal_data received nonconstant thread id");
     abort();
   }
 
   unsigned int tid = to_constant_int2t(threadid).value.to_uint64();
   const expr2tc &startdata = art.get_cur_state().get_thread_start_data(tid);
 
-  assert(base_type_eq(call.ret->type, startdata->type, ns));
+  if (!is_nil_expr(call.ret))
+  {
+    assert(base_type_eq(call.ret->type, startdata->type, ns));
 
-  state.value_set.assign(call.ret, startdata);
-  symex_assign(code_assign2tc(call.ret, startdata), true);
+    state.value_set.assign(call.ret, startdata);
+    symex_assign(code_assign2tc(call.ret, startdata), true);
+  }
 }
 
 void goto_symext::intrinsic_spawn_thread(
@@ -1417,37 +1424,6 @@ void goto_symext::intrinsic_terminate_thread(reachability_treet &art)
   art.get_cur_state().end_thread();
   // No need to force a context switch; an ended thread will cause the run to
   // end and the switcher to be invoked.
-}
-
-void goto_symext::intrinsic_get_thread_state(
-  const code_function_call2t &call,
-  reachability_treet &art)
-{
-  statet &state = art.get_cur_state().get_active_state();
-  expr2tc threadid = call.operands[0];
-  state.level2.rename(threadid);
-
-  while (is_typecast2t(threadid))
-    threadid = to_typecast2t(threadid).from;
-
-  if (!is_constant_int2t(threadid))
-  {
-    log_error("__ESBMC_get_thread_state received nonconstant thread id");
-    abort();
-  }
-
-  unsigned int tid = to_constant_int2t(threadid).value.to_uint64();
-  // Possibly we should handle this error; but meh.
-  assert(art.get_cur_state().threads_state.size() >= tid);
-
-  // Thread state is simply whether the thread is ended or not.
-  unsigned int flags =
-    (art.get_cur_state().threads_state[tid].thread_ended) ? 1 : 0;
-
-  // Reuse threadid
-  expr2tc flag_expr =
-    constant_int2tc(get_uint_type(config.ansi_c.int_width), flags);
-  symex_assign(code_assign2tc(call.ret, flag_expr), true);
 }
 
 void goto_symext::intrinsic_really_atomic_begin(reachability_treet &art)
@@ -2234,8 +2210,11 @@ void goto_symext::intrinsic_memcpy(
   }
 
   expr2tc ret_ref = func_call.ret;
-  dereference(ret_ref, dereferencet::READ);
-  symex_assign(code_assign2tc(ret_ref, dst_arg), false, cur_state->guard);
+  if (!is_nil_expr(ret_ref))
+  {
+    dereference(ret_ref, dereferencet::READ);
+    symex_assign(code_assign2tc(ret_ref, dst_arg), false, cur_state->guard);
+  }
 }
 
 /**
@@ -2325,6 +2304,32 @@ void goto_symext::intrinsic_memset(
   }
 
   unsigned long number_of_bytes = to_constant_int2t(arg2).as_ulong();
+
+  // If any potential target is read-only (string literal or const global/static),
+  // fall back to __memset_impl, which uses WRITE-mode dereferences and reports
+  // the proper violation via valid_check() in dereference.cpp.
+  for (const auto &item : internal_deref_items)
+  {
+    const expr2tc *base = &item.object;
+    while (is_member2t(*base))
+      base = &to_member2t(*base).source_value;
+    while (is_index2t(*base))
+      base = &to_index2t(*base).source_value;
+    if (is_constant_string2t(*base))
+    {
+      bump_call(func_call, "c:@F@__memset_impl");
+      return;
+    }
+    if (is_symbol2t(*base))
+    {
+      const symbolt *sym = ns.lookup(to_symbol2t(*base).thename);
+      if (sym != nullptr && sym->static_lifetime && sym->type.cmt_constant())
+      {
+        bump_call(func_call, "c:@F@__memset_impl");
+        return;
+      }
+    }
+  }
 
   // Where are we pointing to?
   for (auto &item : internal_deref_items)
@@ -2466,8 +2471,11 @@ void goto_symext::intrinsic_memset(
   }
 
   expr2tc ret_ref = func_call.ret;
-  dereference(ret_ref, dereferencet::READ);
-  symex_assign(code_assign2tc(ret_ref, arg0), false, cur_state->guard);
+  if (!is_nil_expr(ret_ref))
+  {
+    dereference(ret_ref, dereferencet::READ);
+    symex_assign(code_assign2tc(ret_ref, arg0), false, cur_state->guard);
+  }
 }
 
 void goto_symext::intrinsic_builtin_object_size(
@@ -2603,7 +2611,13 @@ void goto_symext::intrinsic_builtin_object_size(
       else
       {
         // Offset is symbolic - can't determine remaining size statically
-        obj_size = create_fallback_size(use_zero_for_unknown);
+        const expr2tc total_size_expr =
+          constant_int2tc(get_int64_type(), total_size);
+        obj_size = if2tc(
+          size_type2(),
+          greaterthan2tc(total_size_expr, offset_expr),
+          sub2tc(size_type2(), total_size_expr, offset_expr),
+          gen_zero(size_type2()));
       }
     }
     else
@@ -2614,11 +2628,14 @@ void goto_symext::intrinsic_builtin_object_size(
   }
 
   expr2tc ret_ref = func_call.ret;
-  dereference(ret_ref, dereferencet::READ);
-  symex_assign(
-    code_assign2tc(ret_ref, typecast2tc(ret_ref->type, obj_size)),
-    false,
-    cur_state->guard);
+  if (!is_nil_expr(ret_ref))
+  {
+    dereference(ret_ref, dereferencet::READ);
+    symex_assign(
+      code_assign2tc(ret_ref, typecast2tc(ret_ref->type, obj_size)),
+      false,
+      cur_state->guard);
+  }
 }
 
 void goto_symext::intrinsic_get_object_size(
@@ -2638,11 +2655,14 @@ void goto_symext::intrinsic_get_object_size(
     to_array_type(internal_deref_items.front().object->type).array_size;
 
   expr2tc ret_ref = func_call.ret;
-  dereference(ret_ref, dereferencet::READ);
-  symex_assign(
-    code_assign2tc(ret_ref, typecast2tc(ret_ref->type, obj_size)),
-    false,
-    cur_state->guard);
+  if (!is_nil_expr(ret_ref))
+  {
+    dereference(ret_ref, dereferencet::READ);
+    symex_assign(
+      code_assign2tc(ret_ref, typecast2tc(ret_ref->type, obj_size)),
+      false,
+      cur_state->guard);
+  }
 }
 
 void goto_symext::bump_call(
@@ -2713,15 +2733,16 @@ bool goto_symext::run_builtin(
       abort();
     }
 
+    // Perform overflow check and assign it to the return object
+    if (!is_nil_expr(func_call.ret))
+      symex_assign(code_assign2tc(func_call.ret, overflow2tc(op)));
+
     // Assign result of the two arguments to the dereferenced third argument
     symex_assign(code_assign2tc(
       dereference2tc(
         to_pointer_type(func_call.operands[2]->type).subtype,
         func_call.operands[2]),
       op));
-
-    // Perform overflow check and assign it to the return object
-    symex_assign(code_assign2tc(func_call.ret, overflow2tc(op)));
 
     return true;
   }
@@ -2730,9 +2751,10 @@ bool goto_symext::run_builtin(
   {
     expr2tc op1 = func_call.operands[0];
     cur_state->rename(op1);
-    symex_assign(code_assign2tc(
-      func_call.ret,
-      is_constant_int2t(op1) ? gen_one(int_type2()) : gen_zero(int_type2())));
+    if (!is_nil_expr(func_call.ret))
+      symex_assign(code_assign2tc(
+        func_call.ret,
+        is_constant_int2t(op1) ? gen_one(int_type2()) : gen_zero(int_type2())));
     return true;
   }
 
@@ -2848,6 +2870,22 @@ void goto_symext::simplify_python_builtins(expr2tc &expr)
     expr2tc value = obj.side_1;
     expr2tc expect_type = obj.side_2;
 
+    // isinstance(None, ...) is always False
+    if (is_pointer_type(value->type))
+    {
+      const pointer_type2t &ptr = to_pointer_type(value->type);
+      if (is_bool_type(ptr.subtype))
+      {
+        if (
+          !is_struct_type(expect_type->type) &&
+          !is_pointer_type(expect_type->type))
+        {
+          expr = gen_false_expr();
+          return;
+        }
+      }
+    }
+
     value_setst::valuest value_set;
     cur_state->value_set.get_value_set(value, value_set);
 
@@ -2885,8 +2923,10 @@ void goto_symext::simplify_python_builtins(expr2tc &expr)
       }
 
       // Check sub class
-      if (
-        base_type_eq(expect_type->type, value->type, ns) ||
+      if (base_type_eq(expect_type->type, value->type, ns))
+        expr = gen_true_expr();
+      else if (
+        is_struct_type(expect_type->type) &&
         is_subclass_of(expect_type->type, value->type, ns))
         expr = gen_true_expr();
       else
@@ -2908,6 +2948,19 @@ void goto_symext::simplify_python_builtins(expr2tc &expr)
       expr = gen_true_expr();
     else
       expr = gen_false_expr();
+
+    if (!is_nil_expr(expect_type) && is_array_type(expect_type->type))
+    {
+      // In the memory model, an array of size 1 is simplified to a single element
+      // Therefore, here we specifically check whether the subtypes of the arrays are the same
+      // s:str = "" ----> 0 with char type
+      // This should be safe because int, bool and char have different widths,
+      // so there will be no confusion
+      if (to_array_type(expect_type->type).subtype == value->type)
+        expr = gen_true_expr();
+    }
+
+    return;
   }
   else if (is_hasattr2t(expr))
   {
@@ -2963,27 +3016,65 @@ void goto_symext::simplify_python_builtins(expr2tc &expr)
       rhs = to_typecast2t(rhs).from;
 
     auto is_none_type = [](const expr2tc &e) -> bool {
-      // None is represented as pointer to bool
-      return is_pointer_type(e) &&
-             is_bool_type(to_pointer_type(e->type).subtype);
+      // Python None is represented as bool* (none_type()).
+      // void* (any_type) is for unannotated variables, not Python None.
+      if (is_pointer_type(e))
+      {
+        const pointer_type2t &ptr_type = to_pointer_type(e->type);
+        return is_bool_type(ptr_type.subtype);
+      }
+
+      return false;
     };
 
     const bool lhs_is_none = is_none_type(lhs);
     const bool rhs_is_none = is_none_type(rhs);
 
+    // Check if an expr2tc is an Optional struct and return its is_none field
+    auto optional_is_none_field =
+      [&](const expr2tc &val) -> std::optional<expr2tc> {
+      if (!is_struct_type(val))
+        return std::nullopt;
+      const struct_type2t &st = to_struct_type(val->type);
+      if (!st.name.as_string().starts_with("tag-Optional_"))
+        return std::nullopt;
+      return member2tc(get_bool_type(), val, "is_none");
+    };
+
     // Handle Optional[T] vs None
     auto handle_optional_side =
       [&](const expr2tc &side, bool other_is_none) -> std::optional<expr2tc> {
-      if (is_struct_type(side))
+      if (!other_is_none)
+        return std::nullopt;
+
+      // Direct Optional struct case
+      if (auto res = optional_is_none_field(side))
+        return res;
+
+      // Pointer case (Optional* or void*): resolve via value set to find the
+      // actual Optional struct the pointer points to. We return on the first
+      // Optional entry found; for single-assignment variables the value set
+      // has exactly one entry. The tag "tag-Optional_" is established by
+      // type_handler::build_optional_type.
+      if (is_pointer_type(side))
       {
-        const struct_type2t &struct_type = to_struct_type(side->type);
-        const std::string &tag = struct_type.name.as_string();
-        if (tag.starts_with("tag-Optional_") && other_is_none)
+        value_setst::valuest value_set;
+        cur_state->value_set.get_value_set(side, value_set);
+        for (const auto &obj : value_set)
         {
-          // Access is_none field from Optional struct
-          // isnone always checks equality, so return the field directly
-          return member2tc(get_bool_type(), side, "is_none");
+          if (!is_object_descriptor2t(obj))
+            continue;
+          expr2tc val = to_object_descriptor2t(obj).object;
+          cur_state->rename(val);
+          while (is_typecast2t(val))
+            val = to_typecast2t(val).from;
+          if (auto res = optional_is_none_field(val))
+            return res;
         }
+        // For void* (any_type) with no Optional in the value set,
+        // fall back to null-pointer check: x is None ↔ x == NULL.
+        if (is_empty_type(to_pointer_type(side->type).subtype))
+          return equality2tc(side, gen_zero(side->type));
       }
       return std::nullopt;
     };
@@ -3024,5 +3115,31 @@ void goto_symext::simplify_python_builtins(expr2tc &expr)
 
     // Handle non-None comparisons
     expr = gen_true_expr();
+  }
+}
+
+void goto_symext::volatile_check(expr2tc &expr)
+{
+  if (!options.get_bool_option("volatile-check"))
+    return;
+
+  if (is_symbol2t(expr))
+  {
+    const symbol2t &s = to_symbol2t(expr);
+    const symbolt *sym = new_context.find_symbol(s.thename);
+    if (sym && sym->type.cmt_volatile())
+    {
+      log_debug("volatile check", "variable: {}", sym->name.as_string());
+      unsigned int &nondet_count = get_nondet_counter();
+      expr = symbol2tc(
+        expr->type, "nondet$symex::nondet" + i2string(nondet_count++));
+    }
+  }
+  else
+  {
+    expr->Foreach_operand([this](expr2tc &e) {
+      if (!is_nil_expr(e))
+        volatile_check(e);
+    });
   }
 }

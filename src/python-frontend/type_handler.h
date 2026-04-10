@@ -1,9 +1,88 @@
 #pragma once
 
 #include <util/c_types.h>
+#include <util/arith_tools.h>
+#include <util/std_expr.h>
+#include <util/std_types.h>
 #include <nlohmann/json.hpp>
 
 class python_converter;
+
+// P26: Cached double type — avoids constructing a new floatbv_typet on every call.
+// Initialized once on first use; thread-safe (C++11 static local semantics).
+inline const typet &cached_double_type()
+{
+  static const typet instance = double_type();
+  return instance;
+}
+
+// P4: Static-local struct type — eliminates repeated heap allocations.
+// Returns a const reference to the single global instance.
+inline const struct_typet &get_complex_struct_type()
+{
+  static const struct_typet instance = []() {
+    struct_typet t;
+    t.tag("complex");
+    t.components().push_back(
+      struct_typet::componentt("real", "real", double_type()));
+    t.components().push_back(
+      struct_typet::componentt("imag", "imag", double_type()));
+    return t;
+  }();
+  return instance;
+}
+
+inline bool is_complex_type(const typet &type)
+{
+  if (type.id() == "symbol")
+    return to_symbol_type(type).get_identifier().as_string() == "tag-complex";
+
+  if (!type.is_struct())
+    return false;
+
+  const struct_typet &struct_type = to_struct_type(type);
+  const std::string tag = struct_type.tag().as_string();
+  return tag == "complex" || tag == "tag-complex";
+}
+
+inline exprt make_complex(const exprt &real, const exprt &imag)
+{
+  struct_exprt complex_expr(get_complex_struct_type());
+  const typet &dt = cached_double_type();
+  complex_expr.operands().push_back(
+    real.type() == dt ? real : typecast_exprt(real, dt));
+  complex_expr.operands().push_back(
+    imag.type() == dt ? imag : typecast_exprt(imag, dt));
+  return complex_expr;
+}
+
+inline exprt promote_to_complex(const exprt &value)
+{
+  if (value.statement() == "cpp-throw")
+    return value;
+
+  if (is_complex_type(value.type()))
+    return value;
+
+  // Bool cannot be directly typecast to float64 in the SMT encoder.
+  // Convert bool → int first; make_complex will then typecast int → double.
+  exprt real = value;
+  if (real.type().is_bool())
+    real = typecast_exprt(real, long_long_int_type());
+
+  return make_complex(real, from_double(0.0, cached_double_type()));
+}
+
+inline exprt complex_to_bool_expr(const exprt &complex_expr)
+{
+  const typet &dt = cached_double_type();
+  exprt real = member_exprt(complex_expr, "real", dt);
+  exprt imag = member_exprt(complex_expr, "imag", dt);
+  exprt zero = from_double(0.0, dt);
+  return or_exprt(
+    not_exprt(equality_exprt(real, zero)),
+    not_exprt(equality_exprt(imag, zero)));
+}
 
 class type_handler
 {
@@ -24,12 +103,20 @@ public:
    */
   std::string type_to_string(const typet &t) const;
 
+  /**
+   * Returns the Python type name for an ESBMC type, as produced by type().
+   * Maps: bool→"bool", floatbv→"float", signedbv/unsignedbv→"int",
+   * char array/pointer→"str", complex→"complex", struct→class name.
+   */
+  std::string get_python_type_name(const typet &t) const;
+
   /*
    * Returns the detected type for a variable.
    * @param var_name The name of the variable.
    * @return A string representing the variable's type.
    */
   std::string get_var_type(const std::string &var_name) const;
+  std::string get_var_classname(const nlohmann::json &value_node) const;
 
   /*
    * Creates an array_typet.
@@ -73,6 +160,19 @@ public:
   const typet get_list_type() const;
 
   typet get_list_element_type() const;
+
+  /*
+   * Gets the generic dictionary type from the symbol table.
+   * @return A pointer to the generic __python_dict__ struct type.
+   */
+  const typet get_dict_type() const;
+
+  /*
+   * Infers the specific dictionary type from a JSON value.
+   * @param dict_value The JSON node representing the dict value.
+   * @return The inferred dictionary type based on the value's structure.
+   */
+  typet get_dict_type(const nlohmann::json &dict_value) const;
 
   typet get_tuple_type(const nlohmann::json &tuple_node) const;
 
@@ -118,6 +218,9 @@ private:
 
   /// Get a normalized/canonical type for list element type inference
   typet get_canonical_string_type(const typet &t) const;
+
+  /// Resolves a Call's func node (id or Attribute) to a typet
+  typet get_typet_from_call_func(const nlohmann::json &func) const;
 
   const python_converter &converter_;
 };

@@ -50,10 +50,52 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
     }
   }
 
+  // Interval-based guard check (--interval-symex-guard)
+  if (!new_guard_false && !new_guard_true && interval_domain_state)
+  {
+    tvt res = interval_domaint::eval_boolean_expression(
+      old_guard, *interval_domain_state);
+    if (res.is_false())
+      new_guard_false = true;
+    else if (res.is_true())
+      new_guard_true = true;
+  }
+
   goto_programt::const_targett goto_target = instruction.targets.front();
 
   bool forward =
     cur_state->source.pc->location_number < goto_target->location_number;
+
+  if (
+    options.get_option("witness-output-yaml") != "" && forward &&
+    !is_constant(old_guard) &&
+    !(is_not2t(old_guard) && is_constant(to_not2t(old_guard).value)))
+  {
+    target->branching(
+      cur_state->guard.as_expr(),
+      new_guard,
+      cur_state->source,
+      cur_state->top().hidden,
+      first_loop);
+  }
+
+  // Teach the interval domain the branch constraint for the continuing path.
+  // For a forward GOTO (exit check), the fall-through means the guard is false,
+  // so assume NOT old_guard. For a backward GOTO (loop-back), the jump means
+  // the guard is true, so assume old_guard.
+  if (interval_domain_state && !new_guard_false && !new_guard_true)
+  {
+    if (forward)
+    {
+      expr2tc neg_guard = old_guard;
+      make_not(neg_guard);
+      interval_domain_state->assume(neg_guard);
+    }
+    else
+    {
+      interval_domain_state->assume(old_guard);
+    }
+  }
 
   if (new_guard_false)
   {

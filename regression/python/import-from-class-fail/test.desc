@@ -1,4 +1,4 @@
 CORE
 main.py
-
-ERROR: Function "MyClass" not found.
+--incremental-bmc
+^ERROR\: Function "MyClass" not found \(.+main\.py line [0-9]+\)$

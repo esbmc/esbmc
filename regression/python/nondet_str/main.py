@@ -1,4 +1,3 @@
-# Tests for nondet_str(): nondeterministic strings with a maximum array size
 # defined by --nondet-str-length (default = 16). The last character is always
 # the null terminator. The visible string length is therefore <= max_len - 1.
 

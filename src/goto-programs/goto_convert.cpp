@@ -1,4 +1,5 @@
 #include <cassert>
+#include <map>
 #include <goto-programs/destructor.h>
 #include <goto-programs/goto_convert_class.h>
 #include <goto-programs/remove_no_op.h>
@@ -10,6 +11,7 @@
 #include <util/message.h>
 #include <util/message/format.h>
 #include <util/prefix.h>
+#include <util/replace_symbol.h>
 #include <util/std_expr.h>
 #include <util/type_byte_size.h>
 
@@ -566,11 +568,28 @@ void goto_convertt::generate_dynamic_size_vla(
   };
 
   array_typet arr_type = to_array_type(var.type());
-  exprt size = typecast_exprt(to_array_type(var.type()).size(), size_type());
+  // Use arr_type.size() directly -- rewrite_vla_decl_size has already run and
+  // materialised any side-effecting size expression into an __ESBMC_tmp_ symbol,
+  // so arr_type.size() is a plain symbol (no side effects).  We keep a copy
+  // of the pre-cast expression so the zero-size check operates on the original
+  // (possibly signed) type and correctly catches both zero and negative dimensions.
+  exprt dim_expr = arr_type.size();
+  exprt size = typecast_exprt(dim_expr, size_type());
 
   irep_idt ovfl_cast_id =
     "overflow-typecast-" + size.type().width().as_string();
   assert_not(ovfl_cast_id, size);
+
+  // Zero-size and negative-size VLAs are undefined behaviour (C11 §6.7.6.2p1).
+  if (!disable_check)
+  {
+    expr2tc dim2;
+    migrate_expr(dim_expr, dim2);
+    goto_programt::targett gt_tgt = dest.add_instruction(ASSERT);
+    gt_tgt->guard = greaterthan2tc(dim2, gen_zero(dim2->type));
+    gt_tgt->location = loc;
+    gt_tgt->location.comment("VLA array dimension must be greater than zero");
+  }
 
   // First, if it's a multidimensional vla, the size will be the
   // multiplication of the dimensions
@@ -717,6 +736,116 @@ void goto_convertt::convert_decl_block(const codet &code, goto_programt &dest)
     convert(to_code(it), dest);
 }
 
+/// Returns true if @p expr is a direct reference to a C11 _Atomic-qualified
+/// variable (symbol with the "#atomic" flag set on its type).
+bool goto_convertt::is_atomic_symbol(const exprt &expr, const namespacet &ns)
+{
+  if (expr.id() != "symbol")
+    return false;
+  const symbolt *sym = ns.lookup(expr.identifier());
+  return sym && sym->type.get_bool("#atomic");
+}
+
+/// Returns true if @p expr contains a direct read of any C11 _Atomic variable
+/// (stops early at the first match; does not recurse into address_of).
+static bool has_atomic_read(const exprt &expr, const namespacet &ns)
+{
+  if (expr.is_address_of())
+    return false;
+  if (goto_convertt::is_atomic_symbol(expr, ns))
+    return true;
+  forall_operands (it, expr)
+    if (has_atomic_read(*it, ns))
+      return true;
+  return false;
+}
+
+/// Walks @p expr depth-first and inserts into @p out one entry per distinct
+/// _Atomic symbol that is actually *read* (i.e. not under address_of).
+/// The map key is the symbol identifier; the value is its type.
+static void collect_atomic_reads(
+  const exprt &expr,
+  const namespacet &ns,
+  std::map<irep_idt, typet> &out)
+{
+  if (expr.is_address_of())
+    return;
+  if (goto_convertt::is_atomic_symbol(expr, ns))
+  {
+    out.emplace(expr.identifier(), expr.type());
+    return;
+  }
+  forall_operands (it, expr)
+    collect_atomic_reads(*it, ns, out);
+}
+
+void goto_convertt::convert_assign_atomic(
+  const exprt &lhs,
+  const exprt &rhs,
+  const locationt &location,
+  goto_programt &dest)
+{
+  exprt working_rhs = rhs;
+
+  // Phase 1: for each distinct _Atomic symbol read in rhs, emit an atomic load
+  // into a fresh temporary and substitute it throughout working_rhs.
+  // collect_atomic_reads deduplicates by identifier, so a + a produces one tmp.
+  std::map<irep_idt, typet> atomic_reads;
+  collect_atomic_reads(working_rhs, ns, atomic_reads);
+
+  replace_symbolt subst;
+  for (const auto &[atom_id, atom_type] : atomic_reads)
+  {
+    symbolt &tmp = new_tmp_symbol(atom_type);
+    code_declt decl(symbol_expr(tmp));
+    decl.location() = location;
+    convert_decl(decl, dest);
+
+    dest.add_instruction(ATOMIC_BEGIN);
+    code_assignt load(symbol_expr(tmp), symbol_exprt(atom_id, atom_type));
+    load.location() = location;
+    copy(load, ASSIGN, dest);
+    dest.add_instruction(ATOMIC_END);
+
+    subst.insert(atom_id, symbol_expr(tmp));
+  }
+  subst.replace(working_rhs);
+
+  // Phase 2: emit the store, wrapped in ATOMIC_BEGIN/END only when lhs is _Atomic.
+  // A context switch is allowed between Phase 1 and Phase 2 (between the
+  // ATOMIC_END above and the ATOMIC_BEGIN below), which is exactly the C11
+  // requirement that atomic load and atomic store are separate operations.
+  bool lhs_atomic = is_atomic_symbol(lhs, ns);
+  if (lhs_atomic)
+    dest.add_instruction(ATOMIC_BEGIN);
+
+  code_assignt store(lhs, working_rhs);
+  store.location() = location;
+  copy(store, ASSIGN, dest);
+
+  if (lhs_atomic)
+    dest.add_instruction(ATOMIC_END);
+}
+
+void goto_convertt::convert_assign_rmw_atomic(
+  const exprt &lhs,
+  const exprt &rhs,
+  const locationt &location,
+  goto_programt &dest)
+{
+  // RMW semantics: the entire load-modify-write is one indivisible atomic op.
+  // Unlike convert_assign_atomic, which splits into a separate atomic load and
+  // a separate atomic store (allowing a context switch between them), here the
+  // whole assignment is wrapped in a single ATOMIC_BEGIN/END.  This models
+  // C11 compound-assignment operators (+=, -=, ...) and pre/post-increment
+  // on _Atomic variables, which are sequentially-consistent RMW operations.
+  dest.add_instruction(ATOMIC_BEGIN);
+  code_assignt assign(lhs, rhs);
+  assign.location() = location;
+  copy(assign, ASSIGN, dest);
+  dest.add_instruction(ATOMIC_END);
+}
+
 void goto_convertt::convert_assign(
   const code_assignt &code,
   goto_programt &dest)
@@ -761,6 +890,15 @@ void goto_convertt::convert_assign(
     if (rhs.type().is_code())
     {
       convert(to_code(rhs), dest);
+      return;
+    }
+
+    // C11 _Atomic semantics: each access to an _Atomic object is an
+    // indivisible atomic operation.  Dispatch before atomicity-check so
+    // the two mechanisms remain independent.
+    if (is_atomic_symbol(lhs, ns) || has_atomic_read(rhs, ns))
+    {
+      convert_assign_atomic(lhs, rhs, code.location(), dest);
       return;
     }
 
@@ -1261,6 +1399,10 @@ void goto_convertt::convert_for(const codet &code, goto_programt &dest)
   y->guard = gen_true_expr();
   y->location = code.location();
 
+  // Propagate pragma unroll count
+  if (!code.get("#pragma_unroll").empty())
+    y->pragma_unroll_count = std::stoul(code.get("#pragma_unroll").as_string());
+
   dest.destructive_append(sideeffects);
   dest.destructive_append(tmp_v);
   dest.destructive_append(tmp_w);
@@ -1323,6 +1465,10 @@ void goto_convertt::convert_while(const codet &code, goto_programt &dest)
   y->make_goto(v);
   y->guard = gen_true_expr();
   y->location = code.location();
+
+  // Propagate pragma unroll count
+  if (!code.get("#pragma_unroll").empty())
+    y->pragma_unroll_count = std::stoul(code.get("#pragma_unroll").as_string());
 
   dest.destructive_append(tmp_branch);
   dest.destructive_append(tmp_x);
@@ -1389,6 +1535,10 @@ void goto_convertt::convert_dowhile(const codet &code, goto_programt &dest)
   y->make_goto(w);
   migrate_expr(cond, y->guard);
   y->location = condition_location;
+
+  // Propagate pragma unroll count
+  if (!code.get("#pragma_unroll").empty())
+    y->pragma_unroll_count = std::stoul(code.get("#pragma_unroll").as_string());
 
   dest.destructive_append(tmp_w);
   dest.destructive_append(sideeffects);
@@ -1564,9 +1714,14 @@ void goto_convertt::convert_return(
   {
     if (!new_code.has_return_value())
     {
-      code.dump();
-      log_error("function must return value");
-      abort();
+      log_warning(
+        "The return of the function {} is missing",
+        id2string(code.location().function()));
+      // This might be because the remove_sideeffect removed the undefined function
+      // We replaced it with nondet
+      exprt ret = exprt("sideeffect", code.op0().type());
+      ret.statement("nondet");
+      new_code.return_value() = ret;
     }
 
     // Now add a return node to set the return value.

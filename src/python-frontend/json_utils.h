@@ -5,11 +5,21 @@
 #include <sstream>
 #include <string>
 #include <functional>
+#include <unordered_map>
 
 #define DUMP_OBJECT(obj) printf("%s\n", (obj).dump(2).c_str())
 
 namespace json_utils
 {
+/// Convert a dotted Python module name to a filesystem path segment.
+/// Example: "pkg.mod4" -> "pkg/mod4", "l.ks.foo" -> "l/ks/foo"
+inline std::string dotted_to_path(const std::string &module_name)
+{
+  std::string result = module_name;
+  std::replace(result.begin(), result.end(), '.', '/');
+  return result;
+}
+
 template <typename JsonType>
 bool search_function_in_ast(const JsonType &node, const std::string &func_name)
 {
@@ -63,34 +73,50 @@ bool is_class(const std::string &name, const JsonType &ast_json)
   if (find_class(ast_json["body"], name) != JsonType())
     return true;
 
-  // Find class definition in imported modules
+  // Cache loaded module JSONs
+  // To avoid repeated filesystem reads across calls
+  static std::unordered_map<std::string, JsonType> module_cache;
+
+  // ast_output_dir may be absent in minimal/test JSON documents
+  // that have no imported modules;
+  // skip the import scan in that case.
+  if (!ast_json.contains("ast_output_dir"))
+    return false;
+
+  const std::string output_dir =
+    ast_json["ast_output_dir"].template get<std::string>();
+
+  // Check whether name is a class defined in an imported module
+  // Use continue after a negative result
+  // so that all Import&ImportFrom nodes are scanned
+  auto load_and_check = [&](const std::string &module_name) -> bool {
+    const std::string path =
+      output_dir + "/" + dotted_to_path(module_name) + ".json";
+    auto it = module_cache.find(path);
+    if (it == module_cache.end())
+    {
+      std::ifstream f(path);
+      if (!f.is_open())
+        return false;
+      JsonType j;
+      f >> j;
+      it = module_cache.emplace(path, std::move(j)).first;
+    }
+    return is_class(name, it->second);
+  };
+
   for (const auto &obj : ast_json["body"])
   {
-    auto is_imported_class = [&ast_json,
-                              &name](const std::string &module_name) {
-      std::stringstream module_path;
-      module_path << ast_json["ast_output_dir"].template get<std::string>()
-                  << "/" << module_name << ".json";
-      std::ifstream imported_file(module_path.str());
-      if (!imported_file.is_open())
-        return false;
-
-      JsonType imported_module_json;
-      imported_file >> imported_module_json;
-
-      if (is_class(name, imported_module_json))
-        return true;
-
-      return false;
-    };
     if (obj["_type"] == "ImportFrom")
-      return is_imported_class(obj["module"].template get<std::string>());
-
-    if (obj["_type"] == "Import")
+    {
+      if (load_and_check(obj["module"].template get<std::string>()))
+        return true;
+    }
+    else if (obj["_type"] == "Import")
     {
       for (const auto &imported : obj["names"])
       {
-        if (is_imported_class(imported["name"].template get<std::string>()))
+        if (load_and_check(imported["name"].template get<std::string>()))
           return true;
       }
     }
@@ -102,11 +128,22 @@ bool is_class(const std::string &name, const JsonType &ast_json)
 template <typename JsonType>
 bool is_module(const std::string &module_name, const JsonType &ast)
 {
-  std::stringstream file_path;
-  file_path << ast["ast_output_dir"].template get<std::string>() << "/"
-            << module_name << ".json";
-  std::ifstream file(file_path.str());
-  return file.is_open();
+  static std::unordered_map<std::string, bool> is_module_cache;
+
+  if (!ast.contains("ast_output_dir"))
+    return false;
+
+  const std::string path = ast["ast_output_dir"].template get<std::string>() +
+                           "/" + dotted_to_path(module_name) + ".json";
+
+  auto it = is_module_cache.find(path);
+  if (it != is_module_cache.end())
+    return it->second;
+
+  std::ifstream file(path);
+  bool result = file.is_open();
+  is_module_cache.emplace(path, result);
+  return result;
 }
 
 template <typename JsonType>
@@ -180,22 +217,79 @@ get_object_alias(const JsonType &ast, const std::string &obj_name)
 template <typename JsonType>
 const JsonType get_var_node(const std::string &var_name, const JsonType &block)
 {
-  for (auto &element : block["body"])
-  {
-    // Check for annotated assignment (AnnAssign)
-    if (
-      element["_type"] == "AnnAssign" && element.contains("target") &&
-      element["target"].contains("id") && element["target"]["id"] == var_name)
-      return element;
+  auto find_in_body = [&](const JsonType &body, const auto &self) -> JsonType {
+    for (auto &element : body)
+    {
+      // Check for annotated assignment (AnnAssign)
+      if (
+        element["_type"] == "AnnAssign" && element.contains("target") &&
+        element["target"].contains("id") && element["target"]["id"] == var_name)
+        return element;
 
-    // Check for regular assignment (Assign)
-    if (
-      element["_type"] == "Assign" && element.contains("targets") &&
-      !element["targets"].empty() && element["targets"][0].contains("_type") &&
-      element["targets"][0]["_type"] == "Name" &&
-      element["targets"][0].contains("id") &&
-      element["targets"][0]["id"] == var_name)
-      return element;
+      // Check for regular assignment (Assign)
+      if (
+        element["_type"] == "Assign" && element.contains("targets") &&
+        !element["targets"].empty() &&
+        element["targets"][0].contains("_type") &&
+        element["targets"][0]["_type"] == "Name" &&
+        element["targets"][0].contains("id") &&
+        element["targets"][0]["id"] == var_name)
+        return element;
+
+      // Avoid descending into new scopes
+      if (
+        element.contains("_type") &&
+        (element["_type"] == "FunctionDef" || element["_type"] == "ClassDef" ||
+         element["_type"] == "Lambda"))
+        continue;
+
+      // Recurse into nested blocks
+      for (const auto &key : {"body", "orelse", "finalbody"})
+      {
+        if (element.contains(key) && element[key].is_array())
+        {
+          JsonType nested = self(element[key], self);
+          if (!nested.empty())
+            return nested;
+        }
+      }
+
+      // Try/Except handlers
+      if (element.contains("handlers") && element["handlers"].is_array())
+      {
+        for (auto &handler : element["handlers"])
+        {
+          if (handler.contains("body") && handler["body"].is_array())
+          {
+            JsonType nested = self(handler["body"], self);
+            if (!nested.empty())
+              return nested;
+          }
+        }
+      }
+
+      // Match cases
+      if (element.contains("cases") && element["cases"].is_array())
+      {
+        for (auto &case_node : element["cases"])
+        {
+          if (case_node.contains("body") && case_node["body"].is_array())
+          {
+            JsonType nested = self(case_node["body"], self);
+            if (!nested.empty())
+              return nested;
+          }
+        }
+      }
+    }
+    return JsonType();
+  };
+
+  if (block.contains("body") && block["body"].is_array())
+  {
+    JsonType found = find_in_body(block["body"], find_in_body);
+    if (!found.empty())
+      return found;
   }
 
   if (block.contains("args"))
@@ -352,6 +446,30 @@ const JsonType find_var_decl(
 }
 
 template <typename JsonType>
+std::string get_annotation_type_name(const JsonType &annotation)
+{
+  if (annotation.contains("id"))
+    return annotation["id"];
+
+  if (
+    annotation.contains("_type") && annotation["_type"] == "Subscript" &&
+    annotation.contains("value") && annotation["value"].contains("id"))
+  {
+    std::string base_type =
+      annotation["value"]["id"].template get<std::string>();
+    if (annotation.contains("slice") && annotation["slice"].contains("id"))
+      return base_type + "[" +
+             annotation["slice"]["id"].template get<std::string>() + "]";
+    return base_type;
+  }
+
+  if (annotation.contains("value") && annotation["value"].contains("id"))
+    return annotation["value"]["id"];
+
+  return "";
+}
+
+template <typename JsonType>
 const JsonType get_var_value(
   const std::string &var_name,
   const std::string &function,
@@ -364,6 +482,63 @@ const JsonType get_var_value(
     value = find_var_decl(value["value"]["id"], function, ast);
   }
   return value;
+}
+
+template <typename JsonType>
+bool extract_constant_integer(
+  const JsonType &node,
+  const std::string &function,
+  const JsonType &ast,
+  long long &value)
+{
+  if (
+    node.contains("_type") && node["_type"] == "Constant" &&
+    node.contains("value") && node["value"].is_number_integer())
+  {
+    value = node["value"].template get<long long>();
+    return true;
+  }
+
+  if (
+    node.contains("_type") && node["_type"] == "UnaryOp" &&
+    node.contains("operand") && node["operand"].contains("value") &&
+    node["operand"]["value"].is_number_integer() && node.contains("op"))
+  {
+    const auto &op = node["op"];
+    const bool is_usub =
+      (op.is_object() && op.contains("_type") && op["_type"] == "USub") ||
+      (op.is_string() && op == "USub");
+    const bool is_uadd =
+      (op.is_object() && op.contains("_type") && op["_type"] == "UAdd") ||
+      (op.is_string() && op == "UAdd");
+
+    if (is_usub || is_uadd)
+    {
+      value = node["operand"]["value"].template get<long long>();
+      if (is_usub)
+        value = -value;
+      return true;
+    }
+  }
+
+  if (node.contains("_type") && node["_type"] == "Name" && node.contains("id"))
+  {
+    const std::string var_name = node["id"].template get<std::string>();
+    JsonType var_value = get_var_value(var_name, function, ast);
+
+    if (
+      !var_value.empty() && var_value.contains("value") &&
+      var_value["value"].contains("_type") &&
+      var_value["value"]["_type"] == "Constant" &&
+      var_value["value"].contains("value") &&
+      var_value["value"]["value"].is_number_integer())
+    {
+      value = var_value["value"]["value"].template get<long long>();
+      return true;
+    }
+  }
+
+  return false;
 }
 
 template <typename JsonType>
@@ -408,6 +583,33 @@ const JsonType find_return_node(const JsonType &block)
       return stmt;
   }
   return JsonType();
+}
+
+/// Extract the variable name from a symbol identifier
+/// Examples:
+///   "py:test.py@l" -> "l"
+///   "py:test.py@F@foo@x" -> "x"
+///   "py:test.py@C@MyClass@F@method@var" -> "var"
+inline std::string extract_var_name_from_symbol_id(const std::string &symbol_id)
+{
+  size_t last_at = symbol_id.find_last_of('@');
+  return (last_at != std::string::npos) ? symbol_id.substr(last_at + 1)
+                                        : symbol_id;
+}
+
+template <typename JsonType>
+bool has_overload_decorator(const JsonType &func_node)
+{
+  // Check for @overload decorators
+  if (!func_node.contains("decorator_list"))
+    return false;
+
+  for (const auto &decorator : func_node["decorator_list"])
+  {
+    if (decorator["_type"] == "Name" && decorator["id"] == "overload")
+      return true;
+  }
+  return false;
 }
 
 } // namespace json_utils

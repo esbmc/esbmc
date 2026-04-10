@@ -1,0 +1,4 @@
+CORE
+main.py
+--unwind 1 --bitwuzla --no-standard-checks --smt-during-symex --smt-symex-guard
+^TypeError:\s+quicksort\(\)\s+takes\s+\d+\s+positional argument(?:s)?\s+but\s+\d+\s+were given$

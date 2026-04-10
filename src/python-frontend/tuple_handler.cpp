@@ -109,25 +109,44 @@ exprt tuple_handler::handle_tuple_subscript(
   // Convert subscript to member access
   exprt index_expr = converter_.get_expr(slice);
 
-  // Index must be a constant for struct member access
-  if (!index_expr.is_constant())
+  BigInt index_val;
+
+  // Handle both constant and unary minus (negative indices)
+  if (index_expr.is_constant())
+  {
+    const constant_exprt &const_index = to_constant_expr(index_expr);
+    index_val = binary2integer(const_index.value().c_str(), false);
+  }
+  else if (
+    index_expr.id() == "unary-" && index_expr.operands().size() == 1 &&
+    index_expr.operands()[0].is_constant())
+  {
+    // Handle negative indices such as -1, -2
+    const constant_exprt &const_operand =
+      to_constant_expr(index_expr.operands()[0]);
+    BigInt positive_val = binary2integer(const_operand.value().c_str(), false);
+    index_val = -positive_val;
+  }
+  else
   {
     throw std::runtime_error(
       "Tuple subscript with non-constant index is not supported");
   }
 
-  const constant_exprt &const_index = to_constant_expr(index_expr);
-  BigInt index_val = binary2integer(const_index.value().c_str(), false);
+  // Handle negative indices (Python-style: -1 means last element)
+  size_t tuple_size = tuple_type.components().size();
+
+  if (index_val < 0)
+    index_val += tuple_size;
 
   // Convert BigInt to size_t for array indexing
   size_t idx = index_val.to_int64();
 
   // Check bounds
-  if (index_val < 0 || idx >= tuple_type.components().size())
+  if (index_val < 0 || idx >= tuple_size)
   {
     throw std::runtime_error(
-      "Tuple index " + integer2string(index_val) + " out of range (size: " +
-      std::to_string(tuple_type.components().size()) + ")");
+      "Tuple index out of range (size: " + std::to_string(tuple_size) + ")");
   }
 
   // Create member access expression: t[0] -> t.element_0
@@ -296,4 +315,48 @@ typet tuple_handler::get_tuple_type_from_annotation(
   }
 
   return create_tuple_struct_type(element_types);
+}
+
+exprt tuple_handler::handle_tuple_membership(
+  const exprt &lhs,
+  const exprt &rhs,
+  bool invert) const
+{
+  assert(rhs.type().is_struct());
+  const struct_typet &tuple_type = to_struct_type(rhs.type());
+
+  // Verify it's a tuple
+  if (!is_tuple_type(tuple_type))
+  {
+    throw std::runtime_error(
+      "Membership test on non-tuple struct type: " +
+      tuple_type.tag().as_string());
+  }
+
+  const auto &components = tuple_type.components();
+  if (components.empty())
+  {
+    // Empty tuple: always return false (or true for "not in")
+    if (invert)
+      return true_exprt();
+    else
+      return false_exprt();
+  }
+
+  // Build OR chain: lhs == tuple.element_0 || lhs == tuple.element_1 || ...
+  exprt result;
+  for (size_t i = 0; i < components.size(); i++)
+  {
+    std::string member_name = "element_" + std::to_string(i);
+    member_exprt member_access(rhs, member_name, components[i].type());
+
+    exprt equality = equality_exprt(lhs, member_access);
+
+    if (i == 0)
+      result = equality;
+    else
+      result = or_exprt(result, equality);
+  }
+
+  return invert ? not_exprt(result) : result;
 }

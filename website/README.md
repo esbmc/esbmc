@@ -2,7 +2,7 @@
 
 This directory represents the files for ESBMC's website. They get built by the
 GitHub action /.github/workflows/pages.yml and published to GitHub pages when
-the master branch is update.
+the master branch is updated.
 
 To run it locally, install [Hugo](https://gohugo.io/) and run:
 
@@ -18,7 +18,7 @@ list of important ones:
 
 * draft: set to true to not show in the built site
 * author: displays the author of a specific article (in `/news` only)
-* tags: list of tags that will be ascociated with a specific article (in `/news`
+* tags: list of tags that will be associated with a specific article (in `/news`
 only)
 * date: automatically generated and is **important** as it defines at which place
 the article will be shown.
@@ -37,12 +37,12 @@ hugo new content/docs/example.md
 hugo new content/news/esbmc-version-8.md
 ```
 
-A date value will be assigned and the article will be marked as draft. **Remember
+A date value will be assigned, and the article will be marked as a draft. **Remember
 to set the `draft` flag to `false` when ready to publish.**
 
 ## Static Assets
 
-There is a `static` folder where assets can be comitted into, it's generally
+There is a `static` folder where assets can be committed to; it's generally
 discouraged to commit large assets to that directory. Use 
 [git LFS](https://docs.github.com/en/repositories/working-with-files/managing-large-files/configuring-git-large-file-storage) 
 to link large files to the `static` dir instead.

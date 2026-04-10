@@ -1,0 +1,5 @@
+CORE
+main.py
+--branch-coverage --generate-pytest-testcase
+^Generated pytest test case with 6 test\(s\)\: test_main\.py
+^VERIFICATION FAILED$

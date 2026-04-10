@@ -17,6 +17,9 @@ class goto_convertt
 public:
   void goto_convert(const codet &code, goto_programt &dest);
 
+  /// Returns true iff @p expr is a direct reference to a C11 _Atomic variable.
+  static bool is_atomic_symbol(const exprt &expr, const namespacet &ns);
+
   goto_convertt(contextt &_context, optionst &_options)
     : context(_context),
       options(_options),
@@ -88,6 +91,12 @@ protected:
 
   bool has_sideeffect(const exprt &expr);
 
+  // Used by remove_sideeffects() to process a quantifier body expression.
+  // Recursively walks || and && sub-expressions without converting them to
+  // short-circuit ITE chains, so that bound variables remain reachable by
+  // replace_name_in_body() in smt_conv.cpp.
+  void remove_sideeffects_for_quantifier_body(exprt &body, goto_programt &dest);
+
   void remove_assignment(exprt &expr, goto_programt &dest, bool result_is_used);
   void remove_post(exprt &expr, goto_programt &dest, bool result_is_used);
   void remove_pre(exprt &expr, goto_programt &dest, bool result_is_used);
@@ -147,6 +156,16 @@ protected:
   void convert_decl_block(const codet &code, goto_programt &dest);
   void convert_expression(const codet &code, goto_programt &dest);
   void convert_assign(const code_assignt &code, goto_programt &dest);
+  void convert_assign_atomic(
+    const exprt &lhs,
+    const exprt &rhs,
+    const locationt &location,
+    goto_programt &dest);
+  void convert_assign_rmw_atomic(
+    const exprt &lhs,
+    const exprt &rhs,
+    const locationt &location,
+    goto_programt &dest);
   void convert_cpp_delete(const codet &code, goto_programt &dest);
   void convert_for(const codet &code, goto_programt &dest);
   void convert_while(const codet &code, goto_programt &dest);

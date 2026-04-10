@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 main.py
-
+--unwind 12 --no-standard-checks --bitwuzla
 ^VERIFICATION SUCCESSFUL$

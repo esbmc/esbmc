@@ -1,4 +1,4 @@
 THOROUGH
 main.py
---unwind 4
+--unwind 4 --smt-during-symex --smt-symex-guard --z3
 ^VERIFICATION FAILED$

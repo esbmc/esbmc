@@ -1,24 +1,18 @@
 if(ENABLE_COVERAGE)
-    if(CMAKE_COMPILER_IS_GNUCXX)        
-        if(NOT (CMAKE_BUILD_TYPE STREQUAL "Debug"))
+    if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang|AppleClang")
+        message(ERROR "Code coverage requires Clang or AppleClang — coverage flags not applied.")
+    else()
+        if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
             message(WARNING "Code coverage results with an optimized (non-Debug) build may be misleading")
         endif()
 
-        find_program(LCOV_PATH lcov REQUIRED)
+        find_program(LCOV_PATH lcov)
         if(NOT LCOV_PATH)
-            message(FATAL_ERROR "lcov not found! Aborting...")
+            message(WARNING "lcov not found — coverage reports will not be filtered (filtered LCOV report will not be produced)")
         endif()
 
-        find_program(GENHTML_PATH genhtml)
-        if(NOT GENHTML_PATH)
-            message(FATAL_ERROR "genhtml not found! Aborting...")
-        endif()
-
-        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} --coverage -fprofile-arcs -ftest-coverage")
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --coverage -fprofile-arcs -ftest-coverage")
-
-        
-    else()
-        message(FATAL_ERROR "Code coverage requires GCC. Aborting.")
+        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fprofile-instr-generate -fcoverage-mapping")
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fprofile-instr-generate -fcoverage-mapping")
+        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fprofile-instr-generate")
     endif()
 endif()

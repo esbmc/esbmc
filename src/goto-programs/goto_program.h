@@ -107,6 +107,9 @@ public:
     //! loop invariant for loop_invariant instruction
     std::list<expr2tc> loop_invariants;
 
+    //! loop assigns targets for frame rule enforcement
+    std::list<expr2tc> loop_assigns_targets;
+
     //! the target for gotos and for start_thread nodes
     typedef std::list<class instructiont>::iterator targett;
     typedef std::list<class instructiont>::const_iterator const_targett;
@@ -159,6 +162,7 @@ public:
       guard = gen_true_expr();
       code = expr2tc();
       loop_invariants.clear();
+      loop_assigns_targets.clear();
       inductive_step_instruction = false;
       inductive_assertion = false;
     }
@@ -351,6 +355,7 @@ public:
         inductive_assertion(false),
         location_number(0),
         loop_number(unsigned(0)),
+        pragma_unroll_count(0),
         target_number(unsigned(-1))
     {
       guard = gen_true_expr();
@@ -363,6 +368,7 @@ public:
         inductive_assertion(false),
         location_number(0),
         loop_number(unsigned(0)),
+        pragma_unroll_count(0),
         target_number(unsigned(-1))
     {
       guard = gen_true_expr();
@@ -380,6 +386,7 @@ public:
         inductive_assertion(other.inductive_assertion),
         location_number(other.location_number),
         loop_number(other.loop_number),
+        pragma_unroll_count(other.pragma_unroll_count),
         target_number(other.target_number),
         scope_id(other.scope_id),
         parent_scope_id(other.parent_scope_id)
@@ -405,6 +412,7 @@ public:
         inductive_assertion(other.inductive_assertion),
         location_number(other.location_number),
         loop_number(other.loop_number),
+        pragma_unroll_count(other.pragma_unroll_count),
         target_number(other.target_number),
         scope_id(other.scope_id),
         parent_scope_id(other.parent_scope_id)
@@ -429,11 +437,13 @@ public:
       instruction.guard.swap(guard);
       instruction.targets.swap(targets);
       instruction.loop_invariants.swap(loop_invariants);
+      instruction.loop_assigns_targets.swap(loop_assigns_targets);
       instruction.function.swap(function);
       std::swap(
         inductive_step_instruction, instruction.inductive_step_instruction);
       std::swap(inductive_assertion, instruction.inductive_assertion);
       std::swap(instruction.loop_number, loop_number);
+      std::swap(instruction.pragma_unroll_count, pragma_unroll_count);
       std::swap(target_number, instruction.target_number);
       std::swap(scope_id, instruction.scope_id);
       std::swap(parent_scope_id, instruction.parent_scope_id);
@@ -449,6 +459,16 @@ public:
       return loop_invariants;
     }
 
+    void add_loop_assigns_target(const expr2tc &target)
+    {
+      assert(is_loop_invariant());
+      loop_assigns_targets.push_back(target);
+    }
+    std::list<expr2tc> get_loop_assigns_targets() const
+    {
+      return loop_assigns_targets;
+    }
+
     //! A globally unique number to identify a program location.
     //! It's guaranteed to be ordered in program order within
     //! one goto_program.
@@ -456,6 +476,9 @@ public:
 
     //! Number unique per function to identify loops
     unsigned loop_number;
+
+    //! Pragma-specified unroll count (0 = not specified, UINT_MAX = unlimited)
+    unsigned pragma_unroll_count;
 
     //! A number to identify branch targets.
     //! This is -1 if it's not a target.

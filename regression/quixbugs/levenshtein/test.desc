@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 main.py
-
+--smt-during-symex --smt-symex-guard --bitwuzla --no-standard-checks --unwind 9
 ^VERIFICATION SUCCESSFUL$

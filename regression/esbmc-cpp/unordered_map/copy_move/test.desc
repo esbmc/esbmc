@@ -1,4 +1,4 @@
 THOROUGH
 main.cpp
---incremental-bmc
+--unwind 8 --no-standard-checks --smt-during-symex --smt-symex-guard --bitwuzla
 ^VERIFICATION SUCCESSFUL$

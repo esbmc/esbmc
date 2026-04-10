@@ -1,4 +1,7 @@
 #include <c2goto/cprover_library.h>
+
+#include "util/symbolic_types.h"
+
 #include <ac_config.h>
 #include <boost/filesystem.hpp>
 #include <cstdlib>
@@ -112,6 +115,7 @@ const static std::vector<std::string> python_c_models = {
   "__ESBMC_list_size",
   "list_hash_string",
   "__ESBMC_list_eq",
+  "__ESBMC_list_set_eq",
   "strncmp",
   "strcmp",
   "strlen",
@@ -128,6 +132,7 @@ const static std::vector<std::string> python_c_models = {
   "exp",
   "expm1",
   "expm1_taylor",
+  "exp2",
   "fmod",
   "sqrt",
   "fmin",
@@ -136,6 +141,12 @@ const static std::vector<std::string> python_c_models = {
   "frexp",
   "round",
   "copysign",
+  "tan",
+  "asin",
+  "sinh",
+  "cosh",
+  "tanh",
+  "log10",
   "arctan",
   "atan",
   "_atan",
@@ -154,8 +165,13 @@ const static std::vector<std::string> python_c_models = {
   "log",
   "pow_by_squaring",
   "log2",
+  "log1p",
   "ldexp",
   "log1p_taylor",
+  "asinh",
+  "acosh",
+  "atanh",
+  "hypot",
   "strstr",
   "strchr",
   "__ESBMC_list_contains",
@@ -166,20 +182,70 @@ const static std::vector<std::string> python_c_models = {
   "__python_str_isspace",
   "isspace",
   "__python_str_lstrip",
+  "__python_str_rstrip",
   "__python_str_strip",
+  "__python_str_lstrip_chars",
+  "__python_str_rstrip_chars",
+  "__python_str_strip_chars",
   "__python_char_islower",
   "__python_str_islower",
   "__python_char_lower",
   "__python_str_lower",
+  "__python_char_upper",
+  "__python_str_upper",
   "__python_str_find",
+  "__python_str_find_range",
+  "__python_str_rfind",
+  "__python_str_rfind_range",
+  "__python_str_replace",
+  "__python_str_split",
   "__ESBMC_create_inf_obj",
   "__python_int",
   "__python_chr",
   "__python_str_concat",
+  "__python_str_repeat",
+  "__python_str_slice",
   "__ESBMC_list_find_index",
   "__ESBMC_list_remove_at",
   "__ESBMC_list_set_at",
-  "__ESBMC_list_pop"};
+  "__ESBMC_list_pop",
+  "__ESBMC_list_try_find_index",
+  "__ESBMC_dict_eq",
+  "__ESBMC_sin",
+  "__ESBMC_cos",
+  "__ESBMC_sqrt",
+  "__ESBMC_exp",
+  "__ESBMC_log",
+  "__ESBMC_list_copy",
+  "__ESBMC_tan",
+  "__ESBMC_asin",
+  "__ESBMC_sinh",
+  "__ESBMC_cosh",
+  "__ESBMC_tanh",
+  "__ESBMC_log10",
+  "__ESBMC_inf",
+  "__ESBMC_nan",
+  "__ESBMC_expm1",
+  "__ESBMC_log1p",
+  "__ESBMC_exp2",
+  "__ESBMC_asinh",
+  "__ESBMC_acosh",
+  "__ESBMC_atanh",
+  "__ESBMC_hypot",
+  "__ESBMC_acos",
+  "__ESBMC_atan",
+  "__ESBMC_atan2",
+  "__ESBMC_log2",
+  "__ESBMC_pow",
+  "__ESBMC_fabs",
+  "__ESBMC_trunc",
+  "__ESBMC_fmod",
+  "__ESBMC_copysign",
+  "__ESBMC_list_remove",
+  "__ESBMC_list_sort",
+  "__ESBMC_list_reverse",
+  "__ESBMC_list_push_dict_ptr",
+  "__ESBMC_list_lt"};
 } // namespace
 
 static void generate_symbol_deps(
@@ -375,11 +441,11 @@ void add_cprover_library(contextt &context, const languaget *language)
 
   /* Now iterate through the dependencies that we know we want to add (due to ingest_symbol filter)
    * These will be symbols that didn't make it into store_ctx
-   * 
+   *
    * For Python:
    *    - symbols that didn't make it into store_ctx didn't make it because they're not in new_ctx
    *    - they will be found in ignored_ctx
-   * 
+   *
    * For other frontends:
    *    - every symbol made it into new_ctx (no ignored_ctx)
    *    - not every symbol made it into store_ctx from new_ctx
@@ -427,4 +493,24 @@ void add_cprover_library(contextt &context, const languaget *language)
     log_error("Failed to merge C library");
     abort();
   }
+  // We basically need a place where we know that ESBMC produces the "main" executable that will be run.
+  // This is the best place that I've found and mimics how a real compiler would work:
+  // First compile all source files to objects files, then link them together and then link with the libc
+  // library. Only when linking to the libc library, we know that all unresolved extern symbols (those whose
+  // value is nil) will stay unresolved. A normal linker would reject such files, but we provide some compatibility with
+  // those and initialize the extern variables to nondet.
+  context.Foreach_operand([&context](symbolt &s) {
+    if (s.is_extern && !s.type.is_code())
+    {
+      log_warning(
+        "extern variable with id {} not found, initializing value to "
+        "nondet! "
+        "This code would not compile with an actual compiler.",
+        s.id);
+      exprt value =
+        exprt("sideeffect", get_complete_type(s.type, namespacet{context}));
+      value.statement("nondet");
+      s.value = value;
+    }
+  });
 }

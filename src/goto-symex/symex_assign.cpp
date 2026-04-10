@@ -1,4 +1,5 @@
 #include <cassert>
+#include <climits>
 #include <goto-symex/dynamic_allocation.h>
 #include <goto-symex/execution_state.h>
 #include <goto-symex/goto_symex.h>
@@ -22,6 +23,7 @@ goto_symext::goto_symext(
     first_loop(0),
     total_claims(0),
     remaining_claims(0),
+    simplified_claims(0),
     max_unwind(options.get_option("unwind").c_str()),
     constant_propagation(!options.get_bool_option("no-propagation")),
     ns(_ns),
@@ -100,6 +102,7 @@ goto_symext::goto_symext(
   }
 
   // Build mapping: global_loop_id -> (function_name, per-function loop index)
+  // Also populate unwind_set from #pragma unroll annotations
   for (const auto &func_pair : _goto_functions.function_map)
   {
     unsigned loop_index = 0;
@@ -110,11 +113,38 @@ goto_symext::goto_symext(
         loop_id_to_func_index[instruction.loop_number] =
           std::make_pair(func_pair.first.as_string(), loop_index);
         loop_index++;
+
+        // Handle #pragma unroll annotations
+        // pragma_unroll_count: 0 = not specified, UINT_MAX = unlimited, else = specific count
+        if (instruction.pragma_unroll_count > 0)
+        {
+          unwind_set[instruction.loop_number] =
+            instruction.pragma_unroll_count == UINT_MAX
+              ? 0
+              : BigInt(instruction.pragma_unroll_count);
+          log_debug(
+            "[symex]",
+            "Applying #pragma unroll {} to loop {} in file {} line "
+            "{} column {} function {}",
+            unwind_set[instruction.loop_number],
+            instruction.loop_number,
+            instruction.location.get_file(),
+            instruction.location.get_line(),
+            instruction.location.get_column(),
+            instruction.location.get_function());
+        }
       }
     }
   }
 
   art1 = nullptr;
+
+  if (options.get_bool_option("interval-symex-guard"))
+  {
+    interval_domaint::set_options(options);
+    interval_domain_state.emplace();
+    interval_domain_state->make_top();
+  }
 
   valid_ptr_arr_name = "c:@__ESBMC_alloc";
   alloc_size_arr_name = "c:@__ESBMC_alloc_size";
@@ -147,6 +177,7 @@ goto_symext &goto_symext::operator=(const goto_symext &sym)
   constant_propagation = sym.constant_propagation;
   total_claims = sym.total_claims;
   remaining_claims = sym.remaining_claims;
+  simplified_claims = sym.simplified_claims;
   guard_identifier_s = sym.guard_identifier_s;
   depth_limit = sym.depth_limit;
   break_insn = sym.break_insn;
@@ -167,6 +198,7 @@ goto_symext &goto_symext::operator=(const goto_symext &sym)
   dyn_info_arr_name = sym.dyn_info_arr_name;
 
   dynamic_memory = sym.dynamic_memory;
+  interval_domain_state = sym.interval_domain_state;
 
   // Art ptr is shared
   art1 = sym.art1;
@@ -210,6 +242,31 @@ void goto_symext::handle_sideeffect(
     break;
   case sideeffect2t::printf2:
     // Do nothing for printf
+    break;
+  case sideeffect2t::old_snapshot:
+    // __ESBMC_old() snapshots are handled during contract processing.
+    // If we encounter one here, it means we're in the original function body
+    // (contracts_original_xxx) where the ensures/requires clause is still present.
+    // Store the ADDRESS of the inner expression in lhs (void*), so that
+    // *(T*)lhs correctly reads the value via pointer dereference.
+    // The ensures/requires in contracts_original evaluate BEFORE the function body
+    // modifies anything, so address_of(inner) gives the correct pre-state value.
+    {
+      expr2tc inner = effect.operand;
+      // address_of2tc(subtype, expr): subtype is T, result type is T*
+      expr2tc addr = address_of2tc(inner->type, inner);
+      // Cast to lhs type (void*)
+      expr2tc result = addr;
+      if (result->type != lhs->type)
+        result = typecast2tc(lhs->type, result);
+      symex_assign(code_assign2tc(lhs, result), true, guard);
+    }
+    break;
+  case sideeffect2t::assigns_target:
+    // __ESBMC_assigns() targets are handled during contract processing
+    // In --enforce-contract mode, the assigns clause is extracted and checked,
+    // but we don't need to execute anything here during symex.
+    // Simply ignore the assigns_target side effect.
     break;
   default:
     assert(0 && "unexpected side effect");
@@ -275,6 +332,7 @@ void goto_symext::symex_assign(
 
   replace_nondet(lhs);
   replace_nondet(rhs);
+  volatile_check(rhs);
 
   dereference(lhs, dereferencet::WRITE);
   dereference(rhs, dereferencet::READ);
@@ -282,6 +340,7 @@ void goto_symext::symex_assign(
   replace_dynamic_allocation(rhs);
 
   replace_races_check(lhs);
+  simplify_python_builtins(rhs);
 
   // If rhs is a printf expression, handle it specially
   if (is_code_printf2t(rhs))
@@ -364,6 +423,10 @@ void goto_symext::symex_assign_rec(
   {
     symex_assign_structure(lhs, full_lhs, rhs, full_rhs, guard, hidden);
   }
+  else if (is_constant_union2t(lhs))
+  {
+    symex_assign_union(lhs, full_lhs, rhs, full_rhs, guard, hidden);
+  }
   else if (is_extract2t(lhs))
   {
     symex_assign_extract(lhs, full_lhs, rhs, full_rhs, guard, hidden);
@@ -410,6 +473,13 @@ void goto_symext::symex_assign_symbol(
   if (is_index2t(new_lhs))
     cur_state->rename(to_index2t(new_lhs).index);
 
+  if (is_member_ref2t(rhs))
+    // In pointer-to-member, the following assignment will occur:
+    // int S::* pm = &S::x;
+    // This assignment is static and we do not need to generate an SSA for it,
+    // we can simply skip it - constant propagation can handle it.
+    return;
+
   guardt tmp_guard(cur_state->guard);
   tmp_guard.append(guard);
 
@@ -449,6 +519,22 @@ void goto_symext::symex_assign_structure(
     symex_assign_rec(lhs_memb, full_lhs, rhs_memb, full_rhs, guard, hidden);
     i++;
   }
+}
+
+void goto_symext::symex_assign_union(
+  const expr2tc &lhs,
+  const expr2tc &full_lhs,
+  expr2tc &rhs,
+  expr2tc &full_rhs,
+  guardt &guard,
+  const bool hidden)
+{
+  // For unions, assign through the active member
+  const constant_union2t &the_union = to_constant_union2t(lhs);
+  const expr2tc &lhs_memb = the_union.datatype_members[0];
+  expr2tc rhs_memb = member2tc(lhs_memb->type, rhs, the_union.init_field);
+
+  symex_assign_rec(lhs_memb, full_lhs, rhs_memb, full_rhs, guard, hidden);
 }
 
 void goto_symext::symex_assign_typecast(
@@ -910,7 +996,7 @@ void goto_symext::replace_nondet(expr2tc &expr)
   if (
     is_sideeffect2t(expr) && to_sideeffect2t(expr).kind == sideeffect2t::nondet)
   {
-    unsigned int &nondet_count = get_dynamic_counter();
+    unsigned int &nondet_count = get_nondet_counter();
     expr =
       symbol2tc(expr->type, "nondet$symex::nondet" + i2string(nondet_count++));
   }

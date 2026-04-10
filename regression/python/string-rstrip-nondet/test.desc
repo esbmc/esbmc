@@ -1,0 +1,4 @@
+CORE
+main.py
+--no-standard-checks --unwind 20
+^VERIFICATION SUCCESSFUL$

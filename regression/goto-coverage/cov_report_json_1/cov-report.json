@@ -1,0 +1,30 @@
+{
+  "claims": [
+    {
+      "column": 3,
+      "condition": "!(!(x > 3))",
+      "file": "main.c",
+      "function": "main",
+      "line": 4,
+      "status": "uncovered"
+    },
+    {
+      "column": 3,
+      "condition": "!(x > 3)",
+      "file": "main.c",
+      "function": "main",
+      "line": 4,
+      "status": "covered"
+    }
+  ],
+  "coverage_type": "branch",
+  "source_files": [
+    "main.c"
+  ],
+  "summary": {
+    "covered": 1,
+    "percentage": 50.0,
+    "total": 2,
+    "uncovered": 1
+  }
+}

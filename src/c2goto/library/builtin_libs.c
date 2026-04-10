@@ -243,3 +243,10 @@ __SIZE_TYPE__ __esbmc_cheri_length_get(void *__capability cap)
 }
 
 #endif
+
+__attribute__((annotate("__ESBMC_inf_size"))) _Bool __ESBMC_alloc[1];
+
+__attribute__((annotate("__ESBMC_inf_size"))) _Bool __ESBMC_is_dynamic[1];
+
+__attribute__((annotate("__ESBMC_inf_size")))
+__SIZE_TYPE__ __ESBMC_alloc_size[1];

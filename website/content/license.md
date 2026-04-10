@@ -4,7 +4,7 @@ title: License
 
 
 ```
-ESBMC contains software from numerous different sources, and as a result the
+ESBMC contains software from numerous different sources, and as a result, the
 licensing situation is complex. It is paramount that you understand that many
 SMT solvers that ESBMC links against are not open source or freely
 distributable, and many contain non-commercial usage clauses in their licenses.
@@ -34,7 +34,7 @@ To briefly summarise each solver:
   Yices: Personal use, non-commercial
   Z3: MIT license
 
-In all circumstances you should refer to the specific license of the solver you
+In all circumstances, you should refer to the specific license of the solver you
 are using.
 
 ~

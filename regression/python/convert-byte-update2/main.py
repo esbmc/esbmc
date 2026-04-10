@@ -3,7 +3,6 @@ import random
 def esbmc_choice(seq: list[int]) -> int:
     assert len(seq) > 0
     
-    # Get a nondeterministic index
     idx:int = random.randint(1,4)
     
     # Restrict the nondet index to valid range

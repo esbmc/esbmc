@@ -10,4 +10,3 @@ def test_string_selection_failure() -> None:
 
 test_string_comparison_failure()
 test_string_selection_failure()
-

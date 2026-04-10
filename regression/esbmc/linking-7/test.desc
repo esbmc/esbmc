@@ -1,0 +1,4 @@
+KNOWNBUG
+../linking-common/main_init.c
+../linking-common/another_def.c -DEXPECTED_VALUE=-1 -DDUPLICATE_SYMBOLS_SHOULD_FAIL
+ERROR

@@ -1,8 +1,6 @@
 ---
 title: Usage
 weight: 2
-prev: /docs/setup
-next: /docs/architecture
 ---
 
 As an illustrative example to show some of the ESBMC features concerning floating-point numbers, consider the following C code:
@@ -121,7 +119,7 @@ Violated property:
   dereference failure: NULL pointer
 ```
 
-In the counterexample shown above, State 1 indicates that memory has been allocated, which is identified by 'dynamic_1_array'. State 2 indicates that the call to the `malloc` function did not succeed, and thus returned NULL, i.e., the memory was not allocated. Note that ESBMC allows the user not to check for malloc/new failure via `--force-malloc-success`. State 3 represents an assignment to pointer b. Lastly, State 6 reports a failure to dereference pointer b.
+In the counterexample shown above, State 1 indicates that memory has been allocated, as indicated by 'dynamic_1_array'. State 2 indicates that the `malloc` call failed and returned NULL, indicating that the memory was not allocated. Note that ESBMC allows the user to skip checking for malloc/new failures via `--force-malloc-success`. State 3 represents an assignment to pointer b. Lastly, State 6 reports a failure to dereference pointer b.
 
 As an illustrative example to show some of the ESBMC features concerning concurrency, consider the following C code:
 
@@ -154,7 +152,7 @@ int main (void) {
 
 Here, we create two threads `id1` and `id1`; both threads will run the same code as implemented in **P**. Note that these two threads communicate via the shared memory `n`, which is protected by a mutex via **pthread_mutex_lock** and **pthread_mutex_unlock**. Note further that the thread `main` contains two joining points via **pthread_join** for `id1` and `id2`.
 
-ESBMC can be invoked as follows: `esbmc file.c --context-bound 2` where <i>file.c</i> is the C program to be checked and `--context-bound nr` limits number of context switches for each thread. For this particular C program, ESBMC produces the following verification result:
+ESBMC can be invoked as follows: `esbmc file.c --context-bound 2` where <i>file.c</i> is the C program to be checked, and `--context-bound nr` limits the number of context switches for each thread. For this particular C program, ESBMC produces the following verification result:
 
 ```
 *** Thread interleavings 612 ***
@@ -183,6 +181,67 @@ BMC program time: 0.040s
 VERIFICATION SUCCESSFUL
 ```
 
+## Verification of Python Programs
+
+As an illustrative example to show some of the ESBMC features concerning Python programs, consider the following Python code:
+
+```Python
+def divide(a: int, b: int) -> int:
+    assert b != 0
+    return a // b
+
+def main():
+    a: int = nondet_int()
+    b: int = nondet_int()
+
+    __ESBMC_assume(b != 0)
+    result: int = divide(a, b)
+    assert result == a // b
+
+main()
+```
+
+Here, ESBMC is invoked as follows:
+
+```sh
+esbmc file.py
+```
+
+where `file.py` is the Python program to be checked. ESBMC's Python front-end parses the source into an abstract syntax tree, annotates it with type information, and translates it into an intermediate representation that the standard ESBMC back-end can process via SMT solvers. For this particular Python program, ESBMC produces the following verification result:
+
+```
+Converting
+Generating GOTO Program
+GOTO program creation time: 1.216s
+GOTO program processing time: 0.025s
+Starting Bounded Model Checking
+Symex completed in: 0.003s (63 assignments)
+Caching time: 0.000s (removed 1 assertions)
+Slicing time: 0.000s (removed 53 assignments)
+Generated 4 VCC(s), 3 remaining after simplification (9 assignments)
+No solver specified; defaulting to z3
+Encoding remaining VCC(s) using bit-vector/floating-point arithmetic
+Encoding to solver time: 0.000s
+Solving with solver Z3 v4.15.4
+Runtime decision procedure: 0.001s
+BMC program time: 0.016s
+
+VERIFICATION SUCCESSFUL
+```
+
+## Using the SMT Boolector Solver
+
+Boolector is a fast solver and is recommended. To install Boolector, use the following one-line command:
+
+```
+git clone --depth=1 --branch=3.2.3 https://github.com/boolector/boolector && cd boolector && ./contrib/setup-lingeling.sh && ./contrib/setup-btor2tools.sh && ./configure.sh --prefix $PWD/../boolector-release && cd build && make -j9 && make install && cd .. && cd ..
+```
+Now rerun cmake,
+
+```
+cmake .. -DENABLE_Z3=1 -DENABLE_BOOLECTOR=1 -DBoolector_DIR=<the folder you ran the above command from>/boolector-release
+```
+
 ## Witness Generation
 
 When ESBMC refutes a property, it produces a counterexample that can be used to debug the program to find the root cause of the problem. For this purpose, ESBMC can produce the counterexample in graphml format to make its evaluation easier (e.g., by building a tool that allows graphical visualization).
@@ -200,7 +259,7 @@ int main() {
 }
 ```
 
-If we call ESBMC as `esbmc main.c --witness-output main.graphml`, where `main.c` is the C program we want to verify while `main.graphml` stores the counterexample in graphml format, then ESBMC will produce the following output:
+If we call ESBMC as `esbmc main.c --witness-output main.graphml`, where `main.c` is the C program we want to verify, while `main.graphml` stores the counterexample in graphml format, then ESBMC will produce the following output:
 
 ```sh
 esbmc main.c --witness-output main.graphml
@@ -301,7 +360,7 @@ while ( x>0) x−−;
 assert ( x==0);
 ```
 
-Note that the loop in line 2 runs an unknown number of times, depending on the initial non-deterministic value assigned to x in line 1. The assertion in line 3 holds independent of x's initial value. BMC tools typically fail to verify programs that contain such loops. In particular, BMC tools introduce an unwinding assertion at the end of the loop, as illustrated in line 5 of this C code fragment.
+Note that the loop in line 2 runs an unknown number of times, depending on the initial non-deterministic value assigned to x in line 1. The assertion in line 3 holds independently of x's initial value. BMC tools typically fail to verify programs that contain such loops. In particular, BMC tools introduce an unwinding assertion at the end of the loop, as illustrated in line 5 of this C code fragment.
 
 ```c
 unsigned int x=∗;
@@ -312,7 +371,7 @@ assert (!(x>0));
 assert(x==0);
 ```
 
-his unwinding assertion in line 5 causes the BMC tool to fail if _k_ is too small as follows:
+This unwinding assertion in line 5 causes the BMC tool to fail if _k_ is too small, as follows:
 
 ```c
 #include <assert.h>
@@ -351,3 +410,50 @@ Violated property:
 file file.c line 5 function main
 unwinding assertion loop
 ```
+
+## Docker Build
+
+```
+FROM node:18-slim
+
+## Install dependencies for ESBMC and other build tools
+RUN apt-get update && apt-get install -y \
+    clang-14 \
+    llvm-14 \
+    clang-tidy-14 \
+    python-is-python3 \
+    python3 \
+    git \
+    ccache \
+    unzip \
+    wget \
+    curl \
+    bison \
+    flex \
+    g++-multilib \
+    linux-libc-dev \
+    libboost-all-dev \
+    libz3-dev \
+    libclang-14-dev \
+    libclang-cpp-dev \
+    cmake \
+    && rm -rf /var/lib/apt/lists/*
+
+# Keep the container running with tail -f /dev/null
+CMD ["bash", "-c", "tail -f /dev/null"]
+```
+
+Docker compose file:
+```
+version: '3.8'
+services:
+  esbmc:
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: Dockerfile  # Assuming your Dockerfile is named `Dockerfile`
+    tty: true
+    stdin_open: true
+```
+
+The Linux/Amd64 line is very important for virtualizing Amd64. Now do docker-compose up --build. You can then follow the Linux instructions. Make -j16 works well on M2 mac's and beyond.

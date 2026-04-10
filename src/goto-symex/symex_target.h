@@ -53,6 +53,12 @@ public:
     const std::string &fmt,
     const std::list<expr2tc> &args) = 0;
 
+  virtual void branching(
+    const expr2tc &guard,
+    const expr2tc &cond,
+    const sourcet &source,
+    const bool hidden,
+    unsigned loop_number) = 0;
   // record an assumption
   // cond is destroyed
   virtual void assumption(

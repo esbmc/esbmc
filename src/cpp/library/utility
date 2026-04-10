@@ -1,0 +1,209 @@
+#ifndef ESBMC_UTILITY
+#define ESBMC_UTILITY
+
+#include "cstddef"
+
+namespace std
+{
+
+// remove_reference — needed by move and forward
+template <class T>
+struct remove_reference
+{
+  typedef T type;
+};
+template <class T>
+struct remove_reference<T &>
+{
+  typedef T type;
+};
+template <class T>
+struct remove_reference<T &&>
+{
+  typedef T type;
+};
+
+template <class T>
+using remove_reference_t = typename remove_reference<T>::type;
+
+// remove_extent — needed by make_unique for array types
+template <class T>
+struct remove_extent
+{
+  typedef T type;
+};
+template <class T>
+struct remove_extent<T[]>
+{
+  typedef T type;
+};
+template <class T, size_t N>
+struct remove_extent<T[N]>
+{
+  typedef T type;
+};
+template <class T>
+using remove_extent_t = typename remove_extent<T>::type;
+
+// add_rvalue_reference — needed by declval
+template <class T>
+struct add_rvalue_reference
+{
+  typedef T &&type;
+};
+template <>
+struct add_rvalue_reference<void>
+{
+  typedef void type;
+};
+
+// move
+template <class T>
+constexpr remove_reference_t<T> &&move(T &&t) noexcept
+{
+  return static_cast<remove_reference_t<T> &&>(t);
+}
+
+// forward
+template <class T>
+constexpr T &&forward(remove_reference_t<T> &t) noexcept
+{
+  return static_cast<T &&>(t);
+}
+template <class T>
+constexpr T &&forward(remove_reference_t<T> &&t) noexcept
+{
+  return static_cast<T &&>(t);
+}
+
+// swap
+template <class T>
+void swap(T &a, T &b) noexcept
+{
+  T tmp = move(a);
+  a = move(b);
+  b = move(tmp);
+}
+
+// declval — declaration only (must not be called at runtime)
+template <class T>
+typename add_rvalue_reference<T>::type declval() noexcept;
+
+// pair
+template <class T1, class T2>
+struct pair
+{
+  typedef T1 first_type;
+  typedef T2 second_type;
+
+  T1 first;
+  T2 second;
+
+  constexpr pair() : first(), second()
+  {
+  }
+  constexpr pair(const T1 &a, const T2 &b) : first(a), second(b)
+  {
+  }
+  template <class U1, class U2>
+  constexpr pair(U1 &&a, U2 &&b) : first(forward<U1>(a)), second(forward<U2>(b))
+  {
+  }
+  template <class U1, class U2>
+  constexpr pair(const pair<U1, U2> &p) : first(p.first), second(p.second)
+  {
+  }
+  constexpr pair(const pair &p) : first(p.first), second(p.second)
+  {
+  }
+
+  template <class U1, class U2>
+  constexpr pair(pair<U1, U2> &&p)
+    : first(forward<U1>(p.first)), second(forward<U2>(p.second))
+  {
+  }
+
+  pair &operator=(const pair &p)
+  {
+    first = p.first;
+    second = p.second;
+    return *this;
+  }
+  pair &operator=(pair &&p)
+  {
+    first = std::move(p.first);
+    second = std::move(p.second);
+    return *this;
+  }
+
+  void swap(pair &p) noexcept
+  {
+    std::swap(first, p.first);
+    std::swap(second, p.second);
+  }
+};
+
+template <class T1, class T2>
+constexpr bool operator==(const pair<T1, T2> &a, const pair<T1, T2> &b)
+{
+  return a.first == b.first && a.second == b.second;
+}
+
+template <class T1, class T2>
+constexpr bool operator!=(const pair<T1, T2> &a, const pair<T1, T2> &b)
+{
+  return !(a == b);
+}
+
+template <class T1, class T2>
+constexpr bool operator<(const pair<T1, T2> &a, const pair<T1, T2> &b)
+{
+  return a.first < b.first || (!(b.first < a.first) && a.second < b.second);
+}
+
+template <class T1, class T2>
+constexpr bool operator<=(const pair<T1, T2> &a, const pair<T1, T2> &b)
+{
+  return !(b < a);
+}
+
+template <class T1, class T2>
+constexpr bool operator>(const pair<T1, T2> &a, const pair<T1, T2> &b)
+{
+  return b < a;
+}
+
+template <class T1, class T2>
+constexpr bool operator>=(const pair<T1, T2> &a, const pair<T1, T2> &b)
+{
+  return !(a < b);
+}
+
+// make_pair
+template <class T1, class T2>
+constexpr pair<remove_reference_t<T1>, remove_reference_t<T2>>
+make_pair(T1 &&a, T2 &&b)
+{
+  return pair<remove_reference_t<T1>, remove_reference_t<T2>>(
+    forward<T1>(a), forward<T2>(b));
+}
+
+#if __cplusplus >= 201402L
+// integer_sequence
+template <class T, T... Ints>
+struct integer_sequence
+{
+  typedef T value_type;
+  static constexpr size_t size() noexcept
+  {
+    return sizeof...(Ints);
+  }
+};
+
+template <size_t... Ints>
+using index_sequence = integer_sequence<size_t, Ints...>;
+#endif
+
+} // namespace std
+
+#endif // ESBMC_UTILITY

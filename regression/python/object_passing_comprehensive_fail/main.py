@@ -42,7 +42,6 @@ assert box.height == 5  # Wrong: should be 8
 assert box.area == 100  # Wrong: should be 40
 
 
-# Test 3: Chained object passing A → B → C
 class DataA:
     def __init__(self, value: int) -> None:
         self.value: int = value
@@ -240,7 +239,6 @@ assert abs_val.original == 15  # Wrong: should be -15
 assert abs_val.absolute == -15  # Wrong: should be 15
 
 
-# Test 11: Deep nesting - five level chain (A→B→C→D→E)
 class LevelA:
     def __init__(self, base: int) -> None:
         self.value: int = base

@@ -6,6 +6,8 @@
 #include <irep2/irep2.h>
 #include <langapi/language_util.h>
 #include <goto-symex/goto_trace.h>
+#include <goto-symex/pytest.h>
+#include <goto-symex/ctest.h>
 #include <string>
 #include <regex>
 #include <big-int/bigint.hh>
@@ -94,6 +96,26 @@ public:
   std::string function;
 };
 
+class invariant
+{
+public:
+  enum Type
+  {
+    loop_invariant,
+    loop_transition_invariant,
+    location_invariant,
+    location_transition_invariant
+  };
+
+  Type type;
+  std::string file;
+  std::string value;
+  std::string format;
+  BigInt line = c_nonset;
+  BigInt column = c_nonset;
+  std::string function;
+};
+
 class grapht
 {
 private:
@@ -129,6 +151,7 @@ public:
   typet witness_type;
   std::string verified_file;
   std::vector<waypoint> segments;
+  std::vector<invariant> invariants;
 
   yamlt(typet t)
   {
@@ -238,6 +261,20 @@ get_invariant(std::string verified_file, BigInt line_number, optionst &options);
 void generate_testcase_metadata();
 void generate_testcase(
   const std::string &file_name,
+  const symex_target_equationt &target,
+  smt_convt &smt_conv);
+
+/// Helper structure for collected nondet values
+struct collected_nondet_value
+{
+  std::string symbol_name; // e.g., "nondet$symex::nondet3"
+  expr2tc value_expr;      // The concrete value expression
+  type2tc type;            // The type
+};
+
+/// Collect all nondet values from SSA
+/// Reuses generate_testcase pattern
+std::vector<collected_nondet_value> collect_nondet_values(
   const symex_target_equationt &target,
   smt_convt &smt_conv);
 

@@ -2,9 +2,11 @@
 #define CPROVER_GOTO_SYMEX_GOTO_SYMEX_H
 
 #include <goto-programs/goto_functions.h>
+#include <goto-programs/abstract-interpretation/interval_domain.h>
 #include <goto-symex/goto_symex_state.h>
 #include <goto-symex/symex_target.h>
 #include <map>
+#include <optional>
 #include <pointer-analysis/dereference.h>
 #include <stack>
 #include <util/i2string.h>
@@ -89,12 +91,16 @@ public:
     symex_resultt(
       std::shared_ptr<symex_targett> t,
       unsigned int claims,
-      unsigned int remain)
-      : target(std::move(t)), total_claims(claims), remaining_claims(remain){};
-
+      unsigned int remain,
+      unsigned int simplified)
+      : target(std::move(t)),
+        total_claims(claims),
+        remaining_claims(remain),
+        simplified_claims(simplified){};
     std::shared_ptr<symex_targett> target;
     unsigned int total_claims;
     unsigned int remaining_claims;
+    unsigned int simplified_claims;
   };
 
   // Macros
@@ -214,11 +220,6 @@ protected:
    *  Interpret an ASSERT instruction.
    */
   void symex_assert();
-
-  /**
-   *  Interpret a LOOP_INVARIANT instruction.
-   */
-  void symex_loop_invariant();
 
   /**
    *  Perform incremental SMT solving for assert and assume statements.
@@ -435,10 +436,6 @@ protected:
     reachability_treet &art);
   /** Perform terminate_thread; Record thread as terminated. */
   void intrinsic_terminate_thread(reachability_treet &art);
-  /** Perform get_thead_state... defunct. */
-  void intrinsic_get_thread_state(
-    const code_function_call2t &call,
-    reachability_treet &art);
   /** Really atomic start/end - atomic blocks that just disable ileaves. */
   void intrinsic_really_atomic_begin(reachability_treet &art);
   /** Really atomic start/end - atomic blocks that just disable ileaves. */
@@ -516,6 +513,13 @@ protected:
   void replace_races_check(expr2tc &expr);
 
   void simplify_python_builtins(expr2tc &expr);
+
+  void volatile_check(expr2tc &expr);
+
+  /* Check if thrown_type in Python inherits from catch_type */
+  bool is_python_exception_subtype(
+    const irep_idt &thrown_type,
+    const irep_idt &catch_type);
 
   /** Walk back up stack frame looking for exception handler. */
   bool symex_throw();
@@ -862,6 +866,22 @@ protected:
     const bool hidden);
 
   /**
+   *  Perform assignment to a union.
+   *
+   *  @param lhs Symbol to assign to
+   *  @param full_lhs The original assignment symbol
+   *  @param rhs Value to assign to symbol
+   *  @param guard Guard; intent unknown
+   */
+  void symex_assign_union(
+    const expr2tc &lhs,
+    const expr2tc &full_lhs,
+    expr2tc &rhs,
+    expr2tc &full_rhs,
+    guardt &guard,
+    const bool hidden);
+
+  /**
    *  Perform assignment to an extract irep.
    *
    *  Currently these extract assignments can crop up when we're assigning into
@@ -1097,6 +1117,8 @@ protected:
   unsigned total_claims;
   /** Number of assertions remaining to be discharged. */
   unsigned remaining_claims;
+  /** Number of assertions that were trivially verified. */
+  unsigned simplified_claims;
   /** Reachability tree we're working with. */
   reachability_treet *art1;
   /** Unwind bounds, loop number -> max unwinds. */
@@ -1108,6 +1130,8 @@ protected:
   std::map<unsigned, std::pair<std::string, unsigned>> loop_id_to_func_index;
   /** Global maximum number of unwinds. */
   BigInt max_unwind;
+  /** Optional local interval domain for --interval-symex-guard guard pruning. */
+  std::optional<interval_domaint> interval_domain_state;
   /** Whether constant propagation is to be enabled. */
   bool constant_propagation;
   /** Namespace we're working in. */

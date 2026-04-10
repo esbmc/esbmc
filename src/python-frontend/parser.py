@@ -1,5 +1,4 @@
 import sys
-import subprocess
 
 # Detect the Python version
 PY3 = sys.version_info[0] == 3
@@ -18,6 +17,19 @@ import glob
 import base64
 from preprocessor import Preprocessor
 
+def run_mypy_strict(filename):
+    """Run mypy in-process when available; skip otherwise."""
+    try:
+        from mypy import api as mypy_api
+    except ImportError:
+        return 0, ""
+
+    stdout, stderr, exit_status = mypy_api.run(["--strict", filename])
+    output = stdout
+    if stderr:
+        output += stderr
+    return exit_status, output
+
 
 def check_usage():
     if len(sys.argv) != 3:
@@ -25,7 +37,7 @@ def check_usage():
         sys.exit(2)
 
 def is_imported_model(module_name):
-    models = ["math", "os", "numpy"]
+    models = ["math", "os", "numpy", "esbmc", "decimal", "collections", "typing"]
     return module_name in models
 
 def is_unsupported_module(module_name):
@@ -47,14 +59,9 @@ def import_module_by_name(module_name, output_dir):
 
     base_module = module_name.split(".")[0]
 
-    # Skip typing module - it's for type annotations only and doesn't need AST processing.
-    if base_module == "typing":
-        return None
-
     # Skip testing frameworks - they don't contain logic to verify
     if is_testing_framework(base_module):
         return None
-
     if is_imported_model(base_module):
         parts = module_name.split(".")
         model_dir = os.path.join(output_dir, "models")
@@ -79,19 +86,30 @@ def import_module_by_name(module_name, output_dir):
 
         print("ERROR: Module '{}' not found.".format(module_name))
         print("Please install it with: pip3 install {}".format(module_name))
-        sys.exit(4)
+        return None
 
 
 def encode_bytes(value):
     return base64.b64encode(value).decode('ascii')
 
-def add_type_annotation(node):
-    value_node = node.value
-    if isinstance(value_node, ast.Str):
+def annotate_constant_node(value_node):
+    # Python 3.8+ uses ast.Constant instead of ast.Str, ast.Num, ast.Bytes, etc.
+    if not isinstance(value_node, ast.Constant):
+        return
+
+    if isinstance(value_node.value, str):
         value_node.esbmc_type_annotation = "str"
-    elif isinstance(value_node, ast.Bytes):
+    elif isinstance(value_node.value, bytes):
         value_node.esbmc_type_annotation = "bytes"
         value_node.encoded_bytes = encode_bytes(value_node.value)
+    elif isinstance(value_node.value, complex):
+        value_node.esbmc_type_annotation = "complex"
+        value_node.real_value = value_node.value.real
+        value_node.imag_value = value_node.value.imag
+
+
+def add_type_annotation(node):
+    annotate_constant_node(node.value)
 
 
 def is_standard_library_file(filename):
@@ -171,10 +189,14 @@ def process_imports(node, output_dir):
 
 
     if isinstance(node, (ast.Import)):
+        module_names = []
         for alias_node in node.names:
             module_name = alias_node.name
             alias = alias_node.asname or module_name
             import_aliases[alias] = module_name
+            module_names.append(module_name)
+        if not module_names:
+            return
         imported_elements = None
     elif isinstance(node, ast.ImportFrom):
         module_name = node.module
@@ -185,38 +207,43 @@ def process_imports(node, output_dir):
             imported_elements = node.names
         if module_name:
             import_aliases[module_name] = module_name
+        module_names = [module_name] if module_name else []
+        if not module_names:
+            return
 
     # Track imports for this module
-    if module_name not in module_imports:
-        module_imports[module_name] = {'import_all': False, 'specific_names': set()}
+    for module_name in module_names:
+        if module_name not in module_imports:
+            module_imports[module_name] = {'import_all': False, 'specific_names': set()}
 
-    if imported_elements is None:
-        # This is an "import module" or "from module import *"; mark to import everything
-        module_imports[module_name]['import_all'] = True
-    else:
-        # Add specific names to the set
-        for elem in imported_elements:
-            module_imports[module_name]['specific_names'].add(elem.name)
+        if imported_elements is None:
+            # This is an "import module" or "from module import *"; mark to import everything
+            module_imports[module_name]['import_all'] = True
+        else:
+            # Add specific names to the set
+            for elem in imported_elements:
+                module_imports[module_name]['specific_names'].add(elem.name)
 
-    # Check if module is available/installed
-    if is_imported_model(module_name):
-        models_dir = os.path.join(output_dir, "models")
-        filename = os.path.join(models_dir, module_name + ".py")
-    else:
-        module = import_module_by_name(module_name, output_dir)
-        if module is None:
-            # Module doesn't need processing (e.g., typing) - don't set full_path
-            return
+        # Check if module is available/installed
+        if is_imported_model(module_name):
+            models_dir = os.path.join(output_dir, "models")
+            filename = os.path.join(models_dir, module_name + ".py")
+        else:
+            module = import_module_by_name(module_name, output_dir)
+            if module is None:
+                # Mark this import node so the C++ frontend knows the module was not found
+                node.module_not_found = True
+                continue
 
-        # Check if module has __file__ attribute (built-in C extensions don't)
-        if not hasattr(module, '__file__') or module.__file__ is None:
-            # Skip built-in C extension modules (e.g., _sre, _socket, etc.)
-            return
+            # Check if module has __file__ attribute (built-in C extensions don't)
+            if not hasattr(module, '__file__') or module.__file__ is None:
+                # Skip built-in C extension modules (e.g., _sre, _socket, etc.)
+                continue
 
-        filename = module.__file__
+            filename = module.__file__
 
-    # Don't process the file here; we'll do it once after collecting all imports
-    node.full_path = filename
+        # Don't process the file here; we'll do it once after collecting all imports
+        node.full_path = filename
 
 
 def resolve_module_file(module_qualname: str, output_dir: str) -> str | None:
@@ -514,15 +541,11 @@ def main():
     filename = sys.argv[1]
     output_dir = sys.argv[2]
 
-    # Type checking input program with mypy
-    result = subprocess.run(
-    ["mypy", "--strict", filename],
-    capture_output=True,
-    text=True)
-
-    if result.returncode != 0:
+    # Type checking input program with mypy.
+    returncode, mypy_output = run_mypy_strict(filename)
+    if returncode != 0:
         print("\033[93m\nType checking warning:\033[0m")
-        print(result.stdout)
+        print(mypy_output)
 
     # Add the script directory to the front of the import search path
     script_dir = os.path.dirname(os.path.abspath(filename))
@@ -548,8 +571,11 @@ def main():
             # Collect import information
             process_imports(node, output_dir)
         elif isinstance(node, ast.Assign):
-            # Add type annotation on assignments
+            # Keep assignment-specific annotation behavior.
             add_type_annotation(node)
+        elif isinstance(node, ast.Constant):
+            # Ensure constants are annotated in all contexts (e.g., call args).
+            annotate_constant_node(node)
         elif isinstance(node, ast.Attribute):
             # Detect and process submodule usage
             detect_and_process_submodules(node, processed_submodules, output_dir)
@@ -568,7 +594,7 @@ def main():
         filename = os.path.basename(python_file)
         module_name = filename[:-3]
 
-        if is_imported_model(module_name):
+        if is_imported_model(module_name) and module_name != "typing":
             continue;
 
         with open(python_file) as model:

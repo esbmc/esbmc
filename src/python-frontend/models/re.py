@@ -42,7 +42,7 @@ def try_match_char_class_range(pattern: str, pattern_len: int, string: str) -> i
 
 
 def try_match_digit_sequence(pattern: str, pattern_len: int, string: str) -> int:
-    """Match \d+ or \d* patterns"""
+    r"""Match \d+ or \d* patterns"""
     if pattern_len != 3:
         return -1
 

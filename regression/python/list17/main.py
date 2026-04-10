@@ -1,6 +1,5 @@
 numbers = [10, 20, 30, 40, 50]
 
-# Test various negative indices
 assert numbers[-1] == 50    # Last element
 assert numbers[-5] == 10    # First element via negative index
 assert numbers[-3] == 30    # Middle element

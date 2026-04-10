@@ -1,7 +1,5 @@
 ---
 title: Setup
-prev: /docs
-next: /docs/usage
 weight: 1
 ---
 

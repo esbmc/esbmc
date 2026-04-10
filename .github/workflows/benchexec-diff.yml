@@ -11,8 +11,8 @@ on:
         required: true
 
 jobs:
-  benchexec-diff:
-    runs-on: ubuntu-latest
+  create-diff:
+    runs-on: ubuntu-slim
     steps:
       - name: Set up Python
         uses: actions/setup-python@v5

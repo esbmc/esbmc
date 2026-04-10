@@ -136,6 +136,8 @@ symbolt *contextt::move_symbol_to_context(symbolt &symbol)
         s->swap(symbol);
     }
     else if (s->is_extern && !symbol.is_extern)
+      // Variable symbol already in context. Apply extern→non-extern swap if
+      // needed, then reorder to preserve definition order.
       s->swap(symbol);
   }
   return s;

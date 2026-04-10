@@ -1,4 +1,4 @@
 CORE
 main.py
-
-ERROR: Unsupported expression GeneratorExp at line 2
+--no-standard-checks --incremental-bmc
+^VERIFICATION FAILED$

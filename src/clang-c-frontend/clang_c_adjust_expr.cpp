@@ -157,6 +157,28 @@ void clang_c_adjust::adjust_expr(exprt &expr)
     }
     assert(new_comp.size() == ops.size());
   }
+  else if (expr.id() == "ptr_mem")
+  {
+    adjust_operands(expr);
+
+    exprt &base = expr.op0();
+    if (base.type().is_pointer())
+    {
+      exprt deref("dereference");
+      deref.type() = base.type().subtype();
+      deref.move_to_operands(base);
+      base.swap(deref);
+    }
+
+    if (expr.type().id() == "ptrmem")
+    {
+      exprt func = expr.op1();
+      code_typet &code_type = to_code_type(func.type().subtype());
+      exprt arg0 = address_of_exprt(expr.op0());
+      code_type.arguments().push_back(arg0.type());
+      expr.swap(func);
+    }
+  }
   else
   {
     // Just check operands of everything else

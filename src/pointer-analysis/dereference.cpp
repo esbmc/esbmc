@@ -904,12 +904,12 @@ enum target_flags
  *    U  |  s  |  c  | <ad-hoc>                                       | rec
  *    A  |  s  |  c  | construct_from_array                           | rec, st
  *  -----+-----+-----+------------------------------------------------+---------
- *    s  |  S  |  c  | <bad>: "Structure pointer pointed at scalar"   |
+ *    s  |  S  |  c  | <bitcast if off==0 and sizes match, else bad>  |
  *    S  |  S  |  c  | construct_struct_ref_from_const_offset         | rec'
  *    U  |  S  |  c  | <ad-hoc>                                       | rec
  *    A  |  S  |  c  | construct_struct_ref_from_const_offset_array   | rec, st
  *  -----+-----+-----+------------------------------------------------+---------
- *    s  |  U  |  c  | <bad>: "Union pointer pointed at scalar"       |
+ *    s  |  U  |  c  | <bitcast if off==0 and sizes match, else bad>  |
  *    S  |  U  |  c  | construct_struct_ref_from_const_offset         | rec'
  *    U  |  U  |  c  | construct_struct_ref_from_const_offset         | rec'
  *    A  |  U  |  c  | construct_struct_ref_from_const_offset_array   | rec, st
@@ -944,9 +944,7 @@ void dereferencet::build_reference_rec(
 
   // All accesses to code need no further construction
   if (is_code_type(value) || is_code_type(type))
-  {
     return;
-  }
 
   if (is_struct_type(type))
     flags |= flag_dst_struct;
@@ -998,11 +996,20 @@ void dereferencet::build_reference_rec(
     break;
 
   case flag_src_scalar | flag_dst_struct | flag_is_const_offs:
-    // Attempt to extract a structure from within a scalar. This is not
-    // permitted as the base data objects have incompatible types
+  {
+    // A scalar can be reinterpreted as a struct if the access starts at
+    // offset 0 and the sizes match (C type-punning via pointer cast).
+    const constant_int2t &offs_int = to_constant_int2t(offset);
+    if (offs_int.value == 0 && value->type->get_width() == type->get_width())
+    {
+      if (!base_type_eq(value->type, type, ns))
+        value = bitcast2tc(type, value);
+      break;
+    }
     dereference_failure(
       "Bad dereference", "Structure pointer pointed at scalar", guard);
     break;
+  }
   case flag_src_struct | flag_dst_struct | flag_is_const_offs:
     // Extract a structure from inside another struct.
     construct_struct_ref_from_const_offset(value, offset, type, guard, mode);
@@ -1014,11 +1021,20 @@ void dereferencet::build_reference_rec(
     break;
 
   case flag_src_scalar | flag_dst_union | flag_is_const_offs:
-    // Attempt to extract a union from within a scalar. This is not
-    // permitted as the base data objects have incompatible types
+  {
+    // A scalar can be reinterpreted as a union if the access starts at
+    // offset 0 and the sizes match (C type-punning via pointer cast).
+    const constant_int2t &offs_int = to_constant_int2t(offset);
+    if (offs_int.value == 0 && value->type->get_width() == type->get_width())
+    {
+      if (!base_type_eq(value->type, type, ns))
+        value = bitcast2tc(type, value);
+      break;
+    }
     dereference_failure(
       "Bad dereference", "Union pointer pointed at scalar", guard);
     break;
+  }
   case flag_src_struct | flag_dst_union | flag_is_const_offs:
     // Extract a union from inside a structure.
     construct_struct_ref_from_const_offset(value, offset, type, guard, mode);
@@ -1083,6 +1099,16 @@ void dereferencet::build_reference_rec(
   case flag_src_union | flag_dst_struct | flag_is_dyn_offs:
   {
     const union_type2t &uni_type = to_union_type(value->type);
+
+    // Handle empty unions (size == 0, no members)
+    if (uni_type.members.size() == 0)
+    {
+      dereference_failure(
+        "Bad dereference", "Cannot dereference through empty union", guard);
+      value = make_failed_symbol(type);
+      break;
+    }
+
     assert(uni_type.members.size() != 0);
     BigInt union_total_size = type_byte_size(value->type);
     // Let's find a member with the biggest size
@@ -1446,6 +1472,14 @@ void dereferencet::construct_from_dyn_struct_offset(
     it = ns.follow(it);
     BigInt field_size = type_byte_size_bits(it, &ns);
 
+    // Skip sub-byte members (unnamed bitfields, padding bits): they are
+    // narrower than one byte and cannot hold a byte-aligned access.
+    if (field_size < config.ansi_c.char_width)
+    {
+      i++;
+      continue;
+    }
+
     // Round up to word size
     expr2tc field_offset = constant_int2tc(offset->type, offs);
     expr2tc field_top = constant_int2tc(offset->type, offs + field_size);
@@ -1467,16 +1501,6 @@ void dereferencet::construct_from_dyn_struct_offset(
     {
       construct_from_array(field, new_offset, type, guard, mode, alignment);
       extract_list.emplace_back(field_guard, field);
-    }
-    else if (
-      access_sz > field_size && type->get_width() != config.ansi_c.char_width)
-    {
-      guardt newguard(guard);
-      newguard.add(field_guard);
-      dereference_failure(
-        "pointer dereference", "Oversized field offset", newguard);
-      // Push nothing back, allow fall-through of the if-then-else chain to
-      // resolve to a failed deref symbol.
     }
     else if (
       alignment >= config.ansi_c.word_size &&
@@ -1608,18 +1632,42 @@ void dereferencet::construct_struct_ref_from_const_offset_array(
   // not the case, just let the array recursive handler handle it. It'll bail
   // if access is unaligned, and reduces us to constructing a constant
   // reference from the base subtype, through the correct recursive handler.
-  if (base_subtype->get_width() != 8)
+  if (!is_byte_type(base_subtype))
   {
     construct_from_array(value, offset, type, guard, mode, alignment);
     return;
   }
 
-  // Access is creating a structure reference from on top of a byte
+  // Access is creating a structure/union reference from on top of a byte
   // array. Clearly, this is an expensive operation, but it's necessary for
   // the implementation of malloc.
-  std::vector<expr2tc> fields;
-  assert(is_struct_type(type));
+  assert(is_struct_type(type) || is_union_type(type));
+
+  if (is_union_type(type))
+  {
+    const union_type2t &uniontype = to_union_type(type);
+    if (uniontype.members.empty())
+    {
+      value = make_failed_symbol(type);
+      return;
+    }
+    // For unions all members overlap at the same offset; reconstruct using
+    // the first member, mirroring construct_struct_ref_from_dyn_offset.
+    expr2tc target = value;
+    build_reference_rec(
+      target, gen_ulong(intref.value), uniontype.members[0], guard, mode);
+    std::vector<expr2tc> fields = {target};
+    value = constant_union2tc(type, uniontype.member_names[0], fields);
+    return;
+  }
+
   const struct_type2t &structtype = to_struct_type(type);
+  if (structtype.members.empty())
+  {
+    value = make_failed_symbol(type);
+    return;
+  }
+  std::vector<expr2tc> fields;
   BigInt struct_offset = intref.value;
   for (const type2tc &target_type : structtype.members)
   {
@@ -1681,29 +1729,34 @@ void dereferencet::construct_struct_ref_from_const_offset(
       BigInt offs = member_offset_bits(value->type, data->member_names[i]);
       BigInt size = type_byte_size_bits(it);
 
-      if (
-        !is_scalar_type(it) && intref.value >= offs &&
-        intref.value < (offs + size))
+      // Zero-sized members span an empty range, so the normal range check
+      // [offs, offs+size) never matches. Handle them by requiring an exact
+      // offset match, then dispatching separately from non-zero-sized ones.
+      bool in_range = (size != 0)
+                        ? (intref.value >= offs && intref.value < (offs + size))
+                        : (intref.value == offs);
+
+      if (!is_scalar_type(it) && in_range)
       {
-        // It's this field. However, zero sized structs may have conspired
-        // to make life miserable: we might be creating a reference to one,
-        // or there might be one preceding the desired struct.
+        if (size == 0)
+        {
+          // Zero-sized member and we don't want a zero-sized type: skip.
+          if (type_size != 0)
+            goto cont;
 
-        // Zero sized struct and we don't want one,
-        if (size == 0 && type_size != 0)
-          goto cont;
+          // Both the member and the target are zero-sized. Access this member
+          // only if its type matches; otherwise try the next member.
+          expr2tc member = member2tc(it, value, data->member_names[i]);
+          if (!dereference_type_compare(member, type))
+            goto cont;
+          value = member;
+          return;
+        }
 
-        // Zero sized struct and it's not the right one (!):
-        if (
-          size == 0 && type_size == 0 && !dereference_type_compare(value, type))
-          goto cont;
-
-        // OK, it's this substruct, and we've eliminated the zero-sized-struct
-        // menace. Recurse to continue our checks.
+        // Non-zero-sized substruct: recurse to continue the search.
         BigInt new_offs = intref.value - offs;
         expr2tc offs_expr = gen_ulong(new_offs);
         value = member2tc(it, value, data->member_names[i]);
-
         build_reference_rec(value, offs_expr, type, guard, mode);
         return;
       }
@@ -1730,6 +1783,14 @@ void dereferencet::construct_struct_ref_from_dyn_offset(
   const guardt &guard,
   modet mode)
 {
+  if (
+    (is_union_type(type) && to_union_type(type).members.empty()) ||
+    (is_struct_type(type) && to_struct_type(type).members.empty()))
+  {
+    value = make_failed_symbol(type);
+    return;
+  }
+
   // This is much more complicated -- because we don't know the offset here,
   // we need to go through all the possible fields that this might (legally)
   // resolve to and switch on them; then assert that one of them is accessed.
@@ -1792,7 +1853,7 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
   // Is this a non-byte-array array?
   if (
     is_array_type(value->type) &&
-    get_base_array_subtype(value->type)->get_width() != 8)
+    !is_byte_type(get_base_array_subtype(value->type)))
   {
     const array_type2t &arr_type = to_array_type(value->type);
     // We can legally access various offsets into arrays. Generate an index
@@ -1878,9 +1939,43 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
     return;
   }
 
+  if (is_union_type(value->type))
+  {
+    // Handle union types. All members of a union are at offset 0.
+    // If target type matches, guard that offset is zero and return.
+    expr2tc tmp = value;
+    if (dereference_type_compare(tmp, type))
+    {
+      expr2tc offs_is_zero =
+        and2tc(accuml_guard, equality2tc(offs, gen_long(offs->type, 0)));
+      output.emplace_back(offs_is_zero, tmp);
+    }
+
+    // For union members, all are at offset 0, so recurse into each member
+    // that could contain the target type.
+    const union_type2t &union_type = to_union_type(value->type);
+    unsigned int i = 0;
+    for (auto const &it : union_type.members)
+    {
+      if (is_scalar_type(it))
+      {
+        i++;
+        continue;
+      }
+
+      // All union members are at offset 0
+      expr2tc memb = member2tc(it, value, union_type.member_names[i]);
+
+      construct_struct_ref_from_dyn_offs_rec(
+        memb, offs, type, accuml_guard, mode, output);
+      i++;
+    }
+    return;
+  }
+
   if (
     is_array_type(value->type) &&
-    get_base_array_subtype(value->type)->get_width() == 8)
+    is_byte_type(get_base_array_subtype(value->type)))
   {
     // This is a byte array. We can reconstruct a structure from this, if
     // we don't overflow bounds. Start by encoding an assertion.
@@ -1894,33 +1989,50 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
     if (is_symbol2t(value))
       bounds_check(value, offs, type, tmp);
 
-    // We are left with constructing a structure from a byte array. XXX, this
-    // is duplicated from above, refactor?
-    std::vector<expr2tc> fields;
-    assert(is_struct_type(type));
-    const struct_type2t &structtype = to_struct_type(type);
-    expr2tc array_offset = offs;
-    for (const type2tc &target_type : structtype.members)
+    // We are left with constructing a structure/union from a byte array.
+    if (is_struct_type(type))
     {
-      expr2tc target = value; // The byte array;
+      std::vector<expr2tc> fields;
+      const struct_type2t &structtype = to_struct_type(type);
+      expr2tc array_offset = offs;
+      for (const type2tc &target_type : structtype.members)
+      {
+        expr2tc target = value; // The byte array;
 
-      simplify(array_offset);
-      if (is_array_type(target_type))
-        construct_from_array(target, array_offset, target_type, tmp, mode);
-      else
-        build_reference_rec(target, array_offset, target_type, tmp, mode);
-      fields.push_back(target);
+        simplify(array_offset);
+        if (is_array_type(target_type))
+          construct_from_array(target, array_offset, target_type, tmp, mode);
+        else
+          build_reference_rec(target, array_offset, target_type, tmp, mode);
+        fields.push_back(target);
 
-      // Update dynamic offset into array
-      array_offset = add2tc(
-        array_offset->type,
-        array_offset,
-        gen_long(array_offset->type, type_byte_size_bits(target_type)));
+        // Update dynamic offset into array
+        array_offset = add2tc(
+          array_offset->type,
+          array_offset,
+          gen_long(array_offset->type, type_byte_size_bits(target_type)));
+      }
+
+      // We now have a vector of fields reconstructed from the byte array
+      expr2tc the_struct = constant_struct2tc(type, std::move(fields));
+      output.emplace_back(accuml_guard, the_struct);
     }
+    else if (is_union_type(type))
+    {
+      // For unions from byte arrays, read the first member at offset
+      const union_type2t &uniontype = to_union_type(type);
+      if (uniontype.members.empty())
+        return;
+      expr2tc target = value; // The byte array
+      expr2tc union_offs = offs;
+      simplify(union_offs);
+      build_reference_rec(target, union_offs, uniontype.members[0], tmp, mode);
 
-    // We now have a vector of fields reconstructed from the byte array
-    expr2tc the_struct = constant_struct2tc(type, std::move(fields));
-    output.emplace_back(accuml_guard, the_struct);
+      std::vector<expr2tc> members = {target};
+      expr2tc the_union =
+        constant_union2tc(type, uniontype.member_names[0], members);
+      output.emplace_back(accuml_guard, the_union);
+    }
     return;
   }
 }

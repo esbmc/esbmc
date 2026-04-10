@@ -12,3 +12,6 @@ def lambda_test(x: int) -> int:
 
 x = random.randint(0,10)
 result = lambda_test(x)
+
+# Verify the return value is always non-negative
+assert result >= 0  

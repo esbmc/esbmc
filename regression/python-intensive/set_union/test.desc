@@ -1,4 +1,4 @@
-CORE
+THOROUGH
 main.py
---unwind 9 --no-pointer-check --no-div-by-zero-check --no-bounds-check --no-align-check --ir
+--unwind 9 --no-pointer-check --no-div-by-zero-check --no-bounds-check --no-align-check --ir --smt-during-symex --smt-symex-guard
 ^VERIFICATION SUCCESSFUL$

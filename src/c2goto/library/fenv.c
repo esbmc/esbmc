@@ -1,6 +1,6 @@
 #include <fenv.h>
 
-extern int __ESBMC_rounding_mode;
+int __ESBMC_rounding_mode = 0;
 
 inline int fegetround(void)
 {

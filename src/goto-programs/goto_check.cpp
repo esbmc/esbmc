@@ -111,6 +111,8 @@ protected:
     const expr2tc &value_expr,
     const typet &annotated_type) const;
 
+  expr2tc build_python_is_none_check(const expr2tc &value_expr) const;
+
   bool python_should_skip_type_assertion(const typet &annotated_type) const;
 
   typet resolve_python_effective_type(const typet &annotated_type) const;
@@ -655,14 +657,25 @@ expr2tc goto_checkt::build_python_type_assertion(
   const symbolt &symbol) const
 {
   std::vector<expr2tc> checks;
+  bool allow_none = false;
   for (const auto &annot_type : symbol.python_annotation_types)
   {
     if (annot_type == none_type())
+    {
+      allow_none = true;
       continue;
+    }
 
     expr2tc check = build_python_isinstance_check(value_expr, annot_type);
     if (!is_nil_expr(check))
       checks.push_back(check);
+  }
+
+  if (allow_none)
+  {
+    expr2tc none_check = build_python_is_none_check(value_expr);
+    if (!is_nil_expr(none_check))
+      checks.push_back(none_check);
   }
 
   if (checks.empty())
@@ -687,6 +700,43 @@ expr2tc goto_checkt::build_python_isinstance_check(
     return expr2tc();
 
   return isinstance2tc(value_expr, type_operand);
+}
+
+expr2tc goto_checkt::build_python_is_none_check(const expr2tc &value_expr) const
+{
+  const type2tc &original_type = value_expr->type;
+  type2tc resolved_type = ns.follow(original_type);
+
+  auto is_optional_struct = [](const type2tc &type) -> bool {
+    if (!is_struct_type(type))
+      return false;
+
+    const struct_type2t &struct_type = to_struct_type(type);
+    const std::string &tag = struct_type.name.as_string();
+    return tag.rfind("tag-Optional_", 0) == 0;
+  };
+
+  if (is_optional_struct(resolved_type))
+    return member2tc(get_bool_type(), value_expr, "is_none");
+
+  if (is_pointer_type(resolved_type))
+  {
+    const type2tc &subtype = to_pointer_type(resolved_type).subtype;
+    type2tc followed_subtype = ns.follow(subtype);
+    if (is_optional_struct(followed_subtype))
+    {
+      expr2tc deref = dereference2tc(followed_subtype, value_expr);
+      return member2tc(get_bool_type(), deref, "is_none");
+    }
+
+    expr2tc null_expr = gen_zero(original_type);
+    return equality2tc(value_expr, null_expr);
+  }
+
+  if (resolved_type == migrate_type(none_type()))
+    return gen_true_expr();
+
+  return expr2tc();
 }
 
 bool goto_checkt::python_should_skip_type_assertion(

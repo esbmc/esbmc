@@ -1,0 +1,5 @@
+CORE
+main.c
+--function test_main --enforce-contract "*"
+^VERIFICATION SUCCESSFUL$
+

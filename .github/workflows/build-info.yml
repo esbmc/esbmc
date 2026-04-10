@@ -1,0 +1,28 @@
+name: Build GNU Info Manual
+
+on:
+  workflow_call:
+
+jobs:
+  build-info:
+    name: Build Info Pages
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pandoc texinfo
+          pip install pipenv
+          cd scripts/build-info && pipenv install
+
+      - name: Build info manual
+        run: cd scripts/build-info && pipenv run python build-info.py "${{ github.workspace }}/info-out"
+
+      - name: Upload info artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: esbmc-info-manual
+          path: info-out/esbmc.info

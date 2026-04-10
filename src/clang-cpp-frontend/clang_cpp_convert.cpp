@@ -272,7 +272,10 @@ bool clang_cpp_convertert::get_type(
       return true;
 
     typet class_type;
-#if CLANG_VERSION_MAJOR >= 21
+#if CLANG_VERSION_MAJOR >= 22
+    if (get_type(*mpt.getQualifier().getAsType(), class_type))
+      return true;
+#elif CLANG_VERSION_MAJOR >= 21
     if (get_type(*mpt.getQualifier()->getAsType(), class_type))
       return true;
 #else
@@ -281,7 +284,8 @@ bool clang_cpp_convertert::get_type(
 #endif
 
     new_type = gen_pointer_type(sub_type);
-    new_type.set("to-member", class_type);
+    if (!mpt.isMemberFunctionPointer())
+      new_type.set("to-member", class_type);
     break;
   }
 
@@ -310,7 +314,7 @@ bool clang_cpp_convertert::get_type(
     break;
   }
 
-#if CLANG_VERSION_MAJOR >= 14
+#if CLANG_VERSION_MAJOR >= 14 && CLANG_VERSION_MAJOR < 22
   case clang::Type::Using:
   {
     const clang::UsingType &ut =
@@ -1022,7 +1026,6 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     break;
   }
-
   case clang::Stmt::LambdaExprClass:
   {
     const clang::LambdaExpr &lambda_expr =
@@ -1032,8 +1035,15 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     // Construct a new object of the lambda class
     typet lambda_class_type;
-    if (get_type(
-          *lambda_expr.getLambdaClass()->getTypeForDecl(), lambda_class_type))
+
+    clang::CXXRecordDecl *lambda_class = lambda_expr.getLambdaClass();
+#if CLANG_VERSION_MAJOR >= 22
+    clang::QualType lambda_qual_type =
+      lambda_class->getASTContext().getCanonicalTagType(lambda_class);
+    if (get_type(*lambda_qual_type.getTypePtr(), lambda_class_type))
+#else
+    if (get_type(*lambda_class->getTypeForDecl(), lambda_class_type))
+#endif
       return true;
 
     exprt sym("struct", lambda_class_type);
@@ -1059,7 +1069,6 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     break;
   }
-
   case clang::Stmt::CXXStdInitializerListExprClass:
   {
     const clang::CXXStdInitializerListExpr &cxxstdinit =
@@ -1146,9 +1155,23 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       if (get_expr(*loop_var, loop))
         return true;
 
-    codet::operandst &ops = body.operands();
-    ops.insert(ops.begin(), loop);
-    convert_expression_to_code(body);
+    // When body is not a block (single-statement without braces), it is a raw
+    // expression or non-block code node. Inserting the loop variable declaration
+    // directly into its operands would corrupt the expression structure. Wrap in
+    // a block first so that the prepend targets a statement list.
+    if (body.get_statement() != "block")
+    {
+      convert_expression_to_code(body);
+      code_blockt new_body;
+      new_body.location() = body.location();
+      new_body.operands().push_back(body);
+      body = new_body;
+    }
+    if (loop_var)
+    {
+      codet::operandst &ops = body.operands();
+      ops.insert(ops.begin(), loop);
+    }
 
     code_fort code_for;
     code_for.init() = decls;
@@ -1331,6 +1354,19 @@ bool clang_cpp_convertert::get_function_body(
   exprt &new_expr,
   const code_typet &ftype)
 {
+  // For trivial implicit or explicitly-defaulted destructors, Clang does not
+  // synthesise a body (hasBody() returns false), leaving symbol.value as nil.
+  // This causes a "no body for function ~T#" warning when destructor calls are
+  // emitted at scope exit. A trivial destructor is a no-op: generate an empty body.
+  if (const auto *dd = llvm::dyn_cast<clang::CXXDestructorDecl>(&fd))
+  {
+    if (!fd.hasBody() && (dd->isImplicit() || dd->isExplicitlyDefaulted()))
+    {
+      new_expr = code_blockt();
+      return false;
+    }
+  }
+
   // do nothing if function body doesn't exist
   if (!fd.hasBody())
     return false;
@@ -1933,13 +1969,18 @@ bool clang_cpp_convertert::annotate_class_method(
   exprt &new_expr)
 {
   code_typet &component_type = to_code_type(new_expr.type());
-
-  /*
+/*
    * The order of annotations matters.
    */
-  // annotate parent
+// annotate parent
+#if CLANG_VERSION_MAJOR >= 22
+  std::string parent_class_name = getFullyQualifiedName(
+    ASTContext->getCanonicalTagType(cxxmdd.getParent()), *ASTContext);
+#else
   std::string parent_class_name = getFullyQualifiedName(
     ASTContext->getTagDeclType(cxxmdd.getParent()), *ASTContext);
+#endif
+
   std::string parent_class_id = tag_prefix + parent_class_name;
   component_type.set("#member_name", parent_class_id);
 
@@ -2001,7 +2042,6 @@ bool clang_cpp_convertert::annotate_class_method(
   if (!cxxmdd.isStatic())
     if (to_code(new_expr).statement() == "skip")
       to_code(new_expr).remove("statement");
-
   return false;
 }
 
@@ -2237,12 +2277,14 @@ bool clang_cpp_convertert::is_aggregate_type(const clang::QualType &q_type)
 
     return aryType.isAggregateType();
   }
+#if CLANG_VERSION_MAJOR < 22 // Elaborated types are now transparent
   case clang::Type::Elaborated:
   {
     const clang::ElaboratedType &et =
       static_cast<const clang::ElaboratedType &>(the_type);
     return (is_aggregate_type(et.getNamedType()));
   }
+#endif
   case clang::Type::Record:
   {
     const clang::RecordDecl &rd =

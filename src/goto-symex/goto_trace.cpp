@@ -356,7 +356,7 @@ void violation_graphml_goto_trace(
 
 void violation_yaml_goto_trace(
   optionst &options,
-  const namespacet &ns,
+  const namespacet &ns [[maybe_unused]],
   const goto_tracet &goto_trace)
 {
   yamlt yml(yamlt::VIOLATION);
@@ -388,13 +388,13 @@ void violation_yaml_goto_trace(
       }
       break;
 
-    case goto_trace_stept::ASSUME:
+    case goto_trace_stept::BREANCHING:
       if (step.pc->is_goto())
       {
         waypoint wp;
         wp.type = waypoint::branching;
         wp.file = yml.verified_file;
-        wp.value = step.guard ? "true" : "false";
+        wp.value = !step.guard ? "true" : "false";
         wp.line = get_line_number(
           yml.verified_file,
           std::atoi(step.pc->location.get_line().c_str()),
@@ -406,6 +406,7 @@ void violation_yaml_goto_trace(
       break;
 
     case goto_trace_stept::ASSIGNMENT:
+#if 0
       if (
         step.pc->is_assign() || step.pc->is_return() ||
         (step.pc->is_other() && is_nil_expr(step.lhs)) ||
@@ -427,6 +428,7 @@ void violation_yaml_goto_trace(
         wp.function = step.pc->location.function().c_str();
         yml.segments.push_back(wp);
       }
+#endif
       break;
 
     default:
@@ -652,6 +654,7 @@ void show_goto_trace(
 
     case goto_trace_stept::ASSUME:
     case goto_trace_stept::SKIP:
+    case goto_trace_stept::BREANCHING:
       // Something deliberately ignored
       break;
 

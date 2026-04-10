@@ -65,6 +65,7 @@ public:
   std::string claim_msg;
   std::string claim_loc;
   std::string claim_cstr;
+  std::string claim_property;
   bool show_slice_info;
   bool is_goto_cov;
   namespacet ns;
@@ -84,7 +85,9 @@ class symex_slicet : public slicer
 public:
   explicit symex_slicet(const optionst &options)
     : slice_assumes(options.get_bool_option("slice-assumes")),
-      slice_nondet(!options.get_bool_option("generate-testcase"))
+      slice_nondet(
+        !options.get_bool_option("generate-testcase") &&
+        !options.get_bool_option("generate-ctest-testcase"))
   {
   }
 

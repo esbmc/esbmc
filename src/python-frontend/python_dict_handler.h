@@ -73,6 +73,8 @@
 #ifndef PYTHON_DICT_HANDLER_H
 #define PYTHON_DICT_HANDLER_H
 
+#include <python-frontend/symbol_id.h>
+
 #include <util/std_types.h>
 #include <util/std_code.h>
 #include <util/expr.h>
@@ -144,6 +146,8 @@ public:
    * @throws std::runtime_error if the element is not a dictionary literal.
    */
   exprt get_dict_literal(const nlohmann::json &element);
+
+  exprt get_dict_comprehension(const nlohmann::json &element);
 
   /**
    * @brief Creates and initializes a dictionary from a literal expression.
@@ -219,8 +223,10 @@ public:
    */
   void handle_dict_subscript_assign(
     const exprt &dict_expr,
-    const nlohmann::json &slice_node,
+    const exprt &key_expr,
     const exprt &value,
+    const locationt &location,
+    const nlohmann::json &node,
     codet &target_block);
 
   /**
@@ -319,6 +325,25 @@ public:
   get_dict_value_type_from_annotation(const nlohmann::json &annotation_node);
 
   /**
+   * @brief Returns the tuple type (key_type, value_type) for dict.popitem().
+   * @param dict_expr The dictionary expression (must be a symbol)
+   * @return struct_typet with element_0=key_type, element_1=value_type
+   */
+  typet get_popitem_tuple_type(const exprt &dict_expr);
+
+  /**
+   * @brief Handles dict.popitem() method calls.
+   * Implements Python's dict.popitem() semantics:
+   * - Raises KeyError if the dictionary is empty.
+   * - Otherwise removes and returns the last (key, value) pair as a tuple.
+   * @param dict_expr The dictionary expression
+   * @param call_node The function call AST node
+   * @return Expression representing the (key, value) tuple
+   */
+  exprt
+  handle_dict_popitem(const exprt &dict_expr, const nlohmann::json &call_node);
+
+  /**
    * @brief Resolve expected type for dict subscript using variable annotation
    *
    * Looks up the dict variable's annotation to determine what type
@@ -328,6 +353,144 @@ public:
    * @return The expected value type from annotation, or empty_typet
    */
   typet resolve_expected_type_for_dict_subscript(const exprt &dict_expr);
+
+  /**
+   * @brief Check and handle dictionary subscript assignment
+   * 
+   * Checks if the target is a dictionary subscript and handles the assignment
+   * @param converter Reference to python_converter
+   * @param ast_node Assignment AST node
+   * @param target Target subscript node
+   * @param target_block Code block to append instructions
+   * @return true if handled, false otherwise
+   */
+  bool handle_subscript_assignment_check(
+    python_converter &converter,
+    const nlohmann::json &ast_node,
+    const nlohmann::json &target,
+    codet &target_block);
+
+  /**
+   * @brief Check and handle dictionary literal assignment
+   * 
+   * @param converter Reference to python_converter
+   * @param ast_node Assignment AST node
+   * @param lhs Left-hand side expression
+   * @return true if handled, false otherwise
+   */
+  bool handle_literal_assignment_check(
+    python_converter &converter,
+    const nlohmann::json &ast_node,
+    const exprt &lhs);
+
+  /**
+   * @brief Check and handle unannotated dictionary literal
+   * 
+   * @param converter Reference to python_converter
+   * @param ast_node Assignment AST node
+   * @param target Target node
+   * @param sid Symbol identifier
+   * @return true if handled, false otherwise
+   */
+  bool handle_unannotated_literal_check(
+    python_converter &converter,
+    const nlohmann::json &ast_node,
+    const nlohmann::json &target,
+    const symbol_id &sid);
+
+  /**
+   * @brief Handles dict.get() method calls
+   *
+   * Implements Python's dict.get(key, default=None) semantics:
+   * - Returns value if key exists
+   * - Returns default (or None) if key doesn't exist
+   *
+   * @param dict_expr The dictionary expression
+   * @param call_node The function call AST node containing arguments
+   * @return Expression representing the result (value or default)
+   */
+  exprt
+  handle_dict_get(const exprt &dict_expr, const nlohmann::json &call_node);
+
+  /**
+   * @brief Handles dict.setdefault() method calls
+   *
+   * Implements Python's dict.setdefault(key, default=None) semantics:
+   * - If key exists in the dictionary: returns its current value (no mutation)
+   * - If key does not exist: inserts (key, default) into the dictionary
+   *   and returns default
+   *
+   * @param dict_expr The dictionary expression
+   * @param call_node The function call AST node containing arguments
+   * @return Expression representing the result (existing value or default)
+   */
+  exprt handle_dict_setdefault(
+    const exprt &dict_expr,
+    const nlohmann::json &call_node);
+
+  /**
+   * @brief Handles dict.pop() method calls.
+   *
+   * Implements Python's dict.pop(key[, default]) semantics:
+   * - If key exists: removes it and returns its value.
+   * - If key doesn't exist and default is given: returns default.
+   * - If key doesn't exist and no default: raises KeyError.
+   *
+   * @param dict_expr The dictionary expression
+   * @param call_node The function call AST node containing arguments
+   * @return Expression representing the removed value (or default)
+   */
+  exprt
+  handle_dict_pop(const exprt &dict_expr, const nlohmann::json &call_node);
+
+  /**
+   * @brief Returns true for dict methods that return a value and emit IR.
+   *
+   * Used to avoid double-evaluation during type inference: these methods
+   * must not be called via get_expr() in create_symbol_for_unannotated_assign(),
+   * because they already emit GOTO instructions as a side-effect.
+   *
+   * Keep in sync with handle_dict_method() when adding new value-returning
+   * dict methods.
+   *
+   * @param method_name The method name to check.
+   * @return true if the method is a value-returning, IR-emitting dict method.
+   */
+  static bool is_value_returning_method(const std::string &method_name);
+
+  /**
+   * @brief Handles dict.update() method calls.
+   * Implements Python's dict.update(other) semantics:
+   * - For each key-value pair in other: if key exists, update value;
+   *   otherwise insert the new key-value pair.
+   * - Returns nil_exprt (update() is a void operation).
+   * @param dict_expr The dictionary expression to update
+   * @param call_node The function call AST node containing the argument dict
+   * @return nil_exprt (void operation)
+   */
+  exprt
+  handle_dict_update(const exprt &dict_expr, const nlohmann::json &call_node);
+
+  /**
+   * @brief Compares two dictionaries for equality or inequality
+   *
+   * Implements Python's dictionary comparison semantics by performing
+   * order-independent content comparison:
+   * - Calls __ESBMC_dict_eq which checks if all key-value pairs in lhs
+   *   exist in rhs with matching values (regardless of insertion order)
+   * - Returns true only if both dictionaries have the same keys and
+   *   corresponding values are equal
+   *
+   * This correctly handles cases such as {"a": 1, "b": 2} == {"b": 2, "a": 1}
+   *
+   * Supports both == (Eq) and != (NotEq) operators.
+   *
+   * @param lhs Left-hand side dictionary expression
+   * @param rhs Right-hand side dictionary expression
+   * @param op Comparison operator ("Eq" or "NotEq")
+   * @return Boolean expression representing the comparison result
+   */
+  exprt compare(const exprt &lhs, const exprt &rhs, const std::string &op);
 
 private:
   /// Reference to the main Python converter
@@ -341,6 +504,15 @@ private:
 
   /// Counter for generating unique dictionary variable names
   static int dict_counter_;
+
+  /**
+   * @brief Extract key type from dict type annotation.
+   * For annotations like `dict[K, V]`, extracts the key type K.
+   * @param annotation_node The annotation AST node (Subscript with slice)
+   * @return The key type, or empty_typet if cannot be determined
+   */
+  typet
+  get_dict_key_type_from_annotation(const nlohmann::json &annotation_node);
 
   /**
    * @brief Extracts the key expression from a subscript slice node.
@@ -401,6 +573,20 @@ private:
     const exprt &obj_value,
     const typet &expected_type,
     const locationt &location);
+
+  /**
+   * @brief Generate a unique dictionary name based on source location
+   * 
+   * Creates deterministic names using file, line, and column information.
+   * Falls back to JSON node hash if location is unavailable.
+   * 
+   * @param element The JSON AST node for the dictionary
+   * @param location The source location
+   * @return A unique dictionary identifier
+   */
+  std::string generate_unique_dict_name(
+    const nlohmann::json &element,
+    const locationt &location) const;
 };
 
 #endif // PYTHON_DICT_HANDLER_H

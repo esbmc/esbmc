@@ -109,4 +109,6 @@ tmp_path create_tmp_dir(const std::string &format = "esbmc.%%%%-%%%%-%%%%");
  * contents
  */
 void create_path_and_write(const std::string &path, const char *s, size_t n);
+void register_tmp_for_cleanup(const std::string &path);
+void cleanup_registered_tmps();
 } // namespace file_operations

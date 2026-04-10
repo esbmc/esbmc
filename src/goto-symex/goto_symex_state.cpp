@@ -20,7 +20,6 @@ goto_symex_statet::goto_symex_statet(
   num_instructions = 0;
   thread_ended = false;
   guard.make_true();
-  has_loop_invariant = false;
 }
 
 goto_symex_statet::goto_symex_statet(
@@ -44,8 +43,6 @@ goto_symex_statet &goto_symex_statet::operator=(const goto_symex_statet &state)
   function_unwind = state.function_unwind;
   use_value_set = state.use_value_set;
   call_stack = state.call_stack;
-  pending_invariants = state.pending_invariants;
-  has_loop_invariant = state.has_loop_invariant;
   return *this;
 }
 
@@ -83,6 +80,9 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
   }
 
   if (is_vector_type(expr))
+    return true;
+
+  if (is_member_ref2t(expr))
     return true;
 
   // It's fine to constant propagate something that's absent.
