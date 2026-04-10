@@ -1,6 +1,53 @@
 """
 Operational model for non-deterministic collection functions in ESBMC Python frontend.
 
+KNOWN LIMITATIONS:
+(why we implemented mothod in preprocessor instead of here)
+
+  The ideal fix for both nondet_list and nondet_dict is simple:
+  call nondet_int()/nondet_float()/etc. fresh inside the loop instead of
+  reusing a single pre-evaluated value.
+  For example:
+
+      # Ideal nondet_list:
+      while i < size:
+          result.append(nondet_int())   # fresh value each iteration
+
+      # Ideal nondet_dict:
+      while i < size:
+          result[nondet_int()] = nondet_int()   # fresh key and value
+
+  However, these fixes cannot be implemented in this model file due to
+  some ESBMC frontend limitations(so far we know):
+
+    nondet_list:  adding if/elif branches with different result.append()
+      types (e.g. nondet_int() vs nondet_float()) causes
+      "unresolved operand type" errors when accessing list elements.
+
+    nondet_dict: using isinstance to dispatch nondet type inside model
+      functions does not work reliably. The type check fails even when
+      the correct type is passed.
+
+  So we are using the preprocessor, which works
+      by expanding calls inline as user code:
+
+    nondet_list: while loop with fresh nondet_*() per iteration.
+      x = nondet_list(3, nondet_bool())  -->
+        x: list[bool] = []; ...
+        while i < size: x.append(nondet_bool()); i += 1
+
+    nondet_dict: if-chain with concrete sequential keys to avoid O(N^2)
+      solver explosion from symbolic key comparisons in contains/find_index.
+      x = nondet_dict(3)  -->
+        x: dict[int,int] = {}; ...
+        if size >= 1: x[0] = nondet_int()
+        if size >= 2: x[1] = nondet_int()
+        if size >= 3: x[2] = nondet_int()
+
+  Only direct assignments (x = nondet_list/dict(...)) are expanded.
+  Once the frontend bugs are fixed, the preprocessor expansion
+  can be removed and the fixes moved directly into this file.
+
 USAGE:
     # Lists:
     x = nondet_list()                                    # int list, size [0, 8]
@@ -15,14 +62,10 @@ USAGE:
     d = nondet_dict(max_size=10, key_type=nondet_int(), value_type=nondet_bool())
 """
 
+from typing import Any
+
 # Shared default maximum size for nondet collections
 _DEFAULT_NONDET_SIZE: int = 8
-
-# Type flags (concrete constants, resolved before any loop)
-_T_INT: int = 0
-_T_FLOAT: int = 1
-_T_BOOL: int = 2
-_T_STR: int = 3
 
 
 def _nondet_size(max_size: int) -> int:
@@ -41,21 +84,9 @@ def _nondet_size(max_size: int) -> int:
     return size
 
 
-def _type_flag(sample) -> int:
-    """Determine a concrete type flag from a sample nondet value.
-    Evaluated once before the loop; the result is a plain int constant."""
-    if isinstance(sample, float):
-        return _T_FLOAT
-    if isinstance(sample, bool):
-        return _T_BOOL
-    if isinstance(sample, str):
-        return _T_STR
-    return _T_INT
-
-
-def nondet_list(max_size: int = _DEFAULT_NONDET_SIZE, elem_type=None) -> list:
+def nondet_list(max_size: int = _DEFAULT_NONDET_SIZE, elem_type: Any = None) -> list:
     """
-    Return a non-deterministic list where each element is a fresh nondet value.
+    Return a non-deterministic list with specified element type.
 
     Args:
         max_size: Maximum size of the list (default: 8).
@@ -72,38 +103,32 @@ def nondet_list(max_size: int = _DEFAULT_NONDET_SIZE, elem_type=None) -> list:
         x = nondet_list(elem_type=nondet_float())            # float list, size [0, 8]
         x = nondet_list(max_size=10, elem_type=nondet_bool())# bool list, size [0, 10]
     """
-    tf: int = _type_flag(elem_type)
+    # Default to nondet_int if no type specified
+    assert elem_type is not None
+    if elem_type is None:
+        elem_type = nondet_int()
 
     result: list = []
     size: int = _nondet_size(max_size)
 
-    # Each branch has its own loop with a single nondet call — no branching inside the loop.
     i: int = 0
-    if tf == _T_FLOAT:
-        while i < size:
-            result.append(nondet_float())
-            i = i + 1
-    elif tf == _T_BOOL:
-        while i < size:
-            result.append(nondet_bool())
-            i = i + 1
-    elif tf == _T_STR:
-        while i < size:
-            result.append(nondet_str())
-            i = i + 1
-    else:
-        while i < size:
-            result.append(nondet_int())
-            i = i + 1
+    while i < size:
+        result.append(elem_type)
+        i = i + 1
 
     return result
 
 
 def nondet_dict(max_size: int = _DEFAULT_NONDET_SIZE,
-                key_type=None,
-                value_type=None) -> dict:
+                key_type: Any = None,
+                value_type: Any = None) -> dict:
     """
-    Return a non-deterministic dictionary where each entry has fresh nondet key and value.
+    Return a non-deterministic dictionary with specified key and value types.
+
+    Note: The preprocessor expands this call inline with concrete sequential
+    keys and fresh nondet values.
+    This model function body is the fallback for non-expanded contexts
+    (e.g. return values, nested exprs).
 
     Args:
         max_size: Maximum size of the dictionary (default: 8).
@@ -122,33 +147,18 @@ def nondet_dict(max_size: int = _DEFAULT_NONDET_SIZE,
         d = nondet_dict(key_type=nondet_str(), value_type=nondet_float())
         d = nondet_dict(max_size=10, key_type=nondet_int(), value_type=nondet_bool())
     """
-    kt: int = _type_flag(key_type)
-    vt: int = _type_flag(value_type)
+    # Default to nondet_int if no types specified
+    if key_type is None:
+        key_type = nondet_int()
+    if value_type is None:
+        value_type = nondet_int()
+
     result: dict = {}
     size: int = _nondet_size(max_size)
 
-    # The flag comparisons (kt == X, vt == X) use concrete int constants,
-    # so dead branches are trivially eliminated — only the matching
-    # nondet call survives in the unrolled loop body.
     i: int = 0
     while i < size:
-        if kt == _T_STR:
-            k = nondet_str()
-        elif kt == _T_BOOL:
-            k = nondet_bool()
-        else:
-            k = nondet_int()
-
-        if vt == _T_FLOAT:
-            v = nondet_float()
-        elif vt == _T_BOOL:
-            v = nondet_bool()
-        elif vt == _T_STR:
-            v = nondet_str()
-        else:
-            v = nondet_int()
-
-        result[k] = v
+        result[key_type] = value_type
         i = i + 1
 
     return result
