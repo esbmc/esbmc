@@ -986,8 +986,8 @@ std::string type_handler::get_operand_type(const nlohmann::json &operand) const
       attr_value.contains("_type") && attr_value["_type"] == "Name" &&
       attr_value.contains("id") && attr_value["id"] == "self")
     {
-      const auto self_class_node =
-        json_utils::find_class(converter_.ast()["body"], converter_.current_classname());
+      const auto self_class_node = json_utils::find_class(
+        converter_.ast()["body"], converter_.current_classname());
       std::string self_attr_type = find_annotated_attr_type(self_class_node);
       if (!self_attr_type.empty())
         return self_attr_type;
@@ -996,7 +996,8 @@ std::string type_handler::get_operand_type(const nlohmann::json &operand) const
     std::string obj_type = get_operand_type(attr_value);
     if (!obj_type.empty())
     {
-      const auto class_node = json_utils::find_class(converter_.ast()["body"], obj_type);
+      const auto class_node =
+        json_utils::find_class(converter_.ast()["body"], obj_type);
       std::string attr_type = find_annotated_attr_type(class_node);
       if (!attr_type.empty())
         return attr_type;
