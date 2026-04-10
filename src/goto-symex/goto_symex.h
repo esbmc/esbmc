@@ -1313,6 +1313,7 @@ expr2tc gen_byte_memcpy(
  * @param num_of_bytes The number of bytes to copy from @p src to @p dst.
  * @param src_offset The byte offset in @p src at which copying starts.
  * @param dst_offset The byte offset in @p dst at which bytes are written.
+ * @param is_big_endian Whether byte_update should threat operation as bigendian
  *
  * @returns A new expr2tc representing @p dst after the memcpy, or an empty
  *          expr2tc if the operation cannot be constructed (e.g., @p src is
@@ -1331,7 +1332,8 @@ expr2tc gen_byte_memcpy_byte_update(
   const expr2tc &dst,
   const size_t num_of_bytes,
   const size_t src_offset,
-  const size_t dst_offset);
+  const size_t dst_offset,
+  bool is_big_endian);
 } // namespace goto_symex_utils
 
 #endif

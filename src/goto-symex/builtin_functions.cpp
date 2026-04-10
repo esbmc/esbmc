@@ -1867,6 +1867,15 @@ expr2tc goto_symex_utils::gen_byte_memcpy_byte_update(
     to_array_type(src->type).subtype->get_width() != 8)
     return expr2tc();
 
+  // SMT convertion hates something like "char src[1]" into a "char dst"
+  if (dst->type->get_width() == 8)
+  {
+    assert(!dst_offset);
+    const expr2tc src_index =
+      constant_int2tc(get_int32_type(), BigInt(src_offset));
+    return byte_extract2tc(get_int8_type(), src, src_index, is_big_endian);
+  }    
+  
   expr2tc result = dst;
   for (size_t counter = 0; counter < num_of_bytes; counter++)
   {
