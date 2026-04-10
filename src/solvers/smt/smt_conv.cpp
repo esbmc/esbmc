@@ -1605,7 +1605,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       const expr2tc &rounding_mode = to_ieee_add2t(expr).rounding_mode;
 
       // Interval-lifted enclosure for ieee_add (--ir-ieee only).
-      // Covers RNE, RNA (nearest modes) and RUP, RDN (directed modes).
+      // Covers RNE, RNA (nearest modes) and RUP, RDN, RTZ (directed modes).
       // All share the same addition interval hull:
       //   L_R = L_x + L_y,  U_R = U_x + U_y
       // Nearest (RNE/RNA): symmetric B_near at both endpoints
@@ -1614,9 +1614,15 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       //   ra_lo = L_R (exact),  ra_hi = U_R + B_dir(U_R)
       // RDN: B_dir at lower endpoint, exact upper bound
       //   ra_lo = L_R - B_dir(L_R),  ra_hi = U_R (exact)
+      // RTZ: sign-dependent three-way case on hull sign:
+      //   LR >= 0: ra_lo = LR - B_dir(LR), ra_hi = UR (exact upper)
+      //   UR <= 0: ra_lo = LR (exact lower), ra_hi = UR + B_dir(UR)
+      //   else:   ra_lo = LR - B_dir_max, ra_hi = UR + B_dir_max
+      //           where B_dir_max = eps_rel_dir * max(|LR|, |UR|) + eps_abs
       // Symbol names: ra_lo:: / ra_hi:: (RNE), ra_lo_aw:: / ra_hi_aw::
-      // (RNA), ra_lo_up:: / ra_hi_up:: (RUP), ra_lo_dn:: / ra_hi_dn:: (RDN).
-      // RTZ, non-standard formats, and --ir-ieee disabled fall through to
+      // (RNA), ra_lo_up:: / ra_hi_up:: (RUP), ra_lo_dn:: / ra_hi_dn:: (RDN),
+      // ra_lo_tz:: / ra_hi_tz:: (RTZ).
+      // Non-standard formats and --ir-ieee disabled fall through to
       // apply_ieee754_semantics unchanged.
       bool interval_lifted = false;
       if (
@@ -1624,7 +1630,8 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
         (is_nearest_rounding_mode(rounding_mode) ||
          is_round_to_away(rounding_mode) ||
          is_round_to_plus_inf(rounding_mode) ||
-         is_round_to_minus_inf(rounding_mode)))
+         is_round_to_minus_inf(rounding_mode) ||
+         is_round_to_zero(rounding_mode)))
       {
         const auto double_spec = ieee_float_spect::double_precision();
         const auto single_spec = ieee_float_spect::single_precision();
@@ -1654,9 +1661,12 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
           else if (is_round_to_plus_inf(rounding_mode))
             bounds =
               apply_ieee754_rup_enclosure(real_result, lo_r, hi_r, fbv_type);
-          else
+          else if (is_round_to_minus_inf(rounding_mode))
             bounds =
               apply_ieee754_rdn_enclosure(real_result, lo_r, hi_r, fbv_type);
+          else
+            bounds =
+              apply_ieee754_rtz_enclosure(real_result, lo_r, hi_r, fbv_type);
           ir_ra_interval_map[real_result] = {bounds.first, bounds.second};
           a = real_result;
           interval_lifted = true;
