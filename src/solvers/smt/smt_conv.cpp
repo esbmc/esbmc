@@ -1791,11 +1791,67 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       smt_astt operand_is_zero = mk_or(mk_eq(side1, zero), mk_eq(side2, zero));
 
       const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
-      a = apply_ieee754_semantics(
-        real_result,
-        fbv_type,
-        operand_is_zero,
-        to_ieee_mul2t(expr).rounding_mode);
+      const expr2tc &rounding_mode = to_ieee_mul2t(expr).rounding_mode;
+
+      // RNE interval lifting for ieee_mul.
+      // Hull: lo_r = min(p1,p2,p3,p4), hi_r = max(p1,p2,p3,p4)
+      // where p1=L_x*L_y, p2=L_x*U_y, p3=U_x*L_y, p4=U_x*U_y.
+      bool interval_lifted = false;
+      if (
+        options.get_bool_option("ir-ieee") &&
+        is_nearest_rounding_mode(rounding_mode))
+      {
+        const auto double_spec = ieee_float_spect::double_precision();
+        const auto single_spec = ieee_float_spect::single_precision();
+        if (
+          (fbv_type.exponent == double_spec.e &&
+           fbv_type.fraction == double_spec.f) ||
+          (fbv_type.exponent == single_spec.e &&
+           fbv_type.fraction == single_spec.f))
+        {
+          auto get_iv = [this](smt_astt t) -> ra_interval_t {
+            auto it = ir_ra_interval_map.find(t);
+            return it != ir_ra_interval_map.end() ? it->second
+                                                  : ra_interval_t{t, t};
+          };
+          ra_interval_t iv1 = get_iv(side1);
+          ra_interval_t iv2 = get_iv(side2);
+          // Four endpoint products
+          smt_astt p1 = mk_mul(iv1.lo, iv2.lo);
+          smt_astt p2 = mk_mul(iv1.lo, iv2.hi);
+          smt_astt p3 = mk_mul(iv1.hi, iv2.lo);
+          smt_astt p4 = mk_mul(iv1.hi, iv2.hi);
+          // min/max via nested ITE
+          smt_astt lo_r = mk_ite(
+            mk_le(p1, p2),
+            mk_ite(
+              mk_le(p1, p3),
+              mk_ite(mk_le(p1, p4), p1, p4),
+              mk_ite(mk_le(p3, p4), p3, p4)),
+            mk_ite(
+              mk_le(p2, p3),
+              mk_ite(mk_le(p2, p4), p2, p4),
+              mk_ite(mk_le(p3, p4), p3, p4)));
+          smt_astt hi_r = mk_ite(
+            mk_le(p2, p1),
+            mk_ite(
+              mk_le(p3, p1),
+              mk_ite(mk_le(p4, p1), p1, p4),
+              mk_ite(mk_le(p4, p3), p3, p4)),
+            mk_ite(
+              mk_le(p3, p2),
+              mk_ite(mk_le(p4, p2), p2, p4),
+              mk_ite(mk_le(p4, p3), p3, p4)));
+          std::pair<smt_astt, smt_astt> bounds =
+            apply_ieee754_rne_enclosure(real_result, lo_r, hi_r, fbv_type);
+          ir_ra_interval_map[real_result] = {bounds.first, bounds.second};
+          a = real_result;
+          interval_lifted = true;
+        }
+      }
+      if (!interval_lifted)
+        a = apply_ieee754_semantics(
+          real_result, fbv_type, operand_is_zero, rounding_mode);
     }
     else
     {
