@@ -534,7 +534,7 @@ void __ESBMC_unroll(int);
  * Active contract enforcement only kicks in with --enforce-contract etc. */
 void __ESBMC_requires(_Bool);
 void __ESBMC_ensures(_Bool);
-extern int __ESBMC_return_value;
+int __ESBMC_return_value;
 void* __ESBMC_old_raw(void*);
 #define __ESBMC_old(x) (*(__typeof__(x)*)__ESBMC_old_raw((void*)(&(x))))
 #define __ESBMC_and(a, b) ((a) & (b))
