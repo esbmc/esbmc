@@ -1457,6 +1457,9 @@ int esbmc_parseoptionst::do_bmc_strategy(
     }
   }
 
+  if (options.get_bool_option("multi-property") && options.get_bool_option("k-induction"))
+    diagnose_unknown_properties(options, goto_functions, max_k_step);
+
   log_status("Unable to prove or falsify the program, giving up.");
   log_fail("VERIFICATION UNKNOWN");
 
@@ -3069,4 +3072,32 @@ void esbmc_parseoptionst::help()
     else
       fmt::print(stderr, "{}\n", colorize_flag_refs(line));
   }
+}
+
+// When k-induction exhausts all k-steps without a definitive result, run one
+// final per-VCC inductive-step check at the last k to identify which specific
+// properties could not be resolved, without impacting the main k-induction loop.
+void esbmc_parseoptionst::diagnose_unknown_properties(
+  optionst &options,
+  goto_functionst &goto_functions,
+  const uint64_t k_step)
+{
+  if (options.get_bool_option("disable-inductive-step"))
+    return;
+
+  options.set_option("base-case", false);
+  options.set_option("forward-condition", false);
+  options.set_option("inductive-step", true);
+  options.set_option("no-unwinding-assertions", true);
+  options.set_option("partial-loops", true);
+  options.set_option("unwind", integer2string(k_step));
+  options.set_option("diagnose-unknown-properties", true);
+
+  bmct bmc(goto_functions, options, context);
+
+  log_progress(
+    "\nDiagnosing unresolved properties (inductive step, k = {:d}):", k_step);
+  do_bmc(bmc);
+
+  options.set_option("diagnose-unknown-properties", false);
 }

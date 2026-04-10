@@ -1,0 +1,5 @@
+CORE
+main.c
+--no-standard-checks --loop-invariant --multi-property --max-k-step 2
+^VERIFICATION UNKNOWN$
+\? UNKNOWN.*post loop modular equality
