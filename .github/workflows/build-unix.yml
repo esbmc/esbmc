@@ -59,9 +59,7 @@ jobs:
         if [[ "${{ inputs.operating-system }}" =~ ^macos ]]; then
           ctest -j4 --output-on-failure --progress -L python
         else
-          # We use systemd-run such that OOM kills don't trigger GitHub Actions' "monitoring" and cause the entire job to be killed. Instead, only the ctest process
-          # will be affected by the memory limits.
-          # Use OOMPolicy=continue so systemd doesn't kill the whole group just because one process got killed...
-          # 16GiB Max
-          systemd-run --user --scope -p OOMPolicy=continue -p MemoryMax=$((4*4))G --quiet ctest -j4 --output-on-failure --progress .
+          # Disable systemd's OOM killer as it is too aggressive and can kill the entire test suite when it thinks the system is out of memory. This is especially problematic in CI environments where resources are limited.
+          sudo systemctl stop systemd-oomd ; sudo systemctl mask systemd-oomd
+          ctest -j4 --output-on-failure --progress .
         fi
