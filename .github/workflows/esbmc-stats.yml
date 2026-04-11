@@ -11,25 +11,24 @@ jobs:
   j1:
     name: repostats-for-robota-core
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     strategy:
       matrix:
         # The repositories to generate reports for.
-        statsRepo: 
+        statsRepo:
           - esbmc/esbmc
       # Do not cancel&fail all remaining jobs upon first job failure.
       fail-fast: false
     steps:
       - name: run-ghrs
-        uses: jgehrcke/github-repo-stats@RELEASE
+        uses: jgehrcke/github-repo-stats@d80572c9029636cd0e97e3a79e7a9c293bea3b02  # RELEASE
         with:
           # Define the stats repository (the repo to fetch
           # stats for and to generate the report for).
           # Remove the parameter when the stats repository
           # and the data repository are the same.
           repository: ${{ matrix.statsRepo }}
-          # Set a GitHub API token that can read the GitHub
-          # repository traffic API for the stats repository,
-          # and that can push commits to the data repository
-          # (which this workflow file lives in, to store data
-          # and the report files).
-          ghtoken: ${{ secrets.ghrs_github_api_token }}
+          # Use the built-in GITHUB_TOKEN (never expires).
+          # Requires contents: write to push to the data branch.
+          ghtoken: ${{ secrets.GITHUB_TOKEN }}
