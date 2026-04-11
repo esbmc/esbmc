@@ -77,7 +77,8 @@ TEST_CASE(
 }
 
 TEST_CASE(
-  "set_options: --no-interval-symex-guard without arithmetic leaves it disabled",
+  "set_options: --no-interval-symex-guard without arithmetic leaves it "
+  "disabled",
   "[interval][set_options]")
 {
   reset_interval_flags();

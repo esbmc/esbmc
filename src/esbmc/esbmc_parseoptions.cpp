@@ -444,15 +444,12 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   //   - loop-invariant and function contracts inject havoc+assume sequences
   if (
     options.get_bool_option("k-induction") ||
-    cmdline.isset("k-induction-parallel") ||
-    cmdline.isset("incremental-bmc") ||
-    cmdline.isset("termination") ||
-    cmdline.isset("enforce-contract") ||
+    cmdline.isset("k-induction-parallel") || cmdline.isset("incremental-bmc") ||
+    cmdline.isset("termination") || cmdline.isset("enforce-contract") ||
     cmdline.isset("enforce-all-contracts") ||
     cmdline.isset("replace-call-with-contract") ||
-    cmdline.isset("replace-all-contracts") ||
-    cmdline.isset("base-case") || cmdline.isset("forward-condition") ||
-    cmdline.isset("inductive-step"))
+    cmdline.isset("replace-all-contracts") || cmdline.isset("base-case") ||
+    cmdline.isset("forward-condition") || cmdline.isset("inductive-step"))
     options.set_option("no-interval-symex-guard", true);
 
   if (
