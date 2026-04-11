@@ -112,7 +112,8 @@ static typet get_elem_type_from_return_annotation(
   const nlohmann::json &function_node,
   const type_handler &type_handler_)
 {
-  if (!function_node.contains("returns") || !function_node["returns"].is_object())
+  if (
+    !function_node.contains("returns") || !function_node["returns"].is_object())
     return typet();
 
   nlohmann::json annotation_node;
@@ -157,12 +158,14 @@ static typet infer_elem_type_from_call_return(
     {
       const std::string class_name =
         recv_decl["annotation"]["id"].get<std::string>();
-      nlohmann::json class_node = json_utils::find_class(ast["body"], class_name);
+      nlohmann::json class_node =
+        json_utils::find_class(ast["body"], class_name);
       if (!class_node.is_null() && class_node.contains("body"))
       {
         nlohmann::json function_node = json_utils::find_function(
           class_node["body"], func["attr"].get<std::string>());
-        return get_elem_type_from_return_annotation(function_node, type_handler_);
+        return get_elem_type_from_return_annotation(
+          function_node, type_handler_);
       }
     }
   }
@@ -1826,7 +1829,8 @@ exprt python_list::handle_index_access(
         list_node["value"].contains("_type") &&
         list_node["value"]["_type"] == "Call")
       {
-        elem_type = infer_elem_type_from_call_return(list_node["value"], converter_);
+        elem_type =
+          infer_elem_type_from_call_return(list_node["value"], converter_);
         if (elem_type != typet() && array.is_symbol())
         {
           const std::string &list_name = array.identifier().as_string();
