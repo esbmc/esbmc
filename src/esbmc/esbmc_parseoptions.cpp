@@ -1352,9 +1352,11 @@ int esbmc_parseoptionst::do_bmc_strategy(
   };
 
   // Trying all bounds from 1 to "max_k_step" in "k_step_inc"
+  uint64_t last_k_step = k_step_base;
   for (uint64_t k_step = k_step_base; k_step <= max_k_step;
        k_step += k_step_inc)
   {
+    last_k_step = k_step;
     // k-induction
     if (options.get_bool_option("k-induction"))
     {
@@ -1460,7 +1462,7 @@ int esbmc_parseoptionst::do_bmc_strategy(
   if (
     options.get_bool_option("multi-property") &&
     options.get_bool_option("k-induction"))
-    diagnose_unknown_properties(options, goto_functions, max_k_step);
+    diagnose_unknown_properties(options, goto_functions, last_k_step);
 
   log_status("Unable to prove or falsify the program, giving up.");
   log_fail("VERIFICATION UNKNOWN");
@@ -3087,6 +3089,21 @@ void esbmc_parseoptionst::diagnose_unknown_properties(
   if (options.get_bool_option("disable-inductive-step"))
     return;
 
+  // Mirror the guards used by is_inductive_step_violated in the main loop:
+  // inductive step is skipped for k==1 and capped by --max-inductive-step.
+  if (k_step <= 1)
+    return;
+  if (strtoul(cmdline.getval("max-inductive-step"), nullptr, 10) < k_step)
+    return;
+
+  const bool saved_base_case = options.get_bool_option("base-case");
+  const bool saved_forward_condition =
+    options.get_bool_option("forward-condition");
+  const bool saved_inductive_step = options.get_bool_option("inductive-step");
+  const bool saved_no_unwinding = options.get_bool_option("no-unwinding-assertions");
+  const bool saved_partial_loops = options.get_bool_option("partial-loops");
+  const std::string saved_unwind = options.get_option("unwind");
+
   options.set_option("base-case", false);
   options.set_option("forward-condition", false);
   options.set_option("inductive-step", true);
@@ -3101,5 +3118,11 @@ void esbmc_parseoptionst::diagnose_unknown_properties(
     "\nDiagnosing unresolved properties (inductive step, k = {:d}):", k_step);
   do_bmc(bmc);
 
+  options.set_option("base-case", saved_base_case);
+  options.set_option("forward-condition", saved_forward_condition);
+  options.set_option("inductive-step", saved_inductive_step);
+  options.set_option("no-unwinding-assertions", saved_no_unwinding);
+  options.set_option("partial-loops", saved_partial_loops);
+  options.set_option("unwind", saved_unwind);
   options.set_option("diagnose-unknown-properties", false);
 }

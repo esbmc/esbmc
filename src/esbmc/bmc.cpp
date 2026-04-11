@@ -988,6 +988,10 @@ void bmct::report_result(smt_convt::resultt &res)
   // k-induction prints its own messages
   if (options.get_bool_option("k-induction-parallel"))
     return;
+  // Diagnostic pass: per-property results are already printed by
+  // multi_property_check; suppress any global verdict from this level.
+  if (options.get_bool_option("diagnose-unknown-properties"))
+    return;
 
   bool bs = options.get_bool_option("base-case");
   bool fc = options.get_bool_option("forward-condition");
