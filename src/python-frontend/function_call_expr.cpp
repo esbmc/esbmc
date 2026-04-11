@@ -4340,7 +4340,7 @@ exprt function_call_expr::handle_general_function_call()
   {
     std::string caller = get_object_name();
     obj_symbol_id.set_object(caller);
-    obj_symbol = symbol_table.find_symbol(obj_symbol_id.to_string());
+    obj_symbol = converter_.find_symbol(obj_symbol_id.to_string());
   }
 
   // Indirect call through variable holding a function pointer, e.g.:
