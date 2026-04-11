@@ -32,6 +32,7 @@ FAIL_MODES: list[TestMode] = [TestMode.KNOWNBUG]
 class TestDescription:
     """Immutable test.desc fields."""
 
+    # We use tuple for test_regex and labels to ensure immutability, as lists are mutable and would break the immutability of the dataclass.
     test_dir: Path
     # relative_dir is the path of the test directory relative to the regression root, used for generating arguments and labels
     relative_dir: Path
@@ -53,8 +54,8 @@ class TestDescription:
             test_desc_path.exists()
         ), f"Test description file does not exist: {test_desc_path}"
         with test_desc_path.open(encoding="utf-8") as fp:
-            # First line - TEST MODE
-            test_mode_str: str = fp.readline().strip()
+            # First line - TEST MODE, Label1, Label2, ...
+            test_mode_str, *test_labels = map(str.strip, fp.readline().strip().split(","))
             # assert (
             #     test_mode.strip() == test_mode
             # ), f"{test_dir}: test mode line must not have leading/trailing whitespace: '{test_mode}'"
@@ -73,9 +74,6 @@ class TestDescription:
             # assert (
             #     test_regex
             # ), f"{test_dir}: at least one non-empty line of expected output regex is required"
-        test_labels: tuple[
-            str, ...
-        ] = ()  # TODO: add support for test labels in test.desc
         relative_dir = test_dir.relative_to(regression_root)
         return TestDescription(
             test_dir,
@@ -84,7 +82,7 @@ class TestDescription:
             test_file,
             test_args,
             test_regex,
-            test_labels,
+            tuple(test_labels),
         )
 
     @property
@@ -126,7 +124,10 @@ class TestDescription:
             test_desc_path.is_file()
         ), f"Test description file does not exist: {test_desc_path}"
         with open(test_desc_path, "w") as f:
-            f.write(f"{self.test_mode.value}\n")
+            f.write(f"{self.test_mode.value}")
+            if self.labels:
+                f.write(", " + ", ".join(self.labels))
+            f.write("\n")
             f.write(f"{self.test_file}\n")
             f.write(f"{self.test_args}\n")
             for re in self.test_regex:
