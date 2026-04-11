@@ -11,8 +11,6 @@ jobs:
   j1:
     name: repostats-for-robota-core
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     strategy:
       matrix:
         # The repositories to generate reports for.
@@ -29,6 +27,7 @@ jobs:
           # Remove the parameter when the stats repository
           # and the data repository are the same.
           repository: ${{ matrix.statsRepo }}
-          # Use the built-in GITHUB_TOKEN (never expires).
-          # Requires contents: write to push to the data branch.
-          ghtoken: ${{ secrets.GITHUB_TOKEN }}
+          # Requires a classic PAT (repo scope) stored as a secret.
+          # The GitHub Traffic API blocks integration/machine tokens
+          # (GITHUB_TOKEN), so a real user PAT is mandatory here.
+          ghtoken: ${{ secrets.ghrs_github_api_token }}
