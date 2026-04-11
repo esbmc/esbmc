@@ -446,6 +446,7 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     options.get_bool_option("k-induction") ||
     cmdline.isset("k-induction-parallel") ||
     cmdline.isset("incremental-bmc") ||
+    cmdline.isset("termination") ||
     cmdline.isset("enforce-contract") ||
     cmdline.isset("enforce-all-contracts") ||
     cmdline.isset("replace-call-with-contract") ||
