@@ -1457,7 +1457,9 @@ int esbmc_parseoptionst::do_bmc_strategy(
     }
   }
 
-  if (options.get_bool_option("multi-property") && options.get_bool_option("k-induction"))
+  if (
+    options.get_bool_option("multi-property") &&
+    options.get_bool_option("k-induction"))
     diagnose_unknown_properties(options, goto_functions, max_k_step);
 
   log_status("Unable to prove or falsify the program, giving up.");

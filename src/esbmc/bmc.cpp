@@ -1681,8 +1681,7 @@ smt_convt::resultt bmct::multi_property_check(
       {
         if (is)
           // Inductive step could not prove this claim - show in yellow
-          log_status(
-            "{}? UNKNOWN{}: '{}'", YELLOW, RESET, claim.claim_cstr);
+          log_status("{}? UNKNOWN{}: '{}'", YELLOW, RESET, claim.claim_cstr);
         else
           // Claim failed (counterexample found) - show in red
           log_status("{}✗ FAILED{}: '{}'", RED, RESET, claim.claim_cstr);
