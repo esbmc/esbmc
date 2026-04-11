@@ -44,16 +44,6 @@ class TestCase:
     UNSUPPORTED_OPTIONS = ["--timeout", "--memlimit"]
 
 
-def _prepare_child():
-    """preexec_fn: new process group + memory cap."""
-    os.setpgrp()
-    if RegressionBase.MEMORY_LIMIT:
-        import resource
-        limit = RegressionBase.MEMORY_LIMIT
-        try:
-            resource.setrlimit(resource.RLIMIT_AS, (limit, limit))
-        except (ValueError, OSError):
-            pass  # macOS does not support RLIMIT_AS
 # Seconds to wait between SIGTERM and SIGKILL
 # when cleaning up timed-out process group.
 _TERM_GRACE = 3
@@ -66,13 +56,14 @@ class Executor:
     def run(self, test_case: TestDescription):
         """Execute the test case with `executable`"""
         cmd = test_case.generate_run_argument_list(*self.tool, smt_only=TestCase.SMT_ONLY, unsupported_options=TestCase.UNSUPPORTED_OPTIONS)
-        preexec = _prepare_child if os.name == "posix" else None
+        if RegressionBase.MEMORY_LIMIT:
+            cmd += ["--memlimit", str(RegressionBase.MEMORY_LIMIT)]
 
         with subprocess.Popen(
             cmd,
             stdout=PIPE,
             stderr=PIPE,
-            preexec_fn=preexec,
+            preexec_fn=os.setpgrp if os.name == "posix" else None,
             env=dict(os.environ, ESBMC_CONFIG_FILE=""),
         ) as proc:
             try:
@@ -98,13 +89,13 @@ class Executor:
                     partial += stdout
                 if stderr:
                     partial += stderr
-                return None, msg.encode() + b"\n" + partial, 1
+                return None, msg.encode() + b"\n" + partial, 1, cmd
 
             if sys.platform.startswith("linux"):
                 import resource
                 rss = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
                 print("mem_usage={0} kilobytes".format(rss))
-            return stdout, stderr, proc.returncode
+            return stdout, stderr, proc.returncode, cmd
 
 
 def get_test_objects(base_dir: str) -> list[TestDescription]:
@@ -146,7 +137,7 @@ def _add_test(test_case : TestDescription, executor: Executor):
     """This method returns a function that defines a test"""
 
     def test(self):
-        stdout, stderr, rc = executor.run(test_case)
+        stdout, stderr, rc, cmd = executor.run(test_case)
 
         if stdout is None:
             timeout_message = "\nTIMEOUT TEST: {} (limit {}s)".format(
@@ -171,7 +162,7 @@ def _add_test(test_case : TestDescription, executor: Executor):
         error_message = (
             output_to_validate
             + "\n\nARGUMENTS: "
-            + str(test_case.generate_run_argument_list(*executor.tool, smt_only=TestCase.SMT_ONLY, unsupported_options=TestCase.UNSUPPORTED_OPTIONS))
+            + " ".join(cmd)
         )
 
         if BENCHMARK_BRINGUP:
@@ -180,7 +171,8 @@ def _add_test(test_case : TestDescription, executor: Executor):
             assert os.path.isdir(os.environ["LOG_DIR"])
             destination = os.environ["LOG_DIR"] + "/" + test_case.name
             f = open(destination, "a")
-            f.write("ESBMC args: " + test_case.test_args + "\n\n")
+            f.write("Original ESBMC args: " + test_case.test_args + "\n\n")
+            f.write("Final ESBMC cmd: " + " ".join(cmd) + "\n\n")
             f.write(output_to_validate)
             f.close()
 
