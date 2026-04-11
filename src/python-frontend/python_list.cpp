@@ -108,6 +108,68 @@ static typet get_elem_type_from_annotation(
   return typet();
 }
 
+static typet get_elem_type_from_return_annotation(
+  const nlohmann::json &function_node,
+  const type_handler &type_handler_)
+{
+  if (!function_node.contains("returns") || !function_node["returns"].is_object())
+    return typet();
+
+  nlohmann::json annotation_node;
+  annotation_node["annotation"] = function_node["returns"];
+  return get_elem_type_from_annotation(annotation_node, type_handler_);
+}
+
+static typet infer_elem_type_from_call_return(
+  const nlohmann::json &call_node,
+  python_converter &converter)
+{
+  if (
+    !call_node.is_object() || call_node["_type"] != "Call" ||
+    !call_node.contains("func") || !call_node["func"].is_object())
+    return typet();
+
+  const auto &func = call_node["func"];
+  const auto &ast = converter.ast();
+  const auto &type_handler_ = converter.get_type_handler();
+
+  if (func["_type"] == "Name" && func.contains("id") && func["id"].is_string())
+  {
+    nlohmann::json function_node =
+      json_utils::find_function(ast["body"], func["id"].get<std::string>());
+    return get_elem_type_from_return_annotation(function_node, type_handler_);
+  }
+
+  if (
+    func["_type"] == "Attribute" && func.contains("attr") &&
+    func["attr"].is_string() && func.contains("value") &&
+    func["value"].is_object() && func["value"]["_type"] == "Name" &&
+    func["value"].contains("id") && func["value"]["id"].is_string())
+  {
+    const std::string recv_name = func["value"]["id"].get<std::string>();
+    nlohmann::json recv_decl = json_utils::find_var_decl(
+      recv_name, converter.current_function_name(), ast);
+
+    if (
+      recv_decl.contains("annotation") && recv_decl["annotation"].is_object() &&
+      recv_decl["annotation"].contains("id") &&
+      recv_decl["annotation"]["id"].is_string())
+    {
+      const std::string class_name =
+        recv_decl["annotation"]["id"].get<std::string>();
+      nlohmann::json class_node = json_utils::find_class(ast["body"], class_name);
+      if (!class_node.is_null() && class_node.contains("body"))
+      {
+        nlohmann::json function_node = json_utils::find_function(
+          class_node["body"], func["attr"].get<std::string>());
+        return get_elem_type_from_return_annotation(function_node, type_handler_);
+      }
+    }
+  }
+
+  return typet();
+}
+
 std::unordered_map<std::string, std::vector<std::pair<std::string, typet>>>
   python_list::list_type_map{};
 
@@ -1758,6 +1820,21 @@ exprt python_list::handle_index_access(
       }
 
       // Handle variable-based indexing
+      if (
+        elem_type == typet() && !list_node.is_null() &&
+        list_node.contains("value") && list_node["value"].is_object() &&
+        list_node["value"].contains("_type") &&
+        list_node["value"]["_type"] == "Call")
+      {
+        elem_type = infer_elem_type_from_call_return(list_node["value"], converter_);
+        if (elem_type != typet() && array.is_symbol())
+        {
+          const std::string &list_name = array.identifier().as_string();
+          if (list_type_map[list_name].empty())
+            list_type_map[list_name].push_back(std::make_pair("", elem_type));
+        }
+      }
+
       if (!list_node.is_null() && list_node["_type"] == "arg")
       {
         elem_type = get_elem_type_from_annotation(
