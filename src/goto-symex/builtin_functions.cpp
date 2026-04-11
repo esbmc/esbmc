@@ -1853,6 +1853,50 @@ static inline expr2tc gen_value_by_byte(
   return gen_byte_expression(type, src, value, num_of_bytes, offset);
 }
 
+expr2tc goto_symex_utils::gen_byte_memcpy_byte_update(
+  const expr2tc &src,
+  const expr2tc &dst,
+  const size_t num_of_bytes,
+  const size_t src_offset,
+  const size_t dst_offset,
+  bool is_big_endian)
+{
+  // Very limited for now. Only char src arrays
+  if (
+    !is_array_type(src->type) ||
+    to_array_type(src->type).subtype->get_width() != 8)
+    return expr2tc();
+
+  // SMT convertion hates something like "char src[1]" into a "char dst"
+  if (dst->type->get_width() == 8)
+  {
+    assert(!dst_offset);
+    const expr2tc src_index =
+      constant_int2tc(get_int32_type(), BigInt(src_offset));
+    return byte_extract2tc(get_int8_type(), src, src_index, is_big_endian);
+  }
+
+  expr2tc result = dst;
+  for (size_t counter = 0; counter < num_of_bytes; counter++)
+  {
+    const expr2tc src_index =
+      constant_int2tc(get_int32_type(), BigInt(src_offset + counter));
+    const expr2tc dst_index =
+      constant_int2tc(get_int32_type(), BigInt(dst_offset + counter));
+
+    // Extract src-byte at position (src_offset + counter)
+    expr2tc src_byte =
+      byte_extract2tc(get_int8_type(), src, src_index, is_big_endian);
+
+    // Write src_byte into dst at position (dst_offset + counter)
+    result =
+      byte_update2tc(dst->type, result, dst_index, src_byte, is_big_endian);
+  }
+
+  simplify(result);
+  return result;
+}
+
 expr2tc goto_symex_utils::gen_byte_memcpy(
   const expr2tc &src,
   const expr2tc &dst,
@@ -1917,7 +1961,8 @@ static inline expr2tc do_memcpy_expression(
   const size_t &dst_offset,
   const expr2tc &src,
   const size_t &src_offset,
-  const size_t num_of_bytes)
+  const size_t num_of_bytes,
+  bool is_big_endian)
 {
   if (num_of_bytes == 0)
     return dst;
@@ -1933,8 +1978,8 @@ static inline expr2tc do_memcpy_expression(
     is_struct_type(dst->type) || is_union_type(dst->type) ||
     is_struct_type(src->type) || is_union_type(src->type))
   {
-    log_debug("memcpy", "Only primitives are supported for now");
-    return expr2tc();
+    return goto_symex_utils::gen_byte_memcpy_byte_update(
+      src, dst, num_of_bytes, src_offset, dst_offset, is_big_endian);
   }
 
   // Base-case. Primitives!
@@ -2179,7 +2224,8 @@ void goto_symext::intrinsic_memcpy(
         number_of_offset,
         src_item.object,
         src_offset,
-        number_of_bytes);
+        number_of_bytes,
+        config.ansi_c.endianess == config.ansi_c.IS_BIG_ENDIAN);
 
       if (!new_object)
       {
