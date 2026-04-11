@@ -281,7 +281,6 @@ public:
     }
 
     apply_pending_specializations();
-
   }
 
   void add_type_annotation(const std::string &func_name)
@@ -542,8 +541,7 @@ private:
             bool already_pending = false;
             for (const auto &spec : pending_specializations_)
             {
-              if (
-                spec.function_name == func_name && spec.param_index == i)
+              if (spec.function_name == func_name && spec.param_index == i)
               {
                 already_pending = true;
                 break;
@@ -723,26 +721,27 @@ private:
     return base_name + "__esbmc_poly_" + class_name;
   }
 
-  std::string resolve_name_assigned_class(const std::string &name, const Json &node)
+  std::string
+  resolve_name_assigned_class(const std::string &name, const Json &node)
   {
     if (name.empty())
       return "";
 
     if (node.is_object())
     {
-      if (node.contains("_type") && node["_type"] == "Assign" &&
-          node.contains("targets") && node["targets"].is_array() &&
-          !node["targets"].empty() && node["targets"][0].is_object() &&
-          node["targets"][0].contains("_type") &&
-          node["targets"][0]["_type"] == "Name" &&
-          node["targets"][0].contains("id") &&
-          node["targets"][0]["id"] == name && node.contains("value") &&
-          node["value"].is_object() && node["value"].contains("_type") &&
-          node["value"]["_type"] == "Call" && node["value"].contains("func") &&
-          node["value"]["func"].is_object() &&
-          node["value"]["func"].contains("_type") &&
-          node["value"]["func"]["_type"] == "Name" &&
-          node["value"]["func"].contains("id"))
+      if (
+        node.contains("_type") && node["_type"] == "Assign" &&
+        node.contains("targets") && node["targets"].is_array() &&
+        !node["targets"].empty() && node["targets"][0].is_object() &&
+        node["targets"][0].contains("_type") &&
+        node["targets"][0]["_type"] == "Name" &&
+        node["targets"][0].contains("id") && node["targets"][0]["id"] == name &&
+        node.contains("value") && node["value"].is_object() &&
+        node["value"].contains("_type") && node["value"]["_type"] == "Call" &&
+        node["value"].contains("func") && node["value"]["func"].is_object() &&
+        node["value"]["func"].contains("_type") &&
+        node["value"]["func"]["_type"] == "Name" &&
+        node["value"]["func"].contains("id"))
       {
         std::string class_name =
           node["value"]["func"]["id"].template get<std::string>();
@@ -778,12 +777,13 @@ private:
   {
     if (node.is_object())
     {
-      if (node.contains("_type") && node["_type"] == "Call" &&
-          node.contains("func") && node["func"].is_object() &&
-          node["func"].contains("_type") && node["func"]["_type"] == "Name" &&
-          node["func"].contains("id") && node["func"]["id"] == original_name &&
-          node.contains("args") && node["args"].is_array() &&
-          param_index < node["args"].size())
+      if (
+        node.contains("_type") && node["_type"] == "Call" &&
+        node.contains("func") && node["func"].is_object() &&
+        node["func"].contains("_type") && node["func"]["_type"] == "Name" &&
+        node["func"].contains("id") && node["func"]["id"] == original_name &&
+        node.contains("args") && node["args"].is_array() &&
+        param_index < node["args"].size())
       {
         std::string arg_type = get_argument_type(node["args"][param_index]);
         if (
@@ -826,8 +826,9 @@ private:
       size_t idx = 0;
       for (const auto &node : ast_["body"])
       {
-        if (node.contains("_type") && node["_type"] == "FunctionDef" &&
-            node.contains("name") && node["name"] == func_name)
+        if (
+          node.contains("_type") && node["_type"] == "FunctionDef" &&
+          node.contains("name") && node["name"] == func_name)
         {
           original_function = node;
           found = true;
@@ -867,10 +868,11 @@ private:
           build_specialized_function_name(func_name, class_name);
         specialized["name"] = specialized_name;
 
-        if (specialized.contains("args") && specialized["args"].is_object() &&
-            specialized["args"].contains("args") &&
-            specialized["args"]["args"].is_array() &&
-            param_index < specialized["args"]["args"].size())
+        if (
+          specialized.contains("args") && specialized["args"].is_object() &&
+          specialized["args"].contains("args") &&
+          specialized["args"]["args"].is_array() &&
+          param_index < specialized["args"]["args"].size())
         {
           Json &param = specialized["args"]["args"][param_index];
           add_parameter_annotation(param, class_name);
@@ -880,11 +882,13 @@ private:
         specialized_nodes.push_back(std::move(specialized));
       }
 
-      auto insert_it = ast_["body"].begin() + static_cast<ptrdiff_t>(original_index + 1);
+      auto insert_it =
+        ast_["body"].begin() + static_cast<ptrdiff_t>(original_index + 1);
       ast_["body"].insert(
         insert_it, specialized_nodes.begin(), specialized_nodes.end());
 
-      rewrite_specialized_calls(func_name, param_index, specialized_names, ast_);
+      rewrite_specialized_calls(
+        func_name, param_index, specialized_names, ast_);
     }
 
     pending_specializations_.clear();
