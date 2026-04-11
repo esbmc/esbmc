@@ -90,6 +90,11 @@ protected:
     goto_functionst &goto_functions,
     const uint64_t &k_step);
 
+  void diagnose_unknown_properties(
+    optionst &options,
+    goto_functionst &goto_functions,
+    uint64_t k_step);
+
   bool read_goto_binary(goto_functionst &goto_functions);
 
   bool set_claims(goto_functionst &goto_functions);
