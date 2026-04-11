@@ -118,8 +118,13 @@ symbolt *code_contractst::find_function_symbol(const std::string &function_name)
   symbolt *sym = context.find_symbol(function_name);
   if (sym != nullptr)
     return sym;
+  // C convention: c:@F@funcname
   std::string func_id = "c:@F@" + function_name;
-  return context.find_symbol(func_id);
+  sym = context.find_symbol(func_id);
+  if (sym != nullptr)
+    return sym;
+  // C++ convention: c:@F@funcname# (free function, no namespace/class)
+  return context.find_symbol(func_id + "#");
 }
 
 void code_contractst::rename_function(
