@@ -3100,7 +3100,8 @@ void esbmc_parseoptionst::diagnose_unknown_properties(
   const bool saved_forward_condition =
     options.get_bool_option("forward-condition");
   const bool saved_inductive_step = options.get_bool_option("inductive-step");
-  const bool saved_no_unwinding = options.get_bool_option("no-unwinding-assertions");
+  const bool saved_no_unwinding =
+    options.get_bool_option("no-unwinding-assertions");
   const bool saved_partial_loops = options.get_bool_option("partial-loops");
   const std::string saved_unwind = options.get_option("unwind");
 
