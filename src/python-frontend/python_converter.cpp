@@ -2186,7 +2186,6 @@ exprt python_converter::build_binary_expression(
       return 1;
     return static_cast<const bv_typet &>(t).get_width();
   };
-
   // Adjust types for non-relational operations
   if (!type_utils::is_relational_op(op))
   {
@@ -2196,11 +2195,17 @@ exprt python_converter::build_binary_expression(
 
     // Check for bitvector width mismatch
     if (
-      (lhs_type.is_signedbv() || lhs_type.is_unsignedbv()) &&
-      (rhs_type.is_signedbv() || rhs_type.is_unsignedbv()) &&
-      lhs_type.width() != rhs_type.width())
+      is_bv_or_bool(lhs_type) && is_bv_or_bool(rhs_type) &&
+      (bit_width(lhs_type) != bit_width(rhs_type) ||
+       lhs_type.is_signedbv() != rhs_type.is_signedbv()))
     {
-      adjust_statement_types(lhs, rhs);
+      const typet &target_type =
+        bit_width(lhs_type) >= bit_width(rhs_type) ? lhs_type : rhs_type;
+
+      if (lhs.type() != target_type)
+        lhs = typecast_exprt(lhs, target_type);
+      if (rhs.type() != target_type)
+        rhs = typecast_exprt(rhs, target_type);
     }
   }
   else if (
