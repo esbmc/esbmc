@@ -505,14 +505,9 @@ PyObject *__ESBMC_list_pop(PyListObject *l, int64_t index)
   // Make a copy of the element to return before shifting
   PyObject *popped = __ESBMC_alloca(sizeof(PyObject));
 
-  // Copy the element's data
-  popped->value = __ESBMC_alloca(l->items[actual_index].size);
-  memcpy(
-    (void *)popped->value,
-    l->items[actual_index].value,
-    l->items[actual_index].size);
-  popped->type_id = l->items[actual_index].type_id;
-  popped->size = l->items[actual_index].size;
+  // Return the removed object as-is. The payload already has stable storage
+  // and shifting the remaining slots only moves PyObject descriptors.
+  *popped = l->items[actual_index];
 
   // Now shift elements to fill the gap
   size_t i = actual_index;

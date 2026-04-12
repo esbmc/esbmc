@@ -1130,8 +1130,9 @@ protected:
   std::map<unsigned, std::pair<std::string, unsigned>> loop_id_to_func_index;
   /** Global maximum number of unwinds. */
   BigInt max_unwind;
-  /** Online interval domain used by --interval-symex-guard to prune loop
-   *  guards and by --interval-symex-assert to discharge claims proven TRUE. */
+  /** Online interval domain: guard pruning is on by default (disable with
+   *  --no-interval-symex-guard); assertion pruning via --interval-symex-assert
+   *  discharges claims proven TRUE. */
   std::optional<interval_domaint> interval_domain_state;
   /** Whether constant propagation is to be enabled. */
   bool constant_propagation;
