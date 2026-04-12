@@ -97,8 +97,16 @@ bool code_contractst::is_compiler_generated(
   if (!function_name.empty() && function_name[0] == '~')
     return true;
 
-  // Skip functions with # in name (compiler-generated, e.g., exception destructors)
-  if (function_name.find('#') != std::string::npos)
+  // C++ free functions and methods are stored with a trailing '#' in the Clang
+  // USR encoding (e.g. "c:@F@foo#", "c:@S@MyClass@F@bar#").  Strip exactly
+  // one trailing '#' before the compiler-generated check so that user-defined
+  // C++ functions are not accidentally skipped.
+  std::string name = function_name;
+  if (!name.empty() && name.back() == '#')
+    name.pop_back();
+
+  // Skip functions with # remaining in name (compiler-generated, e.g., exception destructors)
+  if (name.find('#') != std::string::npos)
     return true;
 
   // Skip functions starting with __ESBMC_contracts_original_ (already processed)
@@ -118,8 +126,13 @@ symbolt *code_contractst::find_function_symbol(const std::string &function_name)
   symbolt *sym = context.find_symbol(function_name);
   if (sym != nullptr)
     return sym;
+  // C convention: c:@F@funcname
   std::string func_id = "c:@F@" + function_name;
-  return context.find_symbol(func_id);
+  sym = context.find_symbol(func_id);
+  if (sym != nullptr)
+    return sym;
+  // C++ convention: c:@F@funcname# (free function, no namespace/class)
+  return context.find_symbol(func_id + "#");
 }
 
 void code_contractst::rename_function(
@@ -3093,10 +3106,17 @@ static bool matches_replace_pattern(
     if (func_name == pattern)
       return true;
     // Match unqualified name: extract the part after the last '@'
-    // e.g. "c:@F@foo" → "foo"
+    // e.g. "c:@F@foo" → "foo", "c:@F@foo#" (C++ free func) → "foo"
     auto pos = func_name.rfind('@');
-    if (pos != std::string::npos && func_name.substr(pos + 1) == pattern)
-      return true;
+    if (pos != std::string::npos)
+    {
+      std::string tail = func_name.substr(pos + 1);
+      // Strip trailing '#' used by C++ free function symbols
+      if (!tail.empty() && tail.back() == '#')
+        tail.pop_back();
+      if (tail == pattern)
+        return true;
+    }
   }
   return false;
 }
