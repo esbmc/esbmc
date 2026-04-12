@@ -24,6 +24,35 @@
 // Default depth for list comparison if option not set
 static const int DEFAULT_LIST_COMPARE_DEPTH = 4;
 
+static bool is_excluded_struct_tag_for_object_ref(const std::string &tag)
+{
+  return tag.find("dict_") != std::string::npos ||
+         tag.find("tag-dict") != std::string::npos ||
+         tag.rfind("tag-Optional_", 0) == 0 || tag.rfind("tag-tuple", 0) == 0 ||
+         tag == "__python_dict__";
+}
+
+static bool is_user_class_object_type(const typet &type, const namespacet &ns)
+{
+  typet resolved = type;
+  if (resolved.id() == "symbol")
+    resolved = ns.follow(resolved);
+
+  if (!resolved.is_struct())
+    return false;
+
+  const std::string tag = to_struct_type(resolved).tag().as_string();
+  if (tag.empty())
+    return false;
+
+  if (
+    tag.find("__ESBMC_") != std::string::npos ||
+    tag.rfind("tag-struct __ESBMC_", 0) == 0)
+    return false;
+
+  return !is_excluded_struct_tag_for_object_ref(tag);
+}
+
 static int get_list_compare_depth()
 {
   std::string opt_value =
@@ -398,7 +427,29 @@ exprt python_list::build_push_list_call(
   // For string types (pointer to char), we must pass the pointer value directly
   // For other types (including other pointers such None/bool*), we must pass the address
   exprt element_arg;
-  if (
+  if (is_user_class_object_type(elem_info.elem_symbol->type, converter_.name_space()))
+  {
+    // Python list stores object references. For class objects, store a pointer
+    // to the object (not a byte copy of the struct payload).
+    typet obj_ptr_type = pointer_typet(elem_info.elem_symbol->type);
+    symbolt &obj_ptr_sym =
+      converter_.create_tmp_symbol(op, "$list_obj_ref$", obj_ptr_type, exprt());
+
+    code_declt obj_ptr_decl(symbol_expr(obj_ptr_sym));
+    obj_ptr_decl.location() = elem_info.location;
+    converter_.add_instruction(obj_ptr_decl);
+
+    code_assignt obj_ptr_assign(
+      symbol_expr(obj_ptr_sym),
+      address_of_exprt(symbol_expr(*elem_info.elem_symbol)));
+    obj_ptr_assign.location() = elem_info.location;
+    converter_.add_instruction(obj_ptr_assign);
+
+    element_arg = address_of_exprt(symbol_expr(obj_ptr_sym));
+    const size_t pointer_size_bytes = config.ansi_c.pointer_width() / 8;
+    elem_info.elem_size = from_integer(BigInt(pointer_size_bytes), size_type());
+  }
+  else if (
     elem_info.elem_symbol->type.is_pointer() &&
     elem_info.elem_symbol->type.subtype() == char_type())
   {

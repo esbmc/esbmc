@@ -4454,9 +4454,14 @@ exprt function_call_expr::handle_general_function_call()
           std::vector<std::string> possible_classes =
             find_possible_class_types(obj_symbol);
 
-          // If no classes found, use the inferred class name
+          // If no classes found, use the inferred class name as a best-effort
+          // fallback (it may come from weak type inference in dynamic code).
+          bool inferred_classes_from_fallback = false;
           if (possible_classes.empty())
+          {
             possible_classes.push_back(class_name);
+            inferred_classes_from_fallback = true;
+          }
 
           // When there are multiple possible classes (polymorphic object),
           // the method must exist in ALL of them; otherwise it is an
@@ -4529,7 +4534,19 @@ exprt function_call_expr::handle_general_function_call()
 
           if (!method_exists && !is_in_same_class)
           {
-            // Generate AttributeError
+            // In dynamic/untyped flows we may only have fallback class guesses.
+            // Do not inject a hard failure from uncertain inference.
+            if (inferred_classes_from_fallback)
+            {
+              locationt location = converter_.get_location_from_decl(call_);
+              exprt nondet_fallback("sideeffect", any_type());
+              nondet_fallback.statement("nondet");
+              nondet_fallback.location() = location;
+              nondet_fallback.location().user_provided(true);
+              return nondet_fallback;
+            }
+
+            // Generate AttributeError for concrete class information.
             return generate_attribute_error(method_name, possible_classes);
           }
 
@@ -4715,7 +4732,13 @@ exprt function_call_expr::handle_general_function_call()
   // Add self as first parameter
   if (function_type_ == FunctionType::Constructor)
   {
-    call.type() = type_handler_.get_typet(func_symbol->name.as_string());
+    // Keep the constructor result as the requested class type, even when
+    // __init__ is resolved in a base class.
+    const std::string requested_class = function_id_.get_class();
+    if (!requested_class.empty())
+      call.type() = type_handler_.get_typet(requested_class);
+    else
+      call.type() = type_handler_.get_typet(func_symbol->name.as_string());
 
     // Detect super().__init__() pattern: call parent ctor on current self,
     // not on a newly allocated object.
@@ -5370,7 +5393,11 @@ exprt function_call_expr::handle_general_function_call()
     if (call.arguments().size() == num_provided_args)
     {
       // Create temporary object as self parameter
-      typet class_type = type_handler_.get_typet(func_symbol->name.as_string());
+      const std::string requested_class = function_id_.get_class();
+      typet class_type =
+        requested_class.empty()
+          ? type_handler_.get_typet(func_symbol->name.as_string())
+          : type_handler_.get_typet(requested_class);
       symbolt &temp_self =
         converter_.create_tmp_symbol(call_, "$ctor_self$", class_type, exprt());
       converter_.symbol_table().add(temp_self);
