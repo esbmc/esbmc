@@ -4558,6 +4558,16 @@ exprt function_call_expr::handle_general_function_call()
                   arg.type(),
                   string_constantt::k_default);
               }
+              else if (arg.is_constant())
+              {
+                // Constant array (e.g., folded string concat) must be materialized before address_of_exprt.
+                symbolt &tmp = converter_.create_tmp_symbol(
+                  call_, "$const_str_arg$", arg.type(), arg);
+                code_declt tmp_decl(symbol_expr(tmp));
+                tmp_decl.location() = location;
+                converter_.current_block->copy_to_operands(tmp_decl);
+                arg = symbol_expr(tmp);
+              }
               call.arguments().push_back(address_of_exprt(arg));
             }
             else
@@ -4633,6 +4643,16 @@ exprt function_call_expr::handle_general_function_call()
                   arg_node["value"].get<std::string>(),
                   arg.type(),
                   string_constantt::k_default);
+              }
+              else if (arg.is_constant())
+              {
+                // Constant array (e.g., folded string concat) must be materialized before address_of_exprt.
+                symbolt &tmp = converter_.create_tmp_symbol(
+                  call_, "$const_str_arg$", arg.type(), arg);
+                code_declt tmp_decl(symbol_expr(tmp));
+                tmp_decl.location() = location;
+                converter_.current_block->copy_to_operands(tmp_decl);
+                arg = symbol_expr(tmp);
               }
               call.arguments().push_back(address_of_exprt(arg));
             }
@@ -5139,6 +5159,16 @@ exprt function_call_expr::handle_general_function_call()
           arg_node["value"].get<std::string>(),
           arg.type(),
           string_constantt::k_default);
+      }
+      else if (arg.is_constant())
+      {
+        // Constant array (e.g., folded string concat) must be materialized before address_of_exprt.
+        symbolt &tmp = converter_.create_tmp_symbol(
+          call_, "$const_str_arg$", arg.type(), arg);
+        code_declt tmp_decl(symbol_expr(tmp));
+        tmp_decl.location() = location;
+        converter_.current_block->copy_to_operands(tmp_decl);
+        arg = symbol_expr(tmp);
       }
       call.arguments().push_back(address_of_exprt(arg));
     }
