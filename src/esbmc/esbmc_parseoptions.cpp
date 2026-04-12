@@ -436,6 +436,22 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("termination", false);
   }
 
+  // interval-symex-guard is designed for plain BMC loop-counter tracking.
+  // Disable it for advanced verification modes whose GOTO/symex transformations
+  // are incompatible with a single shared (non-forked) interval_domaint:
+  //   - incremental-BMC reuses one goto_symext across unwind iterations
+  //   - k-induction (base/forward/inductive) havocs loop variables
+  //   - loop-invariant and function contracts inject havoc+assume sequences
+  if (
+    options.get_bool_option("k-induction") ||
+    cmdline.isset("k-induction-parallel") || cmdline.isset("incremental-bmc") ||
+    cmdline.isset("termination") || cmdline.isset("enforce-contract") ||
+    cmdline.isset("enforce-all-contracts") ||
+    cmdline.isset("replace-call-with-contract") ||
+    cmdline.isset("replace-all-contracts") || cmdline.isset("base-case") ||
+    cmdline.isset("forward-condition") || cmdline.isset("inductive-step"))
+    options.set_option("no-interval-symex-guard", true);
+
   if (
     cmdline.isset("overflow-check") || cmdline.isset("unsigned-overflow-check"))
     options.set_option("disable-inductive-step", true);

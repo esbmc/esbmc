@@ -475,8 +475,10 @@ void goto_symext::symex_step(reachability_treet &art)
   }
 
   // Feed the instruction into the online interval domain shared by
-  // --interval-symex-guard and --interval-symex-assert.
-  if (interval_domain_state)
+  // guard pruning (default; disable with --no-interval-symex-guard) and
+  // --interval-symex-assert. Skip unreachable paths so stale state from
+  // contradicted branches does not leak into the shared domain.
+  if (interval_domain_state && !cur_state->guard.is_false())
     interval_domain_state->process_instruction(pre_step_pc);
 }
 
