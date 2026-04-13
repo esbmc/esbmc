@@ -682,12 +682,6 @@ void goto_convertt::convert_decl(const codet &code, goto_programt &dest)
     // just resize the vector, this will get rid of op1
     new_code.operands().pop_back();
 
-    if (options.get_bool_option("atomicity-check"))
-    {
-      unsigned int globals = get_expr_number_globals(initializer);
-      if (globals > 0)
-        break_globals2assignments(initializer, dest, new_code.location());
-    }
   }
 
   // break up into decl and assignment
@@ -902,294 +896,11 @@ void goto_convertt::convert_assign(
       return;
     }
 
-    int atomic = 0;
-    if (options.get_bool_option("atomicity-check"))
-    {
-      unsigned int globals = get_expr_number_globals(lhs);
-      atomic = globals;
-      globals += get_expr_number_globals(rhs);
-      if (
-        globals > 0 &&
-        (lhs.identifier().as_string().find("tmp$") == std::string::npos))
-        break_globals2assignments(atomic, lhs, rhs, dest, code.location());
-    }
-
     code_assignt new_assign(code);
     new_assign.lhs() = lhs;
     new_assign.rhs() = rhs;
     copy(new_assign, ASSIGN, dest);
-
-    if (options.get_bool_option("atomicity-check"))
-      if (atomic == -1)
-        dest.add_instruction(ATOMIC_END);
   }
-}
-
-void goto_convertt::break_globals2assignments(
-  int &atomic,
-  exprt &lhs,
-  exprt &rhs,
-  goto_programt &dest,
-  const locationt &location)
-{
-  if (!options.get_bool_option("atomicity-check"))
-    return;
-
-  exprt atomic_dest = exprt("and", typet("bool"));
-
-  /* break statements such as a = b + c as follows:
-   * tmp1 = b;
-   * tmp2 = c;
-   * atomic_begin
-   * assert tmp1==b && tmp2==c
-   * a = b + c
-   * atomic_end
-  */
-  //break_globals2assignments_rec(lhs,atomic_dest,dest,atomic,location);
-  break_globals2assignments_rec(rhs, atomic_dest, dest, atomic, location);
-
-  if (atomic_dest.operands().size() == 1)
-  {
-    exprt tmp;
-    tmp.swap(atomic_dest.op0());
-    atomic_dest.swap(tmp);
-  }
-  if (atomic_dest.operands().size() != 0)
-  {
-    // do an assert
-    if (atomic > 0)
-    {
-      dest.add_instruction(ATOMIC_BEGIN);
-      atomic = -1;
-    }
-    goto_programt::targett t = dest.add_instruction(ASSERT);
-    expr2tc tmp_guard;
-    migrate_expr(atomic_dest, tmp_guard);
-    t->guard = tmp_guard;
-    t->location = location;
-    t->location.comment(
-      "atomicity violation on assignment to " + lhs.identifier().as_string());
-  }
-}
-
-void goto_convertt::break_globals2assignments(
-  exprt &rhs,
-  goto_programt &dest,
-  const locationt &location)
-{
-  if (!options.get_bool_option("atomicity-check"))
-    return;
-
-  if (rhs.operands().size() > 0)
-    if (rhs.op0().identifier().as_string().find("pthread") != std::string::npos)
-      return;
-
-  if (rhs.operands().size() > 0)
-    if (rhs.op0().operands().size() > 0)
-      return;
-
-  exprt atomic_dest = exprt("and", typet("bool"));
-  break_globals2assignments_rec(rhs, atomic_dest, dest, 0, location);
-
-  if (atomic_dest.operands().size() == 1)
-  {
-    exprt tmp;
-    tmp.swap(atomic_dest.op0());
-    atomic_dest.swap(tmp);
-  }
-
-  if (atomic_dest.operands().size() != 0)
-  {
-    goto_programt::targett t = dest.add_instruction(ASSERT);
-    expr2tc tmp_dest;
-    migrate_expr(atomic_dest, tmp_dest);
-    t->guard.swap(tmp_dest);
-    t->location = location;
-    t->location.comment("atomicity violation");
-  }
-}
-
-void goto_convertt::break_globals2assignments_rec(
-  exprt &rhs,
-  exprt &atomic_dest,
-  goto_programt &dest,
-  int atomic,
-  const locationt &location)
-{
-  if (!options.get_bool_option("atomicity-check"))
-    return;
-
-  if (
-    rhs.id() == "dereference" || rhs.id() == "implicit_dereference" ||
-    rhs.id() == "index" || rhs.id() == "member")
-  {
-    irep_idt identifier = rhs.op0().identifier();
-    if (rhs.id() == "member")
-    {
-      const exprt &object = rhs.operands()[0];
-      identifier = object.identifier();
-    }
-    else if (rhs.id() == "index")
-    {
-      identifier = rhs.op1().identifier();
-    }
-
-    if (identifier.empty())
-      return;
-
-    const symbolt *symbol = ns.lookup(identifier);
-    assert(symbol);
-
-    if (
-      !(identifier == "__ESBMC_alloc" || identifier == "__ESBMC_alloc_size") &&
-      (symbol->static_lifetime || symbol->type.is_dynamic_set()))
-    {
-      // make new assignment to temp for each global symbol
-      symbolt &new_symbol = new_tmp_symbol(rhs.type());
-      new_symbol.static_lifetime = true;
-
-      // declare this symbol first
-      code_declt decl(symbol_expr(new_symbol));
-      decl.location() = location;
-      convert_decl(decl, dest);
-
-      equality_exprt eq_expr;
-      irept irep;
-      new_symbol.to_irep(irep);
-      eq_expr.lhs() = symbol_expr(new_symbol);
-      eq_expr.rhs() = rhs;
-      atomic_dest.copy_to_operands(eq_expr);
-
-      codet assignment("assign");
-      assignment.reserve_operands(2);
-      assignment.copy_to_operands(symbol_expr(new_symbol));
-      assignment.copy_to_operands(rhs);
-      assignment.location() = location;
-      assignment.comment("atomicity violation");
-      copy(assignment, ASSIGN, dest);
-
-      if (atomic == 0)
-        rhs = symbol_expr(new_symbol);
-    }
-  }
-  else if (rhs.id() == "symbol")
-  {
-    const irep_idt &identifier = rhs.identifier();
-    const symbolt *symbol = ns.lookup(identifier);
-    assert(symbol);
-    if (symbol->static_lifetime || symbol->type.is_dynamic_set())
-    {
-      // make new assignment to temp for each global symbol
-      symbolt &new_symbol = new_tmp_symbol(rhs.type());
-      new_symbol.static_lifetime = true;
-
-      // declare this symbol first
-      code_declt decl(symbol_expr(new_symbol));
-      decl.location() = location;
-      convert_decl(decl, dest);
-
-      equality_exprt eq_expr;
-      irept irep;
-      new_symbol.to_irep(irep);
-      eq_expr.lhs() = symbol_expr(new_symbol);
-      eq_expr.rhs() = rhs;
-      atomic_dest.copy_to_operands(eq_expr);
-
-      codet assignment("assign");
-      assignment.reserve_operands(2);
-      assignment.copy_to_operands(symbol_expr(new_symbol));
-      assignment.copy_to_operands(rhs);
-
-      assignment.location() = rhs.find_location();
-      assignment.comment("atomicity violation");
-      copy(assignment, ASSIGN, dest);
-
-      if (atomic == 0)
-        rhs = symbol_expr(new_symbol);
-    }
-  }
-  else if (!rhs.is_address_of()) // && rhs.id() != "dereference")
-  {
-    Forall_operands (it, rhs)
-    {
-      break_globals2assignments_rec(*it, atomic_dest, dest, atomic, location);
-    }
-  }
-}
-
-unsigned int goto_convertt::get_expr_number_globals(const exprt &expr)
-{
-  if (!options.get_bool_option("atomicity-check"))
-    return 0;
-
-  if (expr.is_address_of())
-    return 0;
-
-  if (expr.id() == "symbol")
-  {
-    const irep_idt &identifier = expr.identifier();
-    const symbolt *symbol = ns.lookup(identifier);
-    assert(symbol);
-
-    if (identifier == "__ESBMC_alloc" || identifier == "__ESBMC_alloc_size")
-    {
-      return 0;
-    }
-    if (symbol->static_lifetime || symbol->type.is_dynamic_set())
-    {
-      return 1;
-    }
-    else
-    {
-      return 0;
-    }
-  }
-
-  unsigned int globals = 0;
-
-  forall_operands (it, expr)
-    globals += get_expr_number_globals(*it);
-
-  return globals;
-}
-
-unsigned int goto_convertt::get_expr_number_globals(const expr2tc &expr)
-{
-  if (is_nil_expr(expr))
-    return 0;
-
-  if (!options.get_bool_option("atomicity-check"))
-    return 0;
-
-  if (is_address_of2t(expr))
-    return 0;
-  if (is_symbol2t(expr))
-  {
-    irep_idt identifier = to_symbol2t(expr).get_symbol_name();
-    const symbolt *symbol = ns.lookup(identifier);
-    assert(symbol);
-
-    if (identifier == "__ESBMC_alloc" || identifier == "__ESBMC_alloc_size")
-    {
-      return 0;
-    }
-    if (symbol->static_lifetime || symbol->type.is_dynamic_set())
-    {
-      return 1;
-    }
-    else
-    {
-      return 0;
-    }
-  }
-
-  unsigned int globals = 0;
-
-  expr->foreach_operand([this, &globals](const expr2tc &e) {
-    globals += get_expr_number_globals(e);
-  });
-
-  return globals;
 }
 
 void goto_convertt::convert_init(const codet &code, goto_programt &dest)
@@ -1263,13 +974,6 @@ void goto_convertt::convert_assert(const codet &code, goto_programt &dest)
   if (options.get_bool_option("no-assertions"))
     return;
 
-  if (options.get_bool_option("atomicity-check"))
-  {
-    unsigned int globals = get_expr_number_globals(cond);
-    if (globals > 0)
-      break_globals2assignments(cond, dest, code.location());
-  }
-
   goto_programt::targett t = dest.add_instruction(ASSERT);
   expr2tc tmp_cond;
   migrate_expr(cond, tmp_cond);
@@ -1299,13 +1003,6 @@ void goto_convertt::convert_assume(const codet &code, goto_programt &dest)
   exprt op = code.op0();
 
   remove_sideeffects(op, dest);
-
-  if (options.get_bool_option("atomicity-check"))
-  {
-    unsigned int globals = get_expr_number_globals(op);
-    if (globals > 0)
-      break_globals2assignments(op, dest, code.location());
-  }
 
   goto_programt::targett t = dest.add_instruction(ASSUME);
   expr2tc tmp_op;
@@ -1637,13 +1334,6 @@ void goto_convertt::convert_switch(const codet &code, goto_programt &dest)
     exprt guard_expr;
     case_guard(argument, case_ops, guard_expr);
 
-    if (options.get_bool_option("atomicity-check"))
-    {
-      unsigned int globals = get_expr_number_globals(guard_expr);
-      if (globals > 0)
-        break_globals2assignments(guard_expr, tmp_cases, code.location());
-    }
-
     goto_programt::targett x = tmp_cases.add_instruction();
     x->make_goto(it.first);
     migrate_expr(guard_expr, x->guard);
@@ -1697,14 +1387,6 @@ void goto_convertt::convert_return(
     goto_programt sideeffects;
     remove_sideeffects(new_code.return_value(), sideeffects);
     dest.destructive_append(sideeffects);
-
-    if (options.get_bool_option("atomicity-check"))
-    {
-      unsigned int globals = get_expr_number_globals(new_code.return_value());
-      if (globals > 0)
-        break_globals2assignments(
-          new_code.return_value(), dest, code.location());
-    }
   }
 
   goto_programt dummy;
@@ -2037,17 +1719,10 @@ void goto_convertt::generate_conditional_branch(
 {
   if (!has_sideeffect(guard))
   {
-    exprt g = guard;
-    if (options.get_bool_option("atomicity-check"))
-    {
-      unsigned int globals = get_expr_number_globals(g);
-      if (globals > 0)
-        break_globals2assignments(g, dest, location);
-    }
     // this is trivial
     goto_programt::targett t = dest.add_instruction();
     t->make_goto(target_true);
-    migrate_expr(g, t->guard);
+    migrate_expr(guard, t->guard);
     t->location = location;
     return;
   }
@@ -2085,14 +1760,6 @@ void goto_convertt::generate_conditional_branch(
 
   if (!has_sideeffect(guard))
   {
-    exprt g = guard;
-    if (options.get_bool_option("atomicity-check"))
-    {
-      unsigned int globals = get_expr_number_globals(g);
-      if (globals > 0)
-        break_globals2assignments(g, dest, location);
-    }
-
     // this is trivial
     goto_programt::targett t_true = dest.add_instruction();
     t_true->make_goto(target_true);
@@ -2153,13 +1820,6 @@ void goto_convertt::generate_conditional_branch(
 
   exprt cond = guard;
   remove_sideeffects(cond, dest);
-
-  if (options.get_bool_option("atomicity-check"))
-  {
-    unsigned int globals = get_expr_number_globals(cond);
-    if (globals > 0)
-      break_globals2assignments(cond, dest, location);
-  }
 
   goto_programt::targett t_true = dest.add_instruction();
   t_true->make_goto(target_true);

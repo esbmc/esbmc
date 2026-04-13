@@ -27,6 +27,7 @@ extern "C"
 #include <util/expr_util.h>
 #include <iostream>
 #include <goto-programs/add_race_assertions.h>
+#include <goto-programs/goto_atomicity_check.h>
 #include <goto-programs/goto_check.h>
 #include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/goto_inline.h>
@@ -2173,6 +2174,9 @@ bool esbmc_parseoptionst::process_goto_program(
     }
 
     goto_check(ns, options, goto_functions);
+
+    if (options.get_bool_option("atomicity-check"))
+      goto_atomicity_check(goto_functions, ns, context);
 
     // Process function contracts if enabled
     bool has_enforce = cmdline.isset("enforce-contract");
