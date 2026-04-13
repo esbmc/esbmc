@@ -4539,11 +4539,10 @@ exprt function_call_expr::handle_general_function_call()
             if (inferred_classes_from_fallback)
             {
               locationt location = converter_.get_location_from_decl(call_);
-              exprt nondet_fallback("sideeffect", any_type());
-              nondet_fallback.statement("nondet");
-              nondet_fallback.location() = location;
-              nondet_fallback.location().user_provided(true);
-              return nondet_fallback;
+              exprt zero_fallback = gen_zero(any_type());
+              zero_fallback.location() = location;
+              zero_fallback.location().user_provided(true);
+              return zero_fallback;
             }
 
             // Generate AttributeError for concrete class information.

@@ -32,7 +32,9 @@ static bool is_excluded_struct_tag_for_object_ref(const std::string &tag)
          tag == "__python_dict__";
 }
 
-static bool is_user_class_object_type(const typet &type, const namespacet &ns)
+static bool is_empty_user_class_object_type(
+  const typet &type,
+  const namespacet &ns)
 {
   typet resolved = type;
   if (resolved.id() == "symbol")
@@ -50,7 +52,12 @@ static bool is_user_class_object_type(const typet &type, const namespacet &ns)
     tag.rfind("tag-struct __ESBMC_", 0) == 0)
     return false;
 
-  return !is_excluded_struct_tag_for_object_ref(tag);
+  if (is_excluded_struct_tag_for_object_ref(tag))
+    return false;
+
+  // Empty user-defined classes (no data fields) should be stored as object
+  // references. Non-empty classes keep value-copy semantics in list storage.
+  return to_struct_type(resolved).components().empty();
 }
 
 static int get_list_compare_depth()
@@ -427,7 +434,9 @@ exprt python_list::build_push_list_call(
   // For string types (pointer to char), we must pass the pointer value directly
   // For other types (including other pointers such None/bool*), we must pass the address
   exprt element_arg;
-  if (is_user_class_object_type(elem_info.elem_symbol->type, converter_.name_space()))
+  if (is_empty_user_class_object_type(
+        elem_info.elem_symbol->type,
+        converter_.name_space()))
   {
     // Python list stores object references. For class objects, store a pointer
     // to the object (not a byte copy of the struct payload).
@@ -2010,6 +2019,22 @@ exprt python_list::handle_index_access(
         }
       }
     }
+
+    // For variable indices, prefer compile-time list element type information
+    // when available.
+    if (elem_type == typet() && array.is_symbol())
+    {
+      const std::string &list_name = array.identifier().as_string();
+      auto type_map_it = list_type_map.find(list_name);
+      if (type_map_it != list_type_map.end() && !type_map_it->second.empty())
+        elem_type = type_map_it->second.back().second;
+    }
+
+    // Python allows indexing lists with unknown element type in dynamic code.
+    // If we resolved the index but not the element type, treat elements as Any
+    // instead of raising a frontend conversion error.
+    if (pos_expr != exprt() && elem_type == typet())
+      elem_type = any_type();
 
     if (pos_expr == exprt() || elem_type == typet())
     {
