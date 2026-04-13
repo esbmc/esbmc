@@ -43,6 +43,8 @@ class Preprocessor(ast.NodeTransformer):
         self.called_names = set()  # names used as callees: g() → 'g' ∈ called_names
         self.list_literal_values = {}  # {var_name: ast.List} for direct list literal assignments
         self.newtype_vars = set()  # names defined via typing.NewType: X = NewType('X', T)
+        self.newtype_names = {"NewType"}  # local names bound to typing.NewType (covers aliased imports)
+        self.typing_module_names = set()  # module names for typing (e.g. 'typing' or its alias)
 
     def _create_helper_functions(self):
         """Create the ESBMC helper function definitions"""
@@ -3366,6 +3368,19 @@ class Preprocessor(ast.NodeTransformer):
             return node
         return result
 
+    def _is_newtype_call(self, call_node):
+        """True if call_node is a typing.NewType(...) call, in any import form."""
+        func = call_node.func
+        # from typing import NewType [as alias]  →  X = NewType(...) / alias(...)
+        if isinstance(func, ast.Name):
+            return func.id in self.newtype_names
+        # import typing [as alias]  →  X = typing.NewType(...) / alias.NewType(...)
+        if (isinstance(func, ast.Attribute) and
+                isinstance(func.value, ast.Name) and
+                func.attr == "NewType"):
+            return func.value.id in self.typing_module_names
+        return False
+
     def visit_Assign(self, node):
         """
         Handle assignment nodes, including multiple assignments and tuple unpacking.
@@ -3424,14 +3439,18 @@ class Preprocessor(ast.NodeTransformer):
             else:
                 # NewType is an identity callable
                 # rewrite X = NewType('X', T) → X = T
+                # matches typing.NewType(...) and aliased imports
                 if (isinstance(target, ast.Name) and
                         isinstance(node.value, ast.Call) and
-                        isinstance(node.value.func, ast.Name) and
-                        node.value.func.id == "NewType" and
+                        self._is_newtype_call(node.value) and
                         len(node.value.args) >= 2):
                     self.newtype_vars.add(target.id)
                     node.value = node.value.args[1]
                     ast.fix_missing_locations(node)
+                # Drop stale NewType tracking on reassignment to a non-NewType value
+                elif (isinstance(target, ast.Name) and
+                        target.id in self.newtype_vars):
+                    self.newtype_vars.discard(target.id)
                 # Simple assignment - track the type
                 # Detect bound method assignment: g = obj.method
                 # Only remove when g is actually called somewhere (g())
@@ -4021,6 +4040,12 @@ class Preprocessor(ast.NodeTransformer):
                     self.defaultdict_imported = True
                     if alias.asname:
                         self.defaultdict_alias = alias.asname
+        if node.module == "typing":
+            for alias in node.names:
+                if alias.name == "NewType":
+                    self.newtype_names.add(alias.asname or "NewType")
+                elif alias.name == "*":
+                    self.newtype_names.add("NewType")
         self.generic_visit(node)
         return node
 
@@ -4034,6 +4059,8 @@ class Preprocessor(ast.NodeTransformer):
                 self.collections_module_imported = True
                 if alias.asname:
                     self.collections_module_alias = alias.asname
+            if alias.name == "typing":
+                self.typing_module_names.add(alias.asname or "typing")
         self.generic_visit(node)
         return node
 

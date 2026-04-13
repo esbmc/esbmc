@@ -552,7 +552,7 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
         return any_type();
       // Handle simple alias: X = T to T
       // the preprocessor rewrites
-      // X = NewType('X', T) to X = T)
+      // X = NewType('X', T) to X = T
       if (
         value.contains("_type") && value["_type"] == "Name" &&
         value.contains("id"))
