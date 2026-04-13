@@ -13,6 +13,7 @@ class Preprocessor(ast.NodeTransformer):
         self.range_loop_counter = 0  # Counter for unique variable names in nested range loops
         self.iterable_loop_counter = 0  # Counter for unique variable names in nested iterable loops
         self.enumerate_loop_counter = 0  # Counter for unique variable names in nested enumerate loops
+        self.nondet_expand_counter = 0  # Counter for unique variable names in nondet expansion
         self.helper_functions_added = False  # Track if helper functions have been added
         self.functionKwonlyParams = {}
         self.listcomp_counter = 0  # Counter for list comprehension temporaries
@@ -2913,6 +2914,243 @@ class Preprocessor(ast.NodeTransformer):
                 return name[len('nondet_'):]
         return None
 
+    def _expand_nondet_call(self, target, call, source_node):
+        """Expand nondet_list && nondet_dict call into an inline loop
+        to replace the effect in nondet.py
+        e.g.:
+            x = nondet_list(3, nondet_bool())  -->
+                x: list[bool] = []
+                __nd_size_0: int = nondet_int()
+                __ESBMC_assume(__nd_size_0 >= 0)
+                __ESBMC_assume(__nd_size_0 <= 3)
+                __nd_i_0: int = 0
+                while __nd_i_0 < __nd_size_0:
+                    x.append(nondet_bool())
+                    __nd_i_0 = __nd_i_0 + 1
+
+            x = nondet_dict(2, key_type=nondet_str(), value_type=nondet_float())  -->
+                x: dict[str, float] = {}
+                __nd_size_0: int = nondet_int()
+                __ESBMC_assume(__nd_size_0 >= 0)
+                __ESBMC_assume(__nd_size_0 <= 2)
+                if __nd_size_0 >= 1: x["0"] = nondet_float()
+                if __nd_size_0 >= 2: x["1"] = nondet_float()
+        """
+        uid = self.nondet_expand_counter
+        self.nondet_expand_counter += 1
+        func_name = call.func.id
+        loc = source_node
+
+        # Parse arguments
+        max_size_node = ast.Constant(value=8)
+        if call.args:
+            max_size_node = call.args[0]
+
+        # Determine nondet type functions
+        def _get_nondet_func(call_arg):
+            """Extract function name'nondet_bool' from a Call node."""
+            if isinstance(call_arg, ast.Call) and isinstance(call_arg.func, ast.Name):
+                return call_arg.func.id
+            return None
+
+        def _get_type_name(call_arg):
+            """Extract type name'bool' from nondet_bool() Call node."""
+            fn = _get_nondet_func(call_arg)
+            if fn and fn.startswith('nondet_'):
+                return fn[len('nondet_'):]
+            return 'int'
+
+        if func_name == 'nondet_list':
+            elem_func = 'nondet_int'
+            elem_type_name = 'int'
+            if len(call.args) >= 2:
+                fn = _get_nondet_func(call.args[1])
+                if fn:
+                    elem_func = fn
+                    elem_type_name = _get_type_name(call.args[1])
+            for kw in call.keywords:
+                if kw.arg == 'elem_type':
+                    fn = _get_nondet_func(kw.value)
+                    if fn:
+                        elem_func = fn
+                        elem_type_name = _get_type_name(kw.value)
+        elif func_name == 'nondet_dict':
+            key_func = 'nondet_int'
+            val_func = 'nondet_int'
+            key_type_name = 'int'
+            val_type_name = 'int'
+            for kw in call.keywords:
+                if kw.arg == 'key_type':
+                    fn = _get_nondet_func(kw.value)
+                    if fn:
+                        key_func = fn
+                        key_type_name = _get_type_name(kw.value)
+                elif kw.arg == 'value_type':
+                    fn = _get_nondet_func(kw.value)
+                    if fn:
+                        val_func = fn
+                        val_type_name = _get_type_name(kw.value)
+
+        # create AST nodes
+        def name(n, ctx=ast.Load()):
+            nd = ast.Name(id=n, ctx=ctx)
+            self.ensure_all_locations(nd, loc)
+            return nd
+
+        def const(v):
+            nd = ast.Constant(value=v)
+            self.ensure_all_locations(nd, loc)
+            return nd
+
+        def call_node(fn, args=None):
+            nd = ast.Call(func=name(fn), args=args or [], keywords=[])
+            self.ensure_all_locations(nd, loc)
+            return nd
+
+        size_var = f'__nd_size_{uid}'
+        idx_var = f'__nd_i_{uid}'
+        var_name = target.id
+        stmts = []
+
+        # x: list[T] = [] && x: dict[K,V] = {}
+        if func_name == 'nondet_list':
+            init_val = ast.List(elts=[], ctx=ast.Load())
+            annotation = ast.Subscript(
+                value=name('list'),
+                slice=name(elem_type_name),
+                ctx=ast.Load())
+        else:
+            init_val = ast.Dict(keys=[], values=[])
+            annotation = ast.Subscript(
+                value=name('dict'),
+                slice=ast.Tuple(
+                    elts=[name(key_type_name), name(val_type_name)],
+                    ctx=ast.Load()),
+                ctx=ast.Load())
+        self.ensure_all_locations(init_val, loc)
+        self.ensure_all_locations(annotation, loc)
+
+        init_assign = ast.AnnAssign(
+            target=name(var_name, ast.Store()),
+            annotation=annotation,
+            value=init_val, simple=1)
+        self.ensure_all_locations(init_assign, loc)
+        stmts.append(init_assign)
+
+        # Store annotation for dict iteration support
+        self.variable_annotations[var_name] = annotation
+        self.known_variable_types[var_name] = 'list' if func_name == 'nondet_list' else 'dict'
+
+        # size = nondet_int();
+        # assume(size >= 0);
+        # assume(size <= max_size);
+        size_assign = ast.AnnAssign(
+            target=name(size_var, ast.Store()),
+            annotation=name('int'),
+            value=call_node('nondet_int'), simple=1)
+        self.ensure_all_locations(size_assign, loc)
+        stmts.append(size_assign)
+
+        for op_cls, bound in [(ast.GtE, const(0)), (ast.LtE, max_size_node)]:
+            assume_call = ast.Expr(value=ast.Call(
+                func=name('__ESBMC_assume'),
+                args=[ast.Compare(
+                    left=name(size_var),
+                    ops=[op_cls()],
+                    comparators=[bound])],
+                keywords=[]))
+            self.ensure_all_locations(assume_call, loc)
+            stmts.append(assume_call)
+
+        # i = 0
+        idx_assign = ast.AnnAssign(
+            target=name(idx_var, ast.Store()),
+            annotation=name('int'),
+            value=const(0), simple=1)
+        self.ensure_all_locations(idx_assign, loc)
+        stmts.append(idx_assign)
+
+        # Build the collection
+        if func_name == 'nondet_list':
+            append_call = ast.Expr(value=ast.Call(
+                func=ast.Attribute(
+                    value=name(var_name),
+                    attr='append', ctx=ast.Load()),
+                args=[call_node(elem_func)],
+                keywords=[]))
+            self.ensure_all_locations(append_call, loc)
+
+            inc = ast.Assign(
+                targets=[name(idx_var, ast.Store())],
+                value=ast.BinOp(
+                    left=name(idx_var), op=ast.Add(), right=const(1)))
+            self.ensure_all_locations(inc, loc)
+
+            while_stmt = ast.While(
+                test=ast.Compare(
+                    left=name(idx_var),
+                    ops=[ast.Lt()],
+                    comparators=[name(size_var)]),
+                body=[append_call, inc],
+                orelse=[])
+            self.ensure_all_locations(while_stmt, loc)
+            stmts.append(while_stmt)
+        else:
+            # To avoid solver explosion(timeout)
+            # when the dict grows large.
+            # Dict is using if-chain with
+            # concrete sequential keys (0,1,2,... / False,True /..)
+            # makes every contains check trivially decidable.
+            # values can remain fully nondeterministic.
+            # TODO:
+            # Once the ESBMC dict C model supports efficient
+            # symbolic key insertion(would not be such time-consuming),
+            # this can be replaced with a simple loop like nondet_list.
+            max_entries = 8
+            if isinstance(max_size_node, ast.Constant) and isinstance(max_size_node.value, int):
+                max_entries = max_size_node.value
+
+            for entry_idx in range(max_entries):
+                concrete_key = self._make_concrete_key(key_type_name, entry_idx, loc)
+                dict_assign = ast.Assign(
+                    targets=[ast.Subscript(
+                        value=name(var_name),
+                        slice=concrete_key,
+                        ctx=ast.Store())],
+                    value=call_node(val_func))
+                self.ensure_all_locations(dict_assign, loc)
+
+                if_stmt = ast.If(
+                    test=ast.Compare(
+                        left=name(size_var),
+                        ops=[ast.GtE()],
+                        comparators=[const(entry_idx + 1)]),
+                    body=[dict_assign],
+                    orelse=[])
+                self.ensure_all_locations(if_stmt, loc)
+                stmts.append(if_stmt)
+
+        for s in stmts:
+            ast.fix_missing_locations(s)
+
+        return stmts
+
+    def _make_concrete_key(self, key_type_name, index, loc):
+        """Generate a concrete key AST node for dict if-chain expansion.
+        int  → 0, 1, 2, ...
+        bool → False, True  (wraps at 2)
+        str  → "0", "1", "2", ...
+        """
+        if key_type_name == 'bool':
+            val = bool(index % 2)
+        elif key_type_name == 'str':
+            val = str(index)
+        else:
+            val = index
+        nd = ast.Constant(value=val)
+        self.ensure_all_locations(nd, loc)
+        return nd
+
     def _create_list_annotation(self, list_node):
         """Create list[T] annotation from a list literal"""
         if list_node.elts:
@@ -3387,6 +3625,15 @@ class Preprocessor(ast.NodeTransformer):
         """
         # First visit child nodes
         node = self.generic_visit(node)
+
+        # Expand nondet_list && nondet_dict calls inline.
+        if (len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)
+                and isinstance(node.value, ast.Call)
+                and isinstance(node.value.func, ast.Name)
+                and node.value.func.id in ('nondet_list', 'nondet_dict')):
+            expanded = self._expand_nondet_call(node.targets[0], node.value, node)
+            if expanded is not None:
+                return expanded
 
         # Handle x = next(g) for generator variables
         next_gen_info = self._find_generator_next_call(node.value)
