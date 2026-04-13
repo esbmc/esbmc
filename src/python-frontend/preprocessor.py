@@ -42,6 +42,7 @@ class Preprocessor(ast.NodeTransformer):
         self.bound_method_vars = {}  # {var_name: ast.Attribute} for g = obj.method assignments
         self.called_names = set()  # names used as callees: g() → 'g' ∈ called_names
         self.list_literal_values = {}  # {var_name: ast.List} for direct list literal assignments
+        self.newtype_vars = set()  # names defined via typing.NewType: X = NewType('X', T)
 
     def _create_helper_functions(self):
         """Create the ESBMC helper function definitions"""
@@ -3421,6 +3422,16 @@ class Preprocessor(ast.NodeTransformer):
             if isinstance(target, (ast.Tuple, ast.List)):
                 return self._handle_tuple_unpacking(target, node.value, node)
             else:
+                # NewType is an identity callable
+                # rewrite X = NewType('X', T) → X = T
+                if (isinstance(target, ast.Name) and
+                        isinstance(node.value, ast.Call) and
+                        isinstance(node.value.func, ast.Name) and
+                        node.value.func.id == "NewType" and
+                        len(node.value.args) >= 2):
+                    self.newtype_vars.add(target.id)
+                    node.value = node.value.args[1]
+                    ast.fix_missing_locations(node)
                 # Simple assignment - track the type
                 # Detect bound method assignment: g = obj.method
                 # Only remove when g is actually called somewhere (g())
@@ -3649,6 +3660,12 @@ class Preprocessor(ast.NodeTransformer):
 
     # This method is responsible for visiting and transforming Call nodes in the AST.
     def visit_Call(self, node):
+        # NewType is an identity callable: X(v) → v
+        if (isinstance(node.func, ast.Name) and
+                node.func.id in self.newtype_vars and
+                len(node.args) == 1 and not node.keywords):
+            return self.visit(node.args[0])
+
         # Rewrite g(args) → obj.method(args) for bound method variables
         if isinstance(node.func, ast.Name) and node.func.id in self.bound_method_vars:
             node.func = self.bound_method_vars[node.func.id]
