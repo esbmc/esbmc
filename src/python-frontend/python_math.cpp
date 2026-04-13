@@ -581,7 +581,7 @@ exprt python_math::handle_floor_division(
   pos_remainder.copy_to_operands(remainder, gen_zero(div_type));
 
   // diff_signals = is_num_neg ^ is_den_neg;
-  exprt diff_signals("bitxor", bool_type());
+  exprt diff_signals("xor", bool_type());
   diff_signals.copy_to_operands(is_num_neg, is_den_neg);
 
   exprt cond("and", bool_type());
