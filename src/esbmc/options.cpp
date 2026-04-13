@@ -630,10 +630,14 @@ const struct group_opt_templ all_cmd_options[] = {
     {"interval-analysis-narrowing",
      NULL,
      "Enable narrowing in abstract states (Integers and Reals)"},
-    {"interval-symex-guard",
+    {"no-interval-symex-guard",
      NULL,
-     "Use interval-based guard pruning during symbolic execution to stop "
-     "loop unrolling when the guard becomes provably unsatisfiable"}}},
+     "Disable interval-based guard pruning during symbolic execution (enabled "
+     "by default)"},
+    {"interval-symex-assert",
+     NULL,
+     "Use interval-based assertion pruning during symbolic execution to "
+     "skip assertions that are provably true under the tracked intervals"}}},
   {"Coverage options",
    {
      {"assertion-coverage", NULL, "Show the coverage of assertion statements"},

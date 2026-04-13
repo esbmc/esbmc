@@ -175,7 +175,9 @@ public:
    * @brief Updates the interval state based on a single goto-program instruction.
    *
    * Handles ASSIGN, ASSUME, DECL, and DEAD without requiring an ai_baset reference.
-   * Intended for online use during symbolic execution (--interval-symex-guard).
+   * Intended for online use during symbolic execution (default guard pruning;
+   * disable guard with --no-interval-symex-guard; assertion pruning via
+   * --interval-symex-assert).
    * @param from: iterator to the instruction to process
    */
   void process_instruction(goto_programt::const_targett from);

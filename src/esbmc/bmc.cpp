@@ -988,6 +988,10 @@ void bmct::report_result(smt_convt::resultt &res)
   // k-induction prints its own messages
   if (options.get_bool_option("k-induction-parallel"))
     return;
+  // Diagnostic pass: per-property results are already printed by
+  // multi_property_check; suppress any global verdict from this level.
+  if (options.get_bool_option("diagnose-unknown-properties"))
+    return;
 
   bool bs = options.get_bool_option("base-case");
   bool fc = options.get_bool_option("forward-condition");
@@ -1369,7 +1373,8 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
 
     if (
       options.get_bool_option("multi-property") &&
-      options.get_bool_option("base-case"))
+      (options.get_bool_option("base-case") ||
+       options.get_bool_option("diagnose-unknown-properties")))
       return multi_property_check(
         *eq, solver_result.remaining_claims, *runtime_solver);
 
@@ -1465,11 +1470,6 @@ smt_convt::resultt bmct::multi_property_check(
   size_t remaining_claims,
   smt_convt &runtime_solver)
 {
-  // As of now, it only makes sense to do this for the base-case
-  assert(
-    options.get_bool_option("base-case") &&
-    "Multi-property only supports base-case");
-
   // Initial values
   smt_convt::resultt final_result = smt_convt::P_UNSATISFIABLE;
   std::mutex result_mutex;
@@ -1531,6 +1531,7 @@ smt_convt::resultt bmct::multi_property_check(
 
   // For color output
   bool is_color = options.get_bool_option("color");
+  const std::string YELLOW = is_color ? "\033[33m" : "";
 
   // TODO: This is the place to check a cache
   for (size_t i = 1; i <= remaining_claims; i++)
@@ -1573,6 +1574,7 @@ smt_convt::resultt bmct::multi_property_check(
                        &fc,
                        &is,
                        &is_color,
+                       &YELLOW,
                        &runtime_solver](const size_t &i) {
     //"multi-fail-fast n": stop after first n SATs found.
     if (is_fail_fast && fail_fast_cnt >= fail_fast_limit)
@@ -1681,8 +1683,12 @@ smt_convt::resultt bmct::multi_property_check(
       }
       else if (solver_result == smt_convt::P_SATISFIABLE)
       {
-        // Claim failed - show in red
-        log_status("{}✗ FAILED{}: '{}'", RED, RESET, claim.claim_cstr);
+        if (is)
+          // Inductive step could not prove this claim - show in yellow
+          log_status("{}? UNKNOWN{}: '{}'", YELLOW, RESET, claim.claim_cstr);
+        else
+          // Claim failed (counterexample found) - show in red
+          log_status("{}✗ FAILED{}: '{}'", RED, RESET, claim.claim_cstr);
       }
     }
 
@@ -1698,13 +1704,27 @@ smt_convt::resultt bmct::multi_property_check(
       old_total_time_s, new_total_time_s));
 
     if (solver_result == smt_convt::P_SATISFIABLE)
-      summary.failed_properties++;
+    {
+      if (is)
+        summary.unknown_properties++;
+      else
+        summary.failed_properties++;
+    }
     else if (solver_result == smt_convt::P_UNSATISFIABLE)
       summary.passed_properties++;
 
     // If an assertion instance is verified to be violated
     if (solver_result == smt_convt::P_SATISFIABLE)
     {
+      // Inductive step SAT means unprovable (UNKNOWN), not a real
+      // counterexample — skip trace generation and return early.
+      if (is)
+      {
+        std::lock_guard lock(result_mutex);
+        final_result = solver_result;
+        return;
+      }
+
       bool is_compact_trace = true;
       if (
         options.get_bool_option("no-slice") &&
@@ -1858,6 +1878,13 @@ void bmct::report_simple_summary(const SimpleSummary &summary) const
   if (summary.failed_properties > 0)
     properties_oss << ", " << RED << "✗ " << summary.failed_properties
                    << " failed" << RESET;
+
+  if (summary.unknown_properties > 0)
+  {
+    const std::string YELLOW = is_color ? "\033[33m" : "";
+    properties_oss << ", " << YELLOW << "? " << summary.unknown_properties
+                   << " unknown" << RESET;
+  }
 
   // Build the timing summary string
   double avg_time = summary.total_properties > 0

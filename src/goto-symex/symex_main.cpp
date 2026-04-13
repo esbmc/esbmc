@@ -93,6 +93,32 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
     return;
   }
 
+  // Interval-based assertion pruning (--interval-symex-assert). Evaluate the
+  // pre-rename expression (the domain keys on original names). Skip when the
+  // domain is bottom — empty intervals vacuously don't contain 0, which would
+  // let every query succeed. Only prune on TRUE, never FALSE: the shared,
+  // non-forked domain may carry assume() residue from sibling branches, and
+  // pruning on a contaminated FALSE would silently drop real bugs.
+  if (
+    options.get_bool_option("interval-symex-assert") && interval_domain_state &&
+    !interval_domain_state->is_bottom() &&
+    interval_domaint::eval_boolean_expression(
+      claim_expr, *interval_domain_state)
+      .is_true())
+  {
+    if (options.get_bool_option("multi-property"))
+    {
+      log_success(
+        "✓ PASSED (interval): '{}' at {}",
+        msg,
+        cur_state->source.pc->location.as_string());
+      ++simplified_claims;
+    }
+
+    assume(claim_expr);
+    return;
+  }
+
   // Perform incremental SMT-based verification if enabled
   if (
     options.get_bool_option("smt-symex-assert") &&
@@ -448,8 +474,11 @@ void goto_symext::symex_step(reachability_treet &art)
     abort();
   }
 
-  // Update local interval domain for --interval-symex-guard
-  if (interval_domain_state)
+  // Feed the instruction into the online interval domain shared by
+  // guard pruning (default; disable with --no-interval-symex-guard) and
+  // --interval-symex-assert. Skip unreachable paths so stale state from
+  // contradicted branches does not leak into the shared domain.
+  if (interval_domain_state && !cur_state->guard.is_false())
     interval_domain_state->process_instruction(pre_step_pc);
 }
 
