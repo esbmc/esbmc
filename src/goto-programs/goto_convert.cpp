@@ -681,7 +681,6 @@ void goto_convertt::convert_decl(const codet &code, goto_programt &dest)
 
     // just resize the vector, this will get rid of op1
     new_code.operands().pop_back();
-
   }
 
   // break up into decl and assignment

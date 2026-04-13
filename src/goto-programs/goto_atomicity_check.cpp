@@ -51,9 +51,7 @@ private:
 
   /// Instruments a guard-bearing instruction (ASSERT/ASSUME/GOTO/RETURN):
   /// inserts snapshot vars + bare ASSERT into new_code (no ATOMIC wrapping).
-  void instrument_guard(
-    goto_programt::targett it,
-    goto_programt &new_code);
+  void instrument_guard(goto_programt::targett it, goto_programt &new_code);
 };
 
 bool goto_atomicity_checkt::is_global(const irep_idt &id) const
@@ -152,8 +150,7 @@ bool goto_atomicity_checkt::collect_globals(
   return found;
 }
 
-bool goto_atomicity_checkt::should_instrument_guard(
-  const expr2tc &guard) const
+bool goto_atomicity_checkt::should_instrument_guard(const expr2tc &guard) const
 {
   if (is_nil_expr(guard))
     return false;
@@ -222,11 +219,10 @@ void goto_atomicity_checkt::instrument_assign(
   if (need_atomic)
     new_code.add_instruction(ATOMIC_BEGIN)->location = loc;
 
-  std::string comment =
-    is_symbol2t(assign.target)
-      ? "atomicity violation on assignment to " +
-          id2string(to_symbol2t(assign.target).thename)
-      : "atomicity violation";
+  std::string comment = is_symbol2t(assign.target)
+                          ? "atomicity violation on assignment to " +
+                              id2string(to_symbol2t(assign.target).thename)
+                          : "atomicity violation";
 
   goto_programt::targett asrt = new_code.add_instruction(ASSERT);
   asrt->make_assertion(make_conjunction(conjuncts));
@@ -288,8 +284,7 @@ void goto_atomicity_checkt::check(goto_programt &program)
   // This two-pass approach avoids re-processing the instructions we insert.
   std::vector<goto_programt::targett> assign_instrs, guard_instrs;
 
-  for (auto it = program.instructions.begin();
-       it != program.instructions.end();
+  for (auto it = program.instructions.begin(); it != program.instructions.end();
        ++it)
   {
     if (it->is_assign())

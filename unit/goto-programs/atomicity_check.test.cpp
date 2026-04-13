@@ -10,8 +10,7 @@
 static bool is_user_function(const irep_idt &id)
 {
   const std::string &s = id.as_string();
-  return s.rfind("c:@F@", 0) == 0 &&
-         s.find("__ESBMC") == std::string::npos &&
+  return s.rfind("c:@F@", 0) == 0 && s.find("__ESBMC") == std::string::npos &&
          s.find("__VERIFIER") == std::string::npos;
 }
 
@@ -180,9 +179,7 @@ SCENARIO(
   REQUIRE(count_atomicity_asserts(P.functions) >= 1);
 }
 
-SCENARIO(
-  "array index is a global: assertion inserted",
-  "[atomicity_check]")
+SCENARIO("array index is a global: assertion inserted", "[atomicity_check]")
 {
   // collect_globals index2t path: when the index is a global symbol,
   // the whole indexed expression is snapshotted.
