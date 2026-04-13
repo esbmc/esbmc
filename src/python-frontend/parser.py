@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import sys
 
 # Detect the Python version
@@ -453,6 +455,8 @@ def generate_ast_json(tree, python_filename, elements_to_import, output_dir, mod
 
     # Convert AST to JSON
     ast2json_module = import_module_by_name("ast2json", "")
+    if ast2json_module is None:
+        sys.exit(1)
     ast_json = ast2json_module.ast2json(ast.Module(body=filtered_nodes) if filtered_nodes else tree)
     ast_json["filename"] = python_filename
     ast_json["ast_output_dir"] = output_dir
