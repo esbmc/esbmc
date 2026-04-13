@@ -541,13 +541,30 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   {
     const nlohmann::json &decl =
       json_utils::find_var_decl(ast_type, "", converter_.ast());
-    if (
-      !decl.empty() && decl.contains("value") && decl["value"].is_object() &&
-      decl["value"].contains("_type") && decl["value"]["_type"] == "Call" &&
-      decl["value"].contains("func") && decl["value"]["func"].is_object() &&
-      decl["value"]["func"].contains("id") &&
-      decl["value"]["func"]["id"] == "TypeVar")
-      return any_type();
+    if (!decl.empty() && decl.contains("value") && decl["value"].is_object())
+    {
+      const nlohmann::json &value = decl["value"];
+      // TypeVar(...) has no concrete type(treat as Any)
+      if (
+        value.contains("_type") && value["_type"] == "Call" &&
+        value.contains("func") && value["func"].is_object() &&
+        value["func"].contains("id") && value["func"]["id"] == "TypeVar")
+        return any_type();
+      // Handle simple alias: X = T to T
+      // the preprocessor rewrites
+      // X = NewType('X', T) to X = T
+      if (
+        value.contains("_type") && value["_type"] == "Name" &&
+        value.contains("id"))
+      {
+        const std::string &target = value["id"];
+        if (target != ast_type && type_utils::is_builtin_type(target))
+          return get_typet(target, type_size);
+        if (
+          target != ast_type && json_utils::is_class(target, converter_.ast()))
+          return symbol_typet("tag-" + target);
+      }
+    }
   }
 
   // If still not found, it's a NameError

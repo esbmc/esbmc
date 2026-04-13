@@ -1,4 +1,4 @@
 CORE
-main.py
---incremental-bmc
+main.c
+--atomicity-check
 ^VERIFICATION SUCCESSFUL$
