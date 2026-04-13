@@ -22,6 +22,7 @@ ignored_dirs=(
   "cover3"
   "cover4"
   "cover5"
+  "concurrency_fail"
   "convert-byte-update2"
   "constants"
   "decimal"
