@@ -1914,9 +1914,70 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       smt_astt inf_result =
         mk_ite(mk_lt(side1, zero), mk_sub(zero, max_val), max_val);
       smt_astt real_result = mk_div(side1, side2);
-      smt_astt ieee_result = apply_ieee754_semantics(
-        real_result, fbv_type, nullptr, to_ieee_div2t(expr).rounding_mode);
-      a = mk_ite(div_by_zero, inf_result, ieee_result);
+      const expr2tc &rounding_mode = to_ieee_div2t(expr).rounding_mode;
+
+      // RNE interval lifting for ieee_div.
+      // Proof-aligned compositional lifting:
+      //   hull([L_x,U_x] / [L_y,U_y]) = [min(qi), max(qi)] for i in {1..4}
+      //   where q1=L_x/L_y, q2=L_x/U_y, q3=U_x/L_y, q4=U_x/U_y.
+      // Admissibility guard: the four-endpoint formula is only sound when
+      // the denominator interval does not contain zero (iv2.lo > 0 or
+      // iv2.hi < 0). When inadmissible, the numerator tracked interval is
+      // preserved and the denominator is used as a point value (conservative
+      // but sound). Both operands use point fallback when fresh.
+      bool interval_lifted = false;
+      if (
+        options.get_bool_option("ir-ieee") &&
+        is_nearest_rounding_mode(rounding_mode))
+      {
+        auto get_iv = [this](smt_astt t) -> ra_interval_t {
+          auto it = ir_ra_interval_map.find(t);
+          return it != ir_ra_interval_map.end() ? it->second
+                                                : ra_interval_t{t, t};
+        };
+        ra_interval_t iv1 = get_iv(side1);
+        ra_interval_t iv2 = get_iv(side2);
+
+        // Admissibility: denominator interval does not contain zero.
+        smt_astt denom_admissible =
+          mk_or(mk_lt(zero, iv2.lo), mk_lt(iv2.hi, zero));
+
+        // Full four-endpoint hull (sound when denominator is admissible).
+        smt_astt q1 = mk_div(iv1.lo, iv2.lo);
+        smt_astt q2 = mk_div(iv1.lo, iv2.hi);
+        smt_astt q3 = mk_div(iv1.hi, iv2.lo);
+        smt_astt q4 = mk_div(iv1.hi, iv2.hi);
+        smt_astt lo_r_full = mk_ite(
+          mk_le(q1, q2),
+          mk_ite(mk_le(q1, q3), mk_ite(mk_le(q1, q4), q1, q4), mk_ite(mk_le(q3, q4), q3, q4)),
+          mk_ite(mk_le(q2, q3), mk_ite(mk_le(q2, q4), q2, q4), mk_ite(mk_le(q3, q4), q3, q4)));
+        smt_astt hi_r_full = mk_ite(
+          mk_le(q2, q1),
+          mk_ite(mk_le(q3, q1), mk_ite(mk_le(q4, q1), q1, q4), mk_ite(mk_le(q4, q3), q3, q4)),
+          mk_ite(mk_le(q3, q2), mk_ite(mk_le(q4, q2), q2, q4), mk_ite(mk_le(q4, q3), q3, q4)));
+
+        // Fallback hull: point denominator, numerator tracked interval kept.
+        smt_astt d_lo = mk_div(iv1.lo, side2);
+        smt_astt d_hi = mk_div(iv1.hi, side2);
+        smt_astt lo_r_point = mk_ite(mk_le(d_lo, d_hi), d_lo, d_hi);
+        smt_astt hi_r_point = mk_ite(mk_le(d_hi, d_lo), d_lo, d_hi);
+
+        // Guard: use full hull when denominator interval is admissible.
+        smt_astt lo_r = mk_ite(denom_admissible, lo_r_full, lo_r_point);
+        smt_astt hi_r = mk_ite(denom_admissible, hi_r_full, hi_r_point);
+
+        std::pair<smt_astt, smt_astt> bounds =
+          apply_ieee754_rne_enclosure(real_result, lo_r, hi_r, fbv_type);
+        a = mk_ite(div_by_zero, inf_result, real_result);
+        ir_ra_interval_map[a] = {bounds.first, bounds.second};
+        interval_lifted = true;
+      }
+      if (!interval_lifted)
+      {
+        smt_astt ieee_result =
+          apply_ieee754_semantics(real_result, fbv_type, nullptr, rounding_mode);
+        a = mk_ite(div_by_zero, inf_result, ieee_result);
+      }
     }
     else
     {
