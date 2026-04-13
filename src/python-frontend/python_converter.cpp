@@ -8173,8 +8173,8 @@ static bool node_uses_param_as_list_like(
         node["func"].value("_type", "") == "Name" &&
         node["func"].value("id", "") == "len" && node.contains("args") &&
         node["args"].is_array() && !node["args"].empty() &&
-        node["args"][0].is_object() && node["args"][0].value("_type", "") ==
-                                         "Name" &&
+        node["args"][0].is_object() &&
+        node["args"][0].value("_type", "") == "Name" &&
         node["args"][0].value("id", "") == param_name)
       {
         return true;

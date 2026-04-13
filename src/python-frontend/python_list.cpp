@@ -32,9 +32,8 @@ static bool is_excluded_struct_tag_for_object_ref(const std::string &tag)
          tag == "__python_dict__";
 }
 
-static bool is_empty_user_class_object_type(
-  const typet &type,
-  const namespacet &ns)
+static bool
+is_empty_user_class_object_type(const typet &type, const namespacet &ns)
 {
   typet resolved = type;
   if (resolved.id() == "symbol")
@@ -435,8 +434,7 @@ exprt python_list::build_push_list_call(
   // For other types (including other pointers such None/bool*), we must pass the address
   exprt element_arg;
   if (is_empty_user_class_object_type(
-        elem_info.elem_symbol->type,
-        converter_.name_space()))
+        elem_info.elem_symbol->type, converter_.name_space()))
   {
     // Python list stores object references. For class objects, store a pointer
     // to the object (not a byte copy of the struct payload).
