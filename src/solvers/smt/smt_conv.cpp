@@ -1949,12 +1949,24 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
         smt_astt q4 = mk_div(iv1.hi, iv2.hi);
         smt_astt lo_r_full = mk_ite(
           mk_le(q1, q2),
-          mk_ite(mk_le(q1, q3), mk_ite(mk_le(q1, q4), q1, q4), mk_ite(mk_le(q3, q4), q3, q4)),
-          mk_ite(mk_le(q2, q3), mk_ite(mk_le(q2, q4), q2, q4), mk_ite(mk_le(q3, q4), q3, q4)));
+          mk_ite(
+            mk_le(q1, q3),
+            mk_ite(mk_le(q1, q4), q1, q4),
+            mk_ite(mk_le(q3, q4), q3, q4)),
+          mk_ite(
+            mk_le(q2, q3),
+            mk_ite(mk_le(q2, q4), q2, q4),
+            mk_ite(mk_le(q3, q4), q3, q4)));
         smt_astt hi_r_full = mk_ite(
           mk_le(q2, q1),
-          mk_ite(mk_le(q3, q1), mk_ite(mk_le(q4, q1), q1, q4), mk_ite(mk_le(q4, q3), q3, q4)),
-          mk_ite(mk_le(q3, q2), mk_ite(mk_le(q4, q2), q2, q4), mk_ite(mk_le(q4, q3), q3, q4)));
+          mk_ite(
+            mk_le(q3, q1),
+            mk_ite(mk_le(q4, q1), q1, q4),
+            mk_ite(mk_le(q4, q3), q3, q4)),
+          mk_ite(
+            mk_le(q3, q2),
+            mk_ite(mk_le(q4, q2), q2, q4),
+            mk_ite(mk_le(q4, q3), q3, q4)));
 
         // Fallback hull: point denominator, numerator tracked interval kept.
         smt_astt d_lo = mk_div(iv1.lo, side2);
@@ -1974,8 +1986,8 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       }
       if (!interval_lifted)
       {
-        smt_astt ieee_result =
-          apply_ieee754_semantics(real_result, fbv_type, nullptr, rounding_mode);
+        smt_astt ieee_result = apply_ieee754_semantics(
+          real_result, fbv_type, nullptr, rounding_mode);
         a = mk_ite(div_by_zero, inf_result, ieee_result);
       }
     }
