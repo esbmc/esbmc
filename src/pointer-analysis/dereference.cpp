@@ -2329,11 +2329,11 @@ void dereferencet::bounds_check(
      * the CHERI capability associated with the pointer in it.
      *
      * Convert pointer into its raw integer address form via 'ptraddr_type2()'
-     * Use capability_top2tc and capability_base2tc to get the upper and 
+     * Use capability_top2tc and capability_base2tc to get the upper and
      * lower bounds for the capability.
-     * 
+     *
      * cheri_bounds assertion will be (addr < top && addr > base)
-     * 
+     *
      */
     expr2tc addr = typecast2tc(ptraddr_type2(), deref);
     expr2tc top = capability_top2tc(deref);
@@ -2343,10 +2343,10 @@ void dereferencet::bounds_check(
     expr2tc lt = lessthan2tc(addr, base);
     expr2tc in_cheri_bounds = or2tc(gt, lt);
     /*
-     * In CHERI Clang if a pointer is marked as can_carry_provenance does not 
+     * In CHERI Clang if a pointer is marked as can_carry_provenance does not
      * mean it must carries CHERI capability. Therefore, we need to determine here
      * whether the capacity exists.
-     * 
+     *
      * pointer_capability == zero ?
      */
     expr2tc is_zero = equality2tc(
