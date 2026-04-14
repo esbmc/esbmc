@@ -829,7 +829,7 @@ static std::string format_double_for_complex(double d)
   return s;
 }
 
-exprt function_call_expr::handle_complex_to_str(const exprt &complex_expr) const
+exprt function_call_expr::handle_complex_to_str() const
 {
   // Non-constant complex: fall back to a generic placeholder.
   return converter_.get_string_builder().build_string_literal("(complex)");
@@ -2128,7 +2128,7 @@ exprt function_call_expr::build_constant_from_arg() const
       if (
         !value_expr.is_nil() && value_expr.statement() != "cpp-throw" &&
         is_complex_type(value_expr.type()))
-        return handle_complex_to_str(value_expr);
+        return handle_complex_to_str();
     }
   }
 
@@ -4222,7 +4222,7 @@ function_call_expr::get_dispatch_table()
        if (
          !value_expr.is_nil() && value_expr.statement() != "cpp-throw" &&
          is_complex_type(value_expr.type()))
-         return handle_complex_to_str(value_expr);
+         return handle_complex_to_str();
        return handle_general_function_call();
      },
      "repr()"},
