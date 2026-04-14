@@ -48,29 +48,6 @@ protected:
   // side effect removal
   //
   void make_temp_symbol(exprt &expr, goto_programt &dest);
-  unsigned int get_expr_number_globals(const exprt &expr);
-  unsigned int get_expr_number_globals(const expr2tc &expr);
-  void break_globals2assignments(
-    exprt &rhs,
-    goto_programt &dest,
-    const locationt &location);
-  void break_globals2assignments(
-    int &atomic,
-    exprt &lhs,
-    exprt &rhs,
-    goto_programt &dest,
-    const locationt &location);
-  void break_globals2assignments(
-    int &atomic,
-    exprt &rhs,
-    goto_programt &dest,
-    const locationt &location);
-  void break_globals2assignments_rec(
-    exprt &rhs,
-    exprt &atomic_dest,
-    goto_programt &dest,
-    int atomic,
-    const locationt &location);
 
   // this produces if(guard) dest;
   void guard_program(const guardt &guard, goto_programt &dest);

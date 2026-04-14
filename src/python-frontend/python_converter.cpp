@@ -8147,6 +8147,95 @@ static bool param_is_mutated_in_body(
   return false;
 }
 
+static bool node_uses_param_as_list_like(
+  const std::string &param_name,
+  const nlohmann::json &node)
+{
+  if (!node.is_object())
+    return false;
+
+  if (node.contains("_type") && node["_type"].is_string())
+  {
+    const std::string node_type = node["_type"].get<std::string>();
+
+    // x[i]
+    if (
+      node_type == "Subscript" && node.contains("value") &&
+      node["value"].is_object() && node["value"].value("_type", "") == "Name" &&
+      node["value"].value("id", "") == param_name)
+      return true;
+
+    if (node_type == "Call")
+    {
+      // len(x)
+      if (
+        node.contains("func") && node["func"].is_object() &&
+        node["func"].value("_type", "") == "Name" &&
+        node["func"].value("id", "") == "len" && node.contains("args") &&
+        node["args"].is_array() && !node["args"].empty() &&
+        node["args"][0].is_object() &&
+        node["args"][0].value("_type", "") == "Name" &&
+        node["args"][0].value("id", "") == param_name)
+      {
+        return true;
+      }
+
+      // x.append(...), x.pop(...), ...
+      if (
+        node.contains("func") && node["func"].is_object() &&
+        node["func"].value("_type", "") == "Attribute" &&
+        node["func"].contains("value") && node["func"]["value"].is_object() &&
+        node["func"]["value"].value("_type", "") == "Name" &&
+        node["func"]["value"].value("id", "") == param_name &&
+        node["func"].contains("attr") && node["func"]["attr"].is_string())
+      {
+        const std::string attr = node["func"]["attr"].get<std::string>();
+        if (
+          attr == "append" || attr == "extend" || attr == "insert" ||
+          attr == "pop" || attr == "remove" || attr == "clear" ||
+          attr == "sort" || attr == "reverse")
+          return true;
+      }
+    }
+  }
+
+  for (auto it = node.begin(); it != node.end(); ++it)
+  {
+    const auto &child = it.value();
+    if (child.is_object())
+    {
+      if (node_uses_param_as_list_like(param_name, child))
+        return true;
+    }
+    else if (child.is_array())
+    {
+      for (const auto &elem : child)
+      {
+        if (elem.is_object() && node_uses_param_as_list_like(param_name, elem))
+          return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+static bool param_is_list_like_in_body(
+  const std::string &param_name,
+  const nlohmann::json &body)
+{
+  if (!body.is_array())
+    return false;
+
+  for (const auto &stmt : body)
+  {
+    if (node_uses_param_as_list_like(param_name, stmt))
+      return true;
+  }
+
+  return false;
+}
+
 size_t python_converter::register_function_argument(
   const nlohmann::json &element,
   code_typet &type,
@@ -8363,6 +8452,37 @@ void python_converter::process_function_arguments(
   if (!function_node.contains("body"))
     return;
   const nlohmann::json &body = function_node["body"];
+
+  // Refine unannotated Any parameters to list model type when body usage
+  // clearly matches list semantics (len(x), x[i], list mutator methods).
+  // Restrict this refinement to functions from the main source file to avoid
+  // affecting imported module internals.
+  if (location.get_file().as_string() == main_python_file)
+  {
+    for (auto &param_arg : type.arguments())
+    {
+      const std::string param_name = param_arg.get_base_name().as_string();
+      if (param_name == "self" || param_name == "cls" || param_name.empty())
+        continue;
+
+      if (param_arg.type() != any_type())
+        continue;
+
+      if (!param_is_list_like_in_body(param_name, body))
+        continue;
+
+      typet list_t = type_handler_.get_list_type();
+      param_arg.type() = list_t;
+
+      const std::string param_id = param_arg.cmt_identifier().as_string();
+      if (!param_id.empty())
+      {
+        symbolt *param_sym = symbol_table_.find_symbol(param_id);
+        if (param_sym)
+          param_sym->type = list_t;
+      }
+    }
+  }
 
   for (auto &param_arg : type.arguments())
   {

@@ -1793,7 +1793,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
       const expr2tc &rounding_mode = to_ieee_mul2t(expr).rounding_mode;
 
-      // RNE/RNA/RUP/RDN interval lifting for ieee_mul.
+      // RNE/RNA/RUP/RDN/RTZ interval lifting for ieee_mul.
       // Hull: lo_r = min(p1,p2,p3,p4), hi_r = max(p1,p2,p3,p4)
       // where p1=L_x*L_y, p2=L_x*U_y, p3=U_x*L_y, p4=U_x*U_y.
       bool interval_lifted = false;
@@ -1802,7 +1802,8 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
         (is_nearest_rounding_mode(rounding_mode) ||
          is_round_to_away(rounding_mode) ||
          is_round_to_plus_inf(rounding_mode) ||
-         is_round_to_minus_inf(rounding_mode)))
+         is_round_to_minus_inf(rounding_mode) ||
+         is_round_to_zero(rounding_mode)))
       {
         const auto double_spec = ieee_float_spect::double_precision();
         const auto single_spec = ieee_float_spect::single_precision();
@@ -1855,9 +1856,12 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
           else if (is_round_to_plus_inf(rounding_mode))
             bounds =
               apply_ieee754_rup_enclosure(real_result, lo_r, hi_r, fbv_type);
-          else
+          else if (is_round_to_minus_inf(rounding_mode))
             bounds =
               apply_ieee754_rdn_enclosure(real_result, lo_r, hi_r, fbv_type);
+          else
+            bounds =
+              apply_ieee754_rtz_enclosure(real_result, lo_r, hi_r, fbv_type);
           ir_ra_interval_map[real_result] = {bounds.first, bounds.second};
           a = real_result;
           interval_lifted = true;
