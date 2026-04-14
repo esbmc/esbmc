@@ -1134,7 +1134,7 @@ void goto_convertt::do_function_call_symbol(
       t2->location = function.location();
     }
   }
-  else if (base_name == "__ESBMC_va_copy")
+  else if (base_name == "__ESBMC_va_copy" || base_name == "__builtin_va_copy")
   {
     if (arguments.size() != 2)
     {
