@@ -189,7 +189,7 @@ private:
    * Handles complex-to-str conversions (e.g., str(complex(1,2)) → "(1+2j)").
    * Formats constant complex values using Python's repr rules.
    */
-  exprt handle_complex_to_str(const exprt &complex_expr) const;
+  exprt handle_complex_to_str() const;
 
   /*
    * Handles string arguments (e.g., str("abc")) by converting them

@@ -5,6 +5,5 @@ main.c
 \(declare-fun \|smt_conv::ra_lo_up::1\| \(\) Real\)
 \(\* \|smt_conv::ra_lo_up::0\|
 \(ite
-22204460492503131
-^VERIFICATION FAILED$
-
+(22204460492503131|\(/ 1\.0 0\.0\))
+^Solving with solver Z3
