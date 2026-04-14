@@ -1,0 +1,4 @@
+CORE
+main.c
+--tuple-sym-flattener --smt-symex-guard --z3
+^VERIFICATION FAILED$
