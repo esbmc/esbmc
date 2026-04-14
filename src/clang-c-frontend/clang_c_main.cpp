@@ -194,27 +194,61 @@ bool clang_c_maint::clang_main()
 
       init_code.copy_to_operands(code_assumet(le));
 
-      // assign argv = { NULL };
-      // Adjust __ESBMC_alloc_size as argv is handled as dynamic array
+      // Adjust __ESBMC_alloc_size as argv is handled as dynamic array.
       exprt dynamic_size("dynamic_size", size_type());
       dynamic_size.copy_to_operands(gen_address_of(symbol_expr(argv_symbol)));
       init_code.copy_to_operands(code_assignt(dynamic_size, mult));
 
+      // Model argv per C11 §5.1.2.2.1: argv is left as a nondet array and
+      // two assumptions encode the standard's guarantees:
+      //   1. argv[argc] == NULL   (null terminator)
+      //   2. argv[i]   != NULL   for every 0 <= i < argc
       constant_exprt null(
         irep_idt("NULL"), integer2string(0), argv_symbol.type.subtype());
 
-      // Define an array type
-      array_typet argv_type(argv_symbol.type.subtype(), dynamic_size);
+      // 1. argv[argc] == NULL
+      index_exprt argv_argc(
+        symbol_expr(argv_symbol),
+        symbol_expr(argc_symbol),
+        argv_symbol.type.subtype());
+      exprt term_eq("=", bool_type());
+      term_eq.copy_to_operands(argv_argc, null);
+      init_code.copy_to_operands(code_assumet(term_eq));
 
-      // Create an array filled with NULL (no explicit size)
-      array_of_exprt null_array(null, argv_type);
+      // 2. forall i. (0 <= i < argc) => argv[i] != NULL
+      // Register a fresh symbol used only as the quantifier bound variable.
+      symbolt argv_idx_sym;
+      argv_idx_sym.name = "__ESBMC_argv_idx";
+      argv_idx_sym.id = "c:@__ESBMC_argv_idx";
+      argv_idx_sym.type = argc_symbol.type;
+      argv_idx_sym.lvalue = true;
+      symbolt *argv_idx = nullptr;
+      context.move(argv_idx_sym, argv_idx);
 
-      // Assign the initialized array to argv_symbol
-      // disable bounds check on that one
-      // Logic to perform this ^ moved into goto_check and dereference,
-      // rather than load irep2 with additional baggage.
-      init_code.copy_to_operands(
-        code_assignt(symbol_expr(argv_symbol), null_array));
+      exprt idx = symbol_expr(*argv_idx);
+
+      index_exprt argv_i(
+        symbol_expr(argv_symbol), idx, argv_symbol.type.subtype());
+      exprt ne_null("notequal", bool_type());
+      ne_null.copy_to_operands(argv_i, null);
+
+      exprt ge_zero(">=", bool_type());
+      ge_zero.copy_to_operands(idx, gen_zero(argc_symbol.type));
+      exprt lt_argc("<", bool_type());
+      lt_argc.copy_to_operands(idx, symbol_expr(argc_symbol));
+      exprt in_range("and", bool_type());
+      in_range.copy_to_operands(ge_zero, lt_argc);
+
+      exprt not_in_range("not", bool_type());
+      not_in_range.copy_to_operands(in_range);
+      exprt forall_body("or", bool_type());
+      forall_body.copy_to_operands(not_in_range, ne_null);
+
+      exprt addr_idx("address_of", pointer_typet(argc_symbol.type));
+      addr_idx.copy_to_operands(idx);
+      exprt argv_valid("forall", bool_type());
+      argv_valid.copy_to_operands(addr_idx, forall_body);
+      init_code.copy_to_operands(code_assumet(argv_valid));
 
       exprt::operandst &operands = call.arguments();
 
