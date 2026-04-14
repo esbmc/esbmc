@@ -3,4 +3,4 @@ target_include_directories(pointeranalysis
     PRIVATE ${Boost_INCLUDE_DIRS}
 )
 target_compile_definitions(pointeranalysis PUBLIC BOOST_ALL_NO_LIB)
-target_link_libraries(pointeranalysis util_esbmc fmt::fmt)
+target_link_libraries(pointeranalysis PUBLIC util_esbmc PRIVATE fmt::fmt)
