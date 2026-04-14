@@ -250,6 +250,50 @@ bool clang_c_maint::clang_main()
       argv_valid.copy_to_operands(addr_idx, forall_body);
       init_code.copy_to_operands(code_assumet(argv_valid));
 
+      // Provide valid dereferenceable backing for argv[0] and argv[1] so that
+      // programs which read those strings (e.g. via strncpy) do not trigger
+      // spurious dereference-failure checks.  The backing is a nondet
+      // char[1024]; entries at higher indices remain constrained to be
+      // non-null by the forall above but are not given explicit backing.
+      typet char_t = argv_symbol.type.subtype().subtype();
+      typet char_arr_t = array_typet(char_t, from_integer(1024, index_type()));
+
+      for (int ai = 0; ai < 2; ++ai)
+      {
+        char suffix = static_cast<char>('0' + ai);
+        std::string sname = std::string("__ESBMC_argv_str_") + suffix;
+        std::string sid = "c:@" + sname;
+
+        symbolt str_sym;
+        str_sym.name = irep_idt(sname);
+        str_sym.id = irep_idt(sid);
+        str_sym.type = char_arr_t;
+        str_sym.static_lifetime = true;
+        str_sym.lvalue = true;
+        symbolt *str_ptr = nullptr;
+        context.move(str_sym, str_ptr);
+
+        // if (ai < argc) argv[ai] = &str_sym[0]
+        exprt cond_lt("<", bool_type());
+        cond_lt.copy_to_operands(
+          from_integer(ai, argc_symbol.type), symbol_expr(argc_symbol));
+
+        index_exprt argv_ai(
+          symbol_expr(argv_symbol),
+          from_integer(ai, index_type()),
+          argv_symbol.type.subtype());
+
+        index_exprt str_first(
+          symbol_expr(*str_ptr), gen_zero(index_type()), char_t);
+        exprt addr_str0("address_of", argv_symbol.type.subtype());
+        addr_str0.copy_to_operands(str_first);
+
+        code_ifthenelset if_assign;
+        if_assign.cond() = cond_lt;
+        if_assign.then_case() = code_assignt(argv_ai, addr_str0);
+        init_code.copy_to_operands(if_assign);
+      }
+
       exprt::operandst &operands = call.arguments();
 
       if (arguments.size() == 3)
