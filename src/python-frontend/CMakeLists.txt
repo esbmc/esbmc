@@ -51,4 +51,4 @@ target_include_directories(pythonfrontend
     PUBLIC ${Boost_INCLUDE_DIRS}
 )
 
-target_link_libraries(pythonfrontend fmt::fmt nlohmann_json::nlohmann_json bigint)
+target_link_libraries(pythonfrontend PUBLIC nlohmann_json::nlohmann_json PRIVATE fmt::fmt bigint)

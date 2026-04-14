@@ -22,7 +22,13 @@ if(ENABLE_GOTO_CONTRACTOR)
 endif()
 
 add_subdirectory(abstract-interpretation)
-target_link_libraries(gotoalgorithms algorithms gotoprograms abstract-interpretation)
+target_link_libraries(gotoalgorithms PUBLIC algorithms gotoprograms PRIVATE abstract-interpretation)
+
+# gotocontractor uses ait<> which calls ai_baset virtual methods from abstract-interpretation.
+# Declaring the cycle lets CMake emit --start-group on static-link builds.
+if(ENABLE_GOTO_CONTRACTOR)
+    target_link_libraries(gotocontractor PRIVATE abstract-interpretation)
+endif()
 target_include_directories(gotoprograms
     PRIVATE ${Boost_INCLUDE_DIRS}
 )
@@ -31,4 +37,4 @@ target_include_directories(gotoalgorithms
 )
 target_compile_definitions(gotoprograms PUBLIC BOOST_ALL_NO_LIB YAML_CPP_STATIC_DEFINE)
 
-target_link_libraries(gotoprograms pointeranalysis bigint usr_utils)
+target_link_libraries(gotoprograms PUBLIC pointeranalysis PRIVATE bigint usr_utils langapi)
