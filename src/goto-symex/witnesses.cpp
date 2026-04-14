@@ -1112,12 +1112,13 @@ void generate_testcase_metadata()
 
 static bool is_nondet_symbol_name(const std::string &name)
 {
-  // Returns true if a symbol name looks like a nondet input:
-  //   "nondet$..."                         (direct nondet symbol)
-  //   "...return_value$..._nondet_..."     (return-value temp of a nondet call)
-  return has_prefix(name, "nondet$") ||
-         (name.find("return_value$") != std::string::npos &&
-          name.find("nondet") != std::string::npos);
+  // Only match return-value temporaries of explicit nondet function calls
+  // (e.g. __VERIFIER_nondet_int()), named "...return_value$..._nondet_...".
+  // Internal sideeffect::nondet assignments (e.g. from fscanf) are excluded:
+  // those model I/O, not formal nondeterminism, and must not appear as
+  // assumption waypoints in the witness.
+  return name.find("return_value$") != std::string::npos &&
+         name.find("nondet") != std::string::npos;
 }
 
 bool find_nondet_in_expr(const expr2tc &expr)
