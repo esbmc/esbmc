@@ -9939,6 +9939,7 @@ void python_converter::convert()
       "random",
       "exceptions",
       "datetime",
+      "time",
       "nondet"};
     std::list<std::string> model_folders = {"os", "numpy"};
 
