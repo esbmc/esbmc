@@ -853,8 +853,13 @@ void code_contractst::enforce_contracts(
     // or ensures clause would be invalid. When called from real code (no
     // entry_function, or a different function is the entry) the caller already
     // provides real pointers, so we must not overwrite them.
-    bool alloc_ptr_params =
-      !entry_function.empty() && function_name == entry_function;
+    //
+    // NOTE: When --enforce-contract '*' is used, the wildcard expansion in
+    // esbmc_parseoptions.cpp inserts full IDs like "c:@F@fst" into to_enforce,
+    // while --function gives only the short name "fst". Compare via func_sym->name
+    // (always the short name) to handle both forms correctly.
+    bool alloc_ptr_params = !entry_function.empty() &&
+                            id2string(func_sym->name) == entry_function;
 
     // Generate wrapper function, passing the original body
     goto_programt wrapper = generate_checking_wrapper(
