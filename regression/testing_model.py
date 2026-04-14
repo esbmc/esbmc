@@ -154,3 +154,7 @@ class TestDescription:
 
     def __str__(self) -> str:
         return f"[{self.name}]: {self.test_dir}, {self.test_mode}"
+
+    def mark_test_as_knownbug(self, word: str) -> "TestDescription":
+        # this was broken before, but now it's explicit again
+        raise NotImplementedError("Marking test as known bug is not implemented yet")
