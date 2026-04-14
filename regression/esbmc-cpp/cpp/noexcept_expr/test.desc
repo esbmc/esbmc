@@ -1,4 +1,4 @@
 CORE
-main.py
---incremental-bmc
+main.cpp
+--std c++11
 ^VERIFICATION SUCCESSFUL$
