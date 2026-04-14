@@ -1134,7 +1134,7 @@ void goto_convertt::do_function_call_symbol(
       t2->location = function.location();
     }
   }
-  else if (base_name == "__ESBMC_va_copy" || base_name == "__builtin_va_copy")
+  else if (base_name == "__ESBMC_va_copy")
   {
     if (arguments.size() != 2)
     {
@@ -1228,6 +1228,19 @@ void goto_convertt::do_function_call_symbol(
     if (!is_lvalue(dest_expr))
     {
       log_error("va_end argument expected to be lvalue");
+      abort();
+    }
+  }
+  else if (base_name == "__builtin_va_copy")
+  {
+    // For Clang frontend, goto_symex tracks VA args via va_index in the
+    // call frame; no assignment is needed. Emitting an ASSIGN crashes the
+    // pointer analysis on Linux/Windows where va_list is a struct array.
+    exprt dest_expr = make_va_list(arguments[0]);
+
+    if (!is_lvalue(dest_expr))
+    {
+      log_error("va_copy argument expected to be lvalue");
       abort();
     }
   }
