@@ -2879,8 +2879,11 @@ void esbmc_parseoptionst::process_function_contracts(
         continue;
 
       std::string func_name = id2string(it->first);
-      // Skip compiler-generated functions
-      if (func_name.find("~") == 0 || func_name.find("#") != std::string::npos)
+
+      // Use is_compiler_generated (which correctly handles C++ USR IDs like
+      // "c:@F@fst#*1I#") instead of a raw '#' string filter, which would
+      // incorrectly skip all C++ functions with parameters.
+      if (contracts.is_compiler_generated(func_name))
         continue;
 
       // Check for explicit contract clauses in function body
@@ -2965,7 +2968,7 @@ void esbmc_parseoptionst::process_function_contracts(
       if (!it->second.body_available)
         continue;
       std::string func_name = id2string(it->first);
-      if (func_name.find("~") == 0 || func_name.find("#") != std::string::npos)
+      if (contracts.is_compiler_generated(func_name))
         continue;
       symbolt *func_sym = ctx.find_symbol(it->first);
       if (func_sym && contracts.is_annotated_contract_function(*func_sym))

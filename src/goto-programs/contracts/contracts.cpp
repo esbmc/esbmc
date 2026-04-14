@@ -93,29 +93,29 @@ code_contractst::code_contractst(
 bool code_contractst::is_compiler_generated(
   const std::string &function_name) const
 {
-  // Skip destructors (start with ~)
-  if (!function_name.empty() && function_name[0] == '~')
+  // Extract the short name from a Clang USR-style full ID.
+  // C++ USR format: "c:@F@funcname#param_encoding#"
+  // Strip everything from the first '#' to get "c:@F@funcname", then take
+  // everything after the last '@' to get "funcname".
+  // For plain short names (no '@', no '#') this is a no-op.
+  std::string short_name = function_name;
+  size_t hash_pos = short_name.find('#');
+  if (hash_pos != std::string::npos)
+    short_name = short_name.substr(0, hash_pos);
+  size_t at_pos = short_name.rfind('@');
+  if (at_pos != std::string::npos)
+    short_name = short_name.substr(at_pos + 1);
+
+  // Skip destructors
+  if (!short_name.empty() && short_name[0] == '~')
     return true;
 
-  // C++ free functions and methods are stored with a trailing '#' in the Clang
-  // USR encoding (e.g. "c:@F@foo#", "c:@S@MyClass@F@bar#").  Strip exactly
-  // one trailing '#' before the compiler-generated check so that user-defined
-  // C++ functions are not accidentally skipped.
-  std::string name = function_name;
-  if (!name.empty() && name.back() == '#')
-    name.pop_back();
-
-  // Skip functions with # remaining in name (compiler-generated, e.g., exception destructors)
-  if (name.find('#') != std::string::npos)
+  // Skip C++ runtime helpers
+  if (short_name.find("__cxa_") == 0)
     return true;
 
-  // Skip functions starting with __ESBMC_contracts_original_ (already processed)
+  // Skip already-processed contract wrappers
   if (function_name.find("__ESBMC_contracts_original_") == 0)
-    return true;
-
-  // Skip other compiler-generated patterns if needed
-  // For example, constructors/destructors in exception handling
-  if (function_name.find("__cxa_") == 0)
     return true;
 
   return false;
@@ -123,6 +123,7 @@ bool code_contractst::is_compiler_generated(
 
 symbolt *code_contractst::find_function_symbol(const std::string &function_name)
 {
+  // Exact match (handles full IDs like "c:@F@fst#*1I#" passed by wildcard expansion)
   symbolt *sym = context.find_symbol(function_name);
   if (sym != nullptr)
     return sym;
@@ -131,8 +132,21 @@ symbolt *code_contractst::find_function_symbol(const std::string &function_name)
   sym = context.find_symbol(func_id);
   if (sym != nullptr)
     return sym;
-  // C++ convention: c:@F@funcname# (free function, no namespace/class)
-  return context.find_symbol(func_id + "#");
+  // C++ no-parameter free function: c:@F@funcname#
+  sym = context.find_symbol(func_id + "#");
+  if (sym != nullptr)
+    return sym;
+  // C++ general fallback: search by short name (sym->name) to handle
+  // parametered free functions like c:@F@fst#*1I# where the user passes
+  // just "fst" via --enforce-contract.
+  forall_goto_functions(it, goto_functions)
+  {
+    symbolt *candidate = context.find_symbol(it->first);
+    if (candidate && candidate->type.is_code() &&
+        id2string(candidate->name) == function_name)
+      return candidate;
+  }
+  return nullptr;
 }
 
 void code_contractst::rename_function(
