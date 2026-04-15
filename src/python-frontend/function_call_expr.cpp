@@ -2404,7 +2404,18 @@ exprt function_call_expr::build_constant_from_arg() const
   }
 
   else if (func_name == "str")
+  {
+    // Try __str__ dispatch for custom objects with __str__ defined.
+    exprt value_expr = converter_.get_expr(arg);
+    if (!value_expr.is_nil() && value_expr.statement() != "cpp-throw")
+    {
+      exprt dunder_result = converter_.dispatch_unary_dunder_operator(
+        "str", value_expr, converter_.get_location_from_decl(call_));
+      if (!dunder_result.is_nil())
+        return dunder_result;
+    }
     arg_size = handle_str(arg);
+  }
 
   typet t = type_handler_.get_typet(func_name, arg_size);
   exprt expr = converter_.get_expr(arg);

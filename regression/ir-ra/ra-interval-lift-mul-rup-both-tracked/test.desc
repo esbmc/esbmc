@@ -6,5 +6,5 @@ main.c
 \(\* \|smt_conv::ra_lo_up::0\| \|smt_conv::ra_lo_up::0\|
 \(ite
 22204460492503131
-^VERIFICATION FAILED$
+(^VERIFICATION FAILED$|^Building error trace$)
 
