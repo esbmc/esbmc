@@ -15,7 +15,8 @@ struct PyConstValue
     BOOL,
     INT,
     FLOAT,
-    STRING
+    STRING,
+    TUPLE
   };
 
   Kind kind = NONE;
@@ -23,26 +24,31 @@ struct PyConstValue
   long long int_val = 0;
   double float_val = 0.0;
   std::string string_val;
+  std::vector<PyConstValue> tuple_val;
 
   static PyConstValue make_none()
   {
-    return {NONE, false, 0, 0.0, ""};
+    return {NONE, false, 0, 0.0, "", {}};
   }
   static PyConstValue make_bool(bool v)
   {
-    return {BOOL, v, 0, 0.0, ""};
+    return {BOOL, v, 0, 0.0, "", {}};
   }
   static PyConstValue make_int(long long v)
   {
-    return {INT, false, v, 0.0, ""};
+    return {INT, false, v, 0.0, "", {}};
   }
   static PyConstValue make_float(double v)
   {
-    return {FLOAT, false, 0, v, ""};
+    return {FLOAT, false, 0, v, "", {}};
   }
   static PyConstValue make_string(const std::string &s)
   {
-    return {STRING, false, 0, 0.0, s};
+    return {STRING, false, 0, 0.0, s, {}};
+  }
+  static PyConstValue make_tuple(const std::vector<PyConstValue> &values)
+  {
+    return {TUPLE, false, 0, 0.0, "", values};
   }
 
   bool is_truthy() const;
