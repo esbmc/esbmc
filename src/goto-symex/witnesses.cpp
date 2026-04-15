@@ -1110,6 +1110,40 @@ void generate_testcase_metadata()
   boost::property_tree::write_xml(file, metadata);
 }
 
+static bool is_nondet_symbol_name(const std::string &name)
+{
+  // Only match return-value temporaries of explicit nondet function calls
+  // (e.g. __VERIFIER_nondet_int()), named "...return_value$..._nondet_...".
+  // Internal sideeffect::nondet assignments (e.g. from fscanf) are excluded:
+  // those model I/O, not formal nondeterminism, and must not appear as
+  // assumption waypoints in the witness.
+  return name.find("return_value$") != std::string::npos &&
+         name.find("nondet") != std::string::npos;
+}
+
+bool find_nondet_in_expr(const expr2tc &expr)
+{
+  // Returns true if any sub-expression of expr is a nondet symbol.
+  // Recurses through all operands via get_sub_expr so compound expressions
+  // (arithmetic, bitwise, casts, etc.) are handled without enumerating expr_ids.
+  // Unlike get_nondet_symbol, non-nondet symbols do not cause early return.
+  if (!expr)
+    return false;
+
+  if (is_symbol2t(expr))
+    return is_nondet_symbol_name(to_symbol2t(expr).thename.as_string());
+
+  unsigned int n = expr->get_num_sub_exprs();
+  for (size_t i = 0; i < n; ++i)
+  {
+    const expr2tc *sub = expr->get_sub_expr(i);
+    if (sub && find_nondet_in_expr(*sub))
+      return true;
+  }
+
+  return false;
+}
+
 #include <util/prefix.h>
 #include <boost/property_tree/detail/xml_parser_writer_settings.hpp>
 #include <goto-symex/slice.h>
