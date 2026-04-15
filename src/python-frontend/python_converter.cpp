@@ -4981,10 +4981,14 @@ void python_converter::handle_assignment_type_adjustments(
   // For subscript targets (e.g. dp[i] = v).
   // The rhs writes an element, not the container.
   // Don't rewrite lhs_symbol's type.
+  auto is_subscript_target = [](const nlohmann::json &t) {
+    return t.is_object() && t.value("_type", "") == "Subscript";
+  };
   const bool target_is_subscript =
-    ast_node.contains("targets") && ast_node["targets"].is_array() &&
-    !ast_node["targets"].empty() && ast_node["targets"][0].contains("_type") &&
-    ast_node["targets"][0]["_type"] == "Subscript";
+    (ast_node.contains("targets") && ast_node["targets"].is_array() &&
+     !ast_node["targets"].empty() &&
+     is_subscript_target(ast_node["targets"][0])) ||
+    (ast_node.contains("target") && is_subscript_target(ast_node["target"]));
   if (target_is_subscript)
     lhs_symbol = nullptr;
 
