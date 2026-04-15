@@ -271,7 +271,7 @@ void goto_loop_invariantt::collect_symbols(
     return;
   }
 
-  for (unsigned i = 0; i < expr->get_num_sub_exprs(); ++i)
+  for (size_t i = 0; i < expr->get_num_sub_exprs(); ++i)
   {
     const expr2tc *sub = expr->get_sub_expr(i);
     if (sub && *sub)
@@ -346,7 +346,7 @@ collect_symbols_local(const expr2tc &expr, std::set<irep_idt> &symbols)
     return;
   }
 
-  for (unsigned i = 0; i < expr->get_num_sub_exprs(); ++i)
+  for (size_t i = 0; i < expr->get_num_sub_exprs(); ++i)
   {
     const expr2tc *sub = expr->get_sub_expr(i);
     if (sub && *sub)

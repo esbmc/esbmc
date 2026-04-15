@@ -2273,7 +2273,7 @@ code_contractst::materialize_ptr_deref_snapshots(
           return false;
         if (is_symbol2t(e) && to_symbol2t(e).thename == param_id)
           return true;
-        for (unsigned i = 0; i < e->get_num_sub_exprs(); ++i)
+        for (size_t i = 0; i < e->get_num_sub_exprs(); ++i)
           if (contains_param(*e->get_sub_expr(i)))
             return true;
         return false;

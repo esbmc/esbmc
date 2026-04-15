@@ -336,7 +336,7 @@ bool base_type_eqt::base_type_eq_rec(const expr2tc &expr1, const expr2tc &expr2)
   if (expr1->get_num_sub_exprs() != expr2->get_num_sub_exprs())
     return false;
 
-  for (unsigned int idx = 0; idx < expr1->get_num_sub_exprs(); idx++)
+  for (size_t idx = 0; idx < expr1->get_num_sub_exprs(); idx++)
   {
     const expr2tc *e1 = expr1->get_sub_expr(idx);
     const expr2tc *e2 = expr2->get_sub_expr(idx);
