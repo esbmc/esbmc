@@ -215,30 +215,69 @@ bool clang_c_maint::clang_main()
       term_eq.copy_to_operands(argv_argc, null);
       init_code.copy_to_operands(code_assumet(term_eq));
 
-      // Provide dereferenceable backing for the first ESBMC_ARGV_ENTRIES
-      // argv strings so that programs reading those entries do not trigger
-      // spurious dereference failures.  This is a bounded under-approximation:
-      // argv[i] for i >= ESBMC_ARGV_ENTRIES has no backing allocation, so
-      // programs that access higher indices when argc > ESBMC_ARGV_ENTRIES
-      // may produce false positives (dereference failure) or false negatives
-      // (missed null-deref).  Raise the constant to cover more arguments at
-      // the cost of a larger GOTO program and SMT formula.
-      static const int ESBMC_ARGV_ENTRIES = 10;
+      // Back each argv[i] with a static char array whose SIZE is a nondet
+      // variable bounded in [1, MAX_STR_LEN].  Declaring the array type with
+      // a symbolic size and setting dynamic_size on it mirrors exactly how
+      // argv' itself is modelled, so the dereference checker treats the string
+      // length as an SMT variable chosen by the solver.
+      // This is a bounded under-approximation: argv[i] for i >= ESBMC_ARGV_MAX_ARGS
+      // has no backing; raise the constant for wider coverage at the cost of a
+      // larger GOTO program and SMT formula.
+      static const int ESBMC_ARGV_MAX_ARGS = 10;
+      static const unsigned int ESBMC_ARGV_MAX_STR_LEN = 1024;
       typet char_t = argv_symbol.type.subtype().subtype();
-      typet char_arr_t = array_typet(char_t, from_integer(32, index_type()));
 
-      for (int ai = 0; ai < ESBMC_ARGV_ENTRIES; ++ai)
+      for (int ai = 0; ai < ESBMC_ARGV_MAX_ARGS; ++ai)
       {
-        std::string sname = "__ESBMC_argv_str_" + std::to_string(ai);
+        // Nondet length for this string (uninitialized static ⟹ nondet in symex).
+        std::string lname = "__ESBMC_argv_len_" + std::to_string(ai);
+        symbolt len_sym;
+        len_sym.name = irep_idt(lname);
+        len_sym.id = irep_idt("c:@" + lname);
+        len_sym.type = uint_type();
+        len_sym.static_lifetime = true;
+        len_sym.lvalue = true;
+        symbolt *len_ptr = nullptr;
+        context.move(len_sym, len_ptr);
 
+        exprt len = symbol_expr(*len_ptr);
+
+        // Bound the length unconditionally; the backing is always present even
+        // when ai >= argc (the string simply won't be accessed on those paths).
+        exprt ge_one(">=", bool_type());
+        ge_one.copy_to_operands(len, from_integer(1, uint_type()));
+        init_code.copy_to_operands(code_assumet(ge_one));
+
+        exprt le_max("<=", bool_type());
+        le_max.copy_to_operands(
+          len, from_integer(ESBMC_ARGV_MAX_STR_LEN, uint_type()));
+        init_code.copy_to_operands(code_assumet(le_max));
+
+        // char[len] static symbol — symbolic array size mirrors argv' itself.
+        std::string sname = "__ESBMC_argv_str_" + std::to_string(ai);
         symbolt str_sym;
         str_sym.name = irep_idt(sname);
         str_sym.id = irep_idt("c:@" + sname);
-        str_sym.type = char_arr_t;
+        str_sym.type = array_typet(char_t, len);
         str_sym.static_lifetime = true;
         str_sym.lvalue = true;
         symbolt *str_ptr = nullptr;
         context.move(str_sym, str_ptr);
+
+        // Set __ESBMC_alloc_size for the string (same pattern as argv').
+        exprt str_ds("dynamic_size", size_type());
+        str_ds.copy_to_operands(gen_address_of(symbol_expr(*str_ptr)));
+        init_code.copy_to_operands(code_assignt(str_ds, len));
+
+        // Enforce null-termination: str[len-1] == '\0'.  Without this the
+        // solver may pick len=1 with str[0]!='\0', then strncpy reads str[1]
+        // which is out-of-bounds for a 1-element array.
+        exprt len_minus_one("-", uint_type());
+        len_minus_one.copy_to_operands(len, from_integer(1, uint_type()));
+        index_exprt last_char(symbol_expr(*str_ptr), len_minus_one, char_t);
+        exprt null_term("=", bool_type());
+        null_term.copy_to_operands(last_char, gen_zero(char_t));
+        init_code.copy_to_operands(code_assumet(null_term));
 
         exprt cond_lt("<", bool_type());
         cond_lt.copy_to_operands(
@@ -251,12 +290,12 @@ bool clang_c_maint::clang_main()
 
         index_exprt str_first(
           symbol_expr(*str_ptr), gen_zero(index_type()), char_t);
-        exprt addr_str0("address_of", argv_symbol.type.subtype());
-        addr_str0.copy_to_operands(str_first);
+        exprt addr_str("address_of", argv_symbol.type.subtype());
+        addr_str.copy_to_operands(str_first);
 
         code_ifthenelset if_assign;
         if_assign.cond() = cond_lt;
-        if_assign.then_case() = code_assignt(argv_ai, addr_str0);
+        if_assign.then_case() = code_assignt(argv_ai, addr_str);
         init_code.copy_to_operands(if_assign);
       }
 
