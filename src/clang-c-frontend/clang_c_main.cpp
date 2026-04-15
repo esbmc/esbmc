@@ -255,7 +255,7 @@ bool clang_c_maint::clang_main()
       // Provide dereferenceable backing for argv[0] and argv[1] so programs
       // that read those strings don't trigger spurious dereference failures.
       typet char_t = argv_symbol.type.subtype().subtype();
-      typet char_arr_t = array_typet(char_t, from_integer(1024, index_type()));
+      typet char_arr_t = array_typet(char_t, from_integer(32, index_type()));
 
       for (int ai = 0; ai < 2; ++ai)
       {
