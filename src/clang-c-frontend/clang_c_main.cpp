@@ -216,7 +216,10 @@ bool clang_c_maint::clang_main()
       init_code.copy_to_operands(code_assumet(term_eq));
 
       // 2. forall i. (0 <= i < argc) => argv[i] != NULL
-      // Register a fresh symbol used only as the quantifier bound variable.
+      // Encoded as the implication's contrapositive:
+      //   NOT(0 <= i AND i < argc) OR argv[i] != NULL.
+      // The lower-bound guard (i >= 0) is required so that the array-bounds
+      // check on argv[i] inside the quantifier body can be discharged.
       symbolt argv_idx_sym;
       argv_idx_sym.name = "__ESBMC_argv_idx";
       argv_idx_sym.id = "c:@__ESBMC_argv_idx";
@@ -238,7 +241,6 @@ bool clang_c_maint::clang_main()
       lt_argc.copy_to_operands(idx, symbol_expr(argc_symbol));
       exprt in_range("and", bool_type());
       in_range.copy_to_operands(ge_zero, lt_argc);
-
       exprt not_in_range("not", bool_type());
       not_in_range.copy_to_operands(in_range);
       exprt forall_body("or", bool_type());
@@ -250,11 +252,8 @@ bool clang_c_maint::clang_main()
       argv_valid.copy_to_operands(addr_idx, forall_body);
       init_code.copy_to_operands(code_assumet(argv_valid));
 
-      // Provide valid dereferenceable backing for argv[0] and argv[1] so that
-      // programs which read those strings (e.g. via strncpy) do not trigger
-      // spurious dereference-failure checks.  The backing is a nondet
-      // char[1024]; entries at higher indices remain constrained to be
-      // non-null by the forall above but are not given explicit backing.
+      // Provide dereferenceable backing for argv[0] and argv[1] so programs
+      // that read those strings don't trigger spurious dereference failures.
       typet char_t = argv_symbol.type.subtype().subtype();
       typet char_arr_t = array_typet(char_t, from_integer(1024, index_type()));
 
@@ -262,18 +261,16 @@ bool clang_c_maint::clang_main()
       {
         char suffix = static_cast<char>('0' + ai);
         std::string sname = std::string("__ESBMC_argv_str_") + suffix;
-        std::string sid = "c:@" + sname;
 
         symbolt str_sym;
         str_sym.name = irep_idt(sname);
-        str_sym.id = irep_idt(sid);
+        str_sym.id = irep_idt("c:@" + sname);
         str_sym.type = char_arr_t;
         str_sym.static_lifetime = true;
         str_sym.lvalue = true;
         symbolt *str_ptr = nullptr;
         context.move(str_sym, str_ptr);
 
-        // if (ai < argc) argv[ai] = &str_sym[0]
         exprt cond_lt("<", bool_type());
         cond_lt.copy_to_operands(
           from_integer(ai, argc_symbol.type), symbol_expr(argc_symbol));
