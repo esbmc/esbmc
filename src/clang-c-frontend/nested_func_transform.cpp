@@ -5,6 +5,7 @@
 #include <cctype>
 #include <cstdio>
 #include <fstream>
+#include <map>
 #include <set>
 #include <sstream>
 #include <string>
@@ -502,9 +503,10 @@ static std::vector<local_var> collect_local_vars(
         --depth;
     }
 
-    // Only parse declarations at the outermost body level (depth 1 = inside
-    // the function's top-level braces) and also depth > 1 for block-scoped vars
-    if (depth >= 1 && toks[idx].kind == tok_kind::identifier)
+    // Only parse declarations at the direct function body level (depth 1).
+    // Skip deeper nesting (depth > 1) to avoid collecting variables from
+    // nested function definitions or inner blocks.
+    if (depth == 1 && toks[idx].kind == tok_kind::identifier)
     {
       // Try: type-keyword(s) [*]* name [= ...] [, name2 ...] ;
       size_t try_idx = idx;
@@ -551,6 +553,47 @@ static std::vector<local_var> collect_local_vars(
 
       if (!found_type)
       {
+        // Typedef heuristic: IDENT IDENT followed by = ; [ or ,
+        // e.g. "aligned jj;" where aligned is a typedef
+        size_t t1 = skip_ws(toks, idx);
+        if (
+          t1 < body_end_tok && toks[t1].kind == tok_kind::identifier &&
+          !is_type_keyword(toks[t1].text) &&
+          !is_non_func_keyword(toks[t1].text))
+        {
+          size_t t2 = skip_ws(toks, t1 + 1);
+          if (
+            t2 < body_end_tok && toks[t2].kind == tok_kind::identifier &&
+            !is_type_keyword(toks[t2].text) &&
+            !is_non_func_keyword(toks[t2].text) &&
+            !nested_func_names.count(toks[t2].text))
+          {
+            size_t t3 = skip_ws(toks, t2 + 1);
+            if (
+              t3 < body_end_tok && toks[t3].kind == tok_kind::punctuation &&
+              (toks[t3].text == "=" || toks[t3].text == ";" ||
+               toks[t3].text == "[" || toks[t3].text == ","))
+            {
+              vars.push_back({toks[t1].text, toks[t2].text});
+              // Skip past this declaration
+              size_t scan = t3;
+              while (scan < body_end_tok)
+              {
+                if (
+                  toks[scan].kind == tok_kind::punctuation &&
+                  toks[scan].text == ";")
+                {
+                  idx = scan + 1;
+                  break;
+                }
+                ++scan;
+              }
+              if (scan >= body_end_tok)
+                idx = scan;
+              continue;
+            }
+          }
+        }
         ++idx;
         continue;
       }
@@ -567,9 +610,55 @@ static std::vector<local_var> collect_local_vars(
 
         std::string var_name = toks[name_idx].text;
 
-        // Don't treat nested function names as variables
+        // Don't treat nested function names as variables.
+        // Skip the entire nested function definition (params + body).
         if (nested_func_names.count(var_name))
+        {
+          size_t skip = skip_ws(toks, name_idx + 1);
+          if (
+            skip < body_end_tok && toks[skip].kind == tok_kind::punctuation &&
+            toks[skip].text == "(")
+          {
+            // Skip past matching )
+            int pd = 1;
+            ++skip;
+            while (skip < body_end_tok && pd > 0)
+            {
+              if (toks[skip].kind == tok_kind::punctuation)
+              {
+                if (toks[skip].text == "(")
+                  ++pd;
+                else if (toks[skip].text == ")")
+                  --pd;
+              }
+              ++skip;
+            }
+            // Skip past matching }
+            size_t brace = skip_ws(toks, skip);
+            if (
+              brace < body_end_tok &&
+              toks[brace].kind == tok_kind::punctuation &&
+              toks[brace].text == "{")
+            {
+              int bd = 1;
+              ++brace;
+              while (brace < body_end_tok && bd > 0)
+              {
+                if (toks[brace].kind == tok_kind::punctuation)
+                {
+                  if (toks[brace].text == "{")
+                    ++bd;
+                  else if (toks[brace].text == "}")
+                    --bd;
+                }
+                ++brace;
+              }
+              try_idx = brace;
+              goto done_with_decl;
+            }
+          }
           break;
+        }
 
         // Check what follows: = or , or ; means it's a declaration
         size_t after = skip_ws(toks, name_idx + 1);
@@ -649,8 +738,10 @@ static std::vector<local_var> collect_params(const std::string &params_text)
   if (toks.size() < 2)
     return vars;
 
-  // Split by commas at depth 0, extract last identifier before each comma/end
+  // Split by commas at paren depth 1, extract last identifier before each
+  // comma/end that is NOT inside brackets (to handle VLA params like int t[b]).
   int depth = 0;
+  int bracket_depth = 0;
   std::string current_type;
   std::string last_ident;
   std::vector<std::string> type_parts;
@@ -673,7 +764,6 @@ static std::vector<local_var> collect_params(const std::string &params_text)
         --depth;
         if (depth == 0 && !last_ident.empty())
         {
-          // Everything before last_ident is the type
           std::string type;
           for (const auto &tp : type_parts)
           {
@@ -685,7 +775,17 @@ static std::vector<local_var> collect_params(const std::string &params_text)
         }
         continue;
       }
-      if (t.text == "," && depth == 1)
+      if (t.text == "[" && depth == 1)
+      {
+        ++bracket_depth;
+        continue;
+      }
+      if (t.text == "]" && depth == 1)
+      {
+        --bracket_depth;
+        continue;
+      }
+      if (t.text == "," && depth == 1 && bracket_depth == 0)
       {
         if (!last_ident.empty())
         {
@@ -702,7 +802,7 @@ static std::vector<local_var> collect_params(const std::string &params_text)
         type_parts.clear();
         continue;
       }
-      if (t.text == "*" && depth == 1)
+      if (t.text == "*" && depth == 1 && bracket_depth == 0)
       {
         if (!last_ident.empty())
         {
@@ -714,7 +814,8 @@ static std::vector<local_var> collect_params(const std::string &params_text)
       }
     }
 
-    if (t.kind == tok_kind::identifier && depth == 1)
+    // Only treat identifiers outside brackets as potential param names
+    if (t.kind == tok_kind::identifier && depth == 1 && bracket_depth == 0)
     {
       if (!last_ident.empty())
         type_parts.push_back(last_ident);
@@ -781,23 +882,42 @@ static std::vector<local_var> find_captures(
   std::vector<local_var> captures;
   std::set<std::string> captured_names;
 
+  // Also tokenize params to find captured vars in VLA expressions
+  auto params_toks = tokenize(params_text);
+
   for (const auto &ev : enclosing_vars)
   {
     if (param_names.count(ev.name) || local_names.count(ev.name))
       continue; // shadowed
 
-    // Check if this identifier appears in the body
+    if (captured_names.count(ev.name))
+      continue;
+
+    // Check if this identifier appears in the body or param types
+    bool found = false;
     for (const auto &t : body_toks)
     {
       if (t.kind == tok_kind::identifier && t.text == ev.name)
       {
-        if (!captured_names.count(ev.name))
-        {
-          captures.push_back(ev);
-          captured_names.insert(ev.name);
-        }
+        found = true;
         break;
       }
+    }
+    if (!found)
+    {
+      for (const auto &t : params_toks)
+      {
+        if (t.kind == tok_kind::identifier && t.text == ev.name)
+        {
+          found = true;
+          break;
+        }
+      }
+    }
+    if (found)
+    {
+      captures.push_back(ev);
+      captured_names.insert(ev.name);
     }
   }
 
@@ -823,49 +943,72 @@ static std::string capture_global_name(
 }
 
 // -----------------------------------------------------------------------
-//  Body rewriting: replace captured variable references
+//  Identifier rewriting
 // -----------------------------------------------------------------------
 
-// Rewrite the body of a nested function, replacing captured variable
-// identifiers with the appropriate dereference expression.
-// For direct-call mode: x -> (*__capture_x)
-// For fptr mode: x -> (*__esbmc_cap_outer__inner__x)
-static std::string rewrite_body(
-  const std::string &body_text,
-  const std::vector<local_var> &captures,
-  bool fptr_mode,
-  const std::string &enclosing,
-  const std::string &func_name)
+// Replace identifiers in `text` according to `replacements` map.
+static std::string rewrite_identifiers(
+  const std::string &text,
+  const std::map<std::string, std::string> &replacements)
 {
-  if (captures.empty())
-    return body_text;
+  if (replacements.empty())
+    return text;
 
-  auto toks = tokenize(body_text);
-  std::set<std::string> cap_names;
-  for (const auto &c : captures)
-    cap_names.insert(c.name);
-
+  auto toks = tokenize(text);
   std::string result;
   for (const auto &t : toks)
   {
     if (t.kind == tok_kind::eof)
       break;
 
-    if (t.kind == tok_kind::identifier && cap_names.count(t.text))
+    if (t.kind == tok_kind::identifier)
     {
-      if (fptr_mode)
-        result +=
-          "(*" + capture_global_name(enclosing, func_name, t.text) + ")";
-      else
-        result += "(*__capture_" + t.text + ")";
+      auto it = replacements.find(t.text);
+      if (it != replacements.end())
+      {
+        result += it->second;
+        continue;
+      }
     }
-    else
-    {
-      result += t.text;
-    }
+    result += t.text;
   }
-
   return result;
+}
+
+// Build a capture-replacement map for use in rewrite_identifiers.
+static std::map<std::string, std::string> build_capture_replacements(
+  const std::vector<local_var> &captures,
+  bool fptr_mode,
+  const std::string &enclosing,
+  const std::string &func_name)
+{
+  std::map<std::string, std::string> m;
+  for (const auto &c : captures)
+  {
+    if (fptr_mode)
+      m[c.name] =
+        "(*" + capture_global_name(enclosing, func_name, c.name) + ")";
+    else
+      m[c.name] = "(*__capture_" + c.name + ")";
+  }
+  return m;
+}
+
+static std::string rewrite_body(
+  const std::string &body_text,
+  const std::vector<local_var> &captures,
+  bool fptr_mode,
+  const std::string &enclosing,
+  const std::string &func_name,
+  const std::map<std::string, std::string> &sibling_renames =
+    std::map<std::string, std::string>())
+{
+  auto replacements =
+    build_capture_replacements(captures, fptr_mode, enclosing, func_name);
+  // Merge sibling renames (original name -> lifted name)
+  for (const auto &[k, v] : sibling_renames)
+    replacements.insert({k, v});
+  return rewrite_identifiers(body_text, replacements);
 }
 
 // Extract the inner parameter list (without outer parens) from params_text
@@ -1058,8 +1201,9 @@ static std::string transform_one_pass(const std::string &src)
   std::sort(
     nested.begin(),
     nested.end(),
-    [](const nested_func &a, const nested_func &b)
-    { return a.def_start > b.def_start; });
+    [](const nested_func &a, const nested_func &b) {
+      return a.def_start > b.def_start;
+    });
 
   // Step 1: Remove nested function definitions from the source
   std::string modified = src;
@@ -1082,7 +1226,27 @@ static std::string transform_one_pass(const std::string &src)
   {
     std::string lname = lifted_name(nf.enclosing, nf.name);
 
-    for (size_t i = 0; i < mod_toks.size(); ++i)
+    // Find the enclosing function's body range in mod_toks to scope replacements
+    size_t enc_body_start = 0, enc_body_end = mod_toks.size();
+    for (size_t ei = 0; ei < mod_toks.size(); ++ei)
+    {
+      if (mod_toks[ei].kind != tok_kind::identifier)
+        continue;
+      nested_func enc_dummy;
+      size_t enc_end;
+      if (try_parse_func_def(mod_toks, ei, "", enc_dummy, enc_end, modified))
+      {
+        if (enc_dummy.name == nf.enclosing)
+        {
+          enc_body_start = ei;
+          enc_body_end = enc_end;
+          break;
+        }
+        ei = enc_end - 1;
+      }
+    }
+
+    for (size_t i = enc_body_start; i < enc_body_end; ++i)
     {
       if (
         mod_toks[i].kind == tok_kind::identifier && mod_toks[i].text == nf.name)
@@ -1116,8 +1280,7 @@ static std::string transform_one_pass(const std::string &src)
               }
               ++close;
             }
-            size_t close_paren_pos = mod_toks[close - 1].pos;
-
+            // Insert capture args BEFORE original args (after opening paren)
             std::string extra_args;
             for (const auto &cap : nf.captures)
             {
@@ -1141,9 +1304,11 @@ static std::string transform_one_pass(const std::string &src)
             if (!extra_args.empty())
             {
               std::string insert_text =
-                has_args ? ", " + extra_args : extra_args;
+                has_args ? extra_args + ", " : extra_args;
+              // Insert right after the opening (
+              size_t open_paren_end = mod_toks[next].pos + 1;
               replacements.push_back(
-                {close_paren_pos, close_paren_pos, insert_text});
+                {open_paren_end, open_paren_end, insert_text});
             }
 
             replacements.push_back(
@@ -1159,26 +1324,37 @@ static std::string transform_one_pass(const std::string &src)
   std::sort(
     replacements.begin(),
     replacements.end(),
-    [](const replacement &a, const replacement &b)
-    { return a.start > b.start; });
+    [](const replacement &a, const replacement &b) {
+      return a.start > b.start;
+    });
 
   for (const auto &r : replacements)
     modified.replace(r.start, r.end - r.start, r.text);
 
-  // Step 2: Generate lifted functions as a preamble
-  std::string preamble;
+  // Step 2: Generate lifted functions, grouped by enclosing function
+  std::map<std::string, std::string> per_enclosing_preamble;
 
   std::vector<nested_func> ordered = nested;
   std::sort(
     ordered.begin(),
     ordered.end(),
-    [](const nested_func &a, const nested_func &b)
-    { return a.def_start < b.def_start; });
+    [](const nested_func &a, const nested_func &b) {
+      return a.def_start < b.def_start;
+    });
 
   for (const auto &nf : ordered)
   {
     std::string lname = lifted_name(nf.enclosing, nf.name);
     std::string rewritten_body;
+    std::string &preamble = per_enclosing_preamble[nf.enclosing];
+
+    // Build sibling rename map: other nested funcs in the same enclosing
+    std::map<std::string, std::string> sibling_renames;
+    for (const auto &s : ordered)
+    {
+      if (s.enclosing == nf.enclosing && s.name != nf.name)
+        sibling_renames[s.name] = lifted_name(s.enclosing, s.name);
+    }
 
     if (nf.used_as_fptr)
     {
@@ -1189,8 +1365,13 @@ static std::string transform_one_pass(const std::string &src)
         preamble += "static " + cap.type_text + " *" + gname + ";\n";
       }
 
-      rewritten_body =
-        rewrite_body(nf.body_text, nf.captures, true, nf.enclosing, nf.name);
+      rewritten_body = rewrite_body(
+        nf.body_text,
+        nf.captures,
+        true,
+        nf.enclosing,
+        nf.name,
+        sibling_renames);
       preamble += "static " + nf.return_type + " " + lname + nf.params_text +
                   " " + rewritten_body + "\n";
 
@@ -1222,8 +1403,13 @@ static std::string transform_one_pass(const std::string &src)
     }
     else
     {
-      rewritten_body =
-        rewrite_body(nf.body_text, nf.captures, false, nf.enclosing, nf.name);
+      rewritten_body = rewrite_body(
+        nf.body_text,
+        nf.captures,
+        false,
+        nf.enclosing,
+        nf.name,
+        sibling_renames);
 
       std::string params_inner = inner_params(nf.params_text);
       std::string trimmed_params;
@@ -1238,6 +1424,11 @@ static std::string transform_one_pass(const std::string &src)
         trimmed_params = params_inner.substr(s, e - s);
       }
 
+      auto cap_repls =
+        build_capture_replacements(nf.captures, false, nf.enclosing, nf.name);
+      if (!cap_repls.empty())
+        trimmed_params = rewrite_identifiers(trimmed_params, cap_repls);
+
       bool no_params = trimmed_params.empty() || trimmed_params == "void";
       std::string new_params;
 
@@ -1248,15 +1439,19 @@ static std::string transform_one_pass(const std::string &src)
       else
       {
         new_params = "(";
-        if (!no_params)
-          new_params += trimmed_params;
-
         for (size_t ci = 0; ci < nf.captures.size(); ++ci)
         {
-          if (!no_params || ci > 0)
+          if (ci > 0)
             new_params += ", ";
           new_params +=
             nf.captures[ci].type_text + " *__capture_" + nf.captures[ci].name;
+        }
+
+        if (!no_params)
+        {
+          if (!nf.captures.empty())
+            new_params += ", ";
+          new_params += trimmed_params;
         }
         new_params += ")";
       }
@@ -1266,35 +1461,51 @@ static std::string transform_one_pass(const std::string &src)
     }
   }
 
-  // Step 3: Combine preamble + modified source
-  std::string output;
+  // Step 3: Insert each preamble immediately before its enclosing function.
+  // Find enclosing function positions in `modified`, insert back-to-front.
+  auto mod2_toks = tokenize(modified);
 
-  if (!preamble.empty())
+  struct preamble_insert
   {
-    size_t insert_pos = 0;
-    auto mod2_toks = tokenize(modified);
+    size_t pos;
+    std::string text;
+  };
+  std::vector<preamble_insert> inserts;
+
+  for (const auto &[enc_name, pre_text] : per_enclosing_preamble)
+  {
+    // Find the enclosing function definition in modified
     for (size_t i = 0; i < mod2_toks.size(); ++i)
     {
-      if (
-        mod2_toks[i].kind == tok_kind::pp_directive ||
-        mod2_toks[i].kind == tok_kind::whitespace)
-      {
-        insert_pos = mod2_toks[i].pos + mod2_toks[i].text.size();
+      if (mod2_toks[i].kind != tok_kind::identifier)
         continue;
+
+      nested_func dummy;
+      size_t end_tok;
+      if (try_parse_func_def(mod2_toks, i, "", dummy, end_tok, modified))
+      {
+        if (dummy.name == enc_name)
+        {
+          inserts.push_back({mod2_toks[i].pos, pre_text + "\n"});
+          break;
+        }
+        i = end_tok - 1;
       }
-      break;
     }
-
-    output += modified.substr(0, insert_pos);
-    output += "\n" + preamble + "\n";
-    output += modified.substr(insert_pos);
-  }
-  else
-  {
-    output = modified;
   }
 
-  return output;
+  // Sort by position descending and insert
+  std::sort(
+    inserts.begin(),
+    inserts.end(),
+    [](const preamble_insert &a, const preamble_insert &b) {
+      return a.pos > b.pos;
+    });
+
+  for (const auto &ins : inserts)
+    modified.insert(ins.pos, ins.text);
+
+  return modified;
 }
 
 std::optional<file_operations::tmp_file>
