@@ -42,11 +42,8 @@
 
 std::unordered_set<std::string> goto_functionst::reached_claims;
 std::unordered_multiset<std::string> goto_functionst::reached_mul_claims;
-std::unordered_set<std::string> goto_functionst::verified_claims;
-
 std::mutex goto_functionst::reached_claims_mutex;
 std::mutex goto_functionst::reached_mul_claims_mutex;
-std::mutex goto_functionst::verified_claims_mutex;
 
 bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
   : options(opts), context(_context), ns(context)
@@ -1374,7 +1371,9 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
     if (
       options.get_bool_option("multi-property") &&
       (options.get_bool_option("base-case") ||
-       options.get_bool_option("diagnose-unknown-properties")))
+       options.get_bool_option("diagnose-unknown-properties") ||
+       (options.get_bool_option("inductive-step") &&
+        options.get_bool_option("loop-invariant"))))
       return multi_property_check(
         *eq, solver_result.remaining_claims, *runtime_solver);
 
@@ -1486,11 +1485,9 @@ smt_convt::resultt bmct::multi_property_check(
   // For coverage info
   auto &reached_claims = symex->goto_functions.reached_claims;
   auto &reached_mul_claims = symex->goto_functions.reached_mul_claims;
-  auto &verified_claims = symex->goto_functions.verified_claims;
   auto &reached_claims_mutex = symex->goto_functions.reached_claims_mutex;
   auto &reached_mul_claims_mutex =
     symex->goto_functions.reached_mul_claims_mutex;
-  auto &verified_claims_mutex = symex->goto_functions.verified_claims_mutex;
 
   // "Assertion Cov"
   bool is_assert_cov = options.get_bool_option("assertion-coverage") ||
@@ -1557,10 +1554,8 @@ smt_convt::resultt bmct::multi_property_check(
                        &summary,
                        &reached_claims,
                        &reached_mul_claims,
-                       &verified_claims,
                        &reached_claims_mutex,
                        &reached_mul_claims_mutex,
-                       &verified_claims_mutex,
                        &is_assert_cov,
                        &is_cond_cov,
                        &is_vb,
@@ -1611,13 +1606,6 @@ smt_convt::resultt bmct::multi_property_check(
       // insert to the multiset before skipping the verification process
       std::lock_guard lock(reached_mul_claims_mutex);
       reached_mul_claims.emplace(claim_sig);
-    }
-
-    if (verified_claims.count(claim.claim_cstr))
-    {
-      clear_verified_claims_in_ssa(local_eq, claim, is_goto_cov);
-      clear_verified_claims_in_goto(claim, is_goto_cov);
-      is_verified = true;
     }
 
     // skip if we have already verified
