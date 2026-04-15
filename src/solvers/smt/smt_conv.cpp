@@ -1986,11 +1986,11 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
         std::pair<smt_astt, smt_astt> bounds =
           is_nearest_rounding_mode(rounding_mode)
             ? apply_ieee754_rne_enclosure(real_result, lo_r, hi_r, fbv_type)
-            : is_round_to_away(rounding_mode)
-                ? apply_ieee754_rna_enclosure(real_result, lo_r, hi_r, fbv_type)
-                : is_round_to_plus_inf(rounding_mode)
-                    ? apply_ieee754_rup_enclosure(real_result, lo_r, hi_r, fbv_type)
-                    : apply_ieee754_rdn_enclosure(real_result, lo_r, hi_r, fbv_type);
+          : is_round_to_away(rounding_mode)
+            ? apply_ieee754_rna_enclosure(real_result, lo_r, hi_r, fbv_type)
+          : is_round_to_plus_inf(rounding_mode)
+            ? apply_ieee754_rup_enclosure(real_result, lo_r, hi_r, fbv_type)
+            : apply_ieee754_rdn_enclosure(real_result, lo_r, hi_r, fbv_type);
         a = mk_ite(div_by_zero, inf_result, real_result);
         ir_ra_interval_map[a] = {bounds.first, bounds.second};
         interval_lifted = true;
