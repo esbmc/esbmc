@@ -199,14 +199,14 @@ bool clang_c_maint::clang_main()
       dynamic_size.copy_to_operands(gen_address_of(symbol_expr(argv_symbol)));
       init_code.copy_to_operands(code_assignt(dynamic_size, mult));
 
-      // Model argv per C11 §5.1.2.2.1: argv is left as a nondet array and
-      // two assumptions encode the standard's guarantees:
-      //   1. argv[argc] == NULL   (null terminator)
-      //   2. argv[i]   != NULL   for every 0 <= i < argc
+      // Model argv per C11 §5.1.2.2.1: assume the null terminator.
+      // Non-null entries for argv[0..1] are guaranteed by the backing
+      // assignments below; quantifier-based forall is avoided so that
+      // solvers without quantifier support (e.g. Boolector) are not broken.
       constant_exprt null(
         irep_idt("NULL"), integer2string(0), argv_symbol.type.subtype());
 
-      // 1. argv[argc] == NULL
+      // argv[argc] == NULL
       index_exprt argv_argc(
         symbol_expr(argv_symbol),
         symbol_expr(argc_symbol),
@@ -214,43 +214,6 @@ bool clang_c_maint::clang_main()
       exprt term_eq("=", bool_type());
       term_eq.copy_to_operands(argv_argc, null);
       init_code.copy_to_operands(code_assumet(term_eq));
-
-      // 2. forall i. (0 <= i < argc) => argv[i] != NULL
-      // Encoded as the implication's contrapositive:
-      //   NOT(0 <= i AND i < argc) OR argv[i] != NULL.
-      // The lower-bound guard (i >= 0) is required so that the array-bounds
-      // check on argv[i] inside the quantifier body can be discharged.
-      symbolt argv_idx_sym;
-      argv_idx_sym.name = "__ESBMC_argv_idx";
-      argv_idx_sym.id = "c:@__ESBMC_argv_idx";
-      argv_idx_sym.type = argc_symbol.type;
-      argv_idx_sym.lvalue = true;
-      symbolt *argv_idx = nullptr;
-      context.move(argv_idx_sym, argv_idx);
-
-      exprt idx = symbol_expr(*argv_idx);
-
-      index_exprt argv_i(
-        symbol_expr(argv_symbol), idx, argv_symbol.type.subtype());
-      exprt ne_null("notequal", bool_type());
-      ne_null.copy_to_operands(argv_i, null);
-
-      exprt ge_zero(">=", bool_type());
-      ge_zero.copy_to_operands(idx, gen_zero(argc_symbol.type));
-      exprt lt_argc("<", bool_type());
-      lt_argc.copy_to_operands(idx, symbol_expr(argc_symbol));
-      exprt in_range("and", bool_type());
-      in_range.copy_to_operands(ge_zero, lt_argc);
-      exprt not_in_range("not", bool_type());
-      not_in_range.copy_to_operands(in_range);
-      exprt forall_body("or", bool_type());
-      forall_body.copy_to_operands(not_in_range, ne_null);
-
-      exprt addr_idx("address_of", pointer_typet(argc_symbol.type));
-      addr_idx.copy_to_operands(idx);
-      exprt argv_valid("forall", bool_type());
-      argv_valid.copy_to_operands(addr_idx, forall_body);
-      init_code.copy_to_operands(code_assumet(argv_valid));
 
       // Provide dereferenceable backing for argv[0] and argv[1] so programs
       // that read those strings don't trigger spurious dereference failures.
