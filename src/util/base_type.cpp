@@ -76,6 +76,15 @@ void base_type(typet &type, const namespacet &ns)
 
 void base_type(expr2tc &expr, const namespacet &ns)
 {
+  // Guard against nil sub-expressions (e.g. optional operands left unset by
+  // the frontend) so the recursive operand walk below doesn't deref a null.
+  // This matches the nil tolerance already present in
+  // base_type_eqt::base_type_eq_rec and goto_check's check_rec. The canonical
+  // nil-child producer is gen_nondet() in irep2_utils.h, whose sideeffect2t
+  // of kind `nondet` has nil `operand` and nil `size` by design.
+  if (is_nil_expr(expr))
+    return;
+
   base_type(expr->type, ns);
 
   expr->Foreach_operand([&ns](expr2tc &e) { base_type(e, ns); });
