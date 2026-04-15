@@ -47,11 +47,9 @@ public:
   // Store and pass the coverage data in incr/kind mode
   static std::unordered_set<std::string> reached_claims;
   static std::unordered_multiset<std::string> reached_mul_claims;
-  static std::unordered_set<std::string> verified_claims;
 
   static std::mutex reached_claims_mutex;
   static std::mutex reached_mul_claims_mutex;
-  static std::mutex verified_claims_mutex;
 
   void clear()
   {
