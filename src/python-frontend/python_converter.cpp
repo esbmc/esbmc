@@ -4978,6 +4978,16 @@ void python_converter::handle_assignment_type_adjustments(
   const bool has_annotation =
     ast_node.contains("annotation") && !ast_node["annotation"].is_null();
 
+  // For subscript targets (e.g. dp[i] = v).
+  // The rhs writes an element, not the container.
+  // Don't rewrite lhs_symbol's type.
+  const bool target_is_subscript =
+    ast_node.contains("targets") && ast_node["targets"].is_array() &&
+    !ast_node["targets"].empty() && ast_node["targets"][0].contains("_type") &&
+    ast_node["targets"][0]["_type"] == "Subscript";
+  if (target_is_subscript)
+    lhs_symbol = nullptr;
+
   // Handle assignment of function to function pointer variable
   if (
     lhs.type().is_pointer() && lhs.type().subtype().is_code() &&
