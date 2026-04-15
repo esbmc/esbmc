@@ -1,0 +1,44 @@
+set(_esbmc_discovered_tests "@ESBMC_REGRESSION_DISCOVERY_OUTPUT_FILE@")
+set(
+    _esbmc_discover_command
+    "@Python_EXECUTABLE@"
+    "@ESBMC_REGRESSION_DISCOVER_TOOL@"
+    "--root=@CMAKE_CURRENT_SOURCE_DIR@"
+    "--runner=@ESBMC_REGRESSION_TOOL@"
+    "--python-executable=@Python_EXECUTABLE@"
+    "--tool=@ESBMC_BIN@"
+    "--timeout=@ESBMC_REGRESS_TIMEOUT@"
+    "--modes"
+)
+if(NOT WIN32)
+  list(APPEND _esbmc_discover_command "--memory-limit=@ESBMC_REGRESS_MEMORY_LIMIT@")
+endif()
+list(APPEND _esbmc_discover_command @ESBMC_REGRESSION_DISCOVERY_MODES@)
+
+foreach(_prefix IN ITEMS @ESBMC_REGRESSION_DISCOVERY_PREFIXES@)
+  list(APPEND _esbmc_discover_command "--include-prefix=${_prefix}")
+endforeach()
+
+foreach(_prefix IN ITEMS @ESBMC_REGRESSION_DISCOVERY_IGNORES@)
+  list(APPEND _esbmc_discover_command "--ignore-prefix=${_prefix}")
+endforeach()
+
+if(@ESBMC_REGRESSION_BENCHBRINGUP@)
+  list(APPEND _esbmc_discover_command "--benchbringup")
+endif()
+
+execute_process(
+    COMMAND ${_esbmc_discover_command}
+    RESULT_VARIABLE _esbmc_discover_status
+    OUTPUT_FILE "${_esbmc_discovered_tests}"
+    ERROR_VARIABLE _esbmc_discover_error
+)
+
+if(NOT _esbmc_discover_status EQUAL 0)
+  message(
+      FATAL_ERROR
+      "Failed to discover regression tests: ${_esbmc_discover_error}"
+  )
+endif()
+
+include("${_esbmc_discovered_tests}")

@@ -12,14 +12,23 @@ else()
 endif()
 
 set(ESBMC_REGRESSION_TOOL "${CMAKE_CURRENT_SOURCE_DIR}/testing_tool.py")
+# Discover tool is responsible for discovering tests at runtime so that we don't need to reconfigure CMake when adding new tests.
+# Also translates the discovered test.desc files into CTest add_test() definitions, which are then included at CTest runtime.
+set(ESBMC_REGRESSION_DISCOVER_TOOL
+    "${CMAKE_CURRENT_SOURCE_DIR}/testing_discover_tool.py")
 
-# Per-test timeout, injected into the runner via
-# the ESBMC_REGRESS_TIMEOUT environment variable
-#so the Python side never needs its own default.
+# Per-test timeout and memory limit, passed through discovery
+# into the generated runner flags.
 set(ESBMC_REGRESS_TIMEOUT 1200 CACHE STRING
     "Per-test timeout in seconds for regression tests")
 set(ESBMC_REGRESS_MEMORY_LIMIT 8192 CACHE STRING
     "Per-test virtual memory limit")
+set(ESBMC_REGRESSION_DISCOVERY_TEMPLATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/CTestDiscoverTests.cmake.in")
+set(ESBMC_REGRESSION_DISCOVERY_INCLUDE_FILE
+    "${CMAKE_CURRENT_BINARY_DIR}/CTestDiscoverTests.cmake")
+set(ESBMC_REGRESSION_DISCOVERY_OUTPUT_FILE
+    "${CMAKE_CURRENT_BINARY_DIR}/CTestDiscoveredTests.cmake")
 
 if(BENCHBRINGUP)
   # To run a specific benchmark in Github workflow and download the log archive when completed
@@ -35,35 +44,7 @@ if(BENCHBRINGUP)
   # Override the cache value with the CI-supplied one.
   set(ESBMC_REGRESS_TIMEOUT $ENV{TEST_TIMEOUT})
   message(STATUS "Benchmark to run: $ENV{BENCHMARK_TO_RUN} with timeout ${ESBMC_REGRESS_TIMEOUT}")
-  set(BENCHBRINGUP_ARGS --benchbringup)
 endif()
-
-function(add_esbmc_regression_test folder modes test)
-    set(test_name "regression/${folder}/${test}")
-    add_test(NAME ${test_name}
-             COMMAND ${Python_EXECUTABLE} ${ESBMC_REGRESSION_TOOL}
-                     --tool=${ESBMC_BIN}
-                     --regression=${CMAKE_CURRENT_SOURCE_DIR}/${folder}
-                     --modes ${modes}
-                     --file=${test}
-                     ${BENCHBRINGUP_ARGS}) # additional args for BENCHBRINGUP workflow
-    # Timeout and memory limit are passed via environment
-    set_tests_properties(${test_name}
-      PROPERTIES SKIP_RETURN_CODE 10
-      TIMEOUT ${ESBMC_REGRESS_TIMEOUT}
-      ENVIRONMENT "ESBMC_REGRESS_TIMEOUT=${ESBMC_REGRESS_TIMEOUT};ESBMC_REGRESS_MEMORY_LIMIT=${ESBMC_REGRESS_MEMORY_LIMIT}"
-      LABELS "regression;${folder}/")
-endfunction()
-
-function(add_esbmc_regression folder modes)
-    SUBDIRLIST(SUBDIRS ${CMAKE_CURRENT_SOURCE_DIR}/${regression})
-    if(${folder} STREQUAL "quixbugs")
-        list(REMOVE_ITEM SUBDIRS bucketsort)
-    endif()
-    foreach(test ${SUBDIRS})
-        add_esbmc_regression_test(${folder} "${modes}" ${test})
-    endforeach()
-endfunction()
 
 # conditionally enable regression suites based on configured support
 if(ENABLE_BITWUZLA)
@@ -293,14 +274,34 @@ else()
   endif()
 endif()
 
-foreach(regression IN LISTS REGRESSIONS)
-    if(WIN32 OR APPLE) # FUTURE: configure suites using an option
-        set(MODES CORE KNOWNBUG FUTURE)
-    else()
-        set(MODES CORE KNOWNBUG FUTURE THOROUGH)
-    endif()
-    if(CORE_REGRESSION_ONLY)
-      set(MODES CORE)
-    endif()
-    add_esbmc_regression("${regression}" "${MODES}")
-endforeach()
+if(WIN32 OR APPLE) # FUTURE: configure suites using an option
+    set(MODES CORE KNOWNBUG FUTURE)
+else()
+    set(MODES CORE KNOWNBUG FUTURE THOROUGH)
+endif()
+if(CORE_REGRESSION_ONLY)
+  set(MODES CORE)
+endif()
+
+set(ESBMC_REGRESSION_DISCOVERY_PREFIXES ${REGRESSIONS})
+set(ESBMC_REGRESSION_DISCOVERY_IGNORES disabled quixbugs/bucketsort)
+set(ESBMC_REGRESSION_DISCOVERY_MODES ${MODES})
+set(ESBMC_REGRESSION_BENCHBRINGUP OFF)
+if(BENCHBRINGUP)
+  set(ESBMC_REGRESSION_BENCHBRINGUP ON)
+endif()
+
+# Generate the CTestDiscoverTests.cmake file from the template, substituting the variables defined above.
+# Changing the discovery prefix list still requires reconfiguring CMake (for now).
+configure_file(
+    "${ESBMC_REGRESSION_DISCOVERY_TEMPLATE}"
+    "${ESBMC_REGRESSION_DISCOVERY_INCLUDE_FILE}"
+    @ONLY
+)
+
+# Include the generated CTestDiscoverTests.cmake file, which will be used at CTest runtime to discover tests and generate the CTestDiscoveredTests.cmake file with the add_test() definitions.
+set_property(
+    DIRECTORY
+    APPEND
+    PROPERTY TEST_INCLUDE_FILES "${ESBMC_REGRESSION_DISCOVERY_INCLUDE_FILE}"
+)

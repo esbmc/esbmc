@@ -8,16 +8,14 @@ import sys
 import unittest
 from subprocess import Popen, PIPE, STDOUT
 import argparse
+from pathlib import Path
 import re
 import xml.etree.ElementTree as ET
 import time
 import shlex
 import subprocess
+from testing_model import TestDescription, FAIL_MODES, TestMode
 
-# Environment variable injected by CMake
-# set_tests_properties(ENVIRONMENT).
-_TIMEOUT_ENVVAR = "ESBMC_REGRESS_TIMEOUT"
-_MEMORY_LIMIT_ENVVAR = "ESBMC_REGRESS_MEMORY_LIMIT"
 #####################
 # Testing Tool
 #####################
@@ -32,94 +30,11 @@ _MEMORY_LIMIT_ENVVAR = "ESBMC_REGRESS_MEMORY_LIMIT"
 # Dependencies (install through pip)
 # - unittest-xml-reporting
 
-# TestModes
-# CORE -> Essential tests that are fast
-# THOROUGH -> Slower tests
-# KNOWNBUG -> Tests that are known to fail due to bugs
-# FUTURE -> Test that are known to fail due to missing implementation
-# ALL -> Run all tests
-SUPPORTED_TEST_MODES = ["CORE", "FUTURE", "THOROUGH", "KNOWNBUG", "ALL"]
-FAIL_MODES = ["KNOWNBUG"]
-
 # Bring up a single benchmark
 BENCHMARK_BRINGUP = False
 
 
 class TestCase:
-    """This class is responsible to:
-    (a) parse and validate test descriptions.
-    (b) hold functions to manipulate and generate commands with test case"""
-
-    def _initialize_test_case(self):
-        """Reads test description and initialize this object"""
-        with open(os.path.join(self.test_dir, "test.desc")) as fp:
-            # First line - TEST MODE
-            self.test_mode = fp.readline().strip()
-            assert (
-                self.test_mode in SUPPORTED_TEST_MODES
-            ), f"{self.test_dir}: {self.test_mode} is not supported"
-
-            # Second line - Test file
-            self.test_file = fp.readline().strip()
-            assert os.path.exists(self.test_dir + "/" + self.test_file)
-
-            # Third line - Arguments of executable
-            self.test_args = fp.readline().strip()
-
-            # Fourth line and beyond
-            # Regex of expected output
-            self.test_regex = []
-            for line in fp:
-                self.test_regex.append(line.strip())
-
-    def generate_run_argument_list(self, *tool):
-        """Generates run command list to be used in Popen"""
-        result = list(tool)
-        for x in shlex.split(self.test_args):
-            if x != "":
-                p = os.path.join(self.test_dir, x)
-                result.append(p if os.path.exists(p) else x)
-        if TestCase.SMT_ONLY:
-            result.append("--smtlib")
-            result.append("--smt-formula-only")
-            result.append("--output")
-            result.append(f"{self.test_dir}.smt2")
-            result.append("--array-flattener")
-
-        for x in TestCase.UNSUPPORTED_OPTIONS:
-            try:
-                index = result.index(x)
-                result.pop(index)
-                result.pop(index)
-            except ValueError:
-                pass
-
-        result.append(os.path.join(self.test_dir, self.test_file))
-        return result
-
-    def __str__(self):
-        return f"[{self.name}]: {self.test_dir}, {self.test_mode}"
-
-    def __init__(self, test_dir: str, name: str):
-        assert os.path.exists(test_dir)
-        assert os.path.exists(os.path.join(test_dir, "test.desc"))
-        self.name = name
-        self.test_dir = test_dir
-        self.test_args = None
-        self.test_file = None
-        self.test_mode = "CORE"
-        self._initialize_test_case()
-
-    def save_test(self):
-        """Replaces original test with the current configuration"""
-        test_desc_path = os.path.join(self.test_dir, "test.desc")
-        assert os.path.isfile(test_desc_path)
-        with open(test_desc_path, "w") as f:
-            f.write(f"{self.test_mode}\n")
-            f.write(f"{self.test_file}\n")
-            f.write(f"{self.test_args}\n")
-            for re in self.test_regex:
-                f.write(f"{re}\n")
 
     """Ignore regex and only check for crashes"""
     RUN_ONLY = False
@@ -129,16 +44,6 @@ class TestCase:
     UNSUPPORTED_OPTIONS = ["--timeout", "--memlimit"]
 
 
-def _prepare_child():
-    """preexec_fn: new process group + memory cap."""
-    os.setpgrp()
-    if RegressionBase.MEMORY_LIMIT:
-        import resource
-        limit = RegressionBase.MEMORY_LIMIT
-        try:
-            resource.setrlimit(resource.RLIMIT_AS, (limit, limit))
-        except (ValueError, OSError):
-            pass  # macOS does not support RLIMIT_AS
 # Seconds to wait between SIGTERM and SIGKILL
 # when cleaning up timed-out process group.
 _TERM_GRACE = 3
@@ -148,16 +53,17 @@ class Executor:
         self.tool = shlex.split(tool)
         self.timeout = RegressionBase.TIMEOUT
 
-    def run(self, test_case: TestCase):
+    def run(self, test_case: TestDescription):
         """Execute the test case with `executable`"""
-        cmd = test_case.generate_run_argument_list(*self.tool)
-        preexec = _prepare_child if os.name == "posix" else None
+        cmd = test_case.generate_run_argument_list(*self.tool, smt_only=TestCase.SMT_ONLY, unsupported_options=TestCase.UNSUPPORTED_OPTIONS)
+        if RegressionBase.MEMORY_LIMIT:
+            cmd += ["--memlimit", str(RegressionBase.MEMORY_LIMIT)]
 
         with subprocess.Popen(
             cmd,
             stdout=PIPE,
             stderr=PIPE,
-            preexec_fn=preexec,
+            preexec_fn=os.setpgrp if os.name == "posix" else None,
             env=dict(os.environ, ESBMC_CONFIG_FILE=""),
         ) as proc:
             try:
@@ -183,21 +89,25 @@ class Executor:
                     partial += stdout
                 if stderr:
                     partial += stderr
-                return None, msg.encode() + b"\n" + partial, 1
+                return None, msg.encode() + b"\n" + partial, 1, cmd
 
             if sys.platform.startswith("linux"):
                 import resource
                 rss = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
                 print("mem_usage={0} kilobytes".format(rss))
-            return stdout, stderr, proc.returncode
+            return stdout, stderr, proc.returncode, cmd
 
 
-def get_test_objects(base_dir: str):
-    """Generates a TestCase from a list of files"""
-    assert os.path.exists(base_dir)
-    listdir = os.listdir(base_dir)
-    directories = [x for x in listdir if os.path.isdir(os.path.join(base_dir, x))]
-    tests = [TestCase(os.path.join(base_dir, x), x) for x in directories]
+def get_test_objects(base_dir: str) -> list[TestDescription]:
+    """Generates a test description from a list of files"""
+    assert os.path.exists(base_dir), f"Base directory does not exist: {base_dir}"
+    base_path = Path(base_dir).absolute()
+    listdir = os.listdir(base_path)
+    directories = [x for x in listdir if (base_path / x).is_dir()]
+    tests = [
+        TestDescription.parse_test_description(base_path / x, base_path.parent)
+        for x in directories
+    ]
     return tests
 
 
@@ -207,10 +117,10 @@ class RegressionBase(unittest.TestCase):
     longMessage = True
 
     FAIL_WITH_WORD: str = None
-    # The env var set by CMake.
-    TIMEOUT = int(os.environ.get(_TIMEOUT_ENVVAR, 0)) or None
-    _mem_mb = int(os.environ.get(_MEMORY_LIMIT_ENVVAR, 0))
-    MEMORY_LIMIT = _mem_mb * 1024 * 1024 if _mem_mb else None
+    # Timeout in seconds
+    TIMEOUT: int | None = None
+    # Memory limit in megabytes
+    MEMORY_LIMIT: int | None = None
 
     def setUp(self):
         self.startTime = time.time()
@@ -223,11 +133,11 @@ class RegressionBase(unittest.TestCase):
             print("%.3fs" % elapsed)
 
 
-def _add_test(test_case, executor):
+def _add_test(test_case : TestDescription, executor: Executor):
     """This method returns a function that defines a test"""
 
     def test(self):
-        stdout, stderr, rc = executor.run(test_case)
+        stdout, stderr, rc, cmd = executor.run(test_case)
 
         if stdout is None:
             timeout_message = "\nTIMEOUT TEST: {} (limit {}s)".format(
@@ -252,7 +162,7 @@ def _add_test(test_case, executor):
         error_message = (
             output_to_validate
             + "\n\nARGUMENTS: "
-            + str(test_case.generate_run_argument_list(*executor.tool))
+            + " ".join(cmd)
         )
 
         if BENCHMARK_BRINGUP:
@@ -261,7 +171,8 @@ def _add_test(test_case, executor):
             assert os.path.isdir(os.environ["LOG_DIR"])
             destination = os.environ["LOG_DIR"] + "/" + test_case.name
             f = open(destination, "a")
-            f.write("ESBMC args: " + test_case.test_args + "\n\n")
+            f.write("Original ESBMC args: " + test_case.test_args + "\n\n")
+            f.write("Final ESBMC cmd: " + " ".join(cmd) + "\n\n")
             f.write(output_to_validate)
             f.close()
 
@@ -289,9 +200,10 @@ def _add_test(test_case, executor):
     return test
 
 
-def gen_one_test(base_dir: str, test: str, executor_path: str, modes):
+def gen_one_test(base_dir: str, test: str, executor_path: str, modes: list[TestMode]):
     executor = Executor(executor_path)
-    test_case = TestCase(os.path.join(base_dir, test), test)
+    base_path = Path(base_dir).absolute()
+    test_case = TestDescription.parse_test_description(base_path / test, base_path)
     if test_case.test_mode not in modes:
         exit(10)
     test_func = _add_test(test_case, executor)
@@ -303,7 +215,7 @@ def _arg_parsing():
     parser.add_argument(
         "--tool", required=False, help="tool executable path + optional args"
     )
-    parser.add_argument("--timeout", required=False, help="timeout value")
+    parser.add_argument("--timeout", required=False, type=int, help="timeout value")
     parser.add_argument("--modes", nargs="+", help="a list of modes that are supported")
     parser.add_argument("--regression", required=False, help="regression suite path")
     parser.add_argument(
@@ -339,9 +251,9 @@ def _arg_parsing():
 
     main_args = parser.parse_args()
     if main_args.timeout:
-        RegressionBase.TIMEOUT = int(main_args.timeout)
+        RegressionBase.TIMEOUT = main_args.timeout
     if main_args.memory_limit:
-        RegressionBase.MEMORY_LIMIT = main_args.memory_limit * 1024 * 1024
+        RegressionBase.MEMORY_LIMIT = main_args.memory_limit
     RegressionBase.FAIL_WITH_WORD = main_args.mark_knownbug_with_word
 
     regression_path = os.path.join(
@@ -357,7 +269,7 @@ def _arg_parsing():
         TestCase.RUN_ONLY = True
         TestCase.SMT_ONLY = True
 
-    gen_one_test(regression_path, main_args.file, main_args.tool, main_args.modes)
+    gen_one_test(regression_path, main_args.file, main_args.tool, [TestMode.from_string(mode) for mode in main_args.modes])
 
 
 def main():
@@ -433,7 +345,8 @@ TEST_SUITES = [
     "k-induction",
     "goto-contractor",
     "k-induction-parallel",
-    "termination" "linux",
+    "termination",
+    "linux",
     "llvm",
     "mathsat",
     "nonz3",
@@ -453,5 +366,5 @@ def apply_transform_over_tests(functor):
             functor(test_case)
 
 
-def print_test(test: TestCase):
+def print_test(test: TestDescription):
     print(str(test))

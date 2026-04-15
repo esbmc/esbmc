@@ -14,10 +14,10 @@ First you need to Download and configure the dependencies.
 - [Chocolatey](https://chocolatey.org/)
 - [vcpkg](https://github.com/microsoft/vcpkg). Follow the instructions and integrate it to your system if you want to use Visual Studio or if you want to use CMake directly get the toolchain command (vcpkg docs).
 - [Z3](https://github.com/Z3Prover/z3/releases)
-- Prebuilt LLVM. You can manually compile it (instructions bellow) or use [this](https://www.dropbox.com/s/z1gyschfa46yj6e/clang.zip?dl=1). Note that the official releases won't come with the needed CMake modules. 
+- Prebuilt LLVM. You can manually compile it (instructions bellow) or use [this](https://www.dropbox.com/s/z1gyschfa46yj6e/clang.zip?dl=1). Note that the official releases won't come with the needed CMake modules.
 
 ### Installing libraries
- 
+
 - `vcpkg.exe install boost-filesystem:x64-Windows boost-date-time:x64-windows boost-test:x64-windows boost-multi-index:x64-windows boost-crc:x64-windows boost-property-tree:x64-windows boost-uuid:x64-windows`
 - `chocolatey install winflexbison gnuwin32-coreutils.portable`
 
@@ -28,7 +28,7 @@ First you need to Download and configure the dependencies.
 1. Mark the Configuration type as Release.
 1. If you know what you are doing you can select any toolchain you want (reflecting into vcpkg). If you followed the instructions so far, you should use msvc_x64_x64
 1. In cmake configuration flags you should add the path to where you downloaded Z3 and LLVM e.g `-DLLVM_DIR=C:\\Deps\\llvm9d -DClang_DIR=C:\\Deps\\llvm9d -DZ3_DIR=C:\\Deps\\z3`
-1. You should also add the `-DBOOST_DLL_FILE` to the downloaded file, if you want to use yours, it should be available at `<VCPKG_ROOG>\buildtrees\boost-filesystem\x64-windows-rel\stage\lib` 
+1. You should also add the `-DBOOST_DLL_FILE` to the downloaded file, if you want to use yours, it should be available at `<VCPKG_ROOG>\buildtrees\boost-filesystem\x64-windows-rel\stage\lib`
 1. On vcpkg-target-triples mark as `x64-windows`. If you know what you are doing you should be able to use any triplet you want.
 
 ### Linux Build on Windows
@@ -55,11 +55,11 @@ Install [Build Tools for Visual Studio 2019](https://visualstudio.microsoft.com/
    - 2019 (version 16)
    - 2022 (version 17)
 
-Install [Python 3.9.4](https://www.python.org). Tick the box to add python to your PATH environment variable.
+Install [Python](https://www.python.org). Tick the box to add python to your PATH environment variable.
 
 ### LLVM
 
-Using the start menu, run **x64 Native Tools Command Prompt for VS 2019** and execute these commands, replacing `C:\Users\Andy` with the correct value. Here is listed a brief explanation of each of the CMake parameters we pass when configuring the build 
+Using the start menu, run **x64 Native Tools Command Prompt for VS 2019** and execute these commands, replacing `C:\Users\Andy` with the correct value. Here is listed a brief explanation of each of the CMake parameters we pass when configuring the build
 
 - `-Thost=x64` : Sets the windows toolset to use 64 bit mode.
 - `-A x64` : Make the build target 64 bit .

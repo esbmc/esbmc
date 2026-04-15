@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 
-from testing_tool import (TestCase, apply_transform_over_tests, FAIL_MODES)
+from testing_tool import apply_transform_over_tests
+from testing_model import TestDescription, FAIL_MODES
 
 import sys
 import os.path
 import getopt
 import shlex
 import fnmatch
+from pathlib import Path
 
 SOLVERS = [
     'smtlib',
@@ -109,7 +111,7 @@ def list_flags(verbosity : int):
     # finish
     sys.exit(0)
 
-def flags(tc : TestCase):
+def flags(tc : TestDescription):
     r = set()
     if tc.test_mode in FAIL_MODES:
         r.add(Flag(BUG))
@@ -202,9 +204,12 @@ def main():
         list_flags(verbosity)
 
     tcs = []
+    regression_root = Path(".").absolute()
     if args:
         for arg in args:
-            tcs.append(TestCase(arg, os.path.basename(arg)))
+            tcs.append(
+                TestDescription.parse_test_description(Path(arg).absolute(), regression_root)
+            )
     else:
         apply_transform_over_tests(tcs.append)
 
@@ -217,7 +222,7 @@ def main():
         for tc in tcs:
             print(tc.test_dir)
     else:
-        max_w = max(len(tc.test_dir) for tc in tcs)
+        max_w = max(len(os.fspath(tc.test_dir)) for tc in tcs)
         for tc in tcs:
             # directory + flags or directory + cmdline options
             value = (' '.join(sorted(flags(tc))) if verbosity == 1 else
