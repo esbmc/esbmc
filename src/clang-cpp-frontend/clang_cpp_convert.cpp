@@ -1231,6 +1231,31 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     break;
   }
 
+  case clang::Stmt::CXXNoexceptExprClass:
+  {
+    const clang::CXXNoexceptExpr &noexcept_expr =
+      static_cast<const clang::CXXNoexceptExpr &>(stmt);
+
+    if (noexcept_expr.isValueDependent())
+    {
+      std::ostringstream oss;
+      llvm::raw_os_ostream ross(oss);
+      ross << "Conversion of unsupported value-dependent noexcept expr: \"";
+      ross << stmt.getStmtClassName() << "\" to expression"
+           << "\n";
+      stmt.dump(ross, *ASTContext);
+      ross.flush();
+      log_error("{}", oss.str());
+      return true;
+    }
+
+    if (noexcept_expr.getValue())
+      new_expr = true_exprt();
+    else
+      new_expr = false_exprt();
+    break;
+  }
+
   default:
     if (clang_c_convertert::get_expr(stmt, new_expr))
       return true;

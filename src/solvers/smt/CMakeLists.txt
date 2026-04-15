@@ -17,6 +17,10 @@ target_include_directories(smt
 )
 
 target_link_libraries(smt
-  fmt::fmt
-  
+  PUBLIC fmt::fmt
 )
+
+# smttuple and smtfp include smt headers directly; declare the dep so the
+# linker sees smt after them when resolving array_convt / smt_convt symbols.
+target_link_libraries(smttuple PRIVATE smt)
+target_link_libraries(smtfp PRIVATE smt)

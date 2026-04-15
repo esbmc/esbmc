@@ -127,6 +127,7 @@ private:
     std::atomic<size_t> skipped_properties = 0;
     std::atomic<size_t> simplified_properties = 0;
     std::atomic<size_t> failed_properties = 0;
+    std::atomic<size_t> unknown_properties = 0;
     std::atomic<double> total_time_s = 0.0;
     std::string solver_name;
     std::once_flag solver_name_flag;

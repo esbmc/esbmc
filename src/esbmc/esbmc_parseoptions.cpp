@@ -27,6 +27,7 @@ extern "C"
 #include <util/expr_util.h>
 #include <iostream>
 #include <goto-programs/add_race_assertions.h>
+#include <goto-programs/goto_atomicity_check.h>
 #include <goto-programs/goto_check.h>
 #include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/goto_inline.h>
@@ -435,6 +436,22 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     // Optionally disable termination flag
     options.set_option("termination", false);
   }
+
+  // interval-symex-guard is designed for plain BMC loop-counter tracking.
+  // Disable it for advanced verification modes whose GOTO/symex transformations
+  // are incompatible with a single shared (non-forked) interval_domaint:
+  //   - incremental-BMC reuses one goto_symext across unwind iterations
+  //   - k-induction (base/forward/inductive) havocs loop variables
+  //   - loop-invariant and function contracts inject havoc+assume sequences
+  if (
+    options.get_bool_option("k-induction") ||
+    cmdline.isset("k-induction-parallel") || cmdline.isset("incremental-bmc") ||
+    cmdline.isset("termination") || cmdline.isset("enforce-contract") ||
+    cmdline.isset("enforce-all-contracts") ||
+    cmdline.isset("replace-call-with-contract") ||
+    cmdline.isset("replace-all-contracts") || cmdline.isset("base-case") ||
+    cmdline.isset("forward-condition") || cmdline.isset("inductive-step"))
+    options.set_option("no-interval-symex-guard", true);
 
   if (
     cmdline.isset("overflow-check") || cmdline.isset("unsigned-overflow-check"))
@@ -1352,9 +1369,11 @@ int esbmc_parseoptionst::do_bmc_strategy(
   };
 
   // Trying all bounds from 1 to "max_k_step" in "k_step_inc"
+  uint64_t last_k_step = k_step_base;
   for (uint64_t k_step = k_step_base; k_step <= max_k_step;
        k_step += k_step_inc)
   {
+    last_k_step = k_step;
     // k-induction
     if (options.get_bool_option("k-induction"))
     {
@@ -1456,6 +1475,11 @@ int esbmc_parseoptionst::do_bmc_strategy(
         return 1;
     }
   }
+
+  if (
+    options.get_bool_option("multi-property") &&
+    options.get_bool_option("k-induction"))
+    diagnose_unknown_properties(options, goto_functions, last_k_step);
 
   log_status("Unable to prove or falsify the program, giving up.");
   log_fail("VERIFICATION UNKNOWN");
@@ -2150,6 +2174,9 @@ bool esbmc_parseoptionst::process_goto_program(
     }
 
     goto_check(ns, options, goto_functions);
+
+    if (options.get_bool_option("atomicity-check"))
+      goto_atomicity_check(goto_functions, ns, context);
 
     // Process function contracts if enabled
     bool has_enforce = cmdline.isset("enforce-contract");
@@ -2957,7 +2984,7 @@ void esbmc_parseoptionst::process_function_contracts(
         "Enforcing annotated contracts for {} function(s)", to_enforce.size());
       std::string entry_function =
         cmdline.isset("function") ? cmdline.getval("function") : "";
-      contracts.enforce_contracts(to_enforce, entry_function);
+      contracts.enforce_contracts(to_enforce, entry_function, true);
     }
   }
 
@@ -3069,4 +3096,54 @@ void esbmc_parseoptionst::help()
     else
       fmt::print(stderr, "{}\n", colorize_flag_refs(line));
   }
+}
+
+// When k-induction exhausts all k-steps without a definitive result, run one
+// final per-VCC inductive-step check at the last k to identify which specific
+// properties could not be resolved, without impacting the main k-induction loop.
+void esbmc_parseoptionst::diagnose_unknown_properties(
+  optionst &options,
+  goto_functionst &goto_functions,
+  const uint64_t k_step)
+{
+  if (options.get_bool_option("disable-inductive-step"))
+    return;
+
+  // Mirror the guards used by is_inductive_step_violated in the main loop:
+  // inductive step is skipped for k==1 and capped by --max-inductive-step.
+  if (k_step <= 1)
+    return;
+  if (strtoul(cmdline.getval("max-inductive-step"), nullptr, 10) < k_step)
+    return;
+
+  const bool saved_base_case = options.get_bool_option("base-case");
+  const bool saved_forward_condition =
+    options.get_bool_option("forward-condition");
+  const bool saved_inductive_step = options.get_bool_option("inductive-step");
+  const bool saved_no_unwinding =
+    options.get_bool_option("no-unwinding-assertions");
+  const bool saved_partial_loops = options.get_bool_option("partial-loops");
+  const std::string saved_unwind = options.get_option("unwind");
+
+  options.set_option("base-case", false);
+  options.set_option("forward-condition", false);
+  options.set_option("inductive-step", true);
+  options.set_option("no-unwinding-assertions", true);
+  options.set_option("partial-loops", true);
+  options.set_option("unwind", integer2string(k_step));
+  options.set_option("diagnose-unknown-properties", true);
+
+  bmct bmc(goto_functions, options, context);
+
+  log_progress(
+    "\nDiagnosing unresolved properties (inductive step, k = {:d}):", k_step);
+  do_bmc(bmc);
+
+  options.set_option("base-case", saved_base_case);
+  options.set_option("forward-condition", saved_forward_condition);
+  options.set_option("inductive-step", saved_inductive_step);
+  options.set_option("no-unwinding-assertions", saved_no_unwinding);
+  options.set_option("partial-loops", saved_partial_loops);
+  options.set_option("unwind", saved_unwind);
+  options.set_option("diagnose-unknown-properties", false);
 }

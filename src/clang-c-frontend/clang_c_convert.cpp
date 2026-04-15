@@ -511,11 +511,6 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
   symbol.file_local = (vd.getStorageClass() == clang::SC_Static) ||
                       (!vd.isExternallyVisible() && !vd.hasGlobalStorage());
   symbol.is_thread_local = vd.getTLSKind() != clang::VarDecl::TLS_None;
-  // Preserve _Atomic qualifier so the data-race checker can skip this variable.
-  // get_type() strips _Atomic (see clang::Type::Atomic case), so we record it
-  // here on the symbol type instead.
-  if (vd.getType()->isAtomicType())
-    symbol.type.set("#atomic", true);
 
   if (
     symbol.static_lifetime && !symbol.is_extern &&
@@ -1264,6 +1259,7 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     if (get_type(dt.getValueType(), new_type))
       return true;
 
+    new_type.set("#atomic", true);
     break;
   }
 

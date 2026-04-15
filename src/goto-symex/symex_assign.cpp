@@ -139,6 +139,21 @@ goto_symext::goto_symext(
 
   art1 = nullptr;
 
+  // Guard pruning is on by default (disable with --no-interval-symex-guard);
+  // assertion pruning is opt-in via --interval-symex-assert. Build the online
+  // interval domain when either is active.
+  const bool guard_enabled =
+    !options.get_bool_option("no-interval-symex-guard");
+  const bool assert_enabled = options.get_bool_option("interval-symex-assert");
+  if (guard_enabled || assert_enabled)
+  {
+    if (guard_enabled)
+      options.set_option("interval-symex-guard", true);
+    interval_domaint::set_options(options);
+    interval_domain_state.emplace();
+    interval_domain_state->make_top();
+  }
+
   valid_ptr_arr_name = "c:@__ESBMC_alloc";
   alloc_size_arr_name = "c:@__ESBMC_alloc_size";
   dyn_info_arr_name = "c:@__ESBMC_is_dynamic";
@@ -191,6 +206,7 @@ goto_symext &goto_symext::operator=(const goto_symext &sym)
   dyn_info_arr_name = sym.dyn_info_arr_name;
 
   dynamic_memory = sym.dynamic_memory;
+  interval_domain_state = sym.interval_domain_state;
 
   // Art ptr is shared
   art1 = sym.art1;

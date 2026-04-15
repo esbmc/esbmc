@@ -18,7 +18,7 @@ smt_astt smt_tuple_sym_flattener::tuple_create(const expr2tc &structdef)
   smt_astt result =
     new tuple_sym_smt_ast(ctx, ctx->convert_sort(structdef->type), name);
 
-  for (unsigned int i = 0; i < structdef->get_num_sub_exprs(); i++)
+  for (size_t i = 0; i < structdef->get_num_sub_exprs(); i++)
   {
     smt_astt tmp = ctx->convert_ast(*structdef->get_sub_expr(i));
     smt_astt elem = result->project(ctx, i);

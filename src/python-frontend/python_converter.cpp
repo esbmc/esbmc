@@ -1788,7 +1788,13 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     !type_utils::is_relational_op(op) && op != "Is" && op != "IsNot" &&
     op != "In" && op != "NotIn")
   {
-    if (is_any_ptr(lhs) && is_integer(rhs))
+    if (is_any_ptr(lhs) && is_any_ptr(rhs))
+    {
+      const typet int_type = type_handler_.get_typet("int", 0);
+      lhs = typecast_exprt(lhs, int_type);
+      rhs = typecast_exprt(rhs, int_type);
+    }
+    else if (is_any_ptr(lhs) && is_integer(rhs))
       lhs = typecast_exprt(lhs, rhs.type());
     else if (is_any_ptr(rhs) && is_integer(lhs))
       rhs = typecast_exprt(rhs, lhs.type());
@@ -2180,7 +2186,6 @@ exprt python_converter::build_binary_expression(
       return 1;
     return static_cast<const bv_typet &>(t).get_width();
   };
-
   // Adjust types for non-relational operations
   if (!type_utils::is_relational_op(op))
   {
@@ -2190,11 +2195,17 @@ exprt python_converter::build_binary_expression(
 
     // Check for bitvector width mismatch
     if (
-      (lhs_type.is_signedbv() || lhs_type.is_unsignedbv()) &&
-      (rhs_type.is_signedbv() || rhs_type.is_unsignedbv()) &&
-      lhs_type.width() != rhs_type.width())
+      is_bv_or_bool(lhs_type) && is_bv_or_bool(rhs_type) &&
+      (bit_width(lhs_type) != bit_width(rhs_type) ||
+       lhs_type.is_signedbv() != rhs_type.is_signedbv()))
     {
-      adjust_statement_types(lhs, rhs);
+      const typet &target_type =
+        bit_width(lhs_type) >= bit_width(rhs_type) ? lhs_type : rhs_type;
+
+      if (lhs.type() != target_type)
+        lhs = typecast_exprt(lhs, target_type);
+      if (rhs.type() != target_type)
+        rhs = typecast_exprt(rhs, target_type);
     }
   }
   else if (
@@ -3919,6 +3930,7 @@ exprt python_converter::dispatch_unary_dunder_operator(
     {"complex", "__complex__"},
     {"float", "__float__"},
     {"index", "__index__"},
+    {"str", "__str__"},
   };
   auto it = unary_dunder_map.find(op);
   if (it == unary_dunder_map.end())
@@ -4966,6 +4978,20 @@ void python_converter::handle_assignment_type_adjustments(
 {
   const bool has_annotation =
     ast_node.contains("annotation") && !ast_node["annotation"].is_null();
+
+  // For subscript targets (e.g. dp[i] = v).
+  // The rhs writes an element, not the container.
+  // Don't rewrite lhs_symbol's type.
+  auto is_subscript_target = [](const nlohmann::json &t) {
+    return t.is_object() && t.value("_type", "") == "Subscript";
+  };
+  const bool target_is_subscript =
+    (ast_node.contains("targets") && ast_node["targets"].is_array() &&
+     !ast_node["targets"].empty() &&
+     is_subscript_target(ast_node["targets"][0])) ||
+    (ast_node.contains("target") && is_subscript_target(ast_node["target"]));
+  if (target_is_subscript)
+    return;
 
   // Handle assignment of function to function pointer variable
   if (
@@ -7164,26 +7190,19 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
           throw std::runtime_error(
             "__ESBMC_list_size not found for list condition check");
 
-        symbolt &size_result = create_tmp_symbol(
-          ast_node["test"], "$list_size$", size_type(), gen_zero(size_type()));
-        code_declt size_decl(symbol_expr(size_result));
-        size_decl.location() = location;
-        current_block->copy_to_operands(size_decl);
-
-        // Use `__ESBMC_list_size(cond) != 0` to evaluate the list condition.
-        code_function_callt size_call;
+        // Keep the size query inside the condition expression so constructs
+        // like `while heap:` re-evaluate the current list size every iteration.
+        side_effect_expr_function_callt size_call;
         size_call.function() = symbol_expr(*size_func);
-        size_call.lhs() = symbol_expr(size_result);
         if (cond.type().is_pointer())
           size_call.arguments().push_back(cond);
         else
           size_call.arguments().push_back(address_of_exprt(cond));
         size_call.type() = size_type();
         size_call.location() = location;
-        current_block->copy_to_operands(size_call);
 
         cond = exprt("notequal", bool_type());
-        cond.copy_to_operands(symbol_expr(size_result), gen_zero(size_type()));
+        cond.copy_to_operands(size_call, gen_zero(size_type()));
         cond.location() = location;
       }
 
@@ -8143,6 +8162,95 @@ static bool param_is_mutated_in_body(
   return false;
 }
 
+static bool node_uses_param_as_list_like(
+  const std::string &param_name,
+  const nlohmann::json &node)
+{
+  if (!node.is_object())
+    return false;
+
+  if (node.contains("_type") && node["_type"].is_string())
+  {
+    const std::string node_type = node["_type"].get<std::string>();
+
+    // x[i]
+    if (
+      node_type == "Subscript" && node.contains("value") &&
+      node["value"].is_object() && node["value"].value("_type", "") == "Name" &&
+      node["value"].value("id", "") == param_name)
+      return true;
+
+    if (node_type == "Call")
+    {
+      // len(x)
+      if (
+        node.contains("func") && node["func"].is_object() &&
+        node["func"].value("_type", "") == "Name" &&
+        node["func"].value("id", "") == "len" && node.contains("args") &&
+        node["args"].is_array() && !node["args"].empty() &&
+        node["args"][0].is_object() &&
+        node["args"][0].value("_type", "") == "Name" &&
+        node["args"][0].value("id", "") == param_name)
+      {
+        return true;
+      }
+
+      // x.append(...), x.pop(...), ...
+      if (
+        node.contains("func") && node["func"].is_object() &&
+        node["func"].value("_type", "") == "Attribute" &&
+        node["func"].contains("value") && node["func"]["value"].is_object() &&
+        node["func"]["value"].value("_type", "") == "Name" &&
+        node["func"]["value"].value("id", "") == param_name &&
+        node["func"].contains("attr") && node["func"]["attr"].is_string())
+      {
+        const std::string attr = node["func"]["attr"].get<std::string>();
+        if (
+          attr == "append" || attr == "extend" || attr == "insert" ||
+          attr == "pop" || attr == "remove" || attr == "clear" ||
+          attr == "sort" || attr == "reverse")
+          return true;
+      }
+    }
+  }
+
+  for (auto it = node.begin(); it != node.end(); ++it)
+  {
+    const auto &child = it.value();
+    if (child.is_object())
+    {
+      if (node_uses_param_as_list_like(param_name, child))
+        return true;
+    }
+    else if (child.is_array())
+    {
+      for (const auto &elem : child)
+      {
+        if (elem.is_object() && node_uses_param_as_list_like(param_name, elem))
+          return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+static bool param_is_list_like_in_body(
+  const std::string &param_name,
+  const nlohmann::json &body)
+{
+  if (!body.is_array())
+    return false;
+
+  for (const auto &stmt : body)
+  {
+    if (node_uses_param_as_list_like(param_name, stmt))
+      return true;
+  }
+
+  return false;
+}
+
 size_t python_converter::register_function_argument(
   const nlohmann::json &element,
   code_typet &type,
@@ -8359,6 +8467,37 @@ void python_converter::process_function_arguments(
   if (!function_node.contains("body"))
     return;
   const nlohmann::json &body = function_node["body"];
+
+  // Refine unannotated Any parameters to list model type when body usage
+  // clearly matches list semantics (len(x), x[i], list mutator methods).
+  // Restrict this refinement to functions from the main source file to avoid
+  // affecting imported module internals.
+  if (location.get_file().as_string() == main_python_file)
+  {
+    for (auto &param_arg : type.arguments())
+    {
+      const std::string param_name = param_arg.get_base_name().as_string();
+      if (param_name == "self" || param_name == "cls" || param_name.empty())
+        continue;
+
+      if (param_arg.type() != any_type())
+        continue;
+
+      if (!param_is_list_like_in_body(param_name, body))
+        continue;
+
+      typet list_t = type_handler_.get_list_type();
+      param_arg.type() = list_t;
+
+      const std::string param_id = param_arg.cmt_identifier().as_string();
+      if (!param_id.empty())
+      {
+        symbolt *param_sym = symbol_table_.find_symbol(param_id);
+        if (param_sym)
+          param_sym->type = list_t;
+      }
+    }
+  }
 
   for (auto &param_arg : type.arguments())
   {

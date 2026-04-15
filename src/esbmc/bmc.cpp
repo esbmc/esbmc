@@ -42,11 +42,8 @@
 
 std::unordered_set<std::string> goto_functionst::reached_claims;
 std::unordered_multiset<std::string> goto_functionst::reached_mul_claims;
-std::unordered_set<std::string> goto_functionst::verified_claims;
-
 std::mutex goto_functionst::reached_claims_mutex;
 std::mutex goto_functionst::reached_mul_claims_mutex;
-std::mutex goto_functionst::verified_claims_mutex;
 
 bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
   : options(opts), context(_context), ns(context)
@@ -988,6 +985,10 @@ void bmct::report_result(smt_convt::resultt &res)
   // k-induction prints its own messages
   if (options.get_bool_option("k-induction-parallel"))
     return;
+  // Diagnostic pass: per-property results are already printed by
+  // multi_property_check; suppress any global verdict from this level.
+  if (options.get_bool_option("diagnose-unknown-properties"))
+    return;
 
   bool bs = options.get_bool_option("base-case");
   bool fc = options.get_bool_option("forward-condition");
@@ -1369,7 +1370,10 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
 
     if (
       options.get_bool_option("multi-property") &&
-      options.get_bool_option("base-case"))
+      (options.get_bool_option("base-case") ||
+       options.get_bool_option("diagnose-unknown-properties") ||
+       (options.get_bool_option("inductive-step") &&
+        options.get_bool_option("loop-invariant"))))
       return multi_property_check(
         *eq, solver_result.remaining_claims, *runtime_solver);
 
@@ -1465,11 +1469,6 @@ smt_convt::resultt bmct::multi_property_check(
   size_t remaining_claims,
   smt_convt &runtime_solver)
 {
-  // As of now, it only makes sense to do this for the base-case
-  assert(
-    options.get_bool_option("base-case") &&
-    "Multi-property only supports base-case");
-
   // Initial values
   smt_convt::resultt final_result = smt_convt::P_UNSATISFIABLE;
   std::mutex result_mutex;
@@ -1486,11 +1485,9 @@ smt_convt::resultt bmct::multi_property_check(
   // For coverage info
   auto &reached_claims = symex->goto_functions.reached_claims;
   auto &reached_mul_claims = symex->goto_functions.reached_mul_claims;
-  auto &verified_claims = symex->goto_functions.verified_claims;
   auto &reached_claims_mutex = symex->goto_functions.reached_claims_mutex;
   auto &reached_mul_claims_mutex =
     symex->goto_functions.reached_mul_claims_mutex;
-  auto &verified_claims_mutex = symex->goto_functions.verified_claims_mutex;
 
   // "Assertion Cov"
   bool is_assert_cov = options.get_bool_option("assertion-coverage") ||
@@ -1531,6 +1528,7 @@ smt_convt::resultt bmct::multi_property_check(
 
   // For color output
   bool is_color = options.get_bool_option("color");
+  const std::string YELLOW = is_color ? "\033[33m" : "";
 
   // TODO: This is the place to check a cache
   for (size_t i = 1; i <= remaining_claims; i++)
@@ -1556,10 +1554,8 @@ smt_convt::resultt bmct::multi_property_check(
                        &summary,
                        &reached_claims,
                        &reached_mul_claims,
-                       &verified_claims,
                        &reached_claims_mutex,
                        &reached_mul_claims_mutex,
-                       &verified_claims_mutex,
                        &is_assert_cov,
                        &is_cond_cov,
                        &is_vb,
@@ -1573,6 +1569,7 @@ smt_convt::resultt bmct::multi_property_check(
                        &fc,
                        &is,
                        &is_color,
+                       &YELLOW,
                        &runtime_solver](const size_t &i) {
     //"multi-fail-fast n": stop after first n SATs found.
     if (is_fail_fast && fail_fast_cnt >= fail_fast_limit)
@@ -1609,13 +1606,6 @@ smt_convt::resultt bmct::multi_property_check(
       // insert to the multiset before skipping the verification process
       std::lock_guard lock(reached_mul_claims_mutex);
       reached_mul_claims.emplace(claim_sig);
-    }
-
-    if (verified_claims.count(claim.claim_cstr))
-    {
-      clear_verified_claims_in_ssa(local_eq, claim, is_goto_cov);
-      clear_verified_claims_in_goto(claim, is_goto_cov);
-      is_verified = true;
     }
 
     // skip if we have already verified
@@ -1681,8 +1671,12 @@ smt_convt::resultt bmct::multi_property_check(
       }
       else if (solver_result == smt_convt::P_SATISFIABLE)
       {
-        // Claim failed - show in red
-        log_status("{}✗ FAILED{}: '{}'", RED, RESET, claim.claim_cstr);
+        if (is)
+          // Inductive step could not prove this claim - show in yellow
+          log_status("{}? UNKNOWN{}: '{}'", YELLOW, RESET, claim.claim_cstr);
+        else
+          // Claim failed (counterexample found) - show in red
+          log_status("{}✗ FAILED{}: '{}'", RED, RESET, claim.claim_cstr);
       }
     }
 
@@ -1698,13 +1692,27 @@ smt_convt::resultt bmct::multi_property_check(
       old_total_time_s, new_total_time_s));
 
     if (solver_result == smt_convt::P_SATISFIABLE)
-      summary.failed_properties++;
+    {
+      if (is)
+        summary.unknown_properties++;
+      else
+        summary.failed_properties++;
+    }
     else if (solver_result == smt_convt::P_UNSATISFIABLE)
       summary.passed_properties++;
 
     // If an assertion instance is verified to be violated
     if (solver_result == smt_convt::P_SATISFIABLE)
     {
+      // Inductive step SAT means unprovable (UNKNOWN), not a real
+      // counterexample — skip trace generation and return early.
+      if (is)
+      {
+        std::lock_guard lock(result_mutex);
+        final_result = solver_result;
+        return;
+      }
+
       bool is_compact_trace = true;
       if (
         options.get_bool_option("no-slice") &&
@@ -1858,6 +1866,13 @@ void bmct::report_simple_summary(const SimpleSummary &summary) const
   if (summary.failed_properties > 0)
     properties_oss << ", " << RED << "✗ " << summary.failed_properties
                    << " failed" << RESET;
+
+  if (summary.unknown_properties > 0)
+  {
+    const std::string YELLOW = is_color ? "\033[33m" : "";
+    properties_oss << ", " << YELLOW << "? " << summary.unknown_properties
+                   << " unknown" << RESET;
+  }
 
   // Build the timing summary string
   double avg_time = summary.total_properties > 0

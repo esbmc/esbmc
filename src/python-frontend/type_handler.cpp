@@ -541,13 +541,30 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   {
     const nlohmann::json &decl =
       json_utils::find_var_decl(ast_type, "", converter_.ast());
-    if (
-      !decl.empty() && decl.contains("value") && decl["value"].is_object() &&
-      decl["value"].contains("_type") && decl["value"]["_type"] == "Call" &&
-      decl["value"].contains("func") && decl["value"]["func"].is_object() &&
-      decl["value"]["func"].contains("id") &&
-      decl["value"]["func"]["id"] == "TypeVar")
-      return any_type();
+    if (!decl.empty() && decl.contains("value") && decl["value"].is_object())
+    {
+      const nlohmann::json &value = decl["value"];
+      // TypeVar(...) has no concrete type(treat as Any)
+      if (
+        value.contains("_type") && value["_type"] == "Call" &&
+        value.contains("func") && value["func"].is_object() &&
+        value["func"].contains("id") && value["func"]["id"] == "TypeVar")
+        return any_type();
+      // Handle simple alias: X = T to T
+      // the preprocessor rewrites
+      // X = NewType('X', T) to X = T
+      if (
+        value.contains("_type") && value["_type"] == "Name" &&
+        value.contains("id"))
+      {
+        const std::string &target = value["id"];
+        if (target != ast_type && type_utils::is_builtin_type(target))
+          return get_typet(target, type_size);
+        if (
+          target != ast_type && json_utils::is_class(target, converter_.ast()))
+          return symbol_typet("tag-" + target);
+      }
+    }
   }
 
   // If still not found, it's a NameError
@@ -941,6 +958,67 @@ std::string type_handler::get_operand_type(const nlohmann::json &operand) const
       return lhs_type;
     if (!rhs_type.empty())
       return rhs_type;
+  }
+  else if (
+    operand["_type"] == "Attribute" && operand.contains("attr") &&
+    operand.contains("value"))
+  {
+    const std::string attr_name = operand["attr"].get<std::string>();
+
+    auto find_annotated_attr_type =
+      [&](const nlohmann::json &class_node) -> std::string {
+      if (class_node.empty() || !class_node.contains("body"))
+        return std::string();
+
+      for (const auto &member : class_node["body"])
+      {
+        if (
+          member["_type"] != "FunctionDef" || !member.contains("name") ||
+          member["name"] != "__init__" || !member.contains("body"))
+          continue;
+
+        for (const auto &stmt : member["body"])
+        {
+          if (
+            stmt["_type"] == "AnnAssign" && stmt.contains("target") &&
+            stmt["target"].contains("_type") &&
+            stmt["target"]["_type"] == "Attribute" &&
+            stmt["target"].contains("attr") &&
+            stmt["target"]["attr"] == attr_name &&
+            stmt["target"].contains("value") &&
+            stmt["target"]["value"].contains("_type") &&
+            stmt["target"]["value"]["_type"] == "Name" &&
+            stmt["target"]["value"].contains("id") &&
+            stmt["target"]["value"]["id"] == "self" &&
+            stmt.contains("annotation") && stmt["annotation"].contains("id"))
+            return stmt["annotation"]["id"].get<std::string>();
+        }
+      }
+
+      return std::string();
+    };
+
+    const auto &attr_value = operand["value"];
+    if (
+      attr_value.contains("_type") && attr_value["_type"] == "Name" &&
+      attr_value.contains("id") && attr_value["id"] == "self")
+    {
+      const auto self_class_node = json_utils::find_class(
+        converter_.ast()["body"], converter_.current_classname());
+      std::string self_attr_type = find_annotated_attr_type(self_class_node);
+      if (!self_attr_type.empty())
+        return self_attr_type;
+    }
+
+    std::string obj_type = get_operand_type(attr_value);
+    if (!obj_type.empty())
+    {
+      const auto class_node =
+        json_utils::find_class(converter_.ast()["body"], obj_type);
+      std::string attr_type = find_annotated_attr_type(class_node);
+      if (!attr_type.empty())
+        return attr_type;
+    }
   }
 
   // Handle call expressions: constructor calls like A() and method calls like B().g()
