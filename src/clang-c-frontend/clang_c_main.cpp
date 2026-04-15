@@ -215,15 +215,21 @@ bool clang_c_maint::clang_main()
       term_eq.copy_to_operands(argv_argc, null);
       init_code.copy_to_operands(code_assumet(term_eq));
 
-      // Provide dereferenceable backing for argv[0] and argv[1] so programs
-      // that read those strings don't trigger spurious dereference failures.
+      // Provide dereferenceable backing for the first ESBMC_ARGV_ENTRIES
+      // argv strings so that programs reading those entries do not trigger
+      // spurious dereference failures.  This is a bounded under-approximation:
+      // argv[i] for i >= ESBMC_ARGV_ENTRIES has no backing allocation, so
+      // programs that access higher indices when argc > ESBMC_ARGV_ENTRIES
+      // may produce false positives (dereference failure) or false negatives
+      // (missed null-deref).  Raise the constant to cover more arguments at
+      // the cost of a larger GOTO program and SMT formula.
+      static const int ESBMC_ARGV_ENTRIES = 10;
       typet char_t = argv_symbol.type.subtype().subtype();
       typet char_arr_t = array_typet(char_t, from_integer(32, index_type()));
 
-      for (int ai = 0; ai < 2; ++ai)
+      for (int ai = 0; ai < ESBMC_ARGV_ENTRIES; ++ai)
       {
-        char suffix = static_cast<char>('0' + ai);
-        std::string sname = std::string("__ESBMC_argv_str_") + suffix;
+        std::string sname = "__ESBMC_argv_str_" + std::to_string(ai);
 
         symbolt str_sym;
         str_sym.name = irep_idt(sname);
