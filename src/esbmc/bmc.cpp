@@ -1372,7 +1372,8 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
       options.get_bool_option("multi-property") &&
       (options.get_bool_option("base-case") ||
        options.get_bool_option("diagnose-unknown-properties") ||
-       options.get_bool_option("inductive-step")))
+       (options.get_bool_option("inductive-step") &&
+        options.get_bool_option("loop-invariant"))))
       return multi_property_check(
         *eq, solver_result.remaining_claims, *runtime_solver);
 
