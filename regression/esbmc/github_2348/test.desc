@@ -1,4 +1,4 @@
 CORE
 main.c
---z3
+--incremental-bmc
 ^VERIFICATION SUCCESSFUL$
