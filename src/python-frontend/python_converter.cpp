@@ -4990,7 +4990,7 @@ void python_converter::handle_assignment_type_adjustments(
      is_subscript_target(ast_node["targets"][0])) ||
     (ast_node.contains("target") && is_subscript_target(ast_node["target"]));
   if (target_is_subscript)
-    lhs_symbol = nullptr;
+    return;
 
   // Handle assignment of function to function pointer variable
   if (
