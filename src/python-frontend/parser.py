@@ -39,7 +39,16 @@ def check_usage():
         sys.exit(2)
 
 def is_imported_model(module_name):
-    models = ["math", "os", "numpy", "esbmc", "decimal", "collections", "typing"]
+    models = [
+        "math",
+        "os",
+        "numpy",
+        "esbmc",
+        "decimal",
+        "collections",
+        "typing",
+        "time",
+    ]
     return module_name in models
 
 def is_unsupported_module(module_name):
