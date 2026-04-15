@@ -1133,7 +1133,7 @@ bool find_nondet_in_expr(const expr2tc &expr)
   if (is_symbol2t(expr))
     return is_nondet_symbol_name(to_symbol2t(expr).thename.as_string());
 
-  unsigned int n = expr->get_num_sub_exprs();
+  size_t n = expr->get_num_sub_exprs();
   for (size_t i = 0; i < n; ++i)
   {
     const expr2tc *sub = expr->get_sub_expr(i);
