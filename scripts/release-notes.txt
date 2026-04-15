@@ -1,5 +1,247 @@
 Release Notes of the ESBMC model checker
 
+*** ESBMC v8.2 Release Notes
+This release of ESBMC v8.2 introduces comprehensive complex number support in the Python frontend along with initial generator support and new models for collections.Counter, heapq, and collections.defaultdict. The release adds a theorem-driven interval range analysis (IR-IEEE, formerly IR-RA) covering all IEEE-754 rounding modes for addition, subtraction, multiplication, and division, enables interval-based guard and assertion pruning in symbolic execution, and upgrades Bitwuzla to 0.9.0 with quantifier support. C/C++ verification gains multiple-inheritance virtual dispatch fixes, expanded unique_ptr and function contract support, and a YAML witness parser. Below is a summary of the new features, enhancements, and bug fixes:
+
+* New Features
+** Python Frontend
+*** Complex Numbers
+- Added initial complex number support with type infrastructure, parsing, and type inference (#3705, #3727).
+- Completed complex number arithmetic, built-ins, comparisons, and edge coverage (#3732).
+- Strengthened complex guards for math and added edge regressions (#3740).
+- Completed complex/cmath support, hardened math guards, and fixed large-int complex crash (#3762).
+- Added nondet_complex, pow budget, isinstance, str/repr support (#4000).
+- Fixed soundness issues, added type promotion and caching for complex numbers (#3947).
+- Extracted dedicated complex_handler class and utilities (#3970, #3984).
+- Centralized complex attribute access (.real, .imag, .conjugate()) in a dedicated handler (#3986).
+- Optimized complex lowering and import symbol resolution caches (#3787).
+- Fixed segfault on complex cmath inverse operations (#3774).
+- Fixed -Wunused-parameter in handle_complex_to_str (#4058).
+*** Generators
+- Added initial generator support with stateful next() handling and StopIteration semantics (#3704).
+- Fixed crash on recursive generator functions (#3821).
+- Fixed spurious counterexample for nested generator functions (#3867).
+- Fixed spurious counterexample for recursive generators with type-erased elements (#3870).
+- Added any() support with generator expressions (#3706).
+*** Collections Module
+- Added model for collections.Counter (#3875).
+- Added model for heapq (#3998).
+- Added initial support for collections.defaultdict (#3845).
+*** Dictionary Enhancements
+- Implemented dict.update() semantics and dict.update(other_dict) support (#3661, #3914).
+- Added initial support for dict.setdefault() (#3662).
+- Added support for dict instance attributes (#3872).
+- Added dictionary comprehensions (#3918).
+- Added support for item in d.items() yielding tuples instead of keys (#3814).
+- Fixed dict.get() without default incorrectly failing `is None` check (#3695).
+- Fixed dict.get() crash when comparing string values (#3715).
+- Fixed dict.pop() verification failure (#3785).
+- Fixed dict.popitem() crash on tuple unpacking (#3791).
+- Fixed crash on list(d.items()) (#3810).
+- Fixed set(d.items()) == {(k,v),...} always failing (#3700).
+- Fixed dict[key]() with lambda values incorrectly raising TypeError (#3691).
+- Fixed try/except KeyError not catching dict missing-key access (#3718).
+- Fixed dereference failure when iterating dict with heterogeneous keys (#3723).
+- Fixed Z3 crash and nested dict retrieval for unparameterized dict (#3656).
+- Fixed isinstance(None, ...) and dict iteration for nondet collections (#4013).
+- Fixed nondet_dict and nondet_list failing to generate sets with multiple elements (#3485).
+*** List Operations
+- Added list lexicographic ordering operators Lt/LtE/Gt/GtE (#3835).
+- Added support for starred unpacking from list variables (#3848).
+- Added support for typed list instance attributes in class methods (#3833).
+- Added sum() on lists (#3669).
+- Avoided copying list payloads in pop() (#4038).
+- Fixed pop() on bin expressions and list.extend() with function call arguments (#3688).
+- Fixed crash when calling pop()/list methods on nested list subscripts (#3668, #3670).
+- Fixed crash on chained list OOB access (#3764).
+- Fixed list repetition crash for variable list operands (#3681).
+- Fixed list comprehension with multiple for-generators (#3698).
+- Fixed list conditions in while loops and conditional expressions (#3883, #4019).
+- Fixed list operands in boolean expressions (#3923).
+- Fixed sorted(key=lambda x: x[i]) lowering (#4016).
+- Fixed unsupported comparison between pointer-backed and non-pointer values when returning list from function (#3699).
+- Hardened list/dict reassignment handling (#3676).
+- Improved dynamic method fallback and list object storage for jpl_1 (#4042).
+*** Type Inference and Annotations
+- Added support for typing.NewType and simple type aliases (#4051).
+- Handled TypeVar aliases from typing (#3943).
+- Allowed unannotated parameters by defaulting to Any (#3721).
+- Fixed list type inference for slices (#3937).
+- Fixed nested attribute chained method call typing (#4023).
+- Fixed class constructor type resolution and supported reflected dunder operators (#3997).
+- Fixed annotation type mismatch when function returns str (#3773, #3776).
+- Fixed None return path not detected with explicit return annotation (#3770).
+- Fixed false positive AttributeError due to loss of parameter type information (#3859).
+- Fixed Any arithmetic in Python frontend (#4006).
+- Handled short-circuit in boolean conditions (#3888).
+- Cast any_type (void*) to integer for arithmetic and ordering ops (#3839).
+- Cast integer operands before binary expressions (#4036).
+*** Class and Object Support
+- Added support for global variable lookup from class methods (#3852).
+- Added support for nested attribute chain resolution for non-self base objects (#3834).
+- Added support for instance attribute shadowing when set via function parameter (#3828).
+- Added support for chained tuple unpacking (#3830).
+- Fixed crash on super().__init__() calls (#3687).
+- Fixed super().method() crash with return type annotations (#3842).
+- Fixed method calls on temporary instances A().f(args) (#3680).
+- Fixed annotation crash for A().f() with explicit return type (#3684).
+- Fixed crash when calling bound method stored in variable (#3746).
+- Fixed crash on nested attribute method call returning string (#3768).
+- Fixed crash on chained method calls B().g().f() (#3780).
+- Fixed crash on polymorphic calls with different subclass args (#3801).
+- Fixed global variable resolution in class methods (#3829).
+- Fixed object aliasing: pass mutated class params by pointer (#3734).
+- Fixed crash for del on object attributes (#3731).
+- Fixed attribute access on Optional forward-reference fields (#3739).
+- Added typed attribute-error fallback and dedicated function-call cache hardening (#3878).
+*** String Operations
+- Refactored string call handling and tightened string method validation (#3909).
+- Fixed isspace() segfault and refactored string handling (#3674).
+- Fixed crash on nested Unicode encode/decode method chains (#3689).
+- Fixed false counterexample for string truthiness and char* indexing (#3917).
+- Cleared stale input-len mapping on variable reassignment (#3738).
+- Added regression for len(input()) SMT timeout (#3755).
+*** Numeric Operations
+- Added int.to_bytes() support (#3976).
+- Fixed float() on integer expressions causing SMT sort mismatch (#3882).
+- Fixed unsound ** operator when exponent is non-constant or float (#3817).
+- Supported min()/max() with N >= 2 direct arguments (#3850).
+- Fixed min/max crash on unsignedbv/signedbv type mismatch (#3759).
+- Fixed crash on max()/min() with mixed int/float lists (#3789).
+- Fixed false counterexample for math.sqrt() with constant arguments (#3675).
+- Optimized math dispatch/power paths and strengthened cache/typing robustness (#3902).
+- Fixed range.__iter__() reported as unsupported (#3753).
+*** Lambda and Higher-Order Functions
+- Fixed crash for higher-order lambdas (#3725).
+- Fixed crash on lambda ternary with None branch (#3798).
+- Fixed function alias as default parameter (#3708).
+- Fixed indirect higher-order call (#4018).
+- Fixed polymorphic call-site specialization (#4030).
+*** Iterators and Subscripts
+- Added support for reversed(range(...)) in for loops (#3820).
+- Resolved subscript via __getitem__/__setitem__ (#3745).
+- Resolved tuple subscripts via __getitem__/__setitem__ (#3861).
+- Supported __bool__ in conditionals and ternary expressions (#3847, #3857).
+- Raised TypeError on tuple item assignment (#3749).
+*** Imports
+- Supported imports inside function bodies (#3832).
+- Improved function name resolution (#3948).
+*** Built-ins and Miscellaneous
+- Added type() built-in support (#3903).
+- Evaluated print() arguments in GOTO to preserve checks (#4001).
+- Added support for global variable lookup and initial support for chained assignment (#3840).
+- Fixed nested unpacking assignment preprocessing (#3989).
+- Fixed github_2012 conversion path (#4020).
+*** Regression and Testing
+- Added humaneval and quixbugs buggy test suites (#3748, #3905).
+- Moved frontend Python tests from tests/ to unit/python-frontend (#3802).
+
+** C/C++ Verification
+*** Language Support
+- Added __builtin_va_copy handler to eliminate no-body warning (#4057).
+- Added support for CXXNoexceptExpr conversion (#4055).
+- Handled AtomicToNonAtomic and NonAtomicToAtomic casts (#3949).
+- Prepared for Clang 22 (#3925).
+- Wrapped unbraced range-for body in block before prepending loop var (#3980).
+- Fixed infinite unwinding of ~list when main() lacks return 0 (#3981).
+- Fixed spurious destructor warning for trivial implicit dtors (#3868).
+- Fixed virtual dispatch through non-first base in multiple inheritance (#3880).
+- Added missing unique_ptr members and std::extent trait (#3901).
+- Added converting move ctor/assign to unique_ptr model (#3884).
+- Added regression tests for polymorphic operator== via unique_ptr (#3906).
+- Added and fixed C++ operational models and suppressed system headers with -nostdinc++ (#3889).
+- Migrated esbmc-cpp/inheritance tests to supported test.desc format (#3885).
+- Allowed unsupported extensions as the return value in C verification (#3659).
+*** Function Contracts
+- Implemented Function Contract Op Frame: Assigns Compliance and Loop Frame Rule (#3702).
+- Fixed find_function_symbol for C++ functions (#4037).
+*** Memory Model and Dereferencing
+- Fixed crash on invalid bit extraction from anonymous struct with unnamed bitfield (#3985).
+- Fixed crash on empty union field access from byte array (#3975).
+- Fixed crash on struct-with-array-field assignment (#3971).
+- Fixed spurious failure for scalar-to-struct/union type-punning (#3920).
+
+** Solidity Frontend
+- Refactored Solidity frontend (#3987).
+
+** Verification Features
+*** Interval Range Analysis (IR-IEEE)
+- Added enclosure generation and solver integration for IR-RA (#3641).
+- Added theorem-driven enclosure bounds and regressions (#3858).
+- Guarded theorem-driven enclosure to round-to-nearest (#3871).
+- Added theorem-driven support for round-to-plus-inf, round-to-minus-inf, round-to-zero, and round-to-away (#3896, #3898, #3904, #3908).
+- Added theorem-driven RNE/RNA/RUP/RDN/RTZ interval lifting for ieee_add (#3927, #3940, #4021, #4026).
+- Added theorem-driven RNE/RNA/RUP/RDN/RTZ interval lifting for ieee_sub (#3950, #3999, #4004, #4017).
+- Added theorem-driven RNE/RNA/RUP/RDN/RTZ interval lifting for ieee_mul (#4028, #4034, #4040, #4044, #4049).
+- Added theorem-driven RNE interval lifting for ieee_div (#4056).
+- Renamed --ir-ra option to --ir-ieee (#3931).
+- Propagated interval metadata across assignments (#3967).
+- Strengthened tracked-sub interval regression expectations (#3979).
+*** Symbolic Execution
+- Added interval-based guard pruning (--interval-symex-guard) and made it the default (#4005, #4009).
+- Added interval-based assertion pruning (--interval-symex-assert) (#4024).
+- Detected writes to read-only memory in memset via __memset_impl (#3969).
+- Demoted exception throw/catch logging from error/status to debug (#3913).
+- Fixed guard restore across catch frame pop (#4041).
+*** SMT Backend
+- Updated to Bitwuzla 0.9.0 (#3994).
+- Implemented quantifier support in Bitwuzla backend (#4032).
+- Fixed nested __ESBMC_forall quantifiers (#3907).
+- Fixed spurious array-bounds violations in nested quantifiers (#3996).
+- Fixed int-to-ptr fallback for byte-updated pointer patterns (#3924).
+*** Loop Invariants and K-Induction
+- Enhanced loop invariant verification via combined k-induction (#3777).
+- Fixed side-effect extraction when loop invariant contains function call in the middle (#3726, #3944).
+- Fixed loop invariant with function calls in && chain (#3741).
+- Fixed extract_invariants_near dropping all but the first loop invariant (#3956).
+- Diagnosed unresolved properties on VERIFICATION UNKNOWN (#4031).
+- Fixed unrolling issues (#3895).
+- Fixed spurious VERIFICATION SUCCESSFUL with --multi-property --k-induction (#3862).
+- Fixed misleading "process crashed" warning in k-induction parallel mode (#3682).
+*** GOTO
+- Extracted atomicity-check into post-conversion pass (#4048).
+- Modelled C11 _Atomic assignments as separate atomic ops (#3968).
+- Fixed quantifier body structure lost by remove_sideeffects for ||/&& chains (#3942).
+- Fixed VLA bit-width mismatch and zero-size UB detection (#3957).
+- Fixed --no-standard-checks not suppressing VLA size check (#3941).
+*** Witness
+- Added YAML witness parser (#3488).
+- Improved method for loop invariants and added more test cases (#3900).
+- Supported explicit types and location invariants (#3958).
+- Improved location invariant insertion (#4012).
+*** Coverage
+- Fixed multi-file input ignoring extra source files (#3922).
+- Applied additional coverage fixes (#3946).
+- Fixed meaningless descriptions in branch-function-coverage probes (#3717).
+*** Miscellaneous
+- Added new intrinsic to specify unwind numbers (#3879).
+- Updated command line options for concurrency checks (#4043).
+- Fixed static member initialization order (#3803).
+- Added --show-call-sites printing option (#3893).
+- Refactored color output logic, reorganized CLI options, and improved help output (#3933).
+- Added test cases for multi-property issue #2630 (#3988).
+
+** Build System
+- Added CLAUDE.md and AGENTS.md for AI coding assistants (#4003).
+- Changed build script to use DebugOpt configuration (#3932).
+- Restored Codecov integration with dedicated coverage workflow (#3926).
+- Added GNU Info pages build script and workflow (#3722).
+- Enforced per-test timeouts in regression runners and improved timeout diagnostics (#3797, #3793).
+- Fixed CTest test case generation for C and C++ (#3737, #3877).
+- Changed std::format to fmt::format for compiler compatibility (#3959).
+- Updated LLVM installation to version 18.
+- Fixed release action and included additional release documentation (#3654).
+
+** Documentation
+- Added ESBMC-Python documentation pages (#3963).
+- Replaced Hugo shortcodes with plain Markdown in Python docs (#3965).
+- Fixed Python documentation (#3964).
+- Fixed missing #include <limits.h> in add_one contract example (#4010).
+- Fixed broken Software Security course link (#3703).
+- Enhanced documentation for loop invariants in ESBMC (#3954).
+- Included release workflow link in releases (#3655).
+
+
 *** ESBMC v8.1 Release Notes
 This release of ESBMC v8.1 continues to expand the Python frontend with new data types (enum, Decimal), extended library support (math, string, list, tuple), lambda and higher-order function improvements, and numerous bug fixes for robustness. The release also introduces C/C++ verification improvements including pointer-to-member support, volatile checks, function contract enhancements, and a new time.h operational model. Below is a summary of the new features, enhancements, and bug fixes:
 
