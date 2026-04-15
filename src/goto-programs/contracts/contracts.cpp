@@ -101,7 +101,7 @@ bool code_contractst::is_compiler_generated(
   std::string short_name = function_name;
   size_t hash_pos = short_name.find('#');
   if (hash_pos != std::string::npos)
-    short_name = short_name.substr(0, hash_pos);
+    short_name.resize(hash_pos);
   size_t at_pos = short_name.rfind('@');
   if (at_pos != std::string::npos)
     short_name = short_name.substr(at_pos + 1);
@@ -111,7 +111,7 @@ bool code_contractst::is_compiler_generated(
     return true;
 
   // Skip C++ runtime helpers
-  if (short_name.find("__cxa_") == 0)
+  if (short_name.starts_with("__cxa_"))
     return true;
 
   // Skip already-processed contract wrappers
@@ -137,17 +137,36 @@ symbolt *code_contractst::find_function_symbol(const std::string &function_name)
   if (sym != nullptr)
     return sym;
   // C++ general fallback: search by short name (sym->name) to handle
-  // parametered free functions like c:@F@fst#*1I# where the user passes
-  // just "fst" via --enforce-contract.
+  // parameterized free functions like c:@F@fst#*1I# where the user passes
+  // just "fst" via --enforce-contract. Detect ambiguity when multiple
+  // overloads share the same short name.
+  symbolt *matched = nullptr;
+  std::string matched_ids;
   forall_goto_functions (it, goto_functions)
   {
     symbolt *candidate = context.find_symbol(it->first);
     if (
       candidate && candidate->type.is_code() &&
       id2string(candidate->name) == function_name)
-      return candidate;
+    {
+      if (matched == nullptr)
+      {
+        matched = candidate;
+        matched_ids = id2string(it->first);
+      }
+      else
+      {
+        matched_ids += ", " + id2string(it->first);
+        log_error(
+          "Ambiguous function name '{}'; use a full symbol ID to disambiguate."
+          " Candidates: {}",
+          function_name,
+          matched_ids);
+        return nullptr;
+      }
+    }
   }
-  return nullptr;
+  return matched;
 }
 
 void code_contractst::rename_function(
@@ -870,11 +889,14 @@ void code_contractst::enforce_contracts(
     // provides real pointers, so we must not overwrite them.
     //
     // NOTE: When --enforce-contract '*' is used, the wildcard expansion in
-    // esbmc_parseoptions.cpp inserts full IDs like "c:@F@fst" into to_enforce,
-    // while --function gives only the short name "fst". Compare via func_sym->name
-    // (always the short name) to handle both forms correctly.
+    // esbmc_parseoptions.cpp inserts full IDs like "c:@F@fst#*1I#" into
+    // to_enforce, while --function gives only the short name "fst". Match
+    // against both func_sym->name (short) and func_sym->id (full) to handle
+    // both forms correctly.
     bool alloc_ptr_params =
-      !entry_function.empty() && id2string(func_sym->name) == entry_function;
+      !entry_function.empty() &&
+      (id2string(func_sym->name) == entry_function ||
+       id2string(func_sym->id) == entry_function);
 
     // Generate wrapper function, passing the original body
     goto_programt wrapper = generate_checking_wrapper(
