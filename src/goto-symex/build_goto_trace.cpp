@@ -80,6 +80,7 @@ void build_goto_trace(
     if (SSA_step.is_assignment())
     {
       goto_trace_step.lhs = build_lhs(smt_conv, SSA_step.original_lhs);
+      goto_trace_step.rhs = SSA_step.rhs;
       assert(!goto_trace_step.value);
       try
       {

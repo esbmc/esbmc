@@ -3930,6 +3930,7 @@ exprt python_converter::dispatch_unary_dunder_operator(
     {"complex", "__complex__"},
     {"float", "__float__"},
     {"index", "__index__"},
+    {"str", "__str__"},
   };
   auto it = unary_dunder_map.find(op);
   if (it == unary_dunder_map.end())

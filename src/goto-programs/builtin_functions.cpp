@@ -1231,6 +1231,19 @@ void goto_convertt::do_function_call_symbol(
       abort();
     }
   }
+  else if (base_name == "__builtin_va_copy")
+  {
+    // For Clang frontend, goto_symex tracks VA args via va_index in the
+    // call frame; no assignment is needed. Emitting an ASSIGN crashes the
+    // pointer analysis on Linux/Windows where va_list is a struct array.
+    exprt dest_expr = make_va_list(arguments[0]);
+
+    if (!is_lvalue(dest_expr))
+    {
+      log_error("va_copy argument expected to be lvalue");
+      abort();
+    }
+  }
   // Nontemporal means "do not cache please" (https://lwn.net/Articles/255364/)
   else if (base_name == "__builtin_nontemporal_load")
   {
