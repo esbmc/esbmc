@@ -894,9 +894,8 @@ void code_contractst::enforce_contracts(
     // against both func_sym->name (short) and func_sym->id (full) to handle
     // both forms correctly.
     bool alloc_ptr_params =
-      !entry_function.empty() &&
-      (id2string(func_sym->name) == entry_function ||
-       id2string(func_sym->id) == entry_function);
+      !entry_function.empty() && (id2string(func_sym->name) == entry_function ||
+                                  id2string(func_sym->id) == entry_function);
 
     // Generate wrapper function, passing the original body
     goto_programt wrapper = generate_checking_wrapper(
