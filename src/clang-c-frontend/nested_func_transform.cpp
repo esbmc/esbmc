@@ -814,12 +814,24 @@ static std::vector<local_var> collect_params(const std::string &params_text)
       }
     }
 
-    // Only treat identifiers outside brackets as potential param names
+    // Only treat identifiers outside brackets as potential param names.
+    // Type keywords go into type_parts, not last_ident.
     if (t.kind == tok_kind::identifier && depth == 1 && bracket_depth == 0)
     {
-      if (!last_ident.empty())
-        type_parts.push_back(last_ident);
-      last_ident = t.text;
+      if (is_type_keyword(t.text))
+      {
+        // Type keyword is part of the type, not a param name
+        if (!last_ident.empty())
+          type_parts.push_back(last_ident);
+        last_ident.clear();
+        type_parts.push_back(t.text);
+      }
+      else
+      {
+        if (!last_ident.empty())
+          type_parts.push_back(last_ident);
+        last_ident = t.text;
+      }
     }
   }
 
@@ -956,19 +968,42 @@ static std::string rewrite_identifiers(
 
   auto toks = tokenize(text);
   std::string result;
-  for (const auto &t : toks)
+  bool after_member_op = false; // true after . or ->
+  for (size_t ti = 0; ti < toks.size(); ++ti)
   {
+    const auto &t = toks[ti];
     if (t.kind == tok_kind::eof)
       break;
 
     if (t.kind == tok_kind::identifier)
     {
-      auto it = replacements.find(t.text);
-      if (it != replacements.end())
+      // Don't replace identifiers after . or -> (member access)
+      if (!after_member_op)
       {
-        result += it->second;
-        continue;
+        auto it = replacements.find(t.text);
+        if (it != replacements.end())
+        {
+          result += it->second;
+          after_member_op = false;
+          continue;
+        }
       }
+      after_member_op = false;
+    }
+    else if (t.kind == tok_kind::punctuation)
+    {
+      if (t.text == ".")
+        after_member_op = true;
+      else if (
+        t.text == ">" && ti > 0 && toks[ti - 1].kind == tok_kind::punctuation &&
+        toks[ti - 1].text == "-")
+        after_member_op = true;
+      else if (t.kind != tok_kind::whitespace)
+        after_member_op = false;
+    }
+    else if (t.kind != tok_kind::whitespace)
+    {
+      after_member_op = false;
     }
     result += t.text;
   }
