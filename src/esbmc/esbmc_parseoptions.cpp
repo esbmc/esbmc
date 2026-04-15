@@ -2869,39 +2869,38 @@ void esbmc_parseoptionst::process_function_contracts(
   // This includes functions with:
   // 1. Explicit contract clauses (__ESBMC_requires, __ESBMC_ensures, __ESBMC_assigns)
   // 2. __attribute__((annotate("__ESBMC_contract"))) annotation
-  auto collect_functions_with_contracts = [&contracts,
-                                           &goto_functions,
-                                           &ctx]() {
-    std::set<std::string> result;
-    forall_goto_functions (it, goto_functions)
-    {
-      if (!it->second.body_available)
-        continue;
-
-      std::string func_name = id2string(it->first);
-
-      // Use is_compiler_generated (which correctly handles C++ USR IDs like
-      // "c:@F@fst#*1I#") instead of a raw '#' string filter, which would
-      // incorrectly skip all C++ functions with parameters.
-      if (contracts.is_compiler_generated(func_name))
-        continue;
-
-      // Check for explicit contract clauses in function body
-      if (contracts.has_contracts(it->second.body))
+  auto collect_functions_with_contracts =
+    [&contracts, &goto_functions, &ctx]() {
+      std::set<std::string> result;
+      forall_goto_functions (it, goto_functions)
       {
-        result.insert(func_name);
-        continue;
-      }
+        if (!it->second.body_available)
+          continue;
 
-      // Check for __attribute__((annotate("__ESBMC_contract"))) annotation
-      symbolt *func_sym = ctx.find_symbol(it->first);
-      if (func_sym && contracts.is_annotated_contract_function(*func_sym))
-      {
-        result.insert(func_name);
+        std::string func_name = id2string(it->first);
+
+        // Use is_compiler_generated (which correctly handles C++ USR IDs like
+        // "c:@F@fst#*1I#") instead of a raw '#' string filter, which would
+        // incorrectly skip all C++ functions with parameters.
+        if (contracts.is_compiler_generated(func_name))
+          continue;
+
+        // Check for explicit contract clauses in function body
+        if (contracts.has_contracts(it->second.body))
+        {
+          result.insert(func_name);
+          continue;
+        }
+
+        // Check for __attribute__((annotate("__ESBMC_contract"))) annotation
+        symbolt *func_sym = ctx.find_symbol(it->first);
+        if (func_sym && contracts.is_annotated_contract_function(*func_sym))
+        {
+          result.insert(func_name);
+        }
       }
-    }
-    return result;
-  };
+      return result;
+    };
 
   // Lambda function to process function list (handles "*" wildcard)
   auto process_function_list = [&collect_functions_with_contracts](
@@ -2959,23 +2958,22 @@ void esbmc_parseoptionst::process_function_contracts(
   }
 
   // Lambda to collect ONLY functions with __ESBMC_contract annotation
-  auto collect_annotated_contract_functions = [&contracts,
-                                               &goto_functions,
-                                               &ctx]() {
-    std::set<std::string> result;
-    forall_goto_functions (it, goto_functions)
-    {
-      if (!it->second.body_available)
-        continue;
-      std::string func_name = id2string(it->first);
-      if (contracts.is_compiler_generated(func_name))
-        continue;
-      symbolt *func_sym = ctx.find_symbol(it->first);
-      if (func_sym && contracts.is_annotated_contract_function(*func_sym))
-        result.insert(func_name);
-    }
-    return result;
-  };
+  auto collect_annotated_contract_functions =
+    [&contracts, &goto_functions, &ctx]() {
+      std::set<std::string> result;
+      forall_goto_functions (it, goto_functions)
+      {
+        if (!it->second.body_available)
+          continue;
+        std::string func_name = id2string(it->first);
+        if (contracts.is_compiler_generated(func_name))
+          continue;
+        symbolt *func_sym = ctx.find_symbol(it->first);
+        if (func_sym && contracts.is_annotated_contract_function(*func_sym))
+          result.insert(func_name);
+      }
+      return result;
+    };
 
   // Process --enforce-all-contracts
   if (has_enforce_all)

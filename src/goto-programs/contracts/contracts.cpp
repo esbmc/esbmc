@@ -139,11 +139,12 @@ symbolt *code_contractst::find_function_symbol(const std::string &function_name)
   // C++ general fallback: search by short name (sym->name) to handle
   // parametered free functions like c:@F@fst#*1I# where the user passes
   // just "fst" via --enforce-contract.
-  forall_goto_functions(it, goto_functions)
+  forall_goto_functions (it, goto_functions)
   {
     symbolt *candidate = context.find_symbol(it->first);
-    if (candidate && candidate->type.is_code() &&
-        id2string(candidate->name) == function_name)
+    if (
+      candidate && candidate->type.is_code() &&
+      id2string(candidate->name) == function_name)
       return candidate;
   }
   return nullptr;
@@ -872,8 +873,8 @@ void code_contractst::enforce_contracts(
     // esbmc_parseoptions.cpp inserts full IDs like "c:@F@fst" into to_enforce,
     // while --function gives only the short name "fst". Compare via func_sym->name
     // (always the short name) to handle both forms correctly.
-    bool alloc_ptr_params = !entry_function.empty() &&
-                            id2string(func_sym->name) == entry_function;
+    bool alloc_ptr_params =
+      !entry_function.empty() && id2string(func_sym->name) == entry_function;
 
     // Generate wrapper function, passing the original body
     goto_programt wrapper = generate_checking_wrapper(
