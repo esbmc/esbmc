@@ -1,0 +1,5 @@
+KNOWNBUG
+main.c
+--gcc-nested-functions --no-library
+^VERIFICATION SUCCESSFUL$
+-- __label__ declarations are not yet supported at the GOTO level
