@@ -242,6 +242,17 @@ bool clang_c_maint::clang_main()
         return x < min ? min : x;
       };
       const int max_args = get_int_opt("argv-max-args", 2, 0);
+      // Soft cap: max_strlen feeds a single SMT range so it scales for free,
+      // but max_args drives a build-time loop that materialises 2 symbols
+      // and ~5 init statements per iteration — a typo here causes OOM
+      // before verification starts.  Warn (don't reject) so legitimate
+      // wide-fuzz configurations still work.
+      if (max_args > 1024)
+        log_warning(
+          "--argv-max-args={} is unusually large; this will create {} "
+          "static symbols and may slow GOTO construction significantly",
+          max_args,
+          max_args * 2);
       const int max_strlen = get_int_opt("argv-max-strlen", 256, 1);
       typet char_t = argv_symbol.type.subtype().subtype();
 
