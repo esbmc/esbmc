@@ -200,9 +200,13 @@ bool clang_c_maint::clang_main()
       init_code.copy_to_operands(code_assignt(dynamic_size, mult));
 
       // Model argv per C11 §5.1.2.2.1: assume the null terminator.
-      // Non-null entries for argv[0..1] are guaranteed by the backing
-      // assignments below; quantifier-based forall is avoided so that
-      // solvers without quantifier support (e.g. Boolector) are not broken.
+      // Non-null entries for argv[0..max_args-1] are guaranteed by the
+      // backing assignments below; quantifier-based forall is avoided so
+      // that solvers without quantifier support (e.g. Boolector) are not
+      // broken.  Slots argv[max_args..argc-1] are left uninitialized
+      // rather than NULL: this is a bounded under-approximation, raise
+      // --argv-max-args for wider coverage at the cost of a larger SMT
+      // formula.
       constant_exprt null(
         irep_idt("NULL"), integer2string(0), argv_symbol.type.subtype());
 
@@ -216,18 +220,23 @@ bool clang_c_maint::clang_main()
       init_code.copy_to_operands(code_assumet(term_eq));
 
       // Back each argv[i] with a static char array whose SIZE is a nondet
-      // variable bounded in [1, MAX_STR_LEN].  Declaring the array type with
+      // variable bounded in [1, max_strlen].  Declaring the array type with
       // a symbolic size and setting dynamic_size on it mirrors exactly how
-      // argv' itself is modelled, so the dereference checker treats the string
-      // length as an SMT variable chosen by the solver.
-      // This is a bounded under-approximation: argv[i] for i >= ESBMC_ARGV_MAX_ARGS
-      // has no backing; raise the constant for wider coverage at the cost of a
-      // larger GOTO program and SMT formula.
-      static const int ESBMC_ARGV_MAX_ARGS = 10;
-      static const unsigned int ESBMC_ARGV_MAX_STR_LEN = 1024;
+      // argv' itself is modelled, so the dereference checker treats the
+      // string length as an SMT variable chosen by the solver.
+      // Boost validates the int at parse time; clamp to safe ranges so a
+      // bogus low value (e.g. 0) cannot make `assume(1 <= len <= 0)` reduce
+      // the path to vacuous truth.
+      auto get_int_opt = [](const char *name, int fallback, int min) {
+        std::string v = config.options.get_option(name);
+        int x = v.empty() ? fallback : std::stoi(v);
+        return x < min ? min : x;
+      };
+      const int max_args = get_int_opt("argv-max-args", 2, 0);
+      const int max_strlen = get_int_opt("argv-max-strlen", 256, 1);
       typet char_t = argv_symbol.type.subtype().subtype();
 
-      for (int ai = 0; ai < ESBMC_ARGV_MAX_ARGS; ++ai)
+      for (int ai = 0; ai < max_args; ++ai)
       {
         // Nondet length for this string (uninitialized static ⟹ nondet in symex).
         std::string lname = "__ESBMC_argv_len_" + std::to_string(ai);
@@ -249,8 +258,7 @@ bool clang_c_maint::clang_main()
         init_code.copy_to_operands(code_assumet(ge_one));
 
         exprt le_max("<=", bool_type());
-        le_max.copy_to_operands(
-          len, from_integer(ESBMC_ARGV_MAX_STR_LEN, uint_type()));
+        le_max.copy_to_operands(len, from_integer(max_strlen, uint_type()));
         init_code.copy_to_operands(code_assumet(le_max));
 
         // char[len] static symbol — symbolic array size mirrors argv' itself.

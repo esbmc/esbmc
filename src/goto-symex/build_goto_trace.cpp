@@ -97,7 +97,18 @@ void build_goto_trace(
       }
       catch (const type2t::symbolic_type_excp &e)
       {
-        // Don't add this assignment to the cex if we couldn't build the rhs value
+        log_debug(
+          "trace",
+          "skipping assignment at {} (symbolic type)",
+          SSA_step.source.pc->location.as_string());
+        continue;
+      }
+      catch (const array_type2t::dyn_sized_array_excp &e)
+      {
+        log_debug(
+          "trace",
+          "skipping assignment at {} (symbolic-size array, e.g. argv)",
+          SSA_step.source.pc->location.as_string());
         continue;
       }
     }
