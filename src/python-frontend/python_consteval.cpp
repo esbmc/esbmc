@@ -893,12 +893,12 @@ python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
       return std::nullopt;
 
     if (
-      node["func"]["_type"] == "Attribute" &&
-      node["func"].contains("attr") && node["func"]["attr"] == "index" &&
-      node["func"].contains("value"))
+      node["func"]["_type"] == "Attribute" && node["func"].contains("attr") &&
+      node["func"]["attr"] == "index" && node["func"].contains("value"))
     {
       auto recv = eval_expr(node["func"]["value"], env);
-      if (!recv || recv->kind != PyConstValue::TUPLE || node["args"].size() != 1)
+      if (
+        !recv || recv->kind != PyConstValue::TUPLE || node["args"].size() != 1)
         return std::nullopt;
 
       auto needle = eval_expr(node["args"][0], env);
