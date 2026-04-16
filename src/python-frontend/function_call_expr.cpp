@@ -2623,6 +2623,25 @@ function_call_expr::get_object_list_symbol(std::string &display_name) const
     return nullptr;
   }
 
+  // Call case: e.g. a.setdefault(k, []).append(99)
+  // receiver is a function call whose return value is a list pointer.
+  // Materialize the call result into a $call_list$ temp symbol
+  // so list method handlers can treat it as a named list.
+  // The declaration of the temp is emitted lazily by materialize_list_symbol().
+  if (func_value["_type"] == "Call")
+  {
+    const exprt call_expr = converter_.get_expr(func_value);
+    const typet list_type = converter_.get_type_handler().get_list_type();
+    if (call_expr.type() == list_type)
+    {
+      symbolt &tmp = converter_.create_tmp_symbol(
+        call_, "$call_list$", list_type, call_expr);
+      display_name = "$call_list$";
+      return &tmp;
+    }
+    return nullptr;
+  }
+
   // Plain name case: e.g. mylist.append(99)
   display_name = get_object_name();
   symbol_id list_symbol_id = converter_.create_symbol_id();
@@ -2645,11 +2664,15 @@ void function_call_expr::materialize_list_symbol(const symbolt *sym) const
 {
   if (!sym || sym->value.is_nil())
     return;
-  // Only emit a declaration for instance-attribute temp symbols produced by
-  // get_object_list_symbol().  These are identified by their name prefix
-  // "$attr_list$".  Regular list symbols have a nil value and are declared
-  // elsewhere; this guard prevents accidentally re-declaring them.
-  if (sym->name.as_string().find("$attr_list$") == std::string::npos)
+  // Only emit a declaration for temp symbols produced by
+  // get_object_list_symbol() from non-named receivers.  These are identified
+  // by the prefixes "$attr_list$" and "$call_list$".  Regular list symbols
+  // have a nil value and are declared elsewhere; this guard prevents
+  // re-declaring them.
+  const std::string &name = sym->name.as_string();
+  if (
+    name.find("$attr_list$") == std::string::npos &&
+    name.find("$call_list$") == std::string::npos)
     return;
   code_declt decl(symbol_expr(*sym));
   decl.copy_to_operands(sym->value);
