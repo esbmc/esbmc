@@ -382,16 +382,29 @@ public:
    */
   void analyze_read(const expr2tc &expr);
 
+  /** Kind of memory access, used by get_expr_globals to decide whether a
+   *  read-only global can be filtered out of cswitch-triggering sets. */
+  enum class access_kindt
+  {
+    READ,
+    WRITE
+  };
+
   /**
    *  Get list of globals accessed by expr.
+   *  Reads of globals that are provably never written anywhere in the program
+   *  are filtered out — they cannot participate in data races and should not
+   *  force a context switch.
    *  @param ns Namespace to work under.
-   *  @expr Expression to count global writes in.
-   *  @return Number of global refs in this expression.
+   *  @param expr Expression to count global refs in.
+   *  @param global_list Output set of global refs.
+   *  @param kind Whether this access is a READ or a WRITE.
    */
   void get_expr_globals(
     const namespacet &ns,
     const expr2tc &expr,
-    std::set<expr2tc> &global_list);
+    std::set<expr2tc> &global_list,
+    access_kindt kind);
 
   /**
    *  Check for scheduling dependencies. Whether it exists between the variables

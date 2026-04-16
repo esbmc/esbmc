@@ -7,8 +7,10 @@
 #  undef small // mingw workaround
 #endif
 
+#include <goto-programs/goto_functions.h>
 #include <goto-symex/goto_symex.h>
 #include <goto-symex/reachability_tree.h>
+#include <irep2/irep2_expr.h>
 #include <util/config.h>
 #include <util/crypto_hash.h>
 #include <util/expr_util.h>
@@ -44,6 +46,98 @@ reachability_treet::reachability_treet(
   por = !options.get_bool_option("no-por");
   main_thread_ended = false;
   target_template = std::move(target);
+
+  readonly_global_opt =
+    options.get_bool_option("cswitch-skip-readonly-globals");
+  scan_program_writes();
+}
+
+/* Walk expression e; any symbol2t that refers to a storage-bearing global is
+ * inserted into `out`. A dereference seen as a (sub-)target is treated
+ * conservatively by flipping indirect_write, which disables the optimisation
+ * program-wide. */
+static void collect_write_targets(
+  const expr2tc &e,
+  const namespacet &ns,
+  std::unordered_set<irep_idt, irep_id_hash> &out,
+  bool &indirect_write)
+{
+  if (is_nil_expr(e))
+    return;
+
+  if (is_dereference2t(e))
+  {
+    // Without a flow-sensitive points-to set we cannot name the writee.
+    // Mark the optimisation as unsafe and bail.
+    indirect_write = true;
+    return;
+  }
+
+  if (is_index2t(e))
+    return collect_write_targets(
+      to_index2t(e).source_value, ns, out, indirect_write);
+  if (is_member2t(e))
+    return collect_write_targets(
+      to_member2t(e).source_value, ns, out, indirect_write);
+  if (is_typecast2t(e))
+    return collect_write_targets(
+      to_typecast2t(e).from, ns, out, indirect_write);
+
+  if (is_symbol2t(e))
+  {
+    const irep_idt &name = to_symbol2t(e).thename;
+    const symbolt *s = ns.lookup(name);
+    if (!s)
+      return;
+    const std::string sn = name.as_string();
+    // White-list of ESBMC internal symbols, mirrors get_expr_globals().
+    if (
+      sn == "c:@__ESBMC_alloc" || sn == "c:@__ESBMC_alloc_size" ||
+      sn == "c:@__ESBMC_is_dynamic" ||
+      sn == "c:@__ESBMC_blocked_threads_count" ||
+      sn == "c:@__ESBMC_rounding_mode" ||
+      sn.find("c:pthread_lib") != std::string::npos ||
+      sn.find("c:@__ESBMC_pthread_thread") != std::string::npos)
+      return;
+    if (s->static_lifetime || s->type.is_dynamic_set())
+      out.insert(name);
+    return;
+  }
+
+  e->foreach_operand([&](const expr2tc &sub) {
+    collect_write_targets(sub, ns, out, indirect_write);
+  });
+}
+
+void reachability_treet::scan_program_writes()
+{
+  if (!readonly_global_opt)
+    return;
+
+  Forall_goto_functions (f_it, goto_functions)
+  {
+    for (const auto &ins : f_it->second.body.instructions)
+    {
+      if (is_nil_expr(ins.code))
+        continue;
+
+      if (ins.is_assign())
+      {
+        const code_assign2t &a = to_code_assign2t(ins.code);
+        collect_write_targets(
+          a.target, ns, ever_written_globals, any_indirect_write);
+      }
+      else if (ins.is_function_call())
+      {
+        const code_function_call2t &c = to_code_function_call2t(ins.code);
+        if (!is_nil_expr(c.ret))
+          collect_write_targets(
+            c.ret, ns, ever_written_globals, any_indirect_write);
+        // Writes via pointer arguments are picked up when the callee body is
+        // scanned (every function body participates in this loop).
+      }
+    }
+  }
 }
 
 void reachability_treet::setup_for_new_explore()

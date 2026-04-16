@@ -368,6 +368,36 @@ protected:
   /* associative container that contains global writes in */
   std::unordered_set<expr2tc, irep2_hash> is_global;
 
+  /** Static over-approximation of globals that may be written anywhere in
+   *  the program. Populated once at construction by scan_program_writes().
+   *  Used to skip context switches on variables that are only read across
+   *  all threads. */
+  std::unordered_set<irep_idt, irep_id_hash> ever_written_globals;
+
+  /** Conservative fallback flag. If the static scan sees a write through a
+   *  pointer we cannot resolve, every global must be treated as potentially
+   *  written and the optimisation silently disables itself. */
+  bool any_indirect_write = false;
+
+  /** Master switch; wired to --no-cswitch-on-readonly-globals. */
+  bool readonly_global_opt = true;
+
+  /** Walk all goto instructions once and collect the names of every global
+   *  that may be written. */
+  void scan_program_writes();
+
+public:
+  /** True if `name` may be written by some thread somewhere in the program.
+   *  When the optimisation is disabled, or the static scan was inconclusive
+   *  (any indirect write seen), this conservatively returns true. */
+  bool may_be_written(const irep_idt &name) const
+  {
+    if (!readonly_global_opt || any_indirect_write)
+      return true;
+    return ever_written_globals.count(name) != 0;
+  }
+
+protected:
   friend class execution_statet;
   friend void build_goto_symex_classes();
 };
