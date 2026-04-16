@@ -83,9 +83,17 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
     !is_constant(old_guard) &&
     !(is_not2t(old_guard) && is_constant(to_not2t(old_guard).value)))
   {
+    // Normalize the branching condition so that cond=true always means
+    // "the branch body was reached". For standard GOTOs (IF !cond GOTO skip)
+    // new_guard already has this form. For flipped GOTOs produced by
+    // optimize_guarded_gotos (IF cond GOTO target), the guard sense is
+    // inverted, so we apply make_not to restore the canonical direction.
+    expr2tc branching_cond = new_guard;
+    if (instruction.flipped_guard)
+      make_not(branching_cond);
     target->branching(
       cur_state->guard.as_expr(),
-      new_guard,
+      branching_cond,
       cur_state->source,
       cur_state->top().hidden,
       first_loop);
