@@ -201,7 +201,10 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "Parse source files using the old frontend (deprecated)"},
     {"funsigned-char", NULL, "Make \"char\" unsigned by default"},
-    {"fms-extensions", NULL, "Enable microsoft C extensions"}}},
+    {"fms-extensions", NULL, "Enable microsoft C extensions"},
+    {"gcc-nested-functions",
+     NULL,
+     "Enable GCC nested functions extension (source-level lambda lifting)"}}},
   {"Architecture",
    {
      {"no-arch", NULL, "Don't set up an architecture"},

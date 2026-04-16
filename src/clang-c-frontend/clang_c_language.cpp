@@ -295,7 +295,9 @@ bool clang_c_languaget::parse(const std::string &path)
     return true;
 
   // Transform GCC nested functions (if any) into standard C
-  auto nested_transformed = transform_nested_functions(path);
+  std::optional<file_operations::tmp_file> nested_transformed;
+  if (config.options.get_bool_option("gcc-nested-functions"))
+    nested_transformed = transform_nested_functions(path);
   const std::string &actual_path =
     nested_transformed ? nested_transformed->path() : path;
 
