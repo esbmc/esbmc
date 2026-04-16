@@ -108,6 +108,7 @@ void goto_convertt::optimize_guarded_gotos(goto_programt &dest)
     {
       it->set_target(it_goto_y->get_target());
       make_not(it->guard);
+      it->flipped_guard = true;
       it_goto_y->make_skip();
     }
   }

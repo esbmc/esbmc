@@ -3405,6 +3405,41 @@ exprt function_call_expr::validate_re_module_args() const
   return nil_exprt(); // Validation passed
 }
 
+// Check if an AST node is a known-empty literal (falsy in Python).
+// Needed because ESBMC's IR represents empty containers as non-NULL
+// pointers/structs, making them appear truthy at the IR level.
+static bool is_empty_literal(const nlohmann::json &node)
+{
+  const std::string &type = node["_type"];
+  if (type == "List" || type == "Tuple" || type == "Set")
+    return node.contains("elts") && node["elts"].empty();
+  if (type == "Dict")
+    return node.contains("keys") && node["keys"].empty();
+  if (type == "Constant" && node.contains("value") && node["value"].is_string())
+    return node["value"].get<std::string>().empty();
+  return false;
+}
+
+exprt function_call_expr::compute_element_truthiness(const exprt &element) const
+{
+  if (element.type() == none_type())
+    return gen_boolean(false);
+
+  if (element.type().is_bool())
+    return element;
+
+  if (
+    element.type().id() == "signedbv" || element.type().id() == "unsignedbv" ||
+    element.type().id() == "floatbv" || element.type().is_pointer())
+    return not_exprt(equality_exprt(element, gen_zero(element.type())));
+
+  if (is_complex_type(element.type()))
+    return complex_to_bool_expr(element);
+
+  // For other types, assume truthy (conservative)
+  return gen_boolean(true);
+}
+
 bool function_call_expr::is_any_call() const
 {
   const std::string &func_name = function_id_.get_function();
@@ -3413,6 +3448,11 @@ bool function_call_expr::is_any_call() const
 
 exprt function_call_expr::handle_any() const
 {
+  const auto keywords =
+    call_.contains("keywords") ? call_["keywords"] : nlohmann::json::array();
+  if (!keywords.empty())
+    throw std::runtime_error("any() takes no keyword arguments");
+
   const auto &args = call_["args"];
 
   if (args.empty())
@@ -3426,66 +3466,74 @@ exprt function_call_expr::handle_any() const
   if (arg["_type"] != "List")
     throw std::runtime_error("any() currently only supports list literals");
 
-  const auto &elts = arg["elts"];
+  return reduce_list_literal_truthiness(arg, ReduceOp::Any);
+}
 
-  // Empty list returns False
+bool function_call_expr::is_all_call() const
+{
+  const std::string &func_name = function_id_.get_function();
+  return func_name == "all";
+}
+
+exprt function_call_expr::handle_all()
+{
+  const auto keywords =
+    call_.contains("keywords") ? call_["keywords"] : nlohmann::json::array();
+  if (!keywords.empty())
+    throw std::runtime_error("all() takes no keyword arguments");
+
+  const auto &args = call_["args"];
+
+  if (args.empty())
+    throw std::runtime_error("all() expected at least 1 argument, got 0");
+
+  if (args.size() > 1)
+    throw std::runtime_error(
+      "all() takes at most 1 argument, got " + std::to_string(args.size()));
+
+  const auto &arg = args[0];
+
+  if (arg["_type"] != "List")
+    return handle_general_function_call();
+
+  return reduce_list_literal_truthiness(arg, ReduceOp::All);
+}
+
+exprt function_call_expr::reduce_list_literal_truthiness(
+  const nlohmann::json &list_arg,
+  ReduceOp op) const
+{
+  const auto &elts = list_arg["elts"];
+
   if (elts.empty())
-    return gen_boolean(false);
+    return gen_boolean(op == ReduceOp::All);
 
-  // Build an OR expression of all elements' truthiness
   exprt result;
   bool first = true;
 
   for (const auto &elt : elts)
   {
-    exprt element = converter_.get_expr(elt);
-
-    // Check if element is truthy
     exprt is_truthy;
 
-    if (element.type() == none_type())
+    if (is_empty_literal(elt))
     {
-      // None is always falsy
       is_truthy = gen_boolean(false);
-    }
-    else if (element.type().is_bool())
-    {
-      // Bool: use directly
-      is_truthy = element;
-    }
-    else if (
-      element.type().id() == "signedbv" || element.type().id() == "unsignedbv")
-    {
-      // Integer: truthy if != 0
-      exprt zero = gen_zero(element.type());
-      is_truthy = not_exprt(equality_exprt(element, zero));
-    }
-    else if (element.type().id() == "floatbv")
-    {
-      // Float: truthy if != 0.0
-      exprt zero = gen_zero(element.type());
-      is_truthy = not_exprt(equality_exprt(element, zero));
-    }
-    else if (element.type().is_pointer())
-    {
-      // Pointer: truthy if not NULL
-      exprt null_ptr = gen_zero(element.type());
-      is_truthy = not_exprt(equality_exprt(element, null_ptr));
     }
     else
     {
-      // For other types, assume truthy (conservative)
-      is_truthy = gen_boolean(true);
+      exprt element = converter_.get_expr(elt);
+      is_truthy = compute_element_truthiness(element);
     }
 
-    // OR with accumulated result
     if (first)
     {
       result = is_truthy;
       first = false;
+      continue;
     }
-    else
-      result = or_exprt(result, is_truthy);
+
+    result = (op == ReduceOp::Any) ? exprt(or_exprt(result, is_truthy))
+                                   : exprt(and_exprt(result, is_truthy));
   }
 
   return result;
@@ -3588,6 +3636,11 @@ function_call_expr::get_dispatch_table()
     {[this]() { return is_any_call(); },
      [this]() { return handle_any(); },
      "any()"},
+
+    // All function
+    {[this]() { return is_all_call(); },
+     [this]() { return handle_all(); },
+     "all()"},
 
     // int.to_bytes()
     {[this]() {
