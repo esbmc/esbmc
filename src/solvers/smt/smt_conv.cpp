@@ -1916,7 +1916,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       smt_astt real_result = mk_div(side1, side2);
       const expr2tc &rounding_mode = to_ieee_div2t(expr).rounding_mode;
 
-      // RNE/RNA/RUP/RDN interval lifting for ieee_div.
+      // RNE/RNA/RUP/RDN/RTZ interval lifting for ieee_div.
       // Proof-aligned compositional lifting:
       //   hull([L_x,U_x] / [L_y,U_y]) = [min(qi), max(qi)] for i in {1..4}
       //   where q1=L_x/L_y, q2=L_x/U_y, q3=U_x/L_y, q4=U_x/U_y.
@@ -1925,15 +1925,17 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       // iv2.hi < 0). When inadmissible, the numerator tracked interval is
       // preserved and the denominator is used as a point value (conservative
       // but sound). Both operands use point fallback when fresh.
-      // RNE and RNA share B_near; RUP/RDN use B_dir (upper-only / lower-only
-      // widening respectively).
+      // RNE and RNA share B_near; RUP/RDN/RTZ use B_dir. RTZ is sign-sensitive:
+      // positive hull widens lower only, negative hull widens upper only,
+      // zero-crossing hull uses symmetric B_dir_max fallback.
       bool interval_lifted = false;
       if (
         options.get_bool_option("ir-ieee") &&
         (is_nearest_rounding_mode(rounding_mode) ||
          is_round_to_away(rounding_mode) ||
          is_round_to_plus_inf(rounding_mode) ||
-         is_round_to_minus_inf(rounding_mode)))
+         is_round_to_minus_inf(rounding_mode) ||
+         is_round_to_zero(rounding_mode)))
       {
         auto get_iv = [this](smt_astt t) -> ra_interval_t {
           auto it = ir_ra_interval_map.find(t);
@@ -1986,11 +1988,13 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
         std::pair<smt_astt, smt_astt> bounds =
           is_nearest_rounding_mode(rounding_mode)
             ? apply_ieee754_rne_enclosure(real_result, lo_r, hi_r, fbv_type)
-          : is_round_to_away(rounding_mode)
-            ? apply_ieee754_rna_enclosure(real_result, lo_r, hi_r, fbv_type)
-          : is_round_to_plus_inf(rounding_mode)
-            ? apply_ieee754_rup_enclosure(real_result, lo_r, hi_r, fbv_type)
-            : apply_ieee754_rdn_enclosure(real_result, lo_r, hi_r, fbv_type);
+            : is_round_to_away(rounding_mode)
+                ? apply_ieee754_rna_enclosure(real_result, lo_r, hi_r, fbv_type)
+                : is_round_to_plus_inf(rounding_mode)
+                    ? apply_ieee754_rup_enclosure(real_result, lo_r, hi_r, fbv_type)
+                    : is_round_to_minus_inf(rounding_mode)
+                        ? apply_ieee754_rdn_enclosure(real_result, lo_r, hi_r, fbv_type)
+                        : apply_ieee754_rtz_enclosure(real_result, lo_r, hi_r, fbv_type);
         a = mk_ite(div_by_zero, inf_result, real_result);
         ir_ra_interval_map[a] = {bounds.first, bounds.second};
         interval_lifted = true;
