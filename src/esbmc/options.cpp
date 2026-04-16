@@ -209,7 +209,10 @@ const struct group_opt_templ all_cmd_options[] = {
     {"argv-max-strlen",
      boost::program_options::value<int>()->default_value(256)->value_name("nr"),
      "Maximum length (in bytes, including the null terminator) of each backed "
-     "argv string (default 256)."}}},
+     "argv string (default 256)."},
+    {"gcc-nested-functions",
+     NULL,
+     "Enable GCC nested functions extension (source-level lambda lifting)"}}},
   {"Architecture",
    {
      {"no-arch", NULL, "Don't set up an architecture"},
