@@ -2900,7 +2900,11 @@ exprt python_list::list_repetition(
   // True when the list operand is a variable (not a literal).
   bool is_variable_list = false;
 
-  auto parse_size_from_symbol = [&](symbolt *size_var, BigInt &out) -> bool {
+  auto is_integer_type = [](const typet &type)
+  { return type.is_signedbv() || type.is_unsignedbv(); };
+
+  auto parse_size_from_symbol = [&](symbolt *size_var, BigInt &out) -> bool
+  {
     if (
       size_var->value.is_code() || size_var->value.is_nil() ||
       !size_var->value.is_constant())
@@ -2908,6 +2912,7 @@ exprt python_list::list_repetition(
       return false;
     }
 
+    assert(is_integer_type(size_var->value.type()));
     out = binary2integer(size_var->value.value().c_str(), true);
     return true;
   };
@@ -2915,6 +2920,7 @@ exprt python_list::list_repetition(
   auto parse_repeat_expr = [&](const exprt &expr, BigInt &out) -> bool {
     if (expr.is_constant())
     {
+      assert(is_integer_type(expr.type()));
       out = binary2integer(expr.value().c_str(), true);
       return true;
     }
@@ -3058,7 +3064,10 @@ exprt python_list::list_repetition(
         return create_vla(list_value_, list_symbol, size_var, list_elem);
     }
     else if (lhs.is_constant())
+    {
+      assert(is_integer_type(lhs.type()));
       list_size = binary2integer(lhs.value().c_str(), true);
+    }
 
     // List element comes from the rhs operand
     if (right_node.contains("elts"))
@@ -3101,7 +3110,10 @@ exprt python_list::list_repetition(
         return create_vla(list_value_, list_symbol, size_var, list_elem);
     }
     else if (rhs.is_constant())
+    {
+      assert(is_integer_type(rhs.type()));
       list_size = binary2integer(rhs.value().c_str(), true);
+    }
   }
 
   // For variable lists, allocate a fresh result list so the source is not
