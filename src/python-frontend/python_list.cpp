@@ -2900,11 +2900,11 @@ exprt python_list::list_repetition(
   // True when the list operand is a variable (not a literal).
   bool is_variable_list = false;
 
-  auto is_integer_type = [](const typet &type)
-  { return type.is_signedbv() || type.is_unsignedbv(); };
+  auto is_integer_type = [](const typet &type) {
+    return type.is_signedbv() || type.is_unsignedbv();
+  };
 
-  auto parse_size_from_symbol = [&](symbolt *size_var, BigInt &out) -> bool
-  {
+  auto parse_size_from_symbol = [&](symbolt *size_var, BigInt &out) -> bool {
     if (
       size_var->value.is_code() || size_var->value.is_nil() ||
       !size_var->value.is_constant())
