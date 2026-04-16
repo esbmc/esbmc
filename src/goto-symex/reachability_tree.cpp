@@ -116,6 +116,12 @@ void reachability_treet::scan_program_writes()
 
   Forall_goto_functions (f_it, goto_functions)
   {
+    if (f_it->first == "__ESBMC_main")
+      continue;
+  
+    if (f_it->second.body.hide)
+      continue;
+
     for (const auto &ins : f_it->second.body.instructions)
     {
       if (is_nil_expr(ins.code))
