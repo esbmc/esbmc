@@ -207,8 +207,7 @@ bool clang_c_maint::clang_main()
       // rather than NULL: this is a bounded under-approximation, raise
       // --argv-max-args for wider coverage at the cost of a larger SMT
       // formula.
-      constant_exprt null(
-        irep_idt("NULL"), integer2string(0), argv_symbol.type.subtype());
+      exprt null = gen_zero(argv_symbol.type.subtype());
 
       // argv[argc] == NULL
       index_exprt argv_argc(
