@@ -4336,6 +4336,82 @@ exprt function_call_expr::handle_general_function_call()
   const std::string &func_name = function_id_.get_function();
   std::string actual_func_name = func_name;
 
+  // Fast-path: sorted() over a concrete int list can be materialized directly
+  // in the frontend, avoiding expensive runtime list sorting/equality paths.
+  if (func_name == "sorted" && call_["args"].size() == 1)
+  {
+    exprt list_arg = converter_.get_expr(call_["args"][0]);
+    if (list_arg.is_symbol())
+    {
+      const std::string list_id = list_arg.identifier().as_string();
+      const size_t map_size = python_list::get_list_type_map_size(list_id);
+      if (map_size > 0 && map_size <= 32)
+      {
+        struct sortable_elem
+        {
+          BigInt key;
+          size_t pos;
+        };
+
+        std::vector<sortable_elem> elems;
+        elems.reserve(map_size);
+        bool all_constant_ints = true;
+
+        for (size_t i = 0; i < map_size; ++i)
+        {
+          const std::string elem_id =
+            python_list::get_list_element_id(list_id, i);
+          if (elem_id.empty())
+          {
+            all_constant_ints = false;
+            break;
+          }
+
+          const symbolt *elem_sym = converter_.find_symbol(elem_id);
+          if (
+            !elem_sym || !elem_sym->value.is_constant() ||
+            !(elem_sym->type.is_signedbv() || elem_sym->type.is_unsignedbv()))
+          {
+            all_constant_ints = false;
+            break;
+          }
+
+          BigInt key = binary2integer(elem_sym->value.value().c_str(), true);
+          elems.push_back({key, i});
+        }
+
+        if (all_constant_ints)
+        {
+          std::stable_sort(
+            elems.begin(),
+            elems.end(),
+            [](const sortable_elem &a, const sortable_elem &b) {
+              if (a.key == b.key)
+                return a.pos < b.pos;
+              return a.key < b.key;
+            });
+
+          nlohmann::json sorted_list;
+          sorted_list["_type"] = "List";
+          sorted_list["elts"] = nlohmann::json::array();
+          converter_.copy_location_fields_from_decl(call_, sorted_list);
+          for (const auto &elem : elems)
+          {
+            nlohmann::json cst;
+            cst["_type"] = "Constant";
+            cst["value"] = elem.key.to_int64();
+            cst["kind"] = nullptr;
+            converter_.copy_location_fields_from_decl(call_, cst);
+            sorted_list["elts"].push_back(cst);
+          }
+
+          python_list sorted_list_expr(converter_, sorted_list);
+          return sorted_list_expr.get();
+        }
+      }
+    }
+  }
+
   // Skip builtin dispatch if the user imported a function with the same name
   // e.g. "from other import sum" defines a user sum that shadows the builtin
   bool is_user_imported =
