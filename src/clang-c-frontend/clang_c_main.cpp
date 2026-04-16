@@ -229,7 +229,16 @@ bool clang_c_maint::clang_main()
       // the path to vacuous truth.
       auto get_int_opt = [](const char *name, int fallback, int min) {
         std::string v = config.options.get_option(name);
-        int x = v.empty() ? fallback : std::stoi(v);
+        int x = fallback;
+        if (!v.empty())
+          try
+          {
+            x = std::stoi(v);
+          }
+          catch (...)
+          {
+            x = fallback;
+          }
         return x < min ? min : x;
       };
       const int max_args = get_int_opt("argv-max-args", 2, 0);
