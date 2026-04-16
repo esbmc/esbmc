@@ -45,16 +45,31 @@ jobs:
       contents: write
     steps:
     - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
     - name: Install Dependencies
       run: sudo apt-get update && sudo apt-get install libtinfo-dev
     - name: Download Clang 11
       run: wget https://github.com/llvm/llvm-project/releases/download/llvmorg-11.0.0/clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz
     - name: Extract Clang 11
       run: tar xf clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz && mv clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04 clang
-    - name: Run clang-format (src)
-      run: find src -iname *.h -o -iname *.c -o -iname *.cpp -o -iname *.hpp -iname *.hh | grep -v src/ansi-c/cpp | grep -v src/clang-c-frontend/headers/ | grep -v src/c2goto/library/libm/musl | xargs ./clang/bin/clang-format -style=file -i -fallback-style=none
-    - name: Run clang-format (tests)
-      run: find unit -iname *.h -o -iname *.c -o -iname *.cpp -o -iname *.hpp -iname *.hh  | xargs ./clang/bin/clang-format -style=file -i -fallback-style=none
+    - name: Run clang-format on changed files
+      shell: bash
+      run: |
+        mapfile -t files < <(
+          git diff --name-only "origin/${{ github.base_ref }}...HEAD" -- src unit |
+          grep -E '\.(h|c|cpp|hpp|hh)$' |
+          grep -v '^src/ansi-c/cpp/' |
+          grep -v '^src/clang-c-frontend/headers/' |
+          grep -v '^src/c2goto/library/libm/musl/' || true
+        )
+
+        if [ "${#files[@]}" -eq 0 ]; then
+          echo "No changed C/C++ files to format."
+          exit 0
+        fi
+
+        ./clang/bin/clang-format -style=file -i -fallback-style=none "${files[@]}"
     - name: Delete downloaded Clang 11
       run: rm -rf clang*
     # Commit all changed files back to the repository
@@ -87,10 +102,20 @@ jobs:
         - name: Install YAPF
           run: pip install yapf
 
-        - name: Apply YAPF formatting (src and regression)
+        - name: Apply YAPF formatting on changed files
+          shell: bash
           run: |
-            yapf --recursive --in-place src/python-frontend
-            yapf --recursive --in-place regression/python
+            mapfile -t files < <(
+              git diff --name-only "origin/${{ github.base_ref }}...HEAD" -- src/python-frontend regression/python |
+              grep -E '\.py$' || true
+            )
+
+            if [ "${#files[@]}" -eq 0 ]; then
+              echo "No changed Python files to format."
+              exit 0
+            fi
+
+            yapf --in-place "${files[@]}"
 
         - name: Auto-commit formatting changes
           uses: stefanzweifel/git-auto-commit-action@v5
