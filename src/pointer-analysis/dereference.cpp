@@ -1441,9 +1441,18 @@ void dereferencet::construct_from_dyn_struct_offset(
   // construct_from_dyn_offset
   if (access_sz == config.ansi_c.char_width)
   {
-    value = bitcast2tc(
-      get_uint_type(type_byte_size_bits(value->type, &ns).to_uint64()), value);
-    return construct_from_dyn_offset(value, offset, type);
+    uint64_t struct_bits = type_byte_size_bits(value->type, &ns).to_uint64();
+    value = bitcast2tc(get_uint_type(struct_bits), value);
+    // flatten_to_bitvector places the first struct member in the low bits
+    // regardless of target endianness, so under big-endian we must mirror
+    // the bit offset before delegating to the scalar byte extractor.
+    expr2tc adjusted_offset = offset;
+    if (is_big_endian)
+      adjusted_offset = sub2tc(
+        offset->type,
+        gen_long(offset->type, struct_bits - config.ansi_c.char_width),
+        offset);
+    return construct_from_dyn_offset(value, adjusted_offset, type);
   }
 
   // For each element of the struct, look at the alignment, and produce an
