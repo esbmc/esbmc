@@ -1,0 +1,11 @@
+url_path,views_total,views_unique
+/esbmc/esbmc,980,217
+/esbmc/esbmc/pulls,783,21
+/esbmc/esbmc/issues,216,27
+/esbmc/esbmc/actions,210,8
+/esbmc/esbmc/actions/workflows/benchexec.yml,139,4
+/esbmc/esbmc/commits/master,107,8
+/esbmc/esbmc/pull/3950/commits,85,1
+/esbmc/esbmc/pull/3990,55,10
+/esbmc/esbmc/compare/master...prototypeC14:esbmc:claude/simplify-nondet-optimization-PGe62,55,1
+/esbmc/esbmc/releases,49,21
