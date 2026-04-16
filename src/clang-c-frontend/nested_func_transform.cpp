@@ -1,5 +1,7 @@
 #include <clang-c-frontend/nested_func_transform.h>
 
+#include <util/message.h>
+
 #include <algorithm>
 #include <cassert>
 #include <cctype>
@@ -559,6 +561,9 @@ static std::vector<local_var> collect_local_vars(
           t1 < body_end_tok && toks[t1].kind == tok_kind::identifier &&
           toks[t1].text == "__label__")
         {
+          log_warning(
+            "GCC __label__ declarations are not supported with "
+            "--gcc-nested-functions; results may be unsound");
           size_t scan = t1 + 1;
           while (scan < body_end_tok)
           {
@@ -981,6 +986,16 @@ static std::string capture_global_name(
          std::to_string(var.size()) + "_" + var;
 }
 
+static std::string capture_param_name(
+  const std::string &enclosing,
+  const std::string &nested,
+  const std::string &var)
+{
+  return "__esbmc_p_" + std::to_string(enclosing.size()) + "_" + enclosing +
+         "_" + std::to_string(nested.size()) + "_" + nested + "_" +
+         std::to_string(var.size()) + "_" + var;
+}
+
 // -----------------------------------------------------------------------
 //  Identifier rewriting
 // -----------------------------------------------------------------------
@@ -1051,7 +1066,8 @@ static std::map<std::string, std::string> build_capture_replacements(
       m[c.name] =
         "(*" + capture_global_name(enclosing, func_name, c.name) + ")";
     else
-      m[c.name] = "(*__capture_" + c.name + ")";
+      m[c.name] =
+        "(*" + capture_param_name(enclosing, func_name, c.name) + ")";
   }
   return m;
 }
@@ -1506,7 +1522,9 @@ static std::string transform_one_pass(const std::string &src)
           if (ci > 0)
             new_params += ", ";
           new_params +=
-            nf.captures[ci].type_text + " *__capture_" + nf.captures[ci].name;
+            nf.captures[ci].type_text + " *" +
+            capture_param_name(
+              nf.enclosing, nf.name, nf.captures[ci].name);
         }
 
         if (!no_params)

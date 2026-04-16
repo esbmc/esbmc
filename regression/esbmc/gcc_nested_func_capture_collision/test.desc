@@ -1,4 +1,4 @@
 CORE
 main.c
 --gcc-nested-functions --no-library
-GCC __label__ declarations are not supported
+^VERIFICATION SUCCESSFUL$
