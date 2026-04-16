@@ -17,7 +17,6 @@ CC_DIAGNOSTIC_POP()
 #include <util/c_link.h>
 
 #include <util/filesystem.h>
-#include <clang-c-frontend/nested_func_transform.h>
 
 #include <ac_config.h>
 
@@ -294,14 +293,9 @@ bool clang_c_languaget::parse(const std::string &path)
   if (preprocess(path, o_preprocessed))
     return true;
 
-  // Transform GCC nested functions (if any) into standard C
-  auto nested_transformed = transform_nested_functions(path);
-  const std::string &actual_path =
-    nested_transformed ? nested_transformed->path() : path;
-
   // Get compiler arguments and add the file path
   std::vector<std::string> new_compiler_args = compiler_args("clang-tool");
-  new_compiler_args.push_back(actual_path);
+  new_compiler_args.push_back(path);
 
   if (FILE *f = messaget::state.target("clang", VerbosityLevel::Debug))
   {
