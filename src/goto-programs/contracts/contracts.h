@@ -148,6 +148,12 @@ public:
     expr2tc snapshot_sym; ///< Snapshot symbol holding arr[j] pre-call value
   };
 
+  /// \brief Check if a function is compiler-generated and should be skipped.
+  /// Handles both short names ("fst") and full Clang USR IDs ("c:@F@fst#*1I#").
+  /// \param function_name Function name or full ID
+  /// \return True if the function should be skipped (destructor, __cxa_*, etc.)
+  bool is_compiler_generated(const std::string &function_name) const;
+
 private:
   goto_functionst &goto_functions;
   contextt &context;
@@ -163,11 +169,6 @@ private:
   /// Number of elements to allocate for pointer params that serve as arrays
   /// (i.e., appear in array_elem_targets). Must match the ASSUME(j < N) bound.
   static constexpr size_t ARRAY_ALLOC_ELEMS = 100;
-
-  /// \brief Check if a function is compiler-generated and should be skipped
-  /// \param function_name Function name or ID
-  /// \return True if function should be skipped (destructor, constructor, etc.)
-  bool is_compiler_generated(const std::string &function_name) const;
 
   /// \brief Find function symbol
   /// \param function_name Function name (can be full ID or simple name)

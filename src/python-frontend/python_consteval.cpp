@@ -67,6 +67,38 @@ bool PyConstValue::is_truthy() const
     return float_val != 0.0;
   case STRING:
     return !string_val.empty();
+  case TUPLE:
+    return !tuple_val.empty();
+  }
+  return false;
+}
+
+static bool pyconst_equal(const PyConstValue &lhs, const PyConstValue &rhs)
+{
+  if (lhs.kind != rhs.kind)
+    return false;
+
+  switch (lhs.kind)
+  {
+  case PyConstValue::NONE:
+    return true;
+  case PyConstValue::BOOL:
+    return lhs.bool_val == rhs.bool_val;
+  case PyConstValue::INT:
+    return lhs.int_val == rhs.int_val;
+  case PyConstValue::FLOAT:
+    return lhs.float_val == rhs.float_val;
+  case PyConstValue::STRING:
+    return lhs.string_val == rhs.string_val;
+  case PyConstValue::TUPLE:
+    if (lhs.tuple_val.size() != rhs.tuple_val.size())
+      return false;
+    for (size_t i = 0; i < lhs.tuple_val.size(); ++i)
+    {
+      if (!pyconst_equal(lhs.tuple_val[i], rhs.tuple_val[i]))
+        return false;
+    }
+    return true;
   }
   return false;
 }
@@ -480,10 +512,24 @@ python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
     if (val.is_number_integer())
       return PyConstValue::make_int(val.get<long long>());
     if (val.is_number_float())
-      return PyConstValue{PyConstValue::FLOAT, false, 0, val.get<double>(), ""};
+      return PyConstValue{
+        PyConstValue::FLOAT, false, 0, val.get<double>(), "", {}};
     if (val.is_string())
       return PyConstValue::make_string(val.get<std::string>());
     return std::nullopt;
+  }
+
+  if (type == "Tuple")
+  {
+    std::vector<PyConstValue> values;
+    for (const auto &elt : node["elts"])
+    {
+      auto value = eval_expr(elt, env);
+      if (!value)
+        return std::nullopt;
+      values.push_back(*value);
+    }
+    return PyConstValue::make_tuple(values);
   }
 
   // Variable lookup
@@ -523,7 +569,7 @@ python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
         return PyConstValue::make_int(-operand->int_val);
       if (operand->kind == PyConstValue::FLOAT)
         return PyConstValue{
-          PyConstValue::FLOAT, false, 0, -operand->float_val, ""};
+          PyConstValue::FLOAT, false, 0, -operand->float_val, "", {}};
       return std::nullopt;
     }
 
@@ -846,7 +892,28 @@ python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
     if (!node.contains("func"))
       return std::nullopt;
 
-    // Only support simple function calls (Name), not methods
+    if (
+      node["func"]["_type"] == "Attribute" && node["func"].contains("attr") &&
+      node["func"]["attr"] == "index" && node["func"].contains("value"))
+    {
+      auto recv = eval_expr(node["func"]["value"], env);
+      if (
+        !recv || recv->kind != PyConstValue::TUPLE || node["args"].size() != 1)
+        return std::nullopt;
+
+      auto needle = eval_expr(node["args"][0], env);
+      if (!needle)
+        return std::nullopt;
+
+      for (size_t i = 0; i < recv->tuple_val.size(); ++i)
+      {
+        if (pyconst_equal(recv->tuple_val[i], *needle))
+          return PyConstValue::make_int(static_cast<long long>(i));
+      }
+      return std::nullopt;
+    }
+
+    // Only support simple function calls (Name), not other methods
     if (node["func"]["_type"] != "Name")
       return std::nullopt;
 
