@@ -7,6 +7,7 @@ Author: Rafael Sá Menezes, rafael.sa.menezes@outlook.com
 
 #pragma once
 #include <string>
+#include <type_traits>
 #include <util/compiler_defs.h>
 
 CC_DIAGNOSTIC_PUSH()
@@ -20,6 +21,19 @@ CC_DIAGNOSTIC_PUSH()
 
 #include <fmt/format.h>
 CC_DIAGNOSTIC_POP()
+
+// fmt::underlying() was introduced in fmt 9.0.0 (FMT_VERSION >= 90000).
+// Provide a fallback for systems shipping older fmt (e.g. Ubuntu 22.04 / fmt 8).
+#if !defined(FMT_VERSION) || FMT_VERSION < 90000
+namespace fmt
+{
+template <typename Enum>
+constexpr auto underlying(Enum e) -> std::underlying_type_t<Enum>
+{
+  return static_cast<std::underlying_type_t<Enum>>(e);
+}
+} // namespace fmt
+#endif
 
 #define ESBMC_FORMATS_START_ASSERTION
 

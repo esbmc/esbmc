@@ -13,27 +13,26 @@ Build-Depends: debhelper-compat (= 13),
                bison,
                flex,
                ninja-build,
-               llvm-16-dev | llvm-14-dev,
-               libclang-16-dev | libclang-14-dev,
-               libclang-common-16-dev | libclang-common-14-dev,
-               libclang-cpp16-dev | libclang-cpp14-dev,
-               clang-16 | clang-14,
+               llvm-20-dev | llvm-19-dev | llvm-18-dev | llvm-17-dev | llvm-16-dev | llvm-14-dev,
+               libclang-20-dev | libclang-19-dev | libclang-18-dev | libclang-17-dev | libclang-16-dev | libclang-14-dev,
+               libclang-common-20-dev | libclang-common-19-dev | libclang-common-18-dev | libclang-common-17-dev | libclang-common-16-dev | libclang-common-14-dev,
+               libclang-cpp20-dev | libclang-cpp19-dev | libclang-cpp18-dev | libclang-cpp17-dev | libclang-cpp16-dev | libclang-cpp14-dev,
+               clang-20 | clang-19 | clang-18 | clang-17 | clang-16 | clang-14,
                libc6-dev (>= 2.17),
                linux-libc-dev,
                python3-dev
-Standards-Version: 4.6.2
+Standards-Version: 4.7.0
 Homepage: https://esbmc.org
 Vcs-Browser: https://github.com/esbmc/esbmc
 Vcs-Git: https://github.com/esbmc/esbmc.git
+Rules-Requires-Root: no
 
 Package: esbmc
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends},
          python3,
-         libstdc++6,
-         libstdc++-dev,
-         clang-16 | clang-14 | clang,
-         libclang-common-16-dev | libclang-common-14-dev
+         clang-20 | clang-19 | clang-18 | clang-17 | clang-16 | clang-14 | clang,
+         libclang-common-20-dev | libclang-common-19-dev | libclang-common-18-dev | libclang-common-17-dev | libclang-common-16-dev | libclang-common-14-dev
 Recommends: python3-mypy
 Description: Efficient SMT-based Context-Bounded Model Checker
  ESBMC is a context-bounded model checker for the verification of

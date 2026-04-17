@@ -5,7 +5,7 @@
 
 export DEB_CFLAGS_MAINT_APPEND=-fno-lto
 export DEB_CXXFLAGS_MAINT_APPEND=-fno-lto
-export DEB_LDFLAGS_MAINT_APPEND=-fno-lto -Wl,--unresolved-symbols=ignore-in-object-files
+export DEB_LDFLAGS_MAINT_APPEND=-fno-lto
 
 override_dh_auto_clean:
 	dh_auto_clean
@@ -18,6 +18,7 @@ override_dh_auto_configure:
 	dh_auto_configure -- \
 		-DCMAKE_BUILD_TYPE=Release \
 		-DBUILD_STATIC=OFF \
+		-DCLANG_LINK_CLANG_DYLIB=OFF \
 		-DDOWNLOAD_DEPENDENCIES=OFF \
 		-DBUILD_TESTING=OFF \
 		-DENABLE_Z3=ON \
