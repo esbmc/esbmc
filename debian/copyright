@@ -4,13 +4,15 @@ Upstream-Contact: ESBMC Development Team <esbmc@esbmc.org>
 Source: https://github.com/esbmc/esbmc
 
 Files: *
-Copyright: 2008-2025 ESBMC Development Team
-License: Apache-2.0
+Copyright: 2001-2011 Daniel Kroening, Edmund Clarke,
+            Computer Science Department, Oxford University;
+            Computer Systems Institute, ETH Zurich;
+            Computer Science Department, Carnegie Mellon University
+           2008-2025 ESBMC Development Team
+License: Apache-2.0 and BSD-4-Clause
 Comment:
- ESBMC is based on CBMC (BSD-4-Clause) by Daniel Kroening et al. at Oxford,
- ETH Zurich, and Carnegie Mellon. ESBMC-specific modifications are Apache-2.0.
- For the complete per-file license breakdown see the COPYING file in the
- source tree.
+ ESBMC is based on CBMC (BSD-4-Clause). ESBMC-specific modifications are
+ Apache-2.0. The per-file licensing breakdown is in the COPYING file.
 
 Files: src/big-int/*
 Copyright: Dirk Zoller
