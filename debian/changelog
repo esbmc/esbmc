@@ -1,3 +1,12 @@
+esbmc (8.2.0-2) noble; urgency=medium
+
+  * Add gcc-multilib [amd64 i386] to Build-Depends: required to build
+    clib32.goto (32-bit C library goto binary) in c2goto component.
+    Previous removal in 8.2.0-1 caused Launchpad build failure:
+    bits/libc-header-start.h not found.
+
+ -- Weiqi Wang <lukewang19@icloud.com>  Fri, 17 Apr 2026 00:00:00 +0000
+
 esbmc (8.2.0-1) noble; urgency=medium
 
   * New upstream release 8.2.0.
@@ -7,9 +16,6 @@ esbmc (8.2.0-1) noble; urgency=medium
     removing need for a Debian-specific patch.
   * Merge DOWNLOAD_DEPENDENCIES=OFF system-library support into
     ExternalDependencies.cmake, removing need for a Debian-specific patch.
-  * Add gcc-multilib [amd64 i386] to Build-Depends: required to build
-    clib32.goto (32-bit C library goto binary) in c2goto component.
-    Previous removal caused build failure: bits/libc-header-start.h not found.
   * Move python3-mypy from Depends to Recommends: ESBMC degrades gracefully
     without it (type-checking warnings suppressed, verification unaffected).
   * Remove libstdc++-dev from Depends: dynamically-built binary only needs
