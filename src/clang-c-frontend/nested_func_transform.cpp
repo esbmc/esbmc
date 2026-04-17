@@ -1,15 +1,31 @@
 #include <clang-c-frontend/nested_func_transform.h>
 
+#include <util/compiler_defs.h>
+CC_DIAGNOSTIC_PUSH()
+CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
+#include <clang/Basic/Diagnostic.h>
+#include <clang/Basic/DiagnosticOptions.h>
+#include <clang/Basic/FileManager.h>
+#include <clang/Basic/LangOptions.h>
+#include <clang/Basic/SourceManager.h>
+#include <clang/Basic/TokenKinds.h>
+#include <clang/Basic/Version.inc>
+#include <clang/Lex/Lexer.h>
+#include <clang/Lex/Token.h>
+#include <llvm/ADT/IntrusiveRefCntPtr.h>
+#include <llvm/ADT/StringRef.h>
+#include <llvm/Support/MemoryBuffer.h>
+CC_DIAGNOSTIC_POP()
+
 #include <util/message.h>
 
 #include <algorithm>
 #include <cassert>
-#include <cctype>
 #include <cstdio>
 #include <fstream>
 #include <map>
+#include <memory>
 #include <set>
-#include <sstream>
 #include <string>
 #include <vector>
 
@@ -57,166 +73,181 @@ struct token
   size_t pos; // byte offset in source
 };
 
-static bool is_ident_start(char c)
+// Range of a preprocessor directive in the raw source buffer.
+struct pp_range
 {
-  return std::isalpha(static_cast<unsigned char>(c)) || c == '_';
-}
+  size_t start; // byte offset of the leading '#'
+  size_t end;   // byte offset one past the terminating '\n' (or src.size())
+};
 
-static bool is_ident_cont(char c)
+// Pre-scan the raw source for `#`-at-start-of-line directives.  Clang's raw
+// lexer emits directives as individual tokens, but Layer B expects each
+// directive to be one opaque `pp_directive` token that `skip_ws()` can skip
+// wholesale.  We compute directive ranges with the same byte-level rules as
+// the original hand-rolled tokenizer so offsets stay bit-exact.
+static std::vector<pp_range> scan_pp_directives(const std::string &src)
 {
-  return std::isalnum(static_cast<unsigned char>(c)) || c == '_';
-}
-
-// Tokenize `src` into a flat vector.  Comments are skipped (replaced by
-// a single whitespace token).  String/char literals are kept as opaque
-// blobs.  Preprocessor directives are kept as single tokens.
-static std::vector<token> tokenize(const std::string &src)
-{
-  std::vector<token> tokens;
-  size_t i = 0;
+  std::vector<pp_range> ranges;
   const size_t n = src.size();
+  size_t i = 0;
+  bool at_line_start = true;
 
   while (i < n)
   {
-    // --- whitespace ---
-    if (std::isspace(static_cast<unsigned char>(src[i])))
+    const char c = src[i];
+    if (c == '\n')
     {
-      size_t start = i;
-      while (i < n && std::isspace(static_cast<unsigned char>(src[i])))
-        ++i;
-      tokens.push_back(
-        {tok_kind::whitespace, src.substr(start, i - start), start});
+      at_line_start = true;
+      ++i;
       continue;
     }
-
-    // --- line comment ---
-    if (i + 1 < n && src[i] == '/' && src[i + 1] == '/')
+    if (c == ' ' || c == '\t' || c == '\r' || c == '\f' || c == '\v')
     {
-      size_t start = i;
-      while (i < n && src[i] != '\n')
-        ++i;
-      tokens.push_back(
-        {tok_kind::whitespace, src.substr(start, i - start), start});
+      ++i;
       continue;
     }
-
-    // --- block comment ---
-    if (i + 1 < n && src[i] == '/' && src[i + 1] == '*')
+    if (c == '#' && at_line_start)
     {
       size_t start = i;
-      i += 2;
-      while (i + 1 < n && !(src[i] == '*' && src[i + 1] == '/'))
-        ++i;
-      if (i + 1 < n)
-        i += 2;
-      tokens.push_back(
-        {tok_kind::whitespace, src.substr(start, i - start), start});
-      continue;
-    }
-
-    // --- preprocessor directive (# at the beginning of a line) ---
-    if (src[i] == '#')
-    {
-      // check it's at line start (only whitespace before on this line)
-      bool at_line_start = true;
-      for (size_t j = i; j > 0; --j)
+      ++i;
+      while (i < n)
       {
-        char c = src[j - 1];
-        if (c == '\n')
-          break;
-        if (!std::isspace(static_cast<unsigned char>(c)))
+        if (src[i] == '\n')
         {
-          at_line_start = false;
-          break;
-        }
-      }
-      if (at_line_start)
-      {
-        size_t start = i;
-        while (i < n)
-        {
-          if (src[i] == '\n')
+          if (i > 0 && src[i - 1] == '\\')
           {
-            // check for line continuation
-            if (i > 0 && src[i - 1] == '\\')
-            {
-              ++i;
-              continue;
-            }
             ++i;
-            break;
+            continue;
           }
           ++i;
+          break;
         }
-        tokens.push_back(
-          {tok_kind::pp_directive, src.substr(start, i - start), start});
-        continue;
-      }
-    }
-
-    // --- string literal ---
-    if (src[i] == '"')
-    {
-      size_t start = i;
-      ++i;
-      while (i < n && src[i] != '"')
-      {
-        if (src[i] == '\\' && i + 1 < n)
-          ++i; // skip escaped char
         ++i;
       }
-      if (i < n)
-        ++i; // consume closing quote
+      ranges.push_back({start, i});
+      at_line_start = true;
+      continue;
+    }
+    at_line_start = false;
+    ++i;
+  }
+  return ranges;
+}
+
+// Map Clang's raw token kind to our coarse classification.
+static tok_kind map_clang_kind(const clang::Token &t)
+{
+  using K = clang::tok::TokenKind;
+  switch (t.getKind())
+  {
+  case K::raw_identifier:
+    return tok_kind::identifier;
+  case K::numeric_constant:
+    return tok_kind::number;
+  case K::string_literal:
+  case K::wide_string_literal:
+  case K::utf8_string_literal:
+  case K::utf16_string_literal:
+  case K::utf32_string_literal:
+    return tok_kind::string_lit;
+  case K::char_constant:
+  case K::wide_char_constant:
+  case K::utf8_char_constant:
+  case K::utf16_char_constant:
+  case K::utf32_char_constant:
+    return tok_kind::char_lit;
+  default:
+    return tok_kind::punctuation;
+  }
+}
+
+static std::string spelling_of(
+  const clang::Token &t,
+  const clang::SourceManager &sm,
+  const clang::LangOptions &lo)
+{
+  if (t.is(clang::tok::raw_identifier))
+    return t.getRawIdentifier().str();
+  return clang::Lexer::getSpelling(t, sm, lo);
+}
+
+// Tokenize `src` into a flat vector using Clang's raw lexer.
+// Comments are skipped.  String/char literals are kept as opaque blobs.
+// Preprocessor directives are synthesized as single `pp_directive` tokens
+// (byte-exact with the prior hand-rolled tokenizer) so Layer B consumers
+// can keep skipping them wholesale via `skip_ws()`.
+static std::vector<token> tokenize(const std::string &src)
+{
+  std::vector<token> tokens;
+  const size_t n = src.size();
+
+  // Permissive C/GNU mode: we only need structurally correct tokenization.
+  // The user's real -std=... is honored later by Clang's own parse pass.
+  clang::LangOptions LO;
+  LO.C17 = 1;
+  LO.GNUMode = 1;
+  LO.GNUKeywords = 1;
+  LO.Digraphs = 1;
+
+#if CLANG_VERSION_MAJOR >= 21
+  auto DiagOpts = std::make_shared<clang::DiagnosticOptions>();
+#else
+  llvm::IntrusiveRefCntPtr<clang::DiagnosticOptions> DiagOpts(
+    new clang::DiagnosticOptions());
+#endif
+  llvm::IntrusiveRefCntPtr<clang::DiagnosticIDs> diag_ids(
+    new clang::DiagnosticIDs());
+  clang::DiagnosticsEngine diags(
+    diag_ids,
+#if CLANG_VERSION_MAJOR >= 21
+    *DiagOpts,
+#else
+    &*DiagOpts,
+#endif
+    new clang::IgnoringDiagConsumer(),
+    /*ShouldOwnClient=*/true);
+
+  clang::FileSystemOptions fs_opts;
+  clang::FileManager fm(fs_opts);
+  clang::SourceManager sm(diags, fm);
+
+  std::unique_ptr<llvm::MemoryBuffer> buf = llvm::MemoryBuffer::getMemBuffer(
+    llvm::StringRef(src), /*BufferName=*/"", /*RequiresNullTerminator=*/true);
+  llvm::MemoryBufferRef buf_ref = buf->getMemBufferRef();
+  clang::FileID fid = sm.createFileID(std::move(buf));
+  sm.setMainFileID(fid);
+
+  clang::Lexer lex(fid, buf_ref, sm, LO);
+  lex.SetCommentRetentionState(false);
+
+  std::vector<pp_range> pp = scan_pp_directives(src);
+  size_t pi = 0;
+  auto emit_pending_pp = [&](size_t upto) {
+    while (pi < pp.size() && pp[pi].end <= upto)
+    {
       tokens.push_back(
-        {tok_kind::string_lit, src.substr(start, i - start), start});
-      continue;
+        {tok_kind::pp_directive,
+         src.substr(pp[pi].start, pp[pi].end - pp[pi].start),
+         pp[pi].start});
+      ++pi;
     }
+  };
 
-    // --- character literal ---
-    if (src[i] == '\'')
+  clang::Token t;
+  while (true)
+  {
+    lex.LexFromRawLexer(t);
+    if (t.is(clang::tok::eof))
     {
-      size_t start = i;
-      ++i;
-      while (i < n && src[i] != '\'')
-      {
-        if (src[i] == '\\' && i + 1 < n)
-          ++i;
-        ++i;
-      }
-      if (i < n)
-        ++i;
-      tokens.push_back(
-        {tok_kind::char_lit, src.substr(start, i - start), start});
+      emit_pending_pp(n);
+      break;
+    }
+    const size_t off = sm.getFileOffset(t.getLocation());
+    // Swallow any raw token whose start offset is inside a pp-directive range.
+    if (pi < pp.size() && off >= pp[pi].start && off < pp[pi].end)
       continue;
-    }
-
-    // --- identifier / keyword ---
-    if (is_ident_start(src[i]))
-    {
-      size_t start = i;
-      while (i < n && is_ident_cont(src[i]))
-        ++i;
-      tokens.push_back(
-        {tok_kind::identifier, src.substr(start, i - start), start});
-      continue;
-    }
-
-    // --- number ---
-    if (std::isdigit(static_cast<unsigned char>(src[i])))
-    {
-      size_t start = i;
-      while (i < n && (is_ident_cont(src[i]) || src[i] == '.'))
-        ++i;
-      // Handle suffixes like 0x, exponents
-      tokens.push_back({tok_kind::number, src.substr(start, i - start), start});
-      continue;
-    }
-
-    // --- punctuation (single char) ---
-    {
-      tokens.push_back({tok_kind::punctuation, std::string(1, src[i]), i});
-      ++i;
-    }
+    emit_pending_pp(off);
+    tokens.push_back({map_clang_kind(t), spelling_of(t, sm, LO), off});
   }
 
   tokens.push_back({tok_kind::eof, "", n});
@@ -1010,6 +1041,7 @@ static std::string rewrite_identifiers(
 
   auto toks = tokenize(text);
   std::string result;
+  size_t cursor = 0;            // next unemitted byte of `text`
   bool after_member_op = false; // true after . or ->
   for (size_t ti = 0; ti < toks.size(); ++ti)
   {
@@ -1017,38 +1049,35 @@ static std::string rewrite_identifiers(
     if (t.kind == tok_kind::eof)
       break;
 
-    if (t.kind == tok_kind::identifier)
+    // Copy any interstitial bytes (whitespace, comments) preceding this
+    // token verbatim from the input.  Clang's raw lexer skips whitespace
+    // and comments, so we reconstruct them from source offsets here to
+    // keep the rewrite output formatted identically to its input.
+    if (t.pos > cursor)
+      result += text.substr(cursor, t.pos - cursor);
+
+    bool replaced = false;
+    if (t.kind == tok_kind::identifier && !after_member_op)
     {
-      // Don't replace identifiers after . or -> (member access)
-      if (!after_member_op)
+      auto it = replacements.find(t.text);
+      if (it != replacements.end())
       {
-        auto it = replacements.find(t.text);
-        if (it != replacements.end())
-        {
-          result += it->second;
-          after_member_op = false;
-          continue;
-        }
+        result += it->second;
+        replaced = true;
       }
+    }
+    if (!replaced)
+      result += t.text;
+
+    if (t.kind == tok_kind::punctuation && (t.text == "." || t.text == "->"))
+      after_member_op = true;
+    else
       after_member_op = false;
-    }
-    else if (t.kind == tok_kind::punctuation)
-    {
-      if (t.text == ".")
-        after_member_op = true;
-      else if (
-        t.text == ">" && ti > 0 && toks[ti - 1].kind == tok_kind::punctuation &&
-        toks[ti - 1].text == "-")
-        after_member_op = true;
-      else if (t.kind != tok_kind::whitespace)
-        after_member_op = false;
-    }
-    else if (t.kind != tok_kind::whitespace)
-    {
-      after_member_op = false;
-    }
-    result += t.text;
+
+    cursor = t.pos + t.text.size();
   }
+  if (cursor < text.size())
+    result += text.substr(cursor);
   return result;
 }
 
@@ -1066,8 +1095,7 @@ static std::map<std::string, std::string> build_capture_replacements(
       m[c.name] =
         "(*" + capture_global_name(enclosing, func_name, c.name) + ")";
     else
-      m[c.name] =
-        "(*" + capture_param_name(enclosing, func_name, c.name) + ")";
+      m[c.name] = "(*" + capture_param_name(enclosing, func_name, c.name) + ")";
   }
   return m;
 }
@@ -1523,8 +1551,7 @@ static std::string transform_one_pass(const std::string &src)
             new_params += ", ";
           new_params +=
             nf.captures[ci].type_text + " *" +
-            capture_param_name(
-              nf.enclosing, nf.name, nf.captures[ci].name);
+            capture_param_name(nf.enclosing, nf.name, nf.captures[ci].name);
         }
 
         if (!no_params)
