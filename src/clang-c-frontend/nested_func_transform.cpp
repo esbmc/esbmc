@@ -23,10 +23,12 @@ CC_DIAGNOSTIC_POP()
 #include <cassert>
 #include <cstdio>
 #include <fstream>
+#include <functional>
 #include <map>
 #include <memory>
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 // A local variable declaration found in an enclosing function scope.
@@ -509,11 +511,241 @@ static bool try_parse_func_def(
   return true;
 }
 
-// Collect local variable declarations from a function body.
-// This is a best-effort heuristic that handles common patterns:
-//   type [*]* name [= ...] ;
-//   type [*]* name , name2 ;
-// Also includes function parameters.
+// Try to parse a declaration at `toks[idx]`.  Best-effort heuristic covering:
+//   type-keyword(s) [*]* name [= ...] [, name2 ...] ;
+//   typedef-identifier name [= ...] ;            (IDENT IDENT followed by = ; [ or ,)
+//   __label__ name, name, ... ;                  (consumed silently with a warning)
+//   nested-function definition: ret-type name ( ... ) { ... }   (consumed, no vars)
+//
+// Returns a token index immediately past the consumed declaration.  If no
+// declaration is recognized at `idx`, returns `idx` unchanged so callers can
+// advance by one.  `out_vars` is cleared on entry and populated with any
+// variables declared (possibly empty for __label__ or nested-function defs).
+static size_t parse_decl_at(
+  const std::vector<token> &toks,
+  size_t idx,
+  size_t end,
+  const std::set<std::string> &nested_func_names,
+  std::vector<local_var> &out_vars)
+{
+  out_vars.clear();
+
+  if (idx >= end || toks[idx].kind != tok_kind::identifier)
+    return idx;
+
+  size_t try_idx = idx;
+  std::string type_str;
+  bool found_type = false;
+
+  // Collect type tokens (type keywords and '*').
+  while (try_idx < end)
+  {
+    size_t next = skip_ws(toks, try_idx);
+    if (next >= end)
+      break;
+
+    const token &t = toks[next];
+    if (t.kind == tok_kind::identifier && is_type_keyword(t.text))
+    {
+      if (!type_str.empty())
+        type_str += " ";
+      type_str += t.text;
+      found_type = true;
+      try_idx = next + 1;
+
+      if (t.text == "struct" || t.text == "union" || t.text == "enum")
+      {
+        size_t tag = skip_ws(toks, try_idx);
+        if (tag < end && toks[tag].kind == tok_kind::identifier)
+        {
+          type_str += " " + toks[tag].text;
+          try_idx = tag + 1;
+        }
+      }
+      continue;
+    }
+
+    if (t.kind == tok_kind::punctuation && t.text == "*" && found_type)
+    {
+      type_str += " *";
+      try_idx = next + 1;
+      continue;
+    }
+
+    break;
+  }
+
+  if (!found_type)
+  {
+    size_t t1 = skip_ws(toks, idx);
+
+    // __label__ declarations (GCC local labels): consume through ';'.
+    if (
+      t1 < end && toks[t1].kind == tok_kind::identifier &&
+      toks[t1].text == "__label__")
+    {
+      log_warning(
+        "GCC __label__ declarations are not supported with "
+        "--gcc-nested-functions; results may be unsound");
+      size_t scan = t1 + 1;
+      while (scan < end)
+      {
+        if (toks[scan].kind == tok_kind::punctuation && toks[scan].text == ";")
+          return scan + 1;
+        ++scan;
+      }
+      return scan;
+    }
+
+    // Typedef heuristic: IDENT IDENT followed by = ; [ or ,
+    if (
+      t1 < end && toks[t1].kind == tok_kind::identifier &&
+      !is_type_keyword(toks[t1].text) && !is_non_func_keyword(toks[t1].text))
+    {
+      size_t t2 = skip_ws(toks, t1 + 1);
+      if (
+        t2 < end && toks[t2].kind == tok_kind::identifier &&
+        !is_type_keyword(toks[t2].text) &&
+        !is_non_func_keyword(toks[t2].text) &&
+        !nested_func_names.count(toks[t2].text))
+      {
+        size_t t3 = skip_ws(toks, t2 + 1);
+        if (
+          t3 < end && toks[t3].kind == tok_kind::punctuation &&
+          (toks[t3].text == "=" || toks[t3].text == ";" ||
+           toks[t3].text == "[" || toks[t3].text == ","))
+        {
+          out_vars.push_back({toks[t1].text, toks[t2].text});
+          size_t scan = t3;
+          while (scan < end)
+          {
+            if (
+              toks[scan].kind == tok_kind::punctuation &&
+              toks[scan].text == ";")
+              return scan + 1;
+            ++scan;
+          }
+          return scan;
+        }
+      }
+    }
+    return idx;
+  }
+
+  // found_type: parse one or more: name [= expr] [, ...]  ;  OR a nested
+  // function definition (skipped, no vars added).
+  while (true)
+  {
+    size_t name_idx = skip_ws(toks, try_idx);
+    if (
+      name_idx >= end || toks[name_idx].kind != tok_kind::identifier ||
+      is_type_keyword(toks[name_idx].text))
+      break;
+
+    std::string var_name = toks[name_idx].text;
+
+    // Nested function definition: skip params + body, do not add as var.
+    if (nested_func_names.count(var_name))
+    {
+      size_t skip = skip_ws(toks, name_idx + 1);
+      if (
+        skip < end && toks[skip].kind == tok_kind::punctuation &&
+        toks[skip].text == "(")
+      {
+        int pd = 1;
+        ++skip;
+        while (skip < end && pd > 0)
+        {
+          if (toks[skip].kind == tok_kind::punctuation)
+          {
+            if (toks[skip].text == "(")
+              ++pd;
+            else if (toks[skip].text == ")")
+              --pd;
+          }
+          ++skip;
+        }
+        size_t brace = skip_ws(toks, skip);
+        if (
+          brace < end && toks[brace].kind == tok_kind::punctuation &&
+          toks[brace].text == "{")
+        {
+          int bd = 1;
+          ++brace;
+          while (brace < end && bd > 0)
+          {
+            if (toks[brace].kind == tok_kind::punctuation)
+            {
+              if (toks[brace].text == "{")
+                ++bd;
+              else if (toks[brace].text == "}")
+                --bd;
+            }
+            ++brace;
+          }
+          try_idx = brace;
+          goto done;
+        }
+      }
+      break;
+    }
+
+    // Check what follows: = , ; or [ signals a declaration.
+    size_t after = skip_ws(toks, name_idx + 1);
+    if (after >= end)
+      break;
+
+    bool is_var = toks[after].kind == tok_kind::punctuation &&
+                  (toks[after].text == "=" || toks[after].text == "," ||
+                   toks[after].text == ";" || toks[after].text == "[");
+    if (!is_var)
+      break;
+
+    out_vars.push_back({type_str, var_name});
+
+    // Skip to the next ',' or ';' at depth 0.
+    size_t scan = after;
+    int skip_depth = 0;
+    bool more = false;
+    while (scan < end)
+    {
+      if (toks[scan].kind == tok_kind::punctuation)
+      {
+        if (
+          toks[scan].text == "(" || toks[scan].text == "[" ||
+          toks[scan].text == "{")
+          ++skip_depth;
+        else if (
+          toks[scan].text == ")" || toks[scan].text == "]" ||
+          toks[scan].text == "}")
+          --skip_depth;
+        else if (skip_depth == 0 && toks[scan].text == ",")
+        {
+          try_idx = scan + 1;
+          more = true;
+          break;
+        }
+        else if (skip_depth == 0 && toks[scan].text == ";")
+        {
+          try_idx = scan + 1;
+          goto done;
+        }
+      }
+      ++scan;
+    }
+    if (!more)
+      break;
+  }
+
+done:
+  // Consume at least the type tokens even if no name followed; this matches
+  // the prior walker behaviour that treated `int` anywhere as a decl marker.
+  return try_idx;
+}
+
+// Collect local variable declarations from a function body at depth 1 only.
+// Used to enumerate enclosing-function locals before the scope-aware walker
+// analyses nested-function bodies.
 static std::vector<local_var> collect_local_vars(
   const std::vector<token> &toks,
   size_t body_start_tok,
@@ -521,262 +753,39 @@ static std::vector<local_var> collect_local_vars(
   const std::set<std::string> &nested_func_names)
 {
   std::vector<local_var> vars;
-  size_t idx = body_start_tok;
-
-  // We only look at depth 1 (the direct function body, not nested blocks)
+  std::vector<local_var> decl;
   int depth = 0;
+  size_t idx = body_start_tok;
 
   while (idx < body_end_tok)
   {
     if (toks[idx].kind == tok_kind::punctuation)
     {
       if (toks[idx].text == "{")
+      {
         ++depth;
-      else if (toks[idx].text == "}")
-        --depth;
-    }
-
-    // Only parse declarations at the direct function body level (depth 1).
-    // Skip deeper nesting (depth > 1) to avoid collecting variables from
-    // nested function definitions or inner blocks.
-    if (depth == 1 && toks[idx].kind == tok_kind::identifier)
-    {
-      // Try: type-keyword(s) [*]* name [= ...] [, name2 ...] ;
-      size_t try_idx = idx;
-      std::string type_str;
-      bool found_type = false;
-
-      // Collect type tokens
-      while (try_idx < body_end_tok)
-      {
-        size_t next = skip_ws(toks, try_idx);
-        if (next >= body_end_tok)
-          break;
-
-        const token &t = toks[next];
-        if (t.kind == tok_kind::identifier && is_type_keyword(t.text))
-        {
-          if (!type_str.empty())
-            type_str += " ";
-          type_str += t.text;
-          found_type = true;
-          try_idx = next + 1;
-
-          if (t.text == "struct" || t.text == "union" || t.text == "enum")
-          {
-            size_t tag = skip_ws(toks, try_idx);
-            if (tag < body_end_tok && toks[tag].kind == tok_kind::identifier)
-            {
-              type_str += " " + toks[tag].text;
-              try_idx = tag + 1;
-            }
-          }
-          continue;
-        }
-
-        if (t.kind == tok_kind::punctuation && t.text == "*" && found_type)
-        {
-          type_str += " *";
-          try_idx = next + 1;
-          continue;
-        }
-
-        break;
-      }
-
-      if (!found_type)
-      {
-        size_t t1 = skip_ws(toks, idx);
-        // Skip __label__ declarations (GCC local labels, not variables)
-        if (
-          t1 < body_end_tok && toks[t1].kind == tok_kind::identifier &&
-          toks[t1].text == "__label__")
-        {
-          log_warning(
-            "GCC __label__ declarations are not supported with "
-            "--gcc-nested-functions; results may be unsound");
-          size_t scan = t1 + 1;
-          while (scan < body_end_tok)
-          {
-            if (
-              toks[scan].kind == tok_kind::punctuation &&
-              toks[scan].text == ";")
-            {
-              idx = scan + 1;
-              break;
-            }
-            ++scan;
-          }
-          if (scan >= body_end_tok)
-            idx = scan;
-          continue;
-        }
-        // Typedef heuristic: IDENT IDENT followed by = ; [ or ,
-        // e.g. "aligned jj;" where aligned is a typedef
-        if (
-          t1 < body_end_tok && toks[t1].kind == tok_kind::identifier &&
-          !is_type_keyword(toks[t1].text) &&
-          !is_non_func_keyword(toks[t1].text))
-        {
-          size_t t2 = skip_ws(toks, t1 + 1);
-          if (
-            t2 < body_end_tok && toks[t2].kind == tok_kind::identifier &&
-            !is_type_keyword(toks[t2].text) &&
-            !is_non_func_keyword(toks[t2].text) &&
-            !nested_func_names.count(toks[t2].text))
-          {
-            size_t t3 = skip_ws(toks, t2 + 1);
-            if (
-              t3 < body_end_tok && toks[t3].kind == tok_kind::punctuation &&
-              (toks[t3].text == "=" || toks[t3].text == ";" ||
-               toks[t3].text == "[" || toks[t3].text == ","))
-            {
-              vars.push_back({toks[t1].text, toks[t2].text});
-              // Skip past this declaration
-              size_t scan = t3;
-              while (scan < body_end_tok)
-              {
-                if (
-                  toks[scan].kind == tok_kind::punctuation &&
-                  toks[scan].text == ";")
-                {
-                  idx = scan + 1;
-                  break;
-                }
-                ++scan;
-              }
-              if (scan >= body_end_tok)
-                idx = scan;
-              continue;
-            }
-          }
-        }
         ++idx;
         continue;
       }
-
-      // Now expect one or more: name [= expr] [, ...]  ;
-      while (true)
+      if (toks[idx].text == "}")
       {
-        size_t name_idx = skip_ws(toks, try_idx);
-        if (
-          name_idx >= body_end_tok ||
-          toks[name_idx].kind != tok_kind::identifier ||
-          is_type_keyword(toks[name_idx].text))
-          break;
-
-        std::string var_name = toks[name_idx].text;
-
-        // Don't treat nested function names as variables.
-        // Skip the entire nested function definition (params + body).
-        if (nested_func_names.count(var_name))
-        {
-          size_t skip = skip_ws(toks, name_idx + 1);
-          if (
-            skip < body_end_tok && toks[skip].kind == tok_kind::punctuation &&
-            toks[skip].text == "(")
-          {
-            // Skip past matching )
-            int pd = 1;
-            ++skip;
-            while (skip < body_end_tok && pd > 0)
-            {
-              if (toks[skip].kind == tok_kind::punctuation)
-              {
-                if (toks[skip].text == "(")
-                  ++pd;
-                else if (toks[skip].text == ")")
-                  --pd;
-              }
-              ++skip;
-            }
-            // Skip past matching }
-            size_t brace = skip_ws(toks, skip);
-            if (
-              brace < body_end_tok &&
-              toks[brace].kind == tok_kind::punctuation &&
-              toks[brace].text == "{")
-            {
-              int bd = 1;
-              ++brace;
-              while (brace < body_end_tok && bd > 0)
-              {
-                if (toks[brace].kind == tok_kind::punctuation)
-                {
-                  if (toks[brace].text == "{")
-                    ++bd;
-                  else if (toks[brace].text == "}")
-                    --bd;
-                }
-                ++brace;
-              }
-              try_idx = brace;
-              goto done_with_decl;
-            }
-          }
-          break;
-        }
-
-        // Check what follows: = or , or ; means it's a declaration
-        size_t after = skip_ws(toks, name_idx + 1);
-        if (after >= body_end_tok)
-          break;
-
-        bool is_var = false;
-        if (
-          toks[after].kind == tok_kind::punctuation &&
-          (toks[after].text == "=" || toks[after].text == "," ||
-           toks[after].text == ";"))
-        {
-          is_var = true;
-        }
-        // Also handle: name [ ... ] = ... (array)
-        if (
-          toks[after].kind == tok_kind::punctuation && toks[after].text == "[")
-        {
-          is_var = true;
-        }
-
-        if (is_var)
-        {
-          vars.push_back({type_str, var_name});
-
-          // Skip to , or ;
-          size_t scan = after;
-          int skip_depth = 0;
-          while (scan < body_end_tok)
-          {
-            if (toks[scan].kind == tok_kind::punctuation)
-            {
-              if (
-                toks[scan].text == "(" || toks[scan].text == "[" ||
-                toks[scan].text == "{")
-                ++skip_depth;
-              else if (
-                toks[scan].text == ")" || toks[scan].text == "]" ||
-                toks[scan].text == "}")
-                --skip_depth;
-              else if (skip_depth == 0 && toks[scan].text == ",")
-              {
-                try_idx = scan + 1;
-                break;
-              }
-              else if (skip_depth == 0 && toks[scan].text == ";")
-              {
-                try_idx = scan + 1;
-                goto done_with_decl;
-              }
-            }
-            ++scan;
-          }
-          continue;
-        }
-        break;
+        --depth;
+        ++idx;
+        continue;
       }
+    }
 
-    done_with_decl:
-      idx = try_idx;
-      continue;
+    if (depth == 1)
+    {
+      size_t next =
+        parse_decl_at(toks, idx, body_end_tok, nested_func_names, decl);
+      if (next != idx)
+      {
+        for (auto &v : decl)
+          vars.push_back(std::move(v));
+        idx = next;
+        continue;
+      }
     }
 
     ++idx;
@@ -927,69 +936,370 @@ static bool check_fptr_use(
   return false;
 }
 
-// Identify which enclosing variables are captured by a nested function
+// -----------------------------------------------------------------------
+//  Scope-aware walker
+// -----------------------------------------------------------------------
+
+// Find the preceding non-trivia token (skipping pp_directive tokens).
+// Returns `begin` if no such token exists at or after `begin`.
+static size_t
+skip_ws_back(const std::vector<token> &toks, size_t idx, size_t begin)
+{
+  if (idx <= begin)
+    return begin;
+  size_t j = idx - 1;
+  while (j > begin && toks[j].kind == tok_kind::pp_directive)
+    --j;
+  return j;
+}
+
+// Given `idx` points at a control-flow keyword followed (after skip_ws) by
+// "(", return the token index immediately past the end of the statement it
+// governs.  Recurses on nested control flow in single-statement bodies.
+// Returns `end` if malformed input.
+static size_t
+find_control_stmt_end(const std::vector<token> &toks, size_t idx, size_t end)
+{
+  if (idx >= end)
+    return end;
+
+  size_t i = idx + 1;
+  i = skip_ws(toks, i);
+  if (i >= end || toks[i].kind != tok_kind::punctuation || toks[i].text != "(")
+    return end;
+
+  // Scan to the matching ')'.
+  int pd = 1;
+  ++i;
+  while (i < end && pd > 0)
+  {
+    if (toks[i].kind == tok_kind::punctuation)
+    {
+      if (toks[i].text == "(")
+        ++pd;
+      else if (toks[i].text == ")")
+        --pd;
+    }
+    ++i;
+  }
+
+  // Body start.
+  i = skip_ws(toks, i);
+  if (i >= end)
+    return end;
+
+  // Block body: scan to matching '}'.
+  if (toks[i].kind == tok_kind::punctuation && toks[i].text == "{")
+  {
+    int bd = 1;
+    ++i;
+    while (i < end && bd > 0)
+    {
+      if (toks[i].kind == tok_kind::punctuation)
+      {
+        if (toks[i].text == "{")
+          ++bd;
+        else if (toks[i].text == "}")
+          --bd;
+      }
+      ++i;
+    }
+    return i;
+  }
+
+  // Nested control flow as body: recurse.
+  if (toks[i].kind == tok_kind::identifier)
+  {
+    const std::string &kw = toks[i].text;
+    if (kw == "for" || kw == "while" || kw == "if" || kw == "switch")
+      return find_control_stmt_end(toks, i, end);
+  }
+
+  // Single-statement body: scan to ';' at paren/brace depth 0.
+  int d = 0;
+  while (i < end)
+  {
+    if (toks[i].kind == tok_kind::punctuation)
+    {
+      if (toks[i].text == "(" || toks[i].text == "[" || toks[i].text == "{")
+        ++d;
+      else if (
+        toks[i].text == ")" || toks[i].text == "]" || toks[i].text == "}")
+        --d;
+      else if (d == 0 && toks[i].text == ";")
+        return i + 1;
+    }
+    ++i;
+  }
+  return i;
+}
+
+// Scope-aware walker over a token range.  Supports block scopes (`{ ... }`
+// in statement position) and C99 `for`-init scopes (the init declaration is
+// live through the loop body).  Non-scope `{` braces (compound literals,
+// designated initializers, GCC statement-expressions, struct/union/enum
+// member lists) are tracked but do not push or add to any scope.
+struct scope_walker
+{
+  const std::vector<token> &toks;
+  size_t begin;
+  size_t end;
+  const std::set<std::string> &nested_names;
+
+  // Scopes stack; innermost scope last.  Always at least one entry (root).
+  std::vector<std::set<std::string>> scopes;
+  // Aligned with every `{` seen; true if it pushed a scope onto `scopes`.
+  std::vector<bool> brace_pushed_scope;
+  // Depth of currently-open non-scope braces (used to suppress add_decl
+  // inside struct/union/enum member lists, compound literals, and GCC
+  // statement-expressions).
+  int nonscope_depth = 0;
+  // Indices at which a `for`-scope should be popped (before processing the
+  // token at that index).
+  std::vector<size_t> for_pop_at;
+
+  scope_walker(
+    const std::vector<token> &t,
+    size_t b,
+    size_t e,
+    const std::set<std::string> &nn,
+    std::set<std::string> seed = {})
+    : toks(t), begin(b), end(e), nested_names(nn)
+  {
+    scopes.push_back(std::move(seed));
+  }
+
+  // Any scope on the stack declares `name`?
+  bool declares(const std::string &name) const
+  {
+    for (const auto &s : scopes)
+      if (s.count(name))
+        return true;
+    return false;
+  }
+
+  // Add `name` to the innermost scope.  No-op inside a non-scope brace.
+  void add_decl(const std::string &name)
+  {
+    if (nonscope_depth > 0)
+      return;
+    scopes.back().insert(name);
+  }
+
+  // Call before inspecting `toks[idx]`.  Pops any for-scopes whose governed
+  // statement ended at or before this index.
+  void pre(size_t idx)
+  {
+    while (!for_pop_at.empty() && for_pop_at.back() <= idx)
+    {
+      for_pop_at.pop_back();
+      if (scopes.size() > 1)
+        scopes.pop_back();
+    }
+  }
+
+  // Does `toks[idx]` (which must be `{`) stand in statement position?
+  // Preceding non-trivia token decides: `=` / `,` / `(` / `struct` / `union`
+  // / `enum` (or an identifier tag following one of those) mean non-scope.
+  bool is_block_brace(size_t idx) const
+  {
+    if (idx <= begin)
+      return true;
+    size_t j = skip_ws_back(toks, idx, begin);
+    if (j == idx)
+      return true;
+    const token &p = toks[j];
+    if (p.kind == tok_kind::punctuation)
+    {
+      if (p.text == "=" || p.text == "," || p.text == "(")
+        return false;
+      return true;
+    }
+    if (p.kind == tok_kind::identifier)
+    {
+      if (p.text == "struct" || p.text == "union" || p.text == "enum")
+        return false;
+      // tag-identifier after struct/union/enum: also a member list.
+      if (j > begin)
+      {
+        size_t k = skip_ws_back(toks, j, begin);
+        if (
+          k != j && toks[k].kind == tok_kind::identifier &&
+          (toks[k].text == "struct" || toks[k].text == "union" ||
+           toks[k].text == "enum"))
+          return false;
+      }
+      return true;
+    }
+    return true;
+  }
+
+  // Callers invoke these as they step over tokens.
+  void on_open_brace(size_t idx)
+  {
+    bool scope = is_block_brace(idx);
+    brace_pushed_scope.push_back(scope);
+    if (scope)
+      scopes.push_back({});
+    else
+      ++nonscope_depth;
+  }
+  void on_close_brace()
+  {
+    if (brace_pushed_scope.empty())
+      return;
+    bool was_scope = brace_pushed_scope.back();
+    brace_pushed_scope.pop_back();
+    if (was_scope)
+    {
+      if (scopes.size() > 1)
+        scopes.pop_back();
+    }
+    else if (nonscope_depth > 0)
+    {
+      --nonscope_depth;
+    }
+  }
+  void enter_for_scope(size_t stmt_end)
+  {
+    scopes.push_back({});
+    for_pop_at.push_back(stmt_end);
+  }
+};
+
+// Walk a body token range with a scope-aware walker, invoking `on_use` for
+// every identifier use at a point where no scope currently declares it, and
+// recording declarations in the walker.  Declarations are processed at the
+// statement head by pre-adding their declared names to the current scope
+// before processing any individual token — so initializer expressions
+// inside `int x = expr;` are still visited as uses.
+template <class OnUse>
+static void scope_walk(scope_walker &w, OnUse on_use)
+{
+  std::vector<local_var> decl_buf;
+  size_t decl_end = w.begin;
+  size_t idx = w.begin;
+  while (idx < w.end)
+  {
+    w.pre(idx);
+    const token &t = w.toks[idx];
+
+    if (t.kind == tok_kind::punctuation)
+    {
+      if (t.text == "{")
+      {
+        w.on_open_brace(idx);
+        ++idx;
+        continue;
+      }
+      if (t.text == "}")
+      {
+        w.on_close_brace();
+        ++idx;
+        continue;
+      }
+    }
+
+    // `for` / `while` / `if` / `switch` — push a scope that extends through
+    // the governed statement.  Only `for` permits a declaration in the
+    // init, but the other keywords in C99 cannot introduce new names, so a
+    // pushed empty scope is harmless there and keeps scope-tracking uniform.
+    if (t.kind == tok_kind::identifier)
+    {
+      const std::string &kw = t.text;
+      if (kw == "for" || kw == "while" || kw == "if" || kw == "switch")
+      {
+        size_t after = skip_ws(w.toks, idx + 1);
+        if (
+          after < w.end && w.toks[after].kind == tok_kind::punctuation &&
+          w.toks[after].text == "(")
+        {
+          size_t stmt_end = find_control_stmt_end(w.toks, idx, w.end);
+          w.enter_for_scope(stmt_end);
+          ++idx;
+          continue;
+        }
+      }
+    }
+
+    // At the head of a potential declaration, pre-add the declared names
+    // to the current scope so any reference to them (including the name
+    // tokens themselves) is seen as "declared".  Do NOT skip the decl's
+    // tokens — the initializer may contain identifier uses that must be
+    // processed normally.
+    if (idx >= decl_end)
+    {
+      size_t next = parse_decl_at(w.toks, idx, w.end, w.nested_names, decl_buf);
+      if (next != idx)
+      {
+        for (const auto &v : decl_buf)
+          w.add_decl(v.name);
+        decl_end = next;
+      }
+    }
+
+    // Identifier use — caller decides what to do with it.
+    if (t.kind == tok_kind::identifier)
+      on_use(idx, t.text);
+    ++idx;
+  }
+}
+
+// Identify which enclosing variables are captured by a nested function.
+// Uses a scope-aware walker so that inner-block, function-parameter, or
+// `for`-init declarations correctly shadow outer names.
 static std::vector<local_var> find_captures(
   const std::string &body_text,
   const std::vector<local_var> &enclosing_vars,
   const std::string &params_text)
 {
   auto body_toks = tokenize(body_text);
+  auto params_toks = tokenize(params_text);
   auto param_vars = collect_params(params_text);
 
-  // Build set of parameter names (these shadow enclosing vars)
   std::set<std::string> param_names;
   for (const auto &p : param_vars)
     param_names.insert(p.name);
 
-  // Build set of local variable names declared inside the body
-  std::set<std::string> no_nested;
-  auto locals = collect_local_vars(body_toks, 0, body_toks.size(), no_nested);
-  std::set<std::string> local_names;
-  for (const auto &l : locals)
-    local_names.insert(l.name);
-
-  std::vector<local_var> captures;
-  std::set<std::string> captured_names;
-
-  // Also tokenize params to find captured vars in VLA expressions
-  auto params_toks = tokenize(params_text);
-
+  // Index enclosing names for O(1) membership.
+  std::set<std::string> enclosing_names;
   for (const auto &ev : enclosing_vars)
-  {
-    if (param_names.count(ev.name) || local_names.count(ev.name))
-      continue; // shadowed
+    enclosing_names.insert(ev.name);
 
-    if (captured_names.count(ev.name))
-      continue;
+  std::set<std::string> referenced;
 
-    // Check if this identifier appears in the body or param types
-    bool found = false;
-    for (const auto &t : body_toks)
+  std::set<std::string> no_nested;
+  scope_walker w(body_toks, 0, body_toks.size(), no_nested, param_names);
+  scope_walk(w, [&](size_t idx, const std::string &name) {
+    if (!enclosing_names.count(name))
+      return;
+    if (w.declares(name))
+      return;
+    // Don't treat an identifier after a member-access operator as a
+    // reference to an outer variable.
+    if (idx > 0)
     {
-      if (t.kind == tok_kind::identifier && t.text == ev.name)
-      {
-        found = true;
-        break;
-      }
+      size_t prev = skip_ws_back(body_toks, idx, 0);
+      if (
+        prev != idx && body_toks[prev].kind == tok_kind::punctuation &&
+        (body_toks[prev].text == "." || body_toks[prev].text == "->"))
+        return;
     }
-    if (!found)
-    {
-      for (const auto &t : params_toks)
-      {
-        if (t.kind == tok_kind::identifier && t.text == ev.name)
-        {
-          found = true;
-          break;
-        }
-      }
-    }
-    if (found)
-    {
+    referenced.insert(name);
+  });
+
+  // Also check params_text for uses inside VLA parameter types.
+  for (const auto &t : params_toks)
+    if (
+      t.kind == tok_kind::identifier && enclosing_names.count(t.text) &&
+      !param_names.count(t.text))
+      referenced.insert(t.text);
+
+  // Emit in the original enclosing_vars order.
+  std::vector<local_var> captures;
+  for (const auto &ev : enclosing_vars)
+    if (referenced.count(ev.name))
       captures.push_back(ev);
-      captured_names.insert(ev.name);
-    }
-  }
-
   return captures;
 }
 
@@ -1032,27 +1342,102 @@ static std::string capture_param_name(
 // -----------------------------------------------------------------------
 
 // Replace identifiers in `text` according to `replacements` map.
+// Replace identifiers in `text` according to `replacements`.  Scope-aware:
+// names listed in `scope_aware_names` are replaced only when no enclosing
+// scope on the walker's stack declares them (so inner-block declarations
+// and `for`-init declarations properly shadow outer captures).  Names not
+// in `scope_aware_names` (e.g. sibling-nested-function renames) are
+// replaced unconditionally — those are globally unique in the transform's
+// name scheme and never introduced as local names.  The after-member-op
+// heuristic (do not replace identifiers following `.` or `->`) always
+// applies.
 static std::string rewrite_identifiers(
   const std::string &text,
-  const std::map<std::string, std::string> &replacements)
+  const std::map<std::string, std::string> &replacements,
+  const std::set<std::string> *scope_aware_names = nullptr,
+  std::set<std::string> seed_scope = {})
 {
   if (replacements.empty())
     return text;
 
   auto toks = tokenize(text);
+  std::set<std::string> no_nested;
+  scope_walker w(toks, 0, toks.size(), no_nested, std::move(seed_scope));
+
+  std::vector<local_var> decl_buf;
+  size_t decl_end = 0; // tokens up to (not including) this index are part of
+                       // a decl whose names are already added to the scope.
+
   std::string result;
-  size_t cursor = 0;            // next unemitted byte of `text`
-  bool after_member_op = false; // true after . or ->
-  for (size_t ti = 0; ti < toks.size(); ++ti)
+  size_t cursor = 0;
+  bool after_member_op = false;
+
+  for (size_t ti = 0; ti < toks.size();)
   {
+    w.pre(ti);
     const auto &t = toks[ti];
     if (t.kind == tok_kind::eof)
       break;
 
-    // Copy any interstitial bytes (whitespace, comments) preceding this
-    // token verbatim from the input.  Clang's raw lexer skips whitespace
-    // and comments, so we reconstruct them from source offsets here to
-    // keep the rewrite output formatted identically to its input.
+    // Structural: `{`, `}`.
+    if (t.kind == tok_kind::punctuation)
+    {
+      if (t.text == "{")
+      {
+        w.on_open_brace(ti);
+        if (t.pos > cursor)
+          result += text.substr(cursor, t.pos - cursor);
+        result += t.text;
+        cursor = t.pos + t.text.size();
+        after_member_op = false;
+        ++ti;
+        continue;
+      }
+      if (t.text == "}")
+      {
+        w.on_close_brace();
+        if (t.pos > cursor)
+          result += text.substr(cursor, t.pos - cursor);
+        result += t.text;
+        cursor = t.pos + t.text.size();
+        after_member_op = false;
+        ++ti;
+        continue;
+      }
+    }
+
+    // `for`/`while`/`if`/`switch` — enter condition-governed scope.
+    if (t.kind == tok_kind::identifier)
+    {
+      const std::string &kw = t.text;
+      if (kw == "for" || kw == "while" || kw == "if" || kw == "switch")
+      {
+        size_t after = skip_ws(toks, ti + 1);
+        if (
+          after < toks.size() && toks[after].kind == tok_kind::punctuation &&
+          toks[after].text == "(")
+        {
+          size_t stmt_end = find_control_stmt_end(toks, ti, toks.size());
+          w.enter_for_scope(stmt_end);
+        }
+      }
+    }
+
+    // At the start of a potential declaration, run parse_decl_at once and
+    // pre-add the declared names to the current scope so that the name
+    // tokens, when visited below, are seen as "declared" and not replaced.
+    if (ti >= decl_end)
+    {
+      size_t next = parse_decl_at(toks, ti, toks.size(), no_nested, decl_buf);
+      if (next != ti)
+      {
+        for (const auto &v : decl_buf)
+          w.add_decl(v.name);
+        decl_end = next;
+      }
+    }
+
+    // Emit interstitial bytes preceding this token.
     if (t.pos > cursor)
       result += text.substr(cursor, t.pos - cursor);
 
@@ -1062,8 +1447,14 @@ static std::string rewrite_identifiers(
       auto it = replacements.find(t.text);
       if (it != replacements.end())
       {
-        result += it->second;
-        replaced = true;
+        bool shadowed = false;
+        if (scope_aware_names && scope_aware_names->count(t.text))
+          shadowed = w.declares(t.text);
+        if (!shadowed)
+        {
+          result += it->second;
+          replaced = true;
+        }
       }
     }
     if (!replaced)
@@ -1075,7 +1466,9 @@ static std::string rewrite_identifiers(
       after_member_op = false;
 
     cursor = t.pos + t.text.size();
+    ++ti;
   }
+
   if (cursor < text.size())
     result += text.substr(cursor);
   return result;
@@ -1100,21 +1493,32 @@ static std::map<std::string, std::string> build_capture_replacements(
   return m;
 }
 
+// Rewrite capture references inside a nested function body.  Sibling
+// renames and inter-sibling call arg injection are handled separately by
+// rewrite_nested_calls after this pass.
 static std::string rewrite_body(
   const std::string &body_text,
+  const std::string &params_text,
   const std::vector<local_var> &captures,
   bool fptr_mode,
   const std::string &enclosing,
-  const std::string &func_name,
-  const std::map<std::string, std::string> &sibling_renames =
-    std::map<std::string, std::string>())
+  const std::string &func_name)
 {
   auto replacements =
     build_capture_replacements(captures, fptr_mode, enclosing, func_name);
-  // Merge sibling renames (original name -> lifted name)
-  for (const auto &[k, v] : sibling_renames)
-    replacements.insert({k, v});
-  return rewrite_identifiers(body_text, replacements);
+
+  // Seed the walker's root scope with parameter names so a parameter that
+  // happens to shadow an enclosing capture name is not rewritten.
+  std::set<std::string> param_seed;
+  for (const auto &p : collect_params(params_text))
+    param_seed.insert(p.name);
+
+  std::set<std::string> scope_aware_names;
+  for (const auto &c : captures)
+    scope_aware_names.insert(c.name);
+
+  return rewrite_identifiers(
+    body_text, replacements, &scope_aware_names, std::move(param_seed));
 }
 
 // Extract the inner parameter list (without outer parens) from params_text
@@ -1126,6 +1530,137 @@ static std::string inner_params(const std::string &params_text)
     params_text.back() == ')')
     return params_text.substr(1, params_text.size() - 2);
   return params_text;
+}
+
+// Collect sibling nested-function names that `nf.body_text` directly calls,
+// using the scope-aware walker so that a local variable named `b` that
+// shadows a sibling nested function also named `b` does not produce a
+// spurious call-graph edge.  Only identifier-name calls followed by `(`
+// count; indirect calls via fptrs are silently skipped (out of scope).
+static std::set<std::string> find_sibling_callees(
+  const std::string &body_text,
+  const std::string &params_text,
+  const std::set<std::string> &sibling_names)
+{
+  std::set<std::string> result;
+  if (sibling_names.empty())
+    return result;
+
+  auto body_toks = tokenize(body_text);
+  auto param_vars = collect_params(params_text);
+
+  std::set<std::string> param_names;
+  for (const auto &p : param_vars)
+    param_names.insert(p.name);
+
+  // Do not pass sibling_names as "nested_names" to the scope walker's
+  // decl parser: sibling definitions themselves are NOT present in the
+  // body_text (the transform operates on each nested function's body in
+  // isolation), so nested_names is empty for local-var detection here.
+  std::set<std::string> no_nested;
+  scope_walker w(body_toks, 0, body_toks.size(), no_nested, param_names);
+
+  scope_walk(w, [&](size_t idx, const std::string &name) {
+    if (!sibling_names.count(name))
+      return;
+    if (w.declares(name))
+      return;
+    size_t next = skip_ws(body_toks, idx + 1);
+    if (
+      next < body_toks.size() &&
+      body_toks[next].kind == tok_kind::punctuation &&
+      body_toks[next].text == "(")
+      result.insert(name);
+  });
+
+  return result;
+}
+
+// Propagate captures along the sibling call graph to a fixed point.
+// After this, each nested function's `captures` list holds its *effective*
+// captures: direct captures plus the captures of every sibling it can
+// transitively call.  Emission order matches the enclosing_vars order so
+// lifted-signature emission, call-site arg injection, and capture-param
+// names line up across all three rewriters.
+static void compute_effective_captures(
+  std::vector<nested_func> &nested,
+  const std::map<std::string, std::vector<local_var>> &enc_vars_by_name)
+{
+  // Group nested indices by their enclosing function.
+  std::map<std::string, std::vector<size_t>> by_enc;
+  for (size_t i = 0; i < nested.size(); ++i)
+    by_enc[nested[i].enclosing].push_back(i);
+
+  for (const auto &[enc_name, indices] : by_enc)
+  {
+    auto it = enc_vars_by_name.find(enc_name);
+    if (it == enc_vars_by_name.end())
+      continue;
+    const auto &enc_vars = it->second;
+
+    // Map variable name -> its position in enc_vars for order preservation.
+    std::map<std::string, size_t> pos_of;
+    for (size_t p = 0; p < enc_vars.size(); ++p)
+      pos_of[enc_vars[p].name] = p;
+
+    std::set<std::string> sibling_names;
+    for (size_t i : indices)
+      sibling_names.insert(nested[i].name);
+
+    // Direct call graph.
+    std::map<std::string, std::set<std::string>> callees;
+    for (size_t i : indices)
+      callees[nested[i].name] = find_sibling_callees(
+        nested[i].body_text, nested[i].params_text, sibling_names);
+
+    // Effective capture set per function name.
+    std::map<std::string, std::set<std::string>> eff;
+    for (size_t i : indices)
+      for (const auto &c : nested[i].captures)
+        eff[nested[i].name].insert(c.name);
+
+    // Fixed-point propagation.  Finite lattice + monotone growth => must
+    // converge.
+    bool changed = true;
+    while (changed)
+    {
+      changed = false;
+      for (size_t i : indices)
+      {
+        auto &my_eff = eff[nested[i].name];
+        for (const auto &callee : callees[nested[i].name])
+        {
+          const auto &callee_eff = eff[callee];
+          for (const auto &c : callee_eff)
+            if (my_eff.insert(c).second)
+              changed = true;
+        }
+      }
+    }
+
+    // Write back.  Preserve enc_vars positional order so downstream
+    // emission order is deterministic across call sites and lifted
+    // signatures.
+    for (size_t i : indices)
+    {
+      std::vector<std::pair<size_t, const local_var *>> ordered;
+      for (const auto &name : eff[nested[i].name])
+      {
+        auto pit = pos_of.find(name);
+        if (pit != pos_of.end())
+          ordered.push_back({pit->second, &enc_vars[pit->second]});
+      }
+      std::sort(
+        ordered.begin(), ordered.end(), [](const auto &a, const auto &b) {
+          return a.first < b.first;
+        });
+      std::vector<local_var> new_caps;
+      new_caps.reserve(ordered.size());
+      for (const auto &[p, lv] : ordered)
+        new_caps.push_back(*lv);
+      nested[i].captures = std::move(new_caps);
+    }
+  }
 }
 
 // -----------------------------------------------------------------------
@@ -1217,6 +1752,145 @@ find_nested_functions(const std::string &src, const std::vector<token> &toks)
   return result;
 }
 
+// A single contiguous replacement in a string: replace [start, end) with `text`.
+struct rewrite_op
+{
+  size_t start;
+  size_t end;
+  std::string text;
+};
+
+// Apply rewrites back-to-front (so earlier offsets stay valid during each
+// replacement).
+static std::string apply_rewrites(std::string s, std::vector<rewrite_op> ops)
+{
+  std::sort(
+    ops.begin(), ops.end(), [](const rewrite_op &a, const rewrite_op &b) {
+      return a.start > b.start;
+    });
+  for (const auto &op : ops)
+    s.replace(op.start, op.end - op.start, op.text);
+  return s;
+}
+
+// Plan rewrites for sibling-nested-function calls within a token range.
+//   - Direct-call sibling: inject `source_for(cap.name)` for each capture
+//     of the callee at the start of the argument list, and rename the
+//     identifier to the callee's lifted name.
+//   - Fptr-mode sibling: rename the identifier to the lifted name.  No
+//     args are injected (fptr-mode callees read captures from statics).
+// Scope-aware: skips call sites where the sibling name is shadowed by a
+// local variable or parameter.  Offsets are into the body string of whose
+// tokens are supplied.
+static std::vector<rewrite_op> plan_nested_call_rewrites(
+  const std::vector<token> &body_toks,
+  size_t tok_begin,
+  size_t tok_end,
+  const std::vector<const nested_func *> &siblings,
+  const std::function<std::string(const std::string &)> &source_for)
+{
+  std::vector<rewrite_op> out;
+  if (siblings.empty())
+    return out;
+
+  std::map<std::string, const nested_func *> by_name;
+  for (const nested_func *s : siblings)
+    by_name[s->name] = s;
+
+  std::set<std::string> no_nested;
+  scope_walker w(body_toks, tok_begin, tok_end, no_nested);
+
+  scope_walk(w, [&](size_t i, const std::string &name) {
+    auto it = by_name.find(name);
+    if (it == by_name.end())
+      return;
+    const nested_func *callee = it->second;
+
+    // Don't rewrite an identifier following a member-access operator.
+    size_t prev = skip_ws_back(body_toks, i, tok_begin);
+    if (
+      prev != i && body_toks[prev].kind == tok_kind::punctuation &&
+      (body_toks[prev].text == "." || body_toks[prev].text == "->"))
+      return;
+
+    std::string lname = lifted_name(callee->enclosing, callee->name);
+
+    if (callee->used_as_fptr)
+    {
+      out.push_back(
+        {body_toks[i].pos, body_toks[i].pos + body_toks[i].text.size(), lname});
+      return;
+    }
+
+    size_t next = skip_ws(body_toks, i + 1);
+    if (
+      next >= tok_end || body_toks[next].kind != tok_kind::punctuation ||
+      body_toks[next].text != "(")
+      return;
+
+    // Match the closing ')'.
+    int pd = 1;
+    size_t close = next + 1;
+    while (close < tok_end && pd > 0)
+    {
+      if (body_toks[close].kind == tok_kind::punctuation)
+      {
+        if (body_toks[close].text == "(")
+          ++pd;
+        else if (body_toks[close].text == ")")
+          --pd;
+      }
+      ++close;
+    }
+
+    std::string extra;
+    for (const auto &cap : callee->captures)
+    {
+      if (!extra.empty())
+        extra += ", ";
+      extra += source_for(cap.name);
+    }
+
+    bool has_args = false;
+    for (size_t j = next + 1; j + 1 < close; ++j)
+    {
+      if (
+        body_toks[j].kind != tok_kind::whitespace &&
+        body_toks[j].kind != tok_kind::pp_directive &&
+        body_toks[j].kind != tok_kind::eof)
+      {
+        has_args = true;
+        break;
+      }
+    }
+
+    if (!extra.empty())
+    {
+      std::string insert = has_args ? extra + ", " : extra;
+      size_t open_paren_end = body_toks[next].pos + 1;
+      out.push_back({open_paren_end, open_paren_end, insert});
+    }
+
+    out.push_back(
+      {body_toks[i].pos, body_toks[i].pos + body_toks[i].text.size(), lname});
+  });
+
+  return out;
+}
+
+// Rewrite sibling-nested-function calls in a standalone body string
+// (local offsets).  See plan_nested_call_rewrites for semantics.
+static std::string rewrite_nested_calls(
+  const std::string &body,
+  const std::vector<const nested_func *> &siblings,
+  const std::function<std::string(const std::string &)> &source_for)
+{
+  auto toks = tokenize(body);
+  auto ops =
+    plan_nested_call_rewrites(toks, 0, toks.size(), siblings, source_for);
+  return apply_rewrites(body, std::move(ops));
+}
+
 // Perform one pass of nested function transformation on `src`.
 // Returns the transformed source, or empty string if no nested functions found.
 static std::string transform_one_pass(const std::string &src)
@@ -1226,6 +1900,10 @@ static std::string transform_one_pass(const std::string &src)
 
   if (nested.empty())
     return {};
+
+  // Cache each enclosing function's (params + depth-1 locals) so the
+  // transitive-capture propagator can reuse it without re-deriving.
+  std::map<std::string, std::vector<local_var>> enc_vars_by_name;
 
   // For each nested function, determine captures and fptr usage
   for (auto &nf : nested)
@@ -1301,7 +1979,12 @@ static std::string transform_one_pass(const std::string &src)
     }
 
     nf.captures = find_captures(nf.body_text, enclosing_vars, nf.params_text);
+    enc_vars_by_name[nf.enclosing] = std::move(enclosing_vars);
   }
+
+  // Propagate captures through sibling calls: if A calls B and B captures
+  // `x`, A must also carry `x` so it can forward at the call site.
+  compute_effective_captures(nested, enc_vars_by_name);
 
   // Sort by def_start descending so we can modify the source back-to-front
   std::sort(
@@ -1317,22 +2000,20 @@ static std::string transform_one_pass(const std::string &src)
   for (const auto &nf : nested)
     modified.replace(nf.def_start, nf.def_end - nf.def_start, "");
 
-  // Re-tokenize the modified source to find and transform call sites
+  // Re-tokenize the modified source to find and transform call sites.
   auto mod_toks = tokenize(modified);
 
-  struct replacement
-  {
-    size_t start;
-    size_t end;
-    std::string text;
-  };
-  std::vector<replacement> replacements;
-
+  // Rewrite calls within each enclosing function's body, passing `&x` as
+  // the source expression for a capture `x` (enclosing-scope variables are
+  // in local scope here).  Scope-aware to avoid rewriting names shadowed
+  // by local variables in the enclosing body.
+  std::vector<rewrite_op> call_ops;
+  std::set<std::string> seen_enclosing;
   for (const auto &nf : nested)
   {
-    std::string lname = lifted_name(nf.enclosing, nf.name);
+    if (!seen_enclosing.insert(nf.enclosing).second)
+      continue;
 
-    // Find the enclosing function's body range in mod_toks to scope replacements
     size_t enc_body_start = 0, enc_body_end = mod_toks.size();
     for (size_t ei = 0; ei < mod_toks.size(); ++ei)
     {
@@ -1352,90 +2033,25 @@ static std::string transform_one_pass(const std::string &src)
       }
     }
 
-    for (size_t i = enc_body_start; i < enc_body_end; ++i)
-    {
-      if (
-        mod_toks[i].kind == tok_kind::identifier && mod_toks[i].text == nf.name)
-      {
-        size_t next = skip_ws(mod_toks, i + 1);
+    std::vector<const nested_func *> siblings_in_enc;
+    for (const auto &s : nested)
+      if (s.enclosing == nf.enclosing)
+        siblings_in_enc.push_back(&s);
 
-        if (nf.used_as_fptr)
-        {
-          replacements.push_back(
-            {mod_toks[i].pos,
-             mod_toks[i].pos + mod_toks[i].text.size(),
-             lname});
-        }
-        else
-        {
-          if (
-            next < mod_toks.size() &&
-            mod_toks[next].kind == tok_kind::punctuation &&
-            mod_toks[next].text == "(")
-          {
-            int pd = 1;
-            size_t close = next + 1;
-            while (close < mod_toks.size() && pd > 0)
-            {
-              if (mod_toks[close].kind == tok_kind::punctuation)
-              {
-                if (mod_toks[close].text == "(")
-                  ++pd;
-                else if (mod_toks[close].text == ")")
-                  --pd;
-              }
-              ++close;
-            }
-            // Insert capture args BEFORE original args (after opening paren)
-            std::string extra_args;
-            for (const auto &cap : nf.captures)
-            {
-              if (!extra_args.empty())
-                extra_args += ", ";
-              extra_args += "&" + cap.name;
-            }
+    auto ops = plan_nested_call_rewrites(
+      mod_toks,
+      enc_body_start,
+      enc_body_end,
+      siblings_in_enc,
+      [](const std::string &name) { return "&" + name; });
 
-            bool has_args = false;
-            for (size_t j = next + 1; j < close - 1; ++j)
-            {
-              if (
-                mod_toks[j].kind != tok_kind::whitespace &&
-                mod_toks[j].kind != tok_kind::eof)
-              {
-                has_args = true;
-                break;
-              }
-            }
-
-            if (!extra_args.empty())
-            {
-              std::string insert_text =
-                has_args ? extra_args + ", " : extra_args;
-              // Insert right after the opening (
-              size_t open_paren_end = mod_toks[next].pos + 1;
-              replacements.push_back(
-                {open_paren_end, open_paren_end, insert_text});
-            }
-
-            replacements.push_back(
-              {mod_toks[i].pos,
-               mod_toks[i].pos + mod_toks[i].text.size(),
-               lname});
-          }
-        }
-      }
-    }
+    call_ops.insert(
+      call_ops.end(),
+      std::make_move_iterator(ops.begin()),
+      std::make_move_iterator(ops.end()));
   }
 
-  std::sort(
-    replacements.begin(),
-    replacements.end(),
-    [](const replacement &a, const replacement &b) {
-      return a.start > b.start;
-    });
-
-  for (const auto &r : replacements)
-    modified.replace(r.start, r.end - r.start, r.text);
+  modified = apply_rewrites(std::move(modified), std::move(call_ops));
 
   // Step 2: Generate lifted functions, grouped by enclosing function
   std::map<std::string, std::string> per_enclosing_preamble;
@@ -1454,13 +2070,12 @@ static std::string transform_one_pass(const std::string &src)
     std::string rewritten_body;
     std::string &preamble = per_enclosing_preamble[nf.enclosing];
 
-    // Build sibling rename map: other nested funcs in the same enclosing
-    std::map<std::string, std::string> sibling_renames;
+    // All nested-function siblings in this enclosing (including `nf`
+    // itself — a recursive self-call is rewritten to its lifted name).
+    std::vector<const nested_func *> siblings_in_enc;
     for (const auto &s : ordered)
-    {
-      if (s.enclosing == nf.enclosing && s.name != nf.name)
-        sibling_renames[s.name] = lifted_name(s.enclosing, s.name);
-    }
+      if (s.enclosing == nf.enclosing)
+        siblings_in_enc.push_back(&s);
 
     if (nf.used_as_fptr)
     {
@@ -1472,12 +2087,16 @@ static std::string transform_one_pass(const std::string &src)
       }
 
       rewritten_body = rewrite_body(
-        nf.body_text,
-        nf.captures,
-        true,
-        nf.enclosing,
-        nf.name,
-        sibling_renames);
+        nf.body_text, nf.params_text, nf.captures, true, nf.enclosing, nf.name);
+
+      // Rewrite sibling calls inside this lifted body.  An fptr-mode
+      // caller reads its captures via statics, so to forward a capture
+      // `x` we pass the caller's static pointer (already of type `T *`).
+      rewritten_body = rewrite_nested_calls(
+        rewritten_body, siblings_in_enc, [&nf](const std::string &name) {
+          return capture_global_name(nf.enclosing, nf.name, name);
+        });
+
       preamble += "static " + nf.return_type + " " + lname + nf.params_text +
                   " " + rewritten_body + "\n";
 
@@ -1511,11 +2130,19 @@ static std::string transform_one_pass(const std::string &src)
     {
       rewritten_body = rewrite_body(
         nf.body_text,
+        nf.params_text,
         nf.captures,
         false,
         nf.enclosing,
-        nf.name,
-        sibling_renames);
+        nf.name);
+
+      // Rewrite sibling calls inside this lifted body.  A direct-call
+      // caller has `T *cap_x` as a parameter; forward that pointer
+      // directly when calling siblings that also need `x`.
+      rewritten_body = rewrite_nested_calls(
+        rewritten_body, siblings_in_enc, [&nf](const std::string &name) {
+          return capture_param_name(nf.enclosing, nf.name, name);
+        });
 
       std::string params_inner = inner_params(nf.params_text);
       std::string trimmed_params;
