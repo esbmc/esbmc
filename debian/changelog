@@ -7,8 +7,9 @@ esbmc (8.2.0-1) noble; urgency=medium
     removing need for a Debian-specific patch.
   * Merge DOWNLOAD_DEPENDENCIES=OFF system-library support into
     ExternalDependencies.cmake, removing need for a Debian-specific patch.
-  * Remove gcc-multilib from Build-Depends: only needed for test runs,
-    not the package build (BUILD_TESTING=OFF).
+  * Add gcc-multilib [amd64 i386] to Build-Depends: required to build
+    clib32.goto (32-bit C library goto binary) in c2goto component.
+    Previous removal caused build failure: bits/libc-header-start.h not found.
   * Move python3-mypy from Depends to Recommends: ESBMC degrades gracefully
     without it (type-checking warnings suppressed, verification unaffected).
   * Remove libstdc++-dev from Depends: dynamically-built binary only needs
