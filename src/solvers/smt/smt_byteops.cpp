@@ -452,9 +452,8 @@ smt_astt smt_convt::convert_byte_update_bv_mode(const byte_update2t &data)
     return convert_ast(e);
   }
 
-  // We are merging two values: an 8 bit update value, and a larger source
-  // value that we will have to merge it into. Start off by collecting
-  // information about the source values and their widths.
+  // Merge an 8-bit update value into a larger source value. Collect widths
+  // and offset information first.
   assert(
     is_number_type(data.source_value->type) &&
     "Byte update of unsupported data type");
@@ -474,13 +473,9 @@ smt_astt smt_convt::convert_byte_update_bv_mode(const byte_update2t &data)
     src_offset = data_size - src_offset;
   }
 
-// Assertion some of our assumptions, which broadly mean that we'll only work
-// on bytes that are going into non-byte words
-#ifndef NDEBUG
-  unsigned int width_op2 = data.update_value->type->get_width();
-  assert(width_op2 == 8 && "Can't byte update non-byte operations");
-  assert(width_op2 != width_op0 && "Can't byte update bytes, sorry");
-#endif
+  assert(
+    data.update_value->type->get_width() == 8 &&
+    "Can't byte update non-byte operations");
 
   // Bail if this is an invalid update. This might be legitimate, in that one
   // can update a padding byte in a struct, leading to a crazy out of bounds
@@ -488,6 +483,10 @@ smt_astt smt_convt::convert_byte_update_bv_mode(const byte_update2t &data)
   // invalidity.
   if (src_offset >= (width_op0 / 8))
     return convert_ast(data.source_value);
+
+  // When source is exactly one byte wide, the update replaces it entirely.
+  if (width_op0 == 8)
+    return value;
 
   // Build in three parts: the most significant bits, any in the middle, and
   // the bottom, of the reconstructed / merged output. There might not be a
