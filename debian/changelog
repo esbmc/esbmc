@@ -1,4 +1,4 @@
-esbmc (8.2.0-1) unstable; urgency=medium
+esbmc (8.2.0-1) noble; urgency=medium
 
   * New upstream release 8.2.0.
   * Inline ast2json conversion into parser.py, eliminating bundled
