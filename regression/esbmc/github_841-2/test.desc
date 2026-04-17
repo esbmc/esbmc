@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 main.c
 --big-endian
 ^VERIFICATION FAILED$
