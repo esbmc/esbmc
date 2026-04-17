@@ -20,7 +20,6 @@ Build-Depends: debhelper-compat (= 13),
                clang-16 | clang-14,
                libc6-dev (>= 2.17),
                linux-libc-dev,
-               gcc-multilib,
                python3-dev
 Standards-Version: 4.6.2
 Homepage: https://esbmc.org
@@ -31,11 +30,11 @@ Package: esbmc
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends},
          python3,
-         python3-mypy,
          libstdc++6,
          libstdc++-dev,
          clang-16 | clang-14 | clang,
          libclang-common-16-dev | libclang-common-14-dev
+Recommends: python3-mypy
 Description: Efficient SMT-based Context-Bounded Model Checker
  ESBMC is a context-bounded model checker for the verification of
  single- and multi-threaded C/C++ programs. It can automatically verify
@@ -44,5 +43,4 @@ Description: Efficient SMT-based Context-Bounded Model Checker
  .
  ESBMC supports the Clang compiler as a frontend and uses SMT solvers
  to perform the verification. This package includes support for the Z3
- SMT solver and Python frontend. The ast2json dependency is bundled
- in the package and does not require external installation.
+ SMT solver and Python frontend.

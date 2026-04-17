@@ -12,12 +12,48 @@ if not PY3:
     sys.exit(1)
 
 import ast
+import codecs
 import importlib.util
 import json
 import os
 import glob
 import base64
 from preprocessor import Preprocessor
+
+_AST_BUILTIN_PURE = (int, float, bool)
+_AST_BUILTIN_BYTES = (bytearray, bytes)
+
+
+def _ast_get_value(val):
+    if val is None:
+        return val
+    if isinstance(val, _AST_BUILTIN_PURE):
+        return val
+    if isinstance(val, _AST_BUILTIN_BYTES):
+        try:
+            return val.decode('utf-8')
+        except Exception:
+            return codecs.getencoder('hex_codec')(val)[0].decode('utf-8')
+    if isinstance(val, str):
+        return val
+    if isinstance(val, complex):
+        return str(val)
+    if isinstance(val, list):
+        return [_ast_get_value(x) for x in val]
+    if isinstance(val, ast.AST):
+        return _ast_node_to_dict(val)
+    if val is ...:
+        return '...'
+    raise Exception("ast2json: unknown value type '%s'" % type(val))
+
+
+def _ast_node_to_dict(node):
+    result = {'_type': node.__class__.__name__}
+    for attr in dir(node):
+        if attr.startswith('_'):
+            continue
+        result[attr] = _ast_get_value(getattr(node, attr))
+    return result
 
 
 def run_mypy_strict(filename):
@@ -474,10 +510,7 @@ def generate_ast_json(tree, python_filename, elements_to_import, output_dir, mod
                     filtered_nodes.append(node)
 
     # Convert AST to JSON
-    ast2json_module = import_module_by_name("ast2json", "")
-    if ast2json_module is None:
-        sys.exit(1)
-    ast_json = ast2json_module.ast2json(ast.Module(body=filtered_nodes) if filtered_nodes else tree)
+    ast_json = _ast_node_to_dict(ast.Module(body=filtered_nodes) if filtered_nodes else tree)
     ast_json["filename"] = python_filename
     ast_json["ast_output_dir"] = output_dir
 

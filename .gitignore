@@ -33,9 +33,11 @@ src/CPackSourceConfig.cmake
 *.orig.tar.gz
 *.orig.tar.xz
 
-# Debian packaging: embedded third-party libraries
-# These are downloaded during package preparation, not committed to repo
+# Debian packaging build artifacts and embedded third-party libraries
 debian/embedded-libs/
+debian/files
+debian/*.buildinfo
+debian/*.changes
 
 /.mypy_cache/
 
