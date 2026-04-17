@@ -9,9 +9,12 @@ target_include_directories(symex
     PRIVATE ${CMAKE_BINARY_DIR}/src
     PRIVATE ${Boost_INCLUDE_DIRS}
 )
-target_compile_definitions(symex PUBLIC BOOST_ALL_NO_LIB)
-target_link_libraries(symex nlohmann_json::nlohmann_json yaml-cpp::yaml-cpp fmt::fmt usr_utils)
+target_compile_definitions(symex PUBLIC BOOST_ALL_NO_LIB YAML_CPP_STATIC_DEFINE)
+target_link_libraries(symex
+  PUBLIC  smt gotoprograms pointeranalysis abstract-interpretation
+  PRIVATE nlohmann_json::nlohmann_json yaml-cpp::yaml-cpp fmt::fmt usr_utils
+)
 
 if(WIN32)
-  target_link_libraries(symex nlohmann_json::nlohmann_json yaml-cpp::yaml-cpp fmt::fmt wsock32 ws2_32)
+  target_link_libraries(symex PRIVATE nlohmann_json::nlohmann_json yaml-cpp::yaml-cpp fmt::fmt wsock32 ws2_32)
 endif()

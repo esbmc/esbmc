@@ -17,7 +17,7 @@
 /** @file smt_conv.h
  *  SMT conversion tools and utilities.
  *  smt_convt is the base class for everything that attempts to convert the
- *  contents of an SSA program into something else, generally SMT- or SAT-based.
+ *  contents of an SSA program into something else, generally SMT or SAT based.
  *
  *  The class itself does various accounting and structuring of the conversion,
  *  however the challenge is that as we convert the SSA program into anything
@@ -87,17 +87,18 @@
 // Forward dec.
 class fp_convt;
 class smt_convt;
+class ra_apit;
 
 #include <solvers/smt/smt_array.h>
 #include <solvers/smt/tuple/smt_tuple.h>
 #include <solvers/smt/fp/fp_conv.h>
 
 /** The base SMT-conversion class/interface.
- *  smt_convt handles some decisions that must be made when
+ *  smt_convt handles a number of decisions that must be made when
  *  deconstructing ESBMC expressions down into SMT representation. See
- *  smt_conv.h for more high-level documentation of this.
+ *  smt_conv.h for more high level documentation of this.
  *
- *  The basic flow is thus: a class that can create an SMT formula in some solver
+ *  The basic flow is thus: a class that can create SMT formula in some solver
  *  subclasses smt_convt, implementing abstract methods, in particular
  *  mk_func_app. The rest of ESBMC then calls convert with an expression, and
  *  this class deconstructs it into a series of applications, as documented by
@@ -109,7 +110,7 @@ class smt_convt;
  *  although smt_convt posesses a cache, so they generally have a reference
  *  in there. This will probably be fixed in the future.
  *
- *  In theory, this class supports pushing and popping of solver contexts,
+ *  In theory this class supports pushing and popping of solver contexts,
  *  although of course that depends too on the subclass supporting it. However,
  *  this hasn't really been tested since everything here was rewritten from
  *  The Old Way, so don't trust it.
@@ -152,7 +153,7 @@ public:
   virtual ~smt_convt() = default;
 
   /** Post-constructor setup method. We must create various pieces of memory
-   *  model data for tracking; however, we can't do it from the constructor because
+   *  model data for tracking, however can't do it from the constructor because
    *  the solver converter itself won't have been initialized itself at that
    *  point. So, once it's ready, the solver converter should call this from
    *  it's constructor. */
@@ -269,7 +270,6 @@ public:
     (void)denominator;
     return false;
   }
-
   /** Fetch a satisfying assignment from the solver. If a previous call to
    *  dec_solve returned satisfiable, then the solver has a set of assignments
    *  to symbols / variables used in the formula. This method retrieves the
@@ -286,7 +286,7 @@ public:
   virtual const std::string solver_text() = 0;
 
   /** Fetch the value of a boolean sorted smt_ast. (The 'l' is for literal, and
-   *  is historic). Returns a three-valued result, of true, false, or
+   *  is historic). Returns a three valued result, of true, false, or
    *  unassigned.
    *  @param a The boolean sorted ast to fetch the value of.
    *  @return A three-valued return val, of the assignment to a. */
@@ -436,6 +436,18 @@ public:
   smt_astt get_single_min_subnormal();
   // Returns SMT AST representing single precision maximum normal value (~3.4028234663852886e+38)
   smt_astt get_single_max_normal();
+  // Returns SMT AST for the double precision relative error bound under
+  // round-to-nearest: half machine epsilon = 2^-53 ~ 1.11e-16
+  smt_astt get_double_eps_rel();
+  // Returns SMT AST for the single precision relative error bound under
+  // round-to-nearest: half machine epsilon = 2^-24 ~ 5.96e-08
+  smt_astt get_single_eps_rel();
+  // Returns SMT AST for the double precision directional error bound under
+  // round-toward-+inf: full machine epsilon = 2^-52 ~ 2.22e-16
+  smt_astt get_double_eps_up();
+  // Returns SMT AST for the single precision directional error bound under
+  // round-toward-+inf: full machine epsilon = 2^-23 ~ 1.19e-07
+  smt_astt get_single_eps_up();
 
   /** Create a bitvector.
    *  @param theint Integer representation of the bitvector. Any excess bits
@@ -560,21 +572,27 @@ public:
    *  subnormal range [4.941e-324, 2.225e-308). For single precision: overflow
    *  to ±3.403e+38, underflow below 1.401e-45, subnormal range [1.401e-45, 1.175e-38).
    *  Other formats return the original result unchanged.
+   *  Under --ir-ieee, when rounding_mode is a concrete round-to-nearest constant
+   *  (ROUND_TO_EVEN == 0), a tight symmetric epsilon enclosure is asserted.
+   *  For symbolic or directed rounding modes the function falls back to a weak
+   *  unconstrained enclosure (sound but imprecise); tight directed bounds are
+   *  deferred to a future PR.
    *  @param real_result The result of exact real arithmetic operation
    *  @param fbv_type The floating-point type information (exponent/fraction bits)
    *  @param operand_zero_check Optional boolean AST for special zero handling
    *         (e.g., multiplication where either operand is zero should yield zero
    *         regardless of the other operand, even if it would cause underflow)
+   *  @param rounding_mode The rounding mode expr2tc from the IR operation node;
+   *         typically a constant_int2t or the __ESBMC_rounding_mode symbol.
    *  @return SMT AST representing the result with IEEE 754 semantics applied */
   virtual smt_astt apply_ieee754_semantics(
     smt_astt real_result,
     const floatbv_type2t &fbv_type,
-    smt_astt operand_zero_check = nullptr);
+    smt_astt operand_zero_check = nullptr,
+    const expr2tc &rounding_mode = expr2tc());
 
   /** Method to dump the SMT formula */
   virtual std::string dump_smt();
-
-  //virtual void smt
 
   /** Method to print the SMT model */
   virtual void print_model();
@@ -734,8 +752,9 @@ public:
   void set_array_iface(array_iface *iface);
   /** Stores handle for the floating-point interface. */
   void set_fp_conv(fp_convt *iface);
-  /** Store a new address-allocation record into the address space accounting.
-   *  idx indicates the object number of this record. */
+  /** Stores handle for the real-arithmetic/enclosure interface. */
+  void set_ra_conv(ra_apit *iface);
+
   void bump_addrspace_array(unsigned int idx, const expr2tc &val);
   /** Get the symbol name for the current address-allocation record array. */
   std::string get_cur_addrspace_ident();
@@ -889,13 +908,19 @@ public:
   /* Options contain all the parameters set by the user to run ESBMC */
   const optionst &options;
 
-  size_t quantifier_counter =
-    0; /// Value used to track how many quantifier symbols were created
-
   bool ptr_foo_inited;
 
   smt_astt null_ptr_ast;
   smt_astt invalid_ptr_ast;
+
+  /** Counter for generating unique bound-variable names in quantifiers. */
+  size_t quantifier_counter = 0;
+
+  /** Map from SSA symbol name to its forall/exists irep2 expression.
+   *  Populated in convert_assign when a symbol is assigned a quantifier
+   *  expression; used in convert_ast to inline nested quantifier bodies
+   *  before substituting the outer bound variable. */
+  std::unordered_map<irep_idt, expr2tc, irep_id_hash> forall_defs_;
 
   /** Mapping of name prefixes to use counts: when we want a fresh new name
    *  with a particular prefix, this map stores how many times that prefix has
@@ -941,6 +966,7 @@ public:
   tuple_iface *tuple_api;
   array_iface *array_api;
   fp_convt *fp_api;
+  ra_apit *ra_api;
 
   // Workaround for integer shifts. This is an array of the powers of two,
   // up to 2^64.
@@ -950,15 +976,126 @@ private:
   double convert_rational_to_double(
     const BigInt &numerator,
     const BigInt &denominator);
+
+  /** Interval metadata for the RNE ieee_add interval-lifting path (--ir-ieee).
+   *  After each RNE ieee_add (double/single, int encoding), the {ra_lo, ra_hi}
+   *  SMT symbols are stored here, keyed on the exact real_result AST pointer
+   *  (pointer equality == SSA identity via smt_cache).  Subsequent RNE
+   *  ieee_add calls look up each operand; missing entries fall back to a point
+   *  interval {side, side} which reproduces the single-step formula exactly.
+   *
+   *  Map lifetime: safe in standard BMC (no push_ctx during formula build).
+   *  In runtime_encoded_equationt (incremental), pop_ctx() deletes ASTs for
+   *  the popped level; stale entries may linger but are never looked up in
+   *  practice because SSA renaming gives distinct pointers per step.
+   *  TODO: clear entries for the popped ctx_level in a follow-up PR. */
+  struct ra_interval_t
+  {
+    smt_astt lo;
+    smt_astt hi;
+  };
+  std::unordered_map<const smt_ast *, ra_interval_t> ir_ra_interval_map;
+
+  /** Interval-lifted RNE enclosure helper for ieee_add (--ir-ieee only).
+   *  Called from ieee_add_id after verifying RNE mode + known format.
+   *  Inputs:
+   *    real_result  exact symbolic real for this addition (mk_add(side1,side2))
+   *    lo_r         lower endpoint of the result interval (iv1.lo + iv2.lo)
+   *    hi_r         upper endpoint of the result interval (iv1.hi + iv2.hi)
+   *    fbv_type     FP type; caller guarantees double or single precision
+   *  Behavior:
+   *    Creates fresh ra_lo::N / ra_hi::N Real symbols.
+   *    Pins ra_lo to lo_r - B_near^-(lo_r) via bidirectional inequalities.
+   *    Pins ra_hi to hi_r + B_near^+(hi_r) via bidirectional inequalities.
+   *    Asserts containment: ra_lo <= real_result <= ra_hi, ra_lo <= ra_hi.
+   *    Point-interval fallback (lo_r == hi_r == real_result) produces a
+   *    formula structurally equivalent to the single-step RNE path.
+   *  Returns: {ra_lo, ra_hi} for storage in ir_ra_interval_map. */
+  std::pair<smt_astt, smt_astt> apply_ieee754_rne_enclosure(
+    smt_astt real_result,
+    smt_astt lo_r,
+    smt_astt hi_r,
+    const floatbv_type2t &fbv_type);
+
+  /** Interval-lifted RNA enclosure helper for ieee_add (--ir-ieee only).
+   *  Parallel to apply_ieee754_rne_enclosure; uses the same B_near
+   *  constants (eps_rel = 2^-53 double / 2^-24 single) and identical formula
+   *  shape because ROUND_TO_AWAY is a nearest-rounding mode with the same
+   *  unit roundoff as ROUND_TO_EVEN.
+   *  Inputs / behavior / returns: identical to the RNE helper above,
+   *  except fresh symbols are named ra_lo_aw::N / ra_hi_aw::N to match
+   *  the RNA single-step naming convention. */
+  std::pair<smt_astt, smt_astt> apply_ieee754_rna_enclosure(
+    smt_astt real_result,
+    smt_astt lo_r,
+    smt_astt hi_r,
+    const floatbv_type2t &fbv_type);
+
+  /** Interval-lifted RUP enclosure helper for ieee_sub (--ir-ieee only).
+   *  EbRUP([LR, UR]) = [LR, UR + B_dir(UR)]
+   *  fl_RUP(r) >= r always (directed mode rounds up), so the lower bound is
+   *  exact: ra_lo is pinned to lo_r with no B_dir adjustment.
+   *  The upper bound adds B_dir at the upper endpoint:
+   *    B_dir(r) = eps_rel_dir * |r| + eps_abs
+   *    eps_rel_dir = 2^-52 (double) or 2^-23 (single) -- full machine epsilon.
+   *  Fresh symbols named ra_lo_up::N / ra_hi_up::N to match the single-step
+   *  RUP naming convention in apply_ieee754_semantics. */
+  std::pair<smt_astt, smt_astt> apply_ieee754_rup_enclosure(
+    smt_astt real_result,
+    smt_astt lo_r,
+    smt_astt hi_r,
+    const floatbv_type2t &fbv_type);
+
+  /** Interval-lifted RDN enclosure helper for ieee_sub (--ir-ieee only).
+   *  EbRDN([LR, UR]) = [LR - B_dir(LR), UR]
+   *  fl_RDN(r) <= r always (directed mode rounds down), so the upper bound is
+   *  exact: ra_hi is pinned to hi_r with no B_dir adjustment.
+   *  The lower bound subtracts B_dir at the lower endpoint:
+   *    B_dir(r) = eps_rel_dir * |r| + eps_abs
+   *    eps_rel_dir = 2^-52 (double) or 2^-23 (single) -- full machine epsilon.
+   *  Fresh symbols named ra_lo_dn::N / ra_hi_dn::N to match the single-step
+   *  RDN naming convention in apply_ieee754_semantics. */
+  std::pair<smt_astt, smt_astt> apply_ieee754_rdn_enclosure(
+    smt_astt real_result,
+    smt_astt lo_r,
+    smt_astt hi_r,
+    const floatbv_type2t &fbv_type);
+
+  /** Interval-lifted RTZ enclosure helper for ieee_sub (--ir-ieee only).
+   *  RTZ (truncation toward zero) is sign-dependent: it rounds down for
+   *  non-negative inputs and rounds up for non-positive inputs.
+   *  The enclosure has three cases based on the sign of [LR, UR]:
+   *
+   *  1. LR >= 0 (hull entirely non-negative): fl_RTZ acts like RDN
+   *     EbRTZ = [LR - B_dir(LR), UR]    (exact upper bound)
+   *
+   *  2. UR <= 0 (hull entirely non-positive): fl_RTZ acts like RUP
+   *     EbRTZ = [LR, UR + B_dir(UR)]    (exact lower bound)
+   *
+   *  3. LR < 0 < UR (hull crosses zero): sign of actual result is unknown,
+   *     conservative symmetric bound:
+   *     B_dir_max = eps_rel_dir * max(|LR|, |UR|) + eps_abs
+   *     EbRTZ = [LR - B_dir_max, UR + B_dir_max]
+   *
+   *  B_dir(r) = eps_rel_dir * |r| + eps_abs
+   *    eps_rel_dir = 2^-52 (double) or 2^-23 (single) -- full machine epsilon.
+   *  Fresh symbols named ra_lo_tz::N / ra_hi_tz::N to match the single-step
+   *  RTZ naming convention in apply_ieee754_semantics. */
+  std::pair<smt_astt, smt_astt> apply_ieee754_rtz_enclosure(
+    smt_astt real_result,
+    smt_astt lo_r,
+    smt_astt hi_r,
+    const floatbv_type2t &fbv_type);
 };
 
 /** Given an array type, create a type2tc representing its domain. */
 type2tc make_array_domain_type(const array_type2t &arr);
 
-/** Given an array type, calculate the domain bitwidth it should have. For
- *  nondeterministically or infinite sized arrays, this defaults to the
- *  machine integer width. */
-unsigned long calculate_array_domain_width(const array_type2t &arr);
+/** Return the SMT domain bit-width for an array type.
+ *  For constant-size arrays this is the minimum bit-width needed to represent
+ *  every valid index.  For VLA, dynamic, or infinite arrays the size is not
+ *  statically known, so the machine word size is returned as a safe default. */
+unsigned long array_domain_width_or_word_size(const array_type2t &arr);
 
 // Define here to enable inlining
 inline smt_ast::smt_ast(smt_convt *ctx, smt_sortt s) : sort(s), context(ctx)

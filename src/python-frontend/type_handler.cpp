@@ -2,6 +2,7 @@
 #include <python-frontend/json_utils.h>
 #include <python-frontend/type_utils.h>
 #include <python-frontend/python_converter.h>
+#include <python-frontend/python_typechecking.h>
 #include <python-frontend/symbol_id.h>
 #include <util/arith_tools.h>
 #include <util/context.h>
@@ -26,12 +27,26 @@ bool type_handler::is_constructor_call(const nlohmann::json &json) const
 {
   if (
     !json.contains("_type") || json["_type"] != "Call" ||
-    (!json["func"].contains("id") && !json["func"].contains("attr")))
+    !json.contains("func") || !json["func"].is_object())
     return false;
 
-  const std::string &func_name = json["func"]["_type"] == "Attribute"
-                                   ? json["func"]["attr"]
-                                   : json["func"]["id"];
+  const auto &func = json["func"];
+  if (!func.contains("_type") || !func["_type"].is_string())
+    return false;
+
+  std::string func_name;
+  if (func["_type"] == "Attribute")
+  {
+    if (!func.contains("attr") || !func["attr"].is_string())
+      return false;
+    func_name = func["attr"].get<std::string>();
+  }
+  else
+  {
+    if (!func.contains("id") || !func["id"].is_string())
+      return false;
+    func_name = func["id"].get<std::string>();
+  }
 
   if (func_name == "__init__")
     return true;
@@ -103,6 +118,26 @@ std::string type_handler::type_to_string(const typet &t) const
     return "str";
 
   return "";
+}
+
+std::string type_handler::get_python_type_name(const typet &t) const
+{
+  if (is_complex_type(t))
+    return "complex";
+  if (t.is_bool())
+    return "bool";
+  if (t.is_floatbv())
+    return "float";
+  if (t.is_signedbv() || t.is_unsignedbv())
+    return "int";
+  if ((t.is_array() || t.is_pointer()) && t.subtype() == char_type())
+    return "str";
+  if (t.id() == "symbol")
+  {
+    std::string tag = t.get_string("identifier");
+    return (tag.rfind("tag-", 0) == 0) ? tag.substr(4) : tag;
+  }
+  return type_to_string(t);
 }
 
 std::string type_handler::get_var_type(const std::string &var_name) const
@@ -178,6 +213,51 @@ std::string type_handler::get_var_type(const std::string &var_name) const
   }
 
   return std::string();
+}
+
+std::string
+type_handler::get_var_classname(const nlohmann::json &value_node) const
+{
+  if (!value_node.contains("_type") || value_node["_type"] != "Name")
+    return "";
+
+  const std::string var_name = value_node["id"].get<std::string>();
+  auto get_class_name = [this](const std::string &name) -> std::string {
+    if (name.empty())
+      return "";
+
+    const std::string class_name =
+      (name.rfind("tag-", 0) == 0) ? name.substr(4) : name;
+    const std::string class_tag = "tag-" + class_name;
+    return converter_.symbol_table().find_symbol(class_tag) ? class_name : "";
+  };
+
+  symbol_id var_sid(
+    converter_.python_file(),
+    converter_.current_classname(),
+    converter_.current_function_name());
+  var_sid.set_object(var_name);
+
+  symbolt *var_symbol = converter_.find_symbol(var_sid.to_string());
+  if (!var_symbol)
+    var_symbol = converter_.find_symbol(var_sid.global_to_string());
+
+  if (var_symbol)
+  {
+    const auto annotation_types =
+      converter_.get_typechecker().get_annotation_types(
+        var_symbol->id.as_string());
+    if (!annotation_types.empty())
+    {
+      typet ann_type = annotation_types.front();
+      if (ann_type.is_pointer())
+        ann_type = ann_type.subtype();
+      if (ann_type.is_struct())
+        return get_class_name(to_struct_type(ann_type).tag().as_string());
+    }
+  }
+
+  return get_class_name(get_var_type(var_name));
 }
 
 /// Check if two types are compatible for list homogeneity
@@ -283,9 +363,18 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
     return get_typet(base_type, type_size);
   }
 
+  // type: represents Python type objects (int, str, float, bool, etc.)
+  // Type objects are used for dynamic type checking and introspection
+  if (ast_type == "type")
+    return build_array(char_type(), type_size > 0 ? type_size : 10);
+
   // Typing module types should be treated as transparent
   // These are type hints only and don't enforce runtime type checking
   if (ast_type == "BinaryIO" || ast_type == "TextIO" || ast_type == "IO")
+    return any_type();
+
+  // object — top type in Python; accept any value
+  if (ast_type == "object")
     return any_type();
 
   // NoneType — represents Python's None value
@@ -297,6 +386,15 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   // This can occur during type inference. Return pointer type as placeholder.
   if (ast_type == "Optional")
     return pointer_type();
+
+  // Callable: represents function/callable types
+  // Return a pointer to a generic code type (function pointer)
+  if (ast_type == "Callable")
+  {
+    code_typet code_type;
+    code_type.return_type() = empty_typet();
+    return pointer_typet(code_type);
+  }
 
   // Python float type: IEEE 754 double-precision mapping
   // Python floats are implemented using C double (IEEE 754 double-precision)
@@ -319,6 +417,25 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   // bool — represents True/False
   if (ast_type == "bool")
     return bool_type();
+
+  if (ast_type == "complex")
+  {
+    const char *complex_type_id = "tag-complex";
+    contextt &symbol_table = converter_.symbol_table();
+
+    if (!symbol_table.find_symbol(complex_type_id))
+    {
+      symbolt type_symbol;
+      type_symbol.id = complex_type_id;
+      type_symbol.name = "complex";
+      type_symbol.type = get_complex_struct_type();
+      type_symbol.mode = "Python";
+      type_symbol.is_type = true;
+      symbol_table.move_symbol_to_context(type_symbol);
+    }
+
+    return get_complex_struct_type();
+  }
 
   // Custom large unsigned integer types (used in Ethereum, BLS, etc.)
   if (ast_type == "uint256" || ast_type == "BLSFieldElement")
@@ -381,10 +498,8 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   if (ast_type == "tuple")
     return empty_typet();
 
-  // list — handle list type annotations
-  // For generic "list" without element types, return the list type
-  // so the actual element type is inferred from context
-  if (ast_type == "list")
+  // list/range — range objects are stored as lists in ESBMC's model
+  if (ast_type == "list" || ast_type == "range")
     return get_list_type();
 
   // dict — handle dict type annotations
@@ -422,6 +537,36 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   if (!is_defined)
     is_defined = converter_.is_imported_module(ast_type);
 
+  if (!is_defined)
+  {
+    const nlohmann::json &decl =
+      json_utils::find_var_decl(ast_type, "", converter_.ast());
+    if (!decl.empty() && decl.contains("value") && decl["value"].is_object())
+    {
+      const nlohmann::json &value = decl["value"];
+      // TypeVar(...) has no concrete type(treat as Any)
+      if (
+        value.contains("_type") && value["_type"] == "Call" &&
+        value.contains("func") && value["func"].is_object() &&
+        value["func"].contains("id") && value["func"]["id"] == "TypeVar")
+        return any_type();
+      // Handle simple alias: X = T to T
+      // the preprocessor rewrites
+      // X = NewType('X', T) to X = T
+      if (
+        value.contains("_type") && value["_type"] == "Name" &&
+        value.contains("id"))
+      {
+        const std::string &target = value["id"];
+        if (target != ast_type && type_utils::is_builtin_type(target))
+          return get_typet(target, type_size);
+        if (
+          target != ast_type && json_utils::is_class(target, converter_.ast()))
+          return symbol_typet("tag-" + target);
+      }
+    }
+  }
+
   // If still not found, it's a NameError
   if (!is_defined)
   {
@@ -433,6 +578,40 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   log_warning("Unknown or unsupported AST type: {}", ast_type);
 
   return empty_typet();
+}
+
+typet type_handler::get_typet_from_call_func(const nlohmann::json &func) const
+{
+  std::string func_name;
+  if (func.contains("id"))
+  {
+    func_name = func["id"].get<std::string>();
+    if (type_utils::is_builtin_type(func_name))
+      return get_typet(func_name);
+    // User-defined class constructor: A() -> struct type tag-A
+    if (json_utils::is_class(func_name, converter_.ast()))
+      return symbol_typet("tag-" + func_name);
+  }
+  else if (func["_type"] == "Attribute" && func.contains("attr"))
+  {
+    func_name = func["attr"].get<std::string>();
+    if (func_name == "randint" || func_name == "randrange")
+      return long_long_int_type();
+    if (func_name == "random" || func_name == "uniform")
+      return double_type();
+    if (type_utils::is_builtin_type(func_name))
+      return get_typet(func_name);
+  }
+
+  const std::string nondet_prefix = "nondet_";
+  if (!func_name.empty() && func_name.rfind(nondet_prefix, 0) == 0)
+  {
+    typet t = get_typet(func_name.substr(nondet_prefix.size()));
+    if (t != empty_typet())
+      return t;
+  }
+
+  throw std::runtime_error("Invalid type");
 }
 
 typet type_handler::get_typet(const nlohmann::json &elem) const
@@ -531,38 +710,19 @@ typet type_handler::get_typet(const nlohmann::json &elem) const
 
     if (!var.empty() && var.contains("value") && !var["value"].is_null())
     {
-      if (var["value"]["_type"] == "Call")
-      {
-        // Try to handle known patterns before giving up
-        if (var["value"].contains("func"))
-        {
-          const auto &func = var["value"]["func"];
+      if (var["value"]["_type"] != "Call")
+        return get_typet(var["value"]["value"]);
 
-          // Handle simple function calls: func_name()
-          if (func.contains("id") && type_utils::is_builtin_type(func["id"]))
-            return get_typet(func["id"].get<std::string>());
+      if (var["value"].contains("func"))
+        return get_typet_from_call_func(var["value"]["func"]);
 
-          // Handle attribute calls: module.func_name()
-          if (func["_type"] == "Attribute" && func.contains("attr"))
-          {
-            std::string attr_name = func["attr"].get<std::string>();
-            // Handle common cases like random.randint, math.sqrt, etc.
-            if (attr_name == "randint" || attr_name == "randrange")
-              return long_long_int_type();
-            if (attr_name == "random" || attr_name == "uniform")
-              return double_type();
-            if (type_utils::is_builtin_type(attr_name))
-              return get_typet(attr_name);
-          }
-        }
-        throw std::runtime_error("Invalid type");
-      }
-      return get_typet(var["value"]["value"]);
+      throw std::runtime_error("Invalid type");
     }
-
-    // Fallback for cases where variable declaration has no value or is null
     return empty_typet();
   }
+
+  if (elem["_type"] == "Call")
+    return get_typet_from_call_func(elem["func"]);
 
   throw std::runtime_error("Invalid type");
 }
@@ -781,6 +941,117 @@ std::string type_handler::get_operand_type(const nlohmann::json &operand) const
       return "bool";
     else if (value.is_number_float())
       return "float";
+  }
+  else if (operand["_type"] == "Set")
+  {
+    return "set";
+  }
+  else if (operand["_type"] == "BinOp")
+  {
+    std::string lhs_type = get_operand_type(operand["left"]);
+    std::string rhs_type = get_operand_type(operand["right"]);
+
+    if (!lhs_type.empty() && lhs_type == rhs_type)
+      return lhs_type;
+
+    if (!lhs_type.empty())
+      return lhs_type;
+    if (!rhs_type.empty())
+      return rhs_type;
+  }
+  else if (
+    operand["_type"] == "Attribute" && operand.contains("attr") &&
+    operand.contains("value"))
+  {
+    const std::string attr_name = operand["attr"].get<std::string>();
+
+    auto find_annotated_attr_type =
+      [&](const nlohmann::json &class_node) -> std::string {
+      if (class_node.empty() || !class_node.contains("body"))
+        return std::string();
+
+      for (const auto &member : class_node["body"])
+      {
+        if (
+          member["_type"] != "FunctionDef" || !member.contains("name") ||
+          member["name"] != "__init__" || !member.contains("body"))
+          continue;
+
+        for (const auto &stmt : member["body"])
+        {
+          if (
+            stmt["_type"] == "AnnAssign" && stmt.contains("target") &&
+            stmt["target"].contains("_type") &&
+            stmt["target"]["_type"] == "Attribute" &&
+            stmt["target"].contains("attr") &&
+            stmt["target"]["attr"] == attr_name &&
+            stmt["target"].contains("value") &&
+            stmt["target"]["value"].contains("_type") &&
+            stmt["target"]["value"]["_type"] == "Name" &&
+            stmt["target"]["value"].contains("id") &&
+            stmt["target"]["value"]["id"] == "self" &&
+            stmt.contains("annotation") && stmt["annotation"].contains("id"))
+            return stmt["annotation"]["id"].get<std::string>();
+        }
+      }
+
+      return std::string();
+    };
+
+    const auto &attr_value = operand["value"];
+    if (
+      attr_value.contains("_type") && attr_value["_type"] == "Name" &&
+      attr_value.contains("id") && attr_value["id"] == "self")
+    {
+      const auto self_class_node = json_utils::find_class(
+        converter_.ast()["body"], converter_.current_classname());
+      std::string self_attr_type = find_annotated_attr_type(self_class_node);
+      if (!self_attr_type.empty())
+        return self_attr_type;
+    }
+
+    std::string obj_type = get_operand_type(attr_value);
+    if (!obj_type.empty())
+    {
+      const auto class_node =
+        json_utils::find_class(converter_.ast()["body"], obj_type);
+      std::string attr_type = find_annotated_attr_type(class_node);
+      if (!attr_type.empty())
+        return attr_type;
+    }
+  }
+
+  // Handle call expressions: constructor calls like A() and method calls like B().g()
+  else if (operand["_type"] == "Call" && operand.contains("func"))
+  {
+    const auto &func = operand["func"];
+    // Direct constructor call: A() — return the class name as the type
+    if (func["_type"] == "Name" && func.contains("id"))
+      return func["id"].get<std::string>();
+    // Method call: obj.method() — infer the return type from the class definition
+    if (
+      func["_type"] == "Attribute" && func.contains("attr") &&
+      func.contains("value"))
+    {
+      std::string obj_type = get_operand_type(func["value"]);
+      if (!obj_type.empty())
+      {
+        std::string method_name = func["attr"].get<std::string>();
+        const auto &ast = converter_.ast();
+        nlohmann::json class_node =
+          json_utils::find_class(ast["body"], obj_type);
+        if (class_node.empty() || !class_node.contains("body"))
+          return std::string();
+        for (const auto &member : class_node["body"])
+        {
+          if (
+            member["_type"] == "FunctionDef" && member["name"] == method_name &&
+            member.contains("returns") && !member["returns"].is_null() &&
+            member["returns"].contains("id"))
+            return member["returns"]["id"].get<std::string>();
+        }
+      }
+    }
   }
 
   // Handle list subscript (e.g., `mylist[0]`)

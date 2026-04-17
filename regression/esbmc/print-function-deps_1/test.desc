@@ -1,0 +1,8 @@
+CORE
+main.c
+--show-call-sites
+^c:@F@main -> c:@F@add\(p, q\) \[.*main\.c:\d+\]$
+^c:@F@main -> c:@F@multiply\(sum, r\) \[.*main\.c:\d+\]$
+^c:@F@main -> c:@F@multiply\(p, r\) \[.*main\.c:\d+\]$
+^c:@F@main -> c:@F@add\(prod, return_value.*\) \[.*main\.c:\d+\]$
+^__ESBMC_main -> c:@F@main\(\) \[.*main\.c:\d+\]$

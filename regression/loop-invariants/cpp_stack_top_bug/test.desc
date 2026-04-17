@@ -1,4 +1,4 @@
 KNOWNBUG
 main.cpp
---loop-invariant 
+--loop-invariant-check 
 ^VERIFICATION FAILED$

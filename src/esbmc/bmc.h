@@ -48,7 +48,7 @@ protected:
   std::unique_ptr<smt_convt> runtime_solver;
   std::unique_ptr<reachability_treet> symex;
   pytest_generator pytest_gen; // For Python pytest test case generation
-  ctest_generator ctest_gen;   // For C CTest test case generation
+  ctest_generator ctest_gen;   // For C/C++ CTest test case generation
   mutable std::atomic<bool> keep_alive_running;
   mutable std::atomic<int> keep_alive_interval;
 
@@ -127,6 +127,7 @@ private:
     std::atomic<size_t> skipped_properties = 0;
     std::atomic<size_t> simplified_properties = 0;
     std::atomic<size_t> failed_properties = 0;
+    std::atomic<size_t> unknown_properties = 0;
     std::atomic<double> total_time_s = 0.0;
     std::string solver_name;
     std::once_flag solver_name_flag;

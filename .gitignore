@@ -22,6 +22,7 @@ tags
 release
 .gdbinit
 compile_commands.json
+.deps/
 
 # custom init scripts
 init.sh
@@ -35,3 +36,9 @@ src/CPackSourceConfig.cmake
 # Debian packaging: embedded third-party libraries
 # These are downloaded during package preparation, not committed to repo
 debian/embedded-libs/
+
+/.mypy_cache/
+
+# macOS debug symbols and compiled test binaries in regression dirs
+*.dSYM/
+regression/**/test

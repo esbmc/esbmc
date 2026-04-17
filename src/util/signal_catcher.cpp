@@ -5,6 +5,7 @@
 #  include <cstdlib>
 #endif
 
+#include <util/filesystem.h>
 #include <util/signal_catcher.h>
 
 void install_signal_catcher()
@@ -30,6 +31,7 @@ void signal_catcher(int sig)
   // kill any children by killing group
   killpg(0, sig);
 
+  file_operations::cleanup_registered_tmps();
   exit(sig);
 #endif
 }

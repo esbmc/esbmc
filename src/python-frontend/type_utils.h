@@ -31,7 +31,7 @@ enum class StatementType
   GLOBAL,
   TRY,
   EXCEPTHANDLER,
-  DELETE
+  DELETE_STATEMENT
 };
 
 enum class ExpressionType
@@ -55,6 +55,7 @@ struct TypeFlags
   bool has_float = false;
   bool has_int = false;
   bool has_bool = false;
+  bool has_none = false;
 };
 
 class type_utils
@@ -124,7 +125,9 @@ public:
       name == "ZeroDivisionError" || name == "AssertionError" ||
       name == "NameError" || name == "OSError" || name == "FileNotFoundError" ||
       name == "FileExistsError" || name == "PermissionError" ||
-      name == "NotImplementedError");
+      name == "NotImplementedError" || name == "ImportError" ||
+      name == "ModuleNotFoundError" || name == "RuntimeError" ||
+      name == "StopIteration" || name == "EOFError");
   }
 
   static bool is_c_model_func(const std::string &func_name)
@@ -141,7 +144,9 @@ public:
            func_name == "det" || func_name == "matmul" || func_name == "pow" ||
            func_name == "log" || func_name == "pow_by_squaring" ||
            func_name == "log2" || func_name == "log1p_taylor" ||
-           func_name == "ldexp";
+           func_name == "ldexp" || func_name == "__ESBMC_sin" ||
+           func_name == "__ESBMC_cos" || func_name == "__ESBMC_sqrt" ||
+           func_name == "__ESBMC_exp" || func_name == "__ESBMC_log";
   }
 
   static bool is_ordered_comparison(const std::string &op)
@@ -272,6 +277,24 @@ public:
            element.contains("value");
   }
 
+  static inline bool is_type_identifier(const std::string &name)
+  {
+    static const std::unordered_set<std::string> type_identifiers = {
+      "int",
+      "float",
+      "str",
+      "bool",
+      "bytes",
+      "list",
+      "set",
+      "tuple",
+      "type",
+      "object",
+      "complex",
+      "frozenset"};
+    return type_identifiers.find(name) != type_identifiers.end();
+  }
+
 private:
   static void
   update_type_flags_from_node(const nlohmann::json &node, TypeFlags &flags)
@@ -285,6 +308,14 @@ private:
         flags.has_int = true;
       else if (type_str == "bool")
         flags.has_bool = true;
+      else if (type_str == "None" || type_str == "NoneType")
+        flags.has_none = true;
+    }
+    else if (
+      node["_type"] == "Constant" && node.contains("value") &&
+      node["value"].is_null())
+    {
+      flags.has_none = true;
     }
   }
 
@@ -293,6 +324,7 @@ private:
     dest.has_float = dest.has_float || src.has_float;
     dest.has_int = dest.has_int || src.has_int;
     dest.has_bool = dest.has_bool || src.has_bool;
+    dest.has_none = dest.has_none || src.has_none;
   }
 
   static const std::map<std::string, std::string> &consensus_func_to_type()

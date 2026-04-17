@@ -1,4 +1,4 @@
 THOROUGH
 main.py
 --unwind 10 --no-standard-checks --smt-during-symex --smt-symex-guard --bitwuzla
-^VERIFICATION FAILED$
+^TypeError:\s+(\w+)\(\)\s+takes\s+(\d+)\s+positional argument(?:s)?\s+but\s+(\d+)\s+were given$

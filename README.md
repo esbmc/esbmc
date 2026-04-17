@@ -1,5 +1,6 @@
 # The ESBMC model checker
 
+[![Zulip](https://img.shields.io/badge/social_chat-zulip-blue?logo=zulip)](https://systemsandsoftwaresecurity.zulipchat.com/#narrow/channel/575165-esbmc)
 [![Codacy Badge](https://api.codacy.com/project/badge/Grade/d14d06e975644907a2eb9521e09ccfe4)](https://app.codacy.com/gh/esbmc/esbmc?utm_source=github.com&utm_medium=referral&utm_content=esbmc/esbmc&utm_campaign=Badge_Grade_Dashboard)
 [![codecov](https://codecov.io/gh/esbmc/esbmc/branch/master/graph/badge.svg)](https://codecov.io/gh/esbmc/esbmc)
 [![GitHub All Releases](https://img.shields.io/github/downloads/esbmc/esbmc/total.svg)](https://github.com/esbmc/esbmc/releases)
@@ -208,9 +209,7 @@ https://www.youtube.com/watch?v=uJ5Jn0sxm08&t=2182s
 
 In a workshop between ARM Research and the University of Manchester, this video was delivered as part of a technical talk on exploiting the SAT revolution for automated software verification.
 
-We offer a post-graduate course in software security that explains the internals of ESBMC. 
-
-https://ssvlab.github.io/lucasccordeiro/courses/2020/01/software-security/index.html
+We offer a [post-graduate course](https://ssvlab.github.io/lucasccordeiro/courses/2022/01/software-security/index.html) in software security that explains the internals of ESBMC.
 
 This course unit introduces students to basic and advanced approaches to formally building verified trustworthy software systems, where trustworthiness comprises five attributes: *reliability*, *availability*, *safety*, *resilience*, and *security*.
 
@@ -270,6 +269,10 @@ We'd be extremely happy to receive contributions to improve ESBMC (under the ter
 
 Please review the [developer documentation](https://esbmc.github.io/blob/master/CONTRIBUTIONS.md) if you want to contribute to ESBMC.
 
+## Claude Code Plugin
+
+A [Claude Code](https://docs.anthropic.com/claude-code) plugin for ESBMC is available at [esbmc/agent-marketplace](https://github.com/esbmc/agent-marketplace). It provides `/verify` and `/audit` commands, a verification skill, reference documentation, and examples for using ESBMC within Claude Code.
+
 ## Differences from CBMC
 
 ESBMC is a fork of CBMC v2.9 (2008), the C Bounded Model Checker. The primary differences between the two are described [here](https://esbmc.github.io#cbmc-differences).
@@ -278,4 +281,4 @@ ESBMC is a fork of CBMC v2.9 (2008), the C Bounded Model Checker. The primary di
 
 ESBMC is a joint project of the Federal University of Amazonas (Brazil), the University of Manchester (UK), the University of Southampton (UK), and the University of Stellenbosch (South Africa).
 
-The ESBMC development was supported by various research funding agencies, including CNPq (Brazil), CAPES (Brazil), FAPEAM (Brazil), EPSRC (UK), Royal Society (UK), British Council (UK), UKRI (UK), European Commission (Horizon 2020), foundations including Lattice, Rust, Ethereum, and companies including ARM, Intel, Motorola Mobility, Nokia Institute of Technology, and Samsung. The ESBMC development is currently funded by ARM, EPSRC grants [EP/T026995/1](https://enncore.github.io) and [EP/V000497/1](https://scorch-project.github.io), [Ethereum Foundation](https://blog.ethereum.org/2022/07/29/academic-grants-grantee-announce), [Rust Foundation](https://rustfoundation.org/), [EU H2020 ELEGANT 957286](https://www.elegant-h2020.eu), Brazilian agencies CNPq (407885/2023-4), FAPEAM (01.02.016301.00292/2025-80), and CAPES (Finance Code 001), [Soteria project](https://soteriaresearch.org) awarded by the UK Research and Innovation for the Digital Security by Design (DSbD) Programme, and XC5 Hong Kong Limited.
+The ESBMC development was supported by various research funding agencies, including CNPq (Brazil), CAPES (Brazil), FAPEAM (Brazil), EPSRC (UK), Royal Society (UK), British Council (UK), UKRI (UK), European Commission (Horizon 2020), foundations including Lattice, Rust, Ethereum, and companies including ARM, Intel, Motorola Mobility, Nokia Institute of Technology, Samsung, and [Veribee](https://www.veribee.co/). The ESBMC development is currently funded by ARM, EPSRC grants [EP/T026995/1](https://enncore.github.io) and [EP/V000497/1](https://scorch-project.github.io), [Ethereum Foundation](https://blog.ethereum.org/2022/07/29/academic-grants-grantee-announce), [Rust Foundation](https://rustfoundation.org/), [EU H2020 ELEGANT 957286](https://www.elegant-h2020.eu), Brazilian agencies CNPq (407885/2023-4), FAPEAM (01.02.016301.00292/2025-80), and CAPES (Finance Code 001), [Soteria project](https://soteriaresearch.org) awarded by the UK Research and Innovation for the Digital Security by Design (DSbD) Programme, and XC5 Hong Kong Limited.

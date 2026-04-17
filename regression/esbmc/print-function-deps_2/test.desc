@@ -1,0 +1,5 @@
+CORE
+main.c
+--show-call-sites
+^c:@F@main -> c:@F@swap\(&x, &y\) \[.*main\.c:\d+\]$
+^__ESBMC_main -> c:@F@main\(\) \[.*main\.c:\d+\]$

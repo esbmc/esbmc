@@ -42,7 +42,7 @@ void do_type2string<const expr2t::expr_ids>(
   unsigned int);
 
 template <class T>
-bool do_get_sub_expr(const T &, unsigned int, unsigned int &, const expr2tc *&)
+bool do_get_sub_expr(const T &, size_t, size_t &, const expr2tc *&)
 {
   return false;
 }
@@ -50,19 +50,19 @@ bool do_get_sub_expr(const T &, unsigned int, unsigned int &, const expr2tc *&)
 template <>
 bool do_get_sub_expr<expr2tc>(
   const expr2tc &item,
-  unsigned int idx,
-  unsigned int &it,
+  size_t idx,
+  size_t &it,
   const expr2tc *&ptr);
 
 template <>
 bool do_get_sub_expr<std::vector<expr2tc>>(
   const std::vector<expr2tc> &item,
-  unsigned int idx,
-  unsigned int &it,
+  size_t idx,
+  size_t &it,
   const expr2tc *&ptr);
 
 template <class T>
-bool do_get_sub_expr_nc(T &, unsigned int, unsigned int &, expr2tc *&)
+bool do_get_sub_expr_nc(T &, size_t, size_t &, expr2tc *&)
 {
   return false;
 }
@@ -71,28 +71,28 @@ bool do_get_sub_expr_nc(T &, unsigned int, unsigned int &, expr2tc *&)
 template <>
 bool do_get_sub_expr_nc<expr2tc>(
   expr2tc &item,
-  unsigned int idx,
-  unsigned int &it,
+  size_t idx,
+  size_t &it,
   expr2tc *&ptr);
 
 template <>
 bool do_get_sub_expr_nc<std::vector<expr2tc>>(
   std::vector<expr2tc> &item,
-  unsigned int idx,
-  unsigned int &it,
+  size_t idx,
+  size_t &it,
   expr2tc *&ptr);
 
 template <class T>
-unsigned int do_count_sub_exprs(T &)
+size_t do_count_sub_exprs(T &)
 {
   return 0;
 }
 
 template <>
-unsigned int do_count_sub_exprs<const expr2tc>(const expr2tc &);
+size_t do_count_sub_exprs<const expr2tc>(const expr2tc &);
 
 template <>
-unsigned int do_count_sub_exprs<const std::vector<expr2tc>>(
+size_t do_count_sub_exprs<const std::vector<expr2tc>>(
   const std::vector<expr2tc> &item);
 
 // Local template for implementing delegate calling, with type dependency.

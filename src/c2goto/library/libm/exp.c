@@ -101,6 +101,7 @@ double log1p(double x) /* ln(x+1) */
 
 double log(double x)
 {
+__ESBMC_HIDE:;
   return log2(x) * M_LN2;
 }
 

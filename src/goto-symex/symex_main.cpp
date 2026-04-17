@@ -93,6 +93,32 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
     return;
   }
 
+  // Interval-based assertion pruning (--interval-symex-assert). Evaluate the
+  // pre-rename expression (the domain keys on original names). Skip when the
+  // domain is bottom — empty intervals vacuously don't contain 0, which would
+  // let every query succeed. Only prune on TRUE, never FALSE: the shared,
+  // non-forked domain may carry assume() residue from sibling branches, and
+  // pruning on a contaminated FALSE would silently drop real bugs.
+  if (
+    options.get_bool_option("interval-symex-assert") && interval_domain_state &&
+    !interval_domain_state->is_bottom() &&
+    interval_domaint::eval_boolean_expression(
+      claim_expr, *interval_domain_state)
+      .is_true())
+  {
+    if (options.get_bool_option("multi-property"))
+    {
+      log_success(
+        "✓ PASSED (interval): '{}' at {}",
+        msg,
+        cur_state->source.pc->location.as_string());
+      ++simplified_claims;
+    }
+
+    assume(claim_expr);
+    return;
+  }
+
   // Perform incremental SMT-based verification if enabled
   if (
     options.get_bool_option("smt-symex-assert") &&
@@ -190,6 +216,7 @@ void goto_symext::symex_step(reachability_treet &art)
   assert(!cur_state->call_stack.empty());
 
   const goto_programt::instructiont &instruction = *cur_state->source.pc;
+  const goto_programt::const_targett pre_step_pc = cur_state->source.pc;
 
   // depth exceeded?
   {
@@ -239,6 +266,7 @@ void goto_symext::symex_step(reachability_treet &art)
   {
     expr2tc tmp(instruction.guard);
     replace_nondet(tmp);
+    volatile_check(tmp);
 
     dereference(tmp, dereferencet::READ);
     replace_dynamic_allocation(tmp);
@@ -259,10 +287,6 @@ void goto_symext::symex_step(reachability_treet &art)
     break;
 
   case LOOP_INVARIANT:
-    if (options.get_bool_option("loop-invariant"))
-    {
-      symex_loop_invariant();
-    }
     cur_state->source.pc++;
     break;
 
@@ -449,6 +473,13 @@ void goto_symext::symex_step(reachability_treet &art)
       fmt::underlying(instruction.type));
     abort();
   }
+
+  // Feed the instruction into the online interval domain shared by
+  // guard pruning (default; disable with --no-interval-symex-guard) and
+  // --interval-symex-assert. Skip unreachable paths so stale state from
+  // contradicted branches does not leak into the shared domain.
+  if (interval_domain_state && !cur_state->guard.is_false())
+    interval_domain_state->process_instruction(pre_step_pc);
 }
 
 void goto_symext::symex_assume()
@@ -573,12 +604,6 @@ void goto_symext::run_intrinsic(
   if (symname == "c:@F@__ESBMC_terminate_thread")
   {
     intrinsic_terminate_thread(art);
-    return;
-  }
-
-  if (symname == "c:@F@__ESBMC_get_thread_state")
-  {
-    intrinsic_get_thread_state(func_call, art);
     return;
   }
 
@@ -763,6 +788,38 @@ void goto_symext::run_intrinsic(
     symex_assign(code_assign2tc(func_call.ret, is_little_endian));
     return;
   }
+
+  if (has_prefix(symname, "c:@F@__ESBMC_is_fresh"))
+  {
+    assert(
+      func_call.operands.size() == 2 && "Wrong __ESBMC_is_fresh signature");
+    auto &ex_state = art.get_cur_state();
+    if (ex_state.cur_state->guard.is_false())
+      return;
+
+    // __ESBMC_is_fresh runtime handler
+    //
+    // Design rationale:
+    // When contract enforcement is enabled, memory allocation for is_fresh calls
+    // happens in the contract wrapper (see contracts.cpp generate_checking_wrapper).
+    // The wrapper allocates memory BEFORE calling the original function, avoiding
+    // the C call-by-value problem where parameter modifications don't affect the caller.
+    //
+    // In the original function body, we simply return true to satisfy the requires
+    // clause check. The actual memory has already been allocated in the wrapper,
+    // so no allocation is performed here.
+    //
+    // When contract enforcement is NOT enabled (e.g., in normal execution or when
+    // verifying callers), this intrinsic would typically not be called, as is_fresh
+    // should only appear in requires clauses of functions with enforced contracts.
+
+    // Return true to indicate the memory allocation succeeded
+    if (!is_nil_expr(func_call.ret))
+      symex_assign(code_assign2tc(func_call.ret, gen_true_expr()));
+
+    return;
+  }
+
   else if (symname == "c:@F@__ESBMC_no_abnormal_memory_leak")
   {
     expr2tc no_abnormal_memleak =
@@ -1008,6 +1065,9 @@ void goto_symext::run_intrinsic(
 
     return;
   }
+
+  if (has_prefix(symname, "c:@F@__ESBMC_unroll"))
+    return;
 
   log_error(
     "Function call to non-intrinsic prefixed with __ESBMC (fatal)\n"
@@ -1451,34 +1511,4 @@ void goto_symext::add_memory_leak_checks()
       cond,
       "dereference failure: forgotten memory: " + get_pretty_name(it.name));
   }
-}
-
-void goto_symext::symex_loop_invariant()
-{
-  // this aims to use esbmc to use a single step to prove the loop invariant
-  // Basic guard check - skip if guard is false
-  if (cur_state->guard.is_false())
-    return;
-
-  // Get the loop invariant
-  const goto_programt::instructiont &instruction = *cur_state->source.pc;
-
-  log_status(
-    "Processing {} loop invariant", instruction.get_loop_invariants().size());
-  for (auto &invariant : instruction.get_loop_invariants())
-  {
-    // rename the variables to match the current symbolic execution state
-    cur_state->rename(invariant);
-
-    // store invariant for later use
-    cur_state->pending_invariants.push_back(invariant);
-
-    log_status("Stored loop invariant");
-  }
-  cur_state->has_loop_invariant = true;
-
-  log_status(
-    "Successfully collected {} loop invariants, marked state for loop "
-    "processing",
-    cur_state->pending_invariants.size());
 }

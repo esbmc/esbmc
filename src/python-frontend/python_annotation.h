@@ -8,6 +8,8 @@
 #include <util/message.h>
 
 #include <string>
+#include <unordered_map>
+#include <unordered_set>
 
 enum class InferResult
 {
@@ -32,7 +34,7 @@ static const std::map<std::string, std::string> builtin_functions = {
   {"round", "int"}, // Can return int or float
   {"min", "Any"},   // Type depends on input
   {"max", "Any"},   // Type depends on input
-  {"sum", "int"},   // Can return int or float, but int is common case
+  {"sum", "Any"},   // Type depends on input
   {"pow", "int"},   // Can return int or float
 
   // Sequence functions
@@ -117,9 +119,153 @@ public:
         module_manager::create(ast_["ast_output_dir"], python_filename_);
   }
 
+  void preprocess_constructor_calls(const Json &node)
+  {
+    if (node.is_object())
+    {
+      // Check if this is a constructor call
+      if (
+        node.contains("_type") && node["_type"] == "Call" &&
+        node.contains("func") && node["func"]["_type"] == "Name")
+      {
+        const std::string &func_name = node["func"]["id"];
+        // Find the class in ast_["body"] using reference to modify in-place
+        for (Json &class_node : ast_["body"])
+        {
+          if (
+            class_node["_type"] == "ClassDef" &&
+            class_node["name"] == func_name)
+          {
+            // Find __init__ method
+            for (Json &member : class_node["body"])
+            {
+              if (
+                member["_type"] == "FunctionDef" &&
+                member["name"] == "__init__")
+              {
+                // Annotate parameters based on this call
+                if (member.contains("args") && member["args"].contains("args"))
+                {
+                  Json &params = member["args"]["args"];
+                  const Json &call_args = node["args"];
+                  // Skip self (index 0), match remaining params with call args
+                  for (size_t i = 1;
+                       i < params.size() && (i - 1) < call_args.size();
+                       ++i)
+                  {
+                    Json &param = params[i];
+                    // Only annotate if the parameter is not yet annotated;
+                    // do not overwrite explicit annotations (e.g., Optional["List"])
+                    // with a less-specific type inferred from a call site (e.g., NoneType).
+                    if (
+                      param.contains("annotation") &&
+                      !param["annotation"].is_null())
+                      continue;
+                    const Json &arg = call_args[i - 1];
+                    std::string arg_type = get_argument_type(arg);
+                    if (!arg_type.empty())
+                      add_parameter_annotation(param, arg_type);
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+      // Recursively search all object fields
+      for (auto &kv : node.items())
+        preprocess_constructor_calls(kv.value());
+    }
+    else if (node.is_array())
+    {
+      // Search in arrays (such as list literals)
+      for (const auto &element : node)
+        preprocess_constructor_calls(element);
+    }
+  }
+
+  // Preprocess method calls on temporary instances to infer parameter types.
+  // Handles patterns such as A().method(arg1, arg2) by annotating the method's
+  // parameters from the argument types at the call site.
+  void preprocess_method_calls(const Json &node)
+  {
+    if (node.is_object())
+    {
+      // Detect: A().method(args)
+      // func._type == "Attribute", func.value._type == "Call" (the A() part),
+      // func.value.func._type == "Name" (the class name A)
+      if (
+        node.contains("_type") && node["_type"] == "Call" &&
+        node.contains("func") && node["func"]["_type"] == "Attribute" &&
+        node["func"].contains("value") &&
+        node["func"]["value"]["_type"] == "Call" &&
+        node["func"]["value"].contains("func") &&
+        node["func"]["value"]["func"]["_type"] == "Name" &&
+        node["func"]["value"]["func"].contains("id") &&
+        node["func"].contains("attr"))
+      {
+        const std::string &class_name =
+          node["func"]["value"]["func"]["id"].template get<std::string>();
+        const std::string &method_name =
+          node["func"]["attr"].template get<std::string>();
+        const Json &call_args =
+          node.contains("args") ? node["args"] : Json::array();
+
+        for (Json &class_node : ast_["body"])
+        {
+          if (
+            class_node["_type"] == "ClassDef" &&
+            class_node["name"] == class_name)
+          {
+            for (Json &member : class_node["body"])
+            {
+              if (
+                member["_type"] == "FunctionDef" &&
+                member["name"] == method_name && member.contains("args") &&
+                member["args"].contains("args"))
+              {
+                Json &params = member["args"]["args"];
+                // Skip self (index 0); match remaining params to call args
+                for (size_t i = 1;
+                     i < params.size() && (i - 1) < call_args.size();
+                     ++i)
+                {
+                  Json &param = params[i];
+                  // Only annotate if the parameter is not yet annotated
+                  if (
+                    param.contains("annotation") &&
+                    !param["annotation"].is_null())
+                    continue;
+                  const Json &arg = call_args[i - 1];
+                  std::string arg_type = get_argument_type(arg);
+                  if (!arg_type.empty())
+                    add_parameter_annotation(param, arg_type);
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // Recursively search all object fields
+      for (auto &kv : node.items())
+        preprocess_method_calls(kv.value());
+    }
+    else if (node.is_array())
+    {
+      for (const auto &element : node)
+        preprocess_method_calls(element);
+    }
+  }
+
   void add_type_annotation()
   {
-    // Add type annotations to global scope variables
+    // First pass: preprocess all constructor calls to infer parameter types
+    preprocess_constructor_calls(ast_);
+    // Also preprocess method calls on temporary instances: A().method(args)
+    preprocess_method_calls(ast_);
+
+    // Second pass: add type annotations to global scope variables
     annotate_global_scope();
     current_line_ = 0;
 
@@ -133,6 +279,8 @@ public:
       else if (element["_type"] == "ClassDef")
         annotate_class(element);
     }
+
+    apply_pending_specializations();
   }
 
   void add_type_annotation(const std::string &func_name)
@@ -157,6 +305,51 @@ public:
   }
 
 private:
+  bool has_annotation(const Json &node)
+  {
+    return !node.empty() && node.contains("annotation") &&
+           !node["annotation"].is_null();
+  }
+
+  Json find_var_node_for_inference(const std::string &var_name)
+  {
+    Json var_node =
+      json_utils::find_var_decl(var_name, get_current_func_name(), ast_);
+
+    if (
+      !has_annotation(var_node) &&
+      (var_node.empty() ||
+       (var_node.contains("_type") && var_node["_type"] == "arg")) &&
+      parent_func != nullptr)
+    {
+      if (
+        (*parent_func).contains("args") &&
+        (*parent_func)["args"].contains("args"))
+      {
+        var_node =
+          find_annotated_assign(var_name, (*parent_func)["args"]["args"]);
+      }
+
+      if (!has_annotation(var_node) && (*parent_func).contains("body"))
+        var_node = find_annotated_assign(var_name, (*parent_func)["body"]);
+    }
+
+    if (
+      !has_annotation(var_node) &&
+      (var_node.empty() ||
+       (var_node.contains("_type") && var_node["_type"] == "arg")))
+    {
+      Json global_var_node = json_utils::find_var_decl(var_name, "", ast_);
+      if (!global_var_node.empty())
+        var_node = global_var_node;
+    }
+
+    if (!has_annotation(var_node) && var_node.empty())
+      var_node = find_annotated_assign(var_name, ast_["body"]);
+
+    return var_node;
+  }
+
   // Infer return type from non-recursive return statements
   std::string
   infer_from_return_statements(const Json &body, const std::string &func_name)
@@ -225,6 +418,34 @@ private:
     return ""; // Couldn't infer
   }
 
+  // Check if the function body contains any explicit 'return None' statement
+  bool has_return_none(const Json &body)
+  {
+    for (const Json &stmt : body)
+    {
+      if (stmt["_type"] == "Return")
+      {
+        if (stmt["value"].is_null())
+          return true; // bare 'return'
+        if (
+          stmt["value"]["_type"] == "Constant" &&
+          stmt["value"]["value"].is_null())
+          return true; // 'return None'
+      }
+      if (stmt.contains("body") && stmt["body"].is_array())
+      {
+        if (has_return_none(stmt["body"]))
+          return true;
+      }
+      if (stmt.contains("orelse") && stmt["orelse"].is_array())
+      {
+        if (has_return_none(stmt["orelse"]))
+          return true;
+      }
+    }
+    return false;
+  }
+
   // Method to infer and annotate unannotated function parameters
   void infer_parameter_types(Json &function_element)
   {
@@ -256,6 +477,20 @@ private:
     std::vector<Json> function_calls =
       find_function_calls(func_name, search_context);
 
+    // Determine the call-site context for resolving argument names.
+    // For top-level functions, use global scope (empty context).
+    // For nested functions, use the parent function context.
+    std::string call_site_context;
+    if (parent_func != nullptr)
+    {
+      std::string cur = current_func_name_context_;
+      size_t pos = cur.rfind("@F@");
+      if (pos != std::string::npos)
+        call_site_context = cur.substr(0, pos);
+      else if (parent_func->contains("name"))
+        call_site_context = (*parent_func)["name"].template get<std::string>();
+    }
+
     // For each parameter, try to infer its type from the function calls
     if (
       function_element.contains("args") &&
@@ -267,24 +502,139 @@ private:
       {
         Json &param = params[i];
 
-        // Skip if parameter is already annotated
+        // Check if parameter needs type inference or refinement
+        bool needs_inference = false;
+        bool has_partial_annotation = false;
+        std::string current_type;
+
         if (param.contains("annotation") && !param["annotation"].is_null())
-          continue;
+        {
+          // Extract current annotation
+          if (param["annotation"].contains("id"))
+            current_type = param["annotation"]["id"];
+          // Check if it's a generic container without element type
+          if (
+            current_type == "list" || current_type == "dict" ||
+            current_type == "set")
+          {
+            has_partial_annotation = true;
+            needs_inference = true; // Try to refine with element type
+          }
+          else
+            continue; // Fully annotated, skip
+        }
+        else
+          needs_inference = true; // No annotation at all
 
         std::string inferred_type;
 
         // Try to infer type from function calls if available
-        if (!function_calls.empty())
-          inferred_type = infer_parameter_type_from_calls(i, function_calls);
-
-        // If inference failed or no calls found, use Any only for stub functions
-        if (inferred_type.empty() && !has_meaningful_body)
-          inferred_type = "Any"; // Default fallback for stub functions
-
-        if (!inferred_type.empty())
+        if (needs_inference && !function_calls.empty())
         {
-          // Add annotation to parameter
-          add_parameter_annotation(param, inferred_type);
+          std::vector<std::string> call_types =
+            collect_parameter_types_from_calls(i, function_calls);
+
+          if (
+            parent_func == nullptr && call_types.size() > 1 &&
+            are_all_user_classes(call_types))
+          {
+            bool already_pending = false;
+            for (const auto &spec : pending_specializations_)
+            {
+              if (spec.function_name == func_name && spec.param_index == i)
+              {
+                already_pending = true;
+                break;
+              }
+            }
+
+            if (!already_pending)
+            {
+              pending_specializations_.push_back(
+                {func_name, i, std::move(call_types)});
+            }
+
+            continue;
+          }
+
+          std::string saved_ctx = current_func_name_context_;
+          current_func_name_context_ = call_site_context;
+          inferred_type = infer_parameter_type_from_calls(i, function_calls);
+          current_func_name_context_ = saved_ctx;
+        }
+
+        // If still no type, try to infer from the parameter's default value.
+        // This handles cases like def h(op=g) where g is a function alias.
+        if (inferred_type.empty() && !has_partial_annotation)
+        {
+          const auto &args_node = function_element["args"];
+          if (args_node.contains("defaults"))
+          {
+            const auto &defaults = args_node["defaults"];
+            size_t defaults_start = params.size() - defaults.size();
+            if (i >= defaults_start)
+            {
+              const Json &def_node = defaults[i - defaults_start];
+              if (
+                def_node.contains("_type") && def_node["_type"] == "Name" &&
+                def_node.contains("id"))
+              {
+                const std::string &def_name =
+                  def_node["id"].template get<std::string>();
+                // Use non-throwing (const) overload to avoid crashing when
+                // def_name is a variable (not a FunctionDef).
+                const nlohmann::json &const_body =
+                  static_cast<const nlohmann::json &>(ast_["body"]);
+                // Direct function reference (op=f)?
+                if (!json_utils::find_function(const_body, def_name).empty())
+                  inferred_type = "Any";
+                // Function alias (op=g where g=f)?
+                else
+                {
+                  for (const auto &stmt : ast_["body"])
+                  {
+                    if (
+                      stmt.contains("_type") && stmt["_type"] == "Assign" &&
+                      stmt.contains("targets") && !stmt["targets"].empty() &&
+                      stmt["targets"][0].contains("id") &&
+                      stmt["targets"][0]["id"] == def_name &&
+                      stmt.contains("value") &&
+                      stmt["value"].contains("_type") &&
+                      stmt["value"]["_type"] == "Name" &&
+                      stmt["value"].contains("id") &&
+                      !json_utils::find_function(
+                         const_body,
+                         stmt["value"]["id"].template get<std::string>())
+                         .empty())
+                    {
+                      inferred_type = "Any";
+                      break;
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+
+        // Apply inference results
+        if (has_partial_annotation)
+        {
+          // Refine partial annotation with inferred element type
+          if (!inferred_type.empty() && inferred_type != current_type)
+            add_parameter_annotation(param, inferred_type);
+        }
+        else
+        {
+          // Handle completely unannotated parameters
+          if (inferred_type.empty() && !has_meaningful_body)
+            inferred_type = "Any"; // Default fallback for stub functions
+
+          if (!inferred_type.empty())
+          {
+            // Add annotation to parameter
+            add_parameter_annotation(param, inferred_type);
+          }
         }
       }
     }
@@ -327,6 +677,263 @@ private:
     }
   }
 
+  std::vector<std::string> collect_parameter_types_from_calls(
+    size_t param_index,
+    const std::vector<Json> &function_calls)
+  {
+    std::vector<std::string> types;
+    std::unordered_set<std::string> seen;
+
+    for (const Json &call : function_calls)
+    {
+      if (!call.contains("args") || param_index >= call["args"].size())
+        continue;
+
+      std::string arg_type = get_argument_type(call["args"][param_index]);
+      if (arg_type.empty())
+        continue;
+
+      if (seen.insert(arg_type).second)
+        types.push_back(arg_type);
+    }
+
+    return types;
+  }
+
+  bool are_all_user_classes(const std::vector<std::string> &types) const
+  {
+    if (types.empty())
+      return false;
+
+    for (const auto &type_name : types)
+    {
+      if (type_name.empty() || !json_utils::is_class(type_name, ast_))
+        return false;
+    }
+
+    return true;
+  }
+
+  std::string build_specialized_function_name(
+    const std::string &base_name,
+    const std::string &class_name) const
+  {
+    return base_name + "__esbmc_poly_" + class_name;
+  }
+
+  std::string
+  resolve_name_assigned_class(const std::string &name, const Json &node)
+  {
+    if (name.empty())
+      return "";
+
+    if (node.is_object())
+    {
+      if (
+        node.contains("_type") && node["_type"] == "Assign" &&
+        node.contains("targets") && node["targets"].is_array() &&
+        !node["targets"].empty() && node["targets"][0].is_object() &&
+        node["targets"][0].contains("_type") &&
+        node["targets"][0]["_type"] == "Name" &&
+        node["targets"][0].contains("id") && node["targets"][0]["id"] == name &&
+        node.contains("value") && node["value"].is_object() &&
+        node["value"].contains("_type") && node["value"]["_type"] == "Call" &&
+        node["value"].contains("func") && node["value"]["func"].is_object() &&
+        node["value"]["func"].contains("_type") &&
+        node["value"]["func"]["_type"] == "Name" &&
+        node["value"]["func"].contains("id"))
+      {
+        std::string class_name =
+          node["value"]["func"]["id"].template get<std::string>();
+        if (json_utils::is_class(class_name, ast_))
+          return class_name;
+      }
+
+      for (auto it = node.begin(); it != node.end(); ++it)
+      {
+        std::string found = resolve_name_assigned_class(name, it.value());
+        if (!found.empty())
+          return found;
+      }
+    }
+    else if (node.is_array())
+    {
+      for (const auto &element : node)
+      {
+        std::string found = resolve_name_assigned_class(name, element);
+        if (!found.empty())
+          return found;
+      }
+    }
+
+    return "";
+  }
+
+  void rewrite_specialized_calls(
+    const std::string &original_name,
+    size_t param_index,
+    const std::unordered_map<std::string, std::string> &specialized_names,
+    Json &node)
+  {
+    if (node.is_object())
+    {
+      if (
+        node.contains("_type") && node["_type"] == "Call" &&
+        node.contains("func") && node["func"].is_object() &&
+        node["func"].contains("_type") && node["func"]["_type"] == "Name" &&
+        node["func"].contains("id") && node["func"]["id"] == original_name &&
+        node.contains("args") && node["args"].is_array() &&
+        param_index < node["args"].size())
+      {
+        std::string arg_type = get_argument_type(node["args"][param_index]);
+        if (
+          arg_type.empty() && node["args"][param_index].contains("_type") &&
+          node["args"][param_index]["_type"] == "Name" &&
+          node["args"][param_index].contains("id"))
+        {
+          const std::string arg_name =
+            node["args"][param_index]["id"].template get<std::string>();
+          arg_type = resolve_name_assigned_class(arg_name, ast_["body"]);
+        }
+
+        auto it = specialized_names.find(arg_type);
+        if (it != specialized_names.end())
+          node["func"]["id"] = it->second;
+      }
+
+      for (auto it = node.begin(); it != node.end(); ++it)
+        rewrite_specialized_calls(
+          original_name, param_index, specialized_names, it.value());
+    }
+    else if (node.is_array())
+    {
+      for (auto &element : node)
+        rewrite_specialized_calls(
+          original_name, param_index, specialized_names, element);
+    }
+  }
+
+  void apply_pending_specializations()
+  {
+    for (const auto &spec : pending_specializations_)
+    {
+      const std::string &func_name = spec.function_name;
+      size_t param_index = spec.param_index;
+
+      Json original_function;
+      bool found = false;
+      size_t original_index = 0;
+      size_t idx = 0;
+      for (const auto &node : ast_["body"])
+      {
+        if (
+          node.contains("_type") && node["_type"] == "FunctionDef" &&
+          node.contains("name") && node["name"] == func_name)
+        {
+          original_function = node;
+          found = true;
+          original_index = idx;
+          break;
+        }
+        ++idx;
+      }
+
+      if (!found)
+        continue;
+
+      if (!spec.class_types.empty())
+      {
+        for (auto &node : ast_["body"])
+        {
+          if (
+            node.contains("_type") && node["_type"] == "FunctionDef" &&
+            node.contains("name") && node["name"] == func_name &&
+            node.contains("args") && node["args"].is_object() &&
+            node["args"].contains("args") && node["args"]["args"].is_array() &&
+            param_index < node["args"]["args"].size())
+          {
+            Json &param = node["args"]["args"][param_index];
+            add_parameter_annotation(param, spec.class_types.front());
+            break;
+          }
+        }
+      }
+
+      std::unordered_map<std::string, std::string> specialized_names;
+      Json specialized_nodes = Json::array();
+      for (const auto &class_name : spec.class_types)
+      {
+        Json specialized = original_function;
+        const std::string specialized_name =
+          build_specialized_function_name(func_name, class_name);
+        specialized["name"] = specialized_name;
+
+        if (
+          specialized.contains("args") && specialized["args"].is_object() &&
+          specialized["args"].contains("args") &&
+          specialized["args"]["args"].is_array() &&
+          param_index < specialized["args"]["args"].size())
+        {
+          Json &param = specialized["args"]["args"][param_index];
+          add_parameter_annotation(param, class_name);
+        }
+
+        specialized_names[class_name] = specialized_name;
+        specialized_nodes.push_back(std::move(specialized));
+      }
+
+      auto insert_it =
+        ast_["body"].begin() + static_cast<ptrdiff_t>(original_index + 1);
+      ast_["body"].insert(
+        insert_it, specialized_nodes.begin(), specialized_nodes.end());
+
+      rewrite_specialized_calls(
+        func_name, param_index, specialized_names, ast_);
+    }
+
+    pending_specializations_.clear();
+  }
+
+  // Returns the ancestors of a class (including itself) in BFS order via
+  // "bases". Handles multiple inheritance and cycle-safe (visited guard).
+  // "object" is intentionally excluded — it has no ESBMC IR representation.
+  std::vector<std::string> get_class_ancestors(const std::string &class_name)
+  {
+    std::vector<std::string> ancestors;
+    std::unordered_set<std::string> visited;
+    std::vector<std::string> worklist = {class_name};
+    size_t idx = 0;
+    while (idx < worklist.size())
+    {
+      std::string cur = worklist[idx++];
+      if (cur.empty() || cur == "object" || visited.count(cur))
+        continue;
+      visited.insert(cur);
+      ancestors.push_back(cur);
+      Json cls = json_utils::find_class(ast_["body"], cur);
+      if (cls.empty() || !cls.contains("bases"))
+        continue;
+      for (const auto &base : cls["bases"])
+        if (base.contains("id"))
+          worklist.push_back(base["id"].template get<std::string>());
+    }
+    return ancestors;
+  }
+
+  // Returns the lowest common ancestor of two user-defined class types, or "".
+  std::string
+  find_common_ancestor(const std::string &type_a, const std::string &type_b)
+  {
+    std::vector<std::string> ancestors_a = get_class_ancestors(type_a);
+    std::unordered_set<std::string> ancestors_b_set;
+    for (const auto &anc : get_class_ancestors(type_b))
+      ancestors_b_set.insert(anc);
+    for (const auto &anc : ancestors_a)
+      if (ancestors_b_set.count(anc))
+        return anc;
+    return "";
+  }
+
   // Method to infer parameter type from function calls
   std::string infer_parameter_type_from_calls(
     size_t param_index,
@@ -347,16 +954,11 @@ private:
             inferred_type = arg_type;
           else if (inferred_type != arg_type)
           {
-            // Type conflict between calls, use int as safe fallback
-            log_warning(
-              "Type inference conflict for parameter {}: {} vs {}. Using 'int' "
-              "as fallback ({}:{})",
-              param_index,
-              inferred_type,
-              arg_type,
-              python_filename_,
-              current_line_);
-            return "int";
+            std::string common = find_common_ancestor(inferred_type, arg_type);
+            if (!common.empty())
+              inferred_type = common;
+            else
+              return "Any";
           }
         }
       }
@@ -372,18 +974,14 @@ private:
       return get_type_from_constant(arg);
     else if (arg["_type"] == "Subscript")
     {
-      // Handle subscripts like tokens[0]; try to derive element type from the
-      // container annotation.
+      // Handle subscripts like tokens[0] and slices like tokens[:1].
       const auto &val = arg["value"];
       if (val["_type"] == "Name")
       {
         std::string var_name = val["id"].template get<std::string>();
-        Json var_node =
-          json_utils::find_var_decl(var_name, get_current_func_name(), ast_);
+        Json var_node = find_var_node_for_inference(var_name);
 
-        if (
-          !var_node.empty() && var_node.contains("annotation") &&
-          !var_node["annotation"].is_null())
+        if (has_annotation(var_node))
         {
           const auto &annot = var_node["annotation"];
           // list[T] -> return T
@@ -392,6 +990,18 @@ private:
             annot.contains("value") && annot["value"].contains("id") &&
             annot["value"]["id"] == "list")
           {
+            if (
+              arg.contains("slice") && arg["slice"].contains("_type") &&
+              arg["slice"]["_type"] == "Slice")
+            {
+              if (
+                annot.contains("slice") && annot["slice"].contains("id") &&
+                annot["slice"]["id"].is_string())
+                return "list[" +
+                       annot["slice"]["id"].template get<std::string>() + "]";
+              return "list";
+            }
+
             if (annot.contains("slice"))
             {
               const auto &slice = annot["slice"];
@@ -422,50 +1032,15 @@ private:
       const std::string &var_name = arg["id"];
 
       // Try to find the type of the variable in current scope
-      Json var_node =
-        json_utils::find_var_decl(var_name, get_current_func_name(), ast_);
-
-      // Check if we found a node with annotation
-      bool has_annotation = !var_node.empty() &&
-                            var_node.contains("annotation") &&
-                            !var_node["annotation"].is_null();
-
-      // If not found or found without annotation, and we're in a nested function,
-      // try to find in parent function's parameters and body
-      if (!has_annotation && parent_func != nullptr)
-      {
-        // Check parent function's parameters
-        if (
-          (*parent_func).contains("args") &&
-          (*parent_func)["args"].contains("args"))
-        {
-          var_node =
-            find_annotated_assign(var_name, (*parent_func)["args"]["args"]);
-        }
-
-        // If still not found, check parent function's body for local variables
-        if (var_node.empty() && (*parent_func).contains("body"))
-        {
-          var_node = find_annotated_assign(var_name, (*parent_func)["body"]);
-        }
-      }
+      Json var_node = find_var_node_for_inference(var_name);
 
       // Extract type from the found variable node
-      if (
-        !var_node.empty() && var_node.contains("annotation") &&
-        !var_node["annotation"].is_null())
+      if (has_annotation(var_node))
       {
         // Handle arg nodes (function parameters)
         if (var_node["_type"] == "arg")
         {
-          // Parameters can have annotation as {"id": "int"} or
-          // {"value": {"id": "int"}} for generic types
-          if (var_node["annotation"].contains("id"))
-            return var_node["annotation"]["id"];
-          else if (
-            var_node["annotation"].contains("value") &&
-            var_node["annotation"]["value"].contains("id"))
-            return var_node["annotation"]["value"]["id"];
+          return json_utils::get_annotation_type_name(var_node["annotation"]);
         }
         // Handle generic type annotations like list[int] (Subscript nodes)
         else if (
@@ -474,14 +1049,38 @@ private:
           var_node["annotation"].contains("value") &&
           var_node["annotation"]["value"].contains("id"))
         {
-          std::string base_type = var_node["annotation"]["value"]["id"];
-          return base_type; // Return base type if slice info unavailable
+          return json_utils::get_annotation_type_name(var_node["annotation"]);
         }
         // Handle simple type annotations like int, str (Name nodes)
         else if (var_node["annotation"].contains("id"))
         {
-          return var_node["annotation"]["id"];
+          std::string base_type =
+            var_node["annotation"]["id"].template get<std::string>();
+          // If annotation is just "list"/"dict"/"set" without element type, try to infer from value
+          if (
+            (base_type == "list" || base_type == "dict" ||
+             base_type == "set") &&
+            var_node.contains("value") && !var_node["value"].is_null())
+          {
+            if (base_type == "list" && var_node["value"]["_type"] == "List")
+            {
+              std::string full_type =
+                get_list_type_from_literal(var_node["value"]);
+              if (!full_type.empty())
+                return full_type;
+            }
+          }
+          return base_type;
         }
+      }
+
+      if (
+        !var_node.empty() && var_node.contains("value") &&
+        !var_node["value"].is_null())
+      {
+        std::string inferred_type = get_argument_type(var_node["value"]);
+        if (!inferred_type.empty())
+          return inferred_type;
       }
     }
     else if (arg["_type"] == "BinOp")
@@ -526,6 +1125,13 @@ private:
       if (arg["func"]["_type"] == "Name")
       {
         const std::string &func_name = arg["func"]["id"];
+
+        // Class constructor call: A() produces an instance of A
+        // Resolve possible import aliases before checking if this is a class
+        const std::string class_name =
+          json_utils::get_object_alias(ast_, func_name);
+        if (json_utils::is_class(class_name, ast_))
+          return class_name;
 
         // Check built-in functions first
         auto it = builtin_functions.find(func_name);
@@ -730,19 +1336,40 @@ private:
         infer_from_return_statements(function_element["body"], func_name);
 
       // Only add annotation if we successfully inferred a type from return statements
-      if (!inferred_type.empty())
+      // and the function does not have mixed value+None returns
+      if (!inferred_type.empty() && inferred_type != "NoneType")
       {
-        // Update the function node to include the return type annotation
+        // Check if there are also None returns (mixed value+None)
+        // If so, leave the annotation as null for the converter to handle
+        // via Optional wrapping
+        bool has_none_return = has_return_none(function_element["body"]);
+
+        if (!has_none_return)
+        {
+          // Update the function node to include the return type annotation
+          function_element["returns"] = {
+            {"_type", "Name"},
+            {"id", inferred_type},
+            {"ctx", {{"_type", "Load"}}},
+            {"lineno", function_element["lineno"]},
+            {"col_offset", function_element["col_offset"]},
+            {"end_lineno", function_element["lineno"]},
+            {"end_col_offset",
+             function_element["col_offset"].template get<int>() +
+               inferred_type.size()}};
+        }
+      }
+      else if (inferred_type == "NoneType")
+      {
+        // Function only returns None - annotate as None
         function_element["returns"] = {
-          {"_type", "Name"},
-          {"id", inferred_type},
-          {"ctx", {{"_type", "Load"}}},
+          {"_type", "Constant"},
+          {"value", nullptr},
           {"lineno", function_element["lineno"]},
           {"col_offset", function_element["col_offset"]},
           {"end_lineno", function_element["lineno"]},
           {"end_col_offset",
-           function_element["col_offset"].template get<int>() +
-             inferred_type.size()}};
+           function_element["col_offset"].template get<int>() + 4}};
       }
       // If no return type could be inferred, leave returns as null
       // (function has no explicit return statement)
@@ -1170,6 +1797,26 @@ private:
               functions_in_analysis_.erase(func_name);
               if (returns.contains("value") && returns["value"].is_null())
                 return "NoneType";
+              else if (
+                returns.contains("value") && returns["value"].is_string())
+              {
+                // Forward reference annotation: -> "float", -> "MyClass", etc.
+                // Validate that the string looks like a Python identifier (or
+                // dotted name) before returning it, to guard against arbitrary
+                // string constants used as non-type annotations.
+                std::string type_name =
+                  returns["value"].template get<std::string>();
+                bool valid = !type_name.empty() &&
+                             (std::isalpha((unsigned char)type_name[0]) ||
+                              type_name[0] == '_');
+                for (size_t i = 1; valid && i < type_name.size(); ++i)
+                  valid = std::isalnum((unsigned char)type_name[i]) ||
+                          type_name[i] == '_' || type_name[i] == '.';
+                if (valid)
+                  return type_name;
+                // Not a valid identifier — treat as opaque
+                return "Any";
+              }
               else if (returns.contains("value"))
                 return "Any"; // Other constant types
             }
@@ -1179,6 +1826,14 @@ private:
               // Try to extract id if it exists
               if (returns.contains("id"))
               {
+                // If the body also has `return None` paths, the function
+                // actually returns Optional[T] regardless of the annotation.
+                // Return "" so the converter handles this as Optional.
+                if (has_return_none(func_elem["body"]))
+                {
+                  functions_in_analysis_.erase(func_name);
+                  return "";
+                }
                 functions_in_analysis_.erase(func_name);
                 return returns["id"];
               }
@@ -1198,13 +1853,39 @@ private:
       }
 
       // Try to infer return type from actual return statements
+      // Use recursive inference to find return types in all blocks
+      std::string inferred_type =
+        infer_from_return_statements(func_elem["body"], func_name);
+
+      if (!inferred_type.empty() && inferred_type != "NoneType")
+      {
+        // Found a non-None return type; check for mixed value+None returns
+        if (has_return_none(func_elem["body"]))
+        {
+          // Mixed returns: leave unannotated so converter handles via Optional
+          functions_in_analysis_.erase(func_name);
+          return "";
+        }
+        functions_in_analysis_.erase(func_name);
+        return inferred_type;
+      }
+
+      // Check top-level returns as fallback
       auto return_node = json_utils::find_return_node(func_elem["body"]);
       if (!return_node.empty())
       {
-        std::string inferred_type;
-        infer_type(return_node, func_elem, inferred_type);
+        std::string fallback_type;
+        try
+        {
+          infer_type(return_node, func_elem, fallback_type);
+        }
+        catch (std::runtime_error &)
+        {
+          // Return value type could not be inferred (e.g. call through a
+          // function-pointer parameter); leave fallback_type empty.
+        }
         functions_in_analysis_.erase(func_name);
-        return inferred_type;
+        return fallback_type;
       }
 
       // If function has no explicit return statements, assume void/None
@@ -1273,6 +1954,18 @@ private:
       return it->second;
     }
 
+    // Check if the name is a class constructor
+    // (e.g., A() returns an A instance)
+    {
+      const std::string resolved =
+        json_utils::get_object_alias(ast_, func_name);
+      if (json_utils::is_class(resolved, ast_))
+      {
+        functions_in_analysis_.erase(func_name);
+        return resolved;
+      }
+    }
+
     functions_in_analysis_.erase(func_name);
 
     std::ostringstream oss;
@@ -1282,7 +1975,7 @@ private:
     throw std::runtime_error(oss.str());
   }
 
-  std::string get_type_from_lhs(const std::string &id, Json &body)
+  std::string get_type_from_lhs(const std::string &id, const Json &body)
   {
     // Search for LHS annotation in the current scope (e.g., while/if block)
     Json node = find_annotated_assign(id, body["body"]);
@@ -1496,6 +2189,37 @@ private:
     return base_type;
   }
 
+  bool
+  is_imported_name_in_body(const std::string &name, const Json &stmts) const
+  {
+    // Imported names inside a function body are visible to later calls in that
+    // same body, even though they are not present in the module AST.
+    for (const auto &stmt : stmts)
+    {
+      if (!stmt.contains("_type"))
+        continue;
+
+      const std::string &stype = stmt["_type"];
+      if (
+        (stype == "ImportFrom" || stype == "Import") && stmt.contains("names"))
+      {
+        for (const auto &alias : stmt["names"])
+        {
+          if (
+            alias.contains("name") &&
+            alias["name"].template get<std::string>() == name)
+            return true;
+          if (
+            alias.contains("asname") && !alias["asname"].is_null() &&
+            alias["asname"].template get<std::string>() == name)
+            return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
   std::string get_type_from_rhs_variable(const Json &element, const Json &body)
   {
     const auto &value_type = element["value"]["_type"];
@@ -1523,6 +2247,52 @@ private:
       rhs_var_name = get_base_var_name(element["value"]["value"]);
 
     assert(!rhs_var_name.empty());
+
+    auto extract_lhs_name = [](const Json &stmt) -> std::string {
+      if (
+        stmt.contains("_type") && stmt["_type"] == "Assign" &&
+        stmt.contains("targets") && !stmt["targets"].empty() &&
+        stmt["targets"][0].contains("_type") &&
+        stmt["targets"][0]["_type"] == "Name" &&
+        stmt["targets"][0].contains("id"))
+        return stmt["targets"][0]["id"].template get<std::string>();
+
+      if (
+        stmt.contains("_type") && stmt["_type"] == "AnnAssign" &&
+        stmt.contains("target") && stmt["target"].contains("_type") &&
+        stmt["target"]["_type"] == "Name" && stmt["target"].contains("id"))
+        return stmt["target"]["id"].template get<std::string>();
+
+      return "";
+    };
+
+    const std::string lhs_name = extract_lhs_name(element);
+    if (!lhs_name.empty() && lhs_name == rhs_var_name)
+    {
+      std::string lhs_type = get_type_from_lhs(lhs_name, body);
+      if (!lhs_type.empty())
+        return lhs_type;
+      return "Any";
+    }
+
+    if (resolving_rhs_vars_.contains(rhs_var_name))
+    {
+      std::string lhs_type = get_type_from_lhs(rhs_var_name, body);
+      if (!lhs_type.empty())
+        return lhs_type;
+      return "Any";
+    }
+
+    resolving_rhs_vars_.insert(rhs_var_name);
+    struct erase_guardt
+    {
+      std::set<std::string> &vars;
+      std::string key;
+      ~erase_guardt()
+      {
+        vars.erase(key);
+      }
+    } erase_guard{resolving_rhs_vars_, rhs_var_name};
 
     // Find RHS variable declaration in the current scope (e.g.: while/if block)
     Json rhs_node = find_annotated_assign(rhs_var_name, body["body"]);
@@ -1708,7 +2478,39 @@ private:
         if (!overload_type.empty())
           return overload_type;
 
-        return get_function_return_type(func_id, ast_);
+        // func_id may be a function-pointer variable (not a defined function).
+        // Catch the "not found" error only when func_id is actually defined in
+        // this module's AST (as a top-level assignment or function parameter).
+        // Otherwise re-throw so the caller can report "Function not found".
+        try
+        {
+          return get_function_return_type(func_id, ast_);
+        }
+        catch (std::runtime_error &)
+        {
+          const nlohmann::json &body =
+            static_cast<const nlohmann::json &>(ast_["body"]);
+          // Keep imported names intact here; the converter resolves them later.
+          if (
+            is_imported_name_in_body(func_id, body) ||
+            (current_func != nullptr && (*current_func).contains("body") &&
+             is_imported_name_in_body(func_id, (*current_func)["body"])))
+            return func_id;
+          for (const auto &stmt : body)
+          {
+            if (!stmt.contains("_type"))
+              continue;
+            const std::string &stype = stmt["_type"];
+            // Top-level assignment: g = f
+            if (stype == "Assign" && stmt.contains("targets"))
+            {
+              for (const auto &t : stmt["targets"])
+                if (t.contains("id") && t["id"] == func_id)
+                  return "";
+            }
+          }
+          throw; // func_id is not a known variable: propagate the error
+        }
       }
     }
 
@@ -1724,6 +2526,8 @@ private:
         // Map specific class methods to their return types
         if (class_name == "int" && method_name == "from_bytes")
           return "int";
+        else if (class_name == "int" && method_name == "to_bytes")
+          return "bytes";
         else if (
           class_name == "str" &&
           (method_name == "join" || method_name == "format"))
@@ -1814,6 +2618,23 @@ private:
     if (call["value"]["_type"] == "Constant")
       return get_type_from_constant(call["value"]);
 
+    // Handle method calls on temporary instances: A().method()
+    // A() is a Call node with no "id" field; return the class name so that
+    // get_type_from_method() can look up the method in the class definition.
+    if (
+      call["value"]["_type"] == "Call" && call["value"].contains("func") &&
+      call["value"]["func"]["_type"] == "Name" &&
+      call["value"]["func"].contains("id"))
+      return call["value"]["func"]["id"].template get<std::string>();
+
+    // Handle chained method calls: B().g().f() where B().g() is itself a method
+    // call returning an object. Recursively resolve the return type of B().g()
+    // so that the outer call .f() can look up the method in the right class.
+    if (
+      call["value"]["_type"] == "Call" && call["value"].contains("func") &&
+      call["value"]["func"]["_type"] == "Attribute")
+      return get_type_from_method(call["value"]);
+
     // Handle normal Name values (variable references)
     if (!call["value"].contains("id"))
       return "";
@@ -1823,6 +2644,30 @@ private:
       obj_name = invert_substrings(obj_name);
 
     return json_utils::get_object_alias(ast_, obj_name);
+  }
+
+  std::string get_string_method_return_type(const std::string &method) const
+  {
+    if (
+      method == "join" || method == "lower" || method == "upper" ||
+      method == "strip" || method == "lstrip" || method == "rstrip" ||
+      method == "format" || method == "replace")
+      return "str";
+
+    if (
+      method == "startswith" || method == "endswith" || method == "isdigit" ||
+      method == "isalpha" || method == "isspace" || method == "islower" ||
+      method == "isupper")
+      return "bool";
+
+    if (method == "find" || method == "rfind")
+      return "int";
+
+    if (method == "split")
+      return "list";
+
+    // Keep previous behavior for unmapped string methods.
+    return "str";
   }
 
   std::string get_type_from_method(const Json &call)
@@ -1843,33 +2688,119 @@ private:
       if (obj_type == "str" && call["func"].contains("attr"))
       {
         const std::string &method = call["func"]["attr"];
-        // Methods that return str
-        if (
-          method == "join" || method == "lower" || method == "upper" ||
-          method == "strip" || method == "lstrip" || method == "rstrip" ||
-          method == "format" || method == "replace")
-          return "str";
-        // Methods that return bool
-        else if (
-          method == "startswith" || method == "endswith" ||
-          method == "isdigit" || method == "isalpha" || method == "isspace" ||
-          method == "islower" || method == "isupper")
-          return "bool";
-        else if (method == "find" || method == "rfind")
-          return "int";
-        else if (method == "split")
-          return "list";
-        // Default for string methods
-        return "str";
+        return get_string_method_return_type(method);
       }
 
       return obj_type;
+    }
+
+    // Handle method calls on binary expressions like (s + ",end").split(",", 1)
+    if (
+      call["func"].contains("value") &&
+      call["func"]["value"]["_type"] == "BinOp")
+    {
+      std::string obj_type =
+        get_type_from_binary_expr(call["func"]["value"], ast_);
+      if (obj_type == "str" && call["func"].contains("attr"))
+      {
+        const std::string &method = call["func"]["attr"];
+        return get_string_method_return_type(method);
+      }
+      if (!obj_type.empty())
+        return obj_type;
+    }
+
+    // Handle method calls on subscript expressions: e.g. nested[i].pop()
+    // get_object_name() returns "" for Subscript nodes (no "id" field), which
+    // would cause a spurious "Object not found" throw further below.
+    if (
+      call["func"].contains("value") &&
+      call["func"]["value"]["_type"] == "Subscript")
+    {
+      std::string method = call["func"].contains("attr")
+                             ? call["func"]["attr"].template get<std::string>()
+                             : "";
+      if (method == "pop")
+      {
+        // Try to infer the element type of the inner list from the base list.
+        const auto &subscript = call["func"]["value"];
+        if (
+          subscript.contains("value") &&
+          subscript["value"]["_type"] == "Name" &&
+          subscript["value"].contains("id"))
+        {
+          const std::string &base_name =
+            subscript["value"]["id"].template get<std::string>();
+          Json base_decl =
+            json_utils::find_var_decl(base_name, get_current_func_name(), ast_);
+          if (!base_decl.empty() && base_decl.contains("value"))
+          {
+            const Json &rhs = base_decl["value"];
+            // List comprehension [[...] for _ in range(n)]: elt is the inner list
+            if (rhs["_type"] == "ListComp" && rhs.contains("elt"))
+            {
+              std::string inner_type = get_argument_type(rhs["elt"]);
+              // Strip "list[T]" → "T" (inner list element type is T)
+              if (
+                inner_type.size() > 5 && inner_type.substr(0, 5) == "list[" &&
+                inner_type.back() == ']')
+              {
+                return inner_type.substr(5, inner_type.size() - 6);
+              }
+            }
+          }
+        }
+      }
+      // Cannot infer type — signal unknown to caller
+      return "";
     }
 
     const std::string &obj = get_object_name(call["func"], std::string());
     std::string attr_name = call["func"].contains("attr")
                               ? call["func"]["attr"].template get<std::string>()
                               : "";
+
+    // Handle super().method() calls: look up the method in the parent class.
+    // Only handles simple base class names; dotted names (e.g. module.Base)
+    // and multiple-inheritance MRO traversal beyond the first base are not
+    // supported — they fall back to "Any".
+    if (obj == "super" && !attr_name.empty() && !current_class_name_.empty())
+    {
+      Json class_node =
+        json_utils::find_class(ast_["body"], current_class_name_);
+      if (
+        !class_node.empty() && class_node.contains("bases") &&
+        !class_node["bases"].empty() && class_node["bases"][0].contains("id"))
+      {
+        const std::string base_name =
+          class_node["bases"][0]["id"].template get<std::string>();
+        Json base_class = json_utils::find_class(ast_["body"], base_name);
+        if (!base_class.empty())
+        {
+          for (const Json &member : base_class["body"])
+          {
+            if (member["_type"] != "FunctionDef" || member["name"] != attr_name)
+              continue;
+            if (member.contains("returns") && !member["returns"].is_null())
+            {
+              const Json &ret = member["returns"];
+              if (ret.contains("id"))
+                return ret["id"].template get<std::string>();
+              if (
+                ret.contains("_type") && ret["_type"] == "Subscript" &&
+                ret.contains("value") && ret["value"].contains("id"))
+                return ret["value"]["id"].template get<std::string>();
+            }
+            // attr_name == member["name"] by the loop invariant above
+            std::string inferred =
+              infer_from_return_statements(member["body"], attr_name);
+            return inferred.empty() ? "Any" : inferred;
+          }
+        }
+      }
+      return "Any";
+    }
+
     // Handle dict.keys() and dict.values()
     if (attr_name == "keys" || attr_name == "values")
     {
@@ -2017,11 +2948,12 @@ private:
       // For self.b.a, we get [a, b] but need [b, a] to process left to right
       std::reverse(attr_chain.begin(), attr_chain.end());
 
-      // If base object is "self" and we have at least one attribute, resolve the chain
-      if (base_obj == "self" && !attr_chain.empty() && current_func != nullptr)
+      // Determine the initial class type of the base object.
+      // Handles both "self" (look up current class) and arbitrary variables
+      // (look up variable type from annotation or constructor call).
+      std::string initial_type;
+      if (base_obj == "self" && current_func != nullptr)
       {
-        // Get the class name from current_func's context
-        std::string class_name = "";
         for (const Json &elem : ast_["body"])
         {
           if (elem["_type"] == "ClassDef" && elem.contains("body"))
@@ -2032,73 +2964,135 @@ private:
                 member["_type"] == "FunctionDef" &&
                 member["name"] == (*current_func)["name"])
               {
-                class_name = elem["name"].template get<std::string>();
+                initial_type = elem["name"].template get<std::string>();
                 break;
               }
             }
-            if (!class_name.empty())
+            if (!initial_type.empty())
               break;
           }
         }
+      }
+      else if (!base_obj.empty())
+      {
+        Json var_node =
+          json_utils::find_var_decl(base_obj, get_current_func_name(), ast_);
+        if (!var_node.empty())
+        {
+          // AnnAssign: a: A = ...
+          if (
+            var_node.contains("annotation") &&
+            !var_node["annotation"].is_null() &&
+            var_node["annotation"].contains("id"))
+            initial_type =
+              var_node["annotation"]["id"].template get<std::string>();
+          // Assign: a = A()
+          else if (
+            var_node.contains("value") && var_node["value"].contains("_type") &&
+            var_node["value"]["_type"] == "Call" &&
+            var_node["value"].contains("func") &&
+            var_node["value"]["func"].contains("_type") &&
+            var_node["value"]["func"]["_type"] == "Name" &&
+            var_node["value"]["func"].contains("id"))
+            initial_type =
+              var_node["value"]["func"]["id"].template get<std::string>();
+        }
+        // Also check function parameters
+        if (
+          initial_type.empty() && current_func != nullptr &&
+          (*current_func).contains("args") &&
+          (*current_func)["args"].contains("args"))
+        {
+          Json param =
+            find_annotated_assign(base_obj, (*current_func)["args"]["args"]);
+          if (
+            !param.empty() && param.contains("annotation") &&
+            !param["annotation"].is_null() &&
+            param["annotation"].contains("id"))
+            initial_type =
+              param["annotation"]["id"].template get<std::string>();
+        }
+      }
 
-        // Recursively resolve the attribute chain
-        std::string current_type = class_name;
+      if (!initial_type.empty() && !attr_chain.empty())
+      {
+        std::string current_type = initial_type;
         for (size_t i = 0; i < attr_chain.size(); ++i)
         {
-          const std::string &attr_name = attr_chain[i];
-
-          // Find the current class
+          const std::string &chain_attr = attr_chain[i];
           Json current_class =
             json_utils::find_class(ast_["body"], current_type);
           if (current_class.empty())
             break;
 
-          // Look for the attribute in __init__ method
           bool found = false;
           for (const Json &member : current_class["body"])
           {
             if (
-              member["_type"] == "FunctionDef" && member["name"] == "__init__")
+              member["_type"] != "FunctionDef" || member["name"] != "__init__")
+              continue;
+            for (const Json &stmt : member["body"])
             {
-              for (const Json &stmt : member["body"])
+              // AnnAssign: self.attr: Type = value
+              if (
+                stmt.contains("_type") && stmt["_type"] == "AnnAssign" &&
+                stmt.contains("target") && stmt["target"].is_object() &&
+                stmt["target"].contains("_type") &&
+                stmt["target"]["_type"] == "Attribute" &&
+                stmt["target"].contains("value") &&
+                stmt["target"]["value"].is_object() &&
+                stmt["target"]["value"].contains("id") &&
+                stmt["target"]["value"]["id"] == "self" &&
+                stmt["target"]["attr"] == chain_attr &&
+                stmt.contains("annotation") && !stmt["annotation"].is_null() &&
+                stmt["annotation"].contains("id") &&
+                !stmt["annotation"]["id"].is_null())
               {
-                // Check for AnnAssign: self.attr: Type = value
-                if (
-                  stmt["_type"] == "AnnAssign" &&
-                  stmt["target"]["_type"] == "Attribute" &&
-                  stmt["target"]["value"]["id"] == "self" &&
-                  stmt["target"]["attr"] == attr_name)
-                {
-                  // Found the attribute, get its type
-                  if (
-                    stmt.contains("annotation") &&
-                    !stmt["annotation"].is_null() &&
-                    stmt["annotation"].contains("id") &&
-                    !stmt["annotation"]["id"].is_null())
-                  {
-                    current_type =
-                      stmt["annotation"]["id"].template get<std::string>();
-                    found = true;
-                    break;
-                  }
-                }
-              }
-              if (found)
+                current_type =
+                  stmt["annotation"]["id"].template get<std::string>();
+                found = true;
                 break;
+              }
+              // Assign: self.attr = SomeClass()
+              if (
+                stmt.contains("_type") && stmt["_type"] == "Assign" &&
+                stmt.contains("targets") && stmt["targets"].is_array() &&
+                !stmt["targets"].empty() && stmt["targets"][0].is_object() &&
+                stmt["targets"][0].contains("_type") &&
+                stmt["targets"][0]["_type"] == "Attribute" &&
+                stmt["targets"][0].contains("value") &&
+                stmt["targets"][0]["value"].is_object() &&
+                stmt["targets"][0]["value"].contains("id") &&
+                stmt["targets"][0]["value"]["id"] == "self" &&
+                stmt["targets"][0]["attr"] == chain_attr &&
+                stmt.contains("value") && stmt["value"].contains("_type") &&
+                stmt["value"]["_type"] == "Call" &&
+                stmt["value"].contains("func") &&
+                stmt["value"]["func"].contains("_type") &&
+                stmt["value"]["func"]["_type"] == "Name" &&
+                stmt["value"]["func"].contains("id"))
+              {
+                current_type =
+                  stmt["value"]["func"]["id"].template get<std::string>();
+                found = true;
+                break;
+              }
             }
+            if (found)
+              break;
           }
 
           if (!found)
             break;
 
-          // If this is the last attribute in the chain, find the method return type
           if (i == attr_chain.size() - 1)
           {
             Json final_class =
               json_utils::find_class(ast_["body"], current_type);
             if (!final_class.empty())
             {
-              const std::string &method_name = call["func"]["attr"];
+              const std::string method_name =
+                call["func"]["attr"].template get<std::string>();
               for (const Json &method : final_class["body"])
               {
                 if (
@@ -2106,21 +3100,78 @@ private:
                   method["name"] == method_name)
                 {
                   if (
-                    method.contains("returns") &&
-                    method["returns"].contains("id"))
+                    method.contains("returns") && !method["returns"].is_null())
                   {
-                    return method["returns"]["id"].template get<std::string>();
+                    const auto &ret = method["returns"];
+                    if (ret.contains("id"))
+                      return ret["id"].template get<std::string>();
+                    if (
+                      ret.contains("_type") && ret["_type"] == "Subscript" &&
+                      ret.contains("value") && ret["value"].contains("id"))
+                      return ret["value"]["id"].template get<std::string>();
                   }
+                  // Infer return type from return statements when no annotation
+                  std::string inferred =
+                    infer_from_return_statements(method["body"], method_name);
+                  return inferred.empty() ? "Any" : inferred;
                 }
               }
             }
+            // Chain resolved but method not in final class
+            return "";
           }
         }
       }
+      // Could not resolve chain - return empty rather than throwing
+      return "";
     }
 
     if (obj_node.empty())
+    {
+      // Method call on temporary expression (e.g., ({1,2,3}-{1}).pop()).
+      // Such values have no symbol name, so object lookup fails.
+      if (
+        obj.empty() && call["func"].contains("value") &&
+        call["func"]["value"].contains("_type") &&
+        call["func"]["value"]["_type"] == "BinOp")
+      {
+        std::string inferred_expr_type =
+          get_type_from_binary_expr(call["func"]["value"], ast_);
+        return inferred_expr_type.empty() ? "Any" : inferred_expr_type;
+      }
+
+      // Check if obj is a class name
+      Json class_node = json_utils::find_class(ast_["body"], obj);
+      if (!class_node.empty())
+      {
+        const std::string &method_name = call["func"]["attr"];
+        // Find the method in the class body
+        for (const Json &member : class_node["body"])
+        {
+          if (member["_type"] == "FunctionDef" && member["name"] == method_name)
+          {
+            // Prefer the explicit return-type annotation when present.
+            if (member.contains("returns") && !member["returns"].is_null())
+            {
+              const Json &ret = member["returns"];
+              // Simple type: -> str, -> int, -> MyClass
+              if (ret.contains("id"))
+                return ret["id"].template get<std::string>();
+              // Generic type: -> dict[str, bool], -> list[int], etc.
+              if (
+                ret.contains("_type") && ret["_type"] == "Subscript" &&
+                ret.contains("value") && ret["value"].contains("id"))
+                return ret["value"]["id"].template get<std::string>();
+            }
+            std::string inferred_type =
+              infer_from_return_statements(member["body"], method_name);
+            if (!inferred_type.empty())
+              return inferred_type;
+          }
+        }
+      }
       throw std::runtime_error("Object \"" + obj + "\" not found.");
+    }
 
     std::string obj_type;
     if (
@@ -2273,6 +3324,10 @@ private:
       return InferResult::OK;
     }
 
+    // Guard against bare return (value=null) or missing value key
+    if (!stmt.contains("value") || stmt["value"].is_null())
+      return InferResult::UNKNOWN;
+
     const auto &value_type = stmt["value"]["_type"];
 
     // Get type from RHS constant
@@ -2332,7 +3387,21 @@ private:
 
     // Get type from RHS variable
     else if (value_type == "Name" || value_type == "Subscript")
+    {
+      // If RHS is a function name (e.g. g = f), skip annotation so the
+      // converter can infer the function-pointer type directly.
+      // Use the non-throwing (const) overload to avoid crashing on names
+      // that are not FunctionDefs.
+      if (
+        value_type == "Name" && stmt["value"].contains("id") &&
+        !json_utils::find_function(
+           static_cast<const nlohmann::json &>(ast_["body"]),
+           stmt["value"]["id"].template get<std::string>())
+           .empty())
+        return InferResult::UNKNOWN;
+
       inferred_type = get_type_from_rhs_variable(stmt, body);
+    }
 
     // Get type from RHS binary expression
     else if (value_type == "BinOp")
@@ -2352,6 +3421,8 @@ private:
       !type_utils::is_python_model_func(stmt["value"]["func"]["id"]))
     {
       inferred_type = get_type_from_call(stmt);
+      if (inferred_type.empty())
+        return InferResult::UNKNOWN;
     }
 
     // Get type from methods and class methods
@@ -2384,6 +3455,19 @@ private:
           else
             return InferResult::UNKNOWN;
         }
+        // Method call on subscript (e.g., nested[i].pop()): let converter infer
+        else if (
+          func.contains("value") && func["value"]["_type"] == "Subscript")
+          return InferResult::UNKNOWN;
+        // Method call on temporary instance (e.g., A().f()): let converter infer
+        // if get_type_from_method couldn't resolve (class not in AST etc.)
+        else if (func.contains("value") && func["value"]["_type"] == "Call")
+          return InferResult::UNKNOWN;
+        // Method call on nested attribute chain (e.g., a.b.c.f()): could not
+        // resolve type - let converter infer
+        else if (
+          func.contains("value") && func["value"]["_type"] == "Attribute")
+          return InferResult::UNKNOWN;
       }
     }
     else
@@ -2547,6 +3631,21 @@ private:
 
       std::string inferred_type("");
 
+      // Check if RHS is a type identifier
+      if (element["value"]["_type"] == "Name")
+      {
+        const std::string &rhs_name = element["value"]["id"];
+        if (type_utils::is_type_identifier(rhs_name))
+        {
+          // This is a type object assignment: x = int
+          inferred_type = "type";
+          update_assignment_node(element, inferred_type);
+          if (itr != referenced_global_elements.end())
+            *itr = element;
+          continue;
+        }
+      }
+
       // Check if LHS was previously annotated
       if (
         element.contains("targets") && element["targets"][0]["_type"] == "Name")
@@ -2704,9 +3803,6 @@ private:
 
   void update_assignment_node(Json &element, const std::string &inferred_type)
   {
-    // Update type field
-    element["_type"] = "AnnAssign";
-
     auto target = element["targets"][0];
     std::string id;
 
@@ -2720,7 +3816,13 @@ private:
            target["attr"].template get<std::string>();
     }
     else if (target.contains("slice"))
-      return; // No need to annotate assignments to array elements.
+      return; // No need to annotate subscript assignments (e.g. d["k"] = v).
+
+    // Update type field only after confirming this is an annotatable target.
+    element["_type"] = "AnnAssign";
+    // Mark as inferred to distinguish from explicit
+    // annotations like `x: Any = ...` during assignment type handling.
+    element["_inferred_annotation"] = true;
 
     assert(!id.empty());
 
@@ -2827,6 +3929,18 @@ private:
         ((elem["_type"] == "AnnAssign" && elem.contains("target") &&
           elem["target"].contains("id") &&
           elem["target"]["id"].template get<std::string>() == node_name) ||
+         (elem["_type"] == "Assign" && elem.contains("targets") &&
+          elem["targets"].is_array() && !elem["targets"].empty() &&
+          elem["targets"][0].contains("_type") &&
+          elem["targets"][0]["_type"] == "Name" &&
+          elem["targets"][0].contains("id") &&
+          elem["targets"][0]["id"].template get<std::string>() == node_name &&
+          elem.contains("value") && elem["value"].is_object() &&
+          elem["value"].contains("_type") &&
+          // Keep assign-based lookup for simple RHS forms used by frontend
+          // inference (e.g. Name/Attribute/BinOp), but avoid Call-based
+          // expressions that can trigger heavy paths in known buggy cases.
+          elem["value"]["_type"] != "Call") ||
          (elem["_type"] == "arg" && elem["arg"] == node_name)))
       {
         return elem;
@@ -2911,6 +4025,14 @@ private:
   bool filter_global_elements_ = false;
   std::vector<Json> referenced_global_elements;
   std::set<std::string> functions_in_analysis_;
+  std::set<std::string> resolving_rhs_vars_;
   std::string current_func_name_context_;
   std::string current_class_name_;
+  struct pending_specializationt
+  {
+    std::string function_name;
+    size_t param_index;
+    std::vector<std::string> class_types;
+  };
+  std::vector<pending_specializationt> pending_specializations_;
 };

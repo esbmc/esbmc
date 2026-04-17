@@ -147,6 +147,8 @@ public:
    */
   exprt get_dict_literal(const nlohmann::json &element);
 
+  exprt get_dict_comprehension(const nlohmann::json &element);
+
   /**
    * @brief Creates and initializes a dictionary from a literal expression.
    *
@@ -221,8 +223,10 @@ public:
    */
   void handle_dict_subscript_assign(
     const exprt &dict_expr,
-    const nlohmann::json &slice_node,
+    const exprt &key_expr,
     const exprt &value,
+    const locationt &location,
+    const nlohmann::json &node,
     codet &target_block);
 
   /**
@@ -321,6 +325,25 @@ public:
   get_dict_value_type_from_annotation(const nlohmann::json &annotation_node);
 
   /**
+   * @brief Returns the tuple type (key_type, value_type) for dict.popitem().
+   * @param dict_expr The dictionary expression (must be a symbol)
+   * @return struct_typet with element_0=key_type, element_1=value_type
+   */
+  typet get_popitem_tuple_type(const exprt &dict_expr);
+
+  /**
+   * @brief Handles dict.popitem() method calls.
+   * Implements Python's dict.popitem() semantics:
+   * - Raises KeyError if the dictionary is empty.
+   * - Otherwise removes and returns the last (key, value) pair as a tuple.
+   * @param dict_expr The dictionary expression
+   * @param call_node The function call AST node
+   * @return Expression representing the (key, value) tuple
+   */
+  exprt
+  handle_dict_popitem(const exprt &dict_expr, const nlohmann::json &call_node);
+
+  /**
    * @brief Resolve expected type for dict subscript using variable annotation
    *
    * Looks up the dict variable's annotation to determine what type
@@ -377,17 +400,76 @@ public:
 
   /**
    * @brief Handles dict.get() method calls
-   * 
+   *
    * Implements Python's dict.get(key, default=None) semantics:
    * - Returns value if key exists
    * - Returns default (or None) if key doesn't exist
-   * 
+   *
    * @param dict_expr The dictionary expression
    * @param call_node The function call AST node containing arguments
    * @return Expression representing the result (value or default)
    */
   exprt
   handle_dict_get(const exprt &dict_expr, const nlohmann::json &call_node);
+
+  /**
+   * @brief Handles dict.setdefault() method calls
+   *
+   * Implements Python's dict.setdefault(key, default=None) semantics:
+   * - If key exists in the dictionary: returns its current value (no mutation)
+   * - If key does not exist: inserts (key, default) into the dictionary
+   *   and returns default
+   *
+   * @param dict_expr The dictionary expression
+   * @param call_node The function call AST node containing arguments
+   * @return Expression representing the result (existing value or default)
+   */
+  exprt handle_dict_setdefault(
+    const exprt &dict_expr,
+    const nlohmann::json &call_node);
+
+  /**
+   * @brief Handles dict.pop() method calls.
+   *
+   * Implements Python's dict.pop(key[, default]) semantics:
+   * - If key exists: removes it and returns its value.
+   * - If key doesn't exist and default is given: returns default.
+   * - If key doesn't exist and no default: raises KeyError.
+   *
+   * @param dict_expr The dictionary expression
+   * @param call_node The function call AST node containing arguments
+   * @return Expression representing the removed value (or default)
+   */
+  exprt
+  handle_dict_pop(const exprt &dict_expr, const nlohmann::json &call_node);
+
+  /**
+   * @brief Returns true for dict methods that return a value and emit IR.
+   *
+   * Used to avoid double-evaluation during type inference: these methods
+   * must not be called via get_expr() in create_symbol_for_unannotated_assign(),
+   * because they already emit GOTO instructions as a side-effect.
+   *
+   * Keep in sync with handle_dict_method() when adding new value-returning
+   * dict methods.
+   *
+   * @param method_name The method name to check.
+   * @return true if the method is a value-returning, IR-emitting dict method.
+   */
+  static bool is_value_returning_method(const std::string &method_name);
+
+  /**
+   * @brief Handles dict.update() method calls.
+   * Implements Python's dict.update(other) semantics:
+   * - For each key-value pair in other: if key exists, update value;
+   *   otherwise insert the new key-value pair.
+   * - Returns nil_exprt (update() is a void operation).
+   * @param dict_expr The dictionary expression to update
+   * @param call_node The function call AST node containing the argument dict
+   * @return nil_exprt (void operation)
+   */
+  exprt
+  handle_dict_update(const exprt &dict_expr, const nlohmann::json &call_node);
 
   /**
    * @brief Compares two dictionaries for equality or inequality
@@ -422,6 +504,15 @@ private:
 
   /// Counter for generating unique dictionary variable names
   static int dict_counter_;
+
+  /**
+   * @brief Extract key type from dict type annotation.
+   * For annotations like `dict[K, V]`, extracts the key type K.
+   * @param annotation_node The annotation AST node (Subscript with slice)
+   * @return The key type, or empty_typet if cannot be determined
+   */
+  typet
+  get_dict_key_type_from_annotation(const nlohmann::json &annotation_node);
 
   /**
    * @brief Extracts the key expression from a subscript slice node.

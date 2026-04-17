@@ -9,6 +9,7 @@
 #include <util/message.h>
 #include <nlohmann/json.hpp>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 // Forward declarations
@@ -224,6 +225,26 @@ public:
    * - "-".join(list_var) -> joined string
    */
   exprt handle_str_join(const nlohmann::json &call_json);
+
+  /**
+   * @brief Dispatch and handle string attribute method calls.
+   *
+   * Returns a non-nil expression when the attribute method is recognized as a
+   * supported string operation. Returns nil_exprt for non-string methods so
+   * callers can continue normal dispatch.
+   */
+  exprt handle_string_attribute_call(const nlohmann::json &call_json);
+
+  /**
+   * @brief Try fast-path folding for len() when argument is string-like.
+   *
+   * Returns non-nil when a compile-time or cheap symbolic shortcut is
+   * available. Returns nil_exprt when caller should fall back to the generic
+   * len() handling path.
+   */
+  exprt try_handle_len_string_fast_path(
+    const nlohmann::json &call_json,
+    const exprt &arg_expr);
 
   // String method operations
 
@@ -464,6 +485,158 @@ public:
     const locationt &location);
 
   /**
+   * @brief Handle str.capitalize() method
+   */
+  exprt
+  handle_string_capitalize(const exprt &string_obj, const locationt &location);
+
+  /**
+   * @brief Handle str.title() method
+   */
+  exprt handle_string_title(const exprt &string_obj, const locationt &location);
+
+  /**
+   * @brief Handle str.swapcase() method
+   */
+  exprt
+  handle_string_swapcase(const exprt &string_obj, const locationt &location);
+
+  /**
+   * @brief Handle str.casefold() method
+   */
+  exprt
+  handle_string_casefold(const exprt &string_obj, const locationt &location);
+
+  /**
+   * @brief Handle str.count() method (constant-only support)
+   */
+  exprt handle_string_count(
+    const exprt &string_obj,
+    const exprt &sub_arg,
+    const exprt &start_arg,
+    const exprt &end_arg,
+    const locationt &location);
+
+  /**
+   * @brief Handle str.removeprefix() method
+   */
+  exprt handle_string_removeprefix(
+    const exprt &string_obj,
+    const exprt &prefix_arg,
+    const locationt &location);
+
+  /**
+   * @brief Handle str.removesuffix() method
+   */
+  exprt handle_string_removesuffix(
+    const exprt &string_obj,
+    const exprt &suffix_arg,
+    const locationt &location);
+
+  /**
+   * @brief Handle str.splitlines() method (constant-only support)
+   */
+  exprt handle_string_splitlines(
+    const nlohmann::json &call,
+    const exprt &string_obj,
+    const locationt &location);
+
+  /**
+   * @brief Handle str.format() method (minimal support, constant-only)
+   */
+  exprt handle_string_format(
+    const nlohmann::json &call,
+    const exprt &string_obj,
+    const locationt &location);
+
+  /**
+   * @brief Handle str.partition() method (constant-only support)
+   */
+  exprt handle_string_partition(
+    const exprt &string_obj,
+    const exprt &sep_arg,
+    const locationt &location);
+
+  /**
+   * @brief Handle str.isalnum() method
+   */
+  exprt handle_string_isalnum(
+    const exprt &string_obj,
+    [[maybe_unused]] const locationt &location);
+
+  /**
+   * @brief Handle str.isupper() method
+   */
+  exprt handle_string_isupper(
+    const exprt &string_obj,
+    [[maybe_unused]] const locationt &location);
+
+  /**
+   * @brief Handle str.isnumeric() method
+   */
+  exprt handle_string_isnumeric(
+    const exprt &string_obj,
+    [[maybe_unused]] const locationt &location);
+
+  /**
+   * @brief Handle str.isidentifier() method
+   */
+  exprt handle_string_isidentifier(
+    const exprt &string_obj,
+    [[maybe_unused]] const locationt &location);
+
+  /**
+   * @brief Handle str.center() method (constant-only support)
+   */
+  exprt handle_string_center(
+    const exprt &string_obj,
+    const exprt &width_arg,
+    const exprt &fill_arg,
+    const locationt &location);
+
+  /**
+   * @brief Handle str.ljust() method (constant-only support)
+   */
+  exprt handle_string_ljust(
+    const exprt &string_obj,
+    const exprt &width_arg,
+    const exprt &fill_arg,
+    const locationt &location);
+
+  /**
+   * @brief Handle str.rjust() method (constant-only support)
+   */
+  exprt handle_string_rjust(
+    const exprt &string_obj,
+    const exprt &width_arg,
+    const exprt &fill_arg,
+    const locationt &location);
+
+  /**
+   * @brief Handle str.zfill() method (constant-only support)
+   */
+  exprt handle_string_zfill(
+    const exprt &string_obj,
+    const exprt &width_arg,
+    const locationt &location);
+
+  /**
+   * @brief Handle str.expandtabs() method (constant-only support)
+   */
+  exprt handle_string_expandtabs(
+    const exprt &string_obj,
+    const exprt &tabsize_arg,
+    const locationt &location);
+
+  /**
+   * @brief Handle str.format_map() method (minimal support, constant-only)
+   */
+  exprt handle_string_format_map(
+    const nlohmann::json &call,
+    const exprt &string_obj,
+    const locationt &location);
+
+  /**
    * @brief Extract a constant string from the AST node (literal or const var)
    * @param node JSON node to inspect
    * @param converter Converter used to resolve Name references
@@ -551,8 +724,14 @@ private:
   contextt &symbol_table_;
   type_handler &type_handler_;
   string_builder *string_builder_;
+  std::unordered_map<std::string, symbolt *> symbol_cache_;
+  std::unordered_map<std::string, int> assignment_count_cache_;
+  std::unordered_map<std::string, bool> assignment_has_augassign_cache_;
+  std::unordered_map<std::string, nlohmann::json> var_value_cache_;
+  std::string len_cache_scope_id_;
 
   // Helper methods for internal use
+  bool try_extract_const_string_expr(const exprt &expr, std::string &out);
 
   /**
    * @brief Create a character array expression
@@ -582,6 +761,11 @@ private:
     const typet &return_type,
     const std::vector<typet> &arg_types,
     const locationt &location);
+
+  symbolt *find_cached_symbol(const std::string &symbol_id);
+  symbolt *find_cached_c_function_symbol(const std::string &symbol_id);
+  exprt try_len_fast_path_from_constant_arg(const nlohmann::json &arg_json);
+  exprt try_len_fast_path_from_name_arg(const nlohmann::json &arg_json);
 
   /**
    * @brief Convert float bits to string representation

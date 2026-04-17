@@ -1,5 +1,6 @@
 ---
 title: Random OM
+weight: 6
 ---
 
 ## Addition of `random` Module Stub

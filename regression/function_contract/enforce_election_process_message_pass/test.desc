@@ -1,0 +1,4 @@
+CORE
+main.c
+--function process_message --enforce-contract process_message --replace-call-with-contract "*" --no-align-check --unwind 5
+^VERIFICATION SUCCESSFUL$

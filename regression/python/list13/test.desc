@@ -1,5 +1,4 @@
-KNOWNBUG
+THOROUGH
 main.py
---incremental-bmc
-
+--unwind 11 --no-standard-checks 
 ^VERIFICATION SUCCESSFUL$

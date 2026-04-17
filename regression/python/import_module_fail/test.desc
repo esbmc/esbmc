@@ -1,4 +1,4 @@
 CORE
 main.py
-
+--incremental-bmc
 ^ERROR\: Module \'my_module\' not found\.$

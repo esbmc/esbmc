@@ -1,0 +1,5 @@
+CORE
+main.c
+--function _mm_adds_pi8
+
+^VERIFICATION SUCCESSFUL$

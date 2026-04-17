@@ -5,6 +5,7 @@
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/type_handler.h>
 #include <util/expr.h>
+#include <unordered_map>
 
 enum class FunctionType
 {
@@ -45,6 +46,22 @@ public:
   strip_ctor_self_parameters(const exprt::operandst &args);
 
 private:
+  friend class function_call_expr_test_access;
+
+  /*
+  * Check if the current function call is to math.comb() function
+  * Returns true if this is a call to math.comb
+  */
+  bool is_math_comb_call() const;
+
+  /*
+  * Handles math.comb() function calls with type checking.
+  * Validates that both arguments are integers (not floats).
+  * Returns TypeError exception if arguments are not integers.
+  * Otherwise delegates to the comb implementation function.
+  */
+  exprt handle_math_comb() const;
+
   /*
    * Validates that function call arguments match expected parameter types.
    * Returns TypeError exception if type mismatch is detected, nil_exprt otherwise.
@@ -64,7 +81,8 @@ private:
 
   exprt generate_attribute_error(
     const std::string &method_name,
-    const std::vector<std::string> &possible_classes) const;
+    const std::vector<std::string> &possible_classes,
+    const typet &expected_type = typet()) const;
 
   /**
    * Determines whether a non-deterministic function is being invoked.
@@ -109,10 +127,23 @@ private:
   std::string get_object_name() const;
 
   /*
+   * Resolves the list symbol for a list method call.
+   * Handles both a plain name (e.g. mylist.append()) and a subscript of
+   * a nested list (e.g. nested[0].append()) by looking up the inner list
+   * symbol via list_type_map.  Returns nullptr when not found.
+   * On return, `display_name` holds a human-readable identifier suitable
+   * for error messages (e.g. "mylist" or "nested[0]").
+   */
+  const symbolt *get_object_list_symbol(std::string &display_name) const;
+  void materialize_list_symbol(const symbolt *sym) const;
+
+  /*
    * Handles int-to-str conversions (e.g., str(65)) by generating
    * the appropriate cast expression.
    */
   exprt handle_int_to_str(nlohmann::json &arg) const;
+
+  exprt handle_int_to_bytes() const;
 
   /*
    * Extracts a string representation from a symbol's constant value.
@@ -131,6 +162,8 @@ private:
   exprt handle_isinstance() const;
 
   exprt handle_hasattr() const;
+
+  exprt handle_type_call() const;
 
   /*
    * Handles str-to-int conversions (e.g., int('65')) by reconstructing
@@ -151,6 +184,12 @@ private:
    * the corresponding constant character array expression.
    */
   exprt handle_float_to_str(nlohmann::json &arg) const;
+
+  /*
+   * Handles complex-to-str conversions (e.g., str(complex(1,2)) → "(1+2j)").
+   * Formats constant complex values using Python's repr rules.
+   */
+  exprt handle_complex_to_str() const;
 
   /*
    * Handles string arguments (e.g., str("abc")) by converting them
@@ -204,6 +243,22 @@ private:
   exprt handle_abs(nlohmann::json &arg) const;
 
   /*
+   * Handles round() function calls by rounding a numeric value.
+   * round(x) returns the nearest integer (as int).
+   * round(x, n) returns x rounded to n decimal places (as float).
+   */
+  exprt handle_round(nlohmann::json &arg) const;
+
+  /*
+   * Handles complex() constructor calls.
+   * Supported overloads:
+   * - complex() -> 0.0 + 0.0j
+   * - complex(x) -> float(x) + 0.0j
+   * - complex(x, y) -> float(x) + float(y)j
+   */
+  exprt handle_complex() const;
+
+  /*
    * Checks if the current function call is a min() or max() built-in function.
    * Returns true if the function name matches "min" or "max", false otherwise.
    */
@@ -220,12 +275,6 @@ private:
   exprt
   handle_min_max(const std::string &func_name, irep_idt comparison_op) const;
 
-  /*
-   * Convert the exception type to the constructor call
-   * Returns cpp-throw
-   */
-  exprt gen_exception_raise(std::string exc, std::string message) const;
-
   // Dict method detection and handling
   bool is_dict_method_call() const;
   exprt handle_dict_method() const;
@@ -238,6 +287,10 @@ private:
   exprt handle_list_extend() const;
   exprt handle_list_clear() const;
   exprt handle_list_pop() const;
+  exprt handle_list_copy() const;
+  exprt handle_list_remove() const;
+  exprt handle_list_sort() const;
+  exprt handle_list_reverse() const;
 
   /*
    * Check if the current function call is to a regular expression module function
@@ -252,17 +305,28 @@ private:
    */
   exprt validate_re_module_args() const;
 
-  /*
-   * Check if the current function call is to Python's built-in any() function
-   * Returns true if the function name is "any"
-   */
   bool is_any_call() const;
+  exprt handle_any() const;
+  bool is_all_call() const;
+  exprt handle_all();
+
+  // Convert an IR expression to its Python truthiness value.
+  // Handles None, bool, int, float, complex, pointer types.
+  exprt compute_element_truthiness(const exprt &element) const;
+
+  enum class ReduceOp
+  {
+    Any,
+    All
+  };
 
   /*
-   * Implement Python's any() built-in function
-   * Returns True if any element in the iterable is truthy, False otherwise
+   * Reduce a list literal by combining the truthiness of its elements.
+   * Used by both any() and all().
    */
-  exprt handle_any() const;
+  exprt reduce_list_literal_truthiness(
+    const nlohmann::json &list_arg,
+    ReduceOp op) const;
 
   /**
    * Convert an integer to a string representation in a specific base
@@ -302,10 +366,18 @@ private:
   // General function call handler
   exprt handle_general_function_call();
 
+  const symbolt *cached_find_symbol(const std::string &id) const;
+
 protected:
   symbol_id function_id_;
   const nlohmann::json &call_;
   python_converter &converter_;
   const type_handler &type_handler_;
   FunctionType function_type_;
+
+  mutable std::unordered_map<std::string, const symbolt *> sym_cache_;
 };
+
+/// Convert a code_function_callt to a side_effect_expr_function_callt so it
+/// can be used as a value expression (e.g., as an operand of if_exprt).
+exprt to_value_expr(const exprt &arg, const namespacet &ns);

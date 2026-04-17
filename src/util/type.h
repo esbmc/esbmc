@@ -103,6 +103,7 @@ public:
 
   static irep_idt t_intcap;
   static irep_idt t_uintcap;
+  static irep_idt t_ptrmem;
 
   static irep_idt a_identifier;
   static irep_idt a_name;

@@ -165,3 +165,67 @@ int bounded_loop_unroller::get_loop_bounds(loopst &loop)
   number_of_bounded_loops++;
   return bound;
 }
+
+bool apply_intrinsic_unroller::runOnLoop(
+  loopst &loop,
+  goto_programt &goto_program)
+{
+  auto instrument_function = [&loop](goto_programt::targett &it) -> bool {
+    if (!(is_symbol2t(to_code_function_call2t(it->code).function) &&
+          to_symbol2t(to_code_function_call2t(it->code).function)
+              .get_symbol_name() == "c:@F@__ESBMC_unroll"))
+      return false;
+
+    if (to_code_function_call2t(it->code).operands.size() != 1)
+    {
+      log_error("Invoking __ESBMC_unroll with wrong signature");
+      it->dump();
+      abort();
+    }
+    expr2tc n_unwind = to_code_function_call2t(it->code).operands[0];
+    simplify(n_unwind);
+
+    if (!is_constant_int2t(n_unwind))
+    {
+      log_error("Invoking __ESBMC_unroll with invalid argument");
+      it->dump();
+      n_unwind->dump();
+      abort();
+    }
+    const long unwinds = to_constant_int2t(n_unwind).as_long();
+
+    goto_programt::targett loop_exit = loop.get_original_loop_exit();
+    loop_exit->pragma_unroll_count =
+      unwinds + 1; // add extra one to match pragma unroll behavior
+    return true;
+  };
+  goto_programt::targett program_counter = loop.get_original_loop_head();
+
+  // Two cases that we are trying to solve at the same time. Wheter we
+  // are dealing with an initialization (e.g. for(int i = 0;;)) or a
+  // while loop.
+
+  if (program_counter-- == goto_program.instructions.begin())
+    return false; // loop is in the begginning of the function
+
+  if (program_counter->is_function_call())
+    return instrument_function(program_counter);
+
+  if (
+    !program_counter->is_assign() ||
+    program_counter-- == goto_program.instructions.begin())
+    return false;
+
+  if (program_counter->is_function_call())
+    return instrument_function(program_counter);
+
+  if (
+    !program_counter->is_decl() ||
+    program_counter-- == goto_program.instructions.begin())
+    return false;
+
+  if (program_counter->is_function_call())
+    return instrument_function(program_counter);
+
+  return false;
+}

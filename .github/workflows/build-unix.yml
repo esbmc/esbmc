@@ -55,9 +55,13 @@ jobs:
         # Set PATH to include Python 3.12 and user-installed tools (mypy, meson, etc.)
         export PATH="$(brew --prefix python@3.12)/bin:$HOME/Library/Python/3.12/bin:$PATH"
         cd build/
-        # On macOS, only run Python tests; on other systems, run all tests
+        # On macOS, only run Python tests.
+        # On PR Linux, skip python-intensive to keep fast feedback.
+        # On other systems/events, run all tests.
         if [[ "${{ inputs.operating-system }}" =~ ^macos ]]; then
           ctest -j4 --output-on-failure --progress -L python
+        elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
+          ctest -j4 --output-on-failure --progress -LE python-intensive .
         else
           ctest -j4 --output-on-failure --progress .
         fi

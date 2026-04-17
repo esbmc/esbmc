@@ -1,0 +1,5 @@
+CORE
+main.c
+--branch-coverage --cov-report-json
+^Coverage report written to cov-report.json$
+^VERIFICATION FAILED$
