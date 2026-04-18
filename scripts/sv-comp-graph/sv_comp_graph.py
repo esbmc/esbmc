@@ -23,6 +23,7 @@ import argparse
 import logging
 import re
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -36,7 +37,7 @@ USER_AGENT = "esbmc-sv-comp-graph/1.0"
 OVERALL_LABELS = {"Overall", "C-Overall", "C.Overall"}
 
 OVERALL_LINK_RE = re.compile(
-    r"<a[^>]*href=['\"](META_[A-Za-z.-]*Overall)\.table\.html['\"][^>]*>" r"([^<]+)</a>"
+    r"<a[^>]*href=['\"](META_[A-Za-z.-]*Overall)\.table\.html['\"][^>]*>([^<]+)</a>"
 )
 MAX_SCORE_RE = re.compile(r"max\.\s*score:\s*(\d+)")
 ESBMC_CELL_RE = re.compile(
@@ -85,8 +86,17 @@ def fetch_index(url: str, cache_dir: Path, session: requests.Session) -> str:
     LOG.info("GET %s", url)
     resp = session.get(url, timeout=60, headers={"User-Agent": USER_AGENT})
     resp.raise_for_status()
-    cached.write_text(resp.text, encoding="utf-8")
-    return resp.text
+    text = resp.text
+    # Guard against CDN/holding pages that return 200 with no results table.
+    if len(text) < 4096 or "<tr" not in text:
+        LOG.warning(
+            "index response from %s looks incomplete (%d bytes) — not caching",
+            url,
+            len(text),
+        )
+        return text
+    cached.write_text(text, encoding="utf-8")
+    return text
 
 
 def fetch_tool_version(
@@ -101,6 +111,7 @@ def fetch_tool_version(
 
     LOG.info("GET %s (streaming for version)", url)
     buf = ""
+    saw_full_window = False
     try:
         with session.get(
             url, timeout=60, stream=True, headers={"User-Agent": USER_AGENT}
@@ -116,13 +127,17 @@ def fetch_tool_version(
                     cached.write_text(version, encoding="utf-8")
                     return version
                 if len(buf) >= VERSION_STREAM_LIMIT:
+                    saw_full_window = True
                     break
     except requests.RequestException as e:
         LOG.warning("version fetch failed (%s): %s", url, e)
         return None
 
     LOG.warning("could not extract ESBMC version from %s", url)
-    cached.write_text("", encoding="utf-8")
+    # Only memoize a negative result when we read enough bytes to be confident
+    # the version really isn't present (not a truncated / error response).
+    if saw_full_window:
+        cached.write_text("", encoding="utf-8")
     return None
 
 
@@ -186,16 +201,17 @@ def scrape_year(
             f"{overall_href}_{variant}.table.html"
         )
         version = fetch_tool_version(tool_url, cache_dir, session) or ""
+        result = YearResult(year, variant, score, max_score, version)
         LOG.info(
             "[%d] %-15s score=%d max=%d (%.1f%%) version=%s",
             year,
             variant,
             score,
             max_score,
-            100.0 * score / max_score,
+            result.pct,
             version or "?",
         )
-        out.append(YearResult(year, variant, score, max_score, version))
+        out.append(result)
     return out
 
 
@@ -203,7 +219,7 @@ def _render_bars(
     results: list[YearResult],
     output: Path,
     title: str,
-    label_fn,
+    label_fn: Callable[[YearResult], str],
 ) -> None:
     results = sorted(results, key=lambda r: r.year)
     xs = list(range(len(results)))
@@ -328,7 +344,6 @@ def main(argv: list[str] | None = None) -> int:
         variants = discovered
     LOG.info("plotting variants: %s", ", ".join(variants) or "(none)")
 
-    rc = 0
     for variant in variants:
         variant_results = [r for r in all_results if r.variant == variant]
         output = args.output_dir / f"sv-comp-{variant}.png"
@@ -337,7 +352,7 @@ def main(argv: list[str] | None = None) -> int:
     if not args.no_best:
         plot_best(all_results, args.output_dir / "sv-comp-best.png")
 
-    return rc
+    return 0
 
 
 if __name__ == "__main__":

@@ -32,13 +32,13 @@ import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 
+# Ordered short→long so insertion order drives plot order.
 BUDGETS: dict[str, str] = {
     "30s": "scripts/competitions/svcomp/stats-30s.txt",
     "100s": "scripts/competitions/svcomp/stats-100s",
     "300s": "scripts/competitions/svcomp/stats-300s.txt",
     "600s": "scripts/competitions/svcomp/stats-600s.txt",
 }
-BUDGET_ORDER = sorted(BUDGETS.keys(), key=lambda b: int(b.rstrip("s")))
 
 SCORE_RE = re.compile(r"Score:\s+(\d+)\s+\(max:\s+(\d+)\)")
 
@@ -65,8 +65,10 @@ class HistPoint:
 
 
 def git_log_for_path(path: str, repo: Path) -> list[tuple[str, datetime]]:
+    # --follow tracks the path across renames (e.g. stats-30s → stats-30s.txt),
+    # which matters because our four budget files have inconsistent extensions.
     out = subprocess.run(
-        ["git", "log", "--format=%H %aI", "--", path],
+        ["git", "log", "--follow", "--format=%H %aI", "--", path],
         cwd=repo,
         capture_output=True,
         text=True,
@@ -89,29 +91,41 @@ def pick_commit_for_month(
     target = datetime(year, month, 15, tzinfo=timezone.utc)
     if not commits:
         return None
-    best = min(commits, key=lambda c: abs(c[1] - target))
+    # On ties, prefer the later commit (typically the fix/update, and stable
+    # regardless of input ordering).
+    best = min(
+        commits, key=lambda c: (abs(c[1] - target), -c[1].timestamp())
+    )
     if abs(best[1] - target).days > max_days:
         return None
     return best
 
 
-def extract_file(commit: str, path: str, cache_dir: Path, repo: Path) -> str:
+def extract_file(
+    commit: str, path: str, cache_dir: Path, repo: Path
+) -> str | None:
+    """Return the file contents at `commit`, or None if absent at that commit."""
     cache = cache_dir / f"{commit[:12]}-{Path(path).name}"
     if cache.exists():
         LOG.debug("cache hit %s", cache)
         return cache.read_text(encoding="utf-8")
-    out = subprocess.run(
+    proc = subprocess.run(
         ["git", "show", f"{commit}:{path}"],
         cwd=repo,
         capture_output=True,
         text=True,
-        check=True,
-    ).stdout
-    cache.write_text(out, encoding="utf-8")
-    return out
+        check=False,
+    )
+    if proc.returncode != 0:
+        LOG.debug("git show %s:%s failed: %s", commit[:12], path, proc.stderr.strip())
+        return None
+    cache.write_text(proc.stdout, encoding="utf-8")
+    return proc.stdout
 
 
 def parse_score(text: str) -> tuple[int, int] | None:
+    # Stats files contain a single top-level `Score: N (max: M)` line; we take
+    # the first match and assume it is the overall score.
     m = SCORE_RE.search(text)
     if not m:
         return None
@@ -154,6 +168,11 @@ def collect(
                 continue
             sha, when = picked
             text = extract_file(sha, path, cache_dir, repo)
+            if text is None:
+                LOG.debug(
+                    "[%04d-%02d] %s: path absent at %s", year, month, budget, sha[:12]
+                )
+                continue
             parsed = parse_score(text)
             if parsed is None:
                 LOG.warning(
@@ -165,6 +184,7 @@ def collect(
                 )
                 continue
             score, max_score = parsed
+            point = HistPoint(year, month, budget, sha[:12], when, score, max_score)
             LOG.info(
                 "[%04d-%02d] %-5s commit=%s date=%s score=%d max=%d (%.1f%%)",
                 year,
@@ -174,11 +194,9 @@ def collect(
                 when.date().isoformat(),
                 score,
                 max_score,
-                100.0 * score / max_score,
+                point.pct,
             )
-            points.append(
-                HistPoint(year, month, budget, sha[:12], when, score, max_score)
-            )
+            points.append(point)
     return points
 
 
@@ -239,7 +257,8 @@ def plot_budget(
 def plot_combined(points: list[HistPoint], output: Path, scale: str) -> None:
     if not points:
         return
-    budgets = sorted({p.budget for p in points}, key=lambda b: int(b.rstrip("s")))
+    present = {p.budget for p in points}
+    budgets = [b for b in BUDGETS if b in present]
     colors = {"30s": "#2C68A3", "100s": "#E8871E", "300s": "#2CA02C", "600s": "#D62728"}
 
     fig, ax = plt.subplots(figsize=(11.0, 5.5))
@@ -271,6 +290,8 @@ def plot_combined(points: list[HistPoint], output: Path, scale: str) -> None:
 
 def _parse_ym(s: str, default_month: int) -> tuple[int, int]:
     """Accept either 'YYYY' or 'YYYY-MM'."""
+    if not 1 <= default_month <= 12:
+        raise ValueError(f"default_month out of range: {default_month}")
     if "-" in s:
         d = datetime.strptime(s, "%Y-%m")
         return d.year, d.month
@@ -296,8 +317,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument(
         "--budgets",
         nargs="+",
-        choices=BUDGET_ORDER,
-        default=BUDGET_ORDER,
+        choices=list(BUDGETS),
+        default=list(BUDGETS),
     )
     ap.add_argument(
         "--output-dir",
