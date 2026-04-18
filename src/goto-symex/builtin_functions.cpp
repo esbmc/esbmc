@@ -520,22 +520,35 @@ expr2tc goto_symext::symex_mem(
   else
   {
     cur_state->rename(size);
+    // Fold constant typecasts (e.g., (size_t)(-4) to large unsigned constant)
+    // so the is_constant_int2t check below succeeds even when the frontend
+    // represents the size as a typecast over a literal rather than a folded
+    // constant.
+    do_simplify(size);
     BigInt i;
     if (is_constant_int2t(size))
     {
-      uint64_t v = to_constant_int2t(size).value.to_uint64();
+      const BigInt &val = to_constant_int2t(size).value;
+      uint64_t v = val.to_uint64();
       if (v == 1)
         size_is_one = true;
       else if (v == 0 && options.get_bool_option("malloc-zero-is-null"))
         return symbol2tc(pointer_type2tc(type), "NULL");
       else if (
         is_malloc &&
-        to_constant_int2t(size).value >=
-          BigInt::power2(config.ansi_c.address_width - 1))
-        // Sizes with the top bit set (e.g., (size_t)(-4)) exceed half the
-        // address space and can never be satisfied without wraparound.
-        // Treat as allocation failure regardless of --force-malloc-success.
-        return symbol2tc(pointer_type2tc(type), "NULL");
+        (val.is_negative() ||
+         val >= BigInt::power2(config.ansi_c.address_width - 1)))
+      {
+        // Negative sizes or sizes with the top bit set (e.g., (size_t)(-4))
+        // exceed half the address space and can never be satisfied without
+        // wraparound. Assign NULL and return, matching real OS behaviour where
+        // such allocations always fail — even under --force-malloc-success.
+        expr2tc null_sym = symbol2tc(pointer_type2tc(type), "NULL");
+        if (null_sym->type != lhs->type)
+          null_sym = typecast2tc(lhs->type, null_sym);
+        symex_assign(code_assign2tc(lhs, null_sym), true, guard);
+        return null_sym;
+      }
     }
   }
 
