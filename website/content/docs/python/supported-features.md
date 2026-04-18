@@ -214,7 +214,7 @@ All functions are modelled using nondeterministic values with appropriate constr
 - `random.getrandbits(k)` → nondeterministic integer with k random bits
 - `random.randrange(start, stop, step=1)` → randomly selected integer from the specified range
 
-See also: [Random Operational Model](./Random-Operational-Model-in-ESBMC)
+See also: [Random Operational Model](./random-operational-model)
 
 ## OS Module (`os`)
 
