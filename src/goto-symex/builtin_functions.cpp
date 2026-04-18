@@ -528,6 +528,14 @@ expr2tc goto_symext::symex_mem(
         size_is_one = true;
       else if (v == 0 && options.get_bool_option("malloc-zero-is-null"))
         return symbol2tc(pointer_type2tc(type), "NULL");
+      else if (
+        is_malloc &&
+        to_constant_int2t(size).value >=
+          BigInt::power2(config.ansi_c.address_width - 1))
+        // Sizes with the top bit set (e.g., (size_t)(-4)) exceed half the
+        // address space and can never be satisfied without wraparound.
+        // Treat as allocation failure regardless of --force-malloc-success.
+        return symbol2tc(pointer_type2tc(type), "NULL");
     }
   }
 
