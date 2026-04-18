@@ -1,4 +1,4 @@
 CORE
-main.c
-
+test.c
+--incremental-bmc
 ^VERIFICATION SUCCESSFUL$
