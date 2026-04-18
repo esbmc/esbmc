@@ -1,4 +1,8 @@
 /*
+$ clang -g -O1   -fsanitize=address,undefined   -fsanitize-address-use-after-scope   -fno-omit-frame-pointer   main.c -o main
+*/
+
+/*
  * 
  * ESBMC PARAMETERS
  * --no-unwinding-assertions --unwind 15 --partial-loops --boolector --no-align-check --smtlib-solver-prog --error-label --tuple-node-flattener --all-claims --bv --witness-output --show-loops
