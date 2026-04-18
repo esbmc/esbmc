@@ -946,6 +946,18 @@ void dereferencet::build_reference_rec(
   if (is_code_type(value) || is_code_type(type))
     return;
 
+  // Zero-sized destination: the recursive paths below drill down to a scalar
+  // base case that fails with a spurious width mismatch. Reading 0 bytes is a
+  // no-op, so return any value of the target type (issue #723).
+  if (type_byte_size_bits(type) == 0)
+  {
+    // gen_zero asserts on memberless unions, so fall back to a nondet symbol.
+    value = (is_union_type(type) && to_union_type(type).members.empty())
+              ? make_failed_symbol(type)
+              : gen_zero(type);
+    return;
+  }
+
   if (is_struct_type(type))
     flags |= flag_dst_struct;
   else if (is_union_type(type))
