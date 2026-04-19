@@ -1023,7 +1023,14 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
       if (!is_constant_string2t(base_expr) && is_array_type(base_expr))
       {
         if (!is_symbol2t(base_expr))
+        {
+          log_debug(
+            "printf",
+            "symex_printf: array base is not a symbol (id={}), skipping "
+            "array->string conversion",
+            get_expr_id(base_expr));
           continue;
+        }
         const symbolt &s = *ns.lookup(to_symbol2t(base_expr).thename);
         exprt dest;
         if (array2string(s, dest))
