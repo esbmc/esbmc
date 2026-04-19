@@ -3607,4 +3607,4 @@ exprt migrate_expr_back(const expr2tc &ref)
     log_error("Unrecognized expr in migrate_expr_back");
     abort();
   }
-}
+  }

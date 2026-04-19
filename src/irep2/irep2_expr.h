@@ -3798,31 +3798,31 @@ public:
   {
   }
   phi2t(const phi2t &ref) = default;
-class capability_base2t : public capability_base_expr_methods
-{
-public:
-  /** Primary constructor. @param operand Pointer object to fetch size for. */
-  capability_base2t(const expr2tc &operand)
-    : capability_base_expr_methods(size_type2(), capability_base_id, operand)
+  class capability_base2t : public capability_base_expr_methods
   {
-  }
-  capability_base2t(const capability_base2t &ref) = default;
+  public:
+    /** Primary constructor. @param operand Pointer object to fetch size for. */
+    capability_base2t(const expr2tc &operand)
+      : capability_base_expr_methods(size_type2(), capability_base_id, operand)
+    {
+    }
+    capability_base2t(const capability_base2t &ref) = default;
 
-  static std::string field_names[esbmct::num_type_fields];
-};
+    static std::string field_names[esbmct::num_type_fields];
+  };
 
-class capability_top2t : public capability_top_expr_methods
-{
-public:
-  /** Primary constructor. @param operand Pointer object to fetch size for. */
-  capability_top2t(const expr2tc &operand)
-    : capability_top_expr_methods(size_type2(), capability_top_id, operand)
+  class capability_top2t : public capability_top_expr_methods
   {
-  }
-  capability_top2t(const capability_top2t &ref) = default;
+  public:
+    /** Primary constructor. @param operand Pointer object to fetch size for. */
+    capability_top2t(const expr2tc &operand)
+      : capability_top_expr_methods(size_type2(), capability_top_id, operand)
+    {
+    }
+    capability_top2t(const capability_top2t &ref) = default;
 
-  static std::string field_names[esbmct::num_type_fields];
-};
+    static std::string field_names[esbmct::num_type_fields];
+  };
 
 // Same deal as for "type_macros".
 #ifdef NDEBUG
@@ -3848,7 +3848,7 @@ public:
 
 // Boost preprocessor magic to iterate over all exprs,
 #define _ESBMC_IREP2_MACROS_ENUM(r, data, elem) expr_macros(elem);
-BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_MACROS_ENUM, foo, ESBMC_LIST_OF_EXPRS)
+  BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_MACROS_ENUM, foo, ESBMC_LIST_OF_EXPRS)
 
 #undef expr_macros
 #ifdef dynamic_cast
