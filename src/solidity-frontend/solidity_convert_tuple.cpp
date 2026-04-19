@@ -86,7 +86,6 @@ bool solidity_convertert::get_tuple_definition(const nlohmann::json &ast_node)
     comp.type() = mem_type;
     comp.type().set("#member_name", t.tag());
     comp.identifier(mem_id);
-    comp.cmt_lvalue(true);
     comp.name(mem_name);
     comp.pretty_name(mem_name);
     comp.set_access("internal");

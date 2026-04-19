@@ -3022,7 +3022,6 @@ bool clang_c_convertert::get_decl_ref(const clang::Decl &d, exprt &new_expr)
 
     new_expr = exprt("symbol", type);
     new_expr.identifier(id);
-    new_expr.cmt_lvalue(true);
     new_expr.name(name);
     return false;
   }
