@@ -521,34 +521,30 @@ expr2tc goto_symext::symex_mem(
   {
     cur_state->rename(size);
 
-    // Detect a signed-negative literal cast to size_t (e.g. malloc(-4))
-    // BEFORE do_simplify folds typecast(size_t, -4) into a large positive
-    // constant, at which point the sign information is gone and the value
-    // becomes indistinguishable from a genuine large positive allocation size.
+    // Detect malloc(-N) before do_simplify folds typecast(size_t, -N) into
+    // a large positive constant and erases the sign. The simplifier's
+    // behaviour varies between the normal and --no-slice paths, so we
+    // capture the inner operand's sign up front and also re-check the
+    // post-simplify value below.
     bool is_negative_size = false;
     if (is_malloc && is_typecast2t(size))
     {
-      // Simplify a copy of the inner expression so that neg(4) folds to
-      // constant_int(-4) before we check the sign.
       expr2tc inner = to_typecast2t(size).from;
       do_simplify(inner);
-      if (is_constant_int2t(inner) && to_constant_int2t(inner).value.is_negative())
-        is_negative_size = true;
+      is_negative_size = is_constant_int2t(inner) &&
+                         to_constant_int2t(inner).value.is_negative();
     }
 
     do_simplify(size);
-    BigInt i;
     if (is_constant_int2t(size))
     {
       const BigInt &val = to_constant_int2t(size).value;
-      uint64_t v = val.to_uint64();
-      if (v == 1)
-        size_is_one = true;
-      else if (v == 0 && options.get_bool_option("malloc-zero-is-null"))
-        return symbol2tc(pointer_type2tc(type), "NULL");
-      else if (is_malloc && (is_negative_size || val.is_negative()))
+      // Check negativity before inspecting the magnitude: to_uint64()
+      // discards the sign, so malloc(-1) would otherwise be mistaken for
+      // a 1-byte allocation.
+      if (is_malloc && (is_negative_size || val.is_negative()))
       {
-        // Size was a negative integer cast to size_t: return NULL even under
+        // Negative size cast to size_t: return NULL even under
         // --force-malloc-success, matching real OS behaviour.
         expr2tc null_sym = symbol2tc(pointer_type2tc(type), "NULL");
         if (null_sym->type != lhs->type)
@@ -556,6 +552,11 @@ expr2tc goto_symext::symex_mem(
         symex_assign(code_assign2tc(lhs, null_sym), true, guard);
         return null_sym;
       }
+      uint64_t v = val.to_uint64();
+      if (v == 1)
+        size_is_one = true;
+      else if (v == 0 && options.get_bool_option("malloc-zero-is-null"))
+        return symbol2tc(pointer_type2tc(type), "NULL");
     }
   }
 
