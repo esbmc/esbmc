@@ -216,9 +216,6 @@ void clang_c_adjust::adjust_symbol(exprt &expr)
     // put it back
     expr.location() = location;
 
-    if (symbol.lvalue)
-      expr.cmt_lvalue(true);
-
     if (expr.type().is_code()) // function designator
     {
       // special case: this is sugar for &f
@@ -384,12 +381,7 @@ void clang_c_adjust::adjust_index(index_exprt &index)
   gen_typecast(ns, index_expr, index_type());
 
   const typet &final_array_type = ns.follow(array_expr.type());
-  if (final_array_type.is_array() || final_array_type.is_incomplete_array())
-  {
-    if (array_expr.cmt_lvalue())
-      index.cmt_lvalue(true);
-  }
-  else if (final_array_type.id() == "pointer")
+  if (final_array_type.id() == "pointer")
   {
     // p[i] is syntactic sugar for *(p+i)
 
@@ -397,7 +389,6 @@ void clang_c_adjust::adjust_index(index_exprt &index)
     addition.operands().swap(index.operands());
     index.move_to_operands(addition);
     index.id("dereference");
-    index.cmt_lvalue(true);
   }
 }
 
@@ -517,8 +508,6 @@ void clang_c_adjust::adjust_dereference(exprt &deref)
   {
     deref.type() = op_type.subtype();
   }
-
-  deref.cmt_lvalue(true);
 
   // if you dereference a pointer pointing to
   // a function, you get a pointer again
@@ -760,9 +749,6 @@ void clang_c_adjust::adjust_side_effect_function_call(
 
         // Restore location
         f_op.location() = location;
-
-        if (symbol.lvalue)
-          f_op.cmt_lvalue(true);
 
         align_se_function_call_return_type(f_op, expr);
       }
@@ -1355,10 +1341,6 @@ void clang_c_adjust::adjust_comma(exprt &expr)
   adjust_operands(expr);
 
   expr.type() = expr.op1().type();
-
-  // make this an l-value if the last operand is one
-  if (expr.op1().cmt_lvalue())
-    expr.cmt_lvalue(true);
 }
 
 void clang_c_adjust::adjust_builtin_va_arg(exprt &expr)

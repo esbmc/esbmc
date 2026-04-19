@@ -54,7 +54,6 @@ void solidity_convertert::get_static_contract_instance_ref(
   typet t = symbol_typet(prefix + c_name);
   new_expr = exprt("symbol", t);
   new_expr.identifier(id);
-  new_expr.cmt_lvalue(true);
   new_expr.name(name);
   new_expr.pretty_name(name);
 }
