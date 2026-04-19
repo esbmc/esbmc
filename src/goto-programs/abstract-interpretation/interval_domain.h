@@ -58,7 +58,7 @@ public:
   static bool
     enable_interval_arithmetic; /// Enable simplification for arithmetic operators
   static bool
-    enable_interval_bitwise_arithmetic; /// Enable simplfication for bitwise opeations
+    enable_interval_bitwise_arithmetic; /// Enable simplification for bitwise operations
   static bool
     enable_modular_intervals; /// Make a modular operation after every assignment
   static bool
@@ -75,7 +75,7 @@ public:
   static bool enable_ibex_contractor; /// Use ibex contractor
   // Widening options
   static unsigned
-    fixpoint_limit; /// Sets a limit for number of iteartions before widening
+    fixpoint_limit; /// Sets a limit for number of iterations before widening
   static bool
     widening_under_approximate_bound; /// Whether to considers overflows for Integers
   static bool
@@ -170,6 +170,17 @@ public:
    * Do not mistake this by an ASSUME instruction! This can take any type of expression!
    */
   void assume(const expr2tc &);
+
+  /**
+   * @brief Updates the interval state based on a single goto-program instruction.
+   *
+   * Handles ASSIGN, ASSUME, DECL, and DEAD without requiring an ai_baset reference.
+   * Intended for online use during symbolic execution (default guard pruning;
+   * disable guard with --no-interval-symex-guard; assertion pruning via
+   * --interval-symex-assert).
+   * @param from: iterator to the instruction to process
+   */
+  void process_instruction(goto_programt::const_targett from);
 
   /**
    * @brief Uses the abstract state to simplify a given expression using context-

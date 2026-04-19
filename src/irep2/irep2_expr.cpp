@@ -71,6 +71,8 @@ static const char *expr_names[] = {
   "byte_update",
   "with",
   "member",
+  "member_ref",
+  "ptr_mem",
   "index",
   "isnan",
   "overflow",
@@ -81,6 +83,7 @@ static const char *expr_names[] = {
   "NULL-object",
   "dereference",
   "valid_object",
+  "races_check",
   "deallocated_obj",
   "dynamic_size",
   "sideeffect",
@@ -112,7 +115,14 @@ static const char *expr_names[] = {
   "signbit",
   "concat",
   "extract",
-  "phi"};
+  "phi",
+  "capability_base",
+  "capability_top",
+  "forall",
+  "exists",
+  "isinstance",
+  "hasattr",
+  "isnone"};
 // If this fires, you've added/removed an expr id, and need to update the list
 // above (which is ordered according to the enum list)
 static_assert(
@@ -126,9 +136,10 @@ expr2t::expr2t(const type2tc &_type, expr_ids id)
 {
 }
 
-expr2t::expr2t(const expr2t &ref)
-  : expr_id(ref.expr_id), type(ref.type), crc_val(ref.crc_val)
+expr2t::expr2t(const expr2t &ref) : expr_id(ref.expr_id), type(ref.type)
 {
+  std::lock_guard lock(ref.crc_mutex);
+  crc_val = ref.crc_val;
 }
 
 bool expr2t::operator==(const expr2t &ref) const
@@ -372,14 +383,14 @@ static void assert_type_compat_for_with(const type2tc &a, const type2tc &b)
     /* don't compare argument names, they could be empty on one side */
     assert(at.ellipsis == bt.ellipsis);
   }
+  else if (is_empty_type(a) || is_empty_type(b))
+    return;
   else if (is_pointer_type(a))
   {
     assert(is_pointer_type(b));
     assert_type_compat_for_with(
       to_pointer_type(a).subtype, to_pointer_type(b).subtype);
   }
-  else if (is_empty_type(a) || is_empty_type(b))
-    return;
   else
     assert(a == b);
 }
@@ -388,7 +399,8 @@ void with2t::assert_consistency() const
 {
   if (is_array_type(source_value))
   {
-    assert(is_bv_type(update_field->type));
+    assert(
+      is_bv_type(update_field->type) || is_pointer_type(update_field->type));
     const array_type2t &arr_type = to_array_type(source_value->type);
     assert_type_compat_for_with(arr_type.subtype, update_value->type);
   }

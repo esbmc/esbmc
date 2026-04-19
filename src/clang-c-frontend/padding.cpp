@@ -191,7 +191,7 @@ static void add_padding(struct_typet &type, const namespacet &ns)
         bit_field_bits = 0;
       }
 
-      // Pad out extints that arent in bitfields
+      // Pad out extints that aren't in bitfields
       if (is_extint && !is_bitfield)
       {
         assert(bit_field_bits == 0);

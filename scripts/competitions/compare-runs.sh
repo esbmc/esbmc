@@ -6,6 +6,8 @@ if [ $# -ne 2 ]; then
     exit 1
 fi
 
+echo "Generating diff between runs"
+
 shopt -s failglob
 
 old=$1
@@ -13,11 +15,9 @@ new=$2
 out=diff-$1-$2
 
 res=()
-mkdir $out &&
-    for c in no-overflow termination unreach-call valid-memcleanup.MemSafety-MemCleanup valid-memsafety; do
-	table-generator -f html -d -o $out/$c {$old,$new}/esbmc-kind.*.results.SV-COMP22_$c.xml.bz2 &&
-	    f=`realpath --relative-to "$(dirname "$0")" $out/$c/results.*.diff.html` &&
-	    res+=( "- [$c](https://fbrausse.github.io/esbmc/svcomp/$f)" )
+mkdir -p $out &&
+    for c in no-overflow termination unreach-call valid-memcleanup valid-memsafety; do
+	table-generator -f html -d -o $out/$c {$old,$new}/esbmc.*.results.SV-COMP26_$c.xml.bz2
     done
 echo
 printf "%s\n" "${res[@]}"

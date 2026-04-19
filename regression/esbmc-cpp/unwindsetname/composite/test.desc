@@ -1,0 +1,4 @@
+THOROUGH
+main.cpp
+--unwindsetname global_func:0:6,N@engine@compute:0:4,S@Worker@task_one:0:4,S@Worker@task_three:0:5,main.cpp@N@core@S@Processor@run:0:5,main.cpp@static_helper:0:8 --unwind 7 --z3
+^VERIFICATION SUCCESSFUL$

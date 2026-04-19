@@ -12,7 +12,7 @@
 // definitions. If you'd like to add another type - don't. Vast tracts of code
 // only expect the types below, it's be extremely difficult to hack new ones in.
 
-// Start of definitions for expressions. Forward decs,
+// Start of definitions for expressions. Forward decls
 
 // Iterate, in the preprocessor, over all expr ids and produce a forward
 // class declaration for them
@@ -125,6 +125,7 @@ public:
     std::vector<expr2tc> m)
     : constant_datatype_data(t, id, std::move(m)), init_field(init_field)
   {
+    assert(m.size() <= 1);
   }
   constant_union_data(const constant_union_data &) = default;
 
@@ -833,6 +834,54 @@ public:
   typedef esbmct::expr2t_traits<source_value_field, member_field> traits;
 };
 
+class member_ref_data : public datatype_ops
+{
+public:
+  member_ref_data(
+    const type2tc &t,
+    datatype_ops::expr_ids id,
+    const irep_idt &m)
+    : datatype_ops(t, id), member(m)
+  {
+  }
+  member_ref_data(const member_ref_data &ref) = default;
+
+  irep_idt member;
+
+  // Type mangling:
+  typedef esbmct::
+    field_traits<irep_idt, member_ref_data, &member_ref_data::member>
+      member_field;
+  typedef esbmct::expr2t_traits<member_field> traits;
+};
+
+class ptr_mem_data : public datatype_ops
+{
+public:
+  ptr_mem_data(
+    const type2tc &t,
+    datatype_ops::expr_ids id,
+    const expr2tc &s,
+    const expr2tc &p)
+    : datatype_ops(t, id), source_value(s), member_pointer(p)
+  {
+  }
+  ptr_mem_data(const ptr_mem_data &ref) = default;
+
+  expr2tc source_value;
+  expr2tc member_pointer;
+
+  // Type mangling:
+  typedef esbmct::
+    field_traits<expr2tc, ptr_mem_data, &ptr_mem_data::source_value>
+      source_value_field;
+  typedef esbmct::
+    field_traits<expr2tc, ptr_mem_data, &ptr_mem_data::member_pointer>
+      member_pointer_field;
+  typedef esbmct::expr2t_traits<source_value_field, member_pointer_field>
+    traits;
+};
+
 class index_data : public datatype_ops
 {
 public:
@@ -1001,7 +1050,9 @@ public:
     preincrement,
     postincrement,
     predecrement,
-    postdecrement
+    postdecrement,
+    old_snapshot,  // For __ESBMC_old() in function contracts
+    assigns_target // For __ESBMC_assigns() in function contracts
   };
 
   sideeffect_data(
@@ -1518,6 +1569,8 @@ irep_typedefs(byte_extract, byte_extract_data);
 irep_typedefs(byte_update, byte_update_data);
 irep_typedefs(with, with_data);
 irep_typedefs(member, member_data);
+irep_typedefs(member_ref, member_ref_data);
+irep_typedefs(ptr_mem, ptr_mem_data);
 irep_typedefs(index, index_data);
 irep_typedefs(isnan, bool_1op);
 irep_typedefs(overflow, overflow_ops);
@@ -1529,6 +1582,7 @@ irep_typedefs(null_object, expr2t);
 irep_typedefs(dynamic_object, dynamic_object_data);
 irep_typedefs(dereference, dereference_data);
 irep_typedefs(valid_object, object_ops);
+irep_typedefs(races_check, object_ops);
 irep_typedefs(deallocated_obj, object_ops);
 irep_typedefs(dynamic_size, object_ops);
 irep_typedefs(sideeffect, sideeffect_data);
@@ -1563,6 +1617,37 @@ irep_typedefs(bswap, arith_1op);
 irep_typedefs(concat, bit_2ops);
 irep_typedefs(extract, extract_data);
 irep_typedefs(phi, phi_data);
+irep_typedefs(capability_base, object_ops);
+irep_typedefs(capability_top, object_ops);
+irep_typedefs(forall, logic_2ops);
+irep_typedefs(exists, logic_2ops);
+irep_typedefs(isinstance, logic_2ops);
+irep_typedefs(hasattr, logic_2ops);
+irep_typedefs(isnone, logic_2ops);
+
+class exists2t : public exists_expr_methods
+{
+public:
+  exists2t(const type2tc &type, const expr2tc &sym, const expr2tc &predicate)
+    : exists_expr_methods(type, exists_id, sym, predicate)
+  {
+  }
+  exists2t(const exists2t &ref) = default;
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+class forall2t : public forall_expr_methods
+{
+public:
+  forall2t(const type2tc &type, const expr2tc &sym, const expr2tc &predicate)
+    : forall_expr_methods(type, forall_id, sym, predicate)
+  {
+  }
+  forall2t(const forall2t &ref) = default;
+
+  static std::string field_names[esbmct::num_type_fields];
+};
 
 /** Constant integer class.
  *  Records a constant integer of an arbitary precision, signed or unsigned.
@@ -1767,6 +1852,7 @@ public:
   constant_array2t(const type2tc &type, const std::vector<expr2tc> &members)
     : constant_array_expr_methods(type, constant_array_id, members)
   {
+    assert(type->type_id == type2t::array_id);
   }
   constant_array2t(const constant_array2t &ref) = default;
 
@@ -2757,6 +2843,8 @@ public:
   }
   pointer_object2t(const pointer_object2t &ref) = default;
 
+  expr2tc do_simplify() const override;
+
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -2926,6 +3014,40 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Member reference
+ *  @extends member_ref_data */
+class member_ref2t : public member_ref_expr_methods
+{
+public:
+  /** Primary constructor.
+   *  @param type Type of extracted member.
+   *  @param memb Name of member to extract.  */
+  member_ref2t(const type2tc &type, const irep_idt &memb)
+    : member_ref_expr_methods(type, member_ref_id, memb)
+  {
+  }
+  member_ref2t(const member_ref2t &ref) = default;
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+/** Member pointer
+ *  @extends ptr_mem_data */
+class ptr_mem2t : public ptr_mem_expr_methods
+{
+public:
+  /** Primary constructor.
+   *  @param source Data structure to extract from.
+   *  @param pointer Pointer to member.  */
+  ptr_mem2t(const type2tc &type, const expr2tc &source, const expr2tc &pointer)
+    : ptr_mem_expr_methods(type, ptr_mem_id, source, pointer)
+  {
+  }
+  ptr_mem2t(const ptr_mem2t &ref) = default;
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
 /** Array index operation. Extracts an element from an array at a particular
  *  index. @extends index_data */
 class index2t : public index_expr_methods
@@ -3050,7 +3172,7 @@ public:
 };
 
 /** Record invalid data value. Exclusively for use in pointer analysis to record
- *  the fact that what we point at is guarenteed to be invalid or nonexistant.
+ *  the fact that what we point at is guaranteed to be invalid or nonexistant.
  *  @extends expr2t */
 class invalid2t : public invalid_expr_methods
 {
@@ -3127,6 +3249,55 @@ public:
   {
   }
   valid_object2t(const valid_object2t &ref) = default;
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+class races_check2t : public races_check_expr_methods
+{
+public:
+  races_check2t(const expr2tc &operand)
+    : races_check_expr_methods(get_bool_type(), races_check_id, operand)
+  {
+  }
+  races_check2t(const races_check2t &ref) = default;
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+class isinstance2t : public isinstance_expr_methods
+{
+public:
+  isinstance2t(const expr2tc &value, const expr2tc &type)
+    : isinstance_expr_methods(get_bool_type(), isinstance_id, value, type)
+  {
+  }
+  isinstance2t(const isinstance2t &ref) = default;
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+class hasattr2t : public hasattr_expr_methods
+{
+public:
+  hasattr2t(const expr2tc &value, const expr2tc &attr)
+    : hasattr_expr_methods(get_bool_type(), hasattr_id, value, attr)
+  {
+  }
+  hasattr2t(const hasattr2t &ref) = default;
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+class isnone2t : public isnone_expr_methods
+{
+public:
+  isnone2t(const expr2tc &lhs, const expr2tc &rhs)
+    : isnone_expr_methods(get_bool_type(), isnone_id, lhs, rhs)
+  {
+  }
+
+  isnone2t(const isnone2t &ref) = default;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -3627,6 +3798,29 @@ public:
   {
   }
   phi2t(const phi2t &ref) = default;
+class capability_base2t : public capability_base_expr_methods
+{
+public:
+  /** Primary constructor. @param operand Pointer object to fetch size for. */
+  capability_base2t(const expr2tc &operand)
+    : capability_base_expr_methods(size_type2(), capability_base_id, operand)
+  {
+  }
+  capability_base2t(const capability_base2t &ref) = default;
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+class capability_top2t : public capability_top_expr_methods
+{
+public:
+  /** Primary constructor. @param operand Pointer object to fetch size for. */
+  capability_top2t(const expr2tc &operand)
+    : capability_top_expr_methods(size_type2(), capability_top_id, operand)
+  {
+  }
+  capability_top2t(const capability_top2t &ref) = default;
+
   static std::string field_names[esbmct::num_type_fields];
 };
 

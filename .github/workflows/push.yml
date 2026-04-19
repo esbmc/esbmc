@@ -1,0 +1,49 @@
+name: Master Push
+on:
+  push:
+    branches: [master]
+
+jobs:
+  reupload-coverage:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract PR number from squash commit
+        id: pr
+        run: |
+          PR_NUM=$(git log -1 --pretty=%B | grep -oP '(?<=\(#)\d+(?=\))')
+          echo "number=$PR_NUM" >> $GITHUB_OUTPUT
+
+      - name: Get PR's successful coverage run ID
+        id: run
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          RUN_ID=$(gh run list \
+            --repo ${{ github.repository }} \
+            --workflow coverage.yml \
+            --event pull_request \
+            --status success \
+            --limit 20 \
+            --json databaseId,headBranch \
+            | jq -r --arg pr "${{ steps.pr.outputs.number }}" \
+              '[.[] | select(.headBranch | test("^(feature|fix|chore|ci)/.+$|^[^/]+$"))] | .[0].databaseId')
+          echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
+
+      - name: Download coverage artifact
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh run download ${{ steps.run.outputs.run_id }} \
+            --repo ${{ github.repository }} \
+            --name coverage-report
+
+      - name: Re-upload to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: coverage.info
+          fail_ci_if_error: false
+          override_branch: master
+          override_commit: ${{ github.sha }}

@@ -138,6 +138,18 @@ void cse_domaint::make_expression_available(const expr2tc &E)
     return;
   }
 
+  // ESBMC requires that an overflow2t contains an operator as a sub-expression.
+  // This means that we can't cache the sub-expressions into an intermediate
+  // var.
+  // However, we can do the GCSE in the operands of the nested operator.
+  if (is_overflow2t(E))
+  {
+    expr2tc operand = to_overflow2t(E).operand;
+    operand->Foreach_operand(
+      [this](expr2tc &op) { make_expression_available(op); });
+    return;
+  }
+
   if (is_if2t(E))
   {
     make_expression_available(to_if2t(E).cond);
@@ -160,7 +172,7 @@ void cse_domaint::make_expression_available(const expr2tc &E)
     [this](const expr2tc &e) { make_expression_available(e); });
 
   // TODO: LHS members should always be recomputed
-  if (is_with2t(E) || is_member2t(E) || is_dereference2t(E))
+  if (is_with2t(E) || is_member2t(E) || is_dereference2t(E) || is_index2t(E))
     available_expressions.erase(E);
 }
 
@@ -290,6 +302,17 @@ void goto_cse::replace_max_sub_expr(
   // No need to add primitives
   if (is_constant(e) || is_symbol2t(e))
     return;
+
+  // NOTE: See `make_expression_available`.
+  if (is_overflow2t(e))
+  {
+    expr2tc operand = to_overflow2t(e).operand;
+    operand->Foreach_operand(
+      [this, &expr2symbol, &to, &matched_expressions](expr2tc &op) {
+        replace_max_sub_expr(op, expr2symbol, to, matched_expressions);
+      });
+    return;
+  }
 
   auto common = expr2symbol.find(e);
   if (common != expr2symbol.end())

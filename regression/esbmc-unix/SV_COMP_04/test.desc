@@ -1,0 +1,4 @@
+CORE
+main.c
+--context-bound 3 --no-assertions --data-races-check-only
+^VERIFICATION FAILED$

@@ -1,5 +1,5 @@
 CORE
 main.py
---function fail
+--function bar
 
-^VERIFICATION FAILED$
+^VERIFICATION SUCCESSFUL$

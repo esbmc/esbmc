@@ -5,7 +5,7 @@ CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 CC_DIAGNOSTIC_POP()
 
 #include <AST/build_ast.h>
-#include <ansi-c/c_preprocess.h>
+#include <clang-c-frontend/c_preprocess.h>
 #include <boost/filesystem.hpp>
 #include <c2goto/cprover_library.h>
 #include <clang-c-frontend/clang_c_adjust.h>
@@ -17,8 +17,11 @@ CC_DIAGNOSTIC_POP()
 #include <util/c_link.h>
 
 #include <util/filesystem.h>
+#include <clang-c-frontend/nested_func_transform.h>
 
 #include <ac_config.h>
+
+clang_c_languaget::~clang_c_languaget() = default;
 
 languaget *new_clang_c_language()
 {
@@ -44,6 +47,7 @@ void clang_c_languaget::build_include_args(
   {
     compiler_args.push_back("-isystem");
     compiler_args.push_back(*libc_headers);
+    compiler_args.push_back("-Wno-implicit-function-declaration");
   }
 
   compiler_args.push_back("-resource-dir");
@@ -121,6 +125,7 @@ void clang_c_languaget::build_compiler_args(
     bool is_purecap = config.ansi_c.cheri == configt::ansi_ct::CHERI_PURECAP;
     compiler_args.emplace_back(
       "-cheri=" + std::to_string(config.ansi_c.capability_width()));
+    compiler_args.emplace_back("-cheri-bounds=subobject-safe");
 
     if (config.ansi_c.target
           .is_riscv()) /* unused as of yet: arch is mips64el */
@@ -170,7 +175,6 @@ void clang_c_languaget::build_compiler_args(
 
     /* TODO: DEMO */
     compiler_args.emplace_back("-D__builtin_cheri_tag_get(p)=1");
-    compiler_args.emplace_back("-D__builtin_clzll(n)=__esbmc_clzll(n)");
 
     switch (config.ansi_c.cheri)
     {
@@ -207,8 +211,6 @@ void clang_c_languaget::build_compiler_args(
   for (auto const &inc : config.ansi_c.warnings)
     compiler_args.push_back("-W" + inc);
 
-  compiler_args.emplace_back("-D__builtin_memcpy=memcpy");
-
   compiler_args.emplace_back("-D__ESBMC_alloca=__builtin_alloca");
 
   // Ignore ctype defined by the system
@@ -240,10 +242,15 @@ void clang_c_languaget::build_compiler_args(
     compiler_args.push_back("-D_INC_TIME_INL");
     compiler_args.push_back("-D__CRT__NO_INLINE");
     compiler_args.push_back("-D_USE_MATH_DEFINES");
+    compiler_args.push_back("-Wno-implicit-function-declaration");
   }
 
 #if ESBMC_SVCOMP
   compiler_args.push_back("-D__ESBMC_SVCOMP");
+  // No longer show compiler warnings for SV-COMP
+  compiler_args.push_back("-w");
+  compiler_args.push_back("-Wno-incompatible-function-pointer-types");
+  compiler_args.push_back("-Wno-int-conversion");
 #endif
 
   // Increase maximum bracket depth
@@ -287,9 +294,14 @@ bool clang_c_languaget::parse(const std::string &path)
   if (preprocess(path, o_preprocessed))
     return true;
 
+  // Transform GCC nested functions (if any) into standard C
+  auto nested_transformed = transform_nested_functions(path);
+  const std::string &actual_path =
+    nested_transformed ? nested_transformed->path() : path;
+
   // Get compiler arguments and add the file path
   std::vector<std::string> new_compiler_args = compiler_args("clang-tool");
-  new_compiler_args.push_back(path);
+  new_compiler_args.push_back(actual_path);
 
   if (FILE *f = messaget::state.target("clang", VerbosityLevel::Debug))
   {
@@ -358,6 +370,7 @@ std::string clang_c_languaget::internal_additions()
 # 1 "esbmc_intrinsics.h" 1
 void __ESBMC_assume(_Bool);
 void __ESBMC_assert(_Bool, const char *);
+void __ESBMC_cover(_Bool);
 _Bool __ESBMC_same_object(const void *, const void *);
 void __ESBMC_yield();
 void __ESBMC_atomic_begin();
@@ -372,23 +385,32 @@ __PTRDIFF_TYPE__ __ESBMC_POINTER_OFFSET(const void *);
 
 // malloc
 __attribute__((annotate("__ESBMC_inf_size")))
-_Bool __ESBMC_alloc[1];
+extern _Bool __ESBMC_alloc[1];
 
 __attribute__((annotate("__ESBMC_inf_size")))
-_Bool __ESBMC_is_dynamic[1];
+extern _Bool __ESBMC_is_dynamic[1];
 
 __attribute__((annotate("__ESBMC_inf_size")))
-__SIZE_TYPE__ __ESBMC_alloc_size[1];
+extern __SIZE_TYPE__ __ESBMC_alloc_size[1];
 
 // Get object size
 __SIZE_TYPE__ __ESBMC_get_object_size(const void *);
 
+// Contract predicate: indicates that a pointer points to freshly allocated memory
+// Signature: __ESBMC_is_fresh(void **ptr, size_t size)
+// - ptr: Address of the pointer variable (semantically void**, declared as void* to avoid Clang USR issues)
+// - size: Size in bytes of the memory region
+// Returns: true when memory is successfully allocated (in contract enforcement mode)
+// Note: Used in requires clauses to specify fresh memory allocation requirements
+_Bool __ESBMC_is_fresh(void*, __SIZE_TYPE__);
+
 _Bool __ESBMC_is_little_endian();
 
-int __ESBMC_rounding_mode = 0;
+extern int __ESBMC_rounding_mode;
 
-void *__ESBMC_memset(void *, int, unsigned int);
-
+void *__ESBMC_memset(void *, int, __SIZE_TYPE__);
+      void *__ESBMC_memcpy(void *, const void *, __SIZE_TYPE__);
+      
 /* same semantics as memcpy(tgt, src, size) where size matches the size of the
  * types tgt and src point to. */
 void __ESBMC_bitcast(void * /* tgt */, void * /* src */);
@@ -406,6 +428,19 @@ void __ESBMC_pthread_end_main_hook(void);
 // Forward decl of the intrinsic function that calls atexit registered functions.
 // We need this here or it won't be pulled from the C library
 void __ESBMC_atexit_handler(void);
+
+// Define a macro to generate overflow result structures and function declarations
+#define DEFINE_ESBMC_OVERFLOW_TYPE(type)              \
+  typedef struct {                                          \
+    _Bool overflow;                                         \
+    type result;                                            \
+  } __attribute__((packed)) __ESBMC_overflow_result;          \
+                                                            \
+__ESBMC_overflow_result __ESBMC_overflow_result_plus(type, type);  \
+__ESBMC_overflow_result __ESBMC_overflow_result_minus(type, type); \
+__ESBMC_overflow_result __ESBMC_overflow_result_mult(type, type);  \
+__ESBMC_overflow_result __ESBMC_overflow_result_shl(type, type);   \
+__ESBMC_overflow_result __ESBMC_overflow_result_unary_minus(type);
 
 // Forward declarations for nondeterministic types.
 int nondet_int();
@@ -435,14 +470,91 @@ _Bool __VERIFIER_nondet_bool();
 float __VERIFIER_nondet_float();
 double __VERIFIER_nondet_double();
 
+void __VERIFIER_nondet_memory(void *, __SIZE_TYPE__);
+
 void __VERIFIER_error();
 void __VERIFIER_assume(int);
 void __VERIFIER_atomic_begin();
 void __VERIFIER_atomic_end();
 
+/* Support for CPROVER R_OK: This should return True if reading length bytes 
+ * of addr will not extrapolate the object that addr is pointing to.
+ */
+_Bool __ESBMC_r_ok(void *, unsigned long);
+
 /* Causes a verification error when its call is reachable; internal use in math
  * models */
-void __ESBMC_unreachable();
+_Noreturn void __ESBMC_unreachable();
+/* Quantifiers
+ * Right now we only support one element and they transform the symbol into a nondet one (for the closure)
+ * For example:
+ *
+ * int i = 0;
+ * __ESBMC_forall(&i, i < 0);
+ *
+ * This will return false, because 'i' became a local variable i.e, it means "forall i \in [min(int), (max(int))] . i < 0" */
+
+_Bool __ESBMC_forall(void*, _Bool);
+_Bool __ESBMC_exists(void*, _Bool);
+
+/* This function is used to check loop invariants
+ * It should be run with multi-property:
+ * 1. Check if it is preserved in the loop
+ * 2. Use the invariants to help the following of the loop continue with a simple assumption
+ */
+void __ESBMC_loop_invariant(_Bool);
+
+/* __ESBMC_loop_assigns: specifies memory locations a loop may modify.
+ * Used with --loop-frame-rule for frame condition enforcement.
+ * Variables NOT in this set are assumed unchanged across loop iterations.
+ *
+ * Usage (place before loop, after __ESBMC_loop_invariant):
+ *   __ESBMC_loop_invariant(i >= 0 && i < n);
+ *   __ESBMC_loop_assigns(i);
+ *   for (i = 0; ...) { ... }
+ */
+void __ESBMC_loop_assigns_impl(const void *, ...);
+#define __ESBMC_loop_assigns_1(a) __ESBMC_loop_assigns_impl(&(a))
+#define __ESBMC_loop_assigns_2(a,b) __ESBMC_loop_assigns_impl(&(a),&(b))
+#define __ESBMC_loop_assigns_3(a,b,c) __ESBMC_loop_assigns_impl(&(a),&(b),&(c))
+#define __ESBMC_loop_assigns_4(a,b,c,d) __ESBMC_loop_assigns_impl(&(a),&(b),&(c),&(d))
+#define __ESBMC_loop_assigns_5(a,b,c,d,e) __ESBMC_loop_assigns_impl(&(a),&(b),&(c),&(d),&(e))
+#define __ESBMC_loop_assigns_N(_0,_1,_2,_3,_4,_5,N,...) __ESBMC_loop_assigns_##N
+#define __ESBMC_loop_assigns(...) __ESBMC_loop_assigns_N(~,##__VA_ARGS__,5,4,3,2,1,0)(__VA_ARGS__)
+
+#define __builtin_offsetof(type, member) \
+    ((size_t)__ESBMC_POINTER_OFFSET(&((type*)0)->member))
+
+
+#define __builtin_object_size(ptr, type) \
+    __ESBMC_builtin_object_size(ptr, type)
+
+// __ESBMC_unroll(N): sets the number of iterations for the next loop in the code.
+void __ESBMC_unroll(int);
+
+#define __ESBMC_contract __attribute__((annotate("__ESBMC_contract")))
+
+/* Function contract annotations: always available so annotated files compile
+ * with any ESBMC mode (direct BMC, --enforce-contract, --replace-call-with-contract).
+ * In direct BMC: requires/ensures/assigns are dropped (no-ops) by goto_sideeffects.cpp.
+ * Active contract enforcement only kicks in with --enforce-contract etc. */
+void __ESBMC_requires(_Bool);
+void __ESBMC_ensures(_Bool);
+int __ESBMC_return_value;
+void* __ESBMC_old_raw(void*);
+#define __ESBMC_old(x) (*(__typeof__(x)*)__ESBMC_old_raw((void*)(&(x))))
+#define __ESBMC_and(a, b) ((a) & (b))
+#define __ESBMC_or(a, b) ((a) | (b))
+#define __ESBMC_implies(a, b) ((!(a)) | (b))
+void __ESBMC_assigns_impl(const void *, ...);
+#define __ESBMC_assigns_0() __ESBMC_assigns_impl((void*)0)
+#define __ESBMC_assigns_1(a) __ESBMC_assigns_impl(&(a))
+#define __ESBMC_assigns_2(a,b) __ESBMC_assigns_impl(&(a),&(b))
+#define __ESBMC_assigns_3(a,b,c) __ESBMC_assigns_impl(&(a),&(b),&(c))
+#define __ESBMC_assigns_4(a,b,c,d) __ESBMC_assigns_impl(&(a),&(b),&(c),&(d))
+#define __ESBMC_assigns_5(a,b,c,d,e) __ESBMC_assigns_impl(&(a),&(b),&(c),&(d),&(e))
+#define __ESBMC_assigns_N(_0,_1,_2,_3,_4,_5,N,...) __ESBMC_assigns_##N
+#define __ESBMC_assigns(...) __ESBMC_assigns_N(~,##__VA_ARGS__,5,4,3,2,1,0)(__VA_ARGS__)
     )";
 
   if (config.ansi_c.cheri)
@@ -459,6 +571,11 @@ __UINT32_TYPE__ __esbmc_cheri_type_get(void *__capability);
 _Bool __esbmc_cheri_sealed_get(void *__capability);
 #endif
 __UINT64_TYPE__ __esbmc_clzll(__UINT64_TYPE__);
+
+struct cap_info {__SIZE_TYPE__ base; __SIZE_TYPE__ top;};
+
+__attribute__((annotate("__ESBMC_inf_size")))
+struct cap_info __ESBMC_cheri_info[1];
     )";
   }
 

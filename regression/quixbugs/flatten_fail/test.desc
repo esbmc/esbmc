@@ -1,0 +1,4 @@
+KNOWNBUG
+main.py
+--unwind 9 --no-standard-checks --bitwuzla --smt-during-symex --smt-symex-guard
+^VERIFICATION FAILED$

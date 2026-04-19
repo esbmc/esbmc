@@ -32,6 +32,6 @@ contract Base {
         assert(test3[true] == true);
 
         test4[-1] = T.yyy;
-        assert(test4[-1] == T.yyy);
+        assert(test4[-1] != T.yyy);
     }
 }

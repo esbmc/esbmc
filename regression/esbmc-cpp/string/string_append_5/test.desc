@@ -1,4 +1,4 @@
-CORE
+THOROUGH
 main.cpp
 --unwind 11 --no-unwinding-assertions --timeout 900
 ^VERIFICATION SUCCESSFUL$

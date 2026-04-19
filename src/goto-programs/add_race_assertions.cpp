@@ -15,20 +15,16 @@ public:
 
   std::list<irep_idt> w_guards;
 
-  const symbolt &get_guard_symbol(
-    const irep_idt &object,
-    const exprt &original_expr,
-    bool deref)
+  const symbolt &
+  get_guard_symbol(const irep_idt &object, const exprt &original_expr)
   {
-    const irep_idt identifier =
-      deref ? "__ESBMC_deref_" + id2string(object) : "tmp_" + id2string(object);
+    const irep_idt identifier = "tmp_" + id2string(object);
 
     const symbolt *s = context.find_symbol(identifier);
     if (s != nullptr)
       return *s;
 
-    if (!deref)
-      w_guards.push_back(identifier);
+    w_guards.push_back(identifier);
 
     type2tc index = array_type2tc(get_bool_type(), expr2tc(), true);
 
@@ -45,50 +41,51 @@ public:
     return *symbol_ptr;
   }
 
-  const exprt get_guard_symbol_expr(
-    const irep_idt &object,
-    const exprt &original_expr,
-    bool deref)
+  const exprt get_guard_symbol_expr(const exprt &original_expr)
   {
-    exprt expr = symbol_expr(get_guard_symbol(object, original_expr, deref));
+    // introduce a new expression: RACE_CHECK(&x)
+    // its operand is the address of the variable
+    // which we will replace during symbolic execution.
+    exprt address = address_of_exprt(original_expr);
+    exprt check("races_check", typet("bool"));
+    check.move_to_operands(address);
 
-    if (original_expr.is_index() && expr.type().is_array())
-    {
-      index_exprt full_expr = to_index_expr(original_expr);
-
-      index_exprt index;
-      index.array() = expr;
-      index.index() = full_expr.index();
-      index.type() = typet("bool");
-
-      expr.swap(index);
-    }
-
-    return expr;
+    return check;
   }
 
   const exprt get_w_guard_expr(const rw_sett::entryt &entry)
   {
-    return get_guard_symbol_expr(
-      entry.object, entry.original_expr, entry.deref);
+    return get_guard_symbol_expr(entry.original_expr);
   }
 
   const exprt get_assertion(const rw_sett::entryt &entry)
   {
-    return gen_not(
-      get_guard_symbol_expr(entry.object, entry.original_expr, entry.deref));
+    return gen_not(get_guard_symbol_expr(entry.original_expr));
   }
 
-  void add_initialization(goto_programt &goto_program) const;
+  void add_initialization(goto_programt &goto_program);
 
 protected:
   contextt &context;
 };
 
-void w_guardst::add_initialization(goto_programt &goto_program) const
+void w_guardst::add_initialization(goto_programt &goto_program)
 {
   goto_programt::targett t = goto_program.instructions.begin();
   const namespacet ns(context);
+
+  // introduce new infinite array: __ESBMC_races_flag[]
+  // initialize it to zero: ARRAY_OF(0)
+  type2tc arrayt = array_type2tc(get_bool_type(), expr2tc(), true);
+  const irep_idt identifier = "c:@F@__ESBMC_races_flag";
+  w_guards.push_back(identifier);
+  symbolt new_symbol;
+  new_symbol.id = identifier;
+  new_symbol.name = identifier;
+  new_symbol.type = migrate_type_back(arrayt);
+  new_symbol.static_lifetime = true;
+  new_symbol.value.make_false();
+  context.move_symbol_to_context(new_symbol);
 
   for (const auto &w_guard : w_guards)
   {
@@ -108,7 +105,6 @@ void w_guardst::add_initialization(goto_programt &goto_program) const
 }
 
 void add_race_assertions(
-  value_setst &value_sets,
   contextt &context,
   goto_programt &goto_program,
   w_guardst &w_guards)
@@ -137,7 +133,7 @@ void add_race_assertions(
       else
         tmp_expr = migrate_expr_back(instruction.code);
 
-      rw_sett rw_set(ns, value_sets, i_it, tmp_expr);
+      rw_sett rw_set(ns, i_it, tmp_expr);
 
       if (rw_set.entries.empty())
         continue;
@@ -148,23 +144,22 @@ void add_race_assertions(
       instruction.make_skip();
       i_it++;
 
-      // now add assignments for what is written -- reset
-      forall_rw_set_entries(e_it, rw_set)
       {
         goto_programt::targett t = goto_program.insert(i_it);
+        t->type = FUNCTION_CALL;
+        code_function_callt call;
+        call.function() =
+          symbol_expr(*context.find_symbol("c:@F@__ESBMC_yield"));
 
-        t->type = ASSIGN;
-        code_assignt theassign(
-          w_guards.get_w_guard_expr(e_it->second), false_exprt());
-        migrate_expr(theassign, t->code);
-
+        migrate_expr(call, t->code);
         t->location = original_instruction.location;
         i_it = ++t;
       }
 
       // Avoid adding too much thread interleaving by using atomic block
+      // yield();
+      // atomic {Assert tmp_A == 0; tmp_A = 1; A = n;}
       // tmp_A = 0;
-      // atomic {A = n; Assert tmp_A == 0; tmp_A = 1;}
       // See https://github.com/esbmc/esbmc/pull/1544
       goto_programt::targett t = goto_program.insert(i_it);
       *t = ATOMIC_BEGIN;
@@ -218,6 +213,35 @@ void add_race_assertions(
         i_it = ++t;
       }
 
+      if (config.options.get_bool_option("data-races-check-only"))
+      {
+        goto_programt::targett t = goto_program.insert(i_it);
+        t->type = FUNCTION_CALL;
+        code_function_callt call;
+        call.function() =
+          symbol_expr(*context.find_symbol("c:@F@__ESBMC_yield"));
+
+        migrate_expr(call, t->code);
+        t->location = original_instruction.location;
+        i_it = ++t;
+      }
+
+      // now add assignments for what is written -- reset
+      // only write operations need to be reset:
+      // tmp_A = 0;
+      forall_rw_set_entries(e_it, rw_set) if (e_it->second.w)
+      {
+        goto_programt::targett t = goto_program.insert(i_it);
+
+        t->type = ASSIGN;
+        code_assignt theassign(
+          w_guards.get_w_guard_expr(e_it->second), false_exprt());
+        migrate_expr(theassign, t->code);
+
+        t->location = original_instruction.location;
+        i_it = ++t;
+      }
+
       if (original_instruction.is_return() || original_instruction.is_goto())
       {
         goto_programt::targett t = goto_program.insert(i_it);
@@ -235,29 +259,23 @@ void add_race_assertions(
   remove_no_op(goto_program);
 }
 
-void add_race_assertions(
-  value_setst &value_sets,
-  contextt &context,
-  goto_programt &goto_program)
+void add_race_assertions(contextt &context, goto_programt &goto_program)
 {
   w_guardst w_guards(context);
 
-  add_race_assertions(value_sets, context, goto_program, w_guards);
+  add_race_assertions(context, goto_program, w_guards);
 
   w_guards.add_initialization(goto_program);
   goto_program.update();
 }
 
-void add_race_assertions(
-  value_setst &value_sets,
-  contextt &context,
-  goto_functionst &goto_functions)
+void add_race_assertions(contextt &context, goto_functionst &goto_functions)
 {
   w_guardst w_guards(context);
 
   Forall_goto_functions (f_it, goto_functions)
     if (f_it->first != goto_functions.main_id())
-      add_race_assertions(value_sets, context, f_it->second.body, w_guards);
+      add_race_assertions(context, f_it->second.body, w_guards);
 
   // get "main"
   goto_functionst::function_mapt::iterator m_it =

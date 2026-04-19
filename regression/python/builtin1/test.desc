@@ -1,0 +1,5 @@
+THOROUGH
+main.py
+--no-pointer-check 
+
+^VERIFICATION SUCCESSFUL$

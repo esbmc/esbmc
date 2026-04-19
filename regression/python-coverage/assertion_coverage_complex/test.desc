@@ -1,0 +1,6 @@
+THOROUGH
+main.py
+--assertion-coverage
+^Total Asserts: 22
+^Reached Assertion Instances: 118
+^VERIFICATION FAILED$

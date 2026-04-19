@@ -1,3 +1,4 @@
+#include <stdlib.h>
 #include <pthread.h>
 
 // This is based on the weaver benchmark

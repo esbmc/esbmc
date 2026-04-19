@@ -1,5 +1,5 @@
-count : int = 0
-i:int = 0
+count = 0
+i = 0
 
 while i < 5:
     if (i > 0):

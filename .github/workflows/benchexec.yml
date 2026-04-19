@@ -17,7 +17,7 @@ on:
       svbenchmarks:
         description: 'Git branch, tag, or commit of SV-Benchmarks to use'
         required: true
-        default: 'svcomp23'      	
+        default: 'main'      	
       mode:
         type: choice
         description: Benchexec run mode
@@ -29,12 +29,17 @@ on:
         type: choice
         description: Run-set to use (be sure to set mode to "RunSet")
         options:
-        - SV-COMP23_unreach-call
-        - SV-COMP23_no-data-race
-        - SV-COMP23_valid-memcleanup
-        - SV-COMP23_valid-memsafety
-        - SV-COMP23_termination
-        - SV-COMP23_no-overflow
+        - SV-COMP26_unreach-call
+        - SV-COMP26_no-data-race
+        - SV-COMP26_valid-memcleanup
+        - SV-COMP26_valid-memsafety
+        - SV-COMP26_termination
+        - SV-COMP26_no-overflow
+        - SV-COMP26_ConcurrencySafety
+        - SV-COMP26_unreach-call_demo
+        - SV-COMP26_no-data-race_demo
+        - SV-COMP26_valid-memsafety_demo
+        - SV-COMP26_no-overflow_demo
         - Custom
       task:
         type: choice
@@ -53,51 +58,62 @@ on:
         - ReachSafety-XCSP
         - ReachSafety-Combinations
         - ReachSafety-Hardware
+        - ReachSafety-Hardness
+        - ReachSafety-Fuzzle
         - ConcurrencySafety-Main
-        - ConcurrencySafety-MemSafety
-        - ConcurrencySafety-NoOverflows
+        - SoftwareSystems-AWS-C-Common-ReachSafety
+        - SoftwareSystems-DeviceDriversLinux64-ReachSafety
+        - SoftwareSystems-DeviceDriversLinux64Large-ReachSafety
+        - SoftwareSystems-Other-ReachSafety
+        - SoftwareSystems-uthash-ReachSafety
+        - SoftwareSystems-Intel-TDX-Module-ReachSafety
         - NoDataRace-Main
-        - NoOverflows-Main
-        - NoOverflows-Juliet
         - MemSafety-MemCleanup
+        - SoftwareSystems-uthash-MemCleanup
         - MemSafety-Arrays
         - MemSafety-Heap
         - MemSafety-LinkedLists
         - MemSafety-Other
         - MemSafety-Juliet
-        - SoftwareSystems-AWS-C-Common-ReachSafety
-        - SoftwareSystems-BusyBox-ReachSafety
-        - SoftwareSystems-BusyBox-MemSafety
-        - SoftwareSystems-BusyBox-NoOverflows
-        - SoftwareSystems-coreutils-ReachSafety
         - SoftwareSystems-coreutils-MemSafety
-        - SoftwareSystems-coreutils-NoOverflows
-        - SoftwareSystems-DeviceDriversLinux64-ReachSafety
         - SoftwareSystems-DeviceDriversLinux64-MemSafety
-        - SoftwareSystems-DeviceDriversLinux64Large-ReachSafety
-        - SoftwareSystems-DeviceDriversLinux64-MemSafety
-        - SoftwareSystems-uthash-ReachSafety
+        - SoftwareSystems-Other-MemSafety
         - SoftwareSystems-uthash-MemSafety
+        - ConcurrencySafety-MemSafety
+        - NoOverflows-Main
+        - NoOverflows-Juliet
+        - SoftwareSystems-BusyBox-NoOverflows
+        - SoftwareSystems-coreutils-NoOverflows
         - SoftwareSystems-uthash-NoOverflows
-        - SoftwareSystems-OpenBSD-MemSafety
+        - ConcurrencySafety-NoOverflows
         - Termination-BitVectors
         - Termination-MainControlFlow
         - Termination-MainHeap
         - Termination-Other
+        - SoftwareSystems-DeviceDriversLinux64-Termination
+        - ReachSafety-Huawei-Concurrency-Challenges
+        - NoDataRace-Huawei-Concurrency-Challenges
+        - MemSafety-Huawei-Concurrency-Challenges
+        - NoOverflows-Huawei-Concurrency-Challenges
       cpachecker:
-            description: "Run CPAChecker for violation witness validation"
-            required: true
-            type: boolean
+        description: "Run CPAChecker for witness validation"
+        required: true
+        type: boolean
+      witness:
+        type: choice
+        description: Benchexec witness run mode
+        options:
+        - Full
+        - Correctness
+        - Violation
 
 jobs:
-
-
   build-unix:
     uses: ./.github/workflows/build.yml
     with:
-      operating-system: ubuntu-latest
-      build-flags: '-b Release -e Off -C'
-      testing: false     
+      operating-system: ubuntu-24.04
+      build-flags: '-b Release -e OFF -C'
+      testing: false
 
   run-benchexec:
     runs-on: ['self-hosted', 'Linux', 'x64', 'benchexec']
@@ -105,27 +121,36 @@ jobs:
     needs: build-unix
     steps:
       - name: Setup SV-Benchmarks version
-        run: cd $HOME/sv-benchmarks && git fetch --all --tags && git checkout ${{ inputs.svbenchmarks }}
+        run: cd $HOME/sv-benchmarks && git fetch --all --tags --force && git checkout ${{ inputs.svbenchmarks }} && if [ "${{ inputs.svbenchmarks }}" == "main" ]; then git reset --hard origin/main; fi
       - name: Download Linux Build
-        uses: actions/download-artifact@v1
+        uses: actions/download-artifact@v4
         with:
-          name: release-ubuntu-latest
+          name: 'release-ubuntu-24.04--b Release -e OFF -C'
           path: ./
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           path: esbmc-src
       - name: Set up the custom runset
         if: ${{ inputs.mode == 'RunSet' && inputs.runset == 'Custom' }}
         run: cp ./esbmc-src/scripts/competitions/svcomp/custom-reach.set $HOME/sv-benchmarks/c/ && mv ./esbmc-src/scripts/competitions/svcomp/custom.xml ./esbmc-src/scripts/competitions/svcomp/esbmc.xml
+      - name: Set up the Concurrency runset
+        if: ${{ inputs.mode == 'RunSet' && inputs.runset == 'SV-COMP26_ConcurrencySafety' }}
+        run: mv ./esbmc-src/scripts/competitions/svcomp/ConcurrencySafety.xml ./esbmc-src/scripts/competitions/svcomp/esbmc.xml
       - name: Run Benchexec (Full)
         if: ${{ inputs.mode == 'Full' }}
         run: ./esbmc-src/scripts/benchexec.sh -f
         env:
           TIMEOUT: ${{ inputs.timeout }}
           ESBMC_OPTS: ${{ inputs.options }}
+      - name: Run Benchexec (ConcurrencyRunSet)
+        if: ${{ inputs.mode == 'RunSet' && inputs.runset == 'SV-COMP26_ConcurrencySafety' }}
+        run: ./esbmc-src/scripts/benchexec.sh -f
+        env:
+          TIMEOUT: ${{ inputs.timeout }}
+          ESBMC_OPTS: ${{ inputs.options }}
       - name: Run Benchexec (RunSet)
-        if: ${{ inputs.mode == 'RunSet' }}
+        if: ${{ inputs.mode == 'RunSet'  && inputs.runset != 'SV-COMP26_ConcurrencySafety'}}
         run: ./esbmc-src/scripts/benchexec.sh -r ${{ inputs.runset }}
         env:
           TIMEOUT: ${{ inputs.timeout }}
@@ -145,34 +170,38 @@ jobs:
         run: mv $HOME/output.zip ./output.zip      
       - name: Debug Info
         run: ls
-      - uses: actions/upload-artifact@v1
+      - uses: actions/upload-artifact@v4
         with:
           name: esbmc-result
           path: output.zip  
       - name: Checkout code
         if: ${{ inputs.cpachecker == true }}
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           path: esbmc-src      
       - name: Run Validation (Full)
         if: ${{ inputs.cpachecker == true && inputs.mode == 'Full' }}
         run: ./esbmc-src/scripts/witness.sh -f
+        env:
+          WITNESS_OPTS: ${{ inputs.witness }}
       - name: Run Validation (RunSet)
         if: ${{ inputs.cpachecker == true && inputs.mode == 'RunSet' }}
         run: ./esbmc-src/scripts/witness.sh -r ${{ inputs.runset }}
+        env:
+          WITNESS_OPTS: ${{ inputs.witness }}
       - name: Run Validation (Task)
         if: ${{ inputs.cpachecker == true && inputs.mode == 'Task' }}
         run: ./esbmc-src/scripts/witness.sh -t ${{ inputs.task }}
+        env:
+          WITNESS_OPTS: ${{ inputs.witness }}
       - name: Move output
         if: ${{ inputs.cpachecker == true }}
         run: mv $HOME/witness-output.zip ./witness-output.zip      
       - name: Show summary (CPAChecker)
         if: ${{ inputs.cpachecker == true }}
-        run: tail $HOME/witness-output/*results*.txt
-      - uses: actions/upload-artifact@v1
+        run: tail -v $HOME/witness-output/*results*.txt | sed -E 's|^==> .*/([^/.]+)\..* <==$|==> \1 <==|'
+      - uses: actions/upload-artifact@v4
         if: ${{ inputs.cpachecker == true }}
         with:
           name: witness-result
           path: witness-output.zip
-
-      

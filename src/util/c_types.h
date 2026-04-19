@@ -34,6 +34,7 @@ type2tc char_type2();
 typet float_type();
 type2tc float_type2();
 
+typet build_float_type(unsigned width);
 typet double_type();
 type2tc double_type2();
 

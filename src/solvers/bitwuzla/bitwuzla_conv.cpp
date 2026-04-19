@@ -1,5 +1,6 @@
 #include <bitwuzla_conv.h>
 #include <cstring>
+#include <cstdio>
 
 #define new_ast new_solver_ast<bitw_smt_ast>
 
@@ -715,7 +716,7 @@ BigInt bitwuzla_convt::get_bv(smt_astt a, bool is_signed)
 {
   const bitw_smt_ast *ast = to_solver_smt_ast<bitw_smt_ast>(a);
   const char *result =
-    bitwuzla_term_to_string(bitwuzla_get_value(bitw, ast->a));
+    bitwuzla_term_value_get_str(bitwuzla_get_value(bitw, ast->a));
   BigInt val = binary2integer(result, is_signed);
   return val;
 }
@@ -825,10 +826,35 @@ bitwuzla_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
     arrsort);
 }
 
-void bitwuzla_convt::dump_smt()
+std::string bitwuzla_convt::dump_smt()
 {
-  // Print formulas using binary bit-vector output format
-  bitwuzla_print_formula(bitw, "smt2", messaget::state.out, 2);
+  FILE *temp_file = tmpfile();
+  if (!temp_file)
+  {
+    log_error("Failed to create temporary file for SMT dump");
+    return "";
+  }
+
+  bitwuzla_print_formula(bitw, "smt2", temp_file, 2);
+
+  // Get file size and read entire content
+  fseek(temp_file, 0, SEEK_END);
+  long file_size = ftell(temp_file);
+  fseek(temp_file, 0, SEEK_SET);
+
+  if (file_size <= 0)
+  {
+    fclose(temp_file);
+    return "";
+  }
+
+  // Allocate buffer for entire file content
+  std::vector<char> buffer(file_size + 1);
+  size_t bytes_read = fread(buffer.data(), 1, file_size, temp_file);
+  buffer[bytes_read] = '\0'; // Null terminate
+
+  fclose(temp_file);
+  return std::string(buffer.data(), bytes_read);
 }
 
 void bitw_smt_ast::dump() const
@@ -838,8 +864,70 @@ void bitw_smt_ast::dump() const
 
 void bitwuzla_convt::print_model()
 {
-  // TODO: requires more work! See porting manual!
-  //bitwuzla_print_model(bitw, "smt2", messaget::state.out);
+  log_warning(
+    "Bitwuzla model printing is experimental and does not guarantee correct "
+    "results.");
+  // TODO: We use `symbtable` to get all symbols, because there does not seem to
+  // be a way to get all symbols from Bitwuzla. This is not ideal, because
+  // I have no idea whether ignoring the `level` field, which is also part of
+  // an entry in `symbtable`, is correct. However, it seems to work for now.
+  for (const auto &entry : symtable)
+  {
+    smt_astt term = entry.ast;
+    BitwuzlaSort sort =
+      bitwuzla_term_get_sort(to_solver_smt_ast<bitw_smt_ast>(term)->a);
+    fprintf(
+      messaget::state.out,
+      "(define-fun %s (",
+      bitwuzla_term_get_symbol(to_solver_smt_ast<bitw_smt_ast>(term)->a));
+    if (bitwuzla_sort_is_fun(sort))
+    {
+      BitwuzlaTerm value =
+        bitwuzla_get_value(bitw, to_solver_smt_ast<bitw_smt_ast>(term)->a);
+      size_t size;
+      BitwuzlaTerm *children = bitwuzla_term_get_children(value, &size);
+      assert(size == 2);
+      while (bitwuzla_term_get_kind(children[1]) == BITWUZLA_KIND_LAMBDA)
+      {
+        assert(bitwuzla_term_is_var(children[0]));
+        fprintf(
+          messaget::state.out,
+          "(%s %s) ",
+          bitwuzla_term_to_string(children[0]),
+          bitwuzla_sort_to_string(bitwuzla_term_get_sort(children[0])));
+        value = children[1];
+        children = bitwuzla_term_get_children(value, &size);
+      }
+      assert(bitwuzla_term_is_var(children[0]));
+      // Note: The returned string of bitwuzla_term_to_string and
+      //       bitwuzla_sort_to_string does not have to be freed, but is only
+      //       valid until the next call to the respective function. Thus we
+      //       split printing into separate printf calls so that none of these
+      //       functions is called more than once in one printf call.
+      //       Alternatively, we could also first get and copy the strings, use
+      //       a single printf call, and then free the copied strings.
+      fprintf(
+        messaget::state.out,
+        "(%s %s))",
+        bitwuzla_term_to_string(children[0]),
+        bitwuzla_sort_to_string(bitwuzla_term_get_sort(children[0])));
+      fprintf(
+        messaget::state.out,
+        " %s",
+        bitwuzla_sort_to_string(bitwuzla_sort_fun_get_codomain(sort)));
+      fprintf(
+        messaget::state.out, " %s)\n", bitwuzla_term_to_string(children[1]));
+    }
+    else
+    {
+      fprintf(
+        messaget::state.out,
+        ") %s %s)\n",
+        bitwuzla_sort_to_string(sort),
+        bitwuzla_term_to_string(
+          bitwuzla_get_value(bitw, to_solver_smt_ast<bitw_smt_ast>(term)->a)));
+    }
+  }
 }
 
 smt_sortt bitwuzla_convt::mk_bool_sort()
@@ -884,4 +972,45 @@ smt_sortt bitwuzla_convt::mk_bvfp_rm_sort()
 {
   return new solver_smt_sort<BitwuzlaSort>(
     SMT_SORT_BVFP_RM, bitwuzla_mk_bv_sort(bitw_term_manager, 3), 3);
+}
+
+smt_astt bitwuzla_convt::mk_quantifier(
+  bool is_forall,
+  std::vector<smt_astt> lhs,
+  smt_astt rhs)
+{
+  std::vector<BitwuzlaTerm> original_terms;
+  std::vector<BitwuzlaTerm> bound_vars;
+  original_terms.reserve(lhs.size());
+  bound_vars.reserve(lhs.size());
+
+  for (size_t i = 0; i < lhs.size(); i++)
+  {
+    BitwuzlaTerm orig = to_solver_smt_ast<bitw_smt_ast>(lhs[i])->a;
+    original_terms.push_back(orig);
+    std::string name =
+      "qvar_" + std::to_string(quantifier_counter) + "_" + std::to_string(i);
+    bound_vars.push_back(bitwuzla_mk_var(
+      bitw_term_manager, bitwuzla_term_get_sort(orig), name.c_str()));
+  }
+
+  // Substitute SSA terms with bound vars in the body.
+  // Args to bitwuzla_mk_term: [var0, ..., varN-1, body] — no VARIABLE_LIST
+  // wrapper needed (unlike CVC5).
+  BitwuzlaTerm body = bitwuzla_substitute_term(
+    to_solver_smt_ast<bitw_smt_ast>(rhs)->a,
+    original_terms.size(),
+    original_terms.data(),
+    bound_vars.data());
+
+  std::vector<BitwuzlaTerm> args(bound_vars);
+  args.push_back(body);
+
+  return new_ast(
+    bitwuzla_mk_term(
+      bitw_term_manager,
+      is_forall ? BITWUZLA_KIND_FORALL : BITWUZLA_KIND_EXISTS,
+      static_cast<uint32_t>(args.size()),
+      args.data()),
+    rhs->sort);
 }

@@ -1,0 +1,32 @@
+name: Trigger esbmc.github.io deploy action
+
+on:
+  push:
+    branches: [ master ]
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Repository Dispatch
+        uses: peter-evans/repository-dispatch@v4
+        with:
+          token: ${{ secrets.PAGES_DEPLOY_TOKEN }}
+          repository: esbmc/esbmc.github.io
+          event-type: deploy-site
+
+  # Build developer doc
+  build-developer-doc:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Set up Git repository
+      uses: actions/checkout@v4
+    - name: Compile LaTeX document
+      uses: xu-cheng/latex-action@v2
+      with:
+        root_file: docs/manual.tex
+    - name: Upload PDF file
+      uses: actions/upload-artifact@v4
+      with:
+        name: Developer-Manual
+        path: manual.pdf

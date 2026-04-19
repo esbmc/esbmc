@@ -2,6 +2,22 @@
 # include <stdlib.h>
 # include <assert.h>
 
+/*
+gcc -fsanitize=address,undefined -g -O1 -fno-omit-frame-pointer main.c -o main
+Failed to open the file (null).
+AddressSanitizer:DEADLYSIGNAL
+=================================================================
+==11161==ERROR: AddressSanitizer: stack-overflow on address 0x7ffcb8b585a8 (pc 0x55fe2f838a30 bp 0x7ffcb93575f0 sp 0x7ffcb8b575b0 T0)
+    #0 0x55fe2f838a30 in main /home/lucas/ESBMC_Project/esbmc/regression/esbmc/github_106/main.c:130
+    #1 0x7fccda430d8f in __libc_start_call_main ../sysdeps/nptl/libc_start_call_main.h:58
+    #2 0x7fccda430e3f in __libc_start_main_impl ../csu/libc-start.c:392
+    #3 0x55fe2f837384 in _start (/home/lucas/ESBMC_Project/esbmc/regression/esbmc/github_106/main+0x3384)
+
+SUMMARY: AddressSanitizer: stack-overflow /home/lucas/ESBMC_Project/esbmc/regression/esbmc/github_106/main.c:130 in main
+==11161==ABORTING
+
+*/
+
 typedef int __nodetype;
 
 typedef struct node {

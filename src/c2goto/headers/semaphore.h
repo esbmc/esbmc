@@ -18,6 +18,8 @@
 #ifndef _SEMAPHORE_H
 #define _SEMAPHORE_H	1
 
+#include <time.h>
+
 /* Definition for sem_t.  */
 typedef struct
 {

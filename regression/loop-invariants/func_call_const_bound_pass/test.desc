@@ -1,0 +1,4 @@
+CORE
+main.c
+--loop-invariant-check --multi-property --unwind 4
+^VERIFICATION SUCCESSFUL$

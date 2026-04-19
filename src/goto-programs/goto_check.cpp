@@ -7,8 +7,10 @@
 #include <util/guard.h>
 #include <util/i2string.h>
 #include <util/location.h>
-#include <util/simplify_expr.h>
+#include <util/migrate.h>
 #include <util/mp_arith.h>
+#include <util/python_types.h>
+#include <util/std_types.h>
 
 class goto_checkt
 {
@@ -28,7 +30,8 @@ public:
       enable_unsigned_overflow_check(
         options.get_bool_option("unsigned-overflow-check")),
       enable_ub_shift_check(options.get_bool_option("ub-shift-check")),
-      enable_nan_check(options.get_bool_option("nan-check"))
+      enable_nan_check(options.get_bool_option("nan-check")),
+      enable_is_instance_check(options.get_bool_option("is-instance-check"))
   {
   }
 
@@ -69,6 +72,11 @@ protected:
     const guardt &guard,
     const locationt &loc);
 
+  void cast_overflow_check(
+    const expr2tc &expr,
+    const guardt &guard,
+    const locationt &loc);
+
   /** check for the buffer overflow in scanf/fscanf */
   void input_overflow_check(const expr2tc &expr, const locationt &loc);
   /* check for signed/unsigned_bv */
@@ -87,6 +95,29 @@ protected:
 
   void
   nan_check(const expr2tc &expr, const guardt &guard, const locationt &loc);
+
+  void is_instance_check(
+    goto_programt::targett target,
+    goto_programt &goto_program,
+    const expr2tc &lhs,
+    const expr2tc &rhs,
+    const locationt &loc);
+
+  expr2tc build_python_type_assertion(
+    const expr2tc &value_expr,
+    const symbolt &symbol) const;
+
+  expr2tc build_python_isinstance_check(
+    const expr2tc &value_expr,
+    const typet &annotated_type) const;
+
+  expr2tc build_python_is_none_check(const expr2tc &value_expr) const;
+
+  bool python_should_skip_type_assertion(const typet &annotated_type) const;
+
+  typet resolve_python_effective_type(const typet &annotated_type) const;
+
+  expr2tc build_python_type_operand(const typet &type) const;
 
   void add_guarded_claim(
     const expr2tc &expr,
@@ -107,6 +138,7 @@ protected:
   bool enable_unsigned_overflow_check;
   bool enable_ub_shift_check;
   bool enable_nan_check;
+  bool enable_is_instance_check;
 };
 
 void goto_checkt::div_by_zero_check(
@@ -119,7 +151,7 @@ void goto_checkt::div_by_zero_check(
 
   assert(is_div2t(expr) || is_modulus2t(expr));
 
-  // add divison by zero subgoal
+  // add division by zero subgoal
   expr2tc side_2;
   if (is_div2t(expr))
     side_2 = to_div2t(expr).side_2;
@@ -214,6 +246,33 @@ void goto_checkt::float_overflow_check(
       loc,
       guard);
   }
+}
+
+void goto_checkt::cast_overflow_check(
+  const expr2tc &expr,
+  const guardt &guard,
+  const locationt &loc)
+{
+  if (
+    !options.get_bool_option("int-encoding") ||
+    (!enable_overflow_check && !enable_unsigned_overflow_check))
+    return;
+
+  // First, check type.
+  const type2tc &resolved_type = ns.follow(expr->type);
+  if (!is_signedbv_type(resolved_type) && !is_unsignedbv_type(resolved_type))
+    return;
+
+  // Create cast overflow check expression
+  expr2tc cast_overflow = overflow_cast2tc(expr, resolved_type->get_width());
+  make_not(cast_overflow);
+
+  add_guarded_claim(
+    cast_overflow,
+    std::string("Cast arithmetic overflow on ") + get_expr_id(expr),
+    "overflow",
+    loc,
+    guard);
 }
 
 void goto_checkt::overflow_check(
@@ -365,10 +424,16 @@ void goto_checkt::input_overflow_check(
     arg_names.push_back(arg_name);
   }
 
-  if (limits.size() != arg_names.size())
+  if (limits.size() > arg_names.size())
   {
-    log_error("the format specifiers do not match with the arguments");
+    log_error("too few arguments for format specifiers");
     return;
+  }
+  else if (limits.size() < arg_names.size())
+  {
+    log_debug(
+      "scanf", "extra arguments provided beyond format specifiers (ignored)");
+    arg_names.resize(limits.size());
   }
 
   // do checks
@@ -489,16 +554,30 @@ void goto_checkt::shift_check(
   assert(is_lshr2t(expr) || is_ashr2t(expr) || is_shl2t(expr));
 
   auto right_op = (*expr->get_sub_expr(1));
+  auto right_op_type = right_op->type;
 
-  expr2tc zero = gen_zero(right_op->type);
+  expr2tc zero = gen_zero(right_op_type);
   assert(!is_nil_expr(zero));
 
   expr2tc right_op_non_negative = greaterthanequal2tc(right_op, zero);
 
   auto left_op = (*expr->get_sub_expr(0));
   auto left_op_type = left_op->type;
+  // Use right_op_type as the type of the expression, because otherwise we could
+  // get a signedness mismatch in the lessthan2tc below
   expr2tc left_op_type_size =
-    constant_int2tc(left_op_type, BigInt(left_op_type->get_width()));
+    constant_int2tc(right_op_type, BigInt(left_op_type->get_width()));
+#ifndef NDEBUG
+  // Be paranoid and verify that the size is the same regardless of which type we're using for the
+  // constant. In theory, we could have different signedness or width, but in practice
+  // those differences should not be relevant as the relevant numbers e.g. 32 or 64 can't
+  // cause wraparound issues.
+  expr2tc check2 = (equality2tc(
+    constant_int2tc(left_op_type, BigInt(left_op_type->get_width())),
+    constant_int2tc(right_op_type, BigInt(left_op_type->get_width()))));
+  simplify(check2);
+  assert(is_true(check2));
+#endif
 
   expr2tc right_op_size_check = lessthan2tc(right_op, left_op_type_size);
 
@@ -513,8 +592,8 @@ void goto_checkt::shift_check(
 
   add_guarded_claim(
     ub_check,
-    "undefined behaviour on shift operation " + get_expr_id(expr),
-    "undef-behaviour",
+    "undefined behavior on shift operation " + get_expr_id(expr),
+    "undef-behavior",
     loc,
     guard);
 }
@@ -537,6 +616,206 @@ void goto_checkt::nan_check(
   make_not(isnan);
 
   add_guarded_claim(isnan, "NaN on " + get_expr_id(expr), "NaN", loc, guard);
+}
+
+void goto_checkt::is_instance_check(
+  goto_programt::targett target,
+  goto_programt &goto_program,
+  const expr2tc &lhs,
+  const expr2tc &rhs,
+  const locationt &loc)
+{
+  if (!enable_is_instance_check)
+    return;
+
+  if (!is_symbol2t(lhs))
+    return;
+
+  const auto &identifier = to_symbol2t(lhs).thename;
+  const symbolt *symbol = ns.lookup(identifier);
+  if (symbol == nullptr || symbol->python_annotation_types.empty())
+    return;
+
+  expr2tc assertion = build_python_type_assertion(rhs, *symbol);
+  if (is_nil_expr(assertion))
+    return;
+
+  goto_programt::targett insert_pos = target;
+  ++insert_pos;
+  goto_programt::targett new_inst = goto_program.insert(insert_pos);
+  new_inst->make_assertion(assertion);
+  new_inst->location = loc;
+
+  const std::string var_name =
+    symbol->name.empty() ? symbol->id.as_string() : symbol->name.as_string();
+  new_inst->location.comment("Type annotation check for '" + var_name + "'");
+  new_inst->location.property("is-instance-check");
+}
+
+expr2tc goto_checkt::build_python_type_assertion(
+  const expr2tc &value_expr,
+  const symbolt &symbol) const
+{
+  std::vector<expr2tc> checks;
+  bool allow_none = false;
+  for (const auto &annot_type : symbol.python_annotation_types)
+  {
+    if (annot_type == none_type())
+    {
+      allow_none = true;
+      continue;
+    }
+
+    expr2tc check = build_python_isinstance_check(value_expr, annot_type);
+    if (!is_nil_expr(check))
+      checks.push_back(check);
+  }
+
+  if (allow_none)
+  {
+    expr2tc none_check = build_python_is_none_check(value_expr);
+    if (!is_nil_expr(none_check))
+      checks.push_back(none_check);
+  }
+
+  if (checks.empty())
+    return expr2tc();
+
+  expr2tc assertion = checks.front();
+  for (std::size_t i = 1; i < checks.size(); ++i)
+    assertion = or2tc(assertion, checks[i]);
+  return assertion;
+}
+
+expr2tc goto_checkt::build_python_isinstance_check(
+  const expr2tc &value_expr,
+  const typet &annotated_type) const
+{
+  if (python_should_skip_type_assertion(annotated_type))
+    return expr2tc();
+
+  typet effective = resolve_python_effective_type(annotated_type);
+  expr2tc type_operand = build_python_type_operand(effective);
+  if (is_nil_expr(type_operand))
+    return expr2tc();
+
+  return isinstance2tc(value_expr, type_operand);
+}
+
+expr2tc goto_checkt::build_python_is_none_check(const expr2tc &value_expr) const
+{
+  const type2tc &original_type = value_expr->type;
+  type2tc resolved_type = ns.follow(original_type);
+
+  auto is_optional_struct = [](const type2tc &type) -> bool {
+    if (!is_struct_type(type))
+      return false;
+
+    const struct_type2t &struct_type = to_struct_type(type);
+    const std::string &tag = struct_type.name.as_string();
+    return tag.rfind("tag-Optional_", 0) == 0;
+  };
+
+  if (is_optional_struct(resolved_type))
+    return member2tc(get_bool_type(), value_expr, "is_none");
+
+  if (is_pointer_type(resolved_type))
+  {
+    const type2tc &subtype = to_pointer_type(resolved_type).subtype;
+    type2tc followed_subtype = ns.follow(subtype);
+    if (is_optional_struct(followed_subtype))
+    {
+      expr2tc deref = dereference2tc(followed_subtype, value_expr);
+      return member2tc(get_bool_type(), deref, "is_none");
+    }
+
+    expr2tc null_expr = gen_zero(original_type);
+    return equality2tc(value_expr, null_expr);
+  }
+
+  if (resolved_type == migrate_type(none_type()))
+    return gen_true_expr();
+
+  return expr2tc();
+}
+
+bool goto_checkt::python_should_skip_type_assertion(
+  const typet &annotated_type) const
+{
+  if (annotated_type.is_nil() || annotated_type.id().empty())
+    return true;
+
+  // Empty type represents unknown/unsupported annotation (e.g., Any, invalid or
+  // unresolved types). We cannot sensibly build an isinstance check for this,
+  // and attempting to do so leads to gen_zero on an empty type, which fails.
+  if (annotated_type.id() == "empty")
+    return true;
+
+  if (
+    annotated_type.id() == "pointer" &&
+    annotated_type.subtype().id() == "empty")
+    return true;
+
+  if (annotated_type.id() == "struct")
+  {
+    const struct_typet &struct_type = to_struct_type(annotated_type);
+    const std::string &tag = struct_type.tag().as_string();
+    if (tag.rfind("tag-Optional_", 0) == 0)
+      return true;
+  }
+
+  return false;
+}
+
+typet goto_checkt::resolve_python_effective_type(
+  const typet &annotated_type) const
+{
+  typet effective = ns.follow(annotated_type);
+
+  if (effective.id() == "pointer")
+  {
+    typet pointed = ns.follow(effective.subtype());
+    if (pointed.is_symbol())
+    {
+      const symbolt *type_symbol = ns.lookup(pointed);
+      if (type_symbol != nullptr)
+        pointed = type_symbol->type;
+    }
+
+    if (pointed.id() == "struct")
+      effective = pointed;
+  }
+
+  if (effective.id() == "symbol")
+  {
+    const symbolt *type_symbol = ns.lookup(effective);
+    if (type_symbol != nullptr)
+      effective = type_symbol->type;
+  }
+
+  return effective;
+}
+
+expr2tc goto_checkt::build_python_type_operand(const typet &type) const
+{
+  typet followed = ns.follow(type);
+
+  // Empty type means we don't have enough information to build a meaningful
+  // isinstance operand. Skip and let the caller drop this check.
+  if (followed.id() == "empty")
+    return expr2tc();
+
+  if (followed.id() == "symbol")
+  {
+    const symbolt *symbol = ns.lookup(followed);
+    if (symbol == nullptr)
+      return expr2tc();
+    type2tc symbol_type = migrate_type(symbol->type);
+    return symbol2tc(symbol_type, symbol->id);
+  }
+
+  type2tc type2 = migrate_type(followed);
+  return gen_zero(type2);
 }
 
 void goto_checkt::pointer_rel_check(
@@ -597,20 +876,22 @@ void goto_checkt::bounds_check(
 
   index2t ind = to_index2t(expr);
 
-  // Don't bounds check the initial index of argv in the "main" function; it's
-  // always correct, and just adds needless claims. In the past a "no bounds
-  // check" attribute in old irep handled this.
-  if (
-    is_symbol2t(ind.source_value) &&
-    to_symbol2t(ind.source_value).thename == "argv'" &&
-    is_symbol2t(ind.index) && to_symbol2t(ind.index).thename == "argc'")
-    return;
-
-  if (
-    is_symbol2t(ind.source_value) &&
-    to_symbol2t(ind.source_value).thename == "envp'" &&
-    is_symbol2t(ind.index) && to_symbol2t(ind.index).thename == "envp_size'")
-    return;
+  // Don't bounds check accesses into ESBMC's own main-arg backing symbols.
+  // argv' / envp' and the per-argv string backings are only indexed by the
+  // init code in clang_c_main, which bounds every index via assumes (and
+  // wraps conditional writes with an `ai < argc` guard).  User code touches
+  // argv/envp through pointer parameters, which take the pointer path below.
+  // These claims are therefore redundant — they survive slicing (slicing
+  // keeps assertions) and show up as VC overhead on benchmarks that never
+  // dereference argv.
+  if (is_symbol2t(ind.source_value))
+  {
+    const std::string name = to_symbol2t(ind.source_value).thename.as_string();
+    if (
+      name == "argv'" || name == "envp'" ||
+      name.rfind("__ESBMC_argv_str_", 0) == 0)
+      return;
+  }
 
   const type2tc &t = ns.follow(ind.source_value->type);
   if (is_pointer_type(t))
@@ -630,7 +911,7 @@ void goto_checkt::bounds_check(
     "array bounds violated: " + array_name(ns, ind.source_value);
   const expr2tc &the_index = ind.index;
 
-  // Lower bound access should be greather than zero
+  // Lower bound access should be greater than zero
   expr2tc zero = gen_zero(the_index->type);
   assert(!is_nil_expr(zero));
 
@@ -804,12 +1085,18 @@ void goto_checkt::check_rec(
     break;
   }
 
+  case expr2t::typecast_id:
+  {
+    cast_overflow_check(expr, guard, loc);
+    break;
+  }
+
   case expr2t::ieee_add_id:
   case expr2t::ieee_sub_id:
   case expr2t::ieee_mul_id:
   case expr2t::ieee_div_id:
   {
-    // No division by zero for ieee_div, as it's defined behaviour
+    // No division by zero for ieee_div, as it's defined behavior
     float_overflow_check(expr, guard, loc);
     nan_check(expr, guard, loc);
     break;
@@ -868,6 +1155,7 @@ void goto_checkt::goto_check(goto_programt &goto_program)
       {
         check(assign.target, loc);
         check(assign.source, loc);
+        is_instance_check(it, goto_program, assign.target, assign.source, loc);
       }
     }
     else if (i.is_function_call())

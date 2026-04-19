@@ -1,5 +1,5 @@
 CORE
 main.c
---condition-coverage
+--condition-coverage --no-cov-asserts
 ^Condition Coverage: 25%
 ^VERIFICATION FAILED$

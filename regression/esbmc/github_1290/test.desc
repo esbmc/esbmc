@@ -1,0 +1,4 @@
+CORE
+main.c
+--skip-bmc
+^Generating GOTO Program$

@@ -1,0 +1,4 @@
+CORE
+main.py
+--function distributeCandies_v1 --k-induction
+^VERIFICATION SUCCESSFUL$

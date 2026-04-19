@@ -29,7 +29,7 @@ SCENARIO(
     }
   }
   /* TODO: Add check for well formed symbols
-  GIVEN("An improperly initialised symbol")
+  GIVEN("An improperly initialized symbol")
   {
     symbolt symbol;
 

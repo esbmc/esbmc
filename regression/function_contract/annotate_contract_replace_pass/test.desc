@@ -1,0 +1,4 @@
+CORE
+main.c
+--replace-all-contracts
+^VERIFICATION SUCCESSFUL$

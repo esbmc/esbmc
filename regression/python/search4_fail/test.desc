@@ -1,0 +1,4 @@
+THOROUGH
+main.py
+ --unwind 9  --no-pointer-check --no-unwinding-assertions --ir
+^VERIFICATION FAILED$

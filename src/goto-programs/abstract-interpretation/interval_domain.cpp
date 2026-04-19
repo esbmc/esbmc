@@ -150,7 +150,7 @@ interval_domaint::get_interval_from_const(const expr2tc &e) const
 
   auto real_value = to_constant_floatbv2t(e).value;
 
-  // Health check, is the convertion to double ok? See #1037
+  // Health check, is the conversion to double ok? See #1037
   if (!real_value.is_normal() || real_value.is_zero())
   {
     if (real_value.is_double())
@@ -810,7 +810,7 @@ expr2tc interval_domaint::make_expression_helper(const expr2tc &symbol) const
 
   // Some intervals can be beyond what the type can hold
   // e.g., [-infinity,256] for an unsigned char.
-  // Althugh this is expected (when modular intervals are off)
+  // Although this is expected (when modular intervals are off)
   // We still need to deal with the out-of-bounds when generating
   // the expressions, as 256 would be converted to 0.
   T type_interval = generate_modular_interval<T>(src);
@@ -1003,6 +1003,7 @@ void interval_domaint::transform(
   case DEAD:
   case THROW_DECL:
   case THROW_DECL_END:
+  case LOOP_INVARIANT:
     break;
   }
 
@@ -1258,7 +1259,7 @@ void interval_domaint::havoc_rec(const expr2tc &expr)
   }
   else if (is_symbol2t(expr) || is_code_decl2t(expr))
   {
-    // Reset the interval domain if it is being reasigned (-infinity, +infinity).
+    // Reset the interval domain if it is being reassigned (-infinity, +infinity).
     irep_idt identifier = is_symbol2t(expr) ? to_symbol2t(expr).thename
                                             : to_code_decl2t(expr).value;
     if (intervals->count(identifier))
@@ -1492,6 +1493,10 @@ void interval_domaint::assume_rec(const expr2tc &cond, bool negation)
       apply_assume_symbol_truth<interval_domaint::real_intervalt>(
         to_symbol2t(cond), negation);
   }
+  else if (is_typecast2t(cond) && is_bool_type(cond))
+  {
+    assume_rec(to_typecast2t(cond).from, negation);
+  }
   //added in case "cond = false" which happens when the ibex contractor results in empty set.
   else if (is_constant_bool2t(cond))
   {
@@ -1554,7 +1559,9 @@ bool interval_domaint::ai_simplify(expr2tc &condition, const namespacet &ns)
 void interval_domaint::set_options(const optionst &options)
 {
   enable_interval_arithmetic =
-    options.get_bool_option("interval-analysis-arithmetic");
+    options.get_bool_option("interval-analysis-arithmetic") ||
+    options.get_bool_option("interval-symex-guard") ||
+    options.get_bool_option("interval-symex-assert");
   enable_interval_bitwise_arithmetic =
     options.get_bool_option("interval-analysis-bitwise");
   enable_modular_intervals =
@@ -1580,6 +1587,31 @@ void interval_domaint::set_options(const optionst &options)
   widening_under_approximate_bound =
     options.get_bool_option("interval-analysis-extrapolate-under-approximate");
   widening_narrowing = options.get_bool_option("interval-analysis-narrowing");
+}
+
+void interval_domaint::process_instruction(goto_programt::const_targett from)
+{
+  const goto_programt::instructiont &instruction = *from;
+  switch (instruction.type)
+  {
+  case DECL:
+  case DEAD:
+    havoc_rec(instruction.code);
+    break;
+  case ASSIGN:
+    assign(instruction.code);
+    break;
+  case ASSUME:
+    assume(instruction.guard);
+    break;
+  default:
+    log_debug(
+      "interval",
+      "[process_instruction] Unhandled instruction type {}: {}",
+      fmt::underlying(instruction.type),
+      instruction.location);
+    break;
+  }
 }
 
 // Options

@@ -1,16 +1,14 @@
 
 #pragma once
 
-/* while we don't have our own <math.h> work around the fact that libstdc++'s
- * <math.h> does #include <cmath> and expects all the std::* functions to be
- * there. But we don't want theirs... */
-#define _GLIBCXX_INCLUDE_NEXT_C_HEADERS
 #if __has_include(<sys/_types.h>) /* FreeBSD nonsense about __char{16,32}_t */
-#include <sys/_types.h>
+#  include <sys/_types.h>
 #endif
 
 /* delegates to math.h in the C++ headers */
 #include <math.h>
+#include <type_traits>
+#include <stdlib.h>
 
 namespace std
 {
@@ -28,6 +26,7 @@ inline long double abs(long double num)
   return ::fabsl(num);
 }
 
+using ::abs;
 using ::fabs;
 using ::fabsf;
 using ::fabsl;
@@ -96,10 +95,23 @@ CIMPORT1(log)
 CIMPORT1(log10)
 CIMPORT1(floor)
 CIMPORT1(ceil)
-CIMPORT2(pow)
 CIMPORT1(sqrt)
 CIMPORT2(fmod)
 CIMPORT1(round)
+
+using ::pow;
+#if !defined(__MATHCALL_VEC)
+using ::powf;
+using ::powl;
+inline float pow(float a, float b)
+{
+  return ::powf(a, b);
+}
+inline long double pow(long double a, long double b)
+{
+  return ::powl(a, b);
+}
+#endif
 
 using ::frexp;
 using ::frexpf;
@@ -149,7 +161,52 @@ template <typename Integer>
 double modf(Integer num, double *iptr);
  */
 
+#undef isnan
+#undef isnormal
+
+#define CIMPORT3(name)                                                         \
+  bool name(float x)                                                           \
+  {                                                                            \
+    return __builtin_##name(x);                                                \
+  }                                                                            \
+  bool name(double x)                                                          \
+  {                                                                            \
+    return __builtin_##name(x);                                                \
+  }                                                                            \
+  bool name(long double x)                                                     \
+  {                                                                            \
+    return __builtin_##name(x);                                                \
+  }
+
+CIMPORT3(isnan);
+CIMPORT3(isnormal);
+
+#undef trunc
+#undef truncf
+#undef truncl
+
+using ::trunc;
+using ::truncf;
+using ::truncl;
+
+float trunc(float x)
+{
+  return ::truncf(x);
+}
+
+long double trunc(long double x)
+{
+  return ::truncl(x);
+}
+
+template <typename T>
+typename std::enable_if<std::is_integral<T>::value, double>::type trunc(T x)
+{
+  return ::trunc(x);
+}
+
 #undef CIMPORT1
 #undef CIMPORT2
+#undef CIMPORT3
 
 } // namespace std

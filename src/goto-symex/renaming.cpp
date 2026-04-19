@@ -300,7 +300,7 @@ void renaming::level2t::make_assignment(
     to_symbol2t(lhs_symbol).rlevel == symbol2t::level1_global);
   valuet &entry = current_names[name_record(to_symbol2t(lhs_symbol))];
 
-  // This'll update entry beneath our feet; could reengineer it in the future.
+  // This'll update entry beneath our feet; could re-engineer it in the future.
   rename(lhs_symbol, entry.count + 1);
 
   symbol2t &symbol = to_symbol2t(lhs_symbol);

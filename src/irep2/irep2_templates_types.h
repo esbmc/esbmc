@@ -34,7 +34,7 @@
     basename##2t,                                                              \
     superclass,                                                                \
     superclass::traits,                                                        \
-    boost::mpl::pop_front<typename superclass::traits::fields>::type>;
+    boost::mp11::mp_pop_front<typename superclass::traits::fields>>;
 
 #define irep_typedefs1(basename, superclass)                                   \
   template class esbmct::                                                      \
@@ -43,13 +43,13 @@
     basename##2t,                                                              \
     superclass,                                                                \
     superclass::traits,                                                        \
-    boost::mpl::pop_front<typename superclass::traits::fields>::type>;         \
+    boost::mp11::mp_pop_front<typename superclass::traits::fields>>;           \
   template class esbmct::irep_methods2<                                        \
     basename##2t,                                                              \
     superclass,                                                                \
     superclass::traits,                                                        \
-    boost::mpl::pop_front<typename boost::mpl::pop_front<                      \
-      typename superclass::traits::fields>::type>::type>;
+    boost::mp11::mp_pop_front<typename boost::mp11::mp_pop_front<              \
+      typename superclass::traits::fields>>>;
 
 #define irep_typedefs2(basename, superclass)                                   \
   template class esbmct::                                                      \
@@ -58,20 +58,20 @@
     basename##2t,                                                              \
     superclass,                                                                \
     superclass::traits,                                                        \
-    boost::mpl::pop_front<typename superclass::traits::fields>::type>;         \
+    boost::mp11::mp_pop_front<typename superclass::traits::fields>>;           \
   template class esbmct::irep_methods2<                                        \
     basename##2t,                                                              \
     superclass,                                                                \
     superclass::traits,                                                        \
-    boost::mpl::pop_front<typename boost::mpl::pop_front<                      \
-      typename superclass::traits::fields>::type>::type>;                      \
+    boost::mp11::mp_pop_front<typename boost::mp11::mp_pop_front<              \
+      typename superclass::traits::fields>>>;                                  \
   template class esbmct::irep_methods2<                                        \
     basename##2t,                                                              \
     superclass,                                                                \
     superclass::traits,                                                        \
-    boost::mpl::pop_front<                                                     \
-      typename boost::mpl::pop_front<typename boost::mpl::pop_front<           \
-        typename superclass::traits::fields>::type>::type>::type>;
+    boost::mp11::mp_pop_front<                                                 \
+      typename boost::mp11::mp_pop_front<typename boost::mp11::mp_pop_front<   \
+        typename superclass::traits::fields>>>>;
 
 #define irep_typedefs3(basename, superclass)                                   \
   template class esbmct::                                                      \
@@ -80,27 +80,27 @@
     basename##2t,                                                              \
     superclass,                                                                \
     superclass::traits,                                                        \
-    boost::mpl::pop_front<typename superclass::traits::fields>::type>;         \
+    boost::mp11::mp_pop_front<typename superclass::traits::fields>>;           \
   template class esbmct::irep_methods2<                                        \
     basename##2t,                                                              \
     superclass,                                                                \
     superclass::traits,                                                        \
-    boost::mpl::pop_front<typename boost::mpl::pop_front<                      \
-      typename superclass::traits::fields>::type>::type>;                      \
+    boost::mp11::mp_pop_front<typename boost::mp11::mp_pop_front<              \
+      typename superclass::traits::fields>>>;                                  \
   template class esbmct::irep_methods2<                                        \
     basename##2t,                                                              \
     superclass,                                                                \
     superclass::traits,                                                        \
-    boost::mpl::pop_front<                                                     \
-      typename boost::mpl::pop_front<typename boost::mpl::pop_front<           \
-        typename superclass::traits::fields>::type>::type>::type>;             \
+    boost::mp11::mp_pop_front<                                                 \
+      typename boost::mp11::mp_pop_front<typename boost::mp11::mp_pop_front<   \
+        typename superclass::traits::fields>>>>;                               \
   template class esbmct::irep_methods2<                                        \
     basename##2t,                                                              \
     superclass,                                                                \
     superclass::traits,                                                        \
-    boost::mpl::pop_front<typename boost::mpl::pop_front<                      \
-      typename boost::mpl::pop_front<typename boost::mpl::pop_front<           \
-        typename superclass::traits::fields>::type>::type>::type>::type>;
+    boost::mp11::mp_pop_front<typename boost::mp11::mp_pop_front<              \
+      typename boost::mp11::mp_pop_front<typename boost::mp11::mp_pop_front<   \
+        typename superclass::traits::fields>>>>>;
 
 #define irep_typedefs4(basename, superclass)                                   \
   template class esbmct::                                                      \
@@ -109,35 +109,35 @@
     basename##2t,                                                              \
     superclass,                                                                \
     superclass::traits,                                                        \
-    boost::mpl::pop_front<typename superclass::traits::fields>::type>;         \
+    boost::mp11::mp_pop_front<typename superclass::traits::fields>>;           \
   template class esbmct::irep_methods2<                                        \
     basename##2t,                                                              \
     superclass,                                                                \
     superclass::traits,                                                        \
-    boost::mpl::pop_front<typename boost::mpl::pop_front<                      \
-      typename superclass::traits::fields>::type>::type>;                      \
+    boost::mp11::mp_pop_front<typename boost::mp11::mp_pop_front<              \
+      typename superclass::traits::fields>>>;                                  \
   template class esbmct::irep_methods2<                                        \
     basename##2t,                                                              \
     superclass,                                                                \
     superclass::traits,                                                        \
-    boost::mpl::pop_front<                                                     \
-      typename boost::mpl::pop_front<typename boost::mpl::pop_front<           \
-        typename superclass::traits::fields>::type>::type>::type>;             \
+    boost::mp11::mp_pop_front<                                                 \
+      typename boost::mp11::mp_pop_front<typename boost::mp11::mp_pop_front<   \
+        typename superclass::traits::fields>>>>;                               \
   template class esbmct::irep_methods2<                                        \
     basename##2t,                                                              \
     superclass,                                                                \
     superclass::traits,                                                        \
-    boost::mpl::pop_front<typename boost::mpl::pop_front<                      \
-      typename boost::mpl::pop_front<typename boost::mpl::pop_front<           \
-        typename superclass::traits::fields>::type>::type>::type>::type>;      \
+    boost::mp11::mp_pop_front<typename boost::mp11::mp_pop_front<              \
+      typename boost::mp11::mp_pop_front<typename boost::mp11::mp_pop_front<   \
+        typename superclass::traits::fields>>>>>;                              \
   template class esbmct::irep_methods2<                                        \
     basename##2t,                                                              \
     superclass,                                                                \
     superclass::traits,                                                        \
-    boost::mpl::pop_front<typename boost::mpl::pop_front<                      \
-      typename boost::mpl::pop_front<typename boost::mpl::pop_front<           \
-        typename boost::mpl::pop_front<typename superclass::traits::fields>::  \
-          type>::type>::type>::type>::type>;
+    boost::mp11::mp_pop_front<                                                 \
+      typename boost::mp11::mp_pop_front<typename boost::mp11::mp_pop_front<   \
+        typename boost::mp11::mp_pop_front<typename boost::mp11::mp_pop_front< \
+          typename superclass::traits::fields>>>>>>;
 
 #define irep_typedefs5(basename, superclass)                                   \
   template class esbmct::                                                      \
@@ -146,44 +146,43 @@
     basename##2t,                                                              \
     superclass,                                                                \
     superclass::traits,                                                        \
-    boost::mpl::pop_front<typename superclass::traits::fields>::type>;         \
+    boost::mp11::mp_pop_front<typename superclass::traits::fields>>;           \
   template class esbmct::irep_methods2<                                        \
     basename##2t,                                                              \
     superclass,                                                                \
     superclass::traits,                                                        \
-    boost::mpl::pop_front<typename boost::mpl::pop_front<                      \
-      typename superclass::traits::fields>::type>::type>;                      \
+    boost::mp11::mp_pop_front<typename boost::mp11::mp_pop_front<              \
+      typename superclass::traits::fields>>>;                                  \
   template class esbmct::irep_methods2<                                        \
     basename##2t,                                                              \
     superclass,                                                                \
     superclass::traits,                                                        \
-    boost::mpl::pop_front<                                                     \
-      typename boost::mpl::pop_front<typename boost::mpl::pop_front<           \
-        typename superclass::traits::fields>::type>::type>::type>;             \
+    boost::mp11::mp_pop_front<                                                 \
+      typename boost::mp11::mp_pop_front<typename boost::mp11::mp_pop_front<   \
+        typename superclass::traits::fields>>>>;                               \
   template class esbmct::irep_methods2<                                        \
     basename##2t,                                                              \
     superclass,                                                                \
     superclass::traits,                                                        \
-    boost::mpl::pop_front<typename boost::mpl::pop_front<                      \
-      typename boost::mpl::pop_front<typename boost::mpl::pop_front<           \
-        typename superclass::traits::fields>::type>::type>::type>::type>;      \
+    boost::mp11::mp_pop_front<typename boost::mp11::mp_pop_front<              \
+      typename boost::mp11::mp_pop_front<typename boost::mp11::mp_pop_front<   \
+        typename superclass::traits::fields>>>>>;                              \
   template class esbmct::irep_methods2<                                        \
     basename##2t,                                                              \
     superclass,                                                                \
     superclass::traits,                                                        \
-    boost::mpl::pop_front<typename boost::mpl::pop_front<                      \
-      typename boost::mpl::pop_front<typename boost::mpl::pop_front<           \
-        typename boost::mpl::pop_front<typename superclass::traits::fields>::  \
-          type>::type>::type>::type>::type>;                                   \
+    boost::mp11::mp_pop_front<                                                 \
+      typename boost::mp11::mp_pop_front<typename boost::mp11::mp_pop_front<   \
+        typename boost::mp11::mp_pop_front<typename boost::mp11::mp_pop_front< \
+          typename superclass::traits::fields>>>>>>;                           \
   template class esbmct::irep_methods2<                                        \
     basename##2t,                                                              \
     superclass,                                                                \
     superclass::traits,                                                        \
-    boost::mpl::pop_front<boost::mpl::pop_front<                               \
-      typename boost::mpl::pop_front<typename boost::mpl::pop_front<           \
-        typename boost::mpl::pop_front<typename boost::mpl::pop_front<         \
-          typename superclass::traits::fields>::type>::type>::type>::type>::   \
-                            type>::type>;
+    boost::mp11::mp_pop_front<boost::mp11::mp_pop_front<                       \
+      typename boost::mp11::mp_pop_front<typename boost::mp11::mp_pop_front<   \
+        typename boost::mp11::mp_pop_front<typename boost::mp11::mp_pop_front< \
+          typename superclass::traits::fields>>>>>>>;
 
 #define irep_typedefs6(basename, superclass)                                   \
   template class esbmct::                                                      \
@@ -192,54 +191,52 @@
     basename##2t,                                                              \
     superclass,                                                                \
     superclass::traits,                                                        \
-    boost::mpl::pop_front<typename superclass::traits::fields>::type>;         \
+    boost::mp11::mp_pop_front<typename superclass::traits::fields>>;           \
   template class esbmct::irep_methods2<                                        \
     basename##2t,                                                              \
     superclass,                                                                \
     superclass::traits,                                                        \
-    boost::mpl::pop_front<typename boost::mpl::pop_front<                      \
-      typename superclass::traits::fields>::type>::type>;                      \
+    boost::mp11::mp_pop_front<typename boost::mp11::mp_pop_front<              \
+      typename superclass::traits::fields>>>;                                  \
   template class esbmct::irep_methods2<                                        \
     basename##2t,                                                              \
     superclass,                                                                \
     superclass::traits,                                                        \
-    boost::mpl::pop_front<                                                     \
-      typename boost::mpl::pop_front<typename boost::mpl::pop_front<           \
-        typename superclass::traits::fields>::type>::type>::type>;             \
+    boost::mp11::mp_pop_front<                                                 \
+      typename boost::mp11::mp_pop_front<typename boost::mp11::mp_pop_front<   \
+        typename superclass::traits::fields>>>>;                               \
   template class esbmct::irep_methods2<                                        \
     basename##2t,                                                              \
     superclass,                                                                \
     superclass::traits,                                                        \
-    boost::mpl::pop_front<typename boost::mpl::pop_front<                      \
-      typename boost::mpl::pop_front<typename boost::mpl::pop_front<           \
-        typename superclass::traits::fields>::type>::type>::type>::type>;      \
+    boost::mp11::mp_pop_front<typename boost::mp11::mp_pop_front<              \
+      typename boost::mp11::mp_pop_front<typename boost::mp11::mp_pop_front<   \
+        typename superclass::traits::fields>>>>>;                              \
   template class esbmct::irep_methods2<                                        \
     basename##2t,                                                              \
     superclass,                                                                \
     superclass::traits,                                                        \
-    boost::mpl::pop_front<typename boost::mpl::pop_front<                      \
-      typename boost::mpl::pop_front<typename boost::mpl::pop_front<           \
-        typename boost::mpl::pop_front<typename superclass::traits::fields>::  \
-          type>::type>::type>::type>::type>;                                   \
+    boost::mp11::mp_pop_front<                                                 \
+      typename boost::mp11::mp_pop_front<typename boost::mp11::mp_pop_front<   \
+        typename boost::mp11::mp_pop_front<typename boost::mp11::mp_pop_front< \
+          typename superclass::traits::fields>>>>>>;                           \
   template class esbmct::irep_methods2<                                        \
     basename##2t,                                                              \
     superclass,                                                                \
     superclass::traits,                                                        \
-    boost::mpl::pop_front<boost::mpl::pop_front<                               \
-      typename boost::mpl::pop_front<typename boost::mpl::pop_front<           \
-        typename boost::mpl::pop_front<typename boost::mpl::pop_front<         \
-          typename superclass::traits::fields>::type>::type>::type>::type>::   \
-                            type>::type>;                                      \
+    boost::mp11::mp_pop_front<boost::mp11::mp_pop_front<                       \
+      typename boost::mp11::mp_pop_front<typename boost::mp11::mp_pop_front<   \
+        typename boost::mp11::mp_pop_front<typename boost::mp11::mp_pop_front< \
+          typename superclass::traits::fields>>>>>>>;                          \
   template class esbmct::irep_methods2<                                        \
     basename##2t,                                                              \
     superclass,                                                                \
     superclass::traits,                                                        \
-    boost::mpl::pop_front<                                                     \
-      typename boost::mpl::pop_front<boost::mpl::pop_front<                    \
-        typename boost::mpl::pop_front<typename boost::mpl::pop_front<         \
-          typename boost::mpl::pop_front<typename boost::mpl::pop_front<       \
-            typename superclass::traits::fields>::type>::type>::type>::type>:: \
-                                       type>::type>::type>;
+    boost::mp11::mp_pop_front<typename boost::mp11::mp_pop_front<              \
+      boost::mp11::mp_pop_front<typename boost::mp11::mp_pop_front<            \
+        typename boost::mp11::mp_pop_front<typename boost::mp11::mp_pop_front< \
+          typename boost::mp11::mp_pop_front<                                  \
+            typename superclass::traits::fields>>>>>>>>;
 
 ////////////////////////////
 

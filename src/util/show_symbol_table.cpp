@@ -48,6 +48,8 @@ void show_symbol_table_plain(const namespacet &ns, std::ostream &out)
       out << " extern";
     if (s.is_macro)
       out << " macro";
+    if (s.is_thread_local)
+      out << " is_thread_local";
 
     out << "\n";
     out << "Location....: " << s.location << "\n";

@@ -14,8 +14,8 @@ target_include_directories(c2goto
     PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/c2goto-hdr
     )
 target_link_libraries(c2goto
-  clangcfrontend gotoprograms langapi util_esbmc irep2 c2gotoheaders
-  filesystem ${Boost_LIBRARIES})
+  clangcfrontend langapi c2gotoheaders
+  filesystem ${Boost_LIBRARIES} ${OS_INCLUDE_LIBS})
 set_target_properties(c2goto PROPERTIES
   PRIVATE_HEADER "${CMAKE_CURRENT_BINARY_DIR}/c2goto-hdr/libc.h;${CMAKE_CURRENT_BINARY_DIR}/c2goto-hdr/libm.h;${CMAKE_CURRENT_BINARY_DIR}/c2goto-hdr/headers/libc_hdr.h")
 
@@ -55,7 +55,10 @@ endfunction()
 
 if (ESBMC_BUNDLE_LIBC)
 
-  set(archs --32 --64)
+  set(archs --64)
+  if(ENABLE_BUNDLE_LIBC_32BIT)
+    set(archs --32 --64)
+  endif()
   set(floats "--fixedbv -D__ESBMC_FIXEDBV" --floatbv)
   # for some reason CMake does not differentiate between [""], "" and [] so we
   # have to 'represent' the empty string by a non-empty string in order to get
@@ -81,15 +84,17 @@ if (ESBMC_BUNDLE_LIBC)
 
   foreach_in_cross_product(clib_join_argv cherimodes floats archs)
 
-  set (clib32_config clib32.c --32 --fixedbv -D__ESBMC_FIXEDBV)
   set (clib64_config clib64.c --64 --fixedbv -D__ESBMC_FIXEDBV)
-  set (clib32f_config clib32_fp.c --32 --floatbv)
   set (clib64f_config clib64_fp.c --64 --floatbv)
-  set (inputs clib32_config
-              clib64_config
-              clib32f_config
-              clib64f_config
-      )
+  set (inputs clib64_config clib64f_config)
+  if(ENABLE_BUNDLE_LIBC_32BIT)
+    set (clib32_config clib32.c --32 --fixedbv -D__ESBMC_FIXEDBV)
+    set (clib32f_config clib32_fp.c --32 --floatbv)
+    set (inputs clib32_config
+      clib64_config
+      clib32f_config
+      clib64f_config)
+  endif()
 
   if(ESBMC_CHERI_HYBRID_SYSROOT)
     set (clib32_cherih_config clib32_cherih.c --32 --fixedbv -D__ESBMC_FIXEDBV --cheri hybrid --sysroot "${ESBMC_CHERI_HYBRID_SYSROOT}")
@@ -128,6 +133,14 @@ function(mangle_clib output)
   file(GLOB_RECURSE c2goto_header_files CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/headers/*.h")
 
+  # Extract C models for Python
+  if(ENABLE_PYTHON_FRONTEND)
+    file(GLOB_RECURSE c2goto_python_files CONFIGURE_DEPENDS
+      "${CMAKE_CURRENT_SOURCE_DIR}/library/python/*.c")
+  else()
+    set(c2goto_python_files "")
+  endif()
+
   # For each config, generate clib*.c and clib*.goto file in the current binary directory
   foreach(in_f ${ARGN})
     set (in_f "${${in_f}}")
@@ -139,10 +152,14 @@ function(mangle_clib output)
     set(out_goto "${CMAKE_CURRENT_BINARY_DIR}/${out_goto}")
     set(out_file "${CMAKE_CURRENT_BINARY_DIR}/${out_file}")
 
+    set(inputs_c ${c2goto_library_files})
+
     if(ENABLE_LIBM)
-      set(inputs_c ${c2goto_library_files} ${c2goto_libm_files})
-    else()
-      set(inputs_c ${c2goto_library_files})
+      list(APPEND inputs_c ${c2goto_libm_files})
+    endif()
+
+    if(ENABLE_PYTHON_FRONTEND)
+      list(APPEND inputs_c ${c2goto_python_files})
     endif()
 
     if(ESBMC_CHERI_CLANG)
@@ -155,7 +172,7 @@ function(mangle_clib output)
     # Convert a list of C operational models (e.g. *.c) into a single goto binary file (e.g. clib32.goto) at CMake build time
     add_custom_command(OUTPUT ${out_goto}
       COMMAND ${run_c2goto}
-      DEPENDS c2goto ${c2goto_library_files} ${c2goto_libm_files} ${c2goto_header_files}
+      DEPENDS c2goto ${c2goto_library_files} ${c2goto_libm_files} ${c2goto_header_files} ${c2goto_python_files}
       WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
       COMMENT "Generating libc model ${out_goto}"
       VERBATIM
@@ -189,6 +206,21 @@ function(mangle_clib output)
          MACRO ESBMC_FLAIL
          ACC_HEADERS_INTO ${CMAKE_CURRENT_BINARY_DIR}/libm.h)
 
+  if(ENABLE_PYTHON_FRONTEND)
+    mangle(${CMAKE_CURRENT_BINARY_DIR}/libpython.c
+           ${CMAKE_CURRENT_SOURCE_DIR}/library/python
+           WILDCARD *.c
+           SINGLE
+           PREFIX esbmc_python_
+           MACRO ESBMC_FLAIL
+           ACC_HEADERS_INTO ${CMAKE_CURRENT_BINARY_DIR}/libpython.h)
+
+    list(APPEND result
+      ${CMAKE_CURRENT_BINARY_DIR}/libpython.c
+      ${CMAKE_CURRENT_BINARY_DIR}/libpython.h)
+  endif()
+
+
   list(APPEND result ${CMAKE_CURRENT_BINARY_DIR}/libc.c
                      ${CMAKE_CURRENT_BINARY_DIR}/libm.c)
   set(${output} "${result}" PARENT_SCOPE)
@@ -203,4 +235,16 @@ target_include_directories(clibs
     PRIVATE ${CMAKE_CURRENT_BINARY_DIR}
 )
 target_link_libraries(clibs c2gotoheaders fmt::fmt filesystem)
-set_target_properties(clibs PROPERTIES PRIVATE_HEADER "${CMAKE_CURRENT_BINARY_DIR}/libc.h;${CMAKE_CURRENT_BINARY_DIR}/libm.h")
+
+set(private_headers
+  "${CMAKE_CURRENT_BINARY_DIR}/libc.h"
+  "${CMAKE_CURRENT_BINARY_DIR}/libm.h"
+)
+
+if(ENABLE_PYTHON_FRONTEND)
+  list(APPEND private_headers "${CMAKE_CURRENT_BINARY_DIR}/libpython.h")
+endif()
+
+set_target_properties(clibs PROPERTIES PRIVATE_HEADER "${private_headers}")
+
+

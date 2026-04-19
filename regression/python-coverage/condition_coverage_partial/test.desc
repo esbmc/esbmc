@@ -1,0 +1,7 @@
+THOROUGH
+main.py
+--condition-coverage
+^Condition Properties - SATISFIED:  2
+^Condition Properties - UNSATISFIED:  2
+^Condition Coverage: 50%
+^VERIFICATION FAILED$

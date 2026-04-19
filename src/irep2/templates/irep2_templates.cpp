@@ -26,7 +26,7 @@ std::string array_type2t::field_names[esbmct::num_type_fields] =
 std::string vector_type2t::field_names[esbmct::num_type_fields] =
   {"subtype", "array_size", "size_is_infinite", "", ""};
 std::string pointer_type2t::field_names[esbmct::num_type_fields] =
-  {"subtype", "", "", "", ""};
+  {"subtype", "provenance", "", "", ""};
 std::string fixedbv_type2t::field_names[esbmct::num_type_fields] =
   {"width", "integer_bits", "", "", ""};
 std::string floatbv_type2t::field_names[esbmct::num_type_fields] =
@@ -152,6 +152,10 @@ std::string with2t::field_names[esbmct::num_type_fields] =
   {"source_value", "update_field", "update_value", "", ""};
 std::string member2t::field_names[esbmct::num_type_fields] =
   {"source_value", "member_name", "", "", ""};
+std::string member_ref2t::field_names[esbmct::num_type_fields] =
+  {"member_name", "", "", "", ""};
+std::string ptr_mem2t::field_names[esbmct::num_type_fields] =
+  {"source_value", "member_pointer", "", "", ""};
 std::string index2t::field_names[esbmct::num_type_fields] =
   {"source_value", "index", "", "", ""};
 std::string isnan2t::field_names[esbmct::num_type_fields] =
@@ -173,6 +177,8 @@ std::string dynamic_object2t::field_names[esbmct::num_type_fields] =
 std::string dereference2t::field_names[esbmct::num_type_fields] =
   {"pointer", "", "", "", ""};
 std::string valid_object2t::field_names[esbmct::num_type_fields] =
+  {"value", "", "", "", ""};
+std::string races_check2t::field_names[esbmct::num_type_fields] =
   {"value", "", "", "", ""};
 std::string deallocated_obj2t::field_names[esbmct::num_type_fields] =
   {"value", "", "", "", ""};
@@ -242,6 +248,21 @@ std::string extract2t::field_names[esbmct::num_type_fields] =
   {"from", "upper", "lower", "", ""};
 std::string phi2t::field_names[esbmct::num_type_fields] =
   {"lhs", "rhs", "lhs_location", "rhs_location", ""};
+std::string capability_base2t::field_names[esbmct::num_type_fields] =
+  {"value", "", "", "", ""};
+std::string capability_top2t::field_names[esbmct::num_type_fields] =
+  {"value", "", "", "", ""};
+
+std::string forall2t::field_names[esbmct::num_type_fields] =
+  {"symbol", "predicate", "", "", ""};
+std::string exists2t::field_names[esbmct::num_type_fields] =
+  {"symbol", "predicate", "", "", ""};
+std::string isinstance2t::field_names[esbmct::num_type_fields] =
+  {"value", "type", "", "", ""};
+std::string hasattr2t::field_names[esbmct::num_type_fields] =
+  {"value", "attr", "", "", ""};
+std::string isnone2t::field_names[esbmct::num_type_fields] =
+  {"lhs", "rhs", "", "", ""};
 
 // For CRCing to actually be accurate, expr/type ids mustn't overflow out of
 // a byte. If this happens then a) there are too many exprs, and b) the expr
@@ -274,8 +295,8 @@ void do_type2string<const expr2t::expr_ids>(
 template <>
 bool do_get_sub_expr<expr2tc>(
   const expr2tc &item,
-  unsigned int idx,
-  unsigned int &it,
+  size_t idx,
+  size_t &it,
   const expr2tc *&ptr)
 {
   if (idx == it)
@@ -293,8 +314,8 @@ bool do_get_sub_expr<expr2tc>(
 template <>
 bool do_get_sub_expr<std::vector<expr2tc>>(
   const std::vector<expr2tc> &item,
-  unsigned int idx,
-  unsigned int &it,
+  size_t idx,
+  size_t &it,
   const expr2tc *&ptr)
 {
   if (idx < it + item.size())
@@ -313,8 +334,8 @@ bool do_get_sub_expr<std::vector<expr2tc>>(
 template <>
 bool do_get_sub_expr_nc<expr2tc>(
   expr2tc &item,
-  unsigned int idx,
-  unsigned int &it,
+  size_t idx,
+  size_t &it,
   expr2tc *&ptr)
 {
   if (idx == it)
@@ -332,8 +353,8 @@ bool do_get_sub_expr_nc<expr2tc>(
 template <>
 bool do_get_sub_expr_nc<std::vector<expr2tc>>(
   std::vector<expr2tc> &item,
-  unsigned int idx,
-  unsigned int &it,
+  size_t idx,
+  size_t &it,
   expr2tc *&ptr)
 {
   if (idx < it + item.size())
@@ -349,13 +370,13 @@ bool do_get_sub_expr_nc<std::vector<expr2tc>>(
 }
 
 template <>
-unsigned int do_count_sub_exprs<const expr2tc>(const expr2tc &)
+size_t do_count_sub_exprs<const expr2tc>(const expr2tc &)
 {
   return 1;
 }
 
 template <>
-unsigned int
+size_t
 do_count_sub_exprs<const std::vector<expr2tc>>(const std::vector<expr2tc> &item)
 {
   return item.size();

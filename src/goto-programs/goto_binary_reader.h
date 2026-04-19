@@ -14,11 +14,12 @@ public:
     const void *data,
     size_t size,
     contextt &context,
+    contextt &ignored,
     goto_functionst &dest);
 
   void set_functions_to_read(const std::vector<std::string> &funcs)
   {
-    functions = funcs;
+    function_set.insert(funcs.begin(), funcs.end());
   }
 
   bool read_goto_binary(
@@ -27,5 +28,6 @@ public:
     goto_functionst &dest);
 
 private:
-  std::vector<std::string> functions; // functions to read
+  // whitelist (if not empty) of functions to read symbols of
+  std::unordered_set<std::string> function_set;
 };

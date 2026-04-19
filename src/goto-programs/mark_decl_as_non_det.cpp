@@ -18,7 +18,7 @@ bool mark_decl_as_non_det::runOnFunction(
 
     // find_symbol should always work here
     assert(s);
-    // Global variables and function declaration shouldn`t reach here
+    // Global variables and function declaration shouldn't reach here
     assert(!s->static_lifetime || !s->type.is_code());
 
     // Explicit initialization of return_values is not needed as it will always be

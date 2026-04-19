@@ -2331,6 +2331,16 @@ std::string c_expr2stringt::convert(const exprt &src, unsigned &precedence)
     return src.identifier().as_string();
   }
 
+  else if (src.id() == "member_ref")
+  {
+    return to_member_ref_expr(src).get_component_name().as_string();
+  }
+
+  else if (src.id() == "ptr_mem")
+  {
+    return convert_binary(src, ".*", precedence = 2, true);
+  }
+
   else if (src.id() == "pointer_object")
   {
     return convert_function(src, "POINTER_OBJECT", precedence = 15);
@@ -2374,6 +2384,36 @@ std::string c_expr2stringt::convert(const exprt &src, unsigned &precedence)
   else if (src.id() == "valid_object")
   {
     return convert_function(src, "VALID_OBJECT", precedence = 15);
+  }
+
+  else if (src.id() == "races_check")
+  {
+    return convert_function(src, "RACE_CHECK", precedence = 15);
+  }
+
+  else if (src.id() == "isinstance")
+  {
+    return convert_function(src, "ISINSTANCE", precedence = 15);
+  }
+
+  else if (src.id() == "hasattr")
+  {
+    return convert_function(src, "HASATTR", precedence = 15);
+  }
+
+  else if (src.id() == "isnone")
+  {
+    return convert_function(src, "ISNONE", precedence = 15);
+  }
+
+  else if (src.id() == "capability_base")
+  {
+    return convert_function(src, "CAPABILITY_BASE", precedence = 15);
+  }
+
+  else if (src.id() == "capability_top")
+  {
+    return convert_function(src, "CAPABILITY_TOP", precedence = 15);
   }
 
   else if (src.id() == "deallocated_object" || src.id() == "memory-leak")
@@ -2446,9 +2486,9 @@ std::string c_expr2stringt::convert(const exprt &src, unsigned &precedence)
     return convert_function(src, "bswap", precedence = 15);
   }
 
-  else if (src.id() == "__ESMBC_va_arg")
+  else if (src.id() == "__ESBMC_va_arg")
   {
-    return convert_function(src, "__ESMBC_va_arg", precedence = 15);
+    return convert_function(src, "__ESBMC_va_arg", precedence = 15);
   }
 
   else if (has_prefix(src.id_string(), "byte_extract"))

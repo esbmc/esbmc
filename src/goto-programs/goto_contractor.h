@@ -571,7 +571,7 @@ private:
   /// \param functionst list of functions in the goto program
   void get_contractors(goto_functionst goto_functions);
 
-  /// \Function get_intervals is a function that will go through each asert in
+  /// \Function get_intervals is a function that will go through each assert in
   /// the program and parse it from ESBMC expression to a triplet that are the
   /// variable name and and update its interval depending on the relation it
   /// will decide if the lower or the upper limit or both. the function will
@@ -614,7 +614,7 @@ private:
 
   void insert_assume_at(
     goto_functiont goto_function,
-    std::_List_iterator<goto_programt::instructiont> instruction);
+    goto_programt::targett instruction);
 };
 //-----------------------------------------------------------------------------------------------------------------
 class interval_analysis_ibex_contractor

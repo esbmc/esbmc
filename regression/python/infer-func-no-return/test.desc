@@ -1,0 +1,5 @@
+CORE
+main.py
+--override-return-annotation
+
+^VERIFICATION SUCCESSFUL$

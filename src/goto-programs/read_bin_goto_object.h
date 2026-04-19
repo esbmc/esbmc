@@ -19,7 +19,8 @@ bool read_bin_goto_object(
   std::istream &in,
   const std::string &filename,
   contextt &context,
-  std::vector<std::string> &functions,
+  contextt &ignored,
+  std::unordered_set<std::string> &function_set,
   goto_functionst &goto_functions);
 
 #endif /*READ_BIN_GOTO_OBJECT_H_*/

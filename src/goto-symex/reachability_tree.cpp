@@ -40,6 +40,7 @@ reachability_treet::reachability_treet(
   directed_interleavings = options.get_bool_option("direct-interleavings");
   interactive_ileaves = options.get_bool_option("interactive-ileaves");
   schedule = options.get_bool_option("schedule");
+  smt_during_symex = options.get_bool_option("smt-during-symex");
   por = !options.get_bool_option("no-por");
   main_thread_ended = false;
   target_template = std::move(target);
@@ -66,7 +67,8 @@ void reachability_treet::setup_for_new_explore()
       permanent_context,
       options,
       &schedule_total_claims,
-      &schedule_remaining_claims));
+      &schedule_remaining_claims,
+      &schedule_simplified_claims));
   }
   else
   {
@@ -161,32 +163,42 @@ bool reachability_treet::step_next_state()
 unsigned int
 reachability_treet::decide_ileave_direction(execution_statet &ex_state)
 {
-  unsigned int tid = 0, user_tid = 0;
+  auto is_thread_schedulable = [&](int tid) {
+    return check_thread_viable(tid, true) && ex_state.dfs_explore_thread(tid);
+  };
 
+  signed int tid = 0, user_tid = 0;
+
+  // Get thread ID from user if interactive mode is enabled
+  tid = get_cur_state().active_thread + 1;
   if (interactive_ileaves)
   {
     tid = get_ileave_direction_from_user();
     user_tid = tid;
   }
 
-  for (; tid < ex_state.threads_state.size(); tid++)
+  // Try finding a schedulable thread in the forward direction
+  for (; tid < (int)ex_state.threads_state.size(); ++tid)
   {
-    /* For all threads: */
-    if (!check_thread_viable(tid, true))
-      continue;
-
-    if (!ex_state.dfs_explore_thread(tid))
-      continue;
-
-#if 0
-    //apply static partial-order reduction
-    if (por && !ex_state.is_thread_mpor_schedulable(tid))
-      continue;
-#endif
-
-    break;
+    if (is_thread_schedulable(tid))
+      break;
   }
 
+  // If no thread was found, search in the reverse direction
+  if (tid == (int)ex_state.threads_state.size())
+  {
+    for (tid = get_cur_state().active_thread; tid >= 0; --tid)
+    {
+      if (is_thread_schedulable(tid))
+        break;
+    }
+  }
+
+  // If no valid thread is found, set tid to the size of threads_state
+  if (tid < 0)
+    tid = ex_state.threads_state.size();
+
+  // Validate user choice in interactive mode
   if (interactive_ileaves && tid != user_tid)
   {
     log_error("Ileave code selected different thread from user choice");
@@ -204,7 +216,7 @@ bool reachability_treet::is_has_complete_formula()
 void reachability_treet::switch_to_next_execution_state()
 {
   std::list<std::shared_ptr<execution_statet>>::iterator it = cur_state_it;
-  it++;
+  ++it;
 
   if (it != execution_states.end())
   {
@@ -247,7 +259,7 @@ bool reachability_treet::reset_to_unexplored_state()
   if (execution_states.size() > 0)
     cur_state_it++;
 
-  if (execution_states.size() != 0)
+  if (execution_states.size() && !smt_during_symex)
   {
     // When backtracking, erase all the assertions from the equation before
     // continuing forwards. They've all already been checked, in the trace we
@@ -263,7 +275,7 @@ bool reachability_treet::reset_to_unexplored_state()
     (*cur_state_it)->remaining_claims -= num_asserts;
   }
 
-  return execution_states.size() != 0;
+  return execution_states.size();
 }
 
 void reachability_treet::go_next_state()
@@ -297,7 +309,7 @@ reachability_treet::dfs_position::dfs_position(const reachability_treet &rt)
 
   // Iterate through each position in the DFS tree recording data into this
   // object.
-  for (it = rt.execution_states.begin(); it != rt.execution_states.end(); it++)
+  for (it = rt.execution_states.begin(); it != rt.execution_states.end(); ++it)
   {
     reachability_treet::dfs_position::dfs_state state;
     auto ex = *it;
@@ -357,7 +369,7 @@ bool reachability_treet::dfs_position::write_to_file(
   if (fwrite(&hdr, sizeof(hdr), 1, f) != 1)
     goto fail;
 
-  for (it = states.begin(); it != states.end(); it++)
+  for (it = states.begin(); it != states.end(); ++it)
   {
     entry.location_number = htonl(it->location_number);
     entry.num_threads = htons(it->num_threads);
@@ -371,7 +383,7 @@ bool reachability_treet::dfs_position::write_to_file(
 
     i = 0;
     memset(buffer, 0, sizeof(buffer));
-    for (ex_it = it->explored.begin(); ex_it != it->explored.end(); ex_it++)
+    for (ex_it = it->explored.begin(); ex_it != it->explored.end(); ++ex_it)
     {
       if (*ex_it)
       {
@@ -384,7 +396,7 @@ bool reachability_treet::dfs_position::write_to_file(
     i += 7;
     i >>= 3;
 
-    assert(i != 0); // Always at least one thread in _existance_.
+    assert(i != 0); // Always at least one thread in _existence_.
     if (fwrite(buffer, i, 1, f) != 1)
       goto fail;
   }
@@ -424,7 +436,7 @@ bool reachability_treet::dfs_position::read_from_file(
     return true;
   }
 
-  for (i = 0; i < ntohl(hdr.num_states); i++)
+  for (i = 0; i < ntohl(hdr.num_states); ++i)
   {
     reachability_treet::dfs_position::dfs_state state;
     if (fread(&entry, sizeof(entry), 1, f) != 1)
@@ -442,7 +454,7 @@ bool reachability_treet::dfs_position::read_from_file(
       return true;
     }
 
-    for (j = 0; j < state.num_threads; j++)
+    for (j = 0; j < state.num_threads; ++j)
     {
       if (j % 8 == 0)
       {
@@ -471,7 +483,7 @@ void reachability_treet::print_ileave_trace() const
   int i = 0;
 
   log_status("Context switch trace for interleaving:");
-  for (it = execution_states.begin(); it != execution_states.end(); it++, i++)
+  for (it = execution_states.begin(); it != execution_states.end(); ++it, ++i)
   {
     log_status("Context switch point {}", i);
     (*it)->print_stack_traces(4);
@@ -552,7 +564,9 @@ goto_symext::symex_resultt reachability_treet::get_next_formula()
 
     next_thread_id = decide_ileave_direction(get_cur_state());
 
-    if (get_cur_state().interleaving_unviable)
+    if (
+      get_cur_state().interleaving_unviable &&
+      next_thread_id != get_cur_state().active_thread)
       break;
     create_next_state();
 
@@ -604,7 +618,10 @@ goto_symext::symex_resultt reachability_treet::generate_schedule_formula()
   }
 
   return goto_symext::symex_resultt(
-    schedule_target, schedule_total_claims, schedule_remaining_claims);
+    schedule_target,
+    schedule_total_claims,
+    schedule_remaining_claims,
+    schedule_simplified_claims);
 }
 
 bool reachability_treet::restore_from_dfs_state(void *)

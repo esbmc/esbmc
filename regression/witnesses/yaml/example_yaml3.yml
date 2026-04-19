@@ -1,0 +1,38 @@
+- entry_type: "violation_sequence"
+  metadata:
+    format_version: "2.0"
+    uuid: "193a2d07-d6bb-4d73-aed1-f6bd7864e39e"
+    creation_time: "2025-08-20T14:45:33+08:00"
+    producer:
+      name: "ESBMC"
+      version: "7.10.0"
+    task:
+      input_files:
+        - "main5.c"
+      input_file_hashes:
+        "main5.c": "51e53240f79337f79a08190fe3cdd7ccbd4b68467e1164ea9c12b766a76f8040"
+      specification: "G ! call(reach_error())"
+      data_model: "LP64"
+      language: "C"
+  content:
+    - segment:
+        - waypoint:
+            type: "assumption"
+            action: "follow"
+            constraint:
+              value: "x == 0"
+              format: "c_expression"
+            location:
+              file_name: "main5.c"
+              line: 6
+              column: 3
+              function: "main"
+    - segment:
+        - waypoint:
+            type: "target"
+            action: "follow"
+            location:
+              file_name: "main5.c"
+              line: 8
+              column: 5
+              function: "main"

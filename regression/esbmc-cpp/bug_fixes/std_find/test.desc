@@ -1,0 +1,5 @@
+THOROUGH
+main.cpp
+--incremental-bmc
+
+^VERIFICATION SUCCESSFUL$

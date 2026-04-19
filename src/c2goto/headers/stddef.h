@@ -8,6 +8,8 @@
 #define __need_wchar_t		/* wchar_t */
 #define __need_NULL		/* NULL */
 #define __need_STDDEF_H_misc	/* offsetof() and max_align_t */
+#define __need_max_align_t   /* llvm 21: max_align_t */
+#define __need_offsetof   /* llvm 21: offestof() */
 #include_next <stddef.h>
 
 #else

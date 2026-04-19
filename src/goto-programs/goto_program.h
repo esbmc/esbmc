@@ -26,24 +26,25 @@
 typedef enum
 {
   NO_INSTRUCTION_TYPE = 0,
-  GOTO = 1,           // branch, possibly guarded
-  ASSUME = 2,         // non-failing guarded self loop
-  ASSERT = 3,         // assertions
-  OTHER = 4,          // anything else
-  SKIP = 5,           // just advance the PC
-  LOCATION = 8,       // semantically like SKIP
-  END_FUNCTION = 9,   // exit point of a function
-  ATOMIC_BEGIN = 10,  // marks a block without interleavings
-  ATOMIC_END = 11,    // end of a block without interleavings
-  RETURN = 12,        // return from a function
-  ASSIGN = 13,        // assignment lhs:=rhs
-  DECL = 14,          // declare a local variable
-  DEAD = 15,          // marks the end-of-live of a local variable
-  FUNCTION_CALL = 16, // call a function
-  THROW = 17,         // throw an exception
-  CATCH = 18,         // catch an exception
-  THROW_DECL = 19,    // list of throws that a function can throw
-  THROW_DECL_END = 20 // end of throw declaration
+  GOTO = 1,            // branch, possibly guarded
+  ASSUME = 2,          // non-failing guarded self loop
+  ASSERT = 3,          // assertions
+  OTHER = 4,           // anything else
+  SKIP = 5,            // just advance the PC
+  LOCATION = 8,        // semantically like SKIP
+  END_FUNCTION = 9,    // exit point of a function
+  ATOMIC_BEGIN = 10,   // marks a block without interleavings
+  ATOMIC_END = 11,     // end of a block without interleavings
+  RETURN = 12,         // return from a function
+  ASSIGN = 13,         // assignment lhs:=rhs
+  DECL = 14,           // declare a local variable
+  DEAD = 15,           // marks the end-of-live of a local variable
+  FUNCTION_CALL = 16,  // call a function
+  THROW = 17,          // throw an exception
+  CATCH = 18,          // catch an exception
+  THROW_DECL = 19,     // list of throws that a function can throw
+  THROW_DECL_END = 20, // end of throw declaration
+  LOOP_INVARIANT = 21  // loop invariant
 } goto_program_instruction_typet;
 
 std::ostream &operator<<(std::ostream &, goto_program_instruction_typet);
@@ -87,6 +88,8 @@ public:
   class instructiont
   {
   public:
+    mutable std::mutex clear_claims_mutex;
+
     expr2tc code;
 
     //! function this belongs to
@@ -100,6 +103,12 @@ public:
 
     //! guard for gotos, assume, assert
     expr2tc guard;
+
+    //! loop invariant for loop_invariant instruction
+    std::list<expr2tc> loop_invariants;
+
+    //! loop assigns targets for frame rule enforcement
+    std::list<expr2tc> loop_assigns_targets;
 
     //! the target for gotos and for start_thread nodes
     typedef std::list<class instructiont>::iterator targett;
@@ -139,6 +148,11 @@ public:
 
     bool inductive_assertion;
 
+    // Set by optimize_guarded_gotos when "IF !cond GOTO skip; GOTO target" is
+    // folded into "IF cond GOTO target". The guard is then the positive source
+    // condition, so GOTO-taken means the branch body (original target) IS reached.
+    bool flipped_guard;
+
     //! is this node a branch target?
     inline bool is_target() const
     {
@@ -152,8 +166,11 @@ public:
       targets.clear();
       guard = gen_true_expr();
       code = expr2tc();
+      loop_invariants.clear();
+      loop_assigns_targets.clear();
       inductive_step_instruction = false;
       inductive_assertion = false;
+      flipped_guard = false;
     }
 
     inline void make_goto()
@@ -317,6 +334,11 @@ public:
       return type == ASSERT;
     }
 
+    inline bool is_loop_invariant() const
+    {
+      return type == LOOP_INVARIANT;
+    }
+
     inline bool is_atomic_begin() const
     {
       return type == ATOMIC_BEGIN;
@@ -337,8 +359,10 @@ public:
         type(NO_INSTRUCTION_TYPE),
         inductive_step_instruction(false),
         inductive_assertion(false),
+        flipped_guard(false),
         location_number(0),
         loop_number(unsigned(0)),
+        pragma_unroll_count(0),
         target_number(unsigned(-1))
     {
       guard = gen_true_expr();
@@ -349,26 +373,111 @@ public:
         type(_type),
         inductive_step_instruction(false),
         inductive_assertion(false),
+        flipped_guard(false),
         location_number(0),
         loop_number(unsigned(0)),
+        pragma_unroll_count(0),
         target_number(unsigned(-1))
     {
       guard = gen_true_expr();
     }
 
+    instructiont(const instructiont &other)
+      : code(other.code),
+        function(other.function),
+        location(other.location),
+        type(other.type),
+        guard(other.guard),
+        targets(other.targets),
+        labels(other.labels),
+        inductive_step_instruction(other.inductive_step_instruction),
+        inductive_assertion(other.inductive_assertion),
+        flipped_guard(other.flipped_guard),
+        location_number(other.location_number),
+        loop_number(other.loop_number),
+        pragma_unroll_count(other.pragma_unroll_count),
+        target_number(other.target_number),
+        scope_id(other.scope_id),
+        parent_scope_id(other.parent_scope_id)
+    {
+      // instruction_mutex is not copied
+    }
+
+    instructiont &operator=(const instructiont &other)
+    {
+      instructiont(other).swap(*this);
+      return *this;
+    }
+
+    instructiont(instructiont &&other)
+      : code(std::move(other.code)),
+        function(std::move(other.function)),
+        location(std::move(other.location)),
+        type(other.type),
+        guard(std::move(other.guard)),
+        targets(std::move(other.targets)),
+        labels(std::move(other.labels)),
+        inductive_step_instruction(other.inductive_step_instruction),
+        inductive_assertion(other.inductive_assertion),
+        flipped_guard(other.flipped_guard),
+        location_number(other.location_number),
+        loop_number(other.loop_number),
+        pragma_unroll_count(other.pragma_unroll_count),
+        target_number(other.target_number),
+        scope_id(other.scope_id),
+        parent_scope_id(other.parent_scope_id)
+    {
+    }
+
+    instructiont &operator=(instructiont &&other)
+    {
+      swap(other);
+      return *this;
+    }
+
     //! swap two instructions
     void swap(instructiont &instruction)
     {
+      if (this == &instruction)
+        return;
+
       instruction.code.swap(code);
       instruction.location.swap(location);
       std::swap(instruction.type, type);
       instruction.guard.swap(guard);
       instruction.targets.swap(targets);
+      instruction.loop_invariants.swap(loop_invariants);
+      instruction.loop_assigns_targets.swap(loop_assigns_targets);
       instruction.function.swap(function);
       std::swap(
         inductive_step_instruction, instruction.inductive_step_instruction);
       std::swap(inductive_assertion, instruction.inductive_assertion);
+      std::swap(flipped_guard, instruction.flipped_guard);
       std::swap(instruction.loop_number, loop_number);
+      std::swap(instruction.pragma_unroll_count, pragma_unroll_count);
+      std::swap(target_number, instruction.target_number);
+      std::swap(scope_id, instruction.scope_id);
+      std::swap(parent_scope_id, instruction.parent_scope_id);
+    }
+
+    void add_loop_invariant(const expr2tc &invariant)
+    {
+      assert(is_loop_invariant());
+      loop_invariants.push_back(invariant);
+    }
+    std::list<expr2tc> get_loop_invariants() const
+    {
+      return loop_invariants;
+    }
+
+    void add_loop_assigns_target(const expr2tc &target)
+    {
+      assert(is_loop_invariant());
+      loop_assigns_targets.push_back(target);
+    }
+    std::list<expr2tc> get_loop_assigns_targets() const
+    {
+      return loop_assigns_targets;
     }
 
     //! A globally unique number to identify a program location.
@@ -378,6 +487,9 @@ public:
 
     //! Number unique per function to identify loops
     unsigned loop_number;
+
+    //! Pragma-specified unroll count (0 = not specified, UINT_MAX = unlimited)
+    unsigned pragma_unroll_count;
 
     //! A number to identify branch targets.
     //! This is -1 if it's not a target.

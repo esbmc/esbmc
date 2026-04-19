@@ -1,11 +1,17 @@
+#ifndef CPROVER_GOTO_SYMEX_WITNESSES_H
+#define CPROVER_GOTO_SYMEX_WITNESSES_H
+
 #include <boost/property_tree/xml_parser.hpp>
 #include <util/namespace.h>
 #include <irep2/irep2.h>
 #include <langapi/language_util.h>
 #include <goto-symex/goto_trace.h>
+#include <goto-symex/pytest.h>
+#include <goto-symex/ctest.h>
 #include <string>
 #include <regex>
 #include <big-int/bigint.hh>
+#include <yaml-cpp/yaml.h>
 
 typedef boost::property_tree::ptree xmlnodet;
 
@@ -69,6 +75,47 @@ public:
   }
 };
 
+class waypoint
+{
+public:
+  enum Type
+  {
+    assumption,
+    target,
+    function_enter,
+    function_return,
+    branching
+  };
+
+  Type type;
+  std::string file;
+  std::string value;
+  std::string format;
+  BigInt line = c_nonset;
+  BigInt column = c_nonset;
+  std::string function;
+};
+
+class invariant
+{
+public:
+  enum Type
+  {
+    loop_invariant,
+    loop_transition_invariant,
+    location_invariant,
+    location_transition_invariant
+  };
+
+  Type type;
+  std::string file;
+  std::string value;
+  std::string format;
+  BigInt line = c_nonset;
+  BigInt column = c_nonset;
+  std::string function;
+};
+
 class grapht
 {
 private:
@@ -91,6 +138,26 @@ public:
   }
   void generate_graphml(optionst &options);
   void check_create_new_thread(BigInt thread_id, nodet *prev_node);
+};
+
+class yamlt
+{
+public:
+  enum typet
+  {
+    VIOLATION,
+    CORRECTNESS
+  };
+  typet witness_type;
+  std::string verified_file;
+  std::vector<waypoint> segments;
+  std::vector<invariant> invariants;
+
+  yamlt(typet t)
+  {
+    witness_type = t;
+  }
+  void generate_yaml(optionst &options);
 };
 
 /**
@@ -120,6 +187,18 @@ void create_correctness_graph_node(
   optionst &options,
   xmlnodet &graphnode);
 
+void create_correctness_yaml_emitter(
+  std::string &verifiedfile,
+  optionst &options,
+  YAML::Emitter &root);
+
+void create_violation_yaml_emitter(
+  std::string &verifiedfile,
+  optionst &options,
+  YAML::Emitter &root);
+
+void create_waypoint(const waypoint &wp, YAML::Emitter &waypoint);
+
 /**
  * Create a edge node.
  *
@@ -146,8 +225,10 @@ bool is_valid_witness_step(const namespacet &ns, const goto_trace_stept &step);
  * will return the lhs and rhs formated in a way expected
  * by the assumption field.
  */
-std::string
-get_formated_assignment(const namespacet &ns, const goto_trace_stept &step);
+std::string get_formated_assignment(
+  const namespacet &ns,
+  const goto_trace_stept &step,
+  bool yaml);
 
 /**
  *
@@ -167,13 +248,18 @@ BigInt get_line_number(
 /**
  *
  */
-int generate_sha1_hash_for_file(const char *path, std::string &output);
+int generate_sha256_hash_for_file(const char *path, std::string &output);
 
 /**
  *
  */
 std::string
 get_invariant(std::string verified_file, BigInt line_number, optionst &options);
+
+/// Returns true if any sub-expression of expr is a nondet symbol.
+/// Handles compound expressions (arithmetic, bitwise, casts, etc.) by walking
+/// every operand via the generic get_sub_expr interface.
+bool find_nondet_in_expr(const expr2tc &expr);
 
 /// This generates test-cases as described in: https://gitlab.com/sosy-lab/test-comp/test-format/-/tree/main/
 #include <goto-symex/symex_target_equation.h>
@@ -182,3 +268,19 @@ void generate_testcase(
   const std::string &file_name,
   const symex_target_equationt &target,
   smt_convt &smt_conv);
+
+/// Helper structure for collected nondet values
+struct collected_nondet_value
+{
+  std::string symbol_name; // e.g., "nondet$symex::nondet3"
+  expr2tc value_expr;      // The concrete value expression
+  type2tc type;            // The type
+};
+
+/// Collect all nondet values from SSA
+/// Reuses generate_testcase pattern
+std::vector<collected_nondet_value> collect_nondet_values(
+  const symex_target_equationt &target,
+  smt_convt &smt_conv);
+
+#endif

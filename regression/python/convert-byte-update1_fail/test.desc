@@ -1,0 +1,4 @@
+THOROUGH
+main.py
+--ir
+^VERIFICATION FAILED$

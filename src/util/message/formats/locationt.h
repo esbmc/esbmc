@@ -21,8 +21,8 @@ struct fmt::formatter<locationt>
 
   // This will teach fmt how to convert irep_idt into a str.
   template <typename FormatContext>
-  auto format(const locationt &p, FormatContext &ctx)
+  auto format(const locationt &p, FormatContext &ctx) const
   {
-    return format_to(ctx.out(), "{}", p.as_string());
+    return fmt::format_to(ctx.out(), "{}", p.as_string());
   }
 };

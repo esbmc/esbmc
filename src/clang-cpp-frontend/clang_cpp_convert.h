@@ -48,6 +48,43 @@ protected:
     const clang::CXXConstructExpr &constructor_call,
     exprt &new_expr);
 
+#if CLANG_VERSION_MAJOR <= 15
+#  define CAPTURE_VARIABLE_TYPE clang::VarDecl
+#else
+#  define CAPTURE_VARIABLE_TYPE clang::ValueDecl
+#endif
+  /*
+   *  Map captured variables and this to the non-static members storing their 
+   *  values or references.
+   *  Arguments:
+   *   is_lambda_operator: the lambda operator is being converted
+   *   captures: populated with the mapping from captured variables to the
+   *             corresponding fields.
+   *   thisCapture:	the field declaration for the This capture.
+   */
+  typedef llvm::DenseMap<const CAPTURE_VARIABLE_TYPE *, clang::FieldDecl *>
+    field_mapt;
+  typedef std::
+    unordered_map<std::size_t, std::pair<field_mapt, clang::FieldDecl *>>
+      cap_mapt;
+  cap_mapt cap_map;
+
+  bool is_lambda() const
+  {
+    if (!current_functionDecl)
+      return false;
+
+    if (
+      const auto *methodDecl =
+        llvm::dyn_cast<clang::CXXMethodDecl>(current_functionDecl))
+    {
+      const auto *parent = methodDecl->getParent();
+      if (parent && parent->isLambda())
+        return true;
+    }
+    return false;
+  }
+
   bool get_function_body(
     const clang::FunctionDecl &fd,
     exprt &new_expr,
@@ -175,7 +212,9 @@ protected:
    *  cxxmdd: clang AST node representing the constructor we are dealing with
    *  rtn_type: the corresponding return type node
    */
-  void annotate_cpyctor(const clang::CXXMethodDecl &cxxmdd, typet &rtn_type);
+  void annotate_implicit_copy_move_ctor_union(
+    const clang::CXXMethodDecl &cxxmdd,
+    typet &ctor_return_type);
   /*
    * Flag return type in ctor or dtor, e.g.
    * A default copy constructor would have the return type below:
@@ -189,7 +228,7 @@ protected:
   void annotate_ctor_dtor_rtn_type(
     const clang::CXXMethodDecl &cxxmdd,
     typet &rtn_type);
-  bool is_cpyctor(const clang::DeclContext &dcxt);
+  bool is_copy_or_move_ctor(const clang::DeclContext &dcxt);
   bool is_defaulted_ctor(const clang::CXXMethodDecl &md);
 
   /*
@@ -351,6 +390,7 @@ protected:
    *  - type: ESBMC IR representing the derived class' type
    */
   void add_thunk_method(
+    const clang::CXXRecordDecl &derived_rd,
     const clang::CXXMethodDecl &md,
     const struct_typet::componentt &component,
     struct_typet &type);
@@ -374,7 +414,8 @@ protected:
    */
   void add_thunk_method_body(
     symbolt &thunk_func_symb,
-    const struct_typet::componentt &component);
+    const struct_typet::componentt &component,
+    uint64_t base_offset);
   /*
    * Add thunk body that contains return value
    * Params:
@@ -385,7 +426,7 @@ protected:
   void add_thunk_method_body_return(
     symbolt &thunk_func_symb,
     const struct_typet::componentt &component,
-    const typecast_exprt &late_cast_this);
+    const exprt &late_cast_this);
   /*
    * Add thunk body that does NOT contain return value
    * Params:
@@ -396,7 +437,7 @@ protected:
   void add_thunk_method_body_no_return(
     symbolt &thunk_func_symb,
     const struct_typet::componentt &component,
-    const typecast_exprt &late_cast_this);
+    const exprt &late_cast_this);
   /*
    * Add thunk function as a `method` in the derived class' type
    * Params:
@@ -525,6 +566,8 @@ protected:
    *  expr: ESBMC IR to represent Function call
    */
   void make_temporary(exprt &expr);
+
+  bool get_member_expr(const clang::MemberExpr &memb, exprt &new_expr) override;
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */

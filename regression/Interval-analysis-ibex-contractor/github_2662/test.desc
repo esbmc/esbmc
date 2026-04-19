@@ -1,0 +1,4 @@
+THOROUGH
+main.c
+--interval-analysis --goto-contractor --incremental-bmc
+^VERIFICATION UNKNOWN$

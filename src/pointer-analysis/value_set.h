@@ -367,7 +367,7 @@ public:
         return false;
 
       // Merge the tracking for two offsets; take the minimum alignment
-      // guarenteed by them.
+      // guaranteed by them.
       unsigned long old_align = offset2align(expr_obj, old.offset);
       unsigned long new_align = offset2align(expr_obj, object.offset);
       old.offset_is_set = false;

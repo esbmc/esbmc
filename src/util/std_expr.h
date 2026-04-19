@@ -1007,6 +1007,41 @@ public:
   }
 };
 
+class member_ref_exprt : public exprt
+{
+public:
+  explicit member_ref_exprt(const typet &type) : exprt(exprt::member_ref, type)
+  {
+    operands().resize(1);
+  }
+
+  member_ref_exprt(const irep_idt &component_name) : exprt(exprt::member_ref)
+  {
+    set_component_name(component_name);
+  }
+
+  inline member_ref_exprt(const irep_idt &component_name, const typet &_type)
+    : exprt(exprt::member_ref, _type)
+  {
+    set_component_name(component_name);
+  }
+
+  member_ref_exprt() : exprt(exprt::member_ref)
+  {
+    operands().resize(1);
+  }
+
+  irep_idt get_component_name() const
+  {
+    return get("component_name");
+  }
+
+  void set_component_name(const irep_idt &component_name)
+  {
+    this->component_name(component_name);
+  }
+};
+
 inline const member_exprt &to_member_expr(const exprt &expr)
 {
   assert(expr.id() == exprt::member);
@@ -1017,6 +1052,18 @@ inline member_exprt &to_member_expr(exprt &expr)
 {
   assert(expr.id() == exprt::member);
   return static_cast<member_exprt &>(expr);
+}
+
+inline const member_ref_exprt &to_member_ref_expr(const exprt &expr)
+{
+  assert(expr.id() == exprt::member_ref);
+  return static_cast<const member_ref_exprt &>(expr);
+}
+
+inline member_ref_exprt &to_member_ref_expr(exprt &expr)
+{
+  assert(expr.id() == exprt::member_ref);
+  return static_cast<member_ref_exprt &>(expr);
 }
 
 class type_exprt : public exprt

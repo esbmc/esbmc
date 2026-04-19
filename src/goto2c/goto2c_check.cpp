@@ -126,7 +126,7 @@ void goto2ct::check_goto(goto_programt::instructiont instruction)
   assert(
     !is_nil_expr(instruction.guard) && "The GOTO guard must contain a value");
   check_guard(instruction.guard);
-  // Fedor: I think it will be best if we harmonise both:
+  // Fedor: I think it will be best if we harmonize both:
   // each GOTO instruction must contain a code expression
   // of type "code_goto2t" OR the "code_goto2t" code information
   // is transferred to the list of targets

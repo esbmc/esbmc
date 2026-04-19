@@ -1,0 +1,7 @@
+THOROUGH
+main.py
+--assertion-coverage
+^Total Assertion Instances: 1
+^Reached Assertion Instances: 1
+^Assertion Instances Coverage: 100%
+^VERIFICATION FAILED$

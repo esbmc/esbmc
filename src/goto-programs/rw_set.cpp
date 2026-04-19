@@ -33,27 +33,34 @@ void rw_sett::compute(const exprt &expr)
     else if (statement == "function_call")
     {
       assert(code.operands().size());
-      read_write_rec(code.op0(), false, true, "", guardt(), exprt());
-      // check args of function call
-      if (
-        !has_prefix(instruction.location.function(), "ESBMC_execute_kernel") &&
-        !has_prefix(instruction.location.function(), "ESBMC_verify_kernel"))
-        Forall_operands (it, code.op2())
-          if (!(*it).type().is_pointer())
-            read_rec(*it);
+      read_write_rec(code.op0(), false, true, "", guardt(), nil_exprt());
+      // For function calls, we first check to see if the function has a body available,
+      // and if so, we skip it because we also check inside the function
+      // If not, we need check these args
+      if (code.op1().is_symbol())
+      {
+        const symbol_exprt &symbol_expr = to_symbol_expr(code.op1());
+        const symbolt *symbol = ns.lookup(symbol_expr.get_identifier());
+        if (symbol->value.is_nil() || symbol->name == "__VERIFIER_assert")
+          Forall_operands (it, code.op2())
+          {
+            if (it->is_address_of())
+              read_rec(it->op0());
+            else
+              read_rec(*it);
+          }
+      }
     }
   }
   else if (
     instruction.is_goto() || instruction.is_assert() || instruction.is_assume())
-  {
     read_rec(expr);
-  }
 }
 
 void rw_sett::assign(const exprt &lhs, const exprt &rhs)
 {
   read_rec(rhs);
-  read_write_rec(lhs, false, true, "", guardt(), exprt());
+  read_write_rec(lhs, false, true, "", guardt(), nil_exprt());
 }
 
 void rw_sett::read_write_rec(
@@ -72,7 +79,8 @@ void rw_sett::read_write_rec(
     const symbolt *symbol = ns.lookup(symbol_expr.get_identifier());
     if (symbol)
     {
-      if (!symbol->static_lifetime && !dereferenced)
+      if (
+        (!symbol->static_lifetime && !dereferenced) || symbol->is_thread_local)
       {
         return; // ignore for now
       }
@@ -92,6 +100,11 @@ void rw_sett::read_write_rec(
       {
         return; // ignore for now
       }
+
+      // C11 _Atomic variables are never involved in data races
+      // (§5.1.2.4p4: concurrent accesses to atomic objects are not races).
+      if (symbol->type.get_bool("#atomic"))
+        return;
     }
 
     irep_idt object = id2string(symbol_expr.get_identifier()) + suffix;
@@ -100,46 +113,37 @@ void rw_sett::read_write_rec(
     entry.object = object;
     entry.r = entry.r || r;
     entry.w = entry.w || w;
-    entry.deref = expr.type().is_pointer() && dereferenced;
+    entry.deref = dereferenced;
     entry.guard = migrate_expr_back(guard.as_expr());
-    entry.original_expr = original_expr;
+    entry.original_expr = original_expr.is_nil() ? expr : original_expr;
   }
   else if (expr.is_member())
   {
     assert(expr.operands().size() == 1);
     const std::string &component_name = expr.component_name().as_string();
+    exprt tmp = original_expr.is_nil() ? expr : original_expr;
+
     read_write_rec(
-      expr.op0(), r, w, "." + component_name + suffix, guard, original_expr);
+      expr.op0(),
+      r,
+      w,
+      "." + component_name + suffix,
+      guard,
+      tmp,
+      dereferenced);
   }
   else if (expr.is_index())
   {
     assert(expr.operands().size() == 2);
-    read_write_rec(expr.op0(), r, w, suffix, guard, expr, dereferenced);
+    exprt tmp = original_expr.is_nil() ? expr : original_expr;
+    read_write_rec(expr.op0(), r, w, suffix, guard, tmp, dereferenced);
   }
   else if (expr.is_dereference())
   {
     assert(expr.operands().size() == 1);
-    read_rec(expr.op0(), guard, original_expr);
+    exprt tmp = original_expr.is_nil() ? expr : original_expr;
 
-    expr2tc tmp_expr;
-    migrate_expr(expr, tmp_expr);
-    dereference(target, tmp_expr, ns, value_sets);
-    exprt tmp = migrate_expr_back(tmp_expr);
-
-    // If dereferencing fails, then we revert the variable
-    // and we will attempt dereferencing in symex
-    if (
-      has_prefix(id2string(tmp.identifier()), "symex::invalid_object") ||
-      id2string(tmp.identifier()) == "")
-      tmp = expr.op0();
-
-    if (tmp.id() == "+")
-    {
-      index_exprt tmp_index(tmp.op0(), tmp.op1(), tmp.type());
-      tmp.swap(tmp_index);
-    }
-
-    read_write_rec(tmp, r, w, suffix, guard, original_expr, true);
+    read_write_rec(expr.op0(), r, w, suffix, guard, tmp, true);
   }
   else if (expr.is_address_of() || expr.id() == "implicit_address_of")
   {
@@ -154,16 +158,18 @@ void rw_sett::read_write_rec(
     expr2tc tmp_expr;
     migrate_expr(expr.op0(), tmp_expr);
     true_guard.add(tmp_expr);
-    read_write_rec(expr.op1(), r, w, suffix, true_guard, original_expr);
+    read_write_rec(
+      expr.op1(), r, w, suffix, true_guard, original_expr, dereferenced);
 
     guardt false_guard(guard);
     migrate_expr(gen_not(expr.op0()), tmp_expr);
     false_guard.add(tmp_expr);
-    read_write_rec(expr.op2(), r, w, suffix, false_guard, original_expr);
+    read_write_rec(
+      expr.op2(), r, w, suffix, false_guard, original_expr, dereferenced);
   }
   else
   {
     forall_operands (it, expr)
-      read_write_rec(*it, r, w, suffix, guard, original_expr);
+      read_write_rec(*it, r, w, suffix, guard, original_expr, dereferenced);
   }
 }

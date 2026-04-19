@@ -1,0 +1,4 @@
+CORE
+main.c
+--ir --smt-formula-only --z3
+^\(check\-sat\)$

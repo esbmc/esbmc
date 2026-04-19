@@ -21,25 +21,25 @@ jobs:
     runs-on: ${{ inputs.operating-system }}
     steps:
     - name: Set up Python
-      uses: actions/setup-python@v2
+      uses: actions/setup-python@v5
       with:
-        python-version: 3.8
+        python-version: 3.9
     - name: check python
       run: python --version
     - name: Update vcpkg
       run: |
         vcpkg.exe update
         cd C:/vcpkg
-        git.exe pull
+        git.exe checkout 2025.03.19
         .\bootstrap-vcpkg.bat
     - name: Make git use LF only
       run: |
         git config --system core.autocrlf false
         git config --system core.eol lf
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
     - name: Configure ESBMC
       run: ./scripts/build.ps1
-    - uses: actions/upload-artifact@v2
+    - uses: actions/upload-artifact@v4
       with:
         name: release-windows-latest
         path: C:/deps/esbmc

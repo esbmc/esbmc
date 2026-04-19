@@ -1,4 +1,4 @@
-CORE
+THOROUGH
 log_3_unsafe.c-amalgamation.c
 -I .
 ^VERIFICATION FAILED$

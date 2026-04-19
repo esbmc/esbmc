@@ -617,7 +617,8 @@ void c_typecastt::implicit_typecast_followed(
 
     if (
       ns.follow(dest_type.subtype()).id() == src_type.id() &&
-      src_type != dest_type) // TODO: remove this condition
+      src_type != dest_type &&
+      !expr.is_address_of()) // TODO: remove this condition
     {
       address_of_exprt addr(expr);
       addr.location() = expr.location();
@@ -663,6 +664,17 @@ void c_typecastt::implicit_typecast_followed(
       expr = exprt("constant", dest_type);
       expr.value("NULL");
       return; // ok
+    }
+
+    if (dest_type.find("to-member").is_not_nil())
+    {
+      if (src_type != dest_type)
+      {
+        // pointe-to-member
+        // TODO: take inheritance into account
+        expr = member_ref_exprt(expr.op0().identifier(), expr.type());
+      }
+      return;
     }
 
     if (
@@ -717,7 +729,7 @@ void c_typecastt::implicit_typecast_followed(
       return; // ok
     }
 
-    if (src_type.id() == "struct")
+    if (src_type.is_struct() || src_type.is_union())
     {
       // We got a case to convert derived class object to base base class pointer, e.g.:
       //  Convert from `derived_obj` to `(Base*)&derived_obj`
@@ -871,6 +883,17 @@ void c_typecastt::do_typecast(exprt &dest, const typet &type)
 
   if (dest_type.is_array() || dest_type.is_incomplete_array())
   {
+    if (dest.id() == "if")
+    {
+      // Special case: if expression
+      // To typecast the if expression, we need to apply the operations: true and false
+      dest.type() = type;
+
+      do_typecast(dest.op1(), type);
+      do_typecast(dest.op2(), type);
+      return;
+    }
+
     index_exprt index;
     index.array() = dest;
     index.index() = gen_zero(index_type());

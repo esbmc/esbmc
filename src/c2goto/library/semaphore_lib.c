@@ -28,9 +28,10 @@ __ESBMC_HIDE:;
 
 static int sem_init_check(sem_t *__sem)
 {
-  // check whether this sem has been initialised
+__ESBMC_HIDE:;
+  // check whether this sem has been initialized
   __ESBMC_atomic_begin();
-  __ESBMC_assert(__ESBMC_sem_init_field(*__sem), "Sem is not initialised");
+  __ESBMC_assert(__ESBMC_sem_init_field(*__sem), "Sem is not initialized");
   __ESBMC_atomic_end();
   return 0;
 }

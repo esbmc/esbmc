@@ -26,9 +26,20 @@
 char *strcpy(char *dst, const char *src)
 {
 __ESBMC_HIDE:;
-  char *cp = dst;
-  while ((*cp++ = *src++))
-    ;
+  // Ensure src pointer is non-null
+  __ESBMC_assert(src != NULL, "Source pointer is null");
+
+  // Constant propagation-friendly loop
+  for (size_t i = 0;; ++i)
+  {
+    // Copy each character including the null terminator
+    dst[i] = src[i];
+
+    // Break when null terminator is copied
+    if (src[i] == '\0')
+      break;
+  }
+
   return dst;
 }
 
@@ -36,13 +47,16 @@ char *strncpy(char *dst, const char *src, size_t n)
 {
 __ESBMC_HIDE:;
   char *start = dst;
+  size_t copied = 0;
 
-  while (n && (*dst++ = *src++))
-    n--;
+  while (copied < n && src[copied] != '\0')
+  {
+    dst[copied] = src[copied];
+    copied++;
+  }
 
-  if (n)
-    while (--n)
-      *dst++ = '\0';
+  if (copied < n)
+    memset(dst + copied, 0, n - copied);
 
   return start;
 }
@@ -255,14 +269,26 @@ __ESBMC_HIDE:;
   return cpy;
 }
 
-void *memcpy(void *dst, const void *src, size_t n)
+void *__memcpy_impl(void *dst, const void *src, size_t n)
 {
 __ESBMC_HIDE:;
   char *cdst = dst;
   const char *csrc = src;
-  for (size_t i = 0; i < n; i++)
+  size_t i = 0;
+  while (i < n)
+  {
     cdst[i] = csrc[i];
+    ++i;
+  }
   return dst;
+}
+
+void *memcpy(void *dst, const void *src, size_t n)
+{
+__ESBMC_HIDE:;
+  void *hax = &__memcpy_impl;
+  (void)hax;
+  return __ESBMC_memcpy(dst, src, n);
 }
 
 void *__memset_impl(void *s, int c, size_t n)
@@ -289,13 +315,21 @@ __ESBMC_HIDE:;
   const char *csrc = src;
   if (dest - src >= n)
   {
-    for (size_t i = 0; i < n; i++)
+    size_t i = 0;
+    while (i < n)
+    {
       cdest[i] = csrc[i];
+      ++i;
+    }
   }
   else
   {
-    for (size_t i = n; i > 0; i--)
+    size_t i = n;
+    while (i > 0)
+    {
       cdest[i - 1] = csrc[i - 1];
+      --i;
+    }
   }
   return dest;
 }
@@ -305,17 +339,19 @@ int memcmp(const void *s1, const void *s2, size_t n)
 __ESBMC_HIDE:;
   int res = 0;
   const unsigned char *sc1 = s1, *sc2 = s2;
-  for (; n != 0; n--)
+  while (n != 0)
   {
     res = (*sc1++) - (*sc2++);
     if (res != 0)
       return res;
+    n--;
   }
   return res;
 }
 
 void *memchr(const void *buf, int ch, size_t n)
 {
+__ESBMC_HIDE:;
   while (n && (*(unsigned char *)buf != (unsigned char)ch))
   {
     buf = (unsigned char *)buf + 1;

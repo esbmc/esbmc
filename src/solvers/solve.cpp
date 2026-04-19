@@ -102,6 +102,27 @@ pick_solver(std::string &solver_name, const optionst &options)
   if (solver_name == "")
     solver_name = options.get_option("default-solver");
 
+  // Check for --ir option and default to Z3 for integer/real arithmetic
+  if (solver_name == "" && options.get_bool_option("ir"))
+  {
+#ifdef Z3
+    if (esbmc_solvers.count("z3"))
+    {
+      log_status("Using integer/real arithmetic mode; defaulting to Z3");
+      solver_name = "z3";
+    }
+    else
+    {
+      log_warning(
+        "Z3 not available for integer/real arithmetic mode; using default "
+        "solver");
+    }
+#else
+    log_warning(
+      "Z3 not built into this version of ESBMC; using default solver for "
+      "integer/real mode");
+#endif
+  }
   if (solver_name == "")
     solver_name = pick_default_solver();
 

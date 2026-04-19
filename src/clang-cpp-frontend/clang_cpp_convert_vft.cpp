@@ -21,10 +21,13 @@ CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 #include <clang/Index/USRGeneration.h>
 #include <clang/Frontend/ASTUnit.h>
 #include <clang/AST/ParentMapContext.h>
+#include <clang/AST/RecordLayout.h>
 #include <llvm/Support/raw_os_ostream.h>
 CC_DIAGNOSTIC_POP()
 
 #include <clang-cpp-frontend/clang_cpp_convert.h>
+#include <util/arith_tools.h>
+#include <util/c_types.h>
 #include <util/expr_util.h>
 #include <util/message.h>
 
@@ -85,7 +88,7 @@ bool clang_cpp_convertert::get_struct_class_virtual_methods(
       get_overriden_methods(*md, cxxmethods_overriden);
 
       for (const auto &overriden_md_entry : cxxmethods_overriden)
-        add_thunk_method(overriden_md_entry.second, comp, type);
+        add_thunk_method(cxxrd, overriden_md_entry.second, comp, type);
     }
   }
 
@@ -107,17 +110,39 @@ static bool is_pure_virtual(const clang::CXXMethodDecl &md)
 #endif
 }
 
+/**
+ * @brief Returns the ultimate overridden method for a given CXXMethodDecl.
+ *
+ * This function traverses the overridden methods of the provided CXXMethodDecl
+ * and returns the **unique** ultimate overridden method.
+ *
+ * @param method The CXXMethodDecl to find the ultimate overridden method for.
+ * @return The unique ultimate overridden CXXMethodDecl.
+ */
+static const clang::CXXMethodDecl *
+get_ultimate_overridden_method(const clang::CXXMethodDecl *method)
+{
+  const clang::CXXMethodDecl *current_method = method;
+  while (current_method->size_overridden_methods() == 1)
+  {
+    current_method = *current_method->overridden_methods().begin();
+  }
+  return current_method;
+}
+
 bool clang_cpp_convertert::annotate_virtual_overriding_methods(
   const clang::CXXMethodDecl &md,
   struct_typet::componentt &comp)
 {
-  std::string method_id, method_name;
-  get_decl_name(md, method_name, method_id);
+  const clang::CXXMethodDecl *ultimate_overridden_method =
+    get_ultimate_overridden_method(&md);
+  std::string overridden_method_id, overridden_method_name;
+  get_decl_name(
+    *ultimate_overridden_method, overridden_method_name, overridden_method_id);
+  std::string virtual_name = overridden_method_id;
 
-  comp.type().set("#is_virtual", true);
-  comp.type().set("#virtual_name", method_name);
   comp.set("is_virtual", true);
-  comp.set("virtual_name", method_name);
+  comp.set("virtual_name", virtual_name);
 
   if (is_pure_virtual(md))
     comp.set("is_pure_virtual", true);
@@ -234,6 +259,7 @@ void clang_cpp_convertert::add_vtable_type_entry(
 }
 
 void clang_cpp_convertert::add_thunk_method(
+  const clang::CXXRecordDecl &derived_rd,
   const clang::CXXMethodDecl &md,
   const struct_typet::componentt &component,
   struct_typet &type)
@@ -272,6 +298,29 @@ void clang_cpp_convertert::add_thunk_method(
   std::string base_class_id, base_class_name;
   get_decl_name(*md.getParent(), base_class_name, base_class_id);
 
+  // Compute the byte offset of the base class sub-object within the derived
+  // class. For non-first base classes in multiple inheritance this is non-zero,
+  // and the thunk must subtract it from its Base* this to recover Derived*.
+  // TODO: This loop only searches direct bases of derived_rd. If base_rd is
+  // an indirect base (e.g. Derived : Middle, Middle : B8), base_offset will
+  // incorrectly remain 0. A complete fix requires summing offsets along the
+  // full inheritance path using CXXBasePaths::isDerivedFrom or a recursive
+  // walk — to be addressed as a follow-up.
+  uint64_t base_offset = 0;
+  const clang::CXXRecordDecl *base_rd = md.getParent();
+  const clang::ASTRecordLayout &layout =
+    ASTContext->getASTRecordLayout(&derived_rd);
+  for (const auto &base_spec : derived_rd.bases())
+  {
+    const clang::CXXRecordDecl *spec_rd =
+      base_spec.getType()->getAsCXXRecordDecl();
+    if (spec_rd == base_rd && !base_spec.isVirtual())
+    {
+      base_offset = layout.getBaseClassOffset(base_rd).getQuantity();
+      break;
+    }
+  }
+
   // Create the thunk method symbol
   symbolt thunk_func_symb;
   thunk_func_symb.id =
@@ -293,7 +342,7 @@ void clang_cpp_convertert::add_thunk_method(
   add_thunk_method_arguments(thunk_func_symb);
 
   // add thunk function body
-  add_thunk_method_body(thunk_func_symb, component);
+  add_thunk_method_body(thunk_func_symb, component, base_offset);
 
   // add thunk function symbol to the symbol table
   symbolt &added_thunk_symbol =
@@ -357,8 +406,6 @@ void clang_cpp_convertert::add_thunk_method_arguments(symbolt &thunk_func_symb)
     code_typet::argumentt &arg = args[i];
     irep_idt base_name = arg.get_base_name();
 
-    assert(base_name != "");
-
     symbolt arg_symb;
     arg_symb.id = thunk_func_symb.id.as_string() + "::" + base_name.as_string();
     arg_symb.name = base_name;
@@ -386,31 +433,45 @@ void clang_cpp_convertert::add_thunk_method_arguments(symbolt &thunk_func_symb)
 
 void clang_cpp_convertert::add_thunk_method_body(
   symbolt &thunk_func_symb,
-  const struct_typet::componentt &component)
+  const struct_typet::componentt &component,
+  uint64_t base_offset)
 {
   code_typet &code_type = to_code_type(thunk_func_symb.type);
   code_typet::argumentst &args = code_type.arguments();
 
-  /*
-   * late cast of `this` pointer to (Derived*)this
-   */
-  typecast_exprt late_cast_this(
-    to_code_type(component.type()).arguments()[0].type());
-  late_cast_this.op0() =
+  // Build the adjusted 'this' to pass to the overriding method.
+  // The thunk receives a Base*, but the overriding method expects Derived*.
+  // For non-first base classes, subtract the byte offset of the Base
+  // sub-object within Derived so that the overriding method's 'this' points
+  // to the start of the Derived object, not the Base sub-object.
+  typet derived_ptr_type = to_code_type(component.type()).arguments()[0].type();
+  exprt base_this =
     symbol_expr(*namespacet(context).lookup(args[0].cmt_identifier()));
+
+  exprt adjusted_this;
+  if (base_offset > 0)
+  {
+    typet char_ptr = pointer_typet(char_type());
+    typecast_exprt to_char(base_this, char_ptr);
+    minus_exprt sub(to_char, from_integer(base_offset, index_type()));
+    sub.type() = char_ptr;
+    adjusted_this = typecast_exprt(sub, derived_ptr_type);
+  }
+  else
+    adjusted_this = typecast_exprt(base_this, derived_ptr_type);
 
   if (
     code_type.return_type().id() != "empty" &&
     code_type.return_type().id() != "destructor")
-    add_thunk_method_body_return(thunk_func_symb, component, late_cast_this);
+    add_thunk_method_body_return(thunk_func_symb, component, adjusted_this);
   else
-    add_thunk_method_body_no_return(thunk_func_symb, component, late_cast_this);
+    add_thunk_method_body_no_return(thunk_func_symb, component, adjusted_this);
 }
 
 void clang_cpp_convertert::add_thunk_method_body_return(
   symbolt &thunk_func_symb,
   const struct_typet::componentt &component,
-  const typecast_exprt &late_cast_this)
+  const exprt &late_cast_this)
 {
   /*
    * Add thunk function with return value, something like:
@@ -444,7 +505,7 @@ void clang_cpp_convertert::add_thunk_method_body_return(
 void clang_cpp_convertert::add_thunk_method_body_no_return(
   symbolt &thunk_func_symb,
   const struct_typet::componentt &component,
-  const typecast_exprt &late_cast_this)
+  const exprt &late_cast_this)
 {
   /*
    * Add thunk function without return value, something like:
@@ -530,17 +591,19 @@ void clang_cpp_convertert::build_vtable_map(
       vtable_value_map[class_id]; // switch_map = switch_table
     exprt e = symbol_exprt(method.get_name(), code_type);
 
+    dstring virtual_name = method.get("virtual_name");
+    assert(!virtual_name.empty());
     if (method.get_bool("is_pure_virtual"))
     {
       pointer_typet pointer_type(code_type);
       e = gen_zero(pointer_type);
       assert(e.is_not_nil());
-      value_map[method.get("virtual_name")] = e;
+      value_map[virtual_name] = e;
     }
     else
     {
       address_of_exprt address(e);
-      value_map[method.get("virtual_name")] = address;
+      value_map[virtual_name] = address;
     }
   }
 }
@@ -592,7 +655,7 @@ void clang_cpp_convertert::add_vtable_variable_symbols(
         switch_map.find(compo.get("virtual_name").as_string());
       assert(cit2 != switch_map.end());
       const exprt &value = cit2->second;
-      assert(value.type() == compo.type());
+      assert(value.type().id() == compo.type().id());
       values.operands().push_back(value);
     }
     vt_symb_var.value = values;

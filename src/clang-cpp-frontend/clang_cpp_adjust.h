@@ -45,12 +45,26 @@ public:
   void adjust_member(member_exprt &expr) override;
   void adjust_side_effect(side_effect_exprt &expr) override;
   void adjust_side_effect_assign(side_effect_exprt &expr);
+  void adjust_side_effect_function_call(
+    side_effect_expr_function_callt &expr) override;
   void adjust_function_call_arguments(
     side_effect_expr_function_callt &expr) override;
   void adjust_reference(exprt &expr) override;
   void adjust_new(exprt &expr);
   void adjust_cpp_member(member_exprt &expr);
-  void adjust_if(exprt &expr) override;
+
+  /**
+   * Adjusts a C++ pseudo-destructor call expression.
+   *
+   * This method is responsible for handling adjustments specific to
+   * pseudo-destructor calls in C++ code. The converter has
+   * generated a function call to the pseudo-destructor, but there
+   * is nothing to actually call. Instead, only the base object of
+   * the destructor call is evaluted.
+   *
+   * @param expr The expression representing the pseudo-destructor call
+   */
+  void adjust_cpp_pseudo_destructor_call(exprt &expr);
   void adjust_side_effect_throw(side_effect_exprt &expr);
 
   /**
@@ -93,6 +107,15 @@ public:
     const std::string &suffix,
     std::vector<irep_idt> &ids,
     bool is_catch = false);
+
+  /**
+   * Generates an implicit copy and move constructor for a symbol if it is a union.
+   * Clang does not generate copy and move constructors for unions, so we
+   * need to generate one ourselves.
+   *
+   * @param symbol The symbol for which the implicit copy and move constructor is generated.
+   */
+  void gen_implicit_union_copy_move_constructor(symbolt &symbol);
 };
 
 #endif /* CLANG_CPP_FRONTEND_CLANG_CPP_ADJUST_H_ */

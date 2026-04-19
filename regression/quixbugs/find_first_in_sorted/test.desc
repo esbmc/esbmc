@@ -1,0 +1,5 @@
+CORE
+main.py
+--no-bounds-check --no-pointer-check --no-align-check --unwind 4 --bitwuzla
+
+^VERIFICATION SUCCESSFUL$

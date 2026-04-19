@@ -6,7 +6,11 @@ CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 #include <clang/Basic/Version.inc>
 #include <clang/Driver/Compilation.h>
 #include <clang/Driver/Driver.h>
-#include <clang/Driver/Options.h>
+#if CLANG_VERSION_MAJOR >= 22
+#  include <clang/Options/Options.h>
+#else
+#  include <clang/Driver/Options.h>
+#endif
 #include <clang/Frontend/ASTUnit.h>
 #include <clang/Frontend/CompilerInstance.h>
 #include <clang/Frontend/CompilerInvocation.h>
@@ -70,8 +74,19 @@ std::unique_ptr<clang::ASTUnit> buildASTs(
 
   // Create everything needed to create a CompilerInvocation,
   // copied from ToolInvocation::run
-  llvm::IntrusiveRefCntPtr<clang::DiagnosticOptions> DiagOpts =
-    new clang::DiagnosticOptions();
+
+#if CLANG_VERSION_MAJOR >= 21
+  using DiagOptsType = std::shared_ptr<clang::DiagnosticOptions>;
+#else
+  using DiagOptsType = llvm::IntrusiveRefCntPtr<clang::DiagnosticOptions>;
+#endif
+
+  DiagOptsType DiagOpts;
+#if CLANG_VERSION_MAJOR >= 21
+  DiagOpts = std::make_shared<clang::DiagnosticOptions>();
+#else
+  DiagOpts = new clang::DiagnosticOptions();
+#endif
 
   std::vector<const char *> Argv;
   for (const std::string &Str : compiler_args)
@@ -79,19 +94,39 @@ std::unique_ptr<clang::ASTUnit> buildASTs(
   const char *const BinaryName = Argv[0];
 
   unsigned MissingArgIndex, MissingArgCount;
+#if CLANG_VERSION_MAJOR >= 22
+  llvm::opt::InputArgList ParsedArgs = clang::getDriverOptTable().ParseArgs(
+    llvm::ArrayRef<const char *>(Argv).slice(1),
+    MissingArgIndex,
+    MissingArgCount);
+
+#else
   llvm::opt::InputArgList ParsedArgs =
     clang::driver::getDriverOptTable().ParseArgs(
       llvm::ArrayRef<const char *>(Argv).slice(1),
       MissingArgIndex,
       MissingArgCount);
 
+#endif
+
   clang::ParseDiagnosticArgs(*DiagOpts, ParsedArgs);
 
-  clang::TextDiagnosticPrinter DiagnosticPrinter(llvm::errs(), &*DiagOpts);
+  clang::TextDiagnosticPrinter DiagnosticPrinter(
+    llvm::errs(),
+#if CLANG_VERSION_MAJOR >= 21
+    *DiagOpts
+#else
+    &*DiagOpts
+#endif
+  );
 
   clang::DiagnosticsEngine *Diagnostics = new clang::DiagnosticsEngine(
     llvm::IntrusiveRefCntPtr<clang::DiagnosticIDs>(new clang::DiagnosticIDs()),
+#if CLANG_VERSION_MAJOR >= 21
+    *DiagOpts,
+#else
     &*DiagOpts,
+#endif
     &DiagnosticPrinter,
     false);
 
@@ -127,6 +162,9 @@ std::unique_ptr<clang::ASTUnit> buildASTs(
     clang::ASTUnit::LoadFromCompilerInvocationAction(
       std::move(Invocation),
       std::make_shared<clang::PCHContainerOperations>(),
+#if CLANG_VERSION_MAJOR >= 21
+      DiagOpts,
+#endif
       Diagnostics,
       action));
   assert(unit);

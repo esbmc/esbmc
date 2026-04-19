@@ -20,3 +20,18 @@ __pycache__
 tags
 .cache
 release
+.gdbinit
+compile_commands.json
+.deps/
+
+# custom init scripts
+init.sh
+src/CMakeCache.txt
+src/CMakeFiles/
+src/CPackConfig.cmake
+src/CPackSourceConfig.cmake
+/.mypy_cache/
+
+# macOS debug symbols and compiled test binaries in regression dirs
+*.dSYM/
+regression/**/test

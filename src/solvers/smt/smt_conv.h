@@ -6,6 +6,7 @@
 #include <boost/multi_index/ordered_index.hpp>
 #include <boost/multi_index_container.hpp>
 #include <cstdint>
+#include <mutex>
 #include <solvers/prop/literal.h>
 #include <solvers/prop/pointer_logic.h>
 #include <irep2/irep2_utils.h>
@@ -34,7 +35,7 @@
  *  from the solver.
  *
  *  To do that, the user must allocate a solver converter object, which extends
- *  the class smt_convt. Current, create_solver() will do this, in the
+ *  the class smt_convt. Currently, create_solver() will do this, in the
  *  factory-pattern manner (ish). Each solver converter implements all the
  *  abstract methods of smt_convt. When handed an expression to convert,
  *  smt_convt deconstructs it into a series of function applications, which it
@@ -86,6 +87,7 @@
 // Forward dec.
 class fp_convt;
 class smt_convt;
+class ra_apit;
 
 #include <solvers/smt/smt_array.h>
 #include <solvers/smt/tuple/smt_tuple.h>
@@ -131,10 +133,6 @@ class smt_convt;
 class smt_convt
 {
 public:
-  /* NOTE: I've made this horrible so we remember that there is an
-   * even uglier implementation that just returns an empty
-   * look at where this variable is used for more info :) */
-  bool extracting_from_array_tuple_is_error = false;
   /** Shorthand for a vector of smt_ast's */
   typedef std::vector<smt_astt> ast_vec;
 
@@ -258,6 +256,20 @@ public:
    *  @return Expression representation of a's value */
   expr2tc get_by_value(const type2tc &type, BigInt value);
 
+  /** Extract the assignment to a rational/real value from the SMT solvers model.
+   *  Used in integer/real arithmetic mode to get floating point values.
+   *  @param a The AST whose value we wish to know.
+   *  @param numerator Output parameter for the numerator of the rational.
+   *  @param denominator Output parameter for the denominator of the rational.
+   *  @return True if the rational value was successfully extracted, false otherwise. */
+  virtual bool get_rational(smt_astt a, BigInt &numerator, BigInt &denominator)
+  {
+    // Default implementation returns false - solver-specific implementations should override this
+    (void)a;
+    (void)numerator;
+    (void)denominator;
+    return false;
+  }
   /** Fetch a satisfying assignment from the solver. If a previous call to
    *  dec_solve returned satisfiable, then the solver has a set of assignments
    *  to symbols / variables used in the formula. This method retrieves the
@@ -334,6 +346,19 @@ public:
   virtual smt_astt mk_real2int(smt_astt a);
   virtual smt_astt mk_int2real(smt_astt a);
   virtual smt_astt mk_isint(smt_astt a);
+  virtual smt_astt
+  mk_quantifier(bool is_forall, std::vector<smt_astt> lhs, smt_astt rhs)
+  {
+    (void)is_forall;
+    (void)lhs;
+    (void)rhs;
+    abort();
+  }
+
+  smt_astt convert_concat_int_mode(
+    smt_astt left_ast,
+    smt_astt right_ast,
+    const expr2tc &expr);
 
   /** Create an integer or SBV/UBV sort */
   smt_sortt mk_int_bv_sort(std::size_t width)
@@ -377,7 +402,7 @@ public:
   /** Create a floating-point sort, using bitvectors */
   virtual smt_sortt mk_bvfp_sort(std::size_t ew, std::size_t sw);
 
-  /** Create a floating-point rouding mode sort, using bitvectors */
+  /** Create a floating-point rounding mode sort, using bitvectors */
   virtual smt_sortt mk_bvfp_rm_sort();
 
   /** Create an array sort */
@@ -396,6 +421,33 @@ public:
    *         legitimate use of strings.
    *  @return The newly created terminal smt_ast of this real. */
   virtual smt_astt mk_smt_real(const std::string &str) = 0;
+
+  // Returns SMT AST representing real zero
+  smt_astt get_zero_real();
+  // Returns SMT AST representing double precision minimum normal value (2^-1022)
+  smt_astt get_double_min_normal();
+  // Returns SMT AST representing double precision minimum subnormal value (2^-1074)
+  smt_astt get_double_min_subnormal();
+  // Returns SMT AST representing double precision maximum normal value (~1.7976931348623157e+308)
+  smt_astt get_double_max_normal();
+  // Returns SMT AST representing single precision minimum normal value (2^-126)
+  smt_astt get_single_min_normal();
+  // Returns SMT AST representing single precision minimum subnormal value (2^-149)
+  smt_astt get_single_min_subnormal();
+  // Returns SMT AST representing single precision maximum normal value (~3.4028234663852886e+38)
+  smt_astt get_single_max_normal();
+  // Returns SMT AST for the double precision relative error bound under
+  // round-to-nearest: half machine epsilon = 2^-53 ~ 1.11e-16
+  smt_astt get_double_eps_rel();
+  // Returns SMT AST for the single precision relative error bound under
+  // round-to-nearest: half machine epsilon = 2^-24 ~ 5.96e-08
+  smt_astt get_single_eps_rel();
+  // Returns SMT AST for the double precision directional error bound under
+  // round-toward-+inf: full machine epsilon = 2^-52 ~ 2.22e-16
+  smt_astt get_double_eps_up();
+  // Returns SMT AST for the single precision directional error bound under
+  // round-toward-+inf: full machine epsilon = 2^-23 ~ 1.19e-07
+  smt_astt get_single_eps_up();
 
   /** Create a bitvector.
    *  @param theint Integer representation of the bitvector. Any excess bits
@@ -428,7 +480,7 @@ public:
    *  @param The newly created terminal smt_ast of this symbol. */
   virtual smt_astt mk_smt_symbol(const std::string &name, smt_sortt s) = 0;
 
-  /** Create an 'extract' func app. Due to the fact that we can't currently
+  /** Create an 'extract' func app. Since we can't currently
    *  encode integer constants as function arguments without serious faff,
    *  this can't be performed via the medium of mk_func_app. Hence, this api
    *  call.
@@ -461,13 +513,13 @@ public:
    * @return an ite expression */
   virtual smt_astt mk_ite(smt_astt cond, smt_astt t, smt_astt f) = 0;
 
-  /** Extract the assignment to a boolean variable from the SMT solvers model.
-   *  @param a The AST whos value we wish to know.
+  /** Extract the assignment to a boolean variable from the SMT solver's model.
+   *  @param a The AST whose value we wish to know.
    *  @return Expression representation of a's value, as a constant_bool2tc */
   virtual bool get_bool(smt_astt a) = 0;
 
-  /** Extract the assignment to a bitvector from the SMT solvers model.
-   *  @param a The AST whos value we wish to know.
+  /** Extract the assignment to a bitvector from the SMT solver's model.
+   *  @param a The AST whose value we wish to know.
    *  @param is_signed whether the bitvector is signed
    *  @return Expression representation of a's value */
   virtual BigInt get_bv(smt_astt a, bool is_signed) = 0;
@@ -489,7 +541,7 @@ public:
   /** @{
    *  @name Integer overflow solver-converter API. */
 
-  /** Detect integer arithmetic overflows. Takes an expression, that is one of
+  /** Detect integer arithmetic overflows. Takes an expression that is one of
    *  add / sub / mul, and evaluates whether its operation applied to its
    *  operands will result in an integer overflow or underflow.
    *  @param expr Expression to test for arithmetic overflows in.
@@ -511,8 +563,36 @@ public:
    *  @return Boolean valued AST representing whether an overflow occurs. */
   virtual smt_astt overflow_neg(const expr2tc &expr);
 
+  /** Applies IEEE 754 floating-point semantics to a real arithmetic result.
+   *  Handles overflow, underflow, and subnormal number behaviors that are
+   *  missing when using integer/real encoding for floating-point operations.
+   *  Supports both IEEE 754 single precision (32-bit: 8 exponent, 23 fraction)
+   *  and double precision (64-bit: 11 exponent, 52 fraction) formats.
+   *  For double precision: overflow to ±1.798e+308, underflow below 4.941e-324,
+   *  subnormal range [4.941e-324, 2.225e-308). For single precision: overflow
+   *  to ±3.403e+38, underflow below 1.401e-45, subnormal range [1.401e-45, 1.175e-38).
+   *  Other formats return the original result unchanged.
+   *  Under --ir-ieee, when rounding_mode is a concrete round-to-nearest constant
+   *  (ROUND_TO_EVEN == 0), a tight symmetric epsilon enclosure is asserted.
+   *  For symbolic or directed rounding modes the function falls back to a weak
+   *  unconstrained enclosure (sound but imprecise); tight directed bounds are
+   *  deferred to a future PR.
+   *  @param real_result The result of exact real arithmetic operation
+   *  @param fbv_type The floating-point type information (exponent/fraction bits)
+   *  @param operand_zero_check Optional boolean AST for special zero handling
+   *         (e.g., multiplication where either operand is zero should yield zero
+   *         regardless of the other operand, even if it would cause underflow)
+   *  @param rounding_mode The rounding mode expr2tc from the IR operation node;
+   *         typically a constant_int2t or the __ESBMC_rounding_mode symbol.
+   *  @return SMT AST representing the result with IEEE 754 semantics applied */
+  virtual smt_astt apply_ieee754_semantics(
+    smt_astt real_result,
+    const floatbv_type2t &fbv_type,
+    smt_astt operand_zero_check = nullptr,
+    const expr2tc &rounding_mode = expr2tc());
+
   /** Method to dump the SMT formula */
-  virtual void dump_smt();
+  virtual std::string dump_smt();
 
   /** Method to print the SMT model */
   virtual void print_model();
@@ -553,21 +633,21 @@ public:
     const expr2tc &addr_symbol,
     const expr2tc &new_size);
 
-  /** Convert a type2tc into an smt_sort. This despatches control to the
+  /** Convert a type2tc into an smt_sort. This dispatches control to the
    *  appropriate method in the subclassing solver converter for type
    *  conversion */
   smt_sortt convert_sort(const type2tc &type);
-  /** Convert a terminal expression into an SMT AST. This despatches control to
-   *  the appropriate method in the subclassing solver converter for terminal
+  /** Convert a terminal expression into an SMT AST. This dispatches control to
+   *  the appropriate method in the subclassing solver converter for the terminal
    *  conversion */
   smt_astt convert_terminal(const expr2tc &expr);
 
   /** Flatten pointer arithmetic. When faced with an addition or subtraction
    *  between a pointer and some integer or other pointer, perform whatever
-   *  multiplications or casting is requried to honour the C semantics of
+   *  multiplications or casting is required to honor the C semantics of
    *  pointer arith. */
   smt_astt convert_pointer_arith(const expr2tc &expr, const type2tc &t);
-  /** Compare two pointers. This attempts to optimise cases where we can avoid
+  /** Compare two pointers. This attempts to optimize cases where we can avoid
    *  comparing the integer representation of a pointer, as that's hugely
    *  inefficient sometimes (and gets bitblasted).
    *  @param expr First pointer to compare
@@ -590,7 +670,7 @@ public:
   /** Convert an identifier to a pointer. When given the name of a variable
    *  that we want to take the address of, this inspects our current tracking
    *  of addresses / variables, and returns a pointer for the given symbol.
-   *  If it hasn't had its address taken before, performs any computations or
+   *  If it hasn't had its address taken before, it performs any computations or
    *  address space juggling required to make a new pointer.
    *  @param expr The symbol2tc expression of this symbol.
    *  @param sym The textual representation of this symbol.
@@ -625,9 +705,37 @@ public:
   /** Convert a byte_extract2tc, pulling a byte from the byte representation
    *  of some piece of data. */
   smt_astt convert_byte_extract(const expr2tc &expr);
+  /* Integer mode byte extraction helper functions */
+  smt_astt convert_byte_extract_int_mode(
+    const byte_extract2t &data,
+    expr2tc source,
+    expr2tc offs,
+    unsigned int src_width);
+  /* Bit-vector mode byte extraction helper functions */
+  smt_astt convert_byte_extract_bv_mode(
+    const byte_extract2t &data,
+    expr2tc source,
+    expr2tc offs,
+    unsigned int src_width);
+  /* Helper function for integer arithmetic right shift simulation */
+  expr2tc create_int_right_shift(expr2tc source, expr2tc shift_amount);
   /** Convert a byte_update2tc, inserting a byte into the byte representation
    *  of some piece of data. */
   smt_astt convert_byte_update(const expr2tc &expr);
+  /** Convert a byte_update2tc in integer arithmetic mode, handling both
+   *  constant and non-constant offsets with proper type preservation. */
+  smt_astt convert_byte_update_int_mode(const byte_update2t &data);
+  /** Convert a byte_update2tc with offset in integer mode,
+   *  using conditional expressions for all possible byte positions. */
+  expr2tc convert_byte_update_int_mode_expr(
+    const byte_update2t &data,
+    expr2tc source,
+    expr2tc offs,
+    expr2tc update_value,
+    unsigned int src_width);
+  /** Convert a byte_update2tc using bitvector operations, preserving
+   *  the original bitvector-based implementation. */
+  smt_astt convert_byte_update_bv_mode(const byte_update2t &data);
   /** Convert a bitcast2tc, converting an expr to its bit representation. */
   smt_astt convert_bitcast(const expr2tc &expr);
   /** Convert the given expr to AST, then assert that AST */
@@ -644,8 +752,9 @@ public:
   void set_array_iface(array_iface *iface);
   /** Stores handle for the floating-point interface. */
   void set_fp_conv(fp_convt *iface);
-  /** Store a new address-allocation record into the address space accounting.
-   *  idx indicates the object number of this record. */
+  /** Stores handle for the real-arithmetic/enclosure interface. */
+  void set_ra_conv(ra_apit *iface);
+
   void bump_addrspace_array(unsigned int idx, const expr2tc &val);
   /** Get the symbol name for the current address-allocation record array. */
   std::string get_cur_addrspace_ident();
@@ -679,21 +788,21 @@ public:
   smt_astt convert_typecast_to_fpbv(const typecast2t &cast);
   /** Typecast from a floatbv */
   smt_astt convert_typecast_from_fpbv(const typecast2t &cast);
-  /** Round a real to an integer; not straightforwards at all. */
+  /** Round a real to an integer; not straightforward at all. */
   smt_astt round_real_to_int(smt_astt a);
   /** Round a fixedbv to an integer. */
   smt_astt
   round_fixedbv_to_int(smt_astt a, unsigned int width, unsigned int towidth);
 
-  /** Extract a type definition (i.e. a struct_union_data object) from a type.
-   *  This method abstracts the fact that a pointer type is in fact a tuple. */
+  /** Extract a type definition (i.e., a struct_union_data object) from a type.
+   * This method abstracts the fact that a pointer type is, in fact, a tuple. */
   const struct_union_data &get_type_def(const type2tc &type) const;
   /** Prep call for creating a tuple array */
   smt_astt tuple_array_create_despatch(const expr2tc &expr, smt_sortt domain);
 
   /** Convert a boolean to a bitvector with one bit. */
   smt_astt make_bool_bit(smt_astt a);
-  /** Convert a bitvector with one bit to boolean. */
+  /** Convert a bitvector with one bit to a boolean. */
   smt_astt make_bit_bool(smt_astt a);
 
   /** Given an array index, extract the lower n bits of it, where n is the
@@ -775,6 +884,8 @@ public:
 
   /** A cache mapping expressions to converted SMT ASTs. */
   smt_cachet smt_cache;
+  /** A mutex lock for writing to the cache. */
+  std::mutex smt_cache_mutex;
   /** A cache of converted type2tc's to smt sorts */
   smt_sort_cachet sort_cache;
   /** Pointer_logict object, which contains some code for formatting how
@@ -802,6 +913,15 @@ public:
   smt_astt null_ptr_ast;
   smt_astt invalid_ptr_ast;
 
+  /** Counter for generating unique bound-variable names in quantifiers. */
+  size_t quantifier_counter = 0;
+
+  /** Map from SSA symbol name to its forall/exists irep2 expression.
+   *  Populated in convert_assign when a symbol is assigned a quantifier
+   *  expression; used in convert_ast to inline nested quantifier bodies
+   *  before substituting the outer bound variable. */
+  std::unordered_map<irep_idt, expr2tc, irep_id_hash> forall_defs_;
+
   /** Mapping of name prefixes to use counts: when we want a fresh new name
    *  with a particular prefix, this map stores how many times that prefix has
    *  been used, and thus what number should be appended to make the name
@@ -827,6 +947,10 @@ public:
    */
   expr2tc current_valid_objects_sym;
 
+  /** Holds the `__ESBMC_is_dynamic` symbol convert_terminal() was last invoked with.
+   */
+  expr2tc cur_dynamic;
+
   // XXX - push-pop will break here.
   typedef std::map<std::string, smt_astt> renumber_mapt;
   std::vector<renumber_mapt> renumber_map;
@@ -842,19 +966,136 @@ public:
   tuple_iface *tuple_api;
   array_iface *array_api;
   fp_convt *fp_api;
+  ra_apit *ra_api;
 
   // Workaround for integer shifts. This is an array of the powers of two,
   // up to 2^64.
   smt_astt int_shift_op_array;
+
+private:
+  double convert_rational_to_double(
+    const BigInt &numerator,
+    const BigInt &denominator);
+
+  /** Interval metadata for the RNE ieee_add interval-lifting path (--ir-ieee).
+   *  After each RNE ieee_add (double/single, int encoding), the {ra_lo, ra_hi}
+   *  SMT symbols are stored here, keyed on the exact real_result AST pointer
+   *  (pointer equality == SSA identity via smt_cache).  Subsequent RNE
+   *  ieee_add calls look up each operand; missing entries fall back to a point
+   *  interval {side, side} which reproduces the single-step formula exactly.
+   *
+   *  Map lifetime: safe in standard BMC (no push_ctx during formula build).
+   *  In runtime_encoded_equationt (incremental), pop_ctx() deletes ASTs for
+   *  the popped level; stale entries may linger but are never looked up in
+   *  practice because SSA renaming gives distinct pointers per step.
+   *  TODO: clear entries for the popped ctx_level in a follow-up PR. */
+  struct ra_interval_t
+  {
+    smt_astt lo;
+    smt_astt hi;
+  };
+  std::unordered_map<const smt_ast *, ra_interval_t> ir_ra_interval_map;
+
+  /** Interval-lifted RNE enclosure helper for ieee_add (--ir-ieee only).
+   *  Called from ieee_add_id after verifying RNE mode + known format.
+   *  Inputs:
+   *    real_result  exact symbolic real for this addition (mk_add(side1,side2))
+   *    lo_r         lower endpoint of the result interval (iv1.lo + iv2.lo)
+   *    hi_r         upper endpoint of the result interval (iv1.hi + iv2.hi)
+   *    fbv_type     FP type; caller guarantees double or single precision
+   *  Behavior:
+   *    Creates fresh ra_lo::N / ra_hi::N Real symbols.
+   *    Pins ra_lo to lo_r - B_near^-(lo_r) via bidirectional inequalities.
+   *    Pins ra_hi to hi_r + B_near^+(hi_r) via bidirectional inequalities.
+   *    Asserts containment: ra_lo <= real_result <= ra_hi, ra_lo <= ra_hi.
+   *    Point-interval fallback (lo_r == hi_r == real_result) produces a
+   *    formula structurally equivalent to the single-step RNE path.
+   *  Returns: {ra_lo, ra_hi} for storage in ir_ra_interval_map. */
+  std::pair<smt_astt, smt_astt> apply_ieee754_rne_enclosure(
+    smt_astt real_result,
+    smt_astt lo_r,
+    smt_astt hi_r,
+    const floatbv_type2t &fbv_type);
+
+  /** Interval-lifted RNA enclosure helper for ieee_add (--ir-ieee only).
+   *  Parallel to apply_ieee754_rne_enclosure; uses the same B_near
+   *  constants (eps_rel = 2^-53 double / 2^-24 single) and identical formula
+   *  shape because ROUND_TO_AWAY is a nearest-rounding mode with the same
+   *  unit roundoff as ROUND_TO_EVEN.
+   *  Inputs / behavior / returns: identical to the RNE helper above,
+   *  except fresh symbols are named ra_lo_aw::N / ra_hi_aw::N to match
+   *  the RNA single-step naming convention. */
+  std::pair<smt_astt, smt_astt> apply_ieee754_rna_enclosure(
+    smt_astt real_result,
+    smt_astt lo_r,
+    smt_astt hi_r,
+    const floatbv_type2t &fbv_type);
+
+  /** Interval-lifted RUP enclosure helper for ieee_sub (--ir-ieee only).
+   *  EbRUP([LR, UR]) = [LR, UR + B_dir(UR)]
+   *  fl_RUP(r) >= r always (directed mode rounds up), so the lower bound is
+   *  exact: ra_lo is pinned to lo_r with no B_dir adjustment.
+   *  The upper bound adds B_dir at the upper endpoint:
+   *    B_dir(r) = eps_rel_dir * |r| + eps_abs
+   *    eps_rel_dir = 2^-52 (double) or 2^-23 (single) -- full machine epsilon.
+   *  Fresh symbols named ra_lo_up::N / ra_hi_up::N to match the single-step
+   *  RUP naming convention in apply_ieee754_semantics. */
+  std::pair<smt_astt, smt_astt> apply_ieee754_rup_enclosure(
+    smt_astt real_result,
+    smt_astt lo_r,
+    smt_astt hi_r,
+    const floatbv_type2t &fbv_type);
+
+  /** Interval-lifted RDN enclosure helper for ieee_sub (--ir-ieee only).
+   *  EbRDN([LR, UR]) = [LR - B_dir(LR), UR]
+   *  fl_RDN(r) <= r always (directed mode rounds down), so the upper bound is
+   *  exact: ra_hi is pinned to hi_r with no B_dir adjustment.
+   *  The lower bound subtracts B_dir at the lower endpoint:
+   *    B_dir(r) = eps_rel_dir * |r| + eps_abs
+   *    eps_rel_dir = 2^-52 (double) or 2^-23 (single) -- full machine epsilon.
+   *  Fresh symbols named ra_lo_dn::N / ra_hi_dn::N to match the single-step
+   *  RDN naming convention in apply_ieee754_semantics. */
+  std::pair<smt_astt, smt_astt> apply_ieee754_rdn_enclosure(
+    smt_astt real_result,
+    smt_astt lo_r,
+    smt_astt hi_r,
+    const floatbv_type2t &fbv_type);
+
+  /** Interval-lifted RTZ enclosure helper for ieee_sub (--ir-ieee only).
+   *  RTZ (truncation toward zero) is sign-dependent: it rounds down for
+   *  non-negative inputs and rounds up for non-positive inputs.
+   *  The enclosure has three cases based on the sign of [LR, UR]:
+   *
+   *  1. LR >= 0 (hull entirely non-negative): fl_RTZ acts like RDN
+   *     EbRTZ = [LR - B_dir(LR), UR]    (exact upper bound)
+   *
+   *  2. UR <= 0 (hull entirely non-positive): fl_RTZ acts like RUP
+   *     EbRTZ = [LR, UR + B_dir(UR)]    (exact lower bound)
+   *
+   *  3. LR < 0 < UR (hull crosses zero): sign of actual result is unknown,
+   *     conservative symmetric bound:
+   *     B_dir_max = eps_rel_dir * max(|LR|, |UR|) + eps_abs
+   *     EbRTZ = [LR - B_dir_max, UR + B_dir_max]
+   *
+   *  B_dir(r) = eps_rel_dir * |r| + eps_abs
+   *    eps_rel_dir = 2^-52 (double) or 2^-23 (single) -- full machine epsilon.
+   *  Fresh symbols named ra_lo_tz::N / ra_hi_tz::N to match the single-step
+   *  RTZ naming convention in apply_ieee754_semantics. */
+  std::pair<smt_astt, smt_astt> apply_ieee754_rtz_enclosure(
+    smt_astt real_result,
+    smt_astt lo_r,
+    smt_astt hi_r,
+    const floatbv_type2t &fbv_type);
 };
 
 /** Given an array type, create a type2tc representing its domain. */
 type2tc make_array_domain_type(const array_type2t &arr);
 
-/** Given an array type, calculate the domain bitwidth it should have. For
- *  nondeterministically or infinite sized arrays, this defaults to the
- *  machine integer width. */
-unsigned long calculate_array_domain_width(const array_type2t &arr);
+/** Return the SMT domain bit-width for an array type.
+ *  For constant-size arrays this is the minimum bit-width needed to represent
+ *  every valid index.  For VLA, dynamic, or infinite arrays the size is not
+ *  statically known, so the machine word size is returned as a safe default. */
+unsigned long array_domain_width_or_word_size(const array_type2t &arr);
 
 // Define here to enable inlining
 inline smt_ast::smt_ast(smt_convt *ctx, smt_sortt s) : sort(s), context(ctx)

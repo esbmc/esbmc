@@ -13,7 +13,7 @@ contract MyContract {
 }
 contract tupleABITrig {
     function test() public {
-        MyContract tupleABIContract;
+        MyContract tupleABIContract = new MyContract();
         MyContract tupleABIContract2 = new MyContract();
         assert(tupleABIContract.getI() != tupleABIContract2.getI());
     }

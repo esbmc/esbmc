@@ -20,7 +20,7 @@ class symex_target_equationt : public symex_targett
 public:
   class SSA_stept;
 
-  symex_target_equationt(const namespacet &_ns) : ns(_ns)
+  symex_target_equationt(const namespacet &_ns) : ns(_ns), output_count(0)
   {
     debug_print = config.options.get_bool_option("symex-ssa-trace");
     ssa_trace = config.options.get_bool_option("ssa-trace");
@@ -46,6 +46,13 @@ public:
     const sourcet &source,
     const std::string &fmt,
     const std::list<expr2tc> &args) override;
+
+  void branching(
+    const expr2tc &guard,
+    const expr2tc &cond,
+    const sourcet &source,
+    const bool hidden,
+    unsigned loop_number) override;
 
   // record an assumption
   // cond is destroyed
@@ -116,6 +123,10 @@ public:
     bool is_skip() const
     {
       return type == goto_trace_stept::SKIP;
+    }
+    bool is_branching() const
+    {
+      return type == goto_trace_stept::BREANCHING;
     }
 
     expr2tc guard;
@@ -188,6 +199,7 @@ public:
   void clear()
   {
     SSA_steps.clear();
+    output_count = 0;
   }
 
   unsigned int clear_assertions();
@@ -208,6 +220,7 @@ protected:
   bool debug_print;
   bool ssa_trace;
   bool ssa_smt_trace;
+  unsigned output_count;
 
 private:
   void debug_print_step(const SSA_stept &step) const;

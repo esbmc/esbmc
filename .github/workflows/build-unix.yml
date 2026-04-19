@@ -20,20 +20,48 @@ jobs:
     name: Build ESBMC (${{ inputs.operating-system }})
     runs-on: ${{ inputs.operating-system }}
     steps:
-    - uses: actions/checkout@v2
-    - name: Add apt.llvm.org repository
-      run: |
-        wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc &&
-        source /etc/os-release &&
-        sudo add-apt-repository -y "deb http://apt.llvm.org/${UBUNTU_CODENAME}/ llvm-toolchain-${UBUNTU_CODENAME}-16 main" &&
-        sudo apt-get update
+    - uses: actions/checkout@v4
+
+    # For restore ccache
+    - uses: hendrikmuhs/ccache-action@v1.2
       if: ${{ startsWith(inputs.operating-system, 'ubuntu-') }}
+      # TODO: Onpush and PR used different CMake flags
+      with:
+        restore: ${{ github.event_name == 'push' }}
+        save: ${{ github.event_name == 'push' }}
+        key: ${{ inputs.operating-system }}-${{ hashFiles('**/*.cpp','**/*.h') }}
+        restore-keys: |
+          ${{ inputs.operating-system }}
+        evict-old-files: 2d
+
     - name: Build ESBMC
       run: ./scripts/build.sh ${{ inputs.build-flags }}
-    - uses: actions/upload-artifact@v1
+    - uses: actions/upload-artifact@v4
       with:
-        name: release-${{ inputs.operating-system }}
+        name: release-${{ inputs.operating-system }}-${{ inputs.build-flags }}
         path: ./release
+    
+    - name: Check Python regression tests
+      if: ${{ inputs.testing == true }}
+      run: |
+        # Set PATH to include Python 3.12 and user-installed tools (mypy, meson, etc.)
+        export PATH="$(brew --prefix python@3.12)/bin:$HOME/Library/Python/3.12/bin:$PATH"
+        chmod +x scripts/check_python_tests.sh
+        ./scripts/check_python_tests.sh
+
     - name: Run tests
       if: ${{ inputs.testing == true }}
-      run: cd build/ && ctest -j4 --output-on-failure --progress .
+      run: |
+        # Set PATH to include Python 3.12 and user-installed tools (mypy, meson, etc.)
+        export PATH="$(brew --prefix python@3.12)/bin:$HOME/Library/Python/3.12/bin:$PATH"
+        cd build/
+        # On macOS, only run Python tests.
+        # On PR Linux, skip python-intensive to keep fast feedback.
+        # On other systems/events, run all tests.
+        if [[ "${{ inputs.operating-system }}" =~ ^macos ]]; then
+          ctest -j4 --output-on-failure --progress -L python
+        elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
+          ctest -j4 --output-on-failure --progress -LE python-intensive .
+        else
+          ctest -j4 --output-on-failure --progress .
+        fi

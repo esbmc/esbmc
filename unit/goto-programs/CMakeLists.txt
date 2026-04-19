@@ -1,6 +1,7 @@
-new_unit_test(loop-unroll-algorithms-test "loop_unroll.test.cpp" "test_goto_factory;gotoprograms;gotoalgorithms;filesystem;langapi")
+new_unit_test(loop-unroll-algorithms-test "loop_unroll.test.cpp" "test_goto_factory;gotoalgorithms;langapi")
+new_unit_test(atomicity-check-test "atomicity_check.test.cpp" "test_goto_factory;clangcppfrontend;clibs;filesystem;langapi")
 new_unit_test(interval-template-test "interval_template.test.cpp" "gotoprograms")
 new_unit_test(interval-analysis-test "interval_analysis.test.cpp" "test_goto_factory;gotoprograms;gotoalgorithms;filesystem;langapi")
 new_unit_test(available-expressions-test "available_expressions.test.cpp" "test_goto_factory;gotoprograms;gotoalgorithms;abstract-interpretation;pointeranalysis;filesystem;langapi;util_esbmc")
 new_unit_test(cfg-test "cfg.test.cpp" "langapi;irep2;gotoprograms;gotoalgorithms;abstract-interpretation;pointeranalysis;filesystem;langapi;util_esbmc")
-
+new_unit_test(interval-symex-guard-test "interval_symex_guard.test.cpp" "mode_table_obj;abstract-interpretation;langapi")

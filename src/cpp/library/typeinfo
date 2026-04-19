@@ -1,95 +1,100 @@
-#ifndef STL_TYPEINFO
-#define STL_TYPEINFO
+// ESBMC model for <typeinfo>
+//
+// Replaces the ABI-specific system header with a portable representation.
+// The actual libc++ implementation on ARM64 macOS stores the type name as a
+// uintptr_t (__non_unique_arm_rtti_bit_impl), which causes an SMT sort
+// mismatch when ESBMC constructs a type_info struct for typeid() expressions.
+//
+// By providing our own model with a concrete char* field, we ensure:
+//   - The struct layout matches the two operands emitted by CXXTypeidExprClass:
+//       op0 = address_of(type_name_string)   → const char* __name
+//       op1 = gen_zero(pointer_type())        → void* __impl (zero placeholder)
+//   - operator==() compares string pointers directly (no strcmp needed).
+//   - name() returns a concrete, dereferenceable char*.
+//
+// Polymorphism is not supported (consistent with the existing ESBMC comment
+// in clang_cpp_convert.cpp: "Front end can't account for polymorphism").
 
-#include <exception>
+#ifndef ESBMC_TYPEINFO
+#define ESBMC_TYPEINFO
 
-#include "definitions.h"
+#include <cstddef>
 
 namespace std
 {
+
 class type_info
 {
+  // Field 0: type-name string pointer.
+  // CXXTypeidExprClass fills this with address_of_exprt(string_name).
+  const char *__name;
+
+  // Field 1: ABI placeholder (vtable pointer in real implementations).
+  // CXXTypeidExprClass fills this with gen_zero(pointer_type()) = null.
+  const void *__impl;
+
+  type_info(const type_info &) = delete;
+  type_info &operator=(const type_info &) = delete;
+
 public:
-  virtual ~type_info()
+  ~type_info()
   {
   }
-  bool operator==(const type_info &rhs) const;
-  bool operator!=(const type_info &rhs) const;
-  bool before(const type_info &rhs) const;
-  const char *name() const;
 
-private:
-  type_info(const type_info &rhs);
-  type_info &operator=(const type_info &rhs);
+  // Pointer equality: two typeid results for the same type get the same
+  // string literal address, so this is both fast and correct.
+  bool operator==(const type_info &arg) const noexcept
+  {
+    return __name == arg.__name;
+  }
+
+  bool operator!=(const type_info &arg) const noexcept
+  {
+    return __name != arg.__name;
+  }
+
+  // Returns the concrete string pointer set by CXXTypeidExprClass.
+  const char *name() const noexcept
+  {
+    return __name;
+  }
+
+  size_t hash_code() const noexcept
+  {
+    return (size_t)__name;
+  }
+
+  bool before(const type_info &arg) const noexcept
+  {
+    return (size_t)__name < (size_t)arg.__name;
+  }
 };
 
-/**
- *  @brief  Thrown during incorrect typecasting.
- *  @ingroup exceptions
- *
- *  If you attempt an invalid @c dynamic_cast expression, an instance of
- *  this class (or something derived from this class) is thrown.
- *  */
-
-class bad_cast : public exception
+// Minimal bad_cast / bad_typeid without pulling in <exception>.
+class bad_cast
 {
 public:
-#if __cplusplus >= 201103L // Check if C++11 or later is being used
-  bad_cast() noexcept;
-#else
-  bad_cast() throw()
+  bad_cast() noexcept
   {
   }
-#endif
-#if __cplusplus >= 201103L // Check if C++11 or later is being used
-  virtual ~bad_cast() noexcept
+  const char *what() const noexcept
   {
+    return "bad_cast";
   }
-  virtual const char *what() const noexcept
-  {
-    return "Bad cast";
-  }
-#else
-  virtual ~bad_cast()
-  {
-  }
-  virtual const char *what() const throw()
-  {
-    return "Bad cast";
-  }
-
-#endif
 };
 
-class bad_typeid : public exception
+class bad_typeid
 {
 public:
-#if __cplusplus >= 201103L // Check if C++11 or later is being used
-  bad_typeid() noexcept;
-#else
-  bad_typeid() throw()
+  bad_typeid() noexcept
   {
   }
-#endif
-#if __cplusplus >= 201103L // Check if C++11 or later is being used
-  virtual ~bad_typeid() noexcept
+  const char *what() const noexcept
   {
+    return "bad_typeid";
   }
-  virtual const char *what() const noexcept
-  {
-    return "Bad typeid";
-  }
-#else
-  virtual ~bad_typeid()
-  {
-  }
-  virtual const char *what() const throw()
-  {
-    return "Bad typeid";
-  }
-#endif
 };
 
 } // namespace std
 
-#endif
+#endif // ESBMC_TYPEINFO

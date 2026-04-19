@@ -70,18 +70,37 @@ bool clang_c_maint::clang_main()
     // if user provided class/contract name
     if (!config.cname.empty() && !config.main.empty())
     {
-      const std::string fmt = "@" + config.cname + "@F@" + main;
-      if (it->second.as_string().find(fmt) == std::string::npos)
-        continue;
+      // Allow user to provide a range. e.g.
+      // --class "A B" --function test
+      // --contract "Base Derieve" --function _ESBMC_main
+      // yet only the first matched one will get verified
+      std::istringstream iss(config.cname);
+      std::string tgt_cname;
+      bool is_found_sym = false;
+      while (iss >> tgt_cname)
+      {
+        const std::string fmt = "@" + tgt_cname + "@F@" + main;
+        if (it->second.as_string().find(fmt) != std::string::npos)
+        {
+          is_found_sym = true;
+          break;
+        }
+      }
+      if (is_found_sym)
+      {
+        symbolt *s = context.find_symbol(it->second);
+        if (s != nullptr && s->type.is_code())
+          matches.push_back(it->second);
+        break; // prevent ambiguous
+      }
     }
-    // look it up
-    symbolt *s = context.find_symbol(it->second);
-
-    if (s == nullptr)
-      continue;
-
-    if (s->type.is_code())
-      matches.push_back(it->second);
+    else
+    {
+      // look it up
+      symbolt *s = context.find_symbol(it->second);
+      if (s != nullptr && s->type.is_code())
+        matches.push_back(it->second);
+    }
   }
 
   if (matches.empty())
@@ -149,11 +168,6 @@ bool clang_c_maint::clang_main()
       mult.copy_to_operands(
         add, char_pointer_size); // (argc + 1) * sizeof(char *)
 
-      // Adjust __ESBMC_alloc_size as argv is handled as dynamic array
-      exprt dynamic_size("dynamic_size", size_type());
-      dynamic_size.copy_to_operands(gen_address_of(symbol_expr(argv_symbol)));
-      init_code.copy_to_operands(code_assignt(dynamic_size, mult));
-
       // assume argc is at least one
       exprt ge(">=", bool_type());
       ge.copy_to_operands(symbol_expr(argc_symbol), one);
@@ -180,22 +194,137 @@ bool clang_c_maint::clang_main()
 
       init_code.copy_to_operands(code_assumet(le));
 
-      // assign argv[argc] to NULL
-      constant_exprt null(
-        irep_idt("NULL"), integer2string(0), argv_symbol.type.subtype());
+      // Adjust __ESBMC_alloc_size as argv is handled as dynamic array.
+      exprt dynamic_size("dynamic_size", size_type());
+      dynamic_size.copy_to_operands(gen_address_of(symbol_expr(argv_symbol)));
+      init_code.copy_to_operands(code_assignt(dynamic_size, mult));
 
-      exprt index_expr("index", argv_symbol.type.subtype());
+      // Model argv per C11 §5.1.2.2.1: assume the null terminator.
+      // Non-null entries for argv[0..max_args-1] are guaranteed by the
+      // backing assignments below; quantifier-based forall is avoided so
+      // that solvers without quantifier support (e.g. Boolector) are not
+      // broken.  Slots argv[max_args..argc-1] are left uninitialized
+      // rather than NULL: this is a bounded under-approximation, raise
+      // --argv-max-args for wider coverage at the cost of a larger SMT
+      // formula.
+      exprt null = gen_zero(argv_symbol.type.subtype());
 
-      index_exprt argv_index(
+      // argv[argc] == NULL
+      index_exprt argv_argc(
         symbol_expr(argv_symbol),
         symbol_expr(argc_symbol),
         argv_symbol.type.subtype());
+      exprt term_eq("=", bool_type());
+      term_eq.copy_to_operands(argv_argc, null);
+      init_code.copy_to_operands(code_assumet(term_eq));
 
-      // disable bounds check on that one
-      // Logic to perform this ^ moved into goto_check, rather than load
-      // irep2 with additional baggage.
+      // Back each argv[i] with a static char array whose SIZE is a nondet
+      // variable bounded in [1, max_strlen].  Declaring the array type with
+      // a symbolic size and setting dynamic_size on it mirrors exactly how
+      // argv' itself is modelled, so the dereference checker treats the
+      // string length as an SMT variable chosen by the solver.
+      // Boost validates the int at parse time; clamp to safe ranges so a
+      // bogus low value (e.g. 0) cannot make `assume(1 <= len <= 0)` reduce
+      // the path to vacuous truth.
+      auto get_int_opt = [](const char *name, int fallback, int min) {
+        std::string v = config.options.get_option(name);
+        int x = fallback;
+        if (!v.empty())
+          try
+          {
+            x = std::stoi(v);
+          }
+          catch (...)
+          {
+            x = fallback;
+          }
+        return x < min ? min : x;
+      };
+      const int max_args = get_int_opt("argv-max-args", 2, 0);
+      // Soft cap: max_strlen feeds a single SMT range so it scales for free,
+      // but max_args drives a build-time loop that materialises 2 symbols
+      // and ~5 init statements per iteration — a typo here causes OOM
+      // before verification starts.  Warn (don't reject) so legitimate
+      // wide-fuzz configurations still work.
+      if (max_args > 1024)
+        log_warning(
+          "--argv-max-args={} is unusually large; this will create {} "
+          "static symbols and may slow GOTO construction significantly",
+          max_args,
+          max_args * 2);
+      const int max_strlen = get_int_opt("argv-max-strlen", 256, 1);
+      typet char_t = argv_symbol.type.subtype().subtype();
 
-      init_code.copy_to_operands(code_assignt(argv_index, null));
+      for (int ai = 0; ai < max_args; ++ai)
+      {
+        // Nondet length for this string (uninitialized static ⟹ nondet in symex).
+        std::string lname = "__ESBMC_argv_len_" + std::to_string(ai);
+        symbolt len_sym;
+        len_sym.name = irep_idt(lname);
+        len_sym.id = irep_idt("c:@" + lname);
+        len_sym.type = uint_type();
+        len_sym.static_lifetime = true;
+        len_sym.lvalue = true;
+        symbolt *len_ptr = nullptr;
+        context.move(len_sym, len_ptr);
+
+        exprt len = symbol_expr(*len_ptr);
+
+        // Bound the length unconditionally; the backing is always present even
+        // when ai >= argc (the string simply won't be accessed on those paths).
+        exprt ge_one(">=", bool_type());
+        ge_one.copy_to_operands(len, from_integer(1, uint_type()));
+        init_code.copy_to_operands(code_assumet(ge_one));
+
+        exprt le_max("<=", bool_type());
+        le_max.copy_to_operands(len, from_integer(max_strlen, uint_type()));
+        init_code.copy_to_operands(code_assumet(le_max));
+
+        // char[len] static symbol — symbolic array size mirrors argv' itself.
+        std::string sname = "__ESBMC_argv_str_" + std::to_string(ai);
+        symbolt str_sym;
+        str_sym.name = irep_idt(sname);
+        str_sym.id = irep_idt("c:@" + sname);
+        str_sym.type = array_typet(char_t, len);
+        str_sym.static_lifetime = true;
+        str_sym.lvalue = true;
+        symbolt *str_ptr = nullptr;
+        context.move(str_sym, str_ptr);
+
+        // Set __ESBMC_alloc_size for the string (same pattern as argv').
+        exprt str_ds("dynamic_size", size_type());
+        str_ds.copy_to_operands(gen_address_of(symbol_expr(*str_ptr)));
+        init_code.copy_to_operands(code_assignt(str_ds, len));
+
+        // Enforce null-termination: str[len-1] == '\0'.  Without this the
+        // solver may pick len=1 with str[0]!='\0', then strncpy reads str[1]
+        // which is out-of-bounds for a 1-element array.
+        exprt len_minus_one("-", uint_type());
+        len_minus_one.copy_to_operands(len, from_integer(1, uint_type()));
+        index_exprt last_char(symbol_expr(*str_ptr), len_minus_one, char_t);
+        exprt null_term("=", bool_type());
+        null_term.copy_to_operands(last_char, gen_zero(char_t));
+        init_code.copy_to_operands(code_assumet(null_term));
+
+        exprt cond_lt("<", bool_type());
+        cond_lt.copy_to_operands(
+          from_integer(ai, argc_symbol.type), symbol_expr(argc_symbol));
+
+        index_exprt argv_ai(
+          symbol_expr(argv_symbol),
+          from_integer(ai, index_type()),
+          argv_symbol.type.subtype());
+
+        index_exprt str_first(
+          symbol_expr(*str_ptr), gen_zero(index_type()), char_t);
+        exprt addr_str("address_of", argv_symbol.type.subtype());
+        addr_str.copy_to_operands(str_first);
+
+        code_ifthenelset if_assign;
+        if_assign.cond() = cond_lt;
+        if_assign.then_case() = code_assignt(argv_ai, addr_str);
+        init_code.copy_to_operands(if_assign);
+      }
 
       exprt::operandst &operands = call.arguments();
 

@@ -50,6 +50,13 @@ type2t::type2t(type_ids id) : type_id(id), crc_val(0)
 {
 }
 
+type2t::type2t(const type2t &ref) : type_id(ref.type_id)
+// NOTE: crc_mutex not mentioned here so fresh mutex is created.
+{
+  std::lock_guard lock(ref.crc_mutex);
+  crc_val = ref.crc_val;
+}
+
 bool type2t::operator==(const type2t &ref) const
 {
   return cmpchecked(ref);
@@ -127,7 +134,7 @@ void type2t::hash(crypto_hash &hash) const
 
 unsigned int bool_type2t::get_width() const
 {
-  // For the purpose of the byte representating memory model
+  // For the purpose of the byte representing memory model
   return 8;
 }
 

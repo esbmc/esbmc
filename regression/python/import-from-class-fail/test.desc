@@ -1,4 +1,4 @@
 CORE
 main.py
-
-ERROR: Type undefined for:\s*$
+--incremental-bmc
+^ERROR\: Function "MyClass" not found \(.+main\.py line [0-9]+\)$

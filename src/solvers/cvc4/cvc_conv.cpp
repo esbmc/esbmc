@@ -1272,13 +1272,13 @@ smt_sortt cvc_convt::mk_fpbv_rm_sort()
     SMT_SORT_FPBV_RM, em.roundingModeType(), 3);
 }
 
-void cvc_convt::dump_smt()
+std::string cvc_convt::dump_smt()
 {
   std::ostringstream oss;
   auto const &assertions = smt.getAssertions();
   for (auto const &a : assertions)
     a.printAst(oss, 0);
-  log_debug("cvc4", "{}", oss.str());
+  return oss.str();
 }
 
 void cvc_smt_ast::dump() const

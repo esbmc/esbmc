@@ -41,6 +41,8 @@ class TagDecl;
 class FieldDecl;
 class MemberExpr;
 class EnumConstantDecl;
+class APValue;
+class AlignedAttr;
 } // namespace clang
 
 std::string
@@ -177,6 +179,11 @@ protected:
 
   bool get_builtin_type(const clang::BuiltinType &bt, typet &new_type);
 
+  bool get_bitfield_type(
+    const clang::FieldDecl &,
+    const typet &orig_type,
+    typet &new_type);
+
   virtual bool get_expr(const clang::Stmt &stmt, exprt &new_expr);
 
   bool get_enum_value(const clang::EnumConstantDecl *e, exprt &new_expr);
@@ -194,6 +201,8 @@ protected:
   get_unary_operator_expr(const clang::UnaryOperator &uniop, exprt &new_expr);
 
   bool get_atomic_expr(const clang::AtomicExpr &atm, exprt &new_expr);
+
+  virtual bool get_member_expr(const clang::MemberExpr &memb, exprt &new_expr);
 
   bool get_cast_expr(const clang::CastExpr &cast, exprt &new_expr);
 
@@ -249,6 +258,15 @@ protected:
   const clang::Decl *get_DeclContext_from_Stmt(const clang::Stmt &stmt);
 
   const clang::Decl *get_top_FunctionDecl_from_Stmt(const clang::Stmt &stmt);
+
+  /*
+   * Helper function to process an AlignedAttr and set the alignment on a type
+   * Arguments:
+   *   aattr: the AlignedAttr to process
+   *   t: the type to set alignment on
+   */
+  bool
+  process_aligned_attribute(const clang::AlignedAttr &aattr, typet &t) const;
 
   /*
    * add additional annotations if a class/struct/union field has alignment attribute
@@ -310,10 +328,27 @@ protected:
 
   virtual bool is_aggregate_type(const clang::QualType &q_type);
 
+  bool get_APValue_expr(const clang::APValue &value, exprt &new_expr);
+
   /*
    * Function to check whether a MemberExpr references to a static variable
    */
   bool is_member_decl_static(const clang::MemberExpr &member);
+
+  /**
+   * Rewrites references to builtin functions to their ESBMC counterparts.
+   * Clang provides builtins for e.g. malloc, memcpy, etc. Instead of re-implementing
+   * these functions in ESBMC, we rewrite references to e.g. `__builtin_memcpy` to
+   * just `memcpy`.
+   *
+   * @param d declaration to rewrite (if it refers to a builtin function)
+   * @param name name of the declaration
+   * @param id id of the declaration
+   */
+  void rewrite_builtin_ref(
+    const clang::Decl &d,
+    std::string &name,
+    std::string &id) const;
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */

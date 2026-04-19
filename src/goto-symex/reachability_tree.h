@@ -346,6 +346,8 @@ protected:
   unsigned int schedule_total_claims;
   /** Number of remaining claims in current --schedule exploration */
   unsigned int schedule_remaining_claims;
+  /** Number of trivial claims in current --schedule exploration */
+  unsigned int schedule_simplified_claims;
   /** Next thread ID to switch to, decided by analyse_* routines */
   unsigned int next_thread_id;
   /** Whether partial-order-reduction is enabled */
@@ -357,6 +359,8 @@ protected:
   bool interactive_ileaves;
   /** Are we using the --schedule scheduling method? */
   bool schedule;
+  /** Are we using the --smt-during-symex method? */
+  bool smt_during_symex;
 
   /* Map to store the expression and thread ID,
    * which that expression belongs to. */

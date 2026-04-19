@@ -45,27 +45,23 @@ public:
 
   void compute(const exprt &expr);
 
-  rw_sett(
-    const namespacet &_ns,
-    value_setst &_value_sets,
-    goto_programt::const_targett _target)
-    : ns(_ns), value_sets(_value_sets), target(_target)
+  rw_sett(const namespacet &_ns, goto_programt::const_targett _target)
+    : ns(_ns), target(_target)
   {
   }
 
   rw_sett(
     const namespacet &_ns,
-    value_setst &_value_sets,
     goto_programt::const_targett _target,
     const exprt &expr)
-    : ns(_ns), value_sets(_value_sets), target(_target)
+    : ns(_ns), target(_target)
   {
     compute(expr);
   }
 
   void read_rec(const exprt &expr)
   {
-    read_write_rec(expr, true, false, "", guardt(), exprt());
+    read_write_rec(expr, true, false, "", guardt(), nil_exprt());
   }
 
   void
@@ -76,7 +72,6 @@ public:
 
 protected:
   const namespacet &ns;
-  value_setst &value_sets;
   const goto_programt::const_targett target;
 
   void assign(const exprt &lhs, const exprt &rhs);

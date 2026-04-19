@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 main.c
 --no-slice --memory-leak-check --show-stacktrace
-^VERIFICATION FAILED$
+^VERIFICATION SUCCESSFUL$

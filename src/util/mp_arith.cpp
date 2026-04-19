@@ -99,6 +99,8 @@ const std::string integer2string(const BigInt &n, unsigned base)
 /// \return BigInt
 const BigInt binary2integer(const std::string &n, bool is_signed)
 {
+  assert(std::all_of(
+    n.begin(), n.end(), [](char c) { return c == '0' || c == '1'; }));
   if (n.empty())
     return 0;
 

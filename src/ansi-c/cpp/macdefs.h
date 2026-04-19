@@ -1,1 +1,0 @@
-typedef long long CONSZ;

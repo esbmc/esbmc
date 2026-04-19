@@ -1,0 +1,7 @@
+CORE
+main.c
+--goto-unwind --k-induction --branch-function-coverage
+^Function Entry Points & Branches : 5
+^Reached : 5
+^Branch Coverage: 100%
+^VERIFICATION FAILED$

@@ -11,8 +11,6 @@ typedef const tuple_node_smt_ast *tuple_node_smt_astt;
 class smt_tuple_node_flattener : public tuple_iface
 {
 public:
-  // TODO: Same as the other variable. The current implementation is not good
-  bool is_fetching_from_array_an_error = false;
   smt_tuple_node_flattener(smt_convt *_ctx, const namespacet &_ns)
     : ctx(_ctx), ns(_ns), array_conv(_ctx)
   {

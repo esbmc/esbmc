@@ -713,4 +713,12 @@ public:
   }
 };
 
+class ptrmem_typet : public typet
+{
+public:
+  ptrmem_typet() : typet(t_ptrmem)
+  {
+  }
+};
+
 #endif

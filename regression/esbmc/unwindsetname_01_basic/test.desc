@@ -1,0 +1,4 @@
+CORE
+main.c
+--unwindsetname compute_sum:0:11
+^VERIFICATION SUCCESSFUL$

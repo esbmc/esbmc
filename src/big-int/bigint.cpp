@@ -348,7 +348,7 @@ void BigInt::assign(ullong_t ul)
   digit_set(ul, digit, length);
 }
 
-// Dito signed.
+// Ditto signed.
 void BigInt::assign(llong_t l)
 {
   if (l >= 0)
@@ -685,7 +685,7 @@ inline int BigInt::ucompare(BigInt const &b) const
   return digit_cmp(digit, b.digit, length);
 }
 
-// Comparision primitives.
+// Comparison primitives.
 
 int BigInt::compare(ullong_t b) const
 {

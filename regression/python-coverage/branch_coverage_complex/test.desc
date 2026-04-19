@@ -1,0 +1,7 @@
+THOROUGH
+main.py
+--branch-coverage
+^Branches : 16
+^Reached : 16
+^Branch Coverage: 100%
+^VERIFICATION FAILED$

@@ -10,6 +10,7 @@ namespace std
 
 /* forward declaration */
 class locale;
+class ostream;
 
 template <typename>
 struct char_traits;
@@ -145,6 +146,19 @@ class istreambuf_iterator
 template <typename CharT, typename Traits = char_traits<CharT> >
 class ostreambuf_iterator
 {
+private:
+  streambuf* sbuf_;
+
+public:
+  // Multiple constructors including template constructor for streams
+  template<typename StreamType>
+  explicit ostreambuf_iterator(StreamType& stream);
+  
+  // Essential iterator operators
+  ostreambuf_iterator& operator*();
+  ostreambuf_iterator& operator=(const CharT& c);
+  ostreambuf_iterator& operator++();
+  ostreambuf_iterator operator++(int);
 };
 
 } // namespace std

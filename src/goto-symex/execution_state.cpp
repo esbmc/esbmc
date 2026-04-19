@@ -5,13 +5,13 @@
 #include <langapi/mode.h>
 #include <sstream>
 #include <string>
+#include <util/breakpoint.h>
 #include <util/c_types.h>
 #include <util/config.h>
 #include <util/expr_util.h>
 #include <util/i2string.h>
 #include <irep2/irep2.h>
 #include <util/migrate.h>
-#include <util/simplify_expr.h>
 #include <util/std_expr.h>
 #include <util/string2array.h>
 #include <vector>
@@ -85,9 +85,9 @@ execution_statet::execution_statet(
   // Initial mpor tracking.
   thread_last_reads.emplace_back();
   thread_last_writes.emplace_back();
-  // One thread with one dependancy relation.
-  dependancy_chain.emplace_back();
-  dependancy_chain.back().push_back(0);
+  // One thread with one dependency relation.
+  dependency_chain.emplace_back();
+  dependency_chain.back().push_back(0);
   mpor_says_no = false;
 
   cswitch_forced = false;
@@ -161,7 +161,7 @@ execution_statet &execution_statet::operator=(const execution_statet &ex)
 
   thread_last_reads = ex.thread_last_reads;
   thread_last_writes = ex.thread_last_writes;
-  dependancy_chain = ex.dependancy_chain;
+  dependency_chain = ex.dependency_chain;
   mpor_says_no = ex.mpor_says_no;
   cswitch_forced = ex.cswitch_forced;
 
@@ -201,20 +201,13 @@ void execution_statet::symex_step(reachability_treet &art)
   last_insn = &instruction;
 
   merge_gotos();
-  if (break_insn != 0 && break_insn == instruction.location_number)
-  {
-#ifndef _WIN32
-#  if !(defined(__arm__) || defined(__aarch64__))
-    __asm__("int $3");
-#  else
-    log_error("Can't trap on ARM, sorry");
-    abort();
-#  endif
-#else
-    log_error("Can't trap on windows, sorry");
-    abort();
-#endif
-  }
+
+  // If current state guard is false, it shouldn't perform further context switch.
+  if (
+    !state.guard.is_false() || !is_cur_state_guard_false(state.guard.as_expr()))
+    interleaving_unviable = false;
+  else
+    interleaving_unviable = true;
 
   // Don't convert if it's a inductive instruction and we are running the base
   // case or forward condition
@@ -242,6 +235,10 @@ void execution_statet::symex_step(reachability_treet &art)
     state.source.pc->output_instruction(ns, "", oss, false);
     log_result("{}", oss.str());
   }
+
+  // We use this to break when we are about to run an instruction through symex
+  if (break_insn != 0 && break_insn == instruction.location_number)
+    breakpoint();
 
   switch (instruction.type)
   {
@@ -515,7 +512,7 @@ void execution_statet::preserve_last_paths()
     // the guard of the to-be-merged state is identical to the pre-goto guard,
     // meaning that the GOTO we executed had an unconditionally-true guard.
     // Second where the current-path guard plus the to-be-merged guard is equal
-    // to the pre-goto guard: in that case, these can only be the two descendent
+    // to the pre-goto guard: in that case, these can only be the two descendant
     // paths from the pre-goto state.
     const goto_statet *tomerge = nullptr;
     for (const goto_statet &gs : statelist)
@@ -675,21 +672,41 @@ void execution_statet::execute_guard()
   expr2tc guard_expr = get_guard_identifier();
   expr2tc parent_guard;
 
-  // Parent guard of this context switch - if a assign/claim/assume, just use
-  // the current thread guard. However if we just executed a goto, use the
-  // pre-goto thread guard that we stored at that time. This is so that the
-  // thread we context switch to gets the guard of that context switch happening
-  // rather than the guard of either branch of the GOTO.
-  if (!pre_goto_guard.is_true())
-    parent_guard = pre_goto_guard.as_expr();
+  // Check if the `pre_goto_guard` condition is false.
+  if (pre_goto_guard.is_false())
+  {
+    // If `pre_goto_guard` is false, create a temporary guard (`tmp`)
+    // that combines `pre_goto_guard` with the guard of the last active thread.
+    guardt tmp = pre_goto_guard;
+
+    // Use the OR operator to merge `pre_goto_guard` with the guard of the
+    // last active thread, stored in `threads_state[last_active_thread].guard`.
+    tmp |= threads_state[last_active_thread].guard;
+
+    // Assign the resulting combined expression to `parent_guard`.
+    parent_guard = tmp.as_expr();
+  }
   else
+  {
+    // If `pre_goto_guard` is not false, assign the guard of the last active thread
+    // directly to `parent_guard` without any modifications.
     parent_guard = threads_state[last_active_thread].guard.as_expr();
+  }
 
   // If we simplified the global guard expr to false, write that to thread
   // guards, not the symbolic guard name. This is the only way to bail out of
   // evaluating a particular interleaving early right now.
   if (is_false(parent_guard) || is_cur_state_guard_false(parent_guard))
   {
+    // A context switch happens, add last thread state guard to assumption.
+    if (active_thread != last_active_thread)
+    {
+      target->assumption(
+        guardt().as_expr(),
+        parent_guard,
+        get_active_state().source,
+        first_loop);
+    }
     cur_state->guard.make_false();
     return;
   }
@@ -704,15 +721,6 @@ void execution_statet::execute_guard()
   if (active_thread != last_active_thread)
     target->assumption(
       guardt().as_expr(), parent_guard, get_active_state().source, first_loop);
-  // Check to see whether or not the state guard is false, indicating we've
-  // found an unviable interleaving. However don't do this if we didn't
-  // /actually/ switch between threads, because it's acceptable to have a
-  // context switch point in a branch where the guard is false (it just isn't
-  // acceptable to permit switching).
-  if (
-    last_active_thread != active_thread &&
-    is_cur_state_guard_false(threads_state[active_thread].guard.as_expr()))
-    interleaving_unviable = true;
 }
 
 unsigned int execution_statet::add_thread(const goto_programt *prog)
@@ -726,7 +734,8 @@ unsigned int execution_statet::add_thread(const goto_programt *prog)
 
   unsigned int thread_nr = threads_state.size();
   new_state.source.thread_nr = thread_nr;
-  new_state.global_guard = cur_state->guard;
+  new_state.guard = cur_state->guard;
+  new_state.global_guard.make_true();
   new_state.global_guard.add(get_guard_identifier());
   threads_state.push_back(new_state);
   preserved_paths.emplace_back();
@@ -749,17 +758,17 @@ unsigned int execution_statet::add_thread(const goto_programt *prog)
   // Update MPOR tracking data with newly initialized thread
   thread_last_reads.emplace_back();
   thread_last_writes.emplace_back();
-  // Unfortunately as each thread has a depenancy relation with every other
+  // Unfortunately as each thread has a dependency relation with every other
   // thread we have to do a lot of work to initialize a new one. And initially
   // all relations are '0', no transitions yet.
-  for (auto &it : dependancy_chain)
+  for (auto &it : dependency_chain)
   {
     it.push_back(0);
   }
-  // And the new threads dependancies,
-  dependancy_chain.emplace_back();
-  for (unsigned int i = 0; i < dependancy_chain.size(); i++)
-    dependancy_chain.back().push_back(0);
+  // And the new threads dependencies,
+  dependency_chain.emplace_back();
+  for (unsigned int i = 0; i < dependency_chain.size(); i++)
+    dependency_chain.back().push_back(0);
 
   // While we've recorded the new thread as starting in the designated program,
   // it might not run immediately, thus must have it's path preserved:
@@ -805,11 +814,20 @@ void execution_statet::analyze_read(const expr2tc &code)
   }
 }
 
+void execution_statet::analyze_args(const expr2tc &expr)
+{
+  if (threads_state.size() >= thread_cswitch_threshold)
+    analyze_read(expr);
+}
+
 void execution_statet::get_expr_globals(
   const namespacet &ns,
   const expr2tc &expr,
   std::set<expr2tc> &globals_list)
 {
+  if (options.get_bool_option("data-races-check-only"))
+    return;
+
   if (is_nil_expr(expr))
     return;
 
@@ -844,6 +862,7 @@ void execution_statet::get_expr_globals(
       return;
     }
 
+    expr2tc p = expr;
     bool point_to_global = false;
     if (
       symbol->type.is_pointer() && symbol->name != "invalid_object" &&
@@ -869,6 +888,7 @@ void execution_statet::get_expr_globals(
           if (!s)
             continue;
           point_to_global = s->static_lifetime || s->type.is_dynamic_set();
+          p = to_object_descriptor2t(obj).object;
           /* Stop when the global symbol is found */
           if (point_to_global)
             break;
@@ -876,55 +896,60 @@ void execution_statet::get_expr_globals(
       }
     }
 
+    // Rename to level1 to avoid shared varible mismatch in mpor.
+    cur_state->top().level1.rename(p);
     if (
       symbol->static_lifetime || symbol->type.is_dynamic_set() ||
       point_to_global)
     {
       std::list<unsigned int> threadId_list;
-      auto it_find = art1->vars_map.find(expr);
+      auto it_find = art1->vars_map.find(p);
 
       // the expression was accessed in another interleaving
       if (it_find != art1->vars_map.end())
       {
         threadId_list = it_find->second;
-        threadId_list.push_back(get_active_state().top().level1.thread_id);
-
-        art1->vars_map.insert(
-          std::pair<expr2tc, std::list<unsigned int>>(expr, threadId_list));
+        if (
+          std::find(
+            threadId_list.begin(), threadId_list.end(), active_thread) ==
+          threadId_list.end())
+        {
+          it_find->second.push_back(active_thread);
+        }
 
         std::list<unsigned int>::iterator it_list;
         for (it_list = threadId_list.begin(); it_list != threadId_list.end();
              ++it_list)
         {
           // find if some thread access the same expression
-          if (*it_list != get_active_state().top().level1.thread_id)
+          if (*it_list != active_thread)
           {
-            globals_list.insert(expr);
-            art1->is_global.insert(expr);
+            globals_list.insert(p);
+            art1->is_global.insert(p);
           }
           // expression was not accessed by other thread
           else
           {
-            auto its_global = art1->is_global.find(expr);
+            auto its_global = art1->is_global.find(p);
             // expression was defined as global in another interleaving
             if (its_global != art1->is_global.end())
-              globals_list.insert(expr);
+              globals_list.insert(p);
           }
         }
         // first access of expression
       }
       else
       {
-        auto its_global = art1->is_global.find(expr);
+        auto its_global = art1->is_global.find(p);
         if (its_global != art1->is_global.end())
-          globals_list.insert(expr);
+          globals_list.insert(p);
         else
         {
-          threadId_list.push_back(get_active_state().top().level1.thread_id);
+          threadId_list.push_back(active_thread);
           art1->vars_map.insert(
-            std::pair<expr2tc, std::list<unsigned int>>(expr, threadId_list));
-          globals_list.insert(expr);
-          art1->is_global.insert(expr);
+            std::pair<expr2tc, std::list<unsigned int>>(p, threadId_list));
+          globals_list.insert(p);
+          art1->is_global.insert(p);
         }
       }
     }
@@ -939,7 +964,7 @@ void execution_statet::get_expr_globals(
   });
 }
 
-bool execution_statet::check_mpor_dependancy(unsigned int j, unsigned int l)
+bool execution_statet::check_mpor_dependency(unsigned int j, unsigned int l)
   const
 {
   assert(j < threads_state.size());
@@ -988,10 +1013,10 @@ void execution_statet::calculate_mpor_constraints()
   //    0 that the thread hasn't run yet.
   //    1 that there is a dependency between these threads.
   //
-  //  dependancy_chain contains the state from the previous transition taken;
+  //  dependency_chain contains the state from the previous transition taken;
   //  here we update it to reflect the latest transition, and make a decision
   //  about progress later.
-  std::vector<std::vector<int>> new_dep_chain = dependancy_chain;
+  std::vector<std::vector<int>> new_dep_chain = dependency_chain;
 
   // Start new dependency chain for this thread. Default to there being no
   // relation.
@@ -1008,7 +1033,7 @@ void execution_statet::calculate_mpor_constraints()
     if (j == active_thread)
       continue;
 
-    if (dependancy_chain[j][active_thread] == 0)
+    if (dependency_chain[j][active_thread] == 0)
     {
       // This thread hasn't been run; continue not having been run.
       new_dep_chain[j][active_thread] = 0;
@@ -1024,11 +1049,11 @@ void execution_statet::calculate_mpor_constraints()
 
       for (unsigned int l = 0; l < new_dep_chain.size(); l++)
       {
-        if (dependancy_chain[j][l] != 1)
+        if (dependency_chain[j][l] != 1)
           continue; // No dependency relation here
 
         // Now check for variable dependency.
-        if (!check_mpor_dependancy(active_thread, l))
+        if (!check_mpor_dependency(active_thread, l))
           continue;
 
         res = 1;
@@ -1042,7 +1067,7 @@ void execution_statet::calculate_mpor_constraints()
   }
 
   // For /all other relations/, just propagate the dependency it already has.
-  // Achieved by initial duplication of dependancy_chain.
+  // Achieved by initial duplication of dependency_chain.
 
   // Voila, new dependency chain.
 
@@ -1064,7 +1089,7 @@ void execution_statet::calculate_mpor_constraints()
     bool dep_exists = false;
     for (unsigned int l = 0; l < active_thread; l++)
     {
-      if (dependancy_chain[j][l] == 1)
+      if (dependency_chain[j][l] == 1)
         dep_exists = true;
     }
 
@@ -1077,7 +1102,7 @@ void execution_statet::calculate_mpor_constraints()
 
   mpor_says_no = !can_run;
 
-  dependancy_chain = new_dep_chain;
+  dependency_chain = new_dep_chain;
 }
 
 bool execution_statet::has_cswitch_point_occured() const
@@ -1299,18 +1324,20 @@ void schedule_execution_statet::claim(
   const expr2tc &expr,
   const std::string &msg)
 {
-  unsigned int tmp_total, tmp_remaining;
+  unsigned int tmp_total, tmp_remaining, tmp_simplified;
 
   tmp_total = total_claims;
   tmp_remaining = remaining_claims;
-
+  tmp_simplified = simplified_claims;
   execution_statet::claim(expr, msg);
 
   tmp_total = total_claims - tmp_total;
   tmp_remaining = remaining_claims - tmp_remaining;
+  tmp_simplified = simplified_claims - tmp_simplified;
 
   *ptotal_claims += tmp_total;
   *premaining_claims += tmp_remaining;
+  *psimplified_claims += tmp_simplified;
 }
 
 execution_statet::state_hashing_level2t::state_hashing_level2t(

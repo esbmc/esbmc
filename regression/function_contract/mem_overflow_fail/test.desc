@@ -1,0 +1,4 @@
+CORE
+main.c
+--enforce-contract unchecked_add --function unchecked_add --overflow-check
+^VERIFICATION FAILED$

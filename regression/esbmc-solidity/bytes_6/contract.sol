@@ -1,15 +1,14 @@
-// SPDX-License-Identifier: GPL-3.0
-pragma solidity >=0.8.0;
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
 
-contract call {
-    function test() public pure returns (bytes memory) {
-        bytes memory x = new bytes(10);
-        return x;
-    }
-
-    function test_return() public pure {
-        bytes memory tmp = test();
-        assert(tmp[0] == 0x00);
-        assert(test()[0] == 0x00);
-    }
+contract ArrayAndBytesBuiltinTest {
+    uint x = 0x12;
+    string s = "12";
+    bytes a = bytes("1234");
+    bytes b = bytes(hex"1234");
+    bytes2 c = bytes2(hex"1234");
+    bytes2 d = bytes2(0x1234);
+    bytes e = bytes(s);
+    bytes f = hex"1234";
+    bytes g = "0x1234";
 }

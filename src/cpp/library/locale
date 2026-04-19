@@ -1,6 +1,7 @@
 #ifndef STL_LOCALE
 #define STL_LOCALE
 
+#include <ctime>
 #include "string"
 #include "iterator"
 #include "iostream"

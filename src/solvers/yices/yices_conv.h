@@ -21,7 +21,7 @@ public:
   ~yices_smt_ast() override = default;
 
   // Provide assign semantics for arrays. While yices will swallow array
-  // equalities, it appears to silently not honour them? From observation.
+  // equalities, it appears to silently not honor them? From observation.
   void assign(smt_convt *ctx, smt_astt sym) const override;
 
   smt_astt project(smt_convt *ctx, unsigned int elem) const override;

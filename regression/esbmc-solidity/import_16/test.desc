@@ -1,0 +1,4 @@
+THOROUGH
+contract2.solast
+--sol contract2.sol --k-induction --bound
+^VERIFICATION FAILED$

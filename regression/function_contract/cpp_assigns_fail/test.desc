@@ -1,0 +1,4 @@
+CORE
+main.cpp
+--enforce-contract foo --function foo
+^VERIFICATION FAILED$

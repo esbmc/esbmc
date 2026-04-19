@@ -21,15 +21,18 @@ extern "C"
 #include <cctype>
 #include <clang-c-frontend/clang_c_language.h>
 #include <util/config.h>
+#include <util/filesystem.h>
 #include <csignal>
 #include <cstdlib>
 #include <util/expr_util.h>
 #include <iostream>
 #include <goto-programs/add_race_assertions.h>
+#include <goto-programs/goto_atomicity_check.h>
 #include <goto-programs/goto_check.h>
 #include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/goto_inline.h>
 #include <goto-programs/goto_k_induction.h>
+#include <goto-programs/goto_loop_invariant.h>
 #include <goto-programs/abstract-interpretation/interval_analysis.h>
 #include <goto-programs/abstract-interpretation/gcse.h>
 #include <goto-programs/loop_numbers.h>
@@ -41,6 +44,7 @@ extern "C"
 #include <goto-programs/show_claims.h>
 #include <goto-programs/loop_unroll.h>
 #include <goto-programs/mark_decl_as_non_det.h>
+#include <goto-programs/assign_params_as_non_det.h>
 #include <goto2c/goto2c.h>
 #include <util/irep.h>
 #include <langapi/languages.h>
@@ -52,15 +56,16 @@ extern "C"
 #include <util/symbol.h>
 #include <util/time_stopping.h>
 #include <goto-programs/goto_cfg.h>
+#include <langapi/language_util.h>
+#include <goto-programs/contracts/contracts.h>
+#include <util/yaml_parser.h>
 
 #ifndef _WIN32
 #  include <sys/wait.h>
-#  include <execinfo.h>
 #  include <fcntl.h>
-#endif
-
-#ifdef ENABLE_OLD_FRONTEND
-#  include <ansi-c/c_preprocess.h>
+#  ifdef __GLIBC__
+#    include <execinfo.h>
+#  endif
 #endif
 
 #ifdef ENABLE_GOTO_CONTRACTOR
@@ -68,6 +73,11 @@ extern "C"
 #endif
 
 #define BT_BUF_SIZE 256
+
+// ANSI color/style escape sequences for terminal output
+#define CLR_BOLD_CYAN "\033[1;36m"
+#define CLR_BOLD "\033[1m"
+#define CLR_RESET "\033[0m"
 
 extern "C" const char buildidstring_buf[];
 extern "C" const unsigned int buildidstring_buf_size;
@@ -82,7 +92,8 @@ enum PROCESS_TYPE
   BASE_CASE,
   FORWARD_CONDITION,
   INDUCTIVE_STEP,
-  PARENT
+  NUM_CHILD_PROCESSES,
+  PARENT = NUM_CHILD_PROCESSES
 };
 
 struct resultt
@@ -95,10 +106,8 @@ struct resultt
 void timeout_handler(int)
 {
   log_error("Timed out");
-  // Unfortunately some highly useful pieces of code hook themselves into
-  // aexit and attempt to free some memory. That doesn't really make sense to
-  // occur on exit, but more importantly doesn't mix well with signal handlers,
-  // and results in the allocator locking against itself. So use _exit instead
+  file_operations::cleanup_registered_tmps();
+  // Use _exit to avoid atexit handlers that may deadlock the allocator
   _exit(1);
 }
 #endif
@@ -129,9 +138,11 @@ static void segfault_handler(int sig)
 {
   ::signal(sig, SIG_DFL);
   void *buffer[BT_BUF_SIZE];
+#  ifdef __GLIBC__
   int n = backtrace(buffer, BT_BUF_SIZE);
   dprintf(STDERR_FILENO, "\nSignal %d, backtrace:\n", sig);
   backtrace_symbols_fd(buffer, n, STDERR_FILENO);
+#  endif
   int fd = open("/proc/self/maps", O_RDONLY);
   if (fd != -1)
   {
@@ -294,6 +305,9 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   options.cmdline(cmdline);
   set_verbosity_msg();
 
+  // Resolve --color option: validate and convert to boolean
+  options.set_option("color", resolve_color_option());
+
   if (cmdline.isset("git-hash"))
   {
     log_result("{}", esbmc_version_string());
@@ -317,6 +331,11 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   if (cmdline.isset("ir"))
     options.set_option("int-encoding", true);
 
+  if (cmdline.isset("ir-ieee"))
+  {
+    options.set_option("int-encoding", true);
+    options.set_option("ir-ieee", true);
+  }
   if (cmdline.isset("fixedbv"))
     options.set_option("fixedbv", true);
   else
@@ -338,37 +357,42 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   if (cmdline.isset("compact-trace"))
     options.set_option("no-slice", true);
 
-  if (cmdline.isset("smt-during-symex"))
+  if (
+    cmdline.isset("smt-thread-guard") || cmdline.isset("smt-symex-guard") ||
+    cmdline.isset("smt-symex-assert") || cmdline.isset("smt-symex-assume"))
   {
-    log_status("Enabling --no-slice due to presence of --smt-during-symex");
-    options.set_option("no-slice", true);
-  }
-
-  if (cmdline.isset("smt-thread-guard") || cmdline.isset("smt-symex-guard"))
-  {
-    if (!cmdline.isset("smt-during-symex"))
-    {
-      log_error(
-        "Please explicitly specify --smt-during-symex if you want "
-        "to use features that involve encoding SMT during symex");
-      abort();
-    }
+    log_status(
+      "Enabling --smt-during-symex to use features that involve encoding SMT "
+      "during symex");
+    options.set_option("smt-during-symex", true);
   }
 
   // check the user's parameters to run incremental verification
   if (!cmdline.isset("unlimited-k-steps"))
   {
     // Get max number of iterations
-    BigInt max_k_step = strtoul(cmdline.getval("max-k-step"), nullptr, 10);
+    uint64_t max_k_step = strtoul(cmdline.getval("max-k-step"), nullptr, 10);
 
     // Get the increment
-    unsigned k_step_inc = strtoul(cmdline.getval("k-step"), nullptr, 10);
+    uint64_t k_step_inc = strtoul(cmdline.getval("k-step"), nullptr, 10);
+
+    // Get the start of the base-case, default 1
+    uint64_t k_step_base = strtoul(cmdline.getval("base-k-step"), nullptr, 10);
 
     // check whether k-step is greater than max-k-step
     if (k_step_inc >= max_k_step)
     {
       log_error(
-        "Please specify --k-step smaller than max-k-step if you want "
+        "Please specify --k-step smaller than max-k-step if you want to use "
+        "incremental verification.");
+      abort();
+    }
+
+    // check whether k_step_inc is greater than max-k-step
+    if (k_step_base >= max_k_step)
+    {
+      log_error(
+        "Please specify --base-k-step smaller than max-k-step if you want "
         "to use incremental verification.");
       abort();
     }
@@ -395,6 +419,39 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("no-unwinding-assertions", true);
     options.set_option("partial-loops", false);
   }
+
+  // --loop-invariant implicitly enables k-induction solving so that
+  // do_bmc_strategy runs the full base/forward/inductive-step loop.
+  if (
+    cmdline.isset("loop-invariant") ||
+    cmdline.isset("validate-correctness-witness"))
+    options.set_option("k-induction", true);
+
+  // Check for conflicting strategies
+  if (cmdline.isset("k-induction") && cmdline.isset("termination"))
+  {
+    log_warning(
+      "Both --k-induction and --termination specified. "
+      "Using --k-induction (which does not include termination checking).");
+    // Optionally disable termination flag
+    options.set_option("termination", false);
+  }
+
+  // interval-symex-guard is designed for plain BMC loop-counter tracking.
+  // Disable it for advanced verification modes whose GOTO/symex transformations
+  // are incompatible with a single shared (non-forked) interval_domaint:
+  //   - incremental-BMC reuses one goto_symext across unwind iterations
+  //   - k-induction (base/forward/inductive) havocs loop variables
+  //   - loop-invariant and function contracts inject havoc+assume sequences
+  if (
+    options.get_bool_option("k-induction") ||
+    cmdline.isset("k-induction-parallel") || cmdline.isset("incremental-bmc") ||
+    cmdline.isset("termination") || cmdline.isset("enforce-contract") ||
+    cmdline.isset("enforce-all-contracts") ||
+    cmdline.isset("replace-call-with-contract") ||
+    cmdline.isset("replace-all-contracts") || cmdline.isset("base-case") ||
+    cmdline.isset("forward-condition") || cmdline.isset("inductive-step"))
+    options.set_option("no-interval-symex-guard", true);
 
   if (
     cmdline.isset("overflow-check") || cmdline.isset("unsigned-overflow-check"))
@@ -467,16 +524,91 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   }
 #endif
 
-  // If multi-property is on, we should set result-only and base-case
+  // parallel solving activates "--multi-property"
+  if (cmdline.isset("parallel-solving"))
+  {
+    options.set_option("base-case", true);
+    options.set_option("multi-property", true);
+  }
+
+  // If multi-property is on, we should set base-case
   if (cmdline.isset("multi-property"))
   {
-    options.set_option("result-only", true);
     options.set_option("base-case", true);
   }
 
   /* compatibility: --cvc maps to --cvc4 */
   if (cmdline.isset("cvc"))
     options.set_option("cvc4", true);
+
+  if (cmdline.isset("log-message"))
+    options.set_option("log-message", true);
+
+  if (cmdline.isset("keep_alive_running"))
+    options.set_option("keep_alive_running", true);
+
+  if (cmdline.isset("keep-alive-interval"))
+    options.set_option(
+      "keep-alive-interval", cmdline.getval("keep-alive-interval"));
+
+  if (cmdline.isset("override-return-annotation"))
+    options.set_option("override-return-annotation", true);
+
+  if (cmdline.isset("witness-output-yaml"))
+  {
+    std::string filename = cmdline.getval("witness-output-yaml");
+    boost::filesystem::path n(filename);
+
+    if (n.extension() == ".yaml" || n.extension() == ".yml")
+    {
+      // expected extension
+    }
+    else if (!n.has_extension())
+    {
+      if (n != "-")
+        options.set_option("witness-output-yaml", filename + ".yml");
+    }
+    else
+    {
+      log_error(
+        "Output file has extension {}, expected yaml or yml.",
+        n.extension().string());
+      abort();
+    }
+  }
+
+  if (cmdline.isset("witness-output-graphml"))
+  {
+    std::string filename = cmdline.getval("witness-output-graphml");
+    boost::filesystem::path n(filename);
+
+    if (n.extension() == ".graphml")
+    {
+      // expected extension
+    }
+    else if (!n.has_extension())
+    {
+      if (n != "-")
+        options.set_option("witness-output-graphml", filename + ".graphml");
+    }
+    else
+    {
+      log_error(
+        "Output file has extension {}, expected graphml.",
+        n.extension().string());
+      abort();
+    }
+  }
+
+  if (cmdline.isset("witness-output"))
+  {
+    std::string filename = cmdline.getval("witness-output");
+    boost::filesystem::path n(filename);
+    n.replace_extension("");
+
+    options.set_option("witness-output-yaml", filename + ".yml");
+    options.set_option("witness-output-graphml", filename + ".graphml");
+  }
 
   config.options = options;
 }
@@ -540,9 +672,20 @@ int esbmc_parseoptionst::doit()
         std::make_unique<bounded_loop_unroller>(unroll_limit));
     }
 
+    // Unroll intrinsic support
+    goto_preprocess_algorithms.emplace_back(
+      std::make_unique<apply_intrinsic_unroller>());
+
     // Explicitly marking all declared variables as "nondet"
     goto_preprocess_algorithms.emplace_back(
       std::make_unique<mark_decl_as_non_det>(context));
+
+    if (cmdline.isset("function") && cmdline.isset("assign-param-nondet"))
+    {
+      // assign parameters to "nondet"
+      goto_preprocess_algorithms.emplace_back(
+        std::make_unique<assign_params_as_non_det>(context));
+    }
   }
 
   // Run this before the main flow. This method performs its own
@@ -557,6 +700,17 @@ int esbmc_parseoptionst::doit()
   // Parse ESBMC options (CMD + set internal options)
   optionst options;
   get_command_line_options(options);
+
+  // for solidity
+  if (cmdline.isset("sol"))
+  {
+    // set default options
+    options.set_option(
+      "no-align-check", true); // no need to check alignment in solidity
+    options.set_option("no-unlimited-scanf-check", true);
+    options.set_option(
+      "force-malloc-success", true); // for calloc in the 'newexpression'
+  }
 
   // Create and preprocess a GOTO program
   if (get_goto_program(options, goto_functions))
@@ -583,7 +737,8 @@ int esbmc_parseoptionst::doit()
   // Now run one of the chosen strategies
   if (
     cmdline.isset("termination") || cmdline.isset("incremental-bmc") ||
-    cmdline.isset("falsification") || cmdline.isset("k-induction"))
+    cmdline.isset("falsification") || cmdline.isset("k-induction") ||
+    cmdline.isset("loop-invariant"))
     return do_bmc_strategy(options, goto_functions);
 
   // If no strategy is chosen, just rely on the simplifier
@@ -678,12 +833,22 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
   }
 
   // Get max number of iterations
-  BigInt max_k_step = cmdline.isset("unlimited-k-steps")
-                        ? UINT_MAX
-                        : strtoul(cmdline.getval("max-k-step"), nullptr, 10);
+  uint64_t max_k_step = cmdline.isset("unlimited-k-steps")
+                          ? UINT_MAX
+                          : strtoul(cmdline.getval("max-k-step"), nullptr, 10);
 
   // Get the increment
-  unsigned k_step_inc = strtoul(cmdline.getval("k-step"), nullptr, 10);
+  uint64_t k_step_inc = strtoul(cmdline.getval("k-step"), nullptr, 10);
+
+  // Get the start of the base-case, default 1
+  uint64_t k_step_base = strtoul(cmdline.getval("base-k-step"), nullptr, 10);
+  if (k_step_base >= max_k_step)
+  {
+    log_error(
+      "Please specify --base-k-step smaller than max-k-step if you want "
+      "to use incremental verification.");
+    abort();
+  }
 
   // All processes were created successfully
   switch (process_type)
@@ -695,21 +860,27 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     close(backward_pipe[0]);
 
     struct resultt a_result;
-    bool bc_finished = false, fc_finished = false, is_finished = false;
-    BigInt bc_solution = max_k_step, fc_solution = max_k_step,
-           is_solution = max_k_step;
+    bool finished[NUM_CHILD_PROCESSES] = {};
+    bool intentionally_killed[NUM_CHILD_PROCESSES] = {};
+    const char *process_name[NUM_CHILD_PROCESSES] = {
+      "base case", "forward condition", "inductive step"};
+    uint64_t solution[NUM_CHILD_PROCESSES] = {
+      max_k_step, max_k_step, max_k_step};
 
     // Keep reading until we find an answer
-    while (!(bc_finished && fc_finished && is_finished))
+    while (
+      !(finished[BASE_CASE] && finished[FORWARD_CONDITION] &&
+        finished[INDUCTIVE_STEP]))
     {
       // Perform read and interpret the number of bytes read
+      bool valid_read = true;
       int read_size = read(forward_pipe[0], &a_result, sizeof(resultt));
       if (read_size != sizeof(resultt))
       {
         if (read_size == 0)
         {
-          // Client hung up; continue on, but don't interpret the result.
-          ;
+          // Client hung up; check child status but don't interpret result.
+          valid_read = false;
         }
         else
         {
@@ -720,83 +891,41 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         }
       }
 
-      // Eventually the parent process will check if the child process is alive
-
-      // Check base case process
-      if (!bc_finished)
+      // Check if any child process has terminated
+      for (int i = 0; i < NUM_CHILD_PROCESSES; i++)
       {
+        if (finished[i])
+          continue;
+
         int status;
-        pid_t result = waitpid(children_pid[0], &status, WNOHANG);
-        if (result == 0)
+        pid_t result = waitpid(children_pid[i], &status, WNOHANG);
+        if (result <= 0)
+          continue;
+
+        if (intentionally_killed[i] || WIFEXITED(status))
         {
-          // Child still alive
+          finished[i] = true;
         }
-        else if (result == -1)
+        else if (WIFSIGNALED(status))
         {
-          // Error
-        }
-        else
-        {
-          log_warning("base case process crashed.");
-          bc_finished = fc_finished = is_finished = true;
+          log_warning(
+            "{} process was terminated by signal {:d}.",
+            process_name[i],
+            WTERMSIG(status));
+          std::fill(finished, finished + NUM_CHILD_PROCESSES, true);
         }
       }
 
-      // Check forward condition process
-      if (!fc_finished)
-      {
-        int status;
-        pid_t result = waitpid(children_pid[1], &status, WNOHANG);
-        if (result == 0)
-        {
-          // Child still alive
-        }
-        else if (result == -1)
-        {
-          // Error
-        }
-        else
-        {
-          log_warning("forward condition process crashed.");
-          fc_finished = bc_finished = is_finished = true;
-        }
-      }
-
-      // Check inductive step process
-      if (!is_finished)
-      {
-        int status;
-        pid_t result = waitpid(children_pid[2], &status, WNOHANG);
-        if (result == 0)
-        {
-          // Child still alive
-        }
-        else if (result == -1)
-        {
-          // Error
-        }
-        else
-        {
-          log_warning("inductive step process crashed.");
-          is_finished = bc_finished = fc_finished = true;
-        }
-      }
+      if (!valid_read)
+        continue;
 
       switch (a_result.type)
       {
       case BASE_CASE:
-        bc_finished = true;
-        bc_solution = a_result.k;
-        break;
-
       case FORWARD_CONDITION:
-        fc_finished = true;
-        fc_solution = a_result.k;
-        break;
-
       case INDUCTIVE_STEP:
-        is_finished = true;
-        is_solution = a_result.k;
+        finished[a_result.type] = true;
+        solution[a_result.type] = a_result.k;
         break;
 
       default:
@@ -806,27 +935,32 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
 
       // If either the base case found a bug or the forward condition
       // finds a solution, present the result
-      if (bc_finished && (bc_solution != 0) && (bc_solution != max_k_step))
+      if (
+        finished[BASE_CASE] && (solution[BASE_CASE] != 0) &&
+        (solution[BASE_CASE] != max_k_step))
         break;
 
       // If the either the forward condition or inductive step finds a
       // solution, first check if base case couldn't find a bug in that code,
       // if there is no bug, inductive step can present the result
-      if (fc_finished && (fc_solution != 0) && (fc_solution != max_k_step))
+      if (
+        finished[FORWARD_CONDITION] && (solution[FORWARD_CONDITION] != 0) &&
+        (solution[FORWARD_CONDITION] != max_k_step))
       {
         // If base case finished, then we can present the result
-        if (bc_finished)
+        if (finished[BASE_CASE])
           break;
 
         // Otherwise, kill the inductive step process
-        kill(children_pid[2], SIGKILL);
+        intentionally_killed[INDUCTIVE_STEP] = true;
+        kill(children_pid[INDUCTIVE_STEP], SIGKILL);
 
         // And ask base case for a solution
 
         // Struct to keep the result
         struct resultt r = {process_type, 0};
 
-        r.k = fc_solution.to_uint64();
+        r.k = solution[FORWARD_CONDITION];
 
         // Write result
         auto const len = write(backward_pipe[1], &r, sizeof(r));
@@ -834,21 +968,24 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         (void)len; //ndebug
       }
 
-      if (is_finished && (is_solution != 0) && (is_solution != max_k_step))
+      else if (
+        finished[INDUCTIVE_STEP] && (solution[INDUCTIVE_STEP] != 0) &&
+        (solution[INDUCTIVE_STEP] != max_k_step))
       {
         // If base case finished, then we can present the result
-        if (bc_finished)
+        if (finished[BASE_CASE])
           break;
 
         // Otherwise, kill the forward condition process
-        kill(children_pid[1], SIGKILL);
+        intentionally_killed[FORWARD_CONDITION] = true;
+        kill(children_pid[FORWARD_CONDITION], SIGKILL);
 
         // And ask base case for a solution
 
         // Struct to keep the result
         struct resultt r = {process_type, 0};
 
-        r.k = is_solution.to_uint64();
+        r.k = solution[INDUCTIVE_STEP];
 
         // Write result
         auto const len = write(backward_pipe[1], &r, sizeof(r));
@@ -861,47 +998,53 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       kill(i, SIGKILL);
 
     // Check if a solution was found by the base case
-    if (bc_finished && (bc_solution != 0) && (bc_solution != max_k_step))
+    if (
+      finished[BASE_CASE] && (solution[BASE_CASE] != 0) &&
+      (solution[BASE_CASE] != max_k_step))
     {
       log_result(
         "\nBug found by the base case (k = {})\nVERIFICATION FAILED",
-        bc_solution);
+        solution[BASE_CASE]);
       return true;
     }
 
     // Check if a solution was found by the forward condition
-    if (fc_finished && (fc_solution != 0) && (fc_solution != max_k_step))
+    if (
+      finished[FORWARD_CONDITION] && (solution[FORWARD_CONDITION] != 0) &&
+      (solution[FORWARD_CONDITION] != max_k_step))
     {
       // We should only present the result if the base case finished
-      // and haven't crashed (if it crashed, bc_solution will be UINT_MAX
-      if (bc_finished && (bc_solution != max_k_step))
+      // and haven't crashed (if it crashed, solution will be UINT_MAX)
+      if (finished[BASE_CASE] && (solution[BASE_CASE] != max_k_step))
       {
         log_success(
           "\nSolution found by the forward condition; "
           "all states are reachable (k = {:d})\n"
           "VERIFICATION SUCCESSFUL",
-          fc_solution);
+          solution[FORWARD_CONDITION]);
         return false;
       }
     }
 
     // Check if a solution was found by the inductive step
-    if (is_finished && (is_solution != 0) && (is_solution != max_k_step))
+    if (
+      finished[INDUCTIVE_STEP] && (solution[INDUCTIVE_STEP] != 0) &&
+      (solution[INDUCTIVE_STEP] != max_k_step))
     {
       // We should only present the result if the base case finished
-      // and haven't crashed (if it crashed, bc_solution will be UINT_MAX
-      if (bc_finished && (bc_solution != max_k_step))
+      // and haven't crashed (if it crashed, solution will be UINT_MAX)
+      if (finished[BASE_CASE] && (solution[BASE_CASE] != max_k_step))
       {
         log_success(
           "\nSolution found by the inductive step "
           "(k = {:d})\n"
           "VERIFICATION SUCCESSFUL",
-          is_solution);
+          solution[INDUCTIVE_STEP]);
         return false;
       }
     }
 
-    // Couldn't find a bug or a proof for the current deepth
+    // Couldn't find a bug or a proof for the current depth
     log_fail("\nVERIFICATION UNKNOWN");
     return false;
   }
@@ -926,12 +1069,13 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     // Run bmc and only send results in two occasions:
     // 1. A bug was found, we send the step where it was found
     // 2. It couldn't find a bug
-    for (BigInt k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
+    for (uint64_t k_step = k_step_base; k_step <= max_k_step;
+         k_step += k_step_inc)
     {
       bmct bmc(goto_functions, options, context);
       bmc.options.set_option("unwind", integer2string(k_step));
 
-      log_status("Checking base case, k = {:d}\n", k_step);
+      log_progress("Checking base case, k = {:d}\n", k_step);
 
       // If an exception was thrown, we should abort the process
       int res = smt_convt::P_ERROR;
@@ -947,7 +1091,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       // Send information to parent if no bug was found
       if (res == smt_convt::P_SATISFIABLE)
       {
-        r.k = k_step.to_uint64();
+        r.k = k_step;
 
         // Write result
         auto const len = write(forward_pipe[1], &r, sizeof(r));
@@ -1030,7 +1174,8 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     // Run bmc and only send results in two occasions:
     // 1. A proof was found, we send the step where it was found
     // 2. It couldn't find a proof
-    for (BigInt k_step = 2; k_step <= max_k_step; k_step += k_step_inc)
+    for (uint64_t k_step = k_step_base + 1; k_step <= max_k_step;
+         k_step += k_step_inc)
     {
       bmct bmc(goto_functions, options, context);
       bmc.options.set_option("unwind", integer2string(k_step));
@@ -1054,7 +1199,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       // Send information to parent if no bug was found
       if (res == smt_convt::P_UNSATISFIABLE)
       {
-        r.k = k_step.to_uint64();
+        r.k = k_step;
 
         // Write result
         auto const len = write(forward_pipe[1], &r, sizeof(r));
@@ -1097,7 +1242,8 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     // Run bmc and only send results in two occasions:
     // 1. A proof was found, we send the step where it was found
     // 2. It couldn't find a proof
-    for (BigInt k_step = 2; k_step <= max_k_step; k_step += k_step_inc)
+    for (uint64_t k_step = k_step_base + 1; k_step <= max_k_step;
+         k_step += k_step_inc)
     {
       bmct bmc(goto_functions, options, context);
 
@@ -1122,7 +1268,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       // Send information to parent if no bug was found
       if (res == smt_convt::P_UNSATISFIABLE)
       {
-        r.k = k_step.to_uint64();
+        r.k = k_step;
 
         // Write result
         auto const len = write(forward_pipe[1], &r, sizeof(r));
@@ -1164,7 +1310,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
 //  3) Falsification
 //  4) k-induction
 //
-// Applying a strategy in this context means solving a paticular sequence
+// Applying a strategy in this context means solving a particular sequence
 // of decision problems from the list below for the given unwinding bound k:
 //
 //  - Base case             (see "is_base_case_violated")
@@ -1172,41 +1318,112 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
 //  - Inductive step        (see "is_inductive_step_violated")
 //
 // \param options - options for setting the verification strategy
-// and conrolling symbolic execution
+// and controlling symbolic execution
 // \param goto_functions - GOTO program under verification
 int esbmc_parseoptionst::do_bmc_strategy(
   optionst &options,
   goto_functionst &goto_functions)
 {
   // Get max number of iterations
-  BigInt max_k_step = cmdline.isset("unlimited-k-steps")
-                        ? UINT_MAX
-                        : strtoul(cmdline.getval("max-k-step"), nullptr, 10);
+  uint64_t max_k_step = cmdline.isset("unlimited-k-steps")
+                          ? UINT_MAX
+                          : strtoul(cmdline.getval("max-k-step"), nullptr, 10);
 
   // Get the increment
   unsigned k_step_inc = strtoul(cmdline.getval("k-step"), nullptr, 10);
 
-  // Trying all bounds from 1 to "max_k_step" in "k_step_inc"
-  for (BigInt k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
+  // Get the start of the base-case, default 1
+  unsigned k_step_base = strtoul(cmdline.getval("base-k-step"), nullptr, 10);
+
+  // For pytest test generation
+  pytest_generator pytest_gen;
+
+  // For ctest test generation
+  ctest_generator ctest_gen;
+
+  if (k_step_base >= max_k_step)
   {
+    log_error(
+      "Please specify --base-k-step smaller than max-k-step if you want "
+      "to use incremental verification.");
+    abort();
+  }
+
+  // Track whether any violation was found across all k steps.
+  // In multi-property mode the loop continues past a violation to check
+  // remaining properties, so we must remember the failure for the final verdict.
+  bool any_violation_found = false;
+
+  // Helper: emit the final verdict and return the correct exit code once a
+  // proof or refutation has been found.  In multi-property mode the loop may
+  // have continued past an earlier violation, so we must return 1 even when
+  // the closing step (FC/IS) itself succeeds.
+  auto conclude = [&]() -> int {
+    // In coverage mode violations are expected; always report success.
+    if (any_violation_found && !is_coverage)
+    {
+      log_fail("\nVERIFICATION FAILED");
+      return 1;
+    }
+    return 0;
+  };
+
+  // Trying all bounds from 1 to "max_k_step" in "k_step_inc"
+  uint64_t last_k_step = k_step_base;
+  for (uint64_t k_step = k_step_base; k_step <= max_k_step;
+       k_step += k_step_inc)
+  {
+    last_k_step = k_step;
     // k-induction
     if (options.get_bool_option("k-induction"))
     {
+      bool is_bcv =
+        is_base_case_violated(options, goto_functions, k_step).is_true();
+      if (is_bcv)
+      {
+        any_violation_found = true;
+        // Suppress spurious VERIFICATION SUCCESSFUL from report_result at
+        // subsequent k steps where no new violations are found.
+        options.set_option("kind-violation-found", true);
+      }
+
       if (
-        is_base_case_violated(options, goto_functions, k_step).is_true() &&
-        !cmdline.isset("multi-property"))
+        is_bcv && !cmdline.isset("multi-property") &&
+        !options.get_bool_option("multi-property"))
         return 1;
 
-      if (does_forward_condition_hold(options, goto_functions, k_step)
-            .is_false())
-        return 0;
+      // if the property is proven violated in the bs, it's unnecessary to further run fw and is
+      // this will make the trace looks cleaner yet might lead to an extra round to terminate the verification
+      if (
+        !is_bcv &&
+        does_forward_condition_hold(options, goto_functions, k_step).is_false())
+      {
+        if (is_coverage)
+          report_coverage(
+            options,
+            goto_functions.reached_claims,
+            goto_functions.reached_mul_claims,
+            pytest_gen,
+            ctest_gen);
+        return conclude();
+      }
 
       // Don't run inductive step for k_step == 1
       if (k_step > 1)
       {
-        if (is_inductive_step_violated(options, goto_functions, k_step)
-              .is_false())
-          return 0;
+        if (
+          !is_bcv && is_inductive_step_violated(options, goto_functions, k_step)
+                       .is_false())
+        {
+          if (is_coverage)
+            report_coverage(
+              options,
+              goto_functions.reached_claims,
+              goto_functions.reached_mul_claims,
+              pytest_gen,
+              ctest_gen);
+          return conclude();
+        }
       }
     }
     // termination
@@ -1224,14 +1441,32 @@ int esbmc_parseoptionst::do_bmc_strategy(
     // incremental-bmc
     if (options.get_bool_option("incremental-bmc"))
     {
+      bool is_bcv =
+        is_base_case_violated(options, goto_functions, k_step).is_true();
+      if (is_bcv)
+      {
+        any_violation_found = true;
+        options.set_option("kind-violation-found", true);
+      }
+
       if (
-        is_base_case_violated(options, goto_functions, k_step).is_true() &&
-        !cmdline.isset("multi-property"))
+        is_bcv && !cmdline.isset("multi-property") &&
+        !options.get_bool_option("multi-property"))
         return 1;
 
-      if (does_forward_condition_hold(options, goto_functions, k_step)
-            .is_false())
-        return 0;
+      if (
+        !is_bcv &&
+        does_forward_condition_hold(options, goto_functions, k_step).is_false())
+      {
+        if (is_coverage)
+          report_coverage(
+            options,
+            goto_functions.reached_claims,
+            goto_functions.reached_mul_claims,
+            pytest_gen,
+            ctest_gen);
+        return conclude();
+      }
     }
     // falsification
     if (options.get_bool_option("falsification"))
@@ -1241,8 +1476,21 @@ int esbmc_parseoptionst::do_bmc_strategy(
     }
   }
 
+  if (
+    options.get_bool_option("multi-property") &&
+    options.get_bool_option("k-induction"))
+    diagnose_unknown_properties(options, goto_functions, last_k_step);
+
   log_status("Unable to prove or falsify the program, giving up.");
   log_fail("VERIFICATION UNKNOWN");
+
+  if (is_coverage)
+    report_coverage(
+      options,
+      goto_functions.reached_claims,
+      goto_functions.reached_mul_claims,
+      pytest_gen,
+      ctest_gen);
   return 0;
 }
 
@@ -1261,7 +1509,7 @@ int esbmc_parseoptionst::do_bmc_strategy(
 tvt esbmc_parseoptionst::is_base_case_violated(
   optionst &options,
   goto_functionst &goto_functions,
-  const BigInt &k_step)
+  const uint64_t &k_step)
 {
   options.set_option("base-case", true);
   options.set_option("forward-condition", false);
@@ -1272,7 +1520,7 @@ tvt esbmc_parseoptionst::is_base_case_violated(
 
   bmct bmc(goto_functions, options, context);
 
-  log_status("Checking base case, k = {:d}", k_step);
+  log_progress("Checking base case, k = {:d}", k_step);
   switch (do_bmc(bmc))
   {
   case smt_convt::P_UNSATISFIABLE:
@@ -1310,7 +1558,7 @@ tvt esbmc_parseoptionst::is_base_case_violated(
 tvt esbmc_parseoptionst::does_forward_condition_hold(
   optionst &options,
   goto_functionst &goto_functions,
-  const BigInt &k_step)
+  const uint64_t &k_step)
 {
   if (options.get_bool_option("disable-forward-condition"))
     return tvt(tvt::TV_UNKNOWN);
@@ -1379,14 +1627,12 @@ tvt esbmc_parseoptionst::does_forward_condition_hold(
 tvt esbmc_parseoptionst::is_inductive_step_violated(
   optionst &options,
   goto_functionst &goto_functions,
-  const BigInt &k_step)
+  const uint64_t &k_step)
 {
   if (options.get_bool_option("disable-inductive-step"))
     return tvt(tvt::TV_UNKNOWN);
 
-  if (
-    strtoul(cmdline.getval("max-inductive-step"), nullptr, 10) <
-    k_step.to_uint64())
+  if (strtoul(cmdline.getval("max-inductive-step"), nullptr, 10) < k_step)
     return tvt(tvt::TV_UNKNOWN);
 
   options.set_option("base-case", false);
@@ -1566,8 +1812,33 @@ bool esbmc_parseoptionst::create_goto_program(
     // If the user is providing the GOTO functions, we don't need to parse
     if (cmdline.isset("binary"))
     {
+      if (cmdline.isset("cprover"))
+        log_warning(
+          "Be sure you are manually linking with the cprover libraries. This "
+          "will be automated in the future.");
       if (read_goto_binary(goto_functions))
         return true;
+
+      if (cmdline.isset("function"))
+      {
+        Forall_goto_program_instructions (
+          it, goto_functions.function_map["__ESBMC_main"].body)
+        {
+          if (!it->is_function_call())
+            continue;
+
+          if (
+            !is_symbol2t(to_code_function_call2t(it->code).function) ||
+            to_symbol2t(to_code_function_call2t(it->code).function).thename !=
+              "c:@F@main")
+            continue;
+
+          to_code_function_call2t(it->code).function =
+            symbol2tc(get_empty_type(), cmdline.getval("function"));
+        }
+      }
+
+      goto_functions.update();
     }
     else
     {
@@ -1636,10 +1907,10 @@ bool esbmc_parseoptionst::parse_goto_program(
         it.second->show_parse(oss);
       log_status("{}", oss.str());
       if (cmdline.isset("parse-tree-only"))
-        return true;
+        exit(0);
     }
 
-    // Typecheking (old frontend) or adjust (clang frontend)
+    // Typechecking (old frontend) or adjust (clang frontend)
     if (typecheck())
       return true;
     if (final())
@@ -1654,7 +1925,22 @@ bool esbmc_parseoptionst::parse_goto_program(
       show_symbol_table_plain(oss);
       log_status("{}", oss.str());
       if (cmdline.isset("symbol-table-only"))
-        return true;
+        exit(0);
+    }
+
+    // Expand --no-standard-checks into individual options before goto_convert,
+    // because VLA size checks are generated during goto conversion.
+    if (
+      cmdline.isset("no-standard-checks") ||
+      options.get_bool_option("no-standard-checks"))
+    {
+      options.set_option("no-pointer-check", true);
+      options.set_option("no-div-by-zero-check", true);
+      options.set_option("no-pointer-relation-check", true);
+      options.set_option("no-unlimited-scanf-check", true);
+      options.set_option("no-vla-size-check", true);
+      options.set_option("no-align-check", true);
+      options.set_option("no-bounds-check", true);
     }
 
     log_progress("Generating GOTO Program");
@@ -1703,11 +1989,40 @@ bool esbmc_parseoptionst::process_goto_program(
   {
     namespacet ns(context);
 
-    bool is_no_remove = cmdline.isset("multi-property") ||
-                        cmdline.isset("assertion-coverage") ||
-                        cmdline.isset("assertion-coverage-claims") ||
-                        cmdline.isset("condition-coverage") ||
-                        cmdline.isset("condition-coverage-claims");
+    bool is_mul =
+      cmdline.isset("multi-property") || cmdline.isset("parallel-solving");
+    is_coverage = cmdline.isset("assertion-coverage") ||
+                  cmdline.isset("assertion-coverage-claims") ||
+                  cmdline.isset("condition-coverage") ||
+                  cmdline.isset("condition-coverage-claims") ||
+                  cmdline.isset("condition-coverage-rm") ||
+                  cmdline.isset("condition-coverage-claims-rm") ||
+                  cmdline.isset("branch-coverage") ||
+                  cmdline.isset("branch-coverage-claims") ||
+                  cmdline.isset("branch-function-coverage") ||
+                  cmdline.isset("branch-function-coverage-claims");
+
+    // For coverage mode, treat extra input files (cmdline.args[1:]) as include
+    // files so that the coverage location_pool covers all input sources.
+    if (is_coverage && cmdline.args.size() > 1)
+      for (size_t i = 1; i < cmdline.args.size(); i++)
+        config.ansi_c.include_files.push_back(cmdline.args[i]);
+
+    // Expand --no-standard-checks before goto_check (also expanded before
+    // goto_convert in parse_goto_program; re-expanding here is idempotent
+    // and covers the read_goto_binary path).
+    if (
+      cmdline.isset("no-standard-checks") ||
+      options.get_bool_option("no-standard-checks"))
+    {
+      options.set_option("no-pointer-check", true);
+      options.set_option("no-div-by-zero-check", true);
+      options.set_option("no-pointer-relation-check", true);
+      options.set_option("no-unlimited-scanf-check", true);
+      options.set_option("no-vla-size-check", true);
+      options.set_option("no-align-check", true);
+      options.set_option("no-bounds-check", true);
+    }
 
     // Start by removing all no-op instructions and unreachable code
     if (!(cmdline.isset("no-remove-no-op")))
@@ -1716,13 +2031,20 @@ bool esbmc_parseoptionst::process_goto_program(
     // We should skip this 'remove-unreachable' removal in goto-cov and multi-property
     // - multi-property wants to find all the bugs in the src code
     // - assertion-coverage wants to find out unreached codes (asserts)
-    // - however, the optimisation below will remove codes during the Goto stage
-    if (!(cmdline.isset("no-remove-unreachable") || is_no_remove))
+    // - however, the optimization below will remove codes during the Goto stage
+    if (
+      !(cmdline.isset("no-remove-unreachable") || is_mul || is_coverage) ||
+      cmdline.isset("condition-coverage-rm") ||
+      cmdline.isset("condition-coverage-claims-rm"))
       remove_unreachable(goto_functions);
 
     // Apply all the initialized algorithms
     for (auto &algorithm : goto_preprocess_algorithms)
+    {
+      if (cmdline.isset("function"))
+        algorithm->setTarget(cmdline.getval("function"));
       algorithm->run(goto_functions);
+    }
 
     // do partial inlining
     if (!cmdline.isset("no-inlining"))
@@ -1756,6 +2078,14 @@ bool esbmc_parseoptionst::process_goto_program(
           "optimizations will be disabled");
         vsa = nullptr;
       }
+      catch (const std::string &e)
+      {
+        log_warning(
+          "[GOTO] Unable to compute VSA due to: {}. Some GOTO "
+          "optimizations will be disabled",
+          e);
+        vsa = nullptr;
+      }
 
       if (cmdline.isset("no-library"))
         log_warning("Using CSE with --no-library might cause huge slowdowns!");
@@ -1774,14 +2104,58 @@ bool esbmc_parseoptionst::process_goto_program(
       interval_analysis(goto_functions, ns, options);
     }
 
-    if (
-      cmdline.isset("inductive-step") || cmdline.isset("k-induction") ||
-      cmdline.isset("k-induction-parallel"))
+    bool is_k_induction = cmdline.isset("inductive-step") ||
+                          cmdline.isset("k-induction") ||
+                          cmdline.isset("k-induction-parallel");
+
+    if (cmdline.isset("validate-correctness-witness"))
     {
-      // Always remove skips before doing k-induction.
-      // It seems to fix some issues for now
+      log_status("Enable correctness witness validation 2.0");
+      options.set_option("loop-invariant", true);
+      std::string path = cmdline.getval("witness");
+      boost::filesystem::path n(path);
+
+      if (n.extension() != ".yaml" && n.extension() != ".yml")
+      {
+        // Unexpected extension
+        log_error("Unsupported witness format, expected yaml or yml");
+        return true;
+      }
+
+      yaml_parser parser(path, context, options);
+      if (parser.load_file())
+        return true;
+
+      if (parser.inject_loop_invariants(goto_functions))
+        return true;
+
       remove_no_op(goto_functions);
+      goto_loop_invariant_combined(goto_functions);
+    }
+
+    if (cmdline.isset("loop-invariant"))
+    {
+      // Combined mode: Branch 1 (invariant inductivity check) +
+      // ASSUME(INV) injected at end of loop body + k-induction (Branch 2).
+      remove_no_op(goto_functions);
+      goto_loop_invariant_combined(goto_functions);
       goto_k_induction(goto_functions);
+    }
+    else
+    {
+      // --k-induction and --loop-invariant-check are independent and may
+      // both be specified.  remove_no_op only needs to run once.
+      if (is_k_induction || cmdline.isset("loop-invariant-check"))
+        remove_no_op(goto_functions);
+
+      if (is_k_induction)
+        goto_k_induction(goto_functions);
+
+      if (cmdline.isset("loop-invariant-check"))
+      {
+        bool use_frame_rule = cmdline.isset("loop-frame-rule");
+        goto_loop_invariant(goto_functions, context, use_frame_rule);
+      }
     }
 
     if (
@@ -1799,10 +2173,23 @@ bool esbmc_parseoptionst::process_goto_program(
 #endif
     }
 
-    if (cmdline.isset("termination"))
-      goto_termination(goto_functions);
-
     goto_check(ns, options, goto_functions);
+
+    if (options.get_bool_option("atomicity-check"))
+      goto_atomicity_check(goto_functions, ns, context);
+
+    // Process function contracts if enabled
+    bool has_enforce = cmdline.isset("enforce-contract");
+    bool has_replace = cmdline.isset("replace-call-with-contract");
+    bool has_enforce_all = cmdline.isset("enforce-all-contracts");
+    bool has_replace_all = cmdline.isset("replace-all-contracts");
+    if (has_enforce || has_replace || has_enforce_all || has_replace_all)
+      process_function_contracts(
+        goto_functions,
+        has_replace,
+        has_enforce,
+        has_enforce_all,
+        has_replace_all);
 
     // add re-evaluations of monitored properties
     add_property_monitors(goto_functions, ns);
@@ -1812,21 +2199,18 @@ bool esbmc_parseoptionst::process_goto_program(
     if (!(cmdline.isset("no-remove-no-op")))
       remove_no_op(goto_functions);
 
-    if (!(cmdline.isset("no-remove-unreachable") || is_no_remove))
+    if (!(cmdline.isset("no-remove-unreachable") || is_mul || is_coverage))
       remove_unreachable(goto_functions);
 
     goto_functions.update();
 
-    if (cmdline.isset("data-races-check"))
+    if (
+      cmdline.isset("data-races-check") ||
+      cmdline.isset("data-races-check-only"))
     {
       log_status("Adding Data Race Checks");
-
-      value_set_analysist value_set_analysis(ns);
-      value_set_analysis(goto_functions);
-
-      add_race_assertions(value_set_analysis, context, goto_functions);
-
-      value_set_analysis.update(goto_functions);
+      options.set_option("data-races-check", true);
+      add_race_assertions(context, goto_functions);
     }
 
     //! goto-cov will also mutate the asserts added by esbmc (e.g. goto-check)
@@ -1835,13 +2219,21 @@ bool esbmc_parseoptionst::process_goto_program(
       cmdline.isset("assertion-coverage-claims"))
     {
       // for multi-property
-      options.set_option("result-only", true);
       options.set_option("base-case", true);
       options.set_option("multi-property", true);
       options.set_option("keep-verified-claims", false);
+      options.set_option("no-pointer-check", true);
 
-      goto_coveraget tmp(ns, goto_functions);
-      tmp.replace_all_asserts_to_guard(gen_false_expr(), true);
+      // enable '--no-unwinding-assertions' if '--unwind' is enabled
+      if (cmdline.isset("unwind"))
+        options.set_option("no-unwinding-assertions", true);
+
+      std::string filename = cmdline.args[0];
+      goto_coveraget tmp(ns, goto_functions, filename);
+      // for function mode
+      if (cmdline.isset("function"))
+        tmp.set_target(cmdline.getval("function"));
+      tmp.assertion_coverage();
     }
 
     if (
@@ -1851,11 +2243,19 @@ bool esbmc_parseoptionst::process_goto_program(
       cmdline.isset("condition-coverage-claims-rm"))
     {
       // for multi-property
-      options.set_option("result-only", true);
       options.set_option("base-case", true);
       options.set_option("multi-property", true);
       options.set_option("keep-verified-claims", false);
+      // prevent adding property checking assertions during SymEx
+      options.set_option("no-pointer-check", true);
       // unreachable conditions should be also considered as short-circuited
+
+      // enable '--no-unwinding-assertions' if '--unwind' is enabled
+      if (cmdline.isset("unwind"))
+        options.set_option("no-unwinding-assertions", true);
+
+      // for re-do remove-sideeffects
+      options.set_option("goto-instrumented", false);
 
       //?:
       // if we do not want expressions like 'if(2 || 3)' get simplified to 'if(1||1)'
@@ -1866,20 +2266,76 @@ bool esbmc_parseoptionst::process_goto_program(
 
       std::string filename = cmdline.args[0];
       goto_coveraget tmp(ns, goto_functions, filename);
-      tmp.replace_all_asserts_to_guard(gen_true_expr());
-      tmp.gen_cond_cov();
+      // for function mode
+      if (cmdline.isset("function"))
+        tmp.set_target(cmdline.getval("function"));
+
+      // if we do not want to count the guard in the assertions
+      if (cmdline.isset("no-cov-asserts"))
+      {
+        if (cmdline.isset("cov-assume-asserts"))
+          tmp.replace_all_asserts_to_assume();
+        else
+          tmp.replace_all_asserts_to_guard(gen_true_expr());
+      }
+      tmp.cov_assume_asserts = cmdline.isset("cov-assume-asserts");
+      tmp.condition_coverage();
+
+      // redo conversion to remove_sideeffect
+      // Due to that we deliberately skip some of the sideeffects removal process when generating the Goto program.
+      // This is to keep the condition/guards format and avoid introducing auxiliary variables, which will affect the coverage calculation.
+      goto_coverage_rm temp(context, options, goto_functions);
+      temp.remove_sideeffect();
     }
 
-    if (options.get_bool_option("make-assert-false"))
+    if (
+      cmdline.isset("branch-coverage") ||
+      cmdline.isset("branch-coverage-claims"))
     {
-      goto_coveraget tmp(ns, goto_functions);
-      tmp.replace_all_asserts_to_guard(gen_false_expr());
+      // for multi-property
+      options.set_option("base-case", true);
+      options.set_option("multi-property", true);
+      options.set_option("keep-verified-claims", false);
+      options.set_option("no-pointer-check", true);
+
+      // enable '--no-unwinding-assertions' if '--unwind' is enabled
+      if (cmdline.isset("unwind"))
+        options.set_option("no-unwinding-assertions", true);
+
+      std::string filename = cmdline.args[0];
+      goto_coveraget tmp(ns, goto_functions, filename);
+      // for function mode
+      if (cmdline.isset("function"))
+        tmp.set_target(cmdline.getval("function"));
+      tmp.cov_assume_asserts = cmdline.isset("cov-assume-asserts");
+      tmp.branch_coverage();
+    }
+    if (
+      cmdline.isset("branch-function-coverage") ||
+      cmdline.isset("branch-function-coverage-claims"))
+    {
+      // for multi-property
+      options.set_option("base-case", true);
+      options.set_option("multi-property", true);
+      options.set_option("keep-verified-claims", false);
+      options.set_option("no-pointer-check", true);
+
+      // enable '--no-unwinding-assertions' if '--unwind' is enabled
+      if (cmdline.isset("unwind"))
+        options.set_option("no-unwinding-assertions", true);
+
+      std::string filename = cmdline.args[0];
+      goto_coveraget tmp(ns, goto_functions, filename);
+      tmp.cov_assume_asserts = cmdline.isset("cov-assume-asserts");
+      tmp.branch_function_coverage();
     }
 
-    if (cmdline.isset("add-false-assert"))
+    if (cmdline.isset("negating-property"))
     {
-      goto_coveraget tmp(ns, goto_functions);
-      tmp.add_false_asserts();
+      std::string tgt_fname = cmdline.getval("negating-property");
+      std::string filename = cmdline.args[0];
+      goto_coveraget tmp(ns, goto_functions, filename);
+      tmp.negating_asserts(tgt_fname);
     }
 
     // From here on all changes should update phi-nodes locations when needed
@@ -1988,7 +2444,66 @@ bool esbmc_parseoptionst::output_goto_program(
       goto_functions.output(ns, oss);
       log_status("{}", oss.str());
       if (cmdline.isset("goto-functions-only"))
-        return true;
+        exit(0);
+    }
+
+    if (cmdline.isset("dump-goto-cfg"))
+    {
+      goto_cfg cfg(goto_functions);
+      cfg.dump_graph();
+      return true;
+    }
+
+    // Print a flat list of every function call site with its arguments.
+    // Output format: caller -> callee(arg1, arg2, ...) [file:line]
+    // Nested calls appear as separate lines with compiler-generated
+    // temporaries (e.g. return_value$_add$5) showing data flow.
+    if (cmdline.isset("show-call-sites"))
+    {
+      for (const auto &f : goto_functions.function_map)
+      {
+        if (!f.second.body_available)
+          continue;
+        const std::string caller = f.first.as_string();
+        forall_goto_program_instructions (i_it, f.second.body)
+        {
+          if (i_it->is_function_call())
+          {
+            const auto &fc = to_code_function_call2t(i_it->code);
+
+            // Direct calls have a symbol; indirect calls (function
+            // pointers) fall back to pretty-printing the expression.
+            std::string callee;
+            if (is_symbol2t(fc.function))
+              callee = to_symbol2t(fc.function).get_symbol_name();
+            else
+              callee = from_expr(ns, "", fc.function);
+
+            // Pretty-print each actual argument as a comma-separated list
+            std::string args;
+            for (size_t i = 0; i < fc.operands.size(); i++)
+            {
+              if (i > 0)
+                args += ", ";
+              args += from_expr(ns, "", fc.operands[i]);
+            }
+
+            std::string loc;
+            if (!i_it->location.get_file().empty())
+            {
+              const auto &file = i_it->location.get_file();
+              const auto &line = i_it->location.get_line();
+
+              if (!line.empty())
+                loc = " [" + file.as_string() + ":" + line.as_string() + "]";
+              else
+                loc = " [" + file.as_string() + "]";
+            }
+            log_status("{} -> {}({}){}", caller, callee, args, loc);
+          }
+        }
+      }
+      std::exit(0);
     }
 
     // Translate the GOTO program to C and output it into the log or
@@ -2284,7 +2799,6 @@ static unsigned int calc_globals_used(const namespacet &ns, const expr2tc &expr)
     expr->foreach_operand([&globals, &ns](const expr2tc &e) {
       globals += calc_globals_used(ns, e);
     });
-
     return globals;
   }
 
@@ -2346,6 +2860,7 @@ void esbmc_parseoptionst::print_ileave_points(
       case CATCH:
       case THROW_DECL:
       case THROW_DECL_END:
+      case LOOP_INVARIANT:
         break;
       }
 
@@ -2354,12 +2869,300 @@ void esbmc_parseoptionst::print_ileave_points(
     }
 }
 
+// Process function contracts if enabled
+void esbmc_parseoptionst::process_function_contracts(
+  goto_functionst &goto_functions,
+  bool has_replace,
+  bool has_enforce,
+  bool has_enforce_all,
+  bool has_replace_all)
+{
+  namespacet ns(context);
+  code_contractst contracts(goto_functions, context, ns);
+
+  // Reference to context for use in lambda
+  contextt &ctx = context;
+
+  // Lambda function to collect all functions with contracts
+  // This includes functions with:
+  // 1. Explicit contract clauses (__ESBMC_requires, __ESBMC_ensures, __ESBMC_assigns)
+  // 2. __attribute__((annotate("__ESBMC_contract"))) annotation
+  auto collect_functions_with_contracts =
+    [&contracts, &goto_functions, &ctx]() {
+      std::set<std::string> result;
+      forall_goto_functions (it, goto_functions)
+      {
+        if (!it->second.body_available)
+          continue;
+
+        std::string func_name = id2string(it->first);
+
+        // Use is_compiler_generated (which correctly handles C++ USR IDs like
+        // "c:@F@fst#*1I#") instead of a raw '#' string filter, which would
+        // incorrectly skip all C++ functions with parameters.
+        if (contracts.is_compiler_generated(func_name))
+          continue;
+
+        // Check for explicit contract clauses in function body
+        if (contracts.has_contracts(it->second.body))
+        {
+          result.insert(func_name);
+          continue;
+        }
+
+        // Check for __attribute__((annotate("__ESBMC_contract"))) annotation
+        symbolt *func_sym = ctx.find_symbol(it->first);
+        if (func_sym && contracts.is_annotated_contract_function(*func_sym))
+        {
+          result.insert(func_name);
+        }
+      }
+      return result;
+    };
+
+  // Lambda function to process function list (handles "*" wildcard)
+  auto process_function_list = [&collect_functions_with_contracts](
+                                 const std::list<std::string> &func_list) {
+    std::set<std::string> result;
+    for (const auto &func : func_list)
+    {
+      if (func == "*")
+      {
+        // "*" means all functions with contracts
+        result = collect_functions_with_contracts();
+        break; // "*" means all, so we can break after collecting
+      }
+      else
+      {
+        result.insert(func);
+      }
+    }
+    return result;
+  };
+
+  // Process enforce-contract option
+  if (has_enforce)
+  {
+    const std::list<std::string> &enforce_list =
+      cmdline.get_values("enforce-contract");
+    std::set<std::string> to_enforce = process_function_list(enforce_list);
+
+    if (!to_enforce.empty())
+    {
+      log_status("Enforcing contracts for {} function(s)", to_enforce.size());
+      // Pass --function entry point so the enforce wrapper allocates fresh
+      // backing storage for pointer params (harness receives nil args).
+      std::string entry_function =
+        cmdline.isset("function") ? cmdline.getval("function") : "";
+      // Assigns compliance check is always enabled: without it, functions can
+      // lie about their assigns clause, causing false VERIFICATION SUCCESSFUL.
+      contracts.enforce_contracts(to_enforce, entry_function, true);
+    }
+  }
+
+  // Process replace-call-with-contract option
+  if (has_replace)
+  {
+    const std::list<std::string> &replace_list =
+      cmdline.get_values("replace-call-with-contract");
+    std::set<std::string> to_replace = process_function_list(replace_list);
+
+    if (!to_replace.empty())
+    {
+      log_status(
+        "Replacing calls with contracts for {} function(s)", to_replace.size());
+      contracts.replace_calls(to_replace);
+    }
+  }
+
+  // Lambda to collect ONLY functions with __ESBMC_contract annotation
+  auto collect_annotated_contract_functions =
+    [&contracts, &goto_functions, &ctx]() {
+      std::set<std::string> result;
+      forall_goto_functions (it, goto_functions)
+      {
+        if (!it->second.body_available)
+          continue;
+        std::string func_name = id2string(it->first);
+        if (contracts.is_compiler_generated(func_name))
+          continue;
+        symbolt *func_sym = ctx.find_symbol(it->first);
+        if (func_sym && contracts.is_annotated_contract_function(*func_sym))
+          result.insert(func_name);
+      }
+      return result;
+    };
+
+  // Process --enforce-all-contracts
+  if (has_enforce_all)
+  {
+    std::set<std::string> to_enforce = collect_annotated_contract_functions();
+    if (!to_enforce.empty())
+    {
+      log_status(
+        "Enforcing annotated contracts for {} function(s)", to_enforce.size());
+      std::string entry_function =
+        cmdline.isset("function") ? cmdline.getval("function") : "";
+      contracts.enforce_contracts(to_enforce, entry_function, true);
+    }
+  }
+
+  // Process --replace-all-contracts
+  if (has_replace_all)
+  {
+    std::set<std::string> to_replace = collect_annotated_contract_functions();
+    if (!to_replace.empty())
+    {
+      log_status(
+        "Replacing annotated calls for {} function(s)", to_replace.size());
+      contracts.replace_calls(to_replace);
+    }
+  }
+}
+
+bool esbmc_parseoptionst::resolve_color_option() const
+{
+  const char *raw = cmdline.getval("color");
+  std::string val = (raw && *raw) ? raw : "auto";
+  if (val != "auto" && val != "always" && val != "never")
+  {
+    log_error(
+      "Invalid value for --color: '{}'. Must be auto, always, or never.", val);
+    exit(1);
+  }
+  return ENABLE_COLOR(val);
+}
+
+// Colorize --flag references found in description text with bold formatting.
+// Matches "--" followed by one or more alphanumeric/hyphen characters,
+// stopping at delimiters like '.', ',', ' ', ')', '\'', '"', or end of string.
+static std::string colorize_flag_refs(const std::string &text)
+{
+  std::string result;
+  size_t i = 0;
+  while (i < text.size())
+  {
+    if (
+      i + 2 < text.size() && text[i] == '-' && text[i + 1] == '-' &&
+      (std::isalnum(text[i + 2]) || text[i + 2] == '-'))
+    {
+      size_t start = i;
+      i += 2;
+      while (i < text.size() && (std::isalnum(text[i]) || text[i] == '-'))
+        i++;
+      result += CLR_BOLD;
+      result += text.substr(start, i - start);
+      result += CLR_RESET;
+    }
+    else
+    {
+      result += text[i];
+      i++;
+    }
+  }
+  return result;
+}
+
 // This prints the ESBMC version and a list of CMD options
 // available in ESBMC.
 void esbmc_parseoptionst::help()
 {
-  log_status("\n* * *           ESBMC {}          * * *", ESBMC_VERSION);
+  bool use_color = resolve_color_option();
+
+  // Print the "* * *     ESBMC x.y.z     * * *"
+  auto const esbmc_string = fmt::format(" ESBMC {} ", ESBMC_VERSION);
+  auto const title_start = std::string("* * * ");
+  auto const title_end = std::string(" * * *");
+  auto const inner =
+    80 - title_start.length() - title_end.length() - esbmc_string.length();
+  auto const left_pad = std::string(inner / 2, '=');
+  auto const right_pad = std::string(inner - inner / 2, '=');
+  log_status(
+    "\n{}{}{}{}{}", title_start, left_pad, esbmc_string, right_pad, title_end);
+
   std::ostringstream oss;
   oss << cmdline.cmdline_options;
-  log_status("{}", oss.str());
+
+  if (!use_color)
+  {
+    log_status("{}", oss.str());
+    return;
+  }
+
+  // Colorize: group headers in bold cyan, option names in bold,
+  // and --flag references in descriptions in bold
+  std::istringstream iss(oss.str());
+  std::string line;
+  while (std::getline(iss, line))
+  {
+    if (!line.empty() && line[0] != ' ' && line.back() == ':')
+      // Group header (e.g. "Printing options:")
+      fmt::print(stderr, CLR_BOLD_CYAN "{}" CLR_RESET "\n", line);
+    else if (
+      line.size() >= 3 && line[0] == ' ' && line[1] == ' ' && line[2] == '-')
+    {
+      // Option line: colorize the flag portion (up to the description)
+      auto desc_pos = line.find("  ", 4);
+      if (desc_pos != std::string::npos)
+        fmt::print(
+          stderr,
+          CLR_BOLD "{}" CLR_RESET "{}\n",
+          line.substr(0, desc_pos),
+          colorize_flag_refs(line.substr(desc_pos)));
+      else
+        fmt::print(stderr, CLR_BOLD "{}" CLR_RESET "\n", line);
+    }
+    else
+      fmt::print(stderr, "{}\n", colorize_flag_refs(line));
+  }
+}
+
+// When k-induction exhausts all k-steps without a definitive result, run one
+// final per-VCC inductive-step check at the last k to identify which specific
+// properties could not be resolved, without impacting the main k-induction loop.
+void esbmc_parseoptionst::diagnose_unknown_properties(
+  optionst &options,
+  goto_functionst &goto_functions,
+  const uint64_t k_step)
+{
+  if (options.get_bool_option("disable-inductive-step"))
+    return;
+
+  // Mirror the guards used by is_inductive_step_violated in the main loop:
+  // inductive step is skipped for k==1 and capped by --max-inductive-step.
+  if (k_step <= 1)
+    return;
+  if (strtoul(cmdline.getval("max-inductive-step"), nullptr, 10) < k_step)
+    return;
+
+  const bool saved_base_case = options.get_bool_option("base-case");
+  const bool saved_forward_condition =
+    options.get_bool_option("forward-condition");
+  const bool saved_inductive_step = options.get_bool_option("inductive-step");
+  const bool saved_no_unwinding =
+    options.get_bool_option("no-unwinding-assertions");
+  const bool saved_partial_loops = options.get_bool_option("partial-loops");
+  const std::string saved_unwind = options.get_option("unwind");
+
+  options.set_option("base-case", false);
+  options.set_option("forward-condition", false);
+  options.set_option("inductive-step", true);
+  options.set_option("no-unwinding-assertions", true);
+  options.set_option("partial-loops", true);
+  options.set_option("unwind", integer2string(k_step));
+  options.set_option("diagnose-unknown-properties", true);
+
+  bmct bmc(goto_functions, options, context);
+
+  log_progress(
+    "\nDiagnosing unresolved properties (inductive step, k = {:d}):", k_step);
+  do_bmc(bmc);
+
+  options.set_option("base-case", saved_base_case);
+  options.set_option("forward-condition", saved_forward_condition);
+  options.set_option("inductive-step", saved_inductive_step);
+  options.set_option("no-unwinding-assertions", saved_no_unwinding);
+  options.set_option("partial-loops", saved_partial_loops);
+  options.set_option("unwind", saved_unwind);
+  options.set_option("diagnose-unknown-properties", false);
 }

@@ -1,4 +1,4 @@
-CORE
+THOROUGH
 main.jimple
 --force-malloc-success
 ^VERIFICATION FAILED$

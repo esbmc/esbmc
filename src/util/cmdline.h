@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <optional>
 #include <boost/program_options.hpp>
 
 /* WORKAROUND: On *BSD macOS the include of some system headers
@@ -37,13 +38,16 @@ public:
   typedef std::vector<std::string> argst;
   argst args;
   boost::program_options::variables_map vm;
+  unsigned m_term_width;
   boost::program_options::options_description cmdline_options;
-  cmdlinet()
-  {
-  }
+  cmdlinet();
   ~cmdlinet();
   typedef std::map<std::string, std::list<std::string>> options_mapt;
   options_mapt options_map;
+
+private:
+  std::optional<std::string> get_config_file_location() const;
+  std::string expand_user(std::string const path) const;
 };
 
 #endif

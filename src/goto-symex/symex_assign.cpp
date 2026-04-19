@@ -1,4 +1,5 @@
 #include <cassert>
+#include <climits>
 #include <goto-symex/dynamic_allocation.h>
 #include <goto-symex/execution_state.h>
 #include <goto-symex/goto_symex.h>
@@ -6,9 +7,9 @@
 #include <util/cprover_prefix.h>
 #include <util/expr_util.h>
 #include <util/i2string.h>
+#include <util/usr_utils.h>
 #include <irep2/irep2.h>
 #include <util/migrate.h>
-#include <util/simplify_expr.h>
 #include <util/std_expr.h>
 
 goto_symext::goto_symext(
@@ -22,6 +23,7 @@ goto_symext::goto_symext(
     first_loop(0),
     total_claims(0),
     remaining_claims(0),
+    simplified_claims(0),
     max_unwind(options.get_option("unwind").c_str()),
     constant_propagation(!options.get_bool_option("no-propagation")),
     ns(_ns),
@@ -61,7 +63,96 @@ goto_symext::goto_symext(
     idx = next;
   }
 
+  // Parse --unwindsetname option (name:loop_index:bound,...)
+  const std::string &func_set = options.get_option("unwindsetname");
+  if (!func_set.empty())
+  {
+    std::string::size_type start = 0;
+    while (start < func_set.length())
+    {
+      std::string::size_type comma = func_set.find(",", start);
+      std::string val = func_set.substr(
+        start, comma == std::string::npos ? std::string::npos : comma - start);
+
+      // Parse name:index:bound format
+      std::string::size_type first_colon = val.find(":");
+      std::string::size_type second_colon = first_colon != std::string::npos
+                                              ? val.find(":", first_colon + 1)
+                                              : std::string::npos;
+
+      if (first_colon != std::string::npos && second_colon != std::string::npos)
+      {
+        std::string user_name = val.substr(0, first_colon);
+        unsigned loop_index = atoi(
+          val.substr(first_colon + 1, second_colon - first_colon - 1).c_str());
+        BigInt bound(val.substr(second_colon + 1).c_str());
+
+        // Convert user syntax to internal USR format with trailing #
+        std::string usr_name = user_name_to_usr(user_name);
+
+        // Only add valid entries (must have function name)
+        if (!usr_name.empty())
+          unwind_func_set[std::make_pair(usr_name, loop_index)] = bound;
+      }
+
+      if (comma == std::string::npos)
+        break;
+      start = comma + 1;
+    }
+  }
+
+  // Build mapping: global_loop_id -> (function_name, per-function loop index)
+  // Also populate unwind_set from #pragma unroll annotations
+  for (const auto &func_pair : _goto_functions.function_map)
+  {
+    unsigned loop_index = 0;
+    for (const auto &instruction : func_pair.second.body.instructions)
+    {
+      if (instruction.is_backwards_goto())
+      {
+        loop_id_to_func_index[instruction.loop_number] =
+          std::make_pair(func_pair.first.as_string(), loop_index);
+        loop_index++;
+
+        // Handle #pragma unroll annotations
+        // pragma_unroll_count: 0 = not specified, UINT_MAX = unlimited, else = specific count
+        if (instruction.pragma_unroll_count > 0)
+        {
+          unwind_set[instruction.loop_number] =
+            instruction.pragma_unroll_count == UINT_MAX
+              ? 0
+              : BigInt(instruction.pragma_unroll_count);
+          log_debug(
+            "[symex]",
+            "Applying #pragma unroll {} to loop {} in file {} line "
+            "{} column {} function {}",
+            unwind_set[instruction.loop_number],
+            instruction.loop_number,
+            instruction.location.get_file(),
+            instruction.location.get_line(),
+            instruction.location.get_column(),
+            instruction.location.get_function());
+        }
+      }
+    }
+  }
+
   art1 = nullptr;
+
+  // Guard pruning is on by default (disable with --no-interval-symex-guard);
+  // assertion pruning is opt-in via --interval-symex-assert. Build the online
+  // interval domain when either is active.
+  const bool guard_enabled =
+    !options.get_bool_option("no-interval-symex-guard");
+  const bool assert_enabled = options.get_bool_option("interval-symex-assert");
+  if (guard_enabled || assert_enabled)
+  {
+    if (guard_enabled)
+      options.set_option("interval-symex-guard", true);
+    interval_domaint::set_options(options);
+    interval_domain_state.emplace();
+    interval_domain_state->make_top();
+  }
 
   valid_ptr_arr_name = "c:@__ESBMC_alloc";
   alloc_size_arr_name = "c:@__ESBMC_alloc_size";
@@ -88,10 +179,13 @@ goto_symext::goto_symext(const goto_symext &sym)
 goto_symext &goto_symext::operator=(const goto_symext &sym)
 {
   unwind_set = sym.unwind_set;
+  unwind_func_set = sym.unwind_func_set;
+  loop_id_to_func_index = sym.loop_id_to_func_index;
   max_unwind = sym.max_unwind;
   constant_propagation = sym.constant_propagation;
   total_claims = sym.total_claims;
   remaining_claims = sym.remaining_claims;
+  simplified_claims = sym.simplified_claims;
   guard_identifier_s = sym.guard_identifier_s;
   depth_limit = sym.depth_limit;
   break_insn = sym.break_insn;
@@ -112,6 +206,7 @@ goto_symext &goto_symext::operator=(const goto_symext &sym)
   dyn_info_arr_name = sym.dyn_info_arr_name;
 
   dynamic_memory = sym.dynamic_memory;
+  interval_domain_state = sym.interval_domain_state;
 
   // Art ptr is shared
   art1 = sym.art1;
@@ -127,6 +222,95 @@ void goto_symext::do_simplify(expr2tc &expr)
 {
   if (!no_simplify)
     simplify(expr);
+}
+
+// Handle side effects
+void goto_symext::handle_sideeffect(
+  const expr2tc &lhs,
+  const sideeffect2t &effect,
+  const guardt &guard)
+{
+  switch (effect.kind)
+  {
+  case sideeffect2t::cpp_new:
+  case sideeffect2t::cpp_new_arr:
+    symex_cpp_new(lhs, effect, guard);
+    break;
+  case sideeffect2t::realloc:
+    symex_realloc(lhs, effect, guardt());
+    break;
+  case sideeffect2t::malloc:
+    symex_malloc(lhs, effect, guard);
+    break;
+  case sideeffect2t::alloca:
+    symex_alloca(lhs, effect, guard);
+    break;
+  case sideeffect2t::va_arg:
+    symex_va_arg(lhs, effect, guard);
+    break;
+  case sideeffect2t::printf2:
+    // Do nothing for printf
+    break;
+  case sideeffect2t::old_snapshot:
+    // __ESBMC_old() snapshots are handled during contract processing.
+    // If we encounter one here, it means we're in the original function body
+    // (contracts_original_xxx) where the ensures/requires clause is still present.
+    // Store the ADDRESS of the inner expression in lhs (void*), so that
+    // *(T*)lhs correctly reads the value via pointer dereference.
+    // The ensures/requires in contracts_original evaluate BEFORE the function body
+    // modifies anything, so address_of(inner) gives the correct pre-state value.
+    {
+      expr2tc inner = effect.operand;
+      // address_of2tc(subtype, expr): subtype is T, result type is T*
+      expr2tc addr = address_of2tc(inner->type, inner);
+      // Cast to lhs type (void*)
+      expr2tc result = addr;
+      if (result->type != lhs->type)
+        result = typecast2tc(lhs->type, result);
+      symex_assign(code_assign2tc(lhs, result), true, guard);
+    }
+    break;
+  case sideeffect2t::assigns_target:
+    // __ESBMC_assigns() targets are handled during contract processing
+    // In --enforce-contract mode, the assigns clause is extracted and checked,
+    // but we don't need to execute anything here during symex.
+    // Simply ignore the assigns_target side effect.
+    break;
+  default:
+    assert(0 && "unexpected side effect");
+  }
+}
+
+// Handle conditional expressions (if2t)
+bool goto_symext::handle_conditional(
+  const expr2tc &lhs,
+  const if2t &if_effect,
+  const guardt &guard)
+{
+  bool has_sideeffect = false;
+  const expr2tc &cond = if_effect.cond;
+  const expr2tc &true_value = if_effect.true_value;
+  const expr2tc &false_value = if_effect.false_value;
+
+  // Handle true_value side effects
+  if (is_sideeffect2t(true_value))
+  {
+    guardt g(guard);
+    g.add(cond);
+    handle_sideeffect(lhs, to_sideeffect2t(true_value), g);
+    has_sideeffect = true;
+  }
+
+  // Handle false_value side effects
+  if (is_sideeffect2t(false_value))
+  {
+    guardt g(guard);
+    g.add(not2tc(cond));
+    handle_sideeffect(lhs, to_sideeffect2t(false_value), g);
+    has_sideeffect = true;
+  }
+
+  return has_sideeffect;
 }
 
 void goto_symext::symex_assign(
@@ -156,50 +340,35 @@ void goto_symext::symex_assign(
 
   replace_nondet(lhs);
   replace_nondet(rhs);
-
-  intrinsic_races_check_dereference(lhs);
+  volatile_check(rhs);
 
   dereference(lhs, dereferencet::WRITE);
   dereference(rhs, dereferencet::READ);
   replace_dynamic_allocation(lhs);
   replace_dynamic_allocation(rhs);
 
-  // printf expression that has lhs
+  replace_races_check(lhs);
+  simplify_python_builtins(rhs);
+
+  // If rhs is a printf expression, handle it specially
   if (is_code_printf2t(rhs))
   {
     symex_printf(lhs, rhs);
   }
 
+  // Handle sideeffect2t (side effects) expressions
   if (is_sideeffect2t(rhs))
   {
-    const sideeffect2t &effect = to_sideeffect2t(rhs);
-    switch (effect.kind)
-    {
-    case sideeffect2t::cpp_new:
-    case sideeffect2t::cpp_new_arr:
-      symex_cpp_new(lhs, effect);
-      break;
-    case sideeffect2t::realloc:
-      symex_realloc(lhs, effect);
-      break;
-    case sideeffect2t::malloc:
-      symex_malloc(lhs, effect);
-      break;
-    case sideeffect2t::alloca:
-      symex_alloca(lhs, effect);
-      break;
-    case sideeffect2t::va_arg:
-      symex_va_arg(lhs, effect);
-      break;
-    case sideeffect2t::printf2:
-      // do nothing here
-      break;
-    // No nondet side effect?
-    default:
-      assert(0 && "unexpected side effect");
-    }
-
+    handle_sideeffect(lhs, to_sideeffect2t(rhs), guard);
     return;
+  }
+
+  // Handle conditional (if2t) expressions
+  if (is_if2t(rhs))
+  {
+    const if2t &if_effect = to_if2t(rhs);
+    if (handle_conditional(lhs, if_effect, guard))
+      return;
   }
 
   bool hidden_ssa = hidden || cur_state->top().hidden;
@@ -262,6 +431,10 @@ void goto_symext::symex_assign_rec(
   {
     symex_assign_structure(lhs, full_lhs, rhs, full_rhs, guard, hidden);
   }
+  else if (is_constant_union2t(lhs))
+  {
+    symex_assign_union(lhs, full_lhs, rhs, full_rhs, guard, hidden);
+  }
   else if (is_extract2t(lhs))
   {
     symex_assign_extract(lhs, full_lhs, rhs, full_rhs, guard, hidden);
@@ -308,6 +481,13 @@ void goto_symext::symex_assign_symbol(
   if (is_index2t(new_lhs))
     cur_state->rename(to_index2t(new_lhs).index);
 
+  if (is_member_ref2t(rhs))
+    // In pointer-to-member, the following assignment will occur:
+    // int S::* pm = &S::x;
+    // This assignment is static and we do not need to generate an SSA for it,
+    // we can simply skip it - constant propagation can handle it.
+    return;
+
   guardt tmp_guard(cur_state->guard);
   tmp_guard.append(guard);
 
@@ -347,6 +527,22 @@ void goto_symext::symex_assign_structure(
     symex_assign_rec(lhs_memb, full_lhs, rhs_memb, full_rhs, guard, hidden);
     i++;
   }
+}
+
+void goto_symext::symex_assign_union(
+  const expr2tc &lhs,
+  const expr2tc &full_lhs,
+  expr2tc &rhs,
+  expr2tc &full_rhs,
+  guardt &guard,
+  const bool hidden)
+{
+  // For unions, assign through the active member
+  const constant_union2t &the_union = to_constant_union2t(lhs);
+  const expr2tc &lhs_memb = the_union.datatype_members[0];
+  expr2tc rhs_memb = member2tc(lhs_memb->type, rhs, the_union.init_field);
+
+  symex_assign_rec(lhs_memb, full_lhs, rhs_memb, full_rhs, guard, hidden);
 }
 
 void goto_symext::symex_assign_typecast(
@@ -476,6 +672,9 @@ void goto_symext::symex_assign_array(
   expr2tc new_rhs = rhs;
   if (new_rhs->type != index.type)
     new_rhs = typecast2tc(index.type, new_rhs);
+
+  if (!is_nil_expr(full_rhs) && full_rhs->type != index.type)
+    full_rhs = typecast2tc(index.type, full_rhs);
 
   new_rhs =
     with2tc(index.source_value->type, index.source_value, index.index, new_rhs);
@@ -700,7 +899,7 @@ void goto_symext::symex_assign_extract(
   assert(rhs->type->get_width() == lhs->type->get_width());
 
   // We need to: read the rest of the bitfield and reconstruct it. Extract
-  // and concats are probably the best approach for the solver to optimise for.
+  // and concats are probably the best approach for the solver to optimize for.
   unsigned int bitblob_width = ex.from->type->get_width();
   expr2tc top_part;
   if (ex.upper != bitblob_width - 1)
@@ -805,7 +1004,7 @@ void goto_symext::replace_nondet(expr2tc &expr)
   if (
     is_sideeffect2t(expr) && to_sideeffect2t(expr).kind == sideeffect2t::nondet)
   {
-    unsigned int &nondet_count = get_dynamic_counter();
+    unsigned int &nondet_count = get_nondet_counter();
     expr =
       symbol2tc(expr->type, "nondet$symex::nondet" + i2string(nondet_count++));
   }

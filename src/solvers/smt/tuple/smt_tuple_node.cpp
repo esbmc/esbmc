@@ -18,7 +18,7 @@ smt_astt smt_tuple_node_flattener::tuple_create(const expr2tc &structdef)
     *this, ctx, ctx->convert_sort(structdef->type), name);
   result->elements.resize(structdef->get_num_sub_exprs());
 
-  for (unsigned int i = 0; i < structdef->get_num_sub_exprs(); i++)
+  for (size_t i = 0; i < structdef->get_num_sub_exprs(); i++)
   {
     smt_astt tmp = ctx->convert_ast(*structdef->get_sub_expr(i));
     result->elements[i] = tmp;
@@ -90,7 +90,7 @@ smt_astt smt_tuple_node_flattener::tuple_array_create(
   smt_sortt sort = ctx->convert_sort(array_type);
   smt_sortt subtype = ctx->convert_sort(get_array_subtype(array_type));
 
-  // Optimise the creation of a const array.
+  // Optimize the creation of a const array.
   if (const_array)
     return array_conv.convert_array_of_wsort(
       inputargs[0], domain->get_data_width(), sort);
@@ -179,17 +179,8 @@ expr2tc smt_tuple_node_flattener::tuple_get_rec(tuple_node_smt_astt tuple)
     }
     else if (is_array_type(it))
     {
-      if (is_fetching_from_array_an_error)
-      {
-        log_error(
-          "Fetching array elements inside tuples currently unimplemented, "
-          "sorry");
-        abort();
-      }
-      log_warning(
-        "Fetching array elements inside tuples currently unimplemented, "
-        "returning empty expression...");
-      res = expr2tc();
+      // this will eventually jump to get_array()
+      res = ctx->get_by_ast(it, tuple->elements[i]);
     }
     else
     {
@@ -250,7 +241,7 @@ smt_sortt smt_tuple_node_flattener::mk_struct_sort(const type2tc &type)
       !is_array_type(arrtype.subtype) &&
       "Arrays dimensions should be flattened by the time they reach tuple "
       "interface");
-    unsigned int dom_width = calculate_array_domain_width(arrtype);
+    unsigned int dom_width = array_domain_width_or_word_size(arrtype);
 
     return new smt_sort(
       SMT_SORT_ARRAY, type, dom_width, ctx->convert_sort(arrtype.subtype));

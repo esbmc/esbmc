@@ -1,0 +1,4 @@
+THOROUGH
+alglin1.c
+--function det2 --incremental-bmc
+^VERIFICATION FAILED$

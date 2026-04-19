@@ -1,0 +1,4 @@
+KNOWNBUG
+main.c
+--loop-invariant-check --unwind 10
+^VERIFICATION SUCCESSFUL$

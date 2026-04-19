@@ -1,6 +1,7 @@
 #include <python-frontend/python_language.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python_annotation.h>
+#include <python-frontend/global_scope.h>
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
 #include <util/message.h>
 #include <util/filesystem.h>
@@ -11,9 +12,17 @@
 #include <fstream>
 
 #include <boost/filesystem.hpp>
-#include <boost/process.hpp>
 
+// Use boost::process v1 on macOS or when Boost >= 1.87
+// We use Boost.Process to run the Python interpreter in a separate process.
+#if defined(__APPLE__) || (BOOST_VERSION >= 108700)
+#  include <boost/process/v1.hpp>
+namespace bp = boost::process::v1;
+#else
+#  include <boost/process.hpp>
 namespace bp = boost::process;
+#endif
+
 namespace fs = boost::filesystem;
 
 extern "C"
@@ -64,25 +73,38 @@ bool python_languaget::parse(const std::string &path)
   fs::path parser_path(ast_output_dir);
   parser_path /= "parser.py";
 
-  // Execute python script to generate json file from AST
+  // Execute Python script to generate JSON file from AST
   std::vector<std::string> args = {parser_path.string(), path, ast_output_dir};
 
-  std::string python_exec("python3");
-#ifdef _WIN32
-  python_exec = "python";
-#endif
+  // Get Python interpreter path informed by the user
+  std::string python_exec = config.options.get_option("python");
+  auto python_exec_path = bp::search_path(python_exec);
+  std::list<std::string> python_exec_names = {"python3", "python"};
+  if (!python_exec.empty())
+    python_exec_names.push_front(python_exec);
+  for (const auto &name : python_exec_names)
+  {
+    python_exec_path = bp::search_path(name);
+    if (!python_exec_path.empty())
+      break;
+  }
+  if (python_exec_path.empty())
+  {
+    log_error(
+      "No python executable was found. Tried: {}\n",
+      fmt::join(python_exec_names, ", "));
+    exit(1);
+  }
 
   // Create a child process to execute Python
-  bp::child process(bp::search_path(python_exec), args);
+  bp::child process(python_exec_path, args);
 
   // Wait for execution
   process.wait();
 
+  // parser.py execution failed
   if (process.exit_code())
-  {
-    log_error("Python execution failed");
-    return true;
-  }
+    exit(process.exit_code());
 
   std::stringstream script_path;
   script_path << ast_output_dir << "/" << script.stem().string() << ".json";
@@ -98,13 +120,24 @@ bool python_languaget::parse(const std::string &path)
 
   ast = nlohmann::json::parse(ast_json);
 
-  // Add annotation
-  python_annotation<nlohmann::json> ann(ast);
-  const std::string function = config.options.get_option("function");
-  if (!function.empty())
-    ann.add_type_annotation(function);
-  else
-    ann.add_type_annotation();
+  if (config.options.get_bool_option("parse-tree-only"))
+    return false;
+
+  try
+  {
+    // Add type information
+    python_annotation<nlohmann::json> ann(ast, global_scope_);
+    const std::string function = config.options.get_option("function");
+    if (!function.empty())
+      ann.add_type_annotation(function);
+    else
+      ann.add_type_annotation();
+  }
+  catch (const std::runtime_error &e)
+  {
+    log_error("{}", e.what());
+    exit(-1);
+  }
 
   return false;
 }
@@ -119,9 +152,17 @@ bool python_languaget::typecheck(contextt &context, const std::string &)
   // Load c models
   add_cprover_library(context, this);
 
-  python_converter converter(context, ast);
-  if (converter.convert())
-    return true;
+  try
+  {
+    // Generate symbol table
+    python_converter converter(context, &ast, global_scope_);
+    converter.convert();
+  }
+  catch (const std::runtime_error &e)
+  {
+    log_error("{}", e.what());
+    exit(-2);
+  }
 
   clang_cpp_adjust adjuster(context);
   if (adjuster.adjust())
@@ -151,7 +192,7 @@ void python_languaget::show_parse(std::ostream &out)
     }
   }
   log_error("Function {} not found.\n", function.c_str());
-  abort();
+  exit(-3);
 }
 
 bool python_languaget::from_expr(

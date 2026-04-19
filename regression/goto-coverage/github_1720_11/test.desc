@@ -1,6 +1,6 @@
-CORE
+THOROUGH
 main.c
---condition-coverage
+--condition-coverage --no-cov-asserts
 ^Reached Conditions:  4
 ^Short Circuited Conditions:  1776
 ^VERIFICATION FAILED$

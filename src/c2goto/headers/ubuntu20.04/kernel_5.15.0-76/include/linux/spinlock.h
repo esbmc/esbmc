@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 #include <stdatomic.h>
 #include <stdbool.h>
-/* The declarations of mock spin lock behaviour*/
+/* The declarations of mock spin lock behavior*/
 /** mock spinlock struct*/
 #define SPIN_LIMIT 80
 typedef struct {

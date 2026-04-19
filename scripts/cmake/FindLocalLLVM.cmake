@@ -1,9 +1,15 @@
 # Module to find LLVM and checks it's version
 
 if(DOWNLOAD_DEPENDENCIES AND ("${LLVM_DIR}" STREQUAL ""))
+  if(ESBMC_CHERI)
+    download_zip_and_extract(LLVM ${ESBMC_CHERI_LLVM_URL})
+    set(LLVM_DIR ${CMAKE_BINARY_DIR}/LLVM/${ESBMC_CHERI_LLVM_NAME})
+    set(Clang_DIR ${CMAKE_BINARY_DIR}/LLVM/${ESBMC_CHERI_LLVM_NAME})  
+  else()
     download_zip_and_extract(LLVM ${ESBMC_LLVM_URL})
     set(LLVM_DIR ${CMAKE_BINARY_DIR}/LLVM/${ESBMC_LLVM_NAME})
-    set(Clang_DIR ${CMAKE_BINARY_DIR}/LLVM/${ESBMC_LLVM_NAME})    
+    set(Clang_DIR ${CMAKE_BINARY_DIR}/LLVM/${ESBMC_LLVM_NAME})   
+  endif() 
 endif()
 
 if(NOT (("${LLVM_DIR}" STREQUAL "LLVM_DIR-NOTFOUND") OR ("${LLVM_DIR}" STREQUAL "")))
@@ -40,6 +46,11 @@ elseif (DEFINED ESBMC_CHERI AND NOT ESBMC_CHERI AND ESBMC_CHERI_CLANG)
   message(WARNING "ESBMC_CHERI disabled, but Clang may generate CHERI-related ASTs. This build configuration is not supported! You're on your own.")
   unset(ESBMC_CHERI_CLANG)
   unset(ESBMC_CHERI_CLANG_MORELLO)
+endif()
+
+if (${LLVM_VERSION_MAJOR} GREATER ${MAX_SUPPORTED_LLVM_VERSION_MAJOR})
+  message(WARNING "LLVM version ${LLVM_VERSION_MAJOR} is greater than maximum "
+                  "supported (${MAX_SUPPORTED_LLVM_VERSION_MAJOR})")
 endif()
 
 if (${LLVM_VERSION_MAJOR} LESS 11)

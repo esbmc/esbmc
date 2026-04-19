@@ -1,1 +1,0 @@
-../vector22/main.cpp

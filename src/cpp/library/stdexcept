@@ -10,16 +10,19 @@
 
 namespace std
 {
-
-class __refcnted_cstr {
+class __refcnted_cstr
+{
 protected:
-  struct refcnted {
+  struct refcnted
+  {
     size_t refcnt;
     char cstr[];
   } *ptr;
 
 public:
-  __refcnted_cstr() throw() : ptr(NULL) {}
+  __refcnted_cstr() throw() : ptr(NULL)
+  {
+  }
 
   __refcnted_cstr(const char *cstr)
   {
@@ -31,8 +34,7 @@ public:
     memcpy(ptr->cstr, cstr, n + 1);
   }
 
-  __refcnted_cstr(const __refcnted_cstr &o) throw()
-  : ptr(o.ptr)
+  __refcnted_cstr(const __refcnted_cstr &o) throw() : ptr(o.ptr)
   {
     if (ptr)
       ptr->refcnt++;
@@ -44,7 +46,7 @@ public:
       free(ptr);
   }
 
-  __refcnted_cstr & operator=(const __refcnted_cstr &o) throw()
+  __refcnted_cstr &operator=(const __refcnted_cstr &o) throw()
   {
     if (this != &o)
     {
@@ -54,7 +56,7 @@ public:
     return *this;
   }
 
-  const char * get(const char *def) const throw()
+  const char *get(const char *def) const throw()
   {
     return ptr ? ptr->cstr : def;
   }
@@ -69,7 +71,7 @@ public:
   {
   }
 
-  explicit runtime_error(const string &what_arg) : msg(what_arg.c_str())
+  explicit runtime_error(const std::string &what_arg) : msg(what_arg.c_str())
   {
   }
 
@@ -90,7 +92,7 @@ public:
   {
   }
 
-  explicit range_error(const string &what_arg) : runtime_error(what_arg)
+  explicit range_error(const std::string &what_arg) : runtime_error(what_arg)
   {
   }
 
@@ -106,7 +108,7 @@ public:
   {
   }
 
-  explicit overflow_error(const string &what_arg) : runtime_error(what_arg)
+  explicit overflow_error(const std::string &what_arg) : runtime_error(what_arg)
   {
   }
 
@@ -122,7 +124,7 @@ public:
   {
   }
 
-  explicit underflow_error(const string &what_arg)
+  explicit underflow_error(const std::string &what_arg)
     : runtime_error(what_arg)
   {
   }
@@ -141,7 +143,7 @@ public:
   {
   }
 
-  explicit logic_error(const string &what_arg) : msg(what_arg.c_str())
+  explicit logic_error(const std::string &what_arg) : msg(what_arg.c_str())
   {
   }
 
@@ -149,7 +151,7 @@ public:
   {
   }
 
-  virtual const char * what() const throw()
+  virtual const char *what() const throw()
   {
     return msg.get("std::logic_error");
   }
@@ -162,7 +164,7 @@ public:
   {
   }
 
-  explicit domain_error(const string &what_arg) : logic_error(what_arg)
+  explicit domain_error(const std::string &what_arg) : logic_error(what_arg)
   {
   }
 
@@ -178,7 +180,7 @@ public:
   {
   }
 
-  explicit invalid_argument(const string &what_arg) : logic_error(what_arg)
+  explicit invalid_argument(const std::string &what_arg) : logic_error(what_arg)
   {
   }
 
@@ -194,7 +196,7 @@ public:
   {
   }
 
-  explicit length_error(const string &what_arg) : logic_error(what_arg)
+  explicit length_error(const std::string &what_arg) : logic_error(what_arg)
   {
   }
 
@@ -210,7 +212,7 @@ public:
   {
   }
 
-  explicit out_of_range(const string &what_arg) : logic_error(what_arg)
+  explicit out_of_range(const std::string &what_arg) : logic_error(what_arg)
   {
   }
 

@@ -1,19 +1,13 @@
-/*******************************************************************\
-
-Module: Message System. This system is used to send messages through
-    ESBMC execution.
-Author: Daniel Kroening, kroening@kroening.com
-
-Maintainers:
-- @2021: Rafael Sá Menezes, rafael.sa.menezes@outlook.com
-
-\*******************************************************************/
 #pragma once
 
 #include <cstdio>
 #include <fmt/format.h>
 #include <fmt/color.h>
+#include <fmt/ranges.h>
 #include <util/message/format.h>
+#include <ctime>
+#include <chrono>
+#include <iomanip>
 
 /**
  * @brief Verbosity refers to the max level
@@ -70,10 +64,18 @@ struct messaget
       FILE *f = target(mod, lvl);
       if (!f)
         return false;
+      if (config.options.get_bool_option("log-message"))
+      {
+        std::time_t currentTime = std::chrono::system_clock::to_time_t(
+          std::chrono::system_clock::now());
+        std::string timeStr =
+          (std::ostringstream{}
+           << std::put_time(std::localtime(&currentTime), "%Y-%m-%d %H:%M:%S"))
+            .str();
+        fmt::print(f, "[{}] File: {}, Line: {} ", timeStr, file, line);
+      }
       println(f, lvl, format, fmt::make_format_args(args...));
       return true;
-      (void)file;
-      (void)line;
     }
   } state = {VerbosityLevel::Status, {}, stderr};
 };
@@ -142,8 +144,3 @@ struct messaget
     __LINE__,                                                                  \
     FMT_STRING(fmt),                                                           \
     ##__VA_ARGS__)
-
-// TODO: Eventually this will be removed
-#ifdef ENABLE_OLD_FRONTEND
-#  define err_location(E) (E).location().dump()
-#endif

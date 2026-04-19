@@ -21,8 +21,8 @@ struct fmt::formatter<exprt>
 
   // This will teach fmt how to convert exprt into a str.
   template <typename FormatContext>
-  auto format(const exprt &p, FormatContext &ctx)
+  auto format(const exprt &p, FormatContext &ctx) const
   {
-    return format_to(ctx.out(), "{}", p.pretty(0));
+    return fmt::format_to(ctx.out(), "{}", p.pretty(0));
   }
 };

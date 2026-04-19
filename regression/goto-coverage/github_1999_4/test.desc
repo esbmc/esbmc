@@ -1,0 +1,6 @@
+CORE
+main.c
+--condition-coverage-claims --verbosity coverage:10
+^Short Circuited Conditions:  2
+^VERIFICATION FAILED$
+

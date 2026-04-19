@@ -1,7 +1,7 @@
 #pragma once
 #include <irep2/irep2_templates_types.h>
 
-// Explicit instanciation for exprs.
+// Explicit instantiation for exprs.
 
 #define expr_typedefs1(basename, superclass)                                   \
   template class esbmct::                                                      \
@@ -42,4 +42,4 @@
     basename##2t,                                                              \
     superclass,                                                                \
     superclass::traits,                                                        \
-    boost::mpl::pop_front<typename superclass::traits::fields>::type>;
+    boost::mp11::mp_pop_front<typename superclass::traits::fields>>;

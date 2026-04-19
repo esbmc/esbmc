@@ -27,7 +27,7 @@ array_convt::array_convt(smt_convt *_ctx) : array_iface(true, true), ctx(_ctx)
 void array_convt::convert_array_assign(const array_ast *src, smt_astt sym)
 {
   // Implement array assignments by simply making the destination AST track the
-  // same array. No new variables need be introduced, saving lots of searching
+  // same array. No new variables need to be introduced, saving lots of searching
   // hopefully. This works because we're working with an SSA program where the
   // source array will never be modified.
 
@@ -45,7 +45,7 @@ unsigned int array_convt::new_array_id()
 {
   unsigned int new_base_array_id = array_indexes.size();
 
-  // Pouplate tracking data with empt containers
+  // Pouplate tracking data with empty containers
   idx_record_containert tmp_set;
   array_indexes.push_back(tmp_set);
 
@@ -724,7 +724,7 @@ void array_convt::join_array_indexes()
     }
   } while (modified);
 
-  // Right -- now join all ther indexes. This can be optimised, but not now.
+  // Right -- now join all ther indexes. This can be optimized, but not now.
   for (arrid = 0; arrid < array_updates.size(); arrid++)
   {
     auto const &arrset = array_relations[arrid];
@@ -793,7 +793,7 @@ void array_convt::add_new_indexes()
     re_execute.push_back(true);
     start_pos.push_back(expr_index_map[arrid].size());
 
-    // We're guarenteed that each of these indexes are _new_ to this array.
+    // We're guaranteed that each of these indexes are _new_ to this array.
     // Enumerate them, giving them a location in the expr_index_map.
     // NB: if, actually they're not new, insert will fail, safely
     index_map_containert &idx_map = expr_index_map[arrid];
@@ -837,7 +837,7 @@ void array_convt::add_new_indexes()
     array_update_vect &array_values = array_valuation[arrid];
     smt_sortt subtype = array_subtypes[arrid];
 
-    // Fill inital values with either free variables or the initialiser
+    // Fill inital values with either free variables or the initializer
     array_of_val_containert::nth_index<0>::type &array_num_idx =
       array_of_vals.get<0>();
     auto it = array_num_idx.find(arrid);
@@ -911,7 +911,7 @@ void array_convt::apply_new_selects()
   // (through execute_new_updates).
   // That then leaves new selects that apply to previously encoded array
   // values. We can just pick those straight out of the array valuation vector.
-  // This could be optimised, but not now.
+  // This could be optimized, but not now.
 
   for (unsigned int arrid = 0; arrid < array_selects.size(); arrid++)
   {

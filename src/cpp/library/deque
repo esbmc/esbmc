@@ -8,7 +8,6 @@
 
 namespace std
 {
-
 template <class T>
 class deque
 {
@@ -62,13 +61,16 @@ public:
 
     iterator &operator++()
     {
-      return iterator(++pointer, ++pos, vec_pos);
+      ++pointer;
+      ++pos;
+      return *this;
     }
-    iterator operator++(int b)
+    iterator operator++(int)
     {
-      return iterator(pointer++, pos++, vec_pos);
+      iterator temp = *this;
+      ++(*this); // Use the pre-increment operator
+      return temp;
     }
-
     iterator &operator--()
     {
       return iterator(--pointer, --pos, vec_pos);
@@ -247,6 +249,12 @@ public:
     reverse_iterator()
     {
     }
+    reverse_iterator(T *ppointer, int ppos, T *pvec_pos)
+    {
+      pointer = ppointer;
+      pos = ppos;
+      vec_pos = pvec_pos;
+    }
     reverse_iterator &operator=(const reverse_iterator &i)
     {
       pointer = i.pointer;
@@ -255,42 +263,106 @@ public:
       return *this;
     }
 
-    T *operator->();
+    T *operator->()
+    {
+      return pointer;
+    }
 
     T &operator*()
     {
       return *pointer;
     }
 
-    reverse_iterator &operator++();
-    reverse_iterator operator++(int n)
+    // Pre-increment: move backwards through the container
+    reverse_iterator &operator++()
     {
-      reverse_iterator buffer;
-      buffer.pointer = pointer;
-      buffer.pos = pos;
-      buffer.vec_pos = vec_pos;
-      pointer -= sizeof(T);
-      pos--;
+      --pointer;
+      --pos;
+      return *this;
+    }
+
+    // Post-increment: move backwards through the container
+    reverse_iterator operator++(int)
+    {
+      reverse_iterator buffer = *this;
+      --pointer;
+      --pos;
       return buffer;
     }
 
-    reverse_iterator &operator--();
-    reverse_iterator operator--(int);
+    // Pre-decrement: move forwards through the container
+    reverse_iterator &operator--()
+    {
+      ++pointer;
+      ++pos;
+      return *this;
+    }
 
-    bool operator==(const reverse_iterator &) const;
-    bool operator!=(const reverse_iterator &) const;
+    // Post-decrement: move forwards through the container
+    reverse_iterator operator--(int)
+    {
+      reverse_iterator buffer = *this;
+      ++pointer;
+      ++pos;
+      return buffer;
+    }
 
-    bool operator<(const reverse_iterator &) const;
-    bool operator>(const reverse_iterator &) const;
+    // Comparison operators - compare pointers
+    bool operator==(const reverse_iterator &i) const
+    {
+      return (pointer == i.pointer);
+    }
 
-    bool operator<=(const reverse_iterator &) const;
-    bool operator>=(const reverse_iterator &) const;
+    bool operator!=(const reverse_iterator &i) const
+    {
+      return (pointer != i.pointer);
+    }
 
-    reverse_iterator operator+(int) const;
-    reverse_iterator operator-(int) const;
+    bool operator<(const reverse_iterator &i) const
+    {
+      // For reverse iterators, < means greater pointer address
+      // because we're going backwards
+      return (pointer > i.pointer);
+    }
 
-    reverse_iterator &operator+=(int);
-    reverse_iterator &operator-=(int);
+    bool operator>(const reverse_iterator &i) const
+    {
+      return (pointer < i.pointer);
+    }
+
+    bool operator<=(const reverse_iterator &i) const
+    {
+      return (pointer >= i.pointer);
+    }
+
+    bool operator>=(const reverse_iterator &i) const
+    {
+      return (pointer <= i.pointer);
+    }
+
+    reverse_iterator operator+(int n) const
+    {
+      return reverse_iterator(pointer - n, pos - n, vec_pos);
+    }
+
+    reverse_iterator operator-(int n) const
+    {
+      return reverse_iterator(pointer + n, pos + n, vec_pos);
+    }
+
+    reverse_iterator &operator+=(int n)
+    {
+      pointer -= n;
+      pos -= n;
+      return *this;
+    }
+
+    reverse_iterator &operator-=(int n)
+    {
+      pointer += n;
+      pos += n;
+      return *this;
+    }
   };
 
   class const_reverse_iterator
@@ -473,17 +545,18 @@ public:
   reverse_iterator rbegin()
   {
     reverse_iterator buffer;
-    buffer.pointer = buf + _size;
+    buffer.pointer = buf + _size; // Points to last element
     buffer.pos = _size;
     buffer.vec_pos = buf;
     return buffer;
   }
   const_reverse_iterator rbegin() const;
+
   reverse_iterator rend()
   {
     reverse_iterator buffer;
     buf[0] = T();
-    buffer.pointer = buf;
+    buffer.pointer = buf; // Points to position before first element
     buffer.pos = 0;
     buffer.vec_pos = buf;
     return buffer;
@@ -674,16 +747,6 @@ public:
     }
     verify_capacity();
   }
-
-  //	void insert(iterator position, iterator first, iterator last){
-  //		int i = _size;
-  //		int aux;
-  //		while(first!=last){
-  //			insert(position++, *first);
-  //			first++;
-  //		}
-  //		verify_capacity();
-  //	}
 
   template <class Iterator1, class Iterator2>
   void insert(Iterator1 position, Iterator2 first, Iterator2 last)

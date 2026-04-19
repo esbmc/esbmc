@@ -1,0 +1,4 @@
+THOROUGH
+main.cpp
+--unwind 30 --no-unwinding-assertions --timeout 900 --bitwuzla
+^VERIFICATION SUCCESSFUL$

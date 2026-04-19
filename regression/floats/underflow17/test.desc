@@ -1,0 +1,5 @@
+CORE
+main.c
+--ir
+^  result = 0\.000000$
+^VERIFICATION FAILED$

@@ -19,6 +19,7 @@ if (WIN32)
   set(LIBGOMP_LIB "-lgomp -ldl")
   set(OS_FLEX_SMTLIB_FLAGS "--wincompat")
   set(OS_X86_INCLUDE_FOLDER "C:/")
+  set(OS_INCLUDE_LIBS "")
   set(OS_C2GOTO_FLAGS "-D_MSVC")
 
   if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")

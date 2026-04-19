@@ -1,0 +1,4 @@
+CORE
+main.c
+--parallel-solving -Wno-error=implicit-int -Wno-error=int-conversion -Wno-error=format-security
+^VERIFICATION FAILED$

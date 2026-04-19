@@ -3,23 +3,28 @@
 #################################
 cmake_minimum_required (VERSION 3.18)
 
-# HACK: This msvc policy needs to be setted before project()
+# HACK: This msvc policy needs to be set before project()
 # This can be removed when we move to CMake >= 3.15
 cmake_policy(SET CMP0091 NEW)
 
 project (ESBMC)
 
-set (ESBMC_VERSION_MAJOR 7)
-set (ESBMC_VERSION_MINOR 6)
-set (ESBMC_VERSION_PATCH 1)
+set (ESBMC_VERSION_MAJOR 8)
+set (ESBMC_VERSION_MINOR 2)
+set (ESBMC_VERSION_PATCH 0)
 set (ESBMC_VERSION "${ESBMC_VERSION_MAJOR}.${ESBMC_VERSION_MINOR}.${ESBMC_VERSION_PATCH}")
 
 # The only default solver available is smtlib
 set (ESBMC_AVAILABLE_SOLVERS "smtlib")
 
+set(MAX_SUPPORTED_LLVM_VERSION_MAJOR 21)
+
 #################################
 # Configuration                 #
 #################################
+
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 
 # Adds custom modules from ESBMC and default Options
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/scripts/cmake/")
@@ -57,7 +62,6 @@ include(Utils)
 include(OSConfiguration)
 include(Options)
 include(SendFileHack)
-include(AppleConfiguration)
 include(InstallFiles)
 include(Sanitizers)
 include(ClangTidy)
@@ -97,7 +101,11 @@ endif()
 
 
 # This MUST be executed after BuildStatic since it sets Boost Static flags
-find_package(Boost REQUIRED COMPONENTS filesystem system date_time program_options iostreams)
+# In boost-1.89, system and filesystem has been remove
+# To support the older version, added "optional" here
+find_package(Boost REQUIRED 
+  COMPONENTS date_time program_options iostreams
+  OPTIONAL_COMPONENTS system filesystem)
 include(FindLocalLLVM)
 
 include(ExternalDependencies)
@@ -106,11 +114,6 @@ include(ExternalDependencies)
 include(OptimizationCCache)
 include(WError)
 
-if(ENABLE_OLD_FRONTEND)
-  find_package(BISON 2.6.1 REQUIRED)
-  find_package(FLEX 2.6.1 REQUIRED)
-  add_definitions(-DENABLE_OLD_FRONTEND)
-endif()
 
 if(ENABLE_SOLIDITY_FRONTEND)
   add_definitions(-DENABLE_SOLIDITY_FRONTEND)

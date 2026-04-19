@@ -1,0 +1,6 @@
+CORE
+main.c
+--z3 --ir --no-simplify --multi-property
+VERIFICATION FAILED
+!= 1
+!= 0

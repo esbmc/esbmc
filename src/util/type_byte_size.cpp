@@ -148,7 +148,7 @@ BigInt type_sizet::size_bits(const type2tc &type) const
 
   case type2t::union_id:
   {
-    // Very simple: the largest field size, rounded up to a word boundry for
+    // Very simple: the largest field size, rounded up to a word boundary for
     // array allocation alignment.
     BigInt max_size = 0;
     for (auto const &it : to_union_type(type).members)
@@ -274,7 +274,7 @@ expr2tc type_sizet::size_bits_expr(const type2tc &type) const
 
   case type2t::union_id:
   {
-    // Very simple: the largest field size, rounded up to a word boundry for
+    // Very simple: the largest field size, rounded up to a word boundary for
     // array allocation alignment.
     BigInt max_cnst = 0;
     expr2tc max_dyn;

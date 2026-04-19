@@ -3,37 +3,75 @@
 
 #include "cstddef"
 #include "iterator"
-
-#if 0
-template<class T> class allocator {
-	T value_type;
-	T* pointer;
-	T& reference;
-	const T* const_pointer;
-	const T& const_reference;
-	unsigned int size_type;
-	ptrdiff_t difference_type;
-
-	allocator() throw ();
-	allocator(const allocator&) throw ();
-	template<class U>
-	allocator(const allocator<U>&) throw ();
-	pointer address(reference x) const;
-	const_pointer address(const_reference x) const;
-	pointer allocate(size_type n, allocator<void>::const_pointer hint = 0);
-	void deallocate(pointer p, size_type n);
-	size_type max_size() const throw ();
-	void construct(pointer p, const_reference val) {
-		new ((void*) p) T(val);
-	}
-	void destroy(pointer p) {
-		((T*) p)->~T();
-	}
-};
-#endif
+#include "utility"
+#include "type_traits"
+#include "stdlib.h"
 
 namespace std
 {
+// Minimal allocator implementation
+template <typename T>
+class allocator
+{
+public:
+  typedef T value_type;
+  typedef T *pointer;
+  typedef const T *const_pointer;
+  typedef T &reference;
+  typedef const T &const_reference;
+  typedef size_t size_type;
+  typedef ptrdiff_t difference_type;
+
+  template <typename U>
+  struct rebind
+  {
+    typedef allocator<U> other;
+  };
+
+  allocator() = default;
+
+  template <typename U>
+  allocator(const allocator<U> &)
+  {
+  }
+
+  pointer allocate(size_type n)
+  {
+    return static_cast<pointer>(malloc(n * sizeof(T)));
+  }
+
+  void deallocate(pointer ptr, size_type)
+  {
+    free(ptr);
+  }
+
+  template <typename U, typename... Args>
+  void construct(U *ptr, Args &&...args)
+  {
+    new (ptr) U(args...);
+  }
+
+  template <typename U>
+  void destroy(U *ptr)
+  {
+    ptr->~U();
+  }
+
+  size_type max_size() const
+  {
+    return size_t(-1) / sizeof(T);
+  }
+
+  bool operator==(const allocator &) const
+  {
+    return true;
+  }
+  bool operator!=(const allocator &) const
+  {
+    return false;
+  }
+};
+
 template <class X>
 class auto_ptr
 {
@@ -89,6 +127,352 @@ copy(InputIterator first, InputIterator last, ForwardIterator result)
       typename iterator_traits<ForwardIterator>::value_type(*first);
   return result;
 }
+
+#if __cplusplus >= 201103L // Check if C++11 or later is being used
+
+template <class T>
+struct default_delete
+{
+  constexpr default_delete() noexcept = default;
+
+  // Converting constructor: allows default_delete<U> -> default_delete<T>
+  // when U* is implicitly convertible to T* (e.g. Derived* -> Base*).
+  template <class U>
+  default_delete(const default_delete<U> &) noexcept
+  {
+  }
+
+  void operator()(T *ptr) const
+  {
+    delete ptr;
+  }
+};
+
+// Partial specialization of default_delete for array types
+template <class T>
+struct default_delete<T[]>
+{
+  constexpr default_delete() noexcept = default;
+
+  void operator()(T *ptr) const
+  {
+    delete[] ptr;
+  }
+};
+
+template <class T, class D = default_delete<T>>
+class unique_ptr
+{
+  T *ptr;
+  D deleter;
+
+public:
+  explicit unique_ptr(T *p = nullptr, D del = D()) : ptr(p), deleter(del)
+  {
+  }
+
+  unique_ptr(const unique_ptr &) = delete;
+  unique_ptr &operator=(const unique_ptr &) = delete;
+
+  unique_ptr(unique_ptr &&other) noexcept
+    : ptr(other.ptr), deleter(std::move(other.deleter))
+  {
+    other.ptr = nullptr;
+  }
+
+  unique_ptr &operator=(unique_ptr &&other) noexcept
+  {
+    if (this != &other)
+    {
+      deleter(ptr);
+
+      ptr = other.ptr;
+      deleter = std::move(other.deleter);
+      other.ptr = nullptr;
+    }
+    return *this;
+  }
+
+  // Converting move constructor: allows unique_ptr<U> -> unique_ptr<T>
+  // when U* is implicitly convertible to T* (e.g. Derived* -> Base*).
+  template <class U, class E>
+  unique_ptr(unique_ptr<U, E> &&other) noexcept
+    : ptr(other.release()), deleter(std::move(other.get_deleter()))
+  {
+  }
+
+  // Converting move assignment: allows unique_ptr<U> -> unique_ptr<T>
+  // when U* is implicitly convertible to T* (e.g. Derived* -> Base*).
+  // No self-assignment check needed: U != T guarantees different objects.
+  template <class U, class E>
+  unique_ptr &operator=(unique_ptr<U, E> &&other) noexcept
+  {
+    if (ptr)
+      deleter(ptr);
+    ptr = other.release();
+    deleter = std::move(other.get_deleter());
+    return *this;
+  }
+
+#if 0
+  // TODO: fix remove goto sideeffect
+  ~unique_ptr()
+  {
+    deleter(ptr);
+  }
+#endif
+
+  T *operator->() const
+  {
+    return ptr;
+  }
+
+  T &operator*() const
+  {
+    return *ptr;
+  }
+
+  T *release()
+  {
+    T *temp = ptr;
+    ptr = nullptr;
+    return temp;
+  }
+
+  void reset(T *p = nullptr)
+  {
+    if (ptr != p)
+    {
+      deleter(ptr);
+      ptr = p;
+    }
+  }
+
+  T *get() const
+  {
+    return ptr;
+  }
+
+  D &get_deleter()
+  {
+    return deleter;
+  }
+
+  const D &get_deleter() const
+  {
+    return deleter;
+  }
+
+  explicit operator bool() const noexcept
+  {
+    return ptr != nullptr;
+  }
+
+  void swap(unique_ptr &other) noexcept
+  {
+    std::swap(ptr, other.ptr);
+    std::swap(deleter, other.deleter);
+  }
+};
+
+// Partial specialization for arrays: unique_ptr<T[]>
+// Stores T* internally; provides operator[] instead of operator* and operator->
+template <class T, class D>
+class unique_ptr<T[], D>
+{
+  T *ptr;
+  D deleter;
+
+public:
+  explicit unique_ptr(T *p = nullptr, D del = D()) : ptr(p), deleter(del)
+  {
+  }
+
+  unique_ptr(const unique_ptr &) = delete;
+  unique_ptr &operator=(const unique_ptr &) = delete;
+
+  unique_ptr(unique_ptr &&other) noexcept
+    : ptr(other.ptr), deleter(std::move(other.deleter))
+  {
+    other.ptr = nullptr;
+  }
+
+  unique_ptr &operator=(unique_ptr &&other) noexcept
+  {
+    if (this != &other)
+    {
+      deleter(ptr);
+      ptr = other.ptr;
+      deleter = std::move(other.deleter);
+      other.ptr = nullptr;
+    }
+    return *this;
+  }
+
+  // Converting move constructor: allows unique_ptr<U[]> -> unique_ptr<T[]>
+  // when U* is implicitly convertible to T* (e.g. Derived* -> Base*).
+  template <class U, class E>
+  unique_ptr(unique_ptr<U[], E> &&other) noexcept
+    : ptr(other.release()), deleter(std::move(other.get_deleter()))
+  {
+  }
+
+  // Converting move assignment: allows unique_ptr<U[]> -> unique_ptr<T[]>.
+  template <class U, class E>
+  unique_ptr &operator=(unique_ptr<U[], E> &&other) noexcept
+  {
+    if (ptr)
+      deleter(ptr);
+    ptr = other.release();
+    deleter = std::move(other.get_deleter());
+    return *this;
+  }
+
+  T &operator[](size_t i) const
+  {
+    return ptr[i];
+  }
+
+  T *get() const
+  {
+    return ptr;
+  }
+
+  T *release()
+  {
+    T *temp = ptr;
+    ptr = nullptr;
+    return temp;
+  }
+
+  void reset(T *p = nullptr)
+  {
+    if (ptr != p)
+    {
+      deleter(ptr);
+      ptr = p;
+    }
+  }
+
+  D &get_deleter()
+  {
+    return deleter;
+  }
+
+  const D &get_deleter() const
+  {
+    return deleter;
+  }
+
+  explicit operator bool() const noexcept
+  {
+    return ptr != nullptr;
+  }
+
+  void swap(unique_ptr &other) noexcept
+  {
+    std::swap(ptr, other.ptr);
+    std::swap(deleter, other.deleter);
+  }
+};
+
+template <class T, class D>
+bool operator==(const unique_ptr<T, D> &x, std::nullptr_t) noexcept
+{
+  return x.get() == nullptr;
+}
+
+template <class T, class D>
+bool operator==(std::nullptr_t, const unique_ptr<T, D> &x) noexcept
+{
+  return x.get() == nullptr;
+}
+
+template <class T, class D>
+bool operator!=(const unique_ptr<T, D> &x, std::nullptr_t) noexcept
+{
+  return x.get() != nullptr;
+}
+
+template <class T, class D>
+bool operator!=(std::nullptr_t, const unique_ptr<T, D> &x) noexcept
+{
+  return x.get() != nullptr;
+}
+
+template <class T, class D>
+bool operator==(const unique_ptr<T, D> &x, const T *ptr) noexcept
+{
+  return x.get() == ptr;
+}
+
+template <class T, class D>
+bool operator!=(const unique_ptr<T, D> &x, const T *ptr) noexcept
+{
+  return x.get() != ptr;
+}
+
+template <class T, class D>
+bool operator==(const T *ptr, const unique_ptr<T, D> &x) noexcept
+{
+  return x.get() == ptr;
+}
+
+template <class T, class D>
+bool operator!=(const T *ptr, const unique_ptr<T, D> &x) noexcept
+{
+  return x.get() != ptr;
+}
+
+template <class T, class D>
+bool operator<(const unique_ptr<T, D> &x, const unique_ptr<T, D> &y) noexcept
+{
+  return x.get() < y.get();
+}
+
+template <class T, class D>
+bool operator<=(const unique_ptr<T, D> &x, const unique_ptr<T, D> &y) noexcept
+{
+  return !(y < x);
+}
+
+template <class T, class D>
+bool operator>(const unique_ptr<T, D> &x, const unique_ptr<T, D> &y) noexcept
+{
+  return y < x;
+}
+
+template <class T, class D>
+bool operator>=(const unique_ptr<T, D> &x, const unique_ptr<T, D> &y) noexcept
+{
+  return !(x < y);
+}
+
+template <class T, class D>
+void swap(unique_ptr<T, D> &x, unique_ptr<T, D> &y) noexcept
+{
+  x.swap(y);
+}
+#endif
+
+#if __cplusplus >= 201402L
+template <
+  class T,
+  class... Args,
+  class = typename enable_if<!is_array<T>::value>::type>
+unique_ptr<T> make_unique(Args &&...args)
+{
+  return unique_ptr<T>(new T(std::forward<Args>(args)...));
+}
+
+template <
+  class T,
+  class = typename enable_if<is_array<T>::value && extent<T>::value == 0>::type>
+unique_ptr<T> make_unique(size_t n)
+{
+  return unique_ptr<T>(new remove_extent_t<T>[n]());
+}
+#endif
 
 #if 0
 template <class OutputIterator, class T>

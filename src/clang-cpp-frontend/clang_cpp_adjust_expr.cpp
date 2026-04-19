@@ -10,6 +10,55 @@ clang_cpp_adjust::clang_cpp_adjust(contextt &_context)
 {
 }
 
+void clang_cpp_adjust::gen_implicit_union_copy_move_constructor(symbolt &symbol)
+{
+  if (!symbol.type.is_code())
+    return;
+
+  code_typet &ctor_type = to_code_type(symbol.type);
+
+  if (
+    ctor_type.return_type().id() != "constructor" ||
+    !ctor_type.return_type().get_bool("#implicit_union_copy_move_constructor"))
+    return;
+
+  if (symbol.value.is_not_nil())
+  {
+    code_blockt &ctor_body = to_code_block(to_code(symbol.value));
+    assert(
+      ctor_body.operands().size() == 1 &&
+      ctor_body.op0().statement() ==
+        "throw_decl"); // just a sanity check that we don't accidentally change any clang generated body in the future
+  }
+  else
+  {
+    code_blockt ctor_body;
+    symbol.value = ctor_body;
+  }
+  code_blockt &ctor_body = to_code_block(to_code(symbol.value));
+  /* https://en.cppreference.com/w/cpp/language/copy_constructor#Implicitly-defined_copy_constructor
+   * > If the implicitly-declared copy constructor is not deleted, it is defined (that is, a function body is generated and compiled)
+   * > by the compiler if odr-used or needed for constant evaluation(since C++11).
+   * > **For union types, the implicitly-defined copy constructor copies the object representation (as by std::memmove).**
+   * We don't call std::memmove here, we should be able to just assign the union.
+   * (The wording is similar for https://en.cppreference.com/w/cpp/language/move_constructor#Implicitly-defined_move_constructor)
+   */
+
+  code_assignt copy_ctor_assign;
+  auto this_argument = ctor_type.arguments().at(0);
+  auto this_copy_ref_argument = ctor_type.arguments().at(1);
+  exprt lhs = dereference_exprt(
+    symbol_exprt(this_argument.cmt_identifier(), this_argument.type()),
+    this_argument.type());
+  exprt rhs = symbol_exprt(
+    this_copy_ref_argument.cmt_identifier(), this_copy_ref_argument.type());
+  copy_ctor_assign.lhs() = lhs;
+  copy_ctor_assign.rhs() = rhs;
+  copy_ctor_assign.location() = ctor_body.location();
+  adjust_assign(copy_ctor_assign);
+  ctor_body.operands().push_back(copy_ctor_assign);
+}
+
 void clang_cpp_adjust::adjust_symbol(symbolt &symbol)
 {
   clang_c_adjust::adjust_symbol(symbol);
@@ -21,6 +70,7 @@ void clang_cpp_adjust::adjust_symbol(symbolt &symbol)
    * class to point to the corresponding virtual table.
    */
   gen_vptr_initializations(symbol);
+  gen_implicit_union_copy_move_constructor(symbol);
 }
 
 void clang_cpp_adjust::adjust_side_effect(side_effect_exprt &expr)
@@ -33,6 +83,7 @@ void clang_cpp_adjust::adjust_side_effect(side_effect_exprt &expr)
   }
   else if (statement == "cpp_delete" || statement == "cpp_delete[]")
   {
+    adjust_operands(expr);
     // adjust side effect node to explicitly call class destructor
     // e.g. the adjustment here will add the following instruction in GOTO:
     // FUNCTION_CALL:  ~t2(&(*p))
@@ -103,6 +154,22 @@ void clang_cpp_adjust::adjust_member(member_exprt &expr)
   }
 }
 
+void clang_cpp_adjust::adjust_cpp_pseudo_destructor_call(exprt &expr)
+{
+  // We have a call to a pseudo destructor.
+  // However, there is nothing to actually call for a pseudo destructor.
+  // Instead, all a pseudo destructor does is to evaluate the base expression.
+  assert(expr.operands().size() == 2);
+
+  exprt &pseudo_destructor = expr.op0();
+  assert(pseudo_destructor.is_not_nil());
+  assert(pseudo_destructor.operands().size() == 1);
+  exprt &destructor_base = pseudo_destructor.op0();
+
+  expr = destructor_base;
+  adjust_expr(expr);
+}
+
 void clang_cpp_adjust::adjust_cpp_member(member_exprt &expr)
 {
   /*
@@ -132,19 +199,6 @@ void clang_cpp_adjust::adjust_cpp_member(member_exprt &expr)
   assert(comp_symb->type.is_code());
   exprt method_call = symbol_expr(*comp_symb);
   expr.swap(method_call);
-}
-
-void clang_cpp_adjust::adjust_if(exprt &expr)
-{
-  // Check all operands
-  adjust_operands(expr);
-
-  // If the condition is not of boolean type, it must be casted
-  gen_typecast(ns, expr.op0(), bool_type());
-
-  // Typecast both the true and false results
-  gen_typecast(ns, expr.op1(), expr.type());
-  gen_typecast(ns, expr.op2(), expr.type());
 }
 
 void clang_cpp_adjust::adjust_side_effect_assign(side_effect_exprt &expr)
@@ -363,17 +417,17 @@ void clang_cpp_adjust::convert_exception_id(
       if (bases.is_not_nil() && bases.get_sub().size())
       {
         // record the derived class
-        ids.emplace_back(id2string(identifier) + suffix);
+        ids.emplace_back(id2string(identifier).substr(4) + suffix);
 
         // record all the base classes id
         for (const auto &i : bases.get_sub())
         {
           identifier = i.id();
-          ids.emplace_back(id2string(identifier) + suffix);
+          ids.emplace_back(id2string(identifier).substr(4) + suffix);
         }
       }
       else
-        ids.emplace_back(id2string(identifier) + suffix);
+        ids.emplace_back(id2string(identifier).substr(4) + suffix);
     }
     else
       ids.emplace_back(id2string(identifier) + suffix);
@@ -393,4 +447,17 @@ void clang_cpp_adjust::convert_exception_id(
   std::string cpp_type = type.get("#cpp_type").as_string();
   if (!cpp_type.empty())
     ids.emplace_back(cpp_type + suffix);
+}
+
+void clang_cpp_adjust::adjust_side_effect_function_call(
+  side_effect_expr_function_callt &expr)
+{
+  if (expr.operands().size() == 2 && expr.op0().id() == "cpp-pseudo-destructor")
+  {
+    adjust_cpp_pseudo_destructor_call(expr);
+  }
+  else
+  {
+    clang_c_adjust::adjust_side_effect_function_call(expr);
+  }
 }

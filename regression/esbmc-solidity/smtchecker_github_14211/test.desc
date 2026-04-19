@@ -1,4 +1,4 @@
 CORE
 contract.solast
---function f --sol contract.sol
+--function f --sol contract.sol --incremental-bmc
 ^VERIFICATION FAILED$

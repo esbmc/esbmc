@@ -16,6 +16,7 @@ void goto_convertt::convert_function_call(
     function_call.lhs(),
     function_call.function(),
     function_call.arguments(),
+    function_call.location(),
     dest);
 }
 
@@ -23,12 +24,14 @@ void goto_convertt::do_function_call(
   const exprt &lhs,
   const exprt &function,
   const exprt::operandst &arguments,
+  const locationt &location,
   goto_programt &dest)
 {
   // make it all side effect free
   exprt new_lhs = lhs, new_function = function;
 
   exprt::operandst new_arguments = arguments;
+  new_function.location() = location;
 
   if (!new_lhs.is_nil())
   {
@@ -106,7 +109,7 @@ void goto_convertt::do_function_call_if(
   goto_programt tmp_y;
   goto_programt::targett y;
 
-  do_function_call(lhs, function.op2(), arguments, tmp_y);
+  do_function_call(lhs, function.op2(), arguments, locationt(), tmp_y);
 
   if (tmp_y.instructions.empty())
     y = tmp_y.add_instruction(SKIP);
@@ -119,17 +122,10 @@ void goto_convertt::do_function_call_if(
   v->guard = not2tc(v->guard);
   v->location = function.op0().location();
 
-  unsigned int globals = get_expr_number_globals(v->guard);
-  if (globals > 1)
-  {
-    exprt tmp = migrate_expr_back(v->guard);
-    break_globals2assignments(tmp, tmp_v, lhs.location());
-  }
-
   // w: f();
   goto_programt tmp_w;
 
-  do_function_call(lhs, function.op1(), arguments, tmp_w);
+  do_function_call(lhs, function.op1(), arguments, locationt(), tmp_w);
 
   if (tmp_w.instructions.empty())
     tmp_w.add_instruction(SKIP);

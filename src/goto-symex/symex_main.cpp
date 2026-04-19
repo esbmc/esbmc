@@ -5,6 +5,8 @@
 #include <goto-symex/reachability_tree.h>
 #include <goto-symex/symex_target_equation.h>
 
+#include <langapi/language_util.h>
+
 #include <pointer-analysis/value_set_analysis.h>
 
 #include <util/c_types.h>
@@ -14,7 +16,6 @@
 #include <util/migrate.h>
 #include <util/prefix.h>
 #include <util/pretty.h>
-#include <util/simplify_expr.h>
 #include <util/std_expr.h>
 #include <util/time_stopping.h>
 
@@ -29,16 +30,20 @@ bool goto_symext::check_incremental(const expr2tc &expr, const std::string &msg)
     // check whether the assertion holds
     tvt res = rte->ask_solver_question(question);
     // we don't add this assertion to the resulting logical formula
+    // However, we add it as an assumption to reduce the solver time
     if (res.is_true())
+    {
+      // convert assertion into an assumption
+      assume(expr);
       // incremental verification succeeded
       return true;
+    }
     // this assertion evaluates to false via incremental SMT solving
     if (res.is_false())
     {
       // check assertion to produce a counterexample
       assertion(gen_false_expr(), msg);
-      // eliminate subsequent execution paths
-      assume(gen_false_expr());
+
       // incremental verification succeeded
       return true;
     }
@@ -57,43 +62,86 @@ bool goto_symext::check_incremental(const expr2tc &expr, const std::string &msg)
 
 void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
 {
+  // Can happen when evaluating certain special intrinsics. Gulp.
+  if (cur_state->guard.is_false())
+    return;
+
+  ++total_claims;
+
+  expr2tc new_expr = claim_expr;
+  cur_state->rename(new_expr);
+
+  // simplify the renamed expression to potentially optimize the claim
+  do_simplify(new_expr);
+
+  if (is_true(new_expr))
+  {
+    if (options.get_bool_option("multi-property"))
+    {
+      // Log that this assertion was trivially verified
+      log_success(
+        "✓ PASSED: '{}' at {}",
+        msg,
+        cur_state->source.pc->location.as_string());
+
+      // Track trivially verified claims
+      ++simplified_claims;
+    }
+
+    // Strengthen the claim by assuming it when trivially true
+    assume(claim_expr);
+    return;
+  }
+
+  // Interval-based assertion pruning (--interval-symex-assert). Evaluate the
+  // pre-rename expression (the domain keys on original names). Skip when the
+  // domain is bottom — empty intervals vacuously don't contain 0, which would
+  // let every query succeed. Only prune on TRUE, never FALSE: the shared,
+  // non-forked domain may carry assume() residue from sibling branches, and
+  // pruning on a contaminated FALSE would silently drop real bugs.
+  if (
+    options.get_bool_option("interval-symex-assert") && interval_domain_state &&
+    !interval_domain_state->is_bottom() &&
+    interval_domaint::eval_boolean_expression(
+      claim_expr, *interval_domain_state)
+      .is_true())
+  {
+    if (options.get_bool_option("multi-property"))
+    {
+      log_success(
+        "✓ PASSED (interval): '{}' at {}",
+        msg,
+        cur_state->source.pc->location.as_string());
+      ++simplified_claims;
+    }
+
+    assume(claim_expr);
+    return;
+  }
+
+  // Perform incremental SMT-based verification if enabled
+  if (
+    options.get_bool_option("smt-symex-assert") &&
+    check_incremental(new_expr, msg))
+    return; // Verification succeeded, no further action needed
+
+  // add assertion to the target equation
+  assertion(new_expr, msg);
+
   // Convert asserts in assumes, if it's not the last loop iteration
+  // This is a common technique in k-induction to strengthen the induction hypothesis.
   // also, don't convert assertions added by the bidirectional search
   if (
     inductive_step && first_loop && !cur_state->source.pc->inductive_assertion)
   {
+    // Fetch the current loop iteration count
     BigInt unwind = cur_state->loop_iterations[first_loop];
-    if (unwind < (max_unwind - 1))
+    if (unwind < max_unwind - 1)
     {
       assume(claim_expr);
       return;
     }
   }
-
-  // Can happen when evaluating certain special intrinsics. Gulp.
-  if (cur_state->guard.is_false())
-    return;
-
-  total_claims++;
-
-  expr2tc new_expr = claim_expr;
-  cur_state->rename(new_expr);
-
-  // first try simplifier on it
-  do_simplify(new_expr);
-
-  if (is_true(new_expr))
-    return;
-
-  if (options.get_bool_option("smt-symex-assert"))
-  {
-    if (check_incremental(new_expr, msg))
-      // incremental verification has succeeded
-      return;
-  }
-
-  // add assertion to the target equation
-  assertion(new_expr, msg);
 }
 
 void goto_symext::assertion(
@@ -113,6 +161,30 @@ void goto_symext::assertion(
     first_loop);
 }
 
+bool goto_symext::is_assume_false(const expr2tc &assumption)
+{
+  if (options.get_bool_option("smt-symex-assume"))
+  {
+    runtime_encoded_equationt *rte =
+      dynamic_cast<runtime_encoded_equationt *>(target.get());
+
+    expr2tc the_question = equality2tc(gen_true_expr(), assumption);
+
+    try
+    {
+      tvt res = rte->ask_solver_question(the_question);
+      if (res.is_false())
+        return true;
+    }
+    catch (runtime_encoded_equationt::dual_unsat_exception &e)
+    {
+      return true;
+    }
+  }
+
+  return is_false(assumption);
+}
+
 void goto_symext::assume(const expr2tc &the_assumption)
 {
   expr2tc assumption = the_assumption;
@@ -129,13 +201,14 @@ void goto_symext::assume(const expr2tc &the_assumption)
   target->assumption(tmp_guard, assumption, cur_state->source, first_loop);
 
   // If we're assuming false, make the guard for the following statement false
-  if (is_false(the_assumption))
+  if (is_false(the_assumption) || is_assume_false(the_assumption))
     cur_state->guard.make_false();
 }
 
 goto_symext::symex_resultt goto_symext::get_symex_result()
 {
-  return goto_symext::symex_resultt(target, total_claims, remaining_claims);
+  return goto_symext::symex_resultt(
+    target, total_claims, remaining_claims, simplified_claims);
 }
 
 void goto_symext::symex_step(reachability_treet &art)
@@ -143,6 +216,7 @@ void goto_symext::symex_step(reachability_treet &art)
   assert(!cur_state->call_stack.empty());
 
   const goto_programt::instructiont &instruction = *cur_state->source.pc;
+  const goto_programt::const_targett pre_step_pc = cur_state->source.pc;
 
   // depth exceeded?
   {
@@ -165,8 +239,15 @@ void goto_symext::symex_step(reachability_treet &art)
     break;
 
   case END_FUNCTION:
-    symex_end_of_function();
+    if (
+      inside_unexpected &&
+      unexpected_end == cur_state->source.pc->function.as_string())
+    {
+      std::string msg = std::string("Unexpected exceptions");
+      claim(gen_false_expr(), msg);
+    }
 
+    symex_end_of_function();
     if (!stack_catch.empty())
     {
       // Get to the correct try (always the last one)
@@ -185,9 +266,11 @@ void goto_symext::symex_step(reachability_treet &art)
   {
     expr2tc tmp(instruction.guard);
     replace_nondet(tmp);
+    volatile_check(tmp);
 
     dereference(tmp, dereferencet::READ);
     replace_dynamic_allocation(tmp);
+    simplify_python_builtins(tmp);
 
     symex_goto(tmp);
   }
@@ -200,6 +283,10 @@ void goto_symext::symex_step(reachability_treet &art)
 
   case ASSERT:
     symex_assert();
+    cur_state->source.pc++;
+    break;
+
+  case LOOP_INVARIANT:
     cur_state->source.pc++;
     break;
 
@@ -315,9 +402,11 @@ void goto_symext::symex_step(reachability_treet &art)
       const irep_idt &id = to_symbol2t(call.function).thename;
       if (has_prefix(id.as_string(), "c:@F@__builtin"))
       {
-        cur_state->source.pc++;
         if (run_builtin(call, id.as_string()))
+        {
+          cur_state->source.pc++;
           return;
+        }
       }
     }
 
@@ -384,6 +473,13 @@ void goto_symext::symex_step(reachability_treet &art)
       fmt::underlying(instruction.type));
     abort();
   }
+
+  // Feed the instruction into the online interval domain shared by
+  // guard pruning (default; disable with --no-interval-symex-guard) and
+  // --interval-symex-assert. Skip unreachable paths so stale state from
+  // contradicted branches does not leak into the shared domain.
+  if (interval_domain_state && !cur_state->guard.is_false())
+    interval_domain_state->process_instruction(pre_step_pc);
 }
 
 void goto_symext::symex_assume()
@@ -398,6 +494,33 @@ void goto_symext::symex_assume()
   replace_dynamic_allocation(cond);
 
   assume(cond);
+  expr2tc c = cond;
+  // Recursively remove typecast
+  while (is_typecast2t(c))
+    c = to_typecast2t(c).from;
+
+  // Hack for assume, which allows us to take advantage
+  // of constant propagation in some cases
+  if (is_equality2t(c))
+  {
+    // In the IEEE-754 floating-point number semantics,
+    // there can be situations where the numerical comparison is equal,
+    // but the internal bit patterns are different: +0.0 and -0.0
+
+    // We don't perform constant propagation on it.
+    expr2tc lhs = to_equality2t(c).side_1;
+    expr2tc rhs = to_equality2t(c).side_2;
+    if (
+      is_symbol2t(lhs) && is_constant_expr(rhs) &&
+      !(is_constant_floatbv2t(rhs) &&
+        to_constant_floatbv2t(rhs).value.is_zero()))
+      cur_state->assignment(lhs, rhs);
+    else if (
+      is_symbol2t(rhs) && is_constant_expr(lhs) &&
+      !(is_constant_floatbv2t(lhs) &&
+        to_constant_floatbv2t(lhs).value.is_zero()))
+      cur_state->assignment(rhs, lhs);
+  }
 }
 
 void goto_symext::symex_assert()
@@ -410,19 +533,23 @@ void goto_symext::symex_assert()
   if (cur_state->source.pc->location.user_provided() && no_assertions)
     return;
 
+  const goto_programt::instructiont &instruction = *cur_state->source.pc;
+
   std::string msg = cur_state->source.pc->location.comment().as_string();
   if (msg == "")
-    msg = "assertion";
-
-  const goto_programt::instructiont &instruction = *cur_state->source.pc;
+  {
+    exprt guard = migrate_expr_back(instruction.guard);
+    msg = "assertion " + from_expr(ns, "", guard);
+  }
 
   expr2tc tmp = instruction.guard;
   replace_nondet(tmp);
 
-  intrinsic_races_check_dereference(tmp);
-
   dereference(tmp, dereferencet::READ);
   replace_dynamic_allocation(tmp);
+
+  replace_races_check(tmp);
+  simplify_python_builtins(tmp);
 
   claim(tmp, msg);
 }
@@ -480,12 +607,6 @@ void goto_symext::run_intrinsic(
     return;
   }
 
-  if (symname == "c:@F@__ESBMC_get_thread_state")
-  {
-    intrinsic_get_thread_state(func_call, art);
-    return;
-  }
-
   if (symname == "c:@F@__ESBMC_really_atomic_begin")
   {
     intrinsic_really_atomic_begin(art);
@@ -528,9 +649,21 @@ void goto_symext::run_intrinsic(
     return;
   }
 
+  if (symname == "c:@F@__ESBMC_memcpy")
+  {
+    intrinsic_memcpy(art, func_call);
+    return;
+  }
+
   if (symname == "c:@F@__ESBMC_get_object_size")
   {
     intrinsic_get_object_size(func_call, art);
+    return;
+  }
+
+  if (symname == "c:@F@__ESBMC_builtin_object_size")
+  {
+    intrinsic_builtin_object_size(func_call, art);
     return;
   }
 
@@ -655,6 +788,38 @@ void goto_symext::run_intrinsic(
     symex_assign(code_assign2tc(func_call.ret, is_little_endian));
     return;
   }
+
+  if (has_prefix(symname, "c:@F@__ESBMC_is_fresh"))
+  {
+    assert(
+      func_call.operands.size() == 2 && "Wrong __ESBMC_is_fresh signature");
+    auto &ex_state = art.get_cur_state();
+    if (ex_state.cur_state->guard.is_false())
+      return;
+
+    // __ESBMC_is_fresh runtime handler
+    //
+    // Design rationale:
+    // When contract enforcement is enabled, memory allocation for is_fresh calls
+    // happens in the contract wrapper (see contracts.cpp generate_checking_wrapper).
+    // The wrapper allocates memory BEFORE calling the original function, avoiding
+    // the C call-by-value problem where parameter modifications don't affect the caller.
+    //
+    // In the original function body, we simply return true to satisfy the requires
+    // clause check. The actual memory has already been allocated in the wrapper,
+    // so no allocation is performed here.
+    //
+    // When contract enforcement is NOT enabled (e.g., in normal execution or when
+    // verifying callers), this intrinsic would typically not be called, as is_fresh
+    // should only appear in requires clauses of functions with enforced contracts.
+
+    // Return true to indicate the memory allocation succeeded
+    if (!is_nil_expr(func_call.ret))
+      symex_assign(code_assign2tc(func_call.ret, gen_true_expr()));
+
+    return;
+  }
+
   else if (symname == "c:@F@__ESBMC_no_abnormal_memory_leak")
   {
     expr2tc no_abnormal_memleak =
@@ -708,12 +873,12 @@ void goto_symext::run_intrinsic(
       {
         type_byte_size(item.object->type).to_int64();
       }
-      catch (array_type2t::dyn_sized_array_excp *e)
+      catch (const array_type2t::dyn_sized_array_excp &e)
       {
         log_error("__ESBMC_init_object does not support VLAs");
         abort();
       }
-      catch (array_type2t::inf_sized_array_excp *e)
+      catch (const array_type2t::inf_sized_array_excp &e)
       {
         log_error(
           "__ESBMC_init_object does not support infinite-length arrays");
@@ -763,6 +928,75 @@ void goto_symext::run_intrinsic(
     return;
   }
 
+  if (symname == "c:@F@__ESBMC_r_ok")
+  {
+    assert(func_call.operands.size() == 2 && "__ESBMC_r_ok expects 2 operands");
+
+    expr2tc addr = func_call.operands[0];
+    expr2tc len_expr = func_call.operands[1];
+    expr2tc final_result;
+
+    internal_deref_items.clear();
+
+    expr2tc deref = dereference2tc(get_empty_type(), addr);
+    dereference(deref, dereferencet::INTERNAL);
+
+    type2tc size_type = get_uint64_type();
+    expr2tc cast_len_expr = typecast2tc(size_type, len_expr);
+    addr = typecast2tc(size_type, addr);
+    expr2tc zero = constant_int2tc(size_type, BigInt(0));
+
+    final_result =
+      implies2tc(equality2tc(addr, zero), equality2tc(zero, cast_len_expr));
+
+    for (const auto &item : internal_deref_items)
+    {
+      expr2tc base_obj = item.object;
+      expr2tc base_size;
+
+      if (is_array_type(base_obj->type))
+      {
+        const array_type2t &arr_type = to_array_type(base_obj->type);
+        if (!is_nil_expr(arr_type.array_size))
+        {
+          BigInt elem_size = type_byte_size(arr_type.subtype);
+          expr2tc elem_size_expr = constant_int2tc(size_type, elem_size);
+          expr2tc array_size = typecast2tc(size_type, arr_type.array_size);
+          base_size = mul2tc(size_type, array_size, elem_size_expr);
+        }
+      }
+      else if (is_struct_type(base_obj->type))
+      {
+        // Total size of the entire struct
+        base_size = constant_int2tc(size_type, type_byte_size(base_obj->type));
+      }
+      else if (is_symbol2t(base_obj))
+      {
+        // Try getting size from type directly
+        BigInt sz = type_byte_size(base_obj->type);
+        if (sz > 0)
+          base_size = constant_int2tc(size_type, sz);
+      }
+
+      if (is_nil_expr(base_size))
+        continue;
+
+      base_size = sub2tc(base_size->type, base_size, item.offset);
+      expr2tc lower_bound = lessthanequal2tc(zero, cast_len_expr);
+      expr2tc upper_bound = lessthanequal2tc(cast_len_expr, base_size);
+      expr2tc check = and2tc(lower_bound, upper_bound);
+      expr2tc result = implies2tc(item.guard, check);
+
+      final_result =
+        is_nil_expr(final_result) ? result : and2tc(final_result, result);
+    }
+
+    symex_assign(
+      code_assign2tc(func_call.ret, final_result), false, cur_state->guard);
+
+    return;
+  }
+
   if (symname == "c:@F@__ESBMC_unreachable")
   {
     if (options.get_bool_option("enable-unreachability-intrinsic"))
@@ -781,6 +1015,59 @@ void goto_symext::run_intrinsic(
     bump_call(func_call, symname);
     return;
   }
+
+  if (has_prefix(symname, "c:@F@__ESBMC_track_cheri"))
+  {
+    assert(func_call.operands.size() == 2 && "Wrong signature");
+    expr2tc ptr = func_call.operands[0];
+    expr2tc sz = func_call.operands[1];
+
+    // Rename the size symbol with last known value
+    cur_state->rename(sz);
+
+    expr2tc addr = typecast2tc(ptraddr_type2(), ptr);
+    expr2tc addr_end = add2tc(ptraddr_type2(), addr, sz);
+
+    expr2tc cap_base = capability_base2tc(ptr);
+    expr2tc cap_top = capability_top2tc(ptr);
+    /*
+     * Compiler flag: -cheri-bounds=subobject-safe
+     * For sub objects, CHERI clang should generate 
+     * independent capabilities for it instead of sharing.
+     * 
+     * cheri_base = address 
+     * cheri_top = address + size
+     */
+    symex_assign(code_assign2tc(cap_base, addr), true);
+    symex_assign(code_assign2tc(cap_top, addr_end), true);
+    return;
+  }
+
+  // PythonList methods
+  if (
+    has_prefix(symname, "c:@F@__ESBMC_list") ||
+    has_prefix(symname, "c:@F@__ESBMC_dict"))
+  {
+    bump_call(func_call, symname);
+    return;
+  }
+
+  if (has_prefix(symname, "c:@F@__ESBMC_create_inf_obj"))
+  {
+    assert(func_call.operands.size() == 0 && "Wrong signature");
+
+    const symbolt *list_object_symbol =
+      new_context.find_symbol("tag-struct __ESBMC_PyObj");
+    assert(list_object_symbol);
+
+    symex_mem_inf(
+      func_call.ret, migrate_type(list_object_symbol->type), cur_state->guard);
+
+    return;
+  }
+
+  if (has_prefix(symname, "c:@F@__ESBMC_unroll"))
+    return;
 
   log_error(
     "Function call to non-intrinsic prefixed with __ESBMC (fatal)\n"
@@ -1156,13 +1443,25 @@ void goto_symext::add_memory_leak_checks()
       maybe_global_target = [](expr2tc) { return gen_true_expr(); };
     else
       maybe_global_target = [tgts = std::move(globals_point_to)](expr2tc obj) {
+        // Accumulator for OR-ing conditions
         expr2tc is_any;
+        // Iterate over each (expression, condition) pair in tgts
         for (const auto &[e, g] : tgts)
         {
           /* XXX: 'obj' is the address of a statically known dynamic object,
            *      couldn't we just statically check whether the symbol 'e'
-           *      addresses is the same as 'obj' directly? */
-          expr2tc same = and2tc(g, same_object2tc(obj, e));
+           *      addresses is the same as 'obj' directly?
+           *
+           * Explanation:
+           * - 'g' acts as a guard condition, determining whether 'e' should be considered.
+           * - 'same_object2tc(obj, e)' checks if 'obj' and 'e' refer to the same object.
+           * - If 'g' is an AND condition (is_and2t) or already a same-object check (is_same_object2t),
+           *   then 'g' is combined with 'same_object2tc(obj, e)'.
+           * - Otherwise, we directly use 'same_object2tc(obj, e)'.
+           */
+          expr2tc same = (is_and2t(g) || is_same_object2t(g))
+                           ? and2tc(g, same_object2tc(obj, e))
+                           : same_object2tc(obj, e);
           is_any = is_any ? or2tc(is_any, same) : same;
         }
         return is_any ? is_any : gen_false_expr();

@@ -49,6 +49,8 @@ protected:
     const std::string &msg,
     const guardt &guard) override;
 
+  void dereference_assume(const guardt &guard) override;
+
   bool is_live_variable(const expr2tc &sym) override
   {
     (void)sym;
@@ -71,6 +73,7 @@ protected:
   goto_programt::const_targett current_target;
 
   std::set<expr2tc> assertions;
+  std::set<expr2tc> assumptions;
   goto_programt new_code;
 };
 

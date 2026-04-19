@@ -1,4 +1,4 @@
 CORE
 main.c
---no-slice --memory-leak-check
+--no-slice --memory-leak-check --no-reachable-memory-leak --no-abnormal-memory-leak
 ^VERIFICATION SUCCESSFUL$

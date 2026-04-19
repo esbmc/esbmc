@@ -56,7 +56,22 @@ void goto_contractort::get_intervals(
         while (it != map.var_map.end())
         {
           auto var_name = to_symbol2t(it->second.getSymbol()).get_symbol_name();
-          auto _new_interval = interval_analysis[i_it].intervals->at(var_name);
+
+          // Check if the variable exists in the intervals map before accessing
+          auto intervals_map = interval_analysis[i_it].intervals;
+          if (intervals_map->find(var_name) == intervals_map->end())
+          {
+            // Variable not found in interval analysis for this location
+            log_debug(
+              "contractor",
+              "Variable {} not found in interval analysis at location {}",
+              var_name,
+              i_it->location_number);
+            it++;
+            continue;
+          }
+
+          auto _new_interval = intervals_map->at(var_name);
           if (_new_interval.index() != 0)
           {
             it++;
@@ -236,11 +251,11 @@ bool goto_contractort::initialize_main_function_loops()
 
 void goto_contractort::insert_assume_at(
   goto_functiont goto_function,
-  std::_List_iterator<goto_programt::instructiont> instruction)
+  goto_programt::targett instruction)
 {
   /// Here we build an assume instruction with a conjunction of multiple conditions.
   /// We start with a true expression and add other conditions with and2tc
-  /// eventually, we will have somthing like: true and x>0 and x<10
+  /// eventually, we will have something like: true and x>0 and x<10
   expr2tc cond = gen_true_expr();
   for (auto const &var : map.var_map)
   {
@@ -344,7 +359,7 @@ void goto_contractort::goto_contractor_condition(
           auto goto_target = i_it->get_target();
           goto_target--;
 
-          if (goto_target->is_goto()) //tarrget-1 is goto and
+          if (goto_target->is_goto()) //target-1 is goto and
           {
             if (!goto_target->is_backwards_goto())
             {
@@ -841,19 +856,16 @@ ibex::Function *expr_to_ibex_parser::create_function_from_expr2t(expr2tc expr)
     return f;
     break;
   case expr2t::expr_ids::constant_int_id:
-  {
-    const ibex::ExprConstant &c =
-      ibex::ExprConstant::new_scalar(to_constant_int2t(expr).value.to_int64());
-    f = new ibex::Function(*vars, c);
+    f = new ibex::Function(
+      *vars,
+      ibex::ExprConstant::new_scalar(to_constant_int2t(expr).value.to_int64()));
     break;
-  }
   case expr2t::expr_ids::constant_floatbv_id:
-  {
-    const ibex::ExprConstant &c = ibex::ExprConstant::new_scalar(
-      to_constant_floatbv2t(expr).value.to_double());
-    f = new ibex::Function(*vars, c);
+    f = new ibex::Function(
+      *vars,
+      ibex::ExprConstant::new_scalar(
+        to_constant_floatbv2t(expr).value.to_double()));
     break;
-  }
   default:
     f = nullptr;
   }

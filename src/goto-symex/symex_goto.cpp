@@ -1,5 +1,4 @@
 #include <cassert>
-#include <fstream>
 #include <goto-symex/goto_symex.h>
 #include <goto-symex/slice.h>
 #include <goto-symex/symex_target_equation.h>
@@ -23,7 +22,12 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
   bool new_guard_false = (is_false(new_guard) || cur_state->guard.is_false());
   bool new_guard_true = is_true(new_guard);
 
-  if (!new_guard_false && options.get_bool_option("smt-symex-guard"))
+  // new_guard_false = TRUE means that the guard is false,
+  // new_guard_true = TRUE means that the guard is true.
+  // And if both variables are not TRUE we need to ask the solver whether the guard holds.
+  if (
+    !new_guard_false && !new_guard_true &&
+    options.get_bool_option("smt-symex-guard"))
   {
     auto rte = std::dynamic_pointer_cast<runtime_encoded_equationt>(target);
 
@@ -39,10 +43,9 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
     }
     catch (runtime_encoded_equationt::dual_unsat_exception &e)
     {
-      // Assumptions mean that the guard is never satisfiable as true or false,
-      // basically means we've assume'd away the possibility of hitting this
-      // point.
-      new_guard_false = true;
+      // If reach here it means both guard G and !G are unsatisfiable,
+      // basically means we can't prove the guard must be true or must be false.
+      new_guard_false = false;
     }
   }
 
@@ -50,6 +53,58 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
 
   bool forward =
     cur_state->source.pc->location_number < goto_target->location_number;
+
+  // Interval-based guard check (default, disabled by --no-interval-symex-guard).
+  // Only prune when the guard is provably TRUE (loop can be unwound no further).
+  // Never force-enter a loop (new_guard_false) via the interval domain: doing so
+  // omits the loop-entry guard from the path condition, which lets the SMT solver
+  // pick values outside the loop's feasible range and produce false positives.
+  // The flag check lets --interval-symex-assert keep the domain without pruning.
+  //
+  // Restrict to loop GOTOs (loop_number != 0): the interval domain is a single
+  // shared instance, so ASSIGN instructions inside branches contaminate it.
+  // Non-loop if-statement GOTOs would be incorrectly pruned by stale values.
+  //
+  // Note: eval_boolean_expression already returns TV_UNKNOWN for any guard
+  // containing floatbv-typed sub-expressions (via its contains_float check).
+  if (
+    !new_guard_false && !new_guard_true && interval_domain_state &&
+    options.get_bool_option("interval-symex-guard") &&
+    instruction.loop_number != 0)
+  {
+    tvt res = interval_domaint::eval_boolean_expression(
+      old_guard, *interval_domain_state);
+    if (res.is_true())
+      new_guard_true = true;
+  }
+
+  if (
+    options.get_option("witness-output-yaml") != "" && forward &&
+    !is_constant(old_guard) &&
+    !(is_not2t(old_guard) && is_constant(to_not2t(old_guard).value)))
+  {
+    // Normalize the branching condition so that cond=true always means
+    // "the branch body was reached". For standard GOTOs (IF !cond GOTO skip)
+    // new_guard already has this form. For flipped GOTOs produced by
+    // optimize_guarded_gotos (IF cond GOTO target), the guard sense is
+    // inverted, so we apply make_not to restore the canonical direction.
+    expr2tc branching_cond = new_guard;
+    if (instruction.flipped_guard)
+      make_not(branching_cond);
+    target->branching(
+      cur_state->guard.as_expr(),
+      branching_cond,
+      cur_state->source,
+      cur_state->top().hidden,
+      first_loop);
+  }
+
+  // Note: we intentionally do NOT call interval_domain_state->assume() here.
+  // The interval domain is a single shared instance (not forked per branch).
+  // Assuming the fall-through constraint would contaminate the taken path when
+  // it is explored later, causing unsound pruning.  The domain is still updated
+  // by process_instruction (ASSIGN / ASSUME / DEAD), which is sufficient for
+  // tracking loop counters.
 
   if (new_guard_false)
   {
@@ -340,7 +395,9 @@ void goto_symext::phi_function(const statet::goto_statet &goto_state)
     if (variable.base_name == guard_identifier_s)
       continue; // just a guard
 
-    if (has_prefix(variable.base_name.as_string(), "symex::invalid_object"))
+    if (
+      has_prefix(variable.base_name.as_string(), "symex::invalid_object") ||
+      has_prefix(variable.base_name.as_string(), "symex_throw::thrown_obj"))
       continue;
 
     // If the variable was deleted in this branch, don't create an assignment
@@ -380,7 +437,7 @@ void goto_symext::phi_function(const statet::goto_statet &goto_state)
     migrate_expr(symbol_expr(symbol), lhs);
     expr2tc new_lhs = lhs;
 
-    // Again, specifiy which l1 data object we're going to make the assignment
+    // Again, specify which l1 data object we're going to make the assignment
     // to.
     renaming::level2t::rename_to_record(new_lhs, variable);
 
@@ -436,6 +493,16 @@ bool goto_symext::get_unwind(
   unsigned id = source.pc->loop_number;
   BigInt this_loop_max_unwind = max_unwind;
 
+  // Check for function-specific unwind bound
+  if (loop_id_to_func_index.count(id) != 0)
+  {
+    const auto &[func_name, loop_index] = loop_id_to_func_index[id];
+    auto unwind_key = std::make_pair(func_name, loop_index);
+    if (unwind_func_set.count(unwind_key) != 0)
+      this_loop_max_unwind = unwind_func_set[unwind_key];
+  }
+
+  // Loop-specific bound overrides function-specific bound
   if (unwind_set.count(id) != 0)
     this_loop_max_unwind = unwind_set[id];
 

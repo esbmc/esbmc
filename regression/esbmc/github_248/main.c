@@ -1,5 +1,5 @@
 void a();
-b() {
+void b() {
   for (;;)
     a();
 }

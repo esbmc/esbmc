@@ -8,11 +8,12 @@ CC_DIAGNOSTIC_POP()
 #include <solidity-frontend/solidity_language.h>
 #include <solidity-frontend/solidity_convert.h>
 #include <solidity-frontend/solidity_template.h>
-#include <clang-c-frontend/clang_c_main.h>
+#include <clang-cpp-frontend/clang_cpp_main.h>
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
-#include <clang-c-frontend/clang_c_convert.h>
+#include <clang-cpp-frontend/clang_cpp_convert.h>
 #include <c2goto/cprover_library.h>
 #include <util/c_link.h>
+#include "filesystem.h"
 
 languaget *new_solidity_language()
 {
@@ -24,6 +25,14 @@ solidity_languaget::solidity_languaget()
   std::string fun = config.options.get_option("function");
   if (!fun.empty())
     func_name = fun;
+  else
+    func_name = "";
+
+  std::string cnt = config.options.get_option("contract");
+  if (!cnt.empty())
+    contract_names = cnt;
+  else
+    contract_names = "";
 
   std::string sol = config.options.get_option("sol");
   if (sol.empty())
@@ -31,38 +40,32 @@ solidity_languaget::solidity_languaget()
     log_error("Please set the smart contract source file via --sol");
     abort();
   }
-  smart_contract = sol;
+  contract_path = sol;
 }
 
 std::string solidity_languaget::get_temp_file()
 {
   // Create a temp file for clang-tool
   // needed to convert intrinsics
-  auto p = boost::filesystem::temp_directory_path();
-  if (!boost::filesystem::exists(p) || !boost::filesystem::is_directory(p))
-  {
-    log_error("Can't find temporary directory (needed to convert intrinsics)");
-    abort();
-  }
+  static std::once_flag flag;
+  static std::string p;
 
-  // Create temporary directory
-  p += "/esbmc_solidity_temp";
-  boost::filesystem::create_directory(p);
-  if (!boost::filesystem::is_directory(p))
-  {
-    log_error(
-      "Can't create temporary directory (needed to convert intrinsics)");
-    abort();
-  }
+  std::call_once(flag, [&]() {
+    p = file_operations::create_tmp_dir("esbmc_solidity_temp-%%%%-%%%%-%%%%")
+          .path();
+    boost::filesystem::create_directories(p);
+    p += "/libary.cpp";
+    std::ofstream f(p);
+    if (!f)
+    {
+      log_error(
+        "Can't create temporary directory (needed to convert intrinsics)");
+      abort();
+    }
+    f << temp_cpp_file();
+  });
 
-  // populate temp file
-  std::ofstream f;
-  p += "/temp_sol.c";
-  f.open(p.string());
-  f << temp_c_file();
-  f.close();
-
-  return p.string();
+  return p;
 }
 
 bool solidity_languaget::parse(const std::string &path)
@@ -73,8 +76,8 @@ bool solidity_languaget::parse(const std::string &path)
 
   // get AST nodes of ESBMC intrinsics and the dummy main
   // populate ASTs inherited from parent class
-  auto sol_lang = std::exchange(config.language, {language_idt::C, ""});
-  if (clang_c_languaget::parse(temp_path))
+  auto sol_lang = std::exchange(config.language, {language_idt::CPP, ""});
+  if (clang_cpp_languaget::parse(temp_path))
     return true;
 
   /// For solidity
@@ -127,7 +130,7 @@ bool solidity_languaget::parse(const std::string &path)
 
 bool solidity_languaget::convert_intrinsics(contextt &context)
 {
-  clang_c_convertert converter(context, AST, "C");
+  clang_cpp_convertert converter(context, AST, "C++");
   if (converter.convert())
     return true;
 
@@ -141,7 +144,7 @@ bool solidity_languaget::typecheck(contextt &context, const std::string &module)
     new_context); // Add ESBMC and TACAS intrinsic symbols to the context
 
   solidity_convertert converter(
-    new_context, src_ast_json_array, func_name, smart_contract);
+    new_context, src_ast_json_array, contract_names, func_name, contract_path);
   if (converter.convert()) // Add Solidity symbols to the context
     return true;
 
@@ -168,11 +171,16 @@ void solidity_languaget::show_parse(std::ostream &)
 bool solidity_languaget::final(contextt &context)
 {
   add_cprover_library(context);
-  clang_c_maint c_main(context);
-  return c_main.clang_main();
+  clang_cpp_maint c_main(context);
+  if (c_main.clang_main())
+    return true;
+
+  // roll back
+  config.language = {language_idt::SOLIDITY, ""};
+  return false;
 }
 
-std::string solidity_languaget::temp_c_file()
+std::string solidity_languaget::temp_cpp_file()
 {
   // This function populates the temp file so that Clang has a compilation job.
   // Clang needs a job to convert the intrinsics.

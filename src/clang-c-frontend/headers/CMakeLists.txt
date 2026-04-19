@@ -4,7 +4,7 @@ if (ESBMC_CLANG_HEADERS_BUNDLED)
   mangle(${CMAKE_CURRENT_BINARY_DIR}/cheaders.c ${ESBMC_CLANG_HEADER_DIR}
          WILDCARD "*.h"
          SINGLE
-         PREFIX esmbc_clang_headers_
+         PREFIX esbmc_clang_headers_
          MACRO ESBMC_FLAIL
          ACC_HEADERS_INTO ${CMAKE_CURRENT_BINARY_DIR}/cheaders.h
          LIST_DIRECTORIES FALSE)
