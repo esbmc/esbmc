@@ -1088,7 +1088,6 @@ void solidity_convertert::get_new_object(const typet &t, exprt &this_object)
   assert(t.is_symbol());
 
   exprt temporary = exprt("new_object");
-  temporary.set("#lvalue", true);
   temporary.type() = t;
   this_object = temporary;
 }

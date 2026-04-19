@@ -391,7 +391,6 @@ void goto_convertt::cpp_new_initializer(
 
     // the new object
     exprt new_object("new_object");
-    new_object.set("#lvalue", true);
     new_object.type() = rhs.type().subtype();
 
     // Default value is zero
@@ -415,7 +414,6 @@ void goto_convertt::cpp_new_initializer(
 
       // the new object
       exprt new_object("new_object");
-      new_object.set("#lvalue", true);
       new_object.type() = rhs.type().subtype();
 
       assignment.move_to_operands(new_object, initializer.op0());

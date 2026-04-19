@@ -230,7 +230,6 @@ void solidity_convertert::move_builtin_to_contract(
 
     struct_typet::componentt comp(sym.name(), sym.name(), sym.type());
     comp.set_access(access);
-    comp.set("#lvalue", 1);
     comp.type().set("#member_name", c_sym.type.tag());
     to_struct_type(c_sym.type).components().push_back(comp);
   }
