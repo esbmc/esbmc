@@ -1022,9 +1022,8 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
       const expr2tc &base_expr = get_base_object(arg);
       if (!is_constant_string2t(base_expr) && is_array_type(base_expr))
       {
-        // the current expression "arg" does not hold the value info (might be a bug)
-        // thus we need to look it up from the symbol table
-        assert(is_symbol2t(base_expr));
+        if (!is_symbol2t(base_expr))
+          continue;
         const symbolt &s = *ns.lookup(to_symbol2t(base_expr).thename);
         exprt dest;
         if (array2string(s, dest))
