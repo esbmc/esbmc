@@ -1,5 +1,5 @@
 CORE
 main.c
---func f
+--func f --multi-property
 ^VERIFICATION FAILED$
 \bdereference failure: Incorrect alignment when accessing data object\b
