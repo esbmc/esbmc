@@ -63,8 +63,7 @@ enum class length_modt
   BIG_L,
 };
 
-std::string
-pad_int(const std::string &s, unsigned min_width, bool zero_padding)
+std::string pad_int(const std::string &s, unsigned min_width, bool zero_padding)
 {
   if (s.length() >= min_width)
     return s;
@@ -224,8 +223,7 @@ void printf_formattert::process_format(std::ostream &out)
     else
     {
       const size_t bits = target->get_width();
-      const size_t max_digits =
-        base == 16 ? (bits + 3) / 4 : (bits + 2) / 3;
+      const size_t max_digits = base == 16 ? (bits + 3) / 4 : (bits + 2) / 3;
       s = std::string(max_digits, '0');
     }
     out << pad_int(s, format_constant.min_width, format_constant.zero_padding);
