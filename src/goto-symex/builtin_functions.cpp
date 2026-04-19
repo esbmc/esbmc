@@ -520,10 +520,22 @@ expr2tc goto_symext::symex_mem(
   else
   {
     cur_state->rename(size);
-    // Fold constant typecasts (e.g., (size_t)(-4) to large unsigned constant)
-    // so the is_constant_int2t check below succeeds even when the frontend
-    // represents the size as a typecast over a literal rather than a folded
-    // constant.
+
+    // Detect a signed-negative literal cast to size_t (e.g. malloc(-4))
+    // BEFORE do_simplify folds typecast(size_t, -4) into a large positive
+    // constant, at which point the sign information is gone and the value
+    // becomes indistinguishable from a genuine large positive allocation size.
+    bool is_negative_size = false;
+    if (is_malloc && is_typecast2t(size))
+    {
+      // Simplify a copy of the inner expression so that neg(4) folds to
+      // constant_int(-4) before we check the sign.
+      expr2tc inner = to_typecast2t(size).from;
+      do_simplify(inner);
+      if (is_constant_int2t(inner) && to_constant_int2t(inner).value.is_negative())
+        is_negative_size = true;
+    }
+
     do_simplify(size);
     BigInt i;
     if (is_constant_int2t(size))
@@ -534,15 +546,10 @@ expr2tc goto_symext::symex_mem(
         size_is_one = true;
       else if (v == 0 && options.get_bool_option("malloc-zero-is-null"))
         return symbol2tc(pointer_type2tc(type), "NULL");
-      else if (
-        is_malloc &&
-        (val.is_negative() ||
-         val >= BigInt::power2(config.ansi_c.address_width - 1)))
+      else if (is_malloc && (is_negative_size || val.is_negative()))
       {
-        // Negative sizes or sizes with the top bit set (e.g., (size_t)(-4))
-        // exceed half the address space and can never be satisfied without
-        // wraparound. Assign NULL and return, matching real OS behaviour where
-        // such allocations always fail — even under --force-malloc-success.
+        // Size was a negative integer cast to size_t: return NULL even under
+        // --force-malloc-success, matching real OS behaviour.
         expr2tc null_sym = symbol2tc(pointer_type2tc(type), "NULL");
         if (null_sym->type != lhs->type)
           null_sym = typecast2tc(lhs->type, null_sym);
