@@ -134,9 +134,19 @@ This page is a reference of all Python language constructs, data structures, and
 - **Equality**: `==`, `!=`; ordering operators (`<`, `<=`, `>`, `>=`) and `//`, `%` raise `TypeError`
 - **Annotations**: `z: complex`; `Optional[complex]`, `Union[complex, float]`
 
+## Enum Module (`enum`)
+
+- **`Enum`** base class: members store `value: int` and `name: str`
+- **Comparison**: `==`, `!=`
+- **Hash**: `__hash__()` returns `value`
+- **Representation**: `__str__()` and `__repr__()` return `name`
+
 ## Bytes and Integers
 
-Supports byte and integer operations including type conversions and bit-length queries.
+Byte sequences and integer class methods:
+
+- **`int.from_bytes(bytes_data, big_endian, signed)`** — converts a byte sequence to an integer; supports big- and little-endian, signed and unsigned
+- **`int.bit_length(n)`** — returns the number of bits required to represent `n` in binary
 
 ## Error Handling
 
@@ -225,11 +235,13 @@ All functions accept `complex`, `float`, `int`, or `bool` arguments. Real inputs
 
 **Hyperbolic**: `sinh`, `cosh`, `tanh`, `asinh`, `acosh`, `atanh`
 
-**Integer helpers**: `factorial(n)`, `gcd(a, b)`, `lcm(a, b)`, `isqrt(n)`, `perm(n, k)`, `comb(n, k)`, `prod(lst)` (expects `list[int]`)
+**Integer helpers**: `factorial(n)`, `gcd(a, b)`, `lcm(a, b)`, `isqrt(n)`, `perm(n[, k])`, `comb(n, k)`, `prod(lst[, start])` (expects `list[int]`)
 
 **Geometry**: `hypot(x, y)`, `dist(p, q)` (expects `list[float]`)
 
-**Utilities**: `fmod(x, y)`, `copysign(x, y)`, `degrees(x)`, `radians(x)`, `isclose(a, b)`, `isfinite(x)`, `isnan(x)`, `isinf(x)`
+**Utilities**: `fmod(x, y)`, `remainder(x, y)`, `copysign(x, y)`, `degrees(x)`, `radians(x)`, `isclose(a, b)`, `isfinite(x)`, `isnan(x)`, `isinf(x)`
+
+**Advanced**: `cbrt(x)`, `erf(x)`, `erfc(x)`, `gamma(x)`, `lgamma(x)`, `frexp(x)` → `(mantissa, exponent)`, `ldexp(x, i)`, `nextafter(x, y)`, `ulp(x)`, `sumprod(a, b)` (expects `list[float]`), `fsum(values)` (expects `list[float]`)
 
 ## Regular Expression Module (`re`)
 
@@ -255,8 +267,9 @@ All functions are modelled using nondeterministic values with appropriate constr
 
 - `random.random()` → nondeterministic `float` in `[0.0, 1.0)`
 - `random.uniform(a, b)` → nondeterministic `float` N where `min(a,b) ≤ N ≤ max(a,b)`
+- `random.randint(a, b)` → nondeterministic `int` N where `a ≤ N ≤ b`
 - `random.getrandbits(k)` → nondeterministic integer with k random bits
-- `random.randrange(start, stop, step=1)` → randomly selected integer from the specified range
+- `random.randrange(start[, stop[, step]])` → randomly selected integer from the specified range; single-argument form (`randrange(stop)`) is also supported
 
 See also: [Random Operational Model](./random-operational-model)
 
@@ -273,8 +286,9 @@ See also: [Random Operational Model](./random-operational-model)
 
 - **`Decimal`** class with full arithmetic:
   - **Comparison**: `==`, `!=`, `<`, `<=`, `>`, `>=`
-  - **Arithmetic**: `+`, `-`, `*`, `/`
-  - Special values: infinity and NaN (via `is_special` flag)
+  - **Arithmetic**: `+`, `-`, `*`, `/`, `//`, `%`
+  - **Unary**: `-d` (negation), `abs(d)`
+  - Special values: infinity and NaN (via `is_special` flag; propagated through all operations)
 
 ## Heapq Module (`heapq`)
 
@@ -317,5 +331,7 @@ Partial stub-level support for type-inference and basic arithmetic verification.
 **Element-wise arithmetic**: `np.add(a, b)`, `np.subtract(a, b)`, `np.multiply(a, b)`, `np.divide(a, b)`, `np.power(a, b)`
 
 **Math**: `np.ceil(x)`, `np.floor(x)`, `np.fabs(x)`, `np.sqrt(x)`, `np.trunc(x)`, `np.round(x)`, `np.copysign(x, y)`, `np.fmin(x, y)`, `np.fmax(x, y)`, `np.sin(x)`
+
+**Additional stubs** (return constant placeholder values for type inference only): `np.cos(x)`, `np.arccos(x)`, `np.arctan(x)`, `np.exp(x)`, `np.fmod(x)`, `np.dot(a, b)`, `np.matmul(a, b)`, `np.transpose(a, b)`
 
 **Linear algebra** (`numpy.linalg`): `np.linalg.det(a, b)` (2×2 stub)

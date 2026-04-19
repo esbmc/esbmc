@@ -80,8 +80,7 @@ weight: 4
 
 ## Random Module
 
-- `random.randrange()` with a single argument (e.g., `randrange(10)`) is not supported; two arguments are required.
-- Other `random` functions (`choice`, `shuffle`, `sample`, `seed`, etc.) are not yet supported.
+- `random.choice()`, `random.shuffle()`, `random.sample()`, `random.seed()`, and other functions beyond `random()`, `uniform()`, `randint()`, `getrandbits()`, and `randrange()` are not yet supported.
 
 ## Collections Module
 
