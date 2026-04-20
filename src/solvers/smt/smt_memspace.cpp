@@ -385,7 +385,10 @@ smt_astt smt_convt::init_pointer_obj(
   // Generate address space layout constraints.
   finalize_pointer_chain(obj_num);
 
-  addr_space_data.back()[obj_num] = 0; // XXX -- nothing uses this data?
+  // The key (obj_num) is what's load-bearing here: pre_solve() iterates the
+  // keys to enumerate all registered objects when emitting deferred
+  // int-to-ptr cast constraints.  The value is unused.
+  addr_space_data.back()[obj_num] = 0;
 
   membs.clear();
   membs.push_back(start_sym);

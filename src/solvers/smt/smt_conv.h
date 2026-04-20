@@ -952,11 +952,14 @@ public:
     bool from_byte_update; ///< use soft address-equality fallback instead of INVALID
   };
 
-  // XXX - push-pop will break here.
   /** Int-to-pointer casts whose SMT constraints are deferred until pre_solve()
    *  so that the final addrspace array (containing every registered object) is
-   *  available when the constraints are emitted. */
-  std::vector<PendingIntToPtr> pending_int_to_ptr_casts;
+   *  available when the constraints are emitted.  One vector per context level:
+   *  entries added at level N are discarded when level N is popped, mirroring
+   *  the addrspace itself.  Entries are NOT cleared after emission; each
+   *  dec_solve() re-asserts them into the current solver frame, because
+   *  assertions emitted at a pushed level are popped when that level is. */
+  std::list<std::vector<PendingIntToPtr>> pending_int_to_ptr_casts;
 
   /** Holds the `__ESBMC_alloc` symbol convert_terminal() was last invoked with.
    */
