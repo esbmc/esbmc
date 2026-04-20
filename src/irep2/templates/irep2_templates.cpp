@@ -246,6 +246,8 @@ std::string concat2t::field_names[esbmct::num_type_fields] =
   {"forward", "aft", "", "", ""};
 std::string extract2t::field_names[esbmct::num_type_fields] =
   {"from", "upper", "lower", "", ""};
+std::string phi2t::field_names[esbmct::num_type_fields] =
+  {"lhs", "rhs", "lhs_location", "rhs_location", ""};
 std::string capability_base2t::field_names[esbmct::num_type_fields] =
   {"value", "", "", "", ""};
 std::string capability_top2t::field_names[esbmct::num_type_fields] =

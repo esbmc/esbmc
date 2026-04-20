@@ -1450,6 +1450,44 @@ public:
   typedef esbmct::expr2t_traits<from_field, upper_field, lower_field> traits;
 };
 
+class phi_data : public expr2t
+{
+public:
+  phi_data(
+    const type2tc &t,
+    expr2t::expr_ids id,
+    const expr2tc &lhs,
+    const expr2tc &rhs,
+    locationt lhs_location,
+    locationt rhs_location)
+    : expr2t(t, id),
+      lhs(lhs),
+      rhs(rhs),
+      lhs_location(lhs_location),
+      rhs_location(rhs_location)
+  {
+  }
+  phi_data(const phi_data &ref) = default;
+
+  expr2tc lhs;
+  expr2tc rhs;
+  locationt lhs_location;
+  locationt rhs_location;
+
+  // Type mangling:
+  typedef esbmct::field_traits<expr2tc, phi_data, &phi_data::lhs> lhs_field;
+  typedef esbmct::field_traits<expr2tc, phi_data, &phi_data::rhs> rhs_field;
+
+  typedef esbmct::field_traits<locationt, phi_data, &phi_data::lhs_location>
+    lhs_location_field;
+  typedef esbmct::field_traits<locationt, phi_data, &phi_data::rhs_location>
+    rhs_location_field;
+
+  typedef esbmct::
+    expr2t_traits<lhs_field, rhs_field, lhs_location_field, rhs_location_field>
+      traits;
+};
+
 // Give everything a typedef name. Use this to construct both the templated
 // expression methods, but also the container class which needs the template
 // parameters too.
@@ -1578,6 +1616,7 @@ irep_typedefs(popcount, overflow_ops);
 irep_typedefs(bswap, arith_1op);
 irep_typedefs(concat, bit_2ops);
 irep_typedefs(extract, extract_data);
+irep_typedefs(phi, phi_data);
 irep_typedefs(capability_base, object_ops);
 irep_typedefs(capability_top, object_ops);
 irep_typedefs(forall, logic_2ops);
@@ -3746,31 +3785,44 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class capability_base2t : public capability_base_expr_methods
+class phi2t : public phi_expr_methods
 {
 public:
-  /** Primary constructor. @param operand Pointer object to fetch size for. */
-  capability_base2t(const expr2tc &operand)
-    : capability_base_expr_methods(size_type2(), capability_base_id, operand)
+  phi2t(
+    const type2tc &type,
+    const expr2tc &lhs,
+    const expr2tc &rhs,
+    locationt lhs_location,
+    locationt rhs_location)
+    : phi_expr_methods(type, phi_id, lhs, rhs, lhs_location, rhs_location)
   {
   }
-  capability_base2t(const capability_base2t &ref) = default;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
-class capability_top2t : public capability_top_expr_methods
-{
-public:
-  /** Primary constructor. @param operand Pointer object to fetch size for. */
-  capability_top2t(const expr2tc &operand)
-    : capability_top_expr_methods(size_type2(), capability_top_id, operand)
+  phi2t(const phi2t &ref) = default;
+  class capability_base2t : public capability_base_expr_methods
   {
-  }
-  capability_top2t(const capability_top2t &ref) = default;
+  public:
+    /** Primary constructor. @param operand Pointer object to fetch size for. */
+    capability_base2t(const expr2tc &operand)
+      : capability_base_expr_methods(size_type2(), capability_base_id, operand)
+    {
+    }
+    capability_base2t(const capability_base2t &ref) = default;
 
-  static std::string field_names[esbmct::num_type_fields];
-};
+    static std::string field_names[esbmct::num_type_fields];
+  };
+
+  class capability_top2t : public capability_top_expr_methods
+  {
+  public:
+    /** Primary constructor. @param operand Pointer object to fetch size for. */
+    capability_top2t(const expr2tc &operand)
+      : capability_top_expr_methods(size_type2(), capability_top_id, operand)
+    {
+    }
+    capability_top2t(const capability_top2t &ref) = default;
+
+    static std::string field_names[esbmct::num_type_fields];
+  };
 
 // Same deal as for "type_macros".
 #ifdef NDEBUG
@@ -3796,7 +3848,7 @@ public:
 
 // Boost preprocessor magic to iterate over all exprs,
 #define _ESBMC_IREP2_MACROS_ENUM(r, data, elem) expr_macros(elem);
-BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_MACROS_ENUM, foo, ESBMC_LIST_OF_EXPRS)
+  BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_MACROS_ENUM, foo, ESBMC_LIST_OF_EXPRS)
 
 #undef expr_macros
 #ifdef dynamic_cast

@@ -154,6 +154,11 @@ std::string type_to_string(const irep_idt &theval, int)
   return theval.as_string();
 }
 
+std::string type_to_string(const locationt &theval, int)
+{
+  return theval.as_string();
+}
+
 bool do_type_cmp(const bool &side1, const bool &side2)
 {
   return (side1 == side2) ? true : false;
@@ -254,6 +259,11 @@ bool do_type_cmp(const type2t::type_ids &, const type2t::type_ids &)
 bool do_type_cmp(const expr2t::expr_ids &, const expr2t::expr_ids &)
 {
   return true; // Dummy field comparison.
+}
+
+bool do_type_cmp(const locationt &side1, const locationt &side2)
+{
+  return side1.hash() == side2.hash();
 }
 
 int do_type_lt(const bool &side1, const bool &side2)
@@ -423,6 +433,11 @@ int do_type_lt(const type2t::type_ids &, const type2t::type_ids &)
 }
 
 int do_type_lt(const expr2t::expr_ids &, const expr2t::expr_ids &)
+{
+  return 0; // Dummy field comparison
+}
+
+int do_type_lt(const locationt &, const locationt &)
 {
   return 0; // Dummy field comparison
 }
@@ -649,6 +664,16 @@ size_t do_type_crc(const expr2t::expr_ids &i)
 }
 
 void do_type_hash(const expr2t::expr_ids &, crypto_hash &)
+{
+  // Dummy field crc
+}
+
+size_t do_type_crc(const locationt &i)
+{
+  return i.hash();
+}
+
+void do_type_hash(const locationt &, crypto_hash &)
 {
   // Dummy field crc
 }
