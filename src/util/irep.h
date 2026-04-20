@@ -593,11 +593,6 @@ public:
     return get_bool(a_is_type);
   }
 
-  inline bool cmt_lvalue() const
-  {
-    return get_bool(a_cmt_lvalue);
-  }
-
   inline bool lvalue() const
   {
     return get_bool(a_lvalue);
@@ -721,16 +716,6 @@ public:
   inline void cmt_base_name(const irep_idt name)
   {
     set(a_cmt_base_name, name);
-  }
-
-  inline void cmt_lvalue(const irep_idt val)
-  {
-    set(a_cmt_lvalue, val);
-  }
-
-  inline void cmt_lvalue(bool val)
-  {
-    set(a_cmt_lvalue, val);
   }
 
   inline void name(const irep_idt val)
@@ -1286,7 +1271,7 @@ public:
   static const irep_idt a_initialization, a_inlined, a_invalid_object;
   static const irep_idt a_is_parameter, a_is_expression;
   static const irep_idt a_is_extern, a_is_macro, a_is_thread_local;
-  static const irep_idt a_is_type, a_cmt_lvalue;
+  static const irep_idt a_is_type;
   static const irep_idt a_lvalue, a_reference, a_static_lifetime, a_theorem;
   static const irep_idt a_cmt_unsigned, a_user_provided, a_cmt_volatile;
   static const irep_idt a_zero_initializer, a_restricted, a_flavor;

@@ -1350,7 +1350,6 @@ bool clang_cpp_convertert::get_constructor_call(
   else
   {
     exprt this_object = exprt("new_object");
-    this_object.set("#lvalue", true);
     this_object.type() = type;
 
     /* first parameter is address to the object to be constructed */
@@ -1899,7 +1898,6 @@ bool clang_cpp_convertert::get_decl_ref(
     if (is_lvalue_or_rvalue_reference(new_expr.type()) && should_dereference)
     {
       new_expr = dereference_exprt(new_expr, new_expr.type());
-      new_expr.set("#lvalue", true);
       new_expr.set("#implicit", true);
     }
 
@@ -1926,7 +1924,6 @@ bool clang_cpp_convertert::get_decl_ref(
 
     new_expr = exprt("symbol", type);
     new_expr.identifier(id);
-    new_expr.cmt_lvalue(true);
     new_expr.name(name);
 
     break;
@@ -1940,7 +1937,6 @@ bool clang_cpp_convertert::get_decl_ref(
     if (is_lvalue_or_rvalue_reference(new_expr.type()) && should_dereference)
     {
       new_expr = dereference_exprt(new_expr, new_expr.type());
-      new_expr.set("#lvalue", true);
       new_expr.set("#implicit", true);
     }
 
