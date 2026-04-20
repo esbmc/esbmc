@@ -109,6 +109,7 @@ BigInt type_sizet::size_bits(const type2tc &type) const
   case type2t::signedbv_id:
   case type2t::fixedbv_id:
   case type2t::floatbv_id:
+  case type2t::complex_id:
   case type2t::pointer_id:
     return type->get_width();
 
@@ -213,6 +214,7 @@ expr2tc type_sizet::size_bits_expr(const type2tc &type) const
   case type2t::signedbv_id:
   case type2t::fixedbv_id:
   case type2t::floatbv_id:
+  case type2t::complex_id:
   case type2t::pointer_id:
     return bitsize(type->get_width());
 

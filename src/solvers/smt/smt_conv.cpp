@@ -43,6 +43,14 @@ static std::string itos(int64_t i)
 unsigned int
 smt_convt::get_member_name_field(const type2tc &t, const irep_idt &name) const
 {
+  // if (is_complex_type(t))
+  // {
+  //   if (name == "real")
+  //     return 0;
+  //   assert(name == "imag" && "Complex member must be 'real' or 'imag'");
+  //   return 1;
+  // }
+
   unsigned int idx = 0;
   const struct_union_data &data_ref = get_type_def(t);
 
@@ -2085,7 +2093,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     const with2t &with = to_with2t(expr);
 
     // We reach here if we're with'ing a struct, not an array. Or a bool.
-    if (is_struct_type(expr) || is_pointer_type(expr))
+    if (is_struct_type(expr) || is_pointer_type(expr) || is_complex_type(expr))
     {
       unsigned int idx = get_member_name_field(expr->type, with.update_field);
       smt_astt srcval = convert_ast(with.source_value);
@@ -2768,6 +2776,7 @@ smt_sortt smt_convt::convert_sort(const type2tc &type)
     result = boolean_sort;
     break;
 
+  case type2t::complex_id:
   case type2t::struct_id:
     result = tuple_api->mk_struct_sort(type);
     break;
@@ -3289,6 +3298,7 @@ smt_astt smt_convt::convert_member(const expr2tc &expr)
 
   assert(
     is_struct_type(member.source_value) ||
+    is_complex_type(member.source_value) ||
     is_pointer_type(member.source_value));
   unsigned int idx =
     get_member_name_field(member.source_value->type, member.member);
@@ -4082,6 +4092,7 @@ expr2tc smt_convt::get_by_ast(const type2tc &type, smt_astt a)
     }
     return constant_floatbv2tc(fp_api->get_fpbv(a));
 
+  case type2t::complex_id:
   case type2t::struct_id:
   case type2t::pointer_id:
     return tuple_api->tuple_get(type, a);
@@ -4305,6 +4316,7 @@ expr2tc smt_convt::get_by_type(const expr2tc &expr)
   case type2t::array_id:
     return get_array(expr);
 
+  case type2t::complex_id:
   case type2t::struct_id:
   case type2t::pointer_id:
     return tuple_api->tuple_get(expr);

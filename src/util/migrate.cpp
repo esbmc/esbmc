@@ -253,6 +253,27 @@ static type2tc migrate_type0(const typet &type)
     return floatbv_type2tc(frac_bits, expo_bits);
   }
 
+  if (type.id() == typet::t_complex)
+  {
+    std::vector<type2tc> members;
+    std::vector<irep_idt> names;
+    std::vector<irep_idt> pretty_names;
+    const struct_union_typet &strct = to_complex_type(type);
+    const struct_union_typet::componentst comps = strct.components();
+
+    for (const auto &comp : comps)
+    {
+      type2tc ref = migrate_type((const typet &)comp.type());
+
+      members.push_back(ref);
+      names.push_back(comp.get(typet::a_name));
+      pretty_names.push_back(comp.get(typet::a_pretty_name));
+    }
+
+    irep_idt name = "complex";
+    return complex_type2tc(members, names, pretty_names, name);
+  }
+
   if (type.id() == typet::t_code)
   {
     const code_typet &ref = static_cast<const code_typet &>(type);
@@ -2422,6 +2443,28 @@ typet migrate_type_back(const type2tc &ref)
     floatbv_typet thetype;
     thetype.set_f(ref2.fraction);
     thetype.set_width(ref2.get_width());
+    return thetype;
+  }
+  case type2t::complex_id:
+  {
+    unsigned int idx;
+    union_typet thetype;
+    struct_union_typet::componentst comps;
+    const complex_type2t &ref2 = to_complex_type(ref);
+
+    idx = 0;
+    for (auto const &it : ref2.members)
+    {
+      struct_union_typet::componentt component;
+      component.id("component");
+      component.type() = migrate_type_back(it);
+      component.set_name(irep_idt(ref2.member_names[idx]));
+      component.pretty_name(irep_idt(ref2.member_pretty_names[idx]));
+      comps.push_back(component);
+      idx++;
+    }
+
+    thetype.components() = comps;
     return thetype;
   }
   case type2t::cpp_name_id:

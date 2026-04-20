@@ -1345,12 +1345,8 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     if (get_type(*ct.getElementType(), elem_type))
       return true;
 
-    struct_typet t;
-    t.components().push_back(
-      struct_typet::componentt("real", "real", elem_type));
-    t.components().push_back(
-      struct_typet::componentt("imag", "imag", elem_type));
-
+    complex_typet t;
+    t.set_base_type(elem_type);
     new_type = t;
     break;
   }
@@ -1716,8 +1712,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     if (get_expr(*il.getSubExpr(), imag_val))
       return true;
 
-    const struct_typet &st = to_struct_type(complex_type);
-    const typet &elem_type = st.components()[0].type();
+    const typet &elem_type = to_complex_type(complex_type).base_type();
 
     gen_typecast(ns, imag_val, elem_type);
 
