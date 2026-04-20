@@ -2455,6 +2455,92 @@ exprt python_dict_handler::handle_dict_popitem(
   return symbol_expr(result_var);
 }
 
+exprt python_dict_handler::handle_dict_fromkeys(const nlohmann::json &call_node)
+{
+  const auto &args = call_node["args"];
+
+  if (args.empty() || args.size() > 2)
+    throw std::runtime_error(
+      "fromkeys() takes 1 or 2 arguments (got " + std::to_string(args.size()) +
+      ")");
+
+  const nlohmann::json &iterable = args[0];
+  if (iterable["_type"] != "List")
+    throw std::runtime_error(
+      "fromkeys() currently supports a list literal as iterable");
+
+  nlohmann::json value_template;
+  if (args.size() == 2)
+  {
+    value_template = args[1];
+  }
+  else
+  {
+    // No explicit default: Python's dict.fromkeys uses None.
+    // Emit Constant(None) so the synthetic Dict below stays well-formed.
+    value_template = call_node;
+    value_template.erase("args");
+    value_template.erase("func");
+    value_template["_type"] = "Constant";
+    value_template["value"] = nullptr;
+  }
+
+  // Dedup keys: fromkeys([1, 1, 2], v) == {1: v, 2: v} in Python
+  // and collapsing here avoids redundant IR inserts.
+  // Constants compare by value, Names by id;
+  // other expressions are left distinct.
+  auto same_key = [](const nlohmann::json &a, const nlohmann::json &b) -> bool {
+    if (a.value("_type", "") != b.value("_type", ""))
+      return false;
+    const std::string type = a["_type"];
+    if (type == "Constant")
+      return a.value("value", nlohmann::json(nullptr)) ==
+             b.value("value", nlohmann::json(nullptr));
+    if (type == "Name")
+      return a.value("id", "") == b.value("id", "");
+    return false;
+  };
+
+  nlohmann::json unique_keys = nlohmann::json::array();
+  for (const auto &elt : iterable["elts"])
+  {
+    bool duplicate = false;
+    for (const auto &existing : unique_keys)
+      if (same_key(elt, existing))
+      {
+        duplicate = true;
+        break;
+      }
+    if (!duplicate)
+      unique_keys.push_back(elt);
+  }
+
+  // Synthesize {k: default for k in unique_keys} and hand it off as if
+  // the user had written a Dict literal directly.
+  nlohmann::json synthetic_dict = call_node;
+  synthetic_dict.erase("args");
+  synthetic_dict.erase("func");
+  synthetic_dict["_type"] = "Dict";
+  synthetic_dict["keys"] = unique_keys;
+  synthetic_dict["values"] = nlohmann::json::array();
+  for (size_t i = 0; i < unique_keys.size(); ++i)
+    synthetic_dict["values"].push_back(value_template);
+
+  locationt location = converter_.get_location_from_decl(call_node);
+  std::string dict_name =
+    generate_unique_dict_name(synthetic_dict, location) + "_fromkeys";
+  struct_typet dict_type = get_dict_struct_type();
+
+  symbolt &dict_sym =
+    converter_.create_tmp_symbol(call_node, dict_name, dict_type, exprt());
+  code_declt dict_decl(symbol_expr(dict_sym));
+  dict_decl.location() = location;
+  converter_.add_instruction(dict_decl);
+
+  create_dict_from_literal(synthetic_dict, symbol_expr(dict_sym));
+  return symbol_expr(dict_sym);
+}
+
 exprt python_dict_handler::handle_dict_update(
   const exprt &dict_expr,
   const nlohmann::json &call_node)
