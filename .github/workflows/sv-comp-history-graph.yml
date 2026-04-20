@@ -47,6 +47,4 @@ jobs:
           branch: auto/sv-comp-history-graph
           add-paths: website/content/images/sv-comp-hist-combined.png
           delete-branch: true
-          labels: |
-            automation
-            sv-comp-history-graph
+          labels: automation
