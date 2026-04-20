@@ -20,9 +20,9 @@ public:
   {
   }
 
-  bool run(symex_target_equationt::SSA_stepst &) override;
+  bool run(SSA_stepst &) override;
 
-  void run_on_assert(symex_target_equationt::SSA_stept &) override;
+  void run_on_assert(SSA_stept &) override;
   virtual BigInt ignored() const override
   {
     return hits;

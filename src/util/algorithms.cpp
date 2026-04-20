@@ -42,7 +42,7 @@ bool goto_functions_algorithm::runOnFunction(
   return true;
 }
 
-void ssa_step_algorithm::run_on_step(symex_target_equationt::SSA_stept &step)
+void ssa_step_algorithm::run_on_step(SSA_stept &step)
 {
   // Helper definition
   typedef goto_trace_stept::typet ssa_type;

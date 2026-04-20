@@ -34,7 +34,7 @@ class simple_slice : public slicer
 {
 public:
   simple_slice() = default;
-  bool run(symex_target_equationt::SSA_stepst &) override;
+  bool run(SSA_stepst &) override;
 };
 
 /**
@@ -60,7 +60,7 @@ public:
       abort();
     }
   };
-  bool run(symex_target_equationt::SSA_stepst &) override;
+  bool run(SSA_stepst &) override;
   size_t claim_to_keep;
   std::string claim_msg;
   std::string claim_loc;
@@ -99,7 +99,7 @@ public:
    *
    * @param eq symex formula to be sliced
    */
-  bool run(symex_target_equationt::SSA_stepst &eq) override
+  bool run(SSA_stepst &eq) override
   {
     sliced = 0;
     fine_timet algorithm_start = current_time();
@@ -186,7 +186,7 @@ protected:
    *
    * @param SSA_step an assume step
    */
-  void run_on_assert(symex_target_equationt::SSA_stept &SSA_step) override;
+  void run_on_assert(SSA_stept &SSA_step) override;
 
   /**
    * Remove unneeded assumes from the formula
@@ -205,7 +205,7 @@ protected:
    *
    * @param SSA_step an assume step
    */
-  void run_on_assume(symex_target_equationt::SSA_stept &SSA_step) override;
+  void run_on_assume(SSA_stept &SSA_step) override;
 
   /**
    * Remove unneeded assignments from the formula
@@ -218,7 +218,7 @@ protected:
    *
    * @param SSA_step an assignment step
    */
-  void run_on_assignment(symex_target_equationt::SSA_stept &SSA_step) override;
+  void run_on_assignment(SSA_stept &SSA_step) override;
 
   /**
    * Remove unneeded renumbers from the formula
@@ -231,7 +231,7 @@ protected:
    *
    * @param SSA_step an renumber step
    */
-  void run_on_renumber(symex_target_equationt::SSA_stept &SSA_step) override;
+  void run_on_renumber(SSA_stept &SSA_step) override;
 };
 
 #endif

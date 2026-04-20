@@ -125,7 +125,7 @@ void build_successful_goto_trace(
   goto_tracet &goto_trace)
 {
   unsigned step_nr = 0;
-  for (const symex_target_equationt::SSA_stept &SSA_step : target.SSA_steps)
+  for (const SSA_stept &SSA_step : target.SSA_steps)
   {
     if (
       (SSA_step.is_assert() || SSA_step.is_assume()) &&

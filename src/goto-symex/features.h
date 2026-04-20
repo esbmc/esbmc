@@ -18,7 +18,7 @@ class ssa_features : public ssa_step_algorithm
 {
 public:
   ssa_features() : ssa_step_algorithm(false){};
-  bool run(symex_target_equationt::SSA_stepst &) override;
+  bool run(SSA_stepst &) override;
 
   std::unordered_set<SSA_FEATURES> features;
   void print_result() const;

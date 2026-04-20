@@ -1,7 +1,7 @@
 #include "irep2/irep2_type.h"
 #include <goto-symex/features.h>
 
-bool ssa_features::run(symex_target_equationt::SSA_stepst &steps)
+bool ssa_features::run(SSA_stepst &steps)
 {
   features.clear();
 

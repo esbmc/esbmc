@@ -13,7 +13,7 @@ void bmct::show_vcc(std::ostream &out, const symex_target_equationt &eq)
 
   languagest languages(ns, language_idt::C);
 
-  for (symex_target_equationt::SSA_stepst::const_iterator it =
+  for (SSA_stepst::const_iterator it =
          eq.SSA_steps.begin();
        it != eq.SSA_steps.end();
        it++)
@@ -27,7 +27,7 @@ void bmct::show_vcc(std::ostream &out, const symex_target_equationt &eq)
     if (it->comment != "")
       out << it->comment << "\n";
 
-    symex_target_equationt::SSA_stepst::const_iterator p_it =
+    SSA_stepst::const_iterator p_it =
       eq.SSA_steps.begin();
 
     for (unsigned count = 1; p_it != it; p_it++)

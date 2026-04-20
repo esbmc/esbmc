@@ -266,14 +266,14 @@ void symex_target_equationt::short_output(std::ostream &out, bool show_ignored)
   }
 }
 
-void symex_target_equationt::SSA_stept::dump() const
+void SSA_stept::dump() const
 {
   std::ostringstream oss;
   output(*migrate_namespace_lookup, oss);
   log_status("{}", oss.str());
 }
 
-void symex_target_equationt::SSA_stept::output(
+void SSA_stept::output(
   const namespacet &ns,
   std::ostream &out) const
 {
@@ -325,7 +325,7 @@ void symex_target_equationt::SSA_stept::output(
     out << "Guard: " << from_expr(ns, "", migrate_expr_back(guard)) << "\n";
 }
 
-void symex_target_equationt::SSA_stept::short_output(
+void SSA_stept::short_output(
   const namespacet &ns,
   std::ostream &out,
   bool show_ignored) const

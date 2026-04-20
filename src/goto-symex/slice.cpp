@@ -48,13 +48,13 @@ bool symex_slicet::get_symbols(const expr2tc &expr)
   return res;
 }
 
-void symex_slicet::run_on_assert(symex_target_equationt::SSA_stept &SSA_step)
+void symex_slicet::run_on_assert(SSA_stept &SSA_step)
 {
   get_symbols<true>(SSA_step.guard);
   get_symbols<true>(SSA_step.cond);
 }
 
-void symex_slicet::run_on_assume(symex_target_equationt::SSA_stept &SSA_step)
+void symex_slicet::run_on_assume(SSA_stept &SSA_step)
 {
   if (!slice_assumes)
   {
@@ -85,7 +85,7 @@ void symex_slicet::run_on_assume(symex_target_equationt::SSA_stept &SSA_step)
 }
 
 void symex_slicet::run_on_assignment(
-  symex_target_equationt::SSA_stept &SSA_step)
+  SSA_stept &SSA_step)
 {
   assert(is_symbol2t(SSA_step.lhs));
   // TODO: create an option to ignore nondet symbols (test case generation)
@@ -176,7 +176,7 @@ void symex_slicet::run_on_assignment(
   }
 }
 
-void symex_slicet::run_on_renumber(symex_target_equationt::SSA_stept &SSA_step)
+void symex_slicet::run_on_renumber(SSA_stept &SSA_step)
 {
   assert(is_symbol2t(SSA_step.lhs));
 
@@ -199,21 +199,21 @@ void symex_slicet::run_on_renumber(symex_target_equationt::SSA_stept &SSA_step)
  * @param eq symex formula to be sliced
  * @return number of steps that were ignored
  */
-bool simple_slice::run(symex_target_equationt::SSA_stepst &steps)
+bool simple_slice::run(SSA_stepst &steps)
 {
   sliced = 0;
   fine_timet algorithm_start = current_time();
   // just find the last assertion
-  symex_target_equationt::SSA_stepst::iterator last_assertion = steps.end();
+  SSA_stepst::iterator last_assertion = steps.end();
 
-  for (symex_target_equationt::SSA_stepst::iterator it = steps.begin();
+  for (SSA_stepst::iterator it = steps.begin();
        it != steps.end();
        it++)
     if (it->is_assert())
       last_assertion = it;
 
   // slice away anything after it
-  symex_target_equationt::SSA_stepst::iterator s_it = last_assertion;
+  SSA_stepst::iterator s_it = last_assertion;
 
   if (s_it != steps.end())
     for (s_it++; s_it != steps.end(); s_it++)
@@ -231,12 +231,12 @@ bool simple_slice::run(symex_target_equationt::SSA_stepst &steps)
   return true;
 }
 
-bool claim_slicer::run(symex_target_equationt::SSA_stepst &steps)
+bool claim_slicer::run(SSA_stepst &steps)
 {
   sliced = 0;
   fine_timet algorithm_start = current_time();
   size_t counter = 1;
-  for (symex_target_equationt::SSA_stepst::iterator it = steps.begin();
+  for (SSA_stepst::iterator it = steps.begin();
        it != steps.end();
        it++)
   {

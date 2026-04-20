@@ -4,7 +4,7 @@
 #include <goto-programs/goto_functions.h>
 #include <goto-programs/loopst.h>
 #include <goto-programs/goto_loops.h>
-#include <goto-symex/symex_target_equation.h>
+#include <goto-symex/ssa_step.h>
 #include <util/message.h>
 /**
  * @brief Base interface to run an algorithm in esbmc
@@ -83,7 +83,7 @@ private:
 /**
  * @brief Base interface for ssa-step algorithms
  */
-class ssa_step_algorithm : public algorithm<symex_target_equationt::SSA_stepst>
+class ssa_step_algorithm : public algorithm<SSA_stepst>
 {
 public:
   explicit ssa_step_algorithm(bool sideffect) : algorithm(sideffect)
@@ -93,27 +93,27 @@ public:
   /// How many steps were ignored after this algorithm
   virtual BigInt ignored() const = 0;
 
-  void run_on_step(symex_target_equationt::SSA_stept &);
+  void run_on_step(SSA_stept &);
 
-  virtual void run_on_assignment(symex_target_equationt::SSA_stept &)
+  virtual void run_on_assignment(SSA_stept &)
   {
   }
-  virtual void run_on_assume(symex_target_equationt::SSA_stept &)
+  virtual void run_on_assume(SSA_stept &)
   {
   }
-  virtual void run_on_assert(symex_target_equationt::SSA_stept &)
+  virtual void run_on_assert(SSA_stept &)
   {
   }
-  virtual void run_on_output(symex_target_equationt::SSA_stept &)
+  virtual void run_on_output(SSA_stept &)
   {
   }
-  virtual void run_on_skip(symex_target_equationt::SSA_stept &)
+  virtual void run_on_skip(SSA_stept &)
   {
   }
-  virtual void run_on_renumber(symex_target_equationt::SSA_stept &)
+  virtual void run_on_renumber(SSA_stept &)
   {
   }
-  virtual void run_on_branching(symex_target_equationt::SSA_stept &)
+  virtual void run_on_branching(SSA_stept &)
   {
   }
 };
