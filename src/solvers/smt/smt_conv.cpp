@@ -3842,8 +3842,7 @@ void smt_convt::pre_solve()
       smt_astt in_range = mk_and(ge, le);
       guards.push_back(in_range);
 
-      smt_astt obj_id =
-        convert_terminal(constant_int2tc(int_type, BigInt(id)));
+      smt_astt obj_id = convert_terminal(constant_int2tc(int_type, BigInt(id)));
       smt_astt offs =
         int_encoding ? mk_sub(target, ptr_start) : mk_bvsub(target, ptr_start);
 
@@ -3865,11 +3864,12 @@ void smt_convt::pre_solve()
         obj_num);
       expr2tc from_start =
         member2tc(as.members[0], from_addr, as.member_names[0]);
-      expr2tc ptr_offs =
-        pointer_offset2tc(get_int_type(config.ansi_c.address_width), p.output_sym);
+      expr2tc ptr_offs = pointer_offset2tc(
+        get_int_type(config.ansi_c.address_width), p.output_sym);
       expr2tc address =
         add2tc(int_type, from_start, typecast2tc(int_type, ptr_offs));
-      assert_ast(mk_implies(not_matched, convert_ast(address)->eq(this, target)));
+      assert_ast(
+        mk_implies(not_matched, convert_ast(address)->eq(this, target)));
     }
     else
     {

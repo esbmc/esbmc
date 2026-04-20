@@ -947,9 +947,10 @@ public:
    *  emitted in pre_solve() once all objects have been registered. */
   struct PendingIntToPtr
   {
-    expr2tc output_sym;    ///< fresh pointer symbol representing the result
-    expr2tc target;        ///< the cast integer (unsigned ptraddr width)
-    bool from_byte_update; ///< use soft address-equality fallback instead of INVALID
+    expr2tc output_sym; ///< fresh pointer symbol representing the result
+    expr2tc target;     ///< the cast integer (unsigned ptraddr width)
+    bool
+      from_byte_update; ///< use soft address-equality fallback instead of INVALID
   };
 
   // XXX - push-pop will break here.
