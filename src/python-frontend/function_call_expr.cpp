@@ -2623,6 +2623,25 @@ function_call_expr::get_object_list_symbol(std::string &display_name) const
     return nullptr;
   }
 
+  // Call case: e.g. a.setdefault(k, []).append(99)
+  // receiver is a function call whose return value is a list pointer.
+  // Materialize the call result into a $call_list$ temp symbol
+  // so list method handlers can treat it as a named list.
+  // The declaration of the temp is emitted lazily by materialize_list_symbol().
+  if (func_value["_type"] == "Call")
+  {
+    const exprt call_expr = converter_.get_expr(func_value);
+    const typet list_type = converter_.get_type_handler().get_list_type();
+    if (call_expr.type() == list_type)
+    {
+      symbolt &tmp = converter_.create_tmp_symbol(
+        call_, "$call_list$", list_type, call_expr);
+      display_name = "$call_list$";
+      return &tmp;
+    }
+    return nullptr;
+  }
+
   // Plain name case: e.g. mylist.append(99)
   display_name = get_object_name();
   symbol_id list_symbol_id = converter_.create_symbol_id();
@@ -2645,11 +2664,15 @@ void function_call_expr::materialize_list_symbol(const symbolt *sym) const
 {
   if (!sym || sym->value.is_nil())
     return;
-  // Only emit a declaration for instance-attribute temp symbols produced by
-  // get_object_list_symbol().  These are identified by their name prefix
-  // "$attr_list$".  Regular list symbols have a nil value and are declared
-  // elsewhere; this guard prevents accidentally re-declaring them.
-  if (sym->name.as_string().find("$attr_list$") == std::string::npos)
+  // Only emit a declaration for temp symbols produced by
+  // get_object_list_symbol() from non-named receivers.  These are identified
+  // by the prefixes "$attr_list$" and "$call_list$".  Regular list symbols
+  // have a nil value and are declared elsewhere; this guard prevents
+  // re-declaring them.
+  const std::string &name = sym->name.as_string();
+  if (
+    name.find("$attr_list$") == std::string::npos &&
+    name.find("$call_list$") == std::string::npos)
     return;
   code_declt decl(symbol_expr(*sym));
   decl.copy_to_operands(sym->value);
@@ -4357,6 +4380,82 @@ exprt function_call_expr::handle_general_function_call()
   // Handle single-argument min/max/sum/sorted by dispatching to typed builtins
   const std::string &func_name = function_id_.get_function();
   std::string actual_func_name = func_name;
+
+  // Fast-path: sorted() over a concrete int list can be materialized directly
+  // in the frontend, avoiding expensive runtime list sorting/equality paths.
+  if (func_name == "sorted" && call_["args"].size() == 1)
+  {
+    exprt list_arg = converter_.get_expr(call_["args"][0]);
+    if (list_arg.is_symbol())
+    {
+      const std::string list_id = list_arg.identifier().as_string();
+      const size_t map_size = python_list::get_list_type_map_size(list_id);
+      if (map_size > 0 && map_size <= 32)
+      {
+        struct sortable_elem
+        {
+          BigInt key;
+          size_t pos;
+        };
+
+        std::vector<sortable_elem> elems;
+        elems.reserve(map_size);
+        bool all_constant_ints = true;
+
+        for (size_t i = 0; i < map_size; ++i)
+        {
+          const std::string elem_id =
+            python_list::get_list_element_id(list_id, i);
+          if (elem_id.empty())
+          {
+            all_constant_ints = false;
+            break;
+          }
+
+          const symbolt *elem_sym = converter_.find_symbol(elem_id);
+          if (
+            !elem_sym || !elem_sym->value.is_constant() ||
+            !(elem_sym->type.is_signedbv() || elem_sym->type.is_unsignedbv()))
+          {
+            all_constant_ints = false;
+            break;
+          }
+
+          BigInt key = binary2integer(elem_sym->value.value().c_str(), true);
+          elems.push_back({key, i});
+        }
+
+        if (all_constant_ints)
+        {
+          std::stable_sort(
+            elems.begin(),
+            elems.end(),
+            [](const sortable_elem &a, const sortable_elem &b) {
+              if (a.key == b.key)
+                return a.pos < b.pos;
+              return a.key < b.key;
+            });
+
+          nlohmann::json sorted_list;
+          sorted_list["_type"] = "List";
+          sorted_list["elts"] = nlohmann::json::array();
+          converter_.copy_location_fields_from_decl(call_, sorted_list);
+          for (const auto &elem : elems)
+          {
+            nlohmann::json cst;
+            cst["_type"] = "Constant";
+            cst["value"] = elem.key.to_int64();
+            cst["kind"] = nullptr;
+            converter_.copy_location_fields_from_decl(call_, cst);
+            sorted_list["elts"].push_back(cst);
+          }
+
+          python_list sorted_list_expr(converter_, sorted_list);
+          return sorted_list_expr.get();
+        }
+      }
+    }
+  }
 
   // Skip builtin dispatch if the user imported a function with the same name
   // e.g. "from other import sum" defines a user sum that shadows the builtin

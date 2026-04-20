@@ -3,11 +3,28 @@ title: Build Guide
 weight: 1
 ---
 
-## TLDR
+## Quick Start (Single Solver)
+
+For most users, building with a single SMT solver is enough. Z3 is recommended
+as the default; Boolector or Bitwuzla offer better performance on bit-vector
+benchmarks. For a build with multiple solvers, see the
+[Complete Build](#building-esbmc) section below.
+
+### Simplest path (any platform, dependencies downloaded automatically)
+
+```sh
+git clone https://github.com/esbmc/esbmc.git
+cd esbmc
+cmake -GNinja -Bbuild -DDOWNLOAD_DEPENDENCIES=On -DENABLE_Z3=On
+ninja -C build
+```
+
+`DOWNLOAD_DEPENDENCIES=On` fetches Clang/LLVM and Z3 automatically, so no
+manual solver installation is needed.
 
 ### Ubuntu 24.04
 
-To compile ESBMC on Ubuntu 24.04 with LLVM 14 and the SMT solver Z3:
+To compile with LLVM 14 and system Z3:
 
 ````
 sudo apt update
@@ -27,47 +44,18 @@ cmake .. -DENABLE_Z3=1 -DENABLE_PYTHON_FRONTEND=1
 make -j4
 ````
 
+### Mac OS X
 
-#### Fedora 40
-
-To compile ESBMC on Fedora 40 with the latest version of LLVM and the SMT solver Z3:
-
-```sh
-# Warning, the --allowerasing parameter will also remove incompatible packages to the packages specified below
-sudo dnf install --best --allowerasing "@Development Tools" clang llvm llvm-devel clang-tools-extra python3 git ccache unzip wget curl bison flex gcc-c++ glibc-devel glibc-devel.i686 boost-devel boost-devel.i686 z3-devel clang-devel clang-devel.i686 cmake zlib-devel libffi-devel libstdc++-devel libstdc++-devel.i686
-git clone https://github.com/esbmc/esbmc.git
-cd esbmc
-mkdir build && cd build
-CXX=g++ CC=gcc cmake .. -DENABLE_Z3=1 -DBUILD_TESTING=On -DENABLE_REGRESSION=1 -DZ3_DIR=/usr/include/z3
-make -j4
-```
-
-To build ESBMC with other operating systems and SMT solvers, please see the [BUILDING](https://github.com/esbmc/esbmc/blob/master/BUILDING.md) file.
-
-#### FreeBSD
-
-ESBMC should compile just fine in FreeBSD as long as the 32-bit libraries are enabled
-
-```sh
-pkg install git cmake python3 z3 bison flex boost-all
-wget https://github.com/llvm/llvm-project/releases/download/llvmorg-16.0.0/clang+llvm-16.0.0-amd64-unknown-freebsd13.tar.xz && mv clang16
-mkdir build && cd build
-cmake .. -DLLVM_DIR=../clang16 -DClang_DIR=../clang16
-make -j4
-```
-
-#### Mac OS X
-
-M1/M2/M3/M4 Macs are now supported.
-
-Given the elements of OS X, run the script. It runs on both ARM and Intel macs. You do need Homebrew installed.
-It creates the build folder, installs the Boolector SMT solver, and makes esbmc available globally. The script also supports building the Python frontend. Note that the Python frontend is quite early in its support for Python.
+M1/M2/M3/M4 Macs are now supported. You need Homebrew installed.
+The helper script creates the build folder, optionally installs Boolector and/or
+Bitwuzla, and makes `esbmc` available globally. It also supports the Python
+frontend.
 
 ```
  ./build-esbmc-mac.sh
 ```
 
-The raw command is provided here for your reference.
+The raw cmake command for reference:
 
 ```
 cmake .. -DZ3_DIR=/opt/homebrew/Cellar/z3/4.13.4 -DENABLE_Z3=1 -DC2GOTO_SYSROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk -DLLVM_DIR=/opt/homebrew/opt/llvm/lib/cmake/llvm -DClang_DIR=/opt/homebrew/opt/llvm/lib/cmake/clang
@@ -75,7 +63,13 @@ make -j8
 make install
 ```
 
+For other platforms (Fedora, FreeBSD, Windows WSL) see [Other Platforms](#other-platforms) in the Details section below.
+
 ## Details
+
+The sections below cover the complete build with all supported solvers, CHERI
+support, and platform-specific notes. If you only need a single solver, the
+[Quick Start](#quick-start-single-solver) above is sufficient.
 
 This guide provides instructions on building ESBMC and its supported solvers.
 
@@ -84,6 +78,34 @@ It has been tested with Ubuntu 20.04.1, Ubuntu 22.04 and macOS Catalina as well 
 It is recommended that the RAM should be at least 6 GB.
 
 Before starting, note that ESBMC is mainly distributed under the terms of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0), so please read it carefully.
+
+## Other Platforms
+
+### Fedora 40
+
+To compile on Fedora 40 with the latest LLVM and Z3:
+
+```sh
+# Warning: --allowerasing will remove packages incompatible with those listed below
+sudo dnf install --best --allowerasing "@Development Tools" clang llvm llvm-devel clang-tools-extra python3 git ccache unzip wget curl bison flex gcc-c++ glibc-devel glibc-devel.i686 boost-devel boost-devel.i686 z3-devel clang-devel clang-devel.i686 cmake zlib-devel libffi-devel libstdc++-devel libstdc++-devel.i686
+git clone https://github.com/esbmc/esbmc.git
+cd esbmc
+mkdir build && cd build
+CXX=g++ CC=gcc cmake .. -DENABLE_Z3=1 -DBUILD_TESTING=On -DENABLE_REGRESSION=1 -DZ3_DIR=/usr/include/z3
+make -j4
+```
+
+### FreeBSD
+
+ESBMC compiles on FreeBSD when 32-bit libraries are enabled:
+
+```sh
+pkg install git cmake python3 z3 bison flex boost-all
+wget https://github.com/llvm/llvm-project/releases/download/llvmorg-16.0.0/clang+llvm-16.0.0-amd64-unknown-freebsd13.tar.xz && mv clang16
+mkdir build && cd build
+cmake .. -DLLVM_DIR=../clang16 -DClang_DIR=../clang16
+make -j4
+```
 
 ## Dependency overview
 
@@ -242,6 +264,11 @@ ESBMC can use the forward and backward operations from constraint programming to
 ESBMC relies on SMT solvers to reason about formulae in its back-end.
 
 Currently we support the following solvers: __Bitwuzla__, __Boolector__, __CVC4__, __MathSAT__, __Yices 2__, and __Z3__.
+
+**If you only need one solver**, Z3 is the recommended choice for general use
+(see [Quick Start](#quick-start-single-solver)). Boolector and Bitwuzla tend to
+be faster on bit-vector benchmarks. The sections below describe how to build
+each solver manually for use in the complete multi-solver build.
 
 Since this guide focuses primarily on the ESBMC build, we will only cover the steps needed for it.
 
@@ -407,7 +434,11 @@ If no such directory, please go to App Store and install Xcode. If you do not ha
 
 ## Building ESBMC
 
-Now we are ready to build ESBMC. Please note that we describe the same build option used in our CI/CD. If you want to all available _cmake_ options, refer to our [Options.cmake file](https://github.com/esbmc/esbmc/blob/master/scripts/cmake/Options.cmake).
+Now we are ready to build ESBMC. If you only need one solver, see the
+[Quick Start](#quick-start-single-solver) at the top of this page. The commands
+below configure the complete multi-solver build used in ESBMC's CI/CD. For all
+available cmake options, refer to our
+[Options.cmake file](https://github.com/esbmc/esbmc/blob/master/scripts/cmake/Options.cmake).
 
 If you are building ESBMC-CHERI, please complete the following sections BEFORE configuring ESBMC-CHERI:
 - Preparing CHERI Clang 13 (experimental)
@@ -418,10 +449,10 @@ If you are building ESBMC-CHERI, please complete the following sections BEFORE c
 First, we need to setup __cmake__, by using the following command in ESBMC_Project directory you just created:
 
 ```
-Linux:
+Linux (complete multi-solver build):
 cd esbmc && mkdir build && cd build && cmake .. -GNinja -DBUILD_TESTING=On -DENABLE_REGRESSION=On $ESBMC_CLANG -DBUILD_STATIC=${ESBMC_STATIC:-ON} -DBoolector_DIR=$PWD/../../boolector-release -DZ3_DIR=$PWD/../../z3 -DENABLE_MATHSAT=ON -DMathsat_DIR=$PWD/../../mathsat -DENABLE_YICES=On -DYices_DIR=$PWD/../../yices -DCVC4_DIR=$PWD/../../cvc4 -DGMP_DIR=$PWD/../../gmp -DBitwuzla_DIR=$PWD/../../bitwuzla-release -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../../release
 
-macOS:
+macOS (complete multi-solver build):
 cd esbmc && mkdir build && cd build && cmake .. -GNinja -DBUILD_TESTING=On -DENABLE_REGRESSION=On -DBUILD_STATIC=${ESBMC_STATIC:-ON} $ESBMC_CLANG -DLLVM_DIR=/opt/homebrew/opt/llvm@21/lib/cmake/llvm -DClang_DIR=/opt/homebrew/opt/llvm@21/lib/cmake/clang -DBoolector_DIR=$PWD/../../boolector-release -DZ3_DIR=$PWD/../../z3 -DENABLE_MATHSAT=On -DMathsat_DIR=$PWD/../../mathsat -DENABLE_YICES=ON -DYices_DIR=$PWD/../../yices -DC2GOTO_SYSROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -DBitwuzla_DIR=$PWD/../../bitwuzla-release -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../../release
 ```
 

@@ -1744,9 +1744,12 @@ exprt python_dict_handler::handle_dict_setdefault(
   if (is_string_result)
     result_type = gen_pointer_type(char_type());
 
-  if (is_dict_type(result_type) || result_type == list_type)
-    throw std::runtime_error(
-      "setdefault(): dict and list value types are not supported");
+  if (is_dict_type(result_type))
+    throw std::runtime_error("setdefault(): dict value type is not supported");
+
+  // List values are stored by pointer so that
+  // `a.setdefault(k, []).append(x)` mutates the stored list.
+  const bool is_list_result = (result_type == list_type);
 
   // Get dict members
   member_exprt keys_member(dict_expr, "keys", list_type);
@@ -1848,6 +1851,12 @@ exprt python_dict_handler::handle_dict_setdefault(
     typecast_exprt value_as_bool_ptr(obj_value, pointer_typet(bool_type()));
     retrieved_value = dereference_exprt(value_as_bool_ptr, bool_type());
   }
+  else if (is_list_result)
+  {
+    // List values are stored as raw PyListObject*, so cast the void*
+    // straight back, no extra dereference.
+    retrieved_value = typecast_exprt(obj_value, result_type);
+  }
   else if (
     result_type.is_pointer() && result_type.subtype() != char_type() &&
     !result_type.is_nil())
@@ -1894,16 +1903,6 @@ exprt python_dict_handler::handle_dict_setdefault(
     if (!push_func)
       throw std::runtime_error("__ESBMC_list_push not found");
 
-    list_elem_info value_info =
-      list_handler.get_list_element_info(call_node, effective_default);
-
-    if (
-      value_info.elem_symbol->type.is_pointer() &&
-      value_info.elem_symbol->type.subtype() == char_type())
-      value_arg = symbol_expr(*value_info.elem_symbol);
-    else
-      value_arg = address_of_exprt(symbol_expr(*value_info.elem_symbol));
-
     // Push key into keys list
     code_function_callt push_key_call;
     push_key_call.function() = symbol_expr(*push_func);
@@ -1915,17 +1914,52 @@ exprt python_dict_handler::handle_dict_setdefault(
     push_key_call.location() = location;
     else_block.copy_to_operands(push_key_call);
 
-    // Push value into values list
-    code_function_callt push_value_call;
-    push_value_call.function() = symbol_expr(*push_func);
-    push_value_call.arguments().push_back(values_member);
-    push_value_call.arguments().push_back(value_arg);
-    push_value_call.arguments().push_back(
-      symbol_expr(*value_info.elem_type_sym));
-    push_value_call.arguments().push_back(value_info.elem_size);
-    push_value_call.type() = bool_type();
-    push_value_call.location() = location;
-    else_block.copy_to_operands(push_value_call);
+    // Push value into values list.
+    // List values reuse __ESBMC_list_push_dict_ptr to store the raw pointer.
+    if (is_list_result)
+    {
+      const symbolt *push_ptr_func =
+        symbol_table_.find_symbol("c:@F@__ESBMC_list_push_dict_ptr");
+      if (!push_ptr_func)
+        throw std::runtime_error("__ESBMC_list_push_dict_ptr not found");
+
+      constant_exprt list_type_hash(size_type());
+      list_type_hash.set_value(integer2binary(
+        generate_nested_dict_type_hash(list_type),
+        config.ansi_c.address_width));
+
+      code_function_callt push_list_call;
+      push_list_call.function() = symbol_expr(*push_ptr_func);
+      push_list_call.arguments().push_back(values_member);
+      push_list_call.arguments().push_back(effective_default);
+      push_list_call.arguments().push_back(list_type_hash);
+      push_list_call.type() = bool_type();
+      push_list_call.location() = location;
+      else_block.copy_to_operands(push_list_call);
+    }
+    else
+    {
+      list_elem_info value_info =
+        list_handler.get_list_element_info(call_node, effective_default);
+
+      if (
+        value_info.elem_symbol->type.is_pointer() &&
+        value_info.elem_symbol->type.subtype() == char_type())
+        value_arg = symbol_expr(*value_info.elem_symbol);
+      else
+        value_arg = address_of_exprt(symbol_expr(*value_info.elem_symbol));
+
+      code_function_callt push_value_call;
+      push_value_call.function() = symbol_expr(*push_func);
+      push_value_call.arguments().push_back(values_member);
+      push_value_call.arguments().push_back(value_arg);
+      push_value_call.arguments().push_back(
+        symbol_expr(*value_info.elem_type_sym));
+      push_value_call.arguments().push_back(value_info.elem_size);
+      push_value_call.type() = bool_type();
+      push_value_call.location() = location;
+      else_block.copy_to_operands(push_value_call);
+    }
   }
 
   // Assign effective_default to result.
