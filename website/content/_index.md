@@ -55,6 +55,12 @@ ESBMC implements state-of-the-art incremental BMC and *k*-induction proof-rule a
 
 We provide some background material/publications to help you understand what ESBMC can offer. These are available [online](https://ssvlab.github.io/esbmc/publications.html). For further information about our main components, check the ESBMC [architecture](https://github.com/esbmc/esbmc/blob/master/ARCHITECTURE.md).
 
+## SV-COMP History
+
+![ESBMC SV-COMP overall score history](./images/sv-comp-hist-combined.png)
+
+Overall [SV-COMP](/sv-comp) score over time, by per-benchmark time budget.
+
 ## Applications
 
 ESBMC has been used in a broad range of cutting-edge applications across multiple domains. If you applied ESBMC in your research, but it is not mentioned below, please, do not hesitate to contact us through our [GitHub repository](https://github.com/esbmc/esbmc).
