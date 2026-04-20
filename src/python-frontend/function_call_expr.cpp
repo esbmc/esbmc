@@ -3017,6 +3017,20 @@ exprt function_call_expr::handle_dict_method() const
   throw std::runtime_error("Unsupported dict method: " + method_name);
 }
 
+bool function_call_expr::is_dict_class_method_call() const
+{
+  if (call_["func"]["_type"] != "Attribute")
+    return false;
+  const auto &value = call_["func"]["value"];
+  if (!value.contains("_type") || value["_type"] != "Name")
+    return false;
+  if (value["id"] != "dict")
+    return false;
+
+  const std::string &method_name = function_id_.get_function();
+  return method_name == "fromkeys";
+}
+
 exprt function_call_expr::handle_list_copy() const
 {
   const auto &args = call_["args"];
@@ -3686,6 +3700,14 @@ function_call_expr::get_dispatch_table()
     {[this]() { return is_list_method_call(); },
      [this]() { return handle_list_method(); },
      "list methods"},
+
+    // Dict class methods (dict.fromkeys), matched before instance-method dispatch
+    // The receiver is the class name, not a dict symbol.
+    {[this]() { return is_dict_class_method_call(); },
+     [this]() {
+       return converter_.get_dict_handler()->handle_dict_fromkeys(call_);
+     },
+     "dict class methods"},
 
     // Dict methods
     {[this]() { return is_dict_method_call(); },
