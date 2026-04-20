@@ -35,10 +35,6 @@ jobs:
           python scripts/sv-comp-graph/sv_comp_history.py \
             --output-dir website/content/images \
             --budgets 30s 100s 300s 600s
-          rm -f website/content/images/sv-comp-hist-30s.png \
-                website/content/images/sv-comp-hist-100s.png \
-                website/content/images/sv-comp-hist-300s.png \
-                website/content/images/sv-comp-hist-600s.png
       - uses: peter-evans/create-pull-request@v8.1.1
         with:
           commit-message: '[docs] refresh SV-COMP history graph'
