@@ -74,7 +74,11 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$GITHUB_WORKSPACE/stats-out"
-          src=$(ls $HOME/esbmc-output/*results*.txt | head -n1)
+          src=$(ls -1 "$HOME"/esbmc-output/*results*.txt 2>/dev/null | head -n1)
+          if [ -z "$src" ]; then
+            echo "No results*.txt found under \$HOME/esbmc-output" >&2
+            exit 1
+          fi
           dst="$GITHUB_WORKSPACE/stats-out/${{ matrix.file }}"
           awk '/^Statistics:/{p=1} p{print; if (/^[[:space:]]+Score:/) exit}' \
             "$src" > "$dst"
