@@ -48,7 +48,7 @@ expr2tc expr2t::simplify() const
     bool changed = false;
     std::list<expr2tc> newoperands;
 
-    for (unsigned int idx = 0; idx < get_num_sub_exprs(); idx++)
+    for (size_t idx = 0; idx < get_num_sub_exprs(); idx++)
     {
       expr2tc tmp;
       const expr2tc *e = get_sub_expr(idx);

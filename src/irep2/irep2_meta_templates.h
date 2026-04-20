@@ -28,7 +28,7 @@ template <
   typename fields>
 const expr2tc *
 esbmct::expr_methods2<derived, baseclass, traits, enable, fields>::get_sub_expr(
-  unsigned int i) const
+  size_t i) const
 {
   return superclass::get_sub_expr_rec(0, i); // Skips expr_id
 }
@@ -40,7 +40,7 @@ template <
   typename enable,
   typename fields>
 expr2tc *esbmct::expr_methods2<derived, baseclass, traits, enable, fields>::
-  get_sub_expr_nc(unsigned int i)
+  get_sub_expr_nc(size_t i)
 {
   return superclass::get_sub_expr_nc_rec(0, i); // Skips expr_id
 }
@@ -51,7 +51,7 @@ template <
   typename traits,
   typename enable,
   typename fields>
-unsigned int esbmct::expr_methods2<derived, baseclass, traits, enable, fields>::
+size_t esbmct::expr_methods2<derived, baseclass, traits, enable, fields>::
   get_num_sub_exprs() const
 {
   return superclass::get_num_sub_exprs_rec(); // Skips expr_id
@@ -318,7 +318,7 @@ template <
   typename fields>
 const expr2tc *
 esbmct::irep_methods2<derived, baseclass, traits, enable, fields>::
-  get_sub_expr_rec(unsigned int cur_idx, unsigned int desired) const
+  get_sub_expr_rec(size_t cur_idx, size_t desired) const
 {
   const expr2tc *ptr;
   const derived *derived_this = static_cast<const derived *>(this);
@@ -338,7 +338,7 @@ template <
   typename enable,
   typename fields>
 expr2tc *esbmct::irep_methods2<derived, baseclass, traits, enable, fields>::
-  get_sub_expr_nc_rec(unsigned int cur_idx, unsigned int desired)
+  get_sub_expr_nc_rec(size_t cur_idx, size_t desired)
 {
   expr2tc *ptr;
   derived *derived_this = static_cast<derived *>(this);
@@ -357,10 +357,10 @@ template <
   typename traits,
   typename enable,
   typename fields>
-unsigned int esbmct::irep_methods2<derived, baseclass, traits, enable, fields>::
+size_t esbmct::irep_methods2<derived, baseclass, traits, enable, fields>::
   get_num_sub_exprs_rec() const
 {
-  unsigned int num = 0;
+  size_t num = 0;
   const derived *derived_this = static_cast<const derived *>(this);
   auto m_ptr = membr_ptr::value;
 

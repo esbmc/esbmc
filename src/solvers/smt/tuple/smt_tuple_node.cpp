@@ -18,7 +18,7 @@ smt_astt smt_tuple_node_flattener::tuple_create(const expr2tc &structdef)
     *this, ctx, ctx->convert_sort(structdef->type), name);
   result->elements.resize(structdef->get_num_sub_exprs());
 
-  for (unsigned int i = 0; i < structdef->get_num_sub_exprs(); i++)
+  for (size_t i = 0; i < structdef->get_num_sub_exprs(); i++)
   {
     smt_astt tmp = ctx->convert_ast(*structdef->get_sub_expr(i));
     result->elements[i] = tmp;

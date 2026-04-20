@@ -3930,6 +3930,7 @@ exprt python_converter::dispatch_unary_dunder_operator(
     {"complex", "__complex__"},
     {"float", "__float__"},
     {"index", "__index__"},
+    {"str", "__str__"},
   };
   auto it = unary_dunder_map.find(op);
   if (it == unary_dunder_map.end())
@@ -4977,6 +4978,20 @@ void python_converter::handle_assignment_type_adjustments(
 {
   const bool has_annotation =
     ast_node.contains("annotation") && !ast_node["annotation"].is_null();
+
+  // For subscript targets (e.g. dp[i] = v).
+  // The rhs writes an element, not the container.
+  // Don't rewrite lhs_symbol's type.
+  auto is_subscript_target = [](const nlohmann::json &t) {
+    return t.is_object() && t.value("_type", "") == "Subscript";
+  };
+  const bool target_is_subscript =
+    (ast_node.contains("targets") && ast_node["targets"].is_array() &&
+     !ast_node["targets"].empty() &&
+     is_subscript_target(ast_node["targets"][0])) ||
+    (ast_node.contains("target") && is_subscript_target(ast_node["target"]));
+  if (target_is_subscript)
+    return;
 
   // Handle assignment of function to function pointer variable
   if (

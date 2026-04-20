@@ -356,7 +356,7 @@ void violation_graphml_goto_trace(
 
 void violation_yaml_goto_trace(
   optionst &options,
-  const namespacet &ns [[maybe_unused]],
+  const namespacet &ns,
   const goto_tracet &goto_trace)
 {
   yamlt yml(yamlt::VIOLATION);
@@ -406,15 +406,18 @@ void violation_yaml_goto_trace(
       break;
 
     case goto_trace_stept::ASSIGNMENT:
-#if 0
       if (
         step.pc->is_assign() || step.pc->is_return() ||
         (step.pc->is_other() && is_nil_expr(step.lhs)) ||
         step.pc->is_function_call())
       {
+        // Only emit assumptions for nondet variables
+        if (is_nil_expr(step.rhs) || !find_nondet_in_expr(step.rhs))
+          break;
+
         std::string assignment = get_formated_assignment(ns, step, true);
         if (assignment.empty())
-          continue;
+          break;
 
         waypoint wp;
         wp.type = waypoint::assumption;
@@ -428,7 +431,6 @@ void violation_yaml_goto_trace(
         wp.function = step.pc->location.function().c_str();
         yml.segments.push_back(wp);
       }
-#endif
       break;
 
     default:

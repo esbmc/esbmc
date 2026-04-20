@@ -548,13 +548,11 @@ exprt python_list::build_insert_list_call(
   return converter_.convert_expression_to_code(insert_func_call);
 }
 
-exprt python_list::build_concat_list_call(
-  const exprt &lhs,
-  const exprt &rhs,
+void python_list::emit_list_copy(
+  const exprt &src,
+  const symbolt &dst,
   const nlohmann::json &element)
 {
-  // Create destination list
-  symbolt &dst_list = create_list();
   const locationt loc = converter_.get_location_from_decl(element);
 
   // Helpers we’ll call from the C model
@@ -566,87 +564,88 @@ exprt python_list::build_concat_list_call(
     converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_push_object");
   assert(size_sym && at_sym && push_obj_sym);
 
-  auto copy_list = [&](const exprt &src_list) {
-    // size_t n = list_size(src_list);
-    symbolt &n_sym = converter_.create_tmp_symbol(
-      element, "$n$", size_type(), gen_zero(size_type()));
-    code_declt n_decl(symbol_expr(n_sym));
-    converter_.add_instruction(n_decl);
-
-    code_function_callt get_size;
-    get_size.function() = symbol_expr(*size_sym);
-    // list_size takes const List*, pass address if we have a value
-    if (src_list.type().is_pointer())
-      get_size.arguments().push_back(src_list);
-    else
-      get_size.arguments().push_back(address_of_exprt(src_list));
-    get_size.lhs() = symbol_expr(n_sym);
-    get_size.type() = size_type();
-    get_size.location() = loc;
-    converter_.add_instruction(get_size);
-
-    // for (size_t i = 0; i < n; ++i) { push_object(dst, list_at(src, i)); }
-    symbolt &i_sym = converter_.create_tmp_symbol(
-      element, "$i$", size_type(), gen_zero(size_type()));
-    code_declt i_decl(symbol_expr(i_sym));
-    converter_.add_instruction(i_decl);
-
-    // i = 0
-    code_assignt i_init(symbol_expr(i_sym), gen_zero(size_type()));
-    converter_.add_instruction(i_init);
-
-    // condition: i < n
-    exprt cond("<", bool_type());
-    cond.copy_to_operands(symbol_expr(i_sym), symbol_expr(n_sym));
-
-    // body
-    code_blockt body;
-
-    // tmp_obj = list_at(src_list, i)
-    side_effect_expr_function_callt at_call;
-    at_call.function() = symbol_expr(*at_sym);
-    if (src_list.type().is_pointer())
-      at_call.arguments().push_back(src_list);
-    else
-      at_call.arguments().push_back(address_of_exprt(src_list));
-    at_call.arguments().push_back(symbol_expr(i_sym));
-    at_call.type() =
-      pointer_typet(converter_.get_type_handler().get_list_element_type());
-    at_call.location() = loc;
-
-    symbolt &tmp_obj = converter_.create_tmp_symbol(
-      element,
-      "tmp_list_at",
-      pointer_typet(converter_.get_type_handler().get_list_element_type()),
-      exprt());
-    code_declt tmp_obj_decl(symbol_expr(tmp_obj));
-    tmp_obj_decl.copy_to_operands(at_call);
-    body.copy_to_operands(tmp_obj_decl);
-
-    // list_push_object(dst_list, tmp_obj)
-    side_effect_expr_function_callt push_call;
-    push_call.function() = symbol_expr(*push_obj_sym);
-    push_call.arguments().push_back(symbol_expr(dst_list));
-    push_call.arguments().push_back(symbol_expr(tmp_obj));
-    push_call.type() = bool_type();
-    push_call.location() = loc;
-    body.copy_to_operands(converter_.convert_expression_to_code(push_call));
-
-    // i = i + 1
-    plus_exprt i_inc(symbol_expr(i_sym), gen_one(size_type()));
-    code_assignt i_step(symbol_expr(i_sym), i_inc);
-    body.copy_to_operands(i_step);
-
-    // while (i < n) { ... }
-    codet loop;
-    loop.set_statement("while");
-    loop.copy_to_operands(cond, body);
-    converter_.add_instruction(loop);
+  // list_size / list_at take `const List*`
+  // so pass the address of values.
+  auto as_list_ptr = [](const exprt &e) {
+    return e.type().is_pointer() ? e : static_cast<exprt>(address_of_exprt(e));
   };
 
+  // size_t n = list_size(src_list);
+  symbolt &n_sym = converter_.create_tmp_symbol(
+    element, "$n$", size_type(), gen_zero(size_type()));
+  converter_.add_instruction(code_declt(symbol_expr(n_sym)));
+
+  code_function_callt get_size;
+  get_size.function() = symbol_expr(*size_sym);
+  get_size.arguments().push_back(as_list_ptr(src));
+  get_size.lhs() = symbol_expr(n_sym);
+  get_size.type() = size_type();
+  get_size.location() = loc;
+  converter_.add_instruction(get_size);
+
+  // for (size_t i = 0; i < n; ++i) { push_object(dst, list_at(src, i)); }
+  symbolt &i_sym = converter_.create_tmp_symbol(
+    element, "$i$", size_type(), gen_zero(size_type()));
+  converter_.add_instruction(code_declt(symbol_expr(i_sym)));
+
+  // i = 0
+  converter_.add_instruction(
+    code_assignt(symbol_expr(i_sym), gen_zero(size_type())));
+
+  // condition: i < n
+  exprt cond("<", bool_type());
+  cond.copy_to_operands(symbol_expr(i_sym), symbol_expr(n_sym));
+
+  // body
+  code_blockt body;
+
+  // tmp_obj = list_at(src, i)
+  side_effect_expr_function_callt at_call;
+  at_call.function() = symbol_expr(*at_sym);
+  at_call.arguments().push_back(as_list_ptr(src));
+  at_call.arguments().push_back(symbol_expr(i_sym));
+  at_call.type() =
+    pointer_typet(converter_.get_type_handler().get_list_element_type());
+  at_call.location() = loc;
+
+  symbolt &tmp_obj = converter_.create_tmp_symbol(
+    element,
+    "tmp_list_at",
+    pointer_typet(converter_.get_type_handler().get_list_element_type()),
+    exprt());
+  code_declt tmp_obj_decl(symbol_expr(tmp_obj));
+  tmp_obj_decl.copy_to_operands(at_call);
+  body.copy_to_operands(tmp_obj_decl);
+
+  // list_push_object(dst_list, tmp_obj)
+  side_effect_expr_function_callt push_call;
+  push_call.function() = symbol_expr(*push_obj_sym);
+  push_call.arguments().push_back(symbol_expr(dst));
+  push_call.arguments().push_back(symbol_expr(tmp_obj));
+  push_call.type() = bool_type();
+  push_call.location() = loc;
+  body.copy_to_operands(converter_.convert_expression_to_code(push_call));
+
+  // i = i + 1
+  plus_exprt i_inc(symbol_expr(i_sym), gen_one(size_type()));
+  body.copy_to_operands(code_assignt(symbol_expr(i_sym), i_inc));
+
+  // while (i < n) { ... }
+  codet loop;
+  loop.set_statement("while");
+  loop.copy_to_operands(cond, body);
+  converter_.add_instruction(loop);
+}
+
+exprt python_list::build_concat_list_call(
+  const exprt &lhs,
+  const exprt &rhs,
+  const nlohmann::json &element)
+{
+  symbolt &dst_list = create_list();
   // Copy lhs then rhs
-  copy_list(lhs);
-  copy_list(rhs);
+  emit_list_copy(lhs, dst_list, element);
+  emit_list_copy(rhs, dst_list, element);
 
   // Update list type mapping
   const std::string dst_id = dst_list.id.as_string();
@@ -700,6 +699,23 @@ exprt python_list::get()
   symbolt &list_symbol = create_list();
 
   const std::string &list_id = list_symbol.id.as_string();
+  locationt location = converter_.get_location_from_decl(list_value_);
+
+  auto materialize_list_elem = [&](const exprt &elem) -> exprt {
+    if (elem.is_symbol())
+      return elem;
+
+    symbolt &tmp = converter_.create_tmp_symbol(
+      list_value_, "$list_elem$", elem.type(), elem);
+    code_declt decl(symbol_expr(tmp));
+    decl.location() = location;
+    converter_.add_instruction(decl);
+
+    code_assignt assign(symbol_expr(tmp), elem);
+    assign.location() = location;
+    converter_.add_instruction(assign);
+    return symbol_expr(tmp);
+  };
 
   for (auto &e : list_value_["elts"])
   {
@@ -710,12 +726,13 @@ exprt python_list::get()
     converter_.current_lhs = nullptr;
     exprt elem = converter_.get_expr(e);
     converter_.current_lhs = saved_lhs;
+    exprt map_elem = materialize_list_elem(elem);
 
     exprt list_push_func_call =
-      build_push_list_call(list_symbol, list_value_, elem);
+      build_push_list_call(list_symbol, list_value_, map_elem);
     converter_.add_instruction(list_push_func_call);
     list_type_map[list_id].push_back(
-      std::make_pair(elem.identifier().as_string(), elem.type()));
+      std::make_pair(map_elem.identifier().as_string(), map_elem.type()));
   }
 
   return symbol_expr(list_symbol);
@@ -1629,8 +1646,21 @@ exprt python_list::handle_range_slice(
 
       for (size_t i = begin; i < end; ++i)
       {
-        const exprt element =
-          converter_.get_expr(list_node["value"]["elts"][i]);
+        exprt element = converter_.get_expr(list_node["value"]["elts"][i]);
+        if (!element.is_symbol())
+        {
+          symbolt &tmp = converter_.create_tmp_symbol(
+            list_value_, "$slice_elem$", element.type(), element);
+          code_declt decl(symbol_expr(tmp));
+          decl.location() = location;
+          converter_.add_instruction(decl);
+
+          code_assignt assign(symbol_expr(tmp), element);
+          assign.location() = location;
+          converter_.add_instruction(assign);
+          element = symbol_expr(tmp);
+        }
+
         list_type_map[sliced_list.id.as_string()].push_back(
           std::make_pair(element.identifier().as_string(), element.type()));
       }
@@ -2507,6 +2537,164 @@ exprt python_list::compare(
     return cond;
   }
 
+  // Fast path for list equality/inequality when we have concrete type-map
+  // entries for both operands. This avoids __ESBMC_list_eq loops.
+  if (op == "Eq" || op == "NotEq")
+  {
+    auto resolve_map_id = [&](const symbolt *sym) -> std::string {
+      const std::string direct_id = sym->id.as_string();
+      auto has_map = [&](const std::string &id) {
+        auto it = list_type_map.find(id);
+        return it != list_type_map.end() && !it->second.empty();
+      };
+
+      if (has_map(direct_id))
+        return direct_id;
+
+      const exprt &v = sym->value;
+      if (v.is_symbol())
+      {
+        const std::string alias_id = v.identifier().as_string();
+        if (has_map(alias_id))
+          return alias_id;
+      }
+      else if (
+        v.id() == "typecast" && !v.operands().empty() && v.op0().is_symbol())
+      {
+        const std::string alias_id = v.op0().identifier().as_string();
+        if (has_map(alias_id))
+          return alias_id;
+      }
+
+      return direct_id;
+    };
+
+    const std::string lhs_id = resolve_map_id(lhs_symbol);
+    const std::string rhs_id = resolve_map_id(rhs_symbol);
+    auto is_numeric = [](const typet &t) {
+      return t.is_signedbv() || t.is_unsignedbv() || t.is_floatbv();
+    };
+    auto is_bool = [](const typet &t) { return t == bool_type(); };
+
+    auto is_concrete_map = [&](const std::string &list_id) -> bool {
+      auto it = list_type_map.find(list_id);
+      if (it == list_type_map.end() || it->second.empty())
+        return false;
+
+      for (const auto &entry : it->second)
+      {
+        if (entry.first.empty())
+          return false;
+
+        const symbolt *elem_sym = converter_.find_symbol(entry.first);
+        if (!elem_sym)
+          return false;
+        if (!(is_numeric(elem_sym->type) || is_bool(elem_sym->type)))
+          return false;
+      }
+      return true;
+    };
+
+    auto has_mixed_int_float = [&](const std::string &list_id) -> bool {
+      auto it = list_type_map.find(list_id);
+      if (it == list_type_map.end() || it->second.empty())
+        return false;
+
+      bool has_int = false;
+      bool has_float = false;
+      for (const auto &entry : it->second)
+      {
+        const symbolt *elem_sym = converter_.find_symbol(entry.first);
+        const typet t = elem_sym ? elem_sym->type : entry.second;
+        if (t.is_floatbv())
+          has_float = true;
+        else if (t.is_signedbv() || t.is_unsignedbv())
+          has_int = true;
+      }
+      return has_int && has_float;
+    };
+
+    if (is_concrete_map(lhs_id) && is_concrete_map(rhs_id))
+    {
+      if (has_mixed_int_float(lhs_id) || has_mixed_int_float(rhs_id))
+      {
+        // For mixed int/float lists, runtime operations (e.g., sort) can
+        // reorder heterogeneous elements and invalidate index->type mapping.
+        // Keep the structural runtime comparator for soundness.
+      }
+      else
+      {
+        const size_t lhs_n = get_list_type_map_size(lhs_id);
+        const size_t rhs_n = get_list_type_map_size(rhs_id);
+
+        if (lhs_n == rhs_n && lhs_n <= 64)
+        {
+          exprt all_equal = gen_boolean(true);
+          bool comparable = true;
+
+          for (size_t i = 0; i < lhs_n; ++i)
+          {
+            const std::string lhs_elem_id = get_list_element_id(lhs_id, i);
+            const std::string rhs_elem_id = get_list_element_id(rhs_id, i);
+            const symbolt *lhs_elem_sym = converter_.find_symbol(lhs_elem_id);
+            const symbolt *rhs_elem_sym = converter_.find_symbol(rhs_elem_id);
+            const typet lhs_elem_type = lhs_elem_sym
+                                          ? lhs_elem_sym->type
+                                          : get_list_element_type(lhs_id, i);
+            const typet rhs_elem_type = rhs_elem_sym
+                                          ? rhs_elem_sym->type
+                                          : get_list_element_type(rhs_id, i);
+            if (lhs_elem_type.is_nil() || rhs_elem_type.is_nil())
+            {
+              comparable = false;
+              break;
+            }
+
+            const exprt idx = from_integer(BigInt(i), size_type());
+            exprt lhs_at =
+              build_list_at_call(symbol_expr(*lhs_symbol), idx, list_value_);
+            exprt rhs_at =
+              build_list_at_call(symbol_expr(*rhs_symbol), idx, list_value_);
+            exprt lhs_val = extract_pyobject_value(lhs_at, lhs_elem_type);
+            exprt rhs_val = extract_pyobject_value(rhs_at, rhs_elem_type);
+
+            exprt eq_elem;
+            if (lhs_elem_type == rhs_elem_type && is_numeric(lhs_elem_type))
+            {
+              eq_elem = equality_exprt(lhs_val, rhs_val);
+            }
+            else if (lhs_elem_type == rhs_elem_type && is_bool(lhs_elem_type))
+            {
+              eq_elem = equality_exprt(lhs_val, rhs_val);
+            }
+            else if (is_numeric(lhs_elem_type) && is_numeric(rhs_elem_type))
+            {
+              lhs_val = typecast_exprt(lhs_val, double_type());
+              rhs_val = typecast_exprt(rhs_val, double_type());
+              eq_elem = equality_exprt(lhs_val, rhs_val);
+            }
+            else
+            {
+              comparable = false;
+              break;
+            }
+
+            exprt and_expr("and", bool_type());
+            and_expr.copy_to_operands(all_equal, eq_elem);
+            all_equal = and_expr;
+          }
+
+          if (comparable)
+          {
+            if (op == "NotEq")
+              return not_exprt(all_equal);
+            return all_equal;
+          }
+        }
+      }
+    }
+  }
+
   // ── Ordering operators: Lt, LtE, Gt, GtE ──────────────────────────────────
   // Implemented via __ESBMC_list_lt (lexicographic less-than):
   //   Lt  : list_lt(l1, l2)
@@ -2706,8 +2894,15 @@ exprt python_list::list_repetition(
   BigInt list_size;
   exprt list_elem;
   symbolt *list_symbol = nullptr;
+  exprt source_list;
+  exprt repeat_expr;
+  const nlohmann::json *source_node = nullptr;
   // True when the list operand is a variable (not a literal).
   bool is_variable_list = false;
+
+  auto is_integer_type = [](const typet &type) {
+    return type.is_signedbv() || type.is_unsignedbv();
+  };
 
   auto parse_size_from_symbol = [&](symbolt *size_var, BigInt &out) -> bool {
     if (
@@ -2717,16 +2912,139 @@ exprt python_list::list_repetition(
       return false;
     }
 
+    assert(is_integer_type(size_var->value.type()));
     out = binary2integer(size_var->value.value().c_str(), true);
     return true;
   };
 
+  auto parse_repeat_expr = [&](const exprt &expr, BigInt &out) -> bool {
+    if (expr.is_constant())
+    {
+      assert(is_integer_type(expr.type()));
+      out = binary2integer(expr.value().c_str(), true);
+      return true;
+    }
+
+    if (!expr.is_symbol())
+      return false;
+
+    symbolt *size_var =
+      converter_.find_symbol(to_symbol_expr(expr).get_identifier().as_string());
+    if (!size_var)
+      return false;
+
+    return parse_size_from_symbol(size_var, out);
+  };
+
+  if (lhs.type() == list_type && rhs.type() != list_type)
+  {
+    source_list = lhs;
+    repeat_expr = rhs;
+    source_node = &left_node;
+  }
+  else if (rhs.type() == list_type && lhs.type() != list_type)
+  {
+    source_list = rhs;
+    repeat_expr = lhs;
+    source_node = &right_node;
+  }
+
+  // Constant repetition of an existing list should preserve all elements
+  // (e.g., [4, 5] * 2 -> [4, 5, 4, 5]) via concrete frontend lowering.
+  if (
+    source_node && source_list.is_symbol() &&
+    parse_repeat_expr(repeat_expr, list_size))
+  {
+    const int64_t repeat_count = list_size.to_int64();
+    if (repeat_count <= 0)
+      return symbol_expr(create_list());
+
+    std::vector<exprt> source_elems;
+    if (source_node->contains("elts") && (*source_node)["elts"].is_array())
+    {
+      for (const auto &elt : (*source_node)["elts"])
+        source_elems.push_back(converter_.get_expr(elt));
+    }
+    else
+    {
+      std::string var_name;
+      if (
+        source_node->contains("_type") && (*source_node)["_type"] == "Name" &&
+        source_node->contains("id") && (*source_node)["id"].is_string())
+      {
+        var_name = (*source_node)["id"].get<std::string>();
+      }
+      else
+      {
+        var_name = json_utils::extract_var_name_from_symbol_id(
+          source_list.identifier().as_string());
+      }
+
+      nlohmann::json var_decl = json_utils::find_var_decl(
+        var_name, converter_.current_function_name(), converter_.ast());
+      if (
+        !var_decl.is_null() && var_decl.contains("value") &&
+        var_decl["value"].is_object() && var_decl["value"].contains("_type") &&
+        var_decl["value"]["_type"] == "List" &&
+        var_decl["value"].contains("elts") &&
+        var_decl["value"]["elts"].is_array())
+      {
+        for (const auto &elt : var_decl["value"]["elts"])
+          source_elems.push_back(converter_.get_expr(elt));
+      }
+    }
+
+    if (!source_elems.empty())
+    {
+      symbolt &result = create_list();
+      const std::string result_id = result.id.as_string();
+      locationt location = converter_.get_location_from_decl(list_value_);
+
+      auto materialize_list_elem = [&](const exprt &elem) -> exprt {
+        if (elem.is_symbol())
+          return elem;
+
+        symbolt &tmp = converter_.create_tmp_symbol(
+          list_value_, "$list_rep_elem$", elem.type(), elem);
+        code_declt decl(symbol_expr(tmp));
+        decl.location() = location;
+        converter_.add_instruction(decl);
+
+        code_assignt assign(symbol_expr(tmp), elem);
+        assign.location() = location;
+        converter_.add_instruction(assign);
+        return symbol_expr(tmp);
+      };
+
+      for (int64_t i = 0; i < repeat_count; ++i)
+      {
+        for (const auto &elem : source_elems)
+        {
+          exprt map_elem = materialize_list_elem(elem);
+          converter_.add_instruction(
+            build_push_list_call(result, list_value_, map_elem));
+          list_type_map[result_id].push_back(
+            std::make_pair(map_elem.identifier().as_string(), map_elem.type()));
+        }
+      }
+      return symbol_expr(result);
+    }
+  }
+
   // Get element expression from list_type_map for a variable list.
   auto elem_from_type_map = [&](const std::string &src_id) -> exprt {
-    const std::string &elem_id = get_list_element_id(src_id, 0);
-    assert(!elem_id.empty());
+    const std::string elem_id = get_list_element_id(src_id, 0);
+    if (elem_id.empty())
+    {
+      const typet fallback_type = get_list_element_type(src_id, 0);
+      if (!fallback_type.is_nil() && !fallback_type.is_empty())
+        return gen_zero(fallback_type);
+      return exprt();
+    }
     symbolt *elem_sym = converter_.find_symbol(elem_id);
-    assert(elem_sym);
+    if (!elem_sym)
+      return exprt();
+
     return symbol_expr(*elem_sym);
   };
 
@@ -2746,7 +3064,10 @@ exprt python_list::list_repetition(
         return create_vla(list_value_, list_symbol, size_var, list_elem);
     }
     else if (lhs.is_constant())
+    {
+      assert(is_integer_type(lhs.type()));
       list_size = binary2integer(lhs.value().c_str(), true);
+    }
 
     // List element comes from the rhs operand
     if (right_node.contains("elts"))
@@ -2755,6 +3076,8 @@ exprt python_list::list_repetition(
     {
       // rhs is a variable list — get element from list_type_map
       list_elem = elem_from_type_map(rhs.identifier().as_string());
+      if (list_elem.is_nil())
+        return symbol_expr(create_list());
       is_variable_list = true;
     }
   }
@@ -2769,6 +3092,8 @@ exprt python_list::list_repetition(
     {
       // lhs is a variable list — get element from list_type_map
       list_elem = elem_from_type_map(lhs.identifier().as_string());
+      if (list_elem.is_nil())
+        return symbol_expr(create_list());
       is_variable_list = true;
     }
 
@@ -2785,7 +3110,10 @@ exprt python_list::list_repetition(
         return create_vla(list_value_, list_symbol, size_var, list_elem);
     }
     else if (rhs.is_constant())
+    {
+      assert(is_integer_type(rhs.type()));
       list_size = binary2integer(rhs.value().c_str(), true);
+    }
   }
 
   // For variable lists, allocate a fresh result list so the source is not
@@ -2804,16 +3132,55 @@ exprt python_list::list_repetition(
   }
   assert(list_symbol);
 
+  if (!list_elem.is_symbol() && !list_elem.is_nil())
+  {
+    locationt location = converter_.get_location_from_decl(list_value_);
+    symbolt &tmp = converter_.create_tmp_symbol(
+      list_value_, "$list_rep_elem$", list_elem.type(), list_elem);
+    code_declt decl(symbol_expr(tmp));
+    decl.location() = location;
+    converter_.add_instruction(decl);
+    code_assignt assign(symbol_expr(tmp), list_elem);
+    assign.location() = location;
+    converter_.add_instruction(assign);
+    list_elem = symbol_expr(tmp);
+  }
+
   std::string list_id;
   if (converter_.current_lhs && converter_.current_lhs->is_symbol())
     list_id = converter_.current_lhs->identifier().as_string();
   else
     list_id = list_symbol->id.as_string();
 
-  // Literal lists already contain their first element; variable-list results
-  // start empty.  Adjust the loop bounds accordingly.
-  const int64_t push_count =
-    is_variable_list ? list_size.to_int64() : list_size.to_int64() - 1;
+  // Variable list: emit `list_size` runtime copies of the source
+  // to preserve every element value (symbol && literal).
+  if (is_variable_list)
+  {
+    const exprt &src = (lhs.type() == list_type) ? lhs : rhs;
+    const int64_t repeat_count = list_size.to_int64();
+
+    for (int64_t i = 0; i < repeat_count; ++i)
+      emit_list_copy(src, *list_symbol, list_value_);
+
+    // Mirror the type-map entries.
+    // Make sure later element-type lookups see correct types.
+    if (src.is_symbol())
+    {
+      auto it = list_type_map.find(src.identifier().as_string());
+      if (it != list_type_map.end())
+      {
+        const auto src_entries = it->second;
+        for (int64_t i = 0; i < repeat_count; ++i)
+          for (const auto &entry : src_entries)
+            list_type_map[list_id].push_back(entry);
+      }
+    }
+
+    return symbol_expr(*list_symbol);
+  }
+
+  // Literal list: first element is already in list_symbol, just push the rest.
+  const int64_t push_count = list_size.to_int64() - 1;
 
   for (int64_t i = 0; i < push_count; ++i)
   {
