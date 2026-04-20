@@ -9,6 +9,13 @@ on:
       - '.github/workflows/sv-comp-history-graph.yml'
   workflow_dispatch:
 
+# Coalesce rapid pushes to stats-* so we don't race force-pushes to the
+# auto/sv-comp-history-graph branch. The PR is always refreshed in place,
+# but cancelling superseded runs avoids noisy failures.
+concurrency:
+  group: sv-comp-history-graph
+  cancel-in-progress: true
+
 jobs:
   regen:
     runs-on: ubuntu-latest
@@ -40,3 +47,6 @@ jobs:
           branch: auto/sv-comp-history-graph
           add-paths: website/content/images/sv-comp-hist-combined.png
           delete-branch: true
+          labels: |
+            automation
+            sv-comp-history-graph

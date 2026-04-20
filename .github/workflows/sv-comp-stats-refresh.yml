@@ -123,3 +123,6 @@ jobs:
           branch: auto/sv-comp-stats-refresh
           add-paths: scripts/competitions/svcomp/stats-*
           delete-branch: true
+          labels: |
+            automation
+            sv-comp-stats-refresh
