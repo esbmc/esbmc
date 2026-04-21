@@ -65,9 +65,9 @@ public:
 using CFGNode = std::shared_ptr<goto_cfg::basic_block>;
 
 /**
-   * @brieft Dominator class to compute all dominator info
+   * @brief Dominator class to compute all dominator info
    *
-   * The dominator information is useful to compute featues over the CFG.
+   * The dominator information is useful to compute features over the CFG.
    * For ESBMC, the main purpose here is to be able to compute a DJ-Graph
    * which can be used for SSA-promotion and loop invariants.
    */

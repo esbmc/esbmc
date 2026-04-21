@@ -263,7 +263,7 @@ bool do_type_cmp(const expr2t::expr_ids &, const expr2t::expr_ids &)
 
 bool do_type_cmp(const locationt &side1, const locationt &side2)
 {
-  return side1.hash() == side2.hash();
+  return side1 == side2;
 }
 
 int do_type_lt(const bool &side1, const bool &side2)
