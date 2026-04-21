@@ -3272,6 +3272,50 @@ bool clang_c_convertert::get_cast_expr(
     break;
   }
 
+  case clang::CK_FloatingComplexToReal:
+  case clang::CK_IntegralComplexToReal:
+  {
+    // complex → real part
+    expr = member_exprt(expr, "real", type);
+    break;
+  }
+
+  case clang::CK_FloatingComplexToBoolean:
+  case clang::CK_IntegralComplexToBoolean:
+  {
+    // complex → bool: real != 0 || imag != 0
+    const typet &elem_t = to_complex_type(expr.type()).base_type();
+    exprt real_part = member_exprt(expr, "real", elem_t);
+    exprt imag_part = member_exprt(expr, "imag", elem_t);
+    exprt real_nz("notequal", bool_type());
+    real_nz.copy_to_operands(real_part, gen_zero(elem_t));
+    exprt imag_nz("notequal", bool_type());
+    imag_nz.copy_to_operands(imag_part, gen_zero(elem_t));
+    exprt result("or", bool_type());
+    result.copy_to_operands(real_nz, imag_nz);
+    expr = result;
+    break;
+  }
+
+  case clang::CK_FloatingComplexCast:
+  case clang::CK_IntegralComplexCast:
+  case clang::CK_FloatingComplexToIntegralComplex:
+  case clang::CK_IntegralComplexToFloatingComplex:
+  {
+    // complex → complex: cast each component to the target element type
+    const typet &src_elem_t = to_complex_type(expr.type()).base_type();
+    const typet &dst_elem_t = to_complex_type(type).base_type();
+    exprt real_part = member_exprt(expr, "real", src_elem_t);
+    exprt imag_part = member_exprt(expr, "imag", src_elem_t);
+    gen_typecast(ns, real_part, dst_elem_t);
+    gen_typecast(ns, imag_part, dst_elem_t);
+    struct_exprt complex_expr(type);
+    complex_expr.operands().push_back(real_part);
+    complex_expr.operands().push_back(imag_part);
+    expr = complex_expr;
+    break;
+  }
+
   default:
   {
     std::ostringstream oss;

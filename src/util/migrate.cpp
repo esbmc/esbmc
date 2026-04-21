@@ -2448,7 +2448,7 @@ typet migrate_type_back(const type2tc &ref)
   case type2t::complex_id:
   {
     unsigned int idx;
-    union_typet thetype;
+    complex_typet thetype;
     struct_union_typet::componentst comps;
     const complex_type2t &ref2 = to_complex_type(ref);
 
