@@ -304,6 +304,27 @@ public:
     }
   }
 
+public:
+  // Infer the return type of dict.{setdefault, get, pop} from args[1]'s AST shape:
+  // "list"/"dict"/"set"/"tuple" for literal defaults,
+  // "Any" for anything else,
+  // "" when there is no default arg.
+  static std::string infer_type_from_default_arg_shape(const Json &args_node)
+  {
+    if (!args_node.is_array() || args_node.size() < 2)
+      return std::string();
+    const std::string def_type = args_node[1].value("_type", std::string());
+    if (def_type == "List")
+      return "list";
+    if (def_type == "Dict")
+      return "dict";
+    if (def_type == "Set")
+      return "set";
+    if (def_type == "Tuple")
+      return "tuple";
+    return "Any";
+  }
+
 private:
   bool has_annotation(const Json &node)
   {
@@ -2710,6 +2731,43 @@ private:
         return obj_type;
     }
 
+    // Method calls on inline dict/list/set literals (e.g. {"a":1}.get("x", 3)).
+    // The receiver has no symbol name, so apply the builtin rules directly
+    // before the name-based lookup below kicks in.
+    if (call["func"].contains("value"))
+    {
+      const std::string &recv_kind =
+        call["func"]["value"].value("_type", std::string());
+      if (recv_kind == "Dict" || recv_kind == "List" || recv_kind == "Set")
+      {
+        const std::string lit_obj_type = (recv_kind == "Dict")   ? "dict"
+                                         : (recv_kind == "List") ? "list"
+                                                                 : "set";
+        const std::string method =
+          call["func"].contains("attr")
+            ? call["func"]["attr"].template get<std::string>()
+            : std::string();
+
+        // setdefault/get/pop: return the value's container shape.
+        if (
+          lit_obj_type == "dict" &&
+          (method == "setdefault" || method == "get" || method == "pop"))
+        {
+          std::string t = infer_type_from_default_arg_shape(call["args"]);
+          if (!t.empty())
+            return t;
+        }
+
+        // keys/values/items views behave like lists for type inference.
+        if (
+          lit_obj_type == "dict" &&
+          (method == "keys" || method == "values" || method == "items"))
+          return "list";
+
+        return lit_obj_type;
+      }
+    }
+
     // Handle method calls on subscript expressions: e.g. nested[i].pop()
     // get_object_name() returns "" for Subscript nodes (no "id" field), which
     // would cause a spurious "Object not found" throw further below.
@@ -3191,6 +3249,17 @@ private:
         obj_type == "str" && call["func"].contains("attr") &&
         call["func"]["attr"] == "split")
         return "list";
+      // setdefault/get/pop return the value, not the dict — recover its
+      // container shape from the default arg when the dict is untyped.
+      if (
+        obj_type == "dict" && call["func"].contains("attr") &&
+        (call["func"]["attr"] == "setdefault" ||
+         call["func"]["attr"] == "get" || call["func"]["attr"] == "pop"))
+      {
+        std::string t = infer_type_from_default_arg_shape(call["args"]);
+        if (!t.empty())
+          return t;
+      }
       type = obj_type;
     }
     else
