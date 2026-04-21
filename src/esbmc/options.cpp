@@ -201,7 +201,15 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "Parse source files using the old frontend (deprecated)"},
     {"funsigned-char", NULL, "Make \"char\" unsigned by default"},
-    {"fms-extensions", NULL, "Enable microsoft C extensions"}}},
+    {"fms-extensions", NULL, "Enable microsoft C extensions"},
+    {"argv-max-args",
+     boost::program_options::value<int>()->default_value(2)->value_name("nr"),
+     "Maximum number of argv entries backed with nondet strings (default 2). "
+     "Higher values widen coverage at the cost of a larger SMT formula."},
+    {"argv-max-strlen",
+     boost::program_options::value<int>()->default_value(256)->value_name("nr"),
+     "Maximum length (in bytes, including the null terminator) of each backed "
+     "argv string (default 256)."}}},
   {"Architecture",
    {
      {"no-arch", NULL, "Don't set up an architecture"},
@@ -300,10 +308,6 @@ const struct group_opt_templ all_cmd_options[] = {
        "fun"),
      "Replace function calls with contract semantics (use \"*\" for all "
      "functions)"},
-    {"assume-nonnull-valid",
-     nullptr,
-     "In --enforce-contract mode, assume non-null pointer parameters are valid "
-     "objects"},
     {"enforce-all-contracts",
      nullptr,
      "Enforce contracts for all functions marked with __ESBMC_contract"},
@@ -405,7 +409,11 @@ const struct group_opt_templ all_cmd_options[] = {
      "Verify using loop invariant + k-induction (combined mode)"},
     {"loop-invariant-check",
      NULL,
-     "Verify using loop invariant inductive check (standalone mode)"}}},
+     "Verify using loop invariant inductive check (standalone mode)"},
+    {"loop-frame-rule",
+     NULL,
+     "Enable frame rule for loop invariant checking "
+     "(snapshot-havoc-assume pattern, requires --loop-invariant-check)"}}},
   {"Concurrency and Scheduling",
    {{"schedule", NULL, "Use schedule recording approach"},
     {"context-bound",
@@ -629,7 +637,15 @@ const struct group_opt_templ all_cmd_options[] = {
      "Assume integers will not overflow (Integers)"},
     {"interval-analysis-narrowing",
      NULL,
-     "Enable narrowing in abstract states (Integers and Reals)"}}},
+     "Enable narrowing in abstract states (Integers and Reals)"},
+    {"no-interval-symex-guard",
+     NULL,
+     "Disable interval-based guard pruning during symbolic execution (enabled "
+     "by default)"},
+    {"interval-symex-assert",
+     NULL,
+     "Use interval-based assertion pruning during symbolic execution to "
+     "skip assertions that are provably true under the tracked intervals"}}},
   {"Coverage options",
    {
      {"assertion-coverage", NULL, "Show the coverage of assertion statements"},

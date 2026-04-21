@@ -17,6 +17,9 @@ class goto_convertt
 public:
   void goto_convert(const codet &code, goto_programt &dest);
 
+  /// Returns true iff @p expr is a direct reference to a C11 _Atomic variable.
+  static bool is_atomic_symbol(const exprt &expr, const namespacet &ns);
+
   goto_convertt(contextt &_context, optionst &_options)
     : context(_context),
       options(_options),
@@ -45,29 +48,6 @@ protected:
   // side effect removal
   //
   void make_temp_symbol(exprt &expr, goto_programt &dest);
-  unsigned int get_expr_number_globals(const exprt &expr);
-  unsigned int get_expr_number_globals(const expr2tc &expr);
-  void break_globals2assignments(
-    exprt &rhs,
-    goto_programt &dest,
-    const locationt &location);
-  void break_globals2assignments(
-    int &atomic,
-    exprt &lhs,
-    exprt &rhs,
-    goto_programt &dest,
-    const locationt &location);
-  void break_globals2assignments(
-    int &atomic,
-    exprt &rhs,
-    goto_programt &dest,
-    const locationt &location);
-  void break_globals2assignments_rec(
-    exprt &rhs,
-    exprt &atomic_dest,
-    goto_programt &dest,
-    int atomic,
-    const locationt &location);
 
   // this produces if(guard) dest;
   void guard_program(const guardt &guard, goto_programt &dest);
@@ -153,6 +133,16 @@ protected:
   void convert_decl_block(const codet &code, goto_programt &dest);
   void convert_expression(const codet &code, goto_programt &dest);
   void convert_assign(const code_assignt &code, goto_programt &dest);
+  void convert_assign_atomic(
+    const exprt &lhs,
+    const exprt &rhs,
+    const locationt &location,
+    goto_programt &dest);
+  void convert_assign_rmw_atomic(
+    const exprt &lhs,
+    const exprt &rhs,
+    const locationt &location,
+    goto_programt &dest);
   void convert_cpp_delete(const codet &code, goto_programt &dest);
   void convert_for(const codet &code, goto_programt &dest);
   void convert_while(const codet &code, goto_programt &dest);

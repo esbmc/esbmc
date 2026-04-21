@@ -23,9 +23,14 @@
  * (flatten and, remove_sideeffects per conjunct, rebuild and), so the stored
  * invariant is always the full expression and no short-circuit recovery is
  * needed here.
+ *
+ * When --loop-frame-rule is enabled, the havoc step is enhanced with:
+ *   Snapshot -> Havoc -> FrameRule(Assume unchanged == snapshot) -> Assume invariants
+ * This preserves the relationship between modified and unmodified variables.
  */
 
 #include <goto-programs/goto_loop_invariant.h>
+#include <goto-programs/frame_enforcer.h>
 #include <goto-programs/remove_no_op.h>
 #include <util/c_types.h>
 #include <util/expr_util.h>
@@ -59,6 +64,51 @@ static std::vector<expr2tc> extract_invariants_near(
   goto_programt::targett it = loop_head;
   size_t dist = 0;
 
+  // Fold a LOOP_INVARIANT instruction's expression list into `invariants`.
+  // Multiple sub-expressions are combined with &&.
+  auto collect = [&](const std::list<expr2tc> &lst) {
+    if (lst.size() == 1)
+    {
+      invariants.push_back(lst.front());
+    }
+    else
+    {
+      auto jt = lst.begin();
+      expr2tc combined = *jt;
+      for (++jt; jt != lst.end(); ++jt)
+        combined = and2tc(combined, *jt);
+      invariants.push_back(combined);
+    }
+  };
+
+  // Returns true if the instruction is a compiler-generated DECL, ASSIGN, or
+  // FUNCTION_CALL (name contains '$', e.g. return_value$___ESBMC_forall$N).
+  // These may legitimately appear between consecutive __ESBMC_loop_invariant()
+  // calls.  FUNCTION_CALL instructions arise when remove_function_call emits a
+  // DECL + FUNCTION_CALL pair for helper functions called inside an invariant.
+  auto is_compiler_temp = [](goto_programt::const_targett t) -> bool {
+    if (t->is_decl() && is_code_decl2t(t->code))
+      return id2string(to_code_decl2t(t->code).value).find('$') !=
+             std::string::npos;
+    if (t->is_assign() && is_code_assign2t(t->code))
+    {
+      const auto &assign = to_code_assign2t(t->code);
+      return is_symbol2t(assign.target) &&
+             id2string(to_symbol2t(assign.target).thename).find('$') !=
+               std::string::npos;
+    }
+    if (t->is_function_call() && is_code_function_call2t(t->code))
+    {
+      const auto &call = to_code_function_call2t(t->code);
+      return !is_nil_expr(call.ret) && is_symbol2t(call.ret) &&
+             id2string(to_symbol2t(call.ret).thename).find('$') !=
+               std::string::npos;
+    }
+    return false;
+  };
+
+  // Phase 1: skip non-invariant instructions (including for-init assignments)
+  // until we find the closest LOOP_INVARIANT for this loop.
   while (it != begin && dist < kMaxInvariantSearchBack)
   {
     --it;
@@ -71,29 +121,46 @@ static std::vector<expr2tc> extract_invariants_near(
     if (inv_list.empty())
       continue;
 
-    if (inv_list.size() == 1)
+    collect(inv_list);
+
+    // Phase 2: collect any additional LOOP_INVARIANT instructions that belong
+    // to the same loop.  These arise when the user writes multiple separate
+    // __ESBMC_loop_invariant() calls (issue #3936).  The only instructions
+    // that may appear between consecutive same-loop invariants are compiler-
+    // generated temporaries; any real instruction means we have crossed into
+    // a different context (e.g. outer-loop body), so we stop immediately.
+    // Reuse `dist` so that Phase 1 + Phase 2 together respect the same
+    // kMaxInvariantSearchBack bound and avoid an O(n) scan in large functions.
+    while (it != begin && dist < kMaxInvariantSearchBack)
     {
-      invariants.push_back(inv_list.front());
+      --it;
+      ++dist;
+      if (it->is_loop_invariant())
+      {
+        const std::list<expr2tc> &extra = it->get_loop_invariants();
+        if (!extra.empty())
+          collect(extra);
+        continue;
+      }
+      if (is_compiler_temp(it))
+        continue;
+      break; // real instruction — stop clustering
     }
-    else
-    {
-      auto jt = inv_list.begin();
-      expr2tc combined = *jt;
-      for (++jt; jt != inv_list.end(); ++jt)
-        combined = and2tc(combined, *jt);
-      invariants.push_back(combined);
-    }
-    break;
+    break; // done: found the invariant group for this loop
   }
 
   return invariants;
 }
 
-void goto_loop_invariant(goto_functionst &goto_functions)
+void goto_loop_invariant(
+  goto_functionst &goto_functions,
+  contextt &context,
+  bool use_frame_rule)
 {
   Forall_goto_functions (it, goto_functions)
     if (it->second.body_available)
-      goto_loop_invariantt(it->first, goto_functions, it->second);
+      goto_loop_invariantt(
+        it->first, goto_functions, it->second, context, use_frame_rule);
 
   goto_functions.update();
 }
@@ -119,7 +186,15 @@ void goto_loop_invariantt::convert_loop_with_invariant(loopst &loop)
   std::vector<expr2tc> invariants = extract_loop_invariants(loop);
 
   if (invariants.empty())
-    return; // No invariants found, skip this loop
+    return;
+
+  log_status(
+    "Processing {} loop invariant{}",
+    invariants.size(),
+    invariants.size() == 1 ? "" : "s");
+
+  // Extract loop assigns targets (for frame rule)
+  std::vector<expr2tc> loop_assigns = extract_loop_assigns(loop);
 
   // Extract invariant-related DECL/FUNCTION_CALLs and re-insert before each
   // ASSERT/ASSUME.
@@ -131,10 +206,15 @@ void goto_loop_invariantt::convert_loop_with_invariant(loopst &loop)
 
   // 2. Insert HAVOC and ASSUME before loop condition (after base case assert)
   insert_havoc_and_assume_before_condition(
-    loop_head, loop, invariants, side_effects);
+    loop_head, loop, invariants, loop_assigns, side_effects);
 
   // 3. Insert inductive step verification and loop termination
   insert_inductive_step_and_termination(loop, invariants, side_effects);
+
+  // Cleanup: free the frame enforcer after both steps are done.
+  delete active_frame_enforcer;
+  active_frame_enforcer = nullptr;
+  active_loop_assigns.clear();
 }
 
 std::vector<expr2tc>
@@ -142,6 +222,40 @@ goto_loop_invariantt::extract_loop_invariants(const loopst &loop)
 {
   return extract_invariants_near(
     loop.get_original_loop_head(), goto_function.body.instructions.begin());
+}
+
+std::vector<expr2tc>
+goto_loop_invariantt::extract_loop_assigns(const loopst &loop)
+{
+  std::vector<expr2tc> assigns;
+
+  goto_programt::targett loop_head = loop.get_original_loop_head();
+
+  if (loop_head == goto_function.body.instructions.begin())
+    return assigns;
+
+  // Search backwards from loop head to find LOOP_INVARIANT with assigns targets
+  goto_programt::targett search_it = loop_head;
+  size_t search_distance = 0;
+
+  while (search_it != goto_function.body.instructions.begin() &&
+         search_distance < kMaxInvariantSearchBack)
+  {
+    --search_it;
+    ++search_distance;
+
+    if (search_it->is_loop_invariant())
+    {
+      auto const &targets = search_it->get_loop_assigns_targets();
+      for (const auto &target : targets)
+      {
+        assigns.push_back(target);
+      }
+      break;
+    }
+  }
+
+  return assigns;
 }
 
 void goto_loop_invariantt::collect_symbols(
@@ -157,7 +271,7 @@ void goto_loop_invariantt::collect_symbols(
     return;
   }
 
-  for (unsigned i = 0; i < expr->get_num_sub_exprs(); ++i)
+  for (size_t i = 0; i < expr->get_num_sub_exprs(); ++i)
   {
     const expr2tc *sub = expr->get_sub_expr(i);
     if (sub && *sub)
@@ -232,7 +346,7 @@ collect_symbols_local(const expr2tc &expr, std::set<irep_idt> &symbols)
     return;
   }
 
-  for (unsigned i = 0; i < expr->get_num_sub_exprs(); ++i)
+  for (size_t i = 0; i < expr->get_num_sub_exprs(); ++i)
   {
     const expr2tc *sub = expr->get_sub_expr(i);
     if (sub && *sub)
@@ -427,7 +541,8 @@ void goto_loop_invariantt::insert_havoc_and_assume_before_condition(
   goto_programt::targett &loop_head,
   const loopst &loop,
   const std::vector<expr2tc> &invariants,
-  const goto_programt &side_effects)
+  const std::vector<expr2tc> &loop_assigns,
+  goto_programt &side_effects)
 {
   // Find the loop condition (IF instruction) - this should be right at loop_head
   goto_programt::targett condition_it = loop_head;
@@ -443,8 +558,36 @@ void goto_loop_invariantt::insert_havoc_and_assume_before_condition(
 
   goto_programt dest;
 
-  // 1. Insert HAVOC (nondet assignments) before the loop condition
   auto const &loop_vars = loop.get_modified_loop_vars();
+
+  // =========================================================
+  // Frame Rule Step 1: Materialize Snapshots (if enabled)
+  // Capture pre-state before havoc for frame rule enforcement.
+  // The snapshots are also used in the inductive step for ASSERT compliance.
+  // =========================================================
+  if (use_frame_rule)
+  {
+    active_frame_enforcer = new frame_enforcert(context);
+    active_loop_assigns = loop_assigns;
+
+    std::vector<expr2tc> vars_to_snapshot;
+    for (const auto &v : loop_vars)
+      vars_to_snapshot.push_back(v);
+
+    active_frame_enforcer->materialize_snapshots(
+      vars_to_snapshot, dest, loop_head->location, "loop");
+
+    // Patch old_snapshot side-effect assignments to use the frame snapshots.
+    // Replaces: return_value$___ESBMC_old_raw$N = old_snapshot(var)
+    // With:     return_value$___ESBMC_old_raw$N = (void*)&snapshot_of_var
+    // This also propagates to insert_inductive_step_and_termination which is
+    // called after this function and receives the same side_effects object.
+    active_frame_enforcer->patch_old_snapshot_assigns(side_effects);
+  }
+
+  // =========================================================
+  // Step 2: Standard Havoc — assign nondet to all modified variables
+  // =========================================================
   for (auto const &lhs : loop_vars)
   {
     // do not assign nondeterministic value to pointers if we assume
@@ -464,19 +607,42 @@ void goto_loop_invariantt::insert_havoc_and_assume_before_condition(
     t->location.comment("loop invariant havoc");
   }
 
-  // 2. Emit side-effect instructions (use havoc'd variables).
+  // =========================================================
+  // Frame Rule Step 3: Enforce Frame Conditions (if enabled)
+  // ASSUME: for vars NOT in assigns set, assume var == snapshot (k-induction hypothesis)
+  // =========================================================
+  if (use_frame_rule && active_frame_enforcer && !loop_assigns.empty())
+  {
+    active_frame_enforcer->enforce_frame_rule(
+      loop_assigns, dest, loop_head->location);
+  }
+
+  // Emit side-effect instructions (use havoc'd variables).
   for (const auto &instr : side_effects.instructions)
     dest.instructions.push_back(instr);
 
-  // 3. ASSUME invariants (entering the loop).
+  // Assume invariants (entering the loop).
   for (const auto &invariant : invariants)
   {
+    expr2tc inst_invariant = invariant;
+
+    // If frame rule is enabled, replace any old() references with snapshots
+    if (use_frame_rule && active_frame_enforcer)
+    {
+      inst_invariant =
+        active_frame_enforcer->replace_old_with_snapshots(invariant);
+    }
+
     // Create assume instruction: just the invariant
     goto_programt::targett t = dest.add_instruction(ASSUME);
-    t->guard = invariant;
+    t->guard = inst_invariant;
     t->location = loop_head->location;
     t->location.comment("loop invariant step case");
   }
+
+  // Note: active_frame_enforcer is NOT deleted here.
+  // It is reused in insert_inductive_step_and_termination for the ASSERT
+  // compliance check, then freed in convert_loop_with_invariant.
 
   // Insert before the loop condition
   goto_function.body.insert_swap(insert_point, dest);
@@ -497,7 +663,18 @@ void goto_loop_invariantt::insert_inductive_step_and_termination(
   for (const auto &instr : side_effects.instructions)
     dest.instructions.push_back(instr);
 
-  // 2. ASSERT for inductive step.
+  // 2. ASSERT loop assigns compliance (frame rule ASSERT mode).
+  // After one loop body iteration, assert that variables NOT in the assigns
+  // clause still equal their pre-iteration snapshots.
+  // This verifies the user's __ESBMC_loop_assigns annotation is accurate,
+  // analogous to the function-contract assigns compliance check (Phase 2A).
+  if (use_frame_rule && active_frame_enforcer && !active_loop_assigns.empty())
+  {
+    active_frame_enforcer->enforce_frame_rule(
+      active_loop_assigns, dest, loop_exit->location, frame_modet::ASSERT);
+  }
+
+  // 3. ASSERT for inductive step.
   for (const auto &invariant : invariants)
   {
     // Create assert instruction for each invariant
@@ -507,7 +684,7 @@ void goto_loop_invariantt::insert_inductive_step_and_termination(
     t->location.comment("loop invariant inductive step");
   }
 
-  // 3. Insert ASSUME(FALSE) to terminate the loop
+  // 4. Insert ASSUME(FALSE) to terminate the loop
   goto_programt::targett t = dest.add_instruction(ASSUME);
   t->guard = gen_false_expr();
   t->location = loop_exit->location;

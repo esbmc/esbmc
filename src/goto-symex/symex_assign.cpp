@@ -139,6 +139,21 @@ goto_symext::goto_symext(
 
   art1 = nullptr;
 
+  // Guard pruning is on by default (disable with --no-interval-symex-guard);
+  // assertion pruning is opt-in via --interval-symex-assert. Build the online
+  // interval domain when either is active.
+  const bool guard_enabled =
+    !options.get_bool_option("no-interval-symex-guard");
+  const bool assert_enabled = options.get_bool_option("interval-symex-assert");
+  if (guard_enabled || assert_enabled)
+  {
+    if (guard_enabled)
+      options.set_option("interval-symex-guard", true);
+    interval_domaint::set_options(options);
+    interval_domain_state.emplace();
+    interval_domain_state->make_top();
+  }
+
   valid_ptr_arr_name = "c:@__ESBMC_alloc";
   alloc_size_arr_name = "c:@__ESBMC_alloc_size";
   dyn_info_arr_name = "c:@__ESBMC_is_dynamic";
@@ -191,6 +206,7 @@ goto_symext &goto_symext::operator=(const goto_symext &sym)
   dyn_info_arr_name = sym.dyn_info_arr_name;
 
   dynamic_memory = sym.dynamic_memory;
+  interval_domain_state = sym.interval_domain_state;
 
   // Art ptr is shared
   art1 = sym.art1;
@@ -236,18 +252,22 @@ void goto_symext::handle_sideeffect(
     // Do nothing for printf
     break;
   case sideeffect2t::old_snapshot:
-    // __ESBMC_old() snapshots are handled during contract processing
+    // __ESBMC_old() snapshots are handled during contract processing.
     // If we encounter one here, it means we're in the original function body
-    // where the ensures clause is still present. We simply evaluate the
-    // inner expression (the current value) as a placeholder.
+    // (contracts_original_xxx) where the ensures/requires clause is still present.
+    // Store the ADDRESS of the inner expression in lhs (void*), so that
+    // *(T*)lhs correctly reads the value via pointer dereference.
+    // The ensures/requires in contracts_original evaluate BEFORE the function body
+    // modifies anything, so address_of(inner) gives the correct pre-state value.
     {
-      expr2tc result = effect.operand;
-      replace_nondet(result);
-      dereference(result, dereferencet::READ);
-
-      // Create a simple assignment from the evaluated expression to lhs
-      expr2tc assign_code = code_assign2tc(lhs, result);
-      symex_assign(assign_code, true, guard);
+      expr2tc inner = effect.operand;
+      // address_of2tc(subtype, expr): subtype is T, result type is T*
+      expr2tc addr = address_of2tc(inner->type, inner);
+      // Cast to lhs type (void*)
+      expr2tc result = addr;
+      if (result->type != lhs->type)
+        result = typecast2tc(lhs->type, result);
+      symex_assign(code_assign2tc(lhs, result), true, guard);
     }
     break;
   case sideeffect2t::assigns_target:

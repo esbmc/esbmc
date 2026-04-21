@@ -440,6 +440,51 @@ approach.
 
 ---
 
+### Loop Frame Rule (`--loop-frame-rule`)
+
+A loop invariant says what stays true across iterations. The **loop frame
+rule** adds the complementary claim: which variables the loop is allowed to
+change. Variables not listed in `__ESBMC_loop_assigns` are guaranteed to be
+untouched — and ESBMC checks this.
+
+```c
+int main(void) {
+    int i = 0;
+    int j = 42;
+
+    __ESBMC_loop_invariant(i >= 0 && i <= 10);
+    __ESBMC_loop_assigns(i);
+    while (i < 10)
+        i++;
+
+    /* j was not listed in loop_assigns — ESBMC can prove it is still 42 */
+    __ESBMC_assert(j == 42, "j unchanged");
+    return 0;
+}
+```
+
+Run with:
+
+```bash
+esbmc file.c --loop-invariant-check --loop-frame-rule
+```
+
+Without `--loop-frame-rule`, the havoc step makes every loop-modified variable
+nondeterministic, so the assertion on `j` would fail despite `j` never being
+touched. With the flag, ESBMC snapshots all variables not in
+`__ESBMC_loop_assigns` before the havoc and assumes they are unchanged
+afterward.
+
+Both macros must be placed **before the loop**, as statements ending with `;`.
+`__ESBMC_loop_assigns` supports up to five targets; use
+`__ESBMC_loop_assigns()` with no arguments to declare that the loop modifies
+nothing.
+
+> `--loop-frame-rule` requires `--loop-invariant-check`. It does not work with
+> `--loop-invariant` (the combined k-induction mode).
+
+---
+
 ### References
 
 [1] Mary Sheeran, Satnam Singh, Gunnar Stålmarck: *Checking Safety Properties

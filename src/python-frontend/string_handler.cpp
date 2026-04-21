@@ -1296,6 +1296,18 @@ exprt string_handler::convert_to_string(const exprt &expr)
     }
   }
 
+  // Handle pointer types from struct member access (e.g. self.name).
+  // Skip code/side-effect expressions (function calls) — their declared
+  // return type may be a zero-length array that migrates to empty_type2t,
+  // causing a type mismatch when nested inside __python_str_concat.
+  if (t.is_pointer() && !expr.is_code())
+  {
+    typet char_ptr = gen_pointer_type(char_type());
+    if (t != char_ptr)
+      return typecast_exprt(expr, char_ptr);
+    return expr;
+  }
+
   // For non-constant expressions, we'd need runtime conversion
   // For now, create a placeholder string
   std::string placeholder = "<expr>";

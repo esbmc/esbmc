@@ -55,6 +55,7 @@ This page is a reference of all Python language constructs, data structures, and
 - `copy()`: Return a shallow copy
 - `extend(iterable)`: Append all elements from an iterable
 - `reverse()`: Reverse in place
+- `sort()`: Sort in place (no arguments; key/reverse parameters not supported)
 - `insert(i, x)`: Insert at position; handles index at/beyond end, within bounds, and empty lists
 - `in` operator: Membership testing (`2 in [1, 2, 3]`)
 - `+` operator: List concatenation (`[1,2] + [3,4]`)
@@ -81,6 +82,16 @@ This page is a reference of all Python language constructs, data structures, and
 **Slicing**: `s[start:end]`, omitted bounds (`s[:end]`, `s[start:]`), negative indices (`s[-3:]`), empty slices
 
 **Operators**: `in` (substring test), `*` (repetition: `"a" * 3`, `3 * "a"`, boolean multipliers)
+
+### Sets
+
+- **Literals**: `{1, 2, 3}`
+- **Empty set**: `set()` (note: `{}` creates an empty dict, not a set)
+- **From iterable**: `set(list)`, `set(str)`, `set(d.keys())`, `set(d.values())`
+- **Operators**: `-` (difference), `&` (intersection), `|` (union)
+- **Membership**: `x in s`, `x not in s`
+- **Equality**: `s1 == s2`, `s1 != s2` (order-independent)
+- **`len()`** built-in
 
 ### Tuples
 
@@ -110,9 +121,32 @@ This page is a reference of all Python language constructs, data structures, and
 - **Nested dicts**: `dict[int, dict[int, int]]`
 - **`Optional[T]` values**: `dict[str, Optional[T]]` storage and retrieval
 
+## Complex Numbers
+
+- **Literals**: `3+4j`, `1j`, `0j`
+- **Constructor**: `complex(real, imag)` with `int`, `float`, or `bool` arguments
+- **Attributes**: `.real`, `.imag` (read-only `float`)
+- **Methods**: `.conjugate()` — returns complex conjugate
+- **Arithmetic**: `+`, `-`, `*`, `/`, `**`; augmented assignment (`+=`, `-=`, `*=`, `/=`)
+- **Promotion**: `int`, `float`, and `bool` operands are automatically promoted to `complex`
+- **`abs(z)`**: Returns the magnitude as a `float` (IEEE-754 hypot)
+- **Boolean context**: `bool(z)` is `False` only when both `.real` and `.imag` are `0.0` (signed-zero aware)
+- **Equality**: `==`, `!=`; ordering operators (`<`, `<=`, `>`, `>=`) and `//`, `%` raise `TypeError`
+- **Annotations**: `z: complex`; `Optional[complex]`, `Union[complex, float]`
+
+## Enum Module (`enum`)
+
+- **`Enum`** base class: members store `value: int` and `name: str`
+- **Comparison**: `==`, `!=`
+- **Hash**: `__hash__()` returns `value`
+- **Representation**: `__str__()` and `__repr__()` return `name`
+
 ## Bytes and Integers
 
-Supports byte and integer operations including type conversions and bit-length queries.
+Byte sequences and integer class methods:
+
+- **`int.from_bytes(bytes_data, big_endian, signed)`** — converts a byte sequence to an integer; supports big- and little-endian, signed and unsigned
+- **`int.bit_length(n)`** — returns the number of bits required to represent `n` in binary
 
 ## Error Handling
 
@@ -158,16 +192,36 @@ The `--strict-types` flag enables type compatibility validation for function arg
 | Function | Notes |
 |---|---|
 | `abs`, `divmod` | Standard arithmetic |
-| `int`, `float`, `chr`, `str`, `hex`, `oct` | Type conversions |
-| `len` | Works on lists, strings, tuples |
+| `int`, `float`, `bool`, `chr`, `ord`, `str`, `repr`, `hex`, `oct` | Type conversions and representations |
+| `len` | Works on lists, sets, strings, tuples |
 | `range` | Used in `for` loops |
 | `min(a, b)`, `max(a, b)` | Two-argument form only; promotes `int` to `float` |
+| `min([...])`, `max([...])` | Single-list form; supports `int`, `float`, and `str` element types |
+| `sum([...])` | Sum of list elements; supports `int` and `float` |
+| `sorted(iterable)` | Returns a new sorted list; supports `int`, `float`, and `str` elements |
 | `any([...])` | List literals only; short-circuit OR logic |
+| `all([...])` | List literals only; short-circuit AND logic |
 | `enumerate(iterable, start=0)` | Tuple unpacking and single-variable forms; optional `start` |
 | `isinstance(obj, type)` | Runtime type checking |
 | `float("nan")`, `float("inf")` | Special values (case-insensitive, whitespace-tolerant) |
 | `input()` | Modelled as nondeterministic string, max 256 chars |
 | `print(...)` | Arguments evaluated for side effects; no output produced |
+
+## Complex Math Module (`cmath`)
+
+All functions accept `complex`, `float`, `int`, or `bool` arguments. Real inputs are promoted to complex automatically.
+
+**Constants**: `pi`, `e`, `tau`, `inf`, `nan`, `infj`, `nanj`
+
+**Conversion**: `phase(z)`, `polar(z)` → `(r, φ)`, `rect(r, φ)` → `complex`
+
+**Power/log**: `exp(z)`, `log(z[, base])`, `log10(z)`, `sqrt(z)`
+
+**Trigonometric**: `sin`, `cos`, `tan`, `asin`, `acos`, `atan`
+
+**Hyperbolic**: `sinh`, `cosh`, `tanh`, `asinh`, `acosh`, `atanh`
+
+**Utilities**: `isnan(z)`, `isinf(z)`, `isfinite(z)`, `isclose(a, b[, rel_tol, abs_tol])`
 
 ## Math Module (`math`)
 
@@ -181,11 +235,13 @@ The `--strict-types` flag enables type compatibility validation for function arg
 
 **Hyperbolic**: `sinh`, `cosh`, `tanh`, `asinh`, `acosh`, `atanh`
 
-**Integer helpers**: `factorial(n)`, `gcd(a, b)`, `lcm(a, b)`, `isqrt(n)`, `perm(n, k)`, `comb(n, k)`, `prod(lst)` (expects `list[int]`)
+**Integer helpers**: `factorial(n)`, `gcd(a, b)`, `lcm(a, b)`, `isqrt(n)`, `perm(n[, k])`, `comb(n, k)`, `prod(lst[, start])` (expects `list[int]`)
 
 **Geometry**: `hypot(x, y)`, `dist(p, q)` (expects `list[float]`)
 
-**Utilities**: `fmod(x, y)`, `copysign(x, y)`, `degrees(x)`, `radians(x)`, `isclose(a, b)`, `isfinite(x)`, `isnan(x)`, `isinf(x)`
+**Utilities**: `fmod(x, y)`, `remainder(x, y)`, `copysign(x, y)`, `degrees(x)`, `radians(x)`, `isclose(a, b)`, `isfinite(x)`, `isnan(x)`, `isinf(x)`
+
+**Advanced**: `cbrt(x)`, `erf(x)`, `erfc(x)`, `gamma(x)`, `lgamma(x)`, `frexp(x)` → `(mantissa, exponent)`, `ldexp(x, i)`, `nextafter(x, y)`, `ulp(x)`, `sumprod(a, b)` (expects `list[float]`), `fsum(values)` (expects `list[float]`)
 
 ## Regular Expression Module (`re`)
 
@@ -211,11 +267,44 @@ All functions are modelled using nondeterministic values with appropriate constr
 
 - `random.random()` → nondeterministic `float` in `[0.0, 1.0)`
 - `random.uniform(a, b)` → nondeterministic `float` N where `min(a,b) ≤ N ≤ max(a,b)`
+- `random.randint(a, b)` → nondeterministic `int` N where `a ≤ N ≤ b`
 - `random.getrandbits(k)` → nondeterministic integer with k random bits
-- `random.randrange(start, stop, step=1)` → randomly selected integer from the specified range
+- `random.randrange(start[, stop[, step]])` → randomly selected integer from the specified range; single-argument form (`randrange(stop)`) is also supported
 
-See also: [Random Operational Model](./Random-Operational-Model-in-ESBMC.md)
-{{< /details >}}
+See also: [Random Operational Model](./random-operational-model)
+
+## Collections Module (`collections`)
+
+- **`defaultdict(default_factory)`**: Dict subclass that returns a default value for missing keys; modelled as a plain `dict` with a nondeterministic default
+- **`Counter`**: Mapping of elements to integer counts; supports `__getitem__`, `__setitem__`, `values()`, and boolean truthiness
+
+## Datetime Module (`datetime`)
+
+- **`datetime.datetime(year, month, day)`**: Constructs a datetime object with fields `year`, `month`, `day`, `hour` (0), `minute` (0), `second` (0), `microsecond` (0)
+
+## Decimal Module (`decimal`)
+
+- **`Decimal`** class with full arithmetic:
+  - **Comparison**: `==`, `!=`, `<`, `<=`, `>`, `>=`
+  - **Arithmetic**: `+`, `-`, `*`, `/`, `//`, `%`
+  - **Unary**: `-d` (negation), `abs(d)`
+  - Special values: infinity and NaN (via `is_special` flag; propagated through all operations)
+
+## Heapq Module (`heapq`)
+
+All functions operate on plain Python lists used as min-heaps.
+
+- `heapify(heap)`: No-op in the model (heap invariant assumed)
+- `heappush(heap, item)`: Appends item to the heap list
+- `heappop(heap)`: Removes and returns the minimum element
+- `heappushpop(heap, item)`: Pushes then pops the minimum
+
+## Time Module (`time`)
+
+Functions use a monotonic counter model.
+
+- `time.time()`: Returns a monotonically increasing `float` (increments by 1.0 each call)
+- `time.sleep(seconds)`: Validates `seconds >= 0`; no actual delay
 
 ## OS Module (`os`)
 
@@ -232,3 +321,17 @@ All `os` functions use nondeterministic modelling to verify both success and fai
 **File operations**:
 - `os.remove(path)`: Removes file; may raise `FileNotFoundError`
 - `os.popen(cmd)`: Opens a pipe (modelled for verification)
+
+## NumPy Module (`numpy`)
+
+Partial stub-level support for type-inference and basic arithmetic verification. Arrays are modelled as plain Python lists.
+
+**Array construction**: `np.array(l)`, `np.zeros(shape)`, `np.ones(shape)`
+
+**Element-wise arithmetic**: `np.add(a, b)`, `np.subtract(a, b)`, `np.multiply(a, b)`, `np.divide(a, b)`, `np.power(a, b)`
+
+**Math**: `np.ceil(x)`, `np.floor(x)`, `np.fabs(x)`, `np.sqrt(x)`, `np.trunc(x)`, `np.round(x)`, `np.copysign(x, y)`, `np.fmin(x, y)`, `np.fmax(x, y)`, `np.sin(x)`
+
+**Additional stubs** (return constant placeholder values for type inference only): `np.cos(x)`, `np.arccos(x)`, `np.arctan(x)`, `np.exp(x)`, `np.fmod(x)`, `np.dot(a, b)`, `np.matmul(a, b)`, `np.transpose(a, b)`
+
+**Linear algebra** (`numpy.linalg`): `np.linalg.det(a, b)` (2×2 stub)

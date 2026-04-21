@@ -44,10 +44,10 @@ int validate_tag(u8 tag)
 int parse_header(const u8 *buf, u32 buf_len,
                  u32 *hdr_len, u32 *payload_len)
 {
-    __ESBMC_requires(buf != ((void *)0));
-    __ESBMC_requires(hdr_len != ((void *)0));
-    __ESBMC_requires(payload_len != ((void *)0));
     __ESBMC_requires(buf_len > 0);
+    __ESBMC_requires(__ESBMC_is_fresh(&buf, buf_len));
+    __ESBMC_requires(__ESBMC_is_fresh(&hdr_len, sizeof(u32)));
+    __ESBMC_requires(__ESBMC_is_fresh(&payload_len, sizeof(u32)));
 
     __ESBMC_assigns(*hdr_len, *payload_len);
 

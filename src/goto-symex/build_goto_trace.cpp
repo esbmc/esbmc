@@ -80,6 +80,7 @@ void build_goto_trace(
     if (SSA_step.is_assignment())
     {
       goto_trace_step.lhs = build_lhs(smt_conv, SSA_step.original_lhs);
+      goto_trace_step.rhs = SSA_step.rhs;
       assert(!goto_trace_step.value);
       try
       {
@@ -96,7 +97,18 @@ void build_goto_trace(
       }
       catch (const type2t::symbolic_type_excp &e)
       {
-        // Don't add this assignment to the cex if we couldn't build the rhs value
+        log_debug(
+          "trace",
+          "skipping assignment at {} (symbolic type)",
+          SSA_step.source.pc->location.as_string());
+        continue;
+      }
+      catch (const array_type2t::dyn_sized_array_excp &e)
+      {
+        log_debug(
+          "trace",
+          "skipping assignment at {} (symbolic-size array, e.g. argv)",
+          SSA_step.source.pc->location.as_string());
         continue;
       }
     }

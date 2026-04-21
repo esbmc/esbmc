@@ -1011,21 +1011,77 @@ private:
    *    Point-interval fallback (lo_r == hi_r == real_result) produces a
    *    formula structurally equivalent to the single-step RNE path.
    *  Returns: {ra_lo, ra_hi} for storage in ir_ra_interval_map. */
-  std::pair<smt_astt, smt_astt> apply_ieee754_rne_interval_add(
+  std::pair<smt_astt, smt_astt> apply_ieee754_rne_enclosure(
     smt_astt real_result,
     smt_astt lo_r,
     smt_astt hi_r,
     const floatbv_type2t &fbv_type);
 
   /** Interval-lifted RNA enclosure helper for ieee_add (--ir-ieee only).
-   *  Parallel to apply_ieee754_rne_interval_add; uses the same B_near
+   *  Parallel to apply_ieee754_rne_enclosure; uses the same B_near
    *  constants (eps_rel = 2^-53 double / 2^-24 single) and identical formula
    *  shape because ROUND_TO_AWAY is a nearest-rounding mode with the same
    *  unit roundoff as ROUND_TO_EVEN.
    *  Inputs / behavior / returns: identical to the RNE helper above,
    *  except fresh symbols are named ra_lo_aw::N / ra_hi_aw::N to match
    *  the RNA single-step naming convention. */
-  std::pair<smt_astt, smt_astt> apply_ieee754_rna_interval_add(
+  std::pair<smt_astt, smt_astt> apply_ieee754_rna_enclosure(
+    smt_astt real_result,
+    smt_astt lo_r,
+    smt_astt hi_r,
+    const floatbv_type2t &fbv_type);
+
+  /** Interval-lifted RUP enclosure helper for ieee_sub (--ir-ieee only).
+   *  EbRUP([LR, UR]) = [LR, UR + B_dir(UR)]
+   *  fl_RUP(r) >= r always (directed mode rounds up), so the lower bound is
+   *  exact: ra_lo is pinned to lo_r with no B_dir adjustment.
+   *  The upper bound adds B_dir at the upper endpoint:
+   *    B_dir(r) = eps_rel_dir * |r| + eps_abs
+   *    eps_rel_dir = 2^-52 (double) or 2^-23 (single) -- full machine epsilon.
+   *  Fresh symbols named ra_lo_up::N / ra_hi_up::N to match the single-step
+   *  RUP naming convention in apply_ieee754_semantics. */
+  std::pair<smt_astt, smt_astt> apply_ieee754_rup_enclosure(
+    smt_astt real_result,
+    smt_astt lo_r,
+    smt_astt hi_r,
+    const floatbv_type2t &fbv_type);
+
+  /** Interval-lifted RDN enclosure helper for ieee_sub (--ir-ieee only).
+   *  EbRDN([LR, UR]) = [LR - B_dir(LR), UR]
+   *  fl_RDN(r) <= r always (directed mode rounds down), so the upper bound is
+   *  exact: ra_hi is pinned to hi_r with no B_dir adjustment.
+   *  The lower bound subtracts B_dir at the lower endpoint:
+   *    B_dir(r) = eps_rel_dir * |r| + eps_abs
+   *    eps_rel_dir = 2^-52 (double) or 2^-23 (single) -- full machine epsilon.
+   *  Fresh symbols named ra_lo_dn::N / ra_hi_dn::N to match the single-step
+   *  RDN naming convention in apply_ieee754_semantics. */
+  std::pair<smt_astt, smt_astt> apply_ieee754_rdn_enclosure(
+    smt_astt real_result,
+    smt_astt lo_r,
+    smt_astt hi_r,
+    const floatbv_type2t &fbv_type);
+
+  /** Interval-lifted RTZ enclosure helper for ieee_sub (--ir-ieee only).
+   *  RTZ (truncation toward zero) is sign-dependent: it rounds down for
+   *  non-negative inputs and rounds up for non-positive inputs.
+   *  The enclosure has three cases based on the sign of [LR, UR]:
+   *
+   *  1. LR >= 0 (hull entirely non-negative): fl_RTZ acts like RDN
+   *     EbRTZ = [LR - B_dir(LR), UR]    (exact upper bound)
+   *
+   *  2. UR <= 0 (hull entirely non-positive): fl_RTZ acts like RUP
+   *     EbRTZ = [LR, UR + B_dir(UR)]    (exact lower bound)
+   *
+   *  3. LR < 0 < UR (hull crosses zero): sign of actual result is unknown,
+   *     conservative symmetric bound:
+   *     B_dir_max = eps_rel_dir * max(|LR|, |UR|) + eps_abs
+   *     EbRTZ = [LR - B_dir_max, UR + B_dir_max]
+   *
+   *  B_dir(r) = eps_rel_dir * |r| + eps_abs
+   *    eps_rel_dir = 2^-52 (double) or 2^-23 (single) -- full machine epsilon.
+   *  Fresh symbols named ra_lo_tz::N / ra_hi_tz::N to match the single-step
+   *  RTZ naming convention in apply_ieee754_semantics. */
+  std::pair<smt_astt, smt_astt> apply_ieee754_rtz_enclosure(
     smt_astt real_result,
     smt_astt lo_r,
     smt_astt hi_r,
@@ -1035,10 +1091,11 @@ private:
 /** Given an array type, create a type2tc representing its domain. */
 type2tc make_array_domain_type(const array_type2t &arr);
 
-/** Given an array type, calculate the domain bitwidth it should have. For
- *  nondeterministically or infinite sized arrays, this defaults to the
- *  machine integer width. */
-unsigned long calculate_array_domain_width(const array_type2t &arr);
+/** Return the SMT domain bit-width for an array type.
+ *  For constant-size arrays this is the minimum bit-width needed to represent
+ *  every valid index.  For VLA, dynamic, or infinite arrays the size is not
+ *  statically known, so the machine word size is returned as a safe default. */
+unsigned long array_domain_width_or_word_size(const array_type2t &arr);
 
 // Define here to enable inlining
 inline smt_ast::smt_ast(smt_convt *ctx, smt_sortt s) : sort(s), context(ctx)

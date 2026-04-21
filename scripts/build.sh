@@ -241,12 +241,14 @@ collect_ubuntu_packages() {
     cmake
     bison
     flex
+    llvm
     linux-libc-dev
     libboost-date-time-dev
     libboost-program-options-dev
     libboost-iostreams-dev
     libboost-system-dev
     libboost-filesystem-dev
+    libmpfr-dev
     ninja-build
     python3-setuptools
     libncurses-dev
@@ -284,6 +286,7 @@ collect_macos_formulae() {
     cmake
     z3
     gmp
+    mpfr
     csmith
     boost
     ninja
@@ -617,6 +620,10 @@ while getopts "hb:s:e:r:dS:c:CB:x:k:" flag; do
       require_on_off "-k" "$OPTARG"
       COVERAGE="$OPTARG"
       BASE_ARGS+=("-DENABLE_COVERAGE=${OPTARG}")
+      BASE_ARGS+=("-DCORE_REGRESSION_ONLY=${OPTARG}")
+      if [[ "$OPTARG" == "ON" ]]; then
+        COMPILER_ENV=(CC=clang CXX=clang++)
+      fi
       ;;
     x)
       require_on_off "-x" "$OPTARG"

@@ -215,6 +215,14 @@ void goto_programt::instructiont::output_instruction(
     {
       out << " " << from_expr(ns, identifier, invariant);
     }
+    if (!loop_assigns_targets.empty())
+    {
+      out << " ASSIGNS:";
+      for (const auto &target : loop_assigns_targets)
+      {
+        out << " " << from_expr(ns, identifier, target);
+      }
+    }
     out << "\n";
     break;
 

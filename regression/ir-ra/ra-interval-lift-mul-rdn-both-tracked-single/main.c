@@ -1,0 +1,40 @@
+/* Regression test: RDN (ROUND_TO_MINUS_INF) interval lifting for ieee_mul --
+ * both operands tracked, single precision.
+ *
+ * PURPOSE
+ * -------
+ * Mirrors ra-interval-lift-mul-rdn-both-tracked but exercises the
+ * single-precision (float) path.
+ *
+ * PROOF SHAPE (B_dir, RDN, single precision)
+ * ------------------------------------------
+ * Second mul:  w = z * z  (both tracked)
+ *   lo_r = min(p1,p2,p3,p4), hi_r = max(p1,p2,p3,p4)
+ *   ra_lo_dn::1 = lo_r - B_dir(lo_r)  [single eps]
+ *   ra_hi_dn::1 = hi_r                (exact upper)
+ *
+ * PATTERNS CHECKED (see test.desc)
+ *   ra_lo_dn::0   -- first mul's lower bound declared
+ *   ra_lo_dn::1   -- second mul's lifted lower bound declared
+ *   (* |smt_conv::ra_lo_dn::0|  -- endpoint product in hull
+ *   (ite           -- nested ITE present
+ *   8388608        -- Z3 numerator for eps_rel_dir = 2^-23 (single)
+ *   ^VERIFICATION FAILED$
+ */
+#include <assert.h>
+
+extern int __ESBMC_rounding_mode;
+extern float __VERIFIER_nondet_float(void);
+
+int main(void)
+{
+  __ESBMC_rounding_mode = 3; /* ROUND_TO_MINUS_INF */
+  float x = __VERIFIER_nondet_float();
+  float y = __VERIFIER_nondet_float();
+  float z = x * y; /* first RDN mul: both fresh -> point fallback; stored */
+  float w = z * z; /* second RDN mul: both operands tracked -> full lift */
+
+  /* Always false in real/integer encoding: w == z * z exactly. */
+  assert(w != z * z);
+  return 0;
+}

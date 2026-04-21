@@ -91,7 +91,6 @@ void clang_cpp_adjust::adjust_side_effect(side_effect_exprt &expr)
     if (destructor.is_not_nil())
     {
       exprt new_object("new_object", expr.type());
-      new_object.cmt_lvalue(true);
 
       destructor.arguments().push_back(address_of_exprt(new_object));
       expr.set("destructor", destructor);
@@ -308,7 +307,6 @@ void clang_cpp_adjust::convert_reference(exprt &expr)
     //  *r, *F(a)
     dereference_exprt tmp_deref(expr, expr.type());
     tmp_deref.location() = expr.location();
-    tmp_deref.set("#lvalue", true);
     tmp_deref.set("#implicit", true);
     expr.swap(tmp_deref);
   }
@@ -328,7 +326,6 @@ void clang_cpp_adjust::convert_lvalue_ref_to_deref_sideeffect(exprt &expr)
   assert(expr.id() == "sideeffect" && is_reference(expr.type()));
   dereference_exprt tmp_deref(expr, expr.type());
   tmp_deref.location() = expr.location();
-  tmp_deref.set("#lvalue", true);
   tmp_deref.set("#implicit", true);
   expr.swap(tmp_deref);
 }

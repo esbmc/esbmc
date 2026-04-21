@@ -18,7 +18,7 @@ smt_astt smt_tuple_node_flattener::tuple_create(const expr2tc &structdef)
     *this, ctx, ctx->convert_sort(structdef->type), name);
   result->elements.resize(structdef->get_num_sub_exprs());
 
-  for (unsigned int i = 0; i < structdef->get_num_sub_exprs(); i++)
+  for (size_t i = 0; i < structdef->get_num_sub_exprs(); i++)
   {
     smt_astt tmp = ctx->convert_ast(*structdef->get_sub_expr(i));
     result->elements[i] = tmp;
@@ -241,7 +241,7 @@ smt_sortt smt_tuple_node_flattener::mk_struct_sort(const type2tc &type)
       !is_array_type(arrtype.subtype) &&
       "Arrays dimensions should be flattened by the time they reach tuple "
       "interface");
-    unsigned int dom_width = calculate_array_domain_width(arrtype);
+    unsigned int dom_width = array_domain_width_or_word_size(arrtype);
 
     return new smt_sort(
       SMT_SORT_ARRAY, type, dom_width, ctx->convert_sort(arrtype.subtype));

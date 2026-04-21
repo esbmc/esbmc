@@ -1,0 +1,4 @@
+CORE
+main.c
+--enforce-contract bounded_add --function bounded_add --overflow-check
+^VERIFICATION SUCCESSFUL$
