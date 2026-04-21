@@ -2929,8 +2929,9 @@ smt_astt smt_convt::convert_terminal(const expr2tc &expr)
     const constant_floatbv2t &thereal = to_constant_floatbv2t(expr);
     if (int_encoding)
     {
-      if (thereal.value.is_zero() || thereal.value.is_NaN() ||
-          thereal.value.is_infinity())
+      if (
+        thereal.value.is_zero() || thereal.value.is_NaN() ||
+        thereal.value.is_infinity())
         return mk_smt_real("0");
       BigInt frac, exp;
       thereal.value.extract_base2(frac, exp);
