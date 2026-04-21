@@ -1,5 +1,7 @@
 #include <clang-c-frontend/nested_func_transform.h>
 
+#include <util/message.h>
+
 #include <algorithm>
 #include <cassert>
 #include <cctype>
@@ -553,9 +555,33 @@ static std::vector<local_var> collect_local_vars(
 
       if (!found_type)
       {
+        size_t t1 = skip_ws(toks, idx);
+        // Skip __label__ declarations (GCC local labels, not variables)
+        if (
+          t1 < body_end_tok && toks[t1].kind == tok_kind::identifier &&
+          toks[t1].text == "__label__")
+        {
+          log_warning(
+            "GCC __label__ declarations are not supported with "
+            "--gcc-nested-functions; results may be unsound");
+          size_t scan = t1 + 1;
+          while (scan < body_end_tok)
+          {
+            if (
+              toks[scan].kind == tok_kind::punctuation &&
+              toks[scan].text == ";")
+            {
+              idx = scan + 1;
+              break;
+            }
+            ++scan;
+          }
+          if (scan >= body_end_tok)
+            idx = scan;
+          continue;
+        }
         // Typedef heuristic: IDENT IDENT followed by = ; [ or ,
         // e.g. "aligned jj;" where aligned is a typedef
-        size_t t1 = skip_ws(toks, idx);
         if (
           t1 < body_end_tok && toks[t1].kind == tok_kind::identifier &&
           !is_type_keyword(toks[t1].text) &&
@@ -940,10 +966,14 @@ static std::vector<local_var> find_captures(
 //  Lifted name generation
 // -----------------------------------------------------------------------
 
+// Length-prefixed encoding ensures the mapping is injective: different
+// (enclosing, nested) pairs always produce different lifted names, even
+// when identifier names contain underscores.
 static std::string
 lifted_name(const std::string &enclosing, const std::string &nested)
 {
-  return "__esbmc_nested_" + enclosing + "__" + nested;
+  return "__esbmc_nested_" + std::to_string(enclosing.size()) + "_" +
+         enclosing + "_" + std::to_string(nested.size()) + "_" + nested;
 }
 
 static std::string capture_global_name(
@@ -951,7 +981,19 @@ static std::string capture_global_name(
   const std::string &nested,
   const std::string &var)
 {
-  return "__esbmc_cap_" + enclosing + "__" + nested + "__" + var;
+  return "__esbmc_cap_" + std::to_string(enclosing.size()) + "_" + enclosing +
+         "_" + std::to_string(nested.size()) + "_" + nested + "_" +
+         std::to_string(var.size()) + "_" + var;
+}
+
+static std::string capture_param_name(
+  const std::string &enclosing,
+  const std::string &nested,
+  const std::string &var)
+{
+  return "__esbmc_p_" + std::to_string(enclosing.size()) + "_" + enclosing +
+         "_" + std::to_string(nested.size()) + "_" + nested + "_" +
+         std::to_string(var.size()) + "_" + var;
 }
 
 // -----------------------------------------------------------------------
@@ -1024,7 +1066,8 @@ static std::map<std::string, std::string> build_capture_replacements(
       m[c.name] =
         "(*" + capture_global_name(enclosing, func_name, c.name) + ")";
     else
-      m[c.name] = "(*__capture_" + c.name + ")";
+      m[c.name] =
+        "(*" + capture_param_name(enclosing, func_name, c.name) + ")";
   }
   return m;
 }
@@ -1479,7 +1522,9 @@ static std::string transform_one_pass(const std::string &src)
           if (ci > 0)
             new_params += ", ";
           new_params +=
-            nf.captures[ci].type_text + " *__capture_" + nf.captures[ci].name;
+            nf.captures[ci].type_text + " *" +
+            capture_param_name(
+              nf.enclosing, nf.name, nf.captures[ci].name);
         }
 
         if (!no_params)
