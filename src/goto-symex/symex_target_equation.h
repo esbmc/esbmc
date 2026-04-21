@@ -15,6 +15,8 @@
 #include <util/namespace.h>
 #include <vector>
 #include <goto-symex/ssa_step.h>
+#include <goto-symex/incremental_algorithms.h>
+#include <memory>
 
 class symex_target_equationt : public symex_targett
 {
@@ -77,6 +79,31 @@ public:
     const expr2tc &size,
     const sourcet &source) override;
 
+  void set_incremental_algorithm(std::shared_ptr<incremental_smt_algorithm> algo)
+  {
+    incremental_algo = std::move(algo);
+  }
+
+  incremental_smt_algorithm *get_incremental_algorithm() const
+  {
+    return incremental_algo.get();
+  }
+
+  smt_convt *get_active_solver() const
+  {
+    return incremental_algo ? &incremental_algo->get_conv() : nullptr;
+  }
+
+  bool is_path_pruned() const
+  {
+    return path_pruned;
+  }
+
+  void reset_path_pruned()
+  {
+    path_pruned = false;
+  }
+
   virtual void convert(smt_convt &smt_conv);
   void convert_internal_step(
     smt_convt &smt_conv,
@@ -119,6 +146,7 @@ public:
   {
     SSA_steps.clear();
     output_count = 0;
+    path_pruned = false;
   }
 
   unsigned int clear_assertions();
@@ -140,6 +168,8 @@ protected:
   bool ssa_trace;
   bool ssa_smt_trace;
   unsigned output_count;
+  bool path_pruned = false;
+  std::shared_ptr<incremental_smt_algorithm> incremental_algo;
 
 private:
   void debug_print_step(const SSA_stept &step) const;

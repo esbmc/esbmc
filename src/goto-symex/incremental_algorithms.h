@@ -66,9 +66,23 @@ public:
    */
   tvt ask_solver_question(const expr2tc &question);
 
+  void push_ctx()
+  {
+    assumpt_stack.push_back(assumpt_ast);
+    conv->push_ctx();
+  }
+
+  void pop_ctx()
+  {
+    conv->pop_ctx();
+    assumpt_ast = assumpt_stack.back();
+    assumpt_stack.pop_back();
+  }
+
 private:
   std::unique_ptr<smt_convt> conv;
   smt_astt assumpt_ast;
+  std::vector<smt_astt> assumpt_stack;
   smt_convt::ast_vec assertions;
   BigInt ignored_count;
   unsigned output_count;

@@ -487,6 +487,9 @@ const struct group_opt_templ all_cmd_options[] = {
 
   {"Incremental SMT",
    {{"smt-during-symex", NULL, "Enable incremental SMT solving"},
+    {"incremental-smt-algorithm",
+     NULL,
+     "Enable online incremental SMT algorithm with early path pruning"},
     {"smt-thread-guard",
      NULL,
      "Check the thread guard during thread exploration"},

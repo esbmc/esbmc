@@ -46,6 +46,9 @@ void symex_target_equationt::assignment(
 
   if (debug_print)
     debug_print_step(SSA_step);
+
+  if (incremental_algo)
+    incremental_algo->step_online(SSA_step);
 }
 
 void symex_target_equationt::output(
@@ -65,6 +68,9 @@ void symex_target_equationt::output(
 
   if (debug_print)
     debug_print_step(SSA_step);
+
+  if (incremental_algo)
+    incremental_algo->step_online(SSA_step);
 }
 
 void symex_target_equationt::branching(
@@ -86,6 +92,9 @@ void symex_target_equationt::branching(
 
   if (debug_print)
     debug_print_step(SSA_step);
+
+  if (incremental_algo)
+    incremental_algo->step_online(SSA_step);
 }
 
 void symex_target_equationt::assumption(
@@ -105,6 +114,10 @@ void symex_target_equationt::assumption(
 
   if (debug_print)
     debug_print_step(SSA_step);
+
+  if (incremental_algo)
+    if (incremental_algo->step_online(SSA_step).is_false())
+      path_pruned = true;
 }
 
 void symex_target_equationt::assertion(
@@ -128,6 +141,17 @@ void symex_target_equationt::assertion(
 
   if (debug_print)
     debug_print_step(SSA_step);
+
+  if (incremental_algo)
+  {
+    if (incremental_algo->step_online(SSA_step).is_false())
+    {
+      log_fail(
+        "[assertion-failure] {}",
+        SSA_step.comment.empty() ? "assertion violated" : SSA_step.comment);
+      path_pruned = true;
+    }
+  }
 }
 
 void symex_target_equationt::renumber(
@@ -149,10 +173,16 @@ void symex_target_equationt::renumber(
 
   if (debug_print)
     debug_print_step(SSA_step);
+
+  if (incremental_algo)
+    incremental_algo->step_online(SSA_step);
 }
 
 void symex_target_equationt::convert(smt_convt &smt_conv)
 {
+  if (incremental_algo)
+    return;
+
   smt_convt::ast_vec assertions;
   smt_astt assumpt_ast = smt_conv.convert_ast(gen_true_expr());
 
@@ -342,10 +372,14 @@ void SSA_stept::short_output(
 
 void symex_target_equationt::push_ctx()
 {
+  if (incremental_algo)
+    incremental_algo->push_ctx();
 }
 
 void symex_target_equationt::pop_ctx()
 {
+  if (incremental_algo)
+    incremental_algo->pop_ctx();
 }
 
 std::ostream &

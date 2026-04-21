@@ -203,7 +203,7 @@ SCENARIO(
 
     algo.run(steps);
 
-Tha    THEN("Solver finds no counterexample (UNSAT)")
+    THEN("Solver finds no counterexample (UNSAT)")
     {
       REQUIRE(algo.solve() == smt_convt::P_UNSATISFIABLE);
     }
