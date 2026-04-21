@@ -943,21 +943,6 @@ public:
    *  popping. */
   std::list<std::map<unsigned, unsigned>> addr_space_data;
 
-  /** Describes one integer-to-pointer cast whose range constraint must be
-   *  emitted in pre_solve() once all objects have been registered. */
-  struct PendingIntToPtr
-  {
-    expr2tc output_sym;    ///< fresh pointer symbol representing the result
-    expr2tc target;        ///< the cast integer (unsigned ptraddr width)
-    bool from_byte_update; ///< use soft address-equality fallback instead of INVALID
-  };
-
-  // XXX - push-pop will break here.
-  /** Int-to-pointer casts whose SMT constraints are deferred until pre_solve()
-   *  so that the final addrspace array (containing every registered object) is
-   *  available when the constraints are emitted. */
-  std::vector<PendingIntToPtr> pending_int_to_ptr_casts;
-
   /** Holds the `__ESBMC_alloc` symbol convert_terminal() was last invoked with.
    */
   expr2tc current_valid_objects_sym;

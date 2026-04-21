@@ -564,6 +564,9 @@ void smt_convt::init_addr_space_array()
   type2tc ptr_int_type = ptraddr_type2(); /* CHERI-TODO */
   expr2tc zero_ptr_int = constant_int2tc(ptr_int_type, BigInt(0));
   expr2tc one_ptr_int = constant_int2tc(ptr_int_type, BigInt(1));
+  expr2tc obj1_end_const =
+    constant_int2tc(ptr_int_type, BigInt::power2m1(ptr_int_type->get_width()));
+
   expr2tc obj0_start = symbol2tc(ptr_int_type, "__ESBMC_ptr_obj_start_0");
   expr2tc obj0_end = symbol2tc(ptr_int_type, "__ESBMC_ptr_obj_end_0");
 
@@ -573,13 +576,8 @@ void smt_convt::init_addr_space_array()
   expr2tc obj1_start = symbol2tc(ptr_int_type, "__ESBMC_ptr_obj_start_1");
   expr2tc obj1_end = symbol2tc(ptr_int_type, "__ESBMC_ptr_obj_end_1");
 
-  // INVALID's range is [1, 0] — an empty interval that no address can match.
-  // The self-referential int-to-ptr constraint falls back to INVALID when no
-  // real object's range contains the cast integer; having INVALID cover the
-  // entire address space (the old [1, MAX]) would make it the sole match for
-  // every cast and break that mechanism.
   assert_expr(equality2tc(obj1_start, one_ptr_int));
-  assert_expr(equality2tc(obj1_end, zero_ptr_int));
+  assert_expr(equality2tc(obj1_end, obj1_end_const));
 
   expr2tc addr0_tuple = constant_struct2tc(
     addr_space_type, std::vector<expr2tc>{obj0_start, obj0_end});

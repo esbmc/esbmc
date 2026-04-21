@@ -1,4 +1,5 @@
 #include <solvers/smt/smt_conv.h>
+#include <sstream>
 #include <util/base_type.h>
 #include <util/expr_util.h>
 #include <util/message.h>
@@ -400,22 +401,63 @@ capability_from_components(const expr2tc &pesbt, const expr2tc &cursor)
 
 smt_astt smt_convt::convert_typecast_to_ptr(const typecast2t &cast)
 {
-  // Pointer-to-pointer cast: no integer involved, nothing to enumerate.
+  // First, sanity check -- typecast from one kind of pointer to another kind
+  // is a simple operation. Check for that first.
   if (is_pointer_type(cast.from))
     return convert_ast(cast.from);
 
-  // Integer-to-pointer cast.  We defer the range constraint to pre_solve() so
-  // that the final addrspace array (which includes every object registered
-  // during symex, regardless of declaration order) is available when the
-  // constraint is emitted.
+  // Unpleasentness; we don't know what pointer this integer is going to
+  // correspond to, and there's no way of telling statically, so we have
+  // to enumerate all pointers it could point at. IE, all of them. Which
+  // is expensive, but here we are.
 
+  // First cast it to an unsignedbv
   type2tc int_type = ptraddr_type2();
+  smt_sortt int_sort = convert_sort(int_type);
   expr2tc cast_to_unsigned = typecast2tc(int_type, cast.from);
+  smt_astt target = convert_ast(cast_to_unsigned);
+
+  // Construct array for all possible object outcomes
+  std::vector<smt_astt> is_in_range(addr_space_data.back().size());
+  std::vector<smt_astt> obj_ids(addr_space_data.back().size());
+  std::vector<smt_astt> obj_starts(addr_space_data.back().size());
+
+  std::map<unsigned, unsigned>::const_iterator it;
+  unsigned int i;
+  for (it = addr_space_data.back().begin(), i = 0;
+       it != addr_space_data.back().end();
+       it++, i++)
+  {
+    unsigned id = it->first;
+    obj_ids[i] = convert_terminal(constant_int2tc(int_type, BigInt(id)));
+
+    std::stringstream ss1, ss2;
+    ss1 << "__ESBMC_ptr_obj_start_" << id;
+    smt_astt ptr_start = mk_smt_symbol(ss1.str(), int_sort);
+    ss2 << "__ESBMC_ptr_obj_end_" << id;
+    smt_astt ptr_end = mk_smt_symbol(ss2.str(), int_sort);
+
+    obj_starts[i] = ptr_start;
+
+    smt_astt ge =
+      int_encoding ? mk_ge(target, ptr_start) : mk_bvuge(target, ptr_start);
+    smt_astt le =
+      int_encoding ? mk_le(target, ptr_end) : mk_bvule(target, ptr_end);
+    smt_astt theand = mk_and(ge, le);
+    is_in_range[i] = theand;
+  }
+
+  // Create a fresh new variable; encode implications that if the integer is
+  // in the relevant range, that the value is the relevant id / offset. If none
+  // are matched, match the invalid pointer.
+  // Technically C doesn't allow for any variable to hold an invalid pointer,
+  // except through initialization.
 
   std::string newname = mk_fresh_name("smt_convt::int_to_ptr");
   expr2tc output_sym = symbol2tc(cast.type, newname);
   smt_astt output = convert_ast(output_sym);
-
+  smt_astt output_obj = output->project(this, 0);
+  smt_astt output_offs = output->project(this, 1);
   if (config.ansi_c.cheri)
   {
     smt_astt output_cap = output->project(this, 2);
@@ -425,15 +467,78 @@ smt_astt smt_convt::convert_typecast_to_ptr(const typecast2t &cast)
         member2tc(int_type, capability_struct_from_cap(cast.from), "pesbt");
     else
       other_cap = gen_zero(int_type);
-    assert_ast(convert_ast(other_cap)->eq(this, output_cap));
+    smt_astt other_cap_ast = convert_ast(other_cap);
+    assert_ast(other_cap_ast->eq(this, output_cap));
   }
 
+  ast_vec guards;
+  for (i = 0; i < addr_space_data.back().size(); i++)
+  {
+    if (i == 1)
+      continue; // Skip invalid, it contains everything.
+
+    // Calculate ptr offset were it this
+    smt_astt offs = int_encoding ? mk_sub(target, obj_starts[i])
+                                 : mk_bvsub(target, obj_starts[i]);
+
+    smt_astt this_obj = obj_ids[i];
+    smt_astt this_offs = offs;
+
+    smt_astt obj_eq = this_obj->eq(this, output_obj);
+    smt_astt offs_eq = this_offs->eq(this, output_offs);
+    smt_astt is_eq = mk_and(obj_eq, offs_eq);
+
+    smt_astt in_range = is_in_range[i];
+    guards.push_back(in_range);
+    smt_astt imp = mk_implies(in_range, is_eq);
+    assert_ast(imp);
+  }
+
+  // If none of the above, match invalid.
+  smt_astt was_matched = make_n_ary_or(guards);
+  smt_astt not_matched = mk_not(was_matched);
+
+  smt_astt id = convert_terminal(
+    constant_int2tc(int_type, pointer_logic.back().get_invalid_object()));
+
+  smt_astt one = convert_terminal(constant_int2tc(int_type, BigInt(1)));
+  smt_astt offs = int_encoding ? mk_sub(target, one) : mk_bvsub(target, one);
+  smt_astt inv_obj = id;
+  smt_astt inv_offs = offs;
+
+  // Cast from a byte-updated pointer: either the direct BV-mode update
+  // byte_update<uint>(bitcast<uint>(ptr), ...) or a struct-field extraction
+  // extract<W>(byte_update<uint>(bitcast<uint>(struct), ...)).
+  // In both cases, constrain the output pointer's address to equal the target
+  // integer rather than pinning the fallback to the invalid object.
   const bool from_byte_update =
     is_byte_update2t(cast.from) ||
     (is_extract2t(cast.from) && is_byte_update2t(to_extract2t(cast.from).from));
 
-  pending_int_to_ptr_casts.push_back({output_sym, cast_to_unsigned, from_byte_update});
+  if (from_byte_update)
+  {
+    const struct_type2t &as = to_struct_type(addr_space_type);
+    expr2tc obj_num = pointer_object2tc(ptraddr_type2(), output_sym);
+    expr2tc from_addr = index2tc(
+      addr_space_type,
+      symbol2tc(addr_space_arr_type, get_cur_addrspace_ident()),
+      obj_num);
+    expr2tc from_start =
+      member2tc(as.members[0], from_addr, as.member_names[0]);
+    expr2tc ptr_offs =
+      pointer_offset2tc(get_int_type(config.ansi_c.address_width), output_sym);
+    expr2tc address = add2tc(
+      ptraddr_type2(), from_start, typecast2tc(ptraddr_type2(), ptr_offs));
+    smt_astt addr = convert_ast(address);
+    assert_ast(mk_implies(not_matched, addr->eq(this, target)));
+    return output;
+  }
 
+  smt_astt obj_eq = inv_obj->eq(this, output_obj);
+  smt_astt offs_eq = inv_offs->eq(this, output_offs);
+  smt_astt is_inv = mk_and(obj_eq, offs_eq);
+
+  assert_ast(mk_implies(not_matched, is_inv));
   return output;
 }
 
