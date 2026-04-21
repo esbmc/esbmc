@@ -2929,8 +2929,18 @@ smt_astt smt_convt::convert_terminal(const expr2tc &expr)
     const constant_floatbv2t &thereal = to_constant_floatbv2t(expr);
     if (int_encoding)
     {
-      std::string val = thereal.value.to_expr().value().as_string();
-      std::string result = fixed_point(val, thereal.value.spec.width());
+      if (thereal.value.is_zero() || thereal.value.is_NaN() ||
+          thereal.value.is_infinity())
+        return mk_smt_real("0");
+      BigInt frac, exp;
+      thereal.value.extract_base2(frac, exp);
+      std::string result;
+      if (exp >= 0)
+        result = integer2string(frac * power(2, exp));
+      else
+        result = integer2string(frac) + "/" + integer2string(power(2, -exp));
+      if (thereal.value.get_sign())
+        result = "-" + result;
       return mk_smt_real(result);
     }
 
