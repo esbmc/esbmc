@@ -3,8 +3,8 @@ to reduce SSA programs that contain expressions over integers, arrays,
 pointers, structures, complex byte operations, and much more, down to an SMT
 formula.
 
-The best reference is the boolector backend; see
-solvers/boolector. There's also some documentation on how the new solver
+The best reference is the bitwuzla backend; see
+solvers/bitwuzla. There's also some documentation on how the solver
 backends are arranged in solvers/smt/smt_conv.h in a file comment. There
 are also (mostly) comments about the purpose of each class in that file.
 A brief overview:
