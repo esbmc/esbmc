@@ -780,6 +780,9 @@ unsigned int execution_statet::add_thread(const goto_programt *prog)
 
 void execution_statet::analyze_assign(const expr2tc &code)
 {
+  if (get_active_state().guard.is_false())
+    return;
+  
   if (is_nil_expr(code))
     return;
 
@@ -800,6 +803,9 @@ void execution_statet::analyze_assign(const expr2tc &code)
 
 void execution_statet::analyze_read(const expr2tc &code)
 {
+  if (get_active_state().guard.is_false())
+    return;
+  
   if (is_nil_expr(code))
     return;
 
