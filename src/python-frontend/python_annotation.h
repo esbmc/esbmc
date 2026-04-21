@@ -304,16 +304,16 @@ public:
     }
   }
 
-public:
-  // Infer the return type of dict.{setdefault, get, pop} from args[1]'s AST shape:
-  // "list"/"dict"/"set"/"tuple" for literal defaults,
-  // "Any" for anything else,
-  // "" when there is no default arg.
+  // Return the builtin type of a dict.{get, setdefault, pop} default arg.
+  // Recognises literal shapes (list/dict/set/tuple) and scalar Constants
+  // (int/float/str/bool/None). Returns "Any" for non-literals (variables,
+  // calls), "" when the call has no default argument.
   static std::string infer_type_from_default_arg_shape(const Json &args_node)
   {
     if (!args_node.is_array() || args_node.size() < 2)
       return std::string();
-    const std::string def_type = args_node[1].value("_type", std::string());
+    const Json &def = args_node[1];
+    const std::string def_type = def.value("_type", std::string());
     if (def_type == "List")
       return "list";
     if (def_type == "Dict")
@@ -322,6 +322,22 @@ public:
       return "set";
     if (def_type == "Tuple")
       return "tuple";
+    // Scalar literals: read the builtin type off the constant's JSON value
+    // so that e.g. `.get(k, 3)` does not fall back to `Any`.
+    if (def_type == "Constant" && def.contains("value"))
+    {
+      const Json &v = def["value"];
+      if (v.is_null())
+        return "None";
+      if (v.is_boolean())
+        return "bool";
+      if (v.is_number_integer())
+        return "int";
+      if (v.is_number_float())
+        return "float";
+      if (v.is_string())
+        return "str";
+    }
     return "Any";
   }
 
@@ -2731,40 +2747,32 @@ private:
         return obj_type;
     }
 
-    // Method calls on inline dict/list/set literals (e.g. {"a":1}.get("x", 3)).
-    // The receiver has no symbol name, so apply the builtin rules directly
-    // before the name-based lookup below kicks in.
+    // Inline dict-literal method calls, e.g. `{"a":1}.get("x", 3)`.
+    // The receiver has no symbol name, so resolve the types we model here
+    // (get/setdefault/pop/keys/values/items)
+    // and let anything else fall through to the regular resolution path below.
     if (call["func"].contains("value"))
     {
       const std::string &recv_kind =
         call["func"]["value"].value("_type", std::string());
-      if (recv_kind == "Dict" || recv_kind == "List" || recv_kind == "Set")
+      if (recv_kind == "Dict")
       {
-        const std::string lit_obj_type = (recv_kind == "Dict")   ? "dict"
-                                         : (recv_kind == "List") ? "list"
-                                                                 : "set";
         const std::string method =
           call["func"].contains("attr")
             ? call["func"]["attr"].template get<std::string>()
             : std::string();
 
-        // setdefault/get/pop: return the value's container shape.
-        if (
-          lit_obj_type == "dict" &&
-          (method == "setdefault" || method == "get" || method == "pop"))
+        // get/setdefault/pop: return type comes from the default arg.
+        if (method == "setdefault" || method == "get" || method == "pop")
         {
           std::string t = infer_type_from_default_arg_shape(call["args"]);
           if (!t.empty())
             return t;
         }
 
-        // keys/values/items views behave like lists for type inference.
-        if (
-          lit_obj_type == "dict" &&
-          (method == "keys" || method == "values" || method == "items"))
+        // keys/values/items: views behave like lists for type inference.
+        if (method == "keys" || method == "values" || method == "items")
           return "list";
-
-        return lit_obj_type;
       }
     }
 
