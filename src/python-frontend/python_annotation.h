@@ -304,10 +304,8 @@ public:
     }
   }
 
-  // Return the builtin type of a dict.{get, setdefault, pop} default arg.
-  // Recognises literal shapes (list/dict/set/tuple) and scalar Constants
-  // (int/float/str/bool/None). Returns "Any" for non-literals (variables,
-  // calls), "" when the call has no default argument.
+  // Infer the builtin type of a dict.{get, setdefault, pop} default arg.
+  // Returns "" when there is no default, "Any" for non-literal defaults.
   static std::string infer_type_from_default_arg_shape(const Json &args_node)
   {
     if (!args_node.is_array() || args_node.size() < 2)
@@ -322,21 +320,15 @@ public:
       return "set";
     if (def_type == "Tuple")
       return "tuple";
-    // Scalar literals: read the builtin type off the constant's JSON value
-    // so that e.g. `.get(k, 3)` does not fall back to `Any`.
+    // Scalar literal: narrow to the concrete builtin type (int/float/str/
+    // bool/None) so the caller does not have to fall back to Any.
     if (def_type == "Constant" && def.contains("value"))
     {
-      const Json &v = def["value"];
-      if (v.is_null())
+      const std::string t = get_type_from_json(def["value"]);
+      if (t == "null")
         return "None";
-      if (v.is_boolean())
-        return "bool";
-      if (v.is_number_integer())
-        return "int";
-      if (v.is_number_float())
-        return "float";
-      if (v.is_string())
-        return "str";
+      if (t == "bool" || t == "int" || t == "float" || t == "str")
+        return t;
     }
     return "Any";
   }
@@ -2042,7 +2034,7 @@ private:
     return node["annotation"]["id"];
   }
 
-  std::string get_type_from_json(const Json &value)
+  static std::string get_type_from_json(const Json &value)
   {
     if (value.is_null())
       return "null";
