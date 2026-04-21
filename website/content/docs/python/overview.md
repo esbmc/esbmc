@@ -50,4 +50,4 @@ The final frontend step converts the annotated JSON AST into a symbol table usin
 
 ## Backend: Symbolic Execution and SMT
 
-Once the frontend produces the GOTO program, ESBMC's backend performs symbolic execution, generating instructions in Single Static Assignment (SSA) form. These are then encoded as first-order logical formulas and discharged by an SMT solver (Boolector by default; Z3, MathSAT, and others are also supported).
+Once the frontend produces the GOTO program, ESBMC's backend performs symbolic execution, generating instructions in Single Static Assignment (SSA) form. These are then encoded as first-order logical formulas and discharged by an SMT solver (Bitwuzla by default; Z3, MathSAT, and others are also supported).
