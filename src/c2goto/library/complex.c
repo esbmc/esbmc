@@ -1,26 +1,36 @@
 #include <complex.h>
 #include <math.h>
 
-double creal(double complex z)
+#ifdef _MSC_VER
+#  define COMPLEX_DOUBLE _Dcomplex
+#  define CREAL(z) ((z).real)
+#  define CIMAG(z) ((z).imag)
+#else
+#  define COMPLEX_DOUBLE double complex
+#  define CREAL(z) __real__ (z)
+#  define CIMAG(z) __imag__ (z)
+#endif
+
+double creal(COMPLEX_DOUBLE z)
 {
 __ESBMC_HIDE:;
-  return __real__ z;
+  return CREAL(z);
 }
 
-double cimag(double complex z)
+double cimag(COMPLEX_DOUBLE z)
 {
 __ESBMC_HIDE:;
-  return __imag__ z;
+  return CIMAG(z);
 }
 
-double cabs(double complex z)
+double cabs(COMPLEX_DOUBLE z)
 {
 __ESBMC_HIDE:;
-  return sqrt(__real__ z * __real__ z + __imag__ z * __imag__ z);
+  return sqrt(CREAL(z) * CREAL(z) + CIMAG(z) * CIMAG(z));
 }
 
-double carg(double complex z)
+double carg(COMPLEX_DOUBLE z)
 {
 __ESBMC_HIDE:;
-  return atan2(__imag__ z, __real__ z);
+  return atan2(CIMAG(z), CREAL(z));
 }
