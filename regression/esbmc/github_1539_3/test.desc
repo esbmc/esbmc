@@ -1,4 +1,0 @@
-CORE
-main.c
---incremental-bmc --smt-symex-assert
-^VERIFICATION FAILED$

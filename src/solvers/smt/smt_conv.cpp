@@ -109,7 +109,6 @@ smt_convt::smt_convt(const namespacet &_ns, const optionst &_options)
   addr_space_arr_type = array_type2tc(addr_space_type, expr2tc(), true);
 
   addr_space_data.emplace_back();
-  pending_int_to_ptr_casts.emplace_back();
 
   machine_ptr = get_uint_type(config.ansi_c.pointer_width()); /* CHERI-TODO */
 
@@ -182,7 +181,6 @@ void smt_convt::push_ctx()
   addr_space_sym_num.push_back(addr_space_sym_num.back());
   pointer_logic.push_back(pointer_logic.back());
   renumber_map.push_back(renumber_map.back());
-  pending_int_to_ptr_casts.emplace_back();
 
   live_asts_sizes.push_back(live_asts.size());
 
@@ -240,7 +238,6 @@ void smt_convt::pop_ctx()
   addr_space_sym_num.pop_back();
   addr_space_data.pop_back();
   renumber_map.pop_back();
-  pending_int_to_ptr_casts.pop_back();
 
   ctx_level--;
 
@@ -3813,88 +3810,84 @@ void smt_convt::pre_solve()
   // Emit the range constraint for each deferred int-to-ptr cast, now that
   // every object is registered.  Emitting here (rather than at cast time)
   // ensures objects created after the cast are visible, regardless of
-  // declaration order in the source program.  Each context level has its own
-  // vector of pending casts so entries added inside a pushed context are
-  // discarded when that context is popped.  We do NOT clear the vectors
-  // after emission: a dec_solve() at a pushed level asserts constraints into
-  // that frame, which are popped on return, so the lower-level entries must
-  // be re-emitted at the base level to remain in the solver.
+  // declaration order in the source program.
   type2tc int_type = ptraddr_type2();
   smt_sortt int_sort = convert_sort(int_type);
 
-  for (const auto &level_casts : pending_int_to_ptr_casts)
+  for (const auto &p : pending_int_to_ptr_casts)
   {
-    for (const auto &p : level_casts)
+    smt_astt output = convert_ast(p.output_sym);
+    smt_astt output_obj = output->project(this, 0);
+    smt_astt output_offs = output->project(this, 1);
+    smt_astt target = convert_ast(p.target);
+
+    // Enumerate every registered object, including those added after the cast.
+    ast_vec guards;
+    for (const auto &kv : addr_space_data.back())
     {
-      smt_astt output = convert_ast(p.output_sym);
-      smt_astt output_obj = output->project(this, 0);
-      smt_astt output_offs = output->project(this, 1);
-      smt_astt target = convert_ast(p.target);
+      unsigned id = kv.first;
+      if (id == 1)
+        continue; // INVALID has empty range [1,0]; never in-range.
 
-      // Enumerate every registered object, including those added after the cast.
-      ast_vec guards;
-      for (const auto &kv : addr_space_data.back())
-      {
-        unsigned id = kv.first;
-        if (id == 1)
-          continue; // INVALID has empty range [1,0]; never in-range.
+      std::stringstream ss1, ss2;
+      ss1 << "__ESBMC_ptr_obj_start_" << id;
+      ss2 << "__ESBMC_ptr_obj_end_" << id;
+      smt_astt ptr_start = mk_smt_symbol(ss1.str(), int_sort);
+      smt_astt ptr_end = mk_smt_symbol(ss2.str(), int_sort);
 
-        std::stringstream ss1, ss2;
-        ss1 << "__ESBMC_ptr_obj_start_" << id;
-        ss2 << "__ESBMC_ptr_obj_end_" << id;
-        smt_astt ptr_start = mk_smt_symbol(ss1.str(), int_sort);
-        smt_astt ptr_end = mk_smt_symbol(ss2.str(), int_sort);
+      smt_astt ge =
+        int_encoding ? mk_ge(target, ptr_start) : mk_bvuge(target, ptr_start);
+      smt_astt le =
+        int_encoding ? mk_le(target, ptr_end) : mk_bvule(target, ptr_end);
+      smt_astt in_range = mk_and(ge, le);
+      guards.push_back(in_range);
 
-        smt_astt ge =
-          int_encoding ? mk_ge(target, ptr_start) : mk_bvuge(target, ptr_start);
-        smt_astt le =
-          int_encoding ? mk_le(target, ptr_end) : mk_bvule(target, ptr_end);
-        smt_astt in_range = mk_and(ge, le);
-        guards.push_back(in_range);
+      smt_astt obj_id =
+        convert_terminal(constant_int2tc(int_type, BigInt(id)));
+      smt_astt offs =
+        int_encoding ? mk_sub(target, ptr_start) : mk_bvsub(target, ptr_start);
 
-        smt_astt obj_id =
-          convert_terminal(constant_int2tc(int_type, BigInt(id)));
-        smt_astt offs = int_encoding ? mk_sub(target, ptr_start)
-                                     : mk_bvsub(target, ptr_start);
+      assert_ast(mk_implies(in_range, obj_id->eq(this, output_obj)));
+      assert_ast(mk_implies(in_range, offs->eq(this, output_offs)));
+    }
 
-        assert_ast(mk_implies(in_range, obj_id->eq(this, output_obj)));
-        assert_ast(mk_implies(in_range, offs->eq(this, output_offs)));
-      }
+    smt_astt not_matched = mk_not(make_n_ary_or(guards));
 
-      smt_astt not_matched = mk_not(make_n_ary_or(guards));
-
-      if (p.from_byte_update)
-      {
-        // Cast from a byte-updated pointer: constrain the reconstructed
-        // address to equal the target integer rather than forcing INVALID.
-        const struct_type2t &as = to_struct_type(addr_space_type);
-        expr2tc obj_num = pointer_object2tc(int_type, p.output_sym);
-        expr2tc from_addr = index2tc(
-          addr_space_type,
-          symbol2tc(addr_space_arr_type, get_cur_addrspace_ident()),
-          obj_num);
-        expr2tc from_start =
-          member2tc(as.members[0], from_addr, as.member_names[0]);
-        expr2tc ptr_offs = pointer_offset2tc(
-          get_int_type(config.ansi_c.address_width), p.output_sym);
-        expr2tc address =
-          add2tc(int_type, from_start, typecast2tc(int_type, ptr_offs));
-        assert_ast(
-          mk_implies(not_matched, convert_ast(address)->eq(this, target)));
-      }
-      else
-      {
-        // !in_range  =>  output = INVALID pointer (obj=1, offs=target-1)
-        smt_astt inv_id = convert_terminal(
-          constant_int2tc(int_type, pointer_logic.back().get_invalid_object()));
-        smt_astt one = convert_terminal(constant_int2tc(int_type, BigInt(1)));
-        smt_astt inv_offs =
-          int_encoding ? mk_sub(target, one) : mk_bvsub(target, one);
-        assert_ast(mk_implies(not_matched, inv_id->eq(this, output_obj)));
-        assert_ast(mk_implies(not_matched, inv_offs->eq(this, output_offs)));
-      }
+    if (p.from_byte_update)
+    {
+      // Cast from a byte-updated pointer: constrain the reconstructed
+      // address to equal the target integer rather than forcing INVALID.
+      const struct_type2t &as = to_struct_type(addr_space_type);
+      expr2tc obj_num = pointer_object2tc(int_type, p.output_sym);
+      expr2tc from_addr = index2tc(
+        addr_space_type,
+        symbol2tc(addr_space_arr_type, get_cur_addrspace_ident()),
+        obj_num);
+      expr2tc from_start =
+        member2tc(as.members[0], from_addr, as.member_names[0]);
+      expr2tc ptr_offs =
+        pointer_offset2tc(get_int_type(config.ansi_c.address_width), p.output_sym);
+      expr2tc address =
+        add2tc(int_type, from_start, typecast2tc(int_type, ptr_offs));
+      assert_ast(mk_implies(not_matched, convert_ast(address)->eq(this, target)));
+    }
+    else
+    {
+      // !in_range  =>  output = INVALID pointer (obj=1, offs=target-1)
+      smt_astt inv_id = convert_terminal(
+        constant_int2tc(int_type, pointer_logic.back().get_invalid_object()));
+      smt_astt one = convert_terminal(constant_int2tc(int_type, BigInt(1)));
+      smt_astt inv_offs =
+        int_encoding ? mk_sub(target, one) : mk_bvsub(target, one);
+      assert_ast(mk_implies(not_matched, inv_id->eq(this, output_obj)));
+      assert_ast(mk_implies(not_matched, inv_offs->eq(this, output_offs)));
     }
   }
+  // Only clear the pending list once we're at the permanent (base) context.
+  // ask_solver_question() calls dec_solve() inside pushed contexts; clearing
+  // there would lose the entries before the main BMC solve sees them.
+  if (ctx_level == 0)
+    pending_int_to_ptr_casts.clear();
 
   // NB: always perform tuple constraint adding first, as it covers tuple
   // arrays too, and might end up generating more ASTs to be encoded in

@@ -432,8 +432,7 @@ smt_astt smt_convt::convert_typecast_to_ptr(const typecast2t &cast)
     is_byte_update2t(cast.from) ||
     (is_extract2t(cast.from) && is_byte_update2t(to_extract2t(cast.from).from));
 
-  pending_int_to_ptr_casts.back().push_back(
-    {output_sym, cast_to_unsigned, from_byte_update});
+  pending_int_to_ptr_casts.push_back({output_sym, cast_to_unsigned, from_byte_update});
 
   return output;
 }
