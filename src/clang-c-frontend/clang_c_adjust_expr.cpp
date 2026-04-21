@@ -415,8 +415,8 @@ void clang_c_adjust::adjust_expr_binary_arithmetic(exprt &expr)
     }
     else
     {
-      expr.type() = complex_t;
-      return;
+      log_error("unsupported complex arithmetic operator: {}", op);
+      abort();
     }
 
     struct_exprt result(complex_t);
