@@ -45,9 +45,9 @@ def move_one_ball(arr):
 
 # Direct assertions for ESBMC verification
 if __name__ == "__main__":
-    assert move_one_ball([3, 4, 5, 1, 2])==True, "This prints if this assert fails 1 (good for debugging!)"
+    # assert move_one_ball([3, 4, 5, 1, 2])==True, "This prints if this assert fails 1 (good for debugging!)"
     # assert move_one_ball([3, 5, 10, 1, 2])==True
-    # assert move_one_ball([4, 3, 1, 2])==False
+    assert move_one_ball([4, 3, 1, 2])==False
     # assert move_one_ball([3, 5, 4, 1, 2])==False, "This prints if this assert fails 2 (also good for debugging!)"
     # assert move_one_ball([])==True
     print("✅ HumanEval/109 - All assertions completed!")

@@ -31,6 +31,29 @@ static exprt rebuild_and_chain(const exprt::operandst &conjuncts, std::size_t i)
   return result;
 }
 
+/// Recursively flatten a (possibly nested) binary || expression into a flat
+/// list of disjuncts.  Clang represents A || B || C as or(or(A,B),C).
+static void collect_or_disjuncts(const exprt &expr, exprt::operandst &out)
+{
+  if (expr.id() == "or")
+    for (const auto &op : expr.operands())
+      collect_or_disjuncts(op, out);
+  else
+    out.push_back(expr);
+}
+
+/// Rebuild a right-to-left nested binary || from a flat list of disjuncts
+/// starting at index @p i.
+static exprt rebuild_or_chain(const exprt::operandst &disjuncts, std::size_t i)
+{
+  assert(i < disjuncts.size());
+  if (i + 1 == disjuncts.size())
+    return disjuncts[i];
+  exprt result = exprt("or", bool_type());
+  result.copy_to_operands(disjuncts[i], rebuild_or_chain(disjuncts, i + 1));
+  return result;
+}
+
 void goto_convertt::remove_sideeffects_for_quantifier_body(
   exprt &body,
   goto_programt &dest)
@@ -55,7 +78,41 @@ void goto_convertt::remove_sideeffects_for_quantifier_body(
     return;
   }
 
-  // Leaf that is not a boolean connector: use the standard handler.
+  // If the leaf is a nested quantifier call, convert it to a quantifier
+  // expression inline instead of creating a temp variable.  This keeps the
+  // full expression tree intact so that goto_check's guard propagation from
+  // || / && correctly constrains array accesses within the nested quantifier
+  // body.  Without this, the temp assignment is a separate instruction
+  // without the enclosing quantifier's guard context, causing spurious
+  // array-bounds violations (GitHub #3995).
+  if (
+    expr->id() == "sideeffect" && expr->statement() == "function_call" &&
+    expr->operands().size() >= 2 && expr->op0().is_symbol())
+  {
+    const symbolt *fsym = ns.lookup(expr->op0().identifier());
+    if (
+      fsym &&
+      (fsym->name == "__ESBMC_forall" || fsym->name == "__ESBMC_exists"))
+    {
+      exprt::operandst &args = expr->op1().operands();
+      if (args.size() == 2)
+      {
+        if (has_sideeffect(args[1]))
+          remove_sideeffects_for_quantifier_body(args[1], dest);
+
+        bool is_forall = (fsym->name == "__ESBMC_forall");
+        exprt quant(is_forall ? "forall" : "exists", typet("bool"));
+        quant.copy_to_operands(args[0]);
+        quant.copy_to_operands(args[1]);
+        quant.location() = expr->find_location();
+        body = quant;
+        return;
+      }
+    }
+  }
+
+  // Leaf that is not a boolean connector or nested quantifier: use the
+  // standard handler.
   remove_sideeffects(body, dest, /*result_is_used=*/true);
 }
 
@@ -358,6 +415,26 @@ void goto_convertt::remove_sideeffects(
       expr.op0().is_symbol())
     {
       const symbolt *fsym = ns.lookup(expr.op0().identifier());
+
+      // In non-contract mode, drop all contract annotation calls entirely so
+      // they have zero effect on the GOTO program (no FUNCTION_CALL step, no
+      // side-effect processing of the argument).  The declarations remain in
+      // the unconditional intrinsics section so annotated files still compile.
+      if (
+        fsym && options.get_option("enforce-contract").empty() &&
+        options.get_option("replace-call-with-contract").empty() &&
+        !options.get_bool_option("enforce-all-contracts") &&
+        !options.get_bool_option("replace-all-contracts"))
+      {
+        const std::string &fname = id2string(fsym->name);
+        if (
+          fname == "__ESBMC_requires" || fname == "__ESBMC_ensures" ||
+          fname == "__ESBMC_assigns_impl")
+        {
+          expr.make_nil();
+          return;
+        }
+      }
       if (fsym && fsym->name == "__ESBMC_loop_invariant")
       {
         exprt::operandst &args = expr.op1().operands();
@@ -393,24 +470,51 @@ void goto_convertt::remove_sideeffects(
         }
       }
 
+      // Special handling for __ESBMC_ensures and __ESBMC_requires with
+      // && or || chains containing side effects (e.g. __ESBMC_old()).
+      if (
+        fsym &&
+        (fsym->name == "__ESBMC_ensures" || fsym->name == "__ESBMC_requires"))
+      {
+        exprt::operandst &args = expr.op1().operands();
+        bool rewrote = false;
+        if (args.size() == 1 && has_sideeffect(args.front()))
+        {
+          exprt *inner = &args.front();
+          if (
+            inner->id() == "typecast" && inner->operands().size() == 1 &&
+            (inner->op0().is_and() || inner->op0().id() == "or"))
+            inner = &inner->op0();
+
+          if (inner->is_and())
+          {
+            exprt::operandst parts;
+            collect_and_conjuncts(*inner, parts);
+            for (auto &p : parts)
+              remove_sideeffects(p, dest);
+            args.front() = rebuild_and_chain(parts, 0);
+            rewrote = true;
+          }
+          else if (inner->id() == "or")
+          {
+            exprt::operandst parts;
+            collect_or_disjuncts(*inner, parts);
+            for (auto &p : parts)
+              remove_sideeffects(p, dest);
+            args.front() = rebuild_or_chain(parts, 0);
+            rewrote = true;
+          }
+        }
+        if (rewrote)
+        {
+          remove_function_call(expr, dest, result_is_used);
+          return;
+        }
+      }
+
       // Special handling for __ESBMC_forall/__ESBMC_exists(ptr, body):
-      //
-      // When the body is a || or && expression containing nested quantifier
-      // calls, the normal Forall_operands path below would convert it into a
-      // short-circuit ITE GOTO chain, replacing the compound expression with a
-      // single temp symbol.  The outer quantifier then gets forall(&b, t)
-      // where b no longer appears in t, so replace_name_in_body() in
-      // smt_conv.cpp cannot substitute the bound variable — producing an
-      // incorrect (vacuously true or false) formula.
-      //
-      // This applies at ALL levels: a disjunct that is itself an && expression
-      // containing a nested quantifier would also be ITE-converted, hiding the
-      // bound variable in a temp symbol.
-      //
-      // Instead: walk the || and && sub-tree recursively without ITE-converting
-      // it, processing only the leaf function calls individually.  This
-      // preserves the logical structure so smt_conv can substitute the bound
-      // variable throughout the full body.
+      // preserve logical structure of || / && body so the bound variable
+      // remains visible for substitution in smt_conv.cpp.
       if (
         fsym &&
         (fsym->name == "__ESBMC_forall" || fsym->name == "__ESBMC_exists"))
@@ -612,10 +716,17 @@ void goto_convertt::remove_assignment(
 
     exprt lhs(expr.op0());
 
-    code_assignt assignment(lhs, rhs);
-    assignment.location() = expr.location();
-
-    convert(assignment, dest);
+    // C11 compound assignments on _Atomic are RMW: the read and write must
+    // happen in a single indivisible atomic section (no context-switch window
+    // between the load and the store, unlike plain "x = x op y").
+    if (is_atomic_symbol(lhs, ns))
+      convert_assign_rmw_atomic(lhs, rhs, expr.location(), dest);
+    else
+    {
+      code_assignt assignment(lhs, rhs);
+      assignment.location() = expr.location();
+      convert(assignment, dest);
+    }
   }
 
   // revert assignment in the expression to its LHS
@@ -705,10 +816,16 @@ void goto_convertt::remove_pre(
     rhs.type() = expr.op0().type();
   }
 
-  code_assignt assignment(expr.op0(), rhs);
-  assignment.location() = expr.location();
-
-  convert(assignment, dest);
+  // C11 pre-increment/decrement on _Atomic is a sequentially-consistent RMW:
+  // the load and store must be indivisible.
+  if (is_atomic_symbol(expr.op0(), ns))
+    convert_assign_rmw_atomic(expr.op0(), rhs, expr.location(), dest);
+  else
+  {
+    code_assignt assignment(expr.op0(), rhs);
+    assignment.location() = expr.location();
+    convert(assignment, dest);
+  }
 
   if (result_is_used)
   {
@@ -794,6 +911,39 @@ void goto_convertt::remove_post(
     rhs.copy_to_operands(expr.op0());
     rhs.move_to_operands(constant);
     rhs.type() = expr.op0().type();
+  }
+
+  // C11 post-increment/decrement on _Atomic is a sequentially-consistent RMW.
+  // The old value and the store must be captured inside a single atomic section
+  // so no other thread can observe an intermediate state.
+  if (is_atomic_symbol(expr.op0(), ns))
+  {
+    if (result_is_used)
+    {
+      // Declare the "old value" temporary outside the atomic section.
+      symbolt &old_sym = new_tmp_symbol(expr.op0().type());
+      code_declt decl(symbol_expr(old_sym));
+      decl.location() = expr.location();
+      convert_decl(decl, dest);
+
+      dest.add_instruction(ATOMIC_BEGIN);
+      // Save old value then modify — all inside one atomic block.
+      code_assignt save(symbol_expr(old_sym), expr.op0());
+      save.location() = expr.location();
+      copy(save, ASSIGN, dest);
+      code_assignt modify(expr.op0(), rhs);
+      modify.location() = expr.location();
+      copy(modify, ASSIGN, dest);
+      dest.add_instruction(ATOMIC_END);
+
+      expr = symbol_expr(old_sym);
+    }
+    else
+    {
+      convert_assign_rmw_atomic(expr.op0(), rhs, expr.location(), dest);
+      expr.make_nil();
+    }
+    return;
   }
 
   code_assignt assignment(expr.op0(), rhs);

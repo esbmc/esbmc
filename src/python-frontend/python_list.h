@@ -333,6 +333,20 @@ private:
     const std::string &to_list_id);
 
   /**
+   * @brief Append every element of src onto dst at runtime.
+   *
+   * Shared by list concatenation (a + b) and variable-list repetition (lst * n).
+   *
+   * @param src Source list expression (value or pointer)
+   * @param dst Destination list symbol
+   * @param element The AST node for location information
+   */
+  void emit_list_copy(
+    const exprt &src,
+    const symbolt &dst,
+    const nlohmann::json &element);
+
+  /**
    * @brief Handle symbolic (non-constant) range arguments
    * @param converter The python converter instance
    * @param range_args The range arguments from the AST

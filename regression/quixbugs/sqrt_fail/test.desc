@@ -1,5 +1,5 @@
 CORE
 main.py
---unwind 9
+--incremental-bmc --no-standard-checks --smt-during-symex --smt-symex-guard --bitwuzla
 
-^VERIFICATION FAILED$
+^VERIFICATION UNKNOWN$

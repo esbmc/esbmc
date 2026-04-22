@@ -1,0 +1,4 @@
+KNOWNBUG
+main.c
+--enforce-contract write_global_elem --function write_global_elem --no-pointer-check
+^VERIFICATION SUCCESSFUL$

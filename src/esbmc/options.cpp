@@ -201,7 +201,18 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "Parse source files using the old frontend (deprecated)"},
     {"funsigned-char", NULL, "Make \"char\" unsigned by default"},
-    {"fms-extensions", NULL, "Enable microsoft C extensions"}}},
+    {"fms-extensions", NULL, "Enable microsoft C extensions"},
+    {"argv-max-args",
+     boost::program_options::value<int>()->default_value(2)->value_name("nr"),
+     "Maximum number of argv entries backed with nondet strings (default 2). "
+     "Higher values widen coverage at the cost of a larger SMT formula."},
+    {"argv-max-strlen",
+     boost::program_options::value<int>()->default_value(256)->value_name("nr"),
+     "Maximum length (in bytes, including the null terminator) of each backed "
+     "argv string (default 256)."},
+    {"gcc-nested-functions",
+     NULL,
+     "Enable GCC nested functions extension (source-level lambda lifting)"}}},
   {"Architecture",
    {
      {"no-arch", NULL, "Don't set up an architecture"},
@@ -300,10 +311,6 @@ const struct group_opt_templ all_cmd_options[] = {
        "fun"),
      "Replace function calls with contract semantics (use \"*\" for all "
      "functions)"},
-    {"assume-nonnull-valid",
-     nullptr,
-     "In --enforce-contract mode, assume non-null pointer parameters are valid "
-     "objects"},
     {"enforce-all-contracts",
      nullptr,
      "Enforce contracts for all functions marked with __ESBMC_contract"},
@@ -405,7 +412,11 @@ const struct group_opt_templ all_cmd_options[] = {
      "Verify using loop invariant + k-induction (combined mode)"},
     {"loop-invariant-check",
      NULL,
-     "Verify using loop invariant inductive check (standalone mode)"}}},
+     "Verify using loop invariant inductive check (standalone mode)"},
+    {"loop-frame-rule",
+     NULL,
+     "Enable frame rule for loop invariant checking "
+     "(snapshot-havoc-assume pattern, requires --loop-invariant-check)"}}},
   {"Concurrency and Scheduling",
    {{"schedule", NULL, "Use schedule recording approach"},
     {"context-bound",
@@ -421,7 +432,7 @@ const struct group_opt_templ all_cmd_options[] = {
      "Check all interleavings, even if a bug was already found"}}},
   {"Solver",
    {{"list-solvers", NULL, "List available solvers and exit"},
-    {"boolector", NULL, "Use Boolector (default)"},
+    {"boolector", NULL, "Use Boolector"},
     {"z3", NULL, "Use Z3"},
     {"z3-debug", NULL, "Extracts Z3 dump and SMT2 formula"},
     {"z3-debug-dump-file",
@@ -435,7 +446,7 @@ const struct group_opt_templ all_cmd_options[] = {
     {"cvc4", NULL, "Use CVC4"},
     {"cvc5", NULL, "Use CVC5"},
     {"yices", NULL, "Use Yices"},
-    {"bitwuzla", NULL, "Use Bitwuzla"},
+    {"bitwuzla", NULL, "Use Bitwuzla (default)"},
     {"bv", NULL, "Use solver with bit-vector arithmetic"},
     {"ir",
      NULL,
@@ -452,11 +463,7 @@ const struct group_opt_templ all_cmd_options[] = {
     {"smtlib", NULL, "Use SMT lib format"},
     {"default-solver",
      boost::program_options::value<std::string>()->value_name("<solver>"),
-     "Override default solver used if no concrete one is specified"
-#ifdef BOOLECTOR
-     " (Boolector)"
-#endif
-    },
+     "Override default solver used if no concrete one is specified"},
     {"non-supported-models-as-zero",
      NULL,
      "If ESBMC can't extract a type/expression from the solver, then the value "
@@ -629,7 +636,15 @@ const struct group_opt_templ all_cmd_options[] = {
      "Assume integers will not overflow (Integers)"},
     {"interval-analysis-narrowing",
      NULL,
-     "Enable narrowing in abstract states (Integers and Reals)"}}},
+     "Enable narrowing in abstract states (Integers and Reals)"},
+    {"no-interval-symex-guard",
+     NULL,
+     "Disable interval-based guard pruning during symbolic execution (enabled "
+     "by default)"},
+    {"interval-symex-assert",
+     NULL,
+     "Use interval-based assertion pruning during symbolic execution to "
+     "skip assertions that are provably true under the tracked intervals"}}},
   {"Coverage options",
    {
      {"assertion-coverage", NULL, "Show the coverage of assertion statements"},

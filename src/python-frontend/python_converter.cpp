@@ -1,4 +1,5 @@
 #include <python-frontend/char_utils.h>
+#include <python-frontend/complex_handler.h>
 #include <python-frontend/convert_float_literal.h>
 #include <python-frontend/function_call_builder.h>
 #include <python-frontend/python_consteval.h>
@@ -1719,383 +1720,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   // Intercept complex arithmetic/comparison before generic binary expression
   // building, which cannot operate directly on struct operands.
   if (is_complex_type(lhs.type()) || is_complex_type(rhs.type()))
-  {
-    auto op_symbol = [](const std::string &op_name) -> std::string {
-      if (op_name == "Add")
-        return "+";
-      if (op_name == "Sub")
-        return "-";
-      if (op_name == "Mult")
-        return "*";
-      if (op_name == "Div")
-        return "/";
-      return op_name;
-    };
-    auto expr_python_type_name = [&](const exprt &e) -> std::string {
-      const typet &t = e.type();
-      if (is_complex_type(t))
-        return "complex";
-      if (t.is_bool())
-        return "bool";
-      if (t.is_floatbv())
-        return "float";
-      if (t.is_signedbv() || t.is_unsignedbv())
-        return "int";
-      if (t.is_array() && t.subtype() == char_type())
-        return "str";
-      if (t.is_array())
-        return "bytes";
-      return type_handler_.type_to_string(t);
-    };
-    auto raise_complex_type_error = [&](const std::string &msg) -> exprt {
-      return get_exception_handler().gen_exception_raise("TypeError", msg);
-    };
-    auto is_real_numeric = [](const typet &t) -> bool {
-      return t.is_floatbv() || t.is_signedbv() || t.is_unsignedbv() ||
-             t.is_bool();
-    };
-    auto is_compatible_numeric = [&](const exprt &e) -> bool {
-      return is_complex_type(e.type()) || is_real_numeric(e.type());
-    };
-    auto member = [](const exprt &z, const irep_idt &name) -> exprt {
-      return member_exprt(z, name, double_type());
-    };
-    auto ieee_binop = [](const irep_idt &id, const exprt &x, const exprt &y) {
-      exprt out(id, double_type());
-      out.copy_to_operands(x, y);
-      return out;
-    };
-    auto complex_mul = [&](const exprt &x, const exprt &y) -> exprt {
-      const exprt xr = member(x, "real");
-      const exprt xi = member(x, "imag");
-      const exprt yr = member(y, "real");
-      const exprt yi = member(y, "imag");
-      exprt ac = ieee_binop("ieee_mul", xr, yr);
-      exprt bd = ieee_binop("ieee_mul", xi, yi);
-      exprt ad = ieee_binop("ieee_mul", xr, yi);
-      exprt bc = ieee_binop("ieee_mul", xi, yr);
-      return make_complex(
-        ieee_binop("ieee_sub", ac, bd), ieee_binop("ieee_add", ad, bc));
-    };
-    auto complex_div = [&](const exprt &x, const exprt &y) -> exprt {
-      const exprt xr = member(x, "real");
-      const exprt xi = member(x, "imag");
-      const exprt yr = member(y, "real");
-      const exprt yi = member(y, "imag");
-      const typet &dt = cached_double_type();
-      exprt zero = from_double(0.0, dt);
-      exprt ac = ieee_binop("ieee_mul", xr, yr);
-      exprt bd = ieee_binop("ieee_mul", xi, yi);
-      exprt bc = ieee_binop("ieee_mul", xi, yr);
-      exprt ad = ieee_binop("ieee_mul", xr, yi);
-      exprt c2 = ieee_binop("ieee_mul", yr, yr);
-      exprt d2 = ieee_binop("ieee_mul", yi, yi);
-      exprt numer_real = ieee_binop("ieee_add", ac, bd);
-      exprt numer_imag = ieee_binop("ieee_sub", bc, ad);
-      exprt denom = ieee_binop("ieee_add", c2, d2);
-      exprt normal_result = make_complex(
-        ieee_binop("ieee_div", numer_real, denom),
-        ieee_binop("ieee_div", numer_imag, denom));
-      // P21: Runtime ZeroDivisionError guard — denom==0 iff yr==0 AND yi==0.
-      exprt yr_zero = equality_exprt(yr, zero);
-      exprt yi_zero = equality_exprt(yi, zero);
-      exprt denom_is_zero = and_exprt(yr_zero, yi_zero);
-      exprt raise_zdiv = get_exception_handler().gen_exception_raise(
-        "ZeroDivisionError", "complex division by zero");
-      locationt loc = get_location_from_decl(element);
-      raise_zdiv.location() = loc;
-      raise_zdiv.location().user_provided(true);
-      code_expressiont raise_code(raise_zdiv);
-      raise_code.location() = loc;
-      code_ifthenelset guard;
-      guard.cond() = denom_is_zero;
-      guard.then_case() = raise_code;
-      guard.location() = loc;
-      current_block->copy_to_operands(guard);
-      return normal_result;
-    };
-    auto complex_log = [&](const exprt &z) -> exprt {
-      const exprt zr = member(z, "real");
-      const exprt zi = member(z, "imag");
-      const exprt zr2 = ieee_binop("ieee_mul", zr, zr);
-      const exprt zi2 = ieee_binop("ieee_mul", zi, zi);
-      const exprt abs2 = ieee_binop("ieee_add", zr2, zi2);
-
-      exprt abs_z = get_math_handler().handle_sqrt(abs2, element);
-      if (abs_z.statement() == "cpp-throw")
-        return abs_z;
-
-      exprt ln_abs = get_math_handler().handle_log(abs_z, element);
-      if (ln_abs.statement() == "cpp-throw")
-        return ln_abs;
-
-      exprt arg_z = get_math_handler().handle_atan2(zi, zr, element);
-      if (arg_z.statement() == "cpp-throw")
-        return arg_z;
-
-      return make_complex(ln_abs, arg_z);
-    };
-    auto complex_exp = [&](const exprt &z) -> exprt {
-      const exprt zr = member(z, "real");
-      const exprt zi = member(z, "imag");
-
-      exprt exp_real = get_math_handler().handle_exp(zr, element);
-      if (exp_real.statement() == "cpp-throw")
-        return exp_real;
-
-      exprt cos_imag = get_math_handler().handle_cos(zi, element);
-      if (cos_imag.statement() == "cpp-throw")
-        return cos_imag;
-
-      exprt sin_imag = get_math_handler().handle_sin(zi, element);
-      if (sin_imag.statement() == "cpp-throw")
-        return sin_imag;
-
-      exprt real = ieee_binop("ieee_mul", exp_real, cos_imag);
-      exprt imag = ieee_binop("ieee_mul", exp_real, sin_imag);
-      return make_complex(real, imag);
-    };
-
-    if (op == "Lt" || op == "LtE" || op == "Gt" || op == "GtE")
-      return raise_complex_type_error(
-        "no ordering relation is defined for complex numbers");
-
-    if (op == "FloorDiv" || op == "Mod")
-      return raise_complex_type_error(
-        "can't take floor or mod of complex number");
-
-    if (op == "Pow")
-    {
-      if (!is_compatible_numeric(lhs) || !is_compatible_numeric(rhs))
-        return raise_complex_type_error(
-          "unsupported operand type(s) for " + op_symbol(op) + ": '" +
-          expr_python_type_name(lhs) + "' and '" + expr_python_type_name(rhs) +
-          "'");
-
-      exprt lhs_complex = promote_to_complex(lhs);
-      if (lhs_complex.statement() == "cpp-throw")
-        return lhs_complex;
-
-      exprt resolved_rhs = rhs;
-      if (rhs.is_symbol())
-      {
-        const symbolt *s = symbol_table_.find_symbol(rhs.identifier());
-        if (s && !s->value.is_nil())
-          resolved_rhs = s->value;
-      }
-      else if (
-        rhs.id() == "+" || rhs.id() == "-" || rhs.id() == "*" ||
-        rhs.id() == "/")
-      {
-        resolved_rhs = get_math_handler().compute_expr(rhs);
-      }
-      if (resolved_rhs.statement() == "cpp-throw")
-        return resolved_rhs;
-
-      BigInt exponent_big;
-      bool has_integer_exponent = false;
-
-      if (resolved_rhs.is_true())
-      {
-        exponent_big = BigInt(1);
-        has_integer_exponent = true;
-      }
-      else if (resolved_rhs.is_false())
-      {
-        exponent_big = BigInt(0);
-        has_integer_exponent = true;
-      }
-      else if (
-        resolved_rhs.id() == "unary-" && resolved_rhs.operands().size() == 1)
-      {
-        BigInt inner;
-        if (!to_integer(resolved_rhs.op0(), inner))
-        {
-          exponent_big = -inner;
-          has_integer_exponent = true;
-        }
-      }
-      else if (
-        resolved_rhs.id() == "unary+" && resolved_rhs.operands().size() == 1)
-      {
-        BigInt inner;
-        if (!to_integer(resolved_rhs.op0(), inner))
-        {
-          exponent_big = inner;
-          has_integer_exponent = true;
-        }
-      }
-      else if (!to_integer(resolved_rhs, exponent_big))
-      {
-        has_integer_exponent = true;
-      }
-
-      if (!has_integer_exponent)
-      {
-        exprt rhs_complex = promote_to_complex(resolved_rhs);
-        if (rhs_complex.statement() == "cpp-throw")
-          return rhs_complex;
-
-        exprt lhs_log = complex_log(lhs_complex);
-        if (lhs_log.statement() == "cpp-throw")
-          return lhs_log;
-
-        exprt product = complex_mul(rhs_complex, lhs_log);
-        return complex_exp(product);
-      }
-
-      static const BigInt min_long = BigInt(std::numeric_limits<long>::min());
-      static const BigInt max_long = BigInt(std::numeric_limits<long>::max());
-      if (exponent_big < min_long || exponent_big > max_long)
-      {
-        return raise_complex_type_error(
-          "complex exponent out of supported integer range");
-      }
-
-      auto pow_nonnegative = [&](unsigned long long exponent_abs) -> exprt {
-        exprt acc = make_complex(
-          from_double(1.0, double_type()), from_double(0.0, double_type()));
-        exprt base = lhs_complex;
-
-        while (exponent_abs > 0)
-        {
-          if ((exponent_abs & 1ULL) != 0ULL)
-            acc = complex_mul(acc, base);
-
-          exponent_abs >>= 1U;
-          if (exponent_abs > 0)
-            base = complex_mul(base, base);
-        }
-
-        return acc;
-      };
-
-      const long exponent = exponent_big.to_int64();
-      if (exponent >= 0)
-      {
-        return pow_nonnegative(static_cast<unsigned long long>(exponent));
-      }
-
-      if (exponent == std::numeric_limits<long>::min())
-      {
-        return raise_complex_type_error(
-          "complex exponent out of supported integer range");
-      }
-
-      const unsigned long long exponent_abs =
-        static_cast<unsigned long long>(-exponent);
-      exprt positive_power = pow_nonnegative(exponent_abs);
-      exprt one = make_complex(
-        from_double(1.0, double_type()), from_double(0.0, double_type()));
-      exprt result = complex_div(one, positive_power);
-      // P21: complex_div can return a ZeroDivisionError throw when divisor==0+0j.
-      // (z**n with n<0 and z==0+0j falls here.)
-      return result;
-    }
-
-    if (
-      op == "Add" || op == "Sub" || op == "Mult" || op == "Div" || op == "Eq" ||
-      op == "NotEq")
-    {
-      if (op == "Eq" || op == "NotEq")
-      {
-        if (!is_compatible_numeric(lhs) || !is_compatible_numeric(rhs))
-          return gen_boolean(op == "NotEq");
-      }
-      else
-      {
-        if (!is_compatible_numeric(lhs) || !is_compatible_numeric(rhs))
-          return raise_complex_type_error(
-            "unsupported operand type(s) for " + op_symbol(op) + ": '" +
-            expr_python_type_name(lhs) + "' and '" +
-            expr_python_type_name(rhs) + "'");
-      }
-
-      exprt lhs_complex = promote_to_complex(lhs);
-      exprt rhs_complex = promote_to_complex(rhs);
-      if (lhs_complex.statement() == "cpp-throw")
-        return lhs_complex;
-      if (rhs_complex.statement() == "cpp-throw")
-        return rhs_complex;
-
-      const exprt a = member(lhs_complex, "real");
-      const exprt b = member(lhs_complex, "imag");
-      const exprt c = member(rhs_complex, "real");
-      const exprt d = member(rhs_complex, "imag");
-
-      if (op == "Eq")
-        return and_exprt(equality_exprt(a, c), equality_exprt(b, d));
-      if (op == "NotEq")
-        return or_exprt(
-          not_exprt(equality_exprt(a, c)), not_exprt(equality_exprt(b, d)));
-
-      if (op == "Add")
-      {
-        exprt real = ieee_binop("ieee_add", a, c);
-        exprt imag = ieee_binop("ieee_add", b, d);
-        return make_complex(real, imag);
-      }
-
-      if (op == "Sub")
-      {
-        exprt real = ieee_binop("ieee_sub", a, c);
-        exprt imag = ieee_binop("ieee_sub", b, d);
-        return make_complex(real, imag);
-      }
-
-      if (op == "Mult")
-      {
-        exprt ac = ieee_binop("ieee_mul", a, c);
-        exprt bd = ieee_binop("ieee_mul", b, d);
-        exprt ad = ieee_binop("ieee_mul", a, d);
-        exprt bc = ieee_binop("ieee_mul", b, c);
-
-        exprt real = ieee_binop("ieee_sub", ac, bd);
-        exprt imag = ieee_binop("ieee_add", ad, bc);
-        return make_complex(real, imag);
-      }
-
-      // op == "Div" (inline, mixed complex/real path)
-      exprt ac = ieee_binop("ieee_mul", a, c);
-      exprt bd = ieee_binop("ieee_mul", b, d);
-      exprt bc = ieee_binop("ieee_mul", b, c);
-      exprt ad = ieee_binop("ieee_mul", a, d);
-      exprt c2 = ieee_binop("ieee_mul", c, c);
-      exprt d2 = ieee_binop("ieee_mul", d, d);
-
-      exprt numer_real = ieee_binop("ieee_add", ac, bd);
-      exprt numer_imag = ieee_binop("ieee_sub", bc, ad);
-      exprt denom = ieee_binop("ieee_add", c2, d2);
-
-      exprt real_div = ieee_binop("ieee_div", numer_real, denom);
-      exprt imag_div = ieee_binop("ieee_div", numer_imag, denom);
-      exprt normal_div_result = make_complex(real_div, imag_div);
-      // P21: Runtime ZeroDivisionError guard — denom==0 iff c==0 AND d==0.
-      {
-        const typet &dt = cached_double_type();
-        exprt zero = from_double(0.0, dt);
-        exprt c_zero = equality_exprt(c, zero);
-        exprt d_zero = equality_exprt(d, zero);
-        exprt denom_is_zero = and_exprt(c_zero, d_zero);
-        exprt raise_zdiv = get_exception_handler().gen_exception_raise(
-          "ZeroDivisionError", "complex division by zero");
-        locationt loc = get_location_from_decl(element);
-        raise_zdiv.location() = loc;
-        raise_zdiv.location().user_provided(true);
-        code_expressiont raise_code(raise_zdiv);
-        raise_code.location() = loc;
-        code_ifthenelset guard;
-        guard.cond() = denom_is_zero;
-        guard.then_case() = raise_code;
-        guard.location() = loc;
-        current_block->copy_to_operands(guard);
-        return normal_div_result;
-      }
-    }
-
-    return raise_complex_type_error(
-      "unsupported operation for complex operands");
-  }
+    return complex_handler_.handle_binary_op(op, lhs, rhs, element);
 
   // Handle array/string operations
   if (lhs.type().is_array() || rhs.type().is_array())
@@ -2163,7 +1788,13 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     !type_utils::is_relational_op(op) && op != "Is" && op != "IsNot" &&
     op != "In" && op != "NotIn")
   {
-    if (is_any_ptr(lhs) && is_integer(rhs))
+    if (is_any_ptr(lhs) && is_any_ptr(rhs))
+    {
+      const typet int_type = type_handler_.get_typet("int", 0);
+      lhs = typecast_exprt(lhs, int_type);
+      rhs = typecast_exprt(rhs, int_type);
+    }
+    else if (is_any_ptr(lhs) && is_integer(rhs))
       lhs = typecast_exprt(lhs, rhs.type());
     else if (is_any_ptr(rhs) && is_integer(lhs))
       rhs = typecast_exprt(rhs, lhs.type());
@@ -2555,7 +2186,6 @@ exprt python_converter::build_binary_expression(
       return 1;
     return static_cast<const bv_typet &>(t).get_width();
   };
-
   // Adjust types for non-relational operations
   if (!type_utils::is_relational_op(op))
   {
@@ -2565,11 +2195,17 @@ exprt python_converter::build_binary_expression(
 
     // Check for bitvector width mismatch
     if (
-      (lhs_type.is_signedbv() || lhs_type.is_unsignedbv()) &&
-      (rhs_type.is_signedbv() || rhs_type.is_unsignedbv()) &&
-      lhs_type.width() != rhs_type.width())
+      is_bv_or_bool(lhs_type) && is_bv_or_bool(rhs_type) &&
+      (bit_width(lhs_type) != bit_width(rhs_type) ||
+       lhs_type.is_signedbv() != rhs_type.is_signedbv()))
     {
-      adjust_statement_types(lhs, rhs);
+      const typet &target_type =
+        bit_width(lhs_type) >= bit_width(rhs_type) ? lhs_type : rhs_type;
+
+      if (lhs.type() != target_type)
+        lhs = typecast_exprt(lhs, target_type);
+      if (rhs.type() != target_type)
+        rhs = typecast_exprt(rhs, target_type);
     }
   }
   else if (
@@ -2798,21 +2434,7 @@ exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
 
   // Built-in complex arithmetic: unary + and - operate component-wise.
   if (is_complex_type(unary_sub.type()) && (op == "USub" || op == "UAdd"))
-  {
-    if (op == "UAdd")
-      return unary_sub;
-
-    exprt real = member_exprt(unary_sub, "real", double_type());
-    exprt imag = member_exprt(unary_sub, "imag", double_type());
-    exprt zero = from_double(0.0, double_type());
-
-    exprt neg_real("ieee_sub", double_type());
-    neg_real.copy_to_operands(zero, real);
-    exprt neg_imag("ieee_sub", double_type());
-    neg_imag.copy_to_operands(zero, imag);
-
-    return make_complex(neg_real, neg_imag);
-  }
+    return complex_handler_.handle_unary_op(op, unary_sub);
 
   exprt unary_expr(map_operator(op, type), type);
   unary_expr.operands().push_back(unary_sub);
@@ -3161,26 +2783,9 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
 
     if (method_name == "conjugate")
     {
-      const auto &args =
-        element.contains("args") ? element["args"] : nlohmann::json::array();
-      const auto &keywords = element.contains("keywords")
-                               ? element["keywords"]
-                               : nlohmann::json::array();
-      if (args.empty() && keywords.empty())
-      {
-        exprt obj_expr = get_expr(element["func"]["value"]);
-        if (obj_expr.statement() == "cpp-throw")
-          return obj_expr;
-        if (is_complex_type(obj_expr.type()))
-        {
-          exprt real = member_exprt(obj_expr, "real", double_type());
-          exprt imag = member_exprt(obj_expr, "imag", double_type());
-          exprt zero = from_double(0.0, double_type());
-          exprt neg_imag("ieee_sub", double_type());
-          neg_imag.copy_to_operands(zero, imag);
-          return make_complex(real, neg_imag);
-        }
-      }
+      exprt result = complex_handler_.handle_attribute(element);
+      if (!result.is_nil())
+        return result;
     }
 
     if (
@@ -4073,6 +3678,20 @@ std::string python_converter::op_to_dunder(const std::string &op)
   return it != dunder_map.end() ? it->second : "";
 }
 
+std::string python_converter::op_to_rdunder(const std::string &op)
+{
+  static const std::map<std::string, std::string> rdunder_map = {
+    {"Add", "__radd__"},
+    {"Sub", "__rsub__"},
+    {"Mult", "__rmul__"},
+    {"Div", "__rtruediv__"},
+    {"FloorDiv", "__rfloordiv__"},
+    {"Mod", "__rmod__"},
+  };
+  auto it = rdunder_map.find(op);
+  return it != rdunder_map.end() ? it->second : "";
+}
+
 symbolt *python_converter::find_dunder_method(
   const std::string &class_name,
   const std::string &dunder_name)
@@ -4150,68 +3769,131 @@ exprt python_converter::store_call_result(
   return temp_var_expr;
 }
 
+static bool is_excluded_struct_tag(const std::string &tag)
+{
+  return tag.find("dict_") != std::string::npos ||
+         tag.find("tag-dict") != std::string::npos ||
+         tag.rfind("tag-Optional_", 0) == 0 || tag.rfind("tag-tuple", 0) == 0 ||
+         tag == "__python_dict__";
+}
+
+static typet resolve_operand_type(
+  const exprt &operand,
+  const contextt &symbol_table,
+  const namespacet &ns)
+{
+  typet t = operand.type();
+  if (operand.is_symbol())
+  {
+    const symbolt *sym = symbol_table.find_symbol(operand.identifier());
+    if (sym)
+      t = sym->type;
+  }
+  if (t.id() == "symbol")
+    t = ns.follow(t);
+  return t;
+}
+
+// Check whether the argument type matches the "other" parameter type.
+// In case the user annotates it with a concrete class type.
+static bool is_other_param_compatible(
+  const code_typet &method_type,
+  const typet &operand_type,
+  const namespacet &ns)
+{
+  const auto &params = method_type.arguments();
+  if (params.size() < 2)
+    return true;
+
+  typet param_type = params[1].type();
+  if (param_type.id() == "symbol")
+    param_type = ns.follow(param_type);
+
+  if (param_type.is_pointer())
+  {
+    typet subtype = param_type.subtype();
+    if (subtype.id() == "symbol")
+      subtype = ns.follow(subtype);
+
+    if (subtype.is_struct() && operand_type.is_struct())
+      return to_struct_type(subtype).tag() ==
+             to_struct_type(operand_type).tag();
+  }
+  return true;
+}
+
 exprt python_converter::dispatch_dunder_operator(
   const std::string &op,
   exprt &lhs,
   exprt &rhs,
   const locationt &loc)
 {
-  typet lhs_type = lhs.type();
-  if (lhs.is_symbol())
+  typet lhs_type = resolve_operand_type(lhs, symbol_table_, ns);
+  typet rhs_type = resolve_operand_type(rhs, symbol_table_, ns);
+
+  // Try lhs.__add__(rhs)
+  if (lhs_type.is_struct())
   {
-    const symbolt *sym = symbol_table_.find_symbol(lhs.identifier());
-    if (sym)
-      lhs_type = sym->type;
+    const struct_typet &lhs_struct = to_struct_type(lhs_type);
+    std::string lhs_tag = lhs_struct.tag().as_string();
+
+    if (!is_excluded_struct_tag(lhs_tag))
+    {
+      std::string dunder = op_to_dunder(op);
+      if (!dunder.empty())
+      {
+        std::string class_name = extract_class_name_from_tag(lhs_tag);
+        symbolt *method = find_dunder_method(class_name, dunder);
+        if (method)
+        {
+          const code_typet &method_type = to_code_type(method->type);
+          if (is_other_param_compatible(method_type, rhs_type, ns))
+          {
+            side_effect_expr_function_callt call;
+            call.function() = symbol_expr(*method);
+            call.type() = method_type.return_type();
+            call.location() = loc;
+            call.arguments().push_back(gen_address_of(lhs));
+            call.arguments().push_back(gen_address_of(rhs));
+            return call;
+          }
+        }
+      }
+    }
   }
-  if (lhs_type.id() == "symbol")
-    lhs_type = ns.follow(lhs_type);
 
-  if (!lhs_type.is_struct())
-    return nil_exprt();
-
-  const struct_typet &struct_type = to_struct_type(lhs_type);
-  std::string tag = struct_type.tag().as_string();
-
-  if (
-    tag.find("dict_") != std::string::npos ||
-    tag.find("tag-dict") != std::string::npos ||
-    tag.rfind("tag-Optional_", 0) == 0 || tag.rfind("tag-tuple", 0) == 0 ||
-    tag == "__python_dict__")
-    return nil_exprt();
-
-  // Verify rhs is the same struct type
-  typet rhs_type = rhs.type();
-  if (rhs.is_symbol())
+  // fallback: try rhs.__radd__(lhs)
+  if (rhs_type.is_struct())
   {
-    const symbolt *sym = symbol_table_.find_symbol(rhs.identifier());
-    if (sym)
-      rhs_type = sym->type;
+    const struct_typet &rhs_struct = to_struct_type(rhs_type);
+    std::string rhs_tag = rhs_struct.tag().as_string();
+
+    if (!is_excluded_struct_tag(rhs_tag))
+    {
+      std::string rdunder = op_to_rdunder(op);
+      if (!rdunder.empty())
+      {
+        std::string class_name = extract_class_name_from_tag(rhs_tag);
+        symbolt *method = find_dunder_method(class_name, rdunder);
+        if (method)
+        {
+          const code_typet &method_type = to_code_type(method->type);
+          if (is_other_param_compatible(method_type, lhs_type, ns))
+          {
+            side_effect_expr_function_callt call;
+            call.function() = symbol_expr(*method);
+            call.type() = method_type.return_type();
+            call.location() = loc;
+            call.arguments().push_back(gen_address_of(rhs));
+            call.arguments().push_back(gen_address_of(lhs));
+            return call;
+          }
+        }
+      }
+    }
   }
-  if (rhs_type.id() == "symbol")
-    rhs_type = ns.follow(rhs_type);
-  if (!rhs_type.is_struct())
-    return nil_exprt();
-  const struct_typet &rhs_struct = to_struct_type(rhs_type);
-  if (rhs_struct.tag() != struct_type.tag())
-    return nil_exprt();
 
-  std::string dunder = op_to_dunder(op);
-  if (dunder.empty())
-    return nil_exprt();
-
-  std::string class_name = extract_class_name_from_tag(tag);
-  symbolt *method = find_dunder_method(class_name, dunder);
-  if (!method)
-    return nil_exprt();
-
-  const code_typet &method_type = to_code_type(method->type);
-  side_effect_expr_function_callt call;
-  call.function() = symbol_expr(*method);
-  call.type() = method_type.return_type();
-  call.location() = loc;
-  call.arguments().push_back(gen_address_of(lhs));
-  call.arguments().push_back(gen_address_of(rhs));
-  return call;
+  return nil_exprt();
 }
 
 exprt python_converter::dispatch_unary_dunder_operator(
@@ -4248,6 +3930,7 @@ exprt python_converter::dispatch_unary_dunder_operator(
     {"complex", "__complex__"},
     {"float", "__float__"},
     {"index", "__index__"},
+    {"str", "__str__"},
   };
   auto it = unary_dunder_map.find(op);
   if (it == unary_dunder_map.end())
@@ -4575,6 +4258,18 @@ exprt python_converter::get_expr(const nlohmann::json &element)
             base_type = pointed_to;
         }
 
+        // Delegate complex attribute access (.real, .imag) to the handler.
+        if (is_complex_type(base_type))
+        {
+          exprt result =
+            complex_handler_.handle_attribute_access(base_expr, attr_name);
+          if (!result.is_nil())
+          {
+            expr = result;
+            break;
+          }
+        }
+
         if (base_type.is_struct())
         {
           const struct_typet &struct_type = to_struct_type(base_type);
@@ -4738,6 +4433,18 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     if (!is_class_attr && element["_type"] == "Attribute")
     {
       const std::string &attr_name = element["attr"].get<std::string>();
+
+      // Delegate complex attribute access (.real, .imag) to the handler.
+      if (is_complex_type(symbol->type))
+      {
+        exprt result =
+          complex_handler_.handle_attribute_access(expr, attr_name);
+        if (!result.is_nil())
+        {
+          expr = result;
+          break;
+        }
+      }
 
       // Get object type name from symbol. e.g.: tag-MyClass
       std::string obj_type_name;
@@ -5271,6 +4978,20 @@ void python_converter::handle_assignment_type_adjustments(
 {
   const bool has_annotation =
     ast_node.contains("annotation") && !ast_node["annotation"].is_null();
+
+  // For subscript targets (e.g. dp[i] = v).
+  // The rhs writes an element, not the container.
+  // Don't rewrite lhs_symbol's type.
+  auto is_subscript_target = [](const nlohmann::json &t) {
+    return t.is_object() && t.value("_type", "") == "Subscript";
+  };
+  const bool target_is_subscript =
+    (ast_node.contains("targets") && ast_node["targets"].is_array() &&
+     !ast_node["targets"].empty() &&
+     is_subscript_target(ast_node["targets"][0])) ||
+    (ast_node.contains("target") && is_subscript_target(ast_node["target"]));
+  if (target_is_subscript)
+    return;
 
   // Handle assignment of function to function pointer variable
   if (
@@ -5945,7 +5666,23 @@ symbolt *python_converter::create_symbol_for_unannotated_assign(
         inferred_type = dict_handler_->resolve_expected_type_for_dict_subscript(
           symbol_expr(*obj_sym));
         if (inferred_type.is_nil() || inferred_type.is_empty())
-          inferred_type = long_int_type();
+        {
+          // Untyped dict (e.g. `a = {}`): infer the return type from the default arg.
+          // Any concrete literal (list, dict, int, float, str, bool, None)
+          // is more precise than the `long_int` fallback applied just below.
+          const std::string shape = python_annotation<nlohmann::json>::
+            infer_type_from_default_arg_shape(ast_node["value"]["args"]);
+          if (shape == "list")
+            inferred_type = type_handler_.get_list_type();
+          else if (shape == "dict")
+            inferred_type = dict_handler_->get_dict_struct_type();
+          else if (
+            !shape.empty() && shape != "Any" &&
+            type_utils::is_builtin_type(shape))
+            inferred_type = type_handler_.get_typet(shape, 0);
+          if (inferred_type.is_nil() || inferred_type.is_empty())
+            inferred_type = long_int_type();
+        }
       }
     }
     else
@@ -7469,26 +7206,19 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
           throw std::runtime_error(
             "__ESBMC_list_size not found for list condition check");
 
-        symbolt &size_result = create_tmp_symbol(
-          ast_node["test"], "$list_size$", size_type(), gen_zero(size_type()));
-        code_declt size_decl(symbol_expr(size_result));
-        size_decl.location() = location;
-        current_block->copy_to_operands(size_decl);
-
-        // Use `__ESBMC_list_size(cond) != 0` to evaluate the list condition.
-        code_function_callt size_call;
+        // Keep the size query inside the condition expression so constructs
+        // like `while heap:` re-evaluate the current list size every iteration.
+        side_effect_expr_function_callt size_call;
         size_call.function() = symbol_expr(*size_func);
-        size_call.lhs() = symbol_expr(size_result);
         if (cond.type().is_pointer())
           size_call.arguments().push_back(cond);
         else
           size_call.arguments().push_back(address_of_exprt(cond));
         size_call.type() = size_type();
         size_call.location() = location;
-        current_block->copy_to_operands(size_call);
 
         cond = exprt("notequal", bool_type());
-        cond.copy_to_operands(symbol_expr(size_result), gen_zero(size_type()));
+        cond.copy_to_operands(size_call, gen_zero(size_type()));
         cond.location() = location;
       }
 
@@ -8448,6 +8178,95 @@ static bool param_is_mutated_in_body(
   return false;
 }
 
+static bool node_uses_param_as_list_like(
+  const std::string &param_name,
+  const nlohmann::json &node)
+{
+  if (!node.is_object())
+    return false;
+
+  if (node.contains("_type") && node["_type"].is_string())
+  {
+    const std::string node_type = node["_type"].get<std::string>();
+
+    // x[i]
+    if (
+      node_type == "Subscript" && node.contains("value") &&
+      node["value"].is_object() && node["value"].value("_type", "") == "Name" &&
+      node["value"].value("id", "") == param_name)
+      return true;
+
+    if (node_type == "Call")
+    {
+      // len(x)
+      if (
+        node.contains("func") && node["func"].is_object() &&
+        node["func"].value("_type", "") == "Name" &&
+        node["func"].value("id", "") == "len" && node.contains("args") &&
+        node["args"].is_array() && !node["args"].empty() &&
+        node["args"][0].is_object() &&
+        node["args"][0].value("_type", "") == "Name" &&
+        node["args"][0].value("id", "") == param_name)
+      {
+        return true;
+      }
+
+      // x.append(...), x.pop(...), ...
+      if (
+        node.contains("func") && node["func"].is_object() &&
+        node["func"].value("_type", "") == "Attribute" &&
+        node["func"].contains("value") && node["func"]["value"].is_object() &&
+        node["func"]["value"].value("_type", "") == "Name" &&
+        node["func"]["value"].value("id", "") == param_name &&
+        node["func"].contains("attr") && node["func"]["attr"].is_string())
+      {
+        const std::string attr = node["func"]["attr"].get<std::string>();
+        if (
+          attr == "append" || attr == "extend" || attr == "insert" ||
+          attr == "pop" || attr == "remove" || attr == "clear" ||
+          attr == "sort" || attr == "reverse")
+          return true;
+      }
+    }
+  }
+
+  for (auto it = node.begin(); it != node.end(); ++it)
+  {
+    const auto &child = it.value();
+    if (child.is_object())
+    {
+      if (node_uses_param_as_list_like(param_name, child))
+        return true;
+    }
+    else if (child.is_array())
+    {
+      for (const auto &elem : child)
+      {
+        if (elem.is_object() && node_uses_param_as_list_like(param_name, elem))
+          return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+static bool param_is_list_like_in_body(
+  const std::string &param_name,
+  const nlohmann::json &body)
+{
+  if (!body.is_array())
+    return false;
+
+  for (const auto &stmt : body)
+  {
+    if (node_uses_param_as_list_like(param_name, stmt))
+      return true;
+  }
+
+  return false;
+}
+
 size_t python_converter::register_function_argument(
   const nlohmann::json &element,
   code_typet &type,
@@ -8664,6 +8483,37 @@ void python_converter::process_function_arguments(
   if (!function_node.contains("body"))
     return;
   const nlohmann::json &body = function_node["body"];
+
+  // Refine unannotated Any parameters to list model type when body usage
+  // clearly matches list semantics (len(x), x[i], list mutator methods).
+  // Restrict this refinement to functions from the main source file to avoid
+  // affecting imported module internals.
+  if (location.get_file().as_string() == main_python_file)
+  {
+    for (auto &param_arg : type.arguments())
+    {
+      const std::string param_name = param_arg.get_base_name().as_string();
+      if (param_name == "self" || param_name == "cls" || param_name.empty())
+        continue;
+
+      if (param_arg.type() != any_type())
+        continue;
+
+      if (!param_is_list_like_in_body(param_name, body))
+        continue;
+
+      typet list_t = type_handler_.get_list_type();
+      param_arg.type() = list_t;
+
+      const std::string param_id = param_arg.cmt_identifier().as_string();
+      if (!param_id.empty())
+      {
+        symbolt *param_sym = symbol_table_.find_symbol(param_id);
+        if (param_sym)
+          param_sym->type = list_t;
+      }
+    }
+  }
 
   for (auto &param_arg : type.arguments())
   {
@@ -9812,6 +9662,7 @@ python_converter::python_converter(
     current_lhs(nullptr),
     string_handler_(*this, symbol_table_, type_handler_, string_builder_),
     math_handler_(*this, symbol_table_, type_handler_),
+    complex_handler_(*this, symbol_table_, type_handler_),
     tuple_handler_(new tuple_handler(*this, type_handler_)),
     dict_handler_(new python_dict_handler(*this, symbol_table_, type_handler_)),
     typechecker_(new python_typechecking(*this)),

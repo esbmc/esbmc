@@ -15,6 +15,7 @@
 #include <solidity-frontend/solidity_grammar.h>
 #include <solidity-frontend/pattern_check.h>
 #include <util/symbolic_types.h>
+#include <util/expr_util.h>
 
 class solidity_convertert
 {
@@ -760,5 +761,20 @@ private:
     SolidityGrammar::ElementaryTypeNameT &type,
     typet &out);
 };
+
+static inline void static_lifetime_init(const contextt &context, codet &dest)
+{
+  dest = code_blockt();
+
+  // call designated "initialization" functions
+  context.foreach_operand_in_order([&dest](const symbolt &s) {
+    if (s.type.initialization() && s.type.is_code())
+    {
+      code_function_callt function_call;
+      function_call.function() = symbol_expr(s);
+      dest.move_to_operands(function_call);
+    }
+  });
+}
 
 #endif /* SOLIDITY_FRONTEND_SOLIDITY_CONVERT_H_ */

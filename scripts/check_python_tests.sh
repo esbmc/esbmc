@@ -22,6 +22,7 @@ ignored_dirs=(
   "cover3"
   "cover4"
   "cover5"
+  "concurrency_fail"
   "convert-byte-update2"
   "constants"
   "decimal"
@@ -121,6 +122,7 @@ ignored_dirs=(
   "string-symbolic-4"
   "string-symbolic-7"
   "string-symbolic-8"
+  "complex_str_nonconstant"
 )
 
 for dir in */; do

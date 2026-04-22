@@ -186,6 +186,12 @@ private:
   exprt handle_float_to_str(nlohmann::json &arg) const;
 
   /*
+   * Handles complex-to-str conversions (e.g., str(complex(1,2)) → "(1+2j)").
+   * Formats constant complex values using Python's repr rules.
+   */
+  exprt handle_complex_to_str() const;
+
+  /*
    * Handles string arguments (e.g., str("abc")) by converting them
    * into character array expressions.
    */
@@ -273,6 +279,9 @@ private:
   bool is_dict_method_call() const;
   exprt handle_dict_method() const;
 
+  // Dict class method detection (e.g. dict.fromkeys([1, 2, 3]))
+  bool is_dict_class_method_call() const;
+
   // List method detection and handling
   bool is_list_method_call() const;
   exprt handle_list_method() const;
@@ -299,17 +308,28 @@ private:
    */
   exprt validate_re_module_args() const;
 
-  /*
-   * Check if the current function call is to Python's built-in any() function
-   * Returns true if the function name is "any"
-   */
   bool is_any_call() const;
+  exprt handle_any() const;
+  bool is_all_call() const;
+  exprt handle_all();
+
+  // Convert an IR expression to its Python truthiness value.
+  // Handles None, bool, int, float, complex, pointer types.
+  exprt compute_element_truthiness(const exprt &element) const;
+
+  enum class ReduceOp
+  {
+    Any,
+    All
+  };
 
   /*
-   * Implement Python's any() built-in function
-   * Returns True if any element in the iterable is truthy, False otherwise
+   * Reduce a list literal by combining the truthiness of its elements.
+   * Used by both any() and all().
    */
-  exprt handle_any() const;
+  exprt reduce_list_literal_truthiness(
+    const nlohmann::json &list_arg,
+    ReduceOp op) const;
 
   /**
    * Convert an integer to a string representation in a specific base

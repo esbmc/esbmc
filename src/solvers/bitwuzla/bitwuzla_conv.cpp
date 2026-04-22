@@ -975,11 +975,42 @@ smt_sortt bitwuzla_convt::mk_bvfp_rm_sort()
 }
 
 smt_astt bitwuzla_convt::mk_quantifier(
-  [[maybe_unused]] bool is_forall,
-  [[maybe_unused]] std::vector<smt_astt> lhs,
-  [[maybe_unused]] smt_astt rhs)
+  bool is_forall,
+  std::vector<smt_astt> lhs,
+  smt_astt rhs)
 {
-  log_error("Bitwuzla does not support quantifiers");
-  abort();
-  return nullptr;
+  std::vector<BitwuzlaTerm> original_terms;
+  std::vector<BitwuzlaTerm> bound_vars;
+  original_terms.reserve(lhs.size());
+  bound_vars.reserve(lhs.size());
+
+  for (size_t i = 0; i < lhs.size(); i++)
+  {
+    BitwuzlaTerm orig = to_solver_smt_ast<bitw_smt_ast>(lhs[i])->a;
+    original_terms.push_back(orig);
+    std::string name =
+      "qvar_" + std::to_string(quantifier_counter) + "_" + std::to_string(i);
+    bound_vars.push_back(bitwuzla_mk_var(
+      bitw_term_manager, bitwuzla_term_get_sort(orig), name.c_str()));
+  }
+
+  // Substitute SSA terms with bound vars in the body.
+  // Args to bitwuzla_mk_term: [var0, ..., varN-1, body] — no VARIABLE_LIST
+  // wrapper needed (unlike CVC5).
+  BitwuzlaTerm body = bitwuzla_substitute_term(
+    to_solver_smt_ast<bitw_smt_ast>(rhs)->a,
+    original_terms.size(),
+    original_terms.data(),
+    bound_vars.data());
+
+  std::vector<BitwuzlaTerm> args(bound_vars);
+  args.push_back(body);
+
+  return new_ast(
+    bitwuzla_mk_term(
+      bitw_term_manager,
+      is_forall ? BITWUZLA_KIND_FORALL : BITWUZLA_KIND_EXISTS,
+      static_cast<uint32_t>(args.size()),
+      args.data()),
+    rhs->sort);
 }

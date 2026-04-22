@@ -4,6 +4,6 @@ def test_nondet_dict_str_keys() -> None:
        k: str = nondet_str()
        if k in x:
            v = x[k]
-           assert v == v
+           assert isinstance(v, int)
 
 test_nondet_dict_str_keys()

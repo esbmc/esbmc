@@ -8,6 +8,7 @@
 #include <util/message.h>
 
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 
 enum class InferResult
@@ -278,6 +279,8 @@ public:
       else if (element["_type"] == "ClassDef")
         annotate_class(element);
     }
+
+    apply_pending_specializations();
   }
 
   void add_type_annotation(const std::string &func_name)
@@ -299,6 +302,35 @@ public:
         return;
       }
     }
+  }
+
+  // Infer the builtin type of a dict.{get, setdefault, pop} default arg.
+  // Returns "" when there is no default, "Any" for non-literal defaults.
+  static std::string infer_type_from_default_arg_shape(const Json &args_node)
+  {
+    if (!args_node.is_array() || args_node.size() < 2)
+      return std::string();
+    const Json &def = args_node[1];
+    const std::string def_type = def.value("_type", std::string());
+    if (def_type == "List")
+      return "list";
+    if (def_type == "Dict")
+      return "dict";
+    if (def_type == "Set")
+      return "set";
+    if (def_type == "Tuple")
+      return "tuple";
+    // Scalar literal: narrow to the concrete builtin type (int/float/str/
+    // bool/None) so the caller does not have to fall back to Any.
+    if (def_type == "Constant" && def.contains("value"))
+    {
+      const std::string t = get_type_from_json(def["value"]);
+      if (t == "null")
+        return "None";
+      if (t == "bool" || t == "int" || t == "float" || t == "str")
+        return t;
+    }
+    return "Any";
   }
 
 private:
@@ -528,6 +560,32 @@ private:
         // Try to infer type from function calls if available
         if (needs_inference && !function_calls.empty())
         {
+          std::vector<std::string> call_types =
+            collect_parameter_types_from_calls(i, function_calls);
+
+          if (
+            parent_func == nullptr && call_types.size() > 1 &&
+            are_all_user_classes(call_types))
+          {
+            bool already_pending = false;
+            for (const auto &spec : pending_specializations_)
+            {
+              if (spec.function_name == func_name && spec.param_index == i)
+              {
+                already_pending = true;
+                break;
+              }
+            }
+
+            if (!already_pending)
+            {
+              pending_specializations_.push_back(
+                {func_name, i, std::move(call_types)});
+            }
+
+            continue;
+          }
+
           std::string saved_ctx = current_func_name_context_;
           current_func_name_context_ = call_site_context;
           inferred_type = infer_parameter_type_from_calls(i, function_calls);
@@ -646,6 +704,223 @@ private:
       for (const auto &element : node)
         find_function_calls_recursive(func_name, element, calls);
     }
+  }
+
+  std::vector<std::string> collect_parameter_types_from_calls(
+    size_t param_index,
+    const std::vector<Json> &function_calls)
+  {
+    std::vector<std::string> types;
+    std::unordered_set<std::string> seen;
+
+    for (const Json &call : function_calls)
+    {
+      if (!call.contains("args") || param_index >= call["args"].size())
+        continue;
+
+      std::string arg_type = get_argument_type(call["args"][param_index]);
+      if (arg_type.empty())
+        continue;
+
+      if (seen.insert(arg_type).second)
+        types.push_back(arg_type);
+    }
+
+    return types;
+  }
+
+  bool are_all_user_classes(const std::vector<std::string> &types) const
+  {
+    if (types.empty())
+      return false;
+
+    for (const auto &type_name : types)
+    {
+      if (type_name.empty() || !json_utils::is_class(type_name, ast_))
+        return false;
+    }
+
+    return true;
+  }
+
+  std::string build_specialized_function_name(
+    const std::string &base_name,
+    const std::string &class_name) const
+  {
+    return base_name + "__esbmc_poly_" + class_name;
+  }
+
+  std::string
+  resolve_name_assigned_class(const std::string &name, const Json &node)
+  {
+    if (name.empty())
+      return "";
+
+    if (node.is_object())
+    {
+      if (
+        node.contains("_type") && node["_type"] == "Assign" &&
+        node.contains("targets") && node["targets"].is_array() &&
+        !node["targets"].empty() && node["targets"][0].is_object() &&
+        node["targets"][0].contains("_type") &&
+        node["targets"][0]["_type"] == "Name" &&
+        node["targets"][0].contains("id") && node["targets"][0]["id"] == name &&
+        node.contains("value") && node["value"].is_object() &&
+        node["value"].contains("_type") && node["value"]["_type"] == "Call" &&
+        node["value"].contains("func") && node["value"]["func"].is_object() &&
+        node["value"]["func"].contains("_type") &&
+        node["value"]["func"]["_type"] == "Name" &&
+        node["value"]["func"].contains("id"))
+      {
+        std::string class_name =
+          node["value"]["func"]["id"].template get<std::string>();
+        if (json_utils::is_class(class_name, ast_))
+          return class_name;
+      }
+
+      for (auto it = node.begin(); it != node.end(); ++it)
+      {
+        std::string found = resolve_name_assigned_class(name, it.value());
+        if (!found.empty())
+          return found;
+      }
+    }
+    else if (node.is_array())
+    {
+      for (const auto &element : node)
+      {
+        std::string found = resolve_name_assigned_class(name, element);
+        if (!found.empty())
+          return found;
+      }
+    }
+
+    return "";
+  }
+
+  void rewrite_specialized_calls(
+    const std::string &original_name,
+    size_t param_index,
+    const std::unordered_map<std::string, std::string> &specialized_names,
+    Json &node)
+  {
+    if (node.is_object())
+    {
+      if (
+        node.contains("_type") && node["_type"] == "Call" &&
+        node.contains("func") && node["func"].is_object() &&
+        node["func"].contains("_type") && node["func"]["_type"] == "Name" &&
+        node["func"].contains("id") && node["func"]["id"] == original_name &&
+        node.contains("args") && node["args"].is_array() &&
+        param_index < node["args"].size())
+      {
+        std::string arg_type = get_argument_type(node["args"][param_index]);
+        if (
+          arg_type.empty() && node["args"][param_index].contains("_type") &&
+          node["args"][param_index]["_type"] == "Name" &&
+          node["args"][param_index].contains("id"))
+        {
+          const std::string arg_name =
+            node["args"][param_index]["id"].template get<std::string>();
+          arg_type = resolve_name_assigned_class(arg_name, ast_["body"]);
+        }
+
+        auto it = specialized_names.find(arg_type);
+        if (it != specialized_names.end())
+          node["func"]["id"] = it->second;
+      }
+
+      for (auto it = node.begin(); it != node.end(); ++it)
+        rewrite_specialized_calls(
+          original_name, param_index, specialized_names, it.value());
+    }
+    else if (node.is_array())
+    {
+      for (auto &element : node)
+        rewrite_specialized_calls(
+          original_name, param_index, specialized_names, element);
+    }
+  }
+
+  void apply_pending_specializations()
+  {
+    for (const auto &spec : pending_specializations_)
+    {
+      const std::string &func_name = spec.function_name;
+      size_t param_index = spec.param_index;
+
+      Json original_function;
+      bool found = false;
+      size_t original_index = 0;
+      size_t idx = 0;
+      for (const auto &node : ast_["body"])
+      {
+        if (
+          node.contains("_type") && node["_type"] == "FunctionDef" &&
+          node.contains("name") && node["name"] == func_name)
+        {
+          original_function = node;
+          found = true;
+          original_index = idx;
+          break;
+        }
+        ++idx;
+      }
+
+      if (!found)
+        continue;
+
+      if (!spec.class_types.empty())
+      {
+        for (auto &node : ast_["body"])
+        {
+          if (
+            node.contains("_type") && node["_type"] == "FunctionDef" &&
+            node.contains("name") && node["name"] == func_name &&
+            node.contains("args") && node["args"].is_object() &&
+            node["args"].contains("args") && node["args"]["args"].is_array() &&
+            param_index < node["args"]["args"].size())
+          {
+            Json &param = node["args"]["args"][param_index];
+            add_parameter_annotation(param, spec.class_types.front());
+            break;
+          }
+        }
+      }
+
+      std::unordered_map<std::string, std::string> specialized_names;
+      Json specialized_nodes = Json::array();
+      for (const auto &class_name : spec.class_types)
+      {
+        Json specialized = original_function;
+        const std::string specialized_name =
+          build_specialized_function_name(func_name, class_name);
+        specialized["name"] = specialized_name;
+
+        if (
+          specialized.contains("args") && specialized["args"].is_object() &&
+          specialized["args"].contains("args") &&
+          specialized["args"]["args"].is_array() &&
+          param_index < specialized["args"]["args"].size())
+        {
+          Json &param = specialized["args"]["args"][param_index];
+          add_parameter_annotation(param, class_name);
+        }
+
+        specialized_names[class_name] = specialized_name;
+        specialized_nodes.push_back(std::move(specialized));
+      }
+
+      auto insert_it =
+        ast_["body"].begin() + static_cast<ptrdiff_t>(original_index + 1);
+      ast_["body"].insert(
+        insert_it, specialized_nodes.begin(), specialized_nodes.end());
+
+      rewrite_specialized_calls(
+        func_name, param_index, specialized_names, ast_);
+    }
+
+    pending_specializations_.clear();
   }
 
   // Returns the ancestors of a class (including itself) in BFS order via
@@ -1708,6 +1983,18 @@ private:
       return it->second;
     }
 
+    // Check if the name is a class constructor
+    // (e.g., A() returns an A instance)
+    {
+      const std::string resolved =
+        json_utils::get_object_alias(ast_, func_name);
+      if (json_utils::is_class(resolved, ast_))
+      {
+        functions_in_analysis_.erase(func_name);
+        return resolved;
+      }
+    }
+
     functions_in_analysis_.erase(func_name);
 
     std::ostringstream oss;
@@ -1747,7 +2034,7 @@ private:
     return node["annotation"]["id"];
   }
 
-  std::string get_type_from_json(const Json &value)
+  static std::string get_type_from_json(const Json &value)
   {
     if (value.is_null())
       return "null";
@@ -2452,6 +2739,35 @@ private:
         return obj_type;
     }
 
+    // Inline dict-literal method calls, e.g. `{"a":1}.get("x", 3)`.
+    // The receiver has no symbol name, so resolve the types we model here
+    // (get/setdefault/pop/keys/values/items)
+    // and let anything else fall through to the regular resolution path below.
+    if (call["func"].contains("value"))
+    {
+      const std::string &recv_kind =
+        call["func"]["value"].value("_type", std::string());
+      if (recv_kind == "Dict")
+      {
+        const std::string method =
+          call["func"].contains("attr")
+            ? call["func"]["attr"].template get<std::string>()
+            : std::string();
+
+        // get/setdefault/pop: return type comes from the default arg.
+        if (method == "setdefault" || method == "get" || method == "pop")
+        {
+          std::string t = infer_type_from_default_arg_shape(call["args"]);
+          if (!t.empty())
+            return t;
+        }
+
+        // keys/values/items: views behave like lists for type inference.
+        if (method == "keys" || method == "values" || method == "items")
+          return "list";
+      }
+    }
+
     // Handle method calls on subscript expressions: e.g. nested[i].pop()
     // get_object_name() returns "" for Subscript nodes (no "id" field), which
     // would cause a spurious "Object not found" throw further below.
@@ -2933,6 +3249,17 @@ private:
         obj_type == "str" && call["func"].contains("attr") &&
         call["func"]["attr"] == "split")
         return "list";
+      // setdefault/get/pop return the value, not the dict — recover its
+      // container shape from the default arg when the dict is untyped.
+      if (
+        obj_type == "dict" && call["func"].contains("attr") &&
+        (call["func"]["attr"] == "setdefault" ||
+         call["func"]["attr"] == "get" || call["func"]["attr"] == "pop"))
+      {
+        std::string t = infer_type_from_default_arg_shape(call["args"]);
+        if (!t.empty())
+          return t;
+      }
       type = obj_type;
     }
     else
@@ -3770,4 +4097,11 @@ private:
   std::set<std::string> resolving_rhs_vars_;
   std::string current_func_name_context_;
   std::string current_class_name_;
+  struct pending_specializationt
+  {
+    std::string function_name;
+    size_t param_index;
+    std::vector<std::string> class_types;
+  };
+  std::vector<pending_specializationt> pending_specializations_;
 };

@@ -946,6 +946,18 @@ void dereferencet::build_reference_rec(
   if (is_code_type(value) || is_code_type(type))
     return;
 
+  // Zero-sized destination: the recursive paths below drill down to a scalar
+  // base case that fails with a spurious width mismatch. Reading 0 bytes is a
+  // no-op, so return any value of the target type (issue #723).
+  if (type_byte_size_bits(type) == 0)
+  {
+    // gen_zero asserts on memberless unions, so fall back to a nondet symbol.
+    value = (is_union_type(type) && to_union_type(type).members.empty())
+              ? make_failed_symbol(type)
+              : gen_zero(type);
+    return;
+  }
+
   if (is_struct_type(type))
     flags |= flag_dst_struct;
   else if (is_union_type(type))
@@ -1441,9 +1453,18 @@ void dereferencet::construct_from_dyn_struct_offset(
   // construct_from_dyn_offset
   if (access_sz == config.ansi_c.char_width)
   {
-    value = bitcast2tc(
-      get_uint_type(type_byte_size_bits(value->type, &ns).to_uint64()), value);
-    return construct_from_dyn_offset(value, offset, type);
+    uint64_t struct_bits = type_byte_size_bits(value->type, &ns).to_uint64();
+    value = bitcast2tc(get_uint_type(struct_bits), value);
+    // flatten_to_bitvector places the first struct member in the low bits
+    // regardless of target endianness, so under big-endian we must mirror
+    // the bit offset before delegating to the scalar byte extractor.
+    expr2tc adjusted_offset = offset;
+    if (is_big_endian)
+      adjusted_offset = sub2tc(
+        offset->type,
+        gen_long(offset->type, struct_bits - config.ansi_c.char_width),
+        offset);
+    return construct_from_dyn_offset(value, adjusted_offset, type);
   }
 
   // For each element of the struct, look at the alignment, and produce an
@@ -1471,6 +1492,14 @@ void dereferencet::construct_from_dyn_struct_offset(
     // Compute some kind of guard
     it = ns.follow(it);
     BigInt field_size = type_byte_size_bits(it, &ns);
+
+    // Skip sub-byte members (unnamed bitfields, padding bits): they are
+    // narrower than one byte and cannot hold a byte-aligned access.
+    if (field_size < config.ansi_c.char_width)
+    {
+      i++;
+      continue;
+    }
 
     // Round up to word size
     expr2tc field_offset = constant_int2tc(offset->type, offs);
@@ -2321,11 +2350,11 @@ void dereferencet::bounds_check(
      * the CHERI capability associated with the pointer in it.
      *
      * Convert pointer into its raw integer address form via 'ptraddr_type2()'
-     * Use capability_top2tc and capability_base2tc to get the upper and 
+     * Use capability_top2tc and capability_base2tc to get the upper and
      * lower bounds for the capability.
-     * 
+     *
      * cheri_bounds assertion will be (addr < top && addr > base)
-     * 
+     *
      */
     expr2tc addr = typecast2tc(ptraddr_type2(), deref);
     expr2tc top = capability_top2tc(deref);
@@ -2335,10 +2364,10 @@ void dereferencet::bounds_check(
     expr2tc lt = lessthan2tc(addr, base);
     expr2tc in_cheri_bounds = or2tc(gt, lt);
     /*
-     * In CHERI Clang if a pointer is marked as can_carry_provenance does not 
+     * In CHERI Clang if a pointer is marked as can_carry_provenance does not
      * mean it must carries CHERI capability. Therefore, we need to determine here
      * whether the capacity exists.
-     * 
+     *
      * pointer_capability == zero ?
      */
     expr2tc is_zero = equality2tc(

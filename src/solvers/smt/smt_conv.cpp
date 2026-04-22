@@ -554,6 +554,226 @@ std::pair<smt_astt, smt_astt> smt_convt::apply_ieee754_rna_enclosure(
   return {ra_lo, ra_hi};
 }
 
+std::pair<smt_astt, smt_astt> smt_convt::apply_ieee754_rup_enclosure(
+  smt_astt real_result,
+  smt_astt lo_r,
+  smt_astt hi_r,
+  const floatbv_type2t &fbv_type)
+{
+  // EbRUP([LR, UR]) = [LR, UR + B_dir(UR)]
+  // fl_RUP(r) >= r for all r, so the lower bound is exact: ra_lo = lo_r.
+  // fl_RUP(r) <= r + B_dir(r) <= UR + B_dir(UR) for r in [LR, UR],
+  // so the upper bound is hi_r + B_dir(hi_r).
+  // B_dir(r) = eps_rel_dir * |r| + eps_abs,
+  //   eps_rel_dir = 2^-52 (double) or 2^-23 (single) -- full machine epsilon.
+  const auto double_spec = ieee_float_spect::double_precision();
+  const auto single_spec = ieee_float_spect::single_precision();
+  smt_astt eps_rel_dir, eps_abs;
+  if (fbv_type.exponent == double_spec.e && fbv_type.fraction == double_spec.f)
+  {
+    eps_rel_dir = get_double_eps_up(); // 2^-52
+    eps_abs = get_double_min_subnormal();
+  }
+  else if (
+    fbv_type.exponent == single_spec.e && fbv_type.fraction == single_spec.f)
+  {
+    eps_rel_dir = get_single_eps_up(); // 2^-23
+    eps_abs = get_single_min_subnormal();
+  }
+  else
+  {
+    assert(!"apply_ieee754_rup_enclosure: unsupported FP format");
+  }
+
+  smt_sortt rs = mk_real_sort();
+  smt_astt zero = mk_smt_real("0.0");
+
+  // B_dir(hi_r) = eps_rel_dir * |hi_r| + eps_abs  (bound at upper endpoint)
+  smt_astt abs_hi = mk_ite(mk_lt(hi_r, zero), mk_sub(zero, hi_r), hi_r);
+  smt_astt bound_hi = mk_add(mk_mul(eps_rel_dir, abs_hi), eps_abs);
+  smt_astt ra_hi_expr = mk_add(hi_r, bound_hi); // UR + B_dir(UR)
+
+  // RUP-named enclosure variables, pinned via bidirectional inequalities to
+  // survive Z3's solve-eqs tactic (same technique as all other tight paths).
+  smt_astt ra_lo = mk_fresh(rs, "ra_lo_up::", nullptr);
+  smt_astt ra_hi = mk_fresh(rs, "ra_hi_up::", nullptr);
+
+  // Pin ra_lo = lo_r  (exact lower bound: RUP never rounds below the true value)
+  assert_ast(mk_le(ra_lo, lo_r)); // ra_lo_up <= LR
+  assert_ast(mk_le(lo_r, ra_lo)); // LR <= ra_lo_up  =>  ra_lo_up == LR
+
+  // Pin ra_hi = hi_r + B_dir(hi_r)
+  assert_ast(mk_le(ra_hi, ra_hi_expr)); // ra_hi_up <= UR + B_dir(UR)
+  assert_ast(mk_le(ra_hi_expr, ra_hi)); // UR + B_dir(UR) <= ra_hi_up
+
+  // Containment: ra_lo_up <= real_result <= ra_hi_up  and  ra_lo_up <= ra_hi_up
+  assert_ast(mk_le(ra_lo, real_result));
+  assert_ast(mk_le(real_result, ra_hi));
+  assert_ast(mk_le(ra_lo, ra_hi));
+
+  return {ra_lo, ra_hi};
+}
+
+std::pair<smt_astt, smt_astt> smt_convt::apply_ieee754_rdn_enclosure(
+  smt_astt real_result,
+  smt_astt lo_r,
+  smt_astt hi_r,
+  const floatbv_type2t &fbv_type)
+{
+  // EbRDN([LR, UR]) = [LR - B_dir(LR), UR]
+  // fl_RDN(r) <= r for all r, so the upper bound is exact: ra_hi = hi_r.
+  // fl_RDN(r) >= r - B_dir(r) >= LR - B_dir(LR) for r in [LR, UR],
+  // so the lower bound is lo_r - B_dir(lo_r).
+  // B_dir(r) = eps_rel_dir * |r| + eps_abs,
+  //   eps_rel_dir = 2^-52 (double) or 2^-23 (single) -- full machine epsilon.
+  const auto double_spec = ieee_float_spect::double_precision();
+  const auto single_spec = ieee_float_spect::single_precision();
+  smt_astt eps_rel_dir, eps_abs;
+  if (fbv_type.exponent == double_spec.e && fbv_type.fraction == double_spec.f)
+  {
+    eps_rel_dir = get_double_eps_up(); // 2^-52
+    eps_abs = get_double_min_subnormal();
+  }
+  else if (
+    fbv_type.exponent == single_spec.e && fbv_type.fraction == single_spec.f)
+  {
+    eps_rel_dir = get_single_eps_up(); // 2^-23
+    eps_abs = get_single_min_subnormal();
+  }
+  else
+  {
+    assert(!"apply_ieee754_rdn_enclosure: unsupported FP format");
+  }
+
+  smt_sortt rs = mk_real_sort();
+  smt_astt zero = mk_smt_real("0.0");
+
+  // B_dir(lo_r) = eps_rel_dir * |lo_r| + eps_abs  (bound at lower endpoint)
+  smt_astt abs_lo = mk_ite(mk_lt(lo_r, zero), mk_sub(zero, lo_r), lo_r);
+  smt_astt bound_lo = mk_add(mk_mul(eps_rel_dir, abs_lo), eps_abs);
+  smt_astt ra_lo_expr = mk_sub(lo_r, bound_lo); // LR - B_dir(LR)
+
+  // RDN-named enclosure variables, pinned via bidirectional inequalities to
+  // survive Z3's solve-eqs tactic (same technique as all other tight paths).
+  smt_astt ra_lo = mk_fresh(rs, "ra_lo_dn::", nullptr);
+  smt_astt ra_hi = mk_fresh(rs, "ra_hi_dn::", nullptr);
+
+  // Pin ra_lo = lo_r - B_dir(lo_r)
+  assert_ast(mk_le(ra_lo, ra_lo_expr)); // ra_lo_dn <= LR - B_dir(LR)
+  assert_ast(mk_le(ra_lo_expr, ra_lo)); // LR - B_dir(LR) <= ra_lo_dn
+
+  // Pin ra_hi = hi_r  (exact upper bound: RDN never rounds above the true value)
+  assert_ast(mk_le(ra_hi, hi_r)); // ra_hi_dn <= UR
+  assert_ast(mk_le(hi_r, ra_hi)); // UR <= ra_hi_dn  =>  ra_hi_dn == UR
+
+  // Containment: ra_lo_dn <= real_result <= ra_hi_dn  and  ra_lo_dn <= ra_hi_dn
+  assert_ast(mk_le(ra_lo, real_result));
+  assert_ast(mk_le(real_result, ra_hi));
+  assert_ast(mk_le(ra_lo, ra_hi));
+
+  return {ra_lo, ra_hi};
+}
+
+std::pair<smt_astt, smt_astt> smt_convt::apply_ieee754_rtz_enclosure(
+  smt_astt real_result,
+  smt_astt lo_r,
+  smt_astt hi_r,
+  const floatbv_type2t &fbv_type)
+{
+  // RTZ (truncation toward zero) is sign-dependent.
+  // For an interval hull [LR, UR] = [lo_r, hi_r]:
+  //
+  //   Case 1 -- LR >= 0 (all non-negative): fl_RTZ acts like RDN
+  //     EbRTZ([LR,UR]) = [LR - B_dir(LR), UR]   (exact upper bound)
+  //
+  //   Case 2 -- UR <= 0 (all non-positive): fl_RTZ acts like RUP
+  //     EbRTZ([LR,UR]) = [LR, UR + B_dir(UR)]   (exact lower bound)
+  //
+  //   Case 3 -- LR < 0 < UR (hull crosses zero): sign of actual result
+  //     is unknown at encode time; use conservative symmetric bound:
+  //     B_dir_max = eps_rel_dir * max(|LR|, |UR|) + eps_abs
+  //     EbRTZ([LR,UR]) = [LR - B_dir_max, UR + B_dir_max]
+  //
+  // The three cases are encoded as nested ITE on lo_nonneg / hi_nonpos.
+  // B_dir(r) = eps_rel_dir * |r| + eps_abs,
+  //   eps_rel_dir = 2^-52 (double) or 2^-23 (single) -- full machine epsilon.
+  const auto double_spec = ieee_float_spect::double_precision();
+  const auto single_spec = ieee_float_spect::single_precision();
+  smt_astt eps_rel_dir, eps_abs;
+  if (fbv_type.exponent == double_spec.e && fbv_type.fraction == double_spec.f)
+  {
+    eps_rel_dir = get_double_eps_up(); // 2^-52
+    eps_abs = get_double_min_subnormal();
+  }
+  else if (
+    fbv_type.exponent == single_spec.e && fbv_type.fraction == single_spec.f)
+  {
+    eps_rel_dir = get_single_eps_up(); // 2^-23
+    eps_abs = get_single_min_subnormal();
+  }
+  else
+  {
+    assert(!"apply_ieee754_rtz_enclosure: unsupported FP format");
+  }
+
+  smt_sortt rs = mk_real_sort();
+  smt_astt zero = mk_smt_real("0.0");
+
+  // |LR| and |UR|
+  smt_astt abs_lo = mk_ite(mk_lt(lo_r, zero), mk_sub(zero, lo_r), lo_r);
+  smt_astt abs_hi = mk_ite(mk_lt(hi_r, zero), mk_sub(zero, hi_r), hi_r);
+
+  // B_dir at each endpoint
+  smt_astt bound_lo = mk_add(mk_mul(eps_rel_dir, abs_lo), eps_abs); // B_dir(LR)
+  smt_astt bound_hi = mk_add(mk_mul(eps_rel_dir, abs_hi), eps_abs); // B_dir(UR)
+
+  // B_dir_max = eps_rel_dir * max(|LR|, |UR|) + eps_abs  (crossing-zero case)
+  smt_astt abs_max = mk_ite(mk_le(abs_lo, abs_hi), abs_hi, abs_lo);
+  smt_astt bound_max = mk_add(mk_mul(eps_rel_dir, abs_max), eps_abs);
+
+  // Case selectors
+  smt_astt lo_nonneg = mk_le(zero, lo_r); // LR >= 0
+  smt_astt hi_nonpos = mk_le(hi_r, zero); // UR <= 0
+
+  // ra_lo_expr:
+  //   LR >= 0 -> LR - B_dir(LR)    (truncate-down: lower gets error)
+  //   UR <= 0 -> LR                 (truncate-up: lower is exact)
+  //   else    -> LR - B_dir_max    (crossing zero: conservative)
+  smt_astt ra_lo_expr = mk_ite(
+    lo_nonneg,
+    mk_sub(lo_r, bound_lo),
+    mk_ite(hi_nonpos, lo_r, mk_sub(lo_r, bound_max)));
+
+  // ra_hi_expr:
+  //   LR >= 0 -> UR                 (truncate-down: upper is exact)
+  //   UR <= 0 -> UR + B_dir(UR)    (truncate-up: upper gets error)
+  //   else    -> UR + B_dir_max    (crossing zero: conservative)
+  smt_astt ra_hi_expr = mk_ite(
+    lo_nonneg,
+    hi_r,
+    mk_ite(hi_nonpos, mk_add(hi_r, bound_hi), mk_add(hi_r, bound_max)));
+
+  // RTZ-named enclosure variables, pinned via bidirectional inequalities to
+  // survive Z3's solve-eqs tactic (same technique as all other tight paths).
+  smt_astt ra_lo = mk_fresh(rs, "ra_lo_tz::", nullptr);
+  smt_astt ra_hi = mk_fresh(rs, "ra_hi_tz::", nullptr);
+
+  // Pin ra_lo = ra_lo_expr
+  assert_ast(mk_le(ra_lo, ra_lo_expr));
+  assert_ast(mk_le(ra_lo_expr, ra_lo));
+
+  // Pin ra_hi = ra_hi_expr
+  assert_ast(mk_le(ra_hi, ra_hi_expr));
+  assert_ast(mk_le(ra_hi_expr, ra_hi));
+
+  // Containment: ra_lo_tz <= real_result <= ra_hi_tz  and  ra_lo_tz <= ra_hi_tz
+  assert_ast(mk_le(ra_lo, real_result));
+  assert_ast(mk_le(real_result, ra_hi));
+  assert_ast(mk_le(ra_lo, ra_hi));
+
+  return {ra_lo, ra_hi};
+}
+
 smt_astt smt_convt::apply_ieee754_semantics(
   smt_astt real_result,
   const floatbv_type2t &fbv_type,
@@ -1384,21 +1604,34 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
       const expr2tc &rounding_mode = to_ieee_add2t(expr).rounding_mode;
 
-      // Interval-lifted nearest-mode enclosure for ieee_add (--ir-ieee only).
-      // Covers both RNE (ROUND_TO_EVEN) and RNA (ROUND_TO_AWAY): both are
-      // nearest-rounding modes sharing the same B_near constants and the same
-      // symmetric interval-lifting formula:
-      //   L_R = lo1 + lo2,  U_R = hi1 + hi2
-      //   ra_lo = L_R - B_near^-(L_R),  ra_hi = U_R + B_near^+(U_R)
-      // For RNE the result is named ra_lo:: / ra_hi::; for RNA ra_lo_aw:: /
-      // ra_hi_aw::, matching the single-step naming convention.
-      // Non-nearest modes, non-standard formats, and --ir-ieee disabled all
-      // fall through to apply_ieee754_semantics unchanged.
+      // Interval-lifted enclosure for ieee_add (--ir-ieee only).
+      // Covers RNE, RNA (nearest modes) and RUP, RDN, RTZ (directed modes).
+      // All share the same addition interval hull:
+      //   L_R = L_x + L_y,  U_R = U_x + U_y
+      // Nearest (RNE/RNA): symmetric B_near at both endpoints
+      //   ra_lo = L_R - B_near(L_R),  ra_hi = U_R + B_near(U_R)
+      // RUP: exact lower bound, B_dir at upper endpoint
+      //   ra_lo = L_R (exact),  ra_hi = U_R + B_dir(U_R)
+      // RDN: B_dir at lower endpoint, exact upper bound
+      //   ra_lo = L_R - B_dir(L_R),  ra_hi = U_R (exact)
+      // RTZ: sign-dependent three-way case on hull sign:
+      //   LR >= 0: ra_lo = LR - B_dir(LR), ra_hi = UR (exact upper)
+      //   UR <= 0: ra_lo = LR (exact lower), ra_hi = UR + B_dir(UR)
+      //   else:   ra_lo = LR - B_dir_max, ra_hi = UR + B_dir_max
+      //           where B_dir_max = eps_rel_dir * max(|LR|, |UR|) + eps_abs
+      // Symbol names: ra_lo:: / ra_hi:: (RNE), ra_lo_aw:: / ra_hi_aw::
+      // (RNA), ra_lo_up:: / ra_hi_up:: (RUP), ra_lo_dn:: / ra_hi_dn:: (RDN),
+      // ra_lo_tz:: / ra_hi_tz:: (RTZ).
+      // Non-standard formats and --ir-ieee disabled fall through to
+      // apply_ieee754_semantics unchanged.
       bool interval_lifted = false;
       if (
         options.get_bool_option("ir-ieee") &&
         (is_nearest_rounding_mode(rounding_mode) ||
-         is_round_to_away(rounding_mode)))
+         is_round_to_away(rounding_mode) ||
+         is_round_to_plus_inf(rounding_mode) ||
+         is_round_to_minus_inf(rounding_mode) ||
+         is_round_to_zero(rounding_mode)))
       {
         const auto double_spec = ieee_float_spect::double_precision();
         const auto single_spec = ieee_float_spect::single_precision();
@@ -1425,6 +1658,15 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
           else if (is_round_to_away(rounding_mode))
             bounds =
               apply_ieee754_rna_enclosure(real_result, lo_r, hi_r, fbv_type);
+          else if (is_round_to_plus_inf(rounding_mode))
+            bounds =
+              apply_ieee754_rup_enclosure(real_result, lo_r, hi_r, fbv_type);
+          else if (is_round_to_minus_inf(rounding_mode))
+            bounds =
+              apply_ieee754_rdn_enclosure(real_result, lo_r, hi_r, fbv_type);
+          else
+            bounds =
+              apply_ieee754_rtz_enclosure(real_result, lo_r, hi_r, fbv_type);
           ir_ra_interval_map[real_result] = {bounds.first, bounds.second};
           a = real_result;
           interval_lifted = true;
@@ -1455,16 +1697,34 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
       const expr2tc &rounding_mode = to_ieee_sub2t(expr).rounding_mode;
 
-      // Interval-lifted RNE enclosure for ieee_sub (--ir-ieee only).
-      // Subtraction interval hull:
+      // Interval-lifted enclosure for ieee_sub (--ir-ieee only).
+      // Covers RNE, RNA (nearest modes), RUP, RDN, and RTZ (directed modes).
+      // All share the same subtraction interval hull:
       //   L_R = L_x - U_y,  U_R = U_x - L_y
-      //   ra_lo = L_R - B_near^-(L_R),  ra_hi = U_R + B_near^+(U_R)
-      // Non-RNE modes, non-standard formats, and --ir-ieee disabled all
-      // fall through to apply_ieee754_semantics unchanged.
+      // Nearest (RNE/RNA): symmetric B_near at both endpoints
+      //   ra_lo = L_R - B_near(L_R),  ra_hi = U_R + B_near(U_R)
+      // RUP: exact lower bound, B_dir at upper endpoint
+      //   ra_lo = L_R (exact),  ra_hi = U_R + B_dir(U_R)
+      // RDN: B_dir at lower endpoint, exact upper bound
+      //   ra_lo = L_R - B_dir(L_R),  ra_hi = U_R (exact)
+      // RTZ: sign-dependent three-way case on hull sign:
+      //   LR >= 0: ra_lo = LR - B_dir(LR), ra_hi = UR (exact upper)
+      //   UR <= 0: ra_lo = LR (exact lower), ra_hi = UR + B_dir(UR)
+      //   else:   ra_lo = LR - B_dir_max, ra_hi = UR + B_dir_max
+      //           where B_dir_max = eps_rel_dir * max(|LR|, |UR|) + eps_abs
+      // Symbol names: ra_lo:: / ra_hi:: (RNE), ra_lo_aw:: / ra_hi_aw::
+      // (RNA), ra_lo_up:: / ra_hi_up:: (RUP), ra_lo_dn:: / ra_hi_dn:: (RDN),
+      // ra_lo_tz:: / ra_hi_tz:: (RTZ).
+      // Non-standard formats and --ir-ieee disabled fall through to
+      // apply_ieee754_semantics unchanged.
       bool interval_lifted = false;
       if (
         options.get_bool_option("ir-ieee") &&
-        is_nearest_rounding_mode(rounding_mode))
+        (is_nearest_rounding_mode(rounding_mode) ||
+         is_round_to_away(rounding_mode) ||
+         is_round_to_plus_inf(rounding_mode) ||
+         is_round_to_minus_inf(rounding_mode) ||
+         is_round_to_zero(rounding_mode)))
       {
         const auto double_spec = ieee_float_spect::double_precision();
         const auto single_spec = ieee_float_spect::single_precision();
@@ -1484,8 +1744,22 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
           ra_interval_t iv2 = get_iv(side2);
           smt_astt lo_r = mk_sub(iv1.lo, iv2.hi); // L_R = L_x - U_y
           smt_astt hi_r = mk_sub(iv1.hi, iv2.lo); // U_R = U_x - L_y
-          auto bounds =
-            apply_ieee754_rne_enclosure(real_result, lo_r, hi_r, fbv_type);
+          std::pair<smt_astt, smt_astt> bounds;
+          if (is_nearest_rounding_mode(rounding_mode))
+            bounds =
+              apply_ieee754_rne_enclosure(real_result, lo_r, hi_r, fbv_type);
+          else if (is_round_to_away(rounding_mode))
+            bounds =
+              apply_ieee754_rna_enclosure(real_result, lo_r, hi_r, fbv_type);
+          else if (is_round_to_plus_inf(rounding_mode))
+            bounds =
+              apply_ieee754_rup_enclosure(real_result, lo_r, hi_r, fbv_type);
+          else if (is_round_to_minus_inf(rounding_mode))
+            bounds =
+              apply_ieee754_rdn_enclosure(real_result, lo_r, hi_r, fbv_type);
+          else
+            bounds =
+              apply_ieee754_rtz_enclosure(real_result, lo_r, hi_r, fbv_type);
           ir_ra_interval_map[real_result] = {bounds.first, bounds.second};
           a = real_result;
           interval_lifted = true;
@@ -1517,11 +1791,85 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       smt_astt operand_is_zero = mk_or(mk_eq(side1, zero), mk_eq(side2, zero));
 
       const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
-      a = apply_ieee754_semantics(
-        real_result,
-        fbv_type,
-        operand_is_zero,
-        to_ieee_mul2t(expr).rounding_mode);
+      const expr2tc &rounding_mode = to_ieee_mul2t(expr).rounding_mode;
+
+      // RNE/RNA/RUP/RDN/RTZ interval lifting for ieee_mul.
+      // Hull: lo_r = min(p1,p2,p3,p4), hi_r = max(p1,p2,p3,p4)
+      // where p1=L_x*L_y, p2=L_x*U_y, p3=U_x*L_y, p4=U_x*U_y.
+      bool interval_lifted = false;
+      if (
+        options.get_bool_option("ir-ieee") &&
+        (is_nearest_rounding_mode(rounding_mode) ||
+         is_round_to_away(rounding_mode) ||
+         is_round_to_plus_inf(rounding_mode) ||
+         is_round_to_minus_inf(rounding_mode) ||
+         is_round_to_zero(rounding_mode)))
+      {
+        const auto double_spec = ieee_float_spect::double_precision();
+        const auto single_spec = ieee_float_spect::single_precision();
+        if (
+          (fbv_type.exponent == double_spec.e &&
+           fbv_type.fraction == double_spec.f) ||
+          (fbv_type.exponent == single_spec.e &&
+           fbv_type.fraction == single_spec.f))
+        {
+          auto get_iv = [this](smt_astt t) -> ra_interval_t {
+            auto it = ir_ra_interval_map.find(t);
+            return it != ir_ra_interval_map.end() ? it->second
+                                                  : ra_interval_t{t, t};
+          };
+          ra_interval_t iv1 = get_iv(side1);
+          ra_interval_t iv2 = get_iv(side2);
+          // Four endpoint products
+          smt_astt p1 = mk_mul(iv1.lo, iv2.lo);
+          smt_astt p2 = mk_mul(iv1.lo, iv2.hi);
+          smt_astt p3 = mk_mul(iv1.hi, iv2.lo);
+          smt_astt p4 = mk_mul(iv1.hi, iv2.hi);
+          // min/max via nested ITE
+          smt_astt lo_r = mk_ite(
+            mk_le(p1, p2),
+            mk_ite(
+              mk_le(p1, p3),
+              mk_ite(mk_le(p1, p4), p1, p4),
+              mk_ite(mk_le(p3, p4), p3, p4)),
+            mk_ite(
+              mk_le(p2, p3),
+              mk_ite(mk_le(p2, p4), p2, p4),
+              mk_ite(mk_le(p3, p4), p3, p4)));
+          smt_astt hi_r = mk_ite(
+            mk_le(p2, p1),
+            mk_ite(
+              mk_le(p3, p1),
+              mk_ite(mk_le(p4, p1), p1, p4),
+              mk_ite(mk_le(p4, p3), p3, p4)),
+            mk_ite(
+              mk_le(p3, p2),
+              mk_ite(mk_le(p4, p2), p2, p4),
+              mk_ite(mk_le(p4, p3), p3, p4)));
+          std::pair<smt_astt, smt_astt> bounds;
+          if (is_nearest_rounding_mode(rounding_mode))
+            bounds =
+              apply_ieee754_rne_enclosure(real_result, lo_r, hi_r, fbv_type);
+          else if (is_round_to_away(rounding_mode))
+            bounds =
+              apply_ieee754_rna_enclosure(real_result, lo_r, hi_r, fbv_type);
+          else if (is_round_to_plus_inf(rounding_mode))
+            bounds =
+              apply_ieee754_rup_enclosure(real_result, lo_r, hi_r, fbv_type);
+          else if (is_round_to_minus_inf(rounding_mode))
+            bounds =
+              apply_ieee754_rdn_enclosure(real_result, lo_r, hi_r, fbv_type);
+          else
+            bounds =
+              apply_ieee754_rtz_enclosure(real_result, lo_r, hi_r, fbv_type);
+          ir_ra_interval_map[real_result] = {bounds.first, bounds.second};
+          a = real_result;
+          interval_lifted = true;
+        }
+      }
+      if (!interval_lifted)
+        a = apply_ieee754_semantics(
+          real_result, fbv_type, operand_is_zero, rounding_mode);
     }
     else
     {
@@ -1566,9 +1914,97 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       smt_astt inf_result =
         mk_ite(mk_lt(side1, zero), mk_sub(zero, max_val), max_val);
       smt_astt real_result = mk_div(side1, side2);
-      smt_astt ieee_result = apply_ieee754_semantics(
-        real_result, fbv_type, nullptr, to_ieee_div2t(expr).rounding_mode);
-      a = mk_ite(div_by_zero, inf_result, ieee_result);
+      const expr2tc &rounding_mode = to_ieee_div2t(expr).rounding_mode;
+
+      // RNE/RNA/RUP/RDN/RTZ interval lifting for ieee_div.
+      // Proof-aligned compositional lifting:
+      //   hull([L_x,U_x] / [L_y,U_y]) = [min(qi), max(qi)] for i in {1..4}
+      //   where q1=L_x/L_y, q2=L_x/U_y, q3=U_x/L_y, q4=U_x/U_y.
+      // Admissibility guard: the four-endpoint formula is only sound when
+      // the denominator interval does not contain zero (iv2.lo > 0 or
+      // iv2.hi < 0). When inadmissible, the numerator tracked interval is
+      // preserved and the denominator is used as a point value (conservative
+      // but sound). Both operands use point fallback when fresh.
+      // RNE and RNA share B_near; RUP/RDN/RTZ use B_dir. RTZ is sign-sensitive:
+      // positive hull widens lower only, negative hull widens upper only,
+      // zero-crossing hull uses symmetric B_dir_max fallback.
+      bool interval_lifted = false;
+      if (
+        options.get_bool_option("ir-ieee") &&
+        (is_nearest_rounding_mode(rounding_mode) ||
+         is_round_to_away(rounding_mode) ||
+         is_round_to_plus_inf(rounding_mode) ||
+         is_round_to_minus_inf(rounding_mode) ||
+         is_round_to_zero(rounding_mode)))
+      {
+        auto get_iv = [this](smt_astt t) -> ra_interval_t {
+          auto it = ir_ra_interval_map.find(t);
+          return it != ir_ra_interval_map.end() ? it->second
+                                                : ra_interval_t{t, t};
+        };
+        ra_interval_t iv1 = get_iv(side1);
+        ra_interval_t iv2 = get_iv(side2);
+
+        // Admissibility: denominator interval does not contain zero.
+        smt_astt denom_admissible =
+          mk_or(mk_lt(zero, iv2.lo), mk_lt(iv2.hi, zero));
+
+        // Full four-endpoint hull (sound when denominator is admissible).
+        smt_astt q1 = mk_div(iv1.lo, iv2.lo);
+        smt_astt q2 = mk_div(iv1.lo, iv2.hi);
+        smt_astt q3 = mk_div(iv1.hi, iv2.lo);
+        smt_astt q4 = mk_div(iv1.hi, iv2.hi);
+        smt_astt lo_r_full = mk_ite(
+          mk_le(q1, q2),
+          mk_ite(
+            mk_le(q1, q3),
+            mk_ite(mk_le(q1, q4), q1, q4),
+            mk_ite(mk_le(q3, q4), q3, q4)),
+          mk_ite(
+            mk_le(q2, q3),
+            mk_ite(mk_le(q2, q4), q2, q4),
+            mk_ite(mk_le(q3, q4), q3, q4)));
+        smt_astt hi_r_full = mk_ite(
+          mk_le(q2, q1),
+          mk_ite(
+            mk_le(q3, q1),
+            mk_ite(mk_le(q4, q1), q1, q4),
+            mk_ite(mk_le(q4, q3), q3, q4)),
+          mk_ite(
+            mk_le(q3, q2),
+            mk_ite(mk_le(q4, q2), q2, q4),
+            mk_ite(mk_le(q4, q3), q3, q4)));
+
+        // Fallback hull: point denominator, numerator tracked interval kept.
+        smt_astt d_lo = mk_div(iv1.lo, side2);
+        smt_astt d_hi = mk_div(iv1.hi, side2);
+        smt_astt lo_r_point = mk_ite(mk_le(d_lo, d_hi), d_lo, d_hi);
+        smt_astt hi_r_point = mk_ite(mk_le(d_hi, d_lo), d_lo, d_hi);
+
+        // Guard: use full hull when denominator interval is admissible.
+        smt_astt lo_r = mk_ite(denom_admissible, lo_r_full, lo_r_point);
+        smt_astt hi_r = mk_ite(denom_admissible, hi_r_full, hi_r_point);
+
+        std::pair<smt_astt, smt_astt> bounds =
+          is_nearest_rounding_mode(rounding_mode)
+            ? apply_ieee754_rne_enclosure(real_result, lo_r, hi_r, fbv_type)
+          : is_round_to_away(rounding_mode)
+            ? apply_ieee754_rna_enclosure(real_result, lo_r, hi_r, fbv_type)
+          : is_round_to_plus_inf(rounding_mode)
+            ? apply_ieee754_rup_enclosure(real_result, lo_r, hi_r, fbv_type)
+          : is_round_to_minus_inf(rounding_mode)
+            ? apply_ieee754_rdn_enclosure(real_result, lo_r, hi_r, fbv_type)
+            : apply_ieee754_rtz_enclosure(real_result, lo_r, hi_r, fbv_type);
+        a = mk_ite(div_by_zero, inf_result, real_result);
+        ir_ra_interval_map[a] = {bounds.first, bounds.second};
+        interval_lifted = true;
+      }
+      if (!interval_lifted)
+      {
+        smt_astt ieee_result = apply_ieee754_semantics(
+          real_result, fbv_type, nullptr, rounding_mode);
+        a = mk_ite(div_by_zero, inf_result, ieee_result);
+      }
     }
     else
     {
@@ -2796,8 +3232,55 @@ smt_astt smt_convt::convert_member(const expr2tc &expr)
     expr2tc to_bv =
       bitcast2tc(get_uint_type(size.to_uint64()), member.source_value);
     type2tc type = expr->type;
-    if (is_multi_dimensional_array(type))
-      type = flatten_array_type(type);
+
+    // For array members, use byte_extract so that endianness is respected.
+    // concat2tc(T, A, B) places A in the high bits; stitch accordingly.
+    if (is_array_type(type))
+    {
+      if (is_multi_dimensional_array(type))
+        type = flatten_array_type(type);
+
+      const bool big_endian =
+        (config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN);
+      const array_type2t &arr = to_array_type(type);
+      const unsigned int elem_bits = arr.subtype->get_width();
+      const unsigned int elem_bytes = elem_bits / 8;
+      const unsigned int num_elems = size.to_uint64() / elem_bits;
+      const type2tc bytetype = get_uint8_type();
+
+      std::vector<expr2tc> elems;
+      elems.reserve(num_elems);
+      for (unsigned int i = 0; i < num_elems; i++)
+      {
+        // Collect elem_bytes bytes for this element.
+        std::vector<expr2tc> raw_bytes;
+        raw_bytes.reserve(elem_bytes);
+        for (unsigned int j = 0; j < elem_bytes; j++)
+          raw_bytes.push_back(byte_extract2tc(
+            bytetype, to_bv, gen_ulong(i * elem_bytes + j), big_endian));
+
+        // Stitch bytes into one value.  big-endian: byte 0 at MSB (forward
+        // accumulation); little-endian: byte 0 at LSB (reverse accumulation).
+        expr2tc val;
+        if (big_endian)
+        {
+          val = raw_bytes[0];
+          for (unsigned int j = 1; j < elem_bytes; j++)
+            val = concat2tc(
+              get_uint_type(val->type->get_width() + 8), val, raw_bytes[j]);
+        }
+        else
+        {
+          val = raw_bytes[elem_bytes - 1];
+          for (int j = (int)elem_bytes - 2; j >= 0; j--)
+            val = concat2tc(
+              get_uint_type(val->type->get_width() + 8), val, raw_bytes[j]);
+        }
+        elems.push_back(bitcast2tc(arr.subtype, val));
+      }
+      return convert_ast(constant_array2tc(type, elems));
+    }
+
     return convert_ast(bitcast2tc(
       type,
       typecast2tc(

@@ -29,6 +29,7 @@ add_library(pythonfrontend STATIC
             symbol_id.cpp
             type_handler.cpp
             cmath_lowering_policy.cpp
+            complex_handler.cpp
             complex_handler_utils.cpp
             function_call_expr.cpp
             numpy_call_expr.cpp
@@ -50,4 +51,4 @@ target_include_directories(pythonfrontend
     PUBLIC ${Boost_INCLUDE_DIRS}
 )
 
-target_link_libraries(pythonfrontend fmt::fmt nlohmann_json::nlohmann_json bigint)
+target_link_libraries(pythonfrontend PUBLIC nlohmann_json::nlohmann_json PRIVATE fmt::fmt bigint)

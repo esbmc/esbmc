@@ -391,7 +391,6 @@ void goto_convertt::cpp_new_initializer(
 
     // the new object
     exprt new_object("new_object");
-    new_object.set("#lvalue", true);
     new_object.type() = rhs.type().subtype();
 
     // Default value is zero
@@ -415,7 +414,6 @@ void goto_convertt::cpp_new_initializer(
 
       // the new object
       exprt new_object("new_object");
-      new_object.set("#lvalue", true);
       new_object.type() = rhs.type().subtype();
 
       assignment.move_to_operands(new_object, initializer.op0());
@@ -658,8 +656,6 @@ void goto_convertt::do_function_call_symbol(
     // then create an ASSIGN to a sideeffect "assigns_target". This stores the expression
     // tree for later evaluation during replace-call with proper parameter substitution.
     //
-    // Special case: __ESBMC_assigns() means function has no side effects
-
     if (arguments.empty())
     {
       log_error(
@@ -679,28 +675,34 @@ void goto_convertt::do_function_call_symbol(
       "Processing __ESBMC_assigns with {} arguments",
       arguments.size());
 
-    // Check for empty assigns: __ESBMC_assigns() expands to
-    // __ESBMC_assigns_impl((void*)0), so we detect a single (void*)0 argument.
+    // Check for empty assigns: __ESBMC_assigns_0() means no side effects.
+    // The macro expands to __ESBMC_assigns_impl((void*)0), which arrives here
+    // as a single argument: typecast(constant 0, void*). After stripping the
+    // typecast we check for a zero constant.
     if (arguments.size() == 1)
     {
       exprt first_arg = arguments[0];
+      // Strip typecast if present
       if (first_arg.id() == "typecast" && first_arg.operands().size() == 1)
       {
         first_arg = first_arg.op0();
       }
 
+      // Detect the zero constant produced by the (void*)0 macro expansion
       if (
         first_arg.is_zero() ||
         (first_arg.id() == "constant" && first_arg.get("value") == "0"))
       {
         log_debug(
           "builtin_functions",
-          "__ESBMC_assigns() - function has no side effects");
+          "__ESBMC_assigns(0) - pure function (no side effects)");
 
+        // Generate a special marker to indicate explicit empty assigns
         goto_programt::targett t = dest.add_instruction(ASSERT);
         t->guard = gen_true_expr();
         t->location = function.location();
         t->location.comment("contract::assigns_empty");
+        t->location.property("empty assigns marker");
 
         return;
       }
@@ -724,6 +726,16 @@ void goto_convertt::do_function_call_symbol(
         log_debug(
           "builtin_functions",
           "  Unwrapped address_of for assigns target {}: {}",
+          i,
+          actual_arg.pretty());
+      }
+      else if (actual_arg.type().is_pointer())
+      {
+        // Pointer-typed argument: Clang simplified &(*ptr) to ptr.
+        // This is expected for __ESBMC_assigns(*ptr) patterns.
+        log_debug(
+          "builtin_functions",
+          "  Pointer-typed assigns target {} (from *ptr pattern): {}",
           i,
           actual_arg.pretty());
       }
@@ -753,43 +765,131 @@ void goto_convertt::do_function_call_symbol(
       copy(assignment, ASSIGN, dest);
     }
   }
-  else if (base_name == "__ESBMC_old")
+  else if (base_name == "__ESBMC_loop_assigns_impl")
   {
-    // __ESBMC_old(expr): captures the pre-state value of expr in ensures clauses
-    // This function should only be used within __ESBMC_ensures clauses
+    // __ESBMC_loop_assigns_impl(&expr1, &expr2, ...): loop assigns clause handler
+    // Similar to __ESBMC_assigns_impl but stores targets in LOOP_INVARIANT instruction
+    // for frame rule enforcement during loop invariant checking.
+
+    if (arguments.empty())
+    {
+      log_error(
+        "`__ESBMC_loop_assigns' expected to have at least one argument");
+      abort();
+    }
+
+    if (lhs.is_not_nil())
+    {
+      log_error("__ESBMC_loop_assigns expected not to have LHS");
+      abort();
+    }
+
+    log_debug(
+      "builtin_functions",
+      "Processing __ESBMC_loop_assigns with {} arguments",
+      arguments.size());
+
+    // Find the most recent LOOP_INVARIANT instruction to attach assigns to
+    // If none exists, create one (loop assigns can exist without invariants)
+    goto_programt::instructiont *loop_inv_inst = nullptr;
+    if (!dest.instructions.empty())
+    {
+      auto &last = dest.instructions.back();
+      if (last.is_loop_invariant())
+        loop_inv_inst = &last;
+    }
+
+    // If no LOOP_INVARIANT instruction found, create an empty one
+    if (!loop_inv_inst)
+    {
+      goto_programt::targett t = dest.add_instruction(LOOP_INVARIANT);
+      // Empty loop invariants list - this instruction only carries assigns
+      t->location = function.location();
+      t->location.comment("loop assigns (no invariant)");
+      loop_inv_inst = &(*t);
+    }
+
+    // Process each argument: unwrap address_of and store as assigns target
+    for (size_t i = 0; i < arguments.size(); ++i)
+    {
+      exprt actual_arg = arguments[i];
+
+      // Strip typecast if present
+      if (actual_arg.id() == "typecast" && actual_arg.operands().size() == 1)
+        actual_arg = actual_arg.op0();
+
+      // Unwrap the address_of from macro expansion: &(expr) -> expr
+      if (actual_arg.id() == "address_of" && actual_arg.operands().size() == 1)
+      {
+        actual_arg = actual_arg.op0();
+        log_debug(
+          "builtin_functions",
+          "  Unwrapped address_of for loop assigns target {}: {}",
+          i,
+          actual_arg.pretty());
+      }
+      else
+      {
+        log_warning(
+          "__ESBMC_loop_assigns: unexpected argument form. "
+          "Please use __ESBMC_loop_assigns(expr) where expr is an lvalue.");
+      }
+
+      // Migrate to IRep2 and store as loop assigns target
+      expr2tc target_expr;
+      migrate_expr(actual_arg, target_expr);
+      loop_inv_inst->add_loop_assigns_target(target_expr);
+
+      log_debug(
+        "builtin_functions",
+        "  Loop assigns target {}: {}",
+        i,
+        actual_arg.pretty());
+    }
+  }
+  else if (base_name == "__ESBMC_old_raw")
+  {
+    // __ESBMC_old_raw(void* addr): low-level implementation of __ESBMC_old().
+    // Called via the macro: #define __ESBMC_old(x) (*(__typeof__(x)*)__ESBMC_old_raw(&(x)))
     //
-    // Type handling: Declared as `int __ESBMC_old(int)` in frontend, which causes
-    // Clang to insert implicit typecasts. For example, __ESBMC_old(global_value)
-    // where global_value is double becomes __ESBMC_old((int)global_value).
-    // We need to strip this typecast and use the original expression's type.
+    // The argument is (void*)(&x) — a pointer to the lvalue x.
+    // We strip the void* cast and address_of to recover the original expression x,
+    // then create an old_snapshot sideeffect with x as operand (type T).
+    // The sideeffect is typed as void* (matching the lhs) to avoid type mismatch;
+    // the contracts processing uses the operand's type T to create the snapshot.
     if (arguments.size() != 1)
     {
-      log_error("`__ESBMC_old' expected to have one argument");
+      log_error("`__ESBMC_old_raw' expected to have one argument");
       abort();
     }
 
     if (lhs.is_nil())
     {
-      log_error("`__ESBMC_old' must be used in an expression (requires LHS)");
+      log_error(
+        "`__ESBMC_old_raw' must be used in an expression (requires LHS)");
       abort();
     }
 
-    // Strip typecast if present (due to int declaration in frontend)
-    exprt actual_arg = arguments[0];
-    if (actual_arg.id() == "typecast" && actual_arg.operands().size() == 1)
-    {
-      // Use the inner expression (before typecast)
-      actual_arg = actual_arg.op0();
-    }
+    // Strip all typecasts from the argument: (void*)&x → &x
+    exprt addr_arg = arguments[0];
+    while (addr_arg.id() == "typecast" && addr_arg.operands().size() == 1)
+      addr_arg = addr_arg.op0();
 
-    // Create a special sideeffect expression to mark this as an old() call
-    // Type is inherited from the actual argument (after stripping typecast)
-    exprt old_expr("sideeffect", actual_arg.type());
+    // Extract the inner expression from address_of: &x → x (type T)
+    exprt inner_expr;
+    if (addr_arg.id() == "address_of" && addr_arg.operands().size() == 1)
+      inner_expr = addr_arg.op0();
+    else
+      inner_expr = addr_arg; // Fallback: use addr_arg as-is
+
+    // Create old_snapshot sideeffect with lhs type (void*) to avoid assignment
+    // type mismatch. The operand retains the original expression type T so that
+    // collect_old_snapshots_from_body can create a correctly-typed snapshot.
+    exprt old_expr("sideeffect", lhs.type());
     old_expr.set("statement", "old_snapshot");
-    old_expr.copy_to_operands(actual_arg);
+    old_expr.copy_to_operands(inner_expr);
     old_expr.location() = function.location();
 
-    // Generate assignment: lhs = old_expr
     code_assignt assignment(lhs, old_expr);
     assignment.location() = function.location();
     copy(assignment, ASSIGN, dest);
@@ -1126,6 +1226,19 @@ void goto_convertt::do_function_call_symbol(
     if (!is_lvalue(dest_expr))
     {
       log_error("va_end argument expected to be lvalue");
+      abort();
+    }
+  }
+  else if (base_name == "__builtin_va_copy")
+  {
+    // For Clang frontend, goto_symex tracks VA args via va_index in the
+    // call frame; no assignment is needed. Emitting an ASSIGN crashes the
+    // pointer analysis on Linux/Windows where va_list is a struct array.
+    exprt dest_expr = make_va_list(arguments[0]);
+
+    if (!is_lvalue(dest_expr))
+    {
+      log_error("va_copy argument expected to be lvalue");
       abort();
     }
   }

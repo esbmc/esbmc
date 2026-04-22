@@ -520,10 +520,39 @@ expr2tc goto_symext::symex_mem(
   else
   {
     cur_state->rename(size);
-    BigInt i;
+
+    // Detect malloc(-N) before do_simplify folds typecast(size_t, -N) into
+    // a large positive constant and erases the sign. The simplifier's
+    // behaviour varies between the normal and --no-slice paths, so we
+    // capture the inner operand's sign up front and also re-check the
+    // post-simplify value below.
+    bool is_negative_size = false;
+    if (is_malloc && is_typecast2t(size))
+    {
+      expr2tc inner = to_typecast2t(size).from;
+      do_simplify(inner);
+      is_negative_size = is_constant_int2t(inner) &&
+                         to_constant_int2t(inner).value.is_negative();
+    }
+
+    do_simplify(size);
     if (is_constant_int2t(size))
     {
-      uint64_t v = to_constant_int2t(size).value.to_uint64();
+      const BigInt &val = to_constant_int2t(size).value;
+      // Check negativity before inspecting the magnitude: to_uint64()
+      // discards the sign, so malloc(-1) would otherwise be mistaken for
+      // a 1-byte allocation.
+      if (is_malloc && (is_negative_size || val.is_negative()))
+      {
+        // Negative size cast to size_t: return NULL even under
+        // --force-malloc-success, matching real OS behaviour.
+        expr2tc null_sym = symbol2tc(pointer_type2tc(type), "NULL");
+        if (null_sym->type != lhs->type)
+          null_sym = typecast2tc(lhs->type, null_sym);
+        symex_assign(code_assign2tc(lhs, null_sym), true, guard);
+        return null_sym;
+      }
+      uint64_t v = val.to_uint64();
       if (v == 1)
         size_is_one = true;
       else if (v == 0 && options.get_bool_option("malloc-zero-is-null"))
@@ -2870,6 +2899,22 @@ void goto_symext::simplify_python_builtins(expr2tc &expr)
     expr2tc value = obj.side_1;
     expr2tc expect_type = obj.side_2;
 
+    // isinstance(None, ...) is always False
+    if (is_pointer_type(value->type))
+    {
+      const pointer_type2t &ptr = to_pointer_type(value->type);
+      if (is_bool_type(ptr.subtype))
+      {
+        if (
+          !is_struct_type(expect_type->type) &&
+          !is_pointer_type(expect_type->type))
+        {
+          expr = gen_false_expr();
+          return;
+        }
+      }
+    }
+
     value_setst::valuest value_set;
     cur_state->value_set.get_value_set(value, value_set);
 
@@ -2907,8 +2952,10 @@ void goto_symext::simplify_python_builtins(expr2tc &expr)
       }
 
       // Check sub class
-      if (
-        base_type_eq(expect_type->type, value->type, ns) ||
+      if (base_type_eq(expect_type->type, value->type, ns))
+        expr = gen_true_expr();
+      else if (
+        is_struct_type(expect_type->type) &&
         is_subclass_of(expect_type->type, value->type, ns))
         expr = gen_true_expr();
       else
