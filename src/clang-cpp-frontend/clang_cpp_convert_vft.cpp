@@ -772,6 +772,9 @@ bool clang_cpp_convertert::build_dynamic_cast(
   // For dynamic_cast<void*> the result is a pointer to the start of the
   // most-derived object, so each matching D contributes its own arm
   // adjusting src by the offset of S inside D.
+  // For dynamic_cast<T&> the result is wrapped in a statement_expression
+  // that throws std::bad_cast when no D matches, so the catch (bad_cast&)
+  // arm of a try/catch can fire.
 
   exprt sub;
   if (get_expr(*cast.getSubExpr(), sub))
@@ -787,31 +790,48 @@ bool clang_cpp_convertert::build_dynamic_cast(
     return false;
   };
 
-  // TODO: dynamic_cast<T&> must throw std::bad_cast on a runtime mismatch.
-  // The correct lowering is the same OR-chain as the pointer form plus
-  // either a real `cpp-throw` of a constructed bad_cast object, or — per
-  // the original plan — an assume(match) injected via a
-  // statement_expression to keep verification sound. Both options need
-  // infrastructure (exception construction or stmt-expr plumbing through
-  // the symex side) that isn't justified by the single existing
-  // KNOWNBUG-marked test (inheritance/dynamic_cast3_bug).
-  if (cast.getType()->isReferenceType())
-    return fallback();
-  if (!cast.getType()->isPointerType())
+  // Reference dynamic_cast: Clang strips the reference from getType() but
+  // the result expression is still an lvalue (or xvalue for rvalue
+  // references), so the value kind tells us the source form.
+  const bool is_reference = !cast.isPRValue();
+  if (!is_reference && !cast.getType()->isPointerType())
     return fallback();
 
-  clang::QualType src_qt = cast.getSubExpr()->getType();
-  if (!src_qt->isPointerType())
-    return fallback();
+  // Normalise the source side: for the pointer form sub is already a
+  // pointer to S; for the reference form sub is an lvalue of S, which we
+  // wrap in address_of so the rest of the helper can treat both shapes
+  // uniformly.
+  clang::QualType src_clang_type = cast.getSubExpr()->getType();
+  clang::QualType src_pointee_qt;
+  exprt src_pointer;
+  if (is_reference)
+  {
+    src_pointee_qt = src_clang_type->isReferenceType()
+                       ? src_clang_type->getPointeeType()
+                       : src_clang_type;
+    if (sub.type().is_pointer())
+      src_pointer = sub;
+    else
+      src_pointer = address_of_exprt(sub);
+  }
+  else
+  {
+    if (!src_clang_type->isPointerType())
+      return fallback();
+    src_pointee_qt = src_clang_type->getPointeeType();
+    src_pointer = sub;
+  }
 
-  clang::QualType src_pointee_qt = src_qt->getPointeeType();
-  clang::QualType tgt_pointee_qt = cast.getType()->getPointeeType();
+  // For the pointer form, getType() is T* and the pointee is T. For the
+  // reference form Clang has already stripped the &, so getType() *is* T.
+  clang::QualType tgt_pointee_qt =
+    is_reference ? cast.getType() : cast.getType()->getPointeeType();
 
   const clang::CXXRecordDecl *S = src_pointee_qt->getAsCXXRecordDecl();
   if (!S || !S->hasDefinition())
     return fallback();
 
-  const bool to_void = tgt_pointee_qt->isVoidType();
+  const bool to_void = !is_reference && tgt_pointee_qt->isVoidType();
   const clang::CXXRecordDecl *T = nullptr;
   if (!to_void)
   {
@@ -898,7 +918,7 @@ bool clang_cpp_convertert::build_dynamic_cast(
       if (!off)
         continue;
       typet char_ptr = pointer_typet(char_type());
-      exprt adj = sub;
+      exprt adj = src_pointer;
       gen_typecast(ns, adj, char_ptr);
       if (*off > 0)
       {
@@ -916,11 +936,61 @@ bool clang_cpp_convertert::build_dynamic_cast(
       // emit one flat `(T*) src` for every match — correct only when
       // every matching D has S at offset 0 (single inheritance, the
       // most common case in practice).
-      exprt adj = sub;
+      exprt adj = src_pointer;
       gen_typecast(ns, adj, target_type);
       result = adj;
     }
     arms.push_back({vt_addr, result});
+  }
+
+  // Reference form: throw std::bad_cast on no-match (the standard
+  // requires this; the catch (bad_cast&) arm of any try/catch then
+  // fires). Falls back if std::bad_cast hasn't been declared (the
+  // program didn't include <typeinfo>).
+  if (is_reference)
+  {
+    const symbolt *bad_cast_sym = ns.lookup("tag-std::bad_cast");
+    if (!bad_cast_sym)
+      return fallback();
+
+    exprt src_deref = dereference_exprt(src_pointer, src_pointer.type());
+    exprt vptr_read = member_exprt(
+      src_deref, vptr_class_id + "::" + vtable_ptr_suffix, vptr_type);
+    exprt match;
+    if (arms.empty())
+      match = false_exprt();
+    else
+    {
+      match = equality_exprt(vptr_read, arms.front().first);
+      for (size_t i = 1; i < arms.size(); ++i)
+        match = or_exprt(match, equality_exprt(vptr_read, arms[i].first));
+    }
+
+    typet bad_cast_type = symbol_typet(bad_cast_sym->id);
+    side_effect_exprt throw_op("cpp-throw", bad_cast_type);
+    throw_op.copy_to_operands(side_effect_exprt("nondet", bad_cast_type));
+
+    code_ifthenelset if_throw;
+    if_throw.cond() = not_exprt(match);
+    if_throw.then_case() = code_expressiont(throw_op);
+
+    // Clang strips the reference from cast.getType(), so target_type is
+    // the un-referenced struct T. Reconstruct the IR-level reference
+    // type (pointer-to-T flagged as a reference) for the cast result.
+    typet ref_type = pointer_typet(target_type);
+    ref_type.set("#reference", true);
+
+    exprt cast_value = src_pointer;
+    gen_typecast(ns, cast_value, ref_type);
+
+    code_blockt block;
+    block.copy_to_operands(if_throw);
+    block.copy_to_operands(code_expressiont(cast_value));
+
+    side_effect_exprt stmt_expr("statement_expression", ref_type);
+    stmt_expr.copy_to_operands(block);
+    new_expr = stmt_expr;
+    return false;
   }
 
   exprt cast_or_null;
@@ -932,7 +1002,7 @@ bool clang_cpp_convertert::build_dynamic_cast(
   else if (to_void)
   {
     // Per-D results differ; chain ITEs so each D selects its own offset.
-    exprt src_deref = dereference_exprt(sub, sub.type());
+    exprt src_deref = dereference_exprt(src_pointer, src_pointer.type());
     exprt vptr_read = member_exprt(
       src_deref, vptr_class_id + "::" + vtable_ptr_suffix, vptr_type);
     cast_or_null = typed_null;
@@ -944,7 +1014,7 @@ bool clang_cpp_convertert::build_dynamic_cast(
   {
     // T* form: every matching D yields the same `(T*) src`, so collapse
     // the per-D vptr equalities into one OR-chain with a single result.
-    exprt src_deref = dereference_exprt(sub, sub.type());
+    exprt src_deref = dereference_exprt(src_pointer, src_pointer.type());
     exprt vptr_read = member_exprt(
       src_deref, vptr_class_id + "::" + vtable_ptr_suffix, vptr_type);
 
@@ -956,7 +1026,7 @@ bool clang_cpp_convertert::build_dynamic_cast(
 
   // Null-source guard — without this, src_deref above would crash
   // symbolic execution before the SMT solver ever sees the ITE.
-  exprt is_null = equality_exprt(sub, gen_zero(sub.type()));
+  exprt is_null = equality_exprt(src_pointer, gen_zero(src_pointer.type()));
   new_expr = if_exprt(is_null, typed_null, cast_or_null);
   return false;
 }
