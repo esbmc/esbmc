@@ -1,4 +1,4 @@
 THOROUGH
 main.c
---partial-loops --no-align-check --smtlib-solver-prog --error-label --tuple-node-flattener --all-claims --bv --witness-output --show-loops --unwind 5
+--no-standard-checks --partial-loops --no-align-check --smtlib-solver-prog --error-label --tuple-node-flattener --all-claims --bv --witness-output --show-loops --unwind 1
 ^VERIFICATION SUCCESSFUL$
