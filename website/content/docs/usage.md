@@ -50,10 +50,10 @@ Not unwinding loop 2 iteration 2 file ex5.c line 8 function main
 Symex completed in: 0.001s (40 assignments)
 Slicing time: 0.000s (removed 16 assignments)
 Generated 2 VCC(s), 2 remaining after simplification (24 assignments)
-No solver specified; defaulting to Boolector
+No solver specified; defaulting to Bitwuzla
 Encoding remaining VCC(s) using bit-vector/floating-point arithmetic
 Encoding to solver time: 0.005s
-Solving with solver Boolector 3.2.0
+Solving with solver Bitwuzla
 Encoding to solver time: 0.005s
 Runtime decision procedure: 0.427s
 BMC program time: 0.435s
@@ -170,10 +170,10 @@ Unwinding loop 1 iteration 10 file test3.c line 6 function P
 Symex completed in: 0.031s (431 assignments)
 Slicing time: 0.001s (removed 183 assignments)
 Generated 149 VCC(s), 7 remaining after simplification (248 assignments)
-No solver specified; defaulting to Boolector
+No solver specified; defaulting to Bitwuzla
 Encoding remaining VCC(s) using bit-vector/floating-point arithmetic
 Encoding to solver time: 0.004s
-Solving with solver Boolector 3.2.0
+Solving with solver Bitwuzla
 Encoding to solver time: 0.004s
 Runtime decision procedure: 0.001s
 BMC program time: 0.040s
