@@ -6,6 +6,7 @@ class Field:
 
 
 def dataclass(_cls=None, **kwargs):
+
     def wrap(cls):
         return cls
 
