@@ -1,4 +1,4 @@
 THOROUGH
 main.c
---32
+--32 --boolector
 ^VERIFICATION SUCCESSFUL$

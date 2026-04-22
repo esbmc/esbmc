@@ -6,8 +6,8 @@ weight: 1
 ## Quick Start (Single Solver)
 
 For most users, building with a single SMT solver is enough. Z3 is recommended
-as the default; Boolector or Bitwuzla offer better performance on bit-vector
-benchmarks. For a build with multiple solvers, see the
+for arithmetic-heavy benchmarks; Bitwuzla (the default) or Boolector offer
+better performance on bit-vector benchmarks. For a build with multiple solvers, see the
 [Complete Build](#building-esbmc) section below.
 
 ### Simplest path (any platform, dependencies downloaded automatically)
