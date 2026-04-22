@@ -90,6 +90,10 @@ type2tc pick_int_type(bool is_signed, length_modt mod)
   {
     switch (mod)
     {
+    case length_modt::HH:
+      return get_int8_type();
+    case length_modt::H:
+      return get_int16_type();
     case length_modt::L:
     case length_modt::Z:
     case length_modt::J:
@@ -103,6 +107,10 @@ type2tc pick_int_type(bool is_signed, length_modt mod)
   }
   switch (mod)
   {
+  case length_modt::HH:
+    return get_uint8_type();
+  case length_modt::H:
+    return get_uint16_type();
   case length_modt::L:
   case length_modt::Z:
   case length_modt::J:
