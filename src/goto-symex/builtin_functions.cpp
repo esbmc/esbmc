@@ -628,7 +628,17 @@ expr2tc goto_symext::symex_mem(
     rhs = if2tc(rhs->type, choice, rhs, null_sym);
   }
 
-  if (!options.get_bool_option("force-malloc-success") && is_malloc)
+  // When --data-races-check is on, keep the nondeterministic NULL alternative
+  // even if --force-malloc-success is set. Data-race detection is based on
+  // POINTER_OBJECT(addr) indexing into the races_flag array; if every malloc
+  // is replaced by a distinct concrete dynamic object the SMT solver can never
+  // alias the addresses from two threads, so any races reachable only along a
+  // malloc-failure path (e.g. via --no-pointer-check'd NULL dereferences) are
+  // silently dropped.
+  bool model_malloc_failure =
+    !options.get_bool_option("force-malloc-success") ||
+    options.get_bool_option("data-races-check");
+  if (model_malloc_failure && is_malloc)
   {
     expr2tc null_sym = symbol2tc(rhs->type, "NULL");
     expr2tc choice = sideeffect2tc(
