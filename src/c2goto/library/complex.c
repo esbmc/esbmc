@@ -3,12 +3,12 @@
 
 #ifdef _MSC_VER
 #  define COMPLEX_DOUBLE _Dcomplex
-#  define CREAL(z) ((z).real)
-#  define CIMAG(z) ((z).imag)
+#  define CREAL(z) ((z)._Val[0])
+#  define CIMAG(z) ((z)._Val[1])
 #else
 #  define COMPLEX_DOUBLE double complex
-#  define CREAL(z) __real__ (z)
-#  define CIMAG(z) __imag__ (z)
+#  define CREAL(z) __real__(z)
+#  define CIMAG(z) __imag__(z)
 #endif
 
 double creal(COMPLEX_DOUBLE z)
