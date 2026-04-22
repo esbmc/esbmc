@@ -1,6 +1,8 @@
 class Field:
 
     def __class_getitem__(cls, item):
+        """Return the class itself for subscription-style type usage."""
+
         return cls
 
 
