@@ -3914,7 +3914,7 @@ void clang_c_convertert::get_decl_name(
     }
     else
 #if CLANG_VERSION_MAJOR >= 22
-      name = getFullyQualifiedName(
+      name = rd.getKindName().str() + " " + getFullyQualifiedName(
         ASTContext->getTypeDeclType(llvm::cast<clang::TypeDecl>(&rd)),
         *ASTContext);
 #else
