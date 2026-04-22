@@ -29,6 +29,8 @@ void printf_formattert::print(std::ostream &out)
 {
   format_pos = 0;
   next_operand = operands.begin();
+  min_outlen = 0;
+  max_outlen = 0;
 
   try
   {
@@ -81,6 +83,16 @@ std::string format_radix(uint64_t val, int base, bool uppercase)
     oss << std::uppercase;
   oss << (base == 16 ? std::hex : std::oct) << val;
   return oss.str();
+}
+
+// Maximum number of decimal digits a bits-wide integer can produce,
+// including a leading '-' for signed types.
+size_t max_decimal_digits(bool is_signed, size_t bits)
+{
+  size_t mag_bits = is_signed ? bits - 1 : bits;
+  // ceil(mag_bits * log10(2)) via integer arithmetic (30103/100000 ≈ log10(2))
+  size_t digits = (mag_bits * 30103 + 99999) / 100000;
+  return is_signed ? digits + 1 : digits;
 }
 
 // Pick the integer cast target for a given signedness and length modifier.
@@ -210,44 +222,55 @@ void printf_formattert::process_format(std::ostream &out)
     ch = next();
   }
 
-  // Emit an integer in the given base. Constants are rendered via
-  // format_constantt (decimal) or format_radix (hex/oct). For non-constant
-  // hex/oct args we fall back to a zero-string sized to the maximum number
-  // of digits the target type can produce — this keeps counterexample
-  // output readable while providing a conservative upper bound on the
-  // output length so printf's modelled return value never silently
-  // under-counts. Decimal non-constants use format_constantt's existing
-  // failure-string fallback to preserve pre-existing behaviour.
+  // Emit a string of known length and update both output-length bounds.
+  auto emit = [&](const std::string &s) {
+    out << s;
+    min_outlen += s.length();
+    max_outlen += s.length();
+  };
+
+  // Emit an integer in the given base and update output-length bounds.
+  // For constant args the exact formatted length is known. For non-constant
+  // args we emit a max-width zero placeholder for the counterexample and
+  // record [1, max_digits] as the bound (widened by any explicit min-width).
   auto emit_int = [&](bool is_signed, int base, bool uppercase) {
     if (next_operand == operands.end())
       return;
     const type2tc target = pick_int_type(is_signed, length_mod);
     const expr2tc casted = make_type(*(next_operand++), target);
     std::string s;
+    size_t min_chars, max_chars;
     if (is_constant_int2t(casted))
     {
-      if (base == 10)
-        s = format_constant(casted);
-      else
-        s = format_radix(
-          to_constant_int2t(casted).value.to_uint64(), base, uppercase);
+      s = (base == 10)
+            ? format_constant(casted)
+            : format_radix(
+                to_constant_int2t(casted).value.to_uint64(), base, uppercase);
+      s = pad_int(s, format_constant.min_width, format_constant.zero_padding);
+      min_chars = max_chars = s.length();
     }
-    else if (base == 10)
-      s = format_constant(casted);
     else
     {
       const size_t bits = target->get_width();
-      const size_t max_digits =
-        base == 16 ? (bits + 3) / 4 : (bits + 2) / 3;
-      s = std::string(max_digits, '0');
+      const size_t raw_max = (base == 16)   ? (bits + 3) / 4
+                             : (base == 8)  ? (bits + 2) / 3
+                                            : max_decimal_digits(is_signed, bits);
+      s = pad_int(
+        std::string(raw_max, '0'),
+        format_constant.min_width,
+        format_constant.zero_padding);
+      max_chars = s.length();
+      min_chars = std::max(size_t(1), size_t(format_constant.min_width));
     }
-    out << pad_int(s, format_constant.min_width, format_constant.zero_padding);
+    out << s;
+    min_outlen += min_chars;
+    max_outlen += max_chars;
   };
 
   switch (ch)
   {
   case '%':
-    out << ch;
+    emit(std::string(1, ch));
     break;
 
   case 'e':
@@ -255,7 +278,7 @@ void printf_formattert::process_format(std::ostream &out)
     format_constant.style = format_spect::stylet::SCIENTIFIC;
     if (next_operand == operands.end())
       break;
-    out << format_constant(make_type(*(next_operand++), double_type2()));
+    emit(format_constant(make_type(*(next_operand++), double_type2())));
     break;
 
   case 'f':
@@ -263,7 +286,7 @@ void printf_formattert::process_format(std::ostream &out)
     format_constant.style = format_spect::stylet::DECIMAL;
     if (next_operand == operands.end())
       break;
-    out << format_constant(make_type(*(next_operand++), double_type2()));
+    emit(format_constant(make_type(*(next_operand++), double_type2())));
     break;
 
   case 'g':
@@ -273,7 +296,7 @@ void printf_formattert::process_format(std::ostream &out)
       format_constant.precision = 1;
     if (next_operand == operands.end())
       break;
-    out << format_constant(make_type(*(next_operand++), double_type2()));
+    emit(format_constant(make_type(*(next_operand++), double_type2())));
     break;
 
   case 's':
@@ -284,7 +307,7 @@ void printf_formattert::process_format(std::ostream &out)
     const expr2tc symbol2 = get_base_object(op);
     exprt char_array = migrate_expr_back(symbol2);
     if (char_array.id() == "string-constant")
-      out << char_array.value().as_string();
+      emit(char_array.value().as_string());
   }
   break;
 
@@ -314,7 +337,7 @@ void printf_formattert::process_format(std::ostream &out)
   case 'c':
     if (next_operand == operands.end())
       break;
-    out << format_constant(make_type(*(next_operand++), char_type2()));
+    emit(format_constant(make_type(*(next_operand++), char_type2())));
     break;
 
   case 'x':
@@ -338,13 +361,12 @@ void printf_formattert::process_format(std::ostream &out)
     if (next_operand != operands.end())
       ++next_operand;
     const unsigned hex_chars = (config.ansi_c.pointer_width() + 3) / 4;
-    const std::string placeholder = "0x" + std::string(hex_chars, '0');
-    out << pad_int(placeholder, format_constant.min_width, false);
+    emit(pad_int("0x" + std::string(hex_chars, '0'), format_constant.min_width, false));
     break;
   }
 
   default:
-    out << '%' << ch;
+    emit(std::string(1, '%') + ch);
   }
 }
 
@@ -355,5 +377,9 @@ void printf_formattert::process_char(std::ostream &out)
   if (ch == '%')
     process_format(out);
   else
+  {
     out << ch;
+    min_outlen++;
+    max_outlen++;
+  }
 }
