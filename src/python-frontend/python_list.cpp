@@ -515,6 +515,14 @@ exprt python_list::build_push_list_call(
     symbol_expr(*elem_info.elem_type_sym));                  // type hash
   push_func_call.arguments().push_back(elem_info.elem_size); // element size
 
+  // float_type_id: when element is float, its type hash == float_type_id so
+  // __ESBMC_copy_value uses *(double*) copy in --ir mode (real sort).
+  exprt float_type_id_arg =
+    elem_info.elem_symbol->type.is_floatbv()
+      ? static_cast<exprt>(symbol_expr(*elem_info.elem_type_sym))
+      : from_integer(BigInt(0), size_type());
+  push_func_call.arguments().push_back(float_type_id_arg); // float_type_id
+
   push_func_call.type() = bool_type();
   push_func_call.location() = elem_info.location;
 
@@ -534,6 +542,11 @@ exprt python_list::build_insert_list_call(
   if (!insert_func_sym)
     throw std::runtime_error("Insert function symbol not found");
 
+  exprt float_type_id_arg =
+    elem_info.elem_symbol->type.is_floatbv()
+      ? static_cast<exprt>(symbol_expr(*elem_info.elem_type_sym))
+      : from_integer(BigInt(0), size_type());
+
   code_function_callt insert_func_call;
   insert_func_call.function() = symbol_expr(*insert_func_sym);
   insert_func_call.arguments().push_back(symbol_expr(list));
@@ -542,6 +555,7 @@ exprt python_list::build_insert_list_call(
     address_of_exprt(symbol_expr(*elem_info.elem_symbol)));
   insert_func_call.arguments().push_back(symbol_expr(*elem_info.elem_type_sym));
   insert_func_call.arguments().push_back(elem_info.elem_size);
+  insert_func_call.arguments().push_back(float_type_id_arg);
   insert_func_call.type() = bool_type();
   insert_func_call.location() = elem_info.location;
 
@@ -622,6 +636,7 @@ void python_list::emit_list_copy(
   push_call.function() = symbol_expr(*push_obj_sym);
   push_call.arguments().push_back(symbol_expr(dst));
   push_call.arguments().push_back(symbol_expr(tmp_obj));
+  push_call.arguments().push_back(from_integer(BigInt(0), size_type()));
   push_call.type() = bool_type();
   push_call.location() = loc;
   body.copy_to_operands(converter_.convert_expression_to_code(push_call));
@@ -1592,6 +1607,7 @@ exprt python_list::handle_range_slice(
   push_call.function() = symbol_expr(*push_func);
   push_call.arguments().push_back(symbol_expr(sliced_list));
   push_call.arguments().push_back(symbol_expr(at_result));
+  push_call.arguments().push_back(from_integer(BigInt(0), size_type()));
   push_call.type() = bool_type();
   push_call.location() = location;
   loop_body.copy_to_operands(converter_.convert_expression_to_code(push_call));
@@ -3454,6 +3470,8 @@ exprt python_list::build_extend_list_call(
     push_call.arguments().push_back(type_hash);  // type hash
     push_call.arguments().push_back(
       from_integer(BigInt(2), size_type())); // size = 2
+    push_call.arguments().push_back(
+      from_integer(BigInt(0), size_type())); // float_type_id (not float)
     push_call.type() = bool_type();
     push_call.location() = location;
     loop_body.copy_to_operands(push_call);
@@ -4560,6 +4578,7 @@ void python_list::handle_list_var_unpacking(
     push_call.function() = symbol_expr(*push_obj_func);
     push_call.arguments().push_back(symbol_expr(star_list));
     push_call.arguments().push_back(symbol_expr(tmp_at));
+    push_call.arguments().push_back(from_integer(BigInt(0), size_type()));
     push_call.type() = bool_type();
     push_call.location() = loc;
     loop_body.copy_to_operands(
