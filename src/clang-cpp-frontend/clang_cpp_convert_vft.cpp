@@ -31,6 +31,9 @@ CC_DIAGNOSTIC_POP()
 #include <util/c_types.h>
 #include <util/expr_util.h>
 #include <util/message.h>
+#include <util/std_expr.h>
+
+#include <functional>
 
 bool clang_cpp_convertert::get_struct_class_virtual_methods(
   const clang::CXXRecordDecl &cxxrd,
@@ -700,27 +703,175 @@ void clang_cpp_convertert::get_overriden_methods(
   }
 }
 
+const std::vector<const clang::CXXRecordDecl *> &
+clang_cpp_convertert::translation_unit_record_decls()
+{
+  if (record_decl_index_built_)
+    return record_decl_index_;
+
+  // Walk every DeclContext below the TU (namespaces, classes, etc.) and
+  // collect record definitions. A class declared multiple times shows up
+  // once per declaration; we filter to defining declarations so the index
+  // contains each class at most once.
+  std::function<void(const clang::DeclContext *)> walk =
+    [&](const clang::DeclContext *dc)
+  {
+    for (const clang::Decl *d : dc->decls())
+    {
+      if (const auto *rd = llvm::dyn_cast<clang::CXXRecordDecl>(d))
+        if (rd->isThisDeclarationADefinition())
+          record_decl_index_.push_back(rd);
+      if (const auto *sub_dc = llvm::dyn_cast<clang::DeclContext>(d))
+        walk(sub_dc);
+    }
+  };
+  walk(ASTContext->getTranslationUnitDecl());
+  record_decl_index_built_ = true;
+  return record_decl_index_;
+}
+
 bool clang_cpp_convertert::build_dynamic_cast(
   const clang::CXXDynamicCastExpr &cast,
   exprt &new_expr)
 {
-  // This is the single dispatch
-  // point for dynamic_cast in the C++ frontend, so the C frontend's
-  // get_cast_expr never sees a CK_Dynamic. The runtime vptr-comparison ITE
-  // (steps 5.3-5.6) will land here in follow-up patches; for now we mirror
-  // the legacy structural-typecast behaviour. That keeps casts that are
-  // statically upcasts/identity correct (the source vptr already points
-  // somewhere inside the target subobject) and leaves sibling/cross casts
-  // matching the existing KNOWNBUG state — no regressions, no false fixes.
+  // Lower dynamic_cast<T*>(src) into
+  //   src == NULL
+  //     ? (T*) NULL
+  //     : (src->vptr == &vt-D1 || src->vptr == &vt-D2 || ...)
+  //         ? (T*) src
+  //         : (T*) NULL
+  // where {D1, D2, ...} is the set of concrete classes derived from the
+  // source's static pointee that are also at-or-below T. Cases the runtime
+  // check does not yet handle (reference target, void*, virtual or
+  // multiple inheritance with non-zero base offsets, missing vtable
+  // symbols) fall back to a structural typecast so behaviour stays
+  // compatible with the legacy CK_Dynamic path.
+
   exprt sub;
   if (get_expr(*cast.getSubExpr(), sub))
     return true;
-
   typet target_type;
   if (get_type(cast.getType(), target_type))
     return true;
 
-  gen_typecast(ns, sub, target_type);
-  new_expr = sub;
+  auto fallback = [&]()
+  {
+    gen_typecast(ns, sub, target_type);
+    new_expr = sub;
+    return false;
+  };
+
+  // Reference targets (which throw std::bad_cast on failure) and
+  // dynamic_cast<void*> ship in follow-up patches.
+  if (cast.getType()->isReferenceType())
+    return fallback();
+  if (!cast.getType()->isPointerType())
+    return fallback();
+
+  clang::QualType src_qt = cast.getSubExpr()->getType();
+  if (!src_qt->isPointerType())
+    return fallback();
+
+  clang::QualType src_pointee_qt = src_qt->getPointeeType();
+  clang::QualType tgt_pointee_qt = cast.getType()->getPointeeType();
+  // dynamic_cast<void*> needs a most-derived adjustment; covered separately.
+  if (tgt_pointee_qt->isVoidType())
+    return fallback();
+
+  const clang::CXXRecordDecl *S = src_pointee_qt->getAsCXXRecordDecl();
+  const clang::CXXRecordDecl *T = tgt_pointee_qt->getAsCXXRecordDecl();
+  if (!S || !T || !S->hasDefinition() || !T->hasDefinition())
+    return fallback();
+
+  // Static upcast / identity: the layout already matches, so the legacy
+  // structural typecast is exact and no runtime check is needed.
+  if (S == T || S->isDerivedFrom(T))
+    return fallback();
+
+  // Walk up S's primary inheritance chain to find the class V that owns
+  // the vptr (the most-derived class on the chain with a
+  // virtual_table::tag-V type symbol). Stop at a virtual base — virtual
+  // inheritance is a follow-up.
+  std::string vptr_class_id;
+  for (const clang::CXXRecordDecl *cur = S; cur != nullptr;)
+  {
+    std::string id, name;
+    get_decl_name(*cur, name, id);
+    if (ns.lookup(vtable_type_prefix + id))
+    {
+      vptr_class_id = id;
+      break;
+    }
+    const clang::CXXRecordDecl *next = nullptr;
+    for (const auto &spec : cur->bases())
+    {
+      if (spec.isVirtual())
+      {
+        next = nullptr;
+        break;
+      }
+      if (const auto *bd = spec.getType()->getAsCXXRecordDecl())
+      {
+        next = bd;
+        break;
+      }
+    }
+    cur = next;
+  }
+  if (vptr_class_id.empty())
+    return fallback();
+
+  // Build the matching-vtable address list.
+  std::vector<exprt> vt_addrs;
+  for (const clang::CXXRecordDecl *D : translation_unit_record_decls())
+  {
+    if (!D->hasDefinition())
+      continue;
+    if (D->isAbstract())
+      continue;
+    if (D != S && !D->isDerivedFrom(S))
+      continue;
+    if (!(D == T || D->isDerivedFrom(T)))
+      continue;
+
+    std::string D_id, D_name;
+    get_decl_name(*D, D_name, D_id);
+    const std::string vt_var_id =
+      vtable_type_prefix + vptr_class_id + "@" + D_id;
+    const symbolt *vt_var = ns.lookup(vt_var_id);
+    if (!vt_var)
+      continue;
+    vt_addrs.push_back(
+      address_of_exprt(symbol_exprt(vt_var->id, vt_var->type)));
+  }
+
+  exprt typed_null = gen_zero(target_type);
+  exprt cast_or_null;
+  if (vt_addrs.empty())
+  {
+    // No reachable concrete derived class can satisfy the cast, so the
+    // OR-chain is statically `false` and the result is null.
+    cast_or_null = typed_null;
+  }
+  else
+  {
+    pointer_typet vptr_type(symbol_typet(vtable_type_prefix + vptr_class_id));
+    exprt src_deref = dereference_exprt(sub, sub.type());
+    exprt vptr_read = member_exprt(
+      src_deref, vptr_class_id + "::" + vtable_ptr_suffix, vptr_type);
+
+    exprt match = equality_exprt(vptr_read, vt_addrs.front());
+    for (size_t i = 1; i < vt_addrs.size(); ++i)
+      match = or_exprt(match, equality_exprt(vptr_read, vt_addrs[i]));
+
+    exprt adjusted = sub;
+    gen_typecast(ns, adjusted, target_type);
+    cast_or_null = if_exprt(match, adjusted, typed_null);
+  }
+
+  // Null-source guard — without this, src_deref above would crash symbolic
+  // execution before the SMT solver ever sees the ITE.
+  exprt is_null = equality_exprt(sub, gen_zero(sub.type()));
+  new_expr = if_exprt(is_null, typed_null, cast_or_null);
   return false;
 }

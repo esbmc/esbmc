@@ -505,14 +505,25 @@ protected:
 
   /*
    * Lower a C++ dynamic_cast expression. Lives next to the vtable code in
-   * clang_cpp_convert_vft.cpp because the runtime check (steps 5.3-5.6 of
-   * docs/dynamic_cast_rtti_plan.md) compares against vtable variable
-   * addresses, which this file already names. Currently a stub that emits a
-   * structural typecast — same behaviour as the legacy CK_Dynamic
-   * fall-through; the real vtable-comparison ITE will replace the body.
+   * clang_cpp_convert_vft.cpp because the runtime check compares against
+   * vtable variable addresses, which this file already names. Falls back
+   * to a structural typecast for the cases the helper does not yet cover
+   * (void*, dynamic_cast<T&>, virtual inheritance, missing vtable
+   * symbols) so it stays compatible with the legacy CK_Dynamic behaviour
+   * for those.
    */
   bool
   build_dynamic_cast(const clang::CXXDynamicCastExpr &cast, exprt &new_expr);
+
+  /*
+   * Lazily-built index of every CXXRecordDecl with a definition in the
+   * translation unit. Used by build_dynamic_cast to enumerate concrete
+   * derived classes when computing the matching-vtable set.
+   */
+  const std::vector<const clang::CXXRecordDecl *> &
+  translation_unit_record_decls();
+  std::vector<const clang::CXXRecordDecl *> record_decl_index_;
+  bool record_decl_index_built_ = false;
 
   /*
    * Methods for resolving a clang::MemberExpr to virtual/overriding method
