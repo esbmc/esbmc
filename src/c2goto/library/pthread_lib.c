@@ -452,7 +452,6 @@ __ESBMC_HIDE:;
 int pthread_mutex_lock_check(pthread_mutex_t *mutex)
 {
 __ESBMC_HIDE:;
-  pthread_testcancel();
   _Bool unlocked = 1;
 
   __ESBMC_atomic_begin();
