@@ -43,14 +43,6 @@ static std::string itos(int64_t i)
 unsigned int
 smt_convt::get_member_name_field(const type2tc &t, const irep_idt &name) const
 {
-  // if (is_complex_type(t))
-  // {
-  //   if (name == "real")
-  //     return 0;
-  //   assert(name == "imag" && "Complex member must be 'real' or 'imag'");
-  //   return 1;
-  // }
-
   unsigned int idx = 0;
   const struct_union_data &data_ref = get_type_def(t);
 
