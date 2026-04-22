@@ -79,6 +79,11 @@ public:
     assumpt_stack.pop_back();
   }
 
+  smt_convt *get_conv()
+  {
+    return conv.get();
+  }
+
 private:
   std::unique_ptr<smt_convt> conv;
   smt_astt assumpt_ast;

@@ -28,7 +28,7 @@ bool goto_symext::check_incremental(const expr2tc &expr, const std::string &msg)
   try
   {
     // check whether the assertion holds
-    tvt res = rte->ask_solver_question(question);
+    tvt res = rte->ask_assertion(question);
     // we don't add this assertion to the resulting logical formula
     // However, we add it as an assumption to reduce the solver time
     if (res.is_true())
@@ -43,13 +43,21 @@ bool goto_symext::check_incremental(const expr2tc &expr, const std::string &msg)
     {
       // check assertion to produce a counterexample
       assertion(gen_false_expr(), msg);
-
+      log_status("Found assertrion fail in incremental");
       // incremental verification succeeded
       return true;
     }
-    log_status("Incremental verification returned unknown");
-    // incremental verification returned unknown
-    return false;
+
+    // Unknown. This means that both P and ¬P are SAT
+    
+    if (!options.get_bool_option("multi-property"))
+    {
+      assertion(gen_false_expr(), msg);
+      return true;
+    }
+
+    // TODO: optimize for multi-property
+    return false;    
   }
   catch (runtime_encoded_equationt::dual_unsat_exception &e)
   {
@@ -121,7 +129,7 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
 
   // Perform incremental SMT-based verification if enabled
   if (
-    options.get_bool_option("smt-symex-assert") &&
+    options.get_bool_option("smt-during-symex") &&
     check_incremental(new_expr, msg))
     return; // Verification succeeded, no further action needed
 
@@ -163,7 +171,7 @@ void goto_symext::assertion(
 
 bool goto_symext::is_assume_false(const expr2tc &assumption)
 {
-  if (options.get_bool_option("smt-symex-assume"))
+  if (options.get_bool_option("smt-during-symex"))
   {
     runtime_encoded_equationt *rte =
       dynamic_cast<runtime_encoded_equationt *>(target.get());
@@ -172,9 +180,13 @@ bool goto_symext::is_assume_false(const expr2tc &assumption)
 
     try
     {
-      tvt res = rte->ask_solver_question(the_question);
+      tvt res = rte->ask_assumption(the_question);
       if (res.is_false())
-        return true;
+      {
+	log_status("Solution found by incremental!");
+	return true;
+      }        
+       
     }
     catch (runtime_encoded_equationt::dual_unsat_exception &e)
     {

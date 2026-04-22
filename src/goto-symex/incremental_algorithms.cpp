@@ -39,6 +39,7 @@ smt_convt::resultt incremental_smt_algorithm::solve()
 
 tvt incremental_smt_algorithm::step_online(SSA_stept &step)
 {
+
   if (step.ignore)
   {
     ignored_count += 1;
@@ -49,11 +50,12 @@ tvt incremental_smt_algorithm::step_online(SSA_stept &step)
   // committed to the path (same as an assumption) so subsequent steps see it.
   if (step.is_assert() || step.is_assume())
   {
-    tvt result = ask_solver_question(step.cond);
+    tvt result = ask_solver_question(step.cond);    
     step.guard_ast = conv->convert_ast(step.guard);
     step.cond_ast = conv->convert_ast(step.cond);
     assumpt_ast = conv->mk_and(assumpt_ast, step.cond_ast);
 
+    
     // TODO: TV_FALSE means the path is dead; signal the caller to stop
     //       exploring this path
 

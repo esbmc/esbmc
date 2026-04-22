@@ -163,6 +163,8 @@ public:
   void flush_latest_instructions();
 
   tvt ask_solver_question(const expr2tc &question);
+  tvt ask_assertion(const expr2tc &question, bool multi_property = false);
+  tvt ask_assumption(const expr2tc &question);
 
   smt_convt &conv;
   std::list<smt_convt::ast_vec> assert_vec_list;
