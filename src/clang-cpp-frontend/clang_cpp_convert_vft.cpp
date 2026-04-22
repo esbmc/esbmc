@@ -741,11 +741,13 @@ bool clang_cpp_convertert::build_dynamic_cast(
   //         ? (T*) src
   //         : (T*) NULL
   // where {D1, D2, ...} is the set of concrete classes derived from the
-  // source's static pointee that are also at-or-below T. Cases the runtime
-  // check does not yet handle (reference target, void*, virtual or
-  // multiple inheritance with non-zero base offsets, missing vtable
-  // symbols) fall back to a structural typecast so behaviour stays
-  // compatible with the legacy CK_Dynamic path.
+  // source's static pointee that are also at-or-below T.
+  //
+  // The implementation only covers single-inheritance pointer downcasts
+  // and sibling/cross casts. Each TODO below marks a path that falls
+  // back to the legacy structural typecast and explains what a correct
+  // implementation would need to do; none have regression coverage in
+  // the tree today, so they're deferred until a test exercises them.
 
   exprt sub;
   if (get_expr(*cast.getSubExpr(), sub))
@@ -761,8 +763,13 @@ bool clang_cpp_convertert::build_dynamic_cast(
     return false;
   };
 
-  // Reference targets (which throw std::bad_cast on failure) and
-  // dynamic_cast<void*> ship in follow-up patches.
+  // TODO: dynamic_cast<T&> must throw std::bad_cast on a runtime mismatch,
+  // not silently return a typecast pointer. Correct lowering: build the
+  // same OR-chain as the pointer form, then emit either a `throw` (using
+  // the C++ exception lowering) or, if exceptions prove fiddly, an
+  // assume(match) so verification is at least sound for programs that do
+  // not exercise the failing branch. Falling back means a failing
+  // reference cast yields a garbage reference instead of throwing.
   if (cast.getType()->isReferenceType())
     return fallback();
   if (!cast.getType()->isPointerType())
@@ -774,7 +781,13 @@ bool clang_cpp_convertert::build_dynamic_cast(
 
   clang::QualType src_pointee_qt = src_qt->getPointeeType();
   clang::QualType tgt_pointee_qt = cast.getType()->getPointeeType();
-  // dynamic_cast<void*> needs a most-derived adjustment; covered separately.
+  // TODO: dynamic_cast<void*> must return a pointer to the most-derived
+  // object, which means subtracting the offset of S inside the actual D
+  // (a per-D value computed via ASTContext->getASTRecordLayout(D)
+  // .getBaseClassOffset(S)). Correct lowering: build a per-D arm in the
+  // ITE chain that does `(void*)((char*)src - off(D))`. The fallback
+  // happens to be correct for single inheritance only — every D has S at
+  // offset 0, so no adjustment is needed and `(void*)src` is the answer.
   if (tgt_pointee_qt->isVoidType())
     return fallback();
 
@@ -790,8 +803,13 @@ bool clang_cpp_convertert::build_dynamic_cast(
 
   // Walk up S's primary inheritance chain to find the class V that owns
   // the vptr (the most-derived class on the chain with a
-  // virtual_table::tag-V type symbol). Stop at a virtual base — virtual
-  // inheritance is a follow-up.
+  // virtual_table::tag-V type symbol).
+  //
+  // TODO: a virtual base on the path is treated as "give up and fall
+  // back". The correct response is to emit a nondet result with a warn
+  // log so symbolic execution doesn't trust a wrong answer; the silent
+  // typecast we use today may produce confidently-wrong verifications
+  // for programs that mix dynamic_cast with virtual inheritance.
   std::string vptr_class_id;
   for (const clang::CXXRecordDecl *cur = S; cur != nullptr;)
   {
@@ -864,6 +882,13 @@ bool clang_cpp_convertert::build_dynamic_cast(
     for (size_t i = 1; i < vt_addrs.size(); ++i)
       match = or_exprt(match, equality_exprt(vptr_read, vt_addrs[i]));
 
+    // TODO: under multiple inheritance, S may sit at a non-zero offset
+    // inside D, and that offset is D-dependent. The correct lowering
+    // splits this single typecast into per-D arms inside the ITE chain,
+    // each adjusting `(char*)src + off(S in D)` before casting. Today we
+    // emit one flat `(T*) src` for every match — correct only when every
+    // matching D has S at offset 0 (single inheritance, the most common
+    // case in practice).
     exprt adjusted = sub;
     gen_typecast(ns, adjusted, target_type);
     cast_or_null = if_exprt(match, adjusted, typed_null);
