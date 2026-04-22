@@ -58,11 +58,10 @@ unsigned short int __ESBMC_blocked_threads_count = 0;
 __attribute__((annotate("__ESBMC_inf_size")))
 _Bool __ESBMC_pthread_cancel_requested[1];
 
-__attribute__((annotate("__ESBMC_inf_size")))
-int __ESBMC_pthread_cancelstate[1];
+__attribute__((
+  annotate("__ESBMC_inf_size"))) int __ESBMC_pthread_cancelstate[1];
 
-__attribute__((annotate("__ESBMC_inf_size")))
-int __ESBMC_pthread_canceltype[1];
+__attribute__((annotate("__ESBMC_inf_size"))) int __ESBMC_pthread_canceltype[1];
 
 pthread_t __ESBMC_get_thread_id(void);
 
@@ -283,8 +282,9 @@ void pthread_testcancel(void)
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   pthread_t tid = __ESBMC_get_thread_id();
-  _Bool should_cancel = __ESBMC_pthread_cancel_requested[tid] &&
-                        __ESBMC_pthread_cancelstate[tid] == PTHREAD_CANCEL_ENABLE;
+  _Bool should_cancel =
+    __ESBMC_pthread_cancel_requested[tid] &&
+    __ESBMC_pthread_cancelstate[tid] == PTHREAD_CANCEL_ENABLE;
   __ESBMC_atomic_end();
   if (should_cancel)
     pthread_exit(PTHREAD_CANCELED);
