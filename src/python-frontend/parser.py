@@ -48,6 +48,7 @@ def is_imported_model(module_name):
         "esbmc",
         "decimal",
         "collections",
+        "dataclasses",
         "typing",
         "time",
     ]
