@@ -95,10 +95,11 @@ type2tc pick_int_type(bool is_signed, length_modt mod)
     case length_modt::H:
       return get_int16_type();
     case length_modt::L:
-    case length_modt::Z:
-    case length_modt::J:
-    case length_modt::T:
       return long_int_type2();
+    case length_modt::Z:
+    case length_modt::T:
+      return signed_size_type2();
+    case length_modt::J:
     case length_modt::LL:
       return long_long_int_type2();
     default:
@@ -112,10 +113,12 @@ type2tc pick_int_type(bool is_signed, length_modt mod)
   case length_modt::H:
     return get_uint16_type();
   case length_modt::L:
-  case length_modt::Z:
-  case length_modt::J:
-  case length_modt::T:
     return long_uint_type2();
+  case length_modt::Z:
+    return size_type2();
+  case length_modt::T:
+    return signed_size_type2();
+  case length_modt::J:
   case length_modt::LL:
     return long_long_uint_type2();
   default:
