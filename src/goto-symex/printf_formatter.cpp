@@ -68,6 +68,8 @@ pad_int(const std::string &s, unsigned min_width, bool zero_padding)
 {
   if (s.length() >= min_width)
     return s;
+  if (zero_padding && s[0] == '-')
+    return s[0] + std::string(min_width - s.length(), '0') + s.substr(1);
   return std::string(min_width - s.length(), zero_padding ? '0' : ' ') + s;
 }
 
