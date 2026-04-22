@@ -1,4 +1,4 @@
 THOROUGH
 tanh_5_unsafe.c-amalgamation.c
--I .
+-I . --boolector
 ^VERIFICATION FAILED$

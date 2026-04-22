@@ -1,4 +1,4 @@
 CORE
 main.c
---no-library
+--gcc-nested-functions --no-library
 ^VERIFICATION FAILED$

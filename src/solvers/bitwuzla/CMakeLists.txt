@@ -14,7 +14,7 @@ else()
 
 	  message("[bitwuzla] Source-dir: ${bitwuzla_SOURCE_DIR} ")
         message("[bitwuzla] Configuring project:  ./configure.py --prefix ${bitwuzla_BINARY_DIR}")
-        execute_process(COMMAND python3 ./configure.py --prefix ${bitwuzla_BINARY_DIR}
+        execute_process(COMMAND python3 ./configure.py --prefix ${bitwuzla_BINARY_DIR} --no-fpexp
           WORKING_DIRECTORY "${bitwuzla_SOURCE_DIR}")
 
 

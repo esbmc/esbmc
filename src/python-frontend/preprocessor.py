@@ -598,6 +598,52 @@ class Preprocessor(ast.NodeTransformer):
             return result_expr
 
         def visit_Call(self, node):
+            # Lower sep.join(GeneratorExp(...)) to sep.join(ListComp(...))
+            # and reuse the existing list-comprehension lowering pipeline.
+            if (
+                isinstance(node.func, ast.Attribute)
+                and node.func.attr == "join"
+                and len(node.args) == 1
+                and not node.keywords
+                and isinstance(node.args[0], ast.GeneratorExp)
+            ):
+                gen = node.args[0]
+                elt_expr = copy.deepcopy(gen.elt)
+
+                # Prefer explicit dunder dispatch for object stringification in
+                # join(genexp) to avoid strict builtin str() argument checks on
+                # loop variables inferred as non-string at preprocessing time.
+                if (
+                    isinstance(elt_expr, ast.Call)
+                    and isinstance(elt_expr.func, ast.Name)
+                    and elt_expr.func.id == "str"
+                    and len(elt_expr.args) == 1
+                    and not elt_expr.keywords
+                ):
+                    obj_expr = copy.deepcopy(elt_expr.args[0])
+                    dunder_attr = ast.Attribute(
+                        value=obj_expr,
+                        attr="__str__",
+                        ctx=ast.Load(),
+                    )
+                    elt_expr = ast.Call(func=dunder_attr, args=[], keywords=[])
+                    ast.copy_location(elt_expr, gen.elt)
+                    ast.fix_missing_locations(elt_expr)
+
+                listcomp = ast.ListComp(
+                    elt=elt_expr,
+                    generators=copy.deepcopy(gen.generators),
+                )
+                ast.copy_location(listcomp, gen)
+                ast.fix_missing_locations(listcomp)
+
+                new_call = copy.deepcopy(node)
+                new_call.args = [listcomp]
+                ast.copy_location(new_call, node)
+                ast.fix_missing_locations(new_call)
+
+                return self.visit(new_call)
+
             # Lower any(GeneratorExp(...)) to a loop-based boolean
             if (isinstance(node.func, ast.Name) and node.func.id == 'any' and len(node.args) == 1
                     and not node.keywords and isinstance(node.args[0], ast.GeneratorExp)):

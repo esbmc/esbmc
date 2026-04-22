@@ -209,7 +209,10 @@ const struct group_opt_templ all_cmd_options[] = {
     {"argv-max-strlen",
      boost::program_options::value<int>()->default_value(256)->value_name("nr"),
      "Maximum length (in bytes, including the null terminator) of each backed "
-     "argv string (default 256)."}}},
+     "argv string (default 256)."},
+    {"gcc-nested-functions",
+     NULL,
+     "Enable GCC nested functions extension (source-level lambda lifting)"}}},
   {"Architecture",
    {
      {"no-arch", NULL, "Don't set up an architecture"},
@@ -429,7 +432,7 @@ const struct group_opt_templ all_cmd_options[] = {
      "Check all interleavings, even if a bug was already found"}}},
   {"Solver",
    {{"list-solvers", NULL, "List available solvers and exit"},
-    {"boolector", NULL, "Use Boolector (default)"},
+    {"boolector", NULL, "Use Boolector"},
     {"z3", NULL, "Use Z3"},
     {"z3-debug", NULL, "Extracts Z3 dump and SMT2 formula"},
     {"z3-debug-dump-file",
@@ -443,7 +446,7 @@ const struct group_opt_templ all_cmd_options[] = {
     {"cvc4", NULL, "Use CVC4"},
     {"cvc5", NULL, "Use CVC5"},
     {"yices", NULL, "Use Yices"},
-    {"bitwuzla", NULL, "Use Bitwuzla"},
+    {"bitwuzla", NULL, "Use Bitwuzla (default)"},
     {"bv", NULL, "Use solver with bit-vector arithmetic"},
     {"ir",
      NULL,
@@ -460,11 +463,7 @@ const struct group_opt_templ all_cmd_options[] = {
     {"smtlib", NULL, "Use SMT lib format"},
     {"default-solver",
      boost::program_options::value<std::string>()->value_name("<solver>"),
-     "Override default solver used if no concrete one is specified"
-#ifdef BOOLECTOR
-     " (Boolector)"
-#endif
-    },
+     "Override default solver used if no concrete one is specified"},
     {"non-supported-models-as-zero",
      NULL,
      "If ESBMC can't extract a type/expression from the solver, then the value "

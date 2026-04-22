@@ -2984,37 +2984,63 @@ exprt function_call_expr::handle_dict_method() const
 {
   const std::string &method_name = function_id_.get_function();
 
-  // Resolve the dict symbol for all dict methods
+  // Resolve the dict to a symbol.
+  // Named receivers look up by name;
+  // inline literals (e.g. `{"a":1}.get(...)`) have none,
+  // so spill into a tmp first.
+  exprt dict_expr;
   std::string dict_name = get_object_name();
-  symbol_id dict_symbol_id = converter_.create_symbol_id();
-  dict_symbol_id.set_object(dict_name);
-  const symbolt *dict_symbol =
-    converter_.find_symbol(dict_symbol_id.to_string());
-
-  if (!dict_symbol)
-    throw std::runtime_error("Dictionary variable not found: " + dict_name);
+  if (!dict_name.empty())
+  {
+    symbol_id dict_symbol_id = converter_.create_symbol_id();
+    dict_symbol_id.set_object(dict_name);
+    const symbolt *dict_symbol =
+      converter_.find_symbol(dict_symbol_id.to_string());
+    if (!dict_symbol)
+      throw std::runtime_error("Dictionary variable not found: " + dict_name);
+    dict_expr = symbol_expr(*dict_symbol);
+  }
+  else
+  {
+    exprt literal = converter_.get_expr(call_["func"]["value"]);
+    symbolt &tmp = converter_.create_tmp_symbol(
+      call_, "$dict_lit$", literal.type(), exprt());
+    converter_.add_instruction(code_declt(symbol_expr(tmp)));
+    converter_.add_instruction(code_assignt(symbol_expr(tmp), literal));
+    dict_expr = symbol_expr(tmp);
+  }
 
   if (method_name == "get")
-    return converter_.get_dict_handler()->handle_dict_get(
-      symbol_expr(*dict_symbol), call_);
+    return converter_.get_dict_handler()->handle_dict_get(dict_expr, call_);
 
   if (method_name == "setdefault")
     return converter_.get_dict_handler()->handle_dict_setdefault(
-      symbol_expr(*dict_symbol), call_);
+      dict_expr, call_);
 
   if (method_name == "update")
-    return converter_.get_dict_handler()->handle_dict_update(
-      symbol_expr(*dict_symbol), call_);
+    return converter_.get_dict_handler()->handle_dict_update(dict_expr, call_);
 
   if (method_name == "pop")
-    return converter_.get_dict_handler()->handle_dict_pop(
-      symbol_expr(*dict_symbol), call_);
+    return converter_.get_dict_handler()->handle_dict_pop(dict_expr, call_);
 
   if (method_name == "popitem")
-    return converter_.get_dict_handler()->handle_dict_popitem(
-      symbol_expr(*dict_symbol), call_);
+    return converter_.get_dict_handler()->handle_dict_popitem(dict_expr, call_);
 
   throw std::runtime_error("Unsupported dict method: " + method_name);
+}
+
+bool function_call_expr::is_dict_class_method_call() const
+{
+  if (call_["func"]["_type"] != "Attribute")
+    return false;
+  const auto &value = call_["func"]["value"];
+  if (!value.contains("_type") || value["_type"] != "Name")
+    return false;
+  if (value["id"] != "dict")
+    return false;
+
+  const std::string &method_name = function_id_.get_function();
+  return method_name == "fromkeys";
 }
 
 exprt function_call_expr::handle_list_copy() const
@@ -3686,6 +3712,14 @@ function_call_expr::get_dispatch_table()
     {[this]() { return is_list_method_call(); },
      [this]() { return handle_list_method(); },
      "list methods"},
+
+    // Dict class methods (dict.fromkeys), matched before instance-method dispatch
+    // The receiver is the class name, not a dict symbol.
+    {[this]() { return is_dict_class_method_call(); },
+     [this]() {
+       return converter_.get_dict_handler()->handle_dict_fromkeys(call_);
+     },
+     "dict class methods"},
 
     // Dict methods
     {[this]() { return is_dict_method_call(); },
