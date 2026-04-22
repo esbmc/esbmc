@@ -111,8 +111,7 @@ bool clang_c_convertert::convert_float_literal(
   {
     if (val.isInfinity())
     {
-      value =
-        val.isNegative() ? -power(2, width - 1) : power(2, width - 1) - 1;
+      value = val.isNegative() ? -power(2, width - 1) : power(2, width - 1) - 1;
     }
     else if (val.isNaN())
     {
@@ -122,8 +121,7 @@ bool clang_c_convertert::convert_float_literal(
     {
       const std::string &integer_bits = type.integer_bits().as_string();
       unsigned fraction_bits =
-        integer_bits.empty() ? width / 2
-                             : width - atoi(integer_bits.c_str());
+        integer_bits.empty() ? width / 2 : width - atoi(integer_bits.c_str());
 
       // scalbn is exact for power-of-2 factors in binary floating-point.
       llvm::APFloat scaled = llvm::scalbn(
