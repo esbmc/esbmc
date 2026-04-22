@@ -4,6 +4,15 @@
 #include <stddef.h> /* size_t, NULL */
 #include <stdarg.h> /* va_list */
 
+/* glibc/Apple expose __int64_t via stdio.h; replicate since our bundled header skips that chain. */
+#ifndef _WIN32
+# if defined(__linux__) && defined(__LP64__)
+typedef long __int64_t;
+# else
+__extension__ typedef long long __int64_t;
+# endif
+#endif
+
 __ESBMC_C_CPP_BEGIN
 
 /*
