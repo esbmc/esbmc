@@ -92,6 +92,38 @@ bool clang_c_convertert::convert_integer_literal(
   return false;
 }
 
+static void parse_float(
+  llvm::SmallVectorImpl<char> &src,
+  BigInt &significand,
+  BigInt &exponent)
+{
+  unsigned p = 0;
+  std::string str_whole(1, src[p++]);
+
+  assert(src[p] == '.');
+  p++;
+
+  std::string str_fraction;
+  while (src[p] != 'E')
+    str_fraction += src[p++];
+
+  assert(src[p] == 'E');
+  p++;
+
+  assert(src[p] == '+' || src[p] == '-');
+  if (src[p] == '+')
+    p++;
+
+  std::string str_exp;
+  while (p < src.size())
+    str_exp += src[p++];
+
+  std::string str_number = str_whole + str_fraction;
+  significand = str_number.empty() ? 0 : string2integer(str_number);
+  exponent = str_exp.empty() ? 0 : string2integer(str_exp);
+  exponent -= str_fraction.size();
+}
+
 bool clang_c_convertert::convert_float_literal(
   const clang::FloatingLiteral &floating_literal,
   exprt &dest)
@@ -111,8 +143,7 @@ bool clang_c_convertert::convert_float_literal(
   {
     if (val.isInfinity())
     {
-      value =
-        val.isNegative() ? -power(2, width - 1) : power(2, width - 1) - 1;
+      value = val.isNegative() ? -power(2, width - 1) : power(2, width - 1) - 1;
     }
     else if (val.isNaN())
     {
@@ -122,8 +153,7 @@ bool clang_c_convertert::convert_float_literal(
     {
       const std::string &integer_bits = type.integer_bits().as_string();
       unsigned fraction_bits =
-        integer_bits.empty() ? width / 2
-                             : width - atoi(integer_bits.c_str());
+        integer_bits.empty() ? width / 2 : width - atoi(integer_bits.c_str());
 
       // scalbn is exact for power-of-2 factors in binary floating-point.
       llvm::APFloat scaled = llvm::scalbn(
@@ -164,11 +194,37 @@ bool clang_c_convertert::convert_float_literal(
       else
         a = ieee_floatt::plus_infinity(a.spec);
     }
-    else
+    else if (val.bitcastToAPInt().getBitWidth() == width)
     {
+      // float / double / IEEE quad: APFloat bit width matches ESBMC type width.
       llvm::SmallString<32> hex_str;
       val.bitcastToAPInt().toString(hex_str, 16, false);
       a.unpack(string2integer(hex_str.str().str(), 16));
+    }
+    else if (width == 128)
+    {
+      // x87 on LP64/LLP64: ESBMC models long double as 128-bit (f=112, e=15),
+      // identical to IEEE quad.  Convert x87 → quad (lossless, quad has more
+      // precision than x87) then bitcast.
+      llvm::APFloat quad_val = val;
+      bool losesInfo = false;
+      quad_val.convert(
+        llvm::APFloat::IEEEquad(),
+        llvm::APFloat::rmNearestTiesToEven,
+        &losesInfo);
+      llvm::SmallString<32> hex_str;
+      quad_val.bitcastToAPInt().toString(hex_str, 16, false);
+      a.unpack(string2integer(hex_str.str().str(), 16));
+    }
+    else
+    {
+      // ILP32 x87: ESBMC models long double as 96-bit (f=80, e=15), which has
+      // no corresponding LLVM APFloat semantics.  Fall back to decimal parsing.
+      llvm::SmallVector<char, 128> str;
+      val.toString(str, width, 0);
+      BigInt significand, exponent;
+      parse_float(str, significand, exponent);
+      a.from_base10(significand, exponent);
     }
 
     value = a.pack();
