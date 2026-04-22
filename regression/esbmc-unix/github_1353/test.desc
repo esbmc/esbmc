@@ -1,4 +1,4 @@
-THOROUGH
+CORE
 main.c
---unwind 1 --bitwuzla
+--unwind 1
 ^VERIFICATION FAILED$
