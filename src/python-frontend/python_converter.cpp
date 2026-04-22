@@ -5666,23 +5666,7 @@ symbolt *python_converter::create_symbol_for_unannotated_assign(
         inferred_type = dict_handler_->resolve_expected_type_for_dict_subscript(
           symbol_expr(*obj_sym));
         if (inferred_type.is_nil() || inferred_type.is_empty())
-        {
-          // Untyped dict (e.g. `a = {}`): infer the return type from the default arg.
-          // Any concrete literal (list, dict, int, float, str, bool, None)
-          // is more precise than the `long_int` fallback applied just below.
-          const std::string shape = python_annotation<nlohmann::json>::
-            infer_type_from_default_arg_shape(ast_node["value"]["args"]);
-          if (shape == "list")
-            inferred_type = type_handler_.get_list_type();
-          else if (shape == "dict")
-            inferred_type = dict_handler_->get_dict_struct_type();
-          else if (
-            !shape.empty() && shape != "Any" &&
-            type_utils::is_builtin_type(shape))
-            inferred_type = type_handler_.get_typet(shape, 0);
-          if (inferred_type.is_nil() || inferred_type.is_empty())
-            inferred_type = long_int_type();
-        }
+          inferred_type = long_int_type();
       }
     }
     else
