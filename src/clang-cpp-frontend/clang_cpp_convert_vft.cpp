@@ -25,6 +25,7 @@ CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 #include <llvm/Support/raw_os_ostream.h>
 CC_DIAGNOSTIC_POP()
 
+#include <clang-c-frontend/typecast.h>
 #include <clang-cpp-frontend/clang_cpp_convert.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
@@ -697,4 +698,29 @@ void clang_cpp_convertert::get_overriden_methods(
     (void)status;
     assert(status.second);
   }
+}
+
+bool clang_cpp_convertert::build_dynamic_cast(
+  const clang::CXXDynamicCastExpr &cast,
+  exprt &new_expr)
+{
+  // This is the single dispatch
+  // point for dynamic_cast in the C++ frontend, so the C frontend's
+  // get_cast_expr never sees a CK_Dynamic. The runtime vptr-comparison ITE
+  // (steps 5.3-5.6) will land here in follow-up patches; for now we mirror
+  // the legacy structural-typecast behaviour. That keeps casts that are
+  // statically upcasts/identity correct (the source vptr already points
+  // somewhere inside the target subobject) and leaves sibling/cross casts
+  // matching the existing KNOWNBUG state — no regressions, no false fixes.
+  exprt sub;
+  if (get_expr(*cast.getSubExpr(), sub))
+    return true;
+
+  typet target_type;
+  if (get_type(cast.getType(), target_type))
+    return true;
+
+  gen_typecast(ns, sub, target_type);
+  new_expr = sub;
+  return false;
 }

@@ -504,6 +504,17 @@ protected:
     const switch_table &vtable_value_map);
 
   /*
+   * Lower a C++ dynamic_cast expression. Lives next to the vtable code in
+   * clang_cpp_convert_vft.cpp because the runtime check (steps 5.3-5.6 of
+   * docs/dynamic_cast_rtti_plan.md) compares against vtable variable
+   * addresses, which this file already names. Currently a stub that emits a
+   * structural typecast — same behaviour as the legacy CK_Dynamic
+   * fall-through; the real vtable-comparison ITE will replace the body.
+   */
+  bool
+  build_dynamic_cast(const clang::CXXDynamicCastExpr &cast, exprt &new_expr);
+
+  /*
    * Methods for resolving a clang::MemberExpr to virtual/overriding method
    */
   bool perform_virtual_dispatch(const clang::MemberExpr &member) override;
