@@ -857,17 +857,20 @@ void execution_statet::get_expr_globals(
     if (!symbol)
       return;
 
-    if (
-      name == "c:@__ESBMC_alloc" || name == "c:@__ESBMC_alloc_size" ||
-      name == "c:@__ESBMC_is_dynamic" ||
-      name == "c:@__ESBMC_blocked_threads_count" ||
-      name.find("c:pthread_lib") != std::string::npos ||
-      name == "c:@__ESBMC_rounding_mode" ||
-      name.find("c:@__ESBMC_pthread_thread") != std::string::npos)
-    {
-      return;
-    }
+    auto is_internal_name = [](const std::string &n) {
+      return n == "c:@__ESBMC_alloc" || n == "c:@__ESBMC_alloc_size" ||
+             n == "c:@__ESBMC_is_dynamic" ||
+             n == "c:@__ESBMC_blocked_threads_count" ||
+             n.find("c:pthread_lib") != std::string::npos ||
+             n == "c:@__ESBMC_rounding_mode" ||
+             n.find("c:@__ESBMC_pthread_thread") != std::string::npos;
+    };
 
+    // Resolve pointer parameters/locals BEFORE applying the internal-name
+    // filter. The pointer variable itself may live in pthread_lib (e.g. the
+    // `mutex` parameter of pthread_mutex_lock) and so match the filter, yet
+    // still point to a user global whose access must be recorded as an MPOR
+    // dependency.
     expr2tc p = expr;
     bool point_to_global = false;
     if (
@@ -893,6 +896,8 @@ void execution_statet::get_expr_globals(
           const symbolt *s = ns.lookup(n);
           if (!s)
             continue;
+          if (is_internal_name(n))
+            continue;
           point_to_global = s->static_lifetime || s->type.is_dynamic_set();
           p = to_object_descriptor2t(obj).object;
           /* Stop when the global symbol is found */
@@ -901,6 +906,11 @@ void execution_statet::get_expr_globals(
         }
       }
     }
+
+    // Drop the pointer symbol itself if it is an internal pthread_lib name,
+    // unless we've resolved it to a user global above.
+    if (is_internal_name(name) && !point_to_global)
+      return;
 
     // Rename to level1 to avoid shared varible mismatch in mpor.
     cur_state->top().level1.rename(p);
