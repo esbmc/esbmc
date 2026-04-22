@@ -92,60 +92,6 @@ bool clang_c_convertert::convert_integer_literal(
   return false;
 }
 
-static void parse_float(
-  llvm::SmallVectorImpl<char> &src,
-  BigInt &significand,
-  BigInt &exponent)
-{
-  // {digit}{dot}{digits}[+-]{exponent}
-
-  unsigned p = 0;
-
-  // get whole number
-  std::string str_whole_number;
-  str_whole_number += src[p++];
-
-  // skip dot
-  assert(src[p] == '.');
-  p++;
-
-  // get fraction part
-  std::string str_fraction_part;
-  while (src[p] != 'E')
-    str_fraction_part += src[p++];
-
-  // skip E
-  assert(src[p] == 'E');
-  p++;
-
-  // get exponent
-  assert(src[p] == '+' || src[p] == '-');
-
-  // skip +
-  if (src[p] == '+')
-    p++;
-
-  std::string str_exponent;
-  str_exponent += src[p++];
-
-  while (p < src.size())
-    str_exponent += src[p++];
-
-  std::string str_number = str_whole_number + str_fraction_part;
-
-  if (str_number.empty())
-    significand = 0;
-  else
-    significand = string2integer(str_number);
-
-  if (str_exponent.empty())
-    exponent = 0;
-  else
-    exponent = string2integer(str_exponent);
-
-  exponent -= str_fraction_part.size();
-}
-
 bool clang_c_convertert::convert_float_literal(
   const clang::FloatingLiteral &floating_literal,
   exprt &dest)
@@ -154,40 +100,19 @@ bool clang_c_convertert::convert_float_literal(
   if (get_type(floating_literal.getType(), type))
     return true;
 
-  // Get the value and convert it to string
   llvm::APFloat val = floating_literal.getValue();
-
-  // We create a vector of char with the maximum size a double can be:
-  // long doubles on 64 bits machines can be 128 bits long
-  llvm::SmallVector<char, 128> string;
-
-  // However, only get the number up to the width of the number
-  // Can be 32 (floats), 64 (doubles) or 128 (long doubles)
   unsigned width = bv_width(type);
-  val.toString(string, width, 0);
-
-  // Now let's build the literal
   BigInt value;
-  BigInt significand;
-  BigInt exponent;
   std::string value_string;
 
-  // Fixed bvs
+  // Fixed-point representation: floats are stored as scaled integers.
+  // value = trunc(val * 2^fraction_bits), saturating on overflow.
   if (config.ansi_c.use_fixed_for_float)
   {
-    // If it's +oo or -oo, we can't parse it
     if (val.isInfinity())
     {
-      if (val.isNegative())
-      {
-        // saturate: use "smallest value"
-        value = -power(2, width - 1);
-      }
-      else
-      {
-        // saturate: use "biggest value"
-        value = power(2, width - 1) - 1;
-      }
+      value =
+        val.isNegative() ? -power(2, width - 1) : power(2, width - 1) - 1;
     }
     else if (val.isNaN())
     {
@@ -195,79 +120,61 @@ bool clang_c_convertert::convert_float_literal(
     }
     else
     {
-      // Everything else is fine
-      parse_float(string, significand, exponent);
-
-      unsigned fraction_bits;
       const std::string &integer_bits = type.integer_bits().as_string();
+      unsigned fraction_bits =
+        integer_bits.empty() ? width / 2
+                             : width - atoi(integer_bits.c_str());
 
-      if (integer_bits == "")
-        fraction_bits = width / 2;
-      else
-        fraction_bits = width - atoi(integer_bits.c_str());
+      // scalbn is exact for power-of-2 factors in binary floating-point.
+      llvm::APFloat scaled = llvm::scalbn(
+        val, (int)fraction_bits, llvm::APFloat::rmNearestTiesToEven);
 
-      BigInt factor = BigInt(1) << fraction_bits;
-      value = significand * factor;
+      llvm::APSInt result(width, /*isUnsigned=*/false);
+      bool isExact;
+      auto status =
+        scaled.convertToInteger(result, llvm::APFloat::rmTowardZero, &isExact);
 
-      if (exponent < 0)
-        value /= power(10, -exponent);
+      // opInvalidOp means the scaled value overflowed the integer width.
+      if (status == llvm::APFloat::opInvalidOp)
+        value =
+          val.isNegative() ? -power(2, width - 1) : power(2, width - 1) - 1;
       else
       {
-        value *= power(10, exponent);
-
-        if (value <= -power(2, width - 1) - 1)
-        {
-          // saturate: use "smallest value"
-          value = -power(2, width - 1);
-        }
-        else if (value >= power(2, width - 1))
-        {
-          // saturate: use "biggest value"
-          value = power(2, width - 1) - 1;
-        }
+        llvm::SmallString<64> dec_str;
+        result.toString(dec_str, 10, true);
+        value = string2integer(dec_str.str().str());
       }
     }
 
-    // Save value string format
     value_string = integer2string(value);
   }
   else
   {
+    // IEEE 754: transfer the exact bit pattern via bitcast to avoid any
+    // intermediate decimal rounding.
     ieee_floatt a;
     a.spec = to_floatbv_type(type);
 
-    // If it's +oo or -oo, we can't parse it
-    if (val.isInfinity())
+    if (val.isNaN())
+      a = ieee_floatt::NaN(a.spec);
+    else if (val.isInfinity())
     {
       if (val.isNegative())
-      {
         a = ieee_floatt::minus_infinity(a.spec);
-      }
       else
-      {
         a = ieee_floatt::plus_infinity(a.spec);
-      }
-    }
-    else if (val.isNaN())
-    {
-      a = ieee_floatt::NaN(a.spec);
     }
     else
     {
-      parse_float(string, significand, exponent);
-
-      a.from_base10(significand, exponent);
+      llvm::SmallString<32> hex_str;
+      val.bitcastToAPInt().toString(hex_str, 16, false);
+      a.unpack(string2integer(hex_str.str().str(), 16));
     }
 
-    // Pack the value to generate the correct number, regardless of the case
     value = a.pack();
-
-    // Save value string format
     value_string = a.to_ansi_c_string();
   }
 
-  dest =
-    constant_exprt(integer2binary(value, bv_width(type)), value_string, type);
-
+  dest = constant_exprt(integer2binary(value, width), value_string, type);
   return false;
 }
