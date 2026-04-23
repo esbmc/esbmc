@@ -9936,8 +9936,8 @@ void python_converter::process_module_imports(
       if (elem.value("module_not_found", false))
       {
         const std::string module_name = (elem["_type"] == "ImportFrom")
-                                         ? elem["module"]
-                                         : elem["names"][0]["name"];
+                                          ? elem["module"]
+                                          : elem["names"][0]["name"];
         log_warning("skipping unresolvable import: {}", module_name);
         continue;
       }
@@ -10135,8 +10135,8 @@ void python_converter::convert()
         if (elem.value("module_not_found", false))
         {
           const std::string module_name = (elem["_type"] == "ImportFrom")
-                                           ? elem["module"]
-                                           : elem["names"][0]["name"];
+                                            ? elem["module"]
+                                            : elem["names"][0]["name"];
           log_warning("skipping unresolvable import: {}", module_name);
           continue;
         }
@@ -10168,8 +10168,8 @@ void python_converter::convert()
         if (stmt.value("module_not_found", false))
         {
           const std::string module_name = (stmt["_type"] == "ImportFrom")
-                                           ? stmt["module"]
-                                           : stmt["names"][0]["name"];
+                                            ? stmt["module"]
+                                            : stmt["names"][0]["name"];
           log_warning("skipping unresolvable import: {}", module_name);
           continue;
         }
