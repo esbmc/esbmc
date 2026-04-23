@@ -8989,13 +8989,12 @@ void python_converter::get_attributes_from_self(
             attr_name);
           continue;
         }
-        struct_typet::componentt comp =
-          build_component(current_class_name_, attr_name, type);
-        auto &class_components = clazz.components();
-        if (
-          std::find(class_components.begin(), class_components.end(), comp) ==
-          class_components.end())
-          class_components.push_back(comp);
+        if (!clazz.has_component(attr_name))
+        {
+          struct_typet::componentt comp =
+            build_component(current_class_name_, attr_name, type);
+          clazz.components().push_back(comp);
+        }
         continue;
       }
       else
@@ -9053,14 +9052,12 @@ void python_converter::get_attributes_from_self(
       else
         type = type_handler_.get_typet(annotated_type);
 
-      struct_typet::componentt comp =
-        build_component(current_class_name_, attr_name, type);
-
-      auto &class_components = clazz.components();
-      if (
-        std::find(class_components.begin(), class_components.end(), comp) ==
-        class_components.end())
-        class_components.push_back(comp);
+      if (!clazz.has_component(attr_name))
+      {
+        struct_typet::componentt comp =
+          build_component(current_class_name_, attr_name, type);
+        clazz.components().push_back(comp);
+      }
     }
     else if (
       stmt.contains("_type") && stmt["_type"] == "Assign" &&
@@ -9076,14 +9073,12 @@ void python_converter::get_attributes_from_self(
       // A member is initialized with something that might be not annotated
       typet type = any_type();
       const std::string &attr_name = stmt["targets"][0]["attr"];
-      struct_typet::componentt comp =
-        build_component(current_class_name_, attr_name, type);
-
-      auto &class_components = clazz.components();
-      if (
-        std::find(class_components.begin(), class_components.end(), comp) ==
-        class_components.end())
-        class_components.push_back(comp);
+      if (!clazz.has_component(attr_name))
+      {
+        struct_typet::componentt comp =
+          build_component(current_class_name_, attr_name, type);
+        clazz.components().push_back(comp);
+      }
     }
   }
 }
