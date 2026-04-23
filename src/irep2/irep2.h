@@ -404,6 +404,7 @@ public:
     signedbv_id,
     fixedbv_id,
     floatbv_id,
+    complex_id,
     cpp_name_id,
     end_type_id
   };

@@ -42,6 +42,7 @@
 #include <stdexcept>
 #include <sstream>
 #include <unordered_map>
+#include <unordered_set>
 
 #include <boost/filesystem.hpp>
 
@@ -8923,6 +8924,176 @@ void python_converter::get_function_definition(
   current_func_name_ = caller_func_name;
 }
 
+typet python_converter::infer_attr_type_from_usage(
+  const std::string &class_name,
+  const std::string &attr_name)
+{
+  const auto &module_body = (*ast_json)["body"];
+
+  // Normalise Assign / AnnAssign into a (target, value) pair. Returns
+  // nullptrs for stmts we don't handle.
+  auto tgt_val = [](const nlohmann::json &stmt)
+    -> std::pair<const nlohmann::json *, const nlohmann::json *> {
+    if (!stmt.is_object() || !stmt.contains("value"))
+      return {nullptr, nullptr};
+    const std::string &k = stmt.value("_type", "");
+    if (
+      k == "Assign" && stmt.contains("targets") && stmt["targets"].is_array() &&
+      !stmt["targets"].empty())
+      return {&stmt["targets"][0], &stmt["value"]};
+    if (k == "AnnAssign" && stmt.contains("target"))
+      return {&stmt["target"], &stmt["value"]};
+    return {nullptr, nullptr};
+  };
+
+  // Predicate: a typet produced by the helpers below is "unset" if it was
+  // default-constructed (empty id) or explicitly nil. Either form means
+  // the caller had no type information to offer.
+  auto unset = [](const typet &ty) {
+    return ty.id().as_string().empty() || ty.is_nil();
+  };
+
+  // Build a variable-to-class map from module-level assignments. Covers:
+  //   <Name> = <Cls>(...)    — direct instantiation
+  //   <Name> = <other Name>  — single-hop alias to a known instance
+  // On conflicting class for the same variable (shadowing / reassignment to a
+  // different class), permanently tombstone the name so that later writes
+  // never silently reattach a wrong class — erasure alone is not enough
+  // because a third assignment could re-insert the variable.
+  std::unordered_map<std::string, std::string> var_to_class;
+  std::unordered_set<std::string> conflicted_vars;
+  auto record_var = [&](const std::string &name, const std::string &cls) {
+    if (conflicted_vars.count(name))
+      return;
+    auto it = var_to_class.find(name);
+    if (it == var_to_class.end())
+      var_to_class.emplace(name, cls);
+    else if (it->second != cls)
+    {
+      var_to_class.erase(it);
+      conflicted_vars.insert(name);
+    }
+  };
+  for (const auto &stmt : module_body)
+  {
+    auto [t, v] = tgt_val(stmt);
+    if (
+      !t || !v || !t->is_object() || t->value("_type", "") != "Name" ||
+      !t->contains("id") || !v->is_object())
+      continue;
+    const std::string &vk = v->value("_type", "");
+    const std::string var_name = (*t)["id"].get<std::string>();
+    if (vk == "Call")
+    {
+      const auto &f = (*v)["func"];
+      if (f.is_object() && f.value("_type", "") == "Name" && f.contains("id"))
+        record_var(var_name, f["id"].get<std::string>());
+    }
+    else if (vk == "Name" && v->contains("id"))
+    {
+      auto alias_it = var_to_class.find(v->at("id").get<std::string>());
+      if (alias_it != var_to_class.end())
+        record_var(var_name, alias_it->second);
+    }
+  }
+
+  // Resolve a class name to a pointer-to-struct type. Uses symbol_typet so
+  // the struct is resolved lazily via ns.follow() at use time — capturing
+  // sym->type directly would snapshot a possibly incomplete struct layout.
+  auto cls_ptr = [&](const std::string &cls) -> typet {
+    if (!json_utils::is_class(cls, *ast_json))
+      return typet();
+    return gen_pointer_type(symbol_typet("tag-" + cls));
+  };
+
+  // Cheap static-type inference for an RHS JSON node.
+  auto infer_rhs = [&](const nlohmann::json &rhs) -> typet {
+    if (!rhs.is_object())
+      return typet();
+    const std::string k = rhs.value("_type", "");
+    if (
+      k == "Call" && rhs["func"].is_object() &&
+      rhs["func"].value("_type", "") == "Name" && rhs["func"].contains("id"))
+      return cls_ptr(rhs["func"]["id"].get<std::string>());
+    if (k == "Name" && rhs.contains("id"))
+    {
+      auto it = var_to_class.find(rhs["id"].get<std::string>());
+      if (it != var_to_class.end())
+        return cls_ptr(it->second);
+    }
+    return typet();
+  };
+
+  // Scan `stmts` for `<base>.<attr_name> = <rhs>` where `base` satisfies
+  // `base_ok` and `rhs` yields a concrete type. Walk every hit so that
+  // mutually inconsistent assignments (e.g. `n1.next = node; n1.next = other`)
+  // fall back to any_type() rather than silently adopting the first type.
+  auto scan =
+    [&](
+      const nlohmann::json &stmts,
+      const std::function<bool(const std::string &)> &base_ok) -> typet {
+    typet first;
+    for (const auto &stmt : stmts)
+    {
+      auto [t, v] = tgt_val(stmt);
+      if (
+        !t || !v || !t->is_object() || t->value("_type", "") != "Attribute" ||
+        t->value("attr", "") != attr_name || !t->contains("value") ||
+        !(*t)["value"].is_object() ||
+        (*t)["value"].value("_type", "") != "Name" ||
+        !(*t)["value"].contains("id") ||
+        !base_ok((*t)["value"]["id"].get<std::string>()))
+        continue;
+      typet r = infer_rhs(*v);
+      if (unset(r))
+        continue;
+      if (unset(first))
+        first = r;
+      else if (first != r)
+        return typet();
+    }
+    return first;
+  };
+
+  // Preferred: module-level `<var>.<attr> = <rhs>` where <var> is a known
+  // instance of class_name (handles `n1.next = n2` after `n1 = Node(1)`).
+  typet t = scan(module_body, [&](const std::string &name) {
+    auto it = var_to_class.find(name);
+    return it != var_to_class.end() && it->second == class_name;
+  });
+  if (!unset(t))
+    return t;
+
+  // Fallback: `self.<attr> = <rhs>` inside the class's own methods. Unify
+  // across all methods so that two methods assigning different classes to
+  // the same attribute fall back to any_type() rather than returning
+  // whichever is encountered first.
+  const auto &cls_node = json_utils::find_class(module_body, class_name);
+  if (!cls_node.is_null() && cls_node.contains("body"))
+  {
+    typet unified;
+    for (const auto &m : cls_node.at("body"))
+    {
+      if (
+        !m.is_object() || m.value("_type", "") != "FunctionDef" ||
+        !m.contains("body"))
+        continue;
+      typet r =
+        scan(m["body"], [](const std::string &n) { return n == "self"; });
+      if (unset(r))
+        continue;
+      if (unset(unified))
+        unified = r;
+      else if (unified != r)
+        return typet();
+    }
+    if (!unset(unified))
+      return unified;
+  }
+
+  return typet();
+}
+
 void python_converter::get_attributes_from_self(
   const nlohmann::json &func_node,
   struct_typet &clazz)
@@ -9034,8 +9205,11 @@ void python_converter::get_attributes_from_self(
       else if (annotated_type == "NoneType")
       {
         // The annotator inferred NoneType from a None literal at a call site.
-        // Look up the declared parameter annotation from the function signature
-        // to recover the real type (e.g., Optional["List"]).
+        // Resolve the real type from (1) the declared parameter annotation
+        // for `self.x = param`, else (2) non-None assignments to this
+        // attribute elsewhere in the module — the latter handles linked-list
+        // / tree patterns like `self.next = None` in __init__ plus
+        // `n1.next = n2` at module scope.
         typet resolved;
         if (
           stmt.contains("value") && stmt["value"].is_object() &&
@@ -9046,8 +9220,15 @@ void python_converter::get_attributes_from_self(
           if (it != param_annotations.end())
             resolved = get_type_from_annotation(it->second, stmt);
         }
-        type =
-          (!resolved.is_nil() && !resolved.is_empty()) ? resolved : any_type();
+        // Default-constructed typet has an empty id; explicit error paths
+        // in get_type_from_annotation may return an id_nil one instead.
+        // Treat both as "unset" before falling through.
+        auto unset = [](const typet &ty) {
+          return ty.id().as_string().empty() || ty.is_nil();
+        };
+        if (unset(resolved))
+          resolved = infer_attr_type_from_usage(current_class_name_, attr_name);
+        type = unset(resolved) ? any_type() : resolved;
       }
       else
         type = type_handler_.get_typet(annotated_type);
@@ -10124,6 +10305,14 @@ void python_converter::convert()
     {
       if (elem["_type"] == "ImportFrom" || elem["_type"] == "Import")
       {
+        if (elem.value("module_not_found", false))
+        {
+          const std::string module_name = (elem["_type"] == "ImportFrom")
+                                            ? elem["module"]
+                                            : elem["names"][0]["name"];
+          log_warning("skipping unresolvable import: {}", module_name);
+          continue;
+        }
         is_importing_module = true;
         if (!import_module_into_block(elem, locator, all_imports_block))
         {
