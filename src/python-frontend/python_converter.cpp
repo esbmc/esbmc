@@ -8996,8 +8996,9 @@ typet python_converter::infer_attr_type_from_usage(
     if (!rhs.is_object())
       return typet();
     const std::string k = rhs.value("_type", "");
-    if (k == "Call" && rhs["func"].is_object() &&
-        rhs["func"].value("_type", "") == "Name" && rhs["func"].contains("id"))
+    if (
+      k == "Call" && rhs["func"].is_object() &&
+      rhs["func"].value("_type", "") == "Name" && rhs["func"].contains("id"))
       return cls_ptr(rhs["func"]["id"].get<std::string>());
     if (k == "Name" && rhs.contains("id"))
     {
@@ -9012,16 +9013,16 @@ typet python_converter::infer_attr_type_from_usage(
   // `base_ok` and `rhs` yields a concrete type. Walk every hit so that
   // mutually inconsistent assignments (e.g. `n1.next = node; n1.next = other`)
   // fall back to any_type() rather than silently adopting the first type.
-  auto scan = [&](
-                const nlohmann::json &stmts,
-                const std::function<bool(const std::string &)> &base_ok) -> typet {
+  auto scan =
+    [&](
+      const nlohmann::json &stmts,
+      const std::function<bool(const std::string &)> &base_ok) -> typet {
     typet first;
     for (const auto &stmt : stmts)
     {
       auto [t, v] = tgt_val(stmt);
       if (
-        !t || !v || !t->is_object() ||
-        t->value("_type", "") != "Attribute" ||
+        !t || !v || !t->is_object() || t->value("_type", "") != "Attribute" ||
         t->value("attr", "") != attr_name || !t->contains("value") ||
         !(*t)["value"].is_object() ||
         (*t)["value"].value("_type", "") != "Name" ||
@@ -9054,10 +9055,12 @@ typet python_converter::infer_attr_type_from_usage(
   {
     for (const auto &m : cls_node.at("body"))
     {
-      if (!m.is_object() || m.value("_type", "") != "FunctionDef" ||
-          !m.contains("body"))
+      if (
+        !m.is_object() || m.value("_type", "") != "FunctionDef" ||
+        !m.contains("body"))
         continue;
-      typet r = scan(m["body"], [](const std::string &n) { return n == "self"; });
+      typet r =
+        scan(m["body"], [](const std::string &n) { return n == "self"; });
       if (!r.id().as_string().empty())
         return r;
     }
