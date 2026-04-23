@@ -608,18 +608,13 @@ tvt runtime_encoded_equationt::ask_assertion(
   tvt final_res;
   push_ctx();
   assert(is_bool_type(question));
+
+
   smt_astt q = conv.convert_ast(question);
   conv.assert_ast(assumpt_chain.back());
-
-  // Now, how to ask the question? Unfortunately the clever solver stuff won't
-  // negate the condition, it'll only give us a handle to it that it negates
-  // when we access. So, we have to make an assertion, check it, pop it, then
-  // check another.
-  // Those assertions are just is-the-prop-true, is-the-prop-false. Valid
-  // results are true, false, both.
   push_ctx();
 
-  // Check Violation
+  // Check if Violation is SAT
   push_ctx();
   conv.assert_ast(conv.invert_ast(q));
   smt_convt::resultt res2 = conv.dec_solve();
@@ -654,6 +649,8 @@ tvt runtime_encoded_equationt::ask_assumption(const expr2tc &question)
 {
   tvt final_res;
 
+
+  // Store current context
   push_ctx();
 
   // Convert the question (must be a bool).
@@ -664,7 +661,8 @@ tvt runtime_encoded_equationt::ask_assumption(const expr2tc &question)
   push_ctx();
   conv.assert_ast(q);
   smt_convt::resultt res1 = conv.dec_solve();
-
+  pop_ctx();
+  
   // Assumption we are only interested if the condition is SAT.
   if (res1 == smt_convt::P_ERROR || res1 == smt_convt::P_SMTLIB)
   {
@@ -680,6 +678,7 @@ tvt runtime_encoded_equationt::ask_assumption(const expr2tc &question)
   {
     // Truth is unsat, false is sat, proposition is false
     final_res = tvt(tvt::TV_FALSE);
+
   }
   else
   {
