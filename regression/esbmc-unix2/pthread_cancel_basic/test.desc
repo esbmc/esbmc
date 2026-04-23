@@ -1,4 +1,4 @@
-THOROUGH
+CORE
 main.c
---incremental-bmc
+--context-bound 3
 ^VERIFICATION SUCCESSFUL$
