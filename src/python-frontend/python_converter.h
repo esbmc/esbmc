@@ -429,6 +429,15 @@ private:
     const nlohmann::json &func_node,
     struct_typet &clazz);
 
+  // Infer the static type of `class_name.attr_name` by scanning non-None
+  // assignments to that attribute — both `self.attr = <rhs>` within the
+  // class's own methods and `<var>.attr = <rhs>` at module scope where
+  // `<var>` was assigned `class_name(...)`. Returns nil if no useful
+  // information is found (caller falls back to any_type()).
+  typet infer_attr_type_from_usage(
+    const std::string &class_name,
+    const std::string &attr_name);
+
   exprt get_return_from_func(const char *func_symbol_id);
 
   void create_builtin_symbols();
