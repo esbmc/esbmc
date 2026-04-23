@@ -4301,6 +4301,43 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       {
         var_name = element["value"]["id"].get<std::string>();
       }
+      else if (element["value"]["_type"] == "Subscript")
+      {
+        // Attribute access on a subscript result, e.g. `d[key].attr`.
+        exprt base_expr = get_expr(element["value"]);
+        const std::string &attr_name = element["attr"].get<std::string>();
+
+        typet base_type = base_expr.type();
+        if (base_type.is_pointer())
+          base_type = base_type.subtype();
+        if (base_type.id() == "symbol")
+          base_type = ns.follow(base_type);
+
+        if (base_type.is_struct())
+        {
+          const struct_typet &struct_type = to_struct_type(base_type);
+          if (struct_type.has_component(attr_name))
+          {
+            const typet &attr_type =
+              struct_type.get_component(attr_name).type();
+            typet clean_type = clean_attribute_type(attr_type);
+            exprt member_base = base_expr;
+            if (member_base.type().is_pointer())
+            {
+              exprt deref("dereference");
+              deref.type() = member_base.type().subtype();
+              deref.move_to_operands(member_base);
+              member_base = std::move(deref);
+            }
+            expr = member_exprt(member_base, attr_name, clean_type);
+            break;
+          }
+        }
+
+        log_error(
+          "Cannot resolve attribute '{}' on subscript result", attr_name);
+        abort();
+      }
       else
       {
         log_error(
@@ -5165,14 +5202,15 @@ void python_converter::handle_assignment_type_adjustments(
       lhs_symbol->type = rhs.type();
       lhs.type() = rhs.type();
     }
+    // No annotation or preprocessor-inferred Any: propagate rhs type to lhs.
     else if (
-      !has_annotation && !rhs.type().is_empty() && lhs.type() != rhs.type() &&
+      (!has_annotation ||
+       (ast_node.value("_inferred_annotation", false) &&
+        ast_node["annotation"].value("id", std::string()) == "Any")) &&
+      !rhs.type().is_empty() && lhs.type() != rhs.type() &&
       !rhs.type().is_code() &&
       !(rhs.type().is_pointer() && rhs.type().subtype().id() == "empty"))
     {
-      // Default case: allow Python's dynamic typing by updating the variable
-      // type to match the assigned value. Type annotations are enforced via
-      // runtime assertions rather than static typing.
       lhs_symbol->type = rhs.type();
       lhs.type() = rhs.type();
     }

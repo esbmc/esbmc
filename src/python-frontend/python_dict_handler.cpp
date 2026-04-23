@@ -870,6 +870,21 @@ exprt python_dict_handler::handle_dict_subscript(
     return result;
   }
 
+  // Class-struct value: cast stored void* to the struct type and dereference.
+  {
+    namespacet ns(symbol_table_);
+    typet underlying = resolved_type;
+    if (underlying.id() == "symbol")
+      underlying = ns.follow(underlying);
+    if (underlying.is_struct() && !is_dict_type(underlying))
+    {
+      typecast_exprt value_as_struct_ptr(obj_value, pointer_typet(underlying));
+      dereference_exprt result(value_as_struct_ptr, underlying);
+      result.type() = underlying;
+      return result;
+    }
+  }
+
   // Default: cast void* to char* for string values
   typecast_exprt value_as_string(obj_value, gen_pointer_type(char_type()));
   return value_as_string;
@@ -1336,8 +1351,37 @@ typet python_dict_handler::resolve_expected_type_for_dict_subscript(
   nlohmann::json var_decl = json_utils::find_var_decl(
     var_name, converter_.get_current_func_name(), converter_.get_ast_json());
 
-  if (var_decl.empty() || !var_decl.contains("annotation"))
+  if (var_decl.empty())
     return empty_typet();
+
+  // No annotation or bare `dict`:
+  // peek at the literal's first value to infer the value type.
+  const bool no_annotation =
+    !var_decl.contains("annotation") || var_decl["annotation"].is_null();
+  const bool bare_dict_annotation =
+    !no_annotation && var_decl["annotation"].is_object() &&
+    var_decl["annotation"].value("_type", std::string()) == "Name" &&
+    var_decl["annotation"].value("id", std::string()) == "dict" &&
+    !var_decl["annotation"].contains("slice");
+  if (no_annotation || bare_dict_annotation)
+  {
+    if (
+      var_decl.contains("value") && var_decl["value"].is_object() &&
+      var_decl["value"].value("_type", std::string()) == "Dict" &&
+      var_decl["value"].contains("values") &&
+      var_decl["value"]["values"].is_array() &&
+      !var_decl["value"]["values"].empty())
+    {
+      const std::string kind =
+        var_decl["value"]["values"][0].value("_type", std::string());
+      if (kind == "List")
+        return type_handler_.get_list_type();
+      if (kind == "Dict")
+        return get_dict_struct_type();
+    }
+    if (no_annotation)
+      return empty_typet();
+  }
 
   // Check if the annotation is just a simple type (e.g., "dict")
   // If so, try to get the full type from the RHS (function call)
