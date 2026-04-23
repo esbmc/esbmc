@@ -4255,11 +4255,135 @@ class Preprocessor(ast.NodeTransformer):
         old_class_name = getattr(self, 'current_class_name', None)
         self.current_class_name = node.name
 
+        node = self.expand_dataclass(node)
         self._collect_class_attr_annotations(node)
         self.generic_visit(node)
 
         self.current_class_name = old_class_name
         return node
+
+    def is_dataclass(self, class_node):
+        """Return True when a class is decorated with @dataclass."""
+        for decorator in class_node.decorator_list:
+            target = decorator
+            if isinstance(decorator, ast.Call):
+                target = decorator.func
+
+            if isinstance(target, ast.Name) and target.id == "dataclass":
+                return True
+
+            if (
+                isinstance(target, ast.Attribute)
+                and isinstance(target.value, ast.Name)
+                and target.value.id == "dataclasses"
+                and target.attr == "dataclass"
+            ):
+                return True
+
+        return False
+
+    def collect_fields(self, class_node):
+        """Collect dataclass fields as (name, annotation, default_value)."""
+        fields = []
+        for stmt in class_node.body:
+            if not isinstance(stmt, ast.AnnAssign):
+                continue
+            if not isinstance(stmt.target, ast.Name):
+                continue
+            fields.append((stmt.target.id, stmt.annotation, stmt.value))
+        return fields
+
+    def build_init(self, class_node, fields):
+        """Build __init__(self, ...) that assigns self.<field> = <field>."""
+        args = [ast.arg(arg="self", annotation=None)]
+        defaults = []
+        body = []
+
+        first_default_idx = None
+        for index, (_, _, default_value) in enumerate(fields):
+            if default_value is not None:
+                first_default_idx = index
+                break
+
+        if first_default_idx is not None:
+            for _, _, default_value in fields[first_default_idx:]:
+                if default_value is None:
+                    defaults.append(ast.Constant(value=None))
+                else:
+                    defaults.append(copy.deepcopy(default_value))
+
+        for field_name, annotation, _ in fields:
+            args.append(ast.arg(arg=field_name, annotation=copy.deepcopy(annotation)))
+            assign_stmt = ast.AnnAssign(
+                target=ast.Attribute(
+                    value=self.create_name_node("self", ast.Load(), class_node),
+                    attr=field_name,
+                    ctx=ast.Store(),
+                ),
+                annotation=copy.deepcopy(annotation),
+                value=self.create_name_node(field_name, ast.Load(), class_node),
+                simple=0,
+            )
+            self.ensure_all_locations(assign_stmt, class_node)
+            body.append(assign_stmt)
+
+        if not body:
+            body = [ast.Pass()]
+
+        init_func = ast.FunctionDef(
+            name="__init__",
+            args=ast.arguments(
+                posonlyargs=[],
+                args=args,
+                vararg=None,
+                kwonlyargs=[],
+                kw_defaults=[],
+                kwarg=None,
+                defaults=defaults,
+            ),
+            body=body,
+            decorator_list=[],
+            returns=None,
+            type_comment=None,
+        )
+        self.ensure_all_locations(init_func, class_node)
+        ast.fix_missing_locations(init_func)
+        return init_func
+
+    def expand_dataclass(self, class_node):
+        """Inject a minimal generated __init__ for dataclass-decorated classes."""
+        if not self.is_dataclass(class_node):
+            return class_node
+
+        if any(
+            isinstance(member, ast.FunctionDef) and member.name == "__init__"
+            for member in class_node.body
+        ):
+            return class_node
+
+        fields = self.collect_fields(class_node)
+        if not fields:
+            return class_node
+
+        # For now, synthesize dataclass __init__ only for annotation-only fields.
+        # Classes with explicit field defaults keep existing frontend behavior.
+        if any(default_value is not None for _, _, default_value in fields):
+            return class_node
+
+        field_names = {field_name for field_name, _, _ in fields}
+        class_node.body = [
+            stmt
+            for stmt in class_node.body
+            if not (
+                isinstance(stmt, ast.AnnAssign)
+                and isinstance(stmt.target, ast.Name)
+                and stmt.target.id in field_names
+                and stmt.value is None
+            )
+        ]
+
+        class_node.body.insert(0, self.build_init(class_node, fields))
+        return class_node
 
     def _collect_class_attr_annotations(self, class_node):
         """Scan __init__ for self.attr: T = ... and cache attribute annotations."""
