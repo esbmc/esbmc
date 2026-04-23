@@ -1428,6 +1428,46 @@ class Preprocessor(ast.NodeTransformer):
             return prefix + [node]
         return node
 
+    def visit_Subscript(self, node):
+        """Fold constant indexing over tracked list literals when safe.
+
+        Only folds when the indexed element is a pure literal (Constant or a
+        unary +/- over a Constant). Folding non-pure expressions such as
+        ``nondet_int()`` calls would break value correlation, since each
+        substitution would produce a fresh, independent symbolic value.
+        """
+        node = self.generic_visit(node)
+
+        if (
+            isinstance(node.value, ast.Name)
+            and node.value.id in self.list_literal_values
+        ):
+            list_node = self.list_literal_values[node.value.id]
+
+            idx_node = node.slice
+            if isinstance(idx_node, ast.Index):
+                idx_node = idx_node.value
+
+            if isinstance(idx_node, ast.Constant) and isinstance(idx_node.value, int):
+                idx = idx_node.value
+                elts = list_node.elts
+                if idx < 0:
+                    idx = len(elts) + idx
+                if 0 <= idx < len(elts):
+                    elt = elts[idx]
+                    is_pure_literal = isinstance(elt, ast.Constant) or (
+                        isinstance(elt, ast.UnaryOp)
+                        and isinstance(elt.op, (ast.UAdd, ast.USub))
+                        and isinstance(elt.operand, ast.Constant)
+                    )
+                    if is_pure_literal:
+                        folded = copy.deepcopy(elt)
+                        self.ensure_all_locations(folded, node)
+                        ast.fix_missing_locations(folded)
+                        return folded
+
+        return node
+
     def visit_Expr(self, node):
         node = self.generic_visit(node)
 
@@ -1855,6 +1895,23 @@ class Preprocessor(ast.NodeTransformer):
             # Handle dict.items() for loops
             self.is_range_loop = False
             return self._transform_items_for(node)
+        elif (
+            isinstance(node.iter, ast.Name)
+            and node.iter.id in self.list_literal_values
+            and self._can_safely_unroll_list_literal_for(
+                node, self.list_literal_values[node.iter.id]
+            )
+        ):
+            # For direct iteration over a known list literal variable, unroll the loop
+            # to avoid introducing len()/index machinery in the generated model.
+            # Skip the unroll if the body contains break/continue/return, since
+            # straight-line unrolling would leave those statements without a
+            # surrounding loop/function context. Skip too when elements are not
+            # homogeneous pure literals to preserve runtime isinstance semantics.
+            self.is_range_loop = False
+            return self._unroll_list_literal_for(
+                node, self.list_literal_values[node.iter.id]
+            )
         else:
             # Check if iterating over a generator variable
             if isinstance(node.iter, ast.Name) and node.iter.id in self.generator_vars:
@@ -1890,6 +1947,77 @@ class Preprocessor(ast.NodeTransformer):
             # Handle general iteration over iterables (strings, lists, etc.)
             self.is_range_loop = False
             return self._transform_iterable_for(node)
+
+    def _can_safely_unroll_list_literal_for(self, node, list_literal):
+        """Decide whether a `for` over a tracked list literal is safe to unroll.
+
+        Skip the unroll when:
+          * the loop body contains ``break``/``continue``/``return`` (these
+            need a surrounding loop/function context);
+          * elements are constants of heterogeneous types (e.g. mixed ``int``
+            and ``str``), which would silently drop runtime ``isinstance``
+            checks during unrolling and constant folding.
+        """
+        for stmt in node.body:
+            for n in ast.walk(stmt):
+                if isinstance(n, (ast.Break, ast.Continue, ast.Return)):
+                    return False
+
+        const_types = set()
+        all_constants = True
+        for elt in list_literal.elts:
+            if isinstance(elt, ast.Constant):
+                const_types.add(type(elt.value).__name__)
+            elif (
+                isinstance(elt, ast.UnaryOp)
+                and isinstance(elt.op, (ast.UAdd, ast.USub))
+                and isinstance(elt.operand, ast.Constant)
+            ):
+                const_types.add(type(elt.operand.value).__name__)
+            else:
+                all_constants = False
+                break
+        if all_constants and len(const_types) > 1:
+            return False
+        return True
+
+    def _unroll_list_literal_for(self, node, list_literal):
+        """Unroll `for` over a tracked list literal variable into straight-line code."""
+        unrolled = []
+        for idx, elt in enumerate(list_literal.elts):
+            elt_copy = copy.deepcopy(elt)
+
+            if isinstance(node.target, ast.Name):
+                target_assign = ast.Assign(
+                    targets=[ast.Name(id=node.target.id, ctx=ast.Store())],
+                    value=elt_copy,
+                )
+                self.ensure_all_locations(target_assign, node)
+                unrolled.append(target_assign)
+            elif isinstance(node.target, (ast.Tuple, ast.List)):
+                # Keep tuple/list unpacking as a single assignment so the
+                # converter's tuple-unpacking path handles element extraction.
+                unpack_assign = ast.Assign(
+                    targets=[copy.deepcopy(node.target)],
+                    value=elt_copy,
+                )
+                self.ensure_all_locations(unpack_assign, node)
+                unrolled.append(unpack_assign)
+            else:
+                iter_assign = ast.Assign(
+                    targets=[copy.deepcopy(node.target)], value=elt_copy
+                )
+                self.ensure_all_locations(iter_assign, node)
+                unrolled.append(iter_assign)
+
+            for stmt in node.body:
+                stmt_copy = copy.deepcopy(stmt)
+                self.ensure_all_locations(stmt_copy, node)
+                unrolled.append(stmt_copy)
+
+        for stmt in unrolled:
+            ast.fix_missing_locations(stmt)
+        return unrolled
 
     def visit_With(self, node):
         """Desugar 'with EXPR as VAR: BODY' into __enter__/__exit__ calls.
@@ -3832,6 +3960,15 @@ class Preprocessor(ast.NodeTransformer):
         """
         Handle assignment nodes, including multiple assignments and tuple unpacking.
         """
+        # Invalidate tracked list literals on subscript writes: l[i] = v
+        for target in node.targets:
+            if (
+                isinstance(target, ast.Subscript)
+                and isinstance(target.value, ast.Name)
+                and target.value.id in self.list_literal_values
+            ):
+                self.list_literal_values.pop(target.value.id, None)
+
         # Check if this is a type alias assignment (e.g., Coordinate = Tuple[int, int])
         if (
             len(node.targets) == 1
@@ -4107,6 +4244,14 @@ class Preprocessor(ast.NodeTransformer):
 
     def visit_AugAssign(self, node):
         """Lower augmented assignment into a simple assignment."""
+        # Invalidate tracked list literals on subscript writes: l[i] op= v
+        if (
+            isinstance(node.target, ast.Subscript)
+            and isinstance(node.target.value, ast.Name)
+            and node.target.value.id in self.list_literal_values
+        ):
+            self.list_literal_values.pop(node.target.value.id, None)
+
         # Transform children first so nested expressions are already lowered.
         node = self.generic_visit(node)
 
@@ -4145,6 +4290,72 @@ class Preprocessor(ast.NodeTransformer):
 
     # This method is responsible for visiting and transforming Call nodes in the AST.
     def visit_Call(self, node):
+        # Invalidate tracked list literals on mutating method calls:
+        # name.append/clear/extend/insert/pop/remove/reverse/sort(...)
+        _MUTATING_LIST_METHODS = {
+            "append",
+            "clear",
+            "extend",
+            "insert",
+            "pop",
+            "remove",
+            "reverse",
+            "sort",
+        }
+        if (
+            isinstance(node.func, ast.Attribute)
+            and isinstance(node.func.value, ast.Name)
+            and node.func.attr in _MUTATING_LIST_METHODS
+            and node.func.value.id in self.list_literal_values
+        ):
+            self.list_literal_values.pop(node.func.value.id, None)
+
+        # Conservatively invalidate tracked list literals when passed as an
+        # argument to a non-builtin call: the callee may mutate the list
+        # (e.g. ``func2(l8)`` where ``func2`` does ``l[0] = ...``).
+        # Skip well-known pure builtins that read but never mutate the
+        # argument; some of their lowering handlers also rely on the literal
+        # still being tracked (e.g. ``sorted(pairs, key=...)``).
+        _PURE_LIST_CONSUMERS = {
+            "abs",
+            "all",
+            "any",
+            "bool",
+            "dict",
+            "enumerate",
+            "filter",
+            "float",
+            "frozenset",
+            "hash",
+            "id",
+            "int",
+            "isinstance",
+            "iter",
+            "len",
+            "list",
+            "map",
+            "max",
+            "min",
+            "next",
+            "print",
+            "range",
+            "repr",
+            "reversed",
+            "set",
+            "sorted",
+            "str",
+            "sum",
+            "tuple",
+            "type",
+            "zip",
+        }
+        if not (
+            isinstance(node.func, ast.Name) and node.func.id in _PURE_LIST_CONSUMERS
+        ):
+            for arg in list(node.args) + [kw.value for kw in node.keywords]:
+                if isinstance(arg, ast.Name) and arg.id in self.list_literal_values:
+                    self.list_literal_values.pop(arg.id, None)
+
         # NewType is an identity callable: X(v) → v
         if (isinstance(node.func, ast.Name) and
                 node.func.id in self.newtype_vars and
