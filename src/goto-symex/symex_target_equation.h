@@ -85,6 +85,14 @@ public:
     smt_convt::ast_vec &assertions,
     SSA_stept &s);
 
+  // Pre-register address_of expressions over string/array literals so
+  // int-to-ptr casts see them regardless of source-level declaration order
+  // (issue #1539).
+  void pre_register_addresses(
+    smt_convt &smt_conv,
+    std::list<SSA_stept>::iterator begin,
+    std::list<SSA_stept>::iterator end);
+
   void reconstruct_symbolic_expression(expr2tc &expr, bool keep_local_variables)
     const override;
   void replace_rec(const SSA_stept &step, expr2tc &e, bool keep_local) const;

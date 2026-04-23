@@ -1,4 +1,5 @@
 #include <cassert>
+#include <functional>
 #include <goto-symex/goto_symex.h>
 #include <goto-symex/goto_symex_state.h>
 #include <goto-symex/symex_target_equation.h>
@@ -151,8 +152,55 @@ void symex_target_equationt::renumber(
     debug_print_step(SSA_step);
 }
 
+void symex_target_equationt::pre_register_addresses(
+  smt_convt &smt_conv,
+  std::list<SSA_stept>::iterator begin,
+  std::list<SSA_stept>::iterator end)
+{
+  // Only pre-register address_of of compile-time constants (string and
+  // array literals).  These have static lifetime and exist throughout the
+  // program, so including them early in the address space cannot produce
+  // spurious candidate matches for int-to-ptr casts -- any int-to-ptr
+  // cast could legitimately reach them regardless of where the literal's
+  // use happens to appear in the source.  Dynamic/automatic objects keep
+  // their original lazy registration to avoid exposing later-allocated
+  // memory to earlier casts.
+  std::function<void(const expr2tc &)> walk = [&](const expr2tc &e) {
+    if (!e)
+      return;
+    if (is_address_of2t(e))
+    {
+      // Unwrap index/member chains (e.g. &""[0]) to reach the literal base.
+      expr2tc obj = to_address_of2t(e).ptr_obj;
+      while (is_index2t(obj) || is_member2t(obj))
+        obj = is_index2t(obj) ? to_index2t(obj).source_value
+                              : to_member2t(obj).source_value;
+      if (is_constant_string2t(obj) || is_constant_array2t(obj))
+        smt_conv.convert_ast(e);
+    }
+    e->foreach_operand([&](const expr2tc &op) { walk(op); });
+  };
+
+  for (auto it = begin; it != end; ++it)
+  {
+    const SSA_stept &step = *it;
+    if (step.ignore)
+      continue;
+    walk(step.guard);
+    walk(step.cond);
+    walk(step.lhs);
+    walk(step.rhs);
+    for (const expr2tc &arg : step.output_args)
+      walk(arg);
+  }
+}
+
 void symex_target_equationt::convert(smt_convt &smt_conv)
 {
+  // Register address-taken objects first so int-to-ptr casts see the full
+  // set of candidate objects regardless of source-level declaration order.
+  pre_register_addresses(smt_conv, SSA_steps.begin(), SSA_steps.end());
+
   smt_convt::ast_vec assertions;
   smt_astt assumpt_ast = smt_conv.convert_ast(gen_true_expr());
 
@@ -473,6 +521,10 @@ void runtime_encoded_equationt::flush_latest_instructions()
 
     // Just roll on
   }
+
+  // Register address-taken objects first so int-to-ptr casts see the full
+  // set of candidate objects regardless of source-level declaration order.
+  pre_register_addresses(conv, run_it, SSA_steps.end());
 
   // Now iterate from the start insn to convert, to the end of the list.
   for (; run_it != SSA_steps.end(); ++run_it)
