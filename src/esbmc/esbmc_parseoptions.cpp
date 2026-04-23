@@ -1373,13 +1373,28 @@ int esbmc_parseoptionst::do_bmc_strategy(
     return 0;
   };
 
-  // Count assertions that have not yet been resolved.
-  // multi_property_check calls make_skip() on each ASSERT it has already
-  // handled (SAT → recorded as violation + cleared; UNSAT → recorded as
-  // safe + cleared), so "is_assert()" returning false after skip is the
-  // canonical signal that a claim has been decided.  This lets the outer
-  // k-loop detect "everything is already decided" and stop rather than
-  // burning the remaining k budget on an empty equation.
+  // Under --multi-property, when FC or IS succeed, the remaining
+  // assertions are GLOBALLY safe (FC: no paths longer than k exist;
+  // IS: inductive invariant holds on the remaining claims).  Marking
+  // them ensures the next iteration's multi_property_check sees
+  // nothing to verify and exits cleanly via the (B)-style
+  // "all claims resolved" short-circuit below.
+  auto mark_all_asserts_safe = [](goto_functionst &funcs) {
+    for (auto &f : funcs.function_map)
+      for (auto &i : f.second.body.instructions)
+        if (i.is_assert())
+          i.make_skip();
+  };
+
+  // Count assertions that are still live.  Used as the "all claims
+  // resolved" signal in multi-property mode: once both violated and
+  // proven claims have been make_skip'd, a zero count means there's
+  // nothing left for the outer k-loop to check.  Kept as a fallback
+  // for the small-program case where the entire goto body actually
+  // drains; for larger programs whose goto contains unreachable
+  // asserts (other contract methods not in --focus-function, library
+  // models), this count never reaches 0 and the outer loop relies on
+  // the "no new violation this round" signal instead.
   auto count_active_asserts = [](const goto_functionst &funcs) -> size_t {
     size_t n = 0;
     for (const auto &f : funcs.function_map)
@@ -1387,18 +1402,6 @@ int esbmc_parseoptionst::do_bmc_strategy(
         if (i.is_assert())
           ++n;
     return n;
-  };
-
-  // Under --multi-property, when FC or IS succeed, the remaining asserts
-  // are GLOBALLY safe (FC: no paths longer than k exist; IS: inductive
-  // invariant holds on the remaining claims).  Mark them so that future
-  // bmc runs see zero claims — this is the per-claim analogue of the
-  // make_skip() that multi_property_check already does for SAT results.
-  auto mark_all_asserts_safe = [](goto_functionst &funcs) {
-    for (auto &f : funcs.function_map)
-      for (auto &i : f.second.body.instructions)
-        if (i.is_assert())
-          i.make_skip();
   };
 
   // Whether --multi-property mode is active (checked once to avoid
@@ -1564,20 +1567,30 @@ int esbmc_parseoptionst::do_bmc_strategy(
     options.get_bool_option("k-induction"))
     diagnose_unknown_properties(options, goto_functions, last_k_step);
 
-  // If max_k_step was reached without FC/IS short-circuit but BC found
-  // violations along the way, the correct verdict is FAILED, not UNKNOWN.
-  // Prior to this guard, multi-property + k-induction always ended in
-  // UNKNOWN because the fall-through log_fail hardcoded that verdict,
-  // overriding the per-k "Bug found (k = N)" signal.
+  // Exhaustion semantics under --multi-property + --k-induction.
+  //
+  // Reaching max_k_step without FC/IS holding means: the program's
+  // remaining (non-violated) claims could NOT be proven safe within
+  // our budget.  The fact that earlier k rounds found per-claim
+  // violations is a side effect — those violations are recorded and
+  // listed for the user — but the AGGREGATE verdict for this run is
+  // UNKNOWN, not FAILED, because we never closed the safety question
+  // for the outstanding claims.
+  //
+  // (Contrast with plain BMC: any violation → FAILED, because BMC is
+  //  a bug-finder that stops on the first violation.  In k-induction
+  //  we are trying to PROVE safety; not proving it ≠ having proven
+  //  a bug for every claim.)
   if (any_violation_found && !is_coverage)
   {
     log_status(
-      "[Multi-property] k-induction bound exhausted; reporting "
-      "recorded violations (last_k = {:d})",
+      "[Multi-property] k-induction bound exhausted at k = {:d}; "
+      "earlier rounds recorded per-claim violations, but remaining "
+      "claims could not be proven safe — aggregate verdict is UNKNOWN",
       last_k_step);
-    return conclude();
+    log_fail("VERIFICATION UNKNOWN");
+    return 0;
   }
-
 
   log_status("Unable to prove or falsify the program, giving up.");
   log_fail("VERIFICATION UNKNOWN");
