@@ -10305,6 +10305,14 @@ void python_converter::convert()
     {
       if (elem["_type"] == "ImportFrom" || elem["_type"] == "Import")
       {
+        if (elem.value("module_not_found", false))
+        {
+          const std::string module_name = (elem["_type"] == "ImportFrom")
+                                            ? elem["module"]
+                                            : elem["names"][0]["name"];
+          log_warning("skipping unresolvable import: {}", module_name);
+          continue;
+        }
         is_importing_module = true;
         if (!import_module_into_block(elem, locator, all_imports_block))
         {
