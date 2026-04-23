@@ -27,6 +27,7 @@ static const char *type_names[] = {
   "signedbv",
   "fixedbv",
   "floatbv",
+  "complex",
   "cpp_name"};
 // If this fires, you've added/removed a type id, and need to update the list
 // above (which is ordered according to the enum list)
@@ -229,6 +230,16 @@ unsigned int fixedbv_type2t::get_width() const
 unsigned int floatbv_type2t::get_width() const
 {
   return fraction + exponent + 1;
+}
+
+unsigned int complex_type2t::get_width() const
+{
+  std::vector<type2tc>::const_iterator it;
+  unsigned int width = 0;
+  for (it = members.begin(); it != members.end(); it++)
+    width += (*it)->get_width();
+
+  return width;
 }
 
 unsigned int code_data::get_width() const

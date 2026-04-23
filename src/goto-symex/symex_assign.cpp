@@ -699,7 +699,8 @@ void goto_symext::symex_assign_member(
   const member2t &member = to_member2t(lhs);
 
   assert(
-    is_struct_type(member.source_value) || is_union_type(member.source_value));
+    is_struct_type(member.source_value) || is_union_type(member.source_value) ||
+    is_complex_type(member.source_value));
 
   const irep_idt &component_name = member.member;
   expr2tc real_lhs = member.source_value;
@@ -716,7 +717,9 @@ void goto_symext::symex_assign_member(
     {
       // remove the type cast, we assume that the member is there
       real_lhs = cast.from;
-      assert(is_struct_type(real_lhs) || is_union_type(real_lhs));
+      assert(
+        is_struct_type(real_lhs) || is_union_type(real_lhs) ||
+        is_complex_type(member.source_value));
     }
   }
 
