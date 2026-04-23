@@ -1,0 +1,7 @@
+CORE
+main.c
+--multi-property --k-induction --max-k-step 3
+^VERIFICATION UNKNOWN$
+^\[Multi-property\] k-induction bound exhausted at k = 3;
+earlier rounds recorded per-claim violations
+\bassertion x != 42\b

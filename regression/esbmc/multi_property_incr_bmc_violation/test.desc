@@ -1,0 +1,6 @@
+CORE
+main.c
+--multi-property --incremental-bmc --max-k-step 3
+^VERIFICATION FAILED$
+^\[Multi-property\] all claims resolved at k = 1$
+\bassertion x != 42\b
