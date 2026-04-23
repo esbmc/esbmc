@@ -9933,6 +9933,14 @@ void python_converter::process_module_imports(
   {
     if (elem["_type"] == "ImportFrom" || elem["_type"] == "Import")
     {
+      if (elem.value("module_not_found", false))
+      {
+        const std::string module_name = (elem["_type"] == "ImportFrom")
+                                         ? elem["module"]
+                                         : elem["names"][0]["name"];
+        log_warning("skipping unresolvable import: {}", module_name);
+        continue;
+      }
       std::string saved_file = current_python_file;
       import_module_into_block(elem, locator, block);
       current_python_file = saved_file;
@@ -10124,6 +10132,14 @@ void python_converter::convert()
     {
       if (elem["_type"] == "ImportFrom" || elem["_type"] == "Import")
       {
+        if (elem.value("module_not_found", false))
+        {
+          const std::string module_name = (elem["_type"] == "ImportFrom")
+                                           ? elem["module"]
+                                           : elem["names"][0]["name"];
+          log_warning("skipping unresolvable import: {}", module_name);
+          continue;
+        }
         is_importing_module = true;
         if (!import_module_into_block(elem, locator, all_imports_block))
         {
@@ -10149,6 +10165,14 @@ void python_converter::convert()
         if (stmt["_type"] != "ImportFrom" && stmt["_type"] != "Import")
           continue;
 
+        if (stmt.value("module_not_found", false))
+        {
+          const std::string module_name = (stmt["_type"] == "ImportFrom")
+                                           ? stmt["module"]
+                                           : stmt["names"][0]["name"];
+          log_warning("skipping unresolvable import: {}", module_name);
+          continue;
+        }
         is_importing_module = true;
         if (!import_module_into_block(stmt, locator, all_imports_block))
         {
