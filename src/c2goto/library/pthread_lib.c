@@ -51,6 +51,18 @@ unsigned short int __ESBMC_num_total_threads = 0;
 unsigned short int __ESBMC_num_threads_running = 0;
 unsigned short int __ESBMC_blocked_threads_count = 0;
 
+/* Per-thread cancellation state. All default to 0:
+ *   cancel_requested = false
+ *   cancelstate      = PTHREAD_CANCEL_ENABLE  (0)
+ *   canceltype       = PTHREAD_CANCEL_DEFERRED (0) */
+__attribute__((annotate("__ESBMC_inf_size")))
+_Bool __ESBMC_pthread_cancel_requested[1];
+
+__attribute__((
+  annotate("__ESBMC_inf_size"))) int __ESBMC_pthread_cancelstate[1];
+
+__attribute__((annotate("__ESBMC_inf_size"))) int __ESBMC_pthread_canceltype[1];
+
 pthread_t __ESBMC_get_thread_id(void);
 
 void __ESBMC_really_atomic_begin(void);
@@ -264,9 +276,60 @@ __ESBMC_HIDE:;
   return __ESBMC_get_thread_id();
 }
 
+/** Deliver a pending cancellation if cancelstate is PTHREAD_CANCEL_ENABLE. */
+void pthread_testcancel(void)
+{
+__ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
+  pthread_t tid = __ESBMC_get_thread_id();
+  _Bool should_cancel =
+    __ESBMC_pthread_cancel_requested[tid] &&
+    __ESBMC_pthread_cancelstate[tid] == PTHREAD_CANCEL_ENABLE;
+  __ESBMC_atomic_end();
+  if (should_cancel)
+    pthread_exit(PTHREAD_CANCELED);
+}
+
+/** Send a cancellation request to thread th. */
+int pthread_cancel(pthread_t th)
+{
+__ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
+  __ESBMC_pthread_cancel_requested[(int)th] = 1;
+  __ESBMC_atomic_end();
+  return 0;
+}
+
+/** Set the calling thread's cancellability state. */
+int pthread_setcancelstate(int state, int *oldstate)
+{
+__ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
+  pthread_t tid = __ESBMC_get_thread_id();
+  if (oldstate)
+    *oldstate = __ESBMC_pthread_cancelstate[tid];
+  __ESBMC_pthread_cancelstate[tid] = state;
+  __ESBMC_atomic_end();
+  return 0;
+}
+
+/** Set the calling thread's cancellation type. */
+int pthread_setcanceltype(int type, int *oldtype)
+{
+__ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
+  pthread_t tid = __ESBMC_get_thread_id();
+  if (oldtype)
+    *oldtype = __ESBMC_pthread_canceltype[tid];
+  __ESBMC_pthread_canceltype[tid] = type;
+  __ESBMC_atomic_end();
+  return 0;
+}
+
 int pthread_join_switch(pthread_t thread, void **retval)
 {
 __ESBMC_HIDE:;
+  pthread_testcancel();
   __ESBMC_atomic_begin();
 
   // Detect whether the target thread has ended or not. If it isn't, mark us as
@@ -299,6 +362,7 @@ __ESBMC_HIDE:;
 int pthread_join_noswitch(pthread_t thread, void **retval)
 {
 __ESBMC_HIDE:;
+  pthread_testcancel();
   __ESBMC_atomic_begin();
 
   // If the other thread hasn't ended, assume false, because further progress
@@ -609,6 +673,17 @@ static void
 do_pthread_cond_wait(pthread_cond_t *cond, pthread_mutex_t *mutex, _Bool assrt)
 {
 __ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
+  {
+    pthread_t _ctid = __ESBMC_get_thread_id();
+    _Bool _cancel = __ESBMC_pthread_cancel_requested[_ctid] &&
+                    __ESBMC_pthread_cancelstate[_ctid] == PTHREAD_CANCEL_ENABLE;
+    if (_cancel)
+      __ESBMC_mutex_lock_field(*mutex) = 0;
+    __ESBMC_atomic_end();
+    if (_cancel)
+      pthread_exit(PTHREAD_CANCELED);
+  }
   __ESBMC_atomic_begin();
 
   if (assrt)

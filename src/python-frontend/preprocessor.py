@@ -51,6 +51,7 @@ class Preprocessor(ast.NodeTransformer):
         self.newtype_vars = set()  # names defined via typing.NewType: X = NewType('X', T)
         self.newtype_names = {"NewType"}  # local names bound to typing.NewType (covers aliased imports)
         self.typing_module_names = set()  # module names for typing (e.g. 'typing' or its alias)
+        self._with_counter = 0  # Counter for unique context manager temp names
 
     def _create_helper_functions(self):
         """Create the ESBMC helper function definitions"""
@@ -1781,6 +1782,80 @@ class Preprocessor(ast.NodeTransformer):
             # Handle general iteration over iterables (strings, lists, etc.)
             self.is_range_loop = False
             return self._transform_iterable_for(node)
+
+    def visit_With(self, node):
+        """Desugar 'with EXPR as VAR: BODY' into __enter__/__exit__ calls.
+
+        Transforms each context manager item into:
+            __esbmc_mgr_N = EXPR              # annotated if class type is known
+            VAR = __esbmc_mgr_N.__enter__()   # omitted when there is no 'as' clause
+            BODY
+            __esbmc_mgr_N.__exit__(0, 0, 0)   # non-exceptional path; zeros for int args
+
+        Multiple items are expanded left-to-right; __exit__ is called in reverse order.
+        AsyncWith is handled identically via the class-level alias below.
+        """
+        node = self.generic_visit(node)
+        result = []
+        exit_start = self._with_counter
+
+        for item in node.items:
+            mgr_name = f"__esbmc_mgr_{self._with_counter}"
+            self._with_counter += 1
+            ctx_expr = item.context_expr
+
+            if isinstance(ctx_expr, ast.Call) and isinstance(ctx_expr.func, ast.Name):
+                class_name = ctx_expr.func.id
+                type_ann = ast.Name(id=class_name, ctx=ast.Load())
+                mgr_assign = ast.AnnAssign(
+                    target=ast.Name(id=mgr_name, ctx=ast.Store()),
+                    annotation=type_ann,
+                    value=ctx_expr,
+                    simple=1,
+                )
+                self.variable_annotations[mgr_name] = type_ann
+                self.instance_class_map[mgr_name] = class_name
+            else:
+                mgr_assign = ast.Assign(
+                    targets=[ast.Name(id=mgr_name, ctx=ast.Store())],
+                    value=ctx_expr,
+                )
+            result.append(self.ensure_all_locations(mgr_assign, node))
+
+            enter_call = ast.Call(
+                func=ast.Attribute(
+                    value=ast.Name(id=mgr_name, ctx=ast.Load()),
+                    attr='__enter__',
+                    ctx=ast.Load(),
+                ),
+                args=[],
+                keywords=[],
+            )
+            if item.optional_vars is not None:
+                result.append(
+                    self.ensure_all_locations(
+                        ast.Assign(targets=[item.optional_vars], value=enter_call), node))
+            else:
+                result.append(self.ensure_all_locations(ast.Expr(value=enter_call), node))
+
+        result.extend(node.body)
+
+        for i in range(len(node.items) - 1, -1, -1):
+            mgr_name = f"__esbmc_mgr_{exit_start + i}"
+            exit_call = ast.Call(
+                func=ast.Attribute(
+                    value=ast.Name(id=mgr_name, ctx=ast.Load()),
+                    attr='__exit__',
+                    ctx=ast.Load(),
+                ),
+                args=[ast.Constant(value=0), ast.Constant(value=0), ast.Constant(value=0)],
+                keywords=[],
+            )
+            result.append(self.ensure_all_locations(ast.Expr(value=exit_call), node))
+
+        return result
+
+    visit_AsyncWith = visit_With
 
     def _transform_enumerate_for(self, node):
         """
