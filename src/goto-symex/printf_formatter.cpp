@@ -65,8 +65,7 @@ enum class length_modt
   BIG_L,
 };
 
-std::string
-pad_int(const std::string &s, unsigned min_width, bool zero_padding)
+std::string pad_int(const std::string &s, unsigned min_width, bool zero_padding)
 {
   if (s.length() >= min_width)
     return s;
@@ -252,9 +251,10 @@ void printf_formattert::process_format(std::ostream &out)
     else
     {
       const size_t bits = target->get_width();
-      const size_t raw_max = (base == 16)   ? (bits + 3) / 4
-                             : (base == 8)  ? (bits + 2) / 3
-                                            : max_decimal_digits(is_signed, bits);
+      const size_t raw_max = (base == 16) ? (bits + 3) / 4
+                             : (base == 8)
+                               ? (bits + 2) / 3
+                               : max_decimal_digits(is_signed, bits);
       s = pad_int(
         std::string(raw_max, '0'),
         format_constant.min_width,
@@ -361,7 +361,8 @@ void printf_formattert::process_format(std::ostream &out)
     if (next_operand != operands.end())
       ++next_operand;
     const unsigned hex_chars = (config.ansi_c.pointer_width() + 3) / 4;
-    emit(pad_int("0x" + std::string(hex_chars, '0'), format_constant.min_width, false));
+    emit(pad_int(
+      "0x" + std::string(hex_chars, '0'), format_constant.min_width, false));
     break;
   }
 

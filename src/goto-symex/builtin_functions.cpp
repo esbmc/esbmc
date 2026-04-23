@@ -1065,7 +1065,8 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
         constant_int2tc(int_type2(), BigInt(printf_formatter.min_outlen));
       expr2tc hi =
         constant_int2tc(int_type2(), BigInt(printf_formatter.max_outlen));
-      assume(and2tc(greaterthanequal2tc(nondet, lo), lessthanequal2tc(nondet, hi)));
+      assume(
+        and2tc(greaterthanequal2tc(nondet, lo), lessthanequal2tc(nondet, hi)));
       symex_assign(code_assign2tc(lhs, nondet));
     }
   }
