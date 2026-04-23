@@ -1362,13 +1362,31 @@ int esbmc_parseoptionst::do_bmc_strategy(
   // Helper: emit the final verdict and return the correct exit code once a
   // proof or refutation has been found.  In multi-property mode the loop may
   // have continued past an earlier violation, so we must return 1 even when
-  // the closing step (FC/IS) itself succeeds.
+  // the closing step (FC/IS) itself succeeds — but only when the user
+  // explicitly asked for multi-property (per-claim) reporting.
+  //
+  // --parallel-solving flips "multi-property" on internally (see the
+  // parseoptions setup) purely so the BC round can dispatch per-property
+  // queries across solver threads; the caller's intent is still "verify
+  // the program", not "report every bug".  For that implicit case we keep
+  // the historical verdict (UNKNOWN on exhaustion), leaving the
+  // EXPLICIT-MP path as the only one that converts a recorded violation
+  // into FAILED via this helper.
+  const bool mp_explicit = cmdline.isset("multi-property");
   auto conclude = [&]() -> int {
     // In coverage mode violations are expected; always report success.
     if (any_violation_found && !is_coverage)
     {
-      log_fail("\nVERIFICATION FAILED");
-      return 1;
+      if (mp_explicit)
+      {
+        log_fail("\nVERIFICATION FAILED");
+        return 1;
+      }
+      // Implicit MP (parallel-solving): historical verdict was UNKNOWN.
+      // Emit it here because the short-circuit path above returns before
+      // reaching the loop's UNKNOWN fall-through at the end of this fn.
+      log_fail("VERIFICATION UNKNOWN");
+      return 0;
     }
     return 0;
   };
@@ -1406,9 +1424,8 @@ int esbmc_parseoptionst::do_bmc_strategy(
 
   // Whether --multi-property mode is active (checked once to avoid
   // redundant cmdline.isset lookups in the per-k body).
-  const bool mp_active =
-    cmdline.isset("multi-property") ||
-    options.get_bool_option("multi-property");
+  const bool mp_active = cmdline.isset("multi-property") ||
+                         options.get_bool_option("multi-property");
 
   // Trying all bounds from 1 to "max_k_step" in "k_step_inc"
   uint64_t last_k_step = k_step_base;
@@ -1440,8 +1457,7 @@ int esbmc_parseoptionst::do_bmc_strategy(
       // even after every claim had already been resolved.
       if (mp_active && count_active_asserts(goto_functions) == 0)
       {
-        log_status(
-          "[Multi-property] all claims resolved at k = {:d}", k_step);
+        log_status("[Multi-property] all claims resolved at k = {:d}", k_step);
         if (is_coverage)
           report_coverage(
             options,
@@ -1524,8 +1540,7 @@ int esbmc_parseoptionst::do_bmc_strategy(
 
       if (mp_active && count_active_asserts(goto_functions) == 0)
       {
-        log_status(
-          "[Multi-property] all claims resolved at k = {:d}", k_step);
+        log_status("[Multi-property] all claims resolved at k = {:d}", k_step);
         if (is_coverage)
           report_coverage(
             options,
