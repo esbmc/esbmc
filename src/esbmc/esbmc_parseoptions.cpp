@@ -1373,6 +1373,40 @@ int esbmc_parseoptionst::do_bmc_strategy(
     return 0;
   };
 
+  // Count assertions that have not yet been resolved.
+  // multi_property_check calls make_skip() on each ASSERT it has already
+  // handled (SAT → recorded as violation + cleared; UNSAT → recorded as
+  // safe + cleared), so "is_assert()" returning false after skip is the
+  // canonical signal that a claim has been decided.  This lets the outer
+  // k-loop detect "everything is already decided" and stop rather than
+  // burning the remaining k budget on an empty equation.
+  auto count_active_asserts = [](const goto_functionst &funcs) -> size_t {
+    size_t n = 0;
+    for (const auto &f : funcs.function_map)
+      for (const auto &i : f.second.body.instructions)
+        if (i.is_assert())
+          ++n;
+    return n;
+  };
+
+  // Under --multi-property, when FC or IS succeed, the remaining asserts
+  // are GLOBALLY safe (FC: no paths longer than k exist; IS: inductive
+  // invariant holds on the remaining claims).  Mark them so that future
+  // bmc runs see zero claims — this is the per-claim analogue of the
+  // make_skip() that multi_property_check already does for SAT results.
+  auto mark_all_asserts_safe = [](goto_functionst &funcs) {
+    for (auto &f : funcs.function_map)
+      for (auto &i : f.second.body.instructions)
+        if (i.is_assert())
+          i.make_skip();
+  };
+
+  // Whether --multi-property mode is active (checked once to avoid
+  // redundant cmdline.isset lookups in the per-k body).
+  const bool mp_active =
+    cmdline.isset("multi-property") ||
+    options.get_bool_option("multi-property");
+
   // Trying all bounds from 1 to "max_k_step" in "k_step_inc"
   uint64_t last_k_step = k_step_base;
   for (uint64_t k_step = k_step_base; k_step <= max_k_step;
@@ -1392,17 +1426,19 @@ int esbmc_parseoptionst::do_bmc_strategy(
         options.set_option("kind-violation-found", true);
       }
 
-      if (
-        is_bcv && !cmdline.isset("multi-property") &&
-        !options.get_bool_option("multi-property"))
+      if (is_bcv && !mp_active)
         return 1;
 
-      // if the property is proven violated in the bs, it's unnecessary to further run fw and is
-      // this will make the trace looks cleaner yet might lead to an extra round to terminate the verification
-      if (
-        !is_bcv &&
-        does_forward_condition_hold(options, goto_functions, k_step).is_false())
+      // Multi-property short-circuit: if all assertions have been decided
+      // (violated-and-cleared by multi_property_check, or otherwise
+      // simplified), there is nothing left to prove.  Before this check
+      // existed, the k-loop kept running FC/IS on an empty formula up to
+      // max_k_step, yielding the misleading "VERIFICATION UNKNOWN" verdict
+      // even after every claim had already been resolved.
+      if (mp_active && count_active_asserts(goto_functions) == 0)
       {
+        log_status(
+          "[Multi-property] all claims resolved at k = {:d}", k_step);
         if (is_coverage)
           report_coverage(
             options,
@@ -1413,13 +1449,39 @@ int esbmc_parseoptionst::do_bmc_strategy(
         return conclude();
       }
 
-      // Don't run inductive step for k_step == 1
-      if (k_step > 1)
+      // Forward condition.  Without MP, skip when BC already found a bug
+      // (saves a round-trip but is otherwise equivalent).  With MP, keep
+      // running FC so it can discharge the remaining (non-violated)
+      // claims as GLOBALLY safe — marking them via mark_all_asserts_safe
+      // so the next iteration sees zero active asserts and terminates
+      // cleanly.
+      if (!is_bcv || mp_active)
       {
-        if (
-          !is_bcv && is_inductive_step_violated(options, goto_functions, k_step)
-                       .is_false())
+        if (does_forward_condition_hold(options, goto_functions, k_step)
+              .is_false())
         {
+          if (mp_active)
+            mark_all_asserts_safe(goto_functions);
+          if (is_coverage)
+            report_coverage(
+              options,
+              goto_functions.reached_claims,
+              goto_functions.reached_mul_claims,
+              pytest_gen,
+              ctest_gen);
+          return conclude();
+        }
+      }
+
+      // Inductive step.  Same rationale as FC under MP: discharge safe
+      // remaining claims.  Skipped at k=1 (no induction premise).
+      if (k_step > 1 && (!is_bcv || mp_active))
+      {
+        if (is_inductive_step_violated(options, goto_functions, k_step)
+              .is_false())
+        {
+          if (mp_active)
+            mark_all_asserts_safe(goto_functions);
           if (is_coverage)
             report_coverage(
               options,
@@ -1454,15 +1516,13 @@ int esbmc_parseoptionst::do_bmc_strategy(
         options.set_option("kind-violation-found", true);
       }
 
-      if (
-        is_bcv && !cmdline.isset("multi-property") &&
-        !options.get_bool_option("multi-property"))
+      if (is_bcv && !mp_active)
         return 1;
 
-      if (
-        !is_bcv &&
-        does_forward_condition_hold(options, goto_functions, k_step).is_false())
+      if (mp_active && count_active_asserts(goto_functions) == 0)
       {
+        log_status(
+          "[Multi-property] all claims resolved at k = {:d}", k_step);
         if (is_coverage)
           report_coverage(
             options,
@@ -1471,6 +1531,24 @@ int esbmc_parseoptionst::do_bmc_strategy(
             pytest_gen,
             ctest_gen);
         return conclude();
+      }
+
+      if (!is_bcv || mp_active)
+      {
+        if (does_forward_condition_hold(options, goto_functions, k_step)
+              .is_false())
+        {
+          if (mp_active)
+            mark_all_asserts_safe(goto_functions);
+          if (is_coverage)
+            report_coverage(
+              options,
+              goto_functions.reached_claims,
+              goto_functions.reached_mul_claims,
+              pytest_gen,
+              ctest_gen);
+          return conclude();
+        }
       }
     }
     // falsification
@@ -1485,6 +1563,21 @@ int esbmc_parseoptionst::do_bmc_strategy(
     options.get_bool_option("multi-property") &&
     options.get_bool_option("k-induction"))
     diagnose_unknown_properties(options, goto_functions, last_k_step);
+
+  // If max_k_step was reached without FC/IS short-circuit but BC found
+  // violations along the way, the correct verdict is FAILED, not UNKNOWN.
+  // Prior to this guard, multi-property + k-induction always ended in
+  // UNKNOWN because the fall-through log_fail hardcoded that verdict,
+  // overriding the per-k "Bug found (k = N)" signal.
+  if (any_violation_found && !is_coverage)
+  {
+    log_status(
+      "[Multi-property] k-induction bound exhausted; reporting "
+      "recorded violations (last_k = {:d})",
+      last_k_step);
+    return conclude();
+  }
+
 
   log_status("Unable to prove or falsify the program, giving up.");
   log_fail("VERIFICATION UNKNOWN");
