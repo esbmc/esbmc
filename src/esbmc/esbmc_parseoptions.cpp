@@ -638,7 +638,7 @@ int esbmc_parseoptionst::doit()
 
   // Print a banner with version info to stdout
   {
-    FILE* output_stream = messaget::state.out;
+    FILE *output_stream = messaget::state.out;
     messaget::state.out = stdout;
     log_status(
       "ESBMC version {} {}-bit {} {}",
@@ -3055,7 +3055,7 @@ static std::string colorize_flag_refs(const std::string &text)
 void esbmc_parseoptionst::help()
 {
   // Redirect everything here to stdout
-  FILE* outstream = messaget::state.out;
+  FILE *outstream = messaget::state.out;
   messaget::state.out = stdout;
 
   bool use_color = resolve_color_option();
