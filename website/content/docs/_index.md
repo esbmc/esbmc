@@ -239,9 +239,9 @@ esbmc file.c --z3
 ### Limitations
 
 <ul>
-  <li>Currently, only Z3 is supported (no SMT-LIB support).</li>
-  <li>Only one symbol is supported in quantifiers. Future work will enable multiple symbols.</li>
-  <li>Recursive quantifiers (e.g., nested <code>forall</code> statements) are not yet supported.</li>
+  <li>Currently, the solvers that are supported are: Z3 and CVC5 (no SMT-LIB support).</li>
+  <li>Only one symbol is supported in quantifiers for Z3. CVC5 supports multiple symbols.</li>
+  <li>Recursive quantifiers (e.g., nested <code>forall</code> statements) are supported.</li>
   <li>There is a known issue where a constant-bounded symbol might cause incorrect simplifications.</li>
 </ul>
 
