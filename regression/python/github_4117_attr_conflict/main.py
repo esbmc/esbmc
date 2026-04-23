@@ -17,17 +17,21 @@ class Node:
 
 
 class Other:
-    def __init__(self):
-        self.payload = 42
+    # Keeps a compatible `.value` field so the Python program runs; the
+    # point of the test is the *static* type conflict seen by the
+    # scanner, not a Python-level attribute error.
+    def __init__(self, v):
+        self.value = v
 
 
 n1 = Node(1)
 n2 = Node(2)
-o = Other()
+o = Other(99)
 
 n1.next = n2
 n1.next = o     # conflict: scanner sees Node*, then Other* — gives up
 
-# Python runtime: n1.next is o (an Other). `.value` raises AttributeError.
-# ESBMC today: .next stays any_type(), so the nested access aborts.
-assert n1.next.value == 2
+# CPython runtime: n1.next is `o`, so n1.next.value == 99.
+# ESBMC ideal: verify SUCCESSFUL against that runtime.
+# ESBMC today: .next stays any_type(), nested access aborts.
+assert n1.next.value == 99
