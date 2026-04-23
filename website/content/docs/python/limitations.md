@@ -11,6 +11,10 @@ weight: 4
 - Comprehensions (list, dict, set, generator) are not supported.
 - Iteration over dictionaries via `d.keys()`, `d.values()`, and `d.items()` is supported inside `for` loops (see [Supported Features — Dictionaries](./supported-features#dictionaries)).
 
+## Context Managers
+
+- Only the non-exceptional execution path is modelled: `__enter__` is called before the body and `__exit__` is called after, but exception propagation and suppression via the `__exit__` return value are not yet supported.
+
 ## Lists
 
 - String slicing does not support a step value (e.g., `s[::2]` is not supported).
