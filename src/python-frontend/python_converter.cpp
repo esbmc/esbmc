@@ -42,6 +42,7 @@
 #include <stdexcept>
 #include <sstream>
 #include <unordered_map>
+#include <unordered_set>
 
 #include <boost/filesystem.hpp>
 
@@ -8945,19 +8946,33 @@ typet python_converter::infer_attr_type_from_usage(
     return {nullptr, nullptr};
   };
 
+  // Predicate: a typet produced by the helpers below is "unset" if it was
+  // default-constructed (empty id) or explicitly nil. Either form means
+  // the caller had no type information to offer.
+  auto unset = [](const typet &ty) {
+    return ty.id().as_string().empty() || ty.is_nil();
+  };
+
   // Build a variable-to-class map from module-level assignments. Covers:
   //   <Name> = <Cls>(...)    — direct instantiation
   //   <Name> = <other Name>  — single-hop alias to a known instance
   // On conflicting class for the same variable (shadowing / reassignment to a
-  // different class), drop the entry entirely to avoid attributing later
-  // attribute writes to the wrong class.
+  // different class), permanently tombstone the name so that later writes
+  // never silently reattach a wrong class — erasure alone is not enough
+  // because a third assignment could re-insert the variable.
   std::unordered_map<std::string, std::string> var_to_class;
+  std::unordered_set<std::string> conflicted_vars;
   auto record_var = [&](const std::string &name, const std::string &cls) {
+    if (conflicted_vars.count(name))
+      return;
     auto it = var_to_class.find(name);
     if (it == var_to_class.end())
       var_to_class.emplace(name, cls);
     else if (it->second != cls)
+    {
       var_to_class.erase(it);
+      conflicted_vars.insert(name);
+    }
   };
   for (const auto &stmt : module_body)
   {
@@ -9030,9 +9045,9 @@ typet python_converter::infer_attr_type_from_usage(
         !base_ok((*t)["value"]["id"].get<std::string>()))
         continue;
       typet r = infer_rhs(*v);
-      if (r.id().as_string().empty())
+      if (unset(r))
         continue;
-      if (first.id().as_string().empty())
+      if (unset(first))
         first = r;
       else if (first != r)
         return typet();
@@ -9046,13 +9061,17 @@ typet python_converter::infer_attr_type_from_usage(
     auto it = var_to_class.find(name);
     return it != var_to_class.end() && it->second == class_name;
   });
-  if (!t.id().as_string().empty())
+  if (!unset(t))
     return t;
 
-  // Fallback: `self.<attr> = <rhs>` inside the class's own methods.
+  // Fallback: `self.<attr> = <rhs>` inside the class's own methods. Unify
+  // across all methods so that two methods assigning different classes to
+  // the same attribute fall back to any_type() rather than returning
+  // whichever is encountered first.
   const auto &cls_node = json_utils::find_class(module_body, class_name);
   if (!cls_node.is_null() && cls_node.contains("body"))
   {
+    typet unified;
     for (const auto &m : cls_node.at("body"))
     {
       if (
@@ -9061,9 +9080,15 @@ typet python_converter::infer_attr_type_from_usage(
         continue;
       typet r =
         scan(m["body"], [](const std::string &n) { return n == "self"; });
-      if (!r.id().as_string().empty())
-        return r;
+      if (unset(r))
+        continue;
+      if (unset(unified))
+        unified = r;
+      else if (unified != r)
+        return typet();
     }
+    if (!unset(unified))
+      return unified;
   }
 
   return typet();
@@ -9195,9 +9220,15 @@ void python_converter::get_attributes_from_self(
           if (it != param_annotations.end())
             resolved = get_type_from_annotation(it->second, stmt);
         }
-        if (resolved.id().as_string().empty())
+        // Default-constructed typet has an empty id; explicit error paths
+        // in get_type_from_annotation may return an id_nil one instead.
+        // Treat both as "unset" before falling through.
+        auto unset = [](const typet &ty) {
+          return ty.id().as_string().empty() || ty.is_nil();
+        };
+        if (unset(resolved))
           resolved = infer_attr_type_from_usage(current_class_name_, attr_name);
-        type = resolved.id().as_string().empty() ? any_type() : resolved;
+        type = unset(resolved) ? any_type() : resolved;
       }
       else
         type = type_handler_.get_typet(annotated_type);
