@@ -13,6 +13,11 @@ This page is a reference of all Python language constructs, data structures, and
 - **Identity comparisons**: `is`, `is not` (including `x is None`, `x is not None`)
 - **None handling**: Proper type distinction from `int`, `bool`, `str`, etc.; correctly falsy in boolean contexts (`None and True` → `None`, `None or 1` → `1`)
 - **Global variables**: The `global` keyword for accessing and modifying global scope from within functions
+- **Context managers**: `with` and `async with` statements via preprocessor desugaring into explicit `__enter__`/`__exit__` calls:
+  - `with EXPR as VAR: BODY` — binds the return value of `__enter__()` to `VAR`
+  - `with EXPR: BODY` — context manager used without variable binding
+  - `with A as a, B as b: BODY` — multiple context managers in one statement; expanded left-to-right, `__exit__` called in reverse order
+  - `async with` is handled identically to `with`
 
 ## Functions and Methods
 
