@@ -51,6 +51,7 @@ class Preprocessor(ast.NodeTransformer):
         self.newtype_vars = set()  # names defined via typing.NewType: X = NewType('X', T)
         self.newtype_names = {"NewType"}  # local names bound to typing.NewType (covers aliased imports)
         self.typing_module_names = set()  # module names for typing (e.g. 'typing' or its alias)
+        self._with_counter = 0  # Counter for unique context manager temp names
 
     def _create_helper_functions(self):
         """Create the ESBMC helper function definitions"""
@@ -1781,6 +1782,80 @@ class Preprocessor(ast.NodeTransformer):
             # Handle general iteration over iterables (strings, lists, etc.)
             self.is_range_loop = False
             return self._transform_iterable_for(node)
+
+    def visit_With(self, node):
+        """Desugar 'with EXPR as VAR: BODY' into __enter__/__exit__ calls.
+
+        Transforms each context manager item into:
+            __esbmc_mgr_N = EXPR              # annotated if class type is known
+            VAR = __esbmc_mgr_N.__enter__()   # omitted when there is no 'as' clause
+            BODY
+            __esbmc_mgr_N.__exit__(0, 0, 0)   # non-exceptional path; zeros for int args
+
+        Multiple items are expanded left-to-right; __exit__ is called in reverse order.
+        AsyncWith is handled identically via the class-level alias below.
+        """
+        node = self.generic_visit(node)
+        result = []
+        exit_start = self._with_counter
+
+        for item in node.items:
+            mgr_name = f"__esbmc_mgr_{self._with_counter}"
+            self._with_counter += 1
+            ctx_expr = item.context_expr
+
+            if isinstance(ctx_expr, ast.Call) and isinstance(ctx_expr.func, ast.Name):
+                class_name = ctx_expr.func.id
+                type_ann = ast.Name(id=class_name, ctx=ast.Load())
+                mgr_assign = ast.AnnAssign(
+                    target=ast.Name(id=mgr_name, ctx=ast.Store()),
+                    annotation=type_ann,
+                    value=ctx_expr,
+                    simple=1,
+                )
+                self.variable_annotations[mgr_name] = type_ann
+                self.instance_class_map[mgr_name] = class_name
+            else:
+                mgr_assign = ast.Assign(
+                    targets=[ast.Name(id=mgr_name, ctx=ast.Store())],
+                    value=ctx_expr,
+                )
+            result.append(self.ensure_all_locations(mgr_assign, node))
+
+            enter_call = ast.Call(
+                func=ast.Attribute(
+                    value=ast.Name(id=mgr_name, ctx=ast.Load()),
+                    attr='__enter__',
+                    ctx=ast.Load(),
+                ),
+                args=[],
+                keywords=[],
+            )
+            if item.optional_vars is not None:
+                result.append(
+                    self.ensure_all_locations(
+                        ast.Assign(targets=[item.optional_vars], value=enter_call), node))
+            else:
+                result.append(self.ensure_all_locations(ast.Expr(value=enter_call), node))
+
+        result.extend(node.body)
+
+        for i in range(len(node.items) - 1, -1, -1):
+            mgr_name = f"__esbmc_mgr_{exit_start + i}"
+            exit_call = ast.Call(
+                func=ast.Attribute(
+                    value=ast.Name(id=mgr_name, ctx=ast.Load()),
+                    attr='__exit__',
+                    ctx=ast.Load(),
+                ),
+                args=[ast.Constant(value=0), ast.Constant(value=0), ast.Constant(value=0)],
+                keywords=[],
+            )
+            result.append(self.ensure_all_locations(ast.Expr(value=exit_call), node))
+
+        return result
+
+    visit_AsyncWith = visit_With
 
     def _transform_enumerate_for(self, node):
         """
@@ -4255,11 +4330,135 @@ class Preprocessor(ast.NodeTransformer):
         old_class_name = getattr(self, 'current_class_name', None)
         self.current_class_name = node.name
 
+        node = self.expand_dataclass(node)
         self._collect_class_attr_annotations(node)
         self.generic_visit(node)
 
         self.current_class_name = old_class_name
         return node
+
+    def is_dataclass(self, class_node):
+        """Return True when a class is decorated with @dataclass."""
+        for decorator in class_node.decorator_list:
+            target = decorator
+            if isinstance(decorator, ast.Call):
+                target = decorator.func
+
+            if isinstance(target, ast.Name) and target.id == "dataclass":
+                return True
+
+            if (
+                isinstance(target, ast.Attribute)
+                and isinstance(target.value, ast.Name)
+                and target.value.id == "dataclasses"
+                and target.attr == "dataclass"
+            ):
+                return True
+
+        return False
+
+    def collect_fields(self, class_node):
+        """Collect dataclass fields as (name, annotation, default_value)."""
+        fields = []
+        for stmt in class_node.body:
+            if not isinstance(stmt, ast.AnnAssign):
+                continue
+            if not isinstance(stmt.target, ast.Name):
+                continue
+            fields.append((stmt.target.id, stmt.annotation, stmt.value))
+        return fields
+
+    def build_init(self, class_node, fields):
+        """Build __init__(self, ...) that assigns self.<field> = <field>."""
+        args = [ast.arg(arg="self", annotation=None)]
+        defaults = []
+        body = []
+
+        first_default_idx = None
+        for index, (_, _, default_value) in enumerate(fields):
+            if default_value is not None:
+                first_default_idx = index
+                break
+
+        if first_default_idx is not None:
+            for _, _, default_value in fields[first_default_idx:]:
+                if default_value is None:
+                    defaults.append(ast.Constant(value=None))
+                else:
+                    defaults.append(copy.deepcopy(default_value))
+
+        for field_name, annotation, _ in fields:
+            args.append(ast.arg(arg=field_name, annotation=copy.deepcopy(annotation)))
+            assign_stmt = ast.AnnAssign(
+                target=ast.Attribute(
+                    value=self.create_name_node("self", ast.Load(), class_node),
+                    attr=field_name,
+                    ctx=ast.Store(),
+                ),
+                annotation=copy.deepcopy(annotation),
+                value=self.create_name_node(field_name, ast.Load(), class_node),
+                simple=0,
+            )
+            self.ensure_all_locations(assign_stmt, class_node)
+            body.append(assign_stmt)
+
+        if not body:
+            body = [ast.Pass()]
+
+        init_func = ast.FunctionDef(
+            name="__init__",
+            args=ast.arguments(
+                posonlyargs=[],
+                args=args,
+                vararg=None,
+                kwonlyargs=[],
+                kw_defaults=[],
+                kwarg=None,
+                defaults=defaults,
+            ),
+            body=body,
+            decorator_list=[],
+            returns=None,
+            type_comment=None,
+        )
+        self.ensure_all_locations(init_func, class_node)
+        ast.fix_missing_locations(init_func)
+        return init_func
+
+    def expand_dataclass(self, class_node):
+        """Inject a minimal generated __init__ for dataclass-decorated classes."""
+        if not self.is_dataclass(class_node):
+            return class_node
+
+        if any(
+            isinstance(member, ast.FunctionDef) and member.name == "__init__"
+            for member in class_node.body
+        ):
+            return class_node
+
+        fields = self.collect_fields(class_node)
+        if not fields:
+            return class_node
+
+        # For now, synthesize dataclass __init__ only for annotation-only fields.
+        # Classes with explicit field defaults keep existing frontend behavior.
+        if any(default_value is not None for _, _, default_value in fields):
+            return class_node
+
+        field_names = {field_name for field_name, _, _ in fields}
+        class_node.body = [
+            stmt
+            for stmt in class_node.body
+            if not (
+                isinstance(stmt, ast.AnnAssign)
+                and isinstance(stmt.target, ast.Name)
+                and stmt.target.id in field_names
+                and stmt.value is None
+            )
+        ]
+
+        class_node.body.insert(0, self.build_init(class_node, fields))
+        return class_node
 
     def _collect_class_attr_annotations(self, class_node):
         """Scan __init__ for self.attr: T = ... and cache attribute annotations."""
