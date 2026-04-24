@@ -702,7 +702,7 @@ public:
 
   void verify_capacity()
   {
-    while (_size >= _capacity)
+    while (_size >= _capacity && _capacity < DEQUE_CAPACITY)
       _capacity *= 2;
   }
 
