@@ -291,8 +291,8 @@ void reachability_treet::go_next_state()
       it = cur_state_it;
       cur_state_it--;
 
-      // For the last one:
-      if (execution_states.size() == 1)
+      // For the last one, only if the main thread has actually ended.
+      if (execution_states.size() == 1 && main_thread_ended)
         (*it)->add_memory_leak_checks();
 
       execution_states.erase(it);
@@ -573,7 +573,8 @@ goto_symext::symex_resultt reachability_treet::get_next_formula()
     switch_to_next_execution_state();
   }
 
-  (*cur_state_it)->add_memory_leak_checks();
+  if (main_thread_ended)
+    (*cur_state_it)->add_memory_leak_checks();
 
   has_complete_formula = false;
 

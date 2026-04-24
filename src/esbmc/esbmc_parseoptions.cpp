@@ -2215,6 +2215,7 @@ bool esbmc_parseoptionst::process_goto_program(
     {
       log_status("Adding Data Race Checks");
       options.set_option("data-races-check", true);
+      options.set_option("no-por", true);
       add_race_assertions(context, goto_functions);
     }
 
