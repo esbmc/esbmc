@@ -33,10 +33,12 @@ typedef struct __ESBMC_PyType
 typedef struct __ESBMC_PyObj
 {
   const void *value; /**< Pointer to object data */
-  size_t
-    float_idx; /**< Index into __ESBMC_float_buf (valid when element is float) */
+  // cppcheck-suppress unusedStructMember
+  size_t float_idx; /**< Index into __ESBMC_float_buf (valid when element is float) */
+  // cppcheck-suppress unusedStructMember
   size_t type_id; /**< Hashed or unique type identifier */
-  size_t size;    /**< Number of bytes in value */
+  // cppcheck-suppress unusedStructMember
+  size_t size; /**< Number of bytes in value */
 } PyObject;
 
 /**
