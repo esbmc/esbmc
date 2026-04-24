@@ -33,6 +33,7 @@ typedef struct __ESBMC_PyType
 typedef struct __ESBMC_PyObj
 {
   const void *value; /**< Pointer to object data */
+  double float_val;  /**< Direct float value (avoids void* cast in --ir mode) */
   size_t type_id;    /**< Hashed or unique type identifier */
   size_t size;       /**< Number of bytes in value */
 } PyObject;

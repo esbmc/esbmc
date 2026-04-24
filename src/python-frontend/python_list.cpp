@@ -414,7 +414,8 @@ python_list::get_list_element_info(const nlohmann::json &op, const exprt &elem)
 exprt python_list::build_push_list_call(
   const symbolt &list,
   const nlohmann::json &op,
-  const exprt &elem)
+  const exprt &elem,
+  bool enable_float_path)
 {
   list_elem_info elem_info = get_list_element_info(op, elem);
 
@@ -517,8 +518,9 @@ exprt python_list::build_push_list_call(
 
   // float_type_id: when element is float, its type hash == float_type_id so
   // __ESBMC_copy_value uses *(double*) copy in --ir mode (real sort).
+  // enable_float_path=false skips this for dict values which use void* comparison.
   exprt float_type_id_arg =
-    elem_info.elem_symbol->type.is_floatbv()
+    (enable_float_path && elem_info.elem_symbol->type.is_floatbv())
       ? static_cast<exprt>(symbol_expr(*elem_info.elem_type_sym))
       : from_integer(BigInt(0), size_type());
   push_func_call.arguments().push_back(float_type_id_arg); // float_type_id
@@ -3919,6 +3921,19 @@ exprt python_list::extract_pyobject_value(
   const exprt &pyobject_expr,
   const typet &elem_type)
 {
+  // For float types, access float_val field directly to avoid void* cast in --ir mode.
+  // PyObject::float_val stores the double value without going through void*.
+  if (elem_type.is_floatbv())
+  {
+    member_exprt float_val_member(pyobject_expr, "float_val", elem_type);
+    exprt &base = float_val_member.struct_op();
+    exprt deref("dereference");
+    deref.type() = base.type().subtype();
+    deref.move_to_operands(base);
+    base.swap(deref);
+    return float_val_member;
+  }
+
   // Extract value from PyObject: pyobject_expr->value
   member_exprt obj_value(pyobject_expr, "value", pointer_typet(empty_typet()));
 

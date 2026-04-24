@@ -62,7 +62,8 @@ public:
   exprt build_push_list_call(
     const symbolt &list,
     const nlohmann::json &op,
-    const exprt &elem);
+    const exprt &elem,
+    bool enable_float_path = true);
 
   exprt build_insert_list_call(
     const symbolt &list,
