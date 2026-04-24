@@ -516,14 +516,14 @@ protected:
   build_dynamic_cast(const clang::CXXDynamicCastExpr &cast, exprt &new_expr);
 
   /*
-   * Lazily-built index of every CXXRecordDecl with a definition in the
-   * translation unit. Used by build_dynamic_cast to enumerate concrete
-   * derived classes when computing the matching-vtable set.
+   * Side table populated as we register vtable variables in
+   * add_vtable_variable_symbols: maps a vptr-owning class id (e.g.
+   * "tag-Base") to every concrete class that has a vtable variable for
+   * that vptr. build_dynamic_cast consults it directly instead of walking
+   * every CXXRecordDecl in the TU and probing the symbol table per cast.
    */
-  const std::vector<const clang::CXXRecordDecl *> &
-  translation_unit_record_decls();
-  std::vector<const clang::CXXRecordDecl *> record_decl_index_;
-  bool record_decl_index_built_ = false;
+  std::map<irep_idt, std::vector<const clang::CXXRecordDecl *>>
+    vtable_classes_per_vptr_;
 
   /*
    * Methods for resolving a clang::MemberExpr to virtual/overriding method

@@ -3338,15 +3338,15 @@ bool clang_c_convertert::get_cast_expr(
   }
 
   case clang::CK_Dynamic:
-    // dynamic_cast has no meaning in C and the C frontend cannot lower it
-    // soundly: it requires the C++-only vtable / class-hierarchy machinery
-    // in clang_cpp_convertert. Reaching this point means the C++ frontend
-    // forwarded a CXXDynamicCastExpr to the structural cast path instead
-    // of intercepting it in CXXDynamicCastExprClass.
-    log_error(
-      "CK_Dynamic reached the C frontend; dynamic_cast must be handled in the "
-      "C++ frontend's CXXDynamicCastExprClass arm");
-    return true;
+    // Unreachable: clang_cpp_convertert::get_expr intercepts every
+    // CXXDynamicCastExpr at CXXDynamicCastExprClass and routes it to
+    // build_dynamic_cast. C source cannot produce CK_Dynamic at all, so
+    // landing here means a programmer wired CXXDynamicCastExpr into
+    // get_cast_expr — an invariant violation, not a user-facing error.
+    assert(
+      !"CK_Dynamic must be handled in the C++ frontend's "
+      "CXXDynamicCastExprClass arm");
+    abort();
 
   default:
   {

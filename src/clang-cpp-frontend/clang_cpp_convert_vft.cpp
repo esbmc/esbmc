@@ -11,6 +11,7 @@ CC_DIAGNOSTIC_PUSH()
 CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 #include <clang/Basic/Version.inc>
 #include <clang/AST/Attr.h>
+#include <clang/AST/CXXInheritance.h>
 #include <clang/AST/DeclCXX.h>
 #include <clang/AST/DeclFriend.h>
 #include <clang/AST/DeclTemplate.h>
@@ -33,7 +34,6 @@ CC_DIAGNOSTIC_POP()
 #include <util/message.h>
 #include <util/std_expr.h>
 
-#include <functional>
 #include <optional>
 
 bool clang_cpp_convertert::get_struct_class_virtual_methods(
@@ -673,6 +673,13 @@ void clang_cpp_convertert::add_vtable_variable_symbols(
         class_id);
       abort();
     }
+
+    // Record (vptr-class V → concrete class D) so build_dynamic_cast can
+    // enumerate candidate D's by direct lookup instead of walking the TU.
+    // Skip abstract classes: no object of an abstract type can exist at
+    // runtime, so they can never be the answer to dynamic_cast.
+    if (!cxxrd.isAbstract())
+      vtable_classes_per_vptr_[late_cast_symb->id].push_back(&cxxrd);
   }
 }
 
@@ -704,36 +711,10 @@ void clang_cpp_convertert::get_overriden_methods(
   }
 }
 
-const std::vector<const clang::CXXRecordDecl *> &
-clang_cpp_convertert::translation_unit_record_decls()
-{
-  if (record_decl_index_built_)
-    return record_decl_index_;
-
-  // Walk every DeclContext below the TU (namespaces, classes, etc.) and
-  // collect record definitions. A class declared multiple times shows up
-  // once per declaration; we filter to defining declarations so the index
-  // contains each class at most once.
-  std::function<void(const clang::DeclContext *)> walk =
-    [&](const clang::DeclContext *dc)
-  {
-    for (const clang::Decl *d : dc->decls())
-    {
-      if (const auto *rd = llvm::dyn_cast<clang::CXXRecordDecl>(d))
-        if (rd->isThisDeclarationADefinition())
-          record_decl_index_.push_back(rd);
-      if (const auto *sub_dc = llvm::dyn_cast<clang::DeclContext>(d))
-        walk(sub_dc);
-    }
-  };
-  walk(ASTContext->getTranslationUnitDecl());
-  record_decl_index_built_ = true;
-  return record_decl_index_;
-}
-
-// Compute the byte offset of subobject S inside D, walking via non-virtual
-// direct bases. Returns std::nullopt if S isn't reachable that way (virtual
-// inheritance somewhere on the path or S not actually a base of D).
+// Compute the byte offset of subobject S inside D. Returns std::nullopt if
+// S isn't reachable from D via non-virtual inheritance (virtual base on the
+// path, or S not a base of D at all): callers fall back to a structural
+// typecast in that case.
 static std::optional<uint64_t> offset_of_subobject(
   const clang::ASTContext &ctx,
   const clang::CXXRecordDecl *D,
@@ -741,21 +722,31 @@ static std::optional<uint64_t> offset_of_subobject(
 {
   if (D == S)
     return 0;
-  for (const auto &spec : D->bases())
+
+  clang::CXXBasePaths paths(
+    /*FindAmbiguities=*/false,
+    /*RecordPaths=*/true,
+    /*DetectVirtual=*/true);
+  if (!D->isDerivedFrom(S, paths))
+    return std::nullopt;
+  if (paths.getDetectedVirtual() != nullptr)
+    return std::nullopt;
+
+  // Sum base-class offsets along the first recorded path. Multiple paths
+  // can exist under repeated non-virtual inheritance, but they refer to
+  // distinct subobjects; picking the first matches the behaviour of the
+  // previous primary-base walk.
+  uint64_t offset = 0;
+  const clang::CXXRecordDecl *cur = D;
+  for (const clang::CXXBasePathElement &elem : paths.front())
   {
-    if (spec.isVirtual())
-      continue;
-    const auto *bd = spec.getType()->getAsCXXRecordDecl();
-    if (!bd)
-      continue;
-    auto sub = offset_of_subobject(ctx, bd, S);
-    if (!sub)
-      continue;
-    uint64_t base_off =
-      ctx.getASTRecordLayout(D).getBaseClassOffset(bd).getQuantity();
-    return base_off + *sub;
+    const clang::CXXRecordDecl *base =
+      elem.Base->getType()->getAsCXXRecordDecl();
+    offset +=
+      ctx.getASTRecordLayout(cur).getBaseClassOffset(base).getQuantity();
+    cur = base;
   }
-  return std::nullopt;
+  return offset;
 }
 
 bool clang_cpp_convertert::build_dynamic_cast(
@@ -882,66 +873,87 @@ bool clang_cpp_convertert::build_dynamic_cast(
   if (vptr_class_id.empty())
     return fallback();
 
-  // Walk every concrete derived class. For T*, the matching set is
-  // additionally constrained to D being at-or-below T; for void* every
-  // such D contributes (its result is a pointer adjusted to D's start).
-  // Each entry is (vtable-variable address, per-D result expression).
+  // Enumerate concrete D's via the side table populated during vtable
+  // registration: every entry is a class with a real vtable variable for
+  // this vptr V, so no per-cast TU walk and no symbol-table probe.
+  // For T*, the matching set is additionally constrained to D being
+  // at-or-below T; for void* every such D contributes (its result is a
+  // pointer adjusted to D's start). Each entry is (vtable-variable
+  // address, per-D result expression).
   pointer_typet vptr_type(symbol_typet(vtable_type_prefix + vptr_class_id));
   std::vector<std::pair<exprt, exprt>> arms;
   exprt typed_null = gen_zero(target_type);
 
-  for (const clang::CXXRecordDecl *D : translation_unit_record_decls())
+  auto vptr_it = vtable_classes_per_vptr_.find(vptr_class_id);
+  if (vptr_it != vtable_classes_per_vptr_.end())
   {
-    if (!D->hasDefinition())
-      continue;
-    if (D->isAbstract())
-      continue;
-    if (D != S && !D->isDerivedFrom(S))
-      continue;
-    if (!to_void && !(D == T || D->isDerivedFrom(T)))
-      continue;
-
-    std::string D_id, D_name;
-    get_decl_name(*D, D_name, D_id);
-    const std::string vt_var_id =
-      vtable_type_prefix + vptr_class_id + "@" + D_id;
-    const symbolt *vt_var = ns.lookup(vt_var_id);
-    if (!vt_var)
-      continue;
-    exprt vt_addr = address_of_exprt(symbol_exprt(vt_var->id, vt_var->type));
-
-    exprt result;
-    if (to_void)
+    for (const clang::CXXRecordDecl *D : vptr_it->second)
     {
-      // (void*)((char*)src - off(S inside D))
-      auto off = offset_of_subobject(*ASTContext, D, S);
-      if (!off)
+      if (D != S && !D->isDerivedFrom(S))
         continue;
-      typet char_ptr = pointer_typet(char_type());
-      exprt adj = src_pointer;
-      gen_typecast(ns, adj, char_ptr);
-      if (*off > 0)
+      if (!to_void && !(D == T || D->isDerivedFrom(T)))
+        continue;
+
+      std::string D_id, D_name;
+      get_decl_name(*D, D_name, D_id);
+      const std::string vt_var_id =
+        vtable_type_prefix + vptr_class_id + "@" + D_id;
+      exprt vt_addr =
+        address_of_exprt(symbol_exprt(vt_var_id, vptr_type.subtype()));
+
+      exprt result;
+      if (to_void)
       {
-        adj = minus_exprt(adj, from_integer(*off, index_type()));
-        adj.type() = char_ptr;
+        // (void*)((char*)src - off(S inside D))
+        auto off = offset_of_subobject(*ASTContext, D, S);
+        if (!off)
+          continue;
+        typet char_ptr = pointer_typet(char_type());
+        exprt adj = src_pointer;
+        gen_typecast(ns, adj, char_ptr);
+        if (*off > 0)
+        {
+          adj = minus_exprt(adj, from_integer(*off, index_type()));
+          adj.type() = char_ptr;
+        }
+        gen_typecast(ns, adj, target_type);
+        result = adj;
       }
-      gen_typecast(ns, adj, target_type);
-      result = adj;
+      else
+      {
+        // TODO: under multiple inheritance, S may sit at a non-zero offset
+        // inside D and the adjustment is D-dependent. The correct lowering
+        // gives each D its own arm with `(T*)((char*)src + off)`. Today we
+        // emit one flat `(T*) src` for every match — correct only when
+        // every matching D has S at offset 0 (single inheritance, the
+        // most common case in practice).
+        exprt adj = src_pointer;
+        gen_typecast(ns, adj, target_type);
+        result = adj;
+      }
+      arms.push_back({vt_addr, result});
     }
-    else
-    {
-      // TODO: under multiple inheritance, S may sit at a non-zero offset
-      // inside D and the adjustment is D-dependent. The correct lowering
-      // gives each D its own arm with `(T*)((char*)src + off)`. Today we
-      // emit one flat `(T*) src` for every match — correct only when
-      // every matching D has S at offset 0 (single inheritance, the
-      // most common case in practice).
-      exprt adj = src_pointer;
-      gen_typecast(ns, adj, target_type);
-      result = adj;
-    }
-    arms.push_back({vt_addr, result});
   }
+
+  // src->vptr — needed by every form below that consults the runtime type.
+  // Built once and copied into each arm; the IR is value-typed so this is
+  // safe (no aliasing across exprts).
+  exprt vptr_read;
+  {
+    exprt src_deref = dereference_exprt(src_pointer, src_pointer.type());
+    vptr_read = member_exprt(
+      src_deref, vptr_class_id + "::" + vtable_ptr_suffix, vptr_type);
+  }
+
+  // OR-chain: vptr == arm0 || vptr == arm1 || ... — used by the reference
+  // form and the T* pointer form. Precondition: arms not empty.
+  auto vptr_match_any = [&]() -> exprt
+  {
+    exprt match = equality_exprt(vptr_read, arms.front().first);
+    for (size_t i = 1; i < arms.size(); ++i)
+      match = or_exprt(match, equality_exprt(vptr_read, arms[i].first));
+    return match;
+  };
 
   // Reference form: throw std::bad_cast on no-match (the standard
   // requires this; the catch (bad_cast&) arm of any try/catch then
@@ -953,18 +965,7 @@ bool clang_cpp_convertert::build_dynamic_cast(
     if (!bad_cast_sym)
       return fallback();
 
-    exprt src_deref = dereference_exprt(src_pointer, src_pointer.type());
-    exprt vptr_read = member_exprt(
-      src_deref, vptr_class_id + "::" + vtable_ptr_suffix, vptr_type);
-    exprt match;
-    if (arms.empty())
-      match = false_exprt();
-    else
-    {
-      match = equality_exprt(vptr_read, arms.front().first);
-      for (size_t i = 1; i < arms.size(); ++i)
-        match = or_exprt(match, equality_exprt(vptr_read, arms[i].first));
-    }
+    exprt match = arms.empty() ? exprt(false_exprt()) : vptr_match_any();
 
     typet bad_cast_type = symbol_typet(bad_cast_sym->id);
     side_effect_exprt throw_op("cpp-throw", bad_cast_type);
@@ -1002,9 +1003,6 @@ bool clang_cpp_convertert::build_dynamic_cast(
   else if (to_void)
   {
     // Per-D results differ; chain ITEs so each D selects its own offset.
-    exprt src_deref = dereference_exprt(src_pointer, src_pointer.type());
-    exprt vptr_read = member_exprt(
-      src_deref, vptr_class_id + "::" + vtable_ptr_suffix, vptr_type);
     cast_or_null = typed_null;
     for (auto it = arms.rbegin(); it != arms.rend(); ++it)
       cast_or_null = if_exprt(
@@ -1014,14 +1012,7 @@ bool clang_cpp_convertert::build_dynamic_cast(
   {
     // T* form: every matching D yields the same `(T*) src`, so collapse
     // the per-D vptr equalities into one OR-chain with a single result.
-    exprt src_deref = dereference_exprt(src_pointer, src_pointer.type());
-    exprt vptr_read = member_exprt(
-      src_deref, vptr_class_id + "::" + vtable_ptr_suffix, vptr_type);
-
-    exprt match = equality_exprt(vptr_read, arms.front().first);
-    for (size_t i = 1; i < arms.size(); ++i)
-      match = or_exprt(match, equality_exprt(vptr_read, arms[i].first));
-    cast_or_null = if_exprt(match, arms.front().second, typed_null);
+    cast_or_null = if_exprt(vptr_match_any(), arms.front().second, typed_null);
   }
 
   // Null-source guard — without this, src_deref above would crash
