@@ -1,6 +1,6 @@
 """Tests for type alias handling and dataclass docstring preservation in the preprocessor.
 
-Covers three features added to preprocessor.py:
+Covers the following features added to preprocessor.py:
   1. _is_type_alias_expression(): detects Tuple[...]/List[...]/etc. as type alias RHS
   2. visit_Assign() type alias removal: strips alias assignments from runtime AST
   3. _resolve_annotation_aliases(): expands alias names in annotation contexts
@@ -38,7 +38,18 @@ preprocessor_mod = _load_module("esbmc_preprocessor_type_aliases",
 # ---------------------------------------------------------------------------
 
 def _make_pre():
-    return preprocessor_mod.Preprocessor("test_module")
+    pre = preprocessor_mod.Preprocessor("test_module")
+    # The predicate _is_type_alias_expression now requires the typing names to
+    # actually be imported (so that ``x = List[0]`` after ``List = ...`` is
+    # not silently stripped). Prime the import-tracking state so unit tests
+    # exercising the predicate in isolation reflect a typical user file with
+    # ``from typing import Tuple, List, Dict, Set, Optional, Union, Callable``
+    # plus ``import typing``.
+    pre._typing_imported_names.update(
+        preprocessor_mod.Preprocessor._TYPING_GENERIC_NAMES
+    )
+    pre.typing_module_names.add("typing")
+    return pre
 
 
 def _get_annotation_name(node):
