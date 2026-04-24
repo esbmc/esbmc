@@ -74,6 +74,11 @@ bool goto_symext::run_builtin(
     else if (is_sub)
       op = sub2tc(
         func_type.arguments[0], func_call.operands[0], func_call.operands[1]);
+    else
+    {
+      log_error("Unknown overflow intrinsics");
+      abort();
+    }
 
     // Perform overflow check and assign it to the return object
     if (!is_nil_expr(func_call.ret))
