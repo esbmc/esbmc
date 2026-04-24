@@ -4913,6 +4913,14 @@ python_converter::extract_type_info(const nlohmann::json &var_node)
     {
       if (ann.contains("value") && ann["value"].contains("id"))
         var_type_str = ann["value"]["id"];
+
+      // Preserve concrete tuple element types for Tuple[...] annotations
+      // instead of resolving to the typing.Tuple class type.
+      if (var_type_str == "Tuple" || var_type_str == "tuple")
+      {
+        var_typet = get_type_from_annotation(ann, var_node);
+        return {var_type_str, var_typet};
+      }
     }
     else if (
       ann.contains("_type") && ann["_type"] == "Attribute" &&
