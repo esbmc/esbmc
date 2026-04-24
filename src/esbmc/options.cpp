@@ -645,6 +645,13 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "Use interval-based assertion pruning during symbolic execution to "
      "skip assertions that are provably true under the tracked intervals"}}},
+  {"Linear Equality Analysis",
+   {{"linear-equality-analysis",
+     NULL,
+     "Infer linear equality invariants between integer variables"},
+    {"linear-equality-analysis-dump",
+     NULL,
+     "Print the inferred linear equality equations at each program point"}}},
   {"Coverage options",
    {
      {"assertion-coverage", NULL, "Show the coverage of assertion statements"},

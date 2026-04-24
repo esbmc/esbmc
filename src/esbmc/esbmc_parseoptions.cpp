@@ -34,6 +34,7 @@ extern "C"
 #include <goto-programs/goto_k_induction.h>
 #include <goto-programs/goto_loop_invariant.h>
 #include <goto-programs/abstract-interpretation/interval_analysis.h>
+#include <goto-programs/abstract-interpretation/linear_equality_analysis.h>
 #include <goto-programs/abstract-interpretation/gcse.h>
 #include <goto-programs/loop_numbers.h>
 #include <goto-programs/goto_binary_reader.h>
@@ -2107,6 +2108,11 @@ bool esbmc_parseoptionst::process_goto_program(
     if (cmdline.isset("interval-analysis") || cmdline.isset("goto-contractor"))
     {
       interval_analysis(goto_functions, ns, options);
+    }
+
+    if (cmdline.isset("linear-equality-analysis"))
+    {
+      linear_equality_analysis(goto_functions, ns, options);
     }
 
     bool is_k_induction = cmdline.isset("inductive-step") ||
