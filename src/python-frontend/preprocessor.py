@@ -4952,6 +4952,12 @@ class Preprocessor(ast.NodeTransformer):
         # Body: assign every field, in declaration order. Factory fields use
         # ``self.<field> = <factory>()`` directly; other fields copy from the
         # corresponding parameter.
+        #
+        # Emit plain ``Assign`` statements rather than ``AnnAssign`` for
+        # ``self.<field>``. Optional-typed instance attributes are already
+        # handled by the normal class/parameter typing paths, whereas an
+        # explicit ``self.x: Optional[T] = ...`` here can confuse later
+        # arithmetic over values proven non-None by guards (see optional7).
         for field_name, annotation, default_expr, factory_expr in fields:
             if factory_expr is not None:
                 rhs = ast.Call(
@@ -4962,15 +4968,15 @@ class Preprocessor(ast.NodeTransformer):
             else:
                 rhs = self.create_name_node(field_name, ast.Load(), class_node)
 
-            assign_stmt = ast.AnnAssign(
-                target=ast.Attribute(
-                    value=self.create_name_node("self", ast.Load(), class_node),
-                    attr=field_name,
-                    ctx=ast.Store(),
-                ),
-                annotation=copy.deepcopy(annotation),
+            assign_stmt = ast.Assign(
+                targets=[
+                    ast.Attribute(
+                        value=self.create_name_node("self", ast.Load(), class_node),
+                        attr=field_name,
+                        ctx=ast.Store(),
+                    )
+                ],
                 value=rhs,
-                simple=0,
             )
             self.ensure_all_locations(assign_stmt, class_node)
             body.append(assign_stmt)
@@ -5029,6 +5035,14 @@ class Preprocessor(ast.NodeTransformer):
                 )
             if has_default:
                 seen_default = True
+
+        # Preserve field annotations for later attribute-type lookups even
+        # though the synthesized ``__init__`` now uses plain Assign nodes.
+        if class_node.name not in self.class_attr_annotations:
+            self.class_attr_annotations[class_node.name] = {}
+        for field_name, annotation, _, _ in fields:
+            if annotation is not None:
+                self.class_attr_annotations[class_node.name][field_name] = annotation
 
         field_names = {field_name for field_name, _, _, _ in fields}
         class_node.body = [

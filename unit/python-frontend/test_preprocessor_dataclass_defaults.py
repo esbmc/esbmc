@@ -148,11 +148,13 @@ def test_field_default_factory_assigns_directly_in_body():
     assert arg_names == ["self"]
     assert init.args.defaults == []
 
-    # Body must contain a single AnnAssign: self.items: List[int] = list()
+    # Body must contain a single Assign: self.items = list()
     assert len(init.body) == 1
     assign = init.body[0]
-    assert isinstance(assign, ast.AnnAssign)
-    assert isinstance(assign.target, ast.Attribute) and assign.target.attr == "items"
+    assert isinstance(assign, ast.Assign)
+    assert len(assign.targets) == 1
+    target = assign.targets[0]
+    assert isinstance(target, ast.Attribute) and target.attr == "items"
     assert isinstance(assign.value, ast.Call)
     assert isinstance(assign.value.func, ast.Name) and assign.value.func.id == "list"
     assert assign.value.args == [] and assign.value.keywords == []
@@ -269,12 +271,13 @@ def test_init_body_assigns_every_field_to_self():
     assigned_attrs = []
     for stmt in init.body:
         if (
-            isinstance(stmt, ast.AnnAssign)
-            and isinstance(stmt.target, ast.Attribute)
-            and isinstance(stmt.target.value, ast.Name)
-            and stmt.target.value.id == "self"
+            isinstance(stmt, ast.Assign)
+            and len(stmt.targets) == 1
+            and isinstance(stmt.targets[0], ast.Attribute)
+            and isinstance(stmt.targets[0].value, ast.Name)
+            and stmt.targets[0].value.id == "self"
         ):
-            assigned_attrs.append(stmt.target.attr)
+            assigned_attrs.append(stmt.targets[0].attr)
     assert assigned_attrs == ["a", "b", "c"]
 
 
@@ -331,10 +334,12 @@ def test_field_alias_default_factory_emits_body_assignment():
     assert [a.arg for a in init.args.args] == ["self"]
     # And must be assigned in the body via a fresh call.
     factory_assigns = [
-        s for s in init.body
-        if isinstance(s, ast.AnnAssign)
-        and isinstance(s.target, ast.Attribute)
-        and s.target.attr == "items"
+        s
+        for s in init.body
+        if isinstance(s, ast.Assign)
+        and len(s.targets) == 1
+        and isinstance(s.targets[0], ast.Attribute)
+        and s.targets[0].attr == "items"
         and isinstance(s.value, ast.Call)
     ]
     assert len(factory_assigns) == 1
