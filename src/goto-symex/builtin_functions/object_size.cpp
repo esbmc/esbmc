@@ -23,12 +23,8 @@ void goto_symext::intrinsic_builtin_object_size(
   if (is_constant_int2t(type_param))
   {
     int64_t param_val = to_constant_int2t(type_param).value.to_int64();
-    if (param_val < 0 || param_val > 3)
-    {
-      // Invalid type parameter - treat as type 0 (GCC behavior)
-      type_value = 0;
-    }
-    else
+    // Invalid type parameter (outside 0..3): keep default 0 (GCC behavior).
+    if (param_val >= 0 && param_val <= 3)
       type_value = static_cast<size_t>(param_val);
   }
 

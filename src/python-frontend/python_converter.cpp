@@ -1746,6 +1746,29 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   if (!list_result.is_nil())
     return list_result;
 
+  // Python reference-identity for class instances: class objects are stored
+  // by value (tag-X) while attribute chains reach them through pointer fields
+  // (tag-X *). When one operand is a struct instance and the other is a
+  // pointer to the same class, take the address of the struct so both sides
+  // compare as references. Covers `a.next.next == a` / `is a` on cyclic
+  // linked structures (github #4116).
+  if (
+    (op == "Eq" || op == "NotEq" || op == "Is" || op == "IsNot") &&
+    lhs.type().is_pointer() != rhs.type().is_pointer())
+  {
+    exprt &struct_side = lhs.type().is_pointer() ? rhs : lhs;
+    const exprt &ptr_side = lhs.type().is_pointer() ? lhs : rhs;
+    auto class_tag = [&](const typet &t) -> irep_idt {
+      typet r = t;
+      if (r.id() == "symbol")
+        r = ns.follow(r);
+      return r.is_struct() ? to_struct_type(r).tag() : irep_idt();
+    };
+    const irep_idt s_tag = class_tag(struct_side.type());
+    if (!s_tag.empty() && s_tag == class_tag(ptr_side.type().subtype()))
+      struct_side = gen_address_of(struct_side);
+  }
+
   // Handle identity comparisons
   if (op == "Is")
     return get_binary_operator_expr_for_is(lhs, rhs);
