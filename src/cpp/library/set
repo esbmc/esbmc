@@ -433,6 +433,11 @@ public:
     _size = 0;
   }
 
+  ~multiset()
+  {
+    this->clear();
+  }
+
   multiset(const multiset &x)
   {
     _size = 0;
@@ -1136,6 +1141,11 @@ public:
 
   set() : _size(0), rule(Compare())
   {
+  }
+
+  ~set()
+  {
+    this->clear();
   }
 
   set(const set &x)

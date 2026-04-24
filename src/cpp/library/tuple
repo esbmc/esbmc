@@ -68,6 +68,10 @@ public:
     other.head = temp;
     this->tail.swap(other.tail);
   }
+
+  ~tuple()
+  {
+  }
 };
 
 template <std::size_t I, typename Tuple>
