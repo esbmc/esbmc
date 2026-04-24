@@ -188,9 +188,6 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
       if (!is_pointer_type(arg->type))
         continue;
 
-      if (cur_state->guard.is_false())
-        continue;
-
       // Check the entire expression tree for L2 symbols, not just top-level
       bool has_l2_symbols = false;
       arg->foreach_operand([&has_l2_symbols](const expr2tc &e) {
@@ -391,11 +388,8 @@ void goto_symext::symex_input(const code_function_call2t &func_call)
                 spec == 'a' || spec == 'A' || spec == 'c' || spec == 's' ||
                 spec == 'p' || spec == 'n')
               {
-                // Skip %n since it doesn't consume input but still needs a pointer
-                if (spec != 'n')
-                  actual_format_count++;
-                else
-                  actual_format_count++; // %n still needs a parameter
+                // %n still needs a parameter even though it doesn't consume input
+                actual_format_count++;
               }
             }
           }
