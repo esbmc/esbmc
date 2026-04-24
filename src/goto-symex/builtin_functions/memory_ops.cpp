@@ -460,6 +460,8 @@ void goto_symext::intrinsic_memcpy(
   }
 
   const execution_statet &ex_state = art.get_cur_state();
+  if (ex_state.cur_state->guard.is_false())
+    return;
 
   expr2tc dst_arg = func_call.operands[0];
   expr2tc src_arg = func_call.operands[1];
@@ -740,6 +742,8 @@ void goto_symext::intrinsic_memset(
 
   assert(func_call.operands.size() == 3 && "Wrong memset signature");
   const execution_statet &ex_state = art.get_cur_state();
+  if (ex_state.cur_state->guard.is_false())
+    return;
 
   /* Get the arguments
    * arg0: ptr to object

@@ -188,6 +188,9 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
       if (!is_pointer_type(arg->type))
         continue;
 
+      if (cur_state->guard.is_false())
+        continue;
+
       // Check the entire expression tree for L2 symbols, not just top-level
       bool has_l2_symbols = false;
       arg->foreach_operand([&has_l2_symbols](const expr2tc &e) {
