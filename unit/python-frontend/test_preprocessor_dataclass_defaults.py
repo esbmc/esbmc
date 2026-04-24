@@ -1,14 +1,4 @@
-"""Tests for Marco D: dataclass support for ``field()`` defaults and factories.
-
-Covers ``preprocessor.expand_dataclass`` semantics for:
-  1. raw scalar defaults (``x: int = 5``)
-  2. ``field(default=...)`` literal defaults
-  3. ``field(default_factory=...)`` (factory call emitted as parameter default;
-     ESBMC re-evaluates non-Constant defaults per call site, yielding fresh
-     per-instance values)
-  4. mixed required + defaulted fields with correct positional ordering
-  5. validation of "non-default after default" field ordering (SyntaxError)
-"""
+"""Tests for dataclass support for ``field()`` defaults and factories."""
 
 import ast
 import importlib.util
@@ -371,3 +361,17 @@ def test_non_default_after_default_error_includes_lineno():
     assert "'y'" in msg
     # ``class Bad:`` is on line 5 of the source above.
     assert "line 5" in msg
+
+
+def test_unsupported_default_expression_raises_syntax_error():
+    src = (
+        "from dataclasses import dataclass\n"
+        "def mk():\n"
+        "    return 5\n"
+        "@dataclass\n"
+        "class C:\n"
+        "    x: int = mk()\n"
+    )
+    with pytest.raises(SyntaxError) as exc_info:
+        _transform(src)
+    assert "unsupported dataclass default expression" in str(exc_info.value)

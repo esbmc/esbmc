@@ -77,16 +77,11 @@ class Preprocessor(ast.NodeTransformer):
         "Callable",
     )
 
-    # Sentinel used when a dataclass field declares
-    # ``field(default_factory=...)``. The synthesized __init__ uses ``None``
-    # as the parameter default and rebinds the argument by invoking the
-    # factory inside the body when the caller omitted the value. Callers
-    # therefore cannot pass an explicit ``None`` to a default_factory field —
-    # that value is treated as "use the factory". In practice factory fields
-    # hold mutable collections (``list``, ``dict``, ``set``) where ``None`` is
-    # not a meaningful value, so this trade-off is acceptable and avoids
-    # introducing a module-level helper symbol that the C++ frontend would
-    # have to materialize.
+    # Dataclass fields declared with ``field(default_factory=...)`` are not
+    # exposed as synthesized ``__init__`` parameters. The generated initializer
+    # always assigns ``self.<field> = <factory>()`` in the constructor body.
+    # This keeps the transformation simple, but it also means callers cannot
+    # override default-factory fields via constructor arguments.
 
     def _is_type_alias_expression(self, value):
         """Check whether ``value`` is a typing alias RHS like ``Tuple[int, int]``.
@@ -102,8 +97,8 @@ class Preprocessor(ast.NodeTransformer):
 
         base = value.value
         if isinstance(base, ast.Name):
-            if base.id not in self._TYPING_GENERIC_NAMES:
-                return False
+            # Accept direct imports such as ``from typing import List`` and
+            # aliased imports such as ``from typing import List as L``.
             if base.id not in self._typing_imported_names:
                 return False
         elif isinstance(base, ast.Attribute):
@@ -4941,6 +4936,12 @@ class Preprocessor(ast.NodeTransformer):
         if first_default_idx is not None:
             for _, _, default_expr in param_fields[first_default_idx:]:
                 if default_expr is not None:
+                    if not isinstance(default_expr, (ast.Constant, ast.Name)):
+                        raise SyntaxError(
+                            "unsupported dataclass default expression: "
+                            "synthesized __init__ defaults must be a Constant "
+                            "or a simple Name"
+                        )
                     defaults.append(copy.deepcopy(default_expr))
                 else:
                     defaults.append(ast.Constant(value=None))
@@ -5014,8 +5015,9 @@ class Preprocessor(ast.NodeTransformer):
 
         # Validate field ordering: once a field has a default (raw,
         # ``field(default=...)`` or ``field(default_factory=...)``), every
-        # subsequent field must also have one. This mirrors CPython's
-        # TypeError "non-default argument follows default argument".
+        # subsequent field must also have one. We report this as a
+        # SyntaxError with a "non-default argument follows default argument"
+        # style message.
         seen_default = False
         for field_name, _, default_expr, factory_expr in fields:
             has_default = default_expr is not None or factory_expr is not None
