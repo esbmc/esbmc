@@ -1,29 +1,11 @@
-#include <cassert>
-#include <complex>
-#include <functional>
-#include <goto-symex/execution_state.h>
 #include <goto-symex/goto_symex.h>
-#include <goto-symex/reachability_tree.h>
-#include <goto-symex/printf_formatter.h>
-#include <iomanip>
-#include <limits>
-#include <sstream>
 #include <string>
 #include <util/arith_tools.h>
-#include <util/base_type.h>
 #include <util/c_types.h>
-#include <util/cprover_prefix.h>
 #include <util/expr_util.h>
-#include <util/i2string.h>
 #include <irep2/irep2.h>
-#include <util/message.h>
-#include <util/message/format.h>
 #include <util/migrate.h>
-#include <util/prefix.h>
 #include <util/std_types.h>
-#include <vector>
-#include <algorithm>
-#include <util/array2string.h>
 
 void goto_symext::symex_va_arg(
   const expr2tc &lhs,
