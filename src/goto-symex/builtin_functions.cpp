@@ -1022,9 +1022,15 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
       const expr2tc &base_expr = get_base_object(arg);
       if (!is_constant_string2t(base_expr) && is_array_type(base_expr))
       {
-        // the current expression "arg" does not hold the value info (might be a bug)
-        // thus we need to look it up from the symbol table
-        assert(is_symbol2t(base_expr));
+        if (!is_symbol2t(base_expr))
+        {
+          log_debug(
+            "printf",
+            "symex_printf: array base is not a symbol (id={}), skipping "
+            "array->string conversion",
+            get_expr_id(base_expr));
+          continue;
+        }
         const symbolt &s = *ns.lookup(to_symbol2t(base_expr).thename);
         exprt dest;
         if (array2string(s, dest))
@@ -1036,11 +1042,33 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
     // 3 get the number of characters output (return value)
     printf_formattert printf_formatter;
     printf_formatter(fmt.as_string(), args);
-    size_t outlen = printf_formatter.as_string().length();
+    printf_formatter.as_string(); // populate min_outlen / max_outlen
 
-    // 4. do assign
-    symex_assign(
-      code_assign2tc(lhs, constant_int2tc(int_type2(), BigInt(outlen))));
+    // 4. do assign: constant when fully determined, bounded nondet otherwise
+    if (printf_formatter.min_outlen == printf_formatter.max_outlen)
+    {
+      symex_assign(code_assign2tc(
+        lhs,
+        constant_int2tc(int_type2(), BigInt(printf_formatter.max_outlen))));
+    }
+    else
+    {
+      expr2tc nondet = sideeffect2tc(
+        int_type2(),
+        expr2tc(),
+        expr2tc(),
+        std::vector<expr2tc>(),
+        type2tc(),
+        sideeffect2t::nondet);
+      replace_nondet(nondet);
+      expr2tc lo =
+        constant_int2tc(int_type2(), BigInt(printf_formatter.min_outlen));
+      expr2tc hi =
+        constant_int2tc(int_type2(), BigInt(printf_formatter.max_outlen));
+      assume(
+        and2tc(greaterthanequal2tc(nondet, lo), lessthanequal2tc(nondet, hi)));
+      symex_assign(code_assign2tc(lhs, nondet));
+    }
   }
 
   target->output(
