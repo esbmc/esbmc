@@ -3921,17 +3921,30 @@ exprt python_list::extract_pyobject_value(
   const exprt &pyobject_expr,
   const typet &elem_type)
 {
-  // For float types, access float_val field directly to avoid void* cast in --ir mode.
-  // PyObject::float_val stores the double value without going through void*.
+  // For float types, read __ESBMC_float_buf[item->float_idx].
+  // This avoids the void*→integer truncation in --ir mode: float_idx is a size_t
+  // (no sort mismatch in BV mode), and float_buf is a typed global double array
+  // (real-sorted in --ir mode), so the array read gives the correct real value.
   if (elem_type.is_floatbv())
   {
-    member_exprt float_val_member(pyobject_expr, "float_val", elem_type);
-    exprt &base = float_val_member.struct_op();
-    exprt deref("dereference");
-    deref.type() = base.type().subtype();
-    deref.move_to_operands(base);
-    base.swap(deref);
-    return float_val_member;
+    // Build item->float_idx: dereference the PyObject* and access the float_idx field
+    member_exprt float_idx_member(pyobject_expr, "float_idx", size_type());
+    {
+      exprt &base = float_idx_member.struct_op();
+      exprt deref("dereference");
+      deref.type() = base.type().subtype();
+      deref.move_to_operands(base);
+      base.swap(deref);
+    }
+
+    // Look up __ESBMC_float_buf global (static in list.c, but still in symbol table)
+    const symbolt *fbuf_sym =
+      converter_.symbol_table().find_symbol("c:list.c@__ESBMC_float_buf");
+    assert(fbuf_sym && "could not find __ESBMC_float_buf symbol");
+
+    // Build __ESBMC_float_buf[item->float_idx]
+    index_exprt float_val(symbol_expr(*fbuf_sym), float_idx_member, elem_type);
+    return float_val;
   }
 
   // Extract value from PyObject: pyobject_expr->value
