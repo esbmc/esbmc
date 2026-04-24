@@ -441,21 +441,6 @@ static inline expr2tc do_memcpy_expression(
 static void offset_simplifier(expr2tc &e)
 {
   simplify(e);
-  if (is_div2t(e))
-  {
-    auto as_div = to_div2t(e);
-    if (is_mul2t(as_div.side_1) && is_constant_int2t(as_div.side_2))
-    {
-      auto as_mul = to_mul2t(as_div.side_1);
-      if (
-        is_constant_int2t(as_mul.side_2) &&
-        (to_constant_int2t(as_mul.side_2).as_ulong() ==
-         to_constant_int2t(as_div.side_2).as_ulong()))
-        // if side_1 of mult is a pointer_offset, then it is just zero
-        if (is_pointer_offset2t(as_mul.side_1))
-          e = constant_int2tc(get_uint64_type(), BigInt(0));
-    }
-  }
 }
 
 void goto_symext::intrinsic_memcpy(
@@ -475,8 +460,6 @@ void goto_symext::intrinsic_memcpy(
   }
 
   const execution_statet &ex_state = art.get_cur_state();
-  if (ex_state.cur_state->guard.is_false())
-    return;
 
   expr2tc dst_arg = func_call.operands[0];
   expr2tc src_arg = func_call.operands[1];
@@ -757,8 +740,6 @@ void goto_symext::intrinsic_memset(
 
   assert(func_call.operands.size() == 3 && "Wrong memset signature");
   const execution_statet &ex_state = art.get_cur_state();
-  if (ex_state.cur_state->guard.is_false())
-    return;
 
   /* Get the arguments
    * arg0: ptr to object
@@ -849,40 +830,6 @@ void goto_symext::intrinsic_memset(
     }
 
     simplify(item_offset);
-    // We can't optimize symbolic offsets :/
-    if (is_symbol2t(item_offset))
-    {
-      log_debug(
-        "memset",
-        "Item offset is symbolic: {}",
-        to_symbol2t(item_offset).get_symbol_name());
-      bump_call(func_call, "c:@F@__memset_impl");
-      return;
-    }
-
-    /* TODO: Shouldn't the simplifier be able to solve pointer arithmethic
-     *  when it multiplies and divides for the same value?
-     */
-    if (is_div2t(item_offset))
-    {
-      auto as_div = to_div2t(item_offset);
-      if (is_mul2t(as_div.side_1) && is_constant_int2t(as_div.side_2))
-      {
-        auto as_mul = to_mul2t(as_div.side_1);
-        if (
-          is_constant_int2t(as_mul.side_2) &&
-          (to_constant_int2t(as_mul.side_2).as_ulong() ==
-           to_constant_int2t(as_div.side_2).as_ulong()))
-        {
-          // if side_1 of mult is a pointer_offset, then it is just zero
-          if (is_pointer_offset2t(as_mul.side_1))
-          {
-            log_debug("memset", "TODO: some simplifications are missing");
-            item_offset = constant_int2tc(get_uint64_type(), BigInt(0));
-          }
-        }
-      }
-    }
 
     if (!is_constant_int2t(item_offset))
     {
