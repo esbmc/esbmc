@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--unwind 5
+^VERIFICATION FAILED$
+^.*dereference failure: Access to object out of bounds.*$
