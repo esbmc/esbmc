@@ -118,9 +118,9 @@ std::string c_expr2stringt::convert_rec(
     else if (width == config.ansi_c.long_double_width)
       return q + "long double" + d;
   }
-  else if (src.id() == "struct")
+  else if (src.id() == "struct" || src.id() == "complex")
   {
-    const struct_typet &struct_type = to_struct_type(src);
+    const struct_union_typet &struct_type = to_struct_union_type(src);
 
     std::string dest = q;
 
@@ -1000,10 +1000,12 @@ c_expr2stringt::convert_member(const exprt &src, unsigned precedence)
   if (full_type.id() == "array")
     return convert_array(src, precedence);
 
-  if (full_type.id() != "struct" && full_type.id() != "union")
+  if (
+    full_type.id() != "struct" && full_type.id() != "union" &&
+    full_type.id() != "complex")
     return convert_norep(src, precedence);
 
-  const struct_typet &struct_type = to_struct_type(full_type);
+  const struct_union_typet &struct_type = to_struct_union_type(full_type);
 
   const exprt comp_expr = struct_type.get_component(src.component_name());
 
@@ -1304,10 +1306,10 @@ c_expr2stringt::convert_struct(const exprt &src, unsigned &precedence)
 {
   const typet full_type = ns.follow(src.type());
 
-  if (full_type.id() != "struct")
+  if (full_type.id() != "struct" && full_type.id() != "complex")
     return convert_norep(src, precedence);
 
-  const struct_typet &struct_type = to_struct_type(full_type);
+  const struct_union_typet &struct_type = to_struct_union_type(full_type);
   const struct_union_typet::componentst &components = struct_type.components();
 
   if (components.size() != src.operands().size())

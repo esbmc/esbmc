@@ -52,6 +52,114 @@ class Preprocessor(ast.NodeTransformer):
         self.newtype_names = {"NewType"}  # local names bound to typing.NewType (covers aliased imports)
         self.typing_module_names = set()  # module names for typing (e.g. 'typing' or its alias)
         self._with_counter = 0  # Counter for unique context manager temp names
+        self.type_aliases = (
+            {}
+        )  # {alias_name: annotation_ast} for type alias assignments (Coordinate = Tuple[int, int])
+
+    def _is_type_alias_expression(self, value):
+        """Check if value is a type annotation expression (Tuple[...], List[...], Optional[...], etc.)"""
+        if isinstance(value, ast.Subscript):
+            # Check if the value is a Name that looks like a type (Tuple, List, Dict, Optional, etc.)
+            if isinstance(value.value, ast.Name):
+                type_name = value.value.id
+                return type_name in (
+                    "Tuple",
+                    "List",
+                    "Dict",
+                    "Set",
+                    "Optional",
+                    "Union",
+                    "Callable",
+                )
+            # Handle cases like typing.Tuple, typing.List
+            if isinstance(value.value, ast.Attribute):
+                return value.value.attr in (
+                    "Tuple",
+                    "List",
+                    "Dict",
+                    "Set",
+                    "Optional",
+                    "Union",
+                    "Callable",
+                )
+        return False
+
+    def _copy_annotation_node(self, node):
+        """Deep copy an annotation AST node"""
+        if node is None:
+            return None
+        if isinstance(node, ast.Name):
+            return ast.Name(id=node.id, ctx=ast.Load())
+        elif isinstance(node, ast.Subscript):
+            return ast.Subscript(
+                value=self._copy_annotation_node(node.value),
+                slice=self._copy_annotation_node(node.slice),
+                ctx=ast.Load(),
+            )
+        elif isinstance(node, ast.Index):
+            return ast.Index(value=self._copy_annotation_node(node.value))
+        elif isinstance(node, ast.Tuple):
+            return ast.Tuple(
+                elts=[self._copy_annotation_node(e) for e in node.elts], ctx=ast.Load()
+            )
+        elif isinstance(node, ast.Constant):
+            return ast.Constant(value=node.value)
+        elif isinstance(node, ast.Str):
+            return ast.Str(s=node.s)
+        elif isinstance(node, ast.Attribute):
+            return ast.Attribute(
+                value=self._copy_annotation_node(node.value),
+                attr=node.attr,
+                ctx=ast.Load(),
+            )
+        else:
+            # For other node types, return as-is
+            return node
+
+    def _resolve_annotation_aliases(self, annotation):
+        """Recursively resolve type aliases in an annotation AST node"""
+        if annotation is None:
+            return None
+
+        if isinstance(annotation, ast.Name):
+            # If this name is an alias, return a copy of the aliased type
+            if annotation.id in self.type_aliases:
+                # Copy then recursively resolve transitive aliases (e.g. TaskSchedule → List[TaskInstance] → List[Tuple[int,Task]])
+                copied = self._copy_annotation_node(self.type_aliases[annotation.id])
+                return self._resolve_annotation_aliases(copied)
+            return annotation
+
+        elif isinstance(annotation, ast.Subscript):
+            # Recursively resolve value and slice
+            resolved_value = self._resolve_annotation_aliases(annotation.value)
+            resolved_slice = annotation.slice
+            if isinstance(annotation.slice, ast.Index):
+                resolved_slice = ast.Index(
+                    value=self._resolve_annotation_aliases(annotation.slice.value)
+                )
+            elif not isinstance(annotation.slice, (ast.Slice, ast.ExtSlice)):
+                resolved_slice = self._resolve_annotation_aliases(annotation.slice)
+            return ast.Subscript(
+                value=resolved_value, slice=resolved_slice, ctx=ast.Load()
+            )
+
+        elif isinstance(annotation, ast.Tuple):
+            # Recursively resolve each element
+            resolved_elts = [
+                self._resolve_annotation_aliases(e) for e in annotation.elts
+            ]
+            return ast.Tuple(elts=resolved_elts, ctx=ast.Load())
+
+        elif isinstance(annotation, ast.Attribute):
+            # Recursively resolve the value
+            resolved_value = self._resolve_annotation_aliases(annotation.value)
+            return ast.Attribute(
+                value=resolved_value, attr=annotation.attr, ctx=ast.Load()
+            )
+
+        else:
+            # For other types (Constant, Str, etc.), return as-is
+            return annotation
 
     def _create_helper_functions(self):
         """Create the ESBMC helper function definitions"""
@@ -1320,6 +1428,46 @@ class Preprocessor(ast.NodeTransformer):
             return prefix + [node]
         return node
 
+    def visit_Subscript(self, node):
+        """Fold constant indexing over tracked list literals when safe.
+
+        Only folds when the indexed element is a pure literal (Constant or a
+        unary +/- over a Constant). Folding non-pure expressions such as
+        ``nondet_int()`` calls would break value correlation, since each
+        substitution would produce a fresh, independent symbolic value.
+        """
+        node = self.generic_visit(node)
+
+        if (
+            isinstance(node.value, ast.Name)
+            and node.value.id in self.list_literal_values
+        ):
+            list_node = self.list_literal_values[node.value.id]
+
+            idx_node = node.slice
+            if isinstance(idx_node, ast.Index):
+                idx_node = idx_node.value
+
+            if isinstance(idx_node, ast.Constant) and isinstance(idx_node.value, int):
+                idx = idx_node.value
+                elts = list_node.elts
+                if idx < 0:
+                    idx = len(elts) + idx
+                if 0 <= idx < len(elts):
+                    elt = elts[idx]
+                    is_pure_literal = isinstance(elt, ast.Constant) or (
+                        isinstance(elt, ast.UnaryOp)
+                        and isinstance(elt.op, (ast.UAdd, ast.USub))
+                        and isinstance(elt.operand, ast.Constant)
+                    )
+                    if is_pure_literal:
+                        folded = copy.deepcopy(elt)
+                        self.ensure_all_locations(folded, node)
+                        ast.fix_missing_locations(folded)
+                        return folded
+
+        return node
+
     def visit_Expr(self, node):
         node = self.generic_visit(node)
 
@@ -1747,6 +1895,23 @@ class Preprocessor(ast.NodeTransformer):
             # Handle dict.items() for loops
             self.is_range_loop = False
             return self._transform_items_for(node)
+        elif (
+            isinstance(node.iter, ast.Name)
+            and node.iter.id in self.list_literal_values
+            and self._can_safely_unroll_list_literal_for(
+                node, self.list_literal_values[node.iter.id]
+            )
+        ):
+            # For direct iteration over a known list literal variable, unroll the loop
+            # to avoid introducing len()/index machinery in the generated model.
+            # Skip the unroll if the body contains break/continue/return, since
+            # straight-line unrolling would leave those statements without a
+            # surrounding loop/function context. Skip too when elements are not
+            # homogeneous pure literals to preserve runtime isinstance semantics.
+            self.is_range_loop = False
+            return self._unroll_list_literal_for(
+                node, self.list_literal_values[node.iter.id]
+            )
         else:
             # Check if iterating over a generator variable
             if isinstance(node.iter, ast.Name) and node.iter.id in self.generator_vars:
@@ -1782,6 +1947,77 @@ class Preprocessor(ast.NodeTransformer):
             # Handle general iteration over iterables (strings, lists, etc.)
             self.is_range_loop = False
             return self._transform_iterable_for(node)
+
+    def _can_safely_unroll_list_literal_for(self, node, list_literal):
+        """Decide whether a `for` over a tracked list literal is safe to unroll.
+
+        Skip the unroll when:
+          * the loop body contains ``break``/``continue``/``return`` (these
+            need a surrounding loop/function context);
+          * elements are constants of heterogeneous types (e.g. mixed ``int``
+            and ``str``), which would silently drop runtime ``isinstance``
+            checks during unrolling and constant folding.
+        """
+        for stmt in node.body:
+            for n in ast.walk(stmt):
+                if isinstance(n, (ast.Break, ast.Continue, ast.Return)):
+                    return False
+
+        const_types = set()
+        all_constants = True
+        for elt in list_literal.elts:
+            if isinstance(elt, ast.Constant):
+                const_types.add(type(elt.value).__name__)
+            elif (
+                isinstance(elt, ast.UnaryOp)
+                and isinstance(elt.op, (ast.UAdd, ast.USub))
+                and isinstance(elt.operand, ast.Constant)
+            ):
+                const_types.add(type(elt.operand.value).__name__)
+            else:
+                all_constants = False
+                break
+        if all_constants and len(const_types) > 1:
+            return False
+        return True
+
+    def _unroll_list_literal_for(self, node, list_literal):
+        """Unroll `for` over a tracked list literal variable into straight-line code."""
+        unrolled = []
+        for idx, elt in enumerate(list_literal.elts):
+            elt_copy = copy.deepcopy(elt)
+
+            if isinstance(node.target, ast.Name):
+                target_assign = ast.Assign(
+                    targets=[ast.Name(id=node.target.id, ctx=ast.Store())],
+                    value=elt_copy,
+                )
+                self.ensure_all_locations(target_assign, node)
+                unrolled.append(target_assign)
+            elif isinstance(node.target, (ast.Tuple, ast.List)):
+                # Keep tuple/list unpacking as a single assignment so the
+                # converter's tuple-unpacking path handles element extraction.
+                unpack_assign = ast.Assign(
+                    targets=[copy.deepcopy(node.target)],
+                    value=elt_copy,
+                )
+                self.ensure_all_locations(unpack_assign, node)
+                unrolled.append(unpack_assign)
+            else:
+                iter_assign = ast.Assign(
+                    targets=[copy.deepcopy(node.target)], value=elt_copy
+                )
+                self.ensure_all_locations(iter_assign, node)
+                unrolled.append(iter_assign)
+
+            for stmt in node.body:
+                stmt_copy = copy.deepcopy(stmt)
+                self.ensure_all_locations(stmt_copy, node)
+                unrolled.append(stmt_copy)
+
+        for stmt in unrolled:
+            ast.fix_missing_locations(stmt)
+        return unrolled
 
     def visit_With(self, node):
         """Desugar 'with EXPR as VAR: BODY' into __enter__/__exit__ calls.
@@ -2721,6 +2957,32 @@ class Preprocessor(ast.NodeTransformer):
     def _create_loop_body(self, node, target_var_name, iter_var_name, annotation_id, index_var,
                           element_type):
         """Create the body of the while loop with proper type annotations."""
+        # Current iterable element expression: iter_var[index]
+        current_item = ast.Subscript(
+            value=ast.Name(id=iter_var_name, ctx=ast.Load()),
+            slice=ast.Name(id=index_var, ctx=ast.Load()),
+            ctx=ast.Load(),
+        )
+        self.ensure_all_locations(current_item, node)
+
+        unpack_assigns = []
+        # Support tuple/list unpacking targets in for-loops:
+        # for a, b in items: ...
+        if isinstance(node.target, (ast.Tuple, ast.List)):
+            for i, elt in enumerate(node.target.elts):
+                if not isinstance(elt, ast.Name):
+                    continue
+                unpack_assign = ast.Assign(
+                    targets=[ast.Name(id=elt.id, ctx=ast.Store())],
+                    value=ast.Subscript(
+                        value=ast.Name(id=target_var_name, ctx=ast.Load()),
+                        slice=ast.Constant(value=i),
+                        ctx=ast.Load(),
+                    ),
+                )
+                self.ensure_all_locations(unpack_assign, node)
+                unpack_assigns.append(unpack_assign)
+
         # Create target variable annotation
         if element_type and element_type != 'Any':
             target_annotation = ast.Name(id=element_type, ctx=ast.Load())
@@ -2728,14 +2990,12 @@ class Preprocessor(ast.NodeTransformer):
             target_annotation = ast.Name(id='Any', ctx=ast.Load())
 
         # Create: target: element_type = iter_var[index]
-        target_assign = ast.AnnAssign(target=ast.Name(id=target_var_name, ctx=ast.Store()),
-                                      annotation=target_annotation,
-                                      value=ast.Subscript(value=ast.Name(id=iter_var_name,
-                                                                         ctx=ast.Load()),
-                                                          slice=ast.Name(id=index_var,
-                                                                         ctx=ast.Load()),
-                                                          ctx=ast.Load()),
-                                      simple=1)
+        target_assign = ast.AnnAssign(
+            target=ast.Name(id=target_var_name, ctx=ast.Store()),
+            annotation=target_annotation,
+            value=current_item,
+            simple=1,
+        )
         self.ensure_all_locations(target_assign, node)
 
         # Create: index += 1
@@ -2747,7 +3007,9 @@ class Preprocessor(ast.NodeTransformer):
                                         simple=1)
         self.ensure_all_locations(index_increment, node)
 
-        # Combine with original body
+        # Combine with original body (include unpack assignments when needed)
+        if unpack_assigns:
+            return [target_assign] + unpack_assigns + [index_increment] + node.body
         return [target_assign, index_increment] + node.body
 
     def _create_item_assignment(self,
@@ -3698,6 +3960,26 @@ class Preprocessor(ast.NodeTransformer):
         """
         Handle assignment nodes, including multiple assignments and tuple unpacking.
         """
+        # Invalidate tracked list literals on subscript writes: l[i] = v
+        for target in node.targets:
+            if (
+                isinstance(target, ast.Subscript)
+                and isinstance(target.value, ast.Name)
+                and target.value.id in self.list_literal_values
+            ):
+                self.list_literal_values.pop(target.value.id, None)
+
+        # Check if this is a type alias assignment (e.g., Coordinate = Tuple[int, int])
+        if (
+            len(node.targets) == 1
+            and isinstance(node.targets[0], ast.Name)
+            and self._is_type_alias_expression(node.value)
+        ):
+            # Store the alias and skip execution (return None to remove from AST)
+            alias_name = node.targets[0].id
+            self.type_aliases[alias_name] = node.value
+            return None
+
         # First visit child nodes
         node = self.generic_visit(node)
 
@@ -3880,6 +4162,10 @@ class Preprocessor(ast.NodeTransformer):
     def visit_AnnAssign(self, node):
         """Track type annotations from annotated assignments like x: int = 5.
         Also handles defaultdict rewriting and list comprehension lowering."""
+        # Resolve type aliases in annotation
+        if node.annotation is not None:
+            node.annotation = self._resolve_annotation_aliases(node.annotation)
+
         # First visit child nodes
         node = self.generic_visit(node)
 
@@ -3958,6 +4244,14 @@ class Preprocessor(ast.NodeTransformer):
 
     def visit_AugAssign(self, node):
         """Lower augmented assignment into a simple assignment."""
+        # Invalidate tracked list literals on subscript writes: l[i] op= v
+        if (
+            isinstance(node.target, ast.Subscript)
+            and isinstance(node.target.value, ast.Name)
+            and node.target.value.id in self.list_literal_values
+        ):
+            self.list_literal_values.pop(node.target.value.id, None)
+
         # Transform children first so nested expressions are already lowered.
         node = self.generic_visit(node)
 
@@ -3996,6 +4290,72 @@ class Preprocessor(ast.NodeTransformer):
 
     # This method is responsible for visiting and transforming Call nodes in the AST.
     def visit_Call(self, node):
+        # Invalidate tracked list literals on mutating method calls:
+        # name.append/clear/extend/insert/pop/remove/reverse/sort(...)
+        _MUTATING_LIST_METHODS = {
+            "append",
+            "clear",
+            "extend",
+            "insert",
+            "pop",
+            "remove",
+            "reverse",
+            "sort",
+        }
+        if (
+            isinstance(node.func, ast.Attribute)
+            and isinstance(node.func.value, ast.Name)
+            and node.func.attr in _MUTATING_LIST_METHODS
+            and node.func.value.id in self.list_literal_values
+        ):
+            self.list_literal_values.pop(node.func.value.id, None)
+
+        # Conservatively invalidate tracked list literals when passed as an
+        # argument to a non-builtin call: the callee may mutate the list
+        # (e.g. ``func2(l8)`` where ``func2`` does ``l[0] = ...``).
+        # Skip well-known pure builtins that read but never mutate the
+        # argument; some of their lowering handlers also rely on the literal
+        # still being tracked (e.g. ``sorted(pairs, key=...)``).
+        _PURE_LIST_CONSUMERS = {
+            "abs",
+            "all",
+            "any",
+            "bool",
+            "dict",
+            "enumerate",
+            "filter",
+            "float",
+            "frozenset",
+            "hash",
+            "id",
+            "int",
+            "isinstance",
+            "iter",
+            "len",
+            "list",
+            "map",
+            "max",
+            "min",
+            "next",
+            "print",
+            "range",
+            "repr",
+            "reversed",
+            "set",
+            "sorted",
+            "str",
+            "sum",
+            "tuple",
+            "type",
+            "zip",
+        }
+        if not (
+            isinstance(node.func, ast.Name) and node.func.id in _PURE_LIST_CONSUMERS
+        ):
+            for arg in list(node.args) + [kw.value for kw in node.keywords]:
+                if isinstance(arg, ast.Name) and arg.id in self.list_literal_values:
+                    self.list_literal_values.pop(arg.id, None)
+
         # NewType is an identity callable: X(v) → v
         if (isinstance(node.func, ast.Name) and
                 node.func.id in self.newtype_vars and
@@ -4243,6 +4603,29 @@ class Preprocessor(ast.NodeTransformer):
         return node  # transformed node
 
     def visit_FunctionDef(self, node):
+        # Resolve type aliases in return type annotation
+        if node.returns is not None:
+            node.returns = self._resolve_annotation_aliases(node.returns)
+
+        # Resolve type aliases in parameter annotations
+        for arg in node.args.args:
+            if arg.annotation is not None:
+                arg.annotation = self._resolve_annotation_aliases(arg.annotation)
+
+        if node.args.vararg and node.args.vararg.annotation is not None:
+            node.args.vararg.annotation = self._resolve_annotation_aliases(
+                node.args.vararg.annotation
+            )
+
+        if node.args.kwarg and node.args.kwarg.annotation is not None:
+            node.args.kwarg.annotation = self._resolve_annotation_aliases(
+                node.args.kwarg.annotation
+            )
+
+        for arg in node.args.kwonlyargs:
+            if arg.annotation is not None:
+                arg.annotation = self._resolve_annotation_aliases(arg.annotation)
+
         # Detect generator functions: any function that contains yield
         is_generator = any(isinstance(n, (ast.Yield, ast.YieldFrom)) for n in ast.walk(node))
         if is_generator:
@@ -4457,7 +4840,19 @@ class Preprocessor(ast.NodeTransformer):
             )
         ]
 
-        class_node.body.insert(0, self.build_init(class_node, fields))
+        # Insert __init__ after docstring (if present) to preserve class docstring semantics
+        insert_index = 0
+        if class_node.body:
+            first_stmt = class_node.body[0]
+            if isinstance(first_stmt, ast.Expr) and (
+                (
+                    isinstance(first_stmt.value, ast.Constant)
+                    and isinstance(first_stmt.value.value, str)
+                )
+                or isinstance(first_stmt.value, ast.Str)
+            ):
+                insert_index = 1
+        class_node.body.insert(insert_index, self.build_init(class_node, fields))
         return class_node
 
     def _collect_class_attr_annotations(self, class_node):

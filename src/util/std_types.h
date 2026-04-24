@@ -216,7 +216,7 @@ extern inline const struct_union_typet &to_struct_union_type(const typet &type)
 {
   assert(
     type.id() == typet::t_struct || type.id() == typet::t_union ||
-    type.id() == typet::t_class);
+    type.id() == typet::t_class || type.id() == typet::t_complex);
   return static_cast<const struct_union_typet &>(type);
 }
 
@@ -224,7 +224,7 @@ extern inline struct_union_typet &to_struct_union_type(typet &type)
 {
   assert(
     type.id() == typet::t_struct || type.id() == typet::t_union ||
-    type.id() == typet::t_class);
+    type.id() == typet::t_class || type.id() == typet::t_complex);
   return static_cast<struct_union_typet &>(type);
 }
 
@@ -653,6 +653,35 @@ public:
 };
 
 const floatbv_typet &to_floatbv_type(const typet &type);
+
+class complex_typet : public struct_union_typet
+{
+public:
+  complex_typet() : struct_union_typet(t_complex)
+  {
+  }
+
+  const typet &base_type() const
+  {
+    return subtype();
+  }
+
+  void set_base_type(const typet &base)
+  {
+    subtype() = base;
+    components().clear();
+    components().emplace_back("real", "real", base);
+    components().emplace_back("imag", "imag", base);
+  }
+
+  friend const complex_typet &to_complex_type(const typet &type)
+  {
+    assert(type.id() == t_complex);
+    return static_cast<const complex_typet &>(type);
+  }
+};
+
+const complex_typet &to_complex_type(const typet &type);
 
 /**
  * @brief This type maps the vectors
