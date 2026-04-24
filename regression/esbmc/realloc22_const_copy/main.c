@@ -18,7 +18,11 @@ int main()
   // Both 4 and 6 are constants → min(old=4, new=6) folds to 4.
   int *b = (int *)realloc(a, 6 * sizeof(int));
   if (!b)
+  {
+    // realloc failure leaves the original block untouched; free it.
+    free(a);
     return 0;
+  }
 
   // The first 4 elements must be preserved by realloc.
   assert(b[0] == 10);
