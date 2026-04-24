@@ -75,6 +75,7 @@ void goto_symext::copy_memory_content(
     lessthan2tc(old_elem_count, new_elem_count),
     old_elem_count,
     new_elem_count);
+  do_simplify(copy_count);
 
   // default value
   uint64_t max_symbolic_copy = 128;
