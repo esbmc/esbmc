@@ -2968,8 +2968,20 @@ void goto_symext::simplify_python_builtins(expr2tc &expr)
     // int, str, bool
     type2tc t;
     if (is_index2t(value))
-      // Special case, str is modeled as a array, we need to get its subtype
+    {
+      // str is modeled as an array; also handles typed global arrays such as
+      // __ESBMC_float_buf[idx] used by float list elements.
       t = to_index2t(value).source_value->type;
+      // When the source is an array, also accept a match against the element type
+      // (e.g. double[4096] element type == double for isinstance(x, float)).
+      if (
+        is_array_type(t) &&
+        base_type_eq(to_array_type(t).subtype, expect_type->type, ns))
+      {
+        expr = gen_true_expr();
+        return;
+      }
+    }
     else
       t = value->type;
 
