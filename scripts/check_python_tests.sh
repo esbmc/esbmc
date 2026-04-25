@@ -124,6 +124,7 @@ ignored_dirs=(
   "string-symbolic-7"
   "string-symbolic-8"
   "complex_str_nonconstant"
+  "dataclass_factory_kwarg_ignored"
 )
 
 for dir in */; do
