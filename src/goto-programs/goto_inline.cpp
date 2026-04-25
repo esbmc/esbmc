@@ -128,7 +128,7 @@ void goto_inlinet::replace_return(goto_programt &dest, const expr2tc &lhs)
       assignment->function = it->location.get_function();
 
       dest.insert_swap(it, *assignment);
-      it++;
+      ++it;
     }
     else if (!is_nil_expr(ret.operand))
     {
@@ -143,7 +143,7 @@ void goto_inlinet::replace_return(goto_programt &dest, const expr2tc &lhs)
       expression->code = code_expression2tc(ret.operand);
 
       dest.insert_swap(it, *expression);
-      it++;
+      ++it;
     }
 
     it->make_goto(--dest.instructions.end());
@@ -173,14 +173,14 @@ void goto_inlinet::expand_function_call(
   {
     if (!full)
     {
-      target++;
+      ++target;
       return; // simply ignore, we don't do full inlining, it's ok
     }
 
     // it's really recursive. Give up.
     log_warning("Recursion is ignored when inlining");
     target->make_skip();
-    target++;
+    ++target;
     return;
   }
 
@@ -200,7 +200,7 @@ void goto_inlinet::expand_function_call(
   {
     if (!f.body_available || (f.body.instructions.size() > smallfunc_limit))
     {
-      target++;
+      ++target;
       return;
     }
   }
@@ -289,7 +289,7 @@ void goto_inlinet::expand_function_call(
     // now just kill call
     target->type = LOCATION;
     target->code = expr2tc();
-    target++;
+    ++target;
 
     dest.instructions.splice(target, tmp.instructions);
   }
@@ -311,7 +311,7 @@ void goto_inlinet::goto_inline_rec(goto_programt &dest, bool full)
     if (inline_instruction(dest, full, it))
       changed = true;
     else
-      it++;
+      ++it;
   }
 
   if (changed)
