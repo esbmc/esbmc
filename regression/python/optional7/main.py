@@ -15,7 +15,9 @@ class Task:
 
     def duration(self) -> Optional[int]:
         if self.start_time is not None and self.end_time is not None:
-            return self.end_time - self.start_time
+            start: int = int(self.start_time)
+            end: int = int(self.end_time)
+            return end - start
         return None
 
 def demonstrate_optional():
