@@ -17,12 +17,14 @@
 namespace
 {
 /// Locate the function with the given id; abort the test if missing.
-const goto_functiont &
+/// Returns a pointer so GCC's -Wdangling-reference does not fire at the
+/// call sites that bind the result into a const-reference local.
+const goto_functiont *
 require_function(const goto_functionst &functions, const irep_idt &id)
 {
   auto it = functions.function_map.find(id);
   REQUIRE(it != functions.function_map.end());
-  return it->second;
+  return &it->second;
 }
 
 /// Counts instructions of the given GOTO type in @p body.
@@ -123,13 +125,13 @@ SCENARIO(
   )";
 
   auto P = inline_full(code);
-  const goto_functiont &main = require_function(P.functions, "c:@F@main");
-  REQUIRE(count_calls(main.body) == 0);
+  const goto_functiont *main = require_function(P.functions, "c:@F@main");
+  REQUIRE(count_calls(main->body) == 0);
   // Formals `a` and `b` of add() should now have ASSIGNs in the caller's
   // body. The clang frontend names parameters with the C-mangled USR of
   // the enclosing function, so we look for "add" in the parameter id.
-  REQUIRE(count_assigns_to(main.body, "add@a") >= 1);
-  REQUIRE(count_assigns_to(main.body, "add@b") >= 1);
+  REQUIRE(count_assigns_to(main->body, "add@a") >= 1);
+  REQUIRE(count_assigns_to(main->body, "add@b") >= 1);
 }
 
 // ---------------------------------------------------------------------------
@@ -153,8 +155,8 @@ SCENARIO(
   )";
 
   auto P = inline_full(code);
-  const goto_functiont &main = require_function(P.functions, "c:@F@main");
-  REQUIRE(count_calls(main.body) == 0);
+  const goto_functiont *main = require_function(P.functions, "c:@F@main");
+  REQUIRE(count_calls(main->body) == 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -177,8 +179,8 @@ SCENARIO(
   )";
 
   auto P = inline_full(code);
-  const goto_functiont &main = require_function(P.functions, "c:@F@main");
-  REQUIRE(count_calls(main.body) == 0);
+  const goto_functiont *main = require_function(P.functions, "c:@F@main");
+  REQUIRE(count_calls(main->body) == 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -201,8 +203,8 @@ SCENARIO(
   )";
 
   auto P = inline_full(code);
-  const goto_functiont &main = require_function(P.functions, "c:@F@main");
-  REQUIRE(count_calls(main.body) == 0);
+  const goto_functiont *main = require_function(P.functions, "c:@F@main");
+  REQUIRE(count_calls(main->body) == 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -227,9 +229,9 @@ SCENARIO(
   )";
 
   auto P = inline_full(code);
-  const goto_functiont &main = require_function(P.functions, "c:@F@main");
-  REQUIRE(count_calls(main.body) == 0);
-  REQUIRE(count_instructions(main.body, OTHER) >= 1);
+  const goto_functiont *main = require_function(P.functions, "c:@F@main");
+  REQUIRE(count_calls(main->body) == 0);
+  REQUIRE(count_instructions(main->body, OTHER) >= 1);
 }
 
 // ---------------------------------------------------------------------------
@@ -253,8 +255,8 @@ SCENARIO(
   )";
 
   auto P = inline_full(code);
-  const goto_functiont &main = require_function(P.functions, "c:@F@main");
-  REQUIRE(count_calls(main.body) == 0);
+  const goto_functiont *main = require_function(P.functions, "c:@F@main");
+  REQUIRE(count_calls(main->body) == 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -278,10 +280,10 @@ SCENARIO(
   )";
 
   auto P = inline_full(code);
-  const goto_functiont &main = require_function(P.functions, "c:@F@main");
+  const goto_functiont *main = require_function(P.functions, "c:@F@main");
   // Top-level fact() is inlined; the inner self-call became SKIP, so no
   // FUNCTION_CALL remains.
-  REQUIRE(count_calls(main.body) == 0);
+  REQUIRE(count_calls(main->body) == 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -311,9 +313,9 @@ SCENARIO(
   )";
 
   auto P = inline_partial(code, /*limit=*/3);
-  const goto_functiont &main = require_function(P.functions, "c:@F@main");
+  const goto_functiont *main = require_function(P.functions, "c:@F@main");
   // tiny() (≤3 instructions) was inlined; big() (>3 instructions) wasn't.
-  REQUIRE(count_calls(main.body) >= 1);
+  REQUIRE(count_calls(main->body) >= 1);
 }
 
 // ---------------------------------------------------------------------------
@@ -336,9 +338,9 @@ SCENARIO(
   )";
 
   auto P = inline_full(code);
-  const goto_functiont &main = require_function(P.functions, "c:@F@main");
+  const goto_functiont *main = require_function(P.functions, "c:@F@main");
   // The indirect call survives; FUNCTION_CALL count is at least 1.
-  REQUIRE(count_calls(main.body) >= 1);
+  REQUIRE(count_calls(main->body) >= 1);
 }
 
 // ---------------------------------------------------------------------------
@@ -367,8 +369,8 @@ SCENARIO(
   )";
 
   auto P = inline_full(code);
-  const goto_functiont &main = require_function(P.functions, "c:@F@main");
+  const goto_functiont *main = require_function(P.functions, "c:@F@main");
   // Just check the program still has a body — the assertion is that the
   // hide branch did not abort.
-  REQUIRE(!main.body.instructions.empty());
+  REQUIRE(!main->body.instructions.empty());
 }
