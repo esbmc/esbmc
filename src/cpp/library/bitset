@@ -89,6 +89,10 @@ public:
     }
   }
 
+  ~bitset()
+  {
+  }
+
   bitset(unsigned long val)
   {
     data[0] = val;
