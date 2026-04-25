@@ -59,9 +59,9 @@ jobs:
         # On PR Linux, skip python-intensive to keep fast feedback.
         # On other systems/events, run all tests.
         if [[ "${{ inputs.operating-system }}" =~ ^macos ]]; then
-          ctest -j4 --output-on-failure --progress -L python
+          ctest -j4 --output-on-failure --progress --timeout 60 -L python
         elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
-          ctest -j4 --output-on-failure --progress -LE python-intensive .
+          ctest -j4 --output-on-failure --progress --timeout 60 -LE python-intensive .
         else
-          ctest -j4 --output-on-failure --progress .
+          ctest -j4 --output-on-failure --progress --timeout 60 .
         fi
