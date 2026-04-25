@@ -4936,6 +4936,12 @@ python_converter::extract_type_info(const nlohmann::json &var_node)
     {
       if (ann.contains("value") && ann["value"].contains("id"))
         var_type_str = ann["value"]["id"];
+      // Handle annotations written as ``typing.Tuple[...]`` (or any aliased
+      // typing module): the Subscript base is an Attribute, not a Name.
+      else if (
+        ann.contains("value") && ann["value"].contains("_type") &&
+        ann["value"]["_type"] == "Attribute" && ann["value"].contains("attr"))
+        var_type_str = ann["value"]["attr"];
 
       // Preserve concrete tuple element types for Tuple[...] annotations
       // instead of resolving to the typing.Tuple class type.

@@ -1,13 +1,4 @@
-"""Tests for type alias handling and dataclass docstring preservation in the preprocessor.
-
-Covers three features added to preprocessor.py:
-  1. _is_type_alias_expression(): detects Tuple[...]/List[...]/etc. as type alias RHS
-  2. visit_Assign() type alias removal: strips alias assignments from runtime AST
-  3. _resolve_annotation_aliases(): expands alias names in annotation contexts
-  4. visit_AnnAssign(): resolves aliases in variable annotations
-  5. visit_FunctionDef(): resolves aliases in return type and parameter annotations
-  6. expand_dataclass(): inserts __init__ after docstring (not before it)
-"""
+"""Tests for type alias handling and dataclass docstring preservation in the preprocessor."""
 
 import ast
 import importlib.util
@@ -38,7 +29,18 @@ preprocessor_mod = _load_module("esbmc_preprocessor_type_aliases",
 # ---------------------------------------------------------------------------
 
 def _make_pre():
-    return preprocessor_mod.Preprocessor("test_module")
+    pre = preprocessor_mod.Preprocessor("test_module")
+    # The predicate _is_type_alias_expression now requires the typing names to
+    # actually be imported (so that ``x = List[0]`` after ``List = ...`` is
+    # not silently stripped). Prime the import-tracking state so unit tests
+    # exercising the predicate in isolation reflect a typical user file with
+    # ``from typing import Tuple, List, Dict, Set, Optional, Union, Callable``
+    # plus ``import typing``.
+    pre._typing_imported_names.update(
+        preprocessor_mod.Preprocessor._TYPING_GENERIC_NAMES
+    )
+    pre.typing_module_names.add("typing")
+    return pre
 
 
 def _get_annotation_name(node):
@@ -105,6 +107,14 @@ def test_is_type_alias_expression_typing_attribute():
     """typing.Tuple[int, int] (attribute access) must also be recognized."""
     pre = _make_pre()
     value = ast.parse("typing.Tuple[int, int]", mode="eval").body
+    assert pre._is_type_alias_expression(value)
+
+
+def test_is_type_alias_expression_typing_alias_import():
+    """Aliased typing imports (List as L) must be recognized."""
+    pre = preprocessor_mod.Preprocessor("test_module")
+    pre.visit(ast.parse("from typing import List as L\n"))
+    value = ast.parse("L[int]", mode="eval").body
     assert pre._is_type_alias_expression(value)
 
 
