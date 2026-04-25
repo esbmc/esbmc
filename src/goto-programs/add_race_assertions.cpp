@@ -15,8 +15,7 @@ public:
   /// per-object guard symbol during execution.
   expr2tc get_guard_symbol_expr(const expr2tc &original_expr)
   {
-    return races_check2tc(
-      address_of2tc(original_expr->type, original_expr));
+    return races_check2tc(address_of2tc(original_expr->type, original_expr));
   }
 
   expr2tc get_w_guard_expr(const rw_sett::entryt &entry)
@@ -59,8 +58,8 @@ void w_guardst::add_initialization(goto_programt &goto_program)
   {
     const symbolt &s = *ns.lookup(w_guard);
     expr2tc symbol = symbol2tc(migrate_type(s.type), s.id);
-    expr2tc falsity = s.type.is_array() ? gen_zero(symbol->type, true)
-                                        : gen_false_expr();
+    expr2tc falsity =
+      s.type.is_array() ? gen_zero(symbol->type, true) : gen_false_expr();
     t = goto_program.insert(t);
     t->type = ASSIGN;
     t->code = code_assign2tc(symbol, falsity);
@@ -102,9 +101,8 @@ void add_race_assertions(
       !is_atomic)
     {
       const expr2tc &subject =
-        (instruction.is_goto() || instruction.is_assert())
-          ? instruction.guard
-          : instruction.code;
+        (instruction.is_goto() || instruction.is_assert()) ? instruction.guard
+                                                           : instruction.code;
 
       rw_sett rw_set(ns, i_it, subject);
 

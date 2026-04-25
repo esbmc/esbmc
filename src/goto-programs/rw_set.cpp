@@ -25,8 +25,7 @@ void rw_sett::compute(const expr2tc &expr)
 
     // The return-value lhs (if any) is a write target.
     if (!is_nil_expr(call.ret))
-      read_write_rec(
-        call.ret, false, true, "", gen_true_expr(), expr2tc());
+      read_write_rec(call.ret, false, true, "", gen_true_expr(), expr2tc());
 
     // For function calls, we first check to see if the function has a body
     // available, and if so, we skip it because we also check inside the
