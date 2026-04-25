@@ -29,9 +29,12 @@ static expr2tc sym_to_expr2tc(const symbolt &sym)
 
 /// Append @p instr (with location and function copied from @p it) before @p it
 /// in @p program, leaving @p it pointing at the same original instruction.
-static void
-insert_before(goto_programt &program, goto_programt::targett &it, expr2tc code,
-              goto_program_instruction_typet type, const locationt &loc)
+static void insert_before(
+  goto_programt &program,
+  goto_programt::targett &it,
+  expr2tc code,
+  goto_program_instruction_typet type,
+  const locationt &loc)
 {
   goto_programt::instructiont instr;
   instr.type = type;
