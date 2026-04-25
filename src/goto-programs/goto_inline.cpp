@@ -18,9 +18,11 @@ static bool can_typecast_argument(const type2tc &formal, const type2tc &actual)
     return to_array_type(formal).subtype == to_pointer_type(actual).subtype;
 
   const bool formal_numeric = is_signedbv_type(formal) ||
-                              is_unsignedbv_type(formal) || is_bool_type(formal);
+                              is_unsignedbv_type(formal) ||
+                              is_bool_type(formal);
   const bool actual_numeric = is_signedbv_type(actual) ||
-                              is_unsignedbv_type(actual) || is_bool_type(actual);
+                              is_unsignedbv_type(actual) ||
+                              is_bool_type(actual);
   return formal_numeric && actual_numeric;
 }
 
