@@ -199,8 +199,6 @@ void goto_coveraget::branch_function_coverage()
         // e.g. IF !(a > 1) THEN GOTO 3
         else if (it->is_goto() && !is_true(it->guard))
         {
-          exprt guard = migrate_expr_back(it->guard);
-
           if (it->is_target())
             target_num = it->target_number;
           // assert(!(a > 1));
@@ -451,14 +449,10 @@ void goto_coveraget::condition_coverage()
           (it->is_assert() &&
            it->location.property().as_string() != "replaced assertion"))
         {
-          auto &_guard = it->guard;
-          if (!is_nil_expr(_guard))
+          if (!is_nil_expr(it->guard))
           {
-            exprt guard = migrate_expr_back(_guard);
-            guard = handle_single_guard(guard, true);
-            exprt pre_cond = nil_exprt();
-            pre_cond.location() = it->location;
-            gen_cond_cov_assert(guard, pre_cond, goto_program, it);
+            expr2tc guard = handle_single_guard(it->guard, true);
+            gen_cond_cov_assert(guard, expr2tc(), goto_program, it);
             // after adding the instrumentation, we neutralize the original assert
             if (!it->is_assume())
             {
@@ -481,25 +475,16 @@ void goto_coveraget::condition_coverage()
             target_num = it->target_number;
 
           // preprocessing: if(true) ==> if(true == true)
-
-          exprt guard = migrate_expr_back(it->guard);
-          guard = handle_single_guard(guard, true);
-
-          exprt pre_cond = nil_exprt();
-          pre_cond.location() = it->location;
-          gen_cond_cov_assert(guard, pre_cond, goto_program, it);
+          expr2tc guard = handle_single_guard(it->guard, true);
+          gen_cond_cov_assert(guard, expr2tc(), goto_program, it);
         }
 
         // e.g. bool x = (a>b);
         else if (it->is_assign())
         {
-          const code_assign2t &expr = to_code_assign2t(it->code);
-          const expr2tc &_rhs = expr.source;
-          if (!is_nil_expr(_rhs))
-          {
-            exprt rhs = migrate_expr_back(_rhs);
+          const expr2tc &rhs = to_code_assign2t(it->code).source;
+          if (!is_nil_expr(rhs))
             handle_operands_guard(rhs, goto_program, it);
-          }
         }
 
         // a>b;
@@ -507,41 +492,26 @@ void goto_coveraget::condition_coverage()
         {
           if (is_code_expression2t(it->code))
           {
-            const auto &code_expression = to_code_expression2t(it->code);
-            const auto &_other = code_expression.operand;
-            if (!is_nil_expr(_other))
-            {
-              exprt other = migrate_expr_back(_other);
+            const expr2tc &other = to_code_expression2t(it->code).operand;
+            if (!is_nil_expr(other))
               handle_operands_guard(other, goto_program, it);
-            }
           }
         }
 
         // e.g. RETURN a>b;
         else if (it->is_return())
         {
-          const code_return2t &code_ret = to_code_return2t(it->code);
-          const auto &_ret = code_ret.operand;
-          if (!is_nil_expr(_ret))
-          {
-            exprt ret = migrate_expr_back(_ret);
+          const expr2tc &ret = to_code_return2t(it->code).operand;
+          if (!is_nil_expr(ret))
             handle_operands_guard(ret, goto_program, it);
-          }
         }
 
         // e.g. func(a>b);
         else if (it->is_function_call())
         {
-          const code_function_call2t &code_func =
-            to_code_function_call2t(it->code);
-          for (const expr2tc &op : code_func.operands)
-          {
+          for (const expr2tc &op : to_code_function_call2t(it->code).operands)
             if (!is_nil_expr(op))
-            {
-              exprt func = migrate_expr_back(op);
-              handle_operands_guard(func, goto_program, it);
-            }
-          }
+              handle_operands_guard(op, goto_program, it);
         }
 
         // reset target number
@@ -570,88 +540,94 @@ void goto_coveraget::condition_coverage()
   => assert(!(!b==0 && c>90))
   => assert(!(!(b==0) && !(c>90)))
 */
+/// Returns true iff @p e is one of the relational operators that
+/// gen_cond_cov_assert treats as an instrumented condition leaf.
+static bool is_comparison_op(const expr2tc &e)
+{
+  return is_equality2t(e) || is_notequal2t(e) || is_lessthan2t(e) ||
+         is_greaterthan2t(e) || is_lessthanequal2t(e) ||
+         is_greaterthanequal2t(e);
+}
+
+/// Recurse into all sub-expressions of @p ptr, calling
+/// gen_cond_cov_assert on each.
 void goto_coveraget::gen_cond_cov_assert(
-  exprt ptr,
-  exprt pre_cond,
+  const expr2tc &ptr,
+  const expr2tc &pre_cond,
   goto_programt &goto_program,
   goto_programt::instructiont::targett &it)
 {
-  // return if we meet an atom
-  if (ptr.operands().size() == 0)
+  if (is_nil_expr(ptr))
     return;
+  const std::size_t n = ptr->get_num_sub_exprs();
+  if (n == 0)
+    return; // atom
 
-  const auto &id = ptr.id();
-  if (ptr.operands().size() == 1)
+  auto recurse_all = [&]() {
+    for (std::size_t i = 0; i < n; ++i)
+      gen_cond_cov_assert(*ptr->get_sub_expr(i), pre_cond, goto_program, it);
+  };
+
+  if (n == 1)
   {
     // (a!=0)++, !a, -a, (_Bool)(int)a
-    forall_operands (op, ptr)
-      gen_cond_cov_assert(*op, pre_cond, goto_program, it);
+    recurse_all();
   }
-  else if (ptr.operands().size() == 2)
+  else if (n == 2)
   {
-    if (
-      id == exprt::equality || id == exprt::notequal || id == exprt::i_lt ||
-      id == exprt::i_gt || id == exprt::i_le || id == exprt::i_ge)
+    if (is_comparison_op(ptr))
     {
-      forall_operands (op, ptr)
-        gen_cond_cov_assert(*op, pre_cond, goto_program, it);
+      recurse_all();
       add_cond_cov_assert(ptr, pre_cond, goto_program, it);
     }
-    else if (id == irept::id_and)
+    else if (is_and2t(ptr))
     {
-      // got lhs
-      gen_cond_cov_assert(ptr.op0(), pre_cond, goto_program, it);
+      const expr2tc &lhs = *ptr->get_sub_expr(0);
+      const expr2tc &rhs = *ptr->get_sub_expr(1);
+      gen_cond_cov_assert(lhs, pre_cond, goto_program, it);
 
-      // update pre-condition: pre_cond && op0
-      pre_cond = pre_cond.is_nil()
-                   ? ptr.op0()
-                   : gen_and_expr(pre_cond, ptr.op0(), it->location);
-
-      // go rhs
-      gen_cond_cov_assert(ptr.op1(), pre_cond, goto_program, it);
+      // update pre-condition: pre_cond && lhs
+      expr2tc new_pre =
+        is_nil_expr(pre_cond) ? lhs : gen_and_expr(pre_cond, lhs);
+      gen_cond_cov_assert(rhs, new_pre, goto_program, it);
     }
-    else if (id == irept::id_or)
+    else if (is_or2t(ptr))
     {
-      // got lhs
-      gen_cond_cov_assert(ptr.op0(), pre_cond, goto_program, it);
+      const expr2tc &lhs = *ptr->get_sub_expr(0);
+      const expr2tc &rhs = *ptr->get_sub_expr(1);
+      gen_cond_cov_assert(lhs, pre_cond, goto_program, it);
 
-      // update pre-condition: !(pre_cond && op0)
-      pre_cond = pre_cond.is_nil()
-                   ? ptr.op0()
-                   : gen_and_expr(pre_cond, ptr.op0(), it->location);
-      pre_cond = gen_not_expr(pre_cond, it->location);
-
-      // go rhs
-      gen_cond_cov_assert(ptr.op1(), pre_cond, goto_program, it);
+      // update pre-condition: !(pre_cond && lhs)
+      expr2tc new_pre =
+        is_nil_expr(pre_cond) ? lhs : gen_and_expr(pre_cond, lhs);
+      new_pre = gen_not_expr(new_pre);
+      gen_cond_cov_assert(rhs, new_pre, goto_program, it);
     }
-
     else
+    {
       // a+=b; a>>(b!=0);
-      forall_operands (op, ptr)
-        gen_cond_cov_assert(*op, pre_cond, goto_program, it);
+      recurse_all();
+    }
   }
-  else if (ptr.operands().size() == 3)
+  else if (n == 3)
   {
-    // id == "if"
-    // go left
-    gen_cond_cov_assert(ptr.op0(), pre_cond, goto_program, it);
+    // ternary if
+    const expr2tc &cond = *ptr->get_sub_expr(0);
+    const expr2tc &t_val = *ptr->get_sub_expr(1);
+    const expr2tc &f_val = *ptr->get_sub_expr(2);
 
-    // update pre-condition: pre_cond && op0
-    exprt pre_cond_1 = pre_cond.is_nil()
-                         ? ptr.op0()
-                         : gen_and_expr(pre_cond, ptr.op0(), it->location);
+    gen_cond_cov_assert(cond, pre_cond, goto_program, it);
 
-    // go mid
-    gen_cond_cov_assert(ptr.op1(), pre_cond_1, goto_program, it);
+    // update pre-condition: pre_cond && cond
+    expr2tc pre_cond_1 =
+      is_nil_expr(pre_cond) ? cond : gen_and_expr(pre_cond, cond);
+    gen_cond_cov_assert(t_val, pre_cond_1, goto_program, it);
 
-    // update pre-condition: pre_cond && !op0
-    exprt not_expr = gen_not_expr(ptr.op0(), it->location);
-    exprt pre_cond_2 = pre_cond.is_nil()
-                         ? not_expr
-                         : gen_and_expr(pre_cond, not_expr, it->location);
-
-    // go right
-    gen_cond_cov_assert(ptr.op2(), pre_cond_2, goto_program, it);
+    // update pre-condition: pre_cond && !cond
+    expr2tc not_cond = gen_not_expr(cond);
+    expr2tc pre_cond_2 =
+      is_nil_expr(pre_cond) ? not_cond : gen_and_expr(pre_cond, not_cond);
+    gen_cond_cov_assert(f_val, pre_cond_2, goto_program, it);
   }
   else
   {
@@ -661,88 +637,49 @@ void goto_coveraget::gen_cond_cov_assert(
 }
 
 void goto_coveraget::add_cond_cov_assert(
-  const exprt &expr,
-  const exprt &pre_cond,
+  const expr2tc &expr,
+  const expr2tc &pre_cond,
   goto_programt &goto_program,
   goto_programt::instructiont::targett &it)
 {
-  expr2tc guard;
-  exprt cond =
-    pre_cond.is_nil() ? expr : gen_and_expr(pre_cond, expr, it->location);
-  migrate_expr(cond, guard);
+  expr2tc cond =
+    is_nil_expr(pre_cond) ? expr : gen_and_expr(pre_cond, expr);
 
   // e.g. assert(!(a==1));  // a==1
   // the idf is used as the claim_msg
-  // note that it's difference from the actual guard.
+  // note that it's different from the actual guard.
   std::string idf = from_expr(ns, "", expr);
-  make_not(guard);
-
-  // insert assert
+  expr2tc guard = gen_not_expr(cond);
   insert_assert(goto_program, it, guard, idf);
 
   // reversal
-  exprt not_expr = gen_not_expr(expr, it->location);
-  cond = pre_cond.is_nil() ? not_expr
-                           : gen_and_expr(pre_cond, not_expr, it->location);
-  migrate_expr(cond, guard);
-
-  idf = from_expr(ns, "", gen_not_expr(expr, it->location));
-  make_not(guard);
+  expr2tc not_expr = gen_not_expr(expr);
+  cond = is_nil_expr(pre_cond) ? not_expr : gen_and_expr(pre_cond, not_expr);
+  idf = from_expr(ns, "", not_expr);
+  guard = gen_not_expr(cond);
   insert_assert(goto_program, it, guard, idf);
 }
 
-exprt goto_coveraget::gen_not_eq_expr(
-  const exprt &lhs,
-  const exprt &rhs,
-  const locationt &loc)
+expr2tc
+goto_coveraget::gen_not_eq_expr(const expr2tc &lhs, const expr2tc &rhs)
 {
-  assert(loc.is_not_nil());
-  exprt not_eq_expr = exprt("notequal", bool_type());
-  exprt _lhs = lhs;
-  if (lhs.type() != rhs.type())
-  {
-    _lhs = typecast_exprt(lhs, rhs.type());
-    _lhs.location() = lhs.location();
-  }
-  not_eq_expr.operands().emplace_back(_lhs);
-  not_eq_expr.operands().emplace_back(rhs);
-  not_eq_expr.location() = loc;
-  return not_eq_expr;
+  expr2tc _lhs = (lhs->type == rhs->type) ? lhs : typecast2tc(rhs->type, lhs);
+  return notequal2tc(_lhs, rhs);
 }
 
-exprt goto_coveraget::gen_and_expr(
-  const exprt &lhs,
-  const exprt &rhs,
-  const locationt &loc)
+expr2tc goto_coveraget::gen_and_expr(const expr2tc &lhs, const expr2tc &rhs)
 {
-  assert(loc.is_not_nil());
-  exprt join_expr = exprt(exprt::id_and, bool_type());
-  exprt _lhs = lhs.type().is_bool() ? lhs : typecast_exprt(lhs, bool_type());
-  _lhs.location() = lhs.location();
-  exprt _rhs = rhs.type().is_bool() ? rhs : typecast_exprt(rhs, bool_type());
-  _rhs.location() = rhs.location();
-  join_expr.operands().emplace_back(_lhs);
-  join_expr.operands().emplace_back(_rhs);
-  join_expr.location() = loc;
-  return join_expr;
-}
-
-exprt goto_coveraget::gen_not_expr(const exprt &expr, const locationt &loc)
-{
-  assert(loc.is_not_nil());
-  exprt not_expr = exprt(exprt::id_not, bool_type());
-  not_expr.operands().emplace_back(expr);
-  not_expr.location() = loc;
-  return not_expr;
+  type2tc bt = get_bool_type();
+  expr2tc _lhs = is_bool_type(lhs->type) ? lhs : typecast2tc(bt, lhs);
+  expr2tc _rhs = is_bool_type(rhs->type) ? rhs : typecast2tc(bt, rhs);
+  return and2tc(_lhs, _rhs);
 }
 
 expr2tc goto_coveraget::gen_not_expr(const expr2tc &guard)
 {
-  exprt _guard = migrate_expr_back(guard);
-  exprt not_guard = gen_not_expr(_guard, _guard.location());
-  expr2tc _guard2;
-  migrate_expr(not_guard, _guard2);
-  return _guard2;
+  if (is_not2t(guard))
+    return to_not2t(guard).value;
+  return not2tc(guard);
 }
 
 /*
@@ -764,155 +701,138 @@ expr2tc goto_coveraget::gen_not_expr(const expr2tc &guard)
   e.g. if(a) => if(a!=0); if(true) => if(true != 0); if(a?b:c:d) => if((a?b:c:d)!=0)
   if(a==b) => if(a==b); if(a&&b) => if(a != 0 && b!=0 )
 */
-exprt goto_coveraget::handle_single_guard(
-  exprt &expr,
+/// Recursively maps each operand of @p expr through handle_single_guard
+/// (with the supplied @p sub_top_level), in place. Foreach_operand detaches
+/// the irep_container before mutating, so this is safe even when @p expr
+/// shares storage with its caller.
+static void replace_operands(
+  expr2tc &expr,
+  bool sub_top_level,
+  const std::function<expr2tc(const expr2tc &, bool)> &recurse)
+{
+  expr->Foreach_operand(
+    [&](expr2tc &op) { op = recurse(op, sub_top_level); });
+}
+
+expr2tc goto_coveraget::handle_single_guard(
+  const expr2tc &expr,
   bool top_level /* = true */)
 {
+  if (is_nil_expr(expr))
+    return expr;
+  const std::size_t n = expr->get_num_sub_exprs();
+  auto recurse = [this](const expr2tc &e, bool tl) {
+    return handle_single_guard(e, tl);
+  };
+
   // --- Rule 1: Atomic expressions ---
   // If the expression has no operands (a symbol or constant),
-  // then if it's Boolean and we're at the outer guard, wrap it with "!= false".
-  if (expr.operands().empty())
+  // then if it's Boolean and we're at the outer guard, wrap it with
+  // "!= false".
+  if (n == 0)
   {
-    if (top_level && expr.type().is_bool())
-    {
-      exprt false_expr = false_exprt();
-      false_expr.location() = expr.location();
-      return gen_not_eq_expr(expr, false_expr, expr.location());
-    }
+    if (top_level && is_bool_type(expr->type))
+      return gen_not_eq_expr(expr, gen_false_expr());
     return expr;
   }
 
   // --- Special-case for "not" nodes ---
   // For a "not" operator, process its operand with top_level = true so that
   // even nested atomic expressions (like x in !(!(x))) get wrapped.
-  if (expr.id() == "not")
+  if (is_not2t(expr))
   {
-    expr.op0() = handle_single_guard(expr.op0(), true);
-    return expr;
+    expr2tc result = expr;
+    replace_operands(result, /*sub_top_level=*/true, recurse);
+    return result;
   }
 
-  // --- Helper: Recognized binary comparisons ---
-  auto is_comparison = [](const exprt &e) -> bool {
-    return (
-      e.id() == exprt::equality || e.id() == exprt::notequal ||
-      e.id() == exprt::i_lt || e.id() == exprt::i_gt || e.id() == exprt::i_le ||
-      e.id() == exprt::i_ge);
-  };
-
   // --- Special-case for typecasts to bool ---
-  // If we have (bool)(X) and X is not already a recognized guard (comparison or logical AND/OR),
-  // then unwrap the typecast and wrap X.
-  if (expr.id() == exprt::typecast && expr.type().id() == typet::t_bool)
+  // If we have (bool)(X) and X is not already a recognized guard
+  // (comparison or logical AND/OR), unwrap the typecast and wrap X.
+  if (is_typecast2t(expr) && is_bool_type(expr->type))
   {
-    exprt inner = handle_single_guard(expr.op0(), top_level);
-    if (!(is_comparison(inner) || inner.id() == exprt::id_and ||
-          inner.id() == exprt::id_or))
-    {
-      exprt false_expr = false_exprt();
-      false_expr.location() = expr.location();
-      return gen_not_eq_expr(inner, false_expr, expr.location());
-    }
+    expr2tc inner = handle_single_guard(to_typecast2t(expr).from, top_level);
+    if (!(is_comparison_op(inner) || is_and2t(inner) || is_or2t(inner)))
+      return gen_not_eq_expr(inner, gen_false_expr());
     return inner;
   }
 
   // --- Process Binary Operators (exactly 2 operands) ---
-  if (expr.operands().size() == 2)
+  if (n == 2)
   {
-    // Case: Logical AND/OR operators.
-    if (expr.id() == exprt::id_and || expr.id() == exprt::id_or)
+    expr2tc result = expr;
+    if (is_and2t(expr) || is_or2t(expr))
     {
       // Process each operand as an independent guard (top_level = true).
-      for (auto &op : expr.operands())
-        op = handle_single_guard(op, true);
-      // For AND/OR, we do not add extra wrapping.
-      return expr;
+      replace_operands(result, /*sub_top_level=*/true, recurse);
+      return result;
     }
-    // Case: Recognized binary comparisons.
-    else if (is_comparison(expr))
+    if (is_comparison_op(expr))
     {
-      // Process operands with top_level = false.
-      for (auto &op : expr.operands())
-        op = handle_single_guard(op, false);
-      return expr;
+      replace_operands(result, /*sub_top_level=*/false, recurse);
+      return result;
     }
-    // Case: Other binary operators (e.g. arithmetic '+').
-    else
-    {
-      for (auto &op : expr.operands())
-        op = handle_single_guard(op, false);
-      if (top_level)
-      {
-        exprt false_expr = false_exprt();
-        false_expr.location() = expr.location();
-        return gen_not_eq_expr(expr, false_expr, expr.location());
-      }
-      return expr;
-    }
+    // Other binary operators (e.g. arithmetic '+').
+    replace_operands(result, /*sub_top_level=*/false, recurse);
+    if (top_level)
+      return gen_not_eq_expr(result, gen_false_expr());
+    return result;
   }
-  else
-  {
-    // --- Process Non-Binary Operators (Unary, Ternary, etc.) ---
-    Forall_operands (it, expr)
-      *it = handle_single_guard(*it, false);
 
-    // Special-case: if the expression is a typecast to bool, leave it unchanged.
-    if (expr.id() == exprt::typecast && expr.type().id() == typet::t_bool)
-      return expr;
+  // --- Process Non-Binary Operators (Unary, Ternary, etc.) ---
+  expr2tc result = expr;
+  replace_operands(result, /*sub_top_level=*/false, recurse);
 
-    // For any other expression producing a Boolean value,
-    // if at the outer guard (top_level true) and its id is not among our no-wrap set,
-    // then wrap it with "!= false". This catches cases like member accesses.
-    if (
-      top_level && expr.type().is_bool() &&
-      (expr.id() != exprt::id_and && expr.id() != exprt::id_or &&
-       expr.id() != "not" && !is_comparison(expr)))
-    {
-      exprt false_expr = false_exprt();
-      false_expr.location() = expr.location();
-      return gen_not_eq_expr(expr, false_expr, expr.location());
-    }
-    return expr;
-  }
+  // For any other expression producing a Boolean value, if at the outer
+  // guard (top_level true) and its kind is not among our no-wrap set, then
+  // wrap it with "!= false". This catches cases like member accesses.
+  if (
+    top_level && is_bool_type(result->type) && !is_and2t(result) &&
+    !is_or2t(result) && !is_not2t(result) && !is_comparison_op(result))
+    return gen_not_eq_expr(result, gen_false_expr());
+  return result;
 }
 
 /*
   add condition instrumentation for OTHER, ASSIGN, FUNCTION_CALL..
   whose operands might contain conditions
-  we handle guards for each boolean sub-operands.
+  we handle guards for each boolean sub-operand.
 */
 void goto_coveraget::handle_operands_guard(
-  exprt &expr,
+  const expr2tc &expr,
   goto_programt &goto_program,
   goto_programt::instructiont::targett &it)
 {
-  if (expr.has_operands())
-  {
-    auto &ops = expr.operands();
-    exprt pre_cond = nil_exprt();
-    pre_cond.location() = it->location;
+  if (is_nil_expr(expr))
+    return;
+  const std::size_t n = expr->get_num_sub_exprs();
+  if (n == 0)
+    return;
 
-    if (ops.size() == 1)
+  expr2tc pre_cond; // nil
+
+  if (n == 1)
+  {
+    // e.g. RETURN ++(x&&y);
+    handle_operands_guard(*expr->get_sub_expr(0), goto_program, it);
+  }
+  else if (n == 2)
+  {
+    expr2tc target = expr;
+    if (is_and2t(expr) || is_or2t(expr))
     {
-      // e.g. RETURN ++(x&&y);
-      handle_operands_guard(expr.op0(), goto_program, it);
+      // we do not need to add a !=false at top level
+      // e.g. return x?1:0 != return (x?1:0)!=false
+      target->Foreach_operand(
+        [this](expr2tc &op) { op = handle_single_guard(op, false); });
     }
-    else if (ops.size() == 2)
-    {
-      if (expr.id() == exprt::id_and || expr.id() == exprt::id_or)
-      {
-        Forall_operands (it, expr)
-          // we do not need to add a !=false at top level
-          // e.g. return x?1:0!= return (x?1:0)!=false
-          *it = handle_single_guard(*it, false);
-      }
-      gen_cond_cov_assert(expr, pre_cond, goto_program, it);
-    }
-    else
-    {
-      // this could only be ternary boolean
-      expr = handle_single_guard(expr, false);
-      gen_cond_cov_assert(expr, pre_cond, goto_program, it);
-    }
+    gen_cond_cov_assert(target, pre_cond, goto_program, it);
+  }
+  else
+  {
+    // this could only be ternary boolean
+    expr2tc rewrapped = handle_single_guard(expr, false);
+    gen_cond_cov_assert(rewrapped, pre_cond, goto_program, it);
   }
 }
 
@@ -927,17 +847,14 @@ bool goto_coveraget::is_target_func(
   const irep_idt &f,
   const std::string &tgt_name) const
 {
-  if (ns.lookup(f) == nullptr)
+  const symbolt *sym = ns.lookup(f);
+  if (sym == nullptr)
   {
     log_error("Cannot find target function");
     abort();
   }
 
-  exprt symbol = symbol_expr(*ns.lookup(f));
-  if (symbol.name().as_string() != tgt_name)
-    return false;
-
-  return true;
+  return sym->name.as_string() == tgt_name;
 }
 
 // negate the condition inside the assertion
