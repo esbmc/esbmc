@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 main.cpp
 building.cpp elevator.cpp light.cpp person.cpp floor.cpp elevatorButton.cpp clock.cpp bell.cpp button.cpp door.cpp floorButton.cpp scheduler.cpp --unwind 2 --no-unwinding-assertions --timeout 900
 ^VERIFICATION SUCCESSFUL$
