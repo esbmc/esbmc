@@ -2,6 +2,9 @@
 
 void rw_sett::compute(const expr2tc &expr)
 {
+  if (is_nil_expr(expr))
+    return;
+
   if (is_code_assign2t(expr))
   {
     const code_assign2t &c = to_code_assign2t(expr);
@@ -69,6 +72,9 @@ void rw_sett::read_write_rec(
   const expr2tc &original_expr,
   bool dereferenced)
 {
+  if (is_nil_expr(expr))
+    return;
+
   if (is_symbol2t(expr))
   {
     const symbol2t &sym = to_symbol2t(expr);
