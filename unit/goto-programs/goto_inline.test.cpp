@@ -57,9 +57,9 @@ count_assigns_to(const goto_programt &body, const std::string &target_id)
     if (!is_code_assign2t(instr.code))
       continue;
     const code_assign2t &a = to_code_assign2t(instr.code);
-    if (is_symbol2t(a.target) &&
-        to_symbol2t(a.target).thename.as_string().find(target_id) !=
-          std::string::npos)
+    if (
+      is_symbol2t(a.target) && to_symbol2t(a.target).thename.as_string().find(
+                                 target_id) != std::string::npos)
       ++n;
   }
   return n;
