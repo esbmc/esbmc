@@ -1,89 +1,84 @@
 #include <goto-programs/rw_set.h>
-#include <pointer-analysis/goto_program_dereference.h>
-#include <util/arith_tools.h>
-#include <util/expr_util.h>
-#include <util/namespace.h>
-#include <util/std_expr.h>
 
-void rw_sett::compute(const exprt &expr)
+void rw_sett::compute(const expr2tc &expr)
 {
-  const goto_programt::instructiont &instruction = *target;
-
-  if (expr.is_code())
+  if (is_code_assign2t(expr))
   {
-    codet code = to_code(expr);
-    const irep_idt &statement = code.get_statement();
+    const code_assign2t &c = to_code_assign2t(expr);
+    assign(c.target, c.source);
+  }
+  else if (is_code_printf2t(expr))
+  {
+    for (const auto &op : to_code_printf2t(expr).operands)
+      read_rec(op);
+  }
+  else if (is_code_return2t(expr))
+  {
+    read_rec(to_code_return2t(expr).operand);
+  }
+  else if (is_code_function_call2t(expr))
+  {
+    const code_function_call2t &call = to_code_function_call2t(expr);
 
-    if (statement == "assign")
+    // The return-value lhs (if any) is a write target.
+    if (!is_nil_expr(call.ret))
+      read_write_rec(
+        call.ret, false, true, "", gen_true_expr(), expr2tc());
+
+    // For function calls, we first check to see if the function has a body
+    // available, and if so, we skip it because we also check inside the
+    // function. If not, we need to check these args.
+    if (is_symbol2t(call.function))
     {
-      assert(code.operands().size() == 2);
-      assign(code.op0(), code.op1());
-    }
-    else if (statement == "printf")
-    {
-      exprt expr = code;
-      Forall_operands (it, expr)
-        read_rec(*it);
-    }
-    else if (statement == "return")
-    {
-      assert(code.operands().size() == 1);
-      read_rec(code.op0());
-    }
-    else if (statement == "function_call")
-    {
-      assert(code.operands().size());
-      read_write_rec(code.op0(), false, true, "", guardt(), nil_exprt());
-      // For function calls, we first check to see if the function has a body available,
-      // and if so, we skip it because we also check inside the function
-      // If not, we need check these args
-      if (code.op1().is_symbol())
-      {
-        const symbol_exprt &symbol_expr = to_symbol_expr(code.op1());
-        const symbolt *symbol = ns.lookup(symbol_expr.get_identifier());
-        if (symbol->value.is_nil() || symbol->name == "__VERIFIER_assert")
-          Forall_operands (it, code.op2())
-          {
-            if (it->is_address_of())
-              read_rec(it->op0());
-            else
-              read_rec(*it);
-          }
-      }
+      const symbolt *symbol = ns.lookup(to_symbol2t(call.function).thename);
+      if (
+        symbol &&
+        (symbol->value.is_nil() || symbol->name == "__VERIFIER_assert"))
+        for (const auto &arg : call.operands)
+        {
+          if (is_address_of2t(arg))
+            read_rec(to_address_of2t(arg).ptr_obj);
+          else
+            read_rec(arg);
+        }
     }
   }
-  else if (
-    instruction.is_goto() || instruction.is_assert() || instruction.is_assume())
-    read_rec(expr);
+  else
+  {
+    // Plain expression: only the goto/assert/assume guard is read.
+    const goto_programt::instructiont &instruction = *target;
+    if (
+      instruction.is_goto() || instruction.is_assert() ||
+      instruction.is_assume())
+      read_rec(expr);
+  }
 }
 
-void rw_sett::assign(const exprt &lhs, const exprt &rhs)
+void rw_sett::assign(const expr2tc &lhs, const expr2tc &rhs)
 {
   read_rec(rhs);
-  read_write_rec(lhs, false, true, "", guardt(), nil_exprt());
+  read_write_rec(lhs, false, true, "", gen_true_expr(), expr2tc());
 }
 
 void rw_sett::read_write_rec(
-  const exprt &expr,
+  const expr2tc &expr,
   bool r,
   bool w,
   const std::string &suffix,
-  const guardt &guard,
-  const exprt &original_expr,
+  const expr2tc &guard,
+  const expr2tc &original_expr,
   bool dereferenced)
 {
-  if (expr.is_symbol() && !expr.has_operands())
+  if (is_symbol2t(expr))
   {
-    const symbol_exprt &symbol_expr = to_symbol_expr(expr);
+    const symbol2t &sym = to_symbol2t(expr);
 
-    const symbolt *symbol = ns.lookup(symbol_expr.get_identifier());
+    const symbolt *symbol = ns.lookup(sym.thename);
     if (symbol)
     {
       if (
         (!symbol->static_lifetime && !dereferenced) || symbol->is_thread_local)
-      {
         return; // ignore for now
-      }
 
       if (
         symbol->name == "__ESBMC_alloc" ||
@@ -91,15 +86,11 @@ void rw_sett::read_write_rec(
         symbol->name == "stdout" || symbol->name == "stderr" ||
         symbol->name == "sys_nerr" || symbol->name == "operator=::ref" ||
         symbol->name == "this" || symbol->name == "__ESBMC_atexits")
-      {
         return; // ignore for now
-      }
 
       // Improvements for CUDA features
       if (symbol->name == "indexOfThread" || symbol->name == "indexOfBlock")
-      {
         return; // ignore for now
-      }
 
       // C11 _Atomic variables are never involved in data races
       // (§5.1.2.4p4: concurrent accesses to atomic objects are not races).
@@ -107,69 +98,62 @@ void rw_sett::read_write_rec(
         return;
     }
 
-    irep_idt object = id2string(symbol_expr.get_identifier()) + suffix;
+    irep_idt object = id2string(sym.thename) + suffix;
 
     entryt &entry = entries[object];
     entry.object = object;
     entry.r = entry.r || r;
     entry.w = entry.w || w;
     entry.deref = dereferenced;
-    entry.guard = migrate_expr_back(guard.as_expr());
-    entry.original_expr = original_expr.is_nil() ? expr : original_expr;
+    entry.guard = guard;
+    entry.original_expr = is_nil_expr(original_expr) ? expr : original_expr;
   }
-  else if (expr.is_member())
+  else if (is_member2t(expr))
   {
-    assert(expr.operands().size() == 1);
-    const std::string &component_name = expr.component_name().as_string();
-    exprt tmp = original_expr.is_nil() ? expr : original_expr;
-
+    const member2t &m = to_member2t(expr);
+    expr2tc tmp = is_nil_expr(original_expr) ? expr : original_expr;
     read_write_rec(
-      expr.op0(),
+      m.source_value,
       r,
       w,
-      "." + component_name + suffix,
+      "." + id2string(m.member) + suffix,
       guard,
       tmp,
       dereferenced);
   }
-  else if (expr.is_index())
+  else if (is_index2t(expr))
   {
-    assert(expr.operands().size() == 2);
-    exprt tmp = original_expr.is_nil() ? expr : original_expr;
-    read_write_rec(expr.op0(), r, w, suffix, guard, tmp, dereferenced);
+    const index2t &i = to_index2t(expr);
+    expr2tc tmp = is_nil_expr(original_expr) ? expr : original_expr;
+    read_write_rec(i.source_value, r, w, suffix, guard, tmp, dereferenced);
   }
-  else if (expr.is_dereference())
+  else if (is_dereference2t(expr))
   {
-    assert(expr.operands().size() == 1);
-    exprt tmp = original_expr.is_nil() ? expr : original_expr;
+    const dereference2t &d = to_dereference2t(expr);
+    expr2tc tmp = is_nil_expr(original_expr) ? expr : original_expr;
+    read_write_rec(d.value, r, w, suffix, guard, tmp, true);
+  }
+  else if (is_address_of2t(expr))
+  {
+    // taking the address does not read or write the underlying object
+  }
+  else if (is_if2t(expr))
+  {
+    const if2t &ite = to_if2t(expr);
+    read_rec(ite.cond, guard, original_expr);
 
-    read_write_rec(expr.op0(), r, w, suffix, guard, tmp, true);
-  }
-  else if (expr.is_address_of() || expr.id() == "implicit_address_of")
-  {
-    assert(expr.operands().size() == 1);
-  }
-  else if (expr.id() == "if")
-  {
-    assert(expr.operands().size() == 3);
-    read_rec(expr.op0(), guard, original_expr);
-
-    guardt true_guard(guard);
-    expr2tc tmp_expr;
-    migrate_expr(expr.op0(), tmp_expr);
-    true_guard.add(tmp_expr);
+    expr2tc true_guard = and2tc(guard, ite.cond);
     read_write_rec(
-      expr.op1(), r, w, suffix, true_guard, original_expr, dereferenced);
+      ite.true_value, r, w, suffix, true_guard, original_expr, dereferenced);
 
-    guardt false_guard(guard);
-    migrate_expr(gen_not(expr.op0()), tmp_expr);
-    false_guard.add(tmp_expr);
+    expr2tc false_guard = and2tc(guard, not2tc(ite.cond));
     read_write_rec(
-      expr.op2(), r, w, suffix, false_guard, original_expr, dereferenced);
+      ite.false_value, r, w, suffix, false_guard, original_expr, dereferenced);
   }
   else
   {
-    forall_operands (it, expr)
-      read_write_rec(*it, r, w, suffix, guard, original_expr, dereferenced);
+    expr->foreach_operand([&](const expr2tc &op) {
+      read_write_rec(op, r, w, suffix, guard, original_expr, dereferenced);
+    });
   }
 }

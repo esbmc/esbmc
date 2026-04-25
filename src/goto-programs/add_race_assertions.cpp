@@ -13,11 +13,10 @@ public:
 
   /// Build the RACE_CHECK(&original_expr) marker that symex replaces with the
   /// per-object guard symbol during execution.
-  expr2tc get_guard_symbol_expr(const exprt &original_expr)
+  expr2tc get_guard_symbol_expr(const expr2tc &original_expr)
   {
-    expr2tc operand;
-    migrate_expr(original_expr, operand);
-    return races_check2tc(address_of2tc(operand->type, operand));
+    return races_check2tc(
+      address_of2tc(original_expr->type, original_expr));
   }
 
   expr2tc get_w_guard_expr(const rw_sett::entryt &entry)
@@ -102,14 +101,12 @@ void add_race_assertions(
        instruction.is_assume()) &&
       !is_atomic)
     {
-      // rw_sett still consumes the legacy exprt; convert at the boundary.
-      exprt tmp_expr;
-      if (instruction.is_goto() || instruction.is_assert())
-        tmp_expr = migrate_expr_back(instruction.guard);
-      else
-        tmp_expr = migrate_expr_back(instruction.code);
+      const expr2tc &subject =
+        (instruction.is_goto() || instruction.is_assert())
+          ? instruction.guard
+          : instruction.code;
 
-      rw_sett rw_set(ns, i_it, tmp_expr);
+      rw_sett rw_set(ns, i_it, subject);
 
       if (rw_set.entries.empty())
         continue;
@@ -152,10 +149,9 @@ void add_race_assertions(
       forall_rw_set_entries(e_it, rw_set) if (e_it->second.w)
       {
         goto_programt::targett t = goto_program.insert(i_it);
-        expr2tc rhs;
-        migrate_expr(e_it->second.get_guard(), rhs);
         t->type = ASSIGN;
-        t->code = code_assign2tc(w_guards.get_w_guard_expr(e_it->second), rhs);
+        t->code = code_assign2tc(
+          w_guards.get_w_guard_expr(e_it->second), e_it->second.get_guard());
         t->location = original_instruction.location;
         i_it = ++t;
       }
