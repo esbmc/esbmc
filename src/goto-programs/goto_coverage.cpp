@@ -642,8 +642,7 @@ void goto_coveraget::add_cond_cov_assert(
   goto_programt &goto_program,
   goto_programt::instructiont::targett &it)
 {
-  expr2tc cond =
-    is_nil_expr(pre_cond) ? expr : gen_and_expr(pre_cond, expr);
+  expr2tc cond = is_nil_expr(pre_cond) ? expr : gen_and_expr(pre_cond, expr);
 
   // e.g. assert(!(a==1));  // a==1
   // the idf is used as the claim_msg
@@ -660,8 +659,7 @@ void goto_coveraget::add_cond_cov_assert(
   insert_assert(goto_program, it, guard, idf);
 }
 
-expr2tc
-goto_coveraget::gen_not_eq_expr(const expr2tc &lhs, const expr2tc &rhs)
+expr2tc goto_coveraget::gen_not_eq_expr(const expr2tc &lhs, const expr2tc &rhs)
 {
   expr2tc _lhs = (lhs->type == rhs->type) ? lhs : typecast2tc(rhs->type, lhs);
   return notequal2tc(_lhs, rhs);
@@ -710,8 +708,7 @@ static void replace_operands(
   bool sub_top_level,
   const std::function<expr2tc(const expr2tc &, bool)> &recurse)
 {
-  expr->Foreach_operand(
-    [&](expr2tc &op) { op = recurse(op, sub_top_level); });
+  expr->Foreach_operand([&](expr2tc &op) { op = recurse(op, sub_top_level); });
 }
 
 expr2tc goto_coveraget::handle_single_guard(
