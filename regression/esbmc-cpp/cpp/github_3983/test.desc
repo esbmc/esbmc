@@ -1,4 +1,4 @@
 CORE
 main.cpp
---std c++17 --multi-property
+--incremental-bmc --std c++17 --multi-property
 ^VERIFICATION SUCCESSFUL$
