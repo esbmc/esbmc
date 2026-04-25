@@ -53,6 +53,14 @@ inline bool is_fractional_type(const expr2tc &e)
   return is_bv_type(e->type);
 }
 
+/** Test whether @p e is a relational comparison: ==, !=, <, >, <=, >=. */
+inline bool is_comparison_expr(const expr2tc &e)
+{
+  return is_equality2t(e) || is_notequal2t(e) || is_lessthan2t(e) ||
+         is_greaterthan2t(e) || is_lessthanequal2t(e) ||
+         is_greaterthanequal2t(e);
+}
+
 /** Test whether type is a number type - bv, fixedbv or floatbv. */
 inline bool is_number_type(const type2tc &t)
 {

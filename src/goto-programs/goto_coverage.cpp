@@ -540,15 +540,6 @@ void goto_coveraget::condition_coverage()
   => assert(!(!b==0 && c>90))
   => assert(!(!(b==0) && !(c>90)))
 */
-/// Returns true iff @p e is one of the relational operators that
-/// gen_cond_cov_assert treats as an instrumented condition leaf.
-static bool is_comparison_op(const expr2tc &e)
-{
-  return is_equality2t(e) || is_notequal2t(e) || is_lessthan2t(e) ||
-         is_greaterthan2t(e) || is_lessthanequal2t(e) ||
-         is_greaterthanequal2t(e);
-}
-
 /// Recurse into all sub-expressions of @p ptr, calling
 /// gen_cond_cov_assert on each.
 void goto_coveraget::gen_cond_cov_assert(
@@ -575,7 +566,7 @@ void goto_coveraget::gen_cond_cov_assert(
   }
   else if (n == 2)
   {
-    if (is_comparison_op(ptr))
+    if (is_comparison_expr(ptr))
     {
       recurse_all();
       add_cond_cov_assert(ptr, pre_cond, goto_program, it);
@@ -749,7 +740,7 @@ expr2tc goto_coveraget::handle_single_guard(
   if (is_typecast2t(expr) && is_bool_type(expr->type))
   {
     expr2tc inner = handle_single_guard(to_typecast2t(expr).from, top_level);
-    if (!(is_comparison_op(inner) || is_and2t(inner) || is_or2t(inner)))
+    if (!(is_comparison_expr(inner) || is_and2t(inner) || is_or2t(inner)))
       return gen_not_eq_expr(inner, gen_false_expr());
     return inner;
   }
@@ -764,7 +755,7 @@ expr2tc goto_coveraget::handle_single_guard(
       replace_operands(result, /*sub_top_level=*/true, recurse);
       return result;
     }
-    if (is_comparison_op(expr))
+    if (is_comparison_expr(expr))
     {
       replace_operands(result, /*sub_top_level=*/false, recurse);
       return result;
@@ -785,7 +776,7 @@ expr2tc goto_coveraget::handle_single_guard(
   // wrap it with "!= false". This catches cases like member accesses.
   if (
     top_level && is_bool_type(result->type) && !is_and2t(result) &&
-    !is_or2t(result) && !is_not2t(result) && !is_comparison_op(result))
+    !is_or2t(result) && !is_not2t(result) && !is_comparison_expr(result))
     return gen_not_eq_expr(result, gen_false_expr());
   return result;
 }
