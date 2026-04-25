@@ -20,6 +20,7 @@ class vector_type2t;
 class pointer_type2t;
 class fixedbv_type2t;
 class floatbv_type2t;
+class complex_type2t;
 class cpp_name_type2t;
 
 // We also require in advance, the actual classes that store type data.
@@ -318,6 +319,7 @@ irep_typedefs(array, array_data);
 irep_typedefs(pointer, pointer_data);
 irep_typedefs(fixedbv, fixedbv_data);
 irep_typedefs(floatbv, floatbv_data);
+irep_typedefs(complex, struct_union_data);
 irep_typedefs(cpp_name, cpp_name_data);
 irep_typedefs(vector, array_data);
 #undef irep_typedefs
@@ -661,6 +663,34 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Complex number type.
+ *  Represents C's _Complex type, carrying the base element type.
+ *  @extend complex_data
+ */
+class complex_type2t : public complex_type_methods
+{
+public:
+  complex_type2t(
+    const std::vector<type2tc> &members,
+    const std::vector<irep_idt> &memb_names,
+    const std::vector<irep_idt> &memb_pretty_names,
+    const irep_idt &name,
+    bool packed = false)
+    : complex_type_methods(
+        complex_id,
+        members,
+        memb_names,
+        memb_pretty_names,
+        name,
+        packed)
+  {
+  }
+  complex_type2t(const complex_type2t &ref) = default;
+  unsigned int get_width() const override;
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
 /** C++ Name type.
  *  Contains a type name, but also a vector of template parameters.
  *  Something in the C++ frontend uses this; it's precise purpose is unclear.
@@ -729,6 +759,7 @@ type_macros(unsignedbv);
 type_macros(signedbv);
 type_macros(fixedbv);
 type_macros(floatbv);
+type_macros(complex);
 type_macros(cpp_name);
 #undef type_macros
 #ifdef dynamic_cast

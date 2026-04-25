@@ -304,6 +304,35 @@ public:
     }
   }
 
+  // Infer the builtin type of a dict.{get, setdefault, pop} default arg.
+  // Returns "" when there is no default, "Any" for non-literal defaults.
+  static std::string infer_type_from_default_arg_shape(const Json &args_node)
+  {
+    if (!args_node.is_array() || args_node.size() < 2)
+      return std::string();
+    const Json &def = args_node[1];
+    const std::string def_type = def.value("_type", std::string());
+    if (def_type == "List")
+      return "list";
+    if (def_type == "Dict")
+      return "dict";
+    if (def_type == "Set")
+      return "set";
+    if (def_type == "Tuple")
+      return "tuple";
+    // Scalar literal: narrow to the concrete builtin type (int/float/str/
+    // bool/None) so the caller does not have to fall back to Any.
+    if (def_type == "Constant" && def.contains("value"))
+    {
+      const std::string t = get_type_from_json(def["value"]);
+      if (t == "null")
+        return "None";
+      if (t == "bool" || t == "int" || t == "float" || t == "str")
+        return t;
+    }
+    return "Any";
+  }
+
 private:
   bool has_annotation(const Json &node)
   {
@@ -2005,7 +2034,7 @@ private:
     return node["annotation"]["id"];
   }
 
-  std::string get_type_from_json(const Json &value)
+  static std::string get_type_from_json(const Json &value)
   {
     if (value.is_null())
       return "null";
@@ -2710,6 +2739,35 @@ private:
         return obj_type;
     }
 
+    // Inline dict-literal method calls, e.g. `{"a":1}.get("x", 3)`.
+    // The receiver has no symbol name, so resolve the types we model here
+    // (get/setdefault/pop/keys/values/items)
+    // and let anything else fall through to the regular resolution path below.
+    if (call["func"].contains("value"))
+    {
+      const std::string &recv_kind =
+        call["func"]["value"].value("_type", std::string());
+      if (recv_kind == "Dict")
+      {
+        const std::string method =
+          call["func"].contains("attr")
+            ? call["func"]["attr"].template get<std::string>()
+            : std::string();
+
+        // get/setdefault/pop: return type comes from the default arg.
+        if (method == "setdefault" || method == "get" || method == "pop")
+        {
+          std::string t = infer_type_from_default_arg_shape(call["args"]);
+          if (!t.empty())
+            return t;
+        }
+
+        // keys/values/items: views behave like lists for type inference.
+        if (method == "keys" || method == "values" || method == "items")
+          return "list";
+      }
+    }
+
     // Handle method calls on subscript expressions: e.g. nested[i].pop()
     // get_object_name() returns "" for Subscript nodes (no "id" field), which
     // would cause a spurious "Object not found" throw further below.
@@ -3191,6 +3249,17 @@ private:
         obj_type == "str" && call["func"].contains("attr") &&
         call["func"]["attr"] == "split")
         return "list";
+      // setdefault/get/pop return the value, not the dict — recover its
+      // container shape from the default arg when the dict is untyped.
+      if (
+        obj_type == "dict" && call["func"].contains("attr") &&
+        (call["func"]["attr"] == "setdefault" ||
+         call["func"]["attr"] == "get" || call["func"]["attr"] == "pop"))
+      {
+        std::string t = infer_type_from_default_arg_shape(call["args"]);
+        if (!t.empty())
+          return t;
+      }
       type = obj_type;
     }
     else
@@ -3812,6 +3881,12 @@ private:
     // Get LHS from members access on assignments. e.g.: x.data = 10
     else if (target["_type"] == "Attribute")
     {
+      // Only single-level obj.attr = ... is annotatable here. Nested writes
+      // like obj.a.b = ... mutate an already-declared field and need no
+      // inferred annotation; the inner value is an Attribute (no "id"),
+      // not a Name, so reading "id" would throw json::type_error.
+      if (!target["value"].is_object() || !target["value"].contains("id"))
+        return;
       id = target["value"]["id"].template get<std::string>() + "." +
            target["attr"].template get<std::string>();
     }

@@ -51,6 +51,158 @@ class Preprocessor(ast.NodeTransformer):
         self.newtype_vars = set()  # names defined via typing.NewType: X = NewType('X', T)
         self.newtype_names = {"NewType"}  # local names bound to typing.NewType (covers aliased imports)
         self.typing_module_names = set()  # module names for typing (e.g. 'typing' or its alias)
+        self._typing_imported_names = (
+            set()
+        )  # local names brought from typing (e.g. {'Tuple', 'List'} after `from typing import Tuple, List`)
+        self._with_counter = 0  # Counter for unique context manager temp names
+        self._unroll_counter = 0  # Counter for unique unrolled-loop temp names
+        self.type_aliases = (
+            {}
+        )  # {alias_name: annotation_ast} for type alias assignments (Coordinate = Tuple[int, int])
+        # Local names bound to ``dataclasses.dataclass`` and ``dataclasses.field``
+        # respectively. Seeded with the canonical names so source files that omit
+        # the explicit import (rare, but harmless) still work; ``visit_ImportFrom``
+        # adds aliased names like ``from dataclasses import field as f``.
+        self._dataclass_decorator_names = {"dataclass"}
+        self._dataclass_field_names = {"field"}
+
+    # Names treated as typing-style generic constructors (subscript = type alias).
+    _TYPING_GENERIC_NAMES = (
+        "Tuple",
+        "List",
+        "Dict",
+        "Set",
+        "Optional",
+        "Union",
+        "Callable",
+    )
+
+    # Dataclass fields declared with ``field(default_factory=...)`` are not
+    # exposed as synthesized ``__init__`` parameters. The generated initializer
+    # always assigns ``self.<field> = <factory>()`` in the constructor body.
+    # This keeps the transformation simple, but it also means callers cannot
+    # override default-factory fields via constructor arguments.
+
+    def _is_type_alias_expression(self, value):
+        """Check whether ``value`` is a typing alias RHS like ``Tuple[int, int]``.
+
+        Tightened so that ordinary runtime indexing such as ``x = List[0]``
+        (where ``List`` happens to be a regular variable) is not silently
+        stripped from the AST. The base must be a typing name imported from
+        ``typing`` (or accessed via the ``typing`` module), and the slice
+        must look like a type expression rather than a plain integer index.
+        """
+        if not isinstance(value, ast.Subscript):
+            return False
+
+        base = value.value
+        if isinstance(base, ast.Name):
+            # Accept direct imports such as ``from typing import List`` and
+            # aliased imports such as ``from typing import List as L``.
+            if base.id not in self._typing_imported_names:
+                return False
+        elif isinstance(base, ast.Attribute):
+            if base.attr not in self._TYPING_GENERIC_NAMES:
+                return False
+            mod = base.value
+            if not (isinstance(mod, ast.Name) and mod.id in self.typing_module_names):
+                return False
+        else:
+            return False
+
+        # Reject plain integer-index runtime usage (e.g. ``Foo[0]`` after
+        # ``Foo = SomeRuntimeContainer``). Type aliases are subscripted with
+        # types or tuples of types, never with bare integer literals.
+        idx = value.slice
+        if isinstance(idx, ast.Index):
+            idx = idx.value
+        if isinstance(idx, ast.Constant) and isinstance(idx.value, int):
+            return False
+        if (
+            isinstance(idx, ast.UnaryOp)
+            and isinstance(idx.op, (ast.UAdd, ast.USub))
+            and isinstance(idx.operand, ast.Constant)
+            and isinstance(idx.operand.value, int)
+        ):
+            return False
+        return True
+
+    def _copy_annotation_node(self, node):
+        """Deep copy an annotation AST node"""
+        if node is None:
+            return None
+        if isinstance(node, ast.Name):
+            return ast.Name(id=node.id, ctx=ast.Load())
+        elif isinstance(node, ast.Subscript):
+            return ast.Subscript(
+                value=self._copy_annotation_node(node.value),
+                slice=self._copy_annotation_node(node.slice),
+                ctx=ast.Load(),
+            )
+        elif isinstance(node, ast.Index):
+            return ast.Index(value=self._copy_annotation_node(node.value))
+        elif isinstance(node, ast.Tuple):
+            return ast.Tuple(
+                elts=[self._copy_annotation_node(e) for e in node.elts], ctx=ast.Load()
+            )
+        elif isinstance(node, ast.Constant):
+            return ast.Constant(value=node.value)
+        elif isinstance(node, ast.Str):
+            return ast.Str(s=node.s)
+        elif isinstance(node, ast.Attribute):
+            return ast.Attribute(
+                value=self._copy_annotation_node(node.value),
+                attr=node.attr,
+                ctx=ast.Load(),
+            )
+        else:
+            # For other node types, return as-is
+            return node
+
+    def _resolve_annotation_aliases(self, annotation):
+        """Recursively resolve type aliases in an annotation AST node"""
+        if annotation is None:
+            return None
+
+        if isinstance(annotation, ast.Name):
+            # If this name is an alias, return a copy of the aliased type
+            if annotation.id in self.type_aliases:
+                # Copy then recursively resolve transitive aliases (e.g. TaskSchedule → List[TaskInstance] → List[Tuple[int,Task]])
+                copied = self._copy_annotation_node(self.type_aliases[annotation.id])
+                return self._resolve_annotation_aliases(copied)
+            return annotation
+
+        elif isinstance(annotation, ast.Subscript):
+            # Recursively resolve value and slice
+            resolved_value = self._resolve_annotation_aliases(annotation.value)
+            resolved_slice = annotation.slice
+            if isinstance(annotation.slice, ast.Index):
+                resolved_slice = ast.Index(
+                    value=self._resolve_annotation_aliases(annotation.slice.value)
+                )
+            elif not isinstance(annotation.slice, (ast.Slice, ast.ExtSlice)):
+                resolved_slice = self._resolve_annotation_aliases(annotation.slice)
+            return ast.Subscript(
+                value=resolved_value, slice=resolved_slice, ctx=ast.Load()
+            )
+
+        elif isinstance(annotation, ast.Tuple):
+            # Recursively resolve each element
+            resolved_elts = [
+                self._resolve_annotation_aliases(e) for e in annotation.elts
+            ]
+            return ast.Tuple(elts=resolved_elts, ctx=ast.Load())
+
+        elif isinstance(annotation, ast.Attribute):
+            # Recursively resolve the value
+            resolved_value = self._resolve_annotation_aliases(annotation.value)
+            return ast.Attribute(
+                value=resolved_value, attr=annotation.attr, ctx=ast.Load()
+            )
+
+        else:
+            # For other types (Constant, Str, etc.), return as-is
+            return annotation
 
     def _create_helper_functions(self):
         """Create the ESBMC helper function definitions"""
@@ -1319,6 +1471,57 @@ class Preprocessor(ast.NodeTransformer):
             return prefix + [node]
         return node
 
+    def visit_Subscript(self, node):
+        """Fold constant indexing over tracked list literals when safe.
+
+        Only folds when the indexed element is a pure literal (Constant or a
+        unary +/- over a Constant). Folding non-pure expressions such as
+        ``nondet_int()`` calls would break value correlation, since each
+        substitution would produce a fresh, independent symbolic value.
+        """
+        node = self.generic_visit(node)
+
+        if (
+            isinstance(node.value, ast.Name)
+            and node.value.id in self.list_literal_values
+        ):
+            list_node = self.list_literal_values[node.value.id]
+
+            idx_node = node.slice
+            if isinstance(idx_node, ast.Index):
+                idx_node = idx_node.value
+
+            idx = None
+            if isinstance(idx_node, ast.Constant) and isinstance(idx_node.value, int):
+                idx = idx_node.value
+            elif (
+                isinstance(idx_node, ast.UnaryOp)
+                and isinstance(idx_node.op, (ast.UAdd, ast.USub))
+                and isinstance(idx_node.operand, ast.Constant)
+                and isinstance(idx_node.operand.value, int)
+            ):
+                sign = -1 if isinstance(idx_node.op, ast.USub) else 1
+                idx = sign * idx_node.operand.value
+
+            if idx is not None:
+                elts = list_node.elts
+                if idx < 0:
+                    idx = len(elts) + idx
+                if 0 <= idx < len(elts):
+                    elt = elts[idx]
+                    is_pure_literal = isinstance(elt, ast.Constant) or (
+                        isinstance(elt, ast.UnaryOp)
+                        and isinstance(elt.op, (ast.UAdd, ast.USub))
+                        and isinstance(elt.operand, ast.Constant)
+                    )
+                    if is_pure_literal:
+                        folded = copy.deepcopy(elt)
+                        self.ensure_all_locations(folded, node)
+                        ast.fix_missing_locations(folded)
+                        return folded
+
+        return node
+
     def visit_Expr(self, node):
         node = self.generic_visit(node)
 
@@ -1746,6 +1949,23 @@ class Preprocessor(ast.NodeTransformer):
             # Handle dict.items() for loops
             self.is_range_loop = False
             return self._transform_items_for(node)
+        elif (
+            isinstance(node.iter, ast.Name)
+            and node.iter.id in self.list_literal_values
+            and self._can_safely_unroll_list_literal_for(
+                node, self.list_literal_values[node.iter.id]
+            )
+        ):
+            # For direct iteration over a known list literal variable, unroll the loop
+            # to avoid introducing len()/index machinery in the generated model.
+            # Skip the unroll if the body contains break/continue/return, since
+            # straight-line unrolling would leave those statements without a
+            # surrounding loop/function context. Skip too when elements are not
+            # homogeneous pure literals to preserve runtime isinstance semantics.
+            self.is_range_loop = False
+            return self._unroll_list_literal_for(
+                node, self.list_literal_values[node.iter.id]
+            )
         else:
             # Check if iterating over a generator variable
             if isinstance(node.iter, ast.Name) and node.iter.id in self.generator_vars:
@@ -1781,6 +2001,179 @@ class Preprocessor(ast.NodeTransformer):
             # Handle general iteration over iterables (strings, lists, etc.)
             self.is_range_loop = False
             return self._transform_iterable_for(node)
+
+    def _can_safely_unroll_list_literal_for(self, node, list_literal):
+        """Decide whether a `for` over a tracked list literal is safe to unroll.
+
+        Skip the unroll when:
+          * the loop body contains ``break``/``continue``/``return`` (these
+            need a surrounding loop/function context);
+          * elements are constants of heterogeneous types (e.g. mixed ``int``
+            and ``str``), which would silently drop runtime ``isinstance``
+            checks during unrolling and constant folding.
+        """
+        for stmt in node.body:
+            for n in ast.walk(stmt):
+                if isinstance(n, (ast.Break, ast.Continue, ast.Return)):
+                    return False
+
+        const_types = set()
+        all_constants = True
+        for elt in list_literal.elts:
+            if isinstance(elt, ast.Constant):
+                const_types.add(type(elt.value).__name__)
+            elif (
+                isinstance(elt, ast.UnaryOp)
+                and isinstance(elt.op, (ast.UAdd, ast.USub))
+                and isinstance(elt.operand, ast.Constant)
+            ):
+                const_types.add(type(elt.operand.value).__name__)
+            else:
+                all_constants = False
+                break
+        if all_constants and len(const_types) > 1:
+            return False
+        return True
+
+    def _unroll_list_literal_for(self, node, list_literal):
+        """Unroll `for` over a tracked list literal variable into straight-line code.
+
+        For ``Name`` loop targets, snapshots each list element into a
+        per-iteration temp *before* emitting the unrolled body. This preserves
+        Python's "list elements are evaluated once at list construction"
+        semantics: when the body mutates a name that also appears among the
+        list elements (e.g. ``xs = [a, a]; for x in xs: a = ...``), later
+        iterations still see the original value via the temp instead of
+        re-reading the now-mutated source name.
+
+        For tuple/list unpacking targets (``for a, b in pairs:``), the snapshot
+        path is skipped because the converter's tuple-unpacking pipeline
+        requires the RHS to be a tuple/list literal — not a symbol load — and
+        tuple-literal elements rarely depend on body-mutated names in practice.
+        """
+        unrolled = []
+        counter = self._unroll_counter
+        self._unroll_counter += 1
+        target_is_name = isinstance(node.target, ast.Name)
+
+        # Snapshot phase (Name targets only): evaluate each element once into
+        # a fresh temp so subsequent body mutations cannot retroactively
+        # change values seen by later iterations.
+        temp_names = []
+        if target_is_name:
+            for idx, elt in enumerate(list_literal.elts):
+                temp_name = f"__esbmc_unrolled_item_{counter}_{idx}"
+                temp_names.append(temp_name)
+                snap_assign = ast.Assign(
+                    targets=[ast.Name(id=temp_name, ctx=ast.Store())],
+                    value=copy.deepcopy(elt),
+                )
+                self.ensure_all_locations(snap_assign, node)
+                unrolled.append(snap_assign)
+
+        # Iteration phase: bind the loop target from each snapshot temp (or
+        # inline the elt for tuple/list unpacking) and emit the original body
+        # once per element.
+        for idx, elt in enumerate(list_literal.elts):
+            if target_is_name:
+                rhs = ast.Name(id=temp_names[idx], ctx=ast.Load())
+                self.ensure_all_locations(rhs, node)
+                target_assign = ast.Assign(
+                    targets=[ast.Name(id=node.target.id, ctx=ast.Store())],
+                    value=rhs,
+                )
+            else:
+                # Tuple/list unpacking: keep the RHS as the original literal so
+                # the converter's tuple-unpacking path can still extract elts.
+                target_assign = ast.Assign(
+                    targets=[copy.deepcopy(node.target)],
+                    value=copy.deepcopy(elt),
+                )
+            self.ensure_all_locations(target_assign, node)
+            unrolled.append(target_assign)
+
+            for stmt in node.body:
+                stmt_copy = copy.deepcopy(stmt)
+                self.ensure_all_locations(stmt_copy, node)
+                unrolled.append(stmt_copy)
+
+        for stmt in unrolled:
+            ast.fix_missing_locations(stmt)
+        return unrolled
+
+    def visit_With(self, node):
+        """Desugar 'with EXPR as VAR: BODY' into __enter__/__exit__ calls.
+
+        Transforms each context manager item into:
+            __esbmc_mgr_N = EXPR              # annotated if class type is known
+            VAR = __esbmc_mgr_N.__enter__()   # omitted when there is no 'as' clause
+            BODY
+            __esbmc_mgr_N.__exit__(0, 0, 0)   # non-exceptional path; zeros for int args
+
+        Multiple items are expanded left-to-right; __exit__ is called in reverse order.
+        AsyncWith is handled identically via the class-level alias below.
+        """
+        node = self.generic_visit(node)
+        result = []
+        exit_start = self._with_counter
+
+        for item in node.items:
+            mgr_name = f"__esbmc_mgr_{self._with_counter}"
+            self._with_counter += 1
+            ctx_expr = item.context_expr
+
+            if isinstance(ctx_expr, ast.Call) and isinstance(ctx_expr.func, ast.Name):
+                class_name = ctx_expr.func.id
+                type_ann = ast.Name(id=class_name, ctx=ast.Load())
+                mgr_assign = ast.AnnAssign(
+                    target=ast.Name(id=mgr_name, ctx=ast.Store()),
+                    annotation=type_ann,
+                    value=ctx_expr,
+                    simple=1,
+                )
+                self.variable_annotations[mgr_name] = type_ann
+                self.instance_class_map[mgr_name] = class_name
+            else:
+                mgr_assign = ast.Assign(
+                    targets=[ast.Name(id=mgr_name, ctx=ast.Store())],
+                    value=ctx_expr,
+                )
+            result.append(self.ensure_all_locations(mgr_assign, node))
+
+            enter_call = ast.Call(
+                func=ast.Attribute(
+                    value=ast.Name(id=mgr_name, ctx=ast.Load()),
+                    attr='__enter__',
+                    ctx=ast.Load(),
+                ),
+                args=[],
+                keywords=[],
+            )
+            if item.optional_vars is not None:
+                result.append(
+                    self.ensure_all_locations(
+                        ast.Assign(targets=[item.optional_vars], value=enter_call), node))
+            else:
+                result.append(self.ensure_all_locations(ast.Expr(value=enter_call), node))
+
+        result.extend(node.body)
+
+        for i in range(len(node.items) - 1, -1, -1):
+            mgr_name = f"__esbmc_mgr_{exit_start + i}"
+            exit_call = ast.Call(
+                func=ast.Attribute(
+                    value=ast.Name(id=mgr_name, ctx=ast.Load()),
+                    attr='__exit__',
+                    ctx=ast.Load(),
+                ),
+                args=[ast.Constant(value=0), ast.Constant(value=0), ast.Constant(value=0)],
+                keywords=[],
+            )
+            result.append(self.ensure_all_locations(ast.Expr(value=exit_call), node))
+
+        return result
+
+    visit_AsyncWith = visit_With
 
     def _transform_enumerate_for(self, node):
         """
@@ -2646,6 +3039,32 @@ class Preprocessor(ast.NodeTransformer):
     def _create_loop_body(self, node, target_var_name, iter_var_name, annotation_id, index_var,
                           element_type):
         """Create the body of the while loop with proper type annotations."""
+        # Current iterable element expression: iter_var[index]
+        current_item = ast.Subscript(
+            value=ast.Name(id=iter_var_name, ctx=ast.Load()),
+            slice=ast.Name(id=index_var, ctx=ast.Load()),
+            ctx=ast.Load(),
+        )
+        self.ensure_all_locations(current_item, node)
+
+        unpack_assigns = []
+        # Support tuple/list unpacking targets in for-loops:
+        # for a, b in items: ...
+        if isinstance(node.target, (ast.Tuple, ast.List)):
+            for i, elt in enumerate(node.target.elts):
+                if not isinstance(elt, ast.Name):
+                    continue
+                unpack_assign = ast.Assign(
+                    targets=[ast.Name(id=elt.id, ctx=ast.Store())],
+                    value=ast.Subscript(
+                        value=ast.Name(id=target_var_name, ctx=ast.Load()),
+                        slice=ast.Constant(value=i),
+                        ctx=ast.Load(),
+                    ),
+                )
+                self.ensure_all_locations(unpack_assign, node)
+                unpack_assigns.append(unpack_assign)
+
         # Create target variable annotation
         if element_type and element_type != 'Any':
             target_annotation = ast.Name(id=element_type, ctx=ast.Load())
@@ -2653,14 +3072,12 @@ class Preprocessor(ast.NodeTransformer):
             target_annotation = ast.Name(id='Any', ctx=ast.Load())
 
         # Create: target: element_type = iter_var[index]
-        target_assign = ast.AnnAssign(target=ast.Name(id=target_var_name, ctx=ast.Store()),
-                                      annotation=target_annotation,
-                                      value=ast.Subscript(value=ast.Name(id=iter_var_name,
-                                                                         ctx=ast.Load()),
-                                                          slice=ast.Name(id=index_var,
-                                                                         ctx=ast.Load()),
-                                                          ctx=ast.Load()),
-                                      simple=1)
+        target_assign = ast.AnnAssign(
+            target=ast.Name(id=target_var_name, ctx=ast.Store()),
+            annotation=target_annotation,
+            value=current_item,
+            simple=1,
+        )
         self.ensure_all_locations(target_assign, node)
 
         # Create: index += 1
@@ -2672,7 +3089,9 @@ class Preprocessor(ast.NodeTransformer):
                                         simple=1)
         self.ensure_all_locations(index_increment, node)
 
-        # Combine with original body
+        # Combine with original body (include unpack assignments when needed)
+        if unpack_assigns:
+            return [target_assign] + unpack_assigns + [index_increment] + node.body
         return [target_assign, index_increment] + node.body
 
     def _create_item_assignment(self,
@@ -3623,6 +4042,26 @@ class Preprocessor(ast.NodeTransformer):
         """
         Handle assignment nodes, including multiple assignments and tuple unpacking.
         """
+        # Invalidate tracked list literals on subscript writes: l[i] = v
+        for target in node.targets:
+            if (
+                isinstance(target, ast.Subscript)
+                and isinstance(target.value, ast.Name)
+                and target.value.id in self.list_literal_values
+            ):
+                self.list_literal_values.pop(target.value.id, None)
+
+        # Check if this is a type alias assignment (e.g., Coordinate = Tuple[int, int])
+        if (
+            len(node.targets) == 1
+            and isinstance(node.targets[0], ast.Name)
+            and self._is_type_alias_expression(node.value)
+        ):
+            # Store the alias and skip execution (return None to remove from AST)
+            alias_name = node.targets[0].id
+            self.type_aliases[alias_name] = node.value
+            return None
+
         # First visit child nodes
         node = self.generic_visit(node)
 
@@ -3805,6 +4244,10 @@ class Preprocessor(ast.NodeTransformer):
     def visit_AnnAssign(self, node):
         """Track type annotations from annotated assignments like x: int = 5.
         Also handles defaultdict rewriting and list comprehension lowering."""
+        # Resolve type aliases in annotation
+        if node.annotation is not None:
+            node.annotation = self._resolve_annotation_aliases(node.annotation)
+
         # First visit child nodes
         node = self.generic_visit(node)
 
@@ -3883,6 +4326,14 @@ class Preprocessor(ast.NodeTransformer):
 
     def visit_AugAssign(self, node):
         """Lower augmented assignment into a simple assignment."""
+        # Invalidate tracked list literals on subscript writes: l[i] op= v
+        if (
+            isinstance(node.target, ast.Subscript)
+            and isinstance(node.target.value, ast.Name)
+            and node.target.value.id in self.list_literal_values
+        ):
+            self.list_literal_values.pop(node.target.value.id, None)
+
         # Transform children first so nested expressions are already lowered.
         node = self.generic_visit(node)
 
@@ -3921,6 +4372,72 @@ class Preprocessor(ast.NodeTransformer):
 
     # This method is responsible for visiting and transforming Call nodes in the AST.
     def visit_Call(self, node):
+        # Invalidate tracked list literals on mutating method calls:
+        # name.append/clear/extend/insert/pop/remove/reverse/sort(...)
+        _MUTATING_LIST_METHODS = {
+            "append",
+            "clear",
+            "extend",
+            "insert",
+            "pop",
+            "remove",
+            "reverse",
+            "sort",
+        }
+        if (
+            isinstance(node.func, ast.Attribute)
+            and isinstance(node.func.value, ast.Name)
+            and node.func.attr in _MUTATING_LIST_METHODS
+            and node.func.value.id in self.list_literal_values
+        ):
+            self.list_literal_values.pop(node.func.value.id, None)
+
+        # Conservatively invalidate tracked list literals when passed as an
+        # argument to a non-builtin call: the callee may mutate the list
+        # (e.g. ``func2(l8)`` where ``func2`` does ``l[0] = ...``).
+        # Skip well-known pure builtins that read but never mutate the
+        # argument; some of their lowering handlers also rely on the literal
+        # still being tracked (e.g. ``sorted(pairs, key=...)``).
+        _PURE_LIST_CONSUMERS = {
+            "abs",
+            "all",
+            "any",
+            "bool",
+            "dict",
+            "enumerate",
+            "filter",
+            "float",
+            "frozenset",
+            "hash",
+            "id",
+            "int",
+            "isinstance",
+            "iter",
+            "len",
+            "list",
+            "map",
+            "max",
+            "min",
+            "next",
+            "print",
+            "range",
+            "repr",
+            "reversed",
+            "set",
+            "sorted",
+            "str",
+            "sum",
+            "tuple",
+            "type",
+            "zip",
+        }
+        if not (
+            isinstance(node.func, ast.Name) and node.func.id in _PURE_LIST_CONSUMERS
+        ):
+            for arg in list(node.args) + [kw.value for kw in node.keywords]:
+                if isinstance(arg, ast.Name) and arg.id in self.list_literal_values:
+                    self.list_literal_values.pop(arg.id, None)
+
         # NewType is an identity callable: X(v) → v
         if (isinstance(node.func, ast.Name) and
                 node.func.id in self.newtype_vars and
@@ -4168,6 +4685,29 @@ class Preprocessor(ast.NodeTransformer):
         return node  # transformed node
 
     def visit_FunctionDef(self, node):
+        # Resolve type aliases in return type annotation
+        if node.returns is not None:
+            node.returns = self._resolve_annotation_aliases(node.returns)
+
+        # Resolve type aliases in parameter annotations
+        for arg in node.args.args:
+            if arg.annotation is not None:
+                arg.annotation = self._resolve_annotation_aliases(arg.annotation)
+
+        if node.args.vararg and node.args.vararg.annotation is not None:
+            node.args.vararg.annotation = self._resolve_annotation_aliases(
+                node.args.vararg.annotation
+            )
+
+        if node.args.kwarg and node.args.kwarg.annotation is not None:
+            node.args.kwarg.annotation = self._resolve_annotation_aliases(
+                node.args.kwarg.annotation
+            )
+
+        for arg in node.args.kwonlyargs:
+            if arg.annotation is not None:
+                arg.annotation = self._resolve_annotation_aliases(arg.annotation)
+
         # Detect generator functions: any function that contains yield
         is_generator = any(isinstance(n, (ast.Yield, ast.YieldFrom)) for n in ast.walk(node))
         if is_generator:
@@ -4255,11 +4795,280 @@ class Preprocessor(ast.NodeTransformer):
         old_class_name = getattr(self, 'current_class_name', None)
         self.current_class_name = node.name
 
+        node = self.expand_dataclass(node)
         self._collect_class_attr_annotations(node)
         self.generic_visit(node)
 
         self.current_class_name = old_class_name
         return node
+
+    def is_dataclass(self, class_node):
+        """Return True when a class is decorated with @dataclass.
+
+        Recognizes the canonical ``@dataclass`` form, the qualified
+        ``@dataclasses.dataclass`` form, and any local alias introduced via
+        ``from dataclasses import dataclass as <alias>`` (tracked in
+        ``self._dataclass_decorator_names``).
+        """
+        for decorator in class_node.decorator_list:
+            target = decorator
+            if isinstance(decorator, ast.Call):
+                target = decorator.func
+
+            if (
+                isinstance(target, ast.Name)
+                and target.id in self._dataclass_decorator_names
+            ):
+                return True
+
+            if (
+                isinstance(target, ast.Attribute)
+                and isinstance(target.value, ast.Name)
+                and target.value.id == "dataclasses"
+                and target.attr == "dataclass"
+            ):
+                return True
+
+        return False
+
+    def _parse_field_call(self, default_value):
+        """Decompose ``field(...)`` calls into (default_expr, factory_expr).
+
+        Returns a pair where ``default_expr`` is the AST node for the
+        ``default=`` value (or the original raw value when ``default_value`` is
+        not a ``field(...)`` call), and ``factory_expr`` is the AST node passed
+        as ``default_factory=`` (or ``None`` when not present).
+
+        The model in ``models/dataclasses.py`` already collapses
+        ``field(default=X)`` to ``X`` and ``field(default_factory=F)`` to
+        ``F()`` at runtime, but operating at AST level lets us:
+          * keep ``default=`` literals as ordinary Python defaults
+            (cheap and consistent with Marco B), and
+          * desugar ``default_factory=`` into a per-instance call so each
+            constructed object gets a fresh value.
+        """
+        if not isinstance(default_value, ast.Call):
+            return default_value, None
+
+        func = default_value.func
+        is_field = (
+            isinstance(func, ast.Name) and func.id in self._dataclass_field_names
+        ) or (
+            isinstance(func, ast.Attribute)
+            and func.attr == "field"
+            and isinstance(func.value, ast.Name)
+            and func.value.id == "dataclasses"
+        )
+        if not is_field:
+            return default_value, None
+
+        default_expr = None
+        factory_expr = None
+        for kw in default_value.keywords:
+            if kw.arg == "default":
+                default_expr = kw.value
+            elif kw.arg == "default_factory":
+                factory_expr = kw.value
+            # TODO(Marco F): per-field flags (init=False, repr=False,
+            # compare=False, hash=False/None, kw_only=...) are silently
+            # ignored here. They require coordinated changes in build_init
+            # (skip the parameter for init=False, still assign the default
+            # in the body) and in the future __repr__/__eq__/__hash__
+            # synthesis (skip excluded fields).
+        # ``field()`` with no default and no factory is a required field.
+        return default_expr, factory_expr
+
+    def collect_fields(self, class_node):
+        """Collect dataclass fields as (name, annotation, default_expr, factory_expr)."""
+        fields = []
+        for stmt in class_node.body:
+            if not isinstance(stmt, ast.AnnAssign):
+                continue
+            if not isinstance(stmt.target, ast.Name):
+                continue
+            default_expr, factory_expr = self._parse_field_call(stmt.value)
+            fields.append((stmt.target.id, stmt.annotation, default_expr, factory_expr))
+        return fields
+
+    def build_init(self, class_node, fields):
+        """Build __init__(self, ...) that assigns self.<field> = <field>.
+
+        Supports raw defaults (``x: int = 5``), ``field(default=...)`` and
+        ``field(default_factory=...)``.
+
+        Factory fields are *not* added as ``__init__`` parameters: they are
+        assigned directly in the body via ``self.<field> = <factory>()``,
+        evaluated once per instance. This guarantees per-instance fresh
+        values (sound for mutable factories like ``list``) and side-steps
+        ESBMC's converter limitation that parameter defaults must be either
+        a ``Constant`` or a plain ``Name`` (arbitrary call expressions in
+        defaults are rejected during expression migration). The trade-off is
+        that callers cannot override a factory field via the synthesized
+        ``__init__``, which matches the most common usage pattern of
+        ``default_factory`` (containers initialized to empty per instance).
+
+        TODO(Marco F): once Marco F lands flag-aware __init__ synthesis (or
+        ESBMC's converter learns to migrate Call expressions in parameter
+        defaults), expose factory fields as ``__init__`` parameters with the
+        factory call as the default so callers can override them, matching
+        CPython semantics. The pinned regression
+        ``regression/python/dataclass_factory_kwarg_ignored`` documents the
+        current behavior and will need updating then.
+        """
+        args = [ast.arg(arg="self", annotation=None)]
+        defaults = []
+        body = []
+
+        # Parameters: only non-factory fields. Compute first defaulted index
+        # over this filtered view.
+        param_fields = [
+            (name, ann, default_expr)
+            for (name, ann, default_expr, factory_expr) in fields
+            if factory_expr is None
+        ]
+
+        first_default_idx = None
+        for index, (_, _, default_expr) in enumerate(param_fields):
+            if default_expr is not None:
+                first_default_idx = index
+                break
+
+        if first_default_idx is not None:
+            for _, _, default_expr in param_fields[first_default_idx:]:
+                if default_expr is not None:
+                    if not isinstance(default_expr, (ast.Constant, ast.Name)):
+                        raise SyntaxError(
+                            "unsupported dataclass default expression: "
+                            "synthesized __init__ defaults must be a Constant "
+                            "or a simple Name"
+                        )
+                    defaults.append(copy.deepcopy(default_expr))
+                else:
+                    defaults.append(ast.Constant(value=None))
+
+        for field_name, annotation, _ in param_fields:
+            args.append(ast.arg(arg=field_name, annotation=copy.deepcopy(annotation)))
+
+        # Body: assign every field, in declaration order. Factory fields use
+        # ``self.<field> = <factory>()`` directly; other fields copy from the
+        # corresponding parameter.
+        #
+        # Emit plain ``Assign`` statements rather than ``AnnAssign`` for
+        # ``self.<field>``. Optional-typed instance attributes are already
+        # handled by the normal class/parameter typing paths, whereas an
+        # explicit ``self.x: Optional[T] = ...`` here can confuse later
+        # arithmetic over values proven non-None by guards (see optional7).
+        for field_name, annotation, default_expr, factory_expr in fields:
+            if factory_expr is not None:
+                rhs = ast.Call(
+                    func=copy.deepcopy(factory_expr),
+                    args=[],
+                    keywords=[],
+                )
+            else:
+                rhs = self.create_name_node(field_name, ast.Load(), class_node)
+
+            assign_stmt = ast.Assign(
+                targets=[
+                    ast.Attribute(
+                        value=self.create_name_node("self", ast.Load(), class_node),
+                        attr=field_name,
+                        ctx=ast.Store(),
+                    )
+                ],
+                value=rhs,
+            )
+            self.ensure_all_locations(assign_stmt, class_node)
+            body.append(assign_stmt)
+
+        if not body:
+            body = [ast.Pass()]
+
+        init_func = ast.FunctionDef(
+            name="__init__",
+            args=ast.arguments(
+                posonlyargs=[],
+                args=args,
+                vararg=None,
+                kwonlyargs=[],
+                kw_defaults=[],
+                kwarg=None,
+                defaults=defaults,
+            ),
+            body=body,
+            decorator_list=[],
+            returns=None,
+            type_comment=None,
+        )
+        self.ensure_all_locations(init_func, class_node)
+        ast.fix_missing_locations(init_func)
+        return init_func
+
+    def expand_dataclass(self, class_node):
+        """Inject a minimal generated __init__ for dataclass-decorated classes."""
+        if not self.is_dataclass(class_node):
+            return class_node
+
+        if any(
+            isinstance(member, ast.FunctionDef) and member.name == "__init__"
+            for member in class_node.body
+        ):
+            return class_node
+
+        fields = self.collect_fields(class_node)
+        if not fields:
+            return class_node
+
+        # Validate field ordering: once a field has a default (raw,
+        # ``field(default=...)`` or ``field(default_factory=...)``), every
+        # subsequent field must also have one. We report this as a
+        # SyntaxError with a "non-default argument follows default argument"
+        # style message.
+        seen_default = False
+        for field_name, _, default_expr, factory_expr in fields:
+            has_default = default_expr is not None or factory_expr is not None
+            if seen_default and not has_default:
+                raise SyntaxError(
+                    f"non-default argument {field_name!r} follows default argument "
+                    f"in dataclass {class_node.name!r} "
+                    f"(line {class_node.lineno})"
+                )
+            if has_default:
+                seen_default = True
+
+        # Preserve field annotations for later attribute-type lookups even
+        # though the synthesized ``__init__`` now uses plain Assign nodes.
+        if class_node.name not in self.class_attr_annotations:
+            self.class_attr_annotations[class_node.name] = {}
+        for field_name, annotation, _, _ in fields:
+            if annotation is not None:
+                self.class_attr_annotations[class_node.name][field_name] = annotation
+
+        field_names = {field_name for field_name, _, _, _ in fields}
+        class_node.body = [
+            stmt
+            for stmt in class_node.body
+            if not (
+                isinstance(stmt, ast.AnnAssign)
+                and isinstance(stmt.target, ast.Name)
+                and stmt.target.id in field_names
+            )
+        ]
+
+        # Insert __init__ after docstring (if present) to preserve class docstring semantics
+        insert_index = 0
+        if class_node.body:
+            first_stmt = class_node.body[0]
+            if isinstance(first_stmt, ast.Expr) and (
+                (
+                    isinstance(first_stmt.value, ast.Constant)
+                    and isinstance(first_stmt.value.value, str)
+                )
+                or isinstance(first_stmt.value, ast.Str)
+            ):
+                insert_index = 1
+        class_node.body.insert(insert_index, self.build_init(class_node, fields))
+        return class_node
 
     def _collect_class_attr_annotations(self, class_node):
         """Scan __init__ for self.attr: T = ... and cache attribute annotations."""
@@ -4288,12 +5097,25 @@ class Preprocessor(ast.NodeTransformer):
                     self.defaultdict_imported = True
                     if alias.asname:
                         self.defaultdict_alias = alias.asname
+        if node.module == "dataclasses":
+            for alias in node.names:
+                if alias.name == "dataclass":
+                    self._dataclass_decorator_names.add(alias.asname or "dataclass")
+                elif alias.name == "field":
+                    self._dataclass_field_names.add(alias.asname or "field")
+                elif alias.name == "*":
+                    # ``from dataclasses import *`` exposes both canonical names.
+                    self._dataclass_decorator_names.add("dataclass")
+                    self._dataclass_field_names.add("field")
         if node.module == "typing":
             for alias in node.names:
                 if alias.name == "NewType":
                     self.newtype_names.add(alias.asname or "NewType")
                 elif alias.name == "*":
                     self.newtype_names.add("NewType")
+                    self._typing_imported_names.update(self._TYPING_GENERIC_NAMES)
+                if alias.name in self._TYPING_GENERIC_NAMES:
+                    self._typing_imported_names.add(alias.asname or alias.name)
         self.generic_visit(node)
         return node
 

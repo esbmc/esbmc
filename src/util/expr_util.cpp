@@ -3,6 +3,7 @@
 #include <util/fixedbv.h>
 #include <util/ieee_float.h>
 #include <util/std_expr.h>
+#include <util/std_types.h>
 
 exprt gen_zero(const typet &type)
 {
@@ -19,7 +20,10 @@ exprt gen_zero(const typet &type, bool array_as_array_of)
 
   if (type_id == "complex")
   {
-    result.value("0");
+    const typet &base = to_complex_type(type).base_type();
+    result = struct_exprt(type);
+    result.copy_to_operands(gen_zero(base, array_as_array_of));
+    result.copy_to_operands(gen_zero(base, array_as_array_of));
   }
   else if (
     type_id == "unsignedbv" || type_id == "signedbv" || type_id == "floatbv" ||
@@ -95,9 +99,16 @@ exprt gen_one(const typet &type)
   const std::string &type_id = type.id_string();
   exprt result = exprt("constant", type);
 
-  if (type_id == "bool" || type_id == "complex")
+  if (type_id == "bool")
   {
     result.value("1");
+  }
+  else if (type_id == "complex")
+  {
+    const typet &base = to_complex_type(type).base_type();
+    result = struct_exprt(type);
+    result.copy_to_operands(gen_one(base));
+    result.copy_to_operands(gen_zero(base));
   }
   else if (type_id == "unsignedbv" || type_id == "signedbv")
   {

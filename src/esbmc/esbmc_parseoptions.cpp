@@ -636,13 +636,18 @@ int esbmc_parseoptionst::doit()
     messaget::state.out = f;
   }
 
-  // Print a banner
-  log_status(
-    "ESBMC version {} {}-bit {} {}",
-    ESBMC_VERSION,
-    sizeof(void *) * 8,
-    config.this_architecture(),
-    config.this_operating_system());
+  // Print a banner with version info to stdout
+  {
+    FILE *output_stream = messaget::state.out;
+    messaget::state.out = stdout;
+    log_status(
+      "ESBMC version {} {}-bit {} {}",
+      ESBMC_VERSION,
+      sizeof(void *) * 8,
+      config.this_architecture(),
+      config.this_operating_system());
+    messaget::state.out = output_stream;
+  }
 
   if (cmdline.isset("version"))
     return 0;
@@ -3049,6 +3054,10 @@ static std::string colorize_flag_refs(const std::string &text)
 // available in ESBMC.
 void esbmc_parseoptionst::help()
 {
+  // Redirect everything here to stdout
+  FILE *outstream = messaget::state.out;
+  messaget::state.out = stdout;
+
   bool use_color = resolve_color_option();
 
   // Print the "* * *     ESBMC x.y.z     * * *"
@@ -3079,7 +3088,7 @@ void esbmc_parseoptionst::help()
   {
     if (!line.empty() && line[0] != ' ' && line.back() == ':')
       // Group header (e.g. "Printing options:")
-      fmt::print(stderr, CLR_BOLD_CYAN "{}" CLR_RESET "\n", line);
+      fmt::print(messaget::state.out, CLR_BOLD_CYAN "{}" CLR_RESET "\n", line);
     else if (
       line.size() >= 3 && line[0] == ' ' && line[1] == ' ' && line[2] == '-')
     {
@@ -3087,16 +3096,19 @@ void esbmc_parseoptionst::help()
       auto desc_pos = line.find("  ", 4);
       if (desc_pos != std::string::npos)
         fmt::print(
-          stderr,
+          messaget::state.out,
           CLR_BOLD "{}" CLR_RESET "{}\n",
           line.substr(0, desc_pos),
           colorize_flag_refs(line.substr(desc_pos)));
       else
-        fmt::print(stderr, CLR_BOLD "{}" CLR_RESET "\n", line);
+        fmt::print(messaget::state.out, CLR_BOLD "{}" CLR_RESET "\n", line);
     }
     else
-      fmt::print(stderr, "{}\n", colorize_flag_refs(line));
+      fmt::print(messaget::state.out, "{}\n", colorize_flag_refs(line));
   }
+
+  // Restore everything back to original output stream.
+  messaget::state.out = outstream;
 }
 
 // When k-induction exhausts all k-steps without a definitive result, run one

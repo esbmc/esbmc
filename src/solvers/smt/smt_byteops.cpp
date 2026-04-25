@@ -11,6 +11,15 @@ smt_astt smt_convt::convert_byte_extract(const expr2tc &expr)
 
   unsigned int src_width = source->type->get_width();
 
+  // A byte extract from a zero-sized aggregate is always out of bounds.
+  // Returning the usual out-of-bounds sentinel avoids fabricating width-0
+  // bit-vectors that the SMT backends reject.
+  if (src_width == 0)
+  {
+    smt_sortt s = mk_int_bv_sort(8);
+    return mk_smt_symbol("out_of_bounds_byte_extract", s);
+  }
+
   if (int_encoding)
     return convert_byte_extract_int_mode(data, source, offs, src_width);
   else
@@ -248,6 +257,12 @@ smt_astt smt_convt::convert_byte_update(const expr2tc &expr)
     expr2tc with = with2tc(data.type, data.source_value, index, new_bu);
     return convert_ast(with);
   }
+
+  // A byte update on a zero-sized aggregate (e.g. a struct whose only
+  // field is an empty C++ class) has no observable effect. Bail out before
+  // we fabricate a width-0 bit-vector for the SMT backends.
+  if (data.type->get_width() == 0)
+    return convert_ast(data.source_value);
 
   if (int_encoding)
     return convert_byte_update_int_mode(data);

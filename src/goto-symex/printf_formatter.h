@@ -12,6 +12,12 @@ public:
   void print(std::ostream &out);
   std::string as_string();
 
+  /** Minimum possible output length for the last print() call.
+   *  Equals max_outlen when all format arguments are constants. */
+  size_t min_outlen = 0;
+  /** Maximum possible output length for the last print() call. */
+  size_t max_outlen = 0;
+
 protected:
   std::string format;
   std::list<expr2tc> operands;
