@@ -3881,6 +3881,12 @@ private:
     // Get LHS from members access on assignments. e.g.: x.data = 10
     else if (target["_type"] == "Attribute")
     {
+      // Only single-level obj.attr = ... is annotatable here. Nested writes
+      // like obj.a.b = ... mutate an already-declared field and need no
+      // inferred annotation; the inner value is an Attribute (no "id"),
+      // not a Name, so reading "id" would throw json::type_error.
+      if (!target["value"].is_object() || !target["value"].contains("id"))
+        return;
       id = target["value"]["id"].template get<std::string>() + "." +
            target["attr"].template get<std::string>();
     }
