@@ -6,6 +6,14 @@ class Field:
         return cls
 
 
+class InitVar:
+
+    def __class_getitem__(cls, item):
+        """Return the class itself for subscription-style type usage."""
+
+        return cls
+
+
 def dataclass(_cls=None, **kwargs):
 
     def wrap(cls):

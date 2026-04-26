@@ -273,6 +273,10 @@ bool clang_cpp_convertert::get_type(
 
     typet class_type;
 #if CLANG_VERSION_MAJOR >= 22
+    // Member-pointer qualifier is always a class type; assert before the
+    // (asserting) getAsType() call so a violation surfaces here.
+    assert(
+      mpt.getQualifier().getKind() == clang::NestedNameSpecifier::Kind::Type);
     if (get_type(*mpt.getQualifier().getAsType(), class_type))
       return true;
 #elif CLANG_VERSION_MAJOR >= 21

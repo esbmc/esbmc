@@ -4610,6 +4610,32 @@ exprt function_call_expr::handle_general_function_call()
 
   if (func_symbol == nullptr)
   {
+    // Dataclass synthesized constructors may call Class.__post_init__(...) before
+    // the class method symbol is fully registered. Preserve class scope and emit
+    // a forward reference call instead of falling back to global scope.
+    if (
+      function_type_ == FunctionType::ClassMethod &&
+      function_id_.get_function() == "__post_init__" &&
+      !function_id_.get_class().empty())
+    {
+      locationt location = converter_.get_location_from_decl(call_);
+      code_function_callt call;
+      call.location() = location;
+      call.function() = symbol_exprt(func_symbol_id, code_typet());
+      call.type() = empty_typet();
+
+      for (const auto &arg_node : call_["args"])
+      {
+        exprt arg = converter_.get_expr(arg_node);
+        if (arg.type().is_array())
+          call.arguments().push_back(address_of_exprt(arg));
+        else
+          call.arguments().push_back(arg);
+      }
+
+      return call;
+    }
+
     if (
       function_type_ == FunctionType::Constructor ||
       function_type_ == FunctionType::InstanceMethod)
@@ -4754,8 +4780,12 @@ exprt function_call_expr::handle_general_function_call()
           call.type() = empty_typet();
 
           if (obj_symbol)
+          {
+            exprt receiver = symbol_expr(*obj_symbol);
             call.arguments().push_back(
-              gen_address_of(symbol_expr(*obj_symbol)));
+              receiver.type().is_pointer() ? receiver
+                                           : gen_address_of(receiver));
+          }
 
           for (const auto &arg_node : call_["args"])
           {
@@ -4922,6 +4952,16 @@ exprt function_call_expr::handle_general_function_call()
   const typet &return_type = to_code_type(func_symbol->type).return_type();
   call.type() = return_type;
 
+  auto bind_instance_receiver = [&](exprt receiver) -> exprt {
+    return receiver.type().is_pointer() ? receiver : gen_address_of(receiver);
+  };
+
+  auto bind_instance_receiver_symbol =
+    [&](const symbolt &receiver_symbol) -> exprt {
+    exprt receiver = symbol_expr(receiver_symbol);
+    return bind_instance_receiver(receiver);
+  };
+
   // Determine parameter offset for Optional wrapping logic
   size_t param_offset = 0;
 
@@ -4947,7 +4987,7 @@ exprt function_call_expr::handle_general_function_call()
     if (is_super_init)
     {
       if (obj_symbol)
-        call.arguments().push_back(symbol_expr(*obj_symbol));
+        call.arguments().push_back(bind_instance_receiver_symbol(*obj_symbol));
       param_offset = 1;
     }
     // Self is the LHS
@@ -4970,7 +5010,7 @@ exprt function_call_expr::handle_general_function_call()
   {
     if (obj_symbol)
     {
-      call.arguments().push_back(gen_address_of(symbol_expr(*obj_symbol)));
+      call.arguments().push_back(bind_instance_receiver_symbol(*obj_symbol));
     }
     else
     {
@@ -5003,7 +5043,7 @@ exprt function_call_expr::handle_general_function_call()
           exprt ctor_result = converter_.get_expr(func_value);
           converter_.current_lhs = saved_lhs;
 
-          call.arguments().push_back(gen_address_of(symbol_expr(tmp)));
+          call.arguments().push_back(bind_instance_receiver(symbol_expr(tmp)));
         }
         else if (func_value["_type"] == "Call")
         {
@@ -5032,12 +5072,13 @@ exprt function_call_expr::handle_general_function_call()
               inner_call.location() = location;
               converter_.add_instruction(inner_call);
             }
-            call.arguments().push_back(gen_address_of(symbol_expr(tmp)));
+            call.arguments().push_back(
+              bind_instance_receiver(symbol_expr(tmp)));
           }
           else
           {
             exprt obj_expr = converter_.get_expr(func_value);
-            call.arguments().push_back(gen_address_of(obj_expr));
+            call.arguments().push_back(bind_instance_receiver(obj_expr));
           }
         }
         else
@@ -5045,7 +5086,7 @@ exprt function_call_expr::handle_general_function_call()
           // Member/variable receiver (e.g., self.builder.build()): use the
           // actual receiver expression instead of a nondet temporary.
           exprt obj_expr = converter_.get_expr(func_value);
-          call.arguments().push_back(gen_address_of(obj_expr));
+          call.arguments().push_back(bind_instance_receiver(obj_expr));
         }
       }
       else
