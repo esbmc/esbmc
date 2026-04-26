@@ -414,7 +414,8 @@ python_list::get_list_element_info(const nlohmann::json &op, const exprt &elem)
 exprt python_list::build_push_list_call(
   const symbolt &list,
   const nlohmann::json &op,
-  const exprt &elem)
+  const exprt &elem,
+  bool enable_float_path)
 {
   list_elem_info elem_info = get_list_element_info(op, elem);
 
@@ -515,6 +516,15 @@ exprt python_list::build_push_list_call(
     symbol_expr(*elem_info.elem_type_sym));                  // type hash
   push_func_call.arguments().push_back(elem_info.elem_size); // element size
 
+  // float_type_id: when element is float, its type hash == float_type_id so
+  // __ESBMC_copy_value uses *(double*) copy in --ir mode (real sort).
+  // enable_float_path=false skips this for dict values which use void* comparison.
+  exprt float_type_id_arg =
+    (enable_float_path && elem_info.elem_symbol->type.is_floatbv())
+      ? static_cast<exprt>(symbol_expr(*elem_info.elem_type_sym))
+      : from_integer(BigInt(0), size_type());
+  push_func_call.arguments().push_back(float_type_id_arg); // float_type_id
+
   push_func_call.type() = bool_type();
   push_func_call.location() = elem_info.location;
 
@@ -534,6 +544,11 @@ exprt python_list::build_insert_list_call(
   if (!insert_func_sym)
     throw std::runtime_error("Insert function symbol not found");
 
+  exprt float_type_id_arg =
+    elem_info.elem_symbol->type.is_floatbv()
+      ? static_cast<exprt>(symbol_expr(*elem_info.elem_type_sym))
+      : from_integer(BigInt(0), size_type());
+
   code_function_callt insert_func_call;
   insert_func_call.function() = symbol_expr(*insert_func_sym);
   insert_func_call.arguments().push_back(symbol_expr(list));
@@ -542,6 +557,7 @@ exprt python_list::build_insert_list_call(
     address_of_exprt(symbol_expr(*elem_info.elem_symbol)));
   insert_func_call.arguments().push_back(symbol_expr(*elem_info.elem_type_sym));
   insert_func_call.arguments().push_back(elem_info.elem_size);
+  insert_func_call.arguments().push_back(float_type_id_arg);
   insert_func_call.type() = bool_type();
   insert_func_call.location() = elem_info.location;
 
@@ -622,6 +638,7 @@ void python_list::emit_list_copy(
   push_call.function() = symbol_expr(*push_obj_sym);
   push_call.arguments().push_back(symbol_expr(dst));
   push_call.arguments().push_back(symbol_expr(tmp_obj));
+  push_call.arguments().push_back(from_integer(BigInt(0), size_type()));
   push_call.type() = bool_type();
   push_call.location() = loc;
   body.copy_to_operands(converter_.convert_expression_to_code(push_call));
@@ -1592,6 +1609,7 @@ exprt python_list::handle_range_slice(
   push_call.function() = symbol_expr(*push_func);
   push_call.arguments().push_back(symbol_expr(sliced_list));
   push_call.arguments().push_back(symbol_expr(at_result));
+  push_call.arguments().push_back(from_integer(BigInt(0), size_type()));
   push_call.type() = bool_type();
   push_call.location() = location;
   loop_body.copy_to_operands(converter_.convert_expression_to_code(push_call));
@@ -3454,6 +3472,8 @@ exprt python_list::build_extend_list_call(
     push_call.arguments().push_back(type_hash);  // type hash
     push_call.arguments().push_back(
       from_integer(BigInt(2), size_type())); // size = 2
+    push_call.arguments().push_back(
+      from_integer(BigInt(0), size_type())); // float_type_id (not float)
     push_call.type() = bool_type();
     push_call.location() = location;
     loop_body.copy_to_operands(push_call);
@@ -3901,6 +3921,32 @@ exprt python_list::extract_pyobject_value(
   const exprt &pyobject_expr,
   const typet &elem_type)
 {
+  // For float types, read __ESBMC_float_buf[item->float_idx].
+  // This avoids the void*→integer truncation in --ir mode: float_idx is a size_t
+  // (no sort mismatch in BV mode), and float_buf is a typed global double array
+  // (real-sorted in --ir mode), so the array read gives the correct real value.
+  if (elem_type.is_floatbv())
+  {
+    // Build item->float_idx: dereference the PyObject* and access the float_idx field
+    member_exprt float_idx_member(pyobject_expr, "float_idx", size_type());
+    {
+      exprt &base = float_idx_member.struct_op();
+      exprt deref("dereference");
+      deref.type() = base.type().subtype();
+      deref.move_to_operands(base);
+      base.swap(deref);
+    }
+
+    // Look up __ESBMC_float_buf global (static in list.c, but still in symbol table)
+    const symbolt *fbuf_sym =
+      converter_.symbol_table().find_symbol("c:list.c@__ESBMC_float_buf");
+    assert(fbuf_sym && "could not find __ESBMC_float_buf symbol");
+
+    // Build __ESBMC_float_buf[item->float_idx]
+    index_exprt float_val(symbol_expr(*fbuf_sym), float_idx_member, elem_type);
+    return float_val;
+  }
+
   // Extract value from PyObject: pyobject_expr->value
   member_exprt obj_value(pyobject_expr, "value", pointer_typet(empty_typet()));
 
@@ -4560,6 +4606,7 @@ void python_list::handle_list_var_unpacking(
     push_call.function() = symbol_expr(*push_obj_func);
     push_call.arguments().push_back(symbol_expr(star_list));
     push_call.arguments().push_back(symbol_expr(tmp_at));
+    push_call.arguments().push_back(from_integer(BigInt(0), size_type()));
     push_call.type() = bool_type();
     push_call.location() = loc;
     loop_body.copy_to_operands(

@@ -62,7 +62,8 @@ public:
   exprt build_push_list_call(
     const symbolt &list,
     const nlohmann::json &op,
-    const exprt &elem);
+    const exprt &elem,
+    bool enable_float_path = true);
 
   exprt build_insert_list_call(
     const symbolt &list,
@@ -159,7 +160,7 @@ public:
    * @brief Extract and dereference value from a PyObject* expression
    * @param pyobject_expr Expression representing PyObject* (from list_at or list_pop)
    * @param elem_type The expected element type
-   * @return Properly cast and dereferenced value expression
+   * @return Dereferenced value expression (for floats: __ESBMC_float_buf[item->float_idx])
    */
   exprt
   extract_pyobject_value(const exprt &pyobject_expr, const typet &elem_type);
