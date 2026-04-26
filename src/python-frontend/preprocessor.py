@@ -4903,16 +4903,6 @@ class Preprocessor(ast.NodeTransformer):
                 return True
         return False
 
-    def _get_post_init_dispatch_target(self, class_node):
-        if self._get_post_init_method(class_node) is not None:
-            return class_node.name
-
-        for base in class_node.bases:
-            if isinstance(base, ast.Name) and base.id in self._classes_with_post_init:
-                return base.id
-
-        return None
-
     def _validate_post_init_signature(self, class_node, fields, post_init_method):
         """Validate that ``__post_init__`` can receive the declared InitVar values."""
         if post_init_method is None:
@@ -5206,7 +5196,8 @@ class Preprocessor(ast.NodeTransformer):
             field for field in fields if field[4] in ("instance", "initvar")
         ]
         has_post_init_behavior = self._class_has_post_init_behavior(class_node)
-        if not active_fields and not has_post_init_behavior:
+        has_classvars = any(f[4] == "classvar" for f in fields)
+        if not active_fields and not has_post_init_behavior and not has_classvars:
             return class_node
 
         self._validate_post_init_signature(class_node, fields, post_init_method)
