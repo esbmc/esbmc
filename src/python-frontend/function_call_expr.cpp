@@ -4783,7 +4783,8 @@ exprt function_call_expr::handle_general_function_call()
           {
             exprt receiver = symbol_expr(*obj_symbol);
             call.arguments().push_back(
-              obj_symbol->is_parameter ? receiver : gen_address_of(receiver));
+              receiver.type().is_pointer() ? receiver
+                                           : gen_address_of(receiver));
           }
 
           for (const auto &arg_node : call_["args"])
@@ -4957,8 +4958,7 @@ exprt function_call_expr::handle_general_function_call()
 
   auto bind_instance_receiver_symbol = [&](const symbolt &receiver_symbol) -> exprt {
     exprt receiver = symbol_expr(receiver_symbol);
-    return receiver_symbol.is_parameter ? receiver
-                                        : bind_instance_receiver(receiver);
+    return bind_instance_receiver(receiver);
   };
 
   // Determine parameter offset for Optional wrapping logic
