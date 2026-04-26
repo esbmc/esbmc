@@ -14,6 +14,12 @@ class Callable:
         return cls
 
 
+class ClassVar:
+
+    def __class_getitem__(cls, item):
+        return cls
+
+
 class Dict:
 
     def __class_getitem__(cls, item):
