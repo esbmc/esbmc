@@ -55,13 +55,17 @@ jobs:
         # Set PATH to include Python 3.12 and user-installed tools (mypy, meson, etc.)
         export PATH="$(brew --prefix python@3.12)/bin:$HOME/Library/Python/3.12/bin:$PATH"
         cd build/
+        # Cap the per-test TIMEOUT property at 120s. ctest --timeout is ignored
+        # when tests set TIMEOUT via set_tests_properties (regression/CMakeLists.txt),
+        # so we override the cache variable that feeds it and reconfigure.
+        cmake -DESBMC_REGRESS_TIMEOUT=120 .
         # On macOS, only run Python tests.
         # On PR Linux, skip python-intensive to keep fast feedback.
         # On other systems/events, run all tests.
         if [[ "${{ inputs.operating-system }}" =~ ^macos ]]; then
-          ctest -j4 --output-on-failure --progress --timeout 60 -L python
+          ctest -j4 --output-on-failure --progress -L python
         elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
-          ctest -j4 --output-on-failure --progress --timeout 60 -LE python-intensive .
+          ctest -j4 --output-on-failure --progress -LE python-intensive .
         else
-          ctest -j4 --output-on-failure --progress --timeout 60 .
+          ctest -j4 --output-on-failure --progress .
         fi
