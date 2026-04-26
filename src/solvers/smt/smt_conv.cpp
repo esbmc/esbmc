@@ -1189,18 +1189,30 @@ smt_astt smt_convt::apply_ieee754_semantics(
     // IEEE 754 double precision (64-bit): 11 exponent bits, 52 fraction bits
     if (exponent_bits == double_spec.e && fraction_bits == double_spec.f)
     {
-      min_normal = mk_smt_real("2.2250738585072014e-308");    // 2^(-1022)
-      min_subnormal = mk_smt_real("4.9406564584124654e-324"); // 2^(-1074)
-      max_normal =
-        mk_smt_real("1.7976931348623157e+308"); // ~(2-2^(-52)) * 2^1023
+      // Exact rationals: 1/2^1022, 1/2^1074, (2^53-1)*2^971
+      static const std::string dbl_min_normal =
+        "1/" + integer2string(power(2, 1022));
+      static const std::string dbl_min_subnormal =
+        "1/" + integer2string(power(2, 1074));
+      static const std::string dbl_max_normal =
+        integer2string((power(2, 53) - 1) * power(2, 971));
+      min_normal = mk_smt_real(dbl_min_normal);
+      min_subnormal = mk_smt_real(dbl_min_subnormal);
+      max_normal = mk_smt_real(dbl_max_normal);
     }
     // IEEE 754 single precision (32-bit): 8 exponent bits, 23 fraction bits
     else if (exponent_bits == single_spec.e && fraction_bits == single_spec.f)
     {
-      min_normal = mk_smt_real("1.1754943508222875e-38");    // 2^(-126)
-      min_subnormal = mk_smt_real("1.4012984643248171e-45"); // 2^(-149)
-      max_normal =
-        mk_smt_real("3.4028234663852886e+38"); // ~(2-2^(-23)) * 2^127
+      // Exact rationals: 1/2^126, 1/2^149, (2^24-1)*2^104
+      static const std::string sgl_min_normal =
+        "1/" + integer2string(power(2, 126));
+      static const std::string sgl_min_subnormal =
+        "1/" + integer2string(power(2, 149));
+      static const std::string sgl_max_normal =
+        integer2string((power(2, 24) - 1) * power(2, 104));
+      min_normal = mk_smt_real(sgl_min_normal);
+      min_subnormal = mk_smt_real(sgl_min_subnormal);
+      max_normal = mk_smt_real(sgl_max_normal);
     }
     // Unsupported format - return original result
     else
@@ -1234,19 +1246,12 @@ smt_astt smt_convt::apply_ieee754_semantics(
     smt_astt is_subnormal =
       mk_and(mk_ge(abs_result, min_subnormal), mk_lt(abs_result, min_normal));
 
-    // Handle subnormal rounding (simplified round-to-nearest)
-    smt_astt subnormal_step =
-      (exponent_bits == double_spec.e && fraction_bits == double_spec.f)
-        ? mk_smt_real("4.9406564584124654e-324") // Double precision
-        : mk_smt_real("1.4012984643248171e-45"); // Single precision
-    smt_astt quotient = mk_div(abs_result, subnormal_step);
-    smt_astt rounded_quotient = mk_add(quotient, mk_smt_real("0.5"));
-    smt_astt subnormal_magnitude = mk_mul(rounded_quotient, subnormal_step);
-
-    smt_astt subnormal_result = mk_ite(
-      mk_lt(real_result, zero),
-      mk_sub(zero, subnormal_magnitude),
-      subnormal_magnitude);
+    // For subnormal values, return the exact real result.
+    // Subnormal arithmetic is exact when results are representable, and the
+    // real arithmetic value already captures the correct value. No floor-based
+    // quantization is applied here because ESBMC's SMT API has no floor/to_int
+    // for reals; adding 0.5 without floor gives a wrong non-integer multiple.
+    smt_astt subnormal_result = real_result;
 
     // Overflow result (approximate infinity)
     smt_astt overflow_result =
@@ -2930,8 +2935,19 @@ smt_astt smt_convt::convert_terminal(const expr2tc &expr)
     const constant_floatbv2t &thereal = to_constant_floatbv2t(expr);
     if (int_encoding)
     {
-      std::string val = thereal.value.to_expr().value().as_string();
-      std::string result = fixed_point(val, thereal.value.spec.width());
+      if (
+        thereal.value.is_zero() || thereal.value.is_NaN() ||
+        thereal.value.is_infinity())
+        return mk_smt_real("0");
+      BigInt frac, exp;
+      thereal.value.extract_base2(frac, exp);
+      std::string result;
+      if (exp >= 0)
+        result = integer2string(frac * power(2, exp));
+      else
+        result = integer2string(frac) + "/" + integer2string(power(2, -exp));
+      if (thereal.value.get_sign())
+        result = "-" + result;
       return mk_smt_real(result);
     }
 
