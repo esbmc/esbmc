@@ -1619,8 +1619,11 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     if (const auto nns = decl.getQualifier())
     {
 #if CLANG_VERSION_MAJOR >= 22
-      if (const auto type = nns.getAsType())
+      // Clang 22's NestedNameSpecifier::getAsType() asserts on non-Type
+      // qualifiers (e.g. namespaces), so check the kind first.
+      if (nns.getKind() == clang::NestedNameSpecifier::Kind::Type)
       {
+        const auto type = nns.getAsType();
         assert(!nns.isDependent());
 #else
       if (const auto type = nns->getAsType())
