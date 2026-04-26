@@ -318,13 +318,13 @@ bool clang_cpp_convertert::get_type(
     break;
   }
 
-#if CLANG_VERSION_MAJOR >= 14 && CLANG_VERSION_MAJOR < 22
+#if CLANG_VERSION_MAJOR >= 14
   case clang::Type::Using:
   {
     const clang::UsingType &ut =
       static_cast<const clang::UsingType &>(the_type);
 
-    if (get_type(ut.getUnderlyingType(), new_type))
+    if (get_type(ut.desugar(), new_type))
       return true;
 
     break;
