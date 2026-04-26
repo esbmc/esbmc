@@ -2020,19 +2020,14 @@ bool clang_cpp_convertert::annotate_class_method(
   exprt &new_expr)
 {
   code_typet &component_type = to_code_type(new_expr.type());
-/*
+  /*
    * The order of annotations matters.
    */
-// annotate parent
-#if CLANG_VERSION_MAJOR >= 22
-  std::string parent_class_name = getFullyQualifiedName(
-    ASTContext->getCanonicalTagType(cxxmdd.getParent()), *ASTContext);
-#else
-  std::string parent_class_name = getFullyQualifiedName(
-    ASTContext->getTagDeclType(cxxmdd.getParent()), *ASTContext);
-#endif
-
-  std::string parent_class_id = tag_prefix + parent_class_name;
+  // annotate parent — derive the id via get_decl_name so it matches the
+  // record's symbol id exactly (Clang 22+ prepends the kind name; older
+  // versions don't).
+  std::string parent_class_name, parent_class_id;
+  get_decl_name(*cxxmdd.getParent(), parent_class_name, parent_class_id);
   component_type.set("#member_name", parent_class_id);
 
   // annotate ctor and dtor
