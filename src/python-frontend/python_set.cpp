@@ -375,6 +375,7 @@ exprt python_set::get_from_iterable(
           ? symbol_expr(set_symbol)
           : address_of_exprt(symbol_expr(set_symbol)));
       push_call.arguments().push_back(symbol_expr(*elem_obj_sym));
+      push_call.arguments().push_back(from_integer(BigInt(0), size_type()));
       push_call.type() = bool_type();
       push_call.location() = loc;
       push_block.copy_to_operands(
@@ -542,6 +543,7 @@ exprt python_set::build_set_difference_call(
   push_call.function() = symbol_expr(*push_obj_func);
   push_call.arguments().push_back(symbol_expr(result_set));
   push_call.arguments().push_back(symbol_expr(elem_sym));
+  push_call.arguments().push_back(from_integer(BigInt(0), size_type()));
   push_call.type() = bool_type();
   push_call.location() = loc;
   then_block.copy_to_operands(converter_.convert_expression_to_code(push_call));
@@ -693,6 +695,7 @@ exprt python_set::build_set_intersection_call(
   push_call.function() = symbol_expr(*push_obj_func);
   push_call.arguments().push_back(symbol_expr(result_set));
   push_call.arguments().push_back(symbol_expr(elem_sym));
+  push_call.arguments().push_back(from_integer(BigInt(0), size_type()));
   push_call.type() = bool_type();
   push_call.location() = loc;
   then_block.copy_to_operands(converter_.convert_expression_to_code(push_call));
@@ -855,6 +858,7 @@ exprt python_set::build_set_union_call(
   push_call.function() = symbol_expr(*push_obj_func);
   push_call.arguments().push_back(symbol_expr(result_set));
   push_call.arguments().push_back(symbol_expr(elem_sym));
+  push_call.arguments().push_back(from_integer(BigInt(0), size_type()));
   push_call.type() = bool_type();
   push_call.location() = loc;
   then_block.copy_to_operands(converter_.convert_expression_to_code(push_call));

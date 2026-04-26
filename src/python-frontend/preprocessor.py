@@ -65,6 +65,10 @@ class Preprocessor(ast.NodeTransformer):
         # adds aliased names like ``from dataclasses import field as f``.
         self._dataclass_decorator_names = {"dataclass"}
         self._dataclass_field_names = {"field"}
+        self._dataclass_initvar_names = {"InitVar"}
+        self.dataclasses_module_names = {"dataclasses"}
+        self._typing_classvar_names = {"ClassVar"}
+        self._classes_with_post_init = set()
 
     # Names treated as typing-style generic constructors (subscript = type alias).
     _TYPING_GENERIC_NAMES = (
@@ -75,6 +79,7 @@ class Preprocessor(ast.NodeTransformer):
         "Optional",
         "Union",
         "Callable",
+        "ClassVar",
     )
 
     # Dataclass fields declared with ``field(default_factory=...)`` are not
@@ -4831,6 +4836,106 @@ class Preprocessor(ast.NodeTransformer):
 
         return False
 
+    def _unwrap_annotation_slice(self, annotation):
+        if not isinstance(annotation, ast.Subscript):
+            return None
+        if isinstance(annotation.slice, ast.Index):
+            return annotation.slice.value
+        return annotation.slice
+
+    def _is_dataclass_initvar_base(self, node):
+        return (
+            isinstance(node, ast.Name)
+            and node.id in self._dataclass_initvar_names
+        ) or (
+            isinstance(node, ast.Attribute)
+            and node.attr == "InitVar"
+            and isinstance(node.value, ast.Name)
+            and node.value.id in self.dataclasses_module_names
+        )
+
+    def _is_typing_classvar_base(self, node):
+        return (
+            isinstance(node, ast.Name)
+            and node.id in self._typing_classvar_names
+        ) or (
+            isinstance(node, ast.Attribute)
+            and node.attr == "ClassVar"
+            and isinstance(node.value, ast.Name)
+            and node.value.id in self.typing_module_names
+        )
+
+    def _analyze_dataclass_field_annotation(self, annotation):
+        """Classify a dataclass annotation as instance field, InitVar or ClassVar."""
+        if annotation is None:
+            return "instance", None
+
+        if isinstance(annotation, ast.Subscript):
+            if self._is_dataclass_initvar_base(annotation.value):
+                inner = self._unwrap_annotation_slice(annotation)
+                return "initvar", self._copy_annotation_node(inner)
+            if self._is_typing_classvar_base(annotation.value):
+                inner = self._unwrap_annotation_slice(annotation)
+                return "classvar", self._copy_annotation_node(inner)
+
+        if self._is_dataclass_initvar_base(annotation):
+            return "initvar", None
+        if self._is_typing_classvar_base(annotation):
+            return "classvar", None
+        return "instance", annotation
+
+    def _get_post_init_method(self, class_node):
+        return next(
+            (
+                member
+                for member in class_node.body
+                if isinstance(member, ast.FunctionDef) and member.name == "__post_init__"
+            ),
+            None,
+        )
+
+    def _class_has_post_init_behavior(self, class_node):
+        if self._get_post_init_method(class_node) is not None:
+            return True
+
+        for base in class_node.bases:
+            if isinstance(base, ast.Name) and base.id in self._classes_with_post_init:
+                return True
+        return False
+
+    def _validate_post_init_signature(self, class_node, fields, post_init_method):
+        """Validate that ``__post_init__`` can receive the declared InitVar values."""
+        if post_init_method is None:
+            return
+
+        initvar_count = sum(1 for _, _, _, _, kind in fields if kind == "initvar")
+        total_positional = (
+            len(post_init_method.args.posonlyargs) + len(post_init_method.args.args)
+        )
+        if total_positional == 0:
+            raise SyntaxError(
+                f"dataclass {class_node.name!r} has invalid __post_init__ signature: "
+                "missing bound instance parameter"
+            )
+
+        positional_after_self = total_positional - 1
+        min_positional_after_self = positional_after_self - len(post_init_method.args.defaults)
+        max_positional_after_self = (
+            float("inf") if post_init_method.args.vararg is not None else positional_after_self
+        )
+
+        if any(default is None for default in post_init_method.args.kw_defaults):
+            raise SyntaxError(
+                f"dataclass {class_node.name!r} has incompatible __post_init__ signature: "
+                "required keyword-only parameters are not supported"
+            )
+
+        if not (min_positional_after_self <= initvar_count <= max_positional_after_self):
+            raise SyntaxError(
+                f"dataclass {class_node.name!r} has incompatible __post_init__ signature: "
+                f"expected {initvar_count} InitVar argument(s)"
+            )
+
     def _parse_field_call(self, default_value):
         """Decompose ``field(...)`` calls into (default_expr, factory_expr).
 
@@ -4857,7 +4962,7 @@ class Preprocessor(ast.NodeTransformer):
             isinstance(func, ast.Attribute)
             and func.attr == "field"
             and isinstance(func.value, ast.Name)
-            and func.value.id == "dataclasses"
+            and func.value.id in self.dataclasses_module_names
         )
         if not is_field:
             return default_value, None
@@ -4879,15 +4984,24 @@ class Preprocessor(ast.NodeTransformer):
         return default_expr, factory_expr
 
     def collect_fields(self, class_node):
-        """Collect dataclass fields as (name, annotation, default_expr, factory_expr)."""
+        """Collect dataclass field specs.
+
+        Each entry is ``(name, annotation, default_expr, factory_expr, kind)`` where
+        ``kind`` is one of ``instance``, ``initvar`` or ``classvar``.
+        """
         fields = []
         for stmt in class_node.body:
             if not isinstance(stmt, ast.AnnAssign):
                 continue
             if not isinstance(stmt.target, ast.Name):
                 continue
+            field_kind, annotation = self._analyze_dataclass_field_annotation(
+                stmt.annotation
+            )
             default_expr, factory_expr = self._parse_field_call(stmt.value)
-            fields.append((stmt.target.id, stmt.annotation, default_expr, factory_expr))
+            fields.append(
+                (stmt.target.id, annotation, default_expr, factory_expr, field_kind)
+            )
         return fields
 
     def build_init(self, class_node, fields):
@@ -4919,22 +5033,26 @@ class Preprocessor(ast.NodeTransformer):
         defaults = []
         body = []
 
-        # Parameters: only non-factory fields. Compute first defaulted index
-        # over this filtered view.
+        # Parameters: instance fields except factory-backed ones, plus InitVars.
+        # Compute first defaulted index over this filtered view.
         param_fields = [
-            (name, ann, default_expr)
-            for (name, ann, default_expr, factory_expr) in fields
-            if factory_expr is None
+            (name, ann, default_expr, field_kind)
+            for (name, ann, default_expr, factory_expr, field_kind) in fields
+            if field_kind != "classvar"
+            and not (field_kind == "instance" and factory_expr is not None)
+        ]
+        initvar_names = [
+            name for (name, _, _, _, field_kind) in fields if field_kind == "initvar"
         ]
 
         first_default_idx = None
-        for index, (_, _, default_expr) in enumerate(param_fields):
+        for index, (_, _, default_expr, _) in enumerate(param_fields):
             if default_expr is not None:
                 first_default_idx = index
                 break
 
         if first_default_idx is not None:
-            for _, _, default_expr in param_fields[first_default_idx:]:
+            for _, _, default_expr, _ in param_fields[first_default_idx:]:
                 if default_expr is not None:
                     if not isinstance(default_expr, (ast.Constant, ast.Name)):
                         raise SyntaxError(
@@ -4946,7 +5064,7 @@ class Preprocessor(ast.NodeTransformer):
                 else:
                     defaults.append(ast.Constant(value=None))
 
-        for field_name, annotation, _ in param_fields:
+        for field_name, annotation, _, _ in param_fields:
             args.append(ast.arg(arg=field_name, annotation=copy.deepcopy(annotation)))
 
         # Body: assign every field, in declaration order. Factory fields use
@@ -4958,7 +5076,10 @@ class Preprocessor(ast.NodeTransformer):
         # handled by the normal class/parameter typing paths, whereas an
         # explicit ``self.x: Optional[T] = ...`` here can confuse later
         # arithmetic over values proven non-None by guards (see optional7).
-        for field_name, annotation, default_expr, factory_expr in fields:
+        for field_name, _, _, factory_expr, field_kind in fields:
+            if field_kind != "instance":
+                continue
+
             if factory_expr is not None:
                 rhs = ast.Call(
                     func=copy.deepcopy(factory_expr),
@@ -4980,6 +5101,43 @@ class Preprocessor(ast.NodeTransformer):
             )
             self.ensure_all_locations(assign_stmt, class_node)
             body.append(assign_stmt)
+
+        post_init_method = self._get_post_init_method(class_node)
+        if post_init_method is not None:
+            post_init_call = ast.Expr(
+                value=ast.Call(
+                    func=ast.Attribute(
+                        value=self.create_name_node(class_node.name, ast.Load(), class_node),
+                        attr="__post_init__",
+                        ctx=ast.Load(),
+                    ),
+                    args=[self.create_name_node("self", ast.Load(), class_node)]
+                    + [
+                        self.create_name_node(initvar_name, ast.Load(), class_node)
+                        for initvar_name in initvar_names
+                    ],
+                    keywords=[],
+                )
+            )
+            self.ensure_all_locations(post_init_call, class_node)
+            body.append(post_init_call)
+        elif self._class_has_post_init_behavior(class_node):
+            post_init_call = ast.Expr(
+                value=ast.Call(
+                    func=ast.Attribute(
+                        value=self.create_name_node("self", ast.Load(), class_node),
+                        attr="__post_init__",
+                        ctx=ast.Load(),
+                    ),
+                    args=[
+                        self.create_name_node(initvar_name, ast.Load(), class_node)
+                        for initvar_name in initvar_names
+                    ],
+                    keywords=[],
+                )
+            )
+            self.ensure_all_locations(post_init_call, class_node)
+            body.append(post_init_call)
 
         if not body:
             body = [ast.Pass()]
@@ -5004,6 +5162,23 @@ class Preprocessor(ast.NodeTransformer):
         ast.fix_missing_locations(init_func)
         return init_func
 
+    def build_dataclass_fields_metadata(self, class_node, fields):
+        field_names = [
+            field_name
+            for field_name, _, _, _, field_kind in fields
+            if field_kind == "instance"
+        ]
+        metadata_assign = ast.Assign(
+            targets=[ast.Name(id="__dataclass_fields__", ctx=ast.Store())],
+            value=ast.Tuple(
+                elts=[ast.Constant(value=field_name) for field_name in field_names],
+                ctx=ast.Load(),
+            ),
+        )
+        self.ensure_all_locations(metadata_assign, class_node)
+        ast.fix_missing_locations(metadata_assign)
+        return metadata_assign
+
     def expand_dataclass(self, class_node):
         """Inject a minimal generated __init__ for dataclass-decorated classes."""
         if not self.is_dataclass(class_node):
@@ -5016,8 +5191,18 @@ class Preprocessor(ast.NodeTransformer):
             return class_node
 
         fields = self.collect_fields(class_node)
-        if not fields:
+        post_init_method = self._get_post_init_method(class_node)
+        active_fields = [
+            field for field in fields if field[4] in ("instance", "initvar")
+        ]
+        has_post_init_behavior = self._class_has_post_init_behavior(class_node)
+        has_classvars = any(f[4] == "classvar" for f in fields)
+        if not active_fields and not has_post_init_behavior and not has_classvars:
             return class_node
+
+        self._validate_post_init_signature(class_node, fields, post_init_method)
+        if has_post_init_behavior:
+            self._classes_with_post_init.add(class_node.name)
 
         # Validate field ordering: once a field has a default (raw,
         # ``field(default=...)`` or ``field(default_factory=...)``), every
@@ -5025,7 +5210,9 @@ class Preprocessor(ast.NodeTransformer):
         # SyntaxError with a "non-default argument follows default argument"
         # style message.
         seen_default = False
-        for field_name, _, default_expr, factory_expr in fields:
+        for field_name, _, default_expr, factory_expr, field_kind in fields:
+            if field_kind == "classvar":
+                continue
             has_default = default_expr is not None or factory_expr is not None
             if seen_default and not has_default:
                 raise SyntaxError(
@@ -5040,11 +5227,17 @@ class Preprocessor(ast.NodeTransformer):
         # though the synthesized ``__init__`` now uses plain Assign nodes.
         if class_node.name not in self.class_attr_annotations:
             self.class_attr_annotations[class_node.name] = {}
-        for field_name, annotation, _, _ in fields:
+        for field_name, annotation, _, _, field_kind in fields:
+            if field_kind != "instance":
+                continue
             if annotation is not None:
                 self.class_attr_annotations[class_node.name][field_name] = annotation
 
-        field_names = {field_name for field_name, _, _, _ in fields}
+        field_names = {
+            field_name
+            for field_name, _, _, _, field_kind in fields
+            if field_kind in ("instance", "initvar")
+        }
         class_node.body = [
             stmt
             for stmt in class_node.body
@@ -5068,6 +5261,9 @@ class Preprocessor(ast.NodeTransformer):
             ):
                 insert_index = 1
         class_node.body.insert(insert_index, self.build_init(class_node, fields))
+        class_node.body.insert(
+            insert_index + 1, self.build_dataclass_fields_metadata(class_node, fields)
+        )
         return class_node
 
     def _collect_class_attr_annotations(self, class_node):
@@ -5103,10 +5299,13 @@ class Preprocessor(ast.NodeTransformer):
                     self._dataclass_decorator_names.add(alias.asname or "dataclass")
                 elif alias.name == "field":
                     self._dataclass_field_names.add(alias.asname or "field")
+                elif alias.name == "InitVar":
+                    self._dataclass_initvar_names.add(alias.asname or "InitVar")
                 elif alias.name == "*":
                     # ``from dataclasses import *`` exposes both canonical names.
                     self._dataclass_decorator_names.add("dataclass")
                     self._dataclass_field_names.add("field")
+                    self._dataclass_initvar_names.add("InitVar")
         if node.module == "typing":
             for alias in node.names:
                 if alias.name == "NewType":
@@ -5114,8 +5313,11 @@ class Preprocessor(ast.NodeTransformer):
                 elif alias.name == "*":
                     self.newtype_names.add("NewType")
                     self._typing_imported_names.update(self._TYPING_GENERIC_NAMES)
+                    self._typing_classvar_names.add("ClassVar")
                 if alias.name in self._TYPING_GENERIC_NAMES:
                     self._typing_imported_names.add(alias.asname or alias.name)
+                if alias.name == "ClassVar":
+                    self._typing_classvar_names.add(alias.asname or alias.name)
         self.generic_visit(node)
         return node
 
@@ -5131,6 +5333,8 @@ class Preprocessor(ast.NodeTransformer):
                     self.collections_module_alias = alias.asname
             if alias.name == "typing":
                 self.typing_module_names.add(alias.asname or "typing")
+            if alias.name == "dataclasses":
+                self.dataclasses_module_names.add(alias.asname or "dataclasses")
         self.generic_visit(node)
         return node
 
