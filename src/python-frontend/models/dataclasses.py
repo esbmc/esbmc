@@ -28,18 +28,3 @@ def field(*args, default=None, default_factory=None, **kwargs):
     if default_factory is not None:
         return default_factory()
     return default
-
-
-def fields(class_or_instance):
-    target = class_or_instance
-    if not isinstance(class_or_instance, type):
-        target = class_or_instance.__class__
-    return getattr(target, "__dataclass_fields__", ())
-
-
-def asdict(obj):
-    return {field_name: getattr(obj, field_name) for field_name in fields(obj)}
-
-
-def astuple(obj):
-    return tuple(getattr(obj, field_name) for field_name in fields(obj))
