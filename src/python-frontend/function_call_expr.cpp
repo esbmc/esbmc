@@ -4956,7 +4956,8 @@ exprt function_call_expr::handle_general_function_call()
     return receiver.type().is_pointer() ? receiver : gen_address_of(receiver);
   };
 
-  auto bind_instance_receiver_symbol = [&](const symbolt &receiver_symbol) -> exprt {
+  auto bind_instance_receiver_symbol =
+    [&](const symbolt &receiver_symbol) -> exprt {
     exprt receiver = symbol_expr(receiver_symbol);
     return bind_instance_receiver(receiver);
   };
@@ -4986,8 +4987,7 @@ exprt function_call_expr::handle_general_function_call()
     if (is_super_init)
     {
       if (obj_symbol)
-        call.arguments().push_back(
-          bind_instance_receiver_symbol(*obj_symbol));
+        call.arguments().push_back(bind_instance_receiver_symbol(*obj_symbol));
       param_offset = 1;
     }
     // Self is the LHS
@@ -5043,8 +5043,7 @@ exprt function_call_expr::handle_general_function_call()
           exprt ctor_result = converter_.get_expr(func_value);
           converter_.current_lhs = saved_lhs;
 
-          call.arguments().push_back(
-            bind_instance_receiver(symbol_expr(tmp)));
+          call.arguments().push_back(bind_instance_receiver(symbol_expr(tmp)));
         }
         else if (func_value["_type"] == "Call")
         {
