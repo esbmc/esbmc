@@ -57,11 +57,14 @@ constexpr int popcount(T x) noexcept
 template <class T>
 constexpr int countl_zero(T x) noexcept
 {
-  if (x == 0)
-    return static_cast<int>(sizeof(T) * 8);
+  using U = make_unsigned_t<T>;
+  U u = static_cast<U>(x);
+  constexpr int N = static_cast<int>(sizeof(T) * 8);
+  if (u == 0)
+    return N;
   int count = 0;
-  T mask = static_cast<T>(1) << (sizeof(T) * 8 - 1);
-  while ((x & mask) == 0)
+  U mask = static_cast<U>(1) << (N - 1);
+  while ((u & mask) == 0)
   {
     ++count;
     mask >>= 1;
@@ -72,13 +75,15 @@ constexpr int countl_zero(T x) noexcept
 template <class T>
 constexpr int countr_zero(T x) noexcept
 {
-  if (x == 0)
+  using U = make_unsigned_t<T>;
+  U u = static_cast<U>(x);
+  if (u == 0)
     return static_cast<int>(sizeof(T) * 8);
   int count = 0;
-  while ((x & 1) == 0)
+  while ((u & 1) == 0)
   {
     ++count;
-    x >>= 1;
+    u >>= 1;
   }
   return count;
 }
@@ -109,6 +114,8 @@ template <class T>
 constexpr T rotl(T x, int s) noexcept
 {
   constexpr int N = static_cast<int>(sizeof(T) * 8);
+  // Normalise into (-N, N) before any negation so callers passing
+  // INT_MIN cannot trigger signed-overflow on -s in rotr.
   const int r = s % N;
   if (r == 0)
     return x;
@@ -120,7 +127,8 @@ constexpr T rotl(T x, int s) noexcept
 template <class T>
 constexpr T rotr(T x, int s) noexcept
 {
-  return rotl<T>(x, -s);
+  constexpr int N = static_cast<int>(sizeof(T) * 8);
+  return rotl<T>(x, -(s % N));
 }
 
 enum class endian
