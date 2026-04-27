@@ -9,9 +9,76 @@ endif()
 
 set(CAMADA_DIR "$ENV{HOME}/camada" CACHE PATH "Camada installation prefix")
 
-find_package(camada CONFIG REQUIRED
+find_package(camada CONFIG QUIET
   HINTS ${CAMADA_DIR}
   PATH_SUFFIXES lib/cmake/camada)
+
+if(NOT camada_FOUND AND DOWNLOAD_DEPENDENCIES)
+  set(CAMADA_DOWNLOAD_DIR "${CMAKE_BINARY_DIR}/camada" CACHE PATH "Directory used to extract downloaded Camada")
+  set(CAMADA_ARCHIVE "${CMAKE_BINARY_DIR}/${ESBMC_CAMADA_NAME}")
+
+  if(EXISTS "${CAMADA_ARCHIVE}")
+    file(SIZE "${CAMADA_ARCHIVE}" CAMADA_ARCHIVE_SIZE)
+    if(CAMADA_ARCHIVE_SIZE EQUAL 0)
+      file(REMOVE "${CAMADA_ARCHIVE}")
+    endif()
+  endif()
+
+  if(NOT EXISTS "${CAMADA_ARCHIVE}")
+    message(STATUS "Downloading Camada from ${ESBMC_CAMADA_URL}")
+    file(DOWNLOAD "${ESBMC_CAMADA_URL}" "${CAMADA_ARCHIVE}"
+      SHOW_PROGRESS
+      STATUS CAMADA_DOWNLOAD_STATUS)
+    list(GET CAMADA_DOWNLOAD_STATUS 0 CAMADA_DOWNLOAD_RESULT)
+    list(GET CAMADA_DOWNLOAD_STATUS 1 CAMADA_DOWNLOAD_MESSAGE)
+    if(NOT CAMADA_DOWNLOAD_RESULT EQUAL 0)
+      message(FATAL_ERROR "Failed to download Camada: ${CAMADA_DOWNLOAD_MESSAGE}")
+    endif()
+
+    file(SIZE "${CAMADA_ARCHIVE}" CAMADA_ARCHIVE_SIZE)
+    if(CAMADA_ARCHIVE_SIZE EQUAL 0)
+      message(FATAL_ERROR "Downloaded Camada archive is empty: ${CAMADA_ARCHIVE}")
+    endif()
+  endif()
+
+  find_path(CAMADA_CONFIG_DIR
+    NAMES camadaConfig.cmake camada-config.cmake
+    HINTS "${CAMADA_DOWNLOAD_DIR}"
+    PATH_SUFFIXES lib/cmake/camada share/cmake/camada cmake
+    NO_DEFAULT_PATH)
+
+  if(NOT CAMADA_CONFIG_DIR)
+    message(STATUS "Extracting Camada")
+    file(REMOVE_RECURSE "${CAMADA_DOWNLOAD_DIR}")
+    file(MAKE_DIRECTORY "${CAMADA_DOWNLOAD_DIR}")
+    file(ARCHIVE_EXTRACT INPUT "${CAMADA_ARCHIVE}" DESTINATION "${CAMADA_DOWNLOAD_DIR}")
+
+    file(GLOB CAMADA_EXTRACTED_DIRS LIST_DIRECTORIES true "${CAMADA_DOWNLOAD_DIR}/*")
+    find_path(CAMADA_CONFIG_DIR
+      NAMES camadaConfig.cmake camada-config.cmake
+      HINTS "${CAMADA_DOWNLOAD_DIR}" ${CAMADA_EXTRACTED_DIRS}
+      PATH_SUFFIXES lib/cmake/camada share/cmake/camada cmake
+      NO_DEFAULT_PATH)
+  endif()
+
+  if(NOT CAMADA_CONFIG_DIR)
+    message(FATAL_ERROR "Downloaded Camada archive does not contain camadaConfig.cmake")
+  endif()
+
+  unset(camada_DIR CACHE)
+  set(camada_DIR "${CAMADA_CONFIG_DIR}" CACHE PATH "Path to camadaConfig.cmake" FORCE)
+  find_package(camada CONFIG REQUIRED
+    PATHS "${CAMADA_CONFIG_DIR}"
+    NO_DEFAULT_PATH)
+
+  set(CAMADA_DIR "${CAMADA_DOWNLOAD_DIR}" CACHE PATH "Camada installation prefix" FORCE)
+endif()
+
+if(NOT camada_FOUND)
+  find_package(camada CONFIG REQUIRED
+    HINTS ${CAMADA_DIR}
+    PATH_SUFFIXES lib/cmake/camada)
+endif()
 
 foreach(feature CAMADA_HAVE_Z3 CAMADA_HAVE_CVC5 CAMADA_HAVE_MATHSAT CAMADA_HAVE_YICES CAMADA_HAVE_BITWUZLA)
   if(NOT DEFINED ${feature})
