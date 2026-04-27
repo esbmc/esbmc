@@ -198,6 +198,7 @@ if(APPLE)
                     ${REGRESSIONS_CPP11}
                     ${REGRESSIONS_CPP14}
                     ${REGRESSIONS_CPP17}
+                    NVIDIA-OpenSMA
                     extensions
                     ${REGRESSIONS_CHERI}
                     ${REGRESSIONS_PYTHON}
@@ -262,6 +263,7 @@ else()
                     ${REGRESSIONS_CPP14}
                     ${REGRESSIONS_CPP11}
                     ${REGRESSIONS_CPP03}
+                    NVIDIA-OpenSMA
                     ${REGRESSIONS_GOTO_CONTRACTOR}
                     ${REGRESSIONS_JIMPLE}
                     extensions
