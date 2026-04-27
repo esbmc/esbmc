@@ -294,10 +294,9 @@ static bool is_cxx20_or_later()
     return false; // require leading "c" or "gnu"
 
   const std::string suffix = s.substr(pos + 2);
-  if (suffix == "2a")
-    return true; // alias for C++20
-  if (suffix == "2b" || suffix == "2c")
-    return true; // aliases for C++23 / C++26
+  // Clang aliases: 2a=C++20, 2b=C++23, 2c=C++26
+  if (suffix == "2a" || suffix == "2b" || suffix == "2c")
+    return true;
 
   if (suffix.empty() || !std::all_of(suffix.begin(), suffix.end(), ::isdigit))
     return false;
