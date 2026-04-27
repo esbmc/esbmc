@@ -4157,6 +4157,85 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     }
     else if (element["_type"] == "Attribute")
     {
+      // Resolve `<base>.<attr>` after unwrapping Optional[T] / pointer-to-struct
+      // / complex types. Returns nil if the attribute cannot be resolved.
+      auto resolve_member_on_base =
+        [this](exprt base_expr, const std::string &attr_name) -> exprt {
+        typet base_type = base_expr.type();
+        if (base_type.is_pointer())
+          base_type = base_type.subtype();
+        if (base_type.id() == "symbol")
+          base_type = ns.follow(base_type);
+
+        // Unwrap Optional[T] before attribute access.
+        if (base_type.is_struct())
+        {
+          const struct_typet &opt_st = to_struct_type(base_type);
+          const std::string &tag = opt_st.tag().as_string();
+          if (
+            tag.rfind("tag-Optional_", 0) == 0 &&
+            opt_st.has_component("value") && !opt_st.has_component(attr_name))
+          {
+            const typet &inner_raw = opt_st.get_component("value").type();
+            exprt optional_base = base_expr;
+            if (optional_base.type().is_pointer())
+            {
+              exprt deref("dereference");
+              deref.type() = optional_base.type().subtype();
+              deref.move_to_operands(optional_base);
+              optional_base = std::move(deref);
+            }
+            base_expr = member_exprt(optional_base, "value", inner_raw);
+            base_type = inner_raw;
+            if (base_type.is_pointer())
+              base_type = base_type.subtype();
+            if (base_type.id() == "symbol")
+              base_type = ns.follow(base_type);
+          }
+        }
+
+        // Unwrap pointer-to-struct so the struct component lookup succeeds.
+        if (base_type.is_pointer())
+        {
+          typet pointed_to = base_type.subtype();
+          if (pointed_to.id() == "symbol")
+            pointed_to = ns.follow(pointed_to);
+          if (pointed_to.is_struct())
+            base_type = pointed_to;
+        }
+
+        // Delegate complex attribute access (.real, .imag) to the handler.
+        if (is_complex_type(base_type))
+        {
+          exprt result =
+            complex_handler_.handle_attribute_access(base_expr, attr_name);
+          if (!result.is_nil())
+            return result;
+        }
+
+        if (base_type.is_struct())
+        {
+          const struct_typet &struct_type = to_struct_type(base_type);
+          if (struct_type.has_component(attr_name))
+          {
+            const typet &attr_type =
+              struct_type.get_component(attr_name).type();
+            typet clean_type = clean_attribute_type(attr_type);
+            exprt member_base = base_expr;
+            if (member_base.type().is_pointer())
+            {
+              exprt deref("dereference");
+              deref.type() = member_base.type().subtype();
+              deref.move_to_operands(member_base);
+              member_base = std::move(deref);
+            }
+            return member_exprt(member_base, attr_name, clean_type);
+          }
+        }
+
+        return nil_exprt();
+      };
+
       // Handle nested attribute chain (e.g., self.b.a)
       if (element["value"]["_type"] == "Attribute")
       {
@@ -4218,80 +4297,11 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           }
         }
 
-        // Unwrap Optional[T] before attribute access.
-        // e.g., y.tail.head where tail: Optional[List] → unwrap .value to get List
-        if (base_type.is_struct())
+        exprt resolved = resolve_member_on_base(base_expr, attr_name);
+        if (!resolved.is_nil())
         {
-          const struct_typet &opt_st = to_struct_type(base_type);
-          const std::string &tag = opt_st.tag().as_string();
-          if (
-            tag.rfind("tag-Optional_", 0) == 0 &&
-            opt_st.has_component("value") && !opt_st.has_component(attr_name))
-          {
-            const typet &inner_raw = opt_st.get_component("value").type();
-            exprt optional_base = base_expr;
-            if (optional_base.type().is_pointer())
-            {
-              exprt deref("dereference");
-              deref.type() = optional_base.type().subtype();
-              deref.move_to_operands(optional_base);
-              optional_base = std::move(deref);
-            }
-            base_expr = member_exprt(optional_base, "value", inner_raw);
-            base_type = inner_raw;
-            if (base_type.is_pointer())
-              base_type = base_type.subtype();
-            if (base_type.id() == "symbol")
-              base_type = ns.follow(base_type);
-          }
-        }
-
-        // Unwrap pointer-to-struct for attribute access.
-        // e.g., tail: Optional["List"] is stored as a pointer to tag-List;
-        // update base_type so the struct component lookup below succeeds.
-        // The actual dereference node is inserted by the handler below.
-        if (base_type.is_pointer())
-        {
-          typet pointed_to = base_type.subtype();
-          if (pointed_to.id() == "symbol")
-            pointed_to = ns.follow(pointed_to);
-          if (pointed_to.is_struct())
-            base_type = pointed_to;
-        }
-
-        // Delegate complex attribute access (.real, .imag) to the handler.
-        if (is_complex_type(base_type))
-        {
-          exprt result =
-            complex_handler_.handle_attribute_access(base_expr, attr_name);
-          if (!result.is_nil())
-          {
-            expr = result;
-            break;
-          }
-        }
-
-        if (base_type.is_struct())
-        {
-          const struct_typet &struct_type = to_struct_type(base_type);
-          if (struct_type.has_component(attr_name))
-          {
-            const typet &attr_type =
-              struct_type.get_component(attr_name).type();
-            typet clean_type = clean_attribute_type(attr_type);
-            exprt member_base = base_expr;
-            if (member_base.type().is_pointer())
-            {
-              exprt deref("dereference");
-              deref.type() = member_base.type().subtype();
-              deref.move_to_operands(member_base);
-              member_base = std::move(deref);
-            }
-
-            member_exprt member_expr(member_base, attr_name, clean_type);
-            expr = member_expr;
-            break;
-          }
+          expr = resolved;
+          break;
         }
 
         log_error("Cannot resolve nested attribute: {}", attr_name);
@@ -4307,31 +4317,11 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         exprt base_expr = get_expr(element["value"]);
         const std::string &attr_name = element["attr"].get<std::string>();
 
-        typet base_type = base_expr.type();
-        if (base_type.is_pointer())
-          base_type = base_type.subtype();
-        if (base_type.id() == "symbol")
-          base_type = ns.follow(base_type);
-
-        if (base_type.is_struct())
+        exprt resolved = resolve_member_on_base(base_expr, attr_name);
+        if (!resolved.is_nil())
         {
-          const struct_typet &struct_type = to_struct_type(base_type);
-          if (struct_type.has_component(attr_name))
-          {
-            const typet &attr_type =
-              struct_type.get_component(attr_name).type();
-            typet clean_type = clean_attribute_type(attr_type);
-            exprt member_base = base_expr;
-            if (member_base.type().is_pointer())
-            {
-              exprt deref("dereference");
-              deref.type() = member_base.type().subtype();
-              deref.move_to_operands(member_base);
-              member_base = std::move(deref);
-            }
-            expr = member_exprt(member_base, attr_name, clean_type);
-            break;
-          }
+          expr = resolved;
+          break;
         }
 
         log_error(
