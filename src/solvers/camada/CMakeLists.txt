@@ -8,10 +8,13 @@ if(NOT CAMADA_BACKEND_ENABLED)
 endif()
 
 set(CAMADA_DIR "$ENV{HOME}/camada" CACHE PATH "Camada installation prefix")
+set(CAMADA_EXTRA_INCLUDE_DIRS)
 set(CAMADA_EXTRA_LIBRARY_DIRS)
 
 macro(camada_import_dependency_targets deps_install_dir)
   if(EXISTS "${deps_install_dir}")
+    list(APPEND CAMADA_EXTRA_INCLUDE_DIRS
+      "${deps_install_dir}/include")
     list(APPEND CAMADA_EXTRA_LIBRARY_DIRS
       "${deps_install_dir}/lib"
       "${deps_install_dir}/bin")
@@ -171,6 +174,9 @@ add_library(solvercamada camada_conv.cpp)
 target_include_directories(solvercamada
   PRIVATE ${Boost_INCLUDE_DIRS}
   PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+if(CAMADA_EXTRA_INCLUDE_DIRS)
+  target_include_directories(solvercamada BEFORE PRIVATE ${CAMADA_EXTRA_INCLUDE_DIRS})
+endif()
 if(CAMADA_EXTRA_LIBRARY_DIRS)
   target_link_directories(solvercamada PUBLIC ${CAMADA_EXTRA_LIBRARY_DIRS})
 endif()
