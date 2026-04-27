@@ -1099,54 +1099,6 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
       bswap_expr.operands() = expr.arguments();
       expr.swap(bswap_expr);
     }
-    else if(
-      identifier == "__builtin_clz" || identifier == "__builtin_clzl" ||
-      identifier == "__builtin_clzll" || identifier == "__lzcnt16" ||
-      identifier == "__lzcnt" || identifier == "__lzcnt64")
-    {
-      // x = x | (x >> 1);
-      // x = x | (x >> 2);
-      // x = x | (x >> 4);
-      // x = x | (x >> 8);
-      // etc.
-      // return popcount(~x);
-
-      // make sure the operand width is a power of two
-      exprt x = expr.arguments()[0];
-
-      const auto x_width = bv_width(x.type());
-      assert(x_width >= 1);
-      // const std::size_t bits = address_bits(x_width);
-      // const std::size_t new_width = numeric_cast_v<std::size_t>(power(2, bits));
-
-      // const bool need_typecast = !x.type().is_unsignedbv();
-
-      // if(need_typecast)
-        // x = typecast_exprt(x, unsignedbv_typet(new_width));
-
-      // // repeatedly compute x = x | (x >> shift)
-      for(std::size_t shift = 1; shift < x_width; shift <<= 1)
-      {
-        // x >> shift
-        exprt shifted_x("lshr", x.type());
-        shifted_x.copy_to_operands(x, from_integer(shift, x.type()));
-
-        // build the expression
-        exprt bitorval("bitor", x.type());
-        bitorval.copy_to_operands(x, shifted_x);
-
-        x = bitorval;
-      }
-
-      // the result is restricted to the result type
-      exprt bitnot_expr("bitnot", x.type());
-      bitnot_expr.copy_to_operands(x);
-
-      exprt popcount_expr("popcount", int_type());
-      popcount_expr.copy_to_operands(bitnot_expr);
-
-      expr.swap(popcount_expr);
-    }
     else if (identifier == "__builtin_expect")
     {
       // this is a gcc extension to provide branch prediction
