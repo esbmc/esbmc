@@ -250,30 +250,31 @@ bool linear_equality_domaint::try_as_affine(
 
 expr2tc linear_equality_domaint::make_equality_expr(
   const irep_idt &lhs,
+  const type2tc &lhs_type,
   const AffineExpr &rhs)
 {
-  const type2tc int_type = get_int_type(config.ansi_c.word_size);
-  expr2tc rhs_expr = constant_int2tc(int_type, rhs.constant);
+  // Use lhs_type for every sub-expression so all bitvector widths are uniform.
+  expr2tc rhs_expr = constant_int2tc(lhs_type, rhs.constant);
 
   for (const auto &kv : rhs.coeffs)
   {
-    expr2tc var_expr = symbol2tc(int_type, kv.first);
+    expr2tc var_expr = symbol2tc(lhs_type, kv.first);
     expr2tc term;
     if (kv.second == 1)
       term = var_expr;
     else if (kv.second == -1)
-      term = neg2tc(int_type, var_expr);
+      term = neg2tc(lhs_type, var_expr);
     else
-      term = mul2tc(int_type, constant_int2tc(int_type, kv.second), var_expr);
+      term = mul2tc(lhs_type, constant_int2tc(lhs_type, kv.second), var_expr);
 
     // Skip adding 0 as the initial accumulator to keep the expression clean.
     if (is_constant_int2t(rhs_expr) && to_constant_int2t(rhs_expr).value == 0)
       rhs_expr = term;
     else
-      rhs_expr = add2tc(int_type, rhs_expr, term);
+      rhs_expr = add2tc(lhs_type, rhs_expr, term);
   }
 
-  return equality2tc(symbol2tc(int_type, lhs), rhs_expr);
+  return equality2tc(symbol2tc(lhs_type, lhs), rhs_expr);
 }
 
 const AffineExpr *
@@ -316,6 +317,8 @@ void linear_equality_domaint::transform(
       forget(lhs_name);
       break;
     }
+
+    symbol_types[lhs_name] = ca.target->type;
 
     AffineExpr rhs_affine;
     if (try_as_affine(ca.source, rhs_affine))
@@ -385,9 +388,13 @@ bool linear_equality_domaint::merge(
   {
     // First reachable predecessor — inherit its state.
     equations = src.equations;
+    symbol_types = src.symbol_types;
     bottom = false;
     return true;
   }
+
+  for (const auto &kv : src.symbol_types)
+    symbol_types.insert(kv);
 
   // Keep only equations both predecessors agree on (intersection / meet).
   bool changed = false;
@@ -432,7 +439,10 @@ expr2tc linear_equality_domaint::to_predicate() const
   std::vector<expr2tc> conjuncts;
   for (const auto &kv : *equations)
   {
-    expr2tc eq = make_equality_expr(kv.first, kv.second);
+    auto type_it = symbol_types.find(kv.first);
+    if (type_it == symbol_types.end())
+      continue;
+    expr2tc eq = make_equality_expr(kv.first, type_it->second, kv.second);
     if (!is_nil_expr(eq))
       conjuncts.push_back(eq);
   }
@@ -451,9 +461,11 @@ expr2tc linear_equality_domaint::to_predicate(
   for (const auto &kv : *equations)
   {
     if (!vars.count(kv.first))
-      // skip variables unrelated to the target loop
       continue;
-    expr2tc eq = make_equality_expr(kv.first, kv.second);
+    auto type_it = symbol_types.find(kv.first);
+    if (type_it == symbol_types.end())
+      continue;
+    expr2tc eq = make_equality_expr(kv.first, type_it->second, kv.second);
     if (!is_nil_expr(eq))
       conjuncts.push_back(eq);
   }

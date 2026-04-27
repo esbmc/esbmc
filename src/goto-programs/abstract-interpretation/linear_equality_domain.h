@@ -78,8 +78,11 @@ public:
   using equation_map = std::map<irep_idt, AffineExpr>;
 
   std::shared_ptr<equation_map> equations;
-  // true when the state unreachable
-  bool bottom = true;
+  bool bottom = true; // true when the state is ⊥ (unreachable)
+
+  // Actual irep2 type of each LHS variable, recorded during transform().
+  // Used by make_equality_expr to build expressions with the correct bit width.
+  std::map<irep_idt, type2tc> symbol_types;
 
   linear_equality_domaint() : equations(std::make_shared<equation_map>())
   {
@@ -160,8 +163,12 @@ private:
     const irep_idt &var,
     const AffineExpr &expr);
 
-  /// Build the irep2 expression  lhs_sym == rhs_affine.
-  static expr2tc make_equality_expr(const irep_idt &lhs, const AffineExpr &rhs);
+  /// Build the irep2 expression  lhs_sym == rhs_affine using [lhs_type] for
+  /// every sub-expression so all bitvector widths are consistent.
+  static expr2tc make_equality_expr(
+    const irep_idt &lhs,
+    const type2tc &lhs_type,
+    const AffineExpr &rhs);
 };
 
 using linear_equality_analysist = ait<linear_equality_domaint>;
