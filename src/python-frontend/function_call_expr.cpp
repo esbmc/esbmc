@@ -1904,11 +1904,10 @@ exprt function_call_expr::handle_complex() const
     std::string text;
     if (extract_constant_string(*real_json, text))
     {
-      double real = 0.0, imag = 0.0;
-      if (!complex_utils::parse_complex_string(text, real, imag))
+      exprt real_expr, imag_expr;
+      if (!complex_utils::parse_complex_string(text, real_expr, imag_expr))
         return raise_value_error("complex() arg is a malformed string");
-      return make_complex(
-        from_double(real, double_type()), from_double(imag, double_type()));
+      return make_complex(real_expr, imag_expr);
     }
 
     // Best-effort support for non-literal string symbols.
@@ -1952,12 +1951,11 @@ exprt function_call_expr::handle_complex() const
           auto value_opt = extract_string_from_symbol(sym);
           if (value_opt)
           {
-            double real = 0.0, imag = 0.0;
-            if (!complex_utils::parse_complex_string(*value_opt, real, imag))
+            exprt real_expr, imag_expr;
+            if (!complex_utils::parse_complex_string(
+                  *value_opt, real_expr, imag_expr))
               return raise_value_error("complex() arg is a malformed string");
-            return make_complex(
-              from_double(real, double_type()),
-              from_double(imag, double_type()));
+            return make_complex(real_expr, imag_expr);
           }
         }
       }

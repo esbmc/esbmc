@@ -24,6 +24,21 @@ bool parse_complex_string(
   double &imag_out);
 
 /**
+ * Parses a Python complex literal string into (real, imag) exprt constants
+ * using convert_float_literal, ensuring bit-exact consistency with constants
+ * produced from Python AST float literals (same cformat and binary value).
+ *
+ * @param raw       Input string (may include whitespace and parentheses).
+ * @param real_out  Output real part as a constant_exprt.
+ * @param imag_out  Output imaginary part as a constant_exprt.
+ * @return true on success, false if the string is malformed.
+ */
+bool parse_complex_string(
+  const std::string &raw,
+  exprt &real_out,
+  exprt &imag_out);
+
+/**
  * Generates a TypeError expression for math functions that reject
  * complex arguments: "must be real number, not complex".
  */
