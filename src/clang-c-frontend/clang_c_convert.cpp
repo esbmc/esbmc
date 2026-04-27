@@ -2521,10 +2521,10 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
         if (get_expr(*runtime_branch, new_expr))
           return true;
         convert_expression_to_code(new_expr);
-       }
-       else
-         new_expr = code_skipt();
-       break;
+      }
+      else
+        new_expr = code_skipt();
+      break;
     }
 
     const clang::Stmt *cond_expr = ifstmt.getConditionVariableDeclStmt();
