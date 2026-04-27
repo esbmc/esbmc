@@ -1,0 +1,4 @@
+CORE
+main.c
+--overflow-check --32
+^VERIFICATION SUCCESSFUL$

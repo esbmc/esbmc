@@ -5,13 +5,11 @@ weight: 2
 
 ## Prerequisites
 
-ESBMC-Python requires the following Python packages to be installed before running verification:
+ESBMC-Python requires Python 3.10 or later and the `ast2json` package:
 
 ```bash
 pip install ast2json
 ```
-
-Python 3.8 or later is recommended.
 
 ## Basic Invocation
 
@@ -32,9 +30,11 @@ esbmc main.py --unwind 10
 | Flag | Description |
 |---|---|
 | `--unwind N` | Set the global loop unwind bound to N iterations |
+| `--incremental-bmc` | Increase the unwind bound incrementally until a bug is found or the bound is reached |
 | `--multi-property` | Continue verification after the first failure, reporting all violated properties |
 | `--strict-types` | Enable strict type checking for function arguments at verification time |
-| `--generate-pytest-testcase` | Generate pytest test cases from counterexamples (see [Pytest Test Generation](./PYTEST_TESTGEN)) |
+| `--branch-coverage` | Instrument branch-coverage properties (useful with `--generate-pytest-testcase`) |
+| `--generate-pytest-testcase` | Generate pytest test cases from counterexamples (see [Pytest Test Generation](./pytest-testgen)) |
 
 ## Writing Verification Harnesses
 

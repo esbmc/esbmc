@@ -190,7 +190,9 @@ private:
 public:
     // Constructors
     unordered_map() : size_(0) {}
-    
+
+    ~unordered_map() { size_ = 0; }
+
     explicit unordered_map(size_type /*bucket_count*/) : size_(0) {}
     
     // Iterator range constructor

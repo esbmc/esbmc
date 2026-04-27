@@ -273,6 +273,10 @@ bool clang_cpp_convertert::get_type(
 
     typet class_type;
 #if CLANG_VERSION_MAJOR >= 22
+    // Member-pointer qualifier is always a class type; assert before the
+    // (asserting) getAsType() call so a violation surfaces here.
+    assert(
+      mpt.getQualifier().getKind() == clang::NestedNameSpecifier::Kind::Type);
     if (get_type(*mpt.getQualifier().getAsType(), class_type))
       return true;
 #elif CLANG_VERSION_MAJOR >= 21
@@ -314,13 +318,13 @@ bool clang_cpp_convertert::get_type(
     break;
   }
 
-#if CLANG_VERSION_MAJOR >= 14 && CLANG_VERSION_MAJOR < 22
+#if CLANG_VERSION_MAJOR >= 14
   case clang::Type::Using:
   {
     const clang::UsingType &ut =
       static_cast<const clang::UsingType &>(the_type);
 
-    if (get_type(ut.getUnderlyingType(), new_type))
+    if (get_type(ut.desugar(), new_type))
       return true;
 
     break;
@@ -1350,7 +1354,6 @@ bool clang_cpp_convertert::get_constructor_call(
   else
   {
     exprt this_object = exprt("new_object");
-    this_object.set("#lvalue", true);
     this_object.type() = type;
 
     /* first parameter is address to the object to be constructed */
@@ -1899,7 +1902,6 @@ bool clang_cpp_convertert::get_decl_ref(
     if (is_lvalue_or_rvalue_reference(new_expr.type()) && should_dereference)
     {
       new_expr = dereference_exprt(new_expr, new_expr.type());
-      new_expr.set("#lvalue", true);
       new_expr.set("#implicit", true);
     }
 
@@ -1926,7 +1928,6 @@ bool clang_cpp_convertert::get_decl_ref(
 
     new_expr = exprt("symbol", type);
     new_expr.identifier(id);
-    new_expr.cmt_lvalue(true);
     new_expr.name(name);
 
     break;
@@ -1940,7 +1941,6 @@ bool clang_cpp_convertert::get_decl_ref(
     if (is_lvalue_or_rvalue_reference(new_expr.type()) && should_dereference)
     {
       new_expr = dereference_exprt(new_expr, new_expr.type());
-      new_expr.set("#lvalue", true);
       new_expr.set("#implicit", true);
     }
 
@@ -2024,19 +2024,14 @@ bool clang_cpp_convertert::annotate_class_method(
   exprt &new_expr)
 {
   code_typet &component_type = to_code_type(new_expr.type());
-/*
+  /*
    * The order of annotations matters.
    */
-// annotate parent
-#if CLANG_VERSION_MAJOR >= 22
-  std::string parent_class_name = getFullyQualifiedName(
-    ASTContext->getCanonicalTagType(cxxmdd.getParent()), *ASTContext);
-#else
-  std::string parent_class_name = getFullyQualifiedName(
-    ASTContext->getTagDeclType(cxxmdd.getParent()), *ASTContext);
-#endif
-
-  std::string parent_class_id = tag_prefix + parent_class_name;
+  // annotate parent — derive the id via get_decl_name so it matches the
+  // record's symbol id exactly (Clang 22+ prepends the kind name; older
+  // versions don't).
+  std::string parent_class_name, parent_class_id;
+  get_decl_name(*cxxmdd.getParent(), parent_class_name, parent_class_id);
   component_type.set("#member_name", parent_class_id);
 
   // annotate ctor and dtor

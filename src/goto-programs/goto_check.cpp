@@ -876,20 +876,22 @@ void goto_checkt::bounds_check(
 
   index2t ind = to_index2t(expr);
 
-  // Don't bounds check the initial index of argv in the "main" function; it's
-  // always correct, and just adds needless claims. In the past a "no bounds
-  // check" attribute in old irep handled this.
-  if (
-    is_symbol2t(ind.source_value) &&
-    to_symbol2t(ind.source_value).thename == "argv'" &&
-    is_symbol2t(ind.index) && to_symbol2t(ind.index).thename == "argc'")
-    return;
-
-  if (
-    is_symbol2t(ind.source_value) &&
-    to_symbol2t(ind.source_value).thename == "envp'" &&
-    is_symbol2t(ind.index) && to_symbol2t(ind.index).thename == "envp_size'")
-    return;
+  // Don't bounds check accesses into ESBMC's own main-arg backing symbols.
+  // argv' / envp' and the per-argv string backings are only indexed by the
+  // init code in clang_c_main, which bounds every index via assumes (and
+  // wraps conditional writes with an `ai < argc` guard).  User code touches
+  // argv/envp through pointer parameters, which take the pointer path below.
+  // These claims are therefore redundant — they survive slicing (slicing
+  // keeps assertions) and show up as VC overhead on benchmarks that never
+  // dereference argv.
+  if (is_symbol2t(ind.source_value))
+  {
+    const std::string name = to_symbol2t(ind.source_value).thename.as_string();
+    if (
+      name == "argv'" || name == "envp'" ||
+      name.rfind("__ESBMC_argv_str_", 0) == 0)
+      return;
+  }
 
   const type2tc &t = ns.follow(ind.source_value->type);
   if (is_pointer_type(t))

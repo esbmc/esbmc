@@ -1,4 +1,4 @@
-CORE
+THOROUGH
 main.c
 --ir-ieee --z3 --smt-formula-too
 \(declare-fun \|smt_conv::ra_lo_aw::[0-9]+\| \(\) Real\)

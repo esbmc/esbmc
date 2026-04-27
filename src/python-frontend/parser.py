@@ -18,6 +18,7 @@ import json
 import os
 import glob
 import base64
+import tempfile
 from preprocessor import Preprocessor
 
 _AST_BUILTIN_PURE = (int, float, bool)
@@ -63,7 +64,10 @@ def run_mypy_strict(filename):
     except ImportError:
         return 0, ""
 
-    stdout, stderr, exit_status = mypy_api.run(["--strict", filename])
+    with tempfile.TemporaryDirectory(prefix="esbmc-mypy-cache-") as cache_dir:
+        stdout, stderr, exit_status = mypy_api.run(
+            ["--strict", "--cache-dir", cache_dir, filename]
+        )
     output = stdout
     if stderr:
         output += stderr
@@ -84,6 +88,7 @@ def is_imported_model(module_name):
         "esbmc",
         "decimal",
         "collections",
+        "dataclasses",
         "typing",
         "time",
     ]

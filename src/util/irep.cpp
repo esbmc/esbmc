@@ -533,7 +533,6 @@ const irep_idt irept::a_is_extern = dstring("is_extern");
 const irep_idt irept::a_is_macro = dstring("is_macro");
 const irep_idt irept::a_is_thread_local = dstring("is_thread_local");
 const irep_idt irept::a_is_type = dstring("is_type");
-const irep_idt irept::a_cmt_lvalue = dstring("#lvalue");
 const irep_idt irept::a_lvalue = dstring("lvalue");
 const irep_idt irept::a_reference = dstring("#reference");
 const irep_idt irept::a_restricted = dstring("#restricted");

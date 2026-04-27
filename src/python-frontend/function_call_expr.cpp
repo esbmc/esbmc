@@ -2984,37 +2984,63 @@ exprt function_call_expr::handle_dict_method() const
 {
   const std::string &method_name = function_id_.get_function();
 
-  // Resolve the dict symbol for all dict methods
+  // Resolve the dict to a symbol.
+  // Named receivers look up by name;
+  // inline literals (e.g. `{"a":1}.get(...)`) have none,
+  // so spill into a tmp first.
+  exprt dict_expr;
   std::string dict_name = get_object_name();
-  symbol_id dict_symbol_id = converter_.create_symbol_id();
-  dict_symbol_id.set_object(dict_name);
-  const symbolt *dict_symbol =
-    converter_.find_symbol(dict_symbol_id.to_string());
-
-  if (!dict_symbol)
-    throw std::runtime_error("Dictionary variable not found: " + dict_name);
+  if (!dict_name.empty())
+  {
+    symbol_id dict_symbol_id = converter_.create_symbol_id();
+    dict_symbol_id.set_object(dict_name);
+    const symbolt *dict_symbol =
+      converter_.find_symbol(dict_symbol_id.to_string());
+    if (!dict_symbol)
+      throw std::runtime_error("Dictionary variable not found: " + dict_name);
+    dict_expr = symbol_expr(*dict_symbol);
+  }
+  else
+  {
+    exprt literal = converter_.get_expr(call_["func"]["value"]);
+    symbolt &tmp = converter_.create_tmp_symbol(
+      call_, "$dict_lit$", literal.type(), exprt());
+    converter_.add_instruction(code_declt(symbol_expr(tmp)));
+    converter_.add_instruction(code_assignt(symbol_expr(tmp), literal));
+    dict_expr = symbol_expr(tmp);
+  }
 
   if (method_name == "get")
-    return converter_.get_dict_handler()->handle_dict_get(
-      symbol_expr(*dict_symbol), call_);
+    return converter_.get_dict_handler()->handle_dict_get(dict_expr, call_);
 
   if (method_name == "setdefault")
     return converter_.get_dict_handler()->handle_dict_setdefault(
-      symbol_expr(*dict_symbol), call_);
+      dict_expr, call_);
 
   if (method_name == "update")
-    return converter_.get_dict_handler()->handle_dict_update(
-      symbol_expr(*dict_symbol), call_);
+    return converter_.get_dict_handler()->handle_dict_update(dict_expr, call_);
 
   if (method_name == "pop")
-    return converter_.get_dict_handler()->handle_dict_pop(
-      symbol_expr(*dict_symbol), call_);
+    return converter_.get_dict_handler()->handle_dict_pop(dict_expr, call_);
 
   if (method_name == "popitem")
-    return converter_.get_dict_handler()->handle_dict_popitem(
-      symbol_expr(*dict_symbol), call_);
+    return converter_.get_dict_handler()->handle_dict_popitem(dict_expr, call_);
 
   throw std::runtime_error("Unsupported dict method: " + method_name);
+}
+
+bool function_call_expr::is_dict_class_method_call() const
+{
+  if (call_["func"]["_type"] != "Attribute")
+    return false;
+  const auto &value = call_["func"]["value"];
+  if (!value.contains("_type") || value["_type"] != "Name")
+    return false;
+  if (value["id"] != "dict")
+    return false;
+
+  const std::string &method_name = function_id_.get_function();
+  return method_name == "fromkeys";
 }
 
 exprt function_call_expr::handle_list_copy() const
@@ -3686,6 +3712,14 @@ function_call_expr::get_dispatch_table()
     {[this]() { return is_list_method_call(); },
      [this]() { return handle_list_method(); },
      "list methods"},
+
+    // Dict class methods (dict.fromkeys), matched before instance-method dispatch
+    // The receiver is the class name, not a dict symbol.
+    {[this]() { return is_dict_class_method_call(); },
+     [this]() {
+       return converter_.get_dict_handler()->handle_dict_fromkeys(call_);
+     },
+     "dict class methods"},
 
     // Dict methods
     {[this]() { return is_dict_method_call(); },
@@ -4576,6 +4610,32 @@ exprt function_call_expr::handle_general_function_call()
 
   if (func_symbol == nullptr)
   {
+    // Dataclass synthesized constructors may call Class.__post_init__(...) before
+    // the class method symbol is fully registered. Preserve class scope and emit
+    // a forward reference call instead of falling back to global scope.
+    if (
+      function_type_ == FunctionType::ClassMethod &&
+      function_id_.get_function() == "__post_init__" &&
+      !function_id_.get_class().empty())
+    {
+      locationt location = converter_.get_location_from_decl(call_);
+      code_function_callt call;
+      call.location() = location;
+      call.function() = symbol_exprt(func_symbol_id, code_typet());
+      call.type() = empty_typet();
+
+      for (const auto &arg_node : call_["args"])
+      {
+        exprt arg = converter_.get_expr(arg_node);
+        if (arg.type().is_array())
+          call.arguments().push_back(address_of_exprt(arg));
+        else
+          call.arguments().push_back(arg);
+      }
+
+      return call;
+    }
+
     if (
       function_type_ == FunctionType::Constructor ||
       function_type_ == FunctionType::InstanceMethod)
@@ -4720,8 +4780,12 @@ exprt function_call_expr::handle_general_function_call()
           call.type() = empty_typet();
 
           if (obj_symbol)
+          {
+            exprt receiver = symbol_expr(*obj_symbol);
             call.arguments().push_back(
-              gen_address_of(symbol_expr(*obj_symbol)));
+              receiver.type().is_pointer() ? receiver
+                                           : gen_address_of(receiver));
+          }
 
           for (const auto &arg_node : call_["args"])
           {
@@ -4888,6 +4952,16 @@ exprt function_call_expr::handle_general_function_call()
   const typet &return_type = to_code_type(func_symbol->type).return_type();
   call.type() = return_type;
 
+  auto bind_instance_receiver = [&](exprt receiver) -> exprt {
+    return receiver.type().is_pointer() ? receiver : gen_address_of(receiver);
+  };
+
+  auto bind_instance_receiver_symbol =
+    [&](const symbolt &receiver_symbol) -> exprt {
+    exprt receiver = symbol_expr(receiver_symbol);
+    return bind_instance_receiver(receiver);
+  };
+
   // Determine parameter offset for Optional wrapping logic
   size_t param_offset = 0;
 
@@ -4913,7 +4987,7 @@ exprt function_call_expr::handle_general_function_call()
     if (is_super_init)
     {
       if (obj_symbol)
-        call.arguments().push_back(symbol_expr(*obj_symbol));
+        call.arguments().push_back(bind_instance_receiver_symbol(*obj_symbol));
       param_offset = 1;
     }
     // Self is the LHS
@@ -4936,7 +5010,7 @@ exprt function_call_expr::handle_general_function_call()
   {
     if (obj_symbol)
     {
-      call.arguments().push_back(gen_address_of(symbol_expr(*obj_symbol)));
+      call.arguments().push_back(bind_instance_receiver_symbol(*obj_symbol));
     }
     else
     {
@@ -4969,7 +5043,7 @@ exprt function_call_expr::handle_general_function_call()
           exprt ctor_result = converter_.get_expr(func_value);
           converter_.current_lhs = saved_lhs;
 
-          call.arguments().push_back(gen_address_of(symbol_expr(tmp)));
+          call.arguments().push_back(bind_instance_receiver(symbol_expr(tmp)));
         }
         else if (func_value["_type"] == "Call")
         {
@@ -4998,12 +5072,13 @@ exprt function_call_expr::handle_general_function_call()
               inner_call.location() = location;
               converter_.add_instruction(inner_call);
             }
-            call.arguments().push_back(gen_address_of(symbol_expr(tmp)));
+            call.arguments().push_back(
+              bind_instance_receiver(symbol_expr(tmp)));
           }
           else
           {
             exprt obj_expr = converter_.get_expr(func_value);
-            call.arguments().push_back(gen_address_of(obj_expr));
+            call.arguments().push_back(bind_instance_receiver(obj_expr));
           }
         }
         else
@@ -5011,7 +5086,7 @@ exprt function_call_expr::handle_general_function_call()
           // Member/variable receiver (e.g., self.builder.build()): use the
           // actual receiver expression instead of a nondet temporary.
           exprt obj_expr = converter_.get_expr(func_value);
-          call.arguments().push_back(gen_address_of(obj_expr));
+          call.arguments().push_back(bind_instance_receiver(obj_expr));
         }
       }
       else

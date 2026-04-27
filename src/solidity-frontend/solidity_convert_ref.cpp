@@ -27,7 +27,6 @@ void solidity_convertert::get_symbol_decl_ref(
   {
     new_expr = exprt("symbol", t);
     new_expr.identifier(sym_id);
-    new_expr.cmt_lvalue(true);
     new_expr.name(sym_name);
     new_expr.pretty_name(sym_name);
   }
@@ -79,7 +78,6 @@ bool solidity_convertert::get_var_decl_ref(
       // variable with no value
       new_expr = exprt("symbol", type);
       new_expr.identifier(id);
-      new_expr.cmt_lvalue(true);
       new_expr.name(name);
       new_expr.pretty_name(name);
     }
@@ -159,7 +157,6 @@ bool solidity_convertert::get_func_decl_ref(
   //! function with no value i.e function body
   new_expr = exprt("symbol", type);
   new_expr.identifier(id);
-  new_expr.cmt_lvalue(true);
   new_expr.name(name);
   return false;
 }
@@ -316,7 +313,6 @@ bool solidity_convertert::get_esbmc_builtin_ref(
 
     new_expr = exprt("symbol", type);
     new_expr.identifier(id);
-    new_expr.cmt_lvalue(true);
     new_expr.name(name);
 
     locationt loc;

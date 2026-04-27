@@ -237,6 +237,38 @@ std::string ctest_generator::format_c_value(const expr2tc &value) const
   return "0"; // Fallback
 }
 
+std::string ctest_generator::fingerprint(const std::vector<test_variable> &tc)
+{
+  // The generated file groups values by verifier_type (std::map, sorted by
+  // key); only the per-type value order is taken from the insertion order in
+  // `tc`.  Two test cases whose cross-type interleaving differs but whose
+  // per-type value sequences coincide produce byte-identical output files
+  // and must be treated as duplicates.  Branch-coverage rarely hits this
+  // because all claims share the same SSA traversal; condition-coverage
+  // does, because per-claim SSA slices can reorder cross-type collection.
+  //
+  // Build the fingerprint from the same structure used to write the file,
+  // guaranteeing: fingerprint(a) == fingerprint(b)  <=>  file(a) == file(b).
+  std::map<std::string, std::vector<std::string>> type_values;
+  for (const auto &v : tc)
+    type_values[v.verifier_type].push_back(v.value);
+
+  std::string fp;
+  for (const auto &[verifier_type, values] : type_values)
+  {
+    fp += verifier_type;
+    fp += ':';
+    for (size_t i = 0; i < values.size(); ++i)
+    {
+      if (i > 0)
+        fp += ',';
+      fp += values[i];
+    }
+    fp += ';';
+  }
+  return fp;
+}
+
 void ctest_generator::clear()
 {
   std::lock_guard<std::mutex> lock(data_mutex);
@@ -285,7 +317,10 @@ void ctest_generator::collect(
     if (source_file.empty())
       source_file = config.options.get_option("input-file");
 
-    test_cases.push_back(current_test);
+    // Keep the original collection path intact: every counterexample
+    // that reaches collect() is stored.
+    // Deduplication happens in generate() just before files are written.
+    test_cases.push_back(std::move(current_test));
   }
 }
 
@@ -485,24 +520,14 @@ void ctest_generator::generate() const
   bool cpp_mode = is_cpp_source(source_file);
   std::string test_ext = cpp_mode ? ".cpp" : ".c";
 
-  // Deduplicate detect
-  // two test cases are identical when their (type, value)
-  // sequences are equal.
-  // Build a fingerprint string and skip duplicates.
-  auto fingerprint = [](const std::vector<test_variable> &tc) {
-    std::string fp;
-    for (const auto &v : tc)
-    {
-      fp += v.verifier_type;
-      fp += '=';
-      fp += v.value;
-      fp += ';';
-    }
-    return fp;
-  };
-
+  // Absolute deduplication at the output stage.
+  // test_cases has every counterexample collect() received;
+  // regardless of which coverage command produced them (branch, condition, assertion),
+  // two cases with the same (type, value) sequence
+  // compile to byte identical test files, so keep only the first occurrence.
   std::unordered_set<std::string> seen;
   std::vector<size_t> unique_indices;
+  unique_indices.reserve(test_cases.size());
   for (size_t j = 0; j < test_cases.size(); ++j)
   {
     if (seen.insert(fingerprint(test_cases[j])).second)

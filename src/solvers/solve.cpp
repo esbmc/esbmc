@@ -48,24 +48,21 @@ static const std::unordered_map<std::string, solver_creator *> esbmc_solvers = {
 #endif
 };
 
+// Order encodes default priority: first compiled-in entry (excluding smtlib)
+// is selected when no solver is explicitly requested.
 static const std::string all_solvers[] = {
   "smtlib",
+  "bitwuzla",
+  "boolector",
   "z3",
   "minisat",
-  "boolector",
   "cvc4",
   "cvc5",
   "mathsat",
-  "yices",
-  "bitwuzla"};
+  "yices"};
 
 static std::string pick_default_solver()
 {
-#ifdef BOOLECTOR
-  log_status("No solver specified; defaulting to Boolector");
-  return "boolector";
-#else
-  // Pick whatever's first in the list except for the smtlib solver
   for (const std::string &name : all_solvers)
   {
     if (name == "smtlib" || !esbmc_solvers.count(name))
@@ -77,7 +74,6 @@ static std::string pick_default_solver()
     "No solver backends built into ESBMC; please either build "
     "some in, or explicitly configure the smtlib backend");
   abort();
-#endif
 }
 
 static solver_creator &

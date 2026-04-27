@@ -243,11 +243,13 @@ void value_sett::get_value_set_rec(
 
 #ifndef NDEBUG
     const type2tc &source_type = memb.source_value->type;
-    assert(is_struct_type(source_type) || is_union_type(source_type));
+    assert(
+      is_struct_type(source_type) || is_union_type(source_type) ||
+      is_complex_type(source_type));
 #endif
 
     irep_idt single_source;
-    if (is_struct_type(memb.source_value))
+    if (is_struct_type(memb.source_value) || is_complex_type(memb.source_value))
       single_source = memb.member;
     else if (is_constant_union2t(memb.source_value))
       single_source = to_constant_union2t(memb.source_value).init_field;

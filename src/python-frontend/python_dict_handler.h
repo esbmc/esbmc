@@ -299,7 +299,7 @@ public:
    *
    * Handles three cases:
    * 1. LHS is dict subscript, RHS is primitive
-   * 2. RHS is dict subscript, LHS is primitive  
+   * 2. RHS is dict subscript, LHS is primitive
    * 3. Both are dict subscripts
    *
    * @param left Left JSON AST node
@@ -356,7 +356,7 @@ public:
 
   /**
    * @brief Check and handle dictionary subscript assignment
-   * 
+   *
    * Checks if the target is a dictionary subscript and handles the assignment
    * @param converter Reference to python_converter
    * @param ast_node Assignment AST node
@@ -372,7 +372,7 @@ public:
 
   /**
    * @brief Check and handle dictionary literal assignment
-   * 
+   *
    * @param converter Reference to python_converter
    * @param ast_node Assignment AST node
    * @param lhs Left-hand side expression
@@ -385,7 +385,7 @@ public:
 
   /**
    * @brief Check and handle unannotated dictionary literal
-   * 
+   *
    * @param converter Reference to python_converter
    * @param ast_node Assignment AST node
    * @param target Target node
@@ -470,6 +470,19 @@ public:
    */
   exprt
   handle_dict_update(const exprt &dict_expr, const nlohmann::json &call_node);
+
+  /**
+   * @brief Handles dict.fromkeys() class method calls.
+   *
+   * Implements dict.fromkeys(iterable, value=None):
+   * - Creates a new dict whose keys come from iterable and whose values
+   *   all share the same given value (None by default).
+   * - Only supports iterable passed as a list literal (e.g. dict.fromkeys([1, 2, 3])).
+   *
+   * @param call_node The function call AST node.
+   * @return Expression for the resulting dict symbol.
+   */
+  exprt handle_dict_fromkeys(const nlohmann::json &call_node);
 
   /**
    * @brief Compares two dictionaries for equality or inequality
@@ -576,10 +589,10 @@ private:
 
   /**
    * @brief Generate a unique dictionary name based on source location
-   * 
+   *
    * Creates deterministic names using file, line, and column information.
    * Falls back to JSON node hash if location is unavailable.
-   * 
+   *
    * @param element The JSON AST node for the dictionary
    * @param location The source location
    * @return A unique dictionary identifier
