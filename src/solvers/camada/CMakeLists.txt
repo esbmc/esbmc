@@ -38,6 +38,35 @@ macro(camada_import_dependency_targets deps_install_dir)
   endif()
 endmacro()
 
+function(camada_prefer_static_link_interface target)
+  if(NOT TARGET ${target})
+    return()
+  endif()
+
+  get_target_property(libs ${target} INTERFACE_LINK_LIBRARIES)
+  if(NOT libs)
+    return()
+  endif()
+
+  set(static_libs)
+  foreach(lib IN LISTS libs)
+    set(static_lib "${lib}")
+    if(IS_ABSOLUTE "${lib}" AND
+       "${lib}" MATCHES "\\${CMAKE_SHARED_LIBRARY_SUFFIX}(\\.[0-9]+)*$")
+      get_filename_component(lib_dir "${lib}" DIRECTORY)
+      get_filename_component(lib_name "${lib}" NAME_WE)
+      set(candidate "${lib_dir}/${lib_name}${CMAKE_STATIC_LIBRARY_SUFFIX}")
+      if(EXISTS "${candidate}")
+        set(static_lib "${candidate}")
+      endif()
+    endif()
+    list(APPEND static_libs "${static_lib}")
+  endforeach()
+
+  set_target_properties(${target} PROPERTIES
+    INTERFACE_LINK_LIBRARIES "${static_libs}")
+endfunction()
+
 if(DEFINED CAMADA_DOWNLOAD_DIR)
   camada_import_dependency_targets("${CAMADA_DOWNLOAD_DIR}/build/deps/install")
 endif()
@@ -86,6 +115,14 @@ if(NOT camada_FOUND AND DOWNLOAD_DEPENDENCIES)
     PATH_SUFFIXES lib/cmake/camada share/cmake/camada cmake
     NO_DEFAULT_PATH)
 
+  if(BUILD_STATIC AND CAMADA_CONFIG_DIR AND
+     NOT EXISTS "${CAMADA_INSTALL_DIR}/lib/libcamada.a")
+    message(STATUS "Rebuilding Camada as a static library")
+    file(REMOVE_RECURSE "${CAMADA_BUILD_DIR}" "${CAMADA_INSTALL_DIR}")
+    unset(CAMADA_CONFIG_DIR CACHE)
+    set(CAMADA_CONFIG_DIR)
+  endif()
+
   if(NOT CAMADA_CONFIG_DIR)
     message(STATUS "Extracting Camada")
     file(REMOVE_RECURSE "${CAMADA_SOURCE_DIR}")
@@ -107,6 +144,7 @@ if(NOT camada_FOUND AND DOWNLOAD_DEPENDENCIES)
         -B "${CAMADA_BUILD_DIR}"
         -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
         -DCMAKE_INSTALL_PREFIX=${CAMADA_INSTALL_DIR}
+        -DBUILD_SHARED_LIBS=OFF
         -DCAMADA_DOWNLOAD_DEPENDENCIES=ALL
         -DCAMADA_ENABLE_REGRESSION=OFF
         -DCAMADA_SOLVER_BITWUZLA_ENABLE=ON
@@ -162,6 +200,10 @@ if(NOT camada_FOUND)
   find_package(camada CONFIG REQUIRED
     HINTS ${CAMADA_DIR}
     PATH_SUFFIXES lib/cmake/camada)
+endif()
+
+if(BUILD_STATIC)
+  camada_prefer_static_link_interface(camada::camada)
 endif()
 
 foreach(feature CAMADA_HAVE_Z3 CAMADA_HAVE_CVC5 CAMADA_HAVE_MATHSAT CAMADA_HAVE_YICES CAMADA_HAVE_BITWUZLA)
