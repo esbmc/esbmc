@@ -69,13 +69,8 @@ else()
   set(DEFAULT_CHERI_LLVM_NAME "clang-cheri-17")
 endif()
 
-if(APPLE)
-  set(DEFAULT_CAMADA_URL "https://github.com/mikhailramalho/camada/releases/download/v0.6/camada-macos-arm64.tar.gz")
-  set(DEFAULT_CAMADA_NAME "camada-macos-arm64.tar.gz")
-else()
-  set(DEFAULT_CAMADA_URL "https://github.com/mikhailramalho/camada/releases/download/v0.6/camada-linux-x64.tar.gz")
-  set(DEFAULT_CAMADA_NAME "camada-linux-x64.tar.gz")
-endif()
+set(DEFAULT_CAMADA_URL "https://github.com/mikhailramalho/camada/archive/refs/tags/v0.6.tar.gz")
+set(DEFAULT_CAMADA_NAME "camada-v0.6.tar.gz")
 
 set(ESBMC_LLVM_URL ${DEFAULT_LLVM_URL} CACHE STRING "URL to download prebuilt LLVM")
 set(ESBMC_LLVM_NAME ${DEFAULT_LLVM_NAME} CACHE STRING "Name of the extracted directory of LLVM")
@@ -83,8 +78,8 @@ set(ESBMC_LLVM_NAME ${DEFAULT_LLVM_NAME} CACHE STRING "Name of the extracted dir
 set(ESBMC_CHERI_LLVM_URL ${DEFAULT_CHERI_LLVM_URL} CACHE STRING "URL to download prebuilt CHERI LLVM")
 set(ESBMC_CHERI_LLVM_NAME ${DEFAULT_CHERI_LLVM_NAME} CACHE STRING "Name of the extracted directory of CHERI LLVM")
 
-set(ESBMC_CAMADA_URL ${DEFAULT_CAMADA_URL} CACHE STRING "URL to download prebuilt Camada")
-set(ESBMC_CAMADA_NAME ${DEFAULT_CAMADA_NAME} CACHE STRING "Name of the downloaded Camada archive")
+set(ESBMC_CAMADA_URL ${DEFAULT_CAMADA_URL} CACHE STRING "URL to download Camada sources")
+set(ESBMC_CAMADA_NAME ${DEFAULT_CAMADA_NAME} CACHE STRING "Name of the downloaded Camada source archive")
 
 #############################
 # CMake extra Vars

@@ -8,14 +8,50 @@ if(NOT CAMADA_BACKEND_ENABLED)
 endif()
 
 set(CAMADA_DIR "$ENV{HOME}/camada" CACHE PATH "Camada installation prefix")
+set(CAMADA_EXTRA_LIBRARY_DIRS)
+
+macro(camada_import_dependency_targets deps_install_dir)
+  if(EXISTS "${deps_install_dir}")
+    list(APPEND CAMADA_EXTRA_LIBRARY_DIRS
+      "${deps_install_dir}/lib"
+      "${deps_install_dir}/bin")
+    if(CMAKE_LIBRARY_ARCHITECTURE)
+      list(APPEND CAMADA_EXTRA_LIBRARY_DIRS
+        "${deps_install_dir}/lib/${CMAKE_LIBRARY_ARCHITECTURE}")
+    endif()
+    list(PREPEND CMAKE_PREFIX_PATH "${deps_install_dir}")
+
+    if(EXISTS "${deps_install_dir}/lib/cmake/cvc5/cvc5Config.cmake" AND NOT TARGET cvc5::cvc5)
+      find_package(cvc5 CONFIG REQUIRED
+        PATHS "${deps_install_dir}"
+        NO_DEFAULT_PATH)
+    endif()
+
+    if(EXISTS "${deps_install_dir}/lib/cmake/STP/STPConfig.cmake" AND NOT TARGET stp)
+      find_package(STP CONFIG REQUIRED
+        PATHS "${deps_install_dir}"
+        NO_DEFAULT_PATH)
+    endif()
+  endif()
+endmacro()
+
+if(DEFINED CAMADA_DOWNLOAD_DIR)
+  camada_import_dependency_targets("${CAMADA_DOWNLOAD_DIR}/build/deps/install")
+endif()
 
 find_package(camada CONFIG QUIET
   HINTS ${CAMADA_DIR}
   PATH_SUFFIXES lib/cmake/camada)
 
 if(NOT camada_FOUND AND DOWNLOAD_DEPENDENCIES)
-  set(CAMADA_DOWNLOAD_DIR "${CMAKE_BINARY_DIR}/camada" CACHE PATH "Directory used to extract downloaded Camada")
+  set(CAMADA_DOWNLOAD_DIR "${CMAKE_BINARY_DIR}/camada" CACHE PATH "Directory used to build downloaded Camada")
   set(CAMADA_ARCHIVE "${CMAKE_BINARY_DIR}/${ESBMC_CAMADA_NAME}")
+  set(CAMADA_SOURCE_DIR "${CAMADA_DOWNLOAD_DIR}/src")
+  set(CAMADA_BUILD_DIR "${CAMADA_DOWNLOAD_DIR}/build")
+  set(CAMADA_INSTALL_DIR "${CAMADA_DOWNLOAD_DIR}/install")
+  set(CAMADA_DEPS_INSTALL_DIR "${CAMADA_BUILD_DIR}/deps/install")
+  camada_import_dependency_targets("${CAMADA_DEPS_INSTALL_DIR}")
+  unset(CAMADA_CONFIG_DIR CACHE)
 
   if(EXISTS "${CAMADA_ARCHIVE}")
     file(SIZE "${CAMADA_ARCHIVE}" CAMADA_ARCHIVE_SIZE)
@@ -43,35 +79,80 @@ if(NOT camada_FOUND AND DOWNLOAD_DEPENDENCIES)
 
   find_path(CAMADA_CONFIG_DIR
     NAMES camadaConfig.cmake camada-config.cmake
-    HINTS "${CAMADA_DOWNLOAD_DIR}"
+    HINTS "${CAMADA_INSTALL_DIR}"
     PATH_SUFFIXES lib/cmake/camada share/cmake/camada cmake
     NO_DEFAULT_PATH)
 
   if(NOT CAMADA_CONFIG_DIR)
     message(STATUS "Extracting Camada")
-    file(REMOVE_RECURSE "${CAMADA_DOWNLOAD_DIR}")
-    file(MAKE_DIRECTORY "${CAMADA_DOWNLOAD_DIR}")
-    file(ARCHIVE_EXTRACT INPUT "${CAMADA_ARCHIVE}" DESTINATION "${CAMADA_DOWNLOAD_DIR}")
+    file(REMOVE_RECURSE "${CAMADA_SOURCE_DIR}")
+    file(MAKE_DIRECTORY "${CAMADA_SOURCE_DIR}")
+    file(ARCHIVE_EXTRACT INPUT "${CAMADA_ARCHIVE}" DESTINATION "${CAMADA_SOURCE_DIR}")
 
-    file(GLOB CAMADA_EXTRACTED_DIRS LIST_DIRECTORIES true "${CAMADA_DOWNLOAD_DIR}/*")
+    file(GLOB CAMADA_EXTRACTED_DIRS LIST_DIRECTORIES true "${CAMADA_SOURCE_DIR}/*")
+    list(LENGTH CAMADA_EXTRACTED_DIRS CAMADA_EXTRACTED_DIR_COUNT)
+    if(CAMADA_EXTRACTED_DIR_COUNT EQUAL 1)
+      list(GET CAMADA_EXTRACTED_DIRS 0 CAMADA_PROJECT_SOURCE_DIR)
+    else()
+      set(CAMADA_PROJECT_SOURCE_DIR "${CAMADA_SOURCE_DIR}")
+    endif()
+
+    message(STATUS "Configuring Camada")
+    execute_process(
+      COMMAND ${CMAKE_COMMAND}
+        -S "${CAMADA_PROJECT_SOURCE_DIR}"
+        -B "${CAMADA_BUILD_DIR}"
+        -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+        -DCMAKE_INSTALL_PREFIX=${CAMADA_INSTALL_DIR}
+        -DCAMADA_DOWNLOAD_DEPENDENCIES=ALL
+        -DCAMADA_ENABLE_REGRESSION=OFF
+        -DCAMADA_SOLVER_BITWUZLA_ENABLE=ON
+        -DCAMADA_SOLVER_CVC5_ENABLE=ON
+        -DCAMADA_SOLVER_MATHSAT_ENABLE=OFF
+        -DCAMADA_SOLVER_STP_ENABLE=OFF
+        -DCAMADA_SOLVER_YICES_ENABLE=OFF
+        -DCAMADA_SOLVER_Z3_ENABLE=ON
+      RESULT_VARIABLE CAMADA_CONFIGURE_RESULT)
+    if(NOT CAMADA_CONFIGURE_RESULT EQUAL 0)
+      message(FATAL_ERROR "Failed to configure Camada")
+    endif()
+
+    message(STATUS "Building Camada")
+    execute_process(
+      COMMAND ${CMAKE_COMMAND} --build "${CAMADA_BUILD_DIR}" --parallel 32
+      RESULT_VARIABLE CAMADA_BUILD_RESULT)
+    if(NOT CAMADA_BUILD_RESULT EQUAL 0)
+      message(FATAL_ERROR "Failed to build Camada")
+    endif()
+
+    message(STATUS "Installing Camada")
+    execute_process(
+      COMMAND ${CMAKE_COMMAND} --install "${CAMADA_BUILD_DIR}"
+      RESULT_VARIABLE CAMADA_INSTALL_RESULT)
+    if(NOT CAMADA_INSTALL_RESULT EQUAL 0)
+      message(FATAL_ERROR "Failed to install Camada")
+    endif()
+
     find_path(CAMADA_CONFIG_DIR
       NAMES camadaConfig.cmake camada-config.cmake
-      HINTS "${CAMADA_DOWNLOAD_DIR}" ${CAMADA_EXTRACTED_DIRS}
+      HINTS "${CAMADA_INSTALL_DIR}"
       PATH_SUFFIXES lib/cmake/camada share/cmake/camada cmake
       NO_DEFAULT_PATH)
   endif()
 
   if(NOT CAMADA_CONFIG_DIR)
-    message(FATAL_ERROR "Downloaded Camada archive does not contain camadaConfig.cmake")
+    message(FATAL_ERROR "Downloaded Camada build did not install camadaConfig.cmake")
   endif()
 
   unset(camada_DIR CACHE)
   set(camada_DIR "${CAMADA_CONFIG_DIR}" CACHE PATH "Path to camadaConfig.cmake" FORCE)
+  camada_import_dependency_targets("${CAMADA_DEPS_INSTALL_DIR}")
+
   find_package(camada CONFIG REQUIRED
     PATHS "${CAMADA_CONFIG_DIR}"
     NO_DEFAULT_PATH)
 
-  set(CAMADA_DIR "${CAMADA_DOWNLOAD_DIR}" CACHE PATH "Camada installation prefix" FORCE)
+  set(CAMADA_DIR "${CAMADA_INSTALL_DIR}" CACHE PATH "Camada installation prefix" FORCE)
 endif()
 
 if(NOT camada_FOUND)
@@ -90,6 +171,9 @@ add_library(solvercamada camada_conv.cpp)
 target_include_directories(solvercamada
   PRIVATE ${Boost_INCLUDE_DIRS}
   PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+if(CAMADA_EXTRA_LIBRARY_DIRS)
+  target_link_directories(solvercamada PUBLIC ${CAMADA_EXTRA_LIBRARY_DIRS})
+endif()
 target_link_libraries(solvercamada PUBLIC fmt::fmt camada::camada)
 
 target_link_libraries(solvers INTERFACE solvercamada)
