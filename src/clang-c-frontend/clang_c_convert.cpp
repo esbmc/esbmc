@@ -2513,9 +2513,8 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     // runtime-active branch only (or skip entirely).
     if (ifstmt.isConsteval())
     {
-      const clang::Stmt *runtime_branch = ifstmt.isNegatedConsteval()
-                                            ? ifstmt.getThen()
-                                            : ifstmt.getElse();
+      const clang::Stmt *runtime_branch =
+        ifstmt.isNegatedConsteval() ? ifstmt.getThen() : ifstmt.getElse();
 
       if (runtime_branch == nullptr)
       {
