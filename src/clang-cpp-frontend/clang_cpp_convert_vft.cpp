@@ -837,13 +837,10 @@ bool clang_cpp_convertert::build_dynamic_cast(
 
   // Walk up S's primary inheritance chain to find the class V that owns
   // the vptr (the most-derived class on the chain with a
-  // virtual_table::tag-V type symbol).
-  //
-  // TODO: a virtual base on the path is treated as "give up and fall
-  // back". The correct response is to emit a nondet result with a warn
-  // log so symbolic execution doesn't trust a wrong answer; the silent
-  // typecast we use today may produce confidently-wrong verifications
-  // for programs that mix dynamic_cast with virtual inheritance.
+  // virtual_table::tag-V type symbol). A virtual base on the path
+  // would require runtime offset adjustment via a virtual-base table
+  // we don't model, so refuse the cast loudly rather than silently
+  // typecast and risk confidently-wrong verifications.
   std::string vptr_class_id;
   for (const clang::CXXRecordDecl *cur = S; cur != nullptr;)
   {
@@ -859,8 +856,11 @@ bool clang_cpp_convertert::build_dynamic_cast(
     {
       if (spec.isVirtual())
       {
-        next = nullptr;
-        break;
+        log_error(
+          "dynamic_cast through virtual inheritance is not supported "
+          "(class `{}` has a virtual base)",
+          cur->getNameAsString());
+        abort();
       }
       if (const auto *bd = spec.getType()->getAsCXXRecordDecl())
       {
@@ -921,12 +921,31 @@ bool clang_cpp_convertert::build_dynamic_cast(
       }
       else
       {
-        // TODO: under multiple inheritance, S may sit at a non-zero offset
-        // inside D and the adjustment is D-dependent. The correct lowering
-        // gives each D its own arm with `(T*)((char*)src + off)`. Today we
-        // emit one flat `(T*) src` for every match — correct only when
-        // every matching D has S at offset 0 (single inheritance, the
-        // most common case in practice).
+        // For T* the result must point to the T sub-object inside D:
+        //   result = src + (off(T inside D) - off(S inside D))
+        // When both offsets are zero (single inheritance with S and T
+        // at the start of D) the structural typecast is exact.
+        // Otherwise a per-D byte adjustment is required, which we
+        // don't compute yet — refuse the cast instead of silently
+        // emitting a pointer into the wrong sub-object.
+        auto off_S = offset_of_subobject(*ASTContext, D, S);
+        auto off_T = offset_of_subobject(*ASTContext, D, T);
+        if (!off_S || !off_T)
+        {
+          log_error(
+            "dynamic_cast: virtual base between runtime type `{}` and "
+            "source/target is not supported",
+            D->getNameAsString());
+          abort();
+        }
+        if (*off_S != 0 || *off_T != 0)
+        {
+          log_error(
+            "dynamic_cast: multiple inheritance with non-zero base "
+            "offset in `{}` is not supported",
+            D->getNameAsString());
+          abort();
+        }
         exprt adj = src_pointer;
         gen_typecast(ns, adj, target_type);
         result = adj;
@@ -957,13 +976,18 @@ bool clang_cpp_convertert::build_dynamic_cast(
 
   // Reference form: throw std::bad_cast on no-match (the standard
   // requires this; the catch (bad_cast&) arm of any try/catch then
-  // fires). Falls back if std::bad_cast hasn't been declared (the
-  // program didn't include <typeinfo>).
+  // fires). Without <typeinfo> the bad_cast symbol isn't declared
+  // and we can't synthesise the throw — refuse the cast rather than
+  // silently swallow the failure mode the program may rely on.
   if (is_reference)
   {
     const symbolt *bad_cast_sym = ns.lookup("tag-std::bad_cast");
     if (!bad_cast_sym)
-      return fallback();
+    {
+      log_error(
+        "dynamic_cast<T&> requires std::bad_cast — include <typeinfo>");
+      abort();
+    }
 
     exprt match = arms.empty() ? exprt(false_exprt()) : vptr_match_any();
 
