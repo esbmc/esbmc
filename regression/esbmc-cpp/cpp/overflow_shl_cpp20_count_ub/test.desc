@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--std c++20 --overflow-check --ub-shift-check
+^VERIFICATION FAILED$
+^.*undefined behavior on shift operation.*$
