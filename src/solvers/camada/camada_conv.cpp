@@ -925,6 +925,12 @@ public:
 
   smt_astt mk_tuple_symbol(const std::string &name, smt_sortt s) override
   {
+    if(name == "NULL")
+      return null_ptr_ast;
+
+    if(name == "INVALID")
+      return invalid_ptr_ast;
+
     return mk_smt_symbol(name, s);
   }
 
