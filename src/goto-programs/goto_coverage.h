@@ -55,10 +55,8 @@ public:
 
   // condition cov
   void condition_coverage();
-  exprt
-  gen_not_eq_expr(const exprt &lhs, const exprt &rhs, const locationt &loc);
-  exprt gen_and_expr(const exprt &lhs, const exprt &rhs, const locationt &loc);
-  exprt gen_not_expr(const exprt &expr, const locationt &loc);
+  expr2tc gen_not_eq_expr(const expr2tc &lhs, const expr2tc &rhs);
+  expr2tc gen_and_expr(const expr2tc &lhs, const expr2tc &rhs);
   expr2tc gen_not_expr(const expr2tc &expr);
   int get_total_instrument() const;
   int get_total_assert_instance() const;
@@ -83,19 +81,19 @@ public:
 
 protected:
   // turn a OP b OP c into a list a, b, c
-  exprt handle_single_guard(exprt &expr, bool top_level);
+  expr2tc handle_single_guard(const expr2tc &expr, bool top_level);
   void handle_operands_guard(
-    exprt &expr,
+    const expr2tc &expr,
     goto_programt &goto_program,
     goto_programt::instructiont::targett &it);
   void add_cond_cov_assert(
-    const exprt &top_ptr,
-    const exprt &pre_cond,
+    const expr2tc &top_ptr,
+    const expr2tc &pre_cond,
     goto_programt &goto_program,
     goto_programt::instructiont::targett &it);
   void gen_cond_cov_assert(
-    exprt top_ptr,
-    exprt pre_cond,
+    const expr2tc &top_ptr,
+    const expr2tc &pre_cond,
     goto_programt &goto_program,
     goto_programt::instructiont::targett &it);
 

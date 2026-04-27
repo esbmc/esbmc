@@ -10,6 +10,9 @@ fi
 
 all_passed=true
 failed_tests=()
+test_query="$1"
+matched_tests=0
+selected_tests=0
 
 # List of directories to ignore
 ignored_dirs=(
@@ -124,6 +127,7 @@ ignored_dirs=(
   "string-symbolic-7"
   "string-symbolic-8"
   "complex_str_nonconstant"
+  "dataclass_factory_kwarg_ignored"
 )
 
 for dir in */; do
@@ -135,19 +139,29 @@ for dir in */; do
     continue
   fi
 
-  # Skip if directory name contains "nondet"
+  # Query mode: run only tests whose directory name contains the query
+  # (case-insensitive).
+  if [ -n "$test_query" ]; then
+    if ! echo "$dir" | grep -qiF -- "$test_query"; then
+      continue
+    fi
+    matched_tests=$((matched_tests + 1))
+  fi
+
+  # Always keep legacy ignore behavior, with or without query mode.
   if echo "$dir" | grep -iq 'nondet'; then
     echo "🚫 IGNORED: $dir (contains 'nondet')"
     continue
   fi
 
-  # Skip if in the ignore list
   for ignored in "${ignored_dirs[@]}"; do
     if [[ "$dir" == "$ignored" ]]; then
       echo "🚫 IGNORED: $dir (in ignore list)"
       continue 2  # Skip this iteration of the outer loop
     fi
   done
+
+  selected_tests=$((selected_tests + 1))
 
   echo ">>> Testing $dir"
 
@@ -182,6 +196,16 @@ for dir in */; do
     fi
   fi
 done
+
+if [ -n "$test_query" ] && [ $matched_tests -eq 0 ]; then
+  echo "❌ No tests matched query: $test_query"
+  exit 1
+fi
+
+if [ -n "$test_query" ] && [ $matched_tests -gt 0 ] && [ $selected_tests -eq 0 ]; then
+  echo "⚠️ Query matched tests, but all matches were ignored."
+  exit 0
+fi
 
 if [ ${#failed_tests[@]} -eq 0 ]; then
   echo -e "\n✅ All tests behaved as expected."

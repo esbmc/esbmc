@@ -226,6 +226,40 @@ struct is_arithmetic
 template <class T>
 inline constexpr bool is_arithmetic_v = is_arithmetic<T>::value;
 
+// is_enum
+template <class T>
+struct is_enum : integral_constant<bool, __is_enum(T)>
+{
+};
+template <class T>
+inline constexpr bool is_enum_v = is_enum<T>::value;
+
+// is_signed
+template <class T>
+struct is_signed : integral_constant<bool, __is_signed(T)>
+{
+};
+template <class T>
+inline constexpr bool is_signed_v = is_signed<T>::value;
+
+// is_unsigned
+template <class T>
+struct is_unsigned : integral_constant<bool, __is_unsigned(T)>
+{
+};
+template <class T>
+inline constexpr bool is_unsigned_v = is_unsigned<T>::value;
+
+// is_trivially_copyable (needed by std::bit_cast)
+template <class T>
+struct is_trivially_copyable
+  : integral_constant<bool, __is_trivially_copyable(T)>
+{
+};
+template <class T>
+inline constexpr bool is_trivially_copyable_v =
+  is_trivially_copyable<T>::value;
+
 // is_array
 template <class T>
 struct is_array : false_type

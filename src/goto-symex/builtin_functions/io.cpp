@@ -391,11 +391,8 @@ void goto_symext::symex_input(const code_function_call2t &func_call)
                 spec == 'a' || spec == 'A' || spec == 'c' || spec == 's' ||
                 spec == 'p' || spec == 'n')
               {
-                // Skip %n since it doesn't consume input but still needs a pointer
-                if (spec != 'n')
-                  actual_format_count++;
-                else
-                  actual_format_count++; // %n still needs a parameter
+                // %n still needs a parameter even though it doesn't consume input
+                actual_format_count++;
               }
             }
           }

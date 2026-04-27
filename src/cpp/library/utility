@@ -141,6 +141,10 @@ struct pair
     std::swap(first, p.first);
     std::swap(second, p.second);
   }
+
+  ~pair()
+  {
+  }
 };
 
 template <class T1, class T2>
