@@ -423,8 +423,7 @@ void goto_checkt::overflow_check(
   {
     const expr2tc &E1 = *expr->get_sub_expr(0);
     if (
-      is_signedbv_type(E1) && is_cxx20_or_later() &&
-      shl_E1_is_known_nonneg(E1))
+      is_signedbv_type(E1) && is_cxx20_or_later() && shl_E1_is_known_nonneg(E1))
       return;
   }
 
