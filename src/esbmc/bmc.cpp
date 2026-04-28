@@ -301,6 +301,34 @@ void bmct::report_failure()
   log_fail("\nVERIFICATION FAILED");
 }
 
+void bmct::report_unknown()
+{
+  log_fail("\nVERIFICATION UNKNOWN");
+}
+
+smt_convt::resultt
+bmct::check_vacuity(symex_target_equationt &local_eq) const
+{
+  // Re-encode in vacuity mode: each kept assertion contributes its path
+  // assumption to the OR'd disjunction instead of `not(assumpt -> claim)`.
+  // The result is UNSAT iff the path to every kept claim is unreachable.
+  std::unique_ptr<smt_convt> solver(create_solver("", ns, options));
+  local_eq.convert(*solver, /*vacuity_mode=*/true);
+  return solver->dec_solve();
+}
+
+// True when a discharged claim is a candidate for vacuity probing. Skips
+// the loop-invariant pass's own synthetic sanity assertions: each is
+// sequenced under an ASSUME(false) terminator, so any claim appearing
+// after the first loop's inductive step would always probe vacuous. The
+// probe targets user-facing claims (contract ensures, user assertions),
+// not internal pass scaffolding.
+static bool is_vacuity_probe_candidate(const std::string &claim_property)
+{
+  return claim_property != "invariant-base-case" &&
+         claim_property != "invariant-inductive-step";
+}
+
 void bmct::show_program(const symex_target_equationt &eq)
 {
   unsigned int count = 1;
@@ -1014,7 +1042,12 @@ void bmct::report_result(smt_convt::resultt &res)
         !options.get_bool_option("kind-violation-found") ||
         options.get_bool_option("assertion-coverage") ||
         options.get_bool_option("assertion-coverage-claims"))
-        report_success();
+      {
+        if (vacuity_detected)
+          report_unknown();
+        else
+          report_success();
+      }
     }
     else
     {
@@ -1377,7 +1410,42 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
       return multi_property_check(
         *eq, solver_result.remaining_claims, *runtime_solver);
 
-    return run_decision_procedure(*runtime_solver, *eq);
+    smt_convt::resultt result = run_decision_procedure(*runtime_solver, *eq);
+
+    // Per-claim vacuity probe in single-property mode: a whole-equation
+    // reachability check would silently miss a vacuous claim whenever some
+    // *other* claim has a reachable path.
+    if (
+      result == smt_convt::P_UNSATISFIABLE &&
+      options.get_bool_option("check-vacuity") &&
+      remaining_asserts > 0)
+    {
+      log_status(
+        "Probing {} claim(s) for vacuous discharge",
+        remaining_asserts.to_int64());
+
+      for (size_t i = 1; i <= remaining_asserts.to_uint64(); i++)
+      {
+        symex_target_equationt vac_eq = *eq;
+        claim_slicer keeper(
+          i, /*show_slice_info=*/false, /*is_goto_cov=*/false, ns);
+        keeper.run(vac_eq.SSA_steps);
+
+        if (!is_vacuity_probe_candidate(keeper.claim_property))
+          continue;
+
+        if (check_vacuity(vac_eq) == smt_convt::P_UNSATISFIABLE)
+        {
+          log_warning(
+            "Vacuous discharge: claim '{}' has unsatisfiable path "
+            "assumptions (loop invariant likely implies the loop guard).",
+            keeper.claim_cstr);
+          vacuity_detected = true;
+        }
+      }
+    }
+
+    return result;
   }
 
   catch (std::string &error_str)
@@ -1657,6 +1725,19 @@ smt_convt::resultt bmct::multi_property_check(
       run_decision_procedure(*solver_ptr, local_eq);
     fine_timet solve_stop = current_time();
 
+    // After UNSAT, probe whether the path to the kept claim is reachable.
+    // UNSAT in vacuity mode means the discharge was vacuous -> UNKNOWN.
+    bool is_vacuous = false;
+    if (
+      solver_result == smt_convt::P_UNSATISFIABLE &&
+      options.get_bool_option("check-vacuity") &&
+      is_vacuity_probe_candidate(claim.claim_property))
+    {
+      is_vacuous = (check_vacuity(local_eq) == smt_convt::P_UNSATISFIABLE);
+      if (is_vacuous)
+        vacuity_detected = true;
+    }
+
     // Show colored result after solving
     const std::string GREEN = is_color ? "\033[32m" : "";
     const std::string RED = is_color ? "\033[31m" : "";
@@ -1666,8 +1747,16 @@ smt_convt::resultt bmct::multi_property_check(
     {
       if (solver_result == smt_convt::P_UNSATISFIABLE)
       {
-        // Claim passed - show in green
-        log_status("{}✓ PASSED{}: '{}'", GREEN, RESET, claim.claim_cstr);
+        if (is_vacuous)
+          log_status(
+            "{}? UNKNOWN{}: '{}' (vacuous discharge: path is unreachable; "
+            "loop invariant likely implies the loop guard)",
+            YELLOW,
+            RESET,
+            claim.claim_cstr);
+        else
+          // Claim passed - show in green
+          log_status("{}✓ PASSED{}: '{}'", GREEN, RESET, claim.claim_cstr);
       }
       else if (solver_result == smt_convt::P_SATISFIABLE)
       {
@@ -1699,7 +1788,12 @@ smt_convt::resultt bmct::multi_property_check(
         summary.failed_properties++;
     }
     else if (solver_result == smt_convt::P_UNSATISFIABLE)
-      summary.passed_properties++;
+    {
+      if (is_vacuous)
+        summary.unknown_properties++;
+      else
+        summary.passed_properties++;
+    }
 
     // If an assertion instance is verified to be violated
     if (solver_result == smt_convt::P_SATISFIABLE)

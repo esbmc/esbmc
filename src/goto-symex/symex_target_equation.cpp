@@ -195,7 +195,7 @@ void symex_target_equationt::pre_register_addresses(
   }
 }
 
-void symex_target_equationt::convert(smt_convt &smt_conv)
+void symex_target_equationt::convert(smt_convt &smt_conv, bool vacuity_mode)
 {
   // Register address-taken objects first so int-to-ptr casts see the full
   // set of candidate objects regardless of source-level declaration order.
@@ -205,7 +205,8 @@ void symex_target_equationt::convert(smt_convt &smt_conv)
   smt_astt assumpt_ast = smt_conv.convert_ast(gen_true_expr());
 
   for (auto &SSA_step : SSA_steps)
-    convert_internal_step(smt_conv, assumpt_ast, assertions, SSA_step);
+    convert_internal_step(
+      smt_conv, assumpt_ast, assertions, SSA_step, vacuity_mode);
 
   if (!assertions.empty())
     smt_conv.assert_ast(smt_conv.make_n_ary_or(assertions));
@@ -215,7 +216,8 @@ void symex_target_equationt::convert_internal_step(
   smt_convt &smt_conv,
   smt_astt &assumpt_ast,
   smt_convt::ast_vec &assertions,
-  SSA_stept &step)
+  SSA_stept &step,
+  bool vacuity_mode)
 {
   smt_astt true_val = smt_conv.convert_ast(gen_true_expr());
   smt_astt false_val = smt_conv.convert_ast(gen_false_expr());
@@ -286,8 +288,19 @@ void symex_target_equationt::convert_internal_step(
 
   if (step.is_assert())
   {
-    step.cond_ast = smt_conv.imply_ast(assumpt_ast, step.cond_ast);
-    assertions.push_back(smt_conv.invert_ast(step.cond_ast));
+    if (vacuity_mode)
+    {
+      // Vacuity probe: ask whether the path to this claim is reachable at
+      // all, ignoring the claim itself. If the OR of all kept claims'
+      // assumpt_ast is UNSAT, every discharge was vacuous.
+      step.cond_ast = assumpt_ast;
+      assertions.push_back(assumpt_ast);
+    }
+    else
+    {
+      step.cond_ast = smt_conv.imply_ast(assumpt_ast, step.cond_ast);
+      assertions.push_back(smt_conv.invert_ast(step.cond_ast));
+    }
   }
   else if (step.is_assume())
   {
@@ -529,7 +542,11 @@ void runtime_encoded_equationt::flush_latest_instructions()
   // Now iterate from the start insn to convert, to the end of the list.
   for (; run_it != SSA_steps.end(); ++run_it)
     convert_internal_step(
-      conv, assumpt_chain.back(), assert_vec_list.back(), *run_it);
+      conv,
+      assumpt_chain.back(),
+      assert_vec_list.back(),
+      *run_it,
+      /*vacuity_mode=*/false);
 
   run_it--;
   cvt_progress = run_it;
@@ -562,7 +579,7 @@ void runtime_encoded_equationt::pop_ctx()
   assumpt_chain.pop_back();
 }
 
-void runtime_encoded_equationt::convert(smt_convt &smt_conv)
+void runtime_encoded_equationt::convert(smt_convt &smt_conv, bool)
 {
   // Don't actually convert. We've already done most of the conversion by now
   // (probably), instead flush all unconverted instructions. We don't push
