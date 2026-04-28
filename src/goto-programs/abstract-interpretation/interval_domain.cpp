@@ -178,14 +178,15 @@ interval_domaint::get_interval_from_const(const expr2tc &e) const
   if (value1.is_double())
     result.make_le_than(value1.to_double());
   else
-    log_warning("Failed to convert value1: {}", value1.to_string_decimal(10));
+    log_debug(
+      "interval", "Failed to convert value1: {}", value1.to_string_decimal(10));
 
   // a >= value2
   if (value2.is_double())
     result.make_ge_than(value2.to_double());
   else
-    log_warning(
-      "Failed to convert value2: {}", value2.to_string_decimal(10)); //
+    log_debug(
+      "interval", "Failed to convert value2: {}", value2.to_string_decimal(10));
 
   assert(!result.is_bottom());
   return result;
