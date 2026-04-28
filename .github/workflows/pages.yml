@@ -5,16 +5,6 @@ on:
     branches: [ master ]
 
 jobs:
-  trigger:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Repository Dispatch
-        uses: peter-evans/repository-dispatch@v4
-        with:
-          token: ${{ secrets.PAGES_DEPLOY_TOKEN }}
-          repository: esbmc/esbmc.github.io
-          event-type: deploy-site
-
   # Build developer doc
   build-developer-doc:
     runs-on: ubuntu-latest
@@ -30,3 +20,15 @@ jobs:
       with:
         name: Developer-Manual
         path: manual.pdf
+
+  trigger:
+    needs: build-developer-doc
+    if: github.repository == 'esbmc/esbmc'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Repository Dispatch
+        uses: peter-evans/repository-dispatch@v4
+        with:
+          token: ${{ secrets.PAGES_DEPLOY_TOKEN }}
+          repository: esbmc/esbmc.github.io
+          event-type: deploy-site
