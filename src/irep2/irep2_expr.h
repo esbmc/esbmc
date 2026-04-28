@@ -1051,7 +1051,8 @@ public:
     postincrement,
     predecrement,
     postdecrement,
-    old_snapshot // For __ESBMC_old() in function contracts
+    old_snapshot,  // For __ESBMC_old() in function contracts
+    assigns_target // For __ESBMC_assigns() in function contracts
   };
 
   sideeffect_data(
@@ -2960,7 +2961,8 @@ public:
 #ifndef NDEBUG /* only check consistency in non-Release builds */
     assert(
       source->type->type_id == type2t::struct_id ||
-      source->type->type_id == type2t::union_id);
+      source->type->type_id == type2t::union_id ||
+      source->type->type_id == type2t::complex_id);
     auto *data = dynamic_cast<const struct_union_data *>(source->type.get());
     assert(data);
     /* internally asserts consistency conditions */

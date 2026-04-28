@@ -10,6 +10,17 @@
 #include <util/algorithms.h>
 #include <util/threeval.h>
 
+// Macro to determine if color output should be enabled
+#ifdef _WIN32
+#  include <io.h>
+#  define ENABLE_COLOR(val)                                                    \
+    ((val) == "always" || ((val) == "auto" && _isatty(_fileno(stderr))))
+#else
+#  include <unistd.h>
+#  define ENABLE_COLOR(val)                                                    \
+    ((val) == "always" || ((val) == "auto" && isatty(fileno(stderr))))
+#endif
+
 extern const struct group_opt_templ all_cmd_options[];
 
 class esbmc_parseoptionst : public parseoptions_baset, public language_uit
@@ -51,10 +62,14 @@ protected:
   /// \param goto_functions GOTO functions
   /// \param has_replace Whether to replace calls with contracts
   /// \param has_enforce Whether to enforce contracts
+  /// \param has_enforce_all Whether to enforce contracts for all annotated functions
+  /// \param has_replace_all Whether to replace calls for all annotated functions
   void process_function_contracts(
     goto_functionst &goto_functions,
     bool has_replace,
-    bool has_enforce);
+    bool has_enforce,
+    bool has_enforce_all,
+    bool has_replace_all);
 
   int do_bmc_strategy(optionst &options, goto_functionst &goto_functions);
 
@@ -74,6 +89,11 @@ protected:
     optionst &options,
     goto_functionst &goto_functions,
     const uint64_t &k_step);
+
+  void diagnose_unknown_properties(
+    optionst &options,
+    goto_functionst &goto_functions,
+    uint64_t k_step);
 
   bool read_goto_binary(goto_functionst &goto_functions);
 
@@ -105,6 +125,7 @@ protected:
   bool is_coverage;
 
 private:
+  bool resolve_color_option() const;
   void close_file(FILE *f)
   {
     if (f != stdout && f != stderr)

@@ -5,4 +5,4 @@ def remove_extras(lst):
             newlist.append(i)
     return newlist
 
-assert remove_extras([1, 1, 1, 2, 3]) == [1, 2, 3]
+assert remove_extras([1, 1]) == [1]

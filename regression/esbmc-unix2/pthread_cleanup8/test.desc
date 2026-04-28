@@ -1,4 +1,0 @@
-CORE
-main.c
---smt-during-symex --smt-symex-assume --z3
-^VERIFICATION SUCCESSFUL$

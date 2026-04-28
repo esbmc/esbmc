@@ -3,6 +3,7 @@
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python_list.h>
 #include <python-frontend/string_builder.h>
+#include <python-frontend/tuple_handler.h>
 #include <python-frontend/type_handler.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
@@ -175,13 +176,13 @@ void python_dict_handler::store_nested_dict_value(
   const exprt &value_expr,
   const locationt &location)
 {
-  // Get the list_push function
+  // Get __ESBMC_list_push_dict_ptr which stores dict* directly (no byte copy)
   const symbolt *push_func =
-    symbol_table_.find_symbol("c:@F@__ESBMC_list_push");
+    symbol_table_.find_symbol("c:@F@__ESBMC_list_push_dict_ptr");
 
   if (!push_func)
   {
-    log_error("__ESBMC_list_push not found in symbol table");
+    log_error("__ESBMC_list_push_dict_ptr not found in symbol table");
     throw std::runtime_error("Required list operation function not available");
   }
 
@@ -204,16 +205,13 @@ void python_dict_handler::store_nested_dict_value(
   type_hash.set_value(
     integer2binary(type_hash_value, config.ansi_c.address_width));
 
-  // Pointer size for the storage
-  exprt ptr_size = from_integer(config.ansi_c.pointer_width() / 8, size_type());
-
-  // Call __ESBMC_list_push to store the pointer
+  // Call __ESBMC_list_push_dict_ptr(list, ptr_var, type_hash)
+  // ptr_var (dict*) is stored directly in item->value — no byte extraction needed
   code_function_callt push_call;
   push_call.function() = symbol_expr(*push_func);
   push_call.arguments().push_back(symbol_expr(values_list));
-  push_call.arguments().push_back(address_of_exprt(symbol_expr(ptr_var)));
+  push_call.arguments().push_back(symbol_expr(ptr_var));
   push_call.arguments().push_back(type_hash);
-  push_call.arguments().push_back(ptr_size);
   push_call.type() = bool_type();
   push_call.location() = location;
 
@@ -233,14 +231,13 @@ exprt python_dict_handler::retrieve_nested_dict_value(
       "retrieve_nested_dict_value: expected_type is nil");
   }
 
-  // Cast the stored pointer back to dict pointer type
+  // obj_value = item->value = the dict* stored directly by __ESBMC_list_push_dict_ptr
+  // Cast void* to dict* directly (no byte extraction needed)
   pointer_typet dict_ptr_type(expected_type);
-  exprt dict_ptr_var =
-    safe_cast_to_dict_pointer(slice_node, obj_value, dict_ptr_type, location);
+  typecast_exprt dict_ptr(obj_value, dict_ptr_type);
 
   // Dereference to get the actual dict struct
-  dereference_exprt dict_struct(dict_ptr_var, expected_type);
-  dict_struct.type() = expected_type;
+  dereference_exprt dict_struct(dict_ptr, expected_type);
 
   // Store in final temporary for return
   symbolt &result_dict = converter_.create_tmp_symbol(
@@ -285,6 +282,210 @@ exprt python_dict_handler::get_dict_literal(const nlohmann::json &element)
   return symbol_expr(dict_sym);
 }
 
+exprt python_dict_handler::get_dict_comprehension(const nlohmann::json &element)
+{
+  if (!element.contains("generators") || element["generators"].empty())
+    throw std::runtime_error("DictComp missing generators clause");
+
+  if (element["generators"].size() != 1)
+    throw std::runtime_error("Only single-generator DictComp is supported");
+
+  const auto &generator = element["generators"][0];
+  const auto &target = generator["target"];
+  const auto &iter = generator["iter"];
+
+  locationt location = converter_.get_location_from_decl(element);
+  std::string dict_name = generate_unique_dict_name(element, location);
+  struct_typet dict_type = get_dict_struct_type();
+  typet list_type = type_handler_.get_list_type();
+
+  symbolt &dict_sym =
+    converter_.create_tmp_symbol(element, dict_name, dict_type, exprt());
+  code_declt dict_decl(symbol_expr(dict_sym));
+  dict_decl.location() = location;
+  converter_.add_instruction(dict_decl);
+
+  // Start with an empty dict and fill it inside the comprehension loop
+  nlohmann::json empty_dict = element;
+  empty_dict["_type"] = "Dict";
+  empty_dict["keys"] = nlohmann::json::array();
+  empty_dict["values"] = nlohmann::json::array();
+  create_dict_from_literal(empty_dict, symbol_expr(dict_sym));
+
+  exprt iterable_expr = converter_.get_expr(iter);
+  // If the iterable comes from a call such as range(...), store it first so
+  // the loop can reuse the same list on each iteration
+  if (
+    iterable_expr.is_code() &&
+    iterable_expr.get("statement") == "function_call" &&
+    to_code_function_call(to_code(iterable_expr)).type() == list_type)
+  {
+    const code_function_callt &call =
+      to_code_function_call(to_code(iterable_expr));
+    symbolt &tmp_var_symbol = converter_.create_tmp_symbol(
+      element, "$dictcomp_iter$", list_type, gen_zero(list_type));
+
+    code_declt tmp_var_decl(symbol_expr(tmp_var_symbol));
+    tmp_var_decl.location() = location;
+    converter_.add_instruction(tmp_var_decl);
+
+    code_function_callt new_call;
+    new_call.function() = call.function();
+    new_call.arguments() = call.arguments();
+    new_call.lhs() = symbol_expr(tmp_var_symbol);
+    new_call.type() = list_type;
+    new_call.location() = location;
+    converter_.add_instruction(new_call);
+
+    iterable_expr = symbol_expr(tmp_var_symbol);
+  }
+
+  if (target["_type"] != "Name")
+    throw std::runtime_error("Only simple targets are supported in DictComp");
+
+  std::string loop_var_name = target["id"].get<std::string>();
+  symbol_id loop_var_sid = converter_.create_symbol_id();
+  loop_var_sid.set_object(loop_var_name);
+
+  typet loop_var_type = any_type();
+  // range(...) produces integers, so keep the loop variable in the
+  // same type used later by dict lookups
+  if (
+    iter.contains("_type") && iter["_type"] == "Call" &&
+    iter.contains("func") && iter["func"].contains("_type") &&
+    iter["func"]["_type"] == "Name" && iter["func"].contains("id") &&
+    iter["func"]["id"] == "range")
+  {
+    loop_var_type = long_long_int_type();
+  }
+
+  symbolt loop_var_symbol = converter_.create_symbol(
+    location.get_file().as_string(),
+    loop_var_name,
+    loop_var_sid.to_string(),
+    location,
+    loop_var_type);
+  loop_var_symbol.lvalue = true;
+  loop_var_symbol.file_local = true;
+  loop_var_symbol.is_extern = false;
+  symbolt *loop_var =
+    converter_.symbol_table().move_symbol_to_context(loop_var_symbol);
+
+  symbolt &index_var = converter_.create_tmp_symbol(
+    element, "$dictcomp_i$", size_type(), gen_zero(size_type()));
+  code_declt index_decl(symbol_expr(index_var));
+  index_decl.location() = location;
+  converter_.add_instruction(index_decl);
+
+  code_assignt index_init(symbol_expr(index_var), gen_zero(size_type()));
+  index_init.location() = location;
+  converter_.add_instruction(index_init);
+
+  exprt length_expr;
+  if (iterable_expr.type() == list_type)
+  {
+    const symbolt *size_func =
+      converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_size");
+    if (!size_func)
+      throw std::runtime_error("__ESBMC_list_size not found in symbol table");
+
+    symbolt &length_var = converter_.create_tmp_symbol(
+      element, "$dictcomp_len$", size_type(), gen_zero(size_type()));
+    code_declt length_decl(symbol_expr(length_var));
+    length_decl.location() = location;
+    converter_.add_instruction(length_decl);
+
+    code_function_callt size_call;
+    size_call.function() = symbol_expr(*size_func);
+    size_call.arguments().push_back(
+      iterable_expr.type().is_pointer() ? iterable_expr
+                                        : address_of_exprt(iterable_expr));
+    size_call.lhs() = symbol_expr(length_var);
+    size_call.type() = size_type();
+    size_call.location() = location;
+    converter_.add_instruction(size_call);
+
+    length_expr = symbol_expr(length_var);
+  }
+  else
+  {
+    throw std::runtime_error(
+      "Unsupported iterable type in DictComp: " +
+      iterable_expr.type().id_string());
+  }
+
+  python_list list_handler(converter_, element);
+  code_blockt loop_body;
+
+  // Read the current element from the list and assign it to the
+  // comprehension target before evaluating key and value
+  exprt current_element = list_handler.build_list_at_call(
+    iterable_expr, symbol_expr(index_var), element);
+  current_element =
+    list_handler.extract_pyobject_value(current_element, loop_var_type);
+
+  code_assignt loop_var_assign(symbol_expr(*loop_var), current_element);
+  loop_var_assign.location() = location;
+  loop_body.copy_to_operands(loop_var_assign);
+
+  code_blockt *saved_block = converter_.current_block;
+  converter_.current_block = &loop_body;
+  exprt key_expr = converter_.get_expr(element["key"]);
+  exprt value_expr = converter_.get_expr(element["value"]);
+  converter_.current_block = saved_block;
+
+  // Reuse the normal dict assignment path for each generated pair
+  code_blockt pair_block;
+  handle_dict_subscript_assign(
+    symbol_expr(dict_sym), key_expr, value_expr, location, element, pair_block);
+
+  if (generator.contains("ifs") && !generator["ifs"].empty())
+  {
+    // Dict comprehensions may include filters such as
+    // {k: v for x in xs if cond1 if cond2}
+    exprt combined_condition = gen_boolean(true);
+    for (const auto &if_clause : generator["ifs"])
+    {
+      exprt if_expr = converter_.get_expr(if_clause);
+      if (combined_condition.is_true())
+        combined_condition = if_expr;
+      else
+      {
+        exprt and_expr("and", bool_type());
+        and_expr.copy_to_operands(combined_condition, if_expr);
+        combined_condition = and_expr;
+      }
+    }
+
+    codet if_stmt;
+    if_stmt.set_statement("ifthenelse");
+    if_stmt.copy_to_operands(combined_condition, pair_block);
+    if_stmt.location() = location;
+    loop_body.copy_to_operands(if_stmt);
+  }
+  else
+  {
+    loop_body.copy_to_operands(pair_block);
+  }
+
+  exprt increment("+", size_type());
+  increment.copy_to_operands(symbol_expr(index_var), gen_one(size_type()));
+  code_assignt index_increment(symbol_expr(index_var), increment);
+  index_increment.location() = location;
+  loop_body.copy_to_operands(index_increment);
+
+  exprt loop_condition("<", bool_type());
+  loop_condition.copy_to_operands(symbol_expr(index_var), length_expr);
+
+  codet while_stmt;
+  while_stmt.set_statement("while");
+  while_stmt.copy_to_operands(loop_condition, loop_body);
+  while_stmt.location() = location;
+  converter_.add_instruction(while_stmt);
+
+  return symbol_expr(dict_sym);
+}
+
 exprt python_dict_handler::create_dict_from_literal(
   const nlohmann::json &element,
   const exprt &target_symbol)
@@ -296,6 +497,10 @@ exprt python_dict_handler::create_dict_from_literal(
 
   struct_typet dict_type = get_dict_struct_type();
   typet list_type = type_handler_.get_list_type();
+
+  // Freeze the target as dict-typed lvalue so previously emitted member
+  // accesses remain valid even if the frontend later mutates the symbol type.
+  exprt dict_target = typecast_exprt(target_symbol, dict_type);
 
   // Create keys list
   symbolt &keys_list = converter_.create_tmp_symbol(
@@ -347,6 +552,10 @@ exprt python_dict_handler::create_dict_from_literal(
 
     exprt value_expr = converter_.get_expr(values[i]);
 
+    // Convert lambda/function symbol to function pointer for dict storage
+    if (value_expr.type().is_code() && value_expr.is_symbol())
+      value_expr = address_of_exprt(value_expr);
+
     // Check if this is a nested dict that needs special pointer storage
     if (value_expr.type().is_struct() && is_dict_type(value_expr.type()))
     {
@@ -355,20 +564,22 @@ exprt python_dict_handler::create_dict_from_literal(
     }
     else
     {
-      // Regular value: store value directly (value semantics)
-      exprt push_value =
-        list_handler.build_push_list_call(values_list, element, value_expr);
+      // Regular value: store value directly (value semantics).
+      // Disable float path so dict comparisons via *(void**)item->value use
+      // the integer bit-pattern copy instead of the float_buf pointer.
+      exprt push_value = list_handler.build_push_list_call(
+        values_list, element, value_expr, false);
       converter_.add_instruction(push_value);
     }
   }
 
   // Assign keys and values to target dict struct members
-  member_exprt keys_member(target_symbol, "keys", list_type);
+  member_exprt keys_member(dict_target, "keys", list_type);
   code_assignt keys_assign(keys_member, symbol_expr(keys_list));
   keys_assign.location() = location;
   converter_.add_instruction(keys_assign);
 
-  member_exprt values_member(target_symbol, "values", list_type);
+  member_exprt values_member(dict_target, "values", list_type);
   code_assignt values_assign(values_member, symbol_expr(values_list));
   values_assign.location() = location;
   converter_.add_instruction(values_assign);
@@ -400,12 +611,14 @@ exprt python_dict_handler::handle_dict_subscript(
   member_exprt keys_member(dict_expr, "keys", list_type);
   member_exprt values_member(dict_expr, "values", list_type);
 
-  // Find __ESBMC_list_find_index function
+  // Use try_find_index so a missing key returns SIZE_MAX instead of asserting.
+  // We then emit a cpp-throw KeyError for the not-found case, which allows
+  // try/except KeyError blocks to catch it (Python semantics).
   const symbolt *find_func =
-    symbol_table_.find_symbol("c:@F@__ESBMC_list_find_index");
+    symbol_table_.find_symbol("c:@F@__ESBMC_list_try_find_index");
   if (!find_func)
     throw std::runtime_error(
-      "__ESBMC_list_find_index not found - add it to list.c model");
+      "__ESBMC_list_try_find_index not found - add it to list.c model");
 
   // Create temp for index result
   symbolt &index_var = converter_.create_tmp_symbol(
@@ -420,7 +633,7 @@ exprt python_dict_handler::handle_dict_subscript(
   list_elem_info key_info =
     list_handler.get_list_element_info(slice_node, key_expr);
 
-  // Call find_index(keys, key, type_hash, size)
+  // Call try_find_index(keys, key, type_hash, size) — returns SIZE_MAX if absent
   code_function_callt find_call;
   find_call.function() = symbol_expr(*find_func);
   find_call.lhs() = symbol_expr(index_var);
@@ -440,6 +653,54 @@ exprt python_dict_handler::handle_dict_subscript(
   find_call.type() = size_type();
   find_call.location() = location;
   converter_.add_instruction(find_call);
+
+  // If index == SIZE_MAX the key was not found: throw KeyError so that
+  // try/except KeyError handlers can catch it (instead of failing the property).
+  {
+    const BigInt size_max_val = power(2, bv_width(size_type())) - 1;
+    constant_exprt size_max(size_max_val, size_type());
+    exprt key_not_found = equality_exprt(symbol_expr(index_var), size_max);
+
+    std::string keyerror_msg = "KeyError: key not found in dictionary";
+    std::string keyerror_type_str = "KeyError";
+    typet keyerror_type = type_handler_.get_typet(keyerror_type_str);
+
+    exprt msg_size_expr = constant_exprt(
+      integer2binary(keyerror_msg.size() + 1, bv_width(size_type())),
+      integer2string(keyerror_msg.size() + 1),
+      size_type());
+    typet str_arr_type = array_typet(char_type(), msg_size_expr);
+
+    symbolt &err_msg_var = converter_.create_tmp_symbol(
+      slice_node, "$keyerror_msg$", str_arr_type, exprt());
+    code_declt err_msg_decl(symbol_expr(err_msg_var));
+    err_msg_decl.location() = location;
+
+    exprt err_str =
+      converter_.get_string_builder().build_string_literal(keyerror_msg);
+    code_assignt err_msg_assign(symbol_expr(err_msg_var), err_str);
+    err_msg_assign.location() = location;
+
+    exprt exc_struct("struct", keyerror_type);
+    exc_struct.copy_to_operands(address_of_exprt(symbol_expr(err_msg_var)));
+
+    exprt raise_keyerror = side_effect_exprt("cpp-throw", keyerror_type);
+    raise_keyerror.move_to_operands(exc_struct);
+    raise_keyerror.location() = location;
+
+    code_blockt throw_block;
+    throw_block.copy_to_operands(err_msg_decl);
+    throw_block.copy_to_operands(err_msg_assign);
+    code_expressiont raise_code(raise_keyerror);
+    raise_code.location() = location;
+    throw_block.copy_to_operands(raise_code);
+
+    code_ifthenelset key_check;
+    key_check.cond() = key_not_found;
+    key_check.then_case() = throw_block;
+    key_check.location() = location;
+    converter_.add_instruction(key_check);
+  }
 
   // Get values[index] using list_at
   const symbolt *at_func = symbol_table_.find_symbol("c:@F@__ESBMC_list_at");
@@ -597,6 +858,20 @@ exprt python_dict_handler::handle_dict_subscript(
     return result;
   }
 
+  // Handle non-char pointer types (e.g., Optional[T] stored as T*).
+  // The value was stored by-reference (value_arg = address_of(T* var)), so
+  // item->value points to a buffer holding the T* bytes.
+  // Dereference as T** to recover the stored T* value.
+  if (
+    resolved_type.is_pointer() && resolved_type.subtype() != char_type() &&
+    !resolved_type.is_nil())
+  {
+    typecast_exprt value_as_ptr_ptr(obj_value, pointer_typet(resolved_type));
+    dereference_exprt result(value_as_ptr_ptr, resolved_type);
+    result.type() = resolved_type;
+    return result;
+  }
+
   // Default: cast void* to char* for string values
   typecast_exprt value_as_string(obj_value, gen_pointer_type(char_type()));
   return value_as_string;
@@ -604,14 +879,13 @@ exprt python_dict_handler::handle_dict_subscript(
 
 void python_dict_handler::handle_dict_subscript_assign(
   const exprt &dict_expr,
-  const nlohmann::json &slice_node,
+  const exprt &key_expr,
   const exprt &value,
+  const locationt &location,
+  const nlohmann::json &node,
   codet &target_block)
 {
-  locationt location = converter_.get_location_from_decl(slice_node);
   typet list_type = type_handler_.get_list_type();
-
-  exprt key_expr = get_key_expr(slice_node);
 
   member_exprt keys_member(dict_expr, "keys", list_type);
   member_exprt values_member(dict_expr, "values", list_type);
@@ -638,19 +912,17 @@ void python_dict_handler::handle_dict_subscript_assign(
     throw std::runtime_error(
       "__ESBMC_list_set_at not found - add it to list.c model");
 
-  python_list list_handler(converter_, slice_node);
+  python_list list_handler(converter_, node);
 
-  // Create temp for index result
   symbolt &index_var = converter_.create_tmp_symbol(
-    slice_node, "$dict_update_idx$", size_type(), gen_zero(size_type()));
+    node, "$dict_update_idx$", size_type(), gen_zero(size_type()));
 
   code_declt index_decl(symbol_expr(index_var));
   index_decl.location() = location;
   update_block.copy_to_operands(index_decl);
 
   // Get element info for the key
-  list_elem_info key_info =
-    list_handler.get_list_element_info(slice_node, key_expr);
+  list_elem_info key_info = list_handler.get_list_element_info(node, key_expr);
 
   // Call find_index(keys, key, type_hash, size) to get the index
   code_function_callt find_call;
@@ -674,8 +946,7 @@ void python_dict_handler::handle_dict_subscript_assign(
   update_block.copy_to_operands(find_call);
 
   // Update value at index using list_set_at
-  list_elem_info value_info =
-    list_handler.get_list_element_info(slice_node, value);
+  list_elem_info value_info = list_handler.get_list_element_info(node, value);
 
   code_function_callt set_value_call;
   set_value_call.function() = symbol_expr(*set_func);
@@ -693,6 +964,7 @@ void python_dict_handler::handle_dict_subscript_assign(
   set_value_call.arguments().push_back(value_arg);
   set_value_call.arguments().push_back(symbol_expr(*value_info.elem_type_sym));
   set_value_call.arguments().push_back(value_info.elem_size);
+  set_value_call.arguments().push_back(from_integer(BigInt(0), size_type()));
   set_value_call.type() = bool_type();
   set_value_call.location() = location;
   update_block.copy_to_operands(set_value_call);
@@ -712,6 +984,7 @@ void python_dict_handler::handle_dict_subscript_assign(
   push_key_call.arguments().push_back(key_arg);
   push_key_call.arguments().push_back(symbol_expr(*key_info.elem_type_sym));
   push_key_call.arguments().push_back(key_info.elem_size);
+  push_key_call.arguments().push_back(from_integer(BigInt(0), size_type()));
   push_key_call.type() = bool_type();
   push_key_call.location() = location;
   insert_block.copy_to_operands(push_key_call);
@@ -723,6 +996,7 @@ void python_dict_handler::handle_dict_subscript_assign(
   push_value_call.arguments().push_back(value_arg);
   push_value_call.arguments().push_back(symbol_expr(*value_info.elem_type_sym));
   push_value_call.arguments().push_back(value_info.elem_size);
+  push_value_call.arguments().push_back(from_integer(BigInt(0), size_type()));
   push_value_call.type() = bool_type();
   push_value_call.location() = location;
   insert_block.copy_to_operands(push_value_call);
@@ -781,10 +1055,11 @@ void python_dict_handler::handle_dict_delete(
   typet keyerror_type = type_handler_.get_typet(exc_type_str);
   std::string error_msg = "KeyError: key not found in dictionary";
 
-  // Build the error message as a string constant
+  // Build the error message as a string constant (+1 for null terminator,
+  // matching the char[N+1] type produced by build_string_literal).
   exprt msg_size = constant_exprt(
-    integer2binary(error_msg.size(), bv_width(size_type())),
-    integer2string(error_msg.size()),
+    integer2binary(error_msg.size() + 1, bv_width(size_type())),
+    integer2string(error_msg.size() + 1),
     size_type());
   typet str_type = array_typet(char_type(), msg_size);
 
@@ -997,6 +1272,62 @@ typet python_dict_handler::get_dict_value_type_from_annotation(
 typet python_dict_handler::resolve_expected_type_for_dict_subscript(
   const exprt &dict_expr)
 {
+  if (dict_expr.id() == "member")
+  {
+    const auto &member = to_member_expr(dict_expr);
+    typet class_type = member.struct_op().type();
+    namespacet ns(symbol_table_);
+
+    if (class_type.is_pointer())
+      class_type = ns.follow(class_type.subtype());
+    else
+      class_type = ns.follow(class_type);
+
+    assert(class_type.is_struct());
+
+    // For self.data[key], look up the dict value type from the class
+    // annotation before falling back to the usual symbol-based path.
+    const std::string class_name = converter_.extract_class_name_from_tag(
+      to_struct_type(class_type).tag().as_string());
+    const nlohmann::json class_node =
+      json_utils::find_class(converter_.get_ast_json()["body"], class_name);
+
+    if (!class_node.empty() && class_node.contains("body"))
+    {
+      for (const auto &class_elem : class_node["body"])
+      {
+        if (
+          class_elem.contains("_type") &&
+          class_elem["_type"] == "FunctionDef" && class_elem.contains("name") &&
+          class_elem["name"] == "__init__" && class_elem.contains("body"))
+        {
+          for (const auto &stmt : class_elem["body"])
+          {
+            if (
+              stmt.contains("_type") && stmt["_type"] == "AnnAssign" &&
+              stmt.contains("target") && stmt["target"].is_object() &&
+              stmt["target"].contains("_type") &&
+              stmt["target"]["_type"] == "Attribute" &&
+              stmt["target"].contains("value") &&
+              stmt["target"]["value"].is_object() &&
+              stmt["target"]["value"].contains("id") &&
+              stmt["target"]["value"]["id"] == "self" &&
+              stmt["target"].contains("attr") &&
+              stmt["target"]["attr"].get<std::string>() ==
+                member.get_component_name().as_string() &&
+              stmt.contains("annotation"))
+            {
+              typet result =
+                get_dict_value_type_from_annotation(stmt["annotation"]);
+              if (!result.is_nil() && !result.is_empty())
+                return result;
+            }
+          }
+        }
+      }
+    }
+  }
+
   // Only works if dict_expr is a symbol (variable reference)
   if (!dict_expr.is_symbol())
     return empty_typet();
@@ -1078,7 +1409,12 @@ bool python_dict_handler::handle_subscript_assignment_check(
   converter.set_converting_rhs(false);
 
   handle_dict_subscript_assign(
-    container_expr, target["slice"], rhs, target_block);
+    container_expr,
+    get_key_expr(target["slice"]),
+    rhs,
+    converter.get_location_from_decl(target["slice"]),
+    target["slice"],
+    target_block);
   return true;
 }
 
@@ -1149,7 +1485,13 @@ exprt python_dict_handler::handle_dict_get(
   // Determine the default value
   exprt default_value;
   if (args.size() >= 2)
+  {
     default_value = converter_.get_expr(args[1]);
+    // Unwrap Optional if the default comes from a dict.get() without explicit
+    // default (which now returns Optional[T]). We want the raw value type so
+    // that result_var and default_value have compatible types.
+    default_value = converter_.unwrap_optional_if_needed(default_value);
+  }
   else
     default_value = gen_zero(none_type());
 
@@ -1165,6 +1507,29 @@ exprt python_dict_handler::handle_dict_get(
       result_type =
         long_int_type(); // Default to int when returning None or unknown
   }
+
+  // When no explicit default is given, dict.get() returns Optional[T]:
+  // either the value (key found) or None (key not found). Use an Optional
+  // struct so that `result is None` correctly checks the is_none field.
+  // Exception: for string result types (char array or char*), use a null char*
+  // to represent None instead. Storing a char* inside an Optional struct field
+  // causes the ESBMC SMT encoder's dereference layer to fail (is_struct_type
+  // assertion in dereference.cpp). A null char* is correctly handled by the
+  // isnone evaluator's pointer path: `result is None` => `result == NULL`.
+  // Also normalize the result type to char* (not char[0]) for consistency with
+  // handle_dict_subscript which always returns char* for string values.
+  const bool no_explicit_default = (args.size() < 2);
+  const bool is_string_result =
+    (result_type.is_array() && result_type.subtype() == char_type()) ||
+    (result_type.is_pointer() && result_type.subtype() == char_type());
+  const bool use_optional = no_explicit_default && !is_string_result;
+  // Normalize string types to char* so the result variable holds a proper
+  // pointer, not a zero-length char array.
+  typet normalized_result_type =
+    is_string_result ? gen_pointer_type(char_type()) : result_type;
+  typet effective_result_type =
+    use_optional ? type_handler_.build_optional_type(normalized_result_type)
+                 : normalized_result_type;
 
   // Get dict members
   member_exprt keys_member(dict_expr, "keys", list_type);
@@ -1209,15 +1574,13 @@ exprt python_dict_handler::handle_dict_get(
   converter_.add_instruction(try_find_call);
 
   // Check if key was found (index != SIZE_MAX)
-  constant_exprt size_max(
-    integer2binary(SIZE_MAX, bv_width(size_type())),
-    integer2string(SIZE_MAX),
-    size_type());
+  const BigInt size_max_val = power(2, bv_width(size_type())) - 1;
+  constant_exprt size_max(size_max_val, size_type());
   exprt key_found = not_exprt(equality_exprt(symbol_expr(index_var), size_max));
 
   // Create result variable
   symbolt &result_var = converter_.create_tmp_symbol(
-    call_node, "$dict_get_result$", result_type, exprt());
+    call_node, "$dict_get_result$", effective_result_type, exprt());
   code_declt result_decl(symbol_expr(result_var));
   result_decl.location() = location;
   converter_.add_instruction(result_decl);
@@ -1274,23 +1637,54 @@ exprt python_dict_handler::handle_dict_get(
     typecast_exprt value_as_none(obj_value, result_type);
     retrieved_value = value_as_none;
   }
+  else if (is_string_result)
+  {
+    // For string types: cast void* directly to char* (same as
+    // handle_dict_subscript). Avoid casting to char[0] which is unusable.
+    typecast_exprt value_as_string(obj_value, gen_pointer_type(char_type()));
+    retrieved_value = value_as_string;
+  }
   else
   {
     typecast_exprt value_as_typed(obj_value, result_type);
     retrieved_value = value_as_typed;
   }
 
-  code_assignt value_assign(symbol_expr(result_var), retrieved_value);
+  exprt then_value =
+    use_optional
+      ? converter_.wrap_in_optional(retrieved_value, effective_result_type)
+      : retrieved_value;
+  code_assignt value_assign(symbol_expr(result_var), then_value);
   value_assign.location() = location;
   then_block.copy_to_operands(value_assign);
 
   // Else branch: key not found, use default
   code_blockt else_block;
 
-  // Cast default to result_type if needed
-  if (default_value.type() == none_type() && result_type != none_type())
+  if (use_optional)
   {
-    // Cast None to result_type (represents None as zero/null of that type)
+    // No default given: return Optional(is_none=true) so `result is None` holds.
+    constant_exprt none_expr(none_type());
+    none_expr.set_value("NULL");
+    exprt optional_none =
+      converter_.wrap_in_optional(none_expr, effective_result_type);
+    code_assignt default_assign(symbol_expr(result_var), optional_none);
+    default_assign.location() = location;
+    else_block.copy_to_operands(default_assign);
+  }
+  else if (no_explicit_default)
+  {
+    // String/pointer type with no explicit default: assign NULL char* to
+    // represent None. The isnone evaluator's pointer path handles
+    // `result is None` by checking pointer == NULL.
+    code_assignt default_assign(
+      symbol_expr(result_var), gen_zero(effective_result_type));
+    default_assign.location() = location;
+    else_block.copy_to_operands(default_assign);
+  }
+  else if (default_value.type() == none_type() && result_type != none_type())
+  {
+    // Explicit None default: cast to result_type (represents None as zero)
     typecast_exprt casted_default(default_value, result_type);
     code_assignt default_assign(symbol_expr(result_var), casted_default);
     default_assign.location() = location;
@@ -1312,6 +1706,999 @@ exprt python_dict_handler::handle_dict_get(
   converter_.add_instruction(if_stmt);
 
   return symbol_expr(result_var);
+}
+
+exprt python_dict_handler::handle_dict_setdefault(
+  const exprt &dict_expr,
+  const nlohmann::json &call_node)
+{
+  locationt location = converter_.get_location_from_decl(call_node);
+  typet list_type = type_handler_.get_list_type();
+
+  const auto &args = call_node["args"];
+
+  if (args.empty())
+    throw std::runtime_error("setdefault() missing required argument: 'key'");
+
+  exprt key_expr = converter_.get_expr(args[0]);
+
+  // Determine the default value
+  bool has_explicit_default = args.size() >= 2;
+  exprt default_value;
+  if (has_explicit_default)
+    default_value = converter_.get_expr(args[1]);
+  else
+    default_value = gen_zero(none_type());
+
+  // Infer result type
+  typet result_type = resolve_expected_type_for_dict_subscript(dict_expr);
+
+  // If we can't infer from dict annotation, use sensible defaults
+  if (result_type.is_nil() || result_type.is_empty())
+  {
+    if (has_explicit_default && default_value.type() != none_type())
+      result_type = default_value.type();
+    else
+      result_type = long_int_type();
+  }
+
+  // Strings are stored as char arrays; list_at returns a void* to the first character.
+  bool is_string_result =
+    (result_type.is_pointer() && result_type.subtype() == char_type()) ||
+    (result_type.is_array() && result_type.subtype() == char_type());
+  if (is_string_result)
+    result_type = gen_pointer_type(char_type());
+
+  if (is_dict_type(result_type))
+    throw std::runtime_error("setdefault(): dict value type is not supported");
+
+  // List values are stored by pointer so that
+  // `a.setdefault(k, []).append(x)` mutates the stored list.
+  const bool is_list_result = (result_type == list_type);
+
+  // Get dict members
+  member_exprt keys_member(dict_expr, "keys", list_type);
+  member_exprt values_member(dict_expr, "values", list_type);
+
+  const symbolt *try_find_func =
+    symbol_table_.find_symbol("c:@F@__ESBMC_list_try_find_index");
+  if (!try_find_func)
+    throw std::runtime_error("__ESBMC_list_try_find_index not found");
+
+  // Create temp for index result
+  symbolt &index_var = converter_.create_tmp_symbol(
+    call_node, "$dict_setdefault_idx$", size_type(), exprt());
+  code_declt index_decl(symbol_expr(index_var));
+  index_decl.location() = location;
+  converter_.add_instruction(index_decl);
+
+  // Get element info for the key
+  python_list list_handler(converter_, call_node);
+  list_elem_info key_info =
+    list_handler.get_list_element_info(call_node, key_expr);
+
+  // Build key arg
+  exprt key_arg;
+  if (
+    key_info.elem_symbol->type.is_pointer() &&
+    key_info.elem_symbol->type.subtype() == char_type())
+    key_arg = symbol_expr(*key_info.elem_symbol);
+  else
+    key_arg = address_of_exprt(symbol_expr(*key_info.elem_symbol));
+
+  // Call try_find_index (returns SIZE_MAX if not found)
+  code_function_callt try_find_call;
+  try_find_call.function() = symbol_expr(*try_find_func);
+  try_find_call.lhs() = symbol_expr(index_var);
+  try_find_call.arguments().push_back(keys_member);
+  try_find_call.arguments().push_back(key_arg);
+  try_find_call.arguments().push_back(symbol_expr(*key_info.elem_type_sym));
+  try_find_call.arguments().push_back(key_info.elem_size);
+  try_find_call.type() = size_type();
+  try_find_call.location() = location;
+  converter_.add_instruction(try_find_call);
+
+  // Check if key was found (index != SIZE_MAX)
+  const BigInt size_max_val = power(2, bv_width(size_type())) - 1;
+  constant_exprt size_max(size_max_val, size_type());
+  exprt key_found = not_exprt(equality_exprt(symbol_expr(index_var), size_max));
+
+  // Create result variable
+  symbolt &result_var = converter_.create_tmp_symbol(
+    call_node, "$dict_setdefault_result$", result_type, exprt());
+  code_declt result_decl(symbol_expr(result_var));
+  result_decl.location() = location;
+  converter_.add_instruction(result_decl);
+
+  // Then branch: key found, retrieve value (no dict mutation)
+  code_blockt then_block;
+
+  const symbolt *at_func = symbol_table_.find_symbol("c:@F@__ESBMC_list_at");
+  if (!at_func)
+    throw std::runtime_error("__ESBMC_list_at not found");
+
+  typet obj_ptr_type = pointer_typet(type_handler_.get_list_element_type());
+  symbolt &obj_var = converter_.create_tmp_symbol(
+    call_node, "$dict_setdefault_obj$", obj_ptr_type, exprt());
+  code_declt obj_decl(symbol_expr(obj_var));
+  obj_decl.location() = location;
+  then_block.copy_to_operands(obj_decl);
+
+  code_function_callt at_call;
+  at_call.function() = symbol_expr(*at_func);
+  at_call.lhs() = symbol_expr(obj_var);
+  at_call.arguments().push_back(values_member);
+  at_call.arguments().push_back(symbol_expr(index_var));
+  at_call.type() = obj_ptr_type;
+  at_call.location() = location;
+  then_block.copy_to_operands(at_call);
+
+  member_exprt obj_value(
+    dereference_exprt(
+      symbol_expr(obj_var), type_handler_.get_list_element_type()),
+    "value",
+    pointer_typet(empty_typet()));
+
+  // Cast and assign the retrieved value to result_type
+  exprt retrieved_value;
+  if (result_type.is_floatbv())
+  {
+    typecast_exprt value_as_float_ptr(obj_value, pointer_typet(result_type));
+    retrieved_value = dereference_exprt(value_as_float_ptr, result_type);
+  }
+  else if (result_type.is_signedbv() || result_type.is_unsignedbv())
+  {
+    typecast_exprt value_as_int_ptr(obj_value, pointer_typet(result_type));
+    retrieved_value = dereference_exprt(value_as_int_ptr, result_type);
+  }
+  else if (result_type.is_bool())
+  {
+    typecast_exprt value_as_bool_ptr(obj_value, pointer_typet(bool_type()));
+    retrieved_value = dereference_exprt(value_as_bool_ptr, bool_type());
+  }
+  else if (is_list_result)
+  {
+    // List values are stored as raw PyListObject*, so cast the void*
+    // straight back, no extra dereference.
+    retrieved_value = typecast_exprt(obj_value, result_type);
+  }
+  else if (
+    result_type.is_pointer() && result_type.subtype() != char_type() &&
+    !result_type.is_nil())
+  {
+    // Non-char pointer (e.g., Optional[T] stored as T*): stored by-reference,
+    // so dereference as T** to recover the stored T* value.
+    typecast_exprt value_as_ptr_ptr(obj_value, pointer_typet(result_type));
+    retrieved_value = dereference_exprt(value_as_ptr_ptr, result_type);
+  }
+  else if (result_type == none_type())
+  {
+    typecast_exprt value_as_none(obj_value, result_type);
+    retrieved_value = value_as_none;
+  }
+  else
+  {
+    typecast_exprt value_as_typed(obj_value, result_type);
+    retrieved_value = value_as_typed;
+  }
+
+  code_assignt value_assign(symbol_expr(result_var), retrieved_value);
+  value_assign.location() = location;
+  then_block.copy_to_operands(value_assign);
+
+  // Else branch: key not found — insert (key, default) and return default
+  code_blockt else_block;
+
+  // Compute a single effective default used for both insertion and return.
+  // When the caller omits the default or passes None, approximate None as
+  // zero of the result type so that both the stored value and the returned
+  // value are identical.
+  exprt effective_default =
+    (has_explicit_default && default_value.type() != none_type())
+      ? default_value
+      : gen_zero(result_type);
+
+  // value_arg is the proper char* / typed pointer to the value to insert.
+  // Hoisted so the default assignment below can reuse it for string results.
+  exprt value_arg;
+
+  {
+    const symbolt *push_func =
+      symbol_table_.find_symbol("c:@F@__ESBMC_list_push");
+    if (!push_func)
+      throw std::runtime_error("__ESBMC_list_push not found");
+
+    // Push key into keys list
+    code_function_callt push_key_call;
+    push_key_call.function() = symbol_expr(*push_func);
+    push_key_call.arguments().push_back(keys_member);
+    push_key_call.arguments().push_back(key_arg);
+    push_key_call.arguments().push_back(symbol_expr(*key_info.elem_type_sym));
+    push_key_call.arguments().push_back(key_info.elem_size);
+    push_key_call.arguments().push_back(from_integer(BigInt(0), size_type()));
+    push_key_call.type() = bool_type();
+    push_key_call.location() = location;
+    else_block.copy_to_operands(push_key_call);
+
+    // Push value into values list.
+    // List values reuse __ESBMC_list_push_dict_ptr to store the raw pointer.
+    if (is_list_result)
+    {
+      const symbolt *push_ptr_func =
+        symbol_table_.find_symbol("c:@F@__ESBMC_list_push_dict_ptr");
+      if (!push_ptr_func)
+        throw std::runtime_error("__ESBMC_list_push_dict_ptr not found");
+
+      constant_exprt list_type_hash(size_type());
+      list_type_hash.set_value(integer2binary(
+        generate_nested_dict_type_hash(list_type),
+        config.ansi_c.address_width));
+
+      code_function_callt push_list_call;
+      push_list_call.function() = symbol_expr(*push_ptr_func);
+      push_list_call.arguments().push_back(values_member);
+      push_list_call.arguments().push_back(effective_default);
+      push_list_call.arguments().push_back(list_type_hash);
+      push_list_call.type() = bool_type();
+      push_list_call.location() = location;
+      else_block.copy_to_operands(push_list_call);
+    }
+    else
+    {
+      list_elem_info value_info =
+        list_handler.get_list_element_info(call_node, effective_default);
+
+      if (
+        value_info.elem_symbol->type.is_pointer() &&
+        value_info.elem_symbol->type.subtype() == char_type())
+        value_arg = symbol_expr(*value_info.elem_symbol);
+      else
+        value_arg = address_of_exprt(symbol_expr(*value_info.elem_symbol));
+
+      code_function_callt push_value_call;
+      push_value_call.function() = symbol_expr(*push_func);
+      push_value_call.arguments().push_back(values_member);
+      push_value_call.arguments().push_back(value_arg);
+      push_value_call.arguments().push_back(
+        symbol_expr(*value_info.elem_type_sym));
+      push_value_call.arguments().push_back(value_info.elem_size);
+      push_value_call.arguments().push_back(
+        from_integer(BigInt(0), size_type()));
+      push_value_call.type() = bool_type();
+      push_value_call.location() = location;
+      else_block.copy_to_operands(push_value_call);
+    }
+  }
+
+  // Assign effective_default to result.
+  // For strings use value_arg (the char* pointer already staged for insertion)
+  // so that the returned pointer is identical to what was pushed into the list.
+  // For all other types, effective_default already has the correct type.
+  {
+    exprt result_expr = is_string_result ? value_arg : effective_default;
+    code_assignt default_assign(symbol_expr(result_var), result_expr);
+    default_assign.location() = location;
+    else_block.copy_to_operands(default_assign);
+  }
+
+  // Create if-then-else
+  code_ifthenelset if_stmt;
+  if_stmt.cond() = key_found;
+  if_stmt.then_case() = then_block;
+  if_stmt.else_case() = else_block;
+  if_stmt.location() = location;
+  converter_.add_instruction(if_stmt);
+
+  return symbol_expr(result_var);
+}
+
+bool python_dict_handler::is_value_returning_method(
+  const std::string &method_name)
+{
+  return method_name == "pop" || method_name == "get" ||
+         method_name == "setdefault" || method_name == "popitem";
+}
+
+// Retrieve a typed value from a PyObj's void* value field.
+// Used by both handle_dict_pop and handle_dict_popitem.
+static exprt
+retrieve_list_value(const exprt &obj_value, const typet &result_type)
+{
+  if (result_type.is_pointer() && result_type.subtype() == char_type())
+    return typecast_exprt(obj_value, gen_pointer_type(char_type()));
+  if (result_type.is_floatbv())
+    return dereference_exprt(
+      typecast_exprt(obj_value, pointer_typet(result_type)), result_type);
+  if (result_type.is_signedbv() || result_type.is_unsignedbv())
+    return dereference_exprt(
+      typecast_exprt(obj_value, pointer_typet(result_type)), result_type);
+  if (result_type.is_bool())
+    return dereference_exprt(
+      typecast_exprt(obj_value, pointer_typet(bool_type())), bool_type());
+  return typecast_exprt(obj_value, result_type);
+}
+
+exprt python_dict_handler::handle_dict_pop(
+  const exprt &dict_expr,
+  const nlohmann::json &call_node)
+{
+  locationt location = converter_.get_location_from_decl(call_node);
+  typet list_type = type_handler_.get_list_type();
+
+  const auto &args = call_node["args"];
+  if (args.empty())
+    throw std::runtime_error("pop() missing required argument: 'key'");
+
+  exprt key_expr = converter_.get_expr(args[0]);
+  const bool has_default = (args.size() >= 2);
+
+  exprt default_value;
+  if (has_default)
+  {
+    default_value = converter_.get_expr(args[1]);
+    default_value = converter_.unwrap_optional_if_needed(default_value);
+  }
+
+  // Infer result type
+  typet result_type = resolve_expected_type_for_dict_subscript(dict_expr);
+  if (result_type.is_nil() || result_type.is_empty())
+  {
+    if (has_default && default_value.type() != none_type())
+      result_type = default_value.type();
+    else
+      result_type = long_int_type();
+  }
+
+  // Normalize string types to char*
+  const bool is_string_result =
+    (result_type.is_array() && result_type.subtype() == char_type()) ||
+    (result_type.is_pointer() && result_type.subtype() == char_type());
+  if (is_string_result)
+    result_type = gen_pointer_type(char_type());
+
+  member_exprt keys_member(dict_expr, "keys", list_type);
+  member_exprt values_member(dict_expr, "values", list_type);
+
+  const symbolt *try_find_func =
+    symbol_table_.find_symbol("c:@F@__ESBMC_list_try_find_index");
+  if (!try_find_func)
+    throw std::runtime_error("__ESBMC_list_try_find_index not found");
+
+  const symbolt *at_func = symbol_table_.find_symbol("c:@F@__ESBMC_list_at");
+  if (!at_func)
+    throw std::runtime_error("__ESBMC_list_at not found");
+
+  const symbolt *remove_func =
+    symbol_table_.find_symbol("c:@F@__ESBMC_list_remove_at");
+  if (!remove_func)
+    throw std::runtime_error("__ESBMC_list_remove_at not found");
+
+  // Create temp for index result
+  symbolt &index_var = converter_.create_tmp_symbol(
+    call_node, "$dict_pop_idx$", size_type(), exprt());
+  code_declt index_decl(symbol_expr(index_var));
+  index_decl.location() = location;
+  converter_.add_instruction(index_decl);
+
+  // Get element info for the key
+  python_list list_handler(converter_, call_node);
+  list_elem_info key_info =
+    list_handler.get_list_element_info(call_node, key_expr);
+
+  // Call try_find_index (returns SIZE_MAX if not found)
+  code_function_callt try_find_call;
+  try_find_call.function() = symbol_expr(*try_find_func);
+  try_find_call.lhs() = symbol_expr(index_var);
+  try_find_call.arguments().push_back(keys_member);
+
+  exprt key_arg;
+  if (
+    key_info.elem_symbol->type.is_pointer() &&
+    key_info.elem_symbol->type.subtype() == char_type())
+    key_arg = symbol_expr(*key_info.elem_symbol);
+  else
+    key_arg = address_of_exprt(symbol_expr(*key_info.elem_symbol));
+
+  try_find_call.arguments().push_back(key_arg);
+  try_find_call.arguments().push_back(symbol_expr(*key_info.elem_type_sym));
+  try_find_call.arguments().push_back(key_info.elem_size);
+  try_find_call.type() = size_type();
+  try_find_call.location() = location;
+  converter_.add_instruction(try_find_call);
+
+  const BigInt size_max_val = power(2, bv_width(size_type())) - 1;
+  constant_exprt size_max(size_max_val, size_type());
+  exprt key_found = not_exprt(equality_exprt(symbol_expr(index_var), size_max));
+
+  // Create result variable
+  symbolt &result_var = converter_.create_tmp_symbol(
+    call_node, "$dict_pop_result$", result_type, exprt());
+  code_declt result_decl(symbol_expr(result_var));
+  result_decl.location() = location;
+  converter_.add_instruction(result_decl);
+
+  // Then-branch: key found — retrieve value, remove from both lists
+  code_blockt then_block;
+
+  typet obj_ptr_type = pointer_typet(type_handler_.get_list_element_type());
+  symbolt &obj_var = converter_.create_tmp_symbol(
+    call_node, "$dict_pop_obj$", obj_ptr_type, exprt());
+  code_declt obj_decl(symbol_expr(obj_var));
+  obj_decl.location() = location;
+  then_block.copy_to_operands(obj_decl);
+
+  code_function_callt at_call;
+  at_call.function() = symbol_expr(*at_func);
+  at_call.lhs() = symbol_expr(obj_var);
+  at_call.arguments().push_back(values_member);
+  at_call.arguments().push_back(symbol_expr(index_var));
+  at_call.type() = obj_ptr_type;
+  at_call.location() = location;
+  then_block.copy_to_operands(at_call);
+
+  member_exprt obj_value(
+    dereference_exprt(
+      symbol_expr(obj_var), type_handler_.get_list_element_type()),
+    "value",
+    pointer_typet(empty_typet()));
+
+  exprt retrieved_value = retrieve_list_value(obj_value, result_type);
+
+  code_assignt value_assign(symbol_expr(result_var), retrieved_value);
+  value_assign.location() = location;
+  then_block.copy_to_operands(value_assign);
+
+  // Remove key and value at found index from both lists
+  code_function_callt remove_key_call;
+  remove_key_call.function() = symbol_expr(*remove_func);
+  remove_key_call.arguments().push_back(keys_member);
+  remove_key_call.arguments().push_back(symbol_expr(index_var));
+  remove_key_call.type() = bool_type();
+  remove_key_call.location() = location;
+  then_block.copy_to_operands(remove_key_call);
+
+  code_function_callt remove_value_call;
+  remove_value_call.function() = symbol_expr(*remove_func);
+  remove_value_call.arguments().push_back(values_member);
+  remove_value_call.arguments().push_back(symbol_expr(index_var));
+  remove_value_call.type() = bool_type();
+  remove_value_call.location() = location;
+  then_block.copy_to_operands(remove_value_call);
+
+  // Else-branch: key not found
+  code_blockt else_block;
+
+  if (has_default)
+  {
+    exprt coerced_default = default_value;
+    if (default_value.type() != result_type)
+      coerced_default = typecast_exprt(default_value, result_type);
+    code_assignt default_assign(symbol_expr(result_var), coerced_default);
+    default_assign.location() = location;
+    else_block.copy_to_operands(default_assign);
+  }
+  else
+  {
+    // Raise KeyError
+    std::string error_msg = "KeyError: key not found in dictionary";
+    exprt msg_size = constant_exprt(
+      integer2binary(error_msg.size() + 1, bv_width(size_type())),
+      integer2string(error_msg.size() + 1),
+      size_type());
+    typet str_type = array_typet(char_type(), msg_size);
+
+    symbolt &error_msg_var = converter_.create_tmp_symbol(
+      call_node, "$keyerror_msg$", str_type, exprt());
+    code_declt error_msg_decl(symbol_expr(error_msg_var));
+    error_msg_decl.location() = location;
+    else_block.copy_to_operands(error_msg_decl);
+
+    exprt error_string =
+      converter_.get_string_builder().build_string_literal(error_msg);
+    code_assignt error_msg_assign(symbol_expr(error_msg_var), error_string);
+    error_msg_assign.location() = location;
+    else_block.copy_to_operands(error_msg_assign);
+
+    std::string keyerror_type_str = "KeyError";
+    typet keyerror_type = type_handler_.get_typet(keyerror_type_str);
+    exprt exception_struct("struct", keyerror_type);
+    exception_struct.copy_to_operands(
+      address_of_exprt(symbol_expr(error_msg_var)));
+
+    exprt raise_keyerror = side_effect_exprt("cpp-throw", keyerror_type);
+    raise_keyerror.move_to_operands(exception_struct);
+    raise_keyerror.location() = location;
+
+    code_expressiont raise_code(raise_keyerror);
+    raise_code.location() = location;
+    else_block.copy_to_operands(raise_code);
+  }
+
+  code_ifthenelset if_stmt;
+  if_stmt.cond() = key_found;
+  if_stmt.then_case() = then_block;
+  if_stmt.else_case() = else_block;
+  if_stmt.location() = location;
+  converter_.add_instruction(if_stmt);
+
+  return symbol_expr(result_var);
+}
+
+typet python_dict_handler::get_dict_key_type_from_annotation(
+  const nlohmann::json &annotation_node)
+{
+  if (!annotation_node.contains("slice"))
+    return empty_typet();
+
+  const auto &slice = annotation_node["slice"];
+  if (
+    slice.contains("_type") && slice["_type"] == "Tuple" &&
+    slice.contains("elts") && slice["elts"].size() >= 2)
+  {
+    return converter_.get_type_from_annotation(
+      slice["elts"][0], annotation_node);
+  }
+
+  return empty_typet();
+}
+
+typet python_dict_handler::get_popitem_tuple_type(const exprt &dict_expr)
+{
+  // Get key type from annotation (default: char* / str).
+  // Mirrors the value-type lookup in resolve_expected_type_for_dict_subscript.
+  typet key_type = empty_typet();
+  if (dict_expr.is_symbol())
+  {
+    const symbolt *sym = symbol_table_.find_symbol(dict_expr.identifier());
+    if (sym)
+    {
+      std::string var_name = sym->name.as_string();
+      nlohmann::json var_decl = json_utils::find_var_decl(
+        var_name,
+        converter_.get_current_func_name(),
+        converter_.get_ast_json());
+      if (!var_decl.empty() && var_decl.contains("annotation"))
+      {
+        // For update(other_dict), try dict[K, V] first before using the
+        // default dict fallback.
+        key_type = get_dict_key_type_from_annotation(var_decl["annotation"]);
+
+        // If annotation is a bare "dict" with a function-call initializer,
+        // look up the key type from the function's return annotation.
+        if (
+          (key_type.is_nil() || key_type.is_empty()) &&
+          var_decl["annotation"]["_type"] == "Name" &&
+          var_decl["annotation"]["id"] == "dict" &&
+          var_decl.contains("value") && var_decl["value"]["_type"] == "Call" &&
+          var_decl["value"]["func"]["_type"] == "Name")
+        {
+          std::string func_name =
+            var_decl["value"]["func"]["id"].get<std::string>();
+          nlohmann::json func_def = json_utils::find_function(
+            converter_.get_ast_json()["body"], func_name);
+          if (
+            !func_def.empty() && func_def.contains("returns") &&
+            !func_def["returns"].is_null())
+          {
+            key_type = get_dict_key_type_from_annotation(func_def["returns"]);
+          }
+        }
+      }
+    }
+  }
+  if (key_type.is_nil() || key_type.is_empty())
+    key_type = gen_pointer_type(char_type());
+  if (key_type.is_array() && key_type.subtype() == char_type())
+    key_type = gen_pointer_type(char_type());
+
+  // Get value type from annotation (default: long int)
+  typet val_type = resolve_expected_type_for_dict_subscript(dict_expr);
+  if (val_type.is_nil() || val_type.is_empty())
+    val_type = long_int_type();
+  if (val_type.is_array() && val_type.subtype() == char_type())
+    val_type = gen_pointer_type(char_type());
+
+  return converter_.get_tuple_handler().create_tuple_struct_type(
+    {key_type, val_type});
+}
+
+exprt python_dict_handler::handle_dict_popitem(
+  const exprt &dict_expr,
+  const nlohmann::json &call_node)
+{
+  if (!call_node["args"].empty())
+    throw std::runtime_error("popitem() takes no arguments");
+
+  locationt location = converter_.get_location_from_decl(call_node);
+  typet list_type = type_handler_.get_list_type();
+
+  member_exprt keys_member(dict_expr, "keys", list_type);
+  member_exprt values_member(dict_expr, "values", list_type);
+
+  typet tuple_type = get_popitem_tuple_type(dict_expr);
+  const struct_typet &tuple_struct = to_struct_type(tuple_type);
+  typet key_type = tuple_struct.components()[0].type();
+  typet val_type = tuple_struct.components()[1].type();
+
+  const symbolt *size_func =
+    symbol_table_.find_symbol("c:@F@__ESBMC_list_size");
+  if (!size_func)
+    throw std::runtime_error("__ESBMC_list_size not found");
+
+  const symbolt *at_func = symbol_table_.find_symbol("c:@F@__ESBMC_list_at");
+  if (!at_func)
+    throw std::runtime_error("__ESBMC_list_at not found");
+
+  const symbolt *remove_func =
+    symbol_table_.find_symbol("c:@F@__ESBMC_list_remove_at");
+  if (!remove_func)
+    throw std::runtime_error("__ESBMC_list_remove_at not found");
+
+  // Create result variable (tuple)
+  symbolt &result_var = converter_.create_tmp_symbol(
+    call_node, "$dict_popitem_result$", tuple_type, exprt());
+  code_declt result_decl(symbol_expr(result_var));
+  result_decl.location() = location;
+  converter_.add_instruction(result_decl);
+
+  // Get size of the keys list
+  symbolt &size_var = converter_.create_tmp_symbol(
+    call_node, "$dict_popitem_size$", size_type(), exprt());
+  code_declt size_decl(symbol_expr(size_var));
+  size_decl.location() = location;
+  converter_.add_instruction(size_decl);
+
+  code_function_callt size_call;
+  size_call.function() = symbol_expr(*size_func);
+  size_call.lhs() = symbol_expr(size_var);
+  // list_type is already a pointer (PyListObject*), pass directly
+  size_call.arguments().push_back(keys_member);
+  size_call.type() = size_type();
+  size_call.location() = location;
+  converter_.add_instruction(size_call);
+
+  // Empty dict → raise KeyError
+  exprt is_empty = equality_exprt(symbol_expr(size_var), gen_zero(size_type()));
+
+  code_blockt empty_block;
+  {
+    std::string error_msg = "popitem(): dictionary is empty";
+    exprt msg_size_expr = constant_exprt(
+      integer2binary(error_msg.size() + 1, bv_width(size_type())),
+      integer2string(error_msg.size() + 1),
+      size_type());
+    typet str_type = array_typet(char_type(), msg_size_expr);
+
+    symbolt &err_var = converter_.create_tmp_symbol(
+      call_node, "$popitem_err$", str_type, exprt());
+    code_declt err_decl(symbol_expr(err_var));
+    err_decl.location() = location;
+    empty_block.copy_to_operands(err_decl);
+
+    exprt err_str =
+      converter_.get_string_builder().build_string_literal(error_msg);
+    code_assignt err_assign(symbol_expr(err_var), err_str);
+    err_assign.location() = location;
+    empty_block.copy_to_operands(err_assign);
+
+    std::string keyerror_type_str = "KeyError";
+    typet keyerror_type = type_handler_.get_typet(keyerror_type_str);
+    exprt exc_struct("struct", keyerror_type);
+    exc_struct.copy_to_operands(address_of_exprt(symbol_expr(err_var)));
+
+    exprt raise = side_effect_exprt("cpp-throw", keyerror_type);
+    raise.move_to_operands(exc_struct);
+    raise.location() = location;
+
+    code_expressiont raise_code(raise);
+    raise_code.location() = location;
+    empty_block.copy_to_operands(raise_code);
+  }
+
+  // Non-empty: get last (key, value), remove, build tuple
+  code_blockt nonempty_block;
+  {
+    // last_idx = size - 1
+    symbolt &last_idx_var = converter_.create_tmp_symbol(
+      call_node, "$dict_popitem_last_idx$", size_type(), exprt());
+    code_declt last_idx_decl(symbol_expr(last_idx_var));
+    last_idx_decl.location() = location;
+    nonempty_block.copy_to_operands(last_idx_decl);
+
+    exprt last_idx_expr("-", size_type());
+    last_idx_expr.copy_to_operands(symbol_expr(size_var), gen_one(size_type()));
+    code_assignt last_idx_assign(symbol_expr(last_idx_var), last_idx_expr);
+    last_idx_assign.location() = location;
+    nonempty_block.copy_to_operands(last_idx_assign);
+
+    typet obj_ptr_type = pointer_typet(type_handler_.get_list_element_type());
+
+    // Retrieve key
+    symbolt &key_obj_var = converter_.create_tmp_symbol(
+      call_node, "$dict_popitem_key_obj$", obj_ptr_type, exprt());
+    code_declt key_obj_decl(symbol_expr(key_obj_var));
+    key_obj_decl.location() = location;
+    nonempty_block.copy_to_operands(key_obj_decl);
+
+    code_function_callt key_at_call;
+    key_at_call.function() = symbol_expr(*at_func);
+    key_at_call.lhs() = symbol_expr(key_obj_var);
+    key_at_call.arguments().push_back(keys_member);
+    key_at_call.arguments().push_back(symbol_expr(last_idx_var));
+    key_at_call.type() = obj_ptr_type;
+    key_at_call.location() = location;
+    nonempty_block.copy_to_operands(key_at_call);
+
+    // Assign key into tuple before removing from list
+    member_exprt key_obj_value(
+      dereference_exprt(
+        symbol_expr(key_obj_var), type_handler_.get_list_element_type()),
+      "value",
+      pointer_typet(empty_typet()));
+    member_exprt key_field(symbol_expr(result_var), "element_0", key_type);
+    code_assignt key_assign(
+      key_field, retrieve_list_value(key_obj_value, key_type));
+    key_assign.location() = location;
+    nonempty_block.copy_to_operands(key_assign);
+
+    // Retrieve value
+    symbolt &val_obj_var = converter_.create_tmp_symbol(
+      call_node, "$dict_popitem_val_obj$", obj_ptr_type, exprt());
+    code_declt val_obj_decl(symbol_expr(val_obj_var));
+    val_obj_decl.location() = location;
+    nonempty_block.copy_to_operands(val_obj_decl);
+
+    code_function_callt val_at_call;
+    val_at_call.function() = symbol_expr(*at_func);
+    val_at_call.lhs() = symbol_expr(val_obj_var);
+    val_at_call.arguments().push_back(values_member);
+    val_at_call.arguments().push_back(symbol_expr(last_idx_var));
+    val_at_call.type() = obj_ptr_type;
+    val_at_call.location() = location;
+    nonempty_block.copy_to_operands(val_at_call);
+
+    // Assign value into tuple before removing from list.
+    member_exprt val_obj_value(
+      dereference_exprt(
+        symbol_expr(val_obj_var), type_handler_.get_list_element_type()),
+      "value",
+      pointer_typet(empty_typet()));
+    member_exprt val_field(symbol_expr(result_var), "element_1", val_type);
+    code_assignt val_assign(
+      val_field, retrieve_list_value(val_obj_value, val_type));
+    val_assign.location() = location;
+    nonempty_block.copy_to_operands(val_assign);
+
+    // Now safe to remove: tuple fields are already populated.
+    code_function_callt remove_key;
+    remove_key.function() = symbol_expr(*remove_func);
+    remove_key.arguments().push_back(keys_member);
+    remove_key.arguments().push_back(symbol_expr(last_idx_var));
+    remove_key.type() = bool_type();
+    remove_key.location() = location;
+    nonempty_block.copy_to_operands(remove_key);
+
+    code_function_callt remove_val;
+    remove_val.function() = symbol_expr(*remove_func);
+    remove_val.arguments().push_back(values_member);
+    remove_val.arguments().push_back(symbol_expr(last_idx_var));
+    remove_val.type() = bool_type();
+    remove_val.location() = location;
+    nonempty_block.copy_to_operands(remove_val);
+  }
+
+  code_ifthenelset if_stmt;
+  if_stmt.cond() = is_empty;
+  if_stmt.then_case() = empty_block;
+  if_stmt.else_case() = nonempty_block;
+  if_stmt.location() = location;
+  converter_.add_instruction(if_stmt);
+
+  return symbol_expr(result_var);
+}
+
+exprt python_dict_handler::handle_dict_fromkeys(const nlohmann::json &call_node)
+{
+  const auto &args = call_node["args"];
+
+  if (args.empty() || args.size() > 2)
+    throw std::runtime_error(
+      "fromkeys() takes 1 or 2 arguments (got " + std::to_string(args.size()) +
+      ")");
+
+  const nlohmann::json &iterable = args[0];
+  if (iterable["_type"] != "List")
+    throw std::runtime_error(
+      "fromkeys() currently supports a list literal as iterable");
+
+  nlohmann::json value_template;
+  if (args.size() == 2)
+  {
+    value_template = args[1];
+  }
+  else
+  {
+    // No explicit default: Python's dict.fromkeys uses None.
+    // Emit Constant(None) so the synthetic Dict below stays well-formed.
+    value_template = call_node;
+    value_template.erase("args");
+    value_template.erase("func");
+    value_template["_type"] = "Constant";
+    value_template["value"] = nullptr;
+  }
+
+  // Dedup keys: fromkeys([1, 1, 2], v) == {1: v, 2: v} in Python
+  // and collapsing here avoids redundant IR inserts.
+  // Constants compare by value, Names by id;
+  // other expressions are left distinct.
+  auto same_key = [](const nlohmann::json &a, const nlohmann::json &b) -> bool {
+    if (a.value("_type", "") != b.value("_type", ""))
+      return false;
+    const std::string type = a["_type"];
+    if (type == "Constant")
+      return a.value("value", nlohmann::json(nullptr)) ==
+             b.value("value", nlohmann::json(nullptr));
+    if (type == "Name")
+      return a.value("id", "") == b.value("id", "");
+    return false;
+  };
+
+  nlohmann::json unique_keys = nlohmann::json::array();
+  for (const auto &elt : iterable["elts"])
+  {
+    bool duplicate = false;
+    for (const auto &existing : unique_keys)
+      if (same_key(elt, existing))
+      {
+        duplicate = true;
+        break;
+      }
+    if (!duplicate)
+      unique_keys.push_back(elt);
+  }
+
+  // Synthesize {k: default for k in unique_keys} and hand it off as if
+  // the user had written a Dict literal directly.
+  nlohmann::json synthetic_dict = call_node;
+  synthetic_dict.erase("args");
+  synthetic_dict.erase("func");
+  synthetic_dict["_type"] = "Dict";
+  synthetic_dict["keys"] = unique_keys;
+  synthetic_dict["values"] = nlohmann::json::array();
+  for (size_t i = 0; i < unique_keys.size(); ++i)
+    synthetic_dict["values"].push_back(value_template);
+
+  locationt location = converter_.get_location_from_decl(call_node);
+  std::string dict_name =
+    generate_unique_dict_name(synthetic_dict, location) + "_fromkeys";
+  struct_typet dict_type = get_dict_struct_type();
+
+  symbolt &dict_sym =
+    converter_.create_tmp_symbol(call_node, dict_name, dict_type, exprt());
+  code_declt dict_decl(symbol_expr(dict_sym));
+  dict_decl.location() = location;
+  converter_.add_instruction(dict_decl);
+
+  create_dict_from_literal(synthetic_dict, symbol_expr(dict_sym));
+  return symbol_expr(dict_sym);
+}
+
+exprt python_dict_handler::handle_dict_update(
+  const exprt &dict_expr,
+  const nlohmann::json &call_node)
+{
+  const auto &args = call_node["args"];
+
+  if (args.size() != 1)
+    throw std::runtime_error("update() takes exactly one argument");
+
+  const nlohmann::json &arg = args[0];
+
+  if (is_dict_literal(arg))
+  {
+    // Keep the literal fast path unchanged.
+    const auto &keys = arg["keys"];
+    const auto &values = arg["values"];
+
+    for (size_t i = 0; i < keys.size(); ++i)
+    {
+      exprt value_expr = converter_.get_expr(values[i]);
+      code_blockt pair_block;
+      handle_dict_subscript_assign(
+        dict_expr,
+        get_key_expr(keys[i]),
+        value_expr,
+        converter_.get_location_from_decl(keys[i]),
+        keys[i],
+        pair_block);
+      converter_.add_instruction(pair_block);
+    }
+
+    return nil_exprt();
+  }
+
+  // For update(other_dict), iterate over the source keys/values lists and
+  // reinsert each pair into the destination dict.
+  exprt other_dict = converter_.get_expr(arg);
+  if (!is_dict_type(other_dict.type()))
+    throw std::runtime_error("update() argument must be a dict in ESBMC model");
+
+  // Read entries from the source dict through its internal keys/values lists.
+  locationt location = converter_.get_location_from_decl(call_node);
+  typet list_type = type_handler_.get_list_type();
+  member_exprt keys_member(other_dict, "keys", list_type);
+  member_exprt values_member(other_dict, "values", list_type);
+
+  // Get the helper used to determine how many entries need to be copied.
+  const symbolt *size_func =
+    symbol_table_.find_symbol("c:@F@__ESBMC_list_size");
+  if (!size_func)
+    throw std::runtime_error("__ESBMC_list_size not found");
+
+  // Recover the key and value types so each entry can be reconstructed.
+  python_list list_handler(converter_, call_node);
+  typet tuple_type = get_popitem_tuple_type(other_dict);
+  const struct_typet &tuple_struct = to_struct_type(tuple_type);
+  typet key_type = tuple_struct.components()[0].type();
+  typet val_type = tuple_struct.components()[1].type();
+
+  // Compute the number of entries in the source dict
+  symbolt &size_var = converter_.create_tmp_symbol(
+    call_node, "$dict_update_size$", size_type(), exprt());
+  code_declt size_decl(symbol_expr(size_var));
+  size_decl.location() = location;
+  converter_.add_instruction(size_decl);
+
+  code_function_callt size_call;
+  size_call.function() = symbol_expr(*size_func);
+  size_call.lhs() = symbol_expr(size_var);
+  size_call.arguments().push_back(keys_member);
+  size_call.type() = size_type();
+  size_call.location() = location;
+  converter_.add_instruction(size_call);
+
+  // Create the loop index used to walk over the source entries.
+  symbolt &index_var = converter_.create_tmp_symbol(
+    call_node, "$dict_update_iter$", size_type(), gen_zero(size_type()));
+  code_declt index_decl(symbol_expr(index_var));
+  index_decl.location() = location;
+  converter_.add_instruction(index_decl);
+
+  code_assignt index_init(symbol_expr(index_var), gen_zero(size_type()));
+  index_init.location() = location;
+  converter_.add_instruction(index_init);
+
+  exprt loop_cond("<", bool_type());
+  loop_cond.copy_to_operands(symbol_expr(index_var), symbol_expr(size_var));
+
+  // Rebuild the current key/value pair from the source lists.
+  code_blockt loop_body;
+  exprt key_obj = list_handler.build_list_at_call(
+    keys_member, symbol_expr(index_var), call_node);
+  exprt key_expr = list_handler.extract_pyobject_value(key_obj, key_type);
+  exprt value_obj = list_handler.build_list_at_call(
+    values_member, symbol_expr(index_var), call_node);
+  exprt value_expr = list_handler.extract_pyobject_value(value_obj, val_type);
+
+  // Reuse dict[key] = value handling for each copied entry.
+  code_blockt pair_block;
+  handle_dict_subscript_assign(
+    dict_expr, key_expr, value_expr, location, call_node, pair_block);
+  loop_body.copy_to_operands(pair_block);
+
+  // Advance to the next source entry.
+  exprt next_index = plus_exprt(symbol_expr(index_var), gen_one(size_type()));
+  code_assignt index_update(symbol_expr(index_var), next_index);
+  index_update.location() = location;
+  loop_body.copy_to_operands(index_update);
+
+  // Copy all entries from the source dict into the destination dict.
+  codet while_loop("while");
+  while_loop.copy_to_operands(loop_cond, loop_body);
+  while_loop.location() = location;
+  converter_.add_instruction(while_loop);
+
+  return nil_exprt();
 }
 
 exprt python_dict_handler::compare(

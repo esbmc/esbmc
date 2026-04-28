@@ -56,6 +56,7 @@ TEST_CASE("Add type annotation")
         "_type": "Module",
         "body": [
             {
+                "_inferred_annotation": true,
                 "_type": "AnnAssign",
                 "annotation": {
                     "_type": "Name",
@@ -192,6 +193,7 @@ TEST_CASE("Add type annotation")
     "_type": "Module",
     "body": [
         {
+            "_inferred_annotation": true,
             "_type": "AnnAssign",
             "annotation": {
                 "_type": "Name",
@@ -233,6 +235,7 @@ TEST_CASE("Add type annotation")
             }
         },
         {
+            "_inferred_annotation": true,
             "_type": "AnnAssign",
             "annotation": {
                 "_type": "Name",
@@ -383,6 +386,7 @@ TEST_CASE("Add type annotation")
             },
             "body": [
                 {
+                    "_inferred_annotation": true,
                     "_type": "AnnAssign",
                     "annotation": {
                         "_type": "Name",
@@ -595,6 +599,7 @@ TEST_CASE("Add type annotation")
             },
             "body": [
                 {
+                    "_inferred_annotation": true,
                     "_type": "AnnAssign",
                     "annotation": {
                         "_type": "Name",
@@ -740,6 +745,7 @@ TEST_CASE("Add type annotation")
     "_type": "Module",
     "body": [
         {
+            "_inferred_annotation": true,
             "_type": "AnnAssign",
             "annotation": {
                 "_type": "Name",
@@ -925,6 +931,7 @@ TEST_CASE("Add type annotation")
       "_type": "Module",
       "body": [
         {
+          "_inferred_annotation": true,
           "_type": "AnnAssign",
           "annotation": {
             "_type": "Name",
@@ -964,6 +971,7 @@ TEST_CASE("Add type annotation")
           }
         },
         {
+          "_inferred_annotation": true,
           "_type": "AnnAssign",
           "annotation": {
             "_type": "Name",

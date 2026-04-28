@@ -5,10 +5,15 @@
 #include <util/expr.h>
 #include <util/std_code.h>
 #include <nlohmann/json.hpp>
+#include <optional>
+#include <string>
+#include <string_view>
+#include <unordered_map>
 
 class python_converter;
 class type_handler;
 class contextt;
+class symbolt;
 
 /**
  * @brief Handles mathematical operations for Python-to-C conversion
@@ -23,6 +28,8 @@ private:
   python_converter &converter;
   contextt &symbol_table;
   type_handler &type_handler_;
+  mutable std::unordered_map<std::string_view, const symbolt *>
+    c_math_symbol_cache_;
 
   /**
    * @brief Resolve a symbol to its constant value if possible
@@ -30,6 +37,26 @@ private:
    * @return The resolved constant expression
    */
   exprt resolve_symbol(const exprt &operand) const;
+
+  /// Resolve a constant-like expression (constant or constant-valued symbol)
+  /// to a host double when possible.
+  std::optional<double> try_resolve_constant_double(const exprt &operand) const;
+
+  /// Promote operand to double if needed, preserving the original expression
+  /// when already floating-point.
+  exprt promote_to_double_if_needed(exprt operand) const;
+
+  /// Build a unary C-math call expression (e.g. sin, cos, exp, log).
+  exprt build_unary_c_math_call(
+    const char *symbol_id,
+    const char *display_name,
+    exprt operand,
+    const nlohmann::json &element);
+
+  /// Resolve C-math symbol through a tiny local cache to avoid repeated
+  /// symbol-table lookups in hot math call paths.
+  const symbolt &
+  get_c_math_symbol_cached(const char *symbol_id, const char *display_name);
 
 public:
   /**
@@ -39,6 +66,64 @@ public:
    * @param th Reference to the type handler
    */
   python_math(python_converter &conv, contextt &ctx, type_handler &th);
+
+  /**
+   * @brief Classify whether a call should be handled by math dispatch.
+   *
+   * Returns true for:
+   * - direct `math.<func>` calls supported by the frontend, and
+   * - internal math wrappers such as `__ESBMC_*`.
+   *
+   * @param caller Module/object name for attribute calls (e.g., "math")
+   * @param func_name Called function name
+   * @return true when the call belongs to math dispatch
+   */
+  bool is_math_dispatch_target(
+    const std::string &caller,
+    const std::string &func_name) const;
+
+  /**
+   * @brief Cached variant of is_math_dispatch_target.
+   *
+   * Uses function_call_cache to memoize math-dispatch classification,
+   * reducing repeated set lookups during large regression batches.
+   *
+   * @param caller Module/object name for attribute calls (e.g., "math")
+   * @param func_name Called function name
+   * @return true when the call belongs to math dispatch
+   */
+  bool is_math_dispatch_target_cached(
+    const std::string &caller,
+    const std::string &func_name);
+
+  /// Return true when @p func_name is handled by unary math dispatch.
+  bool is_unary_dispatch_function(std::string_view func_name) const;
+
+  /// Return true when @p func_name is handled by binary math dispatch.
+  bool is_binary_dispatch_function(std::string_view func_name) const;
+
+  /**
+   * @brief Dispatch supported unary math functions through a single entrypoint.
+   *
+   * Returns nil_exprt() when @p func_name is not a supported unary-dispatch
+   * target.
+   */
+  exprt handle(
+    std::string_view func_name,
+    exprt operand,
+    const nlohmann::json &element);
+
+  /**
+   * @brief Dispatch supported binary math functions through a single entrypoint.
+   *
+   * Returns nil_exprt() when @p func_name is not a supported binary-dispatch
+   * target.
+   */
+  exprt handle(
+    std::string_view func_name,
+    exprt lhs,
+    exprt rhs,
+    const nlohmann::json &element);
 
   /**
    * @brief Compute a mathematical expression with constant operands
@@ -290,6 +375,122 @@ public:
    *   math.log(-1) -> domain error at runtime
    */
   exprt handle_log(exprt operand, const nlohmann::json &element);
+
+  /**
+   * @brief Handle arccosine function (math.acos)
+   */
+  exprt handle_acos(exprt operand, const nlohmann::json &element);
+
+  /**
+   * @brief Handle arctangent function (math.atan)
+   */
+  exprt handle_atan(exprt operand, const nlohmann::json &element);
+
+  /**
+   * @brief Handle two-argument arctangent function (math.atan2)
+   */
+  exprt
+  handle_atan2(exprt y_operand, exprt x_operand, const nlohmann::json &element);
+
+  /**
+   * @brief Handle base-2 logarithm function (math.log2)
+   */
+  exprt handle_log2(exprt operand, const nlohmann::json &element);
+
+  /**
+   * @brief Handle power function (math.pow)
+   */
+  exprt handle_pow(exprt base, exprt exp, const nlohmann::json &element);
+
+  /**
+   * @brief Handle absolute value for floats (math.fabs)
+   */
+  exprt handle_fabs(exprt operand, const nlohmann::json &element);
+
+  /**
+   * @brief Handle truncate to integer towards zero (math.trunc)
+   */
+  exprt handle_trunc(exprt operand, const nlohmann::json &element);
+
+  /**
+   * @brief Handle floating-point remainder (math.fmod)
+   */
+  exprt handle_fmod(exprt lhs, exprt rhs, const nlohmann::json &element);
+
+  /**
+   * @brief Handle copy sign (math.copysign)
+   */
+  exprt handle_copysign(exprt lhs, exprt rhs, const nlohmann::json &element);
+
+  /**
+   * @brief Handle tangent function (math.tan)
+   */
+  exprt handle_tan(exprt operand, const nlohmann::json &element);
+
+  /**
+   * @brief Handle arcsine function (math.asin)
+   */
+  exprt handle_asin(exprt operand, const nlohmann::json &element);
+
+  /**
+   * @brief Handle hyperbolic sine function (math.sinh)
+   */
+  exprt handle_sinh(exprt operand, const nlohmann::json &element);
+
+  /**
+   * @brief Handle hyperbolic cosine function (math.cosh)
+   */
+  exprt handle_cosh(exprt operand, const nlohmann::json &element);
+
+  /**
+   * @brief Handle hyperbolic tangent function (math.tanh)
+   */
+  exprt handle_tanh(exprt operand, const nlohmann::json &element);
+
+  /**
+   * @brief Handle base-10 logarithm function (math.log10)
+   */
+  exprt handle_log10(exprt operand, const nlohmann::json &element);
+
+  /**
+   * @brief Handle expm1 function (math.expm1)
+   */
+  exprt handle_expm1(exprt operand, const nlohmann::json &element);
+
+  /**
+   * @brief Handle log1p function (math.log1p)
+   */
+  exprt handle_log1p(exprt operand, const nlohmann::json &element);
+
+  /**
+   * @brief Handle exp2 function (math.exp2)
+   */
+  exprt handle_exp2(exprt operand, const nlohmann::json &element);
+
+  /**
+   * @brief Handle asinh function (math.asinh)
+   */
+  exprt handle_asinh(exprt operand, const nlohmann::json &element);
+
+  /**
+   * @brief Handle acosh function (math.acosh)
+   */
+  exprt handle_acosh(exprt operand, const nlohmann::json &element);
+
+  /**
+   * @brief Handle atanh function (math.atanh)
+   */
+  exprt handle_atanh(exprt operand, const nlohmann::json &element);
+
+  /**
+   * @brief Handle hypot function (math.hypot)
+   */
+  exprt handle_hypot(exprt lhs, exprt rhs, const nlohmann::json &element);
+
+  /**
+   * @brief Handle dist function (math.dist) for tuple arguments
+   */
+  exprt handle_dist(exprt p, exprt q, const nlohmann::json &element);
 };
 
 #endif

@@ -239,9 +239,9 @@ esbmc file.c --z3
 ### Limitations
 
 <ul>
-  <li>Currently, only Z3 is supported (no SMT-LIB support).</li>
-  <li>Only one symbol is supported in quantifiers. Future work will enable multiple symbols.</li>
-  <li>Recursive quantifiers (e.g., nested <code>forall</code> statements) are not yet supported.</li>
+  <li>Currently, the solvers that are supported are: Z3 and CVC5 (no SMT-LIB support).</li>
+  <li>Only one symbol is supported in quantifiers for Z3. CVC5 supports multiple symbols.</li>
+  <li>Recursive quantifiers (e.g., nested <code>forall</code> statements) are supported.</li>
   <li>There is a known issue where a constant-bounded symbol might cause incorrect simplifications.</li>
 </ul>
 
@@ -300,62 +300,202 @@ esbmc file.c --k-induction
 esbmc file.c --loop-invariant
 ```
 
+ESBMC supports user-provided loop invariants as an alternative to expensive loop
+unwinding. This is particularly beneficial for programs with large loop bounds or
+unbounded loops, where traditional k-induction may become computationally
+prohibitive or hit iteration limits.
 
-<p>ESBMC now supports user-provided loop invariants as an alternative to expensive loop unwinding. This approach is particularly beneficial for programs with large loop bounds or unbounded loops, where traditional k-induction may become computationally prohibitive or hit iteration limits.</p>
+Loop invariants are specified using the built-in function
+`__ESBMC_loop_invariant(condition)` placed within the loop body.
 
-<p>Loop invariants are specified using the built-in function <code>__ESBMC_loop_invariant(condition)</code> placed within the loop body. When the <i>--loop-invariant</i> option is enabled, ESBMC transforms the loop using the standard k-induction approach:</p>
+---
 
-<ol>
-  <li><strong>Base case verification:</strong> Check that the invariant holds upon loop entry</li>
-  <li><strong>Inductive step:</strong> Assume the invariant holds, execute one loop iteration, and verify the invariant still holds</li>
-  <li><strong>Property verification:</strong> After loop exit, use the invariant to prove the target property</li>
-</ol>
+### Verification Modes
 
-#### Example: Basic Loop Invariant Usage</h5>
+As of the latest release, ESBMC provides **two distinct modes** for loop
+invariant verification:
 
+---
+
+#### `--loop-invariant` — Combined Mode (Default, Recommended)
+
+This is the recommended mode. It integrates invariant checking with k-induction
+for robust analysis, eliminating the spurious counterexamples that the legacy
+mode could produce for correct-but-weak invariants.
+
+> **Note:** `--loop-invariant` now implicitly enables k-induction. No extra
+> flags are required.
+
+**How it works — two-branch transformation:**
+```
+IF !nondet_bool() GOTO loop_head       // Non-deterministically skip to Branch 2
+
+// --- Branch 1: Inductivity Check ---
+ASSERT(INV)                            // Base case: invariant holds on entry
+HAVOC(loop_vars)
+ASSUME(INV)
+ASSUME(loop_entry_cond)
+ASSERT(INV)                            // Inductive step: invariant still holds
+ASSUME(false)                          // Terminate Branch 1
+
+loop_head:
+// --- Branch 2: K-Induction ---
+ASSUME(INV)                            // Use invariant as a hint for k-induction
+GOTO loop_head
+```
+
+**Expected outcomes:**
+
+| Invariant Quality | Branch 1 Result | K-Induction Result |
+|---|---|---|
+| Wrong (not inductive) | ASSERT fails — clear "invariant not inductive" error | — |
+| Correct but weak | Passes | Proves property via forward condition |
+| Correct and strong | Passes | Closes at inductive step |
+
+---
+
+#### `--loop-invariant-check` — Legacy Mode
+
+The original three-part havoc abstraction is preserved under this flag for
+backward compatibility. It replaces the annotated loop with:
+
+1. **Base-case assertion** — invariant holds on entry
+2. **Havoc + Assume** — abstracts the loop body nondeterministically
+3. **Inductive-step assertion** — invariant still holds after one iteration
+
+This mode avoids loop unrolling entirely, making it faster when the only goal
+is checking invariant inductivity without k-induction overhead. However, it
+**may produce spurious counterexamples** for invariants that are correct but
+weak, because the havoc step can assign values outside the expected program
+state without proper constraint propagation.
+
+> Use `--loop-invariant-check` only when speed is the priority and you
+> understand the false-positive risk.
+
+---
+
+### Example: Basic Loop Invariant Usage
 ```c
 int main() {
-int i = 0;
-int sum = 0;
+    int i = 0;
+    int sum = 0;
 
-__ESBMC_loop_invariant(i >= 0 && i <= 1000 && sum == i * 10);
-while (i < 1000) {
-  sum += 10;
-  i++;
-}
+    __ESBMC_loop_invariant(i >= 0 && i <= 1000 && sum == i * 10);
+    while (i < 1000) {
+        sum += 10;
+        i++;
+    }
 
-assert(sum == 10000);  // Successfully verified
-  return 0;
+    assert(sum == 10000);  // Successfully verified
+    return 0;
 }
 ```
 
-<p>The loop invariant approach has been tested on various benchmark programs from the k-induction test suite, successfully verifying several cases that previously resulted in "VERIFICATION UNKNOWN" verdicts due to unwinding limitations, including <code>check_if</code>, <code>count_down</code>, and <code>count_up_down</code>.</p>
+Verify with:
+```bash
+esbmc file.c --loop-invariant
+```
 
-## Known Limitations
+---
 
-<div class="warning">
-  <p><strong>Integer Overflow False Positives:</strong> The current implementation may generate false positive overflow errors due to aggressive havoc operations that create values outside expected bounds. This occurs when nondeterministic values are assigned without proper constraint propagation.</p>
+### Companion Options
 
-  <p><strong>Nested Loop Support:</strong> The current implementation does not correctly handle nested loops with multiple invariants. State management between inner and outer loops requires further refinement.</p>
+The following options can be combined with the k-induction proof rule to
+produce or strengthen inductive invariants:
 
-  <p><strong>Manual Invariant Specification:</strong> Users must manually specify correct loop invariants since ESBMC will not validate or infer them before verifying the program's correctness.</p>
-</div>
+- `--interval-analysis` — Enable interval analysis for integer variables and
+  inject assume statements into the program.
+- `--add-symex-value-sets` — Enable value-set analysis for pointers and inject
+  assume statements.
+- `--loop-invariant` — Use user-provided loop invariants with the combined
+  k-induction mode (described above).
 
-<p>We can also use additional options together with the k-induction proof rule to produce (inductive) invariants:</p>
-<ol>
-  <li><i>--interval-analysis</i>: enable interval analysis for integer variables and add assumes to the program.</li>
-  <li><i>--add-symex-value-sets</i>: enable value set analysis for pointers and add assumes to the program.</li>
-  <li><i>--loop-invariant</i>: enable user-provided loop invariants to avoid expensive loop unwinding.</li>
-</ol>
+---
 
-<p>The loop invariant feature is completely opt-in and maintains backward compatibility with existing verification workflows. Programs without loop invariant annotations continue to use the standard k-induction unwinding approach.</p>
+### Known Limitations
 
-<p>[1] Mary Sheeran, Satnam Singh, Gunnar Stålmarck: Checking Safety Properties Using Induction and a SAT-Solver. FMCAD 2000: 108-125</p>
-<p>[2] Alastair F. Donaldson, Leopold Haller, Daniel Kroening, Philipp Rümmer: Software Verification Using k-Induction. SAS 2011: 351-368
+**Nested Loop Support:** The current implementation does not correctly handle
+nested loops with multiple invariants. State management between inner and outer
+loops requires further refinement.
+
+**Manual Invariant Specification:** Users must manually specify correct loop
+invariants. ESBMC will not infer or validate invariants before verification. An
+incorrect invariant will lead to a failed base-case assertion in
+`--loop-invariant` mode, or potentially a spurious result in
+`--loop-invariant-check` mode.
+
+> **Note:** The integer overflow false-positive issue present in the legacy
+> mode (caused by unconstrained havoc operations) has been resolved in the new
+> `--loop-invariant` combined mode. If you observe such false positives, ensure
+> you are not using `--loop-invariant-check`.
+
+---
+
+### Backward Compatibility
+
+The `--loop-invariant` flag now routes to the new combined mode. The legacy
+behavior is accessible via `--loop-invariant-check`. Programs without loop
+invariant annotations continue to use the standard k-induction unwinding
+approach.
+
+---
+
+### Loop Frame Rule (`--loop-frame-rule`)
+
+A loop invariant says what stays true across iterations. The **loop frame
+rule** adds the complementary claim: which variables the loop is allowed to
+change. Variables not listed in `__ESBMC_loop_assigns` are guaranteed to be
+untouched — and ESBMC checks this.
+
+```c
+int main(void) {
+    int i = 0;
+    int j = 42;
+
+    __ESBMC_loop_invariant(i >= 0 && i <= 10);
+    __ESBMC_loop_assigns(i);
+    while (i < 10)
+        i++;
+
+    /* j was not listed in loop_assigns — ESBMC can prove it is still 42 */
+    __ESBMC_assert(j == 42, "j unchanged");
+    return 0;
+}
+```
+
+Run with:
+
+```bash
+esbmc file.c --loop-invariant-check --loop-frame-rule
+```
+
+Without `--loop-frame-rule`, the havoc step makes every loop-modified variable
+nondeterministic, so the assertion on `j` would fail despite `j` never being
+touched. With the flag, ESBMC snapshots all variables not in
+`__ESBMC_loop_assigns` before the havoc and assumes they are unchanged
+afterward.
+
+Both macros must be placed **before the loop**, as statements ending with `;`.
+`__ESBMC_loop_assigns` supports up to five targets; use
+`__ESBMC_loop_assigns()` with no arguments to declare that the loop modifies
+nothing.
+
+> `--loop-frame-rule` requires `--loop-invariant-check`. It does not work with
+> `--loop-invariant` (the combined k-induction mode).
+
+---
+
+### References
+
+[1] Mary Sheeran, Satnam Singh, Gunnar Stålmarck: *Checking Safety Properties
+Using Induction and a SAT-Solver.* FMCAD 2000: 108–125
+
+[2] Alastair F. Donaldson, Leopold Haller, Daniel Kroening, Philipp Rümmer:
+*Software Verification Using k-Induction.* SAS 2011: 351–368
   
 <h3 id="multiple-files">Verification of modules that rely on larger structures</h3>
 
-<p>ESBMC can verify code that relies on existing infrastructures and must be compliant with those. Consider the following C program where the verification engineer wants to check whether the assert-statement in line 8 holds.</p>
+<p>ESBMC can verify code that relies on existing infrastructures and must be compliant with those. Consider the following C program where the verification engineer wants to check whether the assert-statement in line 8 holds.</p> 
 
 
 ```
@@ -490,10 +630,10 @@ Starting Bounded Model Checking
 Symex completed in: 0.002s (14 assignments)
 Slicing time: 0.000s (removed 10 assignments)
 Generated 9 VCC(s), 2 remaining after simplification (4 assignments)
-No solver specified; defaulting to Boolector
+No solver specified; defaulting to Bitwuzla
 Encoding remaining VCC(s) using bit-vector/floating-point arithmetic
 Encoding to solver time: 0.000s
-Solving with solver Boolector 3.2.3
+Solving with solver Bitwuzla
 Runtime decision procedure: 0.000s
 BMC program time: 0.003s
 
@@ -800,11 +940,11 @@ x == 3
 0
 
 Slicing time: 0.000s (removed 0 assignments)
-No solver specified; defaulting to Boolector
-Solving claim 'x == 0' with solver Boolector 3.2.2
+No solver specified; defaulting to Bitwuzla
+Solving claim 'x == 0' with solver Bitwuzla
 Encoding remaining VCC(s) using bit-vector/floating-point arithmetic
 Encoding to solver time: 0.001s
-Solving with solver Boolector 3.2.2
+Solving with solver Bitwuzla
 Runtime decision procedure: 0.000s
 
 [Counterexample]
@@ -902,17 +1042,17 @@ Note that the <b>--condition-coverage-claims</b> option provides verbose output 
 <thead>
   <tr><td>Backend</td><td>Option</td></tr>
 </thead>
-<tr><td>Boolector</td><td><code>--boolector</code> (this is the default)</td></tr>
+<tr><td>Bitwuzla</td><td><code>--bitwuzla</code> (this is the default)</td></tr>
+<tr><td>Boolector</td><td><code>--boolector</code></td></tr>
 <tr><td>Z3</td><td><code>--z3</code></td></tr>
 <tr><td>MathSAT</td><td><code>--mathsat</code></td></tr>
 <tr><td>CVC4</td><td><code>--cvc</code></td></tr>
 <tr><td>Yices</td><td><code>--yices</code></td></tr>
-<tr><td>Bitwuzla</td><td><code>--bitwuzla</code></td></tr>
 <tr><td>SMTLIB</td><td><code>--smtlib --smtlib-solver-prog CMD</code>
   (see below for details about the placeholder <code>CMD</code>)</td></tr>
 </table>
 
-<p>While Boolector is the default, an alternative default solver can also
+<p>While Bitwuzla is the default, an alternative default solver can also
   be specified with the <code>--default-solver SOLVER</code> option, where
   <code>SOLVER</code> corresponds to one of the above options without the
   <code>--</code>. This option is particular suited for a shell alias or the

@@ -1,0 +1,143 @@
+#ifndef ESBMC_BIT
+#define ESBMC_BIT
+
+#include "cstdint"
+#include "type_traits"
+
+namespace std
+{
+
+// Pointer-to-pointer specialisation: short-circuit the generic
+// memcpy-into-temporary lowering used by stock libc++ shims, which
+// breaks ESBMC's symex pointer-aliasing tracking and yields
+// internally-inconsistent counterexamples (esbmc#4191).
+template <
+  class To,
+  class From,
+  typename enable_if<
+    is_pointer<To>::value && is_pointer<From>::value,
+    int>::type = 0>
+constexpr To bit_cast(const From &src) noexcept
+{
+  return reinterpret_cast<To>(src);
+}
+
+// Generic case: defer to Clang's __builtin_bit_cast, which the C
+// frontend lowers via gen_typecast (clang_c_convert.cpp,
+// BuiltinBitCastExprClass) — i.e. a plain typecast_exprt, not a memcpy.
+template <
+  class To,
+  class From,
+  typename enable_if<
+    !(is_pointer<To>::value && is_pointer<From>::value),
+    int>::type = 0>
+constexpr To bit_cast(const From &src) noexcept
+{
+  return __builtin_bit_cast(To, src);
+}
+
+template <class T>
+constexpr bool has_single_bit(T x) noexcept
+{
+  return x != 0 && (x & (x - 1)) == 0;
+}
+
+template <class T>
+constexpr int popcount(T x) noexcept
+{
+  int count = 0;
+  while (x)
+  {
+    count += static_cast<int>(x & 1);
+    x >>= 1;
+  }
+  return count;
+}
+
+template <class T>
+constexpr int countl_zero(T x) noexcept
+{
+  using U = make_unsigned_t<T>;
+  U u = static_cast<U>(x);
+  constexpr int N = static_cast<int>(sizeof(T) * 8);
+  if (u == 0)
+    return N;
+  int count = 0;
+  U mask = static_cast<U>(1) << (N - 1);
+  while ((u & mask) == 0)
+  {
+    ++count;
+    mask >>= 1;
+  }
+  return count;
+}
+
+template <class T>
+constexpr int countr_zero(T x) noexcept
+{
+  using U = make_unsigned_t<T>;
+  U u = static_cast<U>(x);
+  if (u == 0)
+    return static_cast<int>(sizeof(T) * 8);
+  int count = 0;
+  while ((u & 1) == 0)
+  {
+    ++count;
+    u >>= 1;
+  }
+  return count;
+}
+
+template <class T>
+constexpr int bit_width(T x) noexcept
+{
+  return static_cast<int>(sizeof(T) * 8) - countl_zero(x);
+}
+
+template <class T>
+constexpr T bit_floor(T x) noexcept
+{
+  if (x == 0)
+    return 0;
+  return static_cast<T>(1) << (bit_width(x) - 1);
+}
+
+template <class T>
+constexpr T bit_ceil(T x) noexcept
+{
+  if (x <= 1)
+    return 1;
+  return static_cast<T>(1) << bit_width(static_cast<T>(x - 1));
+}
+
+template <class T>
+constexpr T rotl(T x, int s) noexcept
+{
+  constexpr int N = static_cast<int>(sizeof(T) * 8);
+  // Normalise into (-N, N) before any negation so callers passing
+  // INT_MIN cannot trigger signed-overflow on -s in rotr.
+  const int r = s % N;
+  if (r == 0)
+    return x;
+  if (r > 0)
+    return static_cast<T>((x << r) | (x >> (N - r)));
+  return static_cast<T>((x >> -r) | (x << (N + r)));
+}
+
+template <class T>
+constexpr T rotr(T x, int s) noexcept
+{
+  constexpr int N = static_cast<int>(sizeof(T) * 8);
+  return rotl<T>(x, -(s % N));
+}
+
+enum class endian
+{
+  little = __ORDER_LITTLE_ENDIAN__,
+  big = __ORDER_BIG_ENDIAN__,
+  native = __BYTE_ORDER__
+};
+
+} // namespace std
+
+#endif

@@ -132,6 +132,16 @@ class PermissionError(OSError):
         return self.message
 
 
+class StopIteration(Exception):
+    message: str = ""
+
+    def __init__(self, message: str = ""):
+        self.message: str = message
+
+    def __str__(self) -> str:
+        return self.message
+
+
 class RuntimeError(Exception):
     """Base class for runtime errors"""
     message: str = ""
@@ -149,6 +159,48 @@ class NotImplementedError(RuntimeError):
 
     def __init__(self, message: str = "Method not implemented"):
         self.message: str = message
+
+    def __str__(self) -> str:
+        return self.message
+
+
+class EOFError(Exception):  # noqa: A001
+    """Raised when input() hits end-of-file without reading any data"""
+
+    message: str = ""
+
+    def __init__(self, message: str = "EOF when reading a line"):
+        self.message: str = message
+
+    def __str__(self) -> str:
+        return self.message
+
+
+class ImportError(Exception):
+    """Raised when an import statement fails to find the module"""
+    message: str = ""
+    name: str = ""
+    path: str = ""
+
+    def __init__(self, message: str = "Import error", name: str = "", path: str = ""):
+        self.message: str = message
+        self.name: str = name
+        self.path: str = path
+
+    def __str__(self) -> str:
+        return self.message
+
+
+class ModuleNotFoundError(ImportError):
+    """Raised when a module cannot be found"""
+    message: str = ""
+    name: str = ""
+    path: str = ""
+
+    def __init__(self, message: str = "Module not found", name: str = "", path: str = ""):
+        self.message: str = message
+        self.name: str = name
+        self.path: str = path
 
     def __str__(self) -> str:
         return self.message

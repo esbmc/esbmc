@@ -169,6 +169,15 @@ void clang_c_adjust::adjust_expr(exprt &expr)
       deref.move_to_operands(base);
       base.swap(deref);
     }
+
+    if (expr.type().id() == "ptrmem")
+    {
+      exprt func = expr.op1();
+      code_typet &code_type = to_code_type(func.type().subtype());
+      exprt arg0 = address_of_exprt(expr.op0());
+      code_type.arguments().push_back(arg0.type());
+      expr.swap(func);
+    }
   }
   else
   {
@@ -206,9 +215,6 @@ void clang_c_adjust::adjust_symbol(exprt &expr)
 
     // put it back
     expr.location() = location;
-
-    if (symbol.lvalue)
-      expr.cmt_lvalue(true);
 
     if (expr.type().is_code()) // function designator
     {
@@ -334,6 +340,92 @@ void clang_c_adjust::adjust_expr_binary_arithmetic(exprt &expr)
   exprt &op0 = expr.op0();
   exprt &op1 = expr.op1();
 
+  if (op0.type().id() == "complex" || op1.type().id() == "complex")
+  {
+    const typet &complex_t =
+      op0.type().id() == "complex" ? op0.type() : op1.type();
+    const typet &elem_t = to_complex_type(complex_t).base_type();
+
+    // Promote non-complex operand to {val, 0}
+    auto promote = [&](exprt &e) {
+      if (e.type().id() != "complex")
+      {
+        struct_exprt promoted(complex_t);
+        promoted.operands().push_back(e);
+        promoted.operands().push_back(gen_zero(elem_t));
+        e = promoted;
+      }
+    };
+    promote(op0);
+    promote(op1);
+
+    // Build a component-level binary expr, mapping to ieee ops for floatbv
+    auto make_op = [&](const irep_idt &id, const exprt &lhs, const exprt &rhs) {
+      irep_idt actual_id = id;
+      if (elem_t.is_floatbv())
+      {
+        if (id == "+")
+          actual_id = "ieee_add";
+        else if (id == "-")
+          actual_id = "ieee_sub";
+        else if (id == "*")
+          actual_id = "ieee_mul";
+        else if (id == "/")
+          actual_id = "ieee_div";
+      }
+      exprt e(actual_id, elem_t);
+      e.copy_to_operands(lhs, rhs);
+      return e;
+    };
+
+    exprt ar = member_exprt(op0, "real", elem_t);
+    exprt ai = member_exprt(op0, "imag", elem_t);
+    exprt br = member_exprt(op1, "real", elem_t);
+    exprt bi = member_exprt(op1, "imag", elem_t);
+
+    exprt new_real, new_imag;
+    const irep_idt &op = expr.id();
+
+    if (op == "+")
+    {
+      new_real = make_op("+", ar, br);
+      new_imag = make_op("+", ai, bi);
+    }
+    else if (op == "-")
+    {
+      new_real = make_op("-", ar, br);
+      new_imag = make_op("-", ai, bi);
+    }
+    else if (op == "*")
+    {
+      // (ar*br - ai*bi) + (ar*bi + ai*br)i
+      new_real = make_op("-", make_op("*", ar, br), make_op("*", ai, bi));
+      new_imag = make_op("+", make_op("*", ar, bi), make_op("*", ai, br));
+    }
+    else if (op == "/")
+    {
+      // denom = br^2 + bi^2
+      exprt denom = make_op("+", make_op("*", br, br), make_op("*", bi, bi));
+      // real = (ar*br + ai*bi) / denom
+      new_real = make_op(
+        "/", make_op("+", make_op("*", ar, br), make_op("*", ai, bi)), denom);
+      // imag = (ai*br - ar*bi) / denom
+      new_imag = make_op(
+        "/", make_op("-", make_op("*", ai, br), make_op("*", ar, bi)), denom);
+    }
+    else
+    {
+      log_error("unsupported complex arithmetic operator: {}", op);
+      abort();
+    }
+
+    struct_exprt result(complex_t);
+    result.operands().push_back(new_real);
+    result.operands().push_back(new_imag);
+    expr.swap(result);
+    return;
+  }
+
   const typet o_type0 = ns.follow(op0.type());
   const typet o_type1 = ns.follow(op1.type());
 
@@ -375,12 +467,7 @@ void clang_c_adjust::adjust_index(index_exprt &index)
   gen_typecast(ns, index_expr, index_type());
 
   const typet &final_array_type = ns.follow(array_expr.type());
-  if (final_array_type.is_array() || final_array_type.is_incomplete_array())
-  {
-    if (array_expr.cmt_lvalue())
-      index.cmt_lvalue(true);
-  }
-  else if (final_array_type.id() == "pointer")
+  if (final_array_type.id() == "pointer")
   {
     // p[i] is syntactic sugar for *(p+i)
 
@@ -388,7 +475,6 @@ void clang_c_adjust::adjust_index(index_exprt &index)
     addition.operands().swap(index.operands());
     index.move_to_operands(addition);
     index.id("dereference");
-    index.cmt_lvalue(true);
   }
 }
 
@@ -508,8 +594,6 @@ void clang_c_adjust::adjust_dereference(exprt &deref)
   {
     deref.type() = op_type.subtype();
   }
-
-  deref.cmt_lvalue(true);
 
   // if you dereference a pointer pointing to
   // a function, you get a pointer again
@@ -751,9 +835,6 @@ void clang_c_adjust::adjust_side_effect_function_call(
 
         // Restore location
         f_op.location() = location;
-
-        if (symbol.lvalue)
-          f_op.cmt_lvalue(true);
 
         align_se_function_call_return_type(f_op, expr);
       }
@@ -1346,10 +1427,6 @@ void clang_c_adjust::adjust_comma(exprt &expr)
   adjust_operands(expr);
 
   expr.type() = expr.op1().type();
-
-  // make this an l-value if the last operand is one
-  if (expr.op1().cmt_lvalue())
-    expr.cmt_lvalue(true);
 }
 
 void clang_c_adjust::adjust_builtin_va_arg(exprt &expr)

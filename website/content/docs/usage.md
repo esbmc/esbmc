@@ -50,10 +50,10 @@ Not unwinding loop 2 iteration 2 file ex5.c line 8 function main
 Symex completed in: 0.001s (40 assignments)
 Slicing time: 0.000s (removed 16 assignments)
 Generated 2 VCC(s), 2 remaining after simplification (24 assignments)
-No solver specified; defaulting to Boolector
+No solver specified; defaulting to Bitwuzla
 Encoding remaining VCC(s) using bit-vector/floating-point arithmetic
 Encoding to solver time: 0.005s
-Solving with solver Boolector 3.2.0
+Solving with solver Bitwuzla
 Encoding to solver time: 0.005s
 Runtime decision procedure: 0.427s
 BMC program time: 0.435s
@@ -170,13 +170,61 @@ Unwinding loop 1 iteration 10 file test3.c line 6 function P
 Symex completed in: 0.031s (431 assignments)
 Slicing time: 0.001s (removed 183 assignments)
 Generated 149 VCC(s), 7 remaining after simplification (248 assignments)
-No solver specified; defaulting to Boolector
+No solver specified; defaulting to Bitwuzla
 Encoding remaining VCC(s) using bit-vector/floating-point arithmetic
 Encoding to solver time: 0.004s
-Solving with solver Boolector 3.2.0
+Solving with solver Bitwuzla
 Encoding to solver time: 0.004s
 Runtime decision procedure: 0.001s
 BMC program time: 0.040s
+
+VERIFICATION SUCCESSFUL
+```
+
+## Verification of Python Programs
+
+As an illustrative example to show some of the ESBMC features concerning Python programs, consider the following Python code:
+
+```Python
+def divide(a: int, b: int) -> int:
+    assert b != 0
+    return a // b
+
+def main():
+    a: int = nondet_int()
+    b: int = nondet_int()
+
+    __ESBMC_assume(b != 0)
+    result: int = divide(a, b)
+    assert result == a // b
+
+main()
+```
+
+Here, ESBMC is invoked as follows:
+
+```sh
+esbmc file.py
+```
+
+where `file.py` is the Python program to be checked. ESBMC's Python front-end parses the source into an abstract syntax tree, annotates it with type information, and translates it into an intermediate representation that the standard ESBMC back-end can process via SMT solvers. For this particular Python program, ESBMC produces the following verification result:
+
+```
+Converting
+Generating GOTO Program
+GOTO program creation time: 1.216s
+GOTO program processing time: 0.025s
+Starting Bounded Model Checking
+Symex completed in: 0.003s (63 assignments)
+Caching time: 0.000s (removed 1 assertions)
+Slicing time: 0.000s (removed 53 assignments)
+Generated 4 VCC(s), 3 remaining after simplification (9 assignments)
+No solver specified; defaulting to z3
+Encoding remaining VCC(s) using bit-vector/floating-point arithmetic
+Encoding to solver time: 0.000s
+Solving with solver Z3 v4.15.4
+Runtime decision procedure: 0.001s
+BMC program time: 0.016s
 
 VERIFICATION SUCCESSFUL
 ```

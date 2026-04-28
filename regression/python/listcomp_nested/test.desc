@@ -1,5 +1,5 @@
-KNOWNBUG
+CORE
 main.py
---incremental-bmc
+--unwind 9 --smt-during-symex --smt-symex-guard --z3
 ^VERIFICATION SUCCESSFUL$
 

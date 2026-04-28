@@ -27,6 +27,11 @@ public:
   {
   }
 
+  ~priority_queue()
+  {
+    _size = 0;
+  }
+
   // Constructor that takes const reference (handles temporaries)
   priority_queue(const Compare &x) : _size(0), head(0), tail(0), comp(x)
   {
@@ -116,6 +121,11 @@ class queue
 public:
   queue() : _size(0), head(0), tail(0)
   {
+  }
+
+  ~queue()
+  {
+    _size = 0;
   }
   queue(std::deque<int> &x) : _size(x.size()), head(0), tail(0)
   {

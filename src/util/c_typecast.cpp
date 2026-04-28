@@ -623,7 +623,6 @@ void c_typecastt::implicit_typecast_followed(
       address_of_exprt addr(expr);
       addr.location() = expr.location();
       addr.type().set("#reference", true);
-      addr.type().set("#lvalue", is_reference(src_type));
       expr.swap(addr);
     }
     else
@@ -642,7 +641,6 @@ void c_typecastt::implicit_typecast_followed(
     {
       dereference_exprt deref(expr, expr.type());
       deref.location() = expr.location();
-      deref.set("#lvalue", true);
       deref.set("#implicit", true);
       expr.swap(deref);
     }

@@ -1,5 +1,5 @@
 THOROUGH
 gh-1352.c
---unwind 1 --no-unwinding-assertion --force-malloc-success
+--unwind 1 --no-unwinding-assertion --force-malloc-success --boolector
 ^VERIFICATION FAILED$
 \bdereference failure: array bounds violated\b

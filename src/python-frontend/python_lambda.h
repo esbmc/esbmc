@@ -26,6 +26,9 @@ public:
   // Handle lambda assignment type adjustments
   void handle_lambda_assignment(symbolt *lhs_symbol, exprt &lhs, exprt &rhs);
 
+  // Infer return type from a lambda body node
+  typet infer_lambda_return_type(const nlohmann::json &body_node);
+
 private:
   python_converter &converter_;
   contextt &context_;
@@ -46,8 +49,6 @@ private:
   exprt process_lambda_body(
     const nlohmann::json &body_node,
     const locationt &location);
-
-  typet infer_lambda_return_type(const nlohmann::json &body_node);
 
   std::string generate_unique_lambda_name();
 

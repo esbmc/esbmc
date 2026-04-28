@@ -1,5 +1,5 @@
 THOROUGH
 main.py
---unwind 10 --python-list-compare-depth 2
+--unwind 10 --python-list-compare-depth 2 --bitwuzla --smt-during-symex --smt-symex-guard
 ^VERIFICATION FAILED$
 --python-list-compare-depth to increase

@@ -1,0 +1,5 @@
+THOROUGH
+main.c
+--loop-invariant --no-standard-checks --z3
+^VERIFICATION SUCCESSFUL$
+

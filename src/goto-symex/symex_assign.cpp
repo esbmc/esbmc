@@ -118,40 +118,41 @@ goto_symext::goto_symext(
         // pragma_unroll_count: 0 = not specified, UINT_MAX = unlimited, else = specific count
         if (instruction.pragma_unroll_count > 0)
         {
-          if (instruction.pragma_unroll_count == UINT_MAX)
-          {
-            // #pragma unroll (no N) - unlimited unrolling (0 means no limit in ESBMC)
-            unwind_set[instruction.loop_number] = 0;
-            log_status(
-              "Applying #pragma unroll (unlimited) to loop {} in file {} line "
-              "{} column {} function {}",
-              instruction.loop_number,
-              instruction.location.get_file(),
-              instruction.location.get_line(),
-              instruction.location.get_column(),
-              instruction.location.get_function());
-          }
-          else
-          {
-            // #pragma unroll N - use specified count
-            unwind_set[instruction.loop_number] =
-              BigInt(instruction.pragma_unroll_count);
-            log_status(
-              "Applying #pragma unroll {} to loop {} in file {} line {} column "
-              "{} function {}",
-              instruction.pragma_unroll_count,
-              instruction.loop_number,
-              instruction.location.get_file(),
-              instruction.location.get_line(),
-              instruction.location.get_column(),
-              instruction.location.get_function());
-          }
+          unwind_set[instruction.loop_number] =
+            instruction.pragma_unroll_count == UINT_MAX
+              ? 0
+              : BigInt(instruction.pragma_unroll_count);
+          log_debug(
+            "[symex]",
+            "Applying #pragma unroll {} to loop {} in file {} line "
+            "{} column {} function {}",
+            unwind_set[instruction.loop_number],
+            instruction.loop_number,
+            instruction.location.get_file(),
+            instruction.location.get_line(),
+            instruction.location.get_column(),
+            instruction.location.get_function());
         }
       }
     }
   }
 
   art1 = nullptr;
+
+  // Guard pruning is on by default (disable with --no-interval-symex-guard);
+  // assertion pruning is opt-in via --interval-symex-assert. Build the online
+  // interval domain when either is active.
+  const bool guard_enabled =
+    !options.get_bool_option("no-interval-symex-guard");
+  const bool assert_enabled = options.get_bool_option("interval-symex-assert");
+  if (guard_enabled || assert_enabled)
+  {
+    if (guard_enabled)
+      options.set_option("interval-symex-guard", true);
+    interval_domaint::set_options(options);
+    interval_domain_state.emplace();
+    interval_domain_state->make_top();
+  }
 
   valid_ptr_arr_name = "c:@__ESBMC_alloc";
   alloc_size_arr_name = "c:@__ESBMC_alloc_size";
@@ -205,6 +206,7 @@ goto_symext &goto_symext::operator=(const goto_symext &sym)
   dyn_info_arr_name = sym.dyn_info_arr_name;
 
   dynamic_memory = sym.dynamic_memory;
+  interval_domain_state = sym.interval_domain_state;
 
   // Art ptr is shared
   art1 = sym.art1;
@@ -250,19 +252,29 @@ void goto_symext::handle_sideeffect(
     // Do nothing for printf
     break;
   case sideeffect2t::old_snapshot:
-    // __ESBMC_old() snapshots are handled during contract processing
+    // __ESBMC_old() snapshots are handled during contract processing.
     // If we encounter one here, it means we're in the original function body
-    // where the ensures clause is still present. We simply evaluate the
-    // inner expression (the current value) as a placeholder.
+    // (contracts_original_xxx) where the ensures/requires clause is still present.
+    // Store the ADDRESS of the inner expression in lhs (void*), so that
+    // *(T*)lhs correctly reads the value via pointer dereference.
+    // The ensures/requires in contracts_original evaluate BEFORE the function body
+    // modifies anything, so address_of(inner) gives the correct pre-state value.
     {
-      expr2tc result = effect.operand;
-      replace_nondet(result);
-      dereference(result, dereferencet::READ);
-
-      // Create a simple assignment from the evaluated expression to lhs
-      expr2tc assign_code = code_assign2tc(lhs, result);
-      symex_assign(assign_code, true, guard);
+      expr2tc inner = effect.operand;
+      // address_of2tc(subtype, expr): subtype is T, result type is T*
+      expr2tc addr = address_of2tc(inner->type, inner);
+      // Cast to lhs type (void*)
+      expr2tc result = addr;
+      if (result->type != lhs->type)
+        result = typecast2tc(lhs->type, result);
+      symex_assign(code_assign2tc(lhs, result), true, guard);
     }
+    break;
+  case sideeffect2t::assigns_target:
+    // __ESBMC_assigns() targets are handled during contract processing
+    // In --enforce-contract mode, the assigns clause is extracted and checked,
+    // but we don't need to execute anything here during symex.
+    // Simply ignore the assigns_target side effect.
     break;
   default:
     assert(0 && "unexpected side effect");
@@ -328,6 +340,7 @@ void goto_symext::symex_assign(
 
   replace_nondet(lhs);
   replace_nondet(rhs);
+  volatile_check(rhs);
 
   dereference(lhs, dereferencet::WRITE);
   dereference(rhs, dereferencet::READ);
@@ -686,7 +699,8 @@ void goto_symext::symex_assign_member(
   const member2t &member = to_member2t(lhs);
 
   assert(
-    is_struct_type(member.source_value) || is_union_type(member.source_value));
+    is_struct_type(member.source_value) || is_union_type(member.source_value) ||
+    is_complex_type(member.source_value));
 
   const irep_idt &component_name = member.member;
   expr2tc real_lhs = member.source_value;
@@ -703,7 +717,9 @@ void goto_symext::symex_assign_member(
     {
       // remove the type cast, we assume that the member is there
       real_lhs = cast.from;
-      assert(is_struct_type(real_lhs) || is_union_type(real_lhs));
+      assert(
+        is_struct_type(real_lhs) || is_union_type(real_lhs) ||
+        is_complex_type(member.source_value));
     }
   }
 
@@ -991,7 +1007,7 @@ void goto_symext::replace_nondet(expr2tc &expr)
   if (
     is_sideeffect2t(expr) && to_sideeffect2t(expr).kind == sideeffect2t::nondet)
   {
-    unsigned int &nondet_count = get_dynamic_counter();
+    unsigned int &nondet_count = get_nondet_counter();
     expr =
       symbol2tc(expr->type, "nondet$symex::nondet" + i2string(nondet_count++));
   }

@@ -404,6 +404,7 @@ public:
     signedbv_id,
     fixedbv_id,
     floatbv_id,
+    complex_id,
     cpp_name_id,
     end_type_id
   };
@@ -746,17 +747,17 @@ public:
    *  These can come out of any field that is an expr2tc, or contains them.
    *  No particular numbering order is promised.
    */
-  virtual const expr2tc *get_sub_expr(unsigned int idx) const = 0;
+  virtual const expr2tc *get_sub_expr(size_t idx) const = 0;
 
   /** Fetch a sub-operand. Non-const version.
    *  These can come out of any field that is an expr2tc, or contains them.
    *  No particular numbering order is promised.
    */
-  virtual expr2tc *get_sub_expr_nc(unsigned int idx) = 0;
+  virtual expr2tc *get_sub_expr_nc(size_t idx) = 0;
 
   /** Count the number of sub-exprs there are.
    */
-  virtual unsigned int get_num_sub_exprs() const = 0;
+  virtual size_t get_num_sub_exprs() const = 0;
 
   /** Simplify an expression.
    *  Similar to simplification in the string-based irep, this generates an
@@ -1157,10 +1158,9 @@ protected:
 
   // These methods are specific to expressions rather than types, and are
   // placed here to avoid un-necessary recursion in expr_methods2.
-  const expr2tc *
-  get_sub_expr_rec(unsigned int cur_count, unsigned int desired) const;
-  expr2tc *get_sub_expr_nc_rec(unsigned int cur_count, unsigned int desired);
-  unsigned int get_num_sub_exprs_rec() const;
+  const expr2tc *get_sub_expr_rec(size_t cur_count, size_t desired) const;
+  expr2tc *get_sub_expr_nc_rec(size_t cur_count, size_t desired);
+  size_t get_num_sub_exprs_rec() const;
 
   void foreach_operand_impl_rec(expr2t::op_delegate &f);
   void foreach_operand_impl_const_rec(expr2t::const_op_delegate &f) const;
@@ -1229,8 +1229,7 @@ protected:
     (void)hash;
   }
 
-  const expr2tc *
-  get_sub_expr_rec(unsigned int cur_idx, unsigned int desired) const
+  const expr2tc *get_sub_expr_rec(size_t cur_idx, size_t desired) const
   {
     // No result, so desired must exceed the number of idx's
     assert(cur_idx >= desired);
@@ -1239,7 +1238,7 @@ protected:
     return nullptr;
   }
 
-  expr2tc *get_sub_expr_nc_rec(unsigned int cur_idx, unsigned int desired)
+  expr2tc *get_sub_expr_nc_rec(size_t cur_idx, size_t desired)
   {
     // See above
     assert(cur_idx >= desired);
@@ -1248,7 +1247,7 @@ protected:
     return nullptr;
   }
 
-  unsigned int get_num_sub_exprs_rec() const
+  size_t get_num_sub_exprs_rec() const
   {
     return 0;
   }
@@ -1304,9 +1303,9 @@ public:
   {
   }
 
-  const expr2tc *get_sub_expr(unsigned int i) const override;
-  expr2tc *get_sub_expr_nc(unsigned int i) override;
-  unsigned int get_num_sub_exprs() const override;
+  const expr2tc *get_sub_expr(size_t i) const override;
+  expr2tc *get_sub_expr_nc(size_t i) override;
+  size_t get_num_sub_exprs() const override;
 
   void
   foreach_operand_impl_const(expr2t::const_op_delegate &expr) const override;

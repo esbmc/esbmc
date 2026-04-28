@@ -38,14 +38,12 @@
 #include <util/time_stopping.h>
 #include <util/cache.h>
 #include <atomic>
+#include <nlohmann/json.hpp>
 
 std::unordered_set<std::string> goto_functionst::reached_claims;
 std::unordered_multiset<std::string> goto_functionst::reached_mul_claims;
-std::unordered_set<std::string> goto_functionst::verified_claims;
-
 std::mutex goto_functionst::reached_claims_mutex;
 std::mutex goto_functionst::reached_mul_claims_mutex;
-std::mutex goto_functionst::verified_claims_mutex;
 
 bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
   : options(opts), context(_context), ns(context)
@@ -492,6 +490,15 @@ void bmct::report_multi_property_trace(
       show_goto_trace(out, ns, goto_trace);
     }
 
+    std::string witness_graphml_output =
+      options.get_option("witness-output-graphml");
+    std::string witness_yaml_output = options.get_option("witness-output-yaml");
+    if (!witness_graphml_output.empty())
+      violation_graphml_goto_trace(options, ns, goto_trace);
+
+    if (!witness_yaml_output.empty())
+      violation_yaml_goto_trace(options, ns, goto_trace);
+
     if (options.get_bool_option("generate-testcase"))
     {
       generate_testcase_metadata();
@@ -515,6 +522,47 @@ void bmct::report_multi_property_trace(
     log_fail("Claim '{}' could not be solved", msg);
     break;
   }
+}
+
+// Parse location string "file X line Y column Z function F" into components
+static nlohmann::json parse_claim_location(const std::string &loc)
+{
+  nlohmann::json j;
+  j["file"] = "";
+  j["line"] = 0;
+  j["column"] = 0;
+  j["function"] = "";
+
+  std::istringstream iss(loc);
+  std::string token;
+  while (iss >> token)
+  {
+    if (token == "file")
+    {
+      std::string val;
+      iss >> val;
+      j["file"] = val;
+    }
+    else if (token == "line")
+    {
+      int val = 0;
+      iss >> val;
+      j["line"] = val;
+    }
+    else if (token == "column")
+    {
+      int val = 0;
+      iss >> val;
+      j["column"] = val;
+    }
+    else if (token == "function")
+    {
+      std::string val;
+      iss >> val;
+      j["function"] = val;
+    }
+  }
+  return j;
 }
 
 void report_coverage(
@@ -747,6 +795,72 @@ void report_coverage(
       log_result("Branch Coverage: 0%");
   }
 
+  // Generate JSON coverage report
+  if (options.get_bool_option("cov-report-json"))
+  {
+    using json = nlohmann::json;
+
+    std::string cov_type = "unknown";
+    if (is_branch_cov)
+      cov_type = "branch";
+    else if (is_branch_func_cov)
+      cov_type = "branch-function";
+    else if (is_cond_cov)
+      cov_type = "condition";
+    else if (is_assert_cov)
+      cov_type = "assertion";
+
+    const auto &all_claims = goto_coveraget::all_claims;
+    std::set<std::string> source_files;
+    json claims_json = json::array();
+
+    for (const auto &[claim_msg, claim_loc] : all_claims)
+    {
+      std::string claim_sig = claim_msg + "\t" + claim_loc;
+      bool covered = reached_claims.count(claim_sig) > 0;
+
+      // For assertion coverage, check reached_mul_claims instead
+      if (is_assert_cov)
+        covered = reached_mul_claims.count(claim_sig) > 0;
+
+      json loc = parse_claim_location(claim_loc);
+      std::string file = loc["file"];
+      if (!file.empty())
+        source_files.insert(file);
+
+      json claim_entry;
+      claim_entry["condition"] = claim_msg;
+      claim_entry["file"] = loc["file"];
+      claim_entry["line"] = loc["line"];
+      claim_entry["column"] = loc["column"];
+      claim_entry["function"] = loc["function"];
+      claim_entry["status"] = covered ? "covered" : "uncovered";
+      claims_json.push_back(claim_entry);
+    }
+
+    size_t total = all_claims.size();
+    size_t covered_count = 0;
+    for (const auto &c : claims_json)
+      if (c["status"] == "covered")
+        covered_count++;
+
+    json report;
+    report["coverage_type"] = cov_type;
+    report["source_files"] = json::array();
+    for (const auto &f : source_files)
+      report["source_files"].push_back(f);
+    report["claims"] = claims_json;
+    report["summary"]["total"] = total;
+    report["summary"]["covered"] = covered_count;
+    report["summary"]["uncovered"] = total - covered_count;
+    report["summary"]["percentage"] =
+      total > 0 ? covered_count * 100.0 / total : 0.0;
+
+    std::ofstream out("cov-report.json");
+    out << report.dump(2) << std::endl;
+    log_success("Coverage report written to cov-report.json");
+  }
+
   // Generate pytest test case from collected data (for coverage mode)
   if (options.get_bool_option("generate-pytest-testcase"))
   {
@@ -871,6 +985,10 @@ void bmct::report_result(smt_convt::resultt &res)
   // k-induction prints its own messages
   if (options.get_bool_option("k-induction-parallel"))
     return;
+  // Diagnostic pass: per-property results are already printed by
+  // multi_property_check; suppress any global verdict from this level.
+  if (options.get_bool_option("diagnose-unknown-properties"))
+    return;
 
   bool bs = options.get_bool_option("base-case");
   bool fc = options.get_bool_option("forward-condition");
@@ -887,7 +1005,16 @@ void bmct::report_result(smt_convt::resultt &res)
     }
     else if (!bs || mul)
     {
-      report_success();
+      // Suppress spurious success when a violation was already found in a
+      // previous k step (multi-property sequential k-induction).  The final
+      // verdict is printed by do_bmc_strategy once the loop terminates.
+      // Exception: assertion-coverage mode always reports success after
+      // coverage analysis, regardless of any violations found.
+      if (
+        !options.get_bool_option("kind-violation-found") ||
+        options.get_bool_option("assertion-coverage") ||
+        options.get_bool_option("assertion-coverage-claims"))
+        report_success();
     }
     else
     {
@@ -1243,7 +1370,10 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
 
     if (
       options.get_bool_option("multi-property") &&
-      options.get_bool_option("base-case"))
+      (options.get_bool_option("base-case") ||
+       options.get_bool_option("diagnose-unknown-properties") ||
+       (options.get_bool_option("inductive-step") &&
+        options.get_bool_option("loop-invariant"))))
       return multi_property_check(
         *eq, solver_result.remaining_claims, *runtime_solver);
 
@@ -1339,11 +1469,6 @@ smt_convt::resultt bmct::multi_property_check(
   size_t remaining_claims,
   smt_convt &runtime_solver)
 {
-  // As of now, it only makes sense to do this for the base-case
-  assert(
-    options.get_bool_option("base-case") &&
-    "Multi-property only supports base-case");
-
   // Initial values
   smt_convt::resultt final_result = smt_convt::P_UNSATISFIABLE;
   std::mutex result_mutex;
@@ -1360,11 +1485,9 @@ smt_convt::resultt bmct::multi_property_check(
   // For coverage info
   auto &reached_claims = symex->goto_functions.reached_claims;
   auto &reached_mul_claims = symex->goto_functions.reached_mul_claims;
-  auto &verified_claims = symex->goto_functions.verified_claims;
   auto &reached_claims_mutex = symex->goto_functions.reached_claims_mutex;
   auto &reached_mul_claims_mutex =
     symex->goto_functions.reached_mul_claims_mutex;
-  auto &verified_claims_mutex = symex->goto_functions.verified_claims_mutex;
 
   // "Assertion Cov"
   bool is_assert_cov = options.get_bool_option("assertion-coverage") ||
@@ -1405,6 +1528,7 @@ smt_convt::resultt bmct::multi_property_check(
 
   // For color output
   bool is_color = options.get_bool_option("color");
+  const std::string YELLOW = is_color ? "\033[33m" : "";
 
   // TODO: This is the place to check a cache
   for (size_t i = 1; i <= remaining_claims; i++)
@@ -1430,10 +1554,8 @@ smt_convt::resultt bmct::multi_property_check(
                        &summary,
                        &reached_claims,
                        &reached_mul_claims,
-                       &verified_claims,
                        &reached_claims_mutex,
                        &reached_mul_claims_mutex,
-                       &verified_claims_mutex,
                        &is_assert_cov,
                        &is_cond_cov,
                        &is_vb,
@@ -1447,6 +1569,7 @@ smt_convt::resultt bmct::multi_property_check(
                        &fc,
                        &is,
                        &is_color,
+                       &YELLOW,
                        &runtime_solver](const size_t &i) {
     //"multi-fail-fast n": stop after first n SATs found.
     if (is_fail_fast && fail_fast_cnt >= fail_fast_limit)
@@ -1485,13 +1608,6 @@ smt_convt::resultt bmct::multi_property_check(
       reached_mul_claims.emplace(claim_sig);
     }
 
-    if (verified_claims.count(claim.claim_cstr))
-    {
-      clear_verified_claims_in_ssa(local_eq, claim, is_goto_cov);
-      clear_verified_claims_in_goto(claim, is_goto_cov);
-      is_verified = true;
-    }
-
     // skip if we have already verified
     if (is_verified && !is_keep_verified)
     {
@@ -1525,10 +1641,15 @@ smt_convt::resultt bmct::multi_property_check(
     std::call_once(summary.solver_name_flag, [&]() {
       summary.solver_name = solver_ptr->solver_text();
     });
-    log_status(
-      "Solving claim '{}' with solver {}",
-      claim.claim_cstr,
-      solver_ptr->solver_text());
+    // In coverage mode, only report instrumented coverage claims
+    bool is_cov_silent =
+      is_goto_cov && claim.claim_property != "instrumented assertion";
+
+    if (!is_cov_silent)
+      log_status(
+        "Solving claim '{}' with solver {}",
+        claim.claim_cstr,
+        solver_ptr->solver_text());
 
     // Save current instance with timing
     fine_timet solve_start = current_time();
@@ -1541,15 +1662,22 @@ smt_convt::resultt bmct::multi_property_check(
     const std::string RED = is_color ? "\033[31m" : "";
     const std::string RESET = is_color ? "\033[0m" : "";
 
-    if (solver_result == smt_convt::P_UNSATISFIABLE)
+    if (!is_cov_silent)
     {
-      // Claim passed - show in green
-      log_status("{}✓ PASSED{}: '{}'", GREEN, RESET, claim.claim_cstr);
-    }
-    else if (solver_result == smt_convt::P_SATISFIABLE)
-    {
-      // Claim failed - show in red
-      log_status("{}✗ FAILED{}: '{}'", RED, RESET, claim.claim_cstr);
+      if (solver_result == smt_convt::P_UNSATISFIABLE)
+      {
+        // Claim passed - show in green
+        log_status("{}✓ PASSED{}: '{}'", GREEN, RESET, claim.claim_cstr);
+      }
+      else if (solver_result == smt_convt::P_SATISFIABLE)
+      {
+        if (is)
+          // Inductive step could not prove this claim - show in yellow
+          log_status("{}? UNKNOWN{}: '{}'", YELLOW, RESET, claim.claim_cstr);
+        else
+          // Claim failed (counterexample found) - show in red
+          log_status("{}✗ FAILED{}: '{}'", RED, RESET, claim.claim_cstr);
+      }
     }
 
     double solve_time_s = (solve_stop - solve_start);
@@ -1564,13 +1692,27 @@ smt_convt::resultt bmct::multi_property_check(
       old_total_time_s, new_total_time_s));
 
     if (solver_result == smt_convt::P_SATISFIABLE)
-      summary.failed_properties++;
+    {
+      if (is)
+        summary.unknown_properties++;
+      else
+        summary.failed_properties++;
+    }
     else if (solver_result == smt_convt::P_UNSATISFIABLE)
       summary.passed_properties++;
 
     // If an assertion instance is verified to be violated
     if (solver_result == smt_convt::P_SATISFIABLE)
     {
+      // Inductive step SAT means unprovable (UNKNOWN), not a real
+      // counterexample — skip trace generation and return early.
+      if (is)
+      {
+        std::lock_guard lock(result_mutex);
+        final_result = solver_result;
+        return;
+      }
+
       bool is_compact_trace = true;
       if (
         options.get_bool_option("no-slice") &&
@@ -1618,7 +1760,7 @@ smt_convt::resultt bmct::multi_property_check(
           is_branch_func_cov,
           reached_claims,
           reached_mul_claims);
-      else
+      else if (!is_cov_silent)
       {
         report_multi_property_trace(
           solver_result,
@@ -1724,6 +1866,13 @@ void bmct::report_simple_summary(const SimpleSummary &summary) const
   if (summary.failed_properties > 0)
     properties_oss << ", " << RED << "✗ " << summary.failed_properties
                    << " failed" << RESET;
+
+  if (summary.unknown_properties > 0)
+  {
+    const std::string YELLOW = is_color ? "\033[33m" : "";
+    properties_oss << ", " << YELLOW << "? " << summary.unknown_properties
+                   << " unknown" << RESET;
+  }
 
   // Build the timing summary string
   double avg_time = summary.total_properties > 0

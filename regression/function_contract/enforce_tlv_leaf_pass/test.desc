@@ -1,0 +1,4 @@
+CORE
+main.c
+--function validate_tag --enforce-contract validate_tag --no-align-check
+^VERIFICATION SUCCESSFUL$

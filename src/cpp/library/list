@@ -2,6 +2,7 @@
 #define __STL_LIST
 
 #include "definitions.h"
+#include "type_traits"
 #include "vector"
 
 #define LIST_MAX_SIZE 20
@@ -1164,10 +1165,6 @@ public:
 
   ~list()
   {
-    for (int i = 0; i < this->_size; i++)
-    {
-      this->_list[i] = T();
-    }
     this->_size = 0;
   }
 

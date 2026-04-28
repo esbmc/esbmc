@@ -94,14 +94,6 @@ public:
   exprt handle_tuple_membership(const exprt &lhs, const exprt &rhs, bool invert)
     const;
 
-private:
-  /**
-   * @brief Build a unique tag name for a tuple based on element types
-   * @param element_types Vector of types for tuple elements
-   * @return std::string The tag name (e.g., "tag-tuple_int_str")
-   */
-  std::string build_tuple_tag(const std::vector<typet> &element_types) const;
-
   /**
    * @brief Create a tuple struct type from element types
    * @param element_types Vector of types for tuple elements
@@ -109,6 +101,14 @@ private:
    */
   struct_typet
   create_tuple_struct_type(const std::vector<typet> &element_types) const;
+
+private:
+  /**
+   * @brief Build a unique tag name for a tuple based on element types
+   * @param element_types Vector of types for tuple elements
+   * @return std::string The tag name (e.g., "tag-tuple_int_str")
+   */
+  std::string build_tuple_tag(const std::vector<typet> &element_types) const;
 
   python_converter &converter_;
   type_handler &type_handler_;

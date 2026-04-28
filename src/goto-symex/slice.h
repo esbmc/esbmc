@@ -65,6 +65,7 @@ public:
   std::string claim_msg;
   std::string claim_loc;
   std::string claim_cstr;
+  std::string claim_property;
   bool show_slice_info;
   bool is_goto_cov;
   namespacet ns;

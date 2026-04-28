@@ -6,6 +6,7 @@ CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 #include <clang/AST/Expr.h>
 #include <clang/AST/ExprCXX.h> /* clang::TypeTraitExpr */
 #include <clang/AST/ParentMapContext.h>
+#include <clang/AST/RecordLayout.h>
 #include <clang/AST/QualTypeNames.h>
 #include <clang/AST/Type.h>
 #include <clang/Basic/Version.inc>
@@ -388,11 +389,8 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
         const clang::AlignedAttr &aattr =
           static_cast<const clang::AlignedAttr &>(*attr);
 
-        exprt alignment;
-        if (get_expr(*(aattr.getAlignmentExpr()), alignment))
+        if (process_aligned_attribute(aattr, t))
           return true;
-
-        t.set("alignment", alignment);
       }
     }
   }
@@ -476,11 +474,8 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
         const clang::AlignedAttr &aattr =
           static_cast<const clang::AlignedAttr &>(*attr);
 
-        exprt alignment;
-        if (get_expr(*(aattr.getAlignmentExpr()), alignment))
+        if (process_aligned_attribute(aattr, t))
           return true;
-
-        t.set("alignment", alignment);
       }
       else
         continue;
@@ -575,6 +570,24 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
     bool aggregate_without_init =
       is_aggregate_type(vd.getType()) &&
       stmt->getStmtClass() == clang::Stmt::CXXConstructExprClass;
+
+    if (vd.isStaticDataMember() && vd.isOutOfLine())
+    {
+      // Reorder to respect definition order for static_lifetime_init()
+      // C++ class static members are inserted into ordered_symbols when the
+      // class body is processed (in declaration order), but their out-of-class
+      // definitions appear later in textual order. Both C and C++ require
+      // initialization in definition order
+      symbolt *s = context.find_symbol(symbol.id);
+      if (
+        s &&
+        vd.getTemplateSpecializationKind() != clang::TSK_ImplicitInstantiation)
+        // In AST, nodes will be generated for the template Instantiation.
+        // We have already initialized it, so skip it
+
+        // Remove the zero initialization symbol and re-arrange the initialization order
+        context.erase_symbol(s->id);
+    }
 
     added_symbol = context.move_symbol_to_context(symbol);
     gen_typecast(ns, val, t);
@@ -685,15 +698,31 @@ bool clang_c_convertert::get_function(
   if (get_function_params(fd, type.arguments()))
     return true;
 
+  // Check for __ESBMC_contract annotation
+  if (fd.hasAttrs())
+  {
+    for (const auto *attr : fd.getAttrs())
+    {
+      if (const auto *annot = llvm::dyn_cast<clang::AnnotateAttr>(attr))
+      {
+        if (annot->getAnnotation().str() == "__ESBMC_contract")
+        {
+          type.set("#annotated_contract", true);
+          break;
+        }
+      }
+    }
+  }
+
   added_symbol.type = type;
   new_expr.type() = type;
 
-  // We need: a type, a name, and an optional body
-  if (fd.hasBody())
-  {
-    if (get_function_body(fd, added_symbol.value, type))
-      return true;
-  }
+  // We need: a type, a name, and an optional body.
+  // Always call get_function_body so overrides (e.g. the C++ frontend) can
+  // synthesise a body for bodyless declarations such as trivial destructors.
+  // The base implementation returns immediately when fd.hasBody() is false.
+  if (get_function_body(fd, added_symbol.value, type))
+    return true;
 
   // Restore old functionDecl
   current_functionDecl = old_functionDecl;
@@ -706,7 +735,8 @@ bool clang_c_convertert::get_function_body(
   exprt &new_expr,
   const code_typet &)
 {
-  assert(fd.hasBody());
+  if (!fd.hasBody())
+    return false;
 
   exprt body_exprt;
   if (get_expr(*fd.getBody(), body_exprt))
@@ -1106,7 +1136,15 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
 
     break;
   }
-
+#if CLANG_VERSION_MAJOR >= 22
+  case clang::Type::PredefinedSugar:
+  {
+    if (get_type(
+          *the_type.getLocallyUnqualifiedSingleStepDesugaredType(), new_type))
+      return true;
+    break;
+  }
+#else
   case clang::Type::Elaborated:
   {
     const clang::ElaboratedType &et =
@@ -1116,7 +1154,7 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
       return true;
     break;
   }
-
+#endif
   case clang::Type::TypeOfExpr:
   {
     const clang::TypeOfExprType &tofe =
@@ -1221,6 +1259,7 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     if (get_type(dt.getValueType(), new_type))
       return true;
 
+    new_type.set("#atomic", true);
     break;
   }
 
@@ -1298,15 +1337,20 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     break;
   }
 
-    // Unsupported extensions (optional don't care)
   case clang::Type::Complex:
   {
-    // Ok, complex numbers are not really an extension, but it is only
-    // used by extensions though.
-    if (config.options.get_bool_option("dont-care-about-missing-extensions"))
-      break;
+    const clang::ComplexType &ct =
+      static_cast<const clang::ComplexType &>(the_type);
+    typet elem_type;
+    if (get_type(*ct.getElementType(), elem_type))
+      return true;
+
+    complex_typet t;
+    t.set_base_type(elem_type);
+    new_type = t;
+    break;
   }
-  // fall through
+
   default:
     std::ostringstream oss;
     llvm::raw_os_ostream ross(oss);
@@ -1461,6 +1505,11 @@ bool clang_c_convertert::get_builtin_type(
     break;
 #endif
 
+  case clang::BuiltinType::BoundMember:
+    new_type = ptrmem_typet();
+    c_type = "_ptrmem";
+    break;
+
   // Unsupported extensions (optional don't care)
   case clang::BuiltinType::BFloat16:
     if (config.options.get_bool_option("dont-care-about-missing-extensions"))
@@ -1569,9 +1618,18 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     if (const auto nns = decl.getQualifier())
     {
+#if CLANG_VERSION_MAJOR >= 22
+      // Clang 22's NestedNameSpecifier::getAsType() asserts on non-Type
+      // qualifiers (e.g. namespaces), so check the kind first.
+      if (nns.getKind() == clang::NestedNameSpecifier::Kind::Type)
+      {
+        const auto type = nns.getAsType();
+        assert(!nns.isDependent());
+#else
       if (const auto type = nns->getAsType())
       {
         assert(!nns->isDependent());
+#endif
         typet ignored;
         if (get_type(*type, ignored))
           return true;
@@ -1640,6 +1698,31 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     if (convert_string_literal(string_literal, new_expr))
       return true;
+
+    break;
+  }
+
+  case clang::Stmt::ImaginaryLiteralClass:
+  {
+    const clang::ImaginaryLiteral &il =
+      static_cast<const clang::ImaginaryLiteral &>(stmt);
+
+    typet complex_type;
+    if (get_type(il.getType(), complex_type))
+      return true;
+
+    exprt imag_val;
+    if (get_expr(*il.getSubExpr(), imag_val))
+      return true;
+
+    const typet &elem_type = to_complex_type(complex_type).base_type();
+
+    gen_typecast(ns, imag_val, elem_type);
+
+    struct_exprt complex_expr(complex_type);
+    complex_expr.operands().push_back(gen_zero(elem_type));
+    complex_expr.operands().push_back(imag_val);
+    new_expr = complex_expr;
 
     break;
   }
@@ -2425,6 +2508,25 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   {
     const clang::IfStmt &ifstmt = static_cast<const clang::IfStmt &>(stmt);
 
+    // C++23 `if consteval` / `if !consteval` carries no condition in the AST.
+    // At runtime the consteval branch is never taken, so lower to the
+    // runtime-active branch only (or skip entirely).
+    if (ifstmt.isConsteval())
+    {
+      const clang::Stmt *runtime_branch =
+        ifstmt.isNegatedConsteval() ? ifstmt.getThen() : ifstmt.getElse();
+
+      if (runtime_branch != nullptr)
+      {
+        if (get_expr(*runtime_branch, new_expr))
+          return true;
+        convert_expression_to_code(new_expr);
+      }
+      else
+        new_expr = code_skipt();
+      break;
+    }
+
     const clang::Stmt *cond_expr = ifstmt.getConditionVariableDeclStmt();
     if (cond_expr == nullptr)
       cond_expr = ifstmt.getCond();
@@ -2833,9 +2935,14 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
           {
             if (clang::Expr *val = lha->getValue())
             {
-              clang::Expr::EvalResult result;
-              if (val->EvaluateAsInt(result, *ASTContext))
-                unroll_count = result.Val.getInt().getZExtValue();
+              if (const auto *lit = llvm::dyn_cast<clang::IntegerLiteral>(val))
+                unroll_count = lit->getValue().getZExtValue();
+              else
+              {
+                clang::Expr::EvalResult result;
+                if (val->EvaluateAsInt(result, *ASTContext))
+                  unroll_count = result.Val.getInt().getZExtValue();
+              }
             }
           }
 
@@ -2967,7 +3074,6 @@ bool clang_c_convertert::get_decl_ref(const clang::Decl &d, exprt &new_expr)
 
     new_expr = exprt("symbol", type);
     new_expr.identifier(id);
-    new_expr.cmt_lvalue(true);
     new_expr.name(name);
     return false;
   }
@@ -3027,10 +3133,101 @@ bool clang_c_convertert::get_cast_expr(
   case clang::CK_ArrayToPointerDecay:
   case clang::CK_FunctionToPointerDecay:
   case clang::CK_BuiltinFnToFnPtr:
-  case clang::CK_UncheckedDerivedToBase:
     break;
 
+  case clang::CK_UncheckedDerivedToBase:
   case clang::CK_DerivedToBase:
+  {
+    // For multiple inheritance, the base class sub-object may reside at a
+    // non-zero byte offset within the derived object. Compute the total
+    // offset by following the cast path through the class hierarchy, then
+    // adjust the pointer by that many bytes so that virtual dispatch via
+    // the base vtable uses the correct vtable pointer.
+    clang::QualType cur_qt = cast.getSubExpr()->getType();
+    if (cur_qt->isPointerType() || cur_qt->isReferenceType())
+      cur_qt = cur_qt->getPointeeType();
+
+    uint64_t total_offset = 0;
+    bool adjust = true;
+    for (auto it = cast.path_begin(); it != cast.path_end(); ++it)
+    {
+      const clang::CXXBaseSpecifier *spec = *it;
+      if (spec->isVirtual())
+      {
+        // Virtual base offsets are dynamic; skip static adjustment.
+        adjust = false;
+        break;
+      }
+      const clang::CXXRecordDecl *cur_decl = cur_qt->getAsCXXRecordDecl();
+      const clang::CXXRecordDecl *base_decl =
+        spec->getType()->getAsCXXRecordDecl();
+      if (!cur_decl || !base_decl)
+      {
+        adjust = false;
+        break;
+      }
+      total_offset += ASTContext->getASTRecordLayout(cur_decl)
+                        .getBaseClassOffset(base_decl)
+                        .getQuantity();
+      cur_qt = spec->getType();
+    }
+
+    // Apply the byte-offset adjustment only when this cast is the implicit
+    // object of a CXXMemberCallExpr (i.e. parent is MemberExpr AND
+    // grandparent is CXXMemberCallExpr). This covers:
+    //   - 'this->B8::eval()' (CXXThisExpr sub-expr)
+    //   - 'ptr->eval()' (DeclRefExpr sub-expr via MemberExpr)
+    // and excludes:
+    //   - Field accesses like 'return j' via 'using Baz::j' — parent is
+    //     MemberExpr but grandparent is ReturnStmt, not CXXMemberCallExpr.
+    //     ESBMC uses named field access for inherited members, so adding a
+    //     byte offset here would corrupt the symbolic model.
+    //   - 'Base2 *o = new Derived()' — parent is not MemberExpr at all.
+    //     Must remain unadjusted for ESBMC's delete model.
+    // NOTE: 'static_cast<B8*>(ptr)->eval()' is not yet handled correctly
+    // (separate issue tracked by the github_3876_static_cast KNOWNBUG test).
+    bool is_method_receiver = false;
+    {
+      auto parents = ASTContext->getParents(cast);
+      if (!parents.empty())
+      {
+        const clang::MemberExpr *me = parents.begin()->get<clang::MemberExpr>();
+        if (me)
+        {
+          auto grandparents = ASTContext->getParents(*me);
+          if (
+            !grandparents.empty() &&
+            grandparents.begin()->get<clang::CXXMemberCallExpr>())
+            is_method_receiver = true;
+        }
+      }
+    }
+
+    bool did_adjust = false;
+    if (
+      adjust && total_offset > 0 && is_method_receiver &&
+      expr.type().is_pointer())
+    {
+      // Cast to char*, add byte offset, then cast to the target pointer type.
+      // index_type() is signed address-width (ptrdiff_t), matching ESBMC's
+      // pointer arithmetic IR convention.
+      typet char_ptr = pointer_typet(char_type());
+      gen_typecast(ns, expr, char_ptr);
+      plus_exprt adjusted(expr, from_integer(total_offset, index_type()));
+      adjusted.type() = char_ptr;
+      expr = adjusted;
+      did_adjust = true;
+    }
+
+    // Preserve original behaviour: CK_DerivedToBase always called gen_typecast;
+    // CK_UncheckedDerivedToBase was a no-op (break) and should only typecast
+    // when we actually applied a byte-offset adjustment above.
+    if (cast.getCastKind() == clang::CK_DerivedToBase || did_adjust)
+      gen_typecast(ns, expr, type);
+
+    break;
+  }
+
   case clang::CK_BaseToDerived:
   case clang::CK_Dynamic:
 
@@ -3079,10 +3276,67 @@ bool clang_c_convertert::get_cast_expr(
     break;
 #endif
 
+  case clang::CK_AtomicToNonAtomic:
   case clang::CK_NonAtomicToAtomic:
-    if (config.options.get_bool_option("dont-care-about-missing-extensions"))
-      break;
-    [[fallthrough]];
+    // get_type() strips _Atomic wrappers (clang::Type::Atomic case; see FIXME
+    // there about irep2 representation), so source and target types are already
+    // identical in ESBMC's IR. Both cast directions are no-ops.
+    break;
+
+  case clang::CK_FloatingRealToComplex:
+  case clang::CK_IntegralRealToComplex:
+  {
+    // real → {real, 0} struct
+    struct_exprt complex_expr(type);
+    complex_expr.operands().push_back(expr);
+    complex_expr.operands().push_back(gen_zero(expr.type()));
+    expr = complex_expr;
+    break;
+  }
+
+  case clang::CK_FloatingComplexToReal:
+  case clang::CK_IntegralComplexToReal:
+  {
+    // complex → real part
+    expr = member_exprt(expr, "real", type);
+    break;
+  }
+
+  case clang::CK_FloatingComplexToBoolean:
+  case clang::CK_IntegralComplexToBoolean:
+  {
+    // complex → bool: real != 0 || imag != 0
+    const typet &elem_t = to_complex_type(expr.type()).base_type();
+    exprt real_part = member_exprt(expr, "real", elem_t);
+    exprt imag_part = member_exprt(expr, "imag", elem_t);
+    exprt real_nz("notequal", bool_type());
+    real_nz.copy_to_operands(real_part, gen_zero(elem_t));
+    exprt imag_nz("notequal", bool_type());
+    imag_nz.copy_to_operands(imag_part, gen_zero(elem_t));
+    exprt result("or", bool_type());
+    result.copy_to_operands(real_nz, imag_nz);
+    expr = result;
+    break;
+  }
+
+  case clang::CK_FloatingComplexCast:
+  case clang::CK_IntegralComplexCast:
+  case clang::CK_FloatingComplexToIntegralComplex:
+  case clang::CK_IntegralComplexToFloatingComplex:
+  {
+    // complex → complex: cast each component to the target element type
+    const typet &src_elem_t = to_complex_type(expr.type()).base_type();
+    const typet &dst_elem_t = to_complex_type(type).base_type();
+    exprt real_part = member_exprt(expr, "real", src_elem_t);
+    exprt imag_part = member_exprt(expr, "imag", src_elem_t);
+    gen_typecast(ns, real_part, dst_elem_t);
+    gen_typecast(ns, imag_part, dst_elem_t);
+    struct_exprt complex_expr(type);
+    complex_expr.operands().push_back(real_part);
+    complex_expr.operands().push_back(imag_part);
+    expr = complex_expr;
+    break;
+  }
 
   default:
   {
@@ -3158,6 +3412,14 @@ bool clang_c_convertert::get_unary_operator_expr(
 
   case clang::UO_Extension:
     new_expr.swap(unary_sub);
+    return false;
+
+  case clang::UO_Real:
+    new_expr = member_exprt(unary_sub, "real", uniop_type);
+    return false;
+
+  case clang::UO_Imag:
+    new_expr = member_exprt(unary_sub, "imag", uniop_type);
     return false;
 
   default:
@@ -3753,15 +4015,28 @@ void clang_c_convertert::get_decl_name(
                                        "_" +
                                        location_begin.column().as_string();
       std::string kind_name = rd.getKindName().str();
+#if CLANG_VERSION_MAJOR >= 22
+      std::string tag_name = getFullyQualifiedName(
+        ASTContext->getTypeDeclType(llvm::cast<clang::TypeDecl>(&rd)),
+        *ASTContext);
+#else
       std::string tag_name =
         getFullyQualifiedName(ASTContext->getTagDeclType(&rd), *ASTContext);
+#endif
       name =
         kind_name + " __anon_typedef_" + tag_name + "_at_" + location_begin_str;
       std::replace(name.begin(), name.end(), '.', '_');
     }
     else
+#if CLANG_VERSION_MAJOR >= 22
+      name = rd.getKindName().str() + " " +
+             getFullyQualifiedName(
+               ASTContext->getTypeDeclType(llvm::cast<clang::TypeDecl>(&rd)),
+               *ASTContext);
+#else
       name =
         getFullyQualifiedName(ASTContext->getTagDeclType(&rd), *ASTContext);
+#endif
 
     id = "tag-" + name;
     return;
@@ -3972,6 +4247,28 @@ clang_c_convertert::get_top_FunctionDecl_from_Stmt(const clang::Stmt &stmt)
   return nullptr;
 }
 
+bool clang_c_convertert::process_aligned_attribute(
+  const clang::AlignedAttr &aattr,
+  typet &t) const
+{
+  unsigned alignment_bits = aattr.getAlignment(*ASTContext);
+
+  // Clang should report alignment in bits; require a non-zero multiple of `char_width`
+  // to safely convert to bytes. If this is not the case, emit a diagnostic.
+  if (alignment_bits == 0 || alignment_bits % config.ansi_c.char_width != 0)
+  {
+    log_error(
+      "unsupported or invalid aligned attribute: expected non-zero "
+      "multiple of {} bits, got {} bits",
+      config.ansi_c.char_width,
+      alignment_bits);
+    return true;
+  }
+  const unsigned alignment = alignment_bits / config.ansi_c.char_width;
+  t.set("alignment", constant_exprt(BigInt(alignment), size_type()));
+  return false;
+}
+
 bool clang_c_convertert::check_alignment_attributes(
   const clang::FieldDecl *field,
   struct_typet::componentt &comp)
@@ -3986,26 +4283,8 @@ bool clang_c_convertert::check_alignment_attributes(
         const clang::AlignedAttr &aattr =
           static_cast<const clang::AlignedAttr &>(*attr);
 
-        if (aattr.isAlignmentExpr())
-        {
-          // This is usually a constant
-          clang::Expr *alignExpr = aattr.getAlignmentExpr();
-          exprt alignment;
-          if (alignExpr && get_expr(*(aattr.getAlignmentExpr()), alignment))
-            return true;
-          comp.type().set("alignment", alignment);
-        }
-        else
-        {
-          // I was not able to find an example to test this, so abort for now
-          log_error("ESBMC currently does not support type alignments");
-          std::ostringstream oss;
-          llvm::raw_os_ostream ross(oss);
-          aattr.getAlignmentType()->getType()->dump(ross, *ASTContext);
-          ross.flush();
-          log_error("{}", oss.str());
+        if (process_aligned_attribute(aattr, comp.type()))
           return true;
-        }
       }
     }
   }
@@ -4123,8 +4402,6 @@ bool clang_c_convertert::get_APValue_expr(
     case clang::APValue::Indeterminate:
     case clang::APValue::Float:
     case clang::APValue::FixedPoint:
-    case clang::APValue::ComplexInt:
-    case clang::APValue::ComplexFloat:
     case clang::APValue::Vector:
     case clang::APValue::Array:
     case clang::APValue::Struct:

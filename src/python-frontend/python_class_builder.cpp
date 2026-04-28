@@ -44,7 +44,10 @@ bool python_class_builder::get_bases(struct_typet &st)
 
   for (const auto &bfull : pc_.bases())
   {
-    std::string base = leaf(bfull);
+    // Resolve any import alias before further processing
+    // e.g. "from enum import Enum as E" → leaf("E") → get_object_alias → "Enum"
+    std::string base =
+      leaf(json_utils::get_object_alias(conv_.ast(), leaf(bfull)));
     if (
       type_utils::is_builtin_type(base) ||
       type_utils::is_consensus_type(base) || type_utils::is_typeddict(base))
@@ -160,7 +163,7 @@ void python_class_builder::add_self_attrs(struct_typet &st)
   // Extract instance attributes (e.g., self.x = ...) from each method body
   for (const auto &n : cls_.at("body"))
     if (n.value("_type", "") == "FunctionDef")
-      conv_.get_attributes_from_self(n.at("body"), st);
+      conv_.get_attributes_from_self(n, st);
 }
 
 /* Generates a default constructor (__init__) when none is provided,
@@ -216,9 +219,17 @@ void python_class_builder::build(codet &out)
   symbolt *sym = ensure_sym(pc_.name());
   assert(sym && sym->is_type);
 
-  // Skip if already complete (prevents infinite recursion)
+  // Skip if already complete (prevents infinite recursion).
+  // Exception: if the existing type is an empty struct (a model-file stub like
+  // 'class List: pass' in models/typing.py), allow the user-defined class with
+  // actual fields to override it.
   if (!sym->type.incomplete())
-    return;
+  {
+    bool is_model_stub = sym->type.id() == "struct" &&
+                         to_struct_type(sym->type).components().empty();
+    if (!is_model_stub)
+      return;
+  }
 
   sym->type.remove(irept::a_incomplete);
 

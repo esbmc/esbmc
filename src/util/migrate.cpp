@@ -253,6 +253,27 @@ static type2tc migrate_type0(const typet &type)
     return floatbv_type2tc(frac_bits, expo_bits);
   }
 
+  if (type.id() == typet::t_complex)
+  {
+    std::vector<type2tc> members;
+    std::vector<irep_idt> names;
+    std::vector<irep_idt> pretty_names;
+    const struct_union_typet &strct = to_complex_type(type);
+    const struct_union_typet::componentst comps = strct.components();
+
+    for (const auto &comp : comps)
+    {
+      type2tc ref = migrate_type((const typet &)comp.type());
+
+      members.push_back(ref);
+      names.push_back(comp.get(typet::a_name));
+      pretty_names.push_back(comp.get(typet::a_pretty_name));
+    }
+
+    irep_idt name = "complex";
+    return complex_type2tc(members, names, pretty_names, name);
+  }
+
   if (type.id() == typet::t_code)
   {
     const code_typet &ref = static_cast<const code_typet &>(type);
@@ -573,6 +594,17 @@ expr2tc sym_name_to_symbol(irep_idt init, type2tc type)
 
   if (target_level != symbol2t::level2_global)
   {
+    // Check that at_pos and exm_pos are valid before using them
+    if (at_pos == std::string::npos || exm_pos == std::string::npos)
+    {
+      log_warning(
+        "migrate_expr: symbol '{}' missing renaming delimiters, "
+        "treating as level0 with base name '{}'",
+        init,
+        thename);
+      return symbol2tc(type, thename, symbol2t::level0, 0, 0, 0, 0);
+    }
+
     std::string atstr = thestr.substr(at_pos + 1, exm_pos - at_pos - 1);
     std::string exmstr = thestr.substr(exm_pos + 1, and_pos - exm_pos - 1);
 
@@ -1859,6 +1891,12 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
       t = sideeffect2t::old_snapshot;
       migrate_expr(expr.op0(), new_expr_ref);
     }
+    else if (expr.statement() == "assigns_target")
+    {
+      // __ESBMC_assigns() in function contracts
+      t = sideeffect2t::assigns_target;
+      migrate_expr(expr.op0(), new_expr_ref);
+    }
     else
     {
       log_error("Unexpected side-effect statement: {}", expr.statement());
@@ -2405,6 +2443,28 @@ typet migrate_type_back(const type2tc &ref)
     floatbv_typet thetype;
     thetype.set_f(ref2.fraction);
     thetype.set_width(ref2.get_width());
+    return thetype;
+  }
+  case type2t::complex_id:
+  {
+    unsigned int idx;
+    complex_typet thetype;
+    struct_union_typet::componentst comps;
+    const complex_type2t &ref2 = to_complex_type(ref);
+
+    idx = 0;
+    for (auto const &it : ref2.members)
+    {
+      struct_union_typet::componentt component;
+      component.id("component");
+      component.type() = migrate_type_back(it);
+      component.set_name(irep_idt(ref2.member_names[idx]));
+      component.pretty_name(irep_idt(ref2.member_pretty_names[idx]));
+      comps.push_back(component);
+      idx++;
+    }
+
+    thetype.components() = comps;
     return thetype;
   }
   case type2t::cpp_name_id:
@@ -3299,6 +3359,9 @@ exprt migrate_expr_back(const expr2tc &ref)
       break;
     case sideeffect2t::old_snapshot:
       theexpr.statement("old_snapshot");
+      break;
+    case sideeffect2t::assigns_target:
+      theexpr.statement("assigns_target");
       break;
     default:
 

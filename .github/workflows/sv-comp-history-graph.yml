@@ -1,0 +1,46 @@
+name: sv-comp-history-graph
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'scripts/competitions/svcomp/stats-*'
+      - 'scripts/sv-comp-graph/**'
+      - '.github/workflows/sv-comp-history-graph.yml'
+  workflow_dispatch:
+
+# Coalesce rapid pushes to stats-* so we don't race force-pushes to the
+# auto/sv-comp-history-graph branch. The PR is always refreshed in place,
+# but cancelling superseded runs avoids noisy failures.
+concurrency:
+  group: sv-comp-history-graph
+  cancel-in-progress: true
+
+jobs:
+  regen:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6.2.0
+        with:
+          python-version: '3.12'
+      - run: pip install 'matplotlib==3.9.*'
+      - name: Regenerate combined graph
+        run: |
+          python scripts/sv-comp-graph/sv_comp_history.py \
+            --output-dir website/content/images \
+            --budgets 30s 100s 300s 600s
+      - uses: peter-evans/create-pull-request@v8.1.1
+        with:
+          commit-message: '[docs] refresh SV-COMP history graph'
+          title: '[docs] refresh SV-COMP history graph'
+          body: 'Auto-regenerated from changes to scripts/competitions/svcomp/stats-*.'
+          branch: auto/sv-comp-history-graph
+          add-paths: website/content/images/sv-comp-hist-combined.png
+          delete-branch: true
+          labels: automation

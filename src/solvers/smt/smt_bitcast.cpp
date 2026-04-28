@@ -57,6 +57,12 @@ static expr2tc flatten_to_bitvector(const expr2tc &new_expr)
   if (is_number_type(new_expr) || is_pointer_type(new_expr))
     return bitcast2tc(get_uint_type(new_expr->type->get_width()), new_expr);
 
+  // Wholly zero-width aggregates (unions/structs of empty types) have no
+  // bits to flatten. Return a width-0 sentinel; downstream simplification
+  // and slicing drop it before it reaches the SMT backend.
+  if (new_expr->type->get_width() == 0)
+    return constant_int2tc(get_uint_type(0), BigInt(0));
+
   // If it is an array, concat every element into a big bitvector
   if (is_array_type(new_expr))
   {
@@ -83,28 +89,29 @@ static expr2tc flatten_to_bitvector(const expr2tc &new_expr)
     return concat_tree(0, sz, extract);
   }
 
-  if (new_expr->type->get_width() == 0)
-    return constant_int2tc(get_uint_type(0), BigInt(0));
-
   // If it is a struct, concat all members into a big bitvector
   // TODO: this is similar to concat array elements, should we merge them?
   if (is_struct_type(new_expr))
   {
     const struct_type2t &structtype = to_struct_type(new_expr->type);
 
-    size_t sz = structtype.members.size();
-
-    // Iterate over each member and flatten them
+    // Zero-width members (e.g. empty C++ class fields) contribute no bits
+    // and must be excluded: SMT backends reject width-0 bit-vector sorts
+    // when they appear as concat operands. The wholly zero-width case is
+    // already handled by the top-level get_width() == 0 guard above.
+    std::vector<size_t> nonempty;
+    nonempty.reserve(structtype.members.size());
+    for (size_t i = 0; i < structtype.members.size(); i++)
+      if (type_byte_size_bits(structtype.members[i]) > 0)
+        nonempty.push_back(i);
 
     auto extract = [&](size_t i) {
-      /* The sub-expression should be flattened as well */
+      size_t idx = nonempty[nonempty.size() - i - 1];
       return flatten_to_bitvector(member2tc(
-        structtype.members[sz - i - 1],
-        new_expr,
-        structtype.member_names[sz - i - 1]));
+        structtype.members[idx], new_expr, structtype.member_names[idx]));
     };
 
-    return concat_tree(0, sz, extract);
+    return concat_tree(0, nonempty.size(), extract);
   }
 
   if (is_union_type(new_expr))
@@ -158,9 +165,9 @@ smt_astt smt_convt::convert_bitcast(const expr2tc &expr)
   }
   else if (is_bv_type(to_type))
   {
-    // When int_encoding is true, fixed- and floating-point types
-    // are represented as reals in the SMT solver, but fp_api expects bitvectors.
-    // Fall back to value-based conversion.
+    // Under --ir-ieee, float values are real-encoded; bit-pattern reinterpretation
+    // Under integer encoding (--ir/--ir-ieee), fixed- and floating-point values are
+    // real-encoded; fall back to value-based typecast.
     if (int_encoding && (is_fixedbv_type(from) || is_floatbv_type(from)))
       return convert_ast(typecast2tc(to_type, from));
 
@@ -196,17 +203,24 @@ smt_astt smt_convt::convert_bitcast(const expr2tc &expr)
       const struct_type2t &structtype = to_struct_type(to_type);
 
       // We have to reconstruct the struct from the bitvector, so do it
-      // by extracting the offsets+size of each member from the bitvector
+      // by extracting the offsets+size of each member from the bitvector.
+      // Zero-width members (e.g. empty C++ class fields) occupy no bits:
+      // emit a zero-valued constant of that type instead of a width-0 extract.
       std::vector<expr2tc> fields;
       for (unsigned int i = 0; i < structtype.members.size(); i++)
       {
+        const type2tc &member_type = structtype.members[i];
+        unsigned int sz = type_byte_size_bits(member_type).to_uint64();
+        if (sz == 0)
+        {
+          fields.push_back(gen_zero(member_type));
+          continue;
+        }
         unsigned int offset =
           member_offset_bits(to_type, structtype.member_names[i]).to_uint64();
-        unsigned int sz =
-          type_byte_size_bits(structtype.members[i]).to_uint64();
         expr2tc tmp =
           extract2tc(get_uint_type(sz), new_from, offset + sz - 1, offset);
-        fields.push_back(bitcast2tc(structtype.members[i], tmp));
+        fields.push_back(bitcast2tc(member_type, tmp));
       }
 
       return convert_ast(constant_struct2tc(to_type, fields));

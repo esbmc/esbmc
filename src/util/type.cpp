@@ -39,6 +39,7 @@ irep_idt typet::t_vector = dstring("vector");
 
 irep_idt typet::t_intcap = dstring("intcap");
 irep_idt typet::t_uintcap = dstring("uintcap");
+irep_idt typet::t_ptrmem = dstring("ptrmem");
 
 irep_idt typet::a_identifier = dstring("identifier");
 irep_idt typet::a_name = dstring("name");

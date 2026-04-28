@@ -112,7 +112,7 @@ jobs:
     uses: ./.github/workflows/build.yml
     with:
       operating-system: ubuntu-24.04
-      build-flags: '-b Release -e Off -C'
+      build-flags: '-b Release -e OFF -C'
       testing: false
 
   run-benchexec:
@@ -125,7 +125,7 @@ jobs:
       - name: Download Linux Build
         uses: actions/download-artifact@v4
         with:
-          name: 'release-ubuntu-24.04--b Release -e Off -C'
+          name: 'release-ubuntu-24.04--b Release -e OFF -C'
           path: ./
       - name: Checkout code
         uses: actions/checkout@v4

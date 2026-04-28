@@ -15,7 +15,9 @@ add_library(pythonfrontend STATIC
             python_converter.cpp
             python_class.cpp
             python_class_builder.cpp
+            python_consteval.cpp
             python_dict_handler.cpp
+            python_exception_handler.cpp
             python_lambda.cpp
             python_list.cpp
             python_math.cpp
@@ -26,13 +28,18 @@ add_library(pythonfrontend STATIC
             module_locator.cpp
             symbol_id.cpp
             type_handler.cpp
+            cmath_lowering_policy.cpp
+            complex_handler.cpp
+            complex_handler_utils.cpp
             function_call_expr.cpp
             numpy_call_expr.cpp
             function_call_builder.cpp
             string_builder.cpp
             string_handler.cpp
+            string_handler_utils.cpp
             exception_utils.cpp
             char_utils.cpp
+            math_guard_utils.cpp
             parse_float.cpp
             tuple_handler.cpp
             convert_float_literal.cpp)
@@ -44,4 +51,4 @@ target_include_directories(pythonfrontend
     PUBLIC ${Boost_INCLUDE_DIRS}
 )
 
-target_link_libraries(pythonfrontend fmt::fmt nlohmann_json::nlohmann_json bigint)
+target_link_libraries(pythonfrontend PUBLIC nlohmann_json::nlohmann_json PRIVATE fmt::fmt bigint)

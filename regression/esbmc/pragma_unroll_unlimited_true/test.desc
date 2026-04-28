@@ -1,4 +1,4 @@
 CORE
 main.c
---unwind 3 --no-unwinding-assertions
+--verbosity 9 --unwind 3 --no-unwinding-assertions
 ^VERIFICATION SUCCESSFUL$

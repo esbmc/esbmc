@@ -1,14 +1,15 @@
+from __future__ import annotations
+
 import sys
-import subprocess
 
 # Detect the Python version
 PY3 = sys.version_info[0] == 3
 
 if not PY3:
-    print("Python version: {}.{}.{}".format(sys.version_info.major, sys.version_info.minor, sys.version_info.micro))
+    print("Python version: {}.{}.{}".format(sys.version_info.major, sys.version_info.minor,
+                                            sys.version_info.micro))
     print("ERROR: Please ensure Python 3 is available in your environment.")
     sys.exit(1)
-
 
 import ast
 import importlib.util
@@ -16,7 +17,25 @@ import json
 import os
 import glob
 import base64
+import tempfile
 from preprocessor import Preprocessor
+
+
+def run_mypy_strict(filename):
+    """Run mypy in-process when available; skip otherwise."""
+    try:
+        from mypy import api as mypy_api
+    except ImportError:
+        return 0, ""
+
+    with tempfile.TemporaryDirectory(prefix="esbmc-mypy-cache-") as cache_dir:
+        stdout, stderr, exit_status = mypy_api.run(
+            ["--strict", "--cache-dir", cache_dir, filename]
+        )
+    output = stdout
+    if stderr:
+        output += stderr
+    return exit_status, output
 
 
 def check_usage():
@@ -24,13 +43,26 @@ def check_usage():
         print("Usage: python astgen.py <file path> <output directory>")
         sys.exit(2)
 
+
 def is_imported_model(module_name):
-    models = ["math", "os", "numpy"]
+    models = [
+        "math",
+        "os",
+        "numpy",
+        "esbmc",
+        "decimal",
+        "collections",
+        "dataclasses",
+        "typing",
+        "time",
+    ]
     return module_name in models
+
 
 def is_unsupported_module(module_name):
     unsuported_modules = ["blah"]
     return module_name in unsuported_modules
+
 
 def is_testing_framework(module_name):
     # Check if module is a testing framework that should be skipped.
@@ -46,10 +78,6 @@ def import_module_by_name(module_name, output_dir):
         sys.exit(3)
 
     base_module = module_name.split(".")[0]
-
-    # Skip typing module - it's for type annotations only and doesn't need AST processing.
-    if base_module == "typing":
-        return None
 
     # Skip testing frameworks - they don't contain logic to verify
     if is_testing_framework(base_module):
@@ -78,21 +106,31 @@ def import_module_by_name(module_name, output_dir):
 
         print("ERROR: Module '{}' not found.".format(module_name))
         print("Please install it with: pip3 install {}".format(module_name))
-        sys.exit(4)
+        return None
 
 
 def encode_bytes(value):
     return base64.b64encode(value).decode('ascii')
 
-def add_type_annotation(node):
-    value_node = node.value
+
+def annotate_constant_node(value_node):
     # Python 3.8+ uses ast.Constant instead of ast.Str, ast.Num, ast.Bytes, etc.
-    if isinstance(value_node, ast.Constant):
-        if isinstance(value_node.value, str):
-            value_node.esbmc_type_annotation = "str"
-        elif isinstance(value_node.value, bytes):
-            value_node.esbmc_type_annotation = "bytes"
-            value_node.encoded_bytes = encode_bytes(value_node.value)
+    if not isinstance(value_node, ast.Constant):
+        return
+
+    if isinstance(value_node.value, str):
+        value_node.esbmc_type_annotation = "str"
+    elif isinstance(value_node.value, bytes):
+        value_node.esbmc_type_annotation = "bytes"
+        value_node.encoded_bytes = encode_bytes(value_node.value)
+    elif isinstance(value_node.value, complex):
+        value_node.esbmc_type_annotation = "complex"
+        value_node.real_value = value_node.value.real
+        value_node.imag_value = value_node.value.imag
+
+
+def add_type_annotation(node):
+    annotate_constant_node(node.value)
 
 
 def is_standard_library_file(filename):
@@ -101,8 +139,8 @@ def is_standard_library_file(filename):
         '/usr/local/lib/python',
         '/Library/Frameworks/Python.framework',
         '/opt/homebrew/Cellar/python',  # Homebrew Python on macOS (Apple Silicon)
-        '/usr/local/Cellar/python',     # Homebrew Python on macOS (Intel)
-        '/opt/conda/lib/python',       # Conda standard installation path
+        '/usr/local/Cellar/python',  # Homebrew Python on macOS (Intel)
+        '/opt/conda/lib/python',  # Conda standard installation path
     ]
     # Check fixed paths first (no expanduser needed)
     if any(filename.startswith(path) for path in stdlib_paths):
@@ -157,9 +195,11 @@ def get_referenced_names(node):
 
     return referenced
 
+
 import_aliases = {}
 # Track all imports per module to combine them
 module_imports = {}
+
 
 def process_imports(node, output_dir):
     """
@@ -169,7 +209,6 @@ def process_imports(node, output_dir):
         - node: The import node to process.
         - output_dir: The directory to save the generated JSON files.
     """
-
 
     if isinstance(node, (ast.Import)):
         module_names = []
@@ -214,7 +253,8 @@ def process_imports(node, output_dir):
         else:
             module = import_module_by_name(module_name, output_dir)
             if module is None:
-                # Module doesn't need processing (e.g., typing) - don't set full_path
+                # Mark this import node so the C++ frontend knows the module was not found
+                node.module_not_found = True
                 continue
 
             # Check if module has __file__ attribute (built-in C extensions don't)
@@ -275,6 +315,7 @@ def filter_imports(tree: ast.AST) -> ast.AST:
 
     tree.body = filtered_body
     return tree
+
 
 def parse_file(filename: str) -> ast.AST:
     """Open, parse, and run Preprocessor on a Python source file."""
@@ -346,7 +387,11 @@ def process_collected_imports(output_dir):
                     rewrite_relative_import(subnode, module_name)
                     process_imports(subnode, output_dir)
 
-            generate_ast_json(tree, filename, imported_elements, output_dir, module_qualname=module_name)
+            generate_ast_json(tree,
+                              filename,
+                              imported_elements,
+                              output_dir,
+                              module_qualname=module_name)
 
 
 def rewrite_relative_import(node, parent_module: str | None):
@@ -435,11 +480,13 @@ def generate_ast_json(tree, python_filename, elements_to_import, output_dir, mod
 
     # Convert AST to JSON
     ast2json_module = import_module_by_name("ast2json", "")
+    if ast2json_module is None:
+        sys.exit(1)
     ast_json = ast2json_module.ast2json(ast.Module(body=filtered_nodes) if filtered_nodes else tree)
     ast_json["filename"] = python_filename
     ast_json["ast_output_dir"] = output_dir
 
-     # Build JSON path
+    # Build JSON path
     if module_qualname:
         parts = module_qualname.split(".")
         json_dir = os.path.join(output_dir, *parts[:-1])  # package subdirs
@@ -449,9 +496,8 @@ def generate_ast_json(tree, python_filename, elements_to_import, output_dir, mod
             dir_name = os.path.basename(os.path.dirname(python_filename))
             json_filename = os.path.join(output_dir, f"{dir_name}.json")
         else:
-            json_filename = os.path.join(
-                output_dir, f"{os.path.basename(python_filename[:-3])}.json"
-            )
+            json_filename = os.path.join(output_dir,
+                                         f"{os.path.basename(python_filename[:-3])}.json")
 
     os.makedirs(os.path.dirname(json_filename), exist_ok=True)
 
@@ -514,24 +560,22 @@ def detect_and_process_submodules(node, processed_submodules, output_dir):
                         try:
                             with open(full_path, "r", encoding="utf-8") as f:
                                 tree = ast.parse(f.read())
-                                generate_ast_json(tree, full_path, None, output_dir + "/" + base_module)
+                                generate_ast_json(tree, full_path, None,
+                                                  output_dir + "/" + base_module)
                         except UnicodeDecodeError:
                             continue
+
 
 def main():
     check_usage()
     filename = sys.argv[1]
     output_dir = sys.argv[2]
 
-    # Type checking input program with mypy
-    result = subprocess.run(
-    ["mypy", "--strict", filename],
-    capture_output=True,
-    text=True)
-
-    if result.returncode != 0:
+    # Type checking input program with mypy.
+    returncode, mypy_output = run_mypy_strict(filename)
+    if returncode != 0:
         print("\033[93m\nType checking warning:\033[0m")
-        print(result.stdout)
+        print(mypy_output)
 
     # Add the script directory to the front of the import search path
     script_dir = os.path.dirname(os.path.abspath(filename))
@@ -557,8 +601,11 @@ def main():
             # Collect import information
             process_imports(node, output_dir)
         elif isinstance(node, ast.Assign):
-            # Add type annotation on assignments
+            # Keep assignment-specific annotation behavior.
             add_type_annotation(node)
+        elif isinstance(node, ast.Constant):
+            # Ensure constants are annotated in all contexts (e.g., call args).
+            annotate_constant_node(node)
         elif isinstance(node, ast.Attribute):
             # Detect and process submodule usage
             detect_and_process_submodules(node, processed_submodules, output_dir)
@@ -577,8 +624,8 @@ def main():
         filename = os.path.basename(python_file)
         module_name = filename[:-3]
 
-        if is_imported_model(module_name):
-            continue;
+        if is_imported_model(module_name) and module_name != "typing":
+            continue
 
         with open(python_file) as model:
             model_tree = ast.parse(model.read())

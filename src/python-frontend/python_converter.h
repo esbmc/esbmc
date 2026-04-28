@@ -1,6 +1,8 @@
 #pragma once
 
 #include <nlohmann/json.hpp>
+#include <python-frontend/complex_handler.h>
+#include <python-frontend/function_call_cache.h>
 #include <python-frontend/global_scope.h>
 #include <python-frontend/python_dict_handler.h>
 #include <python-frontend/python_math.h>
@@ -28,6 +30,7 @@ class tuple_handler;
 class python_typechecking;
 class python_class_builder;
 class python_lambda;
+class python_exception_handler;
 
 /**
  * @class python_converter
@@ -96,9 +99,24 @@ public:
     return dict_handler_;
   }
 
+  python_exception_handler &get_exception_handler()
+  {
+    return *exception_handler_;
+  }
+
+  const python_exception_handler &get_exception_handler() const
+  {
+    return *exception_handler_;
+  }
+
   python_math &get_math_handler()
   {
     return math_handler_;
+  }
+
+  complex_handler &get_complex_handler()
+  {
+    return complex_handler_;
   }
 
   string_handler &get_string_handler()
@@ -133,6 +151,11 @@ public:
     return current_python_file;
   }
 
+  const std::string &main_python_filename() const
+  {
+    return main_python_file;
+  }
+
   const std::string &current_function_name() const
   {
     return current_func_name_;
@@ -146,6 +169,16 @@ public:
   const namespacet &name_space() const
   {
     return ns;
+  }
+
+  function_call_cache &get_function_call_cache()
+  {
+    return function_call_cache_;
+  }
+
+  const function_call_cache &get_function_call_cache() const
+  {
+    return function_call_cache_;
   }
 
   void add_symbol(const symbolt s)
@@ -203,6 +236,7 @@ public:
   const python_typechecking &get_typechecker() const;
 
 private:
+  friend class complex_handler;
   friend class function_call_expr;
   friend class numpy_call_expr;
   friend class function_call_builder;
@@ -214,6 +248,8 @@ private:
   friend class python_class_builder;
   friend class python_dict_handler;
   friend class python_set;
+  friend class python_exception_handler;
+  friend class python_converter_test_access;
 
   template <typename Func>
   decltype(auto) with_ast(const nlohmann::json *new_ast, Func &&f)
@@ -228,6 +264,8 @@ private:
   void load_c_intrisics(code_blockt &block);
 
   void get_var_assign(const nlohmann::json &ast_node, codet &target_block);
+
+  void preregister_global_variables(const nlohmann::json &ast_body);
 
   typet
   resolve_variable_type(const std::string &var_name, const locationt &loc);
@@ -257,8 +295,6 @@ private:
   exprt get_function_constant_return(const exprt &func_value);
 
   exprt resolve_function_call(const exprt &func_expr, const exprt &args_expr);
-
-  symbolt create_assert_temp_variable(const locationt &location);
 
   exprt get_lambda_expr(const nlohmann::json &element);
 
@@ -324,6 +360,12 @@ private:
 
   exprt get_conditional_stm(const nlohmann::json &ast_node);
 
+  bool is_coverage_mode() const;
+
+  bool is_pytest_generation_mode() const;
+
+  bool is_model_file(const nlohmann::json &node) const;
+
   exprt get_function_call(const nlohmann::json &ast_block);
 
   exprt get_block(const nlohmann::json &ast_block);
@@ -384,12 +426,37 @@ private:
     const exprt &rhs);
 
   void get_attributes_from_self(
-    const nlohmann::json &method_body,
+    const nlohmann::json &func_node,
     struct_typet &clazz);
+
+  // Infer the static type of `class_name.attr_name` by scanning non-None
+  // assignments to that attribute — both `self.attr = <rhs>` within the
+  // class's own methods and `<var>.attr = <rhs>` at module scope where
+  // `<var>` was assigned `class_name(...)`. Returns nil if no useful
+  // information is found (caller falls back to any_type()).
+  typet infer_attr_type_from_usage(
+    const std::string &class_name,
+    const std::string &attr_name);
 
   exprt get_return_from_func(const char *func_symbol_id);
 
   void create_builtin_symbols();
+
+  bool import_module_into_block(
+    const nlohmann::json &import_node,
+    module_locator &locator,
+    code_blockt &code);
+
+  nlohmann::json build_dunder_call(
+    const nlohmann::json &object,
+    const std::string &dunder_name,
+    const nlohmann::json &args,
+    const nlohmann::json &source_node) const;
+
+  exprt store_call_result(
+    exprt call_expr,
+    const locationt &location,
+    const std::string &temp_prefix);
 
   void process_module_imports(
     const nlohmann::json &module_ast,
@@ -403,6 +470,7 @@ private:
     bool is_ctor) const;
 
   symbolt *find_imported_symbol(const std::string &symbol_id) const;
+  symbolt *find_nested_function_symbol(const std::string &name) const;
   symbolt *find_symbol_in_global_scope(const std::string &symbol_id) const;
 
   void copy_instance_attributes(
@@ -430,48 +498,6 @@ private:
 
   void
   get_delete_statement(const nlohmann::json &ast_node, codet &target_block);
-
-  // =========================================================================
-  // Assertion helper methods
-  // =========================================================================
-
-  /**
-   * @brief Handles assertions on list expressions.
-   *
-   * In Python, empty lists are falsy, so `assert []` should fail.
-   * This method converts `assert list_var` to `assert len(list_var) > 0`
-   * by calling __ESBMC_list_size and checking the result.
-   *
-   * @param element The assertion AST node.
-   * @param test The test expression (a list or list-returning function call).
-   * @param block The code block to add generated statements to.
-   * @param attach_assert_message Lambda to attach user assertion messages.
-   */
-  void handle_list_assertion(
-    const nlohmann::json &element,
-    const exprt &test,
-    code_blockt &block,
-    const std::function<void(code_assertt &)> &attach_assert_message);
-
-  /**
-   * @brief Handles assertions on function call expressions.
-   *
-   * Materializes function calls in assertions.
-   * For None-returning functions, executes the call and asserts False.
-   * For other functions, stores result in temp var and asserts on that.
-   *
-   * @param element The assertion AST node.
-   * @param func_call_expr The function call expression to assert on.
-   * @param is_negated Whether the assertion is negated (assert not func()).
-   * @param block The code block to add generated statements to.
-   * @param attach_assert_message Lambda to attach user assertion messages.
-   */
-  void handle_function_call_assertion(
-    const nlohmann::json &element,
-    const exprt &func_call_expr,
-    bool is_negated,
-    code_blockt &block,
-    const std::function<void(code_assertt &)> &attach_assert_message);
 
   // =========================================================================
   // Helper methods for get_var_assign
@@ -645,6 +671,27 @@ private:
   // =========================================================================
 
   /**
+   * @brief Handles type identity checks (value is type_identifier).
+   *
+   * Handles identity checks involving Python type objects.
+   * Type objects are singletons, so identity comparisons between
+   * type objects can be resolved by comparing their identifiers.
+   *
+   * @param op The operator string ("Is" or "IsNot").
+   * @param lhs The left operand expression.
+   * @param rhs The right operand expression.
+   * @param left The left operand JSON AST node.
+   * @param right The right operand JSON AST node.
+   * @return Boolean result expression, or nil_exprt if not a type identity check.
+   */
+  exprt handle_type_identity_check(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right);
+
+  /**
    * @brief Converts function calls in binary operands to side effects.
    * @param lhs Left operand expression (may be modified).
    * @param rhs Right operand expression (may be modified).
@@ -809,8 +856,41 @@ private:
   /// Wrap values in Optional
   exprt wrap_in_optional(const exprt &value, const typet &optional_type);
 
+  // =========================================================================
+  // Enum support helpers
+  // =========================================================================
+
+  /// Build a struct expression for an enum member (e.g. TrafficLight.GREEN)
+  /// so that it carries the enum class type rather than a raw int.
+  exprt make_enum_member_struct_expr(
+    const symbolt &int_sym,
+    const std::string &class_name,
+    const std::string &member_name);
+
   /// Handle Optional value access
   exprt unwrap_optional_if_needed(const exprt &expr);
+
+  // =========================================================================
+  // Dunder method dispatch for user-defined struct types
+  // =========================================================================
+
+  static std::string op_to_dunder(const std::string &op);
+  static std::string op_to_rdunder(const std::string &op);
+  symbolt *find_dunder_method(
+    const std::string &class_name,
+    const std::string &dunder_name);
+  bool has_dunder_method(
+    const nlohmann::json &value_node,
+    const std::string &dunder_name);
+  exprt dispatch_dunder_operator(
+    const std::string &op,
+    exprt &lhs,
+    exprt &rhs,
+    const locationt &loc);
+  exprt dispatch_unary_dunder_operator(
+    const std::string &op,
+    exprt &operand,
+    const locationt &loc);
 
   // =========================================================================
   // Member variables
@@ -825,6 +905,7 @@ private:
 
   namespacet ns;
   typet current_element_type;
+  typet current_func_return_type_;
   std::string main_python_file;
   std::string current_python_file;
   nlohmann::json imported_module_json;
@@ -834,10 +915,12 @@ private:
   exprt *current_lhs;
   string_handler string_handler_;
   python_math math_handler_;
+  complex_handler complex_handler_;
   tuple_handler *tuple_handler_;
   python_dict_handler *dict_handler_;
   python_typechecking *typechecker_ = nullptr;
   python_lambda *lambda_handler_;
+  python_exception_handler *exception_handler_;
 
   bool is_converting_lhs = false;
   bool is_converting_rhs = false;
@@ -850,6 +933,11 @@ private:
   std::map<std::string, std::set<std::string>> instance_attr_map;
   /// Map imported modules to their corresponding paths
   std::unordered_map<std::string, std::string> imported_modules;
+  /// Maps any symbol currently known to refer to an input() string
+  /// (e.g. $input_str$N or a variable aliasing it) to its $input_len$N symbol ID
+  std::unordered_map<std::string, std::string> input_str_to_len_sym_;
+
+  function_call_cache function_call_cache_;
 
   std::vector<std::string> global_declarations;
   std::vector<std::string> local_loads;

@@ -1,0 +1,6 @@
+CORE
+main.c
+--multi-property --loop-invariant --max-k-step 2
+^VERIFICATION SUCCESSFUL$
+PASSED.*post loop: qa mod
+PASSED.*post loop: qa ge

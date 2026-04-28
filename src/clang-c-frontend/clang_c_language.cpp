@@ -17,6 +17,7 @@ CC_DIAGNOSTIC_POP()
 #include <util/c_link.h>
 
 #include <util/filesystem.h>
+#include <clang-c-frontend/nested_func_transform.h>
 
 #include <ac_config.h>
 
@@ -293,9 +294,16 @@ bool clang_c_languaget::parse(const std::string &path)
   if (preprocess(path, o_preprocessed))
     return true;
 
+  // Transform GCC nested functions (if any) into standard C
+  std::optional<file_operations::tmp_file> nested_transformed;
+  if (config.options.get_bool_option("gcc-nested-functions"))
+    nested_transformed = transform_nested_functions(path);
+  const std::string &actual_path =
+    nested_transformed ? nested_transformed->path() : path;
+
   // Get compiler arguments and add the file path
   std::vector<std::string> new_compiler_args = compiler_args("clang-tool");
-  new_compiler_args.push_back(path);
+  new_compiler_args.push_back(actual_path);
 
   if (FILE *f = messaget::state.target("clang", VerbosityLevel::Debug))
   {
@@ -389,6 +397,14 @@ extern __SIZE_TYPE__ __ESBMC_alloc_size[1];
 
 // Get object size
 __SIZE_TYPE__ __ESBMC_get_object_size(const void *);
+
+// Contract predicate: indicates that a pointer points to freshly allocated memory
+// Signature: __ESBMC_is_fresh(void **ptr, size_t size)
+// - ptr: Address of the pointer variable (semantically void**, declared as void* to avoid Clang USR issues)
+// - size: Size in bytes of the memory region
+// Returns: true when memory is successfully allocated (in contract enforcement mode)
+// Note: Used in requires clauses to specify fresh memory allocation requirements
+_Bool __ESBMC_is_fresh(void*, __SIZE_TYPE__);
 
 _Bool __ESBMC_is_little_endian();
 
@@ -490,6 +506,23 @@ _Bool __ESBMC_exists(void*, _Bool);
  */
 void __ESBMC_loop_invariant(_Bool);
 
+/* __ESBMC_loop_assigns: specifies memory locations a loop may modify.
+ * Used with --loop-frame-rule for frame condition enforcement.
+ * Variables NOT in this set are assumed unchanged across loop iterations.
+ *
+ * Usage (place before loop, after __ESBMC_loop_invariant):
+ *   __ESBMC_loop_invariant(i >= 0 && i < n);
+ *   __ESBMC_loop_assigns(i);
+ *   for (i = 0; ...) { ... }
+ */
+void __ESBMC_loop_assigns_impl(const void *, ...);
+#define __ESBMC_loop_assigns_1(a) __ESBMC_loop_assigns_impl(&(a))
+#define __ESBMC_loop_assigns_2(a,b) __ESBMC_loop_assigns_impl(&(a),&(b))
+#define __ESBMC_loop_assigns_3(a,b,c) __ESBMC_loop_assigns_impl(&(a),&(b),&(c))
+#define __ESBMC_loop_assigns_4(a,b,c,d) __ESBMC_loop_assigns_impl(&(a),&(b),&(c),&(d))
+#define __ESBMC_loop_assigns_5(a,b,c,d,e) __ESBMC_loop_assigns_impl(&(a),&(b),&(c),&(d),&(e))
+#define __ESBMC_loop_assigns_N(_0,_1,_2,_3,_4,_5,N,...) __ESBMC_loop_assigns_##N
+#define __ESBMC_loop_assigns(...) __ESBMC_loop_assigns_N(~,##__VA_ARGS__,5,4,3,2,1,0)(__VA_ARGS__)
 
 #define __builtin_offsetof(type, member) \
     ((size_t)__ESBMC_POINTER_OFFSET(&((type*)0)->member))
@@ -497,6 +530,33 @@ void __ESBMC_loop_invariant(_Bool);
 
 #define __builtin_object_size(ptr, type) \
     __ESBMC_builtin_object_size(ptr, type)
+
+// __ESBMC_unroll(N): sets the number of iterations for the next loop in the code.
+void __ESBMC_unroll(int);
+
+#define __ESBMC_contract __attribute__((annotate("__ESBMC_contract")))
+
+/* Function contract annotations: always available so annotated files compile
+ * with any ESBMC mode (direct BMC, --enforce-contract, --replace-call-with-contract).
+ * In direct BMC: requires/ensures/assigns are dropped (no-ops) by goto_sideeffects.cpp.
+ * Active contract enforcement only kicks in with --enforce-contract etc. */
+void __ESBMC_requires(_Bool);
+void __ESBMC_ensures(_Bool);
+int __ESBMC_return_value;
+void* __ESBMC_old_raw(void*);
+#define __ESBMC_old(x) (*(__typeof__(x)*)__ESBMC_old_raw((void*)(&(x))))
+#define __ESBMC_and(a, b) ((a) & (b))
+#define __ESBMC_or(a, b) ((a) | (b))
+#define __ESBMC_implies(a, b) ((!(a)) | (b))
+void __ESBMC_assigns_impl(const void *, ...);
+#define __ESBMC_assigns_0() __ESBMC_assigns_impl((void*)0)
+#define __ESBMC_assigns_1(a) __ESBMC_assigns_impl(&(a))
+#define __ESBMC_assigns_2(a,b) __ESBMC_assigns_impl(&(a),&(b))
+#define __ESBMC_assigns_3(a,b,c) __ESBMC_assigns_impl(&(a),&(b),&(c))
+#define __ESBMC_assigns_4(a,b,c,d) __ESBMC_assigns_impl(&(a),&(b),&(c),&(d))
+#define __ESBMC_assigns_5(a,b,c,d,e) __ESBMC_assigns_impl(&(a),&(b),&(c),&(d),&(e))
+#define __ESBMC_assigns_N(_0,_1,_2,_3,_4,_5,N,...) __ESBMC_assigns_##N
+#define __ESBMC_assigns(...) __ESBMC_assigns_N(~,##__VA_ARGS__,5,4,3,2,1,0)(__VA_ARGS__)
     )";
 
   if (config.ansi_c.cheri)
@@ -518,42 +578,6 @@ struct cap_info {__SIZE_TYPE__ base; __SIZE_TYPE__ top;};
 
 __attribute__((annotate("__ESBMC_inf_size")))
 struct cap_info __ESBMC_cheri_info[1];
-    )";
-  }
-
-  // Function contract support - only add symbols when contract processing is enabled
-  // Check if enforce-contract or replace-call-with-contract options are set
-  std::string enforce_opt = config.options.get_option("enforce-contract");
-  std::string replace_opt =
-    config.options.get_option("replace-call-with-contract");
-  if (!enforce_opt.empty() || !replace_opt.empty())
-  {
-    intrinsics += R"(
-/* Function contract support
- * __ESBMC_requires: precondition clause
- * __ESBMC_ensures: postcondition clause
- * __ESBMC_return_value: special variable representing function return value in ensures clauses
- *   Note: The type of __ESBMC_return_value is resolved at conversion time to match
- *   the function's return type. Declared as int for compatibility, but actual type
- *   is determined during IR conversion based on the enclosing function's return type.
- *   For pointer return types, Clang may emit warnings but the conversion will handle
- *   the type correctly.
- */
-void __ESBMC_requires(_Bool);
-void __ESBMC_ensures(_Bool);
-extern int __ESBMC_return_value;
-
-/* __ESBMC_old: captures pre-state value of expressions in ensures clauses
- * This function is used in __ESBMC_ensures to reference the value of an
- * expression before the function executes. For example:
- *   __ESBMC_ensures(x == __ESBMC_old(x) + 1);
- * declares that x after the function should equal x before plus 1.
- *
- * Note: Declared as returning int, but at IR level the actual return type
- * is automatically inherited from the argument type. C's type system will
- * perform implicit conversions as needed, similar to __ESBMC_return_value.
- */
-int __ESBMC_old(int);
     )";
   }
 

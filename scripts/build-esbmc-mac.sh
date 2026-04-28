@@ -35,7 +35,7 @@ brew install boost
 brew install z3 
 brew install bison 
 brew install clang 
-brew install llvm
+brew install llvm@18
 
 # Set up Python environment if requested
 if [[ $use_python =~ ^[Yy]$ ]]; then
@@ -73,7 +73,7 @@ install_boolector() {
 install_bitwuzla() {
     echo "Installing Bitwuzla..."
     cd ..
-    git clone --depth=1 --branch=0.8.2 https://github.com/bitwuzla/bitwuzla.git
+    git clone --depth=1 --branch=0.9 https://github.com/bitwuzla/bitwuzla.git
     cd bitwuzla
     ./configure.py --prefix $PWD/../bitwuzla-release
     cd build

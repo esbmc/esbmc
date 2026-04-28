@@ -178,14 +178,15 @@ interval_domaint::get_interval_from_const(const expr2tc &e) const
   if (value1.is_double())
     result.make_le_than(value1.to_double());
   else
-    log_warning("Failed to convert value1: {}", value1.to_string_decimal(10));
+    log_debug(
+      "interval", "Failed to convert value1: {}", value1.to_string_decimal(10));
 
   // a >= value2
   if (value2.is_double())
     result.make_ge_than(value2.to_double());
   else
-    log_warning(
-      "Failed to convert value2: {}", value2.to_string_decimal(10)); //
+    log_debug(
+      "interval", "Failed to convert value2: {}", value2.to_string_decimal(10));
 
   assert(!result.is_bottom());
   return result;
@@ -1493,6 +1494,10 @@ void interval_domaint::assume_rec(const expr2tc &cond, bool negation)
       apply_assume_symbol_truth<interval_domaint::real_intervalt>(
         to_symbol2t(cond), negation);
   }
+  else if (is_typecast2t(cond) && is_bool_type(cond))
+  {
+    assume_rec(to_typecast2t(cond).from, negation);
+  }
   //added in case "cond = false" which happens when the ibex contractor results in empty set.
   else if (is_constant_bool2t(cond))
   {
@@ -1555,7 +1560,9 @@ bool interval_domaint::ai_simplify(expr2tc &condition, const namespacet &ns)
 void interval_domaint::set_options(const optionst &options)
 {
   enable_interval_arithmetic =
-    options.get_bool_option("interval-analysis-arithmetic");
+    options.get_bool_option("interval-analysis-arithmetic") ||
+    options.get_bool_option("interval-symex-guard") ||
+    options.get_bool_option("interval-symex-assert");
   enable_interval_bitwise_arithmetic =
     options.get_bool_option("interval-analysis-bitwise");
   enable_modular_intervals =
@@ -1581,6 +1588,31 @@ void interval_domaint::set_options(const optionst &options)
   widening_under_approximate_bound =
     options.get_bool_option("interval-analysis-extrapolate-under-approximate");
   widening_narrowing = options.get_bool_option("interval-analysis-narrowing");
+}
+
+void interval_domaint::process_instruction(goto_programt::const_targett from)
+{
+  const goto_programt::instructiont &instruction = *from;
+  switch (instruction.type)
+  {
+  case DECL:
+  case DEAD:
+    havoc_rec(instruction.code);
+    break;
+  case ASSIGN:
+    assign(instruction.code);
+    break;
+  case ASSUME:
+    assume(instruction.guard);
+    break;
+  default:
+    log_debug(
+      "interval",
+      "[process_instruction] Unhandled instruction type {}: {}",
+      fmt::underlying(instruction.type),
+      instruction.location);
+    break;
+  }
 }
 
 // Options

@@ -105,8 +105,10 @@ bool goto_symext::symex_throw()
   // Save the throw
   last_throw = const_cast<goto_programt::instructiont *>(&instruction);
 
-  // Log
-  log_error(
+  // Log at debug level: the throw may be infeasible or caught; for uncaught
+  // exceptions, the error VCC is generated via claim(gen_false_expr()) below.
+  log_debug(
+    "symex",
     "Exception thrown of type {} at file {} line {}",
     exceptions_thrown.begin()->as_string(),
     instruction.location.file(),
@@ -260,8 +262,8 @@ bool goto_symext::symex_throw()
     return false;
   }
 
-  // Log
-  log_status(
+  log_debug(
+    "symex",
     "Caught by catch({}) at file {} line {}",
     catch_name,
     (*catch_insn)->location.file(),

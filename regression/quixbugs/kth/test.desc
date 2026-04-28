@@ -1,4 +1,4 @@
-THOROUGH
+CORE
 main.py
---unwind 4 --no-bounds-check --no-pointer-check --no-align-check --no-div-by-zero-check
+--bitwuzla --unwind 4 --no-bounds-check --no-pointer-check --no-align-check --no-div-by-zero-check
 ^VERIFICATION SUCCESSFUL$

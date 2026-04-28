@@ -4,7 +4,7 @@ title: Windows Build
 
 This page contains info on building ESBMC on Windows, for other OS's use the [BUILDING.md](https://github.com/esbmc/esbmc/blob/master/BUILDING.md) document.
 
-# Common Build
+## Common Build
 
 First you need to Download and configure the dependencies.
 
@@ -35,7 +35,7 @@ First you need to Download and configure the dependencies.
 
 By using Windows [WSL](https://docs.microsoft.com/en-us/windows/wsl/install-win10) you can build and install ESBMC as if you were using an `Ubuntu`.
 
-# Building LLVM From source
+## Building LLVM From source
 
 The building process was shamelessly taken from Zig repository: https://github.com/ziglang/zig/wiki/How-to-build-LLVM,-libclang,-and-liblld-from-source#windows
 
