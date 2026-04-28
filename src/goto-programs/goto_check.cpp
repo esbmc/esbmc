@@ -373,8 +373,8 @@ void goto_checkt::overflow_check(
   {
     const expr2tc &E1 = *expr->get_sub_expr(0);
     if (
-      is_signedbv_type(E1) && config.language.lid == language_idt::CPP &&
-      config.language.version >= 20 && shl_E1_is_known_nonneg(E1))
+      is_signedbv_type(E1) && config.language.cpp_std >= cxx_stdt::cpp20 &&
+      shl_E1_is_known_nonneg(E1))
       return;
   }
 

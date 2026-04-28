@@ -96,23 +96,23 @@ void clang_cpp_languaget::set_language_version()
     clang::LangStandard::getLangStandardForKind(AST->getLangOpts().LangStd);
 #if LLVM_VERSION_MAJOR >= 17
   if (ls.isCPlusPlus26())
-    config.language.version = 26;
+    config.language.cpp_std = cxx_stdt::cpp26;
   else if (ls.isCPlusPlus23())
-    config.language.version = 23;
+    config.language.cpp_std = cxx_stdt::cpp23;
 #else
   if (ls.isCPlusPlus2b())
-    config.language.version = 23;
+    config.language.cpp_std = cxx_stdt::cpp23;
 #endif
   else if (ls.isCPlusPlus20())
-    config.language.version = 20;
+    config.language.cpp_std = cxx_stdt::cpp20;
   else if (ls.isCPlusPlus17())
-    config.language.version = 17;
+    config.language.cpp_std = cxx_stdt::cpp17;
   else if (ls.isCPlusPlus14())
-    config.language.version = 14;
+    config.language.cpp_std = cxx_stdt::cpp14;
   else if (ls.isCPlusPlus11())
-    config.language.version = 11;
+    config.language.cpp_std = cxx_stdt::cpp11;
   else
-    config.language.version = 98;
+    config.language.cpp_std = cxx_stdt::cpp98;
 }
 
 bool clang_cpp_languaget::typecheck(contextt &context, const std::string &)
