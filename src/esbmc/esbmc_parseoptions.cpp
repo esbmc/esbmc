@@ -2342,6 +2342,17 @@ bool esbmc_parseoptionst::process_goto_program(
       goto_coveraget tmp(ns, goto_functions, filename);
       tmp.negating_asserts(tgt_fname);
     }
+
+    // From here on all changes should update phi-nodes locations when needed
+    if (cmdline.isset("goto-ssa-promotion"))
+    {
+      goto_cfg cfg(goto_functions);
+      ssa_promotion ssa(cfg, goto_functions, context);
+      // Adds phi-nodes at GOTO level
+      ssa.promote();
+      goto_functions.update();
+      remove_no_op(goto_functions);
+    }
   }
 
   catch (const char *e)
@@ -2418,6 +2429,13 @@ bool esbmc_parseoptionst::output_goto_program(
     if (cmdline.isset("show-ileave-points"))
     {
       print_ileave_points(ns, goto_functions);
+      return true;
+    }
+
+    if (cmdline.isset("dump-goto-cfg"))
+    {
+      goto_cfg cfg(goto_functions);
+      cfg.dump_graph();
       return true;
     }
 

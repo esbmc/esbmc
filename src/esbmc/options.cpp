@@ -352,8 +352,9 @@ const struct group_opt_templ all_cmd_options[] = {
     {"no-slice-id",
      boost::program_options::value<std::vector<std::string>>()->value_name(
        "id"),
-     "Disable slicing for the symbol with the given id"},
-    {"goto-unwind", NULL, "Unroll bounded loops at goto level"},
+     "disable slicing for the symbol with the given id"},
+    {"goto-ssa-promotion", NULL, "promote goto variables into SSA"},
+    {"goto-unwind", NULL, "unroll bounded loops at goto level"},
     {"unlimited-goto-unwind",
      NULL,
      "Do not unroll bounded loops at goto level (need to enable "
