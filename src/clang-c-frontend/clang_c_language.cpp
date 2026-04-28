@@ -335,8 +335,15 @@ void clang_c_languaget::set_language_version()
 {
   const auto &ls =
     clang::LangStandard::getLangStandardForKind(AST->getLangOpts().LangStd);
+#if LLVM_VERSION_MAJOR >= 17
+  if (ls.isC2y())
+    config.language.version = 26;
+  else if (ls.isC23())
+    config.language.version = 23;
+#else
   if (ls.isC2x())
     config.language.version = 23;
+#endif
   else if (ls.isC17())
     config.language.version = 17;
   else if (ls.isC11())

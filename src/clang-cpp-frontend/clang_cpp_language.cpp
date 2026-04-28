@@ -94,8 +94,15 @@ void clang_cpp_languaget::set_language_version()
 {
   const auto &ls =
     clang::LangStandard::getLangStandardForKind(AST->getLangOpts().LangStd);
+#if LLVM_VERSION_MAJOR >= 17
+  if (ls.isCPlusPlus26())
+    config.language.version = 26;
+  else if (ls.isCPlusPlus23())
+    config.language.version = 23;
+#else
   if (ls.isCPlusPlus2b())
     config.language.version = 23;
+#endif
   else if (ls.isCPlusPlus20())
     config.language.version = 20;
   else if (ls.isCPlusPlus17())
