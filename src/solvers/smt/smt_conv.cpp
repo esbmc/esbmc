@@ -3062,6 +3062,31 @@ smt_astt smt_convt::convert_is_nan(const expr2tc &expr)
   return fp_api->mk_smt_fpbv_is_nan(operand);
 }
 
+// Returns the max-normal SMT real for single/double floatbv, or nullptr for
+// any other format (caller must handle the unsupported case explicitly).
+static smt_astt get_max_normal(smt_convt &conv, const floatbv_type2t &fbv_type)
+{
+  const auto single_spec = ieee_float_spect::single_precision();
+  const auto double_spec = ieee_float_spect::double_precision();
+  if (fbv_type.exponent == single_spec.e && fbv_type.fraction == single_spec.f)
+    return conv.get_single_max_normal();
+  if (fbv_type.exponent == double_spec.e && fbv_type.fraction == double_spec.f)
+    return conv.get_double_max_normal();
+  return nullptr;
+}
+
+// Returns the min-normal SMT real for single/double floatbv, or nullptr.
+static smt_astt get_min_normal(smt_convt &conv, const floatbv_type2t &fbv_type)
+{
+  const auto single_spec = ieee_float_spect::single_precision();
+  const auto double_spec = ieee_float_spect::double_precision();
+  if (fbv_type.exponent == single_spec.e && fbv_type.fraction == single_spec.f)
+    return conv.get_single_min_normal();
+  if (fbv_type.exponent == double_spec.e && fbv_type.fraction == double_spec.f)
+    return conv.get_double_min_normal();
+  return nullptr;
+}
+
 smt_astt smt_convt::convert_is_inf(const expr2tc &expr)
 {
   const isinf2t &isinf = to_isinf2t(expr);
@@ -3075,17 +3100,15 @@ smt_astt smt_convt::convert_is_inf(const expr2tc &expr)
     // In integer/real encoding a float is "infinite" when its real value
     // exceeds the maximum finite float magnitude: |f| > max_normal.
     const floatbv_type2t &fbv_type = to_floatbv_type(isinf.value->type);
-    const auto single_spec = ieee_float_spect::single_precision();
-    const auto double_spec = ieee_float_spect::double_precision();
-    const bool is_single =
-      fbv_type.exponent == single_spec.e && fbv_type.fraction == single_spec.f;
-    const bool is_double =
-      fbv_type.exponent == double_spec.e && fbv_type.fraction == double_spec.f;
-    if (!is_single && !is_double)
+    smt_astt max_val = get_max_normal(*this, fbv_type);
+    if (!max_val)
+    {
+      log_warning(
+        "isinf: unsupported float format (exp={}, frac={}); returning false",
+        fbv_type.exponent,
+        fbv_type.fraction);
       return mk_smt_bool(false);
-
-    smt_astt max_val =
-      is_single ? get_single_max_normal() : get_double_max_normal();
+    }
     smt_astt operand = convert_ast(isinf.value);
     smt_astt pos_inf = mk_gt(operand, max_val);
     smt_astt neg_inf = mk_lt(operand, mk_sub(get_zero_real(), max_val));
@@ -3101,8 +3124,36 @@ smt_astt smt_convt::convert_is_normal(const expr2tc &expr)
   const isnormal2t &isnormal = to_isnormal2t(expr);
 
   // Anything other than floats will always be normal
-  if (!is_floatbv_type(isnormal.value) || int_encoding)
+  if (!is_floatbv_type(isnormal.value))
     return mk_smt_bool(true);
+
+  if (int_encoding)
+  {
+    // In integer/real encoding a float is normal when min_normal <= |f| <=
+    // max_normal.  Zero and subnormals (|f| < min_normal) are not normal.
+    const floatbv_type2t &fbv_type = to_floatbv_type(isnormal.value->type);
+    smt_astt max_val = get_max_normal(*this, fbv_type);
+    smt_astt min_val = get_min_normal(*this, fbv_type);
+    if (!max_val || !min_val)
+    {
+      log_warning(
+        "isnormal: unsupported float format (exp={}, frac={}); returning true",
+        fbv_type.exponent,
+        fbv_type.fraction);
+      return mk_smt_bool(true);
+    }
+    smt_astt zero = get_zero_real();
+    smt_astt neg_max = mk_sub(zero, max_val);
+    smt_astt neg_min = mk_sub(zero, min_val);
+    smt_astt operand = convert_ast(isnormal.value);
+    // |f| >= min_normal: f >= min_normal || f <= -min_normal
+    smt_astt above_min =
+      mk_or(mk_ge(operand, min_val), mk_le(operand, neg_min));
+    // |f| <= max_normal: f <= max_normal && f >= -max_normal
+    smt_astt below_max =
+      mk_and(mk_le(operand, max_val), mk_ge(operand, neg_max));
+    return mk_and(above_min, below_max);
+  }
 
   smt_astt operand = convert_ast(isnormal.value);
   return fp_api->mk_smt_fpbv_is_normal(operand);
@@ -3120,17 +3171,15 @@ smt_astt smt_convt::convert_is_finite(const expr2tc &expr)
   {
     // In integer/real encoding a float is finite when |f| <= max_normal.
     const floatbv_type2t &fbv_type = to_floatbv_type(isfinite.value->type);
-    const auto single_spec = ieee_float_spect::single_precision();
-    const auto double_spec = ieee_float_spect::double_precision();
-    const bool is_single =
-      fbv_type.exponent == single_spec.e && fbv_type.fraction == single_spec.f;
-    const bool is_double =
-      fbv_type.exponent == double_spec.e && fbv_type.fraction == double_spec.f;
-    if (!is_single && !is_double)
+    smt_astt max_val = get_max_normal(*this, fbv_type);
+    if (!max_val)
+    {
+      log_warning(
+        "isfinite: unsupported float format (exp={}, frac={}); returning true",
+        fbv_type.exponent,
+        fbv_type.fraction);
       return mk_smt_bool(true);
-
-    smt_astt max_val =
-      is_single ? get_single_max_normal() : get_double_max_normal();
+    }
     smt_astt operand = convert_ast(isfinite.value);
     smt_astt pos_ok = mk_le(operand, max_val);
     smt_astt neg_ok = mk_ge(operand, mk_sub(get_zero_real(), max_val));
