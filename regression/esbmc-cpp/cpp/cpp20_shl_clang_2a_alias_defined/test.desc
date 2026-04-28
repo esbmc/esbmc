@@ -1,0 +1,4 @@
+CORE
+main.cpp
+--std c++2a --overflow-check
+^VERIFICATION SUCCESSFUL$
