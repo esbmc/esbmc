@@ -431,7 +431,7 @@ static inline expr2tc do_memcpy_expression(
     is_struct_type(src->type) || is_union_type(src->type))
   {
     return goto_symex_utils::gen_byte_memcpy_byte_update(
-       src, dst, num_of_bytes, src_offset, dst_offset, is_big_endian);
+      src, dst, num_of_bytes, src_offset, dst_offset, is_big_endian);
   }
 
   // Base-case. Primitives!
@@ -662,7 +662,7 @@ void goto_symext::intrinsic_memcpy(
         src_item.object,
         src_offset,
         number_of_bytes,
-	config.ansi_c.endianess == config.ansi_c.IS_BIG_ENDIAN);
+        config.ansi_c.endianess == config.ansi_c.IS_BIG_ENDIAN);
 
       if (!new_object)
       {
