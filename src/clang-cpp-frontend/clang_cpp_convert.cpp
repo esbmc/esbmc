@@ -135,6 +135,7 @@ bool clang_cpp_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
   case clang::Decl::ClassTemplatePartialSpecialization:
   case clang::Decl::VarTemplatePartialSpecialization:
   case clang::Decl::Using:
+  case clang::Decl::UsingEnum:
   case clang::Decl::UsingShadow:
   case clang::Decl::UsingDirective:
   case clang::Decl::TypeAlias:
