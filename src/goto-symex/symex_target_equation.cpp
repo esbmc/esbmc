@@ -600,39 +600,41 @@ tvt runtime_encoded_equationt::ask_solver_question(const expr2tc &question)
   return final_res;
 }
 
-// Pretty similar to ask a question, but keeps context!
+
 tvt runtime_encoded_equationt::ask_assertion(
   const expr2tc &question,
   bool multi_property)
 {
-  tvt final_res;
-  push_ctx();
+  // It's an assertion Q so want to know whether ¬Q is SAT.
   assert(is_bool_type(question));
+  
+  // Store current program  
+  push_ctx(); // -> Ctx ====> -> Current -> Ctx
 
-
+  // Send ¬Q  
   smt_astt q = conv.convert_ast(question);
-  conv.assert_ast(assumpt_chain.back());
-  push_ctx();
+  conv.assert_ast(conv.invert_ast(q)); 
+  // conv.assert_ast(assumpt_chain.back());
 
-  // Check if Violation is SAT
-  push_ctx();
-  conv.assert_ast(conv.invert_ast(q));
-  smt_convt::resultt res2 = conv.dec_solve();
-  pop_ctx();
+  // Solve
+  smt_convt::resultt res = conv.dec_solve();
+
+  // Clean the context
+  pop_ctx(); // -> Ctx
 
   if (!multi_property)
   {
-    if (res2 == smt_convt::P_ERROR || res2 == smt_convt::P_SMTLIB)
+    if (res == smt_convt::P_ERROR || res == smt_convt::P_SMTLIB)
     {
       log_error("Solver returned error while asking question");
       abort();
     }
-    else if (res2 == smt_convt::P_SATISFIABLE)
+    else if (res == smt_convt::P_SATISFIABLE)
     {
       // Both ways are satisfiable; result is unknown.
       return tvt(tvt::TV_FALSE);
     }
-    else if (res2 == smt_convt::P_UNSATISFIABLE)
+    else if (res == smt_convt::P_UNSATISFIABLE)
     {
       // Truth is unsat, false is sat, proposition is false
       return tvt(tvt::TV_TRUE);
@@ -640,6 +642,9 @@ tvt runtime_encoded_equationt::ask_assertion(
     abort();
   }
 
+  // Note: still deciding whether we care about multi property here
+  // As it should be an assumption of Q.
+  log_error("TODO: multiproperty");
   abort();
   return tvt(tvt::TV_UNKNOWN);
 }
@@ -647,43 +652,41 @@ tvt runtime_encoded_equationt::ask_assertion(
 // Pretty similar to ask a question, but keeps context!
 tvt runtime_encoded_equationt::ask_assumption(const expr2tc &question)
 {
-  tvt final_res;
-
+  // It's an assumption of Q so want to know whether Q is UNSAT.
+  assert(is_bool_type(question));
 
   // Store current context
-  push_ctx();
+  push_ctx(); // -> Ctx ====> -> Current -> Ctx
 
-  // Convert the question (must be a bool).
-  assert(is_bool_type(question));
+
+  // Send Q  
   smt_astt q = conv.convert_ast(question);
-  conv.assert_ast(assumpt_chain.back());
-
-  push_ctx();
   conv.assert_ast(q);
-  smt_convt::resultt res1 = conv.dec_solve();
+
+  // This should be always part of the context now
+  push_ctx(); // -> Current -> Q -> Ctx
+              // 
+  // Solve  
+  smt_convt::resultt res = conv.dec_solve();
+
+  // Clean context
   pop_ctx();
   
-  // Assumption we are only interested if the condition is SAT.
-  if (res1 == smt_convt::P_ERROR || res1 == smt_convt::P_SMTLIB)
+  // Assumption we are only interested if the condition is UNSAT.
+  if (res == smt_convt::P_ERROR || res == smt_convt::P_SMTLIB)
   {
     log_error("Solver returned error while asking question");
     abort();
   }
-  else if (res1 == smt_convt::P_SATISFIABLE)
+  else if (res == smt_convt::P_SATISFIABLE)
   {
-    // Both ways are satisfiable; result is unknown.
-    final_res = tvt(tvt::TV_TRUE);
+    return tvt(tvt::TV_TRUE);
   }
-  else if (res1 == smt_convt::P_UNSATISFIABLE)
+  else if (res == smt_convt::P_UNSATISFIABLE)
   {
-    // Truth is unsat, false is sat, proposition is false
-    final_res = tvt(tvt::TV_FALSE);
+    return tvt(tvt::TV_FALSE);
+  }
 
-  }
-  else
-  {
-    pop_ctx();
-    throw dual_unsat_exception();
-  }
-  return final_res;
+  // should be unreachable
+  return tvt(tvt::TV_UNKNOWN);
 }

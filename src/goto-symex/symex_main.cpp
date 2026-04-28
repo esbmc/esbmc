@@ -43,7 +43,7 @@ bool goto_symext::check_incremental(const expr2tc &expr, const std::string &msg)
     {
       // check assertion to produce a counterexample
       assertion(gen_false_expr(), msg);
-      log_status("Found assertrion fail in incremental");
+      log_status("Found assertion fail in incremental SMT");
       // incremental verification succeeded
       return true;
     }
@@ -181,11 +181,12 @@ bool goto_symext::is_assume_false(const expr2tc &assumption)
     try
     {
       tvt res = rte->ask_assumption(the_question);
+      
       if (res.is_false())
       {
-	log_status("Solution found by incremental!");
+	log_status("UNSAT assumption found by incremental SMT!");
 	return true;
-      }        
+      }
        
     }
     catch (runtime_encoded_equationt::dual_unsat_exception &e)
