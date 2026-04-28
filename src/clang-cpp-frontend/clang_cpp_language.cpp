@@ -90,8 +90,27 @@ extern "C" {
   return intrinsics;
 }
 
+void clang_cpp_languaget::set_language_version()
+{
+  const auto &ls =
+    clang::LangStandard::getLangStandardForKind(AST->getLangOpts().LangStd);
+  if (ls.isCPlusPlus2b())
+    config.language.version = 23;
+  else if (ls.isCPlusPlus20())
+    config.language.version = 20;
+  else if (ls.isCPlusPlus17())
+    config.language.version = 17;
+  else if (ls.isCPlusPlus14())
+    config.language.version = 14;
+  else if (ls.isCPlusPlus11())
+    config.language.version = 11;
+  else
+    config.language.version = 98;
+}
+
 bool clang_cpp_languaget::typecheck(contextt &context, const std::string &)
 {
+  set_language_version();
   clang_cpp_convertert converter(context, AST, "C++");
   if (converter.convert())
     return true;

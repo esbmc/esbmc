@@ -102,6 +102,8 @@ protected:
   }
 
   std::unique_ptr<clang::ASTUnit> AST;
+
+  virtual void set_language_version();
 };
 
 languaget *new_clang_c_language();

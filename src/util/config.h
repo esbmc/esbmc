@@ -51,6 +51,8 @@ public:
   {
     language_idt lid;
     std::string std;
+    // C: 89/99/11/17/23.  C++: 98/11/14/17/20/23.  0 = unknown.
+    int version = 0;
   } language = {language_idt::NONE, ""};
 
   struct ansi_ct

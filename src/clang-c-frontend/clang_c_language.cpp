@@ -331,8 +331,25 @@ bool clang_c_languaget::parse(const std::string &path)
   return false;
 }
 
+void clang_c_languaget::set_language_version()
+{
+  const auto &ls =
+    clang::LangStandard::getLangStandardForKind(AST->getLangOpts().LangStd);
+  if (ls.isC2x())
+    config.language.version = 23;
+  else if (ls.isC17())
+    config.language.version = 17;
+  else if (ls.isC11())
+    config.language.version = 11;
+  else if (ls.isC99())
+    config.language.version = 99;
+  else
+    config.language.version = 89;
+}
+
 bool clang_c_languaget::typecheck(contextt &context, const std::string &)
 {
+  set_language_version();
   clang_c_convertert converter(context, AST, "C");
   if (converter.convert())
     return true;

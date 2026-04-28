@@ -1,4 +1,5 @@
 #include <goto-programs/goto_check.h>
+#include <cctype>
 #include <util/c_expr2string.h>
 #include <util/arith_tools.h>
 #include <util/array_name.h>
@@ -276,57 +277,6 @@ void goto_checkt::cast_overflow_check(
     guard);
 }
 
-/// Returns true when the active C++ standard selected via `--std` is
-/// C++20 or later. Recognises `c++NN` and `gnu++NN` with numeric NN as
-/// well as the Clang aliases `2a` (C++20), `2b` (C++23) and `2c` (C++26).
-/// Legacy spellings (`98`, `03`) and anything else, including the empty
-/// default and unknown spellings, are conservatively treated as pre-C++20.
-///
-/// TODO(post-PR): hoist this string-based classification into a
-/// `config.language.cpp_standard` enum populated once by
-/// `clang_cpp_languaget` (which already inspects `config.language.std`
-/// before forwarding `-std=...` to clang). A core transformation pass
-/// is the wrong home for `--std` parsing; this lives here only because
-/// no such enum is currently exposed.
-static bool is_cxx20_or_later()
-{
-  if (config.language.lid != language_idt::CPP)
-    return false;
-
-  const std::string &s = config.language.std;
-  std::string suffix;
-  if (s.compare(0, 3, "c++") == 0)
-    suffix = s.substr(3);
-  else if (s.compare(0, 5, "gnu++") == 0)
-    suffix = s.substr(5);
-  else
-    return false;
-
-  // TODO: extend the alias list when clang publishes `3a`/`3b`/... for
-  // C++30+ working drafts; the `[20, 50]` numeric bound below will also
-  // need bumping once C++50 is on the horizon. Both touchpoints are
-  // local to this function.
-  if (suffix == "2a" || suffix == "2b" || suffix == "2c")
-    return true;
-
-  // Canonical C++ standard years are post-C++11 two-digit numerics
-  // (11, 14, 17, 20, 23, 26, ...). Hand-rolled non-throwing parser so
-  // legacy `98` / `03` and obvious garbage do not satisfy "C++20+";
-  // suffix length is capped to keep year representable.
-  if (suffix.empty() || suffix.size() > 2)
-    return false;
-
-  unsigned year = 0;
-  for (char c : suffix)
-  {
-    if (c < '0' || c > '9')
-      return false;
-    year = year * 10 + static_cast<unsigned>(c - '0');
-  }
-
-  return year >= 20 && year <= 50;
-}
-
 /// Returns true when the left operand `e1` of a left-shift is provably
 /// non-negative from its expression shape alone (no symbolic reasoning).
 /// Covers the firmware/protocol byte-deserialisation idioms that
@@ -423,7 +373,8 @@ void goto_checkt::overflow_check(
   {
     const expr2tc &E1 = *expr->get_sub_expr(0);
     if (
-      is_signedbv_type(E1) && is_cxx20_or_later() && shl_E1_is_known_nonneg(E1))
+      is_signedbv_type(E1) && config.language.lid == language_idt::CPP &&
+      config.language.version >= 20 && shl_E1_is_known_nonneg(E1))
       return;
   }
 
