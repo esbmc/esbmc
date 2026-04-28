@@ -1,4 +1,0 @@
-CORE
-main.cpp
---std c++23 --overflow-check
-^VERIFICATION SUCCESSFUL$
