@@ -1,7 +1,7 @@
-/* Regression test for issue #2: confirm the vacuity probe does NOT
- * misclassify an honest, terminating loop with a sound invariant. The
- * post-loop state (i == n) is reachable, so the probe finds the path
- * satisfiable and the verdict remains VERIFICATION SUCCESSFUL.
+/* Confirm the vacuity probe does NOT misclassify an honest, terminating
+ * loop with a sound invariant. The post-loop state (i == n) is reachable,
+ * so the probe finds the path satisfiable and the verdict remains
+ * VERIFICATION SUCCESSFUL.
  */
 extern int __VERIFIER_nondet_int(void);
 

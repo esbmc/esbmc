@@ -1,7 +1,7 @@
-/* Regression test for issue #2: pin the legacy (pre-vacuity-probe)
- * behavior under --no-vacuity-check. Same lying invariant + buggy body
- * as the _unknown variant. With the probe disabled, ESBMC reverts to its
- * partial-correctness verdict of VERIFICATION SUCCESSFUL.
+/* Pin the legacy (pre-vacuity-probe) behavior under --no-vacuity-check.
+ * Same lying invariant + buggy body as the _unknown variant. With the
+ * probe disabled, ESBMC reverts to its partial-correctness verdict of
+ * VERIFICATION SUCCESSFUL.
  *
  * This test exists so that any future change to the vacuity-probe wiring
  * which inadvertently re-enables the probe under --no-vacuity-check is

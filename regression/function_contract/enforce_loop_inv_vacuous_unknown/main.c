@@ -1,9 +1,9 @@
-/* Regression test for issue #2: a "lying" loop invariant that implies the
- * loop guard, combined with a non-terminating body, makes the post-loop
- * continuation unreachable. Without the vacuity probe ESBMC would
- * silently discharge the (clearly wrong) ensures clause as vacuously true.
- * With --check-vacuity (default on under --loop-invariant-check) the
- * proof is rejected as VERIFICATION UNKNOWN.
+/* A "lying" loop invariant that implies the loop guard, combined with a
+ * non-terminating body, makes the post-loop continuation unreachable.
+ * Without the vacuity probe ESBMC would silently discharge the (clearly
+ * wrong) ensures clause as vacuously true. With --check-vacuity (default
+ * on under --loop-invariant-check) the proof is rejected as VERIFICATION
+ * UNKNOWN.
  */
 extern int __VERIFIER_nondet_int(void);
 

@@ -430,7 +430,7 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   // Default-enable the vacuity probe under --loop-invariant-check (the
   // standalone Hoare-rewrite mode). A loop invariant that implies the guard
   // makes the post-loop continuation unreachable; without this probe every
-  // downstream claim discharges as vacuously true (issue #2).
+  // downstream claim discharges as vacuously true.
   //
   // We deliberately do NOT default-enable for combined mode --loop-invariant:
   // that runs k-induction phases (base case, forward condition, inductive
