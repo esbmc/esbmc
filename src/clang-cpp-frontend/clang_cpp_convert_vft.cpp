@@ -774,8 +774,7 @@ bool clang_cpp_convertert::build_dynamic_cast(
   if (get_type(cast.getType(), target_type))
     return true;
 
-  auto fallback = [&]()
-  {
+  auto fallback = [&]() {
     gen_typecast(ns, sub, target_type);
     new_expr = sub;
     return false;
@@ -966,8 +965,7 @@ bool clang_cpp_convertert::build_dynamic_cast(
 
   // OR-chain: vptr == arm0 || vptr == arm1 || ... — used by the reference
   // form and the T* pointer form. Precondition: arms not empty.
-  auto vptr_match_any = [&]() -> exprt
-  {
+  auto vptr_match_any = [&]() -> exprt {
     exprt match = equality_exprt(vptr_read, arms.front().first);
     for (size_t i = 1; i < arms.size(); ++i)
       match = or_exprt(match, equality_exprt(vptr_read, arms[i].first));
@@ -984,8 +982,7 @@ bool clang_cpp_convertert::build_dynamic_cast(
     const symbolt *bad_cast_sym = ns.lookup("tag-std::bad_cast");
     if (!bad_cast_sym)
     {
-      log_error(
-        "dynamic_cast<T&> requires std::bad_cast — include <typeinfo>");
+      log_error("dynamic_cast<T&> requires std::bad_cast — include <typeinfo>");
       abort();
     }
 
