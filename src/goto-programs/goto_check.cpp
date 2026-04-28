@@ -1,11 +1,8 @@
 #include <goto-programs/goto_check.h>
-#include <algorithm>
-#include <cctype>
 #include <util/c_expr2string.h>
 #include <util/arith_tools.h>
 #include <util/array_name.h>
 #include <util/base_type.h>
-#include <util/config.h>
 #include <util/expr_util.h>
 #include <util/guard.h>
 #include <util/i2string.h>
@@ -278,31 +275,6 @@ void goto_checkt::cast_overflow_check(
     guard);
 }
 
-/// Returns true when the active C++ language standard is C++20 or later.
-/// Recognises the spellings accepted by Clang's -std= flag: c++NN, gnu++NN
-/// and the alias suffixes 2a (=20), 2b (=23), 2c (=26). Anything else
-/// (including the empty default and unrecognised suffixes) is treated
-/// conservatively as pre-C++20.
-static bool is_cxx20_or_later()
-{
-  if (config.language.lid != language_idt::CPP)
-    return false;
-
-  const std::string &s = config.language.std;
-  const std::size_t pos = s.find("++");
-  if (pos == std::string::npos || (pos != 1 && pos != 3))
-    return false; // require leading "c" or "gnu"
-
-  const std::string suffix = s.substr(pos + 2);
-  // Clang aliases: 2a=C++20, 2b=C++23, 2c=C++26
-  if (suffix == "2a" || suffix == "2b" || suffix == "2c")
-    return true;
-
-  if (suffix.empty() || !std::all_of(suffix.begin(), suffix.end(), ::isdigit))
-    return false;
-  return std::stoi(suffix) >= 20;
-}
-
 void goto_checkt::overflow_check(
   const expr2tc &expr,
   const guardt &guard,
@@ -331,15 +303,6 @@ void goto_checkt::overflow_check(
 
   // Don't check pointer overflow
   if (is_pointer_type(*expr->get_sub_expr(0)))
-    return;
-
-  // C++20 redefined E1 << E2 as (E1 * 2^E2) mod 2^N, where N is the width
-  // of the result type ([expr.shift]/2). Signed left-shift wrap is therefore
-  // well-defined and not an arithmetic overflow. The orthogonal UB cases
-  // (negative count, count >= width) remain covered by --ub-shift-check.
-  if (
-    is_shl2t(expr) && is_signedbv_type(*expr->get_sub_expr(0)) &&
-    is_cxx20_or_later())
     return;
 
   // add overflow subgoal
