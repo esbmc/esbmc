@@ -117,12 +117,10 @@ exprt clang_cpp_adjust::gen_vptr_init_lhs(
   dereference_exprt this_deref(deref_operand.type());
   this_deref.operands().resize(0);
   this_deref.operands().push_back(deref_operand);
-  this_deref.set("#lvalue", true);
 
   // now we can get the member expr for "this->vptr"
   lhs_code = member_exprt(comp.name(), comp.type());
   lhs_code.operands().push_back(this_deref);
-  lhs_code.set("#lvalue", true);
 
   return lhs_code;
 }

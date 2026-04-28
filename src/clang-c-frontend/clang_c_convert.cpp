@@ -1337,15 +1337,20 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     break;
   }
 
-    // Unsupported extensions (optional don't care)
   case clang::Type::Complex:
   {
-    // Ok, complex numbers are not really an extension, but it is only
-    // used by extensions though.
-    if (config.options.get_bool_option("dont-care-about-missing-extensions"))
-      break;
+    const clang::ComplexType &ct =
+      static_cast<const clang::ComplexType &>(the_type);
+    typet elem_type;
+    if (get_type(*ct.getElementType(), elem_type))
+      return true;
+
+    complex_typet t;
+    t.set_base_type(elem_type);
+    new_type = t;
+    break;
   }
-  // fall through
+
   default:
     std::ostringstream oss;
     llvm::raw_os_ostream ross(oss);
@@ -1614,8 +1619,11 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     if (const auto nns = decl.getQualifier())
     {
 #if CLANG_VERSION_MAJOR >= 22
-      if (const auto type = nns.getAsType())
+      // Clang 22's NestedNameSpecifier::getAsType() asserts on non-Type
+      // qualifiers (e.g. namespaces), so check the kind first.
+      if (nns.getKind() == clang::NestedNameSpecifier::Kind::Type)
       {
+        const auto type = nns.getAsType();
         assert(!nns.isDependent());
 #else
       if (const auto type = nns->getAsType())
@@ -1690,6 +1698,31 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     if (convert_string_literal(string_literal, new_expr))
       return true;
+
+    break;
+  }
+
+  case clang::Stmt::ImaginaryLiteralClass:
+  {
+    const clang::ImaginaryLiteral &il =
+      static_cast<const clang::ImaginaryLiteral &>(stmt);
+
+    typet complex_type;
+    if (get_type(il.getType(), complex_type))
+      return true;
+
+    exprt imag_val;
+    if (get_expr(*il.getSubExpr(), imag_val))
+      return true;
+
+    const typet &elem_type = to_complex_type(complex_type).base_type();
+
+    gen_typecast(ns, imag_val, elem_type);
+
+    struct_exprt complex_expr(complex_type);
+    complex_expr.operands().push_back(gen_zero(elem_type));
+    complex_expr.operands().push_back(imag_val);
+    new_expr = complex_expr;
 
     break;
   }
@@ -2475,6 +2508,25 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   {
     const clang::IfStmt &ifstmt = static_cast<const clang::IfStmt &>(stmt);
 
+    // C++23 `if consteval` / `if !consteval` carries no condition in the AST.
+    // At runtime the consteval branch is never taken, so lower to the
+    // runtime-active branch only (or skip entirely).
+    if (ifstmt.isConsteval())
+    {
+      const clang::Stmt *runtime_branch =
+        ifstmt.isNegatedConsteval() ? ifstmt.getThen() : ifstmt.getElse();
+
+      if (runtime_branch != nullptr)
+      {
+        if (get_expr(*runtime_branch, new_expr))
+          return true;
+        convert_expression_to_code(new_expr);
+      }
+      else
+        new_expr = code_skipt();
+      break;
+    }
+
     const clang::Stmt *cond_expr = ifstmt.getConditionVariableDeclStmt();
     if (cond_expr == nullptr)
       cond_expr = ifstmt.getCond();
@@ -3022,7 +3074,6 @@ bool clang_c_convertert::get_decl_ref(const clang::Decl &d, exprt &new_expr)
 
     new_expr = exprt("symbol", type);
     new_expr.identifier(id);
-    new_expr.cmt_lvalue(true);
     new_expr.name(name);
     return false;
   }
@@ -3232,6 +3283,61 @@ bool clang_c_convertert::get_cast_expr(
     // identical in ESBMC's IR. Both cast directions are no-ops.
     break;
 
+  case clang::CK_FloatingRealToComplex:
+  case clang::CK_IntegralRealToComplex:
+  {
+    // real → {real, 0} struct
+    struct_exprt complex_expr(type);
+    complex_expr.operands().push_back(expr);
+    complex_expr.operands().push_back(gen_zero(expr.type()));
+    expr = complex_expr;
+    break;
+  }
+
+  case clang::CK_FloatingComplexToReal:
+  case clang::CK_IntegralComplexToReal:
+  {
+    // complex → real part
+    expr = member_exprt(expr, "real", type);
+    break;
+  }
+
+  case clang::CK_FloatingComplexToBoolean:
+  case clang::CK_IntegralComplexToBoolean:
+  {
+    // complex → bool: real != 0 || imag != 0
+    const typet &elem_t = to_complex_type(expr.type()).base_type();
+    exprt real_part = member_exprt(expr, "real", elem_t);
+    exprt imag_part = member_exprt(expr, "imag", elem_t);
+    exprt real_nz("notequal", bool_type());
+    real_nz.copy_to_operands(real_part, gen_zero(elem_t));
+    exprt imag_nz("notequal", bool_type());
+    imag_nz.copy_to_operands(imag_part, gen_zero(elem_t));
+    exprt result("or", bool_type());
+    result.copy_to_operands(real_nz, imag_nz);
+    expr = result;
+    break;
+  }
+
+  case clang::CK_FloatingComplexCast:
+  case clang::CK_IntegralComplexCast:
+  case clang::CK_FloatingComplexToIntegralComplex:
+  case clang::CK_IntegralComplexToFloatingComplex:
+  {
+    // complex → complex: cast each component to the target element type
+    const typet &src_elem_t = to_complex_type(expr.type()).base_type();
+    const typet &dst_elem_t = to_complex_type(type).base_type();
+    exprt real_part = member_exprt(expr, "real", src_elem_t);
+    exprt imag_part = member_exprt(expr, "imag", src_elem_t);
+    gen_typecast(ns, real_part, dst_elem_t);
+    gen_typecast(ns, imag_part, dst_elem_t);
+    struct_exprt complex_expr(type);
+    complex_expr.operands().push_back(real_part);
+    complex_expr.operands().push_back(imag_part);
+    expr = complex_expr;
+    break;
+  }
+
   default:
   {
     std::ostringstream oss;
@@ -3306,6 +3412,14 @@ bool clang_c_convertert::get_unary_operator_expr(
 
   case clang::UO_Extension:
     new_expr.swap(unary_sub);
+    return false;
+
+  case clang::UO_Real:
+    new_expr = member_exprt(unary_sub, "real", uniop_type);
+    return false;
+
+  case clang::UO_Imag:
+    new_expr = member_exprt(unary_sub, "imag", uniop_type);
     return false;
 
   default:
@@ -3915,9 +4029,10 @@ void clang_c_convertert::get_decl_name(
     }
     else
 #if CLANG_VERSION_MAJOR >= 22
-      name = getFullyQualifiedName(
-        ASTContext->getTypeDeclType(llvm::cast<clang::TypeDecl>(&rd)),
-        *ASTContext);
+      name = rd.getKindName().str() + " " +
+             getFullyQualifiedName(
+               ASTContext->getTypeDeclType(llvm::cast<clang::TypeDecl>(&rd)),
+               *ASTContext);
 #else
       name =
         getFullyQualifiedName(ASTContext->getTagDeclType(&rd), *ASTContext);
@@ -4287,8 +4402,6 @@ bool clang_c_convertert::get_APValue_expr(
     case clang::APValue::Indeterminate:
     case clang::APValue::Float:
     case clang::APValue::FixedPoint:
-    case clang::APValue::ComplexInt:
-    case clang::APValue::ComplexFloat:
     case clang::APValue::Vector:
     case clang::APValue::Array:
     case clang::APValue::Struct:

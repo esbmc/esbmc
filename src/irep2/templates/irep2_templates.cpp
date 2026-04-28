@@ -31,6 +31,8 @@ std::string fixedbv_type2t::field_names[esbmct::num_type_fields] =
   {"width", "integer_bits", "", "", ""};
 std::string floatbv_type2t::field_names[esbmct::num_type_fields] =
   {"fraction", "exponent", "", "", ""};
+std::string complex_type2t::field_names[esbmct::num_type_fields] =
+  {"members", "member_names", "member_pretty_names", "typename", "packed", ""};
 std::string cpp_name_type2t::field_names[esbmct::num_type_fields] =
   {"name", "template args", "", "", ""};
 
@@ -293,8 +295,8 @@ void do_type2string<const expr2t::expr_ids>(
 template <>
 bool do_get_sub_expr<expr2tc>(
   const expr2tc &item,
-  unsigned int idx,
-  unsigned int &it,
+  size_t idx,
+  size_t &it,
   const expr2tc *&ptr)
 {
   if (idx == it)
@@ -312,8 +314,8 @@ bool do_get_sub_expr<expr2tc>(
 template <>
 bool do_get_sub_expr<std::vector<expr2tc>>(
   const std::vector<expr2tc> &item,
-  unsigned int idx,
-  unsigned int &it,
+  size_t idx,
+  size_t &it,
   const expr2tc *&ptr)
 {
   if (idx < it + item.size())
@@ -332,8 +334,8 @@ bool do_get_sub_expr<std::vector<expr2tc>>(
 template <>
 bool do_get_sub_expr_nc<expr2tc>(
   expr2tc &item,
-  unsigned int idx,
-  unsigned int &it,
+  size_t idx,
+  size_t &it,
   expr2tc *&ptr)
 {
   if (idx == it)
@@ -351,8 +353,8 @@ bool do_get_sub_expr_nc<expr2tc>(
 template <>
 bool do_get_sub_expr_nc<std::vector<expr2tc>>(
   std::vector<expr2tc> &item,
-  unsigned int idx,
-  unsigned int &it,
+  size_t idx,
+  size_t &it,
   expr2tc *&ptr)
 {
   if (idx < it + item.size())
@@ -368,13 +370,13 @@ bool do_get_sub_expr_nc<std::vector<expr2tc>>(
 }
 
 template <>
-unsigned int do_count_sub_exprs<const expr2tc>(const expr2tc &)
+size_t do_count_sub_exprs<const expr2tc>(const expr2tc &)
 {
   return 1;
 }
 
 template <>
-unsigned int
+size_t
 do_count_sub_exprs<const std::vector<expr2tc>>(const std::vector<expr2tc> &item)
 {
   return item.size();

@@ -11,7 +11,7 @@ add_library(gotoprograms goto_convert.cpp goto_function.cpp goto_main.cpp
   read_bin_goto_object.cpp goto_program_irep.cpp format_strings.cpp
   loop_numbers.cpp goto_loops.cpp write_goto_binary.cpp
   goto_k_induction.cpp loopst.cpp goto_coverage.cpp goto_coverage_rm.cpp goto_cfg.cpp goto_loop_invariant.cpp
-  frame_enforcer.cpp contracts/contracts.cpp)
+  goto_atomicity_check.cpp frame_enforcer.cpp contracts/contracts.cpp)
 add_library(gotoalgorithms loop_unroll.cpp mark_decl_as_non_det.cpp assign_params_as_non_det.cpp)
 
 if(ENABLE_GOTO_CONTRACTOR)
@@ -22,7 +22,13 @@ if(ENABLE_GOTO_CONTRACTOR)
 endif()
 
 add_subdirectory(abstract-interpretation)
-target_link_libraries(gotoalgorithms algorithms gotoprograms abstract-interpretation)
+target_link_libraries(gotoalgorithms PUBLIC algorithms gotoprograms PRIVATE abstract-interpretation)
+
+# gotocontractor uses ait<> which calls ai_baset virtual methods from abstract-interpretation.
+# Declaring the cycle lets CMake emit --start-group on static-link builds.
+if(ENABLE_GOTO_CONTRACTOR)
+    target_link_libraries(gotocontractor PRIVATE abstract-interpretation)
+endif()
 target_include_directories(gotoprograms
     PRIVATE ${Boost_INCLUDE_DIRS}
 )
@@ -31,4 +37,4 @@ target_include_directories(gotoalgorithms
 )
 target_compile_definitions(gotoprograms PUBLIC BOOST_ALL_NO_LIB YAML_CPP_STATIC_DEFINE)
 
-target_link_libraries(gotoprograms pointeranalysis bigint usr_utils)
+target_link_libraries(gotoprograms PUBLIC pointeranalysis PRIVATE bigint usr_utils langapi)

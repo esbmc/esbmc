@@ -564,9 +564,11 @@ exprt python_dict_handler::create_dict_from_literal(
     }
     else
     {
-      // Regular value: store value directly (value semantics)
-      exprt push_value =
-        list_handler.build_push_list_call(values_list, element, value_expr);
+      // Regular value: store value directly (value semantics).
+      // Disable float path so dict comparisons via *(void**)item->value use
+      // the integer bit-pattern copy instead of the float_buf pointer.
+      exprt push_value = list_handler.build_push_list_call(
+        values_list, element, value_expr, false);
       converter_.add_instruction(push_value);
     }
   }
@@ -962,6 +964,7 @@ void python_dict_handler::handle_dict_subscript_assign(
   set_value_call.arguments().push_back(value_arg);
   set_value_call.arguments().push_back(symbol_expr(*value_info.elem_type_sym));
   set_value_call.arguments().push_back(value_info.elem_size);
+  set_value_call.arguments().push_back(from_integer(BigInt(0), size_type()));
   set_value_call.type() = bool_type();
   set_value_call.location() = location;
   update_block.copy_to_operands(set_value_call);
@@ -981,6 +984,7 @@ void python_dict_handler::handle_dict_subscript_assign(
   push_key_call.arguments().push_back(key_arg);
   push_key_call.arguments().push_back(symbol_expr(*key_info.elem_type_sym));
   push_key_call.arguments().push_back(key_info.elem_size);
+  push_key_call.arguments().push_back(from_integer(BigInt(0), size_type()));
   push_key_call.type() = bool_type();
   push_key_call.location() = location;
   insert_block.copy_to_operands(push_key_call);
@@ -992,6 +996,7 @@ void python_dict_handler::handle_dict_subscript_assign(
   push_value_call.arguments().push_back(value_arg);
   push_value_call.arguments().push_back(symbol_expr(*value_info.elem_type_sym));
   push_value_call.arguments().push_back(value_info.elem_size);
+  push_value_call.arguments().push_back(from_integer(BigInt(0), size_type()));
   push_value_call.type() = bool_type();
   push_value_call.location() = location;
   insert_block.copy_to_operands(push_value_call);
@@ -1744,9 +1749,12 @@ exprt python_dict_handler::handle_dict_setdefault(
   if (is_string_result)
     result_type = gen_pointer_type(char_type());
 
-  if (is_dict_type(result_type) || result_type == list_type)
-    throw std::runtime_error(
-      "setdefault(): dict and list value types are not supported");
+  if (is_dict_type(result_type))
+    throw std::runtime_error("setdefault(): dict value type is not supported");
+
+  // List values are stored by pointer so that
+  // `a.setdefault(k, []).append(x)` mutates the stored list.
+  const bool is_list_result = (result_type == list_type);
 
   // Get dict members
   member_exprt keys_member(dict_expr, "keys", list_type);
@@ -1848,6 +1856,12 @@ exprt python_dict_handler::handle_dict_setdefault(
     typecast_exprt value_as_bool_ptr(obj_value, pointer_typet(bool_type()));
     retrieved_value = dereference_exprt(value_as_bool_ptr, bool_type());
   }
+  else if (is_list_result)
+  {
+    // List values are stored as raw PyListObject*, so cast the void*
+    // straight back, no extra dereference.
+    retrieved_value = typecast_exprt(obj_value, result_type);
+  }
   else if (
     result_type.is_pointer() && result_type.subtype() != char_type() &&
     !result_type.is_nil())
@@ -1894,16 +1908,6 @@ exprt python_dict_handler::handle_dict_setdefault(
     if (!push_func)
       throw std::runtime_error("__ESBMC_list_push not found");
 
-    list_elem_info value_info =
-      list_handler.get_list_element_info(call_node, effective_default);
-
-    if (
-      value_info.elem_symbol->type.is_pointer() &&
-      value_info.elem_symbol->type.subtype() == char_type())
-      value_arg = symbol_expr(*value_info.elem_symbol);
-    else
-      value_arg = address_of_exprt(symbol_expr(*value_info.elem_symbol));
-
     // Push key into keys list
     code_function_callt push_key_call;
     push_key_call.function() = symbol_expr(*push_func);
@@ -1911,21 +1915,59 @@ exprt python_dict_handler::handle_dict_setdefault(
     push_key_call.arguments().push_back(key_arg);
     push_key_call.arguments().push_back(symbol_expr(*key_info.elem_type_sym));
     push_key_call.arguments().push_back(key_info.elem_size);
+    push_key_call.arguments().push_back(from_integer(BigInt(0), size_type()));
     push_key_call.type() = bool_type();
     push_key_call.location() = location;
     else_block.copy_to_operands(push_key_call);
 
-    // Push value into values list
-    code_function_callt push_value_call;
-    push_value_call.function() = symbol_expr(*push_func);
-    push_value_call.arguments().push_back(values_member);
-    push_value_call.arguments().push_back(value_arg);
-    push_value_call.arguments().push_back(
-      symbol_expr(*value_info.elem_type_sym));
-    push_value_call.arguments().push_back(value_info.elem_size);
-    push_value_call.type() = bool_type();
-    push_value_call.location() = location;
-    else_block.copy_to_operands(push_value_call);
+    // Push value into values list.
+    // List values reuse __ESBMC_list_push_dict_ptr to store the raw pointer.
+    if (is_list_result)
+    {
+      const symbolt *push_ptr_func =
+        symbol_table_.find_symbol("c:@F@__ESBMC_list_push_dict_ptr");
+      if (!push_ptr_func)
+        throw std::runtime_error("__ESBMC_list_push_dict_ptr not found");
+
+      constant_exprt list_type_hash(size_type());
+      list_type_hash.set_value(integer2binary(
+        generate_nested_dict_type_hash(list_type),
+        config.ansi_c.address_width));
+
+      code_function_callt push_list_call;
+      push_list_call.function() = symbol_expr(*push_ptr_func);
+      push_list_call.arguments().push_back(values_member);
+      push_list_call.arguments().push_back(effective_default);
+      push_list_call.arguments().push_back(list_type_hash);
+      push_list_call.type() = bool_type();
+      push_list_call.location() = location;
+      else_block.copy_to_operands(push_list_call);
+    }
+    else
+    {
+      list_elem_info value_info =
+        list_handler.get_list_element_info(call_node, effective_default);
+
+      if (
+        value_info.elem_symbol->type.is_pointer() &&
+        value_info.elem_symbol->type.subtype() == char_type())
+        value_arg = symbol_expr(*value_info.elem_symbol);
+      else
+        value_arg = address_of_exprt(symbol_expr(*value_info.elem_symbol));
+
+      code_function_callt push_value_call;
+      push_value_call.function() = symbol_expr(*push_func);
+      push_value_call.arguments().push_back(values_member);
+      push_value_call.arguments().push_back(value_arg);
+      push_value_call.arguments().push_back(
+        symbol_expr(*value_info.elem_type_sym));
+      push_value_call.arguments().push_back(value_info.elem_size);
+      push_value_call.arguments().push_back(
+        from_integer(BigInt(0), size_type()));
+      push_value_call.type() = bool_type();
+      push_value_call.location() = location;
+      else_block.copy_to_operands(push_value_call);
+    }
   }
 
   // Assign effective_default to result.
@@ -2453,6 +2495,92 @@ exprt python_dict_handler::handle_dict_popitem(
   converter_.add_instruction(if_stmt);
 
   return symbol_expr(result_var);
+}
+
+exprt python_dict_handler::handle_dict_fromkeys(const nlohmann::json &call_node)
+{
+  const auto &args = call_node["args"];
+
+  if (args.empty() || args.size() > 2)
+    throw std::runtime_error(
+      "fromkeys() takes 1 or 2 arguments (got " + std::to_string(args.size()) +
+      ")");
+
+  const nlohmann::json &iterable = args[0];
+  if (iterable["_type"] != "List")
+    throw std::runtime_error(
+      "fromkeys() currently supports a list literal as iterable");
+
+  nlohmann::json value_template;
+  if (args.size() == 2)
+  {
+    value_template = args[1];
+  }
+  else
+  {
+    // No explicit default: Python's dict.fromkeys uses None.
+    // Emit Constant(None) so the synthetic Dict below stays well-formed.
+    value_template = call_node;
+    value_template.erase("args");
+    value_template.erase("func");
+    value_template["_type"] = "Constant";
+    value_template["value"] = nullptr;
+  }
+
+  // Dedup keys: fromkeys([1, 1, 2], v) == {1: v, 2: v} in Python
+  // and collapsing here avoids redundant IR inserts.
+  // Constants compare by value, Names by id;
+  // other expressions are left distinct.
+  auto same_key = [](const nlohmann::json &a, const nlohmann::json &b) -> bool {
+    if (a.value("_type", "") != b.value("_type", ""))
+      return false;
+    const std::string type = a["_type"];
+    if (type == "Constant")
+      return a.value("value", nlohmann::json(nullptr)) ==
+             b.value("value", nlohmann::json(nullptr));
+    if (type == "Name")
+      return a.value("id", "") == b.value("id", "");
+    return false;
+  };
+
+  nlohmann::json unique_keys = nlohmann::json::array();
+  for (const auto &elt : iterable["elts"])
+  {
+    bool duplicate = false;
+    for (const auto &existing : unique_keys)
+      if (same_key(elt, existing))
+      {
+        duplicate = true;
+        break;
+      }
+    if (!duplicate)
+      unique_keys.push_back(elt);
+  }
+
+  // Synthesize {k: default for k in unique_keys} and hand it off as if
+  // the user had written a Dict literal directly.
+  nlohmann::json synthetic_dict = call_node;
+  synthetic_dict.erase("args");
+  synthetic_dict.erase("func");
+  synthetic_dict["_type"] = "Dict";
+  synthetic_dict["keys"] = unique_keys;
+  synthetic_dict["values"] = nlohmann::json::array();
+  for (size_t i = 0; i < unique_keys.size(); ++i)
+    synthetic_dict["values"].push_back(value_template);
+
+  locationt location = converter_.get_location_from_decl(call_node);
+  std::string dict_name =
+    generate_unique_dict_name(synthetic_dict, location) + "_fromkeys";
+  struct_typet dict_type = get_dict_struct_type();
+
+  symbolt &dict_sym =
+    converter_.create_tmp_symbol(call_node, dict_name, dict_type, exprt());
+  code_declt dict_decl(symbol_expr(dict_sym));
+  dict_decl.location() = location;
+  converter_.add_instruction(dict_decl);
+
+  create_dict_from_literal(synthetic_dict, symbol_expr(dict_sym));
+  return symbol_expr(dict_sym);
 }
 
 exprt python_dict_handler::handle_dict_update(

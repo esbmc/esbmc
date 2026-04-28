@@ -391,7 +391,6 @@ void goto_convertt::cpp_new_initializer(
 
     // the new object
     exprt new_object("new_object");
-    new_object.set("#lvalue", true);
     new_object.type() = rhs.type().subtype();
 
     // Default value is zero
@@ -415,7 +414,6 @@ void goto_convertt::cpp_new_initializer(
 
       // the new object
       exprt new_object("new_object");
-      new_object.set("#lvalue", true);
       new_object.type() = rhs.type().subtype();
 
       assignment.move_to_operands(new_object, initializer.op0());
@@ -1228,6 +1226,19 @@ void goto_convertt::do_function_call_symbol(
     if (!is_lvalue(dest_expr))
     {
       log_error("va_end argument expected to be lvalue");
+      abort();
+    }
+  }
+  else if (base_name == "__builtin_va_copy")
+  {
+    // For Clang frontend, goto_symex tracks VA args via va_index in the
+    // call frame; no assignment is needed. Emitting an ASSIGN crashes the
+    // pointer analysis on Linux/Windows where va_list is a struct array.
+    exprt dest_expr = make_va_list(arguments[0]);
+
+    if (!is_lvalue(dest_expr))
+    {
+      log_error("va_copy argument expected to be lvalue");
       abort();
     }
   }

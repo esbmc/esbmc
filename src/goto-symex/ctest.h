@@ -26,6 +26,10 @@ private:
   std::string source_file;
   mutable std::mutex data_mutex;
 
+  /// Build an order-preserving "type=value;..." fingerprint for a test case.
+  /// Used by generate() to drop duplicates right before writing files.
+  static std::string fingerprint(const std::vector<test_variable> &tc);
+
   /// Clean up ESBMC internal variable names
   std::string clean_variable_name(const std::string &name) const;
 

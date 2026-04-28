@@ -135,6 +135,7 @@ bool clang_cpp_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
   case clang::Decl::ClassTemplatePartialSpecialization:
   case clang::Decl::VarTemplatePartialSpecialization:
   case clang::Decl::Using:
+  case clang::Decl::UsingEnum:
   case clang::Decl::UsingShadow:
   case clang::Decl::UsingDirective:
   case clang::Decl::TypeAlias:
@@ -273,6 +274,10 @@ bool clang_cpp_convertert::get_type(
 
     typet class_type;
 #if CLANG_VERSION_MAJOR >= 22
+    // Member-pointer qualifier is always a class type; assert before the
+    // (asserting) getAsType() call so a violation surfaces here.
+    assert(
+      mpt.getQualifier().getKind() == clang::NestedNameSpecifier::Kind::Type);
     if (get_type(*mpt.getQualifier().getAsType(), class_type))
       return true;
 #elif CLANG_VERSION_MAJOR >= 21
@@ -314,13 +319,13 @@ bool clang_cpp_convertert::get_type(
     break;
   }
 
-#if CLANG_VERSION_MAJOR >= 14 && CLANG_VERSION_MAJOR < 22
+#if CLANG_VERSION_MAJOR >= 14
   case clang::Type::Using:
   {
     const clang::UsingType &ut =
       static_cast<const clang::UsingType &>(the_type);
 
-    if (get_type(ut.getUnderlyingType(), new_type))
+    if (get_type(ut.desugar(), new_type))
       return true;
 
     break;
@@ -1091,7 +1096,7 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     sym.move_to_operands(list);
     sym.move_to_operands(size);
 
-    // Implicit construction of a std::initializer_list<T> object
+    // Implicit construction of a std::initializer_list<T> objectcal
     // from an array temporary within list-initialization
     // Therefore the AST does not call the constructor
     new_expr = sym;
@@ -1231,6 +1236,61 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     break;
   }
 
+  case clang::Stmt::CXXNoexceptExprClass:
+  {
+    const clang::CXXNoexceptExpr &noexcept_expr =
+      static_cast<const clang::CXXNoexceptExpr &>(stmt);
+
+    if (noexcept_expr.isValueDependent())
+    {
+      std::ostringstream oss;
+      llvm::raw_os_ostream ross(oss);
+      ross << "Conversion of unsupported value-dependent noexcept expr: \"";
+      ross << stmt.getStmtClassName() << "\" to expression"
+           << "\n";
+      stmt.dump(ross, *ASTContext);
+      ross.flush();
+      log_error("{}", oss.str());
+      return true;
+    }
+
+    if (noexcept_expr.getValue())
+      new_expr = true_exprt();
+    else
+      new_expr = false_exprt();
+    break;
+  }
+
+  case clang::Stmt::UserDefinedLiteralClass:
+  {
+    const clang::UserDefinedLiteral &udl =
+      static_cast<const clang::UserDefinedLiteral &>(stmt);
+
+    exprt callee_expr;
+    if (get_expr(*udl.getCallee(), callee_expr))
+      return true;
+
+    typet type;
+    if (get_type(udl.getCallReturnType(*ASTContext), type))
+      return true;
+
+    side_effect_expr_function_callt call;
+    call.function() = callee_expr;
+    call.type() = type;
+
+    for (const clang::Expr *arg : udl.arguments())
+    {
+      exprt single_arg;
+      if (get_expr(*arg, single_arg))
+        return true;
+
+      call.arguments().push_back(single_arg);
+    }
+
+    new_expr = call;
+    break;
+  }
+
   default:
     if (clang_c_convertert::get_expr(stmt, new_expr))
       return true;
@@ -1295,7 +1355,6 @@ bool clang_cpp_convertert::get_constructor_call(
   else
   {
     exprt this_object = exprt("new_object");
-    this_object.set("#lvalue", true);
     this_object.type() = type;
 
     /* first parameter is address to the object to be constructed */
@@ -1844,7 +1903,6 @@ bool clang_cpp_convertert::get_decl_ref(
     if (is_lvalue_or_rvalue_reference(new_expr.type()) && should_dereference)
     {
       new_expr = dereference_exprt(new_expr, new_expr.type());
-      new_expr.set("#lvalue", true);
       new_expr.set("#implicit", true);
     }
 
@@ -1871,7 +1929,6 @@ bool clang_cpp_convertert::get_decl_ref(
 
     new_expr = exprt("symbol", type);
     new_expr.identifier(id);
-    new_expr.cmt_lvalue(true);
     new_expr.name(name);
 
     break;
@@ -1885,7 +1942,6 @@ bool clang_cpp_convertert::get_decl_ref(
     if (is_lvalue_or_rvalue_reference(new_expr.type()) && should_dereference)
     {
       new_expr = dereference_exprt(new_expr, new_expr.type());
-      new_expr.set("#lvalue", true);
       new_expr.set("#implicit", true);
     }
 
@@ -1969,19 +2025,14 @@ bool clang_cpp_convertert::annotate_class_method(
   exprt &new_expr)
 {
   code_typet &component_type = to_code_type(new_expr.type());
-/*
+  /*
    * The order of annotations matters.
    */
-// annotate parent
-#if CLANG_VERSION_MAJOR >= 22
-  std::string parent_class_name = getFullyQualifiedName(
-    ASTContext->getCanonicalTagType(cxxmdd.getParent()), *ASTContext);
-#else
-  std::string parent_class_name = getFullyQualifiedName(
-    ASTContext->getTagDeclType(cxxmdd.getParent()), *ASTContext);
-#endif
-
-  std::string parent_class_id = tag_prefix + parent_class_name;
+  // annotate parent — derive the id via get_decl_name so it matches the
+  // record's symbol id exactly (Clang 22+ prepends the kind name; older
+  // versions don't).
+  std::string parent_class_name, parent_class_id;
+  get_decl_name(*cxxmdd.getParent(), parent_class_name, parent_class_id);
   component_type.set("#member_name", parent_class_id);
 
   // annotate ctor and dtor

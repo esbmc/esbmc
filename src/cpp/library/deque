@@ -416,6 +416,11 @@ public:
     _capacity = 1;
   }
 
+  ~deque()
+  {
+    _size = 0;
+  }
+
   explicit deque(iterator t1, iterator t2) : _size(0)
   {
     int n = 1;
@@ -697,7 +702,7 @@ public:
 
   void verify_capacity()
   {
-    while (_size >= _capacity)
+    while (_size >= _capacity && _capacity < DEQUE_CAPACITY)
       _capacity *= 2;
   }
 

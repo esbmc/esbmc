@@ -27,6 +27,7 @@ extern "C"
 #include <util/expr_util.h>
 #include <iostream>
 #include <goto-programs/add_race_assertions.h>
+#include <goto-programs/goto_atomicity_check.h>
 #include <goto-programs/goto_check.h>
 #include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/goto_inline.h>
@@ -436,6 +437,22 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("termination", false);
   }
 
+  // interval-symex-guard is designed for plain BMC loop-counter tracking.
+  // Disable it for advanced verification modes whose GOTO/symex transformations
+  // are incompatible with a single shared (non-forked) interval_domaint:
+  //   - incremental-BMC reuses one goto_symext across unwind iterations
+  //   - k-induction (base/forward/inductive) havocs loop variables
+  //   - loop-invariant and function contracts inject havoc+assume sequences
+  if (
+    options.get_bool_option("k-induction") ||
+    cmdline.isset("k-induction-parallel") || cmdline.isset("incremental-bmc") ||
+    cmdline.isset("termination") || cmdline.isset("enforce-contract") ||
+    cmdline.isset("enforce-all-contracts") ||
+    cmdline.isset("replace-call-with-contract") ||
+    cmdline.isset("replace-all-contracts") || cmdline.isset("base-case") ||
+    cmdline.isset("forward-condition") || cmdline.isset("inductive-step"))
+    options.set_option("no-interval-symex-guard", true);
+
   if (
     cmdline.isset("overflow-check") || cmdline.isset("unsigned-overflow-check"))
     options.set_option("disable-inductive-step", true);
@@ -619,13 +636,18 @@ int esbmc_parseoptionst::doit()
     messaget::state.out = f;
   }
 
-  // Print a banner
-  log_status(
-    "ESBMC version {} {}-bit {} {}",
-    ESBMC_VERSION,
-    sizeof(void *) * 8,
-    config.this_architecture(),
-    config.this_operating_system());
+  // Print a banner with version info to stdout
+  {
+    FILE *output_stream = messaget::state.out;
+    messaget::state.out = stdout;
+    log_status(
+      "ESBMC version {} {}-bit {} {}",
+      ESBMC_VERSION,
+      sizeof(void *) * 8,
+      config.this_architecture(),
+      config.this_operating_system());
+    messaget::state.out = output_stream;
+  }
 
   if (cmdline.isset("version"))
     return 0;
@@ -1352,9 +1374,11 @@ int esbmc_parseoptionst::do_bmc_strategy(
   };
 
   // Trying all bounds from 1 to "max_k_step" in "k_step_inc"
+  uint64_t last_k_step = k_step_base;
   for (uint64_t k_step = k_step_base; k_step <= max_k_step;
        k_step += k_step_inc)
   {
+    last_k_step = k_step;
     // k-induction
     if (options.get_bool_option("k-induction"))
     {
@@ -1456,6 +1480,11 @@ int esbmc_parseoptionst::do_bmc_strategy(
         return 1;
     }
   }
+
+  if (
+    options.get_bool_option("multi-property") &&
+    options.get_bool_option("k-induction"))
+    diagnose_unknown_properties(options, goto_functions, last_k_step);
 
   log_status("Unable to prove or falsify the program, giving up.");
   log_fail("VERIFICATION UNKNOWN");
@@ -2151,6 +2180,9 @@ bool esbmc_parseoptionst::process_goto_program(
 
     goto_check(ns, options, goto_functions);
 
+    if (options.get_bool_option("atomicity-check"))
+      goto_atomicity_check(goto_functions, ns, context);
+
     // Process function contracts if enabled
     bool has_enforce = cmdline.isset("enforce-contract");
     bool has_replace = cmdline.isset("replace-call-with-contract");
@@ -2842,36 +2874,38 @@ void esbmc_parseoptionst::process_function_contracts(
   // This includes functions with:
   // 1. Explicit contract clauses (__ESBMC_requires, __ESBMC_ensures, __ESBMC_assigns)
   // 2. __attribute__((annotate("__ESBMC_contract"))) annotation
-  auto collect_functions_with_contracts = [&contracts,
-                                           &goto_functions,
-                                           &ctx]() {
-    std::set<std::string> result;
-    forall_goto_functions (it, goto_functions)
-    {
-      if (!it->second.body_available)
-        continue;
-
-      std::string func_name = id2string(it->first);
-      // Skip compiler-generated functions
-      if (func_name.find("~") == 0 || func_name.find("#") != std::string::npos)
-        continue;
-
-      // Check for explicit contract clauses in function body
-      if (contracts.has_contracts(it->second.body))
+  auto collect_functions_with_contracts =
+    [&contracts, &goto_functions, &ctx]() {
+      std::set<std::string> result;
+      forall_goto_functions (it, goto_functions)
       {
-        result.insert(func_name);
-        continue;
-      }
+        if (!it->second.body_available)
+          continue;
 
-      // Check for __attribute__((annotate("__ESBMC_contract"))) annotation
-      symbolt *func_sym = ctx.find_symbol(it->first);
-      if (func_sym && contracts.is_annotated_contract_function(*func_sym))
-      {
-        result.insert(func_name);
+        std::string func_name = id2string(it->first);
+
+        // Use is_compiler_generated (which correctly handles C++ USR IDs like
+        // "c:@F@fst#*1I#") instead of a raw '#' string filter, which would
+        // incorrectly skip all C++ functions with parameters.
+        if (contracts.is_compiler_generated(func_name))
+          continue;
+
+        // Check for explicit contract clauses in function body
+        if (contracts.has_contracts(it->second.body))
+        {
+          result.insert(func_name);
+          continue;
+        }
+
+        // Check for __attribute__((annotate("__ESBMC_contract"))) annotation
+        symbolt *func_sym = ctx.find_symbol(it->first);
+        if (func_sym && contracts.is_annotated_contract_function(*func_sym))
+        {
+          result.insert(func_name);
+        }
       }
-    }
-    return result;
-  };
+      return result;
+    };
 
   // Lambda function to process function list (handles "*" wildcard)
   auto process_function_list = [&collect_functions_with_contracts](
@@ -2929,23 +2963,22 @@ void esbmc_parseoptionst::process_function_contracts(
   }
 
   // Lambda to collect ONLY functions with __ESBMC_contract annotation
-  auto collect_annotated_contract_functions = [&contracts,
-                                               &goto_functions,
-                                               &ctx]() {
-    std::set<std::string> result;
-    forall_goto_functions (it, goto_functions)
-    {
-      if (!it->second.body_available)
-        continue;
-      std::string func_name = id2string(it->first);
-      if (func_name.find("~") == 0 || func_name.find("#") != std::string::npos)
-        continue;
-      symbolt *func_sym = ctx.find_symbol(it->first);
-      if (func_sym && contracts.is_annotated_contract_function(*func_sym))
-        result.insert(func_name);
-    }
-    return result;
-  };
+  auto collect_annotated_contract_functions =
+    [&contracts, &goto_functions, &ctx]() {
+      std::set<std::string> result;
+      forall_goto_functions (it, goto_functions)
+      {
+        if (!it->second.body_available)
+          continue;
+        std::string func_name = id2string(it->first);
+        if (contracts.is_compiler_generated(func_name))
+          continue;
+        symbolt *func_sym = ctx.find_symbol(it->first);
+        if (func_sym && contracts.is_annotated_contract_function(*func_sym))
+          result.insert(func_name);
+      }
+      return result;
+    };
 
   // Process --enforce-all-contracts
   if (has_enforce_all)
@@ -3021,6 +3054,10 @@ static std::string colorize_flag_refs(const std::string &text)
 // available in ESBMC.
 void esbmc_parseoptionst::help()
 {
+  // Redirect everything here to stdout
+  FILE *outstream = messaget::state.out;
+  messaget::state.out = stdout;
+
   bool use_color = resolve_color_option();
 
   // Print the "* * *     ESBMC x.y.z     * * *"
@@ -3051,7 +3088,7 @@ void esbmc_parseoptionst::help()
   {
     if (!line.empty() && line[0] != ' ' && line.back() == ':')
       // Group header (e.g. "Printing options:")
-      fmt::print(stderr, CLR_BOLD_CYAN "{}" CLR_RESET "\n", line);
+      fmt::print(messaget::state.out, CLR_BOLD_CYAN "{}" CLR_RESET "\n", line);
     else if (
       line.size() >= 3 && line[0] == ' ' && line[1] == ' ' && line[2] == '-')
     {
@@ -3059,14 +3096,67 @@ void esbmc_parseoptionst::help()
       auto desc_pos = line.find("  ", 4);
       if (desc_pos != std::string::npos)
         fmt::print(
-          stderr,
+          messaget::state.out,
           CLR_BOLD "{}" CLR_RESET "{}\n",
           line.substr(0, desc_pos),
           colorize_flag_refs(line.substr(desc_pos)));
       else
-        fmt::print(stderr, CLR_BOLD "{}" CLR_RESET "\n", line);
+        fmt::print(messaget::state.out, CLR_BOLD "{}" CLR_RESET "\n", line);
     }
     else
-      fmt::print(stderr, "{}\n", colorize_flag_refs(line));
+      fmt::print(messaget::state.out, "{}\n", colorize_flag_refs(line));
   }
+
+  // Restore everything back to original output stream.
+  messaget::state.out = outstream;
+}
+
+// When k-induction exhausts all k-steps without a definitive result, run one
+// final per-VCC inductive-step check at the last k to identify which specific
+// properties could not be resolved, without impacting the main k-induction loop.
+void esbmc_parseoptionst::diagnose_unknown_properties(
+  optionst &options,
+  goto_functionst &goto_functions,
+  const uint64_t k_step)
+{
+  if (options.get_bool_option("disable-inductive-step"))
+    return;
+
+  // Mirror the guards used by is_inductive_step_violated in the main loop:
+  // inductive step is skipped for k==1 and capped by --max-inductive-step.
+  if (k_step <= 1)
+    return;
+  if (strtoul(cmdline.getval("max-inductive-step"), nullptr, 10) < k_step)
+    return;
+
+  const bool saved_base_case = options.get_bool_option("base-case");
+  const bool saved_forward_condition =
+    options.get_bool_option("forward-condition");
+  const bool saved_inductive_step = options.get_bool_option("inductive-step");
+  const bool saved_no_unwinding =
+    options.get_bool_option("no-unwinding-assertions");
+  const bool saved_partial_loops = options.get_bool_option("partial-loops");
+  const std::string saved_unwind = options.get_option("unwind");
+
+  options.set_option("base-case", false);
+  options.set_option("forward-condition", false);
+  options.set_option("inductive-step", true);
+  options.set_option("no-unwinding-assertions", true);
+  options.set_option("partial-loops", true);
+  options.set_option("unwind", integer2string(k_step));
+  options.set_option("diagnose-unknown-properties", true);
+
+  bmct bmc(goto_functions, options, context);
+
+  log_progress(
+    "\nDiagnosing unresolved properties (inductive step, k = {:d}):", k_step);
+  do_bmc(bmc);
+
+  options.set_option("base-case", saved_base_case);
+  options.set_option("forward-condition", saved_forward_condition);
+  options.set_option("inductive-step", saved_inductive_step);
+  options.set_option("no-unwinding-assertions", saved_no_unwinding);
+  options.set_option("partial-loops", saved_partial_loops);
+  options.set_option("unwind", saved_unwind);
+  options.set_option("diagnose-unknown-properties", false);
 }

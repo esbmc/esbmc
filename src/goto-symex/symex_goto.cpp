@@ -1,5 +1,4 @@
 #include <cassert>
-#include <fstream>
 #include <goto-symex/goto_symex.h>
 #include <goto-symex/slice.h>
 #include <goto-symex/symex_target_equation.h>
@@ -50,52 +49,62 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
     }
   }
 
-  // Interval-based guard check (--interval-symex-guard)
-  if (!new_guard_false && !new_guard_true && interval_domain_state)
-  {
-    tvt res = interval_domaint::eval_boolean_expression(
-      old_guard, *interval_domain_state);
-    if (res.is_false())
-      new_guard_false = true;
-    else if (res.is_true())
-      new_guard_true = true;
-  }
-
   goto_programt::const_targett goto_target = instruction.targets.front();
 
   bool forward =
     cur_state->source.pc->location_number < goto_target->location_number;
+
+  // Interval-based guard check (default, disabled by --no-interval-symex-guard).
+  // Only prune when the guard is provably TRUE (loop can be unwound no further).
+  // Never force-enter a loop (new_guard_false) via the interval domain: doing so
+  // omits the loop-entry guard from the path condition, which lets the SMT solver
+  // pick values outside the loop's feasible range and produce false positives.
+  // The flag check lets --interval-symex-assert keep the domain without pruning.
+  //
+  // Restrict to loop GOTOs (loop_number != 0): the interval domain is a single
+  // shared instance, so ASSIGN instructions inside branches contaminate it.
+  // Non-loop if-statement GOTOs would be incorrectly pruned by stale values.
+  //
+  // Note: eval_boolean_expression already returns TV_UNKNOWN for any guard
+  // containing floatbv-typed sub-expressions (via its contains_float check).
+  if (
+    !new_guard_false && !new_guard_true && interval_domain_state &&
+    options.get_bool_option("interval-symex-guard") &&
+    instruction.loop_number != 0)
+  {
+    tvt res = interval_domaint::eval_boolean_expression(
+      old_guard, *interval_domain_state);
+    if (res.is_true())
+      new_guard_true = true;
+  }
 
   if (
     options.get_option("witness-output-yaml") != "" && forward &&
     !is_constant(old_guard) &&
     !(is_not2t(old_guard) && is_constant(to_not2t(old_guard).value)))
   {
+    // Normalize the branching condition so that cond=true always means
+    // "the branch body was reached". For standard GOTOs (IF !cond GOTO skip)
+    // new_guard already has this form. For flipped GOTOs produced by
+    // optimize_guarded_gotos (IF cond GOTO target), the guard sense is
+    // inverted, so we apply make_not to restore the canonical direction.
+    expr2tc branching_cond = new_guard;
+    if (instruction.flipped_guard)
+      make_not(branching_cond);
     target->branching(
       cur_state->guard.as_expr(),
-      new_guard,
+      branching_cond,
       cur_state->source,
       cur_state->top().hidden,
       first_loop);
   }
 
-  // Teach the interval domain the branch constraint for the continuing path.
-  // For a forward GOTO (exit check), the fall-through means the guard is false,
-  // so assume NOT old_guard. For a backward GOTO (loop-back), the jump means
-  // the guard is true, so assume old_guard.
-  if (interval_domain_state && !new_guard_false && !new_guard_true)
-  {
-    if (forward)
-    {
-      expr2tc neg_guard = old_guard;
-      make_not(neg_guard);
-      interval_domain_state->assume(neg_guard);
-    }
-    else
-    {
-      interval_domain_state->assume(old_guard);
-    }
-  }
+  // Note: we intentionally do NOT call interval_domain_state->assume() here.
+  // The interval domain is a single shared instance (not forked per branch).
+  // Assuming the fall-through constraint would contaminate the taken path when
+  // it is explored later, causing unsound pruning.  The domain is still updated
+  // by process_instruction (ASSIGN / ASSUME / DEAD), which is sufficient for
+  // tracking loop counters.
 
   if (new_guard_false)
   {

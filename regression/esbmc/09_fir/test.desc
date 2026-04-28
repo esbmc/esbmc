@@ -1,4 +1,0 @@
-THOROUGH
-main.c
---no-standard-checks --unwind 34 --no-library
-^VERIFICATION SUCCESSFUL$

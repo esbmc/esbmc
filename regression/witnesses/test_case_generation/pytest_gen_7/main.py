@@ -1,4 +1,4 @@
-def sum_of_positive_elements(x: dict[int, int], y: list) -> None:
+def sum_of_positive_elements(x: dict[int, int]) -> None:
     if 2 in x:
         all_positive = True
         if 3 in x:
@@ -10,4 +10,4 @@ def sum_of_positive_elements(x: dict[int, int], y: list) -> None:
 
 
 x = nondet_dict(2, key_type=nondet_int(), value_type=nondet_int())
-sum_of_positive_elements(x, "2")
+sum_of_positive_elements(x)

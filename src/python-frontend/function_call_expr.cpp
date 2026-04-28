@@ -829,7 +829,7 @@ static std::string format_double_for_complex(double d)
   return s;
 }
 
-exprt function_call_expr::handle_complex_to_str(const exprt &complex_expr) const
+exprt function_call_expr::handle_complex_to_str() const
 {
   // Non-constant complex: fall back to a generic placeholder.
   return converter_.get_string_builder().build_string_literal("(complex)");
@@ -2128,7 +2128,7 @@ exprt function_call_expr::build_constant_from_arg() const
       if (
         !value_expr.is_nil() && value_expr.statement() != "cpp-throw" &&
         is_complex_type(value_expr.type()))
-        return handle_complex_to_str(value_expr);
+        return handle_complex_to_str();
     }
   }
 
@@ -2404,7 +2404,18 @@ exprt function_call_expr::build_constant_from_arg() const
   }
 
   else if (func_name == "str")
+  {
+    // Try __str__ dispatch for custom objects with __str__ defined.
+    exprt value_expr = converter_.get_expr(arg);
+    if (!value_expr.is_nil() && value_expr.statement() != "cpp-throw")
+    {
+      exprt dunder_result = converter_.dispatch_unary_dunder_operator(
+        "str", value_expr, converter_.get_location_from_decl(call_));
+      if (!dunder_result.is_nil())
+        return dunder_result;
+    }
     arg_size = handle_str(arg);
+  }
 
   typet t = type_handler_.get_typet(func_name, arg_size);
   exprt expr = converter_.get_expr(arg);
@@ -2612,6 +2623,25 @@ function_call_expr::get_object_list_symbol(std::string &display_name) const
     return nullptr;
   }
 
+  // Call case: e.g. a.setdefault(k, []).append(99)
+  // receiver is a function call whose return value is a list pointer.
+  // Materialize the call result into a $call_list$ temp symbol
+  // so list method handlers can treat it as a named list.
+  // The declaration of the temp is emitted lazily by materialize_list_symbol().
+  if (func_value["_type"] == "Call")
+  {
+    const exprt call_expr = converter_.get_expr(func_value);
+    const typet list_type = converter_.get_type_handler().get_list_type();
+    if (call_expr.type() == list_type)
+    {
+      symbolt &tmp = converter_.create_tmp_symbol(
+        call_, "$call_list$", list_type, call_expr);
+      display_name = "$call_list$";
+      return &tmp;
+    }
+    return nullptr;
+  }
+
   // Plain name case: e.g. mylist.append(99)
   display_name = get_object_name();
   symbol_id list_symbol_id = converter_.create_symbol_id();
@@ -2634,11 +2664,15 @@ void function_call_expr::materialize_list_symbol(const symbolt *sym) const
 {
   if (!sym || sym->value.is_nil())
     return;
-  // Only emit a declaration for instance-attribute temp symbols produced by
-  // get_object_list_symbol().  These are identified by their name prefix
-  // "$attr_list$".  Regular list symbols have a nil value and are declared
-  // elsewhere; this guard prevents accidentally re-declaring them.
-  if (sym->name.as_string().find("$attr_list$") == std::string::npos)
+  // Only emit a declaration for temp symbols produced by
+  // get_object_list_symbol() from non-named receivers.  These are identified
+  // by the prefixes "$attr_list$" and "$call_list$".  Regular list symbols
+  // have a nil value and are declared elsewhere; this guard prevents
+  // re-declaring them.
+  const std::string &name = sym->name.as_string();
+  if (
+    name.find("$attr_list$") == std::string::npos &&
+    name.find("$call_list$") == std::string::npos)
     return;
   code_declt decl(symbol_expr(*sym));
   decl.copy_to_operands(sym->value);
@@ -2950,37 +2984,63 @@ exprt function_call_expr::handle_dict_method() const
 {
   const std::string &method_name = function_id_.get_function();
 
-  // Resolve the dict symbol for all dict methods
+  // Resolve the dict to a symbol.
+  // Named receivers look up by name;
+  // inline literals (e.g. `{"a":1}.get(...)`) have none,
+  // so spill into a tmp first.
+  exprt dict_expr;
   std::string dict_name = get_object_name();
-  symbol_id dict_symbol_id = converter_.create_symbol_id();
-  dict_symbol_id.set_object(dict_name);
-  const symbolt *dict_symbol =
-    converter_.find_symbol(dict_symbol_id.to_string());
-
-  if (!dict_symbol)
-    throw std::runtime_error("Dictionary variable not found: " + dict_name);
+  if (!dict_name.empty())
+  {
+    symbol_id dict_symbol_id = converter_.create_symbol_id();
+    dict_symbol_id.set_object(dict_name);
+    const symbolt *dict_symbol =
+      converter_.find_symbol(dict_symbol_id.to_string());
+    if (!dict_symbol)
+      throw std::runtime_error("Dictionary variable not found: " + dict_name);
+    dict_expr = symbol_expr(*dict_symbol);
+  }
+  else
+  {
+    exprt literal = converter_.get_expr(call_["func"]["value"]);
+    symbolt &tmp = converter_.create_tmp_symbol(
+      call_, "$dict_lit$", literal.type(), exprt());
+    converter_.add_instruction(code_declt(symbol_expr(tmp)));
+    converter_.add_instruction(code_assignt(symbol_expr(tmp), literal));
+    dict_expr = symbol_expr(tmp);
+  }
 
   if (method_name == "get")
-    return converter_.get_dict_handler()->handle_dict_get(
-      symbol_expr(*dict_symbol), call_);
+    return converter_.get_dict_handler()->handle_dict_get(dict_expr, call_);
 
   if (method_name == "setdefault")
     return converter_.get_dict_handler()->handle_dict_setdefault(
-      symbol_expr(*dict_symbol), call_);
+      dict_expr, call_);
 
   if (method_name == "update")
-    return converter_.get_dict_handler()->handle_dict_update(
-      symbol_expr(*dict_symbol), call_);
+    return converter_.get_dict_handler()->handle_dict_update(dict_expr, call_);
 
   if (method_name == "pop")
-    return converter_.get_dict_handler()->handle_dict_pop(
-      symbol_expr(*dict_symbol), call_);
+    return converter_.get_dict_handler()->handle_dict_pop(dict_expr, call_);
 
   if (method_name == "popitem")
-    return converter_.get_dict_handler()->handle_dict_popitem(
-      symbol_expr(*dict_symbol), call_);
+    return converter_.get_dict_handler()->handle_dict_popitem(dict_expr, call_);
 
   throw std::runtime_error("Unsupported dict method: " + method_name);
+}
+
+bool function_call_expr::is_dict_class_method_call() const
+{
+  if (call_["func"]["_type"] != "Attribute")
+    return false;
+  const auto &value = call_["func"]["value"];
+  if (!value.contains("_type") || value["_type"] != "Name")
+    return false;
+  if (value["id"] != "dict")
+    return false;
+
+  const std::string &method_name = function_id_.get_function();
+  return method_name == "fromkeys";
 }
 
 exprt function_call_expr::handle_list_copy() const
@@ -3371,6 +3431,41 @@ exprt function_call_expr::validate_re_module_args() const
   return nil_exprt(); // Validation passed
 }
 
+// Check if an AST node is a known-empty literal (falsy in Python).
+// Needed because ESBMC's IR represents empty containers as non-NULL
+// pointers/structs, making them appear truthy at the IR level.
+static bool is_empty_literal(const nlohmann::json &node)
+{
+  const std::string &type = node["_type"];
+  if (type == "List" || type == "Tuple" || type == "Set")
+    return node.contains("elts") && node["elts"].empty();
+  if (type == "Dict")
+    return node.contains("keys") && node["keys"].empty();
+  if (type == "Constant" && node.contains("value") && node["value"].is_string())
+    return node["value"].get<std::string>().empty();
+  return false;
+}
+
+exprt function_call_expr::compute_element_truthiness(const exprt &element) const
+{
+  if (element.type() == none_type())
+    return gen_boolean(false);
+
+  if (element.type().is_bool())
+    return element;
+
+  if (
+    element.type().id() == "signedbv" || element.type().id() == "unsignedbv" ||
+    element.type().id() == "floatbv" || element.type().is_pointer())
+    return not_exprt(equality_exprt(element, gen_zero(element.type())));
+
+  if (is_complex_type(element.type()))
+    return complex_to_bool_expr(element);
+
+  // For other types, assume truthy (conservative)
+  return gen_boolean(true);
+}
+
 bool function_call_expr::is_any_call() const
 {
   const std::string &func_name = function_id_.get_function();
@@ -3379,6 +3474,11 @@ bool function_call_expr::is_any_call() const
 
 exprt function_call_expr::handle_any() const
 {
+  const auto keywords =
+    call_.contains("keywords") ? call_["keywords"] : nlohmann::json::array();
+  if (!keywords.empty())
+    throw std::runtime_error("any() takes no keyword arguments");
+
   const auto &args = call_["args"];
 
   if (args.empty())
@@ -3392,66 +3492,74 @@ exprt function_call_expr::handle_any() const
   if (arg["_type"] != "List")
     throw std::runtime_error("any() currently only supports list literals");
 
-  const auto &elts = arg["elts"];
+  return reduce_list_literal_truthiness(arg, ReduceOp::Any);
+}
 
-  // Empty list returns False
+bool function_call_expr::is_all_call() const
+{
+  const std::string &func_name = function_id_.get_function();
+  return func_name == "all";
+}
+
+exprt function_call_expr::handle_all()
+{
+  const auto keywords =
+    call_.contains("keywords") ? call_["keywords"] : nlohmann::json::array();
+  if (!keywords.empty())
+    throw std::runtime_error("all() takes no keyword arguments");
+
+  const auto &args = call_["args"];
+
+  if (args.empty())
+    throw std::runtime_error("all() expected at least 1 argument, got 0");
+
+  if (args.size() > 1)
+    throw std::runtime_error(
+      "all() takes at most 1 argument, got " + std::to_string(args.size()));
+
+  const auto &arg = args[0];
+
+  if (arg["_type"] != "List")
+    return handle_general_function_call();
+
+  return reduce_list_literal_truthiness(arg, ReduceOp::All);
+}
+
+exprt function_call_expr::reduce_list_literal_truthiness(
+  const nlohmann::json &list_arg,
+  ReduceOp op) const
+{
+  const auto &elts = list_arg["elts"];
+
   if (elts.empty())
-    return gen_boolean(false);
+    return gen_boolean(op == ReduceOp::All);
 
-  // Build an OR expression of all elements' truthiness
   exprt result;
   bool first = true;
 
   for (const auto &elt : elts)
   {
-    exprt element = converter_.get_expr(elt);
-
-    // Check if element is truthy
     exprt is_truthy;
 
-    if (element.type() == none_type())
+    if (is_empty_literal(elt))
     {
-      // None is always falsy
       is_truthy = gen_boolean(false);
-    }
-    else if (element.type().is_bool())
-    {
-      // Bool: use directly
-      is_truthy = element;
-    }
-    else if (
-      element.type().id() == "signedbv" || element.type().id() == "unsignedbv")
-    {
-      // Integer: truthy if != 0
-      exprt zero = gen_zero(element.type());
-      is_truthy = not_exprt(equality_exprt(element, zero));
-    }
-    else if (element.type().id() == "floatbv")
-    {
-      // Float: truthy if != 0.0
-      exprt zero = gen_zero(element.type());
-      is_truthy = not_exprt(equality_exprt(element, zero));
-    }
-    else if (element.type().is_pointer())
-    {
-      // Pointer: truthy if not NULL
-      exprt null_ptr = gen_zero(element.type());
-      is_truthy = not_exprt(equality_exprt(element, null_ptr));
     }
     else
     {
-      // For other types, assume truthy (conservative)
-      is_truthy = gen_boolean(true);
+      exprt element = converter_.get_expr(elt);
+      is_truthy = compute_element_truthiness(element);
     }
 
-    // OR with accumulated result
     if (first)
     {
       result = is_truthy;
       first = false;
+      continue;
     }
-    else
-      result = or_exprt(result, is_truthy);
+
+    result = (op == ReduceOp::Any) ? exprt(or_exprt(result, is_truthy))
+                                   : exprt(and_exprt(result, is_truthy));
   }
 
   return result;
@@ -3555,6 +3663,11 @@ function_call_expr::get_dispatch_table()
      [this]() { return handle_any(); },
      "any()"},
 
+    // All function
+    {[this]() { return is_all_call(); },
+     [this]() { return handle_all(); },
+     "all()"},
+
     // int.to_bytes()
     {[this]() {
        if (call_["func"]["_type"] != "Attribute")
@@ -3599,6 +3712,14 @@ function_call_expr::get_dispatch_table()
     {[this]() { return is_list_method_call(); },
      [this]() { return handle_list_method(); },
      "list methods"},
+
+    // Dict class methods (dict.fromkeys), matched before instance-method dispatch
+    // The receiver is the class name, not a dict symbol.
+    {[this]() { return is_dict_class_method_call(); },
+     [this]() {
+       return converter_.get_dict_handler()->handle_dict_fromkeys(call_);
+     },
+     "dict class methods"},
 
     // Dict methods
     {[this]() { return is_dict_method_call(); },
@@ -4222,7 +4343,7 @@ function_call_expr::get_dispatch_table()
        if (
          !value_expr.is_nil() && value_expr.statement() != "cpp-throw" &&
          is_complex_type(value_expr.type()))
-         return handle_complex_to_str(value_expr);
+         return handle_complex_to_str();
        return handle_general_function_call();
      },
      "repr()"},
@@ -4271,6 +4392,82 @@ exprt function_call_expr::handle_general_function_call()
   // Handle single-argument min/max/sum/sorted by dispatching to typed builtins
   const std::string &func_name = function_id_.get_function();
   std::string actual_func_name = func_name;
+
+  // Fast-path: sorted() over a concrete int list can be materialized directly
+  // in the frontend, avoiding expensive runtime list sorting/equality paths.
+  if (func_name == "sorted" && call_["args"].size() == 1)
+  {
+    exprt list_arg = converter_.get_expr(call_["args"][0]);
+    if (list_arg.is_symbol())
+    {
+      const std::string list_id = list_arg.identifier().as_string();
+      const size_t map_size = python_list::get_list_type_map_size(list_id);
+      if (map_size > 0 && map_size <= 32)
+      {
+        struct sortable_elem
+        {
+          BigInt key;
+          size_t pos;
+        };
+
+        std::vector<sortable_elem> elems;
+        elems.reserve(map_size);
+        bool all_constant_ints = true;
+
+        for (size_t i = 0; i < map_size; ++i)
+        {
+          const std::string elem_id =
+            python_list::get_list_element_id(list_id, i);
+          if (elem_id.empty())
+          {
+            all_constant_ints = false;
+            break;
+          }
+
+          const symbolt *elem_sym = converter_.find_symbol(elem_id);
+          if (
+            !elem_sym || !elem_sym->value.is_constant() ||
+            !(elem_sym->type.is_signedbv() || elem_sym->type.is_unsignedbv()))
+          {
+            all_constant_ints = false;
+            break;
+          }
+
+          BigInt key = binary2integer(elem_sym->value.value().c_str(), true);
+          elems.push_back({key, i});
+        }
+
+        if (all_constant_ints)
+        {
+          std::stable_sort(
+            elems.begin(),
+            elems.end(),
+            [](const sortable_elem &a, const sortable_elem &b) {
+              if (a.key == b.key)
+                return a.pos < b.pos;
+              return a.key < b.key;
+            });
+
+          nlohmann::json sorted_list;
+          sorted_list["_type"] = "List";
+          sorted_list["elts"] = nlohmann::json::array();
+          converter_.copy_location_fields_from_decl(call_, sorted_list);
+          for (const auto &elem : elems)
+          {
+            nlohmann::json cst;
+            cst["_type"] = "Constant";
+            cst["value"] = elem.key.to_int64();
+            cst["kind"] = nullptr;
+            converter_.copy_location_fields_from_decl(call_, cst);
+            sorted_list["elts"].push_back(cst);
+          }
+
+          python_list sorted_list_expr(converter_, sorted_list);
+          return sorted_list_expr.get();
+        }
+      }
+    }
+  }
 
   // Skip builtin dispatch if the user imported a function with the same name
   // e.g. "from other import sum" defines a user sum that shadows the builtin
@@ -4340,7 +4537,7 @@ exprt function_call_expr::handle_general_function_call()
   {
     std::string caller = get_object_name();
     obj_symbol_id.set_object(caller);
-    obj_symbol = symbol_table.find_symbol(obj_symbol_id.to_string());
+    obj_symbol = converter_.find_symbol(obj_symbol_id.to_string());
   }
 
   // Indirect call through variable holding a function pointer, e.g.:
@@ -4413,6 +4610,32 @@ exprt function_call_expr::handle_general_function_call()
 
   if (func_symbol == nullptr)
   {
+    // Dataclass synthesized constructors may call Class.__post_init__(...) before
+    // the class method symbol is fully registered. Preserve class scope and emit
+    // a forward reference call instead of falling back to global scope.
+    if (
+      function_type_ == FunctionType::ClassMethod &&
+      function_id_.get_function() == "__post_init__" &&
+      !function_id_.get_class().empty())
+    {
+      locationt location = converter_.get_location_from_decl(call_);
+      code_function_callt call;
+      call.location() = location;
+      call.function() = symbol_exprt(func_symbol_id, code_typet());
+      call.type() = empty_typet();
+
+      for (const auto &arg_node : call_["args"])
+      {
+        exprt arg = converter_.get_expr(arg_node);
+        if (arg.type().is_array())
+          call.arguments().push_back(address_of_exprt(arg));
+        else
+          call.arguments().push_back(arg);
+      }
+
+      return call;
+    }
+
     if (
       function_type_ == FunctionType::Constructor ||
       function_type_ == FunctionType::InstanceMethod)
@@ -4454,9 +4677,14 @@ exprt function_call_expr::handle_general_function_call()
           std::vector<std::string> possible_classes =
             find_possible_class_types(obj_symbol);
 
-          // If no classes found, use the inferred class name
+          // If no classes found, use the inferred class name as a best-effort
+          // fallback (it may come from weak type inference in dynamic code).
+          bool inferred_classes_from_fallback = false;
           if (possible_classes.empty())
+          {
             possible_classes.push_back(class_name);
+            inferred_classes_from_fallback = true;
+          }
 
           // When there are multiple possible classes (polymorphic object),
           // the method must exist in ALL of them; otherwise it is an
@@ -4529,7 +4757,18 @@ exprt function_call_expr::handle_general_function_call()
 
           if (!method_exists && !is_in_same_class)
           {
-            // Generate AttributeError
+            // In dynamic/untyped flows we may only have fallback class guesses.
+            // Do not inject a hard failure from uncertain inference.
+            if (inferred_classes_from_fallback)
+            {
+              locationt location = converter_.get_location_from_decl(call_);
+              exprt zero_fallback = gen_zero(any_type());
+              zero_fallback.location() = location;
+              zero_fallback.location().user_provided(true);
+              return zero_fallback;
+            }
+
+            // Generate AttributeError for concrete class information.
             return generate_attribute_error(method_name, possible_classes);
           }
 
@@ -4541,8 +4780,12 @@ exprt function_call_expr::handle_general_function_call()
           call.type() = empty_typet();
 
           if (obj_symbol)
+          {
+            exprt receiver = symbol_expr(*obj_symbol);
             call.arguments().push_back(
-              gen_address_of(symbol_expr(*obj_symbol)));
+              receiver.type().is_pointer() ? receiver
+                                           : gen_address_of(receiver));
+          }
 
           for (const auto &arg_node : call_["args"])
           {
@@ -4557,6 +4800,16 @@ exprt function_call_expr::handle_general_function_call()
                   arg_node["value"].get<std::string>(),
                   arg.type(),
                   string_constantt::k_default);
+              }
+              else if (arg.is_constant())
+              {
+                // Constant array (e.g., folded string concat) must be materialized before address_of_exprt.
+                symbolt &tmp = converter_.create_tmp_symbol(
+                  call_, "$const_str_arg$", arg.type(), arg);
+                code_declt tmp_decl(symbol_expr(tmp));
+                tmp_decl.location() = location;
+                converter_.current_block->copy_to_operands(tmp_decl);
+                arg = symbol_expr(tmp);
               }
               call.arguments().push_back(address_of_exprt(arg));
             }
@@ -4634,6 +4887,16 @@ exprt function_call_expr::handle_general_function_call()
                   arg.type(),
                   string_constantt::k_default);
               }
+              else if (arg.is_constant())
+              {
+                // Constant array (e.g., folded string concat) must be materialized before address_of_exprt.
+                symbolt &tmp = converter_.create_tmp_symbol(
+                  call_, "$const_str_arg$", arg.type(), arg);
+                code_declt tmp_decl(symbol_expr(tmp));
+                tmp_decl.location() = location;
+                converter_.current_block->copy_to_operands(tmp_decl);
+                arg = symbol_expr(tmp);
+              }
               call.arguments().push_back(address_of_exprt(arg));
             }
             else
@@ -4689,13 +4952,29 @@ exprt function_call_expr::handle_general_function_call()
   const typet &return_type = to_code_type(func_symbol->type).return_type();
   call.type() = return_type;
 
+  auto bind_instance_receiver = [&](exprt receiver) -> exprt {
+    return receiver.type().is_pointer() ? receiver : gen_address_of(receiver);
+  };
+
+  auto bind_instance_receiver_symbol =
+    [&](const symbolt &receiver_symbol) -> exprt {
+    exprt receiver = symbol_expr(receiver_symbol);
+    return bind_instance_receiver(receiver);
+  };
+
   // Determine parameter offset for Optional wrapping logic
   size_t param_offset = 0;
 
   // Add self as first parameter
   if (function_type_ == FunctionType::Constructor)
   {
-    call.type() = type_handler_.get_typet(func_symbol->name.as_string());
+    // Keep the constructor result as the requested class type, even when
+    // __init__ is resolved in a base class.
+    const std::string requested_class = function_id_.get_class();
+    if (!requested_class.empty())
+      call.type() = type_handler_.get_typet(requested_class);
+    else
+      call.type() = type_handler_.get_typet(func_symbol->name.as_string());
 
     // Detect super().__init__() pattern: call parent ctor on current self,
     // not on a newly allocated object.
@@ -4708,7 +4987,7 @@ exprt function_call_expr::handle_general_function_call()
     if (is_super_init)
     {
       if (obj_symbol)
-        call.arguments().push_back(symbol_expr(*obj_symbol));
+        call.arguments().push_back(bind_instance_receiver_symbol(*obj_symbol));
       param_offset = 1;
     }
     // Self is the LHS
@@ -4731,7 +5010,7 @@ exprt function_call_expr::handle_general_function_call()
   {
     if (obj_symbol)
     {
-      call.arguments().push_back(gen_address_of(symbol_expr(*obj_symbol)));
+      call.arguments().push_back(bind_instance_receiver_symbol(*obj_symbol));
     }
     else
     {
@@ -4764,7 +5043,7 @@ exprt function_call_expr::handle_general_function_call()
           exprt ctor_result = converter_.get_expr(func_value);
           converter_.current_lhs = saved_lhs;
 
-          call.arguments().push_back(gen_address_of(symbol_expr(tmp)));
+          call.arguments().push_back(bind_instance_receiver(symbol_expr(tmp)));
         }
         else if (func_value["_type"] == "Call")
         {
@@ -4793,12 +5072,13 @@ exprt function_call_expr::handle_general_function_call()
               inner_call.location() = location;
               converter_.add_instruction(inner_call);
             }
-            call.arguments().push_back(gen_address_of(symbol_expr(tmp)));
+            call.arguments().push_back(
+              bind_instance_receiver(symbol_expr(tmp)));
           }
           else
           {
             exprt obj_expr = converter_.get_expr(func_value);
-            call.arguments().push_back(gen_address_of(obj_expr));
+            call.arguments().push_back(bind_instance_receiver(obj_expr));
           }
         }
         else
@@ -4806,7 +5086,7 @@ exprt function_call_expr::handle_general_function_call()
           // Member/variable receiver (e.g., self.builder.build()): use the
           // actual receiver expression instead of a nondet temporary.
           exprt obj_expr = converter_.get_expr(func_value);
-          call.arguments().push_back(gen_address_of(obj_expr));
+          call.arguments().push_back(bind_instance_receiver(obj_expr));
         }
       }
       else
@@ -5140,6 +5420,16 @@ exprt function_call_expr::handle_general_function_call()
           arg.type(),
           string_constantt::k_default);
       }
+      else if (arg.is_constant())
+      {
+        // Constant array (e.g., folded string concat) must be materialized before address_of_exprt.
+        symbolt &tmp = converter_.create_tmp_symbol(
+          call_, "$const_str_arg$", arg.type(), arg);
+        code_declt tmp_decl(symbol_expr(tmp));
+        tmp_decl.location() = location;
+        converter_.current_block->copy_to_operands(tmp_decl);
+        arg = symbol_expr(tmp);
+      }
       call.arguments().push_back(address_of_exprt(arg));
     }
     else
@@ -5340,7 +5630,11 @@ exprt function_call_expr::handle_general_function_call()
     if (call.arguments().size() == num_provided_args)
     {
       // Create temporary object as self parameter
-      typet class_type = type_handler_.get_typet(func_symbol->name.as_string());
+      const std::string requested_class = function_id_.get_class();
+      typet class_type =
+        requested_class.empty()
+          ? type_handler_.get_typet(func_symbol->name.as_string())
+          : type_handler_.get_typet(requested_class);
       symbolt &temp_self =
         converter_.create_tmp_symbol(call_, "$ctor_self$", class_type, exprt());
       converter_.symbol_table().add(temp_self);

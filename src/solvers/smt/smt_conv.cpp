@@ -1189,18 +1189,30 @@ smt_astt smt_convt::apply_ieee754_semantics(
     // IEEE 754 double precision (64-bit): 11 exponent bits, 52 fraction bits
     if (exponent_bits == double_spec.e && fraction_bits == double_spec.f)
     {
-      min_normal = mk_smt_real("2.2250738585072014e-308");    // 2^(-1022)
-      min_subnormal = mk_smt_real("4.9406564584124654e-324"); // 2^(-1074)
-      max_normal =
-        mk_smt_real("1.7976931348623157e+308"); // ~(2-2^(-52)) * 2^1023
+      // Exact rationals: 1/2^1022, 1/2^1074, (2^53-1)*2^971
+      static const std::string dbl_min_normal =
+        "1/" + integer2string(power(2, 1022));
+      static const std::string dbl_min_subnormal =
+        "1/" + integer2string(power(2, 1074));
+      static const std::string dbl_max_normal =
+        integer2string((power(2, 53) - 1) * power(2, 971));
+      min_normal = mk_smt_real(dbl_min_normal);
+      min_subnormal = mk_smt_real(dbl_min_subnormal);
+      max_normal = mk_smt_real(dbl_max_normal);
     }
     // IEEE 754 single precision (32-bit): 8 exponent bits, 23 fraction bits
     else if (exponent_bits == single_spec.e && fraction_bits == single_spec.f)
     {
-      min_normal = mk_smt_real("1.1754943508222875e-38");    // 2^(-126)
-      min_subnormal = mk_smt_real("1.4012984643248171e-45"); // 2^(-149)
-      max_normal =
-        mk_smt_real("3.4028234663852886e+38"); // ~(2-2^(-23)) * 2^127
+      // Exact rationals: 1/2^126, 1/2^149, (2^24-1)*2^104
+      static const std::string sgl_min_normal =
+        "1/" + integer2string(power(2, 126));
+      static const std::string sgl_min_subnormal =
+        "1/" + integer2string(power(2, 149));
+      static const std::string sgl_max_normal =
+        integer2string((power(2, 24) - 1) * power(2, 104));
+      min_normal = mk_smt_real(sgl_min_normal);
+      min_subnormal = mk_smt_real(sgl_min_subnormal);
+      max_normal = mk_smt_real(sgl_max_normal);
     }
     // Unsupported format - return original result
     else
@@ -1234,19 +1246,12 @@ smt_astt smt_convt::apply_ieee754_semantics(
     smt_astt is_subnormal =
       mk_and(mk_ge(abs_result, min_subnormal), mk_lt(abs_result, min_normal));
 
-    // Handle subnormal rounding (simplified round-to-nearest)
-    smt_astt subnormal_step =
-      (exponent_bits == double_spec.e && fraction_bits == double_spec.f)
-        ? mk_smt_real("4.9406564584124654e-324") // Double precision
-        : mk_smt_real("1.4012984643248171e-45"); // Single precision
-    smt_astt quotient = mk_div(abs_result, subnormal_step);
-    smt_astt rounded_quotient = mk_add(quotient, mk_smt_real("0.5"));
-    smt_astt subnormal_magnitude = mk_mul(rounded_quotient, subnormal_step);
-
-    smt_astt subnormal_result = mk_ite(
-      mk_lt(real_result, zero),
-      mk_sub(zero, subnormal_magnitude),
-      subnormal_magnitude);
+    // For subnormal values, return the exact real result.
+    // Subnormal arithmetic is exact when results are representable, and the
+    // real arithmetic value already captures the correct value. No floor-based
+    // quantization is applied here because ESBMC's SMT API has no floor/to_int
+    // for reals; adding 0.5 without floor gives a wrong non-integer multiple.
+    smt_astt subnormal_result = real_result;
 
     // Overflow result (approximate infinity)
     smt_astt overflow_result =
@@ -1605,7 +1610,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       const expr2tc &rounding_mode = to_ieee_add2t(expr).rounding_mode;
 
       // Interval-lifted enclosure for ieee_add (--ir-ieee only).
-      // Covers RNE, RNA (nearest modes) and RUP, RDN (directed modes).
+      // Covers RNE, RNA (nearest modes) and RUP, RDN, RTZ (directed modes).
       // All share the same addition interval hull:
       //   L_R = L_x + L_y,  U_R = U_x + U_y
       // Nearest (RNE/RNA): symmetric B_near at both endpoints
@@ -1614,9 +1619,15 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       //   ra_lo = L_R (exact),  ra_hi = U_R + B_dir(U_R)
       // RDN: B_dir at lower endpoint, exact upper bound
       //   ra_lo = L_R - B_dir(L_R),  ra_hi = U_R (exact)
+      // RTZ: sign-dependent three-way case on hull sign:
+      //   LR >= 0: ra_lo = LR - B_dir(LR), ra_hi = UR (exact upper)
+      //   UR <= 0: ra_lo = LR (exact lower), ra_hi = UR + B_dir(UR)
+      //   else:   ra_lo = LR - B_dir_max, ra_hi = UR + B_dir_max
+      //           where B_dir_max = eps_rel_dir * max(|LR|, |UR|) + eps_abs
       // Symbol names: ra_lo:: / ra_hi:: (RNE), ra_lo_aw:: / ra_hi_aw::
-      // (RNA), ra_lo_up:: / ra_hi_up:: (RUP), ra_lo_dn:: / ra_hi_dn:: (RDN).
-      // RTZ, non-standard formats, and --ir-ieee disabled fall through to
+      // (RNA), ra_lo_up:: / ra_hi_up:: (RUP), ra_lo_dn:: / ra_hi_dn:: (RDN),
+      // ra_lo_tz:: / ra_hi_tz:: (RTZ).
+      // Non-standard formats and --ir-ieee disabled fall through to
       // apply_ieee754_semantics unchanged.
       bool interval_lifted = false;
       if (
@@ -1624,7 +1635,8 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
         (is_nearest_rounding_mode(rounding_mode) ||
          is_round_to_away(rounding_mode) ||
          is_round_to_plus_inf(rounding_mode) ||
-         is_round_to_minus_inf(rounding_mode)))
+         is_round_to_minus_inf(rounding_mode) ||
+         is_round_to_zero(rounding_mode)))
       {
         const auto double_spec = ieee_float_spect::double_precision();
         const auto single_spec = ieee_float_spect::single_precision();
@@ -1654,9 +1666,12 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
           else if (is_round_to_plus_inf(rounding_mode))
             bounds =
               apply_ieee754_rup_enclosure(real_result, lo_r, hi_r, fbv_type);
-          else
+          else if (is_round_to_minus_inf(rounding_mode))
             bounds =
               apply_ieee754_rdn_enclosure(real_result, lo_r, hi_r, fbv_type);
+          else
+            bounds =
+              apply_ieee754_rtz_enclosure(real_result, lo_r, hi_r, fbv_type);
           ir_ra_interval_map[real_result] = {bounds.first, bounds.second};
           a = real_result;
           interval_lifted = true;
@@ -1781,11 +1796,85 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       smt_astt operand_is_zero = mk_or(mk_eq(side1, zero), mk_eq(side2, zero));
 
       const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
-      a = apply_ieee754_semantics(
-        real_result,
-        fbv_type,
-        operand_is_zero,
-        to_ieee_mul2t(expr).rounding_mode);
+      const expr2tc &rounding_mode = to_ieee_mul2t(expr).rounding_mode;
+
+      // RNE/RNA/RUP/RDN/RTZ interval lifting for ieee_mul.
+      // Hull: lo_r = min(p1,p2,p3,p4), hi_r = max(p1,p2,p3,p4)
+      // where p1=L_x*L_y, p2=L_x*U_y, p3=U_x*L_y, p4=U_x*U_y.
+      bool interval_lifted = false;
+      if (
+        options.get_bool_option("ir-ieee") &&
+        (is_nearest_rounding_mode(rounding_mode) ||
+         is_round_to_away(rounding_mode) ||
+         is_round_to_plus_inf(rounding_mode) ||
+         is_round_to_minus_inf(rounding_mode) ||
+         is_round_to_zero(rounding_mode)))
+      {
+        const auto double_spec = ieee_float_spect::double_precision();
+        const auto single_spec = ieee_float_spect::single_precision();
+        if (
+          (fbv_type.exponent == double_spec.e &&
+           fbv_type.fraction == double_spec.f) ||
+          (fbv_type.exponent == single_spec.e &&
+           fbv_type.fraction == single_spec.f))
+        {
+          auto get_iv = [this](smt_astt t) -> ra_interval_t {
+            auto it = ir_ra_interval_map.find(t);
+            return it != ir_ra_interval_map.end() ? it->second
+                                                  : ra_interval_t{t, t};
+          };
+          ra_interval_t iv1 = get_iv(side1);
+          ra_interval_t iv2 = get_iv(side2);
+          // Four endpoint products
+          smt_astt p1 = mk_mul(iv1.lo, iv2.lo);
+          smt_astt p2 = mk_mul(iv1.lo, iv2.hi);
+          smt_astt p3 = mk_mul(iv1.hi, iv2.lo);
+          smt_astt p4 = mk_mul(iv1.hi, iv2.hi);
+          // min/max via nested ITE
+          smt_astt lo_r = mk_ite(
+            mk_le(p1, p2),
+            mk_ite(
+              mk_le(p1, p3),
+              mk_ite(mk_le(p1, p4), p1, p4),
+              mk_ite(mk_le(p3, p4), p3, p4)),
+            mk_ite(
+              mk_le(p2, p3),
+              mk_ite(mk_le(p2, p4), p2, p4),
+              mk_ite(mk_le(p3, p4), p3, p4)));
+          smt_astt hi_r = mk_ite(
+            mk_le(p2, p1),
+            mk_ite(
+              mk_le(p3, p1),
+              mk_ite(mk_le(p4, p1), p1, p4),
+              mk_ite(mk_le(p4, p3), p3, p4)),
+            mk_ite(
+              mk_le(p3, p2),
+              mk_ite(mk_le(p4, p2), p2, p4),
+              mk_ite(mk_le(p4, p3), p3, p4)));
+          std::pair<smt_astt, smt_astt> bounds;
+          if (is_nearest_rounding_mode(rounding_mode))
+            bounds =
+              apply_ieee754_rne_enclosure(real_result, lo_r, hi_r, fbv_type);
+          else if (is_round_to_away(rounding_mode))
+            bounds =
+              apply_ieee754_rna_enclosure(real_result, lo_r, hi_r, fbv_type);
+          else if (is_round_to_plus_inf(rounding_mode))
+            bounds =
+              apply_ieee754_rup_enclosure(real_result, lo_r, hi_r, fbv_type);
+          else if (is_round_to_minus_inf(rounding_mode))
+            bounds =
+              apply_ieee754_rdn_enclosure(real_result, lo_r, hi_r, fbv_type);
+          else
+            bounds =
+              apply_ieee754_rtz_enclosure(real_result, lo_r, hi_r, fbv_type);
+          ir_ra_interval_map[real_result] = {bounds.first, bounds.second};
+          a = real_result;
+          interval_lifted = true;
+        }
+      }
+      if (!interval_lifted)
+        a = apply_ieee754_semantics(
+          real_result, fbv_type, operand_is_zero, rounding_mode);
     }
     else
     {
@@ -1830,9 +1919,97 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       smt_astt inf_result =
         mk_ite(mk_lt(side1, zero), mk_sub(zero, max_val), max_val);
       smt_astt real_result = mk_div(side1, side2);
-      smt_astt ieee_result = apply_ieee754_semantics(
-        real_result, fbv_type, nullptr, to_ieee_div2t(expr).rounding_mode);
-      a = mk_ite(div_by_zero, inf_result, ieee_result);
+      const expr2tc &rounding_mode = to_ieee_div2t(expr).rounding_mode;
+
+      // RNE/RNA/RUP/RDN/RTZ interval lifting for ieee_div.
+      // Proof-aligned compositional lifting:
+      //   hull([L_x,U_x] / [L_y,U_y]) = [min(qi), max(qi)] for i in {1..4}
+      //   where q1=L_x/L_y, q2=L_x/U_y, q3=U_x/L_y, q4=U_x/U_y.
+      // Admissibility guard: the four-endpoint formula is only sound when
+      // the denominator interval does not contain zero (iv2.lo > 0 or
+      // iv2.hi < 0). When inadmissible, the numerator tracked interval is
+      // preserved and the denominator is used as a point value (conservative
+      // but sound). Both operands use point fallback when fresh.
+      // RNE and RNA share B_near; RUP/RDN/RTZ use B_dir. RTZ is sign-sensitive:
+      // positive hull widens lower only, negative hull widens upper only,
+      // zero-crossing hull uses symmetric B_dir_max fallback.
+      bool interval_lifted = false;
+      if (
+        options.get_bool_option("ir-ieee") &&
+        (is_nearest_rounding_mode(rounding_mode) ||
+         is_round_to_away(rounding_mode) ||
+         is_round_to_plus_inf(rounding_mode) ||
+         is_round_to_minus_inf(rounding_mode) ||
+         is_round_to_zero(rounding_mode)))
+      {
+        auto get_iv = [this](smt_astt t) -> ra_interval_t {
+          auto it = ir_ra_interval_map.find(t);
+          return it != ir_ra_interval_map.end() ? it->second
+                                                : ra_interval_t{t, t};
+        };
+        ra_interval_t iv1 = get_iv(side1);
+        ra_interval_t iv2 = get_iv(side2);
+
+        // Admissibility: denominator interval does not contain zero.
+        smt_astt denom_admissible =
+          mk_or(mk_lt(zero, iv2.lo), mk_lt(iv2.hi, zero));
+
+        // Full four-endpoint hull (sound when denominator is admissible).
+        smt_astt q1 = mk_div(iv1.lo, iv2.lo);
+        smt_astt q2 = mk_div(iv1.lo, iv2.hi);
+        smt_astt q3 = mk_div(iv1.hi, iv2.lo);
+        smt_astt q4 = mk_div(iv1.hi, iv2.hi);
+        smt_astt lo_r_full = mk_ite(
+          mk_le(q1, q2),
+          mk_ite(
+            mk_le(q1, q3),
+            mk_ite(mk_le(q1, q4), q1, q4),
+            mk_ite(mk_le(q3, q4), q3, q4)),
+          mk_ite(
+            mk_le(q2, q3),
+            mk_ite(mk_le(q2, q4), q2, q4),
+            mk_ite(mk_le(q3, q4), q3, q4)));
+        smt_astt hi_r_full = mk_ite(
+          mk_le(q2, q1),
+          mk_ite(
+            mk_le(q3, q1),
+            mk_ite(mk_le(q4, q1), q1, q4),
+            mk_ite(mk_le(q4, q3), q3, q4)),
+          mk_ite(
+            mk_le(q3, q2),
+            mk_ite(mk_le(q4, q2), q2, q4),
+            mk_ite(mk_le(q4, q3), q3, q4)));
+
+        // Fallback hull: point denominator, numerator tracked interval kept.
+        smt_astt d_lo = mk_div(iv1.lo, side2);
+        smt_astt d_hi = mk_div(iv1.hi, side2);
+        smt_astt lo_r_point = mk_ite(mk_le(d_lo, d_hi), d_lo, d_hi);
+        smt_astt hi_r_point = mk_ite(mk_le(d_hi, d_lo), d_lo, d_hi);
+
+        // Guard: use full hull when denominator interval is admissible.
+        smt_astt lo_r = mk_ite(denom_admissible, lo_r_full, lo_r_point);
+        smt_astt hi_r = mk_ite(denom_admissible, hi_r_full, hi_r_point);
+
+        std::pair<smt_astt, smt_astt> bounds =
+          is_nearest_rounding_mode(rounding_mode)
+            ? apply_ieee754_rne_enclosure(real_result, lo_r, hi_r, fbv_type)
+          : is_round_to_away(rounding_mode)
+            ? apply_ieee754_rna_enclosure(real_result, lo_r, hi_r, fbv_type)
+          : is_round_to_plus_inf(rounding_mode)
+            ? apply_ieee754_rup_enclosure(real_result, lo_r, hi_r, fbv_type)
+          : is_round_to_minus_inf(rounding_mode)
+            ? apply_ieee754_rdn_enclosure(real_result, lo_r, hi_r, fbv_type)
+            : apply_ieee754_rtz_enclosure(real_result, lo_r, hi_r, fbv_type);
+        a = mk_ite(div_by_zero, inf_result, real_result);
+        ir_ra_interval_map[a] = {bounds.first, bounds.second};
+        interval_lifted = true;
+      }
+      if (!interval_lifted)
+      {
+        smt_astt ieee_result = apply_ieee754_semantics(
+          real_result, fbv_type, nullptr, rounding_mode);
+        a = mk_ite(div_by_zero, inf_result, ieee_result);
+      }
     }
     else
     {
@@ -1913,7 +2090,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     const with2t &with = to_with2t(expr);
 
     // We reach here if we're with'ing a struct, not an array. Or a bool.
-    if (is_struct_type(expr) || is_pointer_type(expr))
+    if (is_struct_type(expr) || is_pointer_type(expr) || is_complex_type(expr))
     {
       unsigned int idx = get_member_name_field(expr->type, with.update_field);
       smt_astt srcval = convert_ast(with.source_value);
@@ -2596,6 +2773,7 @@ smt_sortt smt_convt::convert_sort(const type2tc &type)
     result = boolean_sort;
     break;
 
+  case type2t::complex_id:
   case type2t::struct_id:
     result = tuple_api->mk_struct_sort(type);
     break;
@@ -2757,8 +2935,19 @@ smt_astt smt_convt::convert_terminal(const expr2tc &expr)
     const constant_floatbv2t &thereal = to_constant_floatbv2t(expr);
     if (int_encoding)
     {
-      std::string val = thereal.value.to_expr().value().as_string();
-      std::string result = fixed_point(val, thereal.value.spec.width());
+      if (
+        thereal.value.is_zero() || thereal.value.is_NaN() ||
+        thereal.value.is_infinity())
+        return mk_smt_real("0");
+      BigInt frac, exp;
+      thereal.value.extract_base2(frac, exp);
+      std::string result;
+      if (exp >= 0)
+        result = integer2string(frac * power(2, exp));
+      else
+        result = integer2string(frac) + "/" + integer2string(power(2, -exp));
+      if (thereal.value.get_sign())
+        result = "-" + result;
       return mk_smt_real(result);
     }
 
@@ -3060,8 +3249,55 @@ smt_astt smt_convt::convert_member(const expr2tc &expr)
     expr2tc to_bv =
       bitcast2tc(get_uint_type(size.to_uint64()), member.source_value);
     type2tc type = expr->type;
-    if (is_multi_dimensional_array(type))
-      type = flatten_array_type(type);
+
+    // For array members, use byte_extract so that endianness is respected.
+    // concat2tc(T, A, B) places A in the high bits; stitch accordingly.
+    if (is_array_type(type))
+    {
+      if (is_multi_dimensional_array(type))
+        type = flatten_array_type(type);
+
+      const bool big_endian =
+        (config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN);
+      const array_type2t &arr = to_array_type(type);
+      const unsigned int elem_bits = arr.subtype->get_width();
+      const unsigned int elem_bytes = elem_bits / 8;
+      const unsigned int num_elems = size.to_uint64() / elem_bits;
+      const type2tc bytetype = get_uint8_type();
+
+      std::vector<expr2tc> elems;
+      elems.reserve(num_elems);
+      for (unsigned int i = 0; i < num_elems; i++)
+      {
+        // Collect elem_bytes bytes for this element.
+        std::vector<expr2tc> raw_bytes;
+        raw_bytes.reserve(elem_bytes);
+        for (unsigned int j = 0; j < elem_bytes; j++)
+          raw_bytes.push_back(byte_extract2tc(
+            bytetype, to_bv, gen_ulong(i * elem_bytes + j), big_endian));
+
+        // Stitch bytes into one value.  big-endian: byte 0 at MSB (forward
+        // accumulation); little-endian: byte 0 at LSB (reverse accumulation).
+        expr2tc val;
+        if (big_endian)
+        {
+          val = raw_bytes[0];
+          for (unsigned int j = 1; j < elem_bytes; j++)
+            val = concat2tc(
+              get_uint_type(val->type->get_width() + 8), val, raw_bytes[j]);
+        }
+        else
+        {
+          val = raw_bytes[elem_bytes - 1];
+          for (int j = (int)elem_bytes - 2; j >= 0; j--)
+            val = concat2tc(
+              get_uint_type(val->type->get_width() + 8), val, raw_bytes[j]);
+        }
+        elems.push_back(bitcast2tc(arr.subtype, val));
+      }
+      return convert_ast(constant_array2tc(type, elems));
+    }
+
     return convert_ast(bitcast2tc(
       type,
       typecast2tc(
@@ -3070,6 +3306,7 @@ smt_astt smt_convt::convert_member(const expr2tc &expr)
 
   assert(
     is_struct_type(member.source_value) ||
+    is_complex_type(member.source_value) ||
     is_pointer_type(member.source_value));
   unsigned int idx =
     get_member_name_field(member.source_value->type, member.member);
@@ -3863,6 +4100,7 @@ expr2tc smt_convt::get_by_ast(const type2tc &type, smt_astt a)
     }
     return constant_floatbv2tc(fp_api->get_fpbv(a));
 
+  case type2t::complex_id:
   case type2t::struct_id:
   case type2t::pointer_id:
     return tuple_api->tuple_get(type, a);
@@ -4086,6 +4324,7 @@ expr2tc smt_convt::get_by_type(const expr2tc &expr)
   case type2t::array_id:
     return get_array(expr);
 
+  case type2t::complex_id:
   case type2t::struct_id:
   case type2t::pointer_id:
     return tuple_api->tuple_get(expr);
