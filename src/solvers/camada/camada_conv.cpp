@@ -132,9 +132,8 @@ public:
 private:
   static z3::solver make_solver(z3::context &c)
   {
-    return (z3::tactic(c, "simplify") & z3::tactic(c, "solve-eqs") &
-            z3::tactic(c, "simplify") & z3::tactic(c, "smt"))
-      .mk_solver();
+    z3::set_param("tactic.default_tactic", "smt");
+    return z3::solver(c);
   }
 };
 #endif
