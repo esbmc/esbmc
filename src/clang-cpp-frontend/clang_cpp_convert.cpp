@@ -135,6 +135,7 @@ bool clang_cpp_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
   case clang::Decl::ClassTemplatePartialSpecialization:
   case clang::Decl::VarTemplatePartialSpecialization:
   case clang::Decl::Using:
+  case clang::Decl::UsingEnum:
   case clang::Decl::UsingShadow:
   case clang::Decl::UsingDirective:
   case clang::Decl::TypeAlias:
@@ -582,7 +583,10 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
       new_expr = gen_zero(gen_pointer_type(t));
     }
-    else if (get_cast_expr(cast, new_expr))
+    // Route every other dynamic_cast through build_dynamic_cast rather
+    // than get_cast_expr — get_cast_expr now rejects CK_Dynamic since the
+    // C frontend cannot perform the runtime check the cast requires.
+    else if (build_dynamic_cast(cast, new_expr))
       return true;
 
     break;

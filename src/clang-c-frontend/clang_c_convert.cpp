@@ -2508,6 +2508,25 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   {
     const clang::IfStmt &ifstmt = static_cast<const clang::IfStmt &>(stmt);
 
+    // C++23 `if consteval` / `if !consteval` carries no condition in the AST.
+    // At runtime the consteval branch is never taken, so lower to the
+    // runtime-active branch only (or skip entirely).
+    if (ifstmt.isConsteval())
+    {
+      const clang::Stmt *runtime_branch =
+        ifstmt.isNegatedConsteval() ? ifstmt.getThen() : ifstmt.getElse();
+
+      if (runtime_branch != nullptr)
+      {
+        if (get_expr(*runtime_branch, new_expr))
+          return true;
+        convert_expression_to_code(new_expr);
+      }
+      else
+        new_expr = code_skipt();
+      break;
+    }
+
     const clang::Stmt *cond_expr = ifstmt.getConditionVariableDeclStmt();
     if (cond_expr == nullptr)
       cond_expr = ifstmt.getCond();
@@ -3210,7 +3229,6 @@ bool clang_c_convertert::get_cast_expr(
   }
 
   case clang::CK_BaseToDerived:
-  case clang::CK_Dynamic:
 
   case clang::CK_UserDefinedConversion:
   case clang::CK_ConstructorConversion:
@@ -3318,6 +3336,17 @@ bool clang_c_convertert::get_cast_expr(
     expr = complex_expr;
     break;
   }
+
+  case clang::CK_Dynamic:
+    // Unreachable: clang_cpp_convertert::get_expr intercepts every
+    // CXXDynamicCastExpr at CXXDynamicCastExprClass and routes it to
+    // build_dynamic_cast. C source cannot produce CK_Dynamic at all, so
+    // landing here means a programmer wired CXXDynamicCastExpr into
+    // get_cast_expr — an invariant violation, not a user-facing error.
+    assert(
+      !"CK_Dynamic must be handled in the C++ frontend's "
+      "CXXDynamicCastExprClass arm");
+    abort();
 
   default:
   {

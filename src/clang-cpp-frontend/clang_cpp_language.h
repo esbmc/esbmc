@@ -41,6 +41,9 @@ protected:
   std::string internal_additions() override;
   void force_file_type(std::vector<std::string> &compiler_args) override;
   void build_include_args(std::vector<std::string> &compiler_args) override;
+
+private:
+  void set_language_version();
 };
 
 languaget *new_clang_cpp_language();

@@ -60,19 +60,17 @@ protected:
   void expand_function_call(
     goto_programt &dest,
     goto_programt::targett &target,
-    const exprt &lhs,
-    const exprt &function,
-    const exprt::operandst &arguments,
-    const exprt &constrain,
+    const expr2tc &lhs,
+    const expr2tc &function,
+    const std::vector<expr2tc> &arguments,
     bool recursive);
 
-  void
-  replace_return(goto_programt &body, const exprt &lhs, const exprt &constrain);
+  void replace_return(goto_programt &body, const expr2tc &lhs);
 
   void parameter_assignments(
     const locationt &location,
     const code_typet &code_type,
-    const exprt::operandst &arguments,
+    const std::vector<expr2tc> &arguments,
     goto_programt &dest);
 
   typedef std::unordered_set<irep_idt, irep_id_hash> recursion_sett;
