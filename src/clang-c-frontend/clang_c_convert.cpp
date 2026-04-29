@@ -3229,7 +3229,6 @@ bool clang_c_convertert::get_cast_expr(
   }
 
   case clang::CK_BaseToDerived:
-  case clang::CK_Dynamic:
 
   case clang::CK_UserDefinedConversion:
   case clang::CK_ConstructorConversion:
@@ -3337,6 +3336,17 @@ bool clang_c_convertert::get_cast_expr(
     expr = complex_expr;
     break;
   }
+
+  case clang::CK_Dynamic:
+    // Unreachable: clang_cpp_convertert::get_expr intercepts every
+    // CXXDynamicCastExpr at CXXDynamicCastExprClass and routes it to
+    // build_dynamic_cast. C source cannot produce CK_Dynamic at all, so
+    // landing here means a programmer wired CXXDynamicCastExpr into
+    // get_cast_expr — an invariant violation, not a user-facing error.
+    assert(
+      !"CK_Dynamic must be handled in the C++ frontend's "
+      "CXXDynamicCastExprClass arm");
+    abort();
 
   default:
   {
