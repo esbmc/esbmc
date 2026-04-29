@@ -140,20 +140,32 @@ void clang_c_adjust::adjust_expr(exprt &expr)
     const typet &t = ns.follow(expr.type());
     /* can't be an initializer of an incomplete type, it's not allowed by C */
     assert(!t.incomplete());
-    /* adjust_type() above may have added padding members.
-     * Adjust the init expression accordingly. */
     const struct_union_typet::componentst &new_comp =
       to_struct_union_type(t).components();
     exprt::operandst &ops = expr.operands();
-    for (size_t i = 0; i < new_comp.size(); i++)
+    if (ops.size() < new_comp.size())
     {
-      const struct_union_typet::componentt &c = new_comp[i];
-      if (c.get_is_padding())
+      /* adjust_type() above may have added padding members.
+       * Adjust the init expression accordingly. */
+      for (size_t i = 0; i < new_comp.size(); i++)
       {
-        // TODO: should we initialize pads with nondet values?
-        ops.insert(ops.begin() + i, gen_zero(c.type()));
+        const struct_union_typet::componentt &c = new_comp[i];
+        if (c.get_is_padding())
+        {
+          // TODO: should we initialize pads with nondet values?
+          ops.insert(ops.begin() + i, gen_zero(c.type()));
+        }
+        adjust_expr(ops[i]);
       }
-      adjust_expr(ops[i]);
+    }
+    else
+    {
+      /* Padding already present — the struct expression was re-adjusted
+       * (e.g. adjust_operands followed by a second adjust_expr on the
+       * same node).  Skip insertion; just recursively adjust in place. */
+      assert(ops.size() == new_comp.size());
+      for (auto &op : ops)
+        adjust_expr(op);
     }
     assert(new_comp.size() == ops.size());
   }
