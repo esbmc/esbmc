@@ -1412,6 +1412,29 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   }
   }
 
+  // Extend the narrower BV operand when the two sides have mismatched widths.
+  // This can arise from the frontend emitting case constants with a wider
+  // integer type than the switch discriminant (e.g. enum class E : uint8_t
+  // with case values typed as int).
+  auto align_bv_widths = [this](
+                           smt_astt &lhs,
+                           const expr2tc &lhs_expr,
+                           smt_astt &rhs,
+                           const expr2tc &rhs_expr) {
+    if (
+      int_encoding || !is_bv_type(lhs_expr) || !is_bv_type(rhs_expr) ||
+      lhs->sort->id != SMT_SORT_BV || rhs->sort->id != SMT_SORT_BV)
+      return;
+    unsigned lw = lhs->sort->get_data_width();
+    unsigned rw = rhs->sort->get_data_width();
+    if (lw < rw)
+      lhs = is_signedbv_type(lhs_expr) ? mk_sign_ext(lhs, rw - lw)
+                                       : mk_zero_ext(lhs, rw - lw);
+    else if (rw < lw)
+      rhs = is_signedbv_type(rhs_expr) ? mk_sign_ext(rhs, lw - rw)
+                                       : mk_zero_ext(rhs, lw - rw);
+  };
+
   smt_astt a;
   switch (expr->expr_id)
   {
@@ -2322,26 +2345,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       a = fp_api->mk_smt_fpbv_eq(args[0], args[1]);
     else
     {
-      if (
-        !int_encoding && is_bv_type(eq.side_1) && is_bv_type(eq.side_2) &&
-        args[0]->sort->id == SMT_SORT_BV && args[1]->sort->id == SMT_SORT_BV &&
-        args[0]->sort->get_data_width() != args[1]->sort->get_data_width())
-      {
-        unsigned w = std::max(
-          args[0]->sort->get_data_width(), args[1]->sort->get_data_width());
-        if (args[0]->sort->get_data_width() < w)
-        {
-          unsigned ext = w - args[0]->sort->get_data_width();
-          args[0] = is_signedbv_type(eq.side_1) ? mk_sign_ext(args[0], ext)
-                                                 : mk_zero_ext(args[0], ext);
-        }
-        else
-        {
-          unsigned ext = w - args[1]->sort->get_data_width();
-          args[1] = is_signedbv_type(eq.side_2) ? mk_sign_ext(args[1], ext)
-                                                 : mk_zero_ext(args[1], ext);
-        }
-      }
+      align_bv_widths(args[0], eq.side_1, args[1], eq.side_2);
       a = args[0]->eq(this, args[1]);
     }
     break;
@@ -2359,26 +2363,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       a = fp_api->mk_smt_fpbv_eq(args[0], args[1]);
     else
     {
-      if (
-        !int_encoding && is_bv_type(neq.side_1) && is_bv_type(neq.side_2) &&
-        args[0]->sort->id == SMT_SORT_BV && args[1]->sort->id == SMT_SORT_BV &&
-        args[0]->sort->get_data_width() != args[1]->sort->get_data_width())
-      {
-        unsigned w = std::max(
-          args[0]->sort->get_data_width(), args[1]->sort->get_data_width());
-        if (args[0]->sort->get_data_width() < w)
-        {
-          unsigned ext = w - args[0]->sort->get_data_width();
-          args[0] = is_signedbv_type(neq.side_1) ? mk_sign_ext(args[0], ext)
-                                                  : mk_zero_ext(args[0], ext);
-        }
-        else
-        {
-          unsigned ext = w - args[1]->sort->get_data_width();
-          args[1] = is_signedbv_type(neq.side_2) ? mk_sign_ext(args[1], ext)
-                                                  : mk_zero_ext(args[1], ext);
-        }
-      }
+      align_bv_widths(args[0], neq.side_1, args[1], neq.side_2);
       a = args[0]->eq(this, args[1]);
     }
     a = mk_not(a);
