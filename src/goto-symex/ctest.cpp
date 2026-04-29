@@ -257,12 +257,13 @@ std::string ctest_generator::fingerprint(const std::vector<test_variable> &tc)
   for (const auto &[verifier_type, values] : type_values)
   {
     fp += verifier_type;
-    fp += ':';
-    for (size_t i = 0; i < values.size(); ++i)
+    fp += '[';
+    fp += std::to_string(values.size());
+    fp += ']';
+    for (const auto &v : values)
     {
-      if (i > 0)
-        fp += ',';
-      fp += values[i];
+      fp += ':';
+      fp += v;
     }
     fp += ';';
   }
@@ -520,11 +521,8 @@ void ctest_generator::generate() const
   bool cpp_mode = is_cpp_source(source_file);
   std::string test_ext = cpp_mode ? ".cpp" : ".c";
 
-  // Absolute deduplication at the output stage.
-  // test_cases has every counterexample collect() received;
-  // regardless of which coverage command produced them (branch, condition, assertion),
-  // two cases with the same (type, value) sequence
-  // compile to byte identical test files, so keep only the first occurrence.
+  // Deduplicate before writing: keep the first case with each per-type value
+  // sequence (cross-type interleaving is irrelevant to the generated files).
   std::unordered_set<std::string> seen;
   std::vector<size_t> unique_indices;
   unique_indices.reserve(test_cases.size());

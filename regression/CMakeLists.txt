@@ -198,6 +198,7 @@ if(APPLE)
                     ${REGRESSIONS_CPP11}
                     ${REGRESSIONS_CPP14}
                     ${REGRESSIONS_CPP17}
+                    ${REGRESSIONS_CPP20}
                     extensions
                     ${REGRESSIONS_CHERI}
                     ${REGRESSIONS_PYTHON}
