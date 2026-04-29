@@ -2321,7 +2321,29 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       is_floatbv_type(eq.side_1) && is_floatbv_type(eq.side_2) && !int_encoding)
       a = fp_api->mk_smt_fpbv_eq(args[0], args[1]);
     else
+    {
+      if (
+        !int_encoding && is_bv_type(eq.side_1) && is_bv_type(eq.side_2) &&
+        args[0]->sort->id == SMT_SORT_BV && args[1]->sort->id == SMT_SORT_BV &&
+        args[0]->sort->get_data_width() != args[1]->sort->get_data_width())
+      {
+        unsigned w = std::max(
+          args[0]->sort->get_data_width(), args[1]->sort->get_data_width());
+        if (args[0]->sort->get_data_width() < w)
+        {
+          unsigned ext = w - args[0]->sort->get_data_width();
+          args[0] = is_signedbv_type(eq.side_1) ? mk_sign_ext(args[0], ext)
+                                                 : mk_zero_ext(args[0], ext);
+        }
+        else
+        {
+          unsigned ext = w - args[1]->sort->get_data_width();
+          args[1] = is_signedbv_type(eq.side_2) ? mk_sign_ext(args[1], ext)
+                                                 : mk_zero_ext(args[1], ext);
+        }
+      }
       a = args[0]->eq(this, args[1]);
+    }
     break;
   }
   case expr2t::notequal_id:
@@ -2336,7 +2358,29 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       !int_encoding)
       a = fp_api->mk_smt_fpbv_eq(args[0], args[1]);
     else
+    {
+      if (
+        !int_encoding && is_bv_type(neq.side_1) && is_bv_type(neq.side_2) &&
+        args[0]->sort->id == SMT_SORT_BV && args[1]->sort->id == SMT_SORT_BV &&
+        args[0]->sort->get_data_width() != args[1]->sort->get_data_width())
+      {
+        unsigned w = std::max(
+          args[0]->sort->get_data_width(), args[1]->sort->get_data_width());
+        if (args[0]->sort->get_data_width() < w)
+        {
+          unsigned ext = w - args[0]->sort->get_data_width();
+          args[0] = is_signedbv_type(neq.side_1) ? mk_sign_ext(args[0], ext)
+                                                  : mk_zero_ext(args[0], ext);
+        }
+        else
+        {
+          unsigned ext = w - args[1]->sort->get_data_width();
+          args[1] = is_signedbv_type(neq.side_2) ? mk_sign_ext(args[1], ext)
+                                                  : mk_zero_ext(args[1], ext);
+        }
+      }
       a = args[0]->eq(this, args[1]);
+    }
     a = mk_not(a);
     break;
   }
