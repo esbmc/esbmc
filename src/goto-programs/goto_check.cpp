@@ -1,8 +1,10 @@
 #include <goto-programs/goto_check.h>
+#include <cctype>
 #include <util/c_expr2string.h>
 #include <util/arith_tools.h>
 #include <util/array_name.h>
 #include <util/base_type.h>
+#include <util/config.h>
 #include <util/expr_util.h>
 #include <util/guard.h>
 #include <util/i2string.h>
@@ -275,6 +277,48 @@ void goto_checkt::cast_overflow_check(
     guard);
 }
 
+/// Returns true when the left operand `e1` of a left-shift is provably
+/// non-negative from its expression shape alone (no symbolic reasoning).
+/// Covers the firmware/protocol byte-deserialisation idioms that
+/// produced false positives under the strict pre-C++20 shl rule:
+///   - operand has unsigned bit-vector type;
+///   - operand is an integer *widening* promotion of an unsigned-typed
+///     sub-expression (e.g. `int(uint8_t)` after the standard promotion
+///     of `buf[i]`). Same-width or narrowing casts are rejected because
+///     a narrower destination can hold a negative value even when the
+///     source type is unsigned (e.g. `int(uint64_t(-1)) == -1`);
+///   - operand is a non-negative integer constant.
+/// Other shapes (signed `int` symbols, arithmetic on signed values, etc.)
+/// fall through and the caller keeps the overflow claim. This errs on
+/// the side of soundness — a flagged-but-defined shift is a false
+/// positive, never a missed bug.
+///
+/// TODO(layer 2): hook into `--interval-analysis` so a path-qualified
+/// signed `int` known to be `>= 0` (e.g. inside `if (x > 0) { x << 1; }`)
+/// gets the skip too. The value-range table is populated at symex time,
+/// while this check runs at goto-conversion time — closing that phase
+/// gap is the follow-up. Until then the limitation stands; symbolic
+/// non-negativity reasoning is deferred.
+static bool shl_E1_is_known_nonneg(const expr2tc &e1)
+{
+  if (is_unsignedbv_type(e1->type))
+    return true;
+
+  if (is_typecast2t(e1))
+  {
+    const expr2tc &from = to_typecast2t(e1).from;
+    if (
+      is_unsignedbv_type(from->type) &&
+      from->type->get_width() < e1->type->get_width())
+      return true;
+  }
+
+  if (is_constant_int2t(e1) && !to_constant_int2t(e1).value.is_negative())
+    return true;
+
+  return false;
+}
+
 void goto_checkt::overflow_check(
   const expr2tc &expr,
   const guardt &guard,
@@ -304,6 +348,35 @@ void goto_checkt::overflow_check(
   // Don't check pointer overflow
   if (is_pointer_type(*expr->get_sub_expr(0)))
     return;
+
+  // C++20 [expr.shift]/2, as rewritten by P0907 ("Signed integers are
+  // two's complement"), defines the value of `E1 << E2` as the unique
+  // value congruent to `E1 * 2^E2` modulo `2^N`, where `N` is the width
+  // of the result type, *for unsigned `E1` and for signed `E1` with a
+  // non-negative value*. The pre-P0907 "result must be representable in
+  // the result type, otherwise UB" clause was removed: under C++20+,
+  // a signed-`E1` shift whose mathematical product exceeds the signed
+  // range is no longer UB -- the result is the modular value, and the
+  // surrounding cast (e.g. `static_cast<uint32_t>(byte << 24)` in
+  // firmware byte deserialisers) recovers the intended bit pattern.
+  //
+  // The single remaining UB clause is "the behavior is undefined if E1
+  // is negative". The `shl_E1_is_known_nonneg` predicate isolates the
+  // shapes where E1 is provably non-negative; only there does the
+  // arithmetic-overflow claim get suppressed. For signed `E1` that may
+  // be negative the predicate falls through and the claim is preserved,
+  // and `--ub-shift-check` additionally pins the negative-`E1` case
+  // (orthogonal to this site, see goto_checkt::shift_check). Pre-C++20
+  // standards keep the original strict behaviour via
+  // `is_cxx20_or_later`.
+  if (is_shl2t(expr))
+  {
+    const expr2tc &E1 = *expr->get_sub_expr(0);
+    if (
+      is_signedbv_type(E1) && config.language.cpp_std >= cxx_stdt::cpp20 &&
+      shl_E1_is_known_nonneg(E1))
+      return;
+  }
 
   // add overflow subgoal
   expr2tc overflow =
