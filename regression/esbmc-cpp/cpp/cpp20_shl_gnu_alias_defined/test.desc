@@ -1,0 +1,4 @@
+CORE
+main.cpp
+--std gnu++20 --overflow-check
+^VERIFICATION SUCCESSFUL$

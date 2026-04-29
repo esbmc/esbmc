@@ -1619,8 +1619,11 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     if (const auto nns = decl.getQualifier())
     {
 #if CLANG_VERSION_MAJOR >= 22
-      if (const auto type = nns.getAsType())
+      // Clang 22's NestedNameSpecifier::getAsType() asserts on non-Type
+      // qualifiers (e.g. namespaces), so check the kind first.
+      if (nns.getKind() == clang::NestedNameSpecifier::Kind::Type)
       {
+        const auto type = nns.getAsType();
         assert(!nns.isDependent());
 #else
       if (const auto type = nns->getAsType())
@@ -2504,6 +2507,25 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   case clang::Stmt::IfStmtClass:
   {
     const clang::IfStmt &ifstmt = static_cast<const clang::IfStmt &>(stmt);
+
+    // C++23 `if consteval` / `if !consteval` carries no condition in the AST.
+    // At runtime the consteval branch is never taken, so lower to the
+    // runtime-active branch only (or skip entirely).
+    if (ifstmt.isConsteval())
+    {
+      const clang::Stmt *runtime_branch =
+        ifstmt.isNegatedConsteval() ? ifstmt.getThen() : ifstmt.getElse();
+
+      if (runtime_branch != nullptr)
+      {
+        if (get_expr(*runtime_branch, new_expr))
+          return true;
+        convert_expression_to_code(new_expr);
+      }
+      else
+        new_expr = code_skipt();
+      break;
+    }
 
     const clang::Stmt *cond_expr = ifstmt.getConditionVariableDeclStmt();
     if (cond_expr == nullptr)
