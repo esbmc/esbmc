@@ -2491,7 +2491,7 @@ typet migrate_type_back(const type2tc &ref)
     }
 
     typet ret;
-    ret.swap((irept &)thetype);
+    ret.swap(thetype);
     return ret;
   }
   default:
