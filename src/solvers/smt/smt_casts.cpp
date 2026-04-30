@@ -426,7 +426,7 @@ smt_astt smt_convt::convert_typecast_to_ptr(const typecast2t &cast)
   unsigned int i;
   for (it = addr_space_data.back().begin(), i = 0;
        it != addr_space_data.back().end();
-       it++, i++)
+       ++it, i++)
   {
     unsigned id = it->first;
     obj_ids[i] = convert_terminal(constant_int2tc(int_type, BigInt(id)));
