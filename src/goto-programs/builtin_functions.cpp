@@ -401,7 +401,7 @@ void goto_convertt::cpp_new_initializer(
   }
   else
   {
-    initializer = (code_expressiont &)rhs.initializer();
+    initializer = static_cast<const code_expressiont &>(rhs.initializer());
 
     if (!initializer.op0().get_bool("constructor"))
     {
