@@ -1574,6 +1574,57 @@ bool clang_c_convertert::get_bitfield_type(
   return false;
 }
 
+// Flatten Clang's InitListExpr for a struct into a linear sequence of Expr*
+// that matches ESBMC's flat component layout.
+//
+// In C++17/20, aggregate-initializing a derived struct `struct D : B { ... }`
+// produces an InitListExpr where the first sub-expressions are themselves
+// InitListExprs for each base-class sub-object.  ESBMC's IR instead pulls all
+// base-class components into D's own component list (see
+// get_base_components_methods).  This helper recursively expands base-class
+// sub-object InitListExprs so that the resulting flat_inits vector is
+// element-for-element with ESBMC's component list.
+//
+// Note: get_base_components_methods uses an alphabetically-ordered base_map,
+// so for multiple-inheritance the component order may not match declaration
+// order.  Single-inheritance (the common case) is unaffected.
+static void get_base_flattened_inits(
+  const clang::InitListExpr &init,
+  std::vector<const clang::Expr *> &flat)
+{
+  const auto *cxxrd = init.getType()->getAsCXXRecordDecl();
+  if (!cxxrd || cxxrd->getNumBases() == 0)
+  {
+    for (unsigned j = 0, n = init.getNumInits(); j < n; ++j)
+      flat.push_back(init.getInit(j));
+    return;
+  }
+
+  for (unsigned j = 0, n = init.getNumInits(); j < n; ++j)
+  {
+    const clang::Expr *e = init.getInit(j);
+    const clang::Type *etype = e->getType().getCanonicalType().getTypePtr();
+    bool is_base = llvm::any_of(
+      cxxrd->bases(), [&](const clang::CXXBaseSpecifier &base) {
+        return base.getType().getCanonicalType().getTypePtr() == etype;
+      });
+    if (is_base)
+    {
+      if (const auto *nested = llvm::dyn_cast<clang::InitListExpr>(e))
+      {
+        get_base_flattened_inits(*nested, flat);
+        continue;
+      }
+      log_warning(
+        "clang-c-frontend",
+        "base-class initializer is not an InitListExpr; "
+        "flat initializer may be misaligned for type {}",
+        e->getType().getAsString());
+    }
+    flat.push_back(e);
+  }
+}
+
 bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 {
   locationt location;
@@ -2240,7 +2291,13 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
        * padding is taken care of later in adjust() */
       inits = gen_zero(t);
 
-      unsigned int num = init_stmt.getNumInits();
+      // In C++17/20 aggregate-init of a derived struct, Clang places one
+      // InitListExpr per base-class sub-object, but ESBMC's IR flattens all
+      // base-class components into the struct. Flatten before matching.
+      std::vector<const clang::Expr *> flat_inits;
+      get_base_flattened_inits(init_stmt, flat_inits);
+
+      unsigned int num = static_cast<unsigned>(flat_inits.size());
       for (unsigned int i = 0, j = 0; (i < inits.operands().size() && j < num);
            ++i)
       {
@@ -2255,7 +2312,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
         // Get the value being initialized
         exprt init;
-        if (get_expr(*init_stmt.getInit(j++), init))
+        if (get_expr(*flat_inits[j++], init))
           return true;
 
         typet elem_type;
