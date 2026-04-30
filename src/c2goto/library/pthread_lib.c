@@ -776,29 +776,12 @@ __ESBMC_HIDE:;
     key != NULL,
     "In pthread_key_create, key parameter must be different than NULL.");
   // the value NULL shall be associated with the new key in all active threads
-  int result = insert_key_value(__ESBMC_next_thread_key, NULL);
+  insert_key_value(__ESBMC_next_thread_key, NULL);
   __ESBMC_thread_key_destructors[__ESBMC_next_thread_key] = destructor;
   // store the newly created key value at *key
   *key = __ESBMC_next_thread_key++;
-  // check whether we have failed to insert the key into our list.
-  if (result < 0)
-  {
-    if (nondet_bool())
-    {
-      // Insufficient memory exists to create the key.
-      result = ENOMEM;
-    }
-    else
-    {
-      // The system lacked the necessary resources
-      // to create another thread-specific data key, or
-      // the system-imposed limit on the total number of
-      // keys per process {PTHREAD_KEYS_MAX} has been exceeded.
-      result = EAGAIN;
-    }
-  }
   __ESBMC_atomic_end();
-  return result;
+  return 0;
 }
 
 // The pthread_getspecific() function shall return
