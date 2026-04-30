@@ -1,4 +1,5 @@
 # Operational model for collections module
+# pylint: disable=function-redefined  # intentional stdlib shadow for ESBMC models
 
 from typing import Any, Optional
 
