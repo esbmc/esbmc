@@ -2478,7 +2478,7 @@ typet migrate_type_back(const type2tc &ref)
     if (ref2.template_args.size() != 0)
     {
       exprt args("template_args");
-      exprt &arglist = (exprt &)args.add("arguments");
+      exprt &arglist = static_cast<exprt &>(args.add("arguments"));
       for (auto const &it : ref2.template_args)
       {
         typet tmp = migrate_type_back(it);
