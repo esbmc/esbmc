@@ -104,7 +104,6 @@ smt_convt::convert_typecast_to_fixedbv_nonint_from_fixedbv(const expr2tc &expr)
   unsigned to_integer_bits = fbvt.integer_bits;
   unsigned from_fraction_bits = from_fbvt.width - from_fbvt.integer_bits;
   unsigned from_integer_bits = from_fbvt.integer_bits;
-  unsigned from_width = from_fbvt.width;
   smt_astt magnitude, fraction;
   smt_astt a = convert_ast(cast.from);
 
@@ -123,6 +122,7 @@ smt_convt::convert_typecast_to_fixedbv_nonint_from_fixedbv(const expr2tc &expr)
   else
   {
     assert(to_integer_bits > from_integer_bits);
+    unsigned from_width = from_fbvt.width;
     smt_astt ext = mk_extract(a, from_width - 1, from_fraction_bits);
 
     unsigned int additional_bits = to_integer_bits - from_integer_bits;
