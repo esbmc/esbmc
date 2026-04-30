@@ -95,10 +95,7 @@ class Type:
 
 
 class ForwardRef:
-
-    def __class_getitem__(cls, item):
-        """Return cls for generic-alias subscription support."""
-        return cls
+    pass
 
 
 class Union:
