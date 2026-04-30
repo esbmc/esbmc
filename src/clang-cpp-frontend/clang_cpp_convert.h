@@ -504,6 +504,28 @@ protected:
     const switch_table &vtable_value_map);
 
   /*
+   * Lower a C++ dynamic_cast expression. Lives next to the vtable code in
+   * clang_cpp_convert_vft.cpp because the runtime check compares against
+   * vtable variable addresses, which this file already names. Falls back
+   * to a structural typecast for the cases the helper does not yet cover
+   * (void*, dynamic_cast<T&>, virtual inheritance, missing vtable
+   * symbols) so it stays compatible with the legacy CK_Dynamic behaviour
+   * for those.
+   */
+  bool
+  build_dynamic_cast(const clang::CXXDynamicCastExpr &cast, exprt &new_expr);
+
+  /*
+   * Side table populated as we register vtable variables in
+   * add_vtable_variable_symbols: maps a vptr-owning class id (e.g.
+   * "tag-Base") to every concrete class that has a vtable variable for
+   * that vptr. build_dynamic_cast consults it directly instead of walking
+   * every CXXRecordDecl in the TU and probing the symbol table per cast.
+   */
+  std::map<irep_idt, std::vector<const clang::CXXRecordDecl *>>
+    vtable_classes_per_vptr_;
+
+  /*
    * Methods for resolving a clang::MemberExpr to virtual/overriding method
    */
   bool perform_virtual_dispatch(const clang::MemberExpr &member) override;

@@ -77,7 +77,7 @@ bool goto_symext::is_python_exception_subtype(
     std::string base_name = base.id().as_string();
 
     // Remove "tag-" prefix to get the class name
-    if (base_name.find("tag-") == 0)
+    if (base_name.starts_with("tag-"))
       base_name = base_name.substr(4);
 
     // Recursively check if this base class matches or inherits from catch_type
@@ -383,7 +383,7 @@ void goto_symext::update_throw_target(
     // contains the function containing the target instruction.
     goto_symex_statet::call_stackt::reverse_iterator i;
     for (i = cur_state->call_stack.rbegin(); i != cur_state->call_stack.rend();
-         i++)
+         ++i)
     {
       irep_idt id = i->function_identifier.empty() ? "__ESBMC_main"
                                                    : i->function_identifier;

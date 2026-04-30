@@ -35,10 +35,10 @@ void goto_coveraget::replace_all_asserts_to_guard(
       if (filter(f_it->first, goto_program))
         continue;
 
-      std::string cur_filename;
       Forall_goto_program_instructions (it, goto_program)
       {
-        cur_filename = get_filename_from_path(it->location.file().as_string());
+        std::string cur_filename =
+          get_filename_from_path(it->location.file().as_string());
         if (location_pool.count(cur_filename) == 0)
           continue;
 
@@ -97,10 +97,10 @@ void goto_coveraget::replace_all_asserts_to_assume()
       if (filter(f_it->first, goto_program))
         continue;
 
-      std::string cur_filename;
       Forall_goto_program_instructions (it, goto_program)
       {
-        cur_filename = get_filename_from_path(it->location.file().as_string());
+        std::string cur_filename =
+          get_filename_from_path(it->location.file().as_string());
         if (location_pool.count(cur_filename) == 0)
           continue;
 
@@ -157,12 +157,12 @@ void goto_coveraget::branch_function_coverage()
       if (filter(f_it->first, goto_program))
         continue;
 
-      std::string cur_filename;
       bool flg = true;
 
       Forall_goto_program_instructions (it, goto_program)
       {
-        cur_filename = get_filename_from_path(it->location.file().as_string());
+        std::string cur_filename =
+          get_filename_from_path(it->location.file().as_string());
         // skip if it's not the verifying files
         // probably a library
         if (location_pool.count(cur_filename) == 0)
@@ -239,11 +239,10 @@ void goto_coveraget::branch_coverage()
       if (filter(f_it->first, goto_program))
         continue;
 
-      std::string cur_filename;
-
       Forall_goto_program_instructions (it, goto_program)
       {
-        cur_filename = get_filename_from_path(it->location.file().as_string());
+        std::string cur_filename =
+          get_filename_from_path(it->location.file().as_string());
         // skip if it's not the verifying files
         // probably a library
         if (location_pool.count(cur_filename) == 0)
@@ -415,10 +414,10 @@ void goto_coveraget::condition_coverage()
       if (filter(f_it->first, goto_program))
         continue;
 
-      std::string cur_filename;
       Forall_goto_program_instructions (it, goto_program)
       {
-        cur_filename = get_filename_from_path(it->location.file().as_string());
+        std::string cur_filename =
+          get_filename_from_path(it->location.file().as_string());
         if (location_pool.count(cur_filename) == 0)
           continue;
 
@@ -864,10 +863,10 @@ void goto_coveraget::negating_asserts(const std::string &tgt_fname)
       if (filter(f_it->first, goto_program))
         continue;
 
-      std::string cur_filename;
       Forall_goto_program_instructions (it, goto_program)
       {
-        cur_filename = get_filename_from_path(it->location.file().as_string());
+        std::string cur_filename =
+          get_filename_from_path(it->location.file().as_string());
         if (location_pool.count(cur_filename) == 0)
           continue;
 

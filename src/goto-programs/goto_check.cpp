@@ -1199,7 +1199,7 @@ void goto_checkt::goto_check(goto_programt &goto_program)
   for (goto_programt::instructionst::iterator it =
          goto_program.instructions.begin();
        it != goto_program.instructions.end();
-       it++)
+       ++it)
   {
     goto_programt::instructiont &i = *it;
     const locationt &loc = i.location;
@@ -1250,7 +1250,7 @@ void goto_checkt::goto_check(goto_programt &goto_program)
     {
       goto_program.insert_swap(it, new_code.instructions.front());
       new_code.instructions.pop_front();
-      it++;
+      ++it;
     }
   }
 }
