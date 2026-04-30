@@ -60,7 +60,7 @@ void goto_programt::instructiont::output_instruction(
 
     for (instructiont::targetst::const_iterator gt_it = targets.begin();
          gt_it != targets.end();
-         gt_it++)
+         ++gt_it)
     {
       if (gt_it != targets.begin())
         out << ", ";
@@ -363,7 +363,7 @@ void goto_programt::compute_target_numbers()
 
   for (instructionst::iterator it = instructions.begin();
        it != instructions.end();
-       it++)
+       ++it)
   {
     if (it->is_target())
     {

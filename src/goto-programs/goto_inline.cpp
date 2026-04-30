@@ -105,7 +105,7 @@ void goto_inlinet::replace_return(goto_programt &dest, const expr2tc &lhs)
 {
   for (goto_programt::instructionst::iterator it = dest.instructions.begin();
        it != dest.instructions.end();
-       it++)
+       ++it)
   {
     if (!it->is_return())
       continue;
