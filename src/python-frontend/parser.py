@@ -166,8 +166,8 @@ def expand_star_import(module) -> list[str] | None:
 
 
 def get_referenced_names(node):
-    """
-    Find all functions and classes referenced in a function or class definition.
+    """Find all functions and classes referenced in a function or class definition.
+
     Returns a set of names that are called as functions or used in type annotations.
     """
     referenced = set()
