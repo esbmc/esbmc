@@ -1805,11 +1805,11 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     if (expr.statement() == "cpp_new" || expr.statement() == "cpp_new[]")
       // These hide the size in a real size field,
-      migrate_expr((const exprt &)expr.cmt_size(), thesize);
+      migrate_expr(static_cast<const exprt &>(expr.cmt_size()), thesize);
     else if (
       expr.statement() != "nondet" && expr.statement() != "function_call")
       // For everything other than nondet,
-      migrate_expr((const exprt &)expr.cmt_size(), thesize);
+      migrate_expr(static_cast<const exprt &>(expr.cmt_size()), thesize);
 
     type2tc cmt_type = migrate_type((const typet &)expr.cmt_type());
     type2tc plaintype = migrate_type(expr.type());
