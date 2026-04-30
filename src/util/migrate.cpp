@@ -149,7 +149,7 @@ static type2tc migrate_type0(const typet &type)
     }
     else
     {
-      exprt sz = (exprt &)type.find(typet::a_size);
+      exprt sz = static_cast<const exprt &>(type.find(typet::a_size));
       simplify(sz);
       migrate_expr(sz, size);
       size = fixup_containerof_in_sizeof(size);
