@@ -1604,8 +1604,8 @@ static void get_base_flattened_inits(
   {
     const clang::Expr *e = init.getInit(j);
     const clang::Type *etype = e->getType().getCanonicalType().getTypePtr();
-    bool is_base = llvm::any_of(
-      cxxrd->bases(), [&](const clang::CXXBaseSpecifier &base) {
+    bool is_base =
+      llvm::any_of(cxxrd->bases(), [&](const clang::CXXBaseSpecifier &base) {
         return base.getType().getCanonicalType().getTypePtr() == etype;
       });
     if (is_base)
