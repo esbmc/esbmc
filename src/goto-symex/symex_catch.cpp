@@ -77,7 +77,7 @@ bool goto_symext::is_python_exception_subtype(
     std::string base_name = base.id().as_string();
 
     // Remove "tag-" prefix to get the class name
-    if (base_name.find("tag-") == 0)
+    if (base_name.starts_with("tag-"))
       base_name = base_name.substr(4);
 
     // Recursively check if this base class matches or inherits from catch_type

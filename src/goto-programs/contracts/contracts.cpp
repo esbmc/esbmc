@@ -692,7 +692,7 @@ void code_contractst::havoc_static_globals(
 
     // Skip internal ESBMC symbols
     std::string sym_name = id2string(s.name);
-    if (sym_name.find("__ESBMC_") == 0)
+    if (sym_name.starts_with("__ESBMC_"))
       return;
 
     // Build LHS symbol expression
