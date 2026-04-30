@@ -221,7 +221,7 @@ uint64_t esbmc_parseoptionst::read_time_spec(std::string_view str)
 // this method throws an error.
 //
 // \param str - string representation of a memory limit,
-// \return - number of megabytes that represents the input string value.
+// \return - number of bytes that represents the input string value.
 uint64_t esbmc_parseoptionst::read_mem_spec(std::string_view str)
 {
   if (str.empty())
