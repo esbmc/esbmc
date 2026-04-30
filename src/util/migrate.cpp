@@ -1811,7 +1811,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
       // For everything other than nondet,
       migrate_expr(static_cast<const exprt &>(expr.cmt_size()), thesize);
 
-    type2tc cmt_type = migrate_type((const typet &)expr.cmt_type());
+    type2tc cmt_type = migrate_type(static_cast<const typet &>(expr.cmt_type()));
     type2tc plaintype = migrate_type(expr.type());
 
     sideeffect2t::allockind t;
