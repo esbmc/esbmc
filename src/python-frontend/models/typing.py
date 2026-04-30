@@ -94,6 +94,10 @@ class Type:
         return cls
 
 
+class ForwardRef:
+    pass
+
+
 class Union:
 
     def __class_getitem__(cls, item):
