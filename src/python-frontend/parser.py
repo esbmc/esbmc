@@ -202,14 +202,16 @@ module_imports = {}
 
 
 def process_imports(node, output_dir):
-    """
-    Process import statements in the AST node.
+    """Process import statements in the AST node.
 
-    Parameters:
-        - node: The import node to process.
-        - output_dir: The directory to save the generated JSON files.
-    """
+    Parameters
+    ----------
+    node
+        The import node to process.
+    output_dir
+        The directory to save the generated JSON files.
 
+    """
     if isinstance(node, (ast.Import)):
         module_names = []
         for alias_node in node.names:
