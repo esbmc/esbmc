@@ -383,7 +383,7 @@ void goto_symext::update_throw_target(
     // contains the function containing the target instruction.
     goto_symex_statet::call_stackt::reverse_iterator i;
     for (i = cur_state->call_stack.rbegin(); i != cur_state->call_stack.rend();
-         i++)
+         ++i)
     {
       irep_idt id = i->function_identifier.empty() ? "__ESBMC_main"
                                                    : i->function_identifier;
