@@ -199,7 +199,7 @@ static type2tc migrate_type0(const typet &type)
 
     for (const auto &comp : comps)
     {
-      type2tc ref = migrate_type((const typet &)comp.type());
+      type2tc ref = migrate_type(comp.type());
 
       members.push_back(ref);
       names.push_back(comp.get(typet::a_name));
@@ -225,7 +225,7 @@ static type2tc migrate_type0(const typet &type)
 
     for (const auto &comp : comps)
     {
-      type2tc ref = migrate_type((const typet &)comp.type());
+      type2tc ref = migrate_type(comp.type());
 
       members.push_back(ref);
       names.push_back(comp.get(typet::a_name));
@@ -263,7 +263,7 @@ static type2tc migrate_type0(const typet &type)
 
     for (const auto &comp : comps)
     {
-      type2tc ref = migrate_type((const typet &)comp.type());
+      type2tc ref = migrate_type(comp.type());
 
       members.push_back(ref);
       names.push_back(comp.get(typet::a_name));
