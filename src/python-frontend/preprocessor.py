@@ -1742,8 +1742,10 @@ class Preprocessor(ast.NodeTransformer):
 
     def _lower_assert_eq_literal(self, test_node, source_node):
         # Disabled by default: this optimization introduced broad semantic/type
-        # inference drift across regression suites. Keep original assert shape.
-        return [], test_node
+        # inference drift across regression suites. Keep original assert shape
+        # unless explicitly enabled for focused experiments.
+        if not getattr(self, "_enable_assert_eq_literal_lowering", False):
+            return [], test_node
 
         if not (
             isinstance(test_node, ast.Compare)
@@ -5239,9 +5241,7 @@ class Preprocessor(ast.NodeTransformer):
             constructed object gets a fresh value.
         """
         if not isinstance(default_value, ast.Call):
-            return default_value, None, self._field_spec(
-                "", None, default_value, None, "instance", {}
-            )
+            return default_value, None, {}
 
         func = default_value.func
         is_field = (
@@ -5253,9 +5253,10 @@ class Preprocessor(ast.NodeTransformer):
             and func.value.id in self.dataclasses_module_names
         )
         if not is_field:
-            return default_value, None, self._field_spec(
-                "", None, default_value, None, "instance", {}
-            )
+            return default_value, None, {}
+
+        if default_value.args:
+            raise SyntaxError("field(...) does not accept positional arguments")
 
         default_expr = None
         factory_expr = None
@@ -5425,14 +5426,29 @@ class Preprocessor(ast.NodeTransformer):
                 default_factory_call = ast.Call(
                     func=copy.deepcopy(field["factory_expr"]), args=[], keywords=[]
                 )
-                rhs = default_factory_call
+                if field["init"]:
+                    param_node = self.create_name_node(field_name, ast.Load(), class_node)
+                    rhs = ast.IfExp(
+                        test=ast.Compare(
+                            left=copy.deepcopy(param_node),
+                            ops=[ast.IsNot()],
+                            comparators=[ast.Constant(value=None)],
+                        ),
+                        body=param_node,
+                        orelse=default_factory_call,
+                    )
+                else:
+                    rhs = default_factory_call
             else:
                 if field["init"]:
                     rhs = self.create_name_node(field_name, ast.Load(), class_node)
                 else:
                     rhs = copy.deepcopy(field["default_expr"])
                     if rhs is None:
-                        rhs = ast.Constant(value=None)
+                        raise SyntaxError(
+                            f"field(init=False) for instance field {field_name!r} "
+                            "requires a default or default_factory"
+                        )
 
             assign_stmt = ast.Assign(
                 targets=[
@@ -5510,8 +5526,7 @@ class Preprocessor(ast.NodeTransformer):
     def _build_tuple_from_fields(self, class_node, fields, predicate):
         tuple_node = ast.Tuple(
             elts=[
-                self.create_name_node("self", ast.Load(), class_node)
-                and ast.Attribute(
+                ast.Attribute(
                     value=self.create_name_node("self", ast.Load(), class_node),
                     attr=field["name"],
                     ctx=ast.Load(),
@@ -5569,7 +5584,13 @@ class Preprocessor(ast.NodeTransformer):
                     keywords=[],
                 ),
                 body=[ast.Return(value=ast.Compare(left=self_tuple, ops=[ast.Eq()], comparators=[other_tuple]))],
-                orelse=[ast.Return(value=ast.Constant(value=False))],
+                orelse=[
+                    ast.Return(
+                        value=self.create_name_node(
+                            "NotImplemented", ast.Load(), class_node
+                        )
+                    )
+                ],
             )
         ]
         fn = ast.FunctionDef(
@@ -5633,7 +5654,13 @@ class Preprocessor(ast.NodeTransformer):
             ast.If(
                 test=ast.Call(func=self.create_name_node("isinstance", ast.Load(), class_node), args=[self.create_name_node("other", ast.Load(), class_node), self.create_name_node(class_node.name, ast.Load(), class_node)], keywords=[]),
                 body=[ast.Return(value=ast.Compare(left=self_tuple, ops=[op_cls()], comparators=[other_tuple]))],
-                orelse=[ast.Return(value=ast.Constant(value=False))],
+                orelse=[
+                    ast.Return(
+                        value=self.create_name_node(
+                            "NotImplemented", ast.Load(), class_node
+                        )
+                    )
+                ],
             )
         ]
         fn = ast.FunctionDef(

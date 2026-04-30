@@ -148,18 +148,17 @@ def test_field_default_factory_assigns_directly_in_body():
     assert isinstance(init.args.defaults[0], ast.Constant)
     assert init.args.defaults[0].value is None
 
-    # Body must contain a single Assign using the factory when parameter is None.
+    # Body must contain a single Assign using the factory directly.
     assert len(init.body) == 1
     assign = init.body[0]
     assert isinstance(assign, ast.Assign)
     assert len(assign.targets) == 1
     target = assign.targets[0]
     assert isinstance(target, ast.Attribute) and target.attr == "items"
-    assert isinstance(assign.value, ast.IfExp)
-    assert isinstance(assign.value.body, ast.Call)
-    assert isinstance(assign.value.body.func, ast.Name)
-    assert assign.value.body.func.id == "list"
-    assert assign.value.body.args == [] and assign.value.body.keywords == []
+    assert isinstance(assign.value, ast.Call)
+    assert isinstance(assign.value.func, ast.Name)
+    assert assign.value.func.id == "list"
+    assert assign.value.args == [] and assign.value.keywords == []
 
 
 def test_no_module_level_factory_sentinel_injected():
@@ -338,7 +337,7 @@ def test_field_alias_default_factory_emits_body_assignment():
     assert len(init.args.defaults) == 1
     assert isinstance(init.args.defaults[0], ast.Constant)
     assert init.args.defaults[0].value is None
-    # And must be assigned via conditional factory fallback.
+    # And must be assigned via direct factory call.
     factory_assigns = [
         s
         for s in init.body
@@ -346,8 +345,9 @@ def test_field_alias_default_factory_emits_body_assignment():
         and len(s.targets) == 1
         and isinstance(s.targets[0], ast.Attribute)
         and s.targets[0].attr == "items"
-        and isinstance(s.value, ast.IfExp)
-        and isinstance(s.value.body, ast.Call)
+        and isinstance(s.value, ast.Call)
+        and isinstance(s.value.func, ast.Name)
+        and s.value.func.id == "list"
     ]
     assert len(factory_assigns) == 1
 
