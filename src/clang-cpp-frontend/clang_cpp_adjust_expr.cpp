@@ -100,7 +100,7 @@ void clang_cpp_adjust::adjust_side_effect(side_effect_exprt &expr)
   {
     adjust_operands(expr);
 
-    exprt &initializer = (exprt &)expr.find("initializer");
+    exprt &initializer = static_cast<exprt &>(expr.add("initializer"));
     adjust_expr(initializer);
   }
   else if (statement == "assign")
