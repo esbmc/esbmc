@@ -1295,6 +1295,47 @@ expr2tc gen_byte_memcpy(
   const size_t num_of_bytes,
   const size_t src_offset,
   const size_t dst_offset);
+
+/**
+ * Computes the equivalent object value when considering a memcpy operation
+ * on composite types (arrays, structs, unions) using byte_extract /
+ * byte_update IR operations.
+ *
+ * Unlike gen_byte_memcpy (which operates on primitives via bitwise masks),
+ * this variant handles structured types by extracting individual bytes from
+ * @p src and applying them one-by-one into @p dst via byte_update. This
+ * preserves struct field information and handles type mismatches between
+ * @p src and @p dst (e.g., char[] → struct, char[] → int[]).
+ *
+ * @param src The source expression from which bytes are copied. Must be a
+ *            char array (array with 8-bit element type); returns an empty
+ *            expr2tc for other source types.
+ * @param dst The destination expression to which bytes are copied. May be
+ *            any type (array, struct, union, or primitive).
+ * @param num_of_bytes The number of bytes to copy from @p src to @p dst.
+ * @param src_offset The byte offset in @p src at which copying starts.
+ * @param dst_offset The byte offset in @p dst at which bytes are written.
+ * @param is_big_endian Whether byte_update should threat operation as bigendian
+ *
+ * @returns A new expr2tc representing @p dst after the memcpy, or an empty
+ *          expr2tc if the operation cannot be constructed (e.g., @p src is
+ *          not a char array).
+ *
+ * Usage Examples:
+ * @code
+ * // Copy 4 bytes from char src[50] (offset 10) into a struct dst (offset 0)
+ * expr2tc src = symbol_expr_of_char_array;
+ * expr2tc dst = symbol_expr_of_struct;
+ * expr2tc result = gen_byte_memcpy_byte_update(src, dst, 4, 10, 0);
+ * @endcode
+ */
+expr2tc gen_byte_memcpy_byte_update(
+  const expr2tc &src,
+  const expr2tc &dst,
+  const size_t num_of_bytes,
+  const size_t src_offset,
+  const size_t dst_offset,
+  bool is_big_endian);
 } // namespace goto_symex_utils
 
 #endif
