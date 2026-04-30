@@ -19,6 +19,7 @@ extern "C"
 #include <esbmc/bmc.h>
 #include <esbmc/esbmc_parseoptions.h>
 #include <cctype>
+#include <charconv>
 #include <clang-c-frontend/clang_c_language.h>
 #include <util/config.h>
 #include <util/filesystem.h>
@@ -200,7 +201,8 @@ uint64_t esbmc_parseoptionst::read_time_spec(std::string_view str)
       abort();
     }
   }
-  uint64_t timeout = strtoull(str.data(), nullptr, 10);
+  uint64_t timeout = 0;
+  std::from_chars(str.data(), str.data() + str.size(), timeout);
   timeout *= mult;
   return timeout;
 }
@@ -249,7 +251,8 @@ uint64_t esbmc_parseoptionst::read_mem_spec(std::string_view str)
       abort();
     }
   }
-  uint64_t size = strtoull(str.data(), nullptr, 10);
+  uint64_t size = 0;
+  std::from_chars(str.data(), str.data() + str.size(), size);
   size *= mult;
   return size;
 }
