@@ -600,7 +600,6 @@ smt_astt smt_convt::convert_typecast_to_struct(const typecast2t &cast)
   // we just select out the common fields, which drops any additional data in
   // the subclass.
 
-  unsigned int i = 0;
   bool same_format = true;
   if (is_subclass_of(cast.from->type, cast.type, ns))
   {
@@ -613,6 +612,7 @@ smt_astt smt_convt::convert_typecast_to_struct(const typecast2t &cast)
   else
   {
     // Check that these two different structs have the same format.
+    unsigned int i = 0;
     for (auto const &it : struct_type_to.members)
     {
       if (!base_type_eq(struct_type_from.members[i], it, ns))
