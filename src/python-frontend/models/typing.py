@@ -1,3 +1,4 @@
+# pylint: disable=function-redefined  # intentional stdlib shadow for ESBMC models
 def TypeVar(name, *args, **kwargs) -> type:
     return object
 
