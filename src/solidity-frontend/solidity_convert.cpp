@@ -1038,9 +1038,11 @@ bool solidity_convertert::populate_function_signature(
   bool is_library = json["contractKind"] == "library";
 
   // merge inherited nodes
-  std::set<std::string> dump;
   if (!is_library)
+  {
+    std::set<std::string> dump;
     merge_inheritance_ast(cname, json, dump);
+  }
 
   std::string func_name, func_id, visibility;
   code_typet type;
