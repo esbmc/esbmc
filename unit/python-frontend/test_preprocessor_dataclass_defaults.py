@@ -140,24 +140,26 @@ def test_field_default_factory_assigns_directly_in_body():
     init = _get_init(cls)
     assert init is not None
 
-    # Factory fields must NOT appear as __init__ parameters — ESBMC's
-    # converter cannot handle Call expressions as parameter defaults, and
-    # emitting the factory call in the body guarantees per-instance fresh
-    # values for mutable factories like ``list``.
+    # Marco F: factory-backed fields are now exposed as overridable init
+    # parameters (defaulting to None => call factory).
     arg_names = [a.arg for a in init.args.args]
-    assert arg_names == ["self"]
-    assert init.args.defaults == []
+    assert arg_names == ["self", "items"]
+    assert len(init.args.defaults) == 1
+    assert isinstance(init.args.defaults[0], ast.Constant)
+    assert init.args.defaults[0].value is None
 
-    # Body must contain a single Assign: self.items = list()
+    # Body must contain a single Assign using the factory when parameter is None.
     assert len(init.body) == 1
     assign = init.body[0]
     assert isinstance(assign, ast.Assign)
     assert len(assign.targets) == 1
     target = assign.targets[0]
     assert isinstance(target, ast.Attribute) and target.attr == "items"
-    assert isinstance(assign.value, ast.Call)
-    assert isinstance(assign.value.func, ast.Name) and assign.value.func.id == "list"
-    assert assign.value.args == [] and assign.value.keywords == []
+    assert isinstance(assign.value, ast.IfExp)
+    assert isinstance(assign.value.body, ast.Call)
+    assert isinstance(assign.value.body.func, ast.Name)
+    assert assign.value.body.func.id == "list"
+    assert assign.value.body.args == [] and assign.value.body.keywords == []
 
 
 def test_no_module_level_factory_sentinel_injected():
@@ -196,16 +198,17 @@ def test_required_then_defaulted_positional_ordering():
     init = _get_init(cls)
     assert init is not None
 
-    # Factory fields are excluded from __init__ parameters (assigned in
-    # body), so only ``name`` and ``priority`` appear as parameters.
+    # Factory field is now overridable in __init__ (default None -> factory).
     arg_names = [a.arg for a in init.args.args]
-    assert arg_names == ["self", "name", "priority"]
-    # One trailing default for priority.
-    assert len(init.args.defaults) == 1
+    assert arg_names == ["self", "name", "priority", "tags"]
+    # Two trailing defaults: priority=0 and tags=None.
+    assert len(init.args.defaults) == 2
     assert (
         isinstance(init.args.defaults[0], ast.Constant)
         and init.args.defaults[0].value == 0
     )
+    assert isinstance(init.args.defaults[1], ast.Constant)
+    assert init.args.defaults[1].value is None
 
 
 # ---------------------------------------------------------------------------
@@ -330,9 +333,12 @@ def test_field_alias_default_factory_emits_body_assignment():
     cls = _get_class(module, "C")
     init = _get_init(cls)
     assert init is not None
-    # Factory field must NOT appear as an __init__ parameter.
-    assert [a.arg for a in init.args.args] == ["self"]
-    # And must be assigned in the body via a fresh call.
+    # Factory field is exposed as overridable parameter with None default.
+    assert [a.arg for a in init.args.args] == ["self", "items"]
+    assert len(init.args.defaults) == 1
+    assert isinstance(init.args.defaults[0], ast.Constant)
+    assert init.args.defaults[0].value is None
+    # And must be assigned via conditional factory fallback.
     factory_assigns = [
         s
         for s in init.body
@@ -340,7 +346,8 @@ def test_field_alias_default_factory_emits_body_assignment():
         and len(s.targets) == 1
         and isinstance(s.targets[0], ast.Attribute)
         and s.targets[0].attr == "items"
-        and isinstance(s.value, ast.Call)
+        and isinstance(s.value, ast.IfExp)
+        and isinstance(s.value.body, ast.Call)
     ]
     assert len(factory_assigns) == 1
 
