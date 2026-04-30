@@ -1,4 +1,5 @@
-"""Operational model for non-deterministic collection functions in ESBMC Python frontend.
+"""
+Operational model for non-deterministic collection functions in ESBMC Python frontend.
 
 KNOWN LIMITATIONS:
 (why we implemented mothod in preprocessor instead of here)

@@ -202,7 +202,8 @@ module_imports = {}
 
 
 def process_imports(node, output_dir):
-    """Process import statements in the AST node.
+    """
+    Process import statements in the AST node.
 
     Parameters
     ----------
