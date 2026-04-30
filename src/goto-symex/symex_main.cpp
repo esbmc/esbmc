@@ -1439,12 +1439,12 @@ void goto_symext::add_memory_leak_checks()
           to_symbol2t(to_address_of2t(e).ptr_obj).get_symbol_name());
 
     maybe_global_target = [tgts = std::move(globals_point_to)](expr2tc obj) {
-        // Accumulator for OR-ing conditions
-        expr2tc is_any;
-        // Iterate over each (expression, condition) pair in tgts
-        for (const auto &[e, g] : tgts)
-        {
-          /* XXX: 'obj' is the address of a statically known dynamic object,
+      // Accumulator for OR-ing conditions
+      expr2tc is_any;
+      // Iterate over each (expression, condition) pair in tgts
+      for (const auto &[e, g] : tgts)
+      {
+        /* XXX: 'obj' is the address of a statically known dynamic object,
            *      couldn't we just statically check whether the symbol 'e'
            *      addresses is the same as 'obj' directly?
            *
@@ -1455,13 +1455,13 @@ void goto_symext::add_memory_leak_checks()
            *   then 'g' is combined with 'same_object2tc(obj, e)'.
            * - Otherwise, we directly use 'same_object2tc(obj, e)'.
            */
-          expr2tc same = (is_and2t(g) || is_same_object2t(g))
-                           ? and2tc(g, same_object2tc(obj, e))
-                           : same_object2tc(obj, e);
-          is_any = is_any ? or2tc(is_any, same) : same;
-        }
-        return is_any ? is_any : gen_false_expr();
-      };
+        expr2tc same = (is_and2t(g) || is_same_object2t(g))
+                         ? and2tc(g, same_object2tc(obj, e))
+                         : same_object2tc(obj, e);
+        is_any = is_any ? or2tc(is_any, same) : same;
+      }
+      return is_any ? is_any : gen_false_expr();
+    };
   }
 
   for (auto const &it : dynamic_memory)
