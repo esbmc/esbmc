@@ -285,7 +285,9 @@ def resolve_module_file(module_qualname: str, output_dir: str) -> str | None:
 
 
 def filter_imports(tree: ast.AST) -> ast.AST:
-    """Remove import statements for verification-agnostic testing frameworks(import pytest) from the AST.
+    """
+    Remove import statements for verification-agnostic testing frameworks(import pytest) from the AST.
+
     This prevents the C++ backend from trying to open JSON files for
     imported testing frameworks that we intentionally skip.
     """
