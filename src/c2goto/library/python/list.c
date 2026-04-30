@@ -645,11 +645,11 @@ bool __ESBMC_dict_eq(
       if (lhs_is_none != rhs_is_none)
         return false;
     }
-    // size==0: setdefault path, value IS the PyListObject* directly.
-    // size>0:  literal path, value points to a copy of the PyListObject*.
-    // These two paths also produce different type_ids for the same list type,
-    // so skip the type_id check and compare list contents when either size is 0.
-    else if (lhs_value->size == 0 || rhs_value->size == 0)
+    // setdefault list (size==0, raw PyListObject*) vs literal list (size>0,
+    // pointer-to-PyListObject*): normalise both sides and use list_eq.
+    // Restricted to asymmetric size to leave symmetric size==0 payloads
+    // (e.g. nested dict pointers) on the byte-compare path.
+    else if ((lhs_value->size == 0) != (rhs_value->size == 0))
     {
       const PyListObject *lhs_list =
         (lhs_value->size == 0) ? (const PyListObject *)lhs_value->value
@@ -662,7 +662,11 @@ bool __ESBMC_dict_eq(
     }
     else
     {
-      if (lhs_value->type_id != rhs_value->type_id)
+      // type_id alone does not pin size for variable-sized payloads
+      // (e.g. strings: same type_id, size == strlen+1).
+      if (
+        lhs_value->type_id != rhs_value->type_id ||
+        lhs_value->size != rhs_value->size)
         return false;
       if (!__ESBMC_values_equal(
             lhs_value->value, rhs_value->value, lhs_value->size))
