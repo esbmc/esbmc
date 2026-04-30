@@ -558,7 +558,7 @@ def detect_and_process_submodules(node, processed_submodules, output_dir):
             else:
                 module_dir = os.path.dirname(file_path)
 
-            for root, dirs, files in os.walk(module_dir):
+            for root, _dirs, files in os.walk(module_dir):
                 for file in files:
                     if file.endswith('.py'):
                         full_path = os.path.join(root, file)
