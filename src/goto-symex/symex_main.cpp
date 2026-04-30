@@ -1155,7 +1155,7 @@ void goto_symext::add_memory_leak_checks()
      */
     fine_timet start_time = current_time();
     std::unordered_map<expr2tc, expr2tc, irep2_hash> globals_point_to;
-    bool has_unknown = false;
+
     value_set_analysist va(ns);
 
     /* List of sets of all globally reachable symbols (encoded as a list of
@@ -1183,7 +1183,7 @@ void goto_symext::add_memory_leak_checks()
      * the user code has constructed circular data structures, maintain a set
      * of visited symbols. */
     std::unordered_set<std::string> visited;
-    for (int i = 0; !has_unknown && !globals.empty(); i++)
+    for (int i = 0; !globals.empty(); i++)
     {
       std::vector<std::pair<expr2tc, std::list<value_sett::entryt>>> tmp;
       for (const auto &[path_to_e, g] : globals)
@@ -1430,19 +1430,15 @@ void goto_symext::add_memory_leak_checks()
 
     if (log_debug(
           "memcleanup",
-          "memcleanup: time: {}s, unknown: {}, globals point to:",
-          time2string(current_time() - start_time),
-          has_unknown))
+          "memcleanup: time: {}s, globals point to:",
+          time2string(current_time() - start_time)))
       for (const auto &[e, g] : globals_point_to)
         log_debug(
           "memcleanup",
           "memcleanup:  {}",
           to_symbol2t(to_address_of2t(e).ptr_obj).get_symbol_name());
 
-    if (has_unknown)
-      maybe_global_target = [](expr2tc) { return gen_true_expr(); };
-    else
-      maybe_global_target = [tgts = std::move(globals_point_to)](expr2tc obj) {
+    maybe_global_target = [tgts = std::move(globals_point_to)](expr2tc obj) {
         // Accumulator for OR-ing conditions
         expr2tc is_any;
         // Iterate over each (expression, condition) pair in tgts
