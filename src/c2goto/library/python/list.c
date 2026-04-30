@@ -27,6 +27,20 @@ __ESBMC_values_equal(const void *a, const void *b, size_t size)
     return *(const uint64_t *)a == *(const uint64_t *)b;
   if (size == 1)
     return *(const uint8_t *)a == *(const uint8_t *)b;
+  // 8-byte-aligned fast paths for small tuple keys (2-4 int/float fields).
+  // Avoids memcmp's per-byte loop which blows up incremental-bmc.
+  if (size == 16)
+    return ((const uint64_t *)a)[0] == ((const uint64_t *)b)[0] &&
+           ((const uint64_t *)a)[1] == ((const uint64_t *)b)[1];
+  if (size == 24)
+    return ((const uint64_t *)a)[0] == ((const uint64_t *)b)[0] &&
+           ((const uint64_t *)a)[1] == ((const uint64_t *)b)[1] &&
+           ((const uint64_t *)a)[2] == ((const uint64_t *)b)[2];
+  if (size == 32)
+    return ((const uint64_t *)a)[0] == ((const uint64_t *)b)[0] &&
+           ((const uint64_t *)a)[1] == ((const uint64_t *)b)[1] &&
+           ((const uint64_t *)a)[2] == ((const uint64_t *)b)[2] &&
+           ((const uint64_t *)a)[3] == ((const uint64_t *)b)[3];
   // Fallback for larger/unusual sizes
   return memcmp(a, b, size) == 0;
 }
@@ -88,13 +102,27 @@ static inline void *__ESBMC_copy_value(
 
   void *copied = __ESBMC_alloca(size);
 
+  // 8-byte-aligned fast paths for scalars and small tuple keys.
+  // Avoids memcpy's per-byte loop which blows up incremental-bmc.
   if (size == 8)
     *(uint64_t *)copied = *(const uint64_t *)value;
   else if (size == 16)
   {
-    // Handle 16-byte structs (such as dictionaries) explicitly
-    *(uint64_t *)copied = *(const uint64_t *)value;
-    *((uint64_t *)copied + 1) = *((const uint64_t *)value + 1);
+    ((uint64_t *)copied)[0] = ((const uint64_t *)value)[0];
+    ((uint64_t *)copied)[1] = ((const uint64_t *)value)[1];
+  }
+  else if (size == 24)
+  {
+    ((uint64_t *)copied)[0] = ((const uint64_t *)value)[0];
+    ((uint64_t *)copied)[1] = ((const uint64_t *)value)[1];
+    ((uint64_t *)copied)[2] = ((const uint64_t *)value)[2];
+  }
+  else if (size == 32)
+  {
+    ((uint64_t *)copied)[0] = ((const uint64_t *)value)[0];
+    ((uint64_t *)copied)[1] = ((const uint64_t *)value)[1];
+    ((uint64_t *)copied)[2] = ((const uint64_t *)value)[2];
+    ((uint64_t *)copied)[3] = ((const uint64_t *)value)[3];
   }
   else
     memcpy(copied, value, size);
@@ -607,16 +635,39 @@ bool __ESBMC_dict_eq(
     // Key found: compare the corresponding values
     const PyObject *rhs_value = &rhs_values->items[rhs_idx];
 
-    // Values must have same type and size
-    if (
-      lhs_value->type_id != rhs_value->type_id ||
-      lhs_value->size != rhs_value->size)
-      return false;
-
-    // Compare actual value contents
-    if (!__ESBMC_values_equal(
-          lhs_value->value, rhs_value->value, lhs_value->size))
-      return false;
+    // None values are stored as (value=NULL, size=0).
+    // Treat them separately from the size==0 list-pointer path below,
+    // which would otherwise dereference NULL.
+    const bool lhs_is_none = (lhs_value->value == NULL && lhs_value->size == 0);
+    const bool rhs_is_none = (rhs_value->value == NULL && rhs_value->size == 0);
+    if (lhs_is_none || rhs_is_none)
+    {
+      if (lhs_is_none != rhs_is_none)
+        return false;
+    }
+    // size==0: setdefault path, value IS the PyListObject* directly.
+    // size>0:  literal path, value points to a copy of the PyListObject*.
+    // These two paths also produce different type_ids for the same list type,
+    // so skip the type_id check and compare list contents when either size is 0.
+    else if (lhs_value->size == 0 || rhs_value->size == 0)
+    {
+      const PyListObject *lhs_list =
+        (lhs_value->size == 0) ? (const PyListObject *)lhs_value->value
+                               : *(const PyListObject **)lhs_value->value;
+      const PyListObject *rhs_list =
+        (rhs_value->size == 0) ? (const PyListObject *)rhs_value->value
+                               : *(const PyListObject **)rhs_value->value;
+      if (!__ESBMC_list_eq(lhs_list, rhs_list, 0, 0))
+        return false;
+    }
+    else
+    {
+      if (lhs_value->type_id != rhs_value->type_id)
+        return false;
+      if (!__ESBMC_values_equal(
+            lhs_value->value, rhs_value->value, lhs_value->size))
+        return false;
+    }
 
     i++;
   }
