@@ -75,8 +75,11 @@ def _nondet_size(max_size: int) -> int:
     Args:
         max_size: Maximum size (inclusive).
 
-    Returns:
-        int: A non-deterministic integer in [0, max_size].
+    Returns
+    -------
+    int
+        A non-deterministic integer in [0, max_size].
+
     """
     size: int = nondet_int()
     __ESBMC_assume(size >= 0)

@@ -1,3 +1,4 @@
+# pylint: disable=function-redefined  # intentional stdlib shadow for ESBMC models
 def TypeVar(name, *args, **kwargs) -> type:
     return object
 
@@ -5,84 +6,98 @@ def TypeVar(name, *args, **kwargs) -> type:
 class Any:
 
     def __class_getitem__(cls, item):
+        """Return cls for generic-alias subscription support."""
         return cls
 
 
 class Callable:
 
     def __class_getitem__(cls, item):
+        """Return cls for generic-alias subscription support."""
         return cls
 
 
 class ClassVar:
 
     def __class_getitem__(cls, item):
+        """Return cls for generic-alias subscription support."""
         return cls
 
 
 class Dict:
 
     def __class_getitem__(cls, item):
+        """Return cls for generic-alias subscription support."""
         return cls
 
 
 class Generic:
 
     def __class_getitem__(cls, item):
+        """Return cls for generic-alias subscription support."""
         return cls
 
 
 class Iterable:
 
     def __class_getitem__(cls, item):
+        """Return cls for generic-alias subscription support."""
         return cls
 
 
 class Iterator:
 
     def __class_getitem__(cls, item):
+        """Return cls for generic-alias subscription support."""
         return cls
 
 
 class List:
 
     def __class_getitem__(cls, item):
+        """Return cls for generic-alias subscription support."""
         return cls
 
 
 class Optional:
 
     def __class_getitem__(cls, item):
+        """Return cls for generic-alias subscription support."""
         return cls
 
 
 class Set:
 
     def __class_getitem__(cls, item):
+        """Return cls for generic-alias subscription support."""
         return cls
 
 
 class Sized:
 
     def __class_getitem__(cls, item):
+        """Return cls for generic-alias subscription support."""
         return cls
 
 
 class Tuple:
 
     def __class_getitem__(cls, item):
+        """Return cls for generic-alias subscription support."""
         return cls
 
 
 class Type:
 
     def __class_getitem__(cls, item):
+        """Return cls for generic-alias subscription support."""
         return cls
 
 
 class Union:
 
     def __class_getitem__(cls, item):
+        """Return cls for generic-alias subscription support."""
         return cls
 
 

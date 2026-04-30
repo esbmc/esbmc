@@ -325,7 +325,7 @@ static void ingest_symbol(
   if (range.first == range.second)
     return;
 
-  for (it = range.first; it != range.second; it++)
+  for (it = range.first; it != range.second; ++it)
     to_include.push_back(it->second);
 
   deps.erase(name);
@@ -453,7 +453,7 @@ void add_cprover_library(contextt &context, const languaget *language)
    */
   for (std::list<irep_idt>::const_iterator nameit = to_include.begin();
        nameit != to_include.end();
-       nameit++)
+       ++nameit)
   {
     symbolt *s;
 

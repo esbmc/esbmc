@@ -675,13 +675,12 @@ bool solidity_convertert::populate_auxilary_vars()
     {
       for (auto inherit_id : j.second)
       {
-        std::string base_cname = j.first;
-
         auto c_def = find_decl_ref(src_ast_json["nodes"], inherit_id);
         assert(!c_def.empty());
 
         if (cname == c_def["name"].get<std::string>())
         {
+          const std::string base_cname = j.first;
           inheritanceMap[cname].insert(base_cname);
           break;
         }
@@ -1039,9 +1038,11 @@ bool solidity_convertert::populate_function_signature(
   bool is_library = json["contractKind"] == "library";
 
   // merge inherited nodes
-  std::set<std::string> dump;
   if (!is_library)
+  {
+    std::set<std::string> dump;
     merge_inheritance_ast(cname, json, dump);
+  }
 
   std::string func_name, func_id, visibility;
   code_typet type;
