@@ -342,7 +342,8 @@ void clang_cpp_adjust::align_se_function_call_return_type(
 {
   // align the side effect's type at callsite with the
   // function return type. But ignore constructors
-  const typet &return_type = static_cast<const typet &>(f_op.type().return_type());
+  const typet &return_type =
+    static_cast<const typet &>(f_op.type().return_type());
   if (return_type.id() != "constructor" && return_type.is_not_nil())
     expr.type() = return_type;
 }
