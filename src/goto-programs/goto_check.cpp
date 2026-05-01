@@ -277,7 +277,6 @@ void goto_checkt::cast_overflow_check(
     guard);
 }
 
-
 void goto_checkt::overflow_check(
   const expr2tc &expr,
   const guardt &guard,
