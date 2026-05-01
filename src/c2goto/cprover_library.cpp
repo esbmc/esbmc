@@ -310,6 +310,7 @@ const static std::vector<std::string> solidity_c_models = {
   // string (solidity_string.c)
   "get_char", "sol_rev", "i256toa", "u256toa",
   "decToHexa", "ASCIItoHEX", "hexdec", "str2uint",
+  "_ESBMC_str_key_fold64",
   "_str_assign", "nondet_string",
   // address (solidity_address.c)
   "_ESBMC_get_addr_array_idx", "_ESBMC_cmp_cname",

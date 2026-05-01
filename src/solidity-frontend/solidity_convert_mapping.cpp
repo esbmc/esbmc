@@ -290,51 +290,29 @@ void solidity_convertert::gen_mapping_key_typecast(
 
 void solidity_convertert::xor_fold_key_to_64bit(exprt &key)
 {
-  // XOR-fold a 256-bit mapping key to 64-bit to avoid SMT performance issues
+  // Fold a 256-bit mapping key to 64-bit to avoid SMT performance issues
   // with 256-bit array domains, while preserving collision resistance at 2^-64.
   //
-  // result = key[63:0] ^ key[127:64] ^ key[191:128] ^ key[255:192]
-  //
-  // This is applied before using the key as an infinite array index so that
-  // the SMT solver works with 64-bit array domains instead of 256-bit.
+  // Routed through a single library call _ESBMC_str_key_fold64 so the side
+  // effect of `key` (e.g. a str2uint or bytes_static_to_mapping_key
+  // function call) is evaluated exactly once. An inline 4-way XOR over `key`
+  // would duplicate the side effect and produce four independent symbolic
+  // results that fail to alias on equal inputs (causing false negatives on
+  // mapping reads that should hit a previously-stored entry).
 
-  const typet u256 = unsignedbv_typet(256);
-  const typet u64 = unsignedbv_typet(64);
+  const locationt loc = static_cast<const locationt &>(key.find("#location"));
 
-  // k0 = (uint64)key
-  exprt k0 = key;
-  solidity_gen_typecast(ns, k0, u64);
+  side_effect_expr_function_callt fold_call;
+  assert(context.find_symbol("c:@F@_ESBMC_str_key_fold64") != nullptr);
+  get_library_function_call_no_args(
+    "_ESBMC_str_key_fold64",
+    "c:@F@_ESBMC_str_key_fold64",
+    unsignedbv_typet(64),
+    loc,
+    fold_call);
+  fold_call.arguments().push_back(key);
 
-  // k1 = (uint64)(key >> 64)
-  exprt shift64 = from_integer(64, u256);
-  exprt shr1("shr", u256);
-  shr1.copy_to_operands(key, shift64);
-  exprt k1 = shr1;
-  solidity_gen_typecast(ns, k1, u64);
-
-  // k2 = (uint64)(key >> 128)
-  exprt shift128 = from_integer(128, u256);
-  exprt shr2("shr", u256);
-  shr2.copy_to_operands(key, shift128);
-  exprt k2 = shr2;
-  solidity_gen_typecast(ns, k2, u64);
-
-  // k3 = (uint64)(key >> 192)
-  exprt shift192 = from_integer(192, u256);
-  exprt shr3("shr", u256);
-  shr3.copy_to_operands(key, shift192);
-  exprt k3 = shr3;
-  solidity_gen_typecast(ns, k3, u64);
-
-  // result = k0 ^ k1 ^ k2 ^ k3
-  exprt xor01("bitxor", u64);
-  xor01.copy_to_operands(k0, k1);
-  exprt xor012("bitxor", u64);
-  xor012.copy_to_operands(xor01, k2);
-  exprt result("bitxor", u64);
-  result.copy_to_operands(xor012, k3);
-
-  key = result;
+  key = fold_call;
 }
 
 /**

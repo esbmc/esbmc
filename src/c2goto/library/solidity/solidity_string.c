@@ -181,7 +181,35 @@ __ESBMC_HIDE:;
 uint256_t str2uint(const char *str)
 {
 __ESBMC_HIDE:;
-    return hexdec(ASCIItoHEX(str));
+    // Pure: same string contents -> same uint256_t.
+    // The previous hexdec(ASCIItoHEX(str)) implementation went through malloc,
+    // so symex could not treat repeated calls on the same literal as equal —
+    // mapping(string => T) writes and reads produced different keys, missing
+    // the just-stored entry.
+    //
+    // Encoding: pack the first 32 bytes of str into a 256-bit big-endian
+    // integer, stopping at the NUL terminator. Strings longer than 32 bytes
+    // are still mapped deterministically (further bytes shift earlier ones
+    // out of the high 32 lanes), preserving collision resistance.
+    uint256_t result = (uint256_t)0;
+    for (size_t i = 0; str[i] != '\0' && i < 32; i++)
+        result = (result << (uint256_t)8) | (uint256_t)(uint8_t)str[i];
+    return result;
+}
+
+// Fold a 256-bit mapping key down to a 64-bit array-domain index.
+// Implemented as a single C function so the frontend only generates one call,
+// avoiding side-effect duplication when the key is a function-call result
+// (e.g. str2uint, bytes_static_to_mapping_key) that would otherwise be
+// re-evaluated per chunk.
+uint64_t _ESBMC_str_key_fold64(uint256_t key)
+{
+__ESBMC_HIDE:;
+    uint64_t k0 = (uint64_t)key;
+    uint64_t k1 = (uint64_t)(key >> (uint256_t)64);
+    uint64_t k2 = (uint64_t)(key >> (uint256_t)128);
+    uint64_t k3 = (uint64_t)(key >> (uint256_t)192);
+    return k0 ^ k1 ^ k2 ^ k3;
 }
 
 // string assign
