@@ -202,6 +202,20 @@ if(NOT camada_FOUND)
     PATH_SUFFIXES lib/cmake/camada)
 endif()
 
+# Camada and its solver dependencies (cvc5, etc.) are consumed as IMPORTED
+# targets, whose include dirs CMake propagates as SYSTEM by default. That
+# downgrades them to -isystem and lets earlier -I paths (e.g. Homebrew's
+# /opt/homebrew/include) shadow Camada's vendored z3++.h with an
+# incompatible system copy. Force non-SYSTEM on every imported target that
+# Camada brings in so their includes emit as -I.
+foreach(_camada_imported_target
+        camada::camada cvc5::cvc5 cvc5::cvc5parser stp::stp)
+  if(TARGET ${_camada_imported_target})
+    set_target_properties(${_camada_imported_target} PROPERTIES
+      IMPORTED_NO_SYSTEM TRUE)
+  endif()
+endforeach()
+
 if(BUILD_STATIC)
   camada_prefer_static_link_interface(camada::camada)
 endif()
