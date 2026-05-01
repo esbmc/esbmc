@@ -137,6 +137,27 @@ if(NOT camada_FOUND AND DOWNLOAD_DEPENDENCIES)
       set(CAMADA_PROJECT_SOURCE_DIR "${CAMADA_SOURCE_DIR}")
     endif()
 
+    # Map ESBMC ENABLE_<solver> flags to Camada's CAMADA_SOLVER_<solver>_ENABLE.
+    # Camada has no Windows prebuilts for Bitwuzla, CVC5, or MathSAT (see the
+    # comments in Camada's CamadaDependencies.cmake), so force them off on
+    # Windows regardless of the user's ENABLE_* selection.
+    macro(_camada_solver_flag esbmc_var camada_solver)
+      if(${esbmc_var} AND NOT CMAKE_HOST_SYSTEM_NAME MATCHES "Windows")
+        set(_camada_${camada_solver} ON)
+      else()
+        set(_camada_${camada_solver} OFF)
+      endif()
+    endmacro()
+    _camada_solver_flag(ENABLE_BITWUZLA BITWUZLA)
+    _camada_solver_flag(ENABLE_CVC5 CVC5)
+    _camada_solver_flag(ENABLE_MATHSAT MATHSAT)
+    _camada_solver_flag(ENABLE_YICES YICES)
+    if(ENABLE_Z3)
+      set(_camada_Z3 ON)
+    else()
+      set(_camada_Z3 OFF)
+    endif()
+
     message(STATUS "Configuring Camada")
     execute_process(
       COMMAND ${CMAKE_COMMAND}
@@ -147,12 +168,12 @@ if(NOT camada_FOUND AND DOWNLOAD_DEPENDENCIES)
         -DBUILD_SHARED_LIBS=OFF
         -DCAMADA_DOWNLOAD_DEPENDENCIES=ALL
         -DCAMADA_ENABLE_REGRESSION=OFF
-        -DCAMADA_SOLVER_BITWUZLA_ENABLE=ON
-        -DCAMADA_SOLVER_CVC5_ENABLE=ON
-        -DCAMADA_SOLVER_MATHSAT_ENABLE=OFF
+        -DCAMADA_SOLVER_BITWUZLA_ENABLE=${_camada_BITWUZLA}
+        -DCAMADA_SOLVER_CVC5_ENABLE=${_camada_CVC5}
+        -DCAMADA_SOLVER_MATHSAT_ENABLE=${_camada_MATHSAT}
         -DCAMADA_SOLVER_STP_ENABLE=OFF
-        -DCAMADA_SOLVER_YICES_ENABLE=OFF
-        -DCAMADA_SOLVER_Z3_ENABLE=ON
+        -DCAMADA_SOLVER_YICES_ENABLE=${_camada_YICES}
+        -DCAMADA_SOLVER_Z3_ENABLE=${_camada_Z3}
       RESULT_VARIABLE CAMADA_CONFIGURE_RESULT)
     if(NOT CAMADA_CONFIGURE_RESULT EQUAL 0)
       message(FATAL_ERROR "Failed to configure Camada")
