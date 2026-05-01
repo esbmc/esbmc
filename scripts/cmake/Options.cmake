@@ -69,8 +69,8 @@ else()
   set(DEFAULT_CHERI_LLVM_NAME "clang-cheri-17")
 endif()
 
-set(DEFAULT_CAMADA_URL "https://github.com/mikhailramalho/camada/archive/refs/tags/v0.6.tar.gz")
-set(DEFAULT_CAMADA_NAME "camada-v0.6.tar.gz")
+set(DEFAULT_CAMADA_URL "https://github.com/mikhailramalho/camada/archive/refs/tags/v0.7.tar.gz")
+set(DEFAULT_CAMADA_NAME "camada-v0.7.tar.gz")
 
 set(ESBMC_LLVM_URL ${DEFAULT_LLVM_URL} CACHE STRING "URL to download prebuilt LLVM")
 set(ESBMC_LLVM_NAME ${DEFAULT_LLVM_NAME} CACHE STRING "Name of the extracted directory of LLVM")
