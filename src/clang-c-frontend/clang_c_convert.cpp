@@ -1574,61 +1574,39 @@ bool clang_c_convertert::get_bitfield_type(
   return false;
 }
 
-// Count how many flat ESBMC components a CXXRecordDecl contributes,
-// recursing through its own base classes (mirrors get_base_components_methods).
-// visited deduplicates diamond-inheritance bases the same way
-// is_duplicate_component does.
-static unsigned count_flat_fields(
-  const clang::CXXRecordDecl &rd,
-  std::set<const clang::CXXRecordDecl *> &visited)
-{
-  unsigned n = 0;
-  for (const clang::FieldDecl *f : rd.fields())
-  {
-#if LLVM_VERSION_MAJOR > 18
-    if (!f->isUnnamedBitField())
-#else
-    if (!f->isUnnamedBitfield())
-#endif
-      ++n;
-  }
-  for (const clang::CXXBaseSpecifier &base : rd.bases())
-    if (const auto *base_rd = base.getType()->getAsCXXRecordDecl())
-      if (visited.insert(base_rd).second)
-        n += count_flat_fields(*base_rd, visited);
-  return n;
-}
-
-static unsigned count_flat_fields(const clang::CXXRecordDecl &rd)
-{
-  std::set<const clang::CXXRecordDecl *> visited;
-  return count_flat_fields(rd, visited);
-}
-
-// Flatten Clang's InitListExpr for a struct into a linear sequence of Expr*
+// Flatten Clang's InitListExpr for a struct into a linear sequence of exprt
 // that matches ESBMC's flat component layout.
 //
 // In C++17/20, aggregate-initializing a derived struct `struct D : B { ... }`
 // produces an InitListExpr where the first sub-expressions are themselves
-// InitListExprs for each base-class sub-object.  ESBMC's IR instead pulls all
-// base-class components into D's own component list (see
-// get_base_components_methods).  This helper recursively expands base-class
-// sub-object InitListExprs so that the resulting flat_inits vector is
-// element-for-element with ESBMC's component list.
+// InitListExprs (or CXXConstructExprs) for each base-class sub-object. ESBMC's
+// IR instead pulls all base-class components into D's own component list (see
+// get_base_components_methods). This helper recursively expands base-class
+// sub-object entries so that the resulting flat vector is element-for-element
+// with ESBMC's component list.
+//
+// For a CXXConstructExpr base (e.g. from `Derived d{}`), the expression is
+// converted once and each of its non-bitfield fields is pushed as a
+// member_exprt, keeping types aligned without duplication.
 //
 // Note: get_base_components_methods uses an alphabetically-ordered base_map,
 // so for multiple-inheritance the component order may not match declaration
 // order.  Single-inheritance (the common case) is unaffected.
-static void get_base_flattened_inits(
+bool clang_c_convertert::get_base_flattened_inits(
   const clang::InitListExpr &init,
-  std::vector<const clang::Expr *> &flat)
+  std::vector<exprt> &flat)
 {
   const auto *cxxrd = init.getType()->getAsCXXRecordDecl();
   if (!cxxrd || cxxrd->getNumBases() == 0)
   {
     for (unsigned j = 0, n = init.getNumInits(); j < n; ++j)
-      flat.push_back(init.getInit(j));
-    return;
+    {
+      exprt val;
+      if (get_expr(*init.getInit(j), val))
+        return true;
+      flat.push_back(std::move(val));
+    }
+    return false;
   }
 
   for (unsigned j = 0, n = init.getNumInits(); j < n; ++j)
@@ -1643,29 +1621,27 @@ static void get_base_flattened_inits(
     {
       if (const auto *nested = llvm::dyn_cast<clang::InitListExpr>(e))
       {
-        get_base_flattened_inits(*nested, flat);
+        if (get_base_flattened_inits(*nested, flat))
+          return true;
         continue;
       }
-      // CXXConstructExpr base initializer (e.g. from `Derived d{}`): push
-      // the same expr once per flat field so the loop index stays aligned.
-      if (const auto *base_rd = e->getType()->getAsCXXRecordDecl())
-      {
-        unsigned n_fields = count_flat_fields(*base_rd);
-        if (n_fields > 0)
-        {
-          for (unsigned k = 0; k < n_fields; ++k)
-            flat.push_back(e);
-          continue;
-        }
-      }
-      log_warning(
-        "clang-c-frontend",
-        "base-class initializer is not an InitListExpr; "
-        "flat initializer may be misaligned for type {}",
-        e->getType().getAsString());
+      // CXXConstructExpr base initializer (e.g. from `Derived d{}`): convert
+      // once and expand each field as a member_exprt so types stay aligned.
+      exprt base_expr;
+      if (get_expr(*e, base_expr))
+        return true;
+      for (const auto &field :
+           to_struct_type(ns.follow(base_expr.type())).components())
+        if (!field.get_is_unnamed_bitfield())
+          flat.push_back(member_exprt(base_expr, field.name(), field.type()));
+      continue;
     }
-    flat.push_back(e);
+    exprt val;
+    if (get_expr(*e, val))
+      return true;
+    flat.push_back(std::move(val));
   }
+  return false;
 }
 
 bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
@@ -2337,8 +2313,9 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       // In C++17/20 aggregate-init of a derived struct, Clang places one
       // InitListExpr per base-class sub-object, but ESBMC's IR flattens all
       // base-class components into the struct. Flatten before matching.
-      std::vector<const clang::Expr *> flat_inits;
-      get_base_flattened_inits(init_stmt, flat_inits);
+      std::vector<exprt> flat_inits;
+      if (get_base_flattened_inits(init_stmt, flat_inits))
+        return true;
 
       unsigned int num = static_cast<unsigned>(flat_inits.size());
       for (unsigned int i = 0, j = 0; (i < inits.operands().size() && j < num);
@@ -2353,10 +2330,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
             continue;
         }
 
-        // Get the value being initialized
-        exprt init;
-        if (get_expr(*flat_inits[j++], init))
-          return true;
+        exprt init = flat_inits[j++];
 
         typet elem_type;
         if (t.is_struct())
@@ -2365,33 +2339,6 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
           elem_type = to_array_type(t).subtype();
         else
           elem_type = to_vector_type(t).subtype();
-
-        // A CXXConstructExpr for a base class produces a temporary of that
-        // base type; extract the named component so the types align.
-        if (
-          c != nullptr && ns.follow(init.type()).is_struct() &&
-          ns.follow(init.type()) != ns.follow(elem_type))
-        {
-          bool found = false;
-          for (const auto &field :
-               to_struct_type(ns.follow(init.type())).components())
-          {
-            if (field.name() == c->name())
-            {
-              init = member_exprt(init, c->name(), field.type());
-              found = true;
-              break;
-            }
-          }
-          if (!found)
-          {
-            log_error(
-              "clang-c-frontend",
-              "could not extract field '{}' from base-class initializer",
-              c->name().as_string());
-            return true;
-          }
-        }
 
         gen_typecast(ns, init, elem_type);
         inits.operands().at(i) = init;
