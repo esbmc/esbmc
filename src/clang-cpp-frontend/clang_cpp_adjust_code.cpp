@@ -103,6 +103,7 @@ void clang_cpp_adjust::adjust_switch_case_ops(
     if (!sc.is_default() && sc.case_op().type() != switch_type)
       gen_typecast(ns, sc.case_op(), switch_type);
 
+    adjust_switch_case_ops(sc.code(), switch_type);
     return;
   }
 
