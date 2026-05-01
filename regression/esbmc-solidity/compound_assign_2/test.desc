@@ -1,0 +1,4 @@
+CORE
+contract.solast
+--sol contract.sol --unsigned-overflow-check --contract CompoundOverflow --unwind 1 --no-unwinding-assertions
+^VERIFICATION FAILED$

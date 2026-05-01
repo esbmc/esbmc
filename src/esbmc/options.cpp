@@ -125,10 +125,19 @@ const struct group_opt_templ all_cmd_options[] = {
   {"Solidity frontend",
    {{"sol",
      boost::program_options::value<std::string>()->value_name("path"),
-     ".sol and .solast file names"},
+     "Solidity source file (.sol) — also accepted as a positional argument"},
+    {"solc-bin",
+     boost::program_options::value<std::string>()->value_name("path"),
+     "path to solc binary (default: $SOLC or solc in $PATH)"},
     {"contract",
      boost::program_options::value<std::string>()->value_name("cname"),
      "Set contract name"},
+    {"focus-function",
+     boost::program_options::value<std::string>()->value_name("name"),
+     "Restrict the contract harness to verify only the named public/external "
+     "function. The constructor and state initialization still run (unlike "
+     "--function), but the nondet dispatch loop calls only this function. "
+     "Requires --contract when the source declares more than one contract."},
     {"no-visibility",
      NULL,
      "Force to verify every function, even if it's an unreachable "

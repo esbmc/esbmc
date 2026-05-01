@@ -1,0 +1,4 @@
+CORE
+contract.sol
+--contract TestToken --unwind 5 --no-unwinding-assertions
+^VERIFICATION SUCCESSFUL$

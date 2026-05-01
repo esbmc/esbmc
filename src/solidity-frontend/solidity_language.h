@@ -1,3 +1,12 @@
+/// \file solidity_language.h
+/// \brief Solidity language frontend interface for ESBMC.
+///
+/// Defines solidity_languaget, the top-level entry point for parsing Solidity
+/// source files. Inherits from clang_cpp_languaget and orchestrates the full
+/// frontend pipeline: invoking the solc compiler to produce a JSON AST,
+/// converting the AST to ESBMC's GOTO intermediate representation via
+/// solidity_convertert, and performing type-checking and finalization.
+
 #ifndef SOLIDITY_FRONTEND_SOLIDITY_AST_LANGUAGE_H_
 #define SOLIDITY_FRONTEND_SOLIDITY_AST_LANGUAGE_H_
 
@@ -27,25 +36,32 @@ public:
 
   void show_parse(std::ostream &out) override;
 
-  // temp file used by clang-c-frontend
+  // temp file for Clang to parse ESBMC intrinsic symbols
   std::string temp_path;
-
-  // Functions to handle temp C file used by clang-c-frontend
   std::string get_temp_file();
-  std::string temp_cpp_file();
+  bool convert_intrinsics(contextt &context);
+
+  // solc auto-invocation support
+  std::string find_solc() const;
+  std::string get_solc_version(const std::string &solc) const;
+  bool invoke_solc(const std::string &sol_path, std::string &solast_path);
+  bool parse_solast(const std::string &solast_path);
 
   languaget *new_language() const override
   {
     return new solidity_languaget;
   }
 
-  bool convert_intrinsics(contextt &context);
-
   // contract name for verification, allow multiple inputs.
   std::string contract_names;
 
   // function name for verification that requires this information before GOTO conversion phase.
   std::string func_name;
+
+  // focus function name: like func_name, but the full contract harness
+  // (constructor + state init) still runs and only this function is
+  // dispatched in the nondet extcall loop. Empty means feature disabled.
+  std::string focus_func_name;
 
   // smart contract source
   std::string contract_path;

@@ -1,4 +1,4 @@
 THOROUGH
 contract.solast
---sol contract.sol  --unwind 2 --no-unwinding-assertions --overflow-check --multi-property
+--sol contract.sol  --unwind 2 --no-unwinding-assertions --overflow-check --multi-property --z3
 ^VERIFICATION FAILED$

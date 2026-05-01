@@ -1,5 +1,13 @@
+/// \file solidity_convert_inheritance.cpp
+/// \brief Contract inheritance handling for the Solidity frontend.
+///
+/// Implements Solidity's C3-linearized contract inheritance model. Merges
+/// base contract members (state variables, functions, modifiers) into the
+/// derived contract's AST, handles virtual function override resolution,
+/// and adds inheritance labels to track which contract originally defined
+/// each member.
+
 #include <solidity-frontend/solidity_convert.h>
-#include <solidity-frontend/solidity_template.h>
 #include <solidity-frontend/typecast.h>
 #include <util/arith_tools.h>
 #include <util/bitvector.h>
@@ -9,11 +17,7 @@
 #include <util/mp_arith.h>
 #include <util/std_expr.h>
 #include <util/message.h>
-#include <regex>
-#include <optional>
-
 #include <fstream>
-#include <iostream>
 
 void solidity_convertert::add_inherit_label(
   nlohmann::json &node,
@@ -77,7 +81,7 @@ void solidity_convertert::merge_inheritance_ast(
       }
 
       const nlohmann::json &i_node =
-        find_decl_ref_unique_id(src_ast_json["nodes"], *i_ptr);
+        find_node_by_id(src_ast_json["nodes"], *i_ptr);
       assert(!i_node.empty());
 
       // abstract contract

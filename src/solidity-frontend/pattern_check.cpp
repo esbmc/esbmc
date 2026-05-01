@@ -1,3 +1,11 @@
+/// \file pattern_check.cpp
+/// \brief Implementation of pattern-based vulnerability detection.
+///
+/// Walks the solc JSON AST to detect known Solidity vulnerability patterns
+/// such as authorization through tx.origin, unchecked external calls, and
+/// other syntactic anti-patterns that can be identified without symbolic
+/// execution.
+
 #include <solidity-frontend/pattern_check.h>
 #include <util/message.h>
 #include <stdlib.h>
@@ -136,7 +144,6 @@ void pattern_checker::check_tx_origin(const nlohmann::json &left_expr)
     {
       if (left_expr["expression"]["name"].get<std::string>() == "tx")
       {
-        //assert(!"Found vulnerability SWC-115 Authorization through tx.origin");
         log_error(
           "Found vulnerability SWC-115 Authorization through tx.origin");
         log_fail("VERIFICATION FAILED");

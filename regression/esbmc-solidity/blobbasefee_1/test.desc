@@ -1,0 +1,4 @@
+CORE
+contract.sol
+--contract BlobTest --unwind 1 --no-unwinding-assertions --no-standard-checks
+^VERIFICATION SUCCESSFUL$

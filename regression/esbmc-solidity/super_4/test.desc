@@ -1,0 +1,4 @@
+CORE
+contract.sol
+--sol contract.sol --contract C --unwind 3 --no-unwinding-assertions --no-standard-checks
+^VERIFICATION FAILED$

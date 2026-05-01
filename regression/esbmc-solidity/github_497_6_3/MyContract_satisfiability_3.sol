@@ -5,17 +5,10 @@ contract MyContract {
     uint8 x;
     uint8 sum;
 
-    function nondet() public pure returns(uint8)
-    {
-      uint8 i;
-      return i;
-    }
-
     function __ESBMC_assume(bool) internal pure { }
 
-    function func_sat() external {
+    function func_sat(uint8 y) external {
       x = 0;
-      uint8 y = nondet();
       sum = x + y;
 
       // C : Add additional constraints here

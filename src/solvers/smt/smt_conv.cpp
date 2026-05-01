@@ -1476,10 +1476,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       if (is_tuple_ast_type(arr.subtype))
         a = tuple_api->tuple_fresh(sort);
       else
-        a = mk_fresh(
-          sort,
-          "inf_array",
-          convert_sort(get_flattened_array_subtype(expr->type)));
+        a = mk_fresh(sort, "inf_array", convert_sort(arr.subtype));
       break;
     }
 
@@ -2813,6 +2810,19 @@ smt_sortt smt_convt::convert_sort(const type2tc &type)
   case type2t::vector_id:
   case type2t::array_id:
   {
+    const array_type2t &arrtype = to_array_type(type);
+
+    // Nested infinite arrays (e.g. Solidity nested mappings): do NOT flatten.
+    // Create Array(BV64, Array(BV64, V)) with recursive convert_sort.
+    if (arrtype.size_is_infinite && is_array_type(arrtype.subtype))
+    {
+      type2tc t = make_array_domain_type(arrtype);
+      smt_sortt d = mk_int_bv_sort(t->get_width());
+      smt_sortt r = convert_sort(arrtype.subtype);
+      result = mk_array_sort(d, r);
+      break;
+    }
+
     // Index arrays by the smallest integer required to represent its size.
     // Unless it's either infinite or dynamic in size, in which case use the
     // machine int size. Also, faff about if it's an array of arrays, extending
@@ -2848,6 +2858,14 @@ smt_sortt smt_convt::convert_sort(const type2tc &type)
     result = mk_int_bv_sort(type_byte_size_bits(type).to_uint64());
     break;
   }
+
+  case type2t::empty_id:
+    // Empty type can appear during Solidity nested mapping encoding
+    // when the 'with' expression generates intermediate void-typed subexpressions.
+    // Return a minimal sort as placeholder — these are never directly used in
+    // solver queries and the verification result is unaffected.
+    result = mk_int_bv_sort(1);
+    break;
 
   default:
     log_error(
@@ -3585,8 +3603,14 @@ type2tc make_array_domain_type(const array_type2t &arr)
     return get_uint_type(array_domain_width_or_word_size(arr));
   }
 
-  // This is an array of arrays -- we're going to convert this into a single
-  // array that has an extended domain. Work out that width.
+  // Infinite arrays of arrays (e.g. nested Solidity mappings) are NOT
+  // flattened — each level uses its own domain.  flatten_array_type()
+  // already skips infinite arrays, so the domain must stay single-level.
+  if (arr.size_is_infinite)
+    return get_uint_type(array_domain_width_or_word_size(arr));
+
+  // This is a finite array of arrays -- we're going to convert this into a
+  // single array that has an extended domain. Work out that width.
 
   unsigned int domwidth = array_domain_width_or_word_size(arr);
 
@@ -3729,12 +3753,17 @@ smt_astt smt_convt::convert_array_index(const expr2tc &expr)
   expr2tc src_value = index.source_value;
 
   expr2tc newidx;
-  if (is_index2t(index.source_value))
+  if (
+    is_index2t(index.source_value) &&
+    !to_array_type(index.source_value->type).size_is_infinite)
   {
+    // Finite multi-dimensional arrays: flatten via decompose_select_chain.
     newidx = decompose_select_chain(expr, src_value);
   }
   else
   {
+    // Single-level index, or infinite arrays (nested Solidity mappings) —
+    // use direct select without flattening.
     newidx = fix_array_idx(index.index, index.source_value->type);
   }
 
@@ -3764,12 +3793,18 @@ smt_astt smt_convt::convert_array_store(const expr2tc &expr)
   expr2tc newidx;
 
   if (
-    is_array_type(with.type) && is_array_type(to_array_type(with.type).subtype))
+    is_array_type(with.type) &&
+    is_array_type(to_array_type(with.type).subtype) &&
+    !to_array_type(with.type).size_is_infinite)
   {
+    // Finite multi-dimensional arrays: flatten into single array with extended
+    // domain via decompose_store_chain.
     newidx = decompose_store_chain(expr, update_val);
   }
   else
   {
+    // Single-level arrays, or infinite arrays (including nested infinite arrays
+    // used by Solidity nested mappings) — use direct index.
     newidx = fix_array_idx(with.update_field, with.type);
   }
 
@@ -3908,6 +3943,13 @@ type2tc smt_convt::get_flattened_array_subtype(const type2tc &type)
   // Get the subtype of an array, ensuring that any intermediate arrays have
   // been flattened.
 
+  // For infinite arrays of arrays (nested Solidity mappings), do NOT flatten
+  // past the first level — each level uses its own SMT array sort.
+  if (
+    is_array_type(type) && to_array_type(type).size_is_infinite &&
+    is_array_type(to_array_type(type).subtype))
+    return to_array_type(type).subtype;
+
   type2tc type_rec = type;
   while (is_array_type(type_rec) || is_vector_type(type_rec))
   {
@@ -3950,7 +3992,9 @@ expr2tc smt_convt::get(const expr2tc &expr)
     expr2tc src_value = index.source_value;
 
     expr2tc newidx;
-    if (is_index2t(index.source_value))
+    if (
+      is_index2t(index.source_value) &&
+      !to_array_type(index.source_value->type).size_is_infinite)
     {
       newidx = decompose_select_chain(expr, src_value);
     }
@@ -3998,7 +4042,8 @@ expr2tc smt_convt::get(const expr2tc &expr)
 
     if (
       is_array_type(with.type) &&
-      is_array_type(to_array_type(with.type).subtype))
+      is_array_type(to_array_type(with.type).subtype) &&
+      !to_array_type(with.type).size_is_infinite)
     {
       decompose_store_chain(expr, update_val);
     }
@@ -4567,6 +4612,17 @@ smt_astt smt_convt::convert_array_of_prep(const expr2tc &expr)
   const array_type2t &arrtype = to_array_type(arrof.type);
   expr2tc base_init;
   unsigned long array_size = 0;
+
+  // Nested infinite arrays (e.g. Solidity nested mappings): do NOT flatten.
+  // Create Array(BV64, Array(BV64, V)) where the inner initializer is itself
+  // an array_of that will be recursively converted.
+  if (arrtype.size_is_infinite && is_array_type(arrtype.subtype))
+  {
+    // Convert the inner array_of initializer directly (recursive)
+    smt_astt inner = convert_ast(arrof.initializer);
+    array_size = array_domain_width_or_word_size(arrtype);
+    return array_api->convert_array_of(inner, array_size);
+  }
 
   // So: we have an array_of, that we have to convert into a bunch of stores.
   // However, it might be a nested array. If that's the case, then we're

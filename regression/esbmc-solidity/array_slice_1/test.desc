@@ -1,0 +1,4 @@
+CORE
+contract.solast
+--sol contract.sol --contract SliceTest --no-standard-checks --unwind 1 --no-unwinding-assertions
+^VERIFICATION SUCCESSFUL$
