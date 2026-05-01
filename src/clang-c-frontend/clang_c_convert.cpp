@@ -1574,6 +1574,37 @@ bool clang_c_convertert::get_bitfield_type(
   return false;
 }
 
+// Count how many flat ESBMC components a CXXRecordDecl contributes,
+// recursing through its own base classes (mirrors get_base_components_methods).
+// visited deduplicates diamond-inheritance bases the same way
+// is_duplicate_component does.
+static unsigned count_flat_fields(
+  const clang::CXXRecordDecl &rd,
+  std::set<const clang::CXXRecordDecl *> &visited)
+{
+  unsigned n = 0;
+  for (const clang::FieldDecl *f : rd.fields())
+  {
+#if LLVM_VERSION_MAJOR > 18
+    if (!f->isUnnamedBitField())
+#else
+    if (!f->isUnnamedBitfield())
+#endif
+      ++n;
+  }
+  for (const clang::CXXBaseSpecifier &base : rd.bases())
+    if (const auto *base_rd = base.getType()->getAsCXXRecordDecl())
+      if (visited.insert(base_rd).second)
+        n += count_flat_fields(*base_rd, visited);
+  return n;
+}
+
+static unsigned count_flat_fields(const clang::CXXRecordDecl &rd)
+{
+  std::set<const clang::CXXRecordDecl *> visited;
+  return count_flat_fields(rd, visited);
+}
+
 // Flatten Clang's InitListExpr for a struct into a linear sequence of Expr*
 // that matches ESBMC's flat component layout.
 //
@@ -1614,6 +1645,18 @@ static void get_base_flattened_inits(
       {
         get_base_flattened_inits(*nested, flat);
         continue;
+      }
+      // CXXConstructExpr base initializer (e.g. from `Derived d{}`): push
+      // the same expr once per flat field so the loop index stays aligned.
+      if (const auto *base_rd = e->getType()->getAsCXXRecordDecl())
+      {
+        unsigned n_fields = count_flat_fields(*base_rd);
+        if (n_fields > 0)
+        {
+          for (unsigned k = 0; k < n_fields; ++k)
+            flat.push_back(e);
+          continue;
+        }
       }
       log_warning(
         "clang-c-frontend",
@@ -2322,6 +2365,34 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
           elem_type = to_array_type(t).subtype();
         else
           elem_type = to_vector_type(t).subtype();
+
+        // A CXXConstructExpr for a base class produces a temporary of that
+        // base type; extract the named component so the types align.
+        if (
+          c != nullptr && ns.follow(init.type()).is_struct() &&
+          ns.follow(init.type()) != ns.follow(elem_type))
+        {
+          bool found = false;
+          for (const auto &field :
+               to_struct_type(ns.follow(init.type())).components())
+          {
+            if (field.name() == c->name())
+            {
+              init = member_exprt(init, c->name(), field.type());
+              found = true;
+              break;
+            }
+          }
+          if (!found)
+          {
+            log_error(
+              "clang-c-frontend",
+              "could not extract field '{}' from base-class initializer",
+              c->name().as_string());
+            return true;
+          }
+        }
+
         gen_typecast(ns, init, elem_type);
         inits.operands().at(i) = init;
       }
