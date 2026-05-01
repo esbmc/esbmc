@@ -264,6 +264,9 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci)
   witness_name = os.path.basename(benchmark) if esbmc_ci else "witness"
   command_line += "--witness-output " + witness_name + " "
 
+  # Disable the default shift UB check for SV-COMP
+  command_line += "--no-ub-shift-check "
+
   # Special case for termination, it runs regardless of the strategy
   if prop == Property.termination:
     command_line += "--no-pointer-check --no-bounds-check --no-assertions "
