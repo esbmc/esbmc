@@ -304,11 +304,7 @@ smt_convt::convert_typecast_to_ints_from_fbv_sint(const typecast2t &cast)
   if (from_width < to_width)
     return mk_sign_ext(a, to_width - from_width);
 
-  if (from_width > to_width)
-    return mk_extract(a, to_width - 1, 0);
-
-  log_error("Malformed cast from signedbv/fixedbv");
-  abort();
+  return mk_extract(a, to_width - 1, 0);
 }
 
 smt_astt
