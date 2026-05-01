@@ -1637,6 +1637,10 @@ class Preprocessor(ast.NodeTransformer):
             rewritten = self._try_transform_items_set_eq(left, right, node)
             if rewritten is None:
                 rewritten = self._try_transform_items_set_eq(right, left, node)
+            if rewritten is None:
+                rewritten = self._try_transform_list_tuple_eq(left, right, node)
+            if rewritten is None:
+                rewritten = self._try_transform_list_tuple_eq(right, left, node)
             if rewritten is not None:
                 node.test = rewritten
         eq_prefix, maybe_eq_test = self._lower_assert_eq_literal(node.test, node)
@@ -5107,6 +5111,19 @@ class Preprocessor(ast.NodeTransformer):
                 return True
         return False
 
+    def _class_defines_name(self, class_node, name):
+        for member in class_node.body:
+            if isinstance(member, ast.FunctionDef) and member.name == name:
+                return True
+            if isinstance(member, ast.Assign):
+                for target in member.targets:
+                    if isinstance(target, ast.Name) and target.id == name:
+                        return True
+            if isinstance(member, ast.AnnAssign):
+                if isinstance(member.target, ast.Name) and member.target.id == name:
+                    return True
+        return False
+
     def _validate_post_init_signature(self, class_node, fields, post_init_method):
         """Validate that ``__post_init__`` can receive the declared InitVar values."""
         if post_init_method is None:
@@ -5222,6 +5239,14 @@ class Preprocessor(ast.NodeTransformer):
             options[kw.arg] = self._parse_dataclass_bool_option(kw.value, kw.arg)
         if options["order"] and not options["eq"]:
             raise SyntaxError("dataclass option 'order=True' requires 'eq=True'")
+        if options["slots"] and self._class_defines_name(class_node, "__slots__"):
+            raise SyntaxError(
+                "dataclass option 'slots=True' cannot be used when '__slots__' is already defined"
+            )
+        if options["unsafe_hash"] and self._class_defines_name(class_node, "__hash__"):
+            raise SyntaxError(
+                "dataclass option 'unsafe_hash=True' cannot be used when '__hash__' is explicitly defined"
+            )
         return options
 
     def _parse_field_call(self, default_value):
@@ -5364,11 +5389,15 @@ class Preprocessor(ast.NodeTransformer):
         body = []
 
         # Parameters: instance fields except factory-backed ones, plus InitVars.
+        # Factory fields are never added as parameters — they are always
+        # assigned in the body via ``self.<field> = <factory>()``.
         # Compute first defaulted index over this filtered view.
         param_fields = [
             field
             for field in fields
-            if field["kind"] != "classvar" and field["init"]
+            if field["kind"] != "classvar"
+            and field["init"]
+            and field["factory_expr"] is None
         ]
         initvar_names = [field["name"] for field in fields if field["kind"] == "initvar"]
         pos_fields = [field for field in param_fields if not field["kw_only"]]
@@ -5423,22 +5452,11 @@ class Preprocessor(ast.NodeTransformer):
             if field["kind"] != "instance":
                 continue
             if field["factory_expr"] is not None:
-                default_factory_call = ast.Call(
+                # Factory fields are always assigned via the factory call;
+                # they are not exposed as __init__ parameters.
+                rhs = ast.Call(
                     func=copy.deepcopy(field["factory_expr"]), args=[], keywords=[]
                 )
-                if field["init"]:
-                    param_node = self.create_name_node(field_name, ast.Load(), class_node)
-                    rhs = ast.IfExp(
-                        test=ast.Compare(
-                            left=copy.deepcopy(param_node),
-                            ops=[ast.IsNot()],
-                            comparators=[ast.Constant(value=None)],
-                        ),
-                        body=param_node,
-                        orelse=default_factory_call,
-                    )
-                else:
-                    rhs = default_factory_call
             else:
                 if field["init"]:
                     rhs = self.create_name_node(field_name, ast.Load(), class_node)
@@ -5580,17 +5598,20 @@ class Preprocessor(ast.NodeTransformer):
             ast.If(
                 test=ast.Call(
                     func=self.create_name_node("isinstance", ast.Load(), class_node),
-                    args=[self.create_name_node("other", ast.Load(), class_node), self.create_name_node(class_node.name, ast.Load(), class_node)],
+                    args=[
+                        self.create_name_node("other", ast.Load(), class_node),
+                        self.create_name_node(class_node.name, ast.Load(), class_node),
+                    ],
                     keywords=[],
                 ),
-                body=[ast.Return(value=ast.Compare(left=self_tuple, ops=[ast.Eq()], comparators=[other_tuple]))],
-                orelse=[
+                body=[
                     ast.Return(
-                        value=self.create_name_node(
-                            "NotImplemented", ast.Load(), class_node
+                        value=ast.Compare(
+                            left=self_tuple, ops=[ast.Eq()], comparators=[other_tuple]
                         )
                     )
                 ],
+                orelse=[ast.Return(value=ast.Constant(value=False))],
             )
         ]
         fn = ast.FunctionDef(
@@ -5652,15 +5673,22 @@ class Preprocessor(ast.NodeTransformer):
         other_tuple = ast.Tuple(elts=[ast.Attribute(value=self.create_name_node("other", ast.Load(), class_node), attr=f["name"], ctx=ast.Load()) for f in compare_fields], ctx=ast.Load())
         body = [
             ast.If(
-                test=ast.Call(func=self.create_name_node("isinstance", ast.Load(), class_node), args=[self.create_name_node("other", ast.Load(), class_node), self.create_name_node(class_node.name, ast.Load(), class_node)], keywords=[]),
-                body=[ast.Return(value=ast.Compare(left=self_tuple, ops=[op_cls()], comparators=[other_tuple]))],
-                orelse=[
+                test=ast.Call(
+                    func=self.create_name_node("isinstance", ast.Load(), class_node),
+                    args=[
+                        self.create_name_node("other", ast.Load(), class_node),
+                        self.create_name_node(class_node.name, ast.Load(), class_node),
+                    ],
+                    keywords=[],
+                ),
+                body=[
                     ast.Return(
-                        value=self.create_name_node(
-                            "NotImplemented", ast.Load(), class_node
+                        value=ast.Compare(
+                            left=self_tuple, ops=[op_cls()], comparators=[other_tuple]
                         )
                     )
                 ],
+                orelse=[ast.Return(value=ast.Constant(value=False))],
             )
         ]
         fn = ast.FunctionDef(

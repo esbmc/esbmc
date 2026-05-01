@@ -151,6 +151,43 @@ def test_order_requires_eq():
         _transform(src)
 
 
+def test_slots_true_rejects_explicit_slots_definition():
+    src = (
+        "from dataclasses import dataclass\n"
+        "@dataclass(slots=True)\n"
+        "class C:\n"
+        "    __slots__ = ('x',)\n"
+        "    x: int\n"
+    )
+    with pytest.raises(SyntaxError, match="slots=True"):
+        _transform(src)
+
+
+def test_unsafe_hash_true_rejects_explicit_hash_method():
+    src = (
+        "from dataclasses import dataclass\n"
+        "@dataclass(unsafe_hash=True)\n"
+        "class C:\n"
+        "    x: int\n"
+        "    def __hash__(self):\n"
+        "        return 1\n"
+    )
+    with pytest.raises(SyntaxError, match="unsafe_hash=True"):
+        _transform(src)
+
+
+def test_unsafe_hash_true_rejects_explicit_hash_attribute():
+    src = (
+        "from dataclasses import dataclass\n"
+        "@dataclass(unsafe_hash=True)\n"
+        "class C:\n"
+        "    x: int\n"
+        "    __hash__ = None\n"
+    )
+    with pytest.raises(SyntaxError, match="unsafe_hash=True"):
+        _transform(src)
+
+
 def test_invalid_field_option_is_rejected():
     src = (
         "from dataclasses import dataclass, field\n"
