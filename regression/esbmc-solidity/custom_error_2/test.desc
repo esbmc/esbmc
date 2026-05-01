@@ -1,4 +1,4 @@
 CORE
-contract.sol
---contract TestToken --bound --unwind 5 --no-unwinding-assertions
+contract.solast
+--sol contract.sol --contract TestToken --bound --unwind 5 --no-unwinding-assertions
 ^VERIFICATION SUCCESSFUL$
