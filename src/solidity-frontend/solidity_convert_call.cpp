@@ -945,14 +945,14 @@ bool solidity_convertert::get_high_level_member_access(
   return false;
 }
 
-/** e.g.
- * x.call{value: val}("")
- * @base: (this->)x
- * @mem_name: call
 /**
  * Resolve a low-level call (.call/.send/.transfer/.delegatecall/.staticcall)
  * in bound mode by finding the enclosing FunctionCall AST node, extracting
  * arguments, and dispatching to get_low_level_member_accsss.
+ *
+ * e.g. x.call{value: val}("")
+ *   @base: (this->)x
+ *   @mem_name: call
  */
 bool solidity_convertert::get_bound_low_level_call(
   const nlohmann::json &expr,
