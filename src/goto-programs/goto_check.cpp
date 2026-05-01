@@ -280,26 +280,34 @@ void goto_checkt::cast_overflow_check(
   if (!is_signedbv_type(resolved_type) && !is_unsignedbv_type(resolved_type))
     return;
 
-  // Extract the inner operand from the typecast expression
-  const typecast2t &cast = to_typecast2t(expr);
-  const type2tc &src_type = ns.follow(cast.from->type);
   unsigned int dst_width = resolved_type->get_width();
+  expr2tc cast_overflow;
+  std::string claim_msg;
 
-  // Only check narrowing casts (destination width < source width)
-  if (
-    !is_signedbv_type(src_type) && !is_unsignedbv_type(src_type))
-    return;
-  unsigned int src_width = src_type->get_width();
-  if (dst_width >= src_width)
-    return;
+  if (is_solidity)
+  {
+    // Solidity: check the inner operand (before wrap) against the destination
+    // width — required for narrowing casts like uint256 → uint8.
+    const typecast2t &cast = to_typecast2t(expr);
+    const type2tc &src_type = ns.follow(cast.from->type);
+    if (!is_signedbv_type(src_type) && !is_unsignedbv_type(src_type))
+      return;
+    if (dst_width >= src_type->get_width())
+      return;
+    cast_overflow = overflow_cast2tc(cast.from, dst_width);
+    claim_msg = "Narrowing cast overflow on ";
+  }
+  else
+  {
+    cast_overflow = overflow_cast2tc(expr, dst_width);
+    claim_msg = "Cast arithmetic overflow on ";
+  }
 
-  // Use the inner operand (before cast) for the overflow check
-  expr2tc cast_overflow = overflow_cast2tc(cast.from, dst_width);
   make_not(cast_overflow);
 
   add_guarded_claim(
     cast_overflow,
-    std::string("Narrowing cast overflow on ") + get_expr_id(expr),
+    claim_msg + get_expr_id(expr),
     "overflow",
     loc,
     guard);
