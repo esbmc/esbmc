@@ -104,7 +104,6 @@ smt_convt::convert_typecast_to_fixedbv_nonint_from_fixedbv(const expr2tc &expr)
   unsigned to_integer_bits = fbvt.integer_bits;
   unsigned from_fraction_bits = from_fbvt.width - from_fbvt.integer_bits;
   unsigned from_integer_bits = from_fbvt.integer_bits;
-  unsigned from_width = from_fbvt.width;
   smt_astt magnitude, fraction;
   smt_astt a = convert_ast(cast.from);
 
@@ -123,6 +122,7 @@ smt_convt::convert_typecast_to_fixedbv_nonint_from_fixedbv(const expr2tc &expr)
   else
   {
     assert(to_integer_bits > from_integer_bits);
+    unsigned from_width = from_fbvt.width;
     smt_astt ext = mk_extract(a, from_width - 1, from_fraction_bits);
 
     unsigned int additional_bits = to_integer_bits - from_integer_bits;
@@ -426,7 +426,7 @@ smt_astt smt_convt::convert_typecast_to_ptr(const typecast2t &cast)
   unsigned int i;
   for (it = addr_space_data.back().begin(), i = 0;
        it != addr_space_data.back().end();
-       it++, i++)
+       ++it, i++)
   {
     unsigned id = it->first;
     obj_ids[i] = convert_terminal(constant_int2tc(int_type, BigInt(id)));
@@ -600,7 +600,6 @@ smt_astt smt_convt::convert_typecast_to_struct(const typecast2t &cast)
   // we just select out the common fields, which drops any additional data in
   // the subclass.
 
-  unsigned int i = 0;
   bool same_format = true;
   if (is_subclass_of(cast.from->type, cast.type, ns))
   {
@@ -613,6 +612,7 @@ smt_astt smt_convt::convert_typecast_to_struct(const typecast2t &cast)
   else
   {
     // Check that these two different structs have the same format.
+    unsigned int i = 0;
     for (auto const &it : struct_type_to.members)
     {
       if (!base_type_eq(struct_type_from.members[i], it, ns))

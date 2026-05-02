@@ -11,6 +11,7 @@ CC_DIAGNOSTIC_PUSH()
 CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 #include <clang/Basic/Version.inc>
 #include <clang/AST/Attr.h>
+#include <clang/AST/CXXInheritance.h>
 #include <clang/AST/DeclCXX.h>
 #include <clang/AST/DeclFriend.h>
 #include <clang/AST/DeclTemplate.h>
@@ -25,11 +26,15 @@ CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 #include <llvm/Support/raw_os_ostream.h>
 CC_DIAGNOSTIC_POP()
 
+#include <clang-c-frontend/typecast.h>
 #include <clang-cpp-frontend/clang_cpp_convert.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
 #include <util/expr_util.h>
 #include <util/message.h>
+#include <util/std_expr.h>
+
+#include <optional>
 
 bool clang_cpp_convertert::get_struct_class_virtual_methods(
   const clang::CXXRecordDecl &cxxrd,
@@ -668,6 +673,13 @@ void clang_cpp_convertert::add_vtable_variable_symbols(
         class_id);
       abort();
     }
+
+    // Record (vptr-class V → concrete class D) so build_dynamic_cast can
+    // enumerate candidate D's by direct lookup instead of walking the TU.
+    // Skip abstract classes: no object of an abstract type can exist at
+    // runtime, so they can never be the answer to dynamic_cast.
+    if (!cxxrd.isAbstract())
+      vtable_classes_per_vptr_[late_cast_symb->id].push_back(&cxxrd);
   }
 }
 
@@ -697,4 +709,310 @@ void clang_cpp_convertert::get_overriden_methods(
     (void)status;
     assert(status.second);
   }
+}
+
+// Compute the byte offset of subobject S inside D. Returns std::nullopt if
+// S isn't reachable from D via non-virtual inheritance (virtual base on the
+// path, or S not a base of D at all): callers fall back to a structural
+// typecast in that case.
+static std::optional<uint64_t> offset_of_subobject(
+  const clang::ASTContext &ctx,
+  const clang::CXXRecordDecl *D,
+  const clang::CXXRecordDecl *S)
+{
+  if (D == S)
+    return 0;
+
+  clang::CXXBasePaths paths(
+    /*FindAmbiguities=*/false,
+    /*RecordPaths=*/true,
+    /*DetectVirtual=*/true);
+  if (!D->isDerivedFrom(S, paths))
+    return std::nullopt;
+  if (paths.getDetectedVirtual() != nullptr)
+    return std::nullopt;
+
+  // Sum base-class offsets along the first recorded path. Multiple paths
+  // can exist under repeated non-virtual inheritance, but they refer to
+  // distinct subobjects; picking the first matches the behaviour of the
+  // previous primary-base walk.
+  uint64_t offset = 0;
+  const clang::CXXRecordDecl *cur = D;
+  for (const clang::CXXBasePathElement &elem : paths.front())
+  {
+    const clang::CXXRecordDecl *base =
+      elem.Base->getType()->getAsCXXRecordDecl();
+    offset +=
+      ctx.getASTRecordLayout(cur).getBaseClassOffset(base).getQuantity();
+    cur = base;
+  }
+  return offset;
+}
+
+bool clang_cpp_convertert::build_dynamic_cast(
+  const clang::CXXDynamicCastExpr &cast,
+  exprt &new_expr)
+{
+  // Lower dynamic_cast into a guarded ITE that reads src's vptr and
+  // compares it against vtable variable addresses to identify the
+  // runtime type. For dynamic_cast<T*>:
+  //   src == NULL ? (T*)NULL
+  //               : (src->vptr == &vt-D1 || src->vptr == &vt-D2 || ...)
+  //                   ? (T*)src
+  //                   : (T*)NULL
+  // For dynamic_cast<void*> the result is a pointer to the start of the
+  // most-derived object, so each matching D contributes its own arm
+  // adjusting src by the offset of S inside D.
+  // For dynamic_cast<T&> the result is wrapped in a statement_expression
+  // that throws std::bad_cast when no D matches, so the catch (bad_cast&)
+  // arm of a try/catch can fire.
+
+  exprt sub;
+  if (get_expr(*cast.getSubExpr(), sub))
+    return true;
+  typet target_type;
+  if (get_type(cast.getType(), target_type))
+    return true;
+
+  auto fallback = [&]() {
+    gen_typecast(ns, sub, target_type);
+    new_expr = sub;
+    return false;
+  };
+
+  // Reference dynamic_cast: Clang strips the reference from getType() but
+  // the result expression is still an lvalue (or xvalue for rvalue
+  // references), so the value kind tells us the source form.
+  const bool is_reference = !cast.isPRValue();
+  if (!is_reference && !cast.getType()->isPointerType())
+    return fallback();
+
+  // Normalise the source side: for the pointer form sub is already a
+  // pointer to S; for the reference form sub is an lvalue of S, which we
+  // wrap in address_of so the rest of the helper can treat both shapes
+  // uniformly.
+  clang::QualType src_clang_type = cast.getSubExpr()->getType();
+  clang::QualType src_pointee_qt;
+  exprt src_pointer;
+  if (is_reference)
+  {
+    src_pointee_qt = src_clang_type->isReferenceType()
+                       ? src_clang_type->getPointeeType()
+                       : src_clang_type;
+    if (sub.type().is_pointer())
+      src_pointer = sub;
+    else
+      src_pointer = address_of_exprt(sub);
+  }
+  else
+  {
+    if (!src_clang_type->isPointerType())
+      return fallback();
+    src_pointee_qt = src_clang_type->getPointeeType();
+    src_pointer = sub;
+  }
+
+  // For the pointer form, getType() is T* and the pointee is T. For the
+  // reference form Clang has already stripped the &, so getType() *is* T.
+  clang::QualType tgt_pointee_qt =
+    is_reference ? cast.getType() : cast.getType()->getPointeeType();
+
+  const clang::CXXRecordDecl *S = src_pointee_qt->getAsCXXRecordDecl();
+  if (!S || !S->hasDefinition())
+    return fallback();
+
+  const bool to_void = !is_reference && tgt_pointee_qt->isVoidType();
+  const clang::CXXRecordDecl *T = nullptr;
+  if (!to_void)
+  {
+    T = tgt_pointee_qt->getAsCXXRecordDecl();
+    if (!T || !T->hasDefinition())
+      return fallback();
+    // Static upcast / identity: the layout already matches, so the legacy
+    // structural typecast is exact and no runtime check is needed.
+    if (S == T || S->isDerivedFrom(T))
+      return fallback();
+  }
+
+  // Walk up S's primary inheritance chain to find the class V that owns
+  // the vptr (the most-derived class on the chain with a
+  // virtual_table::tag-V type symbol). A virtual base on the path
+  // would require runtime offset adjustment via a virtual-base table
+  // we don't model, so refuse the cast loudly rather than silently
+  // typecast and risk confidently-wrong verifications.
+  std::string vptr_class_id;
+  for (const clang::CXXRecordDecl *cur = S; cur != nullptr;)
+  {
+    std::string id, name;
+    get_decl_name(*cur, name, id);
+    if (ns.lookup(vtable_type_prefix + id))
+    {
+      vptr_class_id = id;
+      break;
+    }
+    const clang::CXXRecordDecl *next = nullptr;
+    for (const auto &spec : cur->bases())
+    {
+      if (spec.isVirtual())
+      {
+        log_error(
+          "dynamic_cast through virtual inheritance is not supported "
+          "(class `{}` has a virtual base)",
+          cur->getNameAsString());
+        abort();
+      }
+      if (const auto *bd = spec.getType()->getAsCXXRecordDecl())
+      {
+        next = bd;
+        break;
+      }
+    }
+    cur = next;
+  }
+  if (vptr_class_id.empty())
+    return fallback();
+
+  // Enumerate concrete D's via the side table populated during vtable
+  // registration: every entry is a class with a real vtable variable for
+  // this vptr V, so no per-cast TU walk and no symbol-table probe.
+  // For T*, the matching set is additionally constrained to D being
+  // at-or-below T; for void* every such D contributes (its result is a
+  // pointer adjusted to D's start). Each entry is (vtable-variable
+  // address, per-D result expression).
+  pointer_typet vptr_type(symbol_typet(vtable_type_prefix + vptr_class_id));
+  std::vector<std::pair<exprt, exprt>> arms;
+  exprt typed_null = gen_zero(target_type);
+
+  auto vptr_it = vtable_classes_per_vptr_.find(vptr_class_id);
+  if (vptr_it != vtable_classes_per_vptr_.end())
+  {
+    for (const clang::CXXRecordDecl *D : vptr_it->second)
+    {
+      if (D != S && !D->isDerivedFrom(S))
+        continue;
+      if (!to_void && !(D == T || D->isDerivedFrom(T)))
+        continue;
+
+      std::string D_id, D_name;
+      get_decl_name(*D, D_name, D_id);
+      const std::string vt_var_id =
+        vtable_type_prefix + vptr_class_id + "@" + D_id;
+      exprt vt_addr =
+        address_of_exprt(symbol_exprt(vt_var_id, vptr_type.subtype()));
+
+      exprt result;
+      if (to_void)
+      {
+        // (void*)((char*)src - off(S inside D))
+        auto off = offset_of_subobject(*ASTContext, D, S);
+        if (!off)
+          continue;
+        typet char_ptr = pointer_typet(char_type());
+        exprt adj = src_pointer;
+        gen_typecast(ns, adj, char_ptr);
+        if (*off > 0)
+        {
+          adj = minus_exprt(adj, from_integer(*off, index_type()));
+          adj.type() = char_ptr;
+        }
+        gen_typecast(ns, adj, target_type);
+        result = adj;
+      }
+      else
+      {
+        // For T* the result must point to the T sub-object inside D:
+        //   result = src + (off(T inside D) - off(S inside D))
+        // When both offsets are zero (single inheritance with S and T
+        // at the start of D) the structural typecast is exact.
+        // Otherwise a per-D byte adjustment is required, which we
+        // don't compute yet — refuse the cast instead of silently
+        // emitting a pointer into the wrong sub-object.
+        auto off_S = offset_of_subobject(*ASTContext, D, S);
+        auto off_T = offset_of_subobject(*ASTContext, D, T);
+        if (!off_S || !off_T)
+        {
+          log_error(
+            "dynamic_cast: virtual base between runtime type `{}` and "
+            "source/target is not supported",
+            D->getNameAsString());
+          abort();
+        }
+        if (*off_S != 0 || *off_T != 0)
+        {
+          log_error(
+            "dynamic_cast: multiple inheritance with non-zero base "
+            "offset in `{}` is not supported",
+            D->getNameAsString());
+          abort();
+        }
+        exprt adj = src_pointer;
+        gen_typecast(ns, adj, target_type);
+        result = adj;
+      }
+      arms.push_back({vt_addr, result});
+    }
+  }
+
+  // src->vptr — needed by every form below that consults the runtime type.
+  // Built once and copied into each arm; the IR is value-typed so this is
+  // safe (no aliasing across exprts).
+  exprt vptr_read;
+  {
+    exprt src_deref = dereference_exprt(src_pointer, src_pointer.type());
+    vptr_read = member_exprt(
+      src_deref, vptr_class_id + "::" + vtable_ptr_suffix, vptr_type);
+  }
+
+  // OR-chain: vptr == arm0 || vptr == arm1 || ... — used by the reference
+  // form and the T* pointer form. Precondition: arms not empty.
+  auto vptr_match_any = [&]() -> exprt {
+    exprt match = equality_exprt(vptr_read, arms.front().first);
+    for (size_t i = 1; i < arms.size(); ++i)
+      match = or_exprt(match, equality_exprt(vptr_read, arms[i].first));
+    return match;
+  };
+
+  if (is_reference)
+  {
+    // TODO: find a way to throw std::bad_cast
+
+    // Clang strips the reference from cast.getType(), so target_type is
+    // the un-referenced struct T. Reconstruct the IR-level reference
+    // type (pointer-to-T flagged as a reference) for the cast result.
+    typet ref_type = pointer_typet(target_type);
+    ref_type.set("#reference", true);
+
+    exprt cast_value = src_pointer;
+    gen_typecast(ns, cast_value, ref_type);
+
+    new_expr = cast_value;
+    return false;
+  }
+
+  exprt cast_or_null;
+  if (arms.empty())
+  {
+    // No reachable D can satisfy the cast — emit a typed null directly.
+    cast_or_null = typed_null;
+  }
+  else if (to_void)
+  {
+    // Per-D results differ; chain ITEs so each D selects its own offset.
+    cast_or_null = typed_null;
+    for (auto it = arms.rbegin(); it != arms.rend(); ++it)
+      cast_or_null = if_exprt(
+        equality_exprt(vptr_read, it->first), it->second, cast_or_null);
+  }
+  else
+  {
+    // T* form: every matching D yields the same `(T*) src`, so collapse
+    // the per-D vptr equalities into one OR-chain with a single result.
+    cast_or_null = if_exprt(vptr_match_any(), arms.front().second, typed_null);
+  }
+
+  // Null-source guard — without this, src_deref above would crash
+  // symbolic execution before the SMT solver ever sees the ITE.
+  exprt is_null = equality_exprt(src_pointer, gen_zero(src_pointer.type()));
+  new_expr = if_exprt(is_null, typed_null, cast_or_null);
+  return false;
 }

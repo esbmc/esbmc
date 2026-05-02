@@ -132,9 +132,6 @@ expr2tc smt_tuple_node_flattener::tuple_get(const type2tc &, smt_astt sym)
 expr2tc smt_tuple_node_flattener::tuple_get(const expr2tc &expr)
 {
   assert(is_symbol2t(expr) && "Non-symbol in smtlib expr get()");
-  const symbol2t &sym = to_symbol2t(expr);
-  std::string name = sym.get_symbol_name();
-
   tuple_node_smt_astt a = to_tuple_node_ast(ctx->convert_ast(expr));
   return tuple_get_rec(a);
 }

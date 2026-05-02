@@ -166,8 +166,8 @@ def expand_star_import(module) -> list[str] | None:
 
 
 def get_referenced_names(node):
-    """
-    Find all functions and classes referenced in a function or class definition.
+    """Find all functions and classes referenced in a function or class definition.
+
     Returns a set of names that are called as functions or used in type annotations.
     """
     referenced = set()
@@ -205,11 +205,14 @@ def process_imports(node, output_dir):
     """
     Process import statements in the AST node.
 
-    Parameters:
-        - node: The import node to process.
-        - output_dir: The directory to save the generated JSON files.
-    """
+    Parameters
+    ----------
+    node
+        The import node to process.
+    output_dir
+        The directory to save the generated JSON files.
 
+    """
     if isinstance(node, (ast.Import)):
         module_names = []
         for alias_node in node.names:
@@ -283,7 +286,9 @@ def resolve_module_file(module_qualname: str, output_dir: str) -> str | None:
 
 
 def filter_imports(tree: ast.AST) -> ast.AST:
-    """Remove import statements for verification-agnostic testing frameworks(import pytest) from the AST.
+    """
+    Remove import statements for verification-agnostic testing frameworks(import pytest) from the AST.
+
     This prevents the C++ backend from trying to open JSON files for
     imported testing frameworks that we intentionally skip.
     """
@@ -553,7 +558,7 @@ def detect_and_process_submodules(node, processed_submodules, output_dir):
             else:
                 module_dir = os.path.dirname(file_path)
 
-            for root, dirs, files in os.walk(module_dir):
+            for root, _dirs, files in os.walk(module_dir):
                 for file in files:
                     if file.endswith('.py'):
                         full_path = os.path.join(root, file)

@@ -170,7 +170,7 @@ unsigned goto_symext::argument_assignments(
       ++va_count;
 
     va_index = va_count;
-    for (; it1 != arguments.end(); it1++, va_count++)
+    for (; it1 != arguments.end(); ++it1, va_count++)
     {
       irep_idt identifier =
         id2string(function_identifier) + "::va_arg" + std::to_string(va_count);
