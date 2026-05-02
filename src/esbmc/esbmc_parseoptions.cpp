@@ -32,6 +32,7 @@ extern "C"
 #include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/goto_inline.h>
 #include <goto-programs/goto_k_induction.h>
+#include <goto-programs/goto_reassociate.h>
 #include <goto-programs/goto_loop_invariant.h>
 #include <goto-programs/abstract-interpretation/interval_analysis.h>
 #include <goto-programs/abstract-interpretation/gcse.h>
@@ -2179,6 +2180,12 @@ bool esbmc_parseoptionst::process_goto_program(
     }
 
     goto_check(ns, options, goto_functions);
+
+    // Run reassoc AFTER goto_check so overflow-check assertions are already
+    // inserted: rewriting x + (-x) -> 0 doesn't drop the precondition that
+    // -x must not overflow (e.g. x == INT_MIN).
+    if (!options.get_bool_option("no-simplify"))
+      goto_reassociate(goto_functions);
 
     if (options.get_bool_option("atomicity-check"))
       goto_atomicity_check(goto_functions, ns, context);
