@@ -1,3 +1,7 @@
+# pylint: disable=redefined-builtin
+# Some functions in this module intentionally shadow Python built-ins
+# (e.g. `pow`): they are the operational models ESBMC uses to verify
+# Python programs, so they must match the built-in names exactly.
 def __ESBMC_expm1(x: float) -> float:
     ...
 
