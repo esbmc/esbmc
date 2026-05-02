@@ -1,3 +1,8 @@
+# pylint: disable=redefined-builtin
+# Some functions in this module intentionally shadow Python built-ins
+# (e.g. `round`): they are the operational models ESBMC uses to verify
+# Python programs, so they must match the built-in names exactly.
+
 # Stubs for type inference.
 def array(l: list[Any]) -> list[Any]:
     return l
