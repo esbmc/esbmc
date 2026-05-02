@@ -28,23 +28,9 @@ expr2tc expr2t::simplify() const
     if (expr_id == overflow_id)
       return expr2tc();
 
-    // Try initial simplification
-    expr2tc res = do_simplify();
-    if (!is_nil_expr(res))
-    {
-      // Woot, we simplified some of this. It may have _additional_ fields that
-      // need to get simplified (member2ts in arrays for example), so invoke the
-      // simplifier again, to hit those potential subfields.
-      expr2tc res2 = res->simplify();
-
-      // If we simplified even further, return res2; otherwise res.
-      if (is_nil_expr(res2))
-        return res;
-      else
-        return res2;
-    }
-
-    // Try simplifying all the sub-operands.
+    // Step 1: simplify all sub-operands first. This way do_simplify() always
+    // sees canonical operands and its peepholes can match nested patterns
+    // without a second-shot retry.
     bool changed = false;
     std::list<expr2tc> newoperands;
 
@@ -55,8 +41,8 @@ expr2tc expr2t::simplify() const
 
       if (expr_id == with_id && idx == 0 && is_with2t(*e))
       {
-        // Don't simplifying all the sub-operands for with
-        // as they have already been simplified
+        // Don't simplify the first operand of a with-of-with: it's already
+        // been simplified at construction time.
         newoperands.push_back(tmp);
         continue;
       }
@@ -71,30 +57,33 @@ expr2tc expr2t::simplify() const
       newoperands.push_back(tmp);
     }
 
-    if (changed == false)
-      // Second shot at simplification. For efficiency, a simplifier may be
-      // holding something back until it's certain all its operands are
-      // simplified. It's responsible for simplifying further if it's made that
-      // call though.
-      return do_simplify();
+    // Step 2: build the "current" form of the expression — either the
+    // original (if no operand changed) or a clone with rewritten operands.
+    // do_simplify() runs on whichever of those we end up with.
+    expr2tc current;
+    if (changed)
+    {
+      current = clone();
+      std::list<expr2tc>::iterator it = newoperands.begin();
+      current->Foreach_operand([&it](expr2tc &e) {
+        if (*it)
+          e = *it;
+        ++it;
+      });
+    }
 
-    // An operand has been changed; clone ourselves and update.
-    expr2tc new_us = clone();
-    std::list<expr2tc>::iterator it2 = newoperands.begin();
-    new_us->Foreach_operand([&it2](expr2tc &e) {
-      if (!*it2)
-        ; // No change in operand;
-      else
-        e = *it2; // Operand changed; overwrite with new one.
-      it2++;
-    });
+    // Step 3: top-level peephole. If do_simplify() returned something
+    // structurally different, recurse once on the result so any new
+    // sub-expressions it introduced get simplified too.
+    expr2tc top = changed ? current->do_simplify() : do_simplify();
+    if (!is_nil_expr(top))
+    {
+      expr2tc top2 = top->simplify();
+      return is_nil_expr(top2) ? top : top2;
+    }
 
-    // Finally, attempt simplification again.
-    expr2tc tmp = new_us->do_simplify();
-    if (is_nil_expr(tmp))
-      return new_us;
-    else
-      return tmp;
+    // No top-level rewrite, but operands may have changed.
+    return changed ? current : expr2tc();
   }
   catch (const array_type2t::dyn_sized_array_excp &e)
   {
