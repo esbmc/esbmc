@@ -48,6 +48,32 @@ if(DEFINED CAMADA_DOWNLOAD_DIR)
   camada_register_deps_tree("${CAMADA_DOWNLOAD_DIR}/build/deps/install")
 endif()
 
+# If the user bumped ESBMC_CAMADA_NAME and a stale install from a previous
+# version is still in the download dir, wipe it so the rebuild path below
+# kicks in. Otherwise find_package would happily pick up the old install
+# and silently link ESBMC against the previous camada version.
+if(DEFINED CAMADA_DOWNLOAD_DIR AND DOWNLOAD_DEPENDENCIES)
+  set(_camada_stale_version_file
+      "${CAMADA_DOWNLOAD_DIR}/install/lib/cmake/camada/camadaConfigVersion.cmake")
+  if(EXISTS "${_camada_stale_version_file}")
+    string(REGEX MATCH "v?([0-9]+\\.[0-9]+(\\.[0-9]+)?)"
+                 _camada_unused "${ESBMC_CAMADA_NAME}")
+    set(_camada_expected_version "${CMAKE_MATCH_1}")
+    file(STRINGS "${_camada_stale_version_file}" _camada_version_line
+         REGEX "^set\\(PACKAGE_VERSION ")
+    string(REGEX MATCH "\"([^\"]+)\"" _camada_unused "${_camada_version_line}")
+    set(_camada_installed_version "${CMAKE_MATCH_1}")
+    if(_camada_expected_version AND _camada_installed_version
+       AND NOT _camada_installed_version VERSION_EQUAL _camada_expected_version)
+      message(STATUS "Wiping stale Camada install "
+              "(${_camada_installed_version}, expected ${_camada_expected_version})")
+      file(REMOVE_RECURSE "${CAMADA_DOWNLOAD_DIR}")
+      unset(camada_DIR CACHE)
+      unset(CAMADA_CONFIG_DIR CACHE)
+    endif()
+  endif()
+endif()
+
 find_package(camada CONFIG QUIET HINTS ${CAMADA_DIR} PATH_SUFFIXES lib/cmake/camada)
 
 #-----------------------------------------------------------------------------#
@@ -87,7 +113,9 @@ if(NOT camada_FOUND AND DOWNLOAD_DEPENDENCIES)
     endif()
   endif()
 
-  # Treat an existing install as up-to-date unless we need a static rebuild.
+  # An install from a prior run is up-to-date unless we need a static
+  # rebuild. Version mismatches are caught earlier (above) before
+  # find_package picks up the old install.
   unset(CAMADA_CONFIG_DIR CACHE)
   find_path(CAMADA_CONFIG_DIR
     NAMES camadaConfig.cmake camada-config.cmake
@@ -196,6 +224,34 @@ endif()
 
 if(NOT camada_FOUND)
   find_package(camada CONFIG REQUIRED HINTS ${CAMADA_DIR} PATH_SUFFIXES lib/cmake/camada)
+endif()
+
+# Under BUILD_STATIC the user expects no shared-library dependencies from
+# camada's link interface. Pre-v0.9 camada installs (and hand-built ones
+# without BUILD_SHARED_LIBS=OFF) export absolute paths to .so/.dylib files
+# in INTERFACE_LINK_LIBRARIES. Fail loudly so a stale CAMADA_DIR pin is
+# diagnosed at configure time instead of producing a silently dynamically
+# linked esbmc.
+if(BUILD_STATIC AND TARGET camada::camada)
+  get_target_property(_camada_link_iface camada::camada INTERFACE_LINK_LIBRARIES)
+  if(_camada_link_iface)
+    set(_camada_shared_paths)
+    foreach(_lib IN LISTS _camada_link_iface)
+      if("${_lib}" MATCHES "\\.(so|dylib)(\\.[0-9]+)*$"
+         OR "${_lib}" MATCHES "\\.dll$")
+        list(APPEND _camada_shared_paths "${_lib}")
+      endif()
+    endforeach()
+    if(_camada_shared_paths)
+      string(REPLACE ";" "\n  " _camada_shared_str "${_camada_shared_paths}")
+      message(FATAL_ERROR
+        "BUILD_STATIC=ON but camada::camada's INTERFACE_LINK_LIBRARIES "
+        "references shared libraries:\n  ${_camada_shared_str}\n"
+        "Camada v0.9+ exports static archives when built with "
+        "BUILD_SHARED_LIBS=OFF. Either upgrade your CAMADA_DIR install to "
+        "v0.9+ or rebuild it with BUILD_SHARED_LIBS=OFF.")
+    endif()
+  endif()
 endif()
 
 foreach(_feature CAMADA_HAVE_Z3 CAMADA_HAVE_CVC5 CAMADA_HAVE_MATHSAT
