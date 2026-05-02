@@ -1,3 +1,7 @@
+# pylint: disable=undefined-variable
+# `__VERIFIER_nondet_bool` is an ESBMC intrinsic matched by name by
+# the Python converter; it has no Python binding.
+
 # Regular Expression Operational Model
 # TODO: Currently, the regex model uses manual pattern recognizers with
 # nondeterministic fallbacks. A proper string solver would handle

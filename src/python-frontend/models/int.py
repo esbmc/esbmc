@@ -1,3 +1,7 @@
+# pylint: disable=redefined-builtin
+# This class intentionally shadows the Python built-in `int`: it is the
+# operational model ESBMC uses to verify Python programs, so it must
+# match the built-in name exactly.
 class int:
 
     @classmethod
