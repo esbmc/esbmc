@@ -187,36 +187,6 @@ inline bool is_arith_expr(const expr2tc &expr)
          expr->expr_id == expr2t::modulus_id;
 }
 
-/** True if the binary operator denoted by @p id is associative on bit-vector
- *  / boolean operands: (A op B) op C == A op (B op C). Floating-point add/mul
- *  are intentionally excluded: IEEE rounding makes them non-associative. */
-inline bool is_associative(unsigned int id)
-{
-  return id == expr2t::add_id || id == expr2t::mul_id ||
-         id == expr2t::and_id || id == expr2t::or_id ||
-         id == expr2t::xor_id || id == expr2t::bitand_id ||
-         id == expr2t::bitor_id || id == expr2t::bitxor_id;
-}
-
-inline bool is_associative(const expr2tc &e)
-{
-  return is_associative(e->expr_id);
-}
-
-/** True if the binary operator denoted by @p id is commutative: A op B == B op A. */
-inline bool is_commutative(unsigned int id)
-{
-  return id == expr2t::add_id || id == expr2t::mul_id ||
-         id == expr2t::and_id || id == expr2t::or_id ||
-         id == expr2t::xor_id || id == expr2t::bitand_id ||
-         id == expr2t::bitor_id || id == expr2t::bitxor_id;
-}
-
-inline bool is_commutative(const expr2tc &e)
-{
-  return is_commutative(e->expr_id);
-}
-
 inline bool is_comp_expr(const expr2tc &expr)
 {
   return expr->expr_id == expr2t::lessthan_id ||
