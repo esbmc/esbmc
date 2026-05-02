@@ -224,11 +224,8 @@ static expr2tc simplify_arith_2ops(
 
     // Fix rounding when an overflow occurs
     if (!is_nil_expr(simpl_res) && is_constant_int2t(simpl_res))
-      migrate_expr(
-        from_integer(
-          to_constant_int2t(simpl_res).value,
-          migrate_type_back(simpl_res->type)),
-        simpl_res);
+      simpl_res =
+        from_integer(to_constant_int2t(simpl_res).value, simpl_res->type);
   }
   else if (
     is_fixedbv_type(simplified_side_1) || is_fixedbv_type(simplified_side_2))
@@ -634,11 +631,8 @@ static expr2tc simplify_arith_1op(const type2tc &type, const expr2tc &value)
     // Properly handle truncation when an overflow occurs
     // or when the result gets out of the bounds of the type
     if (!is_nil_expr(simpl_res) && is_constant_int2t(simpl_res))
-      migrate_expr(
-        from_integer(
-          to_constant_int2t(simpl_res).value,
-          migrate_type_back(simpl_res->type)),
-        simpl_res);
+      simpl_res =
+        from_integer(to_constant_int2t(simpl_res).value, simpl_res->type);
   }
   else if (is_fixedbv_type(value))
   {

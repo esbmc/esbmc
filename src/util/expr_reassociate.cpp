@@ -3,7 +3,6 @@
 #include <irep2/irep2_utils.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
-#include <util/migrate.h>
 
 #include <vector>
 
@@ -227,12 +226,10 @@ bool optimize_terms(std::vector<signed_term> &terms)
 
   if (have_const && !acc_value.is_zero())
   {
-    // Re-typed via from_integer(exprt overload) + migrate_expr so the value
-    // is truncated to the result bit-width.
-    expr2tc folded;
-    migrate_expr(
-      from_integer(acc_value, migrate_type_back(const_type)), folded);
-    terms.push_back({acc_negative, folded});
+    // from_integer truncates to const_type's bit width so the rebuilt
+    // constant fits the type — important when, e.g., narrow `unsigned char`
+    // additions accumulate beyond 255.
+    terms.push_back({acc_negative, from_integer(acc_value, const_type)});
   }
 
   // Cancel matching X / -X pairs. O(n^2) but n is tiny in practice.
