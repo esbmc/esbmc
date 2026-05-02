@@ -3,23 +3,23 @@
 
 
 def randint(a: int, b: int) -> int:
-    value: int = nondet_int()  # noqa: F821
-    __ESBMC_assume(value >= a and value <= b)  # noqa: F821
+    value: int = nondet_int()
+    __ESBMC_assume(value >= a and value <= b)
     return value  # Ensures value is within [a, b]
 
 
 def random() -> float:
-    value: float = nondet_float()  # noqa: F821
-    __ESBMC_assume(value >= 0.0 and value < 1.0)  # noqa: F821
+    value: float = nondet_float()
+    __ESBMC_assume(value >= 0.0 and value < 1.0)
     return value  #  Returns a floating number [0,1.0).
 
 
 def uniform(a: float, b: float) -> float:
-    value: float = nondet_float()  # noqa: F821
+    value: float = nondet_float()
     if a <= b:
-        __ESBMC_assume(value >= a and value <= b)  # noqa: F821
+        __ESBMC_assume(value >= a and value <= b)
     else:
-        __ESBMC_assume(value >= b and value <= a)  # noqa: F821
+        __ESBMC_assume(value >= b and value <= a)
     return value
 
 
@@ -30,9 +30,9 @@ def getrandbits(k: int) -> int:
     if k == 0:
         return 0
 
-    value: int = nondet_int()  # noqa: F821
+    value: int = nondet_int()
     max_val: int = (1 << k) - 1  # 2**k - 1
-    __ESBMC_assume(value >= 0 and value <= max_val)  # noqa: F821
+    __ESBMC_assume(value >= 0 and value <= max_val)
     return value
 
 
@@ -62,7 +62,7 @@ def randrange(start: int, stop: int = None, step: int = 1) -> int:
         raise ValueError("empty range for randrange()")
 
     # Select random index
-    index: int = nondet_int()  # noqa: F821
-    __ESBMC_assume(index >= 0 and index < count)  # noqa: F821
+    index: int = nondet_int()
+    __ESBMC_assume(index >= 0 and index < count)
 
     return actual_start + (index * actual_step)

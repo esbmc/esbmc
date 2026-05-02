@@ -4,7 +4,7 @@
 # Python programs, so they must match the built-in names exactly.
 
 # Stubs for type inference.
-def array(l: list[Any]) -> list[Any]:  # noqa: F821
+def array(l: list[Any]) -> list[Any]:
     return l
 
 
