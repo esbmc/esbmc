@@ -166,7 +166,8 @@ def expand_star_import(module) -> list[str] | None:
 
 
 def get_referenced_names(node):
-    """Find all functions and classes referenced in a function or class definition.
+    """
+    Find all functions and classes referenced in a function or class definition.
 
     Returns a set of names that are called as functions or used in type annotations.
     """
@@ -202,7 +203,8 @@ module_imports = {}
 
 
 def process_imports(node, output_dir):
-    """Process import statements in the AST node.
+    """
+    Process import statements in the AST node.
 
     Parameters
     ----------
@@ -438,7 +440,8 @@ def rewrite_relative_import(node, parent_module: str | None):
 
 
 def generate_ast_json(tree, python_filename, elements_to_import, output_dir, module_qualname=None):
-    """Generate AST JSON from the given Python AST tree.
+    """
+    Generate AST JSON from the given Python AST tree.
 
     Parameters
     ----------
@@ -522,7 +525,8 @@ def generate_ast_json(tree, python_filename, elements_to_import, output_dir, mod
 
 
 def detect_and_process_submodules(node, processed_submodules, output_dir):
-    """Detect submodule usage in the AST and process each unseen submodule.
+    """
+    Detect submodule usage in the AST and process each unseen submodule.
 
     Parameters
     ----------

@@ -5,7 +5,8 @@ from typing import Any, Optional
 
 
 def defaultdict(default_factory: Optional[Any] = None, *args, **kwargs) -> dict:
-    """Create a defaultdict - modeled as a plain dict for verification purposes.
+    """
+    Create a defaultdict - modeled as a plain dict for verification purposes.
 
     Approximations:
     - The default_factory is tracked by the preprocessor and used to insert
@@ -19,6 +20,7 @@ def defaultdict(default_factory: Optional[Any] = None, *args, **kwargs) -> dict:
 
 
 class Counter:
+
     """Simplified Counter model: maps (int, int) keys to integer counts."""
 
     def __init__(self) -> None:

@@ -1,4 +1,5 @@
-"""Operational model for non-deterministic collection functions in ESBMC Python frontend.
+"""
+Operational model for non-deterministic collection functions in ESBMC Python frontend.
 
 KNOWN LIMITATIONS:
 (why we implemented mothod in preprocessor instead of here)
@@ -87,7 +88,8 @@ def _nondet_size(max_size: int) -> int:
 
 
 def nondet_list(max_size: int = _DEFAULT_NONDET_SIZE, elem_type: Any = None) -> list:
-    """Return a non-deterministic list with specified element type.
+    """
+    Return a non-deterministic list with specified element type.
 
     Parameters
     ----------
@@ -130,7 +132,8 @@ def nondet_list(max_size: int = _DEFAULT_NONDET_SIZE, elem_type: Any = None) -> 
 def nondet_dict(max_size: int = _DEFAULT_NONDET_SIZE,
                 key_type: Any = None,
                 value_type: Any = None) -> dict:
-    """Return a non-deterministic dictionary with specified key and value types.
+    """
+    Return a non-deterministic dictionary with specified key and value types.
 
     The preprocessor expands this call inline with concrete sequential keys
     and fresh nondet values. This model function body is the fallback for
