@@ -21,6 +21,7 @@
 #include <optional>
 #include <sstream>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace
@@ -48,7 +49,7 @@ bool backend_supports_tuples(camada_backendt backend)
     return false;
   }
 
-  __builtin_unreachable();
+  std::unreachable();
 }
 
 using camada_sort = solver_smt_sort<camada::SMTSortRef>;
@@ -381,7 +382,7 @@ public:
     case camada::checkResult::UNKNOWN:
       return P_ERROR;
     }
-    __builtin_unreachable();
+    std::unreachable();
   }
 
   void assert_ast(smt_astt a) override
