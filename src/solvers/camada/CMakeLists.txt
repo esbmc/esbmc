@@ -138,11 +138,14 @@ if(NOT camada_FOUND AND DOWNLOAD_DEPENDENCIES)
     endif()
 
     # Map ESBMC ENABLE_<solver> flags to Camada's CAMADA_SOLVER_<solver>_ENABLE.
-    # Camada has no Windows prebuilts for Bitwuzla, CVC5, or MathSAT (see the
-    # comments in Camada's CamadaDependencies.cmake), so force them off on
-    # Windows regardless of the user's ENABLE_* selection.
+    # Camada has no MSVC-compatible builds for Bitwuzla, CVC5, MathSAT (see
+    # the comments in Camada's CamadaDependencies.cmake), or Yices (its source
+    # build invokes autoreconf, which is unavailable on Windows MSVC). Force
+    # them off when targeting Windows regardless of the user's ENABLE_*
+    # selection. Use CMAKE_SYSTEM_NAME (target platform) so cross-compiles to
+    # Windows from Unix hosts honour the same restriction.
     macro(_camada_solver_flag esbmc_var camada_solver)
-      if(${esbmc_var} AND NOT CMAKE_HOST_SYSTEM_NAME MATCHES "Windows")
+      if(${esbmc_var} AND NOT CMAKE_SYSTEM_NAME MATCHES "Windows")
         set(_camada_${camada_solver} ON)
       else()
         set(_camada_${camada_solver} OFF)
@@ -158,12 +161,22 @@ if(NOT camada_FOUND AND DOWNLOAD_DEPENDENCIES)
       set(_camada_Z3 OFF)
     endif()
 
+    # Multi-config generators (Visual Studio, Xcode) ignore CMAKE_BUILD_TYPE
+    # at configure time and select the configuration via --config at build
+    # time. Pick a sensible default when the parent didn't set one so the
+    # --build/--install invocations below get a non-empty --config argument.
+    if(NOT CMAKE_BUILD_TYPE)
+      set(_camada_build_type RelWithDebInfo)
+    else()
+      set(_camada_build_type "${CMAKE_BUILD_TYPE}")
+    endif()
+
     message(STATUS "Configuring Camada")
     execute_process(
       COMMAND ${CMAKE_COMMAND}
         -S "${CAMADA_PROJECT_SOURCE_DIR}"
         -B "${CAMADA_BUILD_DIR}"
-        -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+        -DCMAKE_BUILD_TYPE=${_camada_build_type}
         -DCMAKE_INSTALL_PREFIX=${CAMADA_INSTALL_DIR}
         -DBUILD_SHARED_LIBS=OFF
         -DCAMADA_DOWNLOAD_DEPENDENCIES=ALL
@@ -182,7 +195,7 @@ if(NOT camada_FOUND AND DOWNLOAD_DEPENDENCIES)
     message(STATUS "Building Camada")
     execute_process(
       COMMAND ${CMAKE_COMMAND} --build "${CAMADA_BUILD_DIR}"
-        --config ${CMAKE_BUILD_TYPE} --parallel
+        --config ${_camada_build_type} --parallel
       RESULT_VARIABLE CAMADA_BUILD_RESULT)
     if(NOT CAMADA_BUILD_RESULT EQUAL 0)
       message(FATAL_ERROR "Failed to build Camada")
@@ -191,7 +204,7 @@ if(NOT camada_FOUND AND DOWNLOAD_DEPENDENCIES)
     message(STATUS "Installing Camada")
     execute_process(
       COMMAND ${CMAKE_COMMAND} --install "${CAMADA_BUILD_DIR}"
-        --config ${CMAKE_BUILD_TYPE}
+        --config ${_camada_build_type}
       RESULT_VARIABLE CAMADA_INSTALL_RESULT)
     if(NOT CAMADA_INSTALL_RESULT EQUAL 0)
       message(FATAL_ERROR "Failed to install Camada")
@@ -225,20 +238,6 @@ if(NOT camada_FOUND)
     PATH_SUFFIXES lib/cmake/camada)
 endif()
 
-# Camada and its solver dependencies (cvc5, etc.) are consumed as IMPORTED
-# targets, whose include dirs CMake propagates as SYSTEM by default. That
-# downgrades them to -isystem and lets earlier -I paths (e.g. Homebrew's
-# /opt/homebrew/include) shadow Camada's vendored z3++.h with an
-# incompatible system copy. Force non-SYSTEM on every imported target that
-# Camada brings in so their includes emit as -I.
-foreach(_camada_imported_target
-        camada::camada cvc5::cvc5 cvc5::cvc5parser stp::stp)
-  if(TARGET ${_camada_imported_target})
-    set_target_properties(${_camada_imported_target} PROPERTIES
-      IMPORTED_NO_SYSTEM TRUE)
-  endif()
-endforeach()
-
 if(BUILD_STATIC)
   camada_prefer_static_link_interface(camada::camada)
 endif()
@@ -250,6 +249,15 @@ foreach(feature CAMADA_HAVE_Z3 CAMADA_HAVE_CVC5 CAMADA_HAVE_MATHSAT CAMADA_HAVE_
 endforeach()
 
 add_library(solvercamada camada_conv.cpp)
+# Camada and its solver dependencies (cvc5, etc.) are consumed as IMPORTED
+# targets, whose include dirs CMake propagates as SYSTEM by default. That
+# downgrades them to -isystem and lets earlier -I paths (e.g. Homebrew's
+# /opt/homebrew/include) shadow Camada's vendored z3++.h with an
+# incompatible system copy. Disable SYSTEM-from-imported on the consuming
+# target so those includes emit as -I and the BEFORE PRIVATE ordering
+# below keeps Camada's vendored headers ahead of system ones.
+set_target_properties(solvercamada PROPERTIES
+  NO_SYSTEM_FROM_IMPORTED TRUE)
 target_include_directories(solvercamada
   PRIVATE ${Boost_INCLUDE_DIRS}
   PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
