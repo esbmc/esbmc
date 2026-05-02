@@ -226,6 +226,23 @@ if(NOT camada_FOUND)
   find_package(camada CONFIG REQUIRED HINTS ${CAMADA_DIR} PATH_SUFFIXES lib/cmake/camada)
 endif()
 
+# Camada is built for a single configuration (CMAKE_BUILD_TYPE on
+# single-config generators, RelWithDebInfo when invoked from a multi-config
+# generator like Visual Studio). The exported camada::camada target
+# therefore only carries IMPORTED_LOCATION_<one-config>. When ESBMC is
+# itself driven by a multi-config generator, CMake validates the imported
+# target against every entry in CMAKE_CONFIGURATION_TYPES (Debug, Release,
+# MinSizeRel, RelWithDebInfo) and errors out on the missing ones. Map
+# every consumer config to the configurations camada actually provides so
+# the target resolves uniformly.
+if(TARGET camada::camada)
+  set(_camada_config_fallbacks RelWithDebInfo Release Debug MinSizeRel "")
+  foreach(_cfg DEBUG RELEASE MINSIZEREL RELWITHDEBINFO)
+    set_property(TARGET camada::camada PROPERTY
+      MAP_IMPORTED_CONFIG_${_cfg} ${_camada_config_fallbacks})
+  endforeach()
+endif()
+
 # Under BUILD_STATIC the user expects no shared-library dependencies from
 # camada's link interface. Pre-v0.9 camada installs (and hand-built ones
 # without BUILD_SHARED_LIBS=OFF) export absolute paths to .so/.dylib files
