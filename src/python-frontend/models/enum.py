@@ -4,10 +4,10 @@ class Enum:
         self.value: int = value
         self.name: str = name
 
-    def __eq__(self, other: Enum) -> bool:
+    def __eq__(self, other: Enum) -> bool:  # noqa: F821
         return self.value == other.value
 
-    def __ne__(self, other: Enum) -> bool:
+    def __ne__(self, other: Enum) -> bool:  # noqa: F821
         return self.value != other.value
 
     def __hash__(self) -> int:

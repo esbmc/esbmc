@@ -9,7 +9,7 @@
 #         return -x
 
 
-def all(iterable: list[Any]) -> bool:
+def all(iterable: list[Any]) -> bool:  # noqa: F821
     """Return True if all elements of the iterable are true (or if empty)."""
     i: int = 0
     length: int = len(iterable)
