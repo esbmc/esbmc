@@ -82,11 +82,11 @@ def comb(n: int, k: int) -> int:
 
 
 def isinf(x: float) -> bool:
-    return __ESBMC_isinf(x)
+    return __ESBMC_isinf(x)  # noqa: F821
 
 
 def isnan(x: float) -> bool:
-    return __ESBMC_isnan(x)
+    return __ESBMC_isnan(x)  # noqa: F821
 
 
 def floor(x: float) -> int:
@@ -131,7 +131,7 @@ def sin(x: float) -> float:
     Returns:
         Sine of x
     """
-    return __ESBMC_sin(x)
+    return __ESBMC_sin(x)  # noqa: F821
 
 
 def cos(x: float) -> float:
@@ -144,14 +144,14 @@ def cos(x: float) -> float:
     Returns:
         Cosine of x
     """
-    return __ESBMC_cos(x)
+    return __ESBMC_cos(x)  # noqa: F821
 
 
 def tan(x: float) -> float:
     """
     Calculate tangent of x (in radians)
     """
-    return __ESBMC_tan(x)
+    return __ESBMC_tan(x)  # noqa: F821
 
 
 def sqrt(x: float) -> float:
@@ -170,7 +170,7 @@ def sqrt(x: float) -> float:
     if x < 0:
         raise ValueError("math domain error")
 
-    return __ESBMC_sqrt(x)
+    return __ESBMC_sqrt(x)  # noqa: F821
 
 
 def exp(x: float) -> float:
@@ -183,7 +183,7 @@ def exp(x: float) -> float:
     Returns:
         e^x
     """
-    return __ESBMC_exp(x)
+    return __ESBMC_exp(x)  # noqa: F821
 
 
 def log(x: float) -> float:
@@ -201,7 +201,7 @@ def log(x: float) -> float:
     """
     if x <= 0:
         raise ValueError("math domain error")
-    return __ESBMC_log(x)
+    return __ESBMC_log(x)  # noqa: F821
 
 
 def factorial(n: int) -> int:
@@ -331,7 +331,7 @@ def asin(x: float) -> float:
     """
     if x < -1.0 or x > 1.0:
         raise ValueError("math domain error")
-    return __ESBMC_asin(x)
+    return __ESBMC_asin(x)  # noqa: F821
 
 
 def acos(x: float) -> float:
@@ -343,21 +343,21 @@ def acos(x: float) -> float:
     """
     if x < -1.0 or x > 1.0:
         raise ValueError("math domain error")
-    return __ESBMC_acos(x)
+    return __ESBMC_acos(x)  # noqa: F821
 
 
 def atan(x: float) -> float:
     """
     Calculate arctangent of x (in radians)
     """
-    return __ESBMC_atan(x)
+    return __ESBMC_atan(x)  # noqa: F821
 
 
 def atan2(y: float, x: float) -> float:
     """
     Calculate two-argument arctangent (in radians)
     """
-    return __ESBMC_atan2(y, x)
+    return __ESBMC_atan2(y, x)  # noqa: F821
 
 
 def log2(x: float) -> float:
@@ -369,7 +369,7 @@ def log2(x: float) -> float:
     """
     if x <= 0:
         raise ValueError("math domain error")
-    return __ESBMC_log2(x)
+    return __ESBMC_log2(x)  # noqa: F821
 
 
 def log10(x: float) -> float:
@@ -381,7 +381,7 @@ def log10(x: float) -> float:
     """
     if x <= 0:
         raise ValueError("math domain error")
-    return __ESBMC_log10(x)
+    return __ESBMC_log10(x)  # noqa: F821
 
 
 def asinh(x: float) -> float:
@@ -420,14 +420,14 @@ def pow(x: float, y: float) -> float:
     """
     Calculate x raised to the power of y
     """
-    return __ESBMC_pow(x, y)
+    return __ESBMC_pow(x, y)  # noqa: F821
 
 
 def fabs(x: float) -> float:
     """
     Calculate absolute value of x
     """
-    return __ESBMC_fabs(x)
+    return __ESBMC_fabs(x)  # noqa: F821
 
 
 def trunc(x: float) -> int:
@@ -441,35 +441,35 @@ def fmod(x: float, y: float) -> float:
     """
     Floating-point remainder of x / y
     """
-    return __ESBMC_fmod(x, y)
+    return __ESBMC_fmod(x, y)  # noqa: F821
 
 
 def copysign(x: float, y: float) -> float:
     """
     Return x with the sign of y
     """
-    return __ESBMC_copysign(x, y)
+    return __ESBMC_copysign(x, y)  # noqa: F821
 
 
 def sinh(x: float) -> float:
     """
     Calculate hyperbolic sine of x
     """
-    return __ESBMC_sinh(x)
+    return __ESBMC_sinh(x)  # noqa: F821
 
 
 def cosh(x: float) -> float:
     """
     Calculate hyperbolic cosine of x
     """
-    return __ESBMC_cosh(x)
+    return __ESBMC_cosh(x)  # noqa: F821
 
 
 def tanh(x: float) -> float:
     """
     Calculate hyperbolic tangent of x
     """
-    return __ESBMC_tanh(x)
+    return __ESBMC_tanh(x)  # noqa: F821
 
 
 def isfinite(x: float) -> bool:
