@@ -181,7 +181,8 @@ if(NOT camada_FOUND AND DOWNLOAD_DEPENDENCIES)
 
     message(STATUS "Building Camada")
     execute_process(
-      COMMAND ${CMAKE_COMMAND} --build "${CAMADA_BUILD_DIR}" --parallel 32
+      COMMAND ${CMAKE_COMMAND} --build "${CAMADA_BUILD_DIR}"
+        --config ${CMAKE_BUILD_TYPE} --parallel
       RESULT_VARIABLE CAMADA_BUILD_RESULT)
     if(NOT CAMADA_BUILD_RESULT EQUAL 0)
       message(FATAL_ERROR "Failed to build Camada")
@@ -190,6 +191,7 @@ if(NOT camada_FOUND AND DOWNLOAD_DEPENDENCIES)
     message(STATUS "Installing Camada")
     execute_process(
       COMMAND ${CMAKE_COMMAND} --install "${CAMADA_BUILD_DIR}"
+        --config ${CMAKE_BUILD_TYPE}
       RESULT_VARIABLE CAMADA_INSTALL_RESULT)
     if(NOT CAMADA_INSTALL_RESULT EQUAL 0)
       message(FATAL_ERROR "Failed to install Camada")
