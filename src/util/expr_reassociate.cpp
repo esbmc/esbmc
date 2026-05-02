@@ -17,13 +17,38 @@ struct signed_term
   expr2tc term;
 };
 
+/// True if @p child is an add/sub/neg whose result type and operand types
+/// all match @p chain_type — i.e., descending into @p child stays in the
+/// same homogeneous arithmetic chain. Guards against unsound transitions
+/// like descending into `sub(ptr, ptr) -> int`, which would leak
+/// pointer-typed leaves into an integer-rooted chain.
+bool same_chain(const expr2tc &child, const type2tc &chain_type)
+{
+  if (child->type != chain_type)
+    return false;
+  if (is_add2t(child))
+  {
+    const add2t &a = to_add2t(child);
+    return a.side_1->type == chain_type && a.side_2->type == chain_type;
+  }
+  if (is_sub2t(child))
+  {
+    const sub2t &s = to_sub2t(child);
+    return s.side_1->type == chain_type && s.side_2->type == chain_type;
+  }
+  if (is_neg2t(child))
+    return to_neg2t(child).value->type == chain_type;
+  return false;
+}
+
 /// Recursively flatten an add/sub/neg chain into a list of signed terms.
 ///
-/// Stops descending at any non-add/sub/neg node — that node becomes a leaf
-/// term. The flatten is type-preserving: every leaf has the same type as the
-/// root, since add/sub/neg always preserve the operand type in IRep2.
+/// Only descends into a child add/sub/neg whose result and operand types
+/// all match @p chain_type; everything else becomes a leaf. This keeps
+/// the chain homogeneously typed and prevents unsound transitions like
+/// pulling pointer leaves out of `sub(p,q)` into an integer chain.
 ///
-/// Examples:
+/// Examples (chain_type = int):
 ///   ((2 - x) - 20) - 4*y
 ///     -> [(+,2), (-,x), (-,20), (-,4*y)]
 ///   3 - (5 - x)
@@ -32,28 +57,29 @@ struct signed_term
 ///     -> [(-,x), (-,y), (+,z)]
 void linearize_add_sub(
   const expr2tc &expr,
+  const type2tc &chain_type,
   bool negate,
   std::vector<signed_term> &out)
 {
-  if (is_add2t(expr))
+  if (is_add2t(expr) && same_chain(expr, chain_type))
   {
     const add2t &a = to_add2t(expr);
-    linearize_add_sub(a.side_1, negate, out);
-    linearize_add_sub(a.side_2, negate, out);
+    linearize_add_sub(a.side_1, chain_type, negate, out);
+    linearize_add_sub(a.side_2, chain_type, negate, out);
     return;
   }
 
-  if (is_sub2t(expr))
+  if (is_sub2t(expr) && same_chain(expr, chain_type))
   {
     const sub2t &s = to_sub2t(expr);
-    linearize_add_sub(s.side_1, negate, out);
-    linearize_add_sub(s.side_2, !negate, out); // RHS of sub flips sign
+    linearize_add_sub(s.side_1, chain_type, negate, out);
+    linearize_add_sub(s.side_2, chain_type, !negate, out);
     return;
   }
 
-  if (is_neg2t(expr))
+  if (is_neg2t(expr) && same_chain(expr, chain_type))
   {
-    linearize_add_sub(to_neg2t(expr).value, !negate, out);
+    linearize_add_sub(to_neg2t(expr).value, chain_type, !negate, out);
     return;
   }
 
@@ -71,13 +97,16 @@ bool is_add_sub_root(const expr2tc &e)
   return is_add2t(e) || is_sub2t(e) || is_neg2t(e);
 }
 
-/// True if @p type is one we know how to fold constants in: bit-vectors,
-/// bool, or pointer (where the root is `pointer + int_offset` chains —
-/// e.g. `(((p+1)+1)+1)` from repeated `p++`). Floating-point is excluded:
-/// IEEE add is not associative.
+/// True if @p type is one we know how to fold constants in: bit-vectors
+/// and bool. Floating-point is excluded — IEEE add is not associative.
+/// Pointer-typed chains are excluded too: `add(p, c)` mixes a pointer
+/// operand with an integer offset, which our homogeneous-chain
+/// invariant doesn't model. Master folded those via a different path
+/// (attempt_associative_simplify); we handle that in expr_simplifier
+/// peepholes instead.
 bool reassoc_safe_type(const type2tc &type)
 {
-  return is_bv_type(type) || is_bool_type(type) || is_pointer_type(type);
+  return is_bv_type(type) || is_bool_type(type);
 }
 
 /// Build a balanced-ish add/sub tree from a list of signed terms.
@@ -94,12 +123,8 @@ expr2tc rebuild_chain(
   // collapse `add(x, neg(y))` back to `sub(x, y)` and `add(neg(x), y)` to
   // `sub(y, x)` via its existing peepholes — so we don't need to special-case
   // those shapes here.
-  //
-  // Use each term's own type for neg2t, not the root type: in pointer
-  // arithmetic the root is `pointer` but the offset terms are integers;
-  // we must not synthesize neg2t(pointer_type, ...).
-  auto materialize = [](const signed_term &t) -> expr2tc {
-    return t.negative ? neg2tc(t.term->type, t.term) : t.term;
+  auto materialize = [&](const signed_term &t) -> expr2tc {
+    return t.negative ? neg2tc(type, t.term) : t.term;
   };
 
   expr2tc acc = materialize(terms[0]);
@@ -124,22 +149,16 @@ expr2tc rebuild_chain(
 /// bit-width (otherwise narrow types like `unsigned char` would see
 /// un-truncated sums).
 ///
-/// The folded constant uses the type of the *first* integer leaf we saw
-/// (not the chain's root type): in pointer arithmetic the root is
-/// `pointer` but the integer offsets are e.g. `signed long`, and we
-/// must not synthesize a pointer-typed integer constant.
-///
 /// Constants are never mutated in place: expr2tc shares storage, so writing
 /// `to_constant_int2t(c).value +=` would corrupt every other use of that
 /// constant in the program.
-bool optimize_terms(std::vector<signed_term> &terms)
+bool optimize_terms(const type2tc &type, std::vector<signed_term> &terms)
 {
   bool changed = false;
 
   BigInt acc_value(0);
   bool acc_negative = false;
   bool have_const = false;
-  type2tc const_type;
   for (std::size_t i = 0; i < terms.size();)
   {
     if (!is_constant_int2t(terms[i].term))
@@ -152,7 +171,6 @@ bool optimize_terms(std::vector<signed_term> &terms)
     {
       acc_value = v;
       acc_negative = terms[i].negative;
-      const_type = terms[i].term->type;
       have_const = true;
     }
     else if (acc_negative == terms[i].negative)
@@ -178,7 +196,7 @@ bool optimize_terms(std::vector<signed_term> &terms)
     // is truncated to the result bit-width.
     expr2tc folded;
     migrate_expr(
-      from_integer(acc_value, migrate_type_back(const_type)), folded);
+      from_integer(acc_value, migrate_type_back(type)), folded);
     terms.push_back({acc_negative, folded});
   }
 
@@ -238,13 +256,13 @@ bool reassociate_arith(expr2tc &expr)
     return changed;
 
   std::vector<signed_term> terms;
-  linearize_add_sub(expr, /*negate=*/false, terms);
+  linearize_add_sub(expr, expr->type, /*negate=*/false, terms);
 
   if (terms.size() < 2)
     return changed;
 
   const std::size_t orig_size = terms.size();
-  if (!optimize_terms(terms) && terms.size() == orig_size)
+  if (!optimize_terms(expr->type, terms) && terms.size() == orig_size)
     return changed;
 
   expr = rebuild_chain(expr->type, terms);
