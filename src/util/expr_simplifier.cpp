@@ -268,6 +268,106 @@ expr2tc attempt_associative_simplify(
   return expr2tc();
 }
 
+/** LLVM-style associative/commutative reassociation of a binary op.
+ *
+ *  Tries the four rewrites from llvm::simplifyAssociativeBinOp:
+ *    (A op B) op C  ->  A op (B op C)   if (B op C) simplifies        [assoc]
+ *    A op (B op C)  ->  (A op B) op C   if (A op B) simplifies        [assoc]
+ *    (A op B) op C  ->  (C op A) op B   if (C op A) simplifies   [assoc+commut]
+ *    A op (B op C)  ->  B op (C op A)   if (C op A) simplifies   [assoc+commut]
+ *
+ *  Finds simplifications that pure constant-folding misses, e.g.
+ *  (x + 5) + (-x) reduces to 5.
+ *
+ *  Caller passes:
+ *    - is_op_type / to_op_type — like simplify_associative_binary_op above
+ *    - op_constructor — builds a fresh T from two operands (stamps the type)
+ *
+ *  @returns the rewritten expression, or nil if no rewrite fired. */
+template <typename OpType, typename OpConstructor>
+expr2tc simplify_assoc_commute(
+  const type2tc &result_type,
+  const expr2tc &side_1,
+  const expr2tc &side_2,
+  bool (*is_op_type)(const expr2tc &),
+  const OpType &(*to_op_type)(const expr2tc &),
+  OpConstructor op_constructor)
+{
+  // Termination: each simplify() call only descends into the *operands*
+  // we just constructed. They are not larger than the originals (same A,B,C
+  // arguments in different positions), and ::simplify either folds them to
+  // a single value or leaves them as-is — we drop the latter. No unbounded
+  // recursion via this helper.
+
+  auto try_simplify = [](expr2tc candidate) -> expr2tc {
+    if (::simplify(candidate))
+      return candidate;
+    return expr2tc();
+  };
+
+  // Match (A op B) op C
+  if (is_op_type(side_1))
+  {
+    const OpType &lhs = to_op_type(side_1);
+    const expr2tc &A = lhs.side_1;
+    const expr2tc &B = lhs.side_2;
+    const expr2tc &C = side_2;
+
+    // (A op B) op C -> A op (B op C) if (B op C) simplifies
+    if (expr2tc V = try_simplify(op_constructor(B, C)))
+    {
+      if (V == B)
+        return side_1; // "A op V" == "A op B" == side_1
+      if (expr2tc W = try_simplify(op_constructor(A, V)))
+        return typecast_check_return(result_type, W);
+    }
+
+    // (A op B) op C -> (C op A) op B if (C op A) simplifies   [needs commut]
+    if (is_commutative(side_1))
+    {
+      if (expr2tc V = try_simplify(op_constructor(C, A)))
+      {
+        if (V == A)
+          return side_1; // "V op B" == "A op B" == side_1
+        if (expr2tc W = try_simplify(op_constructor(V, B)))
+          return typecast_check_return(result_type, W);
+      }
+    }
+  }
+
+  // Match A op (B op C)
+  if (is_op_type(side_2))
+  {
+    const OpType &rhs = to_op_type(side_2);
+    const expr2tc &A = side_1;
+    const expr2tc &B = rhs.side_1;
+    const expr2tc &C = rhs.side_2;
+
+    // A op (B op C) -> (A op B) op C if (A op B) simplifies
+    if (expr2tc V = try_simplify(op_constructor(A, B)))
+    {
+      if (V == B)
+        return side_2; // "V op C" == "B op C" == side_2
+      if (expr2tc W = try_simplify(op_constructor(V, C)))
+        return typecast_check_return(result_type, W);
+    }
+
+    // A op (B op C) -> B op (C op A) if (C op A) simplifies   [needs commut]
+    if (is_commutative(side_2))
+    {
+      if (expr2tc V = try_simplify(op_constructor(C, A)))
+      {
+        if (V == C)
+          return side_2; // "B op V" == "B op C" == side_2
+        if (expr2tc W = try_simplify(op_constructor(B, V)))
+          return typecast_check_return(result_type, W);
+      }
+    }
+  }
+
+  return expr2tc();
+}
+
 template <template <typename> class TFunctor, typename constructor>
 static expr2tc simplify_arith_2ops(
   const type2tc &type,
@@ -479,7 +579,7 @@ expr2tc add2t::do_simplify() const
   if (!is_nil_expr(res))
     return res;
 
-  // Attempt associative simplification
+  // Wrapper used by both LLVM-style reassoc and the n-ary rebalancer.
   std::function<expr2tc(const expr2tc &arg1, const expr2tc &arg2)> add_wrapper =
     [](const expr2tc &arg1, const expr2tc &arg2) -> expr2tc {
     expr2tc a = arg1, b = arg2;
@@ -487,6 +587,14 @@ expr2tc add2t::do_simplify() const
     return add2tc(t, a, b);
   };
 
+  // LLVM-style reassoc: catches non-constant patterns like
+  //   (x + 5) + (-x) -> 5,  (x + a) + (b - x) -> a + b
+  if (
+    expr2tc reassoc = simplify_assoc_commute<add2t>(
+      type, side_1, side_2, is_add2t, to_add2t, add_wrapper))
+    return reassoc;
+
+  // Fallback: n-ary constant folding across an associative tree.
   return attempt_associative_simplify(*this, add_wrapper);
 }
 
