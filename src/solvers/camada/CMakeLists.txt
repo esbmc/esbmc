@@ -170,6 +170,18 @@ if(NOT camada_FOUND AND DOWNLOAD_DEPENDENCIES)
       set(_camada_build_type RelWithDebInfo)
     endif()
 
+    # On MSVC, the CRT (/MT vs /MD) must match between camada and ESBMC, or
+    # linking fails with LNK2038 RuntimeLibrary mismatch. The inner build does
+    # not inherit cache variables, so forward CMAKE_MSVC_RUNTIME_LIBRARY (and
+    # CMP0091 NEW so the variable is honored).
+    if(MSVC)
+      list(APPEND _camada_args "-DCMAKE_POLICY_DEFAULT_CMP0091=NEW")
+      if(CMAKE_MSVC_RUNTIME_LIBRARY)
+        list(APPEND _camada_args
+          "-DCMAKE_MSVC_RUNTIME_LIBRARY=${CMAKE_MSVC_RUNTIME_LIBRARY}")
+      endif()
+    endif()
+
     message(STATUS "Configuring Camada")
     execute_process(
       COMMAND ${CMAKE_COMMAND}
