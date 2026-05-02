@@ -2810,17 +2810,22 @@ smt_sortt smt_convt::convert_sort(const type2tc &type)
   case type2t::vector_id:
   case type2t::array_id:
   {
-    const array_type2t &arrtype = to_array_type(type);
-
     // Nested infinite arrays (e.g. Solidity nested mappings): do NOT flatten.
     // Create Array(BV64, Array(BV64, V)) with recursive convert_sort.
-    if (arrtype.size_is_infinite && is_array_type(arrtype.subtype))
+    // Only applicable to genuine array types — vectors are always finite,
+    // and to_array_type(vector_type) throws std::bad_cast under -DNDEBUG-off
+    // builds (where the type_macros' dynamic_cast is real, not static_cast).
+    if (is_array_type(type))
     {
-      type2tc t = make_array_domain_type(arrtype);
-      smt_sortt d = mk_int_bv_sort(t->get_width());
-      smt_sortt r = convert_sort(arrtype.subtype);
-      result = mk_array_sort(d, r);
-      break;
+      const array_type2t &arrtype = to_array_type(type);
+      if (arrtype.size_is_infinite && is_array_type(arrtype.subtype))
+      {
+        type2tc t = make_array_domain_type(arrtype);
+        smt_sortt d = mk_int_bv_sort(t->get_width());
+        smt_sortt r = convert_sort(arrtype.subtype);
+        result = mk_array_sort(d, r);
+        break;
+      }
     }
 
     // Index arrays by the smallest integer required to represent its size.
@@ -3753,9 +3758,13 @@ smt_astt smt_convt::convert_array_index(const expr2tc &expr)
   expr2tc src_value = index.source_value;
 
   expr2tc newidx;
-  if (
-    is_index2t(index.source_value) &&
-    !to_array_type(index.source_value->type).size_is_infinite)
+  // Source type might not be an array (e.g. vector); to_array_type() throws
+  // std::bad_cast under -DNDEBUG-off builds. Gate the size_is_infinite probe
+  // on is_array_type() before dereferencing.
+  const bool src_is_infinite_array =
+    is_array_type(index.source_value->type) &&
+    to_array_type(index.source_value->type).size_is_infinite;
+  if (is_index2t(index.source_value) && !src_is_infinite_array)
   {
     // Finite multi-dimensional arrays: flatten via decompose_select_chain.
     newidx = decompose_select_chain(expr, src_value);
@@ -3992,9 +4001,11 @@ expr2tc smt_convt::get(const expr2tc &expr)
     expr2tc src_value = index.source_value;
 
     expr2tc newidx;
-    if (
-      is_index2t(index.source_value) &&
-      !to_array_type(index.source_value->type).size_is_infinite)
+    // Same NDEBUG-off safety guard as in convert_array_index() above.
+    const bool src_is_infinite_array =
+      is_array_type(index.source_value->type) &&
+      to_array_type(index.source_value->type).size_is_infinite;
+    if (is_index2t(index.source_value) && !src_is_infinite_array)
     {
       newidx = decompose_select_chain(expr, src_value);
     }
