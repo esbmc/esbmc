@@ -71,11 +71,13 @@ bool is_add_sub_root(const expr2tc &e)
   return is_add2t(e) || is_sub2t(e) || is_neg2t(e);
 }
 
-/// True if @p type is one we know how to fold constants in: bit-vectors and
-/// bool. Floating-point is excluded — IEEE add is not associative.
+/// True if @p type is one we know how to fold constants in: bit-vectors,
+/// bool, or pointer (where the root is `pointer + int_offset` chains —
+/// e.g. `(((p+1)+1)+1)` from repeated `p++`). Floating-point is excluded:
+/// IEEE add is not associative.
 bool reassoc_safe_type(const type2tc &type)
 {
-  return is_bv_type(type) || is_bool_type(type);
+  return is_bv_type(type) || is_bool_type(type) || is_pointer_type(type);
 }
 
 /// Build a balanced-ish add/sub tree from a list of signed terms.
@@ -92,8 +94,12 @@ expr2tc rebuild_chain(
   // collapse `add(x, neg(y))` back to `sub(x, y)` and `add(neg(x), y)` to
   // `sub(y, x)` via its existing peepholes — so we don't need to special-case
   // those shapes here.
-  auto materialize = [&](const signed_term &t) -> expr2tc {
-    return t.negative ? neg2tc(type, t.term) : t.term;
+  //
+  // Use each term's own type for neg2t, not the root type: in pointer
+  // arithmetic the root is `pointer` but the offset terms are integers;
+  // we must not synthesize neg2t(pointer_type, ...).
+  auto materialize = [](const signed_term &t) -> expr2tc {
+    return t.negative ? neg2tc(t.term->type, t.term) : t.term;
   };
 
   expr2tc acc = materialize(terms[0]);
@@ -118,16 +124,22 @@ expr2tc rebuild_chain(
 /// bit-width (otherwise narrow types like `unsigned char` would see
 /// un-truncated sums).
 ///
+/// The folded constant uses the type of the *first* integer leaf we saw
+/// (not the chain's root type): in pointer arithmetic the root is
+/// `pointer` but the integer offsets are e.g. `signed long`, and we
+/// must not synthesize a pointer-typed integer constant.
+///
 /// Constants are never mutated in place: expr2tc shares storage, so writing
 /// `to_constant_int2t(c).value +=` would corrupt every other use of that
 /// constant in the program.
-bool optimize_terms(const type2tc &type, std::vector<signed_term> &terms)
+bool optimize_terms(std::vector<signed_term> &terms)
 {
   bool changed = false;
 
   BigInt acc_value(0);
   bool acc_negative = false;
   bool have_const = false;
+  type2tc const_type;
   for (std::size_t i = 0; i < terms.size();)
   {
     if (!is_constant_int2t(terms[i].term))
@@ -140,6 +152,7 @@ bool optimize_terms(const type2tc &type, std::vector<signed_term> &terms)
     {
       acc_value = v;
       acc_negative = terms[i].negative;
+      const_type = terms[i].term->type;
       have_const = true;
     }
     else if (acc_negative == terms[i].negative)
@@ -164,7 +177,8 @@ bool optimize_terms(const type2tc &type, std::vector<signed_term> &terms)
     // Re-typed via from_integer(exprt overload) + migrate_expr so the value
     // is truncated to the result bit-width.
     expr2tc folded;
-    migrate_expr(from_integer(acc_value, migrate_type_back(type)), folded);
+    migrate_expr(
+      from_integer(acc_value, migrate_type_back(const_type)), folded);
     terms.push_back({acc_negative, folded});
   }
 
@@ -230,7 +244,7 @@ bool reassociate_arith(expr2tc &expr)
     return changed;
 
   const std::size_t orig_size = terms.size();
-  if (!optimize_terms(expr->type, terms) && terms.size() == orig_size)
+  if (!optimize_terms(terms) && terms.size() == orig_size)
     return changed;
 
   expr = rebuild_chain(expr->type, terms);
