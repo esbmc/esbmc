@@ -559,7 +559,12 @@ void goto_checkt::shift_check(
 {
   overflow_check(expr, guard, loc);
 
-  if (!enable_ub_shift_check)
+  // Negative shift distance and distance >= width are UB per C11 §6.5.7p3
+  // and C++ [expr.shift]/1. Run the UB-distance assertions whenever the user
+  // asked for shift UB checks or for general overflow checking.
+  if (
+    !enable_ub_shift_check && !enable_overflow_check &&
+    !enable_unsigned_overflow_check)
     return;
 
   assert(is_lshr2t(expr) || is_ashr2t(expr) || is_shl2t(expr));
