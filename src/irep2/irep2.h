@@ -770,14 +770,15 @@ public:
    */
   expr2tc simplify() const;
 
-  /** Simplify with control over whether reassociation fires.
-   *  When @p inside_chain is true, the chain-root reassociation step is
-   *  skipped, even if the result is an add/sub/neg expression. This is
-   *  used by recursive simplify calls so that reassoc fires at most once
-   *  per add/sub/neg chain root (i.e., at the topmost call from a
-   *  non-chain context). External callers should use simplify_no_reassoc
-   *  in @c util/expr_reassociate.h instead of this overload directly. */
-  expr2tc simplify(bool inside_chain) const;
+  /** Simplify with reassociation suppression.
+   *  When @p suppress_reassoc is true, the chain-root reassociation step
+   *  is skipped throughout the subtree (the flag propagates to every
+   *  descendant, including those reached through non-chain ops like
+   *  modulus). Used by simplify_no_reassoc to walk a subtree with
+   *  peepholes only, e.g. on a freshly-rebuilt chain.
+   *  External callers should prefer simplify_no_reassoc in
+   *  @c util/expr_reassociate.h over calling this overload directly. */
+  expr2tc simplify(bool suppress_reassoc) const;
 
   /** expr-specific simplification methods.
    *  By default, an expression can't be simplified, and this method returns

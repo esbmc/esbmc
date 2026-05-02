@@ -16,10 +16,10 @@ expr2tc expr2t::do_simplify() const
 
 expr2tc expr2t::simplify() const
 {
-  return simplify(/*inside_chain=*/false);
+  return simplify(/*suppress_reassoc=*/false);
 }
 
-expr2tc expr2t::simplify(bool inside_chain) const
+expr2tc expr2t::simplify(bool suppress_reassoc) const
 {
   try
   {
@@ -34,12 +34,17 @@ expr2tc expr2t::simplify(bool inside_chain) const
     if (expr_id == overflow_id)
       return expr2tc();
 
-    // We are at the root of an add/sub/neg chain whenever this node is one
-    // of those three operations and our caller wasn't (so its operands get
-    // a fresh inside_chain=false). Operands of *this* are inside our chain
-    // iff we ourselves are an add/sub/neg.
+    // Operands of an add/sub/neg are *inside* our chain — they will be
+    // flattened/folded by our chain-root reassoc step at the end of this
+    // call, so they should not run their own reassoc. Pass true.
+    //
+    // For other expression kinds, propagate whatever suppression the caller
+    // gave us: if we're inside a `simplify_no_reassoc` umbrella, that flag
+    // must reach every descendant, including the operand of a non-chain op
+    // like modulus.
     const bool this_is_chain_op =
       expr_id == add_id || expr_id == sub_id || expr_id == neg_id;
+    const bool operand_suppress = suppress_reassoc || this_is_chain_op;
 
     // Step 1: simplify all sub-operands first. This way do_simplify() always
     // sees canonical operands and its peepholes can match nested patterns
@@ -62,7 +67,7 @@ expr2tc expr2t::simplify(bool inside_chain) const
 
       if (!is_nil_expr(*e))
       {
-        tmp = (*e)->simplify(/*inside_chain=*/this_is_chain_op);
+        tmp = (*e)->simplify(operand_suppress);
         if (!is_nil_expr(tmp))
           changed = true;
       }
@@ -92,10 +97,10 @@ expr2tc expr2t::simplify(bool inside_chain) const
     expr2tc top = changed ? current->do_simplify() : do_simplify();
     if (!is_nil_expr(top))
     {
-      // Pass our own inside_chain through: if a peephole rewrote an
-      // add into a sub (or vice versa), that result is still in the
-      // same chain context as we are.
-      expr2tc top2 = top->simplify(inside_chain);
+      // Pass our own suppress_reassoc through: if a peephole rewrote an
+      // add into a sub (or vice versa), that result is still subject to
+      // whatever suppression we were given.
+      expr2tc top2 = top->simplify(suppress_reassoc);
       result = is_nil_expr(top2) ? top : top2;
     }
     else if (changed)
@@ -104,11 +109,11 @@ expr2tc expr2t::simplify(bool inside_chain) const
       result = current;
     }
 
-    // Step 4: chain-root reassociation. Fires only at the topmost call from
-    // a non-chain context, on a result that is still an add/sub/neg. The
-    // recursive resimplify above means peephole-introduced chain roots are
-    // also caught here.
-    if (!inside_chain)
+    // Step 4: chain-root reassociation. Fires only when the caller didn't
+    // suppress reassoc and the result is still an add/sub/neg. The recursive
+    // resimplify above means peephole-introduced chain roots are also
+    // caught here.
+    if (!suppress_reassoc)
     {
       expr2tc canonical = is_nil_expr(result) ? clone() : result;
       if (
@@ -118,8 +123,9 @@ expr2tc expr2t::simplify(bool inside_chain) const
         if (reassociate_arith(canonical))
         {
           // Run peepholes on the rebuilt tree so add(x, neg(y)) -> sub(x, y)
-          // and friends collapse. simplify_no_reassoc forces inside_chain=true
-          // throughout to avoid re-entering the chain-root path.
+          // and friends collapse. simplify_no_reassoc forces
+          // suppress_reassoc=true throughout to avoid re-entering the
+          // chain-root path.
           simplify_no_reassoc(canonical);
           return canonical;
         }
@@ -702,10 +708,15 @@ expr2tc neg2t::do_simplify() const
     const BigInt modulus = BigInt(1) << width;
     const expr2tc modulus_expr = constant_int2tc(value->type, modulus);
 
-    // Perform modular negation: (modulus - x) % modulus
+    // Perform modular negation: (modulus - x) % modulus.
+    //
+    // simplify_no_reassoc instead of plain ::simplify: ::simplify would
+    // re-enter the chain-root reassoc path on the freshly-built sub2tc
+    // and, on already-flattened reassoc output, recurse without bound.
+    // The wrap is a one-shot canonicalisation, not a chain root.
     const expr2tc negated_value = sub2tc(value->type, modulus_expr, value);
     expr2tc wrap = modulus2tc(value->type, negated_value, modulus_expr);
-    wrap->simplify();
+    simplify_no_reassoc(wrap);
 
     return wrap;
   }

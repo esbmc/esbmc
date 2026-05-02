@@ -288,7 +288,7 @@ void simplify_no_reassoc(expr2tc &expr)
 {
   if (is_nil_expr(expr))
     return;
-  expr2tc tmp = expr->simplify(/*inside_chain=*/true);
+  expr2tc tmp = expr->simplify(/*suppress_reassoc=*/true);
   if (!is_nil_expr(tmp))
     expr = tmp;
 }
