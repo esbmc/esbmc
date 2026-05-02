@@ -57,7 +57,7 @@ jobs:
       shell: bash
       run: |
         mapfile -t files < <(
-          git diff --name-only "origin/${{ github.base_ref }}...HEAD" -- src unit |
+          git diff --name-only --diff-filter=d "origin/${{ github.base_ref }}...HEAD" -- src unit |
           grep -E '\.(h|c|cpp|hpp|hh)$' |
           grep -v '^src/ansi-c/cpp/' |
           grep -v '^src/clang-c-frontend/headers/' |
@@ -106,7 +106,7 @@ jobs:
           shell: bash
           run: |
             mapfile -t files < <(
-              git diff --name-only "origin/${{ github.base_ref }}...HEAD" -- src/python-frontend regression/python |
+              git diff --name-only --diff-filter=d "origin/${{ github.base_ref }}...HEAD" -- src/python-frontend regression/python |
               grep -E '\.py$' || true
             )
 
