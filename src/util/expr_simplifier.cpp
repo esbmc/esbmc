@@ -334,9 +334,21 @@ expr2tc add2t::do_simplify() const
   if (is_neg2t(side_1))
     return sub2tc(type, side_2, to_neg2t(side_1).value);
 
-  // Whole-program reassoc (constant fold across a chain, X/-X cancellation)
-  // is handled by goto_reassociate and ssa_reassociate, so add2t::do_simplify
-  // only needs the local two-operand peepholes and constant fold above.
+  // x + (negative constant c) -> x - (-c). The reassoc rebuild can produce
+  // an `add(x, -c)` once neg2t::do_simplify folds neg(constant) into a
+  // negative constant, after which the `is_neg2t` peepholes above no
+  // longer match. Catch the value-shaped form too.
+  if (
+    is_signedbv_type(type) && is_constant_int2t(side_2) &&
+    to_constant_int2t(side_2).value.is_negative())
+    return sub2tc(
+      type, side_1, from_integer(-to_constant_int2t(side_2).value, type));
+  if (
+    is_signedbv_type(type) && is_constant_int2t(side_1) &&
+    to_constant_int2t(side_1).value.is_negative())
+    return sub2tc(
+      type, side_2, from_integer(-to_constant_int2t(side_1).value, type));
+
   return simplify_arith_2ops<Addtor, add2t>(type, side_1, side_2);
 }
 
