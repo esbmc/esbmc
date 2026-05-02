@@ -3,6 +3,7 @@
 #include <util/arith_tools.h>
 #include <util/base_type.h>
 #include <util/c_types.h>
+#include <util/expr_reassociate.h>
 #include <util/expr_util.h>
 #include <irep2/irep2.h>
 #include <irep2/irep2_utils.h>
@@ -14,6 +15,11 @@ expr2tc expr2t::do_simplify() const
 }
 
 expr2tc expr2t::simplify() const
+{
+  return simplify(/*inside_chain=*/false);
+}
+
+expr2tc expr2t::simplify(bool inside_chain) const
 {
   try
   {
@@ -27,6 +33,13 @@ expr2tc expr2t::simplify() const
     // when we're trying to work out whether or not it's going to overflow.
     if (expr_id == overflow_id)
       return expr2tc();
+
+    // We are at the root of an add/sub/neg chain whenever this node is one
+    // of those three operations and our caller wasn't (so its operands get
+    // a fresh inside_chain=false). Operands of *this* are inside our chain
+    // iff we ourselves are an add/sub/neg.
+    const bool this_is_chain_op =
+      expr_id == add_id || expr_id == sub_id || expr_id == neg_id;
 
     // Step 1: simplify all sub-operands first. This way do_simplify() always
     // sees canonical operands and its peepholes can match nested patterns
@@ -49,7 +62,7 @@ expr2tc expr2t::simplify() const
 
       if (!is_nil_expr(*e))
       {
-        tmp = e->simplify();
+        tmp = (*e)->simplify(/*inside_chain=*/this_is_chain_op);
         if (!is_nil_expr(tmp))
           changed = true;
       }
@@ -75,15 +88,45 @@ expr2tc expr2t::simplify() const
     // Step 3: top-level peephole. If do_simplify() returned something
     // structurally different, recurse once on the result so any new
     // sub-expressions it introduced get simplified too.
+    expr2tc result;
     expr2tc top = changed ? current->do_simplify() : do_simplify();
     if (!is_nil_expr(top))
     {
-      expr2tc top2 = top->simplify();
-      return is_nil_expr(top2) ? top : top2;
+      // Pass our own inside_chain through: if a peephole rewrote an
+      // add into a sub (or vice versa), that result is still in the
+      // same chain context as we are.
+      expr2tc top2 = top->simplify(inside_chain);
+      result = is_nil_expr(top2) ? top : top2;
+    }
+    else if (changed)
+    {
+      // No top-level rewrite, but operands changed.
+      result = current;
     }
 
-    // No top-level rewrite, but operands may have changed.
-    return changed ? current : expr2tc();
+    // Step 4: chain-root reassociation. Fires only at the topmost call from
+    // a non-chain context, on a result that is still an add/sub/neg. The
+    // recursive resimplify above means peephole-introduced chain roots are
+    // also caught here.
+    if (!inside_chain)
+    {
+      expr2tc canonical = is_nil_expr(result) ? clone() : result;
+      if (
+        canonical->expr_id == add_id || canonical->expr_id == sub_id ||
+        canonical->expr_id == neg_id)
+      {
+        if (reassociate_arith(canonical))
+        {
+          // Run peepholes on the rebuilt tree so add(x, neg(y)) -> sub(x, y)
+          // and friends collapse. simplify_no_reassoc forces inside_chain=true
+          // throughout to avoid re-entering the chain-root path.
+          simplify_no_reassoc(canonical);
+          return canonical;
+        }
+      }
+    }
+
+    return result;
   }
   catch (const array_type2t::dyn_sized_array_excp &e)
   {
