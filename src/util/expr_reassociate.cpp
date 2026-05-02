@@ -107,11 +107,12 @@ void linearize_add_sub(
     return;
   }
 
-  // Leaf — try a local simplify so embedded constant chunks like 10*2 fold
-  // before they're inserted as opaque terms.
-  expr2tc leaf = expr;
-  ::simplify(leaf);
-  out.push_back({negate, leaf});
+  // Opaque leaf. The caller (expr2t::simplify) walks operands bottom-up
+  // before invoking us, so this expression is already canonical — calling
+  // ::simplify on it here would just re-walk its subtree and, on deep
+  // expressions, blow the stack via the chain-root reassoc -> simplify ->
+  // linearize loop.
+  out.push_back({negate, expr});
 }
 
 /// True if @p e is a node we will rewrite at the top level (add/sub/neg).
