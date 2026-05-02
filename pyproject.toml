@@ -13,3 +13,8 @@ dev = [
     "hypothesis>=6.0",
     "pytest>=9.0.3",
 ]
+
+[tool.pydocstyle]
+# D203 (1 blank line before class docstring) conflicts with D211; we follow D211.
+# D213 (multi-line summary on second line) conflicts with D212; we follow D212.
+add-ignore = "D203,D213"
