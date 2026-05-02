@@ -842,6 +842,11 @@ public:
 
   smt_astt mk_extract(smt_astt a, unsigned int high, unsigned int low) override
   {
+    // If it's a floatbv, convert it to bv first so callers extracting bytes
+    // out of structs/unions containing floats encode against the IEEE bit
+    // pattern instead of triggering a sort mismatch.
+    if(a->sort->id == SMT_SORT_FPBV)
+      a = mk_from_fp_to_bv(a);
     return wrap(solver->mkBVExtract(high, low, expr(a)), mk_bv_sort(high - low + 1));
   }
 
