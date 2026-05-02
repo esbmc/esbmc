@@ -1,3 +1,7 @@
+# pylint: disable=undefined-variable
+# `nondet_bool` is an ESBMC intrinsic matched by name by the Python
+# converter; it has no Python binding.
+
 # Stubs for os module - operating system interfaces
 
 

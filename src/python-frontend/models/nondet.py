@@ -62,6 +62,11 @@ USAGE:
     d = nondet_dict(max_size=10, key_type=nondet_int(), value_type=nondet_bool())
 """
 
+# pylint: disable=undefined-variable
+# `nondet_int`, `nondet_bool`, `__ESBMC_assume`, etc. are ESBMC
+# intrinsics matched by name by the Python converter; they have no
+# Python binding.
+
 from typing import Any
 
 # Shared default maximum size for nondet collections
