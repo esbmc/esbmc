@@ -20,7 +20,6 @@ def defaultdict(default_factory: Optional[Any] = None, *args, **kwargs) -> dict:
 
 
 class Counter:
-
     """Simplified Counter model: maps (int, int) keys to integer counts."""
 
     def __init__(self) -> None:
