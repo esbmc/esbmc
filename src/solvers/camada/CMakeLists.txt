@@ -41,37 +41,6 @@ macro(camada_register_deps_tree deps_install_dir)
   endif()
 endmacro()
 
-# Camada's exported camada::camada target lists some shared library paths
-# (notably libz3.so) directly in INTERFACE_LINK_LIBRARIES. Under BUILD_STATIC
-# we rewrite those to the matching .a if it exists in the same directory so
-# the final esbmc binary can be linked statically.
-function(camada_prefer_static_link_interface target)
-  if(NOT TARGET ${target})
-    return()
-  endif()
-  get_target_property(libs ${target} INTERFACE_LINK_LIBRARIES)
-  if(NOT libs)
-    return()
-  endif()
-
-  set(static_libs)
-  foreach(lib IN LISTS libs)
-    set(static_lib "${lib}")
-    if(IS_ABSOLUTE "${lib}" AND
-       "${lib}" MATCHES "\\${CMAKE_SHARED_LIBRARY_SUFFIX}(\\.[0-9]+)*$")
-      get_filename_component(lib_dir "${lib}" DIRECTORY)
-      get_filename_component(lib_name "${lib}" NAME_WE)
-      set(candidate "${lib_dir}/${lib_name}${CMAKE_STATIC_LIBRARY_SUFFIX}")
-      if(EXISTS "${candidate}")
-        set(static_lib "${candidate}")
-      endif()
-    endif()
-    list(APPEND static_libs "${static_lib}")
-  endforeach()
-  set_target_properties(${target} PROPERTIES
-    INTERFACE_LINK_LIBRARIES "${static_libs}")
-endfunction()
-
 # On a re-configure the camada build tree from the previous run is still
 # around; re-register its deps so cvc5/STP imported targets are available
 # before the find_package(camada ...) call below.
@@ -227,10 +196,6 @@ endif()
 
 if(NOT camada_FOUND)
   find_package(camada CONFIG REQUIRED HINTS ${CAMADA_DIR} PATH_SUFFIXES lib/cmake/camada)
-endif()
-
-if(BUILD_STATIC)
-  camada_prefer_static_link_interface(camada::camada)
 endif()
 
 foreach(_feature CAMADA_HAVE_Z3 CAMADA_HAVE_CVC5 CAMADA_HAVE_MATHSAT
