@@ -62,6 +62,11 @@ USAGE:
     d = nondet_dict(max_size=10, key_type=nondet_int(), value_type=nondet_bool())
 """
 
+# pylint: disable=undefined-variable
+# `nondet_int`, `nondet_bool`, `__ESBMC_assume`, etc. are ESBMC
+# intrinsics matched by name by the Python converter; they have no
+# Python binding.
+
 from typing import Any
 
 # Shared default maximum size for nondet collections
@@ -81,9 +86,9 @@ def _nondet_size(max_size: int) -> int:
         A non-deterministic integer in [0, max_size].
 
     """
-    size: int = nondet_int()  # noqa: F821
-    __ESBMC_assume(size >= 0)  # noqa: F821
-    __ESBMC_assume(size <= max_size)  # noqa: F821
+    size: int = nondet_int()
+    __ESBMC_assume(size >= 0)
+    __ESBMC_assume(size <= max_size)
     return size
 
 
@@ -116,7 +121,7 @@ def nondet_list(max_size: int = _DEFAULT_NONDET_SIZE, elem_type: Any = None) -> 
     """
     # Default to nondet_int if no type specified
     if elem_type is None:
-        elem_type = nondet_int()  # noqa: F821
+        elem_type = nondet_int()
 
     result: list = []
     size: int = _nondet_size(max_size)
@@ -168,9 +173,9 @@ def nondet_dict(max_size: int = _DEFAULT_NONDET_SIZE,
     """
     # Default to nondet_int if no types specified
     if key_type is None:
-        key_type = nondet_int()  # noqa: F821
+        key_type = nondet_int()
     if value_type is None:
-        value_type = nondet_int()  # noqa: F821
+        value_type = nondet_int()
 
     result: dict = {}
     size: int = _nondet_size(max_size)

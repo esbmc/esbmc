@@ -1,7 +1,9 @@
-# pylint: disable=redefined-builtin
-# These functions intentionally shadow Python built-ins: they are the
-# operational models ESBMC uses to verify Python programs, so they must
-# match the built-in names exactly.
+# pylint: disable=redefined-builtin,undefined-variable
+# These functions intentionally shadow Python built-ins and reference
+# typing forward-declarations (e.g. `Any`) and ESBMC intrinsics that
+# have no Python binding: they are the operational models ESBMC uses
+# to verify Python programs, so they must match the built-in names
+# exactly.
 # def abs(x:float) -> float:
 #     if x >= 0:
 #         return x
@@ -9,7 +11,7 @@
 #         return -x
 
 
-def all(iterable: list[Any]) -> bool:  # noqa: F821
+def all(iterable: list[Any]) -> bool:
     """Return True if all elements of the iterable are true (or if empty)."""
     i: int = 0
     length: int = len(iterable)

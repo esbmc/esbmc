@@ -1,3 +1,7 @@
+# pylint: disable=undefined-variable
+# `__VERIFIER_nondet_bool` is an ESBMC intrinsic matched by name by
+# the Python converter; it has no Python binding.
+
 # Regular Expression Operational Model
 # TODO: Currently, the regex model uses manual pattern recognizers with
 # nondeterministic fallbacks. A proper string solver would handle
@@ -258,7 +262,7 @@ def match(pattern: str, string: str) -> bool:
         return True
 
     # Nondeterministic fallback
-    has_match: bool = __VERIFIER_nondet_bool()  # noqa: F821
+    has_match: bool = __VERIFIER_nondet_bool()
     return has_match
 
 
@@ -309,7 +313,7 @@ def search(pattern: str, string: str) -> bool:
         return False
 
     # For patterns with metacharacters, use nondeterministic behavior
-    has_match: bool = __VERIFIER_nondet_bool()  # noqa: F821
+    has_match: bool = __VERIFIER_nondet_bool()
     return has_match
 
 
@@ -373,5 +377,5 @@ def fullmatch(pattern: str, string: str) -> bool:
         return True
 
     # For patterns with metacharacters, use nondeterministic behavior
-    has_match: bool = __VERIFIER_nondet_bool()  # noqa: F821
+    has_match: bool = __VERIFIER_nondet_bool()
     return has_match
