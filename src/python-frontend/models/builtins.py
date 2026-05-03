@@ -4,6 +4,11 @@
 # have no Python binding: they are the operational models ESBMC uses
 # to verify Python programs, so they must match the built-in names
 # exactly.
+#
+# pylint: disable=consider-using-max-builtin,consider-using-min-builtin
+# This module is itself the source of max() / min() for the verification
+# model. Rewriting the explicit branch forms here as max()/min() would
+# create a self-reference: the model would call into itself.
 # def abs(x:float) -> float:
 #     if x >= 0:
 #         return x
