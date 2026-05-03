@@ -17,7 +17,7 @@ if __name__ == "__main__":
     print('extern "C"\n{\n')
     for filename in files:
         name, ext = os.path.splitext(filename)
-        assert(len(ext) == 2)
+        assert len(ext) == 2
 
         name_ = name.replace('-', '_')
         print("extern char " + name_ + "_buf[];")
@@ -26,7 +26,7 @@ if __name__ == "__main__":
     print('struct hooked_header clang_headers[] = {')
     for filename in files:
         name, ext = os.path.splitext(filename)
-        assert(len(ext) == 2)
+        assert len(ext) == 2
 
         name_ = name.replace('-', '_')
         print(f'{{"{filename}", {name_}_buf, &{name_}_buf_size}},')
