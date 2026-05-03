@@ -18,7 +18,7 @@ class int:
 
         bytes_len: int = len(bytes_data)
 
-        while index >= 0 and index < bytes_len:
+        while 0 <= index < bytes_len:
             byte: int = bytes_data[index]
             result: int = (result << 8) + byte
             index: int = index + step
