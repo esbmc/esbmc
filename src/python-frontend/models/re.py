@@ -236,9 +236,8 @@ def match(pattern: str, string: str) -> bool:
             i: int = 0
             while i < prefix_len:
                 c: str = pattern[i]
-                if (c == '.' or c == '*' or c == '+' or c == '?'
-                        or c == '[' or c == ']' or c == '(' or c == ')'
-                        or c == '|' or c == '^' or c == '$' or c == '\\'):
+                if (c == '.' or c == '*' or c == '+' or c == '?' or c == '[' or c == ']' or c == '('
+                        or c == ')' or c == '|' or c == '^' or c == '$' or c == '\\'):
                     has_meta_in_prefix = True
                     break
                 i = i + 1
@@ -258,9 +257,8 @@ def match(pattern: str, string: str) -> bool:
     k: int = 0
     while k < pattern_len - 1:
         ch: str = pattern[k]
-        if (ch == '.' or ch == '*' or ch == '+' or ch == '?'
-                or ch == '[' or ch == ']' or ch == '(' or ch == ')'
-                or ch == '|' or ch == '^' or ch == '$' or ch == '\\'):
+        if (ch == '.' or ch == '*' or ch == '+' or ch == '?' or ch == '[' or ch == ']' or ch == '('
+                or ch == ')' or ch == '|' or ch == '^' or ch == '$' or ch == '\\'):
             has_meta = True
             break
         k = k + 1
