@@ -172,8 +172,9 @@ bool parse_complex_string(
     if (std::isspace(static_cast<unsigned char>(c)))
       return false;
 
-  auto lower_last = [](char c)
-  { return static_cast<char>(std::tolower(static_cast<unsigned char>(c))); };
+  auto lower_last = [](char c) {
+    return static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+  };
 
   if (lower_last(s.back()) != 'j')
   {
