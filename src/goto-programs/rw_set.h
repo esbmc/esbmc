@@ -1,8 +1,11 @@
 #ifndef CPROVER_GOTO_PROGRAMS_RW_SET
 #define CPROVER_GOTO_PROGRAMS_RW_SET
 
-#include <goto-programs/goto_program.h>
+#include <pointer-analysis/value_sets.h>
+#include <util/expr_util.h>
+#include <util/guard.h>
 #include <util/namespace.h>
+#include <util/std_code.h>
 
 class rw_sett
 {
@@ -11,14 +14,14 @@ public:
   {
     irep_idt object;
     bool r, w, deref;
-    expr2tc guard;
-    expr2tc original_expr;
+    exprt guard;
+    exprt original_expr;
 
-    entryt() : r(false), w(false), deref(false), guard(gen_true_expr())
+    entryt() : r(false), w(false), guard(true_exprt())
     {
     }
 
-    const expr2tc &get_guard() const
+    const exprt &get_guard() const
     {
       return guard;
     }
@@ -40,11 +43,7 @@ public:
   typedef std::unordered_map<irep_idt, entryt, irep_id_hash> entriest;
   entriest entries;
 
-  /// Compute read/write entries for the given instruction-level expression.
-  /// Dispatches on the irep2 code kind (assign / printf / return /
-  /// function_call) or, for plain expressions on goto/assert/assume
-  /// instructions, treats the expression as a read.
-  void compute(const expr2tc &expr);
+  void compute(const exprt &expr);
 
   rw_sett(const namespacet &_ns, goto_programt::const_targett _target)
     : ns(_ns), target(_target)
@@ -54,21 +53,19 @@ public:
   rw_sett(
     const namespacet &_ns,
     goto_programt::const_targett _target,
-    const expr2tc &expr)
+    const exprt &expr)
     : ns(_ns), target(_target)
   {
     compute(expr);
   }
 
-  void read_rec(const expr2tc &expr)
+  void read_rec(const exprt &expr)
   {
-    read_write_rec(expr, true, false, "", gen_true_expr(), expr2tc());
+    read_write_rec(expr, true, false, "", guardt(), nil_exprt());
   }
 
-  void read_rec(
-    const expr2tc &expr,
-    const expr2tc &guard,
-    const expr2tc &original_expr)
+  void
+  read_rec(const exprt &expr, const guardt &guard, const exprt &original_expr)
   {
     read_write_rec(expr, true, false, "", guard, original_expr);
   }
@@ -77,15 +74,15 @@ protected:
   const namespacet &ns;
   const goto_programt::const_targett target;
 
-  void assign(const expr2tc &lhs, const expr2tc &rhs);
+  void assign(const exprt &lhs, const exprt &rhs);
 
   void read_write_rec(
-    const expr2tc &expr,
+    const exprt &expr,
     bool r,
     bool w,
     const std::string &suffix,
-    const expr2tc &guard,
-    const expr2tc &original_expr,
+    const guardt &guard,
+    const exprt &original_expr,
     bool dereferenced = false);
 };
 
