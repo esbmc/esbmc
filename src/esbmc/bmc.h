@@ -3,7 +3,6 @@
 
 #include <goto-programs/goto_coverage.h>
 #include <goto-symex/slice.h>
-#include <goto-symex/ssa_reassociate.h>
 #include <goto-symex/reachability_tree.h>
 #include <goto-symex/symex_target_equation.h>
 #include <goto-symex/witnesses.h>

@@ -11,7 +11,7 @@ add_library(symex symex_target.cpp symex_target_equation.cpp symex_assign.cpp
   builtin_functions/run_builtin.cpp
   builtin_functions/python_builtins.cpp
   builtin_functions/misc.cpp
-  slice.cpp ssa_reassociate.cpp symex_other.cpp xml_goto_trace.cpp
+  slice.cpp symex_other.cpp xml_goto_trace.cpp
   symex_valid_object.cpp dynamic_allocation.cpp symex_catch.cpp renaming.cpp
   execution_state.cpp reachability_tree.cpp reachability_tree_cin.cpp
   witnesses.cpp pytest.cpp ctest.cpp printf_formatter.cpp features.cpp html.cpp json.cpp)

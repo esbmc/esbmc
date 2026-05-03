@@ -68,13 +68,6 @@ bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
       algorithms.emplace_back(
         std::make_unique<assertion_cache>(config.ssa_caching_db));
 
-    // Reassociate add/sub chains in the SSA equation before slicing, so the
-    // slicer (and any later analysis) sees canonical forms. Catches reassoc
-    // opportunities exposed by symex value substitution that goto_reassociate
-    // can't see in the static program.
-    if (!opts.get_bool_option("no-simplify"))
-      algorithms.emplace_back(std::make_unique<ssa_reassociate>());
-
     if (opts.get_bool_option("no-slice"))
       algorithms.emplace_back(std::make_unique<simple_slice>());
     else
