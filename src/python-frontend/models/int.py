@@ -10,15 +10,16 @@ class int:
         index: int = 0
         step: int = 1
         byte: int = 0
+        is_negative: bool = False
 
         ## If little endian
-        if big_endian == False:
+        if not big_endian:
             index: int = len(bytes_data) - 1
             step: int = -1
 
         bytes_len: int = len(bytes_data)
 
-        while index >= 0 and index < bytes_len:
+        while 0 <= index < bytes_len:
             byte: int = bytes_data[index]
             result: int = (result << 8) + byte
             index: int = index + step
