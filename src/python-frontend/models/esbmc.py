@@ -1,3 +1,8 @@
+# pylint: disable=unused-argument,unnecessary-pass
+# These intrinsic stubs are intercepted by ESBMC's Python converter and
+# replaced with symbolic operations. Argument names are part of the API
+# contract; the `pass` body is required so the converter sees a parsed
+# function definition.
 """
 ESBMC Python intrinsic stubs.
 
