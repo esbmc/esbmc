@@ -6,6 +6,7 @@ import sys
 PY3 = sys.version_info[0] == 3
 
 if not PY3:
+    # pylint: disable=consider-using-f-string  # f-strings are a SyntaxError on Python 2
     print("Python version: {}.{}.{}".format(sys.version_info.major, sys.version_info.minor,
                                             sys.version_info.micro))
     print("ERROR: Please ensure Python 3 is available in your environment.")
@@ -74,7 +75,7 @@ def is_testing_framework(module_name):
 
 def import_module_by_name(module_name, output_dir):
     if is_unsupported_module(module_name):
-        print("ERROR: \"import {}\" is not supported".format(module_name))
+        print(f"ERROR: \"import {module_name}\" is not supported")
         sys.exit(3)
 
     base_module = module_name.split(".")[0]
@@ -104,8 +105,8 @@ def import_module_by_name(module_name, output_dir):
             except ImportError:
                 pass
 
-        print("ERROR: Module '{}' not found.".format(module_name))
-        print("Please install it with: pip3 install {}".format(module_name))
+        print(f"ERROR: Module '{module_name}' not found.")
+        print(f"Please install it with: pip3 install {module_name}")
         return None
 
 
@@ -521,7 +522,7 @@ def generate_ast_json(tree, python_filename, elements_to_import, output_dir, mod
         with open(json_filename, "w", encoding="utf-8") as json_file:
             json.dump(ast_json, json_file, indent=4, ensure_ascii=False)
     except Exception as e:
-        print("Error writing JSON file: {}".format(e))
+        print(f"Error writing JSON file: {e}")
 
 
 def detect_and_process_submodules(node, processed_submodules, output_dir):
