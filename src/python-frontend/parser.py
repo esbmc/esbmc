@@ -1,3 +1,13 @@
+# pylint: disable=wrong-import-position
+# Imports below the PY3 check are intentional: the check is a hard fail
+# under Python 2 and must run before the Python-3-only imports (ast,
+# importlib.util, etc.) to produce a clean error message instead of an
+# ImportError stack trace.
+#
+# pylint: disable=c-extension-no-member
+# `mypy.api.run` is a real (typed) entry point; pylint only flags it
+# because mypy ships as a compiled extension and is not always installed
+# in the lint environment.
 from __future__ import annotations
 
 import sys
@@ -25,7 +35,7 @@ from preprocessor import Preprocessor
 def run_mypy_strict(filename):
     """Run mypy in-process when available; skip otherwise."""
     try:
-        from mypy import api as mypy_api
+        from mypy import api as mypy_api  # pylint: disable=import-outside-toplevel
     except ImportError:
         return 0, ""
 
@@ -203,6 +213,7 @@ import_aliases = {}
 module_imports = {}
 
 
+# pylint: disable-next=too-many-locals,too-many-branches
 def process_imports(node, output_dir):
     """
     Process import statements in the AST node.
@@ -438,6 +449,7 @@ def rewrite_relative_import(node, parent_module: str | None):
     node.level = 0
 
 
+# pylint: disable-next=too-many-locals,too-many-branches
 def generate_ast_json(tree, python_filename, elements_to_import, output_dir, module_qualname=None):
     """
     Generate AST JSON from the given Python AST tree.
@@ -523,6 +535,7 @@ def generate_ast_json(tree, python_filename, elements_to_import, output_dir, mod
         print(f"Error writing JSON file: {e}")
 
 
+# pylint: disable-next=too-many-locals,too-many-nested-blocks
 def detect_and_process_submodules(node, processed_submodules, output_dir):
     """
     Detect submodule usage in the AST and process each unseen submodule.

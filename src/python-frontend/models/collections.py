@@ -1,5 +1,13 @@
 # Operational model for collections module
 # pylint: disable=function-redefined  # intentional stdlib shadow for ESBMC models
+# pylint: disable=keyword-arg-before-vararg,unused-argument
+# defaultdict's signature is pinned: callers in regression/python/
+# (e.g. github_3841_*) pass `default_factory` positionally as in
+# `defaultdict(int)`, so it must come first; and the no-arg form
+# `defaultdict()` is recognised by preprocessor.py:_get_defaultdict_factory,
+# so the default value cannot be removed. *args / **kwargs are part of
+# the API contract; the body silently ignores them by design (see the
+# docstring below for the verification approximation).
 
 from typing import Any, Optional
 
