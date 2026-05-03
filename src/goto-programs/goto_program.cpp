@@ -405,7 +405,7 @@ void goto_programt::copy_from(const goto_programt &src)
 
   for (instructionst::const_iterator it = src.instructions.begin();
        it != src.instructions.end();
-       it++)
+       ++it)
   {
     targett new_instruction = add_instruction();
     targets_mapping[it] = new_instruction;
