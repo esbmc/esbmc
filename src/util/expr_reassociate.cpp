@@ -134,6 +134,10 @@ bool reassoc_safe_type(const type2tc &type)
 
 /// Build a balanced-ish add/sub tree from a list of signed terms.
 /// Result's type is @p type. Returns nil if @p terms is empty.
+///
+/// This always constructs fresh expression nodes. Callers must only invoke it
+/// after proving the term list is meaningfully different from the input chain;
+/// rebuilding an equivalent chain can still affect simplifier change tracking.
 expr2tc rebuild_chain(
   const type2tc &type,
   const std::vector<signed_term> &terms)
@@ -192,22 +196,31 @@ bool optimize_terms(std::vector<signed_term> &terms)
   bool acc_negative = false;
   bool have_const = false;
   type2tc const_type;
-  for (std::size_t i = 0; i < terms.size();)
+  std::size_t const_count = 0;
+  std::vector<signed_term> non_const_terms;
+  non_const_terms.reserve(terms.size());
+
+  // Accumulate constants into a scratch term list, but commit it only for
+  // real rewrites. A lone non-zero constant is preserved by not swapping;
+  // only zero-identity removal and two-or-more-constant folds update terms.
+  for (const auto &term : terms)
   {
-    if (!is_constant_int2t(terms[i].term))
+    if (!is_constant_int2t(term.term))
     {
-      ++i;
+      non_const_terms.push_back(term);
       continue;
     }
-    const BigInt &v = to_constant_int2t(terms[i].term).value;
+
+    ++const_count;
+    const BigInt &v = to_constant_int2t(term.term).value;
     if (!have_const)
     {
       acc_value = v;
-      acc_negative = terms[i].negative;
-      const_type = terms[i].term->type;
+      acc_negative = term.negative;
+      const_type = term.term->type;
       have_const = true;
     }
-    else if (acc_negative == terms[i].negative)
+    else if (acc_negative == term.negative)
     {
       acc_value += v;
     }
@@ -218,18 +231,25 @@ bool optimize_terms(std::vector<signed_term> &terms)
     else
     {
       acc_value = v - acc_value;
-      acc_negative = terms[i].negative;
+      acc_negative = term.negative;
     }
-    terms.erase(terms.begin() + i);
-    changed = true;
   }
 
-  if (have_const && !acc_value.is_zero())
+  if (const_count > 1)
   {
-    // from_integer truncates to const_type's bit width so the rebuilt
-    // constant fits the type — important when, e.g., narrow `unsigned char`
-    // additions accumulate beyond 255.
-    terms.push_back({acc_negative, from_integer(acc_value, const_type)});
+    if (!acc_value.is_zero())
+      // from_integer truncates to const_type's bit width so the rebuilt
+      // constant fits the type — important when, e.g., narrow `unsigned char`
+      // additions accumulate beyond 255.
+      non_const_terms.push_back(
+        {acc_negative, from_integer(acc_value, const_type)});
+    terms.swap(non_const_terms);
+    changed = true;
+  }
+  else if (const_count == 1 && acc_value.is_zero())
+  {
+    terms.swap(non_const_terms);
+    changed = true;
   }
 
   // Cancel matching X / -X pairs. O(n^2) but n is tiny in practice.
