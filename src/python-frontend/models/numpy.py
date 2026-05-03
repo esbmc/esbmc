@@ -6,6 +6,7 @@
 # exactly. Argument names are part of the API contract matched by ESBMC's
 # Python converter, even when the abstract body does not reference them.
 
+
 # Stubs for type inference.
 def array(data: list[Any]) -> list[Any]:
     return data
