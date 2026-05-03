@@ -214,8 +214,9 @@ def process_imports(node, output_dir):
         The directory to save the generated JSON files.
 
     """
+    imported_elements = None
+    module_names = []
     if isinstance(node, (ast.Import)):
-        module_names = []
         for alias_node in node.names:
             module_name = alias_node.name
             alias = alias_node.asname or module_name
@@ -223,13 +224,10 @@ def process_imports(node, output_dir):
             module_names.append(module_name)
         if not module_names:
             return
-        imported_elements = None
     elif isinstance(node, ast.ImportFrom):
         module_name = node.module
-        # If it's a star import, set the list to None to import everything
-        if any(a.name == '*' for a in node.names):
-            imported_elements = None
-        else:
+        # If it's a star import, leave imported_elements as None to import everything
+        if not any(a.name == '*' for a in node.names):
             imported_elements = node.names
         if module_name:
             import_aliases[module_name] = module_name

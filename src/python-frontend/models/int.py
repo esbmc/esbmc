@@ -10,9 +10,10 @@ class int:
         index: int = 0
         step: int = 1
         byte: int = 0
+        is_negative: bool = False
 
         ## If little endian
-        if big_endian == False:
+        if not big_endian:
             index: int = len(bytes_data) - 1
             step: int = -1
 
