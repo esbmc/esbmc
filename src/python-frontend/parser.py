@@ -518,7 +518,7 @@ def generate_ast_json(tree, python_filename, elements_to_import, output_dir, mod
 
     # Write AST JSON to file
     try:
-        with open(json_filename, "w") as json_file:
+        with open(json_filename, "w", encoding="utf-8") as json_file:
             json.dump(ast_json, json_file, indent=4, ensure_ascii=False)
     except Exception as e:
         print("Error writing JSON file: {}".format(e))
@@ -603,7 +603,7 @@ def main():
         os.makedirs(output_dir)
 
     # Process and convert AST for main file
-    with open(filename, "r") as source:
+    with open(filename, "r", encoding="utf-8") as source:
         tree = ast.parse(source.read())
 
     # Apply AST transformations
@@ -644,7 +644,7 @@ def main():
         if is_imported_model(module_name) and module_name != "typing":
             continue
 
-        with open(python_file) as model:
+        with open(python_file, encoding="utf-8") as model:
             model_tree = ast.parse(model.read())
             # Generate JSON from AST for the memory models.
             generate_ast_json(model_tree, filename, None, output_dir)
