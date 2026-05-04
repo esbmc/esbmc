@@ -1,6 +1,7 @@
 #include <cassert>
 #include <util/arith_tools.h>
 #include <util/bitvector.h>
+#include <util/mp_arith.h>
 #include <irep2/irep2_utils.h>
 
 bool to_integer(const exprt &expr, BigInt &int_value)
@@ -80,7 +81,17 @@ expr2tc from_integer(const BigInt &int_value, const type2tc &type)
 
   case type2t::unsignedbv_id:
   case type2t::signedbv_id:
-    return constant_int2tc(type, int_value);
+  {
+    // Truncate to the type's bit width via the same binary round-trip the
+    // exprt overload uses, so values that overflow wrap correctly. Without
+    // this, callers that fold arbitrary-precision arithmetic and then build
+    // a constant of fixed type would carry an out-of-range BigInt that
+    // confuses downstream encoders.
+    BigInt truncated = binary2integer(
+      integer2binary(int_value, type->get_width()),
+      type->type_id == type2t::signedbv_id);
+    return constant_int2tc(type, truncated);
+  }
 
   case type2t::fixedbv_id:
   {

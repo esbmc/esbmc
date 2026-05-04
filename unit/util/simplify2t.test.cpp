@@ -182,15 +182,63 @@ TEST_CASE("Division constant folding: 20 / 4 = 5", "[arithmetic][div]")
   REQUIRE(to_constant_int2t(result).value == 5);
 }
 
-TEST_CASE("Modulus simplification: x % x = 0", "[arithmetic][mod]")
+TEST_CASE("Modulus simplification: x % x is not folded", "[arithmetic][mod]")
 {
   const expr2tc x = symbol2tc(get_int_type(32), "x");
   const expr2tc mod = modulus2tc(get_int_type(32), x, x);
 
   const expr2tc result = mod->simplify();
 
-  REQUIRE(is_constant_int2t(result));
-  REQUIRE(to_constant_int2t(result).value == 0);
+  REQUIRE(is_nil_expr(result));
+}
+
+TEST_CASE(
+  "Equality simplification: (x * 3) == 0 -> x == 0 (odd c)",
+  "[arithmetic][equal][mul]")
+{
+  // For odd c, modular bv multiplication is invertible, so (x * c) == 0
+  // iff x == 0. Folding is sound.
+  const expr2tc x = symbol2tc(get_int_type(32), "x");
+  const expr2tc three = constant_int2tc(get_int_type(32), BigInt(3));
+  const expr2tc mul = mul2tc(get_int_type(32), x, three);
+  const expr2tc zero = constant_int2tc(get_int_type(32), BigInt(0));
+  const expr2tc eq = equality2tc(mul, zero);
+
+  const expr2tc result = eq->simplify();
+
+  REQUIRE(!is_nil_expr(result));
+  REQUIRE(is_equality2t(result));
+  const equality2t &reduced = to_equality2t(result);
+  REQUIRE(reduced.side_1 == x);
+  REQUIRE(is_constant_int2t(reduced.side_2));
+  REQUIRE(to_constant_int2t(reduced.side_2).value == 0);
+}
+
+TEST_CASE(
+  "Equality simplification: (x * 2) == 0 is not folded (even c)",
+  "[arithmetic][equal][mul]")
+{
+  // For even c, modular bv multiplication is NOT invertible. With c = 2 in
+  // 8-bit unsigned, x = 128 satisfies (x * 2) == 0 mod 256 even though
+  // x != 0. Folding (x * c) == 0 -> x == 0 would be unsound.
+  const expr2tc x = symbol2tc(get_uint_type(8), "x");
+  const expr2tc two = constant_int2tc(get_uint_type(8), BigInt(2));
+  const expr2tc mul = mul2tc(get_uint_type(8), x, two);
+  const expr2tc zero = constant_int2tc(get_uint_type(8), BigInt(0));
+  const expr2tc eq = equality2tc(mul, zero);
+
+  const expr2tc result = eq->simplify();
+
+  // Either nil (no rewrite) or unchanged equality structure with the mul
+  // intact — the key property is that we do NOT collapse to (x == 0).
+  if (!is_nil_expr(result))
+  {
+    REQUIRE(is_equality2t(result));
+    const equality2t &reduced = to_equality2t(result);
+    // The mul side must still be a mul (not the bare symbol x).
+    REQUIRE_FALSE(reduced.side_1 == x);
+    REQUIRE_FALSE(reduced.side_2 == x);
+  }
 }
 
 TEST_CASE("Modulus simplification: x % 1 = 0", "[arithmetic][mod]")
