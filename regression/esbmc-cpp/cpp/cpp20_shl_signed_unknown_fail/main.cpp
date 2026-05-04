@@ -1,5 +1,5 @@
-// Unconstrained signed int may be negative; the type-driven non-negativity
-// predicate falls through and the overflow claim is preserved.
+// C++20 [expr.shift]/2: signed left-shift is defined as wrapping for any
+// value of E1. --overflow-check must NOT flag this under C++20.
 
 extern "C" int nondet_int();
 

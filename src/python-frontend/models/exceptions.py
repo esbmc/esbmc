@@ -1,3 +1,7 @@
+# pylint: disable=redefined-builtin
+# These classes intentionally shadow Python built-ins: they are the
+# operational models ESBMC uses to verify Python programs, so they must
+# match the built-in names exactly.
 class BaseException:
     message: str = ""
 

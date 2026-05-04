@@ -1,4 +1,5 @@
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
+#include <clang-c-frontend/typecast.h>
 
 void clang_cpp_adjust::convert_expression_to_code(exprt &expr)
 {
@@ -88,6 +89,32 @@ void clang_cpp_adjust::adjust_while(codet &code)
     clang_c_adjust::adjust_while(code);
 }
 
+void clang_cpp_adjust::adjust_switch_case_ops(
+  exprt &expr,
+  const typet &switch_type)
+{
+  if (!expr.is_code())
+    return;
+
+  codet &c = to_code(expr);
+  if (c.get_statement() == "switch_case")
+  {
+    code_switch_caset &sc = to_code_switch_case(c);
+    if (!sc.is_default() && sc.case_op().type() != switch_type)
+      gen_typecast(ns, sc.case_op(), switch_type);
+
+    adjust_switch_case_ops(sc.code(), switch_type);
+    return;
+  }
+
+  // Don't recurse into nested switch statements
+  if (c.get_statement() == "switch")
+    return;
+
+  Forall_operands (it, c)
+    adjust_switch_case_ops(*it, switch_type);
+}
+
 void clang_cpp_adjust::adjust_switch(codet &code)
 {
   // In addition to the C syntax, C++ also allows a declaration
@@ -109,13 +136,18 @@ void clang_cpp_adjust::adjust_switch(codet &code)
     code.op0() = decl.op0();
     clang_c_adjust::adjust_switch(code);
 
+    adjust_switch_case_ops(code.op1(), code.op0().type());
+
     // Create new block
     code_blockt code_block;
     code_block.move_to_operands(decl_block.op0(), code);
     code.swap(code_block);
   }
   else
+  {
     clang_c_adjust::adjust_switch(code);
+    adjust_switch_case_ops(code.op1(), code.op0().type());
+  }
 }
 
 void clang_cpp_adjust::adjust_for(codet &code)

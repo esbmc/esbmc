@@ -43,6 +43,7 @@ class MemberExpr;
 class EnumConstantDecl;
 class APValue;
 class AlignedAttr;
+class InitListExpr;
 } // namespace clang
 
 std::string
@@ -185,6 +186,10 @@ protected:
     typet &new_type);
 
   virtual bool get_expr(const clang::Stmt &stmt, exprt &new_expr);
+
+  bool get_base_flattened_inits(
+    const clang::InitListExpr &init,
+    std::vector<exprt> &flat);
 
   bool get_enum_value(const clang::EnumConstantDecl *e, exprt &new_expr);
 

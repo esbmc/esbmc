@@ -208,7 +208,7 @@ bool simple_slice::run(symex_target_equationt::SSA_stepst &steps)
 
   for (symex_target_equationt::SSA_stepst::iterator it = steps.begin();
        it != steps.end();
-       it++)
+       ++it)
     if (it->is_assert())
       last_assertion = it;
 
@@ -216,7 +216,7 @@ bool simple_slice::run(symex_target_equationt::SSA_stepst &steps)
   symex_target_equationt::SSA_stepst::iterator s_it = last_assertion;
 
   if (s_it != steps.end())
-    for (s_it++; s_it != steps.end(); s_it++)
+    for (++s_it; s_it != steps.end(); ++s_it)
     {
       s_it->ignore = true;
       ++sliced;
@@ -238,7 +238,7 @@ bool claim_slicer::run(symex_target_equationt::SSA_stepst &steps)
   size_t counter = 1;
   for (symex_target_equationt::SSA_stepst::iterator it = steps.begin();
        it != steps.end();
-       it++)
+       ++it)
   {
     // just find the next assertion
     if (it->is_assert())

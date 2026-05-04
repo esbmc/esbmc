@@ -1,3 +1,9 @@
+# pylint: disable=undefined-variable,unused-argument
+# `nondet_bool` is an ESBMC intrinsic matched by name by the Python
+# converter; it has no Python binding. Argument names on the abstract
+# stubs below are part of the API contract matched by ESBMC's Python
+# converter, even when the body does not reference them.
+
 # Stubs for os module - operating system interfaces
 
 
