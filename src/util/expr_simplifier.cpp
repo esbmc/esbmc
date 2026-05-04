@@ -548,9 +548,12 @@ expr2tc sub2t::do_simplify() const
   if (is_constant_int2t(side_1) && to_constant_int2t(side_1).value.is_zero())
     return neg2tc(type, side_2);
 
-  // x - x = 0 (self-subtraction)
+  // x - x = 0 (self-subtraction). Use the sub2t's own result type, not
+  // side_1's type: pointer subtraction has pointer operands but a
+  // ptrdiff/integer result, so gen_zero(side_1->type) would synthesize
+  // a pointer-typed zero (i.e. NULL) and corrupt downstream encoding.
   if (side_1 == side_2)
-    return gen_zero(side_1->type);
+    return gen_zero(type);
 
   if (is_bv_type(type))
   {

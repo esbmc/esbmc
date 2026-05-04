@@ -75,6 +75,26 @@ TEST_CASE("Subtraction simplification: x - x = 0", "[arithmetic][sub]")
   REQUIRE(to_constant_int2t(result).value == 0);
 }
 
+TEST_CASE(
+  "Subtraction simplification: p - p uses ptrdiff result type",
+  "[arithmetic][sub][pointer]")
+{
+  // Pointer subtraction has pointer operands but a ptrdiff/integer result
+  // type. The self-sub rewrite must use the sub2t's own result type, not
+  // the operand type, to avoid synthesizing a pointer-typed zero (NULL)
+  // that downstream encoding can't handle.
+  const type2tc ptr_type = pointer_type2tc(get_int_type(32));
+  const type2tc result_type = signedbv_type2tc(64);
+  const expr2tc p = symbol2tc(ptr_type, "p");
+  const expr2tc sub = sub2tc(result_type, p, p);
+
+  const expr2tc result = sub->simplify();
+
+  REQUIRE(is_constant_int2t(result));
+  REQUIRE(to_constant_int2t(result).value == 0);
+  REQUIRE(result->type == result_type);
+}
+
 TEST_CASE("Subtraction simplification: x - 0 = x", "[arithmetic][sub]")
 {
   const expr2tc x = symbol2tc(get_int_type(32), "x");
