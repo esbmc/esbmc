@@ -3343,6 +3343,27 @@ bool clang_c_convertert::get_cast_expr(
     gen_typecast(ns, expr, type);
     break;
 
+  // Member-pointer casts. ESBMC stores data-member pointers as plain pointers
+  // carrying a "to-member" type attribute and tracks no per-class offset, so
+  // BaseToDerived / Reinterpret reduce to an IR-level retag and
+  // MemberPointerToBoolean to a non-zero check against the same gen_zero
+  // value CK_NullToMemberPointer below produces. typecast_exprt is used
+  // directly: c_typecastt::implicit_typecast_followed's to-member branch
+  // dereferences expr.op0() assuming a literal &Class::member operand, which
+  // segfaults when the operand is a variable of member-pointer type.
+  case clang::CK_BaseToDerivedMemberPointer:
+  case clang::CK_ReinterpretMemberPointer:
+    expr = typecast_exprt(expr, type);
+    break;
+
+  case clang::CK_MemberPointerToBoolean:
+  {
+    exprt cmp("notequal", bool_type());
+    cmp.copy_to_operands(expr, gen_zero(expr.type()));
+    expr = cmp;
+    break;
+  }
+
   case clang::CK_AddressSpaceConversion:
   case clang::CK_NullToPointer:
   case clang::CK_NullToMemberPointer:
