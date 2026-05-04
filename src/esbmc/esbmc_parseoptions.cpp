@@ -58,7 +58,6 @@ extern "C"
 #include <goto-programs/goto_cfg.h>
 #include <langapi/language_util.h>
 #include <goto-programs/contracts/contracts.h>
-#include <util/yaml_parser.h>
 
 #ifndef _WIN32
 #  include <sys/wait.h>
@@ -418,6 +417,21 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("inductive-step", true);
     options.set_option("no-unwinding-assertions", true);
     options.set_option("partial-loops", false);
+  }
+
+  if (cmdline.isset("validate-correctness-witness"))
+  {
+    const std::string witness = cmdline.getval("witness");
+    const boost::filesystem::path wp(witness);
+    if (wp.extension() != ".yaml" && wp.extension() != ".yml")
+    {
+      log_error(
+        "Witness file has extension {}, expected yaml or yml.",
+        wp.extension().string());
+      abort();
+    }
+    options.set_option("validate-correctness-witness", true);
+    options.set_option("witness", witness);
   }
 
   // --loop-invariant implicitly enables k-induction solving so that
@@ -2116,24 +2130,6 @@ bool esbmc_parseoptionst::process_goto_program(
     if (cmdline.isset("validate-correctness-witness"))
     {
       log_status("Enable correctness witness validation 2.0");
-      options.set_option("loop-invariant", true);
-      std::string path = cmdline.getval("witness");
-      boost::filesystem::path n(path);
-
-      if (n.extension() != ".yaml" && n.extension() != ".yml")
-      {
-        // Unexpected extension
-        log_error("Unsupported witness format, expected yaml or yml");
-        return true;
-      }
-
-      yaml_parser parser(path, context, options);
-      if (parser.load_file())
-        return true;
-
-      if (parser.inject_loop_invariants(goto_functions))
-        return true;
-
       remove_no_op(goto_functions);
       goto_loop_invariant_combined(goto_functions);
     }

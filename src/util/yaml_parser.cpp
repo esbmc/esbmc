@@ -1,57 +1,40 @@
 #include <yaml_parser.h>
-#include <util/c_string2expr.h>
-#include <util/expr_util.h>
+#include <fstream>
+#include <unordered_map>
+#include <sstream>
 
-yaml_parser::yaml_parser(
-  const std::string &path,
-  contextt &ns,
-  optionst &options)
-  : file_path_(path), context_(ns), options_(options)
+std::vector<invariant> yaml_parser::read_invariants(const std::string &path)
 {
-}
-
-bool yaml_parser::load_file()
-{
+  std::vector<invariant> result;
   try
   {
-    root_ = YAML::LoadFile(file_path_);
-    if (get_invariants())
-      return true;
+    YAML::Node root = YAML::LoadFile(path);
+    if (!root || !root.IsSequence())
+      return result;
+
+    for (const auto &entry : root)
+    {
+      const auto &content = entry["content"];
+      if (!content || !content.IsSequence())
+        continue;
+
+      for (const auto &c : content)
+      {
+        const auto &inv_node = c["invariant"];
+        if (!inv_node)
+          continue;
+        result.push_back(parse_invariant(inv_node));
+      }
+    }
   }
   catch (const YAML::Exception &e)
   {
-    log_error("Failed to parse YAML file '{}': {}", file_path_, e.what());
-    return true;
+    log_error("Failed to parse witness YAML '{}': {}", path, e.what());
   }
-
-  return false;
+  return result;
 }
 
-bool yaml_parser::get_invariants()
-{
-  if (!root_ || !root_.IsSequence())
-    return true;
-
-  for (const auto &entry : root_)
-  {
-    const auto &content = entry["content"];
-    if (!content || !content.IsSequence())
-      continue;
-
-    for (const auto &c : content)
-    {
-      const auto &inv_node = c["invariant"];
-      if (!inv_node)
-        continue;
-      invariant info = parse_invariant(inv_node);
-      parsed_invariants_.push_back(std::move(info));
-    }
-  }
-
-  return false;
-}
-
-invariant yaml_parser::parse_invariant(const YAML::Node &node) const
+invariant yaml_parser::parse_invariant(const YAML::Node &node)
 {
   invariant info;
   if (node["type"])
@@ -77,7 +60,7 @@ invariant yaml_parser::parse_invariant(const YAML::Node &node) const
   return info;
 }
 
-invariant::Type yaml_parser::type_from_string(const std::string &s) const
+invariant::Type yaml_parser::type_from_string(const std::string &s)
 {
   if (s == "loop_invariant")
     return invariant::loop_invariant;
@@ -92,114 +75,58 @@ invariant::Type yaml_parser::type_from_string(const std::string &s) const
   abort();
 }
 
-bool yaml_parser::inject_loop_invariants(goto_functionst &goto_functions)
+std::string yaml_parser::build_injected_source(
+  const std::string &source_path,
+  const std::string &original_path,
+  const std::vector<invariant> &invariants)
 {
-  expression_parser parser;
-  for (const auto &inv : parsed_invariants_)
+  std::unordered_map<size_t, std::vector<const invariant *>> by_line;
+  by_line.reserve(invariants.size());
+  for (const auto &inv : invariants)
+    by_line[static_cast<size_t>(inv.line.to_int64())].push_back(&inv);
+
+  std::ifstream in(source_path);
+  if (!in)
+    return {};
+
+  std::ostringstream out;
+  std::string line_text;
+  size_t line_num = 0;
+
+  while (std::getline(in, line_text))
   {
-    std::string func_id = "c:@F@" + inv.function;
-    goto_functionst::function_mapt::iterator m_it =
-      goto_functions.function_map.find(func_id);
-    if (m_it != goto_functions.function_map.end())
+    ++line_num;
+    auto it = by_line.find(line_num);
+    if (it != by_line.end())
     {
-      goto_programt &func = m_it->second.body;
-      Forall_goto_program_instructions (it, func)
+      for (const invariant *inv : it->second)
       {
-        int line = std::stoi(it->location.line().as_string());
-        if (line == inv.line)
+        switch (inv->type)
         {
-          const expression_node *root = nullptr;
-          if (parser.parse(inv.value, root))
-          {
-            log_warning(
-              "failed to build the AST of witness expression: {}, skip it",
-              inv.value);
-            continue;
-          }
-
-          if (options_.get_bool_option("witness-parse-tree"))
-          {
-            root->dump();
-            continue;
-          }
-
-          expression_converter converter(context_, it->location);
-          exprt expr;
-          if (converter.convert(root, expr))
-          {
-            log_warning(
-              "failed to convert the witness AST: {}, skip it", inv.value);
-            continue;
-          }
-
-          expr2tc guard;
-          migrate_expr(expr, guard);
-
-          switch (inv.type)
-          {
-          case invariant::loop_invariant:
-            if (it->is_goto() && !it->is_backwards_goto())
-            {
-              goto_programt::targett t = func.insert(it);
-              t->type = LOOP_INVARIANT;
-              t->add_loop_invariant(guard);
-              t->location = it->location;
-              log_progress(
-                "Applied loop invariant: {} in line {}",
-                inv.value,
-                t->location.line());
-            }
-            break;
-
-          case invariant::location_invariant:
-          {
-            goto_programt tmp;
-            goto_programt::targett t1 = tmp.add_instruction();
-            t1->make_assertion(guard);
-            t1->location = it->location;
-            goto_programt::targett t2 = tmp.add_instruction();
-            t2->make_assumption(guard);
-            t2->location = it->location;
-            // Redirect only the forward gotos that come
-            // before t1 in the instruction list, preserving the original loop head.
-            func.destructive_insert(it, tmp);
-            for (auto jt = func.instructions.begin(); jt != t1; ++jt)
-            {
-              if (!jt->is_goto())
-                continue;
-              for (auto &tgt : jt->targets)
-              {
-                if (tgt == it)
-                  tgt = t1;
-              }
-            }
-
-            log_progress(
-              "Applied location invariant: {} in line {}",
-              inv.value,
-              t1->location.line());
-            break;
-          }
-
-          default:
-            log_error("unsupported invariant type: {}", inv.value);
-            break;
-          }
-
+        case invariant::loop_invariant:
+          out << "__ESBMC_loop_invariant((_Bool)(" << inv->value << "));\n";
+          log_progress(
+            "Injecting loop invariant at line {}: {}", line_num, inv->value);
+          break;
+        case invariant::location_invariant:
+          out << "__ESBMC_assert((_Bool)(" << inv->value
+              << "), \"witness invariant\");\n";
+          out << "__ESBMC_assume((_Bool)(" << inv->value << "));\n";
+          log_progress(
+            "Injecting location invariant at line {}: {}",
+            line_num,
+            inv->value);
+          break;
+        default:
+          log_warning(
+            "Unsupported invariant type for '{}', skipping", inv->value);
           break;
         }
       }
+      out << "#line " << line_num << " \"" << original_path << "\"\n";
     }
-    else
-    {
-      log_warning("can not find wintness function '{}'", inv.value);
-      continue;
-    }
+    out << line_text << "\n";
   }
 
-  if (options_.get_bool_option("witness-parse-tree"))
-    // stop verify for debugging
-    return true;
-
-  return false;
+  return out.str();
 }
