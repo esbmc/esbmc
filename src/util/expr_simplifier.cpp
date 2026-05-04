@@ -1273,8 +1273,14 @@ expr2tc pointer_offset2t::do_simplify() const
            is_constant_string2t(index.source_value)))
           return gen_zero(type);
 
-        expr2tc offs =
-          try_simplification(compute_pointer_offset(addrof.ptr_obj));
+        // compute_pointer_offset builds a fresh typecast/div/mul/add tree;
+        // try_simplification only walks the root, so use the full simplifier
+        // to fold member_offset + idx*sizeof down to a constant for nested
+        // shapes like &(member.array)[0].
+        expr2tc offs = compute_pointer_offset(addrof.ptr_obj);
+        expr2tc folded = offs->simplify();
+        if (!is_nil_expr(folded))
+          offs = folded;
         if (is_constant_int2t(offs))
           return offs;
       }
