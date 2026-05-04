@@ -316,7 +316,6 @@ public:
   virtual smt_astt mk_neg(smt_astt a);
   virtual smt_astt mk_bvneg(smt_astt a);
   virtual smt_astt mk_bvnot(smt_astt a);
-  virtual smt_astt mk_bvnxor(smt_astt a, smt_astt b);
   virtual smt_astt mk_bvnor(smt_astt a, smt_astt b);
   virtual smt_astt mk_bvnand(smt_astt a, smt_astt b);
   virtual smt_astt mk_bvxor(smt_astt a, smt_astt b);
