@@ -342,6 +342,59 @@ expr2tc add2t::do_simplify() const
   if (is_constant_int2t(side_1) && to_constant_int2t(side_1).value.is_zero())
     return side_2;
 
+  // Symex sometimes calls do_simplify() directly after renaming a pointer
+  // increment, bypassing the full expr2t::simplify() reassociation pass. Keep
+  // this pointer-only fold local so repeated increments still canonicalize:
+  //   (p + C1) + C2 -> p + (C1 + C2)
+  if (is_pointer_type(type))
+  {
+    auto split_pointer_add_const =
+      [](const expr2tc &expr, expr2tc &base, expr2tc &constant) -> bool {
+      if (!is_add2t(expr))
+        return false;
+
+      const add2t &add = to_add2t(expr);
+      if (is_pointer_type(add.side_1) && is_constant_int2t(add.side_2))
+      {
+        base = add.side_1;
+        constant = add.side_2;
+        return true;
+      }
+
+      if (is_pointer_type(add.side_2) && is_constant_int2t(add.side_1))
+      {
+        base = add.side_2;
+        constant = add.side_1;
+        return true;
+      }
+
+      return false;
+    };
+
+    expr2tc base, constant;
+    if (
+      is_constant_int2t(side_2) &&
+      split_pointer_add_const(side_1, base, constant))
+    {
+      const BigInt folded =
+        to_constant_int2t(constant).value + to_constant_int2t(side_2).value;
+      if (folded.is_zero())
+        return base;
+      return add2tc(type, base, from_integer(folded, constant->type));
+    }
+
+    if (
+      is_constant_int2t(side_1) &&
+      split_pointer_add_const(side_2, base, constant))
+    {
+      const BigInt folded =
+        to_constant_int2t(constant).value + to_constant_int2t(side_1).value;
+      if (folded.is_zero())
+        return base;
+      return add2tc(type, base, from_integer(folded, constant->type));
+    }
+  }
+
   // x + (-x) = 0
   if (is_neg2t(side_2) && to_neg2t(side_2).value == side_1)
     return gen_zero(type);
@@ -1213,6 +1266,13 @@ expr2tc pointer_offset2t::do_simplify() const
 
       if (is_constant_int2t(index_value))
       {
+        // Fast path for &symbol[0] / &string_lit[0]: byte offset is 0.
+        if (
+          to_constant_int2t(index_value).value.is_zero() &&
+          (is_symbol2t(index.source_value) ||
+           is_constant_string2t(index.source_value)))
+          return gen_zero(type);
+
         expr2tc offs =
           try_simplification(compute_pointer_offset(addrof.ptr_obj));
         if (is_constant_int2t(offs))
@@ -1310,6 +1370,13 @@ expr2tc pointer_offset2t::do_simplify() const
 
     if (non_ptr_op->type != type)
       non_ptr_op = typecast2tc(type, non_ptr_op);
+    // type_byte_size_expr returns size_type2 (unsigned 64-bit). The outer
+    // type may be signed (signed_long for pointer offsets). Coerce to
+    // match so the mul/add chain is homogeneously typed; a mixed s64/u64
+    // mul confuses downstream equality folding (see github_1590-style
+    // pointer-arith proofs).
+    if (type_size->type != type)
+      type_size = typecast2tc(type, type_size);
 
     expr2tc new_non_ptr_op = mul2tc(type, non_ptr_op, type_size);
 
@@ -1349,6 +1416,10 @@ expr2tc pointer_offset2t::do_simplify() const
 
       if (offset_op->type != type)
         offset_op = typecast2tc(type, offset_op);
+      // type_byte_size_expr returns size_type2 (unsigned 64-bit). The outer
+      // type may be signed (signed_long). Coerce so the mul is homogeneous.
+      if (type_size->type != type)
+        type_size = typecast2tc(type, type_size);
 
       expr2tc scaled_offset = mul2tc(type, offset_op, type_size);
       expr2tc result = sub2tc(type, ptr_offset, scaled_offset);

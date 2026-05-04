@@ -182,15 +182,16 @@ TEST_CASE("Division constant folding: 20 / 4 = 5", "[arithmetic][div]")
   REQUIRE(to_constant_int2t(result).value == 5);
 }
 
-TEST_CASE("Modulus simplification: x % x = 0", "[arithmetic][mod]")
+TEST_CASE(
+  "Modulus simplification: x % x is not folded",
+  "[arithmetic][mod]")
 {
   const expr2tc x = symbol2tc(get_int_type(32), "x");
   const expr2tc mod = modulus2tc(get_int_type(32), x, x);
 
   const expr2tc result = mod->simplify();
 
-  REQUIRE(is_constant_int2t(result));
-  REQUIRE(to_constant_int2t(result).value == 0);
+  REQUIRE(is_nil_expr(result));
 }
 
 TEST_CASE("Modulus simplification: x % 1 = 0", "[arithmetic][mod]")
