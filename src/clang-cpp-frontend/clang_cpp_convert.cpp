@@ -1595,11 +1595,30 @@ bool clang_cpp_convertert::get_function_body(
       else if (init->isMemberInitializer())
       {
         // parsing non-static member initializer
+        const clang::FieldDecl *member_decl = init->getMember();
 
         exprt member;
         member.set("#member_init", 1);
-        if (get_decl_ref(*init->getMember(), member))
+        if (get_decl_ref(*member_decl, member))
           return true;
+
+        // get_decl_ref resolves a bitfield FieldDecl to its underlying integer
+        // type (e.g. uint32_t for `uint32_t flag : 1`). For body assignments,
+        // get_member_expr wraps the LHS with get_bitfield_type so the
+        // expression carries the #bitfield/width-N marker symex relies on
+        // (see symex_assign_bitfield / symex_assign_extract). Mirror that
+        // here for the init-list path; otherwise the LHS looks like a
+        // full-width access into a sub-width slot, which sends symex through
+        // dereferencet's non-scalar path and produces spurious bounds /
+        // alignment VCCs on bitfields in packed (and even plain) structs.
+        // See issue #4281.
+        if (member_decl->isBitField())
+        {
+          typet bitfield_type;
+          if (get_bitfield_type(*member_decl, member.type(), bitfield_type))
+            return true;
+          member.type().swap(bitfield_type);
+        }
 
         build_member_from_component(fd, member);
         // set #member_init flag again, as it has been cleared between the first call...
