@@ -1,6 +1,7 @@
 #pragma once
 
 #include "cstdint"
+#include "limits"
 
 namespace std
 {
@@ -20,6 +21,22 @@ using milli = ratio<1, 1000>;
 namespace chrono
 {
 
+template <class Rep>
+struct duration_values
+{
+  static constexpr Rep zero() noexcept { return Rep(0); }
+  // lowest(), not min(), per [time.traits.duration_values]: for floating-point
+  // Rep, std::numeric_limits<Rep>::min() is the smallest positive value.
+  static constexpr Rep min() noexcept
+  {
+    return std::numeric_limits<Rep>::lowest();
+  }
+  static constexpr Rep max() noexcept
+  {
+    return std::numeric_limits<Rep>::max();
+  }
+};
+
 template <class Rep, class Period = std::ratio<1>>
 class duration
 {
@@ -37,6 +54,19 @@ public:
   constexpr Rep count() const noexcept
   {
     return rep_;
+  }
+
+  static constexpr duration zero() noexcept
+  {
+    return duration(duration_values<Rep>::zero());
+  }
+  static constexpr duration min() noexcept
+  {
+    return duration(duration_values<Rep>::min());
+  }
+  static constexpr duration max() noexcept
+  {
+    return duration(duration_values<Rep>::max());
   }
 };
 
