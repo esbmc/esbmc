@@ -72,12 +72,17 @@ size_t __ESBMC_list_size(const PyListObject *l)
   return l ? l->size : 0;
 }
 
+// ptr_free=1: payload has no pointer field, so we can reinterpret it as
+// uint64_t and use the 16/24/32-byte fast paths below. Pass 0 for opaque or
+// pointer-bearing structs — writing through a uint64_t lvalue would lose the
+// pointer object under ESBMC's byte-encoding.
 static inline void *__ESBMC_copy_value(
   const void *value,
   size_t size,
   size_t type_id,
   size_t float_type_id,
-  size_t *out_float_idx)
+  size_t *out_float_idx,
+  int ptr_free)
 {
   if (out_float_idx)
     *out_float_idx = 0;
@@ -106,18 +111,18 @@ static inline void *__ESBMC_copy_value(
   // Avoids memcpy's per-byte loop which blows up incremental-bmc.
   if (size == 8)
     *(uint64_t *)copied = *(const uint64_t *)value;
-  else if (size == 16)
+  else if (ptr_free && size == 16)
   {
     ((uint64_t *)copied)[0] = ((const uint64_t *)value)[0];
     ((uint64_t *)copied)[1] = ((const uint64_t *)value)[1];
   }
-  else if (size == 24)
+  else if (ptr_free && size == 24)
   {
     ((uint64_t *)copied)[0] = ((const uint64_t *)value)[0];
     ((uint64_t *)copied)[1] = ((const uint64_t *)value)[1];
     ((uint64_t *)copied)[2] = ((const uint64_t *)value)[2];
   }
-  else if (size == 32)
+  else if (ptr_free && size == 32)
   {
     ((uint64_t *)copied)[0] = ((const uint64_t *)value)[0];
     ((uint64_t *)copied)[1] = ((const uint64_t *)value)[1];
@@ -135,12 +140,13 @@ bool __ESBMC_list_push(
   const void *value,
   size_t type_id,
   size_t type_size,
-  size_t float_type_id)
+  size_t float_type_id,
+  int ptr_free)
 {
   // TODO: __ESBMC_obj_cpy
   size_t float_idx = 0;
-  void *copied_value =
-    __ESBMC_copy_value(value, type_size, type_id, float_type_id, &float_idx);
+  void *copied_value = __ESBMC_copy_value(
+    value, type_size, type_id, float_type_id, &float_idx, ptr_free);
 
   // Use a pointer to avoid repeated indexing
   PyObject *item = &l->items[l->size];
@@ -157,7 +163,8 @@ bool __ESBMC_list_push(
 bool __ESBMC_list_push_object(
   PyListObject *l,
   PyObject *o,
-  size_t float_type_id)
+  size_t float_type_id,
+  int ptr_free)
 {
   assert(l != NULL);
   assert(o != NULL);
@@ -168,9 +175,10 @@ bool __ESBMC_list_push_object(
   {
     double temp = __ESBMC_float_buf[o->float_idx];
     return __ESBMC_list_push(
-      l, (const void *)&temp, o->type_id, o->size, float_type_id);
+      l, (const void *)&temp, o->type_id, o->size, float_type_id, ptr_free);
   }
-  return __ESBMC_list_push(l, o->value, o->type_id, o->size, float_type_id);
+  return __ESBMC_list_push(
+    l, o->value, o->type_id, o->size, float_type_id, ptr_free);
 }
 
 // Store a dict pointer directly in the list without byte-copying.
@@ -378,14 +386,15 @@ bool __ESBMC_list_set_at(
   const void *value,
   size_t type_id,
   size_t type_size,
-  size_t float_type_id)
+  size_t float_type_id,
+  int ptr_free)
 {
   __ESBMC_assert(l != NULL, "list_set_at: list is null");
   __ESBMC_assert(index < l->size, "list_set_at: index out of bounds");
 
   size_t float_idx = 0;
-  void *copied_value =
-    __ESBMC_copy_value(value, type_size, type_id, float_type_id, &float_idx);
+  void *copied_value = __ESBMC_copy_value(
+    value, type_size, type_id, float_type_id, &float_idx, ptr_free);
 
   // Update the element at the given index
   l->items[index].value = copied_value;
@@ -402,15 +411,17 @@ bool __ESBMC_list_insert(
   const void *value,
   size_t type_id,
   size_t type_size,
-  size_t float_type_id)
+  size_t float_type_id,
+  int ptr_free)
 {
   // If index is beyond the end, just append
   if (index >= l->size)
-    return __ESBMC_list_push(l, value, type_id, type_size, float_type_id);
+    return __ESBMC_list_push(
+      l, value, type_id, type_size, float_type_id, ptr_free);
 
   size_t float_idx = 0;
-  void *copied_value =
-    __ESBMC_copy_value(value, type_size, type_id, float_type_id, &float_idx);
+  void *copied_value = __ESBMC_copy_value(
+    value, type_size, type_id, float_type_id, &float_idx, ptr_free);
 
   // TODO: there oughta be a better way to do this
   size_t i = l->size;
@@ -693,9 +704,10 @@ PyListObject *__ESBMC_list_copy(const PyListObject *l)
   {
     const PyObject *elem = &l->items[i];
 
-    // Copy the value; float_type_id=0 means no float-aware copy (generic copy)
+    // Generic per-element copy: float_type_id=0 disables float-aware copy,
+    // ptr_free=0 routes through memcpy (we don't track per-element types).
     void *copied_value =
-      __ESBMC_copy_value(elem->value, elem->size, 0, 0, NULL);
+      __ESBMC_copy_value(elem->value, elem->size, 0, 0, NULL, 0);
 
     // Add to new list
     copied->items[copied->size].value = copied_value;

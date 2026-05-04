@@ -97,6 +97,15 @@ public:
   bool is_constructor_call(const nlohmann::json &json) const;
 
   /*
+   * True iff `t`'s storage has no pointer fields (primitives, char arrays,
+   * or structs whose components are recursively pointer-free). Used to gate
+   * uint64 fast paths in the list operational model — a struct payload with
+   * a pointer field cannot be reinterpreted as a uint64 array under
+   * ESBMC's byte-encoding.
+   */
+  bool is_pointer_free(const typet &t) const;
+
+  /*
    * Converts a typet to its string representation.
    * @param t The typet to convert.
    * @return A string containing the type name.
