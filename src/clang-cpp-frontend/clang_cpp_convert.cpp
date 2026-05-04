@@ -209,15 +209,15 @@ void clang_cpp_convertert::get_decl_name(
     // Unnamed parameter of an inheriting constructor (`using Base::Base;`).
     // Sema synthesises these params without identifiers; we still need a
     // stable name so the inheriting ctor body can forward them.
-    if (const auto *ctor = llvm::dyn_cast_or_null<clang::CXXConstructorDecl>(
-          pd.getParentFunctionOrMethod()))
+    if (
+      const auto *ctor = llvm::dyn_cast_or_null<clang::CXXConstructorDecl>(
+        pd.getParentFunctionOrMethod()))
     {
       if (ctor->isInheritingConstructor())
       {
         std::string parent_name, parent_id;
         get_decl_name(*ctor, parent_name, parent_id);
-        std::string suffix =
-          "::p" + std::to_string(pd.getFunctionScopeIndex());
+        std::string suffix = "::p" + std::to_string(pd.getFunctionScopeIndex());
         name = parent_name + suffix;
         id = parent_id + suffix;
         return;
