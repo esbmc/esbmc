@@ -4,6 +4,7 @@
 #include <util/arith_tools.h>
 #include <util/c_types.h>
 
+#include <optional>
 #include <vector>
 
 namespace
@@ -15,6 +16,22 @@ struct signed_term
   bool negative;
   expr2tc term;
 };
+
+/// Per-element comparison: same sign and structurally-equal term (using
+/// expr2tc's deep-equality `operator==`). Used to gate the rebuild step in
+/// reassociate_arith so a "rewrite" that produces a logically identical term
+/// list cannot fool the simplifier's "nil iff unchanged" contract.
+bool signed_terms_equal(
+  const std::vector<signed_term> &a,
+  const std::vector<signed_term> &b)
+{
+  if (a.size() != b.size())
+    return false;
+  for (std::size_t i = 0; i < a.size(); ++i)
+    if (a[i].negative != b[i].negative || !(a[i].term == b[i].term))
+      return false;
+  return true;
+}
 
 /// True if @p operand of an add/sub node is acceptable to descend into
 /// while flattening a chain of type @p chain_type. Operand can be:
@@ -169,26 +186,41 @@ expr2tc rebuild_chain(
   return acc;
 }
 
-/// Optimize a linearized term list:
-///  - sum all constants into a single trailing constant
-///  - cancel matching X / -X pairs (one positive, one negative occurrence)
-/// Returns true if anything was changed.
+/// Optimize a linearized term list. Returns a replacement vector if a real
+/// rewrite is possible, std::nullopt otherwise.
 ///
-/// Constants are accumulated in a local BigInt and re-typed through
-/// from_integer() at the end so the rebuilt constant fits the target
-/// bit-width (otherwise narrow types like `unsigned char` would see
-/// un-truncated sums).
+/// Three transforms apply:
 ///
-/// The folded constant takes the type of the first integer leaf seen in
-/// the term list, not the chain's root type. For pure-integer chains
-/// these match. For pointer chains the root is pointer but the integer
-/// offsets are e.g. `signed long`, and we must not synthesize a
-/// pointer-typed integer constant.
+///   1. Constant folding: when two or more `constant_int2t` entries are
+///      present, sum them into one `BigInt` and re-emit as a single term.
+///      Re-typed through `from_integer()` so the rebuilt constant fits the
+///      target bit-width (otherwise narrow types like `unsigned char`
+///      would see un-truncated sums). The folded constant takes the type
+///      of the first integer leaf seen in the term list, not the chain's
+///      root type — for pure-integer chains these match, but for pointer
+///      chains the root is pointer while the integer offsets are e.g.
+///      `signed long`, and we must not synthesize a pointer-typed integer
+///      constant.
+///
+///   2. Identity removal: a lone constant equal to zero contributes
+///      nothing to an add/sub chain and is dropped (`x +/- 0 = x`). This
+///      is an explicit add/sub identity rule, separate from the multi-
+///      constant fold above.
+///
+///   3. X / -X cancellation: matching pairs (one positive occurrence, one
+///      negative occurrence of the same term) annihilate.
+///
+/// Returning std::nullopt encodes "no rewrite is possible". Returning a
+/// vector encodes "here is the new term list" — note that the caller must
+/// still verify the new list differs from the input (via
+/// signed_terms_equal) before committing, because some transforms above
+/// can produce structurally-identical output.
 ///
 /// Constants are never mutated in place: expr2tc shares storage, so writing
 /// `to_constant_int2t(c).value +=` would corrupt every other use of that
 /// constant in the program.
-bool optimize_terms(std::vector<signed_term> &terms)
+std::optional<std::vector<signed_term>>
+optimize_terms(const std::vector<signed_term> &terms)
 {
   bool changed = false;
 
@@ -197,17 +229,21 @@ bool optimize_terms(std::vector<signed_term> &terms)
   bool have_const = false;
   type2tc const_type;
   std::size_t const_count = 0;
-  std::vector<signed_term> non_const_terms;
-  non_const_terms.reserve(terms.size());
+  // For the lone-constant case we re-emit the *original* signed_term
+  // unchanged. Recreating it via from_integer() would needlessly normalize
+  // the constant, and if a later cancel-pair pass flips `changed` to true
+  // we would commit a structurally-different but logically-equal term list.
+  const signed_term *lone_const = nullptr;
+  std::vector<signed_term> result;
+  result.reserve(terms.size());
 
-  // Accumulate constants into a scratch term list, but commit it only for
-  // real rewrites. A lone non-zero constant is preserved by not swapping;
-  // only zero-identity removal and two-or-more-constant folds update terms.
+  // Pass 1: separate constants from non-constants and accumulate the
+  // constant portion into a single BigInt.
   for (const auto &term : terms)
   {
     if (!is_constant_int2t(term.term))
     {
-      non_const_terms.push_back(term);
+      result.push_back(term);
       continue;
     }
 
@@ -219,6 +255,7 @@ bool optimize_terms(std::vector<signed_term> &terms)
       acc_negative = term.negative;
       const_type = term.term->type;
       have_const = true;
+      lone_const = &term;
     }
     else if (acc_negative == term.negative)
     {
@@ -237,34 +274,36 @@ bool optimize_terms(std::vector<signed_term> &terms)
 
   if (const_count > 1)
   {
+    // Two or more constants folded into one — that's a real rewrite.
     if (!acc_value.is_zero())
-      // from_integer truncates to const_type's bit width so the rebuilt
-      // constant fits the type — important when, e.g., narrow `unsigned char`
-      // additions accumulate beyond 255.
-      non_const_terms.push_back(
-        {acc_negative, from_integer(acc_value, const_type)});
-    terms.swap(non_const_terms);
+      result.push_back({acc_negative, from_integer(acc_value, const_type)});
     changed = true;
   }
   else if (const_count == 1 && acc_value.is_zero())
   {
-    terms.swap(non_const_terms);
+    // Lone zero constant — additive identity, drop it.
     changed = true;
   }
+  else if (const_count == 1)
+  {
+    // Lone non-zero constant — preserve the original term unchanged so
+    // any later cancel-pair commit cannot pair it with a recreated copy.
+    result.push_back(*lone_const);
+  }
 
-  // Cancel matching X / -X pairs. O(n^2) but n is tiny in practice.
-  for (std::size_t i = 0; i < terms.size();)
+  // Pass 2: cancel matching X / -X pairs. O(n^2) but n is tiny in practice.
+  for (std::size_t i = 0; i < result.size();)
   {
     bool erased = false;
-    for (std::size_t j = i + 1; j < terms.size(); ++j)
+    for (std::size_t j = i + 1; j < result.size(); ++j)
     {
-      if (terms[i].negative == terms[j].negative)
+      if (result[i].negative == result[j].negative)
         continue;
-      if (!(terms[i].term == terms[j].term))
+      if (!(result[i].term == result[j].term))
         continue;
       // Found X with one sign and X with the other — drop both.
-      terms.erase(terms.begin() + j);
-      terms.erase(terms.begin() + i);
+      result.erase(result.begin() + j);
+      result.erase(result.begin() + i);
       erased = true;
       changed = true;
       break;
@@ -273,7 +312,496 @@ bool optimize_terms(std::vector<signed_term> &terms)
       ++i;
   }
 
-  return changed;
+  if (!changed)
+    return std::nullopt;
+  return result;
+}
+
+// === Multiplication chain reassoc ============================================
+
+/// Per-element comparison for mul-chain term lists. Mul has no sign field, so
+/// the lists are plain `std::vector<expr2tc>` and equality is structural.
+bool mul_terms_equal(
+  const std::vector<expr2tc> &a,
+  const std::vector<expr2tc> &b)
+{
+  if (a.size() != b.size())
+    return false;
+  for (std::size_t i = 0; i < a.size(); ++i)
+    if (!(a[i] == b[i]))
+      return false;
+  return true;
+}
+
+/// True if @p type is one we know how to fold mul-chain constants in. Pointer
+/// is excluded (pointer * _ isn't a valid C operation); float/fixedbv are
+/// excluded (mul is not associative under rounding).
+bool reassoc_mul_safe_type(const type2tc &type)
+{
+  return is_bv_type(type) || is_bool_type(type);
+}
+
+/// Recursively flatten a mul chain into a list of leaves.
+///
+/// Descends only when the mul node and both operands have type @p chain_type.
+/// Mul doesn't allow mixed-type operands the way pointer-add does (you can't
+/// multiply a pointer by an integer in C), so the rule is the simpler
+/// strict-match form. Nested muls of mismatched types become opaque leaves.
+void linearize_mul(
+  const expr2tc &expr,
+  const type2tc &chain_type,
+  std::vector<expr2tc> &out)
+{
+  auto can_descend = [&](const expr2tc &n) -> bool {
+    if (!is_mul2t(n) || n->type != chain_type)
+      return false;
+    const mul2t &m = to_mul2t(n);
+    return m.side_1->type == chain_type && m.side_2->type == chain_type;
+  };
+
+  if (can_descend(expr))
+  {
+    const mul2t &m = to_mul2t(expr);
+    linearize_mul(m.side_1, chain_type, out);
+    linearize_mul(m.side_2, chain_type, out);
+    return;
+  }
+
+  out.push_back(expr);
+}
+
+/// Optimize a flattened mul-chain term list. Returns the replacement vector
+/// when a real rewrite is possible, std::nullopt otherwise.
+///
+/// The only transform is constant folding: when two or more `constant_int2t`
+/// entries are present, multiply them into a single `BigInt` and re-emit as
+/// one term, re-typed via `from_integer()` for bit-width truncation.
+///
+/// Identity (`x * 1 = x`) and absorber (`x * 0 = 0`) rules are left to the
+/// per-op peephole in `mul2t::do_simplify`, which fires before reassoc gets
+/// invoked. A surviving lone constant in the term list means the per-op
+/// peephole couldn't fold it (e.g. it's a constant operand of a chain mul
+/// where the other side is symbolic), so we must preserve it as-is.
+std::optional<std::vector<expr2tc>>
+optimize_mul_terms(const std::vector<expr2tc> &terms)
+{
+  std::size_t const_count = 0;
+  BigInt acc(1);
+  type2tc const_type;
+  bool saw_zero = false;
+  std::vector<expr2tc> result;
+  result.reserve(terms.size());
+
+  // Pass 1: separate constants from non-constants and accumulate the product.
+  for (const auto &term : terms)
+  {
+    if (!is_constant_int2t(term))
+    {
+      result.push_back(term);
+      continue;
+    }
+
+    ++const_count;
+    const BigInt &v = to_constant_int2t(term).value;
+    if (v.is_zero())
+      saw_zero = true;
+    if (const_count == 1)
+    {
+      acc = v;
+      const_type = term->type;
+    }
+    else
+      acc *= v;
+  }
+
+  if (const_count < 2)
+    return std::nullopt;
+
+  // Two or more constants folded. Watch for the absorber: if any constant
+  // was zero, the product is zero — emit a single zero term. Otherwise emit
+  // the folded product (truncated through from_integer for the chain type).
+  if (saw_zero)
+  {
+    result.clear();
+    result.push_back(from_integer(BigInt(0), const_type));
+    return result;
+  }
+
+  // If the folded constant is 1, it's the multiplicative identity and can be
+  // dropped — unless the result would be empty, in which case we keep a
+  // single 1 term so the rebuilt chain has something to emit.
+  if (acc == BigInt(1))
+  {
+    if (result.empty())
+      result.push_back(from_integer(acc, const_type));
+    return result;
+  }
+
+  result.push_back(from_integer(acc, const_type));
+  return result;
+}
+
+/// Build a left-leaning mul chain from a list of terms. Returns nil if @p
+/// terms is empty (the caller guarantees a non-empty list when commit is
+/// possible: `optimize_mul_terms` always returns at least one term, and the
+/// caller short-circuits on terms.size() < 2 before calling).
+expr2tc rebuild_mul_chain(
+  const type2tc &type,
+  const std::vector<expr2tc> &terms)
+{
+  if (terms.empty())
+    return gen_zero(type); // unreachable in current call path; defensive
+
+  expr2tc acc = terms[0];
+  for (std::size_t i = 1; i < terms.size(); ++i)
+    acc = mul2tc(type, acc, terms[i]);
+  return acc;
+}
+
+// === Bitwise chain reassoc ===================================================
+
+/// True if @p type is one we know how to fold bitwise-chain constants in.
+/// Bool is allowed (bitwise on bool is logically meaningful). Pointer and
+/// float are excluded — bitwise ops on pointers aren't valid C and on
+/// floats aren't defined.
+bool reassoc_bitwise_safe_type(const type2tc &type)
+{
+  return is_bv_type(type) || is_bool_type(type);
+}
+
+/// Apply a bitwise op to two BigInts via uint64 round-trip. Returns nullopt
+/// if either input doesn't fit in uint64; caller should bail in that case
+/// rather than produce a wrong answer (mirrors do_bit_munge_operation's
+/// 64-bit-bound for constant folding).
+template <typename U64Op>
+std::optional<BigInt>
+bitwise_fold(const BigInt &a, const BigInt &b, U64Op op)
+{
+  // Use the same two's-complement round-trip as do_bit_munge_operation:
+  // signed values reach this via int64_t and unsigned via uint64_t. For
+  // bitwise ops, what we care about is the underlying bit pattern, so we
+  // accept either form as long as it fits in 64 bits.
+  auto fits = [](const BigInt &x) {
+    return x.is_int64() || x.is_uint64();
+  };
+  if (!fits(a) || !fits(b))
+    return std::nullopt;
+  uint64_t la = a.is_uint64() ? a.to_uint64() : (uint64_t)a.to_int64();
+  uint64_t lb = b.is_uint64() ? b.to_uint64() : (uint64_t)b.to_int64();
+  return BigInt((int64_t)op(la, lb));
+}
+
+void linearize_bitand(
+  const expr2tc &expr,
+  const type2tc &chain_type,
+  std::vector<expr2tc> &out)
+{
+  if (is_bitand2t(expr) && expr->type == chain_type)
+  {
+    const bitand2t &op = to_bitand2t(expr);
+    if (op.side_1->type == chain_type && op.side_2->type == chain_type)
+    {
+      linearize_bitand(op.side_1, chain_type, out);
+      linearize_bitand(op.side_2, chain_type, out);
+      return;
+    }
+  }
+  out.push_back(expr);
+}
+
+void linearize_bitor(
+  const expr2tc &expr,
+  const type2tc &chain_type,
+  std::vector<expr2tc> &out)
+{
+  if (is_bitor2t(expr) && expr->type == chain_type)
+  {
+    const bitor2t &op = to_bitor2t(expr);
+    if (op.side_1->type == chain_type && op.side_2->type == chain_type)
+    {
+      linearize_bitor(op.side_1, chain_type, out);
+      linearize_bitor(op.side_2, chain_type, out);
+      return;
+    }
+  }
+  out.push_back(expr);
+}
+
+void linearize_bitxor(
+  const expr2tc &expr,
+  const type2tc &chain_type,
+  std::vector<expr2tc> &out)
+{
+  if (is_bitxor2t(expr) && expr->type == chain_type)
+  {
+    const bitxor2t &op = to_bitxor2t(expr);
+    if (op.side_1->type == chain_type && op.side_2->type == chain_type)
+    {
+      linearize_bitxor(op.side_1, chain_type, out);
+      linearize_bitxor(op.side_2, chain_type, out);
+      return;
+    }
+  }
+  out.push_back(expr);
+}
+
+expr2tc rebuild_bitand_chain(
+  const type2tc &type,
+  const std::vector<expr2tc> &terms)
+{
+  if (terms.empty())
+    return gen_zero(type); // unreachable in current call path; defensive
+  expr2tc acc = terms[0];
+  for (std::size_t i = 1; i < terms.size(); ++i)
+    acc = bitand2tc(type, acc, terms[i]);
+  return acc;
+}
+
+expr2tc rebuild_bitor_chain(
+  const type2tc &type,
+  const std::vector<expr2tc> &terms)
+{
+  if (terms.empty())
+    return gen_zero(type);
+  expr2tc acc = terms[0];
+  for (std::size_t i = 1; i < terms.size(); ++i)
+    acc = bitor2tc(type, acc, terms[i]);
+  return acc;
+}
+
+expr2tc rebuild_bitxor_chain(
+  const type2tc &type,
+  const std::vector<expr2tc> &terms)
+{
+  if (terms.empty())
+    return gen_zero(type);
+  expr2tc acc = terms[0];
+  for (std::size_t i = 1; i < terms.size(); ++i)
+    acc = bitxor2tc(type, acc, terms[i]);
+  return acc;
+}
+
+/// Optimize a flattened bitand-chain term list. Folds `constant_int2t`
+/// entries via bitwise AND. Identity (`x & -1 = x`) and absorber
+/// (`x & 0 = 0`) at the chain top are caught by the per-op peephole, but
+/// chain-internal leaves (from cross-chain flattening) are handled here.
+std::optional<std::vector<expr2tc>>
+optimize_bitand_terms(const std::vector<expr2tc> &terms)
+{
+  std::size_t const_count = 0;
+  BigInt acc(-1); // identity for AND: all bits set
+  type2tc const_type;
+  bool saw_zero = false;
+  std::vector<expr2tc> result;
+  result.reserve(terms.size());
+
+  for (const auto &term : terms)
+  {
+    if (!is_constant_int2t(term))
+    {
+      result.push_back(term);
+      continue;
+    }
+
+    ++const_count;
+    const BigInt &v = to_constant_int2t(term).value;
+    if (v.is_zero())
+      saw_zero = true;
+    if (const_count == 1)
+    {
+      acc = v;
+      const_type = term->type;
+    }
+    else
+    {
+      auto folded =
+        bitwise_fold(acc, v, [](uint64_t a, uint64_t b) { return a & b; });
+      if (!folded)
+        return std::nullopt; // operands too wide for 64-bit fold; bail
+      acc = *folded;
+    }
+  }
+
+  if (const_count < 2)
+    return std::nullopt;
+
+  if (saw_zero)
+  {
+    result.clear();
+    result.push_back(from_integer(BigInt(0), const_type));
+    return result;
+  }
+
+  if (acc == BigInt(-1))
+  {
+    if (result.empty())
+      result.push_back(from_integer(acc, const_type));
+    return result;
+  }
+
+  result.push_back(from_integer(acc, const_type));
+  return result;
+}
+
+/// Optimize a flattened bitor-chain term list. Absorber: -1. Identity: 0.
+std::optional<std::vector<expr2tc>>
+optimize_bitor_terms(const std::vector<expr2tc> &terms)
+{
+  std::size_t const_count = 0;
+  BigInt acc(0);
+  type2tc const_type;
+  bool saw_minus_one = false;
+  std::vector<expr2tc> result;
+  result.reserve(terms.size());
+
+  for (const auto &term : terms)
+  {
+    if (!is_constant_int2t(term))
+    {
+      result.push_back(term);
+      continue;
+    }
+
+    ++const_count;
+    const BigInt &v = to_constant_int2t(term).value;
+    if (v == BigInt(-1))
+      saw_minus_one = true;
+    if (const_count == 1)
+    {
+      acc = v;
+      const_type = term->type;
+    }
+    else
+    {
+      auto folded =
+        bitwise_fold(acc, v, [](uint64_t a, uint64_t b) { return a | b; });
+      if (!folded)
+        return std::nullopt;
+      acc = *folded;
+    }
+  }
+
+  if (const_count < 2)
+    return std::nullopt;
+
+  if (saw_minus_one)
+  {
+    result.clear();
+    result.push_back(from_integer(BigInt(-1), const_type));
+    return result;
+  }
+
+  if (acc.is_zero())
+  {
+    if (result.empty())
+      result.push_back(from_integer(acc, const_type));
+    return result;
+  }
+
+  result.push_back(from_integer(acc, const_type));
+  return result;
+}
+
+/// Optimize a flattened bitxor-chain term list.
+///
+/// Two transforms:
+///   1. Constant folding via bitwise XOR. Identity is 0 (drops out).
+///      Bitxor has no absorber.
+///   2. Self-cancellation: matching pairs (`x ^ x = 0`) annihilate.
+///
+/// @p chain_type is the type of the original bitxor root, used to type the
+/// final zero leaf when total cancellation occurs and no constant was ever
+/// seen (so const_type, which only the constant pass sets, is otherwise
+/// nil and would produce a malformed expression via from_integer).
+std::optional<std::vector<expr2tc>>
+optimize_bitxor_terms(
+  const type2tc &chain_type,
+  const std::vector<expr2tc> &terms)
+{
+  bool changed = false;
+
+  std::size_t const_count = 0;
+  BigInt acc(0);
+  type2tc const_type;
+  std::vector<expr2tc> result;
+  result.reserve(terms.size());
+
+  for (const auto &term : terms)
+  {
+    if (!is_constant_int2t(term))
+    {
+      result.push_back(term);
+      continue;
+    }
+
+    ++const_count;
+    const BigInt &v = to_constant_int2t(term).value;
+    if (const_count == 1)
+    {
+      acc = v;
+      const_type = term->type;
+    }
+    else
+    {
+      auto folded =
+        bitwise_fold(acc, v, [](uint64_t a, uint64_t b) { return a ^ b; });
+      if (!folded)
+        return std::nullopt;
+      acc = *folded;
+    }
+  }
+
+  if (const_count > 1)
+  {
+    // Two or more constants folded. Drop the result if it's the identity (0).
+    if (!acc.is_zero())
+      result.push_back(from_integer(acc, const_type));
+    changed = true;
+  }
+  else if (const_count == 1 && acc.is_zero())
+  {
+    // Lone zero constant — identity, drop it.
+    changed = true;
+  }
+  else if (const_count == 1)
+  {
+    // Lone non-zero constant — re-emit it.
+    result.push_back(from_integer(acc, const_type));
+  }
+
+  // Pass 2: cancel matching pairs `x ^ x = 0`. No sign tracking; any two
+  // structurally-equal leaves cancel.
+  for (std::size_t i = 0; i < result.size();)
+  {
+    bool erased = false;
+    for (std::size_t j = i + 1; j < result.size(); ++j)
+    {
+      if (!(result[i] == result[j]))
+        continue;
+      result.erase(result.begin() + j);
+      result.erase(result.begin() + i);
+      erased = true;
+      changed = true;
+      break;
+    }
+    if (!erased)
+      ++i;
+  }
+
+  if (!changed)
+    return std::nullopt;
+
+  // Empty result after total cancellation: emit a single zero so rebuild
+  // produces a well-formed expression. Use const_type when a constant was
+  // seen during the fold; otherwise fall back to the chain root type to
+  // avoid passing an uninitialized type2tc to from_integer (which would
+  // produce a malformed expression).
+  if (result.empty())
+  {
+    const type2tc &zero_type = is_nil_type(const_type) ? chain_type : const_type;
+    result.push_back(from_integer(BigInt(0), zero_type));
+  }
+  return result;
 }
 } // namespace
 
@@ -296,11 +824,104 @@ bool reassociate_arith(expr2tc &expr)
   if (terms.size() < 2)
     return false;
 
-  const std::size_t orig_size = terms.size();
-  if (!optimize_terms(terms) && terms.size() == orig_size)
+  // optimize_terms returns Some(replacement) only when a real transform
+  // applied. Even then, double-check structural equality before rebuilding
+  // — defense in depth against a future transform that produces a
+  // logically-identical replacement and breaks the simplifier's
+  // "nil iff unchanged" contract.
+  std::optional<std::vector<signed_term>> optimized = optimize_terms(terms);
+  if (!optimized || signed_terms_equal(*optimized, terms))
     return false;
 
-  expr = rebuild_chain(expr->type, terms);
+  expr = rebuild_chain(expr->type, *optimized);
+  return true;
+}
+
+bool reassociate_mul(expr2tc &expr)
+{
+  if (is_nil_expr(expr))
+    return false;
+
+  // Only attempt mul reassoc on bv/bool mul roots. Like reassociate_arith
+  // we don't descend into operands here — the caller is expr2t::simplify(),
+  // which already simplified them bottom-up.
+  if (!is_mul2t(expr) || !reassoc_mul_safe_type(expr->type))
+    return false;
+
+  std::vector<expr2tc> terms;
+  linearize_mul(expr, expr->type, terms);
+
+  if (terms.size() < 2)
+    return false;
+
+  std::optional<std::vector<expr2tc>> optimized = optimize_mul_terms(terms);
+  if (!optimized || mul_terms_equal(*optimized, terms))
+    return false;
+
+  // optimize_mul_terms guarantees a non-empty replacement when it returns a
+  // value, so the rebuild produces a well-formed expression.
+  expr = rebuild_mul_chain(expr->type, *optimized);
+  return true;
+}
+
+bool reassociate_bitand(expr2tc &expr)
+{
+  if (is_nil_expr(expr))
+    return false;
+  if (!is_bitand2t(expr) || !reassoc_bitwise_safe_type(expr->type))
+    return false;
+
+  std::vector<expr2tc> terms;
+  linearize_bitand(expr, expr->type, terms);
+  if (terms.size() < 2)
+    return false;
+
+  std::optional<std::vector<expr2tc>> optimized = optimize_bitand_terms(terms);
+  if (!optimized || mul_terms_equal(*optimized, terms))
+    return false;
+
+  expr = rebuild_bitand_chain(expr->type, *optimized);
+  return true;
+}
+
+bool reassociate_bitor(expr2tc &expr)
+{
+  if (is_nil_expr(expr))
+    return false;
+  if (!is_bitor2t(expr) || !reassoc_bitwise_safe_type(expr->type))
+    return false;
+
+  std::vector<expr2tc> terms;
+  linearize_bitor(expr, expr->type, terms);
+  if (terms.size() < 2)
+    return false;
+
+  std::optional<std::vector<expr2tc>> optimized = optimize_bitor_terms(terms);
+  if (!optimized || mul_terms_equal(*optimized, terms))
+    return false;
+
+  expr = rebuild_bitor_chain(expr->type, *optimized);
+  return true;
+}
+
+bool reassociate_bitxor(expr2tc &expr)
+{
+  if (is_nil_expr(expr))
+    return false;
+  if (!is_bitxor2t(expr) || !reassoc_bitwise_safe_type(expr->type))
+    return false;
+
+  std::vector<expr2tc> terms;
+  linearize_bitxor(expr, expr->type, terms);
+  if (terms.size() < 2)
+    return false;
+
+  std::optional<std::vector<expr2tc>> optimized =
+    optimize_bitxor_terms(expr->type, terms);
+  if (!optimized || mul_terms_equal(*optimized, terms))
+    return false;
+
+  expr = rebuild_bitxor_chain(expr->type, *optimized);
   return true;
 }
 

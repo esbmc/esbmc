@@ -980,9 +980,22 @@ void goto_symext::symex_assign_bitfield(
   const expr2tc &cast_expr = to_bitand2t(lhs).side_1;
   assert(is_typecast2t(cast_expr));
   const expr2tc &shft_expr = to_typecast2t(cast_expr).from;
-  assert(is_lshr2t(shft_expr));
-  const expr2tc &val = to_lshr2t(shft_expr).side_1;
-  const expr2tc &shft = to_lshr2t(shft_expr).side_2;
+
+  // When the bitfield is at bit offset 0, the simplifier collapses
+  // `lshr(val, 0)` to just `val`, so the lshr wrapper may not be present.
+  // Synthesize a zero shft in that case so the rewrite below works
+  // uniformly.
+  expr2tc val, shft;
+  if (is_lshr2t(shft_expr))
+  {
+    val = to_lshr2t(shft_expr).side_1;
+    shft = to_lshr2t(shft_expr).side_2;
+  }
+  else
+  {
+    val = shft_expr;
+    shft = gen_zero(shft_expr->type);
+  }
   const expr2tc &mask = to_bitand2t(lhs).side_2;
 
   expr2tc neg_mask, rhs_shft, new_rhs;
