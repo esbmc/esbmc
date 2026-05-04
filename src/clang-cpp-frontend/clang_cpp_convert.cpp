@@ -1595,10 +1595,19 @@ bool clang_cpp_convertert::get_function_body(
       else if (init->isMemberInitializer())
       {
         // parsing non-static member initializer
+        const clang::FieldDecl *member_decl = init->getMember();
 
         exprt member;
         member.set("#member_init", 1);
-        if (get_decl_ref(*init->getMember(), member))
+        if (get_decl_ref(*member_decl, member))
+          return true;
+
+        // get_decl_ref resolves a bitfield FieldDecl to its underlying integer
+        // type. Mirror the wrapping done by get_member_expr so the LHS
+        // carries the #bitfield/width-N marker symex relies on; otherwise
+        // symex routes through dereferencet's non-scalar path and produces
+        // spurious bounds / alignment VCCs on bitfield members. See #4281.
+        if (wrap_bitfield_type_if_needed(*member_decl, member.type()))
           return true;
 
         build_member_from_component(fd, member);

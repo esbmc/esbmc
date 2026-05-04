@@ -159,7 +159,7 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
     struct_union_typet::componentt comp(id, name, t);
     if (fd.isBitField())
     {
-      if (get_bitfield_type(fd, t, comp.type()))
+      if (wrap_bitfield_type_if_needed(fd, comp.type()))
         return true;
 
 #if LLVM_VERSION_MAJOR > 18
@@ -1536,6 +1536,20 @@ bool clang_c_convertert::get_builtin_type(
   }
 
   new_type.set("#cpp_type", c_type);
+  return false;
+}
+
+bool clang_c_convertert::wrap_bitfield_type_if_needed(
+  const clang::FieldDecl &fd,
+  typet &t)
+{
+  if (!fd.isBitField())
+    return false;
+
+  typet bitfield_type;
+  if (get_bitfield_type(fd, t, bitfield_type))
+    return true;
+  t.swap(bitfield_type);
   return false;
 }
 
@@ -3957,10 +3971,8 @@ bool clang_c_convertert::get_member_expr(
 
   if (const auto *bitfield = memb.getSourceBitField())
   {
-    typet bitfield_type;
-    if (get_bitfield_type(*bitfield, comp_type, bitfield_type))
+    if (wrap_bitfield_type_if_needed(*bitfield, comp_type))
       return true;
-    comp_type.swap(bitfield_type);
   }
 
   std::string id, name;
