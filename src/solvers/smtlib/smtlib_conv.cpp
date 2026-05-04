@@ -359,8 +359,14 @@ smtlib_convt::smtlib_convt(const namespacet &_ns, const optionst &_options)
     emit_proc(_options.get_option("smtlib-solver-prog")),
     emit_opt_output(_options.get_option("output"))
 {
-  std::string logic =
-    options.get_bool_option("int-encoding") ? "QF_AUFLIRA" : "QF_AUFBV";
+  std::string logic;
+  const bool has_quantifiers = options.get_bool_option("has-quantifiers");
+  if(options.get_bool_option("int-encoding"))
+    logic = has_quantifiers ? "AUFLIRA" : "QF_AUFLIRA";
+  else if(options.get_bool_option("floatbv"))
+    logic = has_quantifiers ? "AUFBV" : "QF_AUFBV";
+  else
+    logic = has_quantifiers ? "AUFBVFP" : "QF_AUFBVFP";
 
   emit("%s", "(set-option :produce-models true)\n");
   emit("(set-logic %s)\n", logic.c_str());
@@ -386,8 +392,15 @@ std::string smtlib_convt::sort_to_string(const smt_sort *s) const
   case SMT_SORT_FIXEDBV:
   case SMT_SORT_BV:
   case SMT_SORT_BVFP:
+  case SMT_SORT_BVFP_RM:
     ss << "(_ BitVec " << sort->get_data_width() << ")";
     return ss.str();
+  case SMT_SORT_FPBV:
+    ss << "(_ FloatingPoint " << sort->get_exponent_width() << " "
+       << sort->get_significand_width() << ")";
+    return ss.str();
+  case SMT_SORT_FPBV_RM:
+    return "RoundingMode";
   case SMT_SORT_ARRAY:
     ss << "(Array " << sort_to_string(sort->domain) << " "
        << sort_to_string(sort->range) << ")";

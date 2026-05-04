@@ -24,16 +24,12 @@ target_link_libraries(solvers INTERFACE solve smttuple smtfp smt prop)
 
 # Logic for each of these are duplicated -- cmake doesn't have indirect function
 # calling, so it's hard to structure it how I want
-add_subdirectory(z3)
+add_subdirectory(camada)
 add_subdirectory(boolector)
 add_subdirectory(cvc4)
-add_subdirectory(cvc5)
-add_subdirectory(mathsat)
-add_subdirectory(yices)
-add_subdirectory(bitwuzla)
 add_subdirectory(smtlib)
 
-if(ENABLE_BITWUZLA OR ENABLE_MATHSAT OR ENABLE_CVC4)
+if(ENABLE_CVC4)
     find_library(GMP_LIB gmp)
     if(NOT GMP_LIB)
         message(FATAL_ERROR "gmp not found")

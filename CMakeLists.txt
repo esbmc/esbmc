@@ -1,7 +1,7 @@
 #################################
 # Project Information           #
 #################################
-cmake_minimum_required (VERSION 3.18)
+cmake_minimum_required (VERSION 3.24)
 
 # HACK: This msvc policy needs to be set before project()
 # This can be removed when we move to CMake >= 3.15
@@ -14,8 +14,8 @@ set (ESBMC_VERSION_MINOR 2)
 set (ESBMC_VERSION_PATCH 0)
 set (ESBMC_VERSION "${ESBMC_VERSION_MAJOR}.${ESBMC_VERSION_MINOR}.${ESBMC_VERSION_PATCH}")
 
-# The only default solver available is smtlib
-set (ESBMC_AVAILABLE_SOLVERS "smtlib")
+# Solver subdirectories append to this during configuration.
+set(ESBMC_AVAILABLE_SOLVERS "")
 
 set(MAX_SUPPORTED_LLVM_VERSION_MAJOR 21)
 

@@ -61,40 +61,25 @@ option(CORE_REGRESSION_ONLY "Only add tests in the regression that are CORE (def
 if(WIN32)
   set(DEFAULT_LLVM_URL "https://github.com/XLiZHI/esbmc/releases/download/v17/llvm+clang+lld-16.0.0-x86_64-windows-msvc-release-mt.zip")
   set(DEFAULT_LLVM_NAME "llvm+clang+lld-16.0.0-x86_64-windows-msvc-release-mt")
-
-  set(DEFAULT_Z3_URL "https://github.com/Z3Prover/z3/releases/download/z3-4.13.3/z3-4.13.3-x64-win.zip")
-  set(DEFAULT_Z3_NAME z3-4.13.3-x64-win)
-
-  set(MATHSAT_URL "https://mathsat.fbk.eu/download.php?file=mathsat-5.6.10-win64-msvc.zip")
-  set(MATHSAT_NAME "mathsat-5.6.10-win64-msvc")
 else()
   set(DEFAULT_LLVM_URL "https://github.com/esbmc/esbmc/releases/download/v7.10/clang+llvm-21.1.2-x86_64-linux-gnu-ubuntu-22.04.tar.xz")
   set(DEFAULT_LLVM_NAME "clang+llvm-21.1.2-x86_64-linux-gnu-ubuntu-22.04")
 
   set(DEFAULT_CHERI_LLVM_URL "https://github.com/XLiZHI/esbmc/releases/download/v17/clang-cheri-17.zip")
   set(DEFAULT_CHERI_LLVM_NAME "clang-cheri-17")
-
-  set(DEFAULT_Z3_URL "https://github.com/Z3Prover/z3/releases/download/z3-4.13.3/z3-4.13.3-x64-glibc-2.35.zip")
-  set(DEFAULT_Z3_NAME z3-4.13.3-x64-glibc-2.35)
-
-  set(MATHSAT_URL "https://mathsat.fbk.eu/release/mathsat-5.6.11-linux-x86_64.tar.gz")
-  set(MATHSAT_NAME "mathsat-5.6.11-linux-x86_64")
-
-  set(DEFAULT_CVC5_URL "https://github.com/cvc5/cvc5/releases/download/cvc5-1.1.2/cvc5-Linux-static.zip")
-  set(DEFAULT_CVC5_NAME cvc5-Linux-static)
 endif()
+
+set(DEFAULT_CAMADA_URL "https://github.com/mikhailramalho/camada/archive/refs/tags/v0.9.tar.gz")
+set(DEFAULT_CAMADA_NAME "camada-v0.9.tar.gz")
 
 set(ESBMC_LLVM_URL ${DEFAULT_LLVM_URL} CACHE STRING "URL to download prebuilt LLVM")
 set(ESBMC_LLVM_NAME ${DEFAULT_LLVM_NAME} CACHE STRING "Name of the extracted directory of LLVM")
 
-set(ESBMC_Z3_URL ${DEFAULT_Z3_URL} CACHE STRING "URL to download prebuilt Z3")
-set(ESBMC_Z3_NAME ${DEFAULT_Z3_NAME} CACHE STRING "Name of the extracted directory of Z3")
-
-set(ESBMC_CVC5_URL ${DEFAULT_CVC5_URL} CACHE STRING "URL to download prebuilt CVC")
-set(ESBMC_CVC5_NAME ${DEFAULT_CVC5_NAME} CACHE STRING "Name of the extracted directory of CVC")
-
 set(ESBMC_CHERI_LLVM_URL ${DEFAULT_CHERI_LLVM_URL} CACHE STRING "URL to download prebuilt CHERI LLVM")
 set(ESBMC_CHERI_LLVM_NAME ${DEFAULT_CHERI_LLVM_NAME} CACHE STRING "Name of the extracted directory of CHERI LLVM")
+
+set(ESBMC_CAMADA_URL ${DEFAULT_CAMADA_URL} CACHE STRING "URL to download Camada sources")
+set(ESBMC_CAMADA_NAME ${DEFAULT_CAMADA_NAME} CACHE STRING "Name of the downloaded Camada source archive")
 
 #############################
 # CMake extra Vars
