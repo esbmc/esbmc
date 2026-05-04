@@ -23,6 +23,25 @@ exprt type_handler::get_expr_helper(const nlohmann::json &json) const
   return const_cast<python_converter &>(converter_).get_expr(json);
 }
 
+bool type_handler::is_pointer_free(const typet &t) const
+{
+  namespacet ns(converter_.symbol_table());
+  typet ty = (t.id() == "symbol") ? ns.follow(t) : t;
+
+  if (ty.is_pointer())
+    return false;
+  if (ty.is_array())
+    return is_pointer_free(ty.subtype());
+  if (ty.is_struct() || ty.is_union())
+  {
+    for (const auto &comp : to_struct_union_type(ty).components())
+      if (!is_pointer_free(comp.type()))
+        return false;
+    return true;
+  }
+  return true; // primitives
+}
+
 bool type_handler::is_constructor_call(const nlohmann::json &json) const
 {
   if (

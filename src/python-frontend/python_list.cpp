@@ -525,6 +525,14 @@ exprt python_list::build_push_list_call(
       : from_integer(BigInt(0), size_type());
   push_func_call.arguments().push_back(float_type_id_arg); // float_type_id
 
+  // ptr_free gates the uint64 fast paths in __ESBMC_copy_value.
+  push_func_call.arguments().push_back(from_integer(
+    BigInt(
+      converter_.get_type_handler().is_pointer_free(elem_info.elem_symbol->type)
+        ? 1
+        : 0),
+    int_type()));
+
   push_func_call.type() = bool_type();
   push_func_call.location() = elem_info.location;
 
@@ -558,6 +566,12 @@ exprt python_list::build_insert_list_call(
   insert_func_call.arguments().push_back(symbol_expr(*elem_info.elem_type_sym));
   insert_func_call.arguments().push_back(elem_info.elem_size);
   insert_func_call.arguments().push_back(float_type_id_arg);
+  insert_func_call.arguments().push_back(from_integer(
+    BigInt(
+      converter_.get_type_handler().is_pointer_free(elem_info.elem_symbol->type)
+        ? 1
+        : 0),
+    int_type()));
   insert_func_call.type() = bool_type();
   insert_func_call.location() = elem_info.location;
 
@@ -633,12 +647,13 @@ void python_list::emit_list_copy(
   tmp_obj_decl.copy_to_operands(at_call);
   body.copy_to_operands(tmp_obj_decl);
 
-  // list_push_object(dst_list, tmp_obj)
+  // list_push_object(dst_list, tmp_obj). ptr_free=0 (generic source).
   side_effect_expr_function_callt push_call;
   push_call.function() = symbol_expr(*push_obj_sym);
   push_call.arguments().push_back(symbol_expr(dst));
   push_call.arguments().push_back(symbol_expr(tmp_obj));
   push_call.arguments().push_back(from_integer(BigInt(0), size_type()));
+  push_call.arguments().push_back(from_integer(BigInt(0), int_type()));
   push_call.type() = bool_type();
   push_call.location() = loc;
   body.copy_to_operands(converter_.convert_expression_to_code(push_call));
@@ -1610,6 +1625,7 @@ exprt python_list::handle_range_slice(
   push_call.arguments().push_back(symbol_expr(sliced_list));
   push_call.arguments().push_back(symbol_expr(at_result));
   push_call.arguments().push_back(from_integer(BigInt(0), size_type()));
+  push_call.arguments().push_back(from_integer(BigInt(0), int_type()));
   push_call.type() = bool_type();
   push_call.location() = location;
   loop_body.copy_to_operands(converter_.convert_expression_to_code(push_call));
@@ -3474,6 +3490,8 @@ exprt python_list::build_extend_list_call(
       from_integer(BigInt(2), size_type())); // size = 2
     push_call.arguments().push_back(
       from_integer(BigInt(0), size_type())); // float_type_id (not float)
+    push_call.arguments().push_back(
+      from_integer(BigInt(1), int_type())); // ptr_free: char element
     push_call.type() = bool_type();
     push_call.location() = location;
     loop_body.copy_to_operands(push_call);
@@ -4607,6 +4625,7 @@ void python_list::handle_list_var_unpacking(
     push_call.arguments().push_back(symbol_expr(star_list));
     push_call.arguments().push_back(symbol_expr(tmp_at));
     push_call.arguments().push_back(from_integer(BigInt(0), size_type()));
+    push_call.arguments().push_back(from_integer(BigInt(0), int_type()));
     push_call.type() = bool_type();
     push_call.location() = loc;
     loop_body.copy_to_operands(
