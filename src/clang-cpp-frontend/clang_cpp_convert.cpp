@@ -137,6 +137,7 @@ bool clang_cpp_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
   case clang::Decl::Using:
   case clang::Decl::UsingEnum:
   case clang::Decl::UsingShadow:
+  case clang::Decl::ConstructorUsingShadow:
   case clang::Decl::UsingDirective:
   case clang::Decl::TypeAlias:
   case clang::Decl::NamespaceAlias:
@@ -204,6 +205,23 @@ void clang_cpp_convertert::get_decl_name(
       name += "::" + std::to_string(pd.getFunctionScopeIndex());
       id_suffix = "::" + std::to_string(pd.getFunctionScopeIndex());
       break;
+    }
+    // Unnamed parameter of an inheriting constructor (`using Base::Base;`).
+    // Sema synthesises these params without identifiers; we still need a
+    // stable name so the inheriting ctor body can forward them.
+    if (
+      const auto *ctor = llvm::dyn_cast_or_null<clang::CXXConstructorDecl>(
+        pd.getParentFunctionOrMethod()))
+    {
+      if (ctor->isInheritingConstructor())
+      {
+        std::string parent_name, parent_id;
+        get_decl_name(*ctor, parent_name, parent_id);
+        std::string suffix = "::p" + std::to_string(pd.getFunctionScopeIndex());
+        name = parent_name + suffix;
+        id = parent_id + suffix;
+        return;
+      }
     }
     clang_c_convertert::get_decl_name(nd, name, id);
     return;
@@ -883,6 +901,62 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     if (get_constructor_call(cxxtoe, new_expr))
       return true;
 
+    break;
+  }
+
+  case clang::Stmt::CXXInheritedCtorInitExprClass:
+  {
+    // Synthesised inside a constructor introduced by `using Base::Base;`.
+    // Lower it to a base-ctor call that forwards the enclosing inheriting
+    // constructor's parameters.
+    const clang::CXXInheritedCtorInitExpr &ice =
+      static_cast<const clang::CXXInheritedCtorInitExpr &>(stmt);
+
+    // Virtual bases follow a different lowering: only the most-derived
+    // object constructs them, so naively forwarding here can double-init.
+    // Reject rather than silently miscompile.
+    if (ice.constructsVBase())
+    {
+      log_error(
+        "Inherited constructor for virtual base is not supported yet "
+        "(see #4271)");
+      return true;
+    }
+
+    if (!new_expr.base_ctor_derived())
+    {
+      log_error(
+        "CXXInheritedCtorInitExpr encountered outside a base-class "
+        "initializer context");
+      return true;
+    }
+
+    exprt callee_decl;
+    if (get_decl_ref(*ice.getConstructor(), callee_decl))
+      return true;
+
+    typet type;
+    if (get_type(ice.getType(), type))
+      return true;
+
+    side_effect_expr_function_callt call;
+    call.function() = callee_decl;
+    call.type() = type;
+
+    gen_typecast_base_ctor_call(callee_decl, call, new_expr);
+
+    // Forward the enclosing inheriting constructor's parameters.
+    assert(current_functionDecl);
+    for (const clang::ParmVarDecl *p : current_functionDecl->parameters())
+    {
+      exprt arg;
+      if (get_decl_ref(*p, arg))
+        return true;
+      call.arguments().push_back(arg);
+    }
+
+    call.set("constructor", 1);
+    new_expr.swap(call);
     break;
   }
 

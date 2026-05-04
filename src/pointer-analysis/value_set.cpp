@@ -1260,7 +1260,7 @@ void value_sett::do_free(const expr2tc &op)
 
     for (object_mapt::const_iterator o_it = value.second.object_map.begin();
          o_it != value.second.object_map.end();
-         o_it++)
+         ++o_it)
     {
       const expr2tc &object = object_numbering[o_it->first];
 

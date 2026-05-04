@@ -2,7 +2,8 @@
 
 #include "cstddef"  /* size_t, ptrdiff_t */
 #include "cstdint"  /* SIZE_MAX */
-#include "array"
+#include <array>
+#include "bit"      /* std::bit_cast (transitive, matches libc++/libstdc++) */
 #include "type_traits"
 
 namespace std
