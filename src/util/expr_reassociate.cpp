@@ -172,9 +172,33 @@ rebuild_chain(const type2tc &type, const std::vector<signed_term> &terms)
     return t.negative ? neg2tc(t.term->type, t.term) : t.term;
   };
 
-  expr2tc acc = materialize(terms[0]);
-  for (std::size_t i = 1; i < terms.size(); ++i)
+  // Defense-in-depth for pointer chains: every intermediate add we emit
+  // is typed as `pointer_type`, so we must seed `acc` with a pointer-
+  // typed term. Otherwise a chain like `[i, j, p, ...]` (integer leaves
+  // before the pointer base) would synthesize add2tc(pointer_type, i, j)
+  // — a pointer-typed add with two integer operands, violating the
+  // pointer-arithmetic invariant. The C frontend doesn't currently emit
+  // shapes that hit this path, but a future frontend change easily could.
+  std::size_t base_idx = 0;
+  if (is_pointer_type(type))
+  {
+    for (std::size_t k = 0; k < terms.size(); ++k)
+    {
+      if (is_pointer_type(terms[k].term) && !terms[k].negative)
+      {
+        base_idx = k;
+        break;
+      }
+    }
+  }
+
+  expr2tc acc = materialize(terms[base_idx]);
+  for (std::size_t i = 0; i < terms.size(); ++i)
+  {
+    if (i == base_idx)
+      continue;
     acc = add2tc(type, acc, materialize(terms[i]));
+  }
 
   // The caller (expr2t::simplify's chain-root step) runs simplify_no_reassoc
   // on the result so add(x, neg(y)) -> sub(x, y) and friends collapse via
