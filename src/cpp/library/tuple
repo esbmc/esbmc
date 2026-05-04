@@ -34,7 +34,9 @@ public:
   {
   }
 
-  constexpr tuple(const tuple &) = default;
+  constexpr tuple(const tuple &other) : head(other.head), tail(other.tail)
+  {
+  }
 
   template <
     typename UHead,
@@ -47,7 +49,12 @@ public:
   {
   }
 
-  tuple &operator=(const tuple &) = default;
+  tuple &operator=(const tuple &other)
+  {
+    head = other.head;
+    tail = other.tail;
+    return *this;
+  }
 
   void swap(tuple &other)
   {
