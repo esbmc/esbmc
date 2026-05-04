@@ -368,8 +368,9 @@ public:
   {
     buf = static_cast<T *>(malloc(sizeof(T) * n));
     __ESBMC_assume(buf);
-    for (int i = 0; i < n; i++)
-      buf[i] = T();
+    // Slots are left nondet on purpose: forcing a T() write here would
+    // require DefaultInsertable<T> at parse time, breaking element types
+    // with only user-provided constructors (issue #2040).
     _size = n;
     _capacity = n;
   }
@@ -605,10 +606,10 @@ public:
       _capacity = sz;
     }
 
-    // Initialize new elements with default values
-    for (unsigned int n = _size; n < sz; n++)
-      buf[n] = T();
-
+    // New slots are left nondet on purpose: forcing a T() write here would
+    // require DefaultInsertable<T> at parse time, breaking element types
+    // with only user-provided constructors (issue #2040). Use the
+    // two-argument overload below to seed a specific value.
     _size = sz;
     return;
   }
