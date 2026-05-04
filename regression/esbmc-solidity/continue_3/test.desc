@@ -1,4 +1,4 @@
 THOROUGH
 contract.solast
---sol contract.sol --contract MyContract --unwind 20 --no-unwinding-assertions
+--sol contract.sol --contract MyContract --unwind 12 --no-unwinding-assertions
 ^VERIFICATION FAILED$

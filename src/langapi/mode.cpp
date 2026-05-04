@@ -23,7 +23,7 @@ static const char *const extensions_cpp[] =
   {"cpp", "cc", "cu", "ipp", "C", "cxx", nullptr};
 #endif
 
-static const char *const extensions_sol_ast[] = {"solast", nullptr};
+static const char *const extensions_sol_ast[] = {"solast", "sol", nullptr};
 static const char *const extensions_jimple[] = {"jimple", nullptr};
 static const char *const extensions_python[] = {"py", nullptr};
 

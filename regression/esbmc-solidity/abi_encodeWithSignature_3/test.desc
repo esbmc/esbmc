@@ -1,0 +1,4 @@
+CORE
+contract.solast
+--sol contract.sol --contract AbiEncodeWithSignatureDiff --unwind 1 --no-unwinding-assertions --no-standard-checks
+^VERIFICATION FAILED$

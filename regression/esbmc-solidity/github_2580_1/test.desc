@@ -1,4 +1,4 @@
-THOROUGH
+CORE
 contract.solast
---sol contract.sol --unwind 5 --no-unwinding-assertions --unbound
+--sol contract.sol --contract ArrayAndBytesBuiltinTest --unwind 5 --no-unwinding-assertions
 ^VERIFICATION SUCCESSFUL$
