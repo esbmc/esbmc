@@ -185,6 +185,29 @@ TEST_CASE(
 }
 
 TEST_CASE(
+  "constant_array2t: uniform array does not fold to array_of",
+  "[array][simplify]")
+{
+  // Folding a uniform finite constant_array to constant_array_of is unsound
+  // under the SMT encoding: default_convert_array_of writes the initializer
+  // at every domain index, including indices past the array's declared size,
+  // so OOB reads return the initializer instead of being unconstrained.
+  // Pin the contract by checking that constant_array2t::do_simplify leaves
+  // a uniform finite array unchanged.
+  const type2tc elem_type = get_int_type(32);
+  const expr2tc zero = constant_int2tc(elem_type, BigInt(0));
+  const expr2tc size = constant_int2tc(get_uint_type(32), BigInt(10));
+  const type2tc arr_type = array_type2tc(elem_type, size, false);
+  std::vector<expr2tc> members(10, zero);
+  const expr2tc arr = constant_array2tc(arr_type, std::move(members));
+
+  // do_simplify is the operator-local rewrite; it must NOT replace this
+  // uniform constant_array with an array_of.
+  const expr2tc result = arr->do_simplify();
+  REQUIRE(is_nil_expr(result));
+}
+
+TEST_CASE(
   "Subtraction simplification: p - p uses ptrdiff result type",
   "[arithmetic][sub][pointer]")
 {
