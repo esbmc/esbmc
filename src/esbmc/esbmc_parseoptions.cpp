@@ -19,6 +19,7 @@ extern "C"
 #include <esbmc/bmc.h>
 #include <esbmc/esbmc_parseoptions.h>
 #include <cctype>
+#include <charconv>
 #include <clang-c-frontend/clang_c_language.h>
 #include <util/config.h>
 #include <util/filesystem.h>
@@ -171,13 +172,17 @@ static void segfault_handler(int sig)
 //
 // \param str - string representation of a time interval,
 // \return - number of seconds that represents the input string value.
-uint64_t esbmc_parseoptionst::read_time_spec(const char *str)
+uint64_t esbmc_parseoptionst::read_time_spec(std::string_view str)
 {
-  uint64_t mult;
-  int len = strlen(str);
-  if (!isdigit(str[len - 1]))
+  if (str.empty())
   {
-    switch (str[len - 1])
+    log_error("Empty timeout value");
+    abort();
+  }
+  uint64_t mult = 1;
+  if (!isdigit((unsigned char)str.back()))
+  {
+    switch (str.back())
     {
     case 's':
       mult = 1;
@@ -196,12 +201,8 @@ uint64_t esbmc_parseoptionst::read_time_spec(const char *str)
       abort();
     }
   }
-  else
-  {
-    mult = 1;
-  }
-
-  uint64_t timeout = strtol(str, nullptr, 10);
+  uint64_t timeout = 0;
+  std::from_chars(str.data(), str.data() + str.size(), timeout);
   timeout *= mult;
   return timeout;
 }
@@ -220,14 +221,18 @@ uint64_t esbmc_parseoptionst::read_time_spec(const char *str)
 // this method throws an error.
 //
 // \param str - string representation of a memory limit,
-// \return - number of megabytes that represents the input string value.
-uint64_t esbmc_parseoptionst::read_mem_spec(const char *str)
+// \return - number of bytes that represents the input string value.
+uint64_t esbmc_parseoptionst::read_mem_spec(std::string_view str)
 {
-  uint64_t mult;
-  int len = strlen(str);
-  if (!isdigit(str[len - 1]))
+  if (str.empty())
   {
-    switch (str[len - 1])
+    log_error("Empty memlimit value");
+    abort();
+  }
+  uint64_t mult = 1024ULL * 1024ULL;
+  if (!isdigit((unsigned char)str.back()))
+  {
+    switch (str.back())
     {
     case 'b':
       mult = 1;
@@ -236,22 +241,18 @@ uint64_t esbmc_parseoptionst::read_mem_spec(const char *str)
       mult = 1024;
       break;
     case 'm':
-      mult = 1024 * 1024;
+      mult = 1024ULL * 1024ULL;
       break;
     case 'g':
-      mult = 1024 * 1024 * 1024;
+      mult = 1024ULL * 1024ULL * 1024ULL;
       break;
     default:
       log_error("Unrecognized memlimit suffix");
       abort();
     }
   }
-  else
-  {
-    mult = 1024 * 1024;
-  }
-
-  uint64_t size = strtol(str, nullptr, 10);
+  uint64_t size = 0;
+  std::from_chars(str.data(), str.data() + str.size(), size);
   size *= mult;
   return size;
 }
