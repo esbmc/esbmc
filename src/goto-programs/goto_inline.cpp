@@ -37,16 +37,33 @@ void goto_inlinet::parameter_assignments(
   auto actual_it = arguments.begin();
   for (const auto &argument_type : argument_types)
   {
-    if (actual_it == arguments.end())
-    {
-      log_error("function call: not enough arguments");
-      abort();
-    }
-
     // The "argument_type" entry from a code_typet is itself an exprt that
     // carries the formal parameter's name (#identifier) and type.
     const exprt &formal = static_cast<const exprt &>(argument_type);
     const irep_idt &identifier = formal.cmt_identifier();
+    const type2tc formal_type = migrate_type(ns.follow(formal.type()));
+
+    // If the call site supplied fewer arguments than the function definition
+    // declares, only declare the formal parameter (it remains unassigned and
+    // any read of it will be treated as nondeterministic by symex).  This
+    // mirrors the symex-time handling in goto_symext::argument_assignments.
+    if (actual_it == arguments.end())
+    {
+      log_warning(
+        "function call: missing argument for parameter '{}'; "
+        "modelled as nondet",
+        id2string(identifier));
+
+      if (identifier != "")
+      {
+        goto_programt::targett decl = dest.add_instruction();
+        decl->make_other();
+        decl->code = code_decl2tc(formal_type, identifier);
+        decl->location = location;
+        decl->function = location.get_function();
+      }
+      continue;
+    }
 
     // Don't assign arguments if they have no name, see regression spec21
     if (identifier == "")
@@ -54,8 +71,6 @@ void goto_inlinet::parameter_assignments(
       ++actual_it;
       continue;
     }
-
-    const type2tc formal_type = migrate_type(ns.follow(formal.type()));
 
     {
       goto_programt::targett decl = dest.add_instruction();
