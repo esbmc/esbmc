@@ -1561,7 +1561,8 @@ expr2tc index2t::do_simplify() const
 
     return arr.datatype_members[the_idx];
   }
-  else if (is_constant_vector2t(src) && is_constant_int2t(idx_e))
+
+  if (is_constant_vector2t(src) && is_constant_int2t(idx_e))
   {
     const constant_vector2t &arr = to_constant_vector2t(src);
     const constant_int2t &idx = to_constant_int2t(idx_e);
@@ -1598,26 +1599,8 @@ expr2tc index2t::do_simplify() const
   }
 
   // Only thing this index can evaluate to is the default value of this array.
-  // For finite-size array_of, preserve bounds so out-of-range reads stay
-  // visible to memory-safety checks instead of silently folding.
   if (is_constant_array_of2t(src))
-  {
-    const constant_array_of2t &aof = to_constant_array_of2t(src);
-    if (
-      is_array_type(aof.type) && !to_array_type(aof.type).size_is_infinite &&
-      is_constant_int2t(idx_e))
-    {
-      const constant_int2t &idx = to_constant_int2t(idx_e);
-      if (idx.value.is_negative())
-        return expr2tc();
-      const expr2tc &arr_size = to_array_type(aof.type).array_size;
-      if (
-        is_constant_int2t(arr_size) &&
-        idx.value >= to_constant_int2t(arr_size).value)
-        return expr2tc();
-    }
-    return aof.initializer;
-  }
+    return to_constant_array_of2t(src).initializer;
 
   return expr2tc();
 }
@@ -5372,20 +5355,15 @@ expr2tc constant_struct2t::do_simplify() const
 
 expr2tc constant_array2t::do_simplify() const
 {
-  // Uniform array -> constant_array_of. SMT encoding for array_of is much
-  // tighter than enumerating every element, and the index2t/with2t
-  // simplifiers already collapse reads/no-op writes against array_of. Most
-  // arrays in symex output aren't uniform — the early exit keeps this O(1)
-  // for the common case.
-  if (datatype_members.size() < 2)
-    return expr2tc();
-
-  const expr2tc &first = datatype_members.front();
-  for (size_t i = 1; i < datatype_members.size(); ++i)
-    if (datatype_members[i] != first)
-      return expr2tc();
-
-  return constant_array_of2tc(type, first);
+  // Don't fold uniform constant_array N to constant_array_of. The SMT
+  // encoding for array_of (default_convert_array_of in smt_conv.cpp) writes
+  // the initializer at *every* domain index, including indices past the
+  // array's declared size — making out-of-bounds reads of the resulting
+  // SMT array return the initializer instead of an unconstrained value.
+  // For finite arrays under --no-bounds-check, that hides OOB-read
+  // assertion violations. Leave constant_array as-is and let array_create
+  // (smt_conv.cpp) populate only the actual range.
+  return expr2tc();
 }
 
 expr2tc byte_extract2t::do_simplify() const
