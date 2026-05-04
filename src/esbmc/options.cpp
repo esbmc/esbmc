@@ -416,7 +416,15 @@ const struct group_opt_templ all_cmd_options[] = {
     {"loop-frame-rule",
      NULL,
      "Enable frame rule for loop invariant checking "
-     "(snapshot-havoc-assume pattern, requires --loop-invariant-check)"}}},
+     "(snapshot-havoc-assume pattern, requires --loop-invariant-check)"},
+    {"check-vacuity",
+     NULL,
+     "After UNSAT discharge, re-solve path assumptions alone; if also UNSAT, "
+     "report VERIFICATION UNKNOWN (vacuous discharge) instead of SUCCESSFUL. "
+     "Default on when --loop-invariant or --loop-invariant-check is set."},
+    {"no-vacuity-check",
+     NULL,
+     "Disable the vacuity probe (overrides default-on behavior)."}}},
   {"Concurrency and Scheduling",
    {{"schedule", NULL, "Use schedule recording approach"},
     {"context-bound",

@@ -55,9 +55,21 @@ protected:
   virtual smt_convt::resultt
   run_decision_procedure(smt_convt &smt_conv, symex_target_equationt &eq) const;
 
+  // Re-encode `local_eq` in vacuity mode against a fresh solver and check
+  // whether the path to each kept claim is reachable. UNSAT means the
+  // discharge was vacuous: the path assumptions alone are unsatisfiable.
+  smt_convt::resultt check_vacuity(symex_target_equationt &local_eq) const;
+
+  // Set by the vacuity probe when at least one kept claim discharged
+  // vacuously; consulted by report_result to map the final verdict from
+  // SUCCESSFUL to UNKNOWN. Atomic because multi_property_check writes from
+  // parallel job threads.
+  std::atomic<bool> vacuity_detected{false};
+
   virtual void show_program(const symex_target_equationt &eq);
   virtual void report_success();
   virtual void report_failure();
+  virtual void report_unknown();
   virtual void keep_alive_function() const;
 
   virtual void

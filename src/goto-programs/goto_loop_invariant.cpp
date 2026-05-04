@@ -531,6 +531,7 @@ void goto_loop_invariantt::insert_assert_before_loop(
     t->guard = invariant;
     t->location = loop_head->location;
     t->location.comment("loop invariant base case");
+    t->location.property("invariant-base-case");
   }
 
   // Insert before the loop head
@@ -682,6 +683,7 @@ void goto_loop_invariantt::insert_inductive_step_and_termination(
     t->guard = invariant;
     t->location = loop_exit->location;
     t->location.comment("loop invariant inductive step");
+    t->location.property("invariant-inductive-step");
   }
 
   // 4. Insert ASSUME(FALSE) to terminate the loop
