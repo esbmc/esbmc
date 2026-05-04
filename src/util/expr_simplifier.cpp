@@ -765,10 +765,10 @@ expr2tc div2t::do_simplify() const
 
 expr2tc modulus2t::do_simplify() const
 {
-  // x % x = 0
-  if (side_1 == side_2)
-    return gen_zero(type);
-
+  // NOTE: deliberately no `x % x = 0` rule. For x == 0, the original is
+  // modulo-by-zero (UB), and folding to 0 here would suppress the
+  // div-by-zero check that runs as a separate VCC. Mirror of the
+  // intentionally-absent `x / x = 1` rule in div2t::do_simplify.
   return simplify_arith_2ops<Modtor, modulus2t>(type, side_1, side_2);
 }
 
@@ -3456,8 +3456,15 @@ expr2tc equality2t::do_simplify() const
     return simplify_floatbv_relations<IEEE_equalitytor, equality2t>(
       type, side_1, side_2);
 
-  // (x + c1) == c2 -> x == (c2 - c1)
-  if (is_add2t(side_1) && is_constant_int2t(side_2))
+  // (x + c1) == c2 -> x == (c2 - c1). Requires homogeneous types across
+  // the entire shape: the add, BOTH its operands, and c2 must share a
+  // single arithmetic domain. Mixed widths (e.g. (x_u8 + c_u16) == c2_u16)
+  // would silently rewrite into something that confuses modular semantics.
+  if (
+    is_add2t(side_1) && is_constant_int2t(side_2) &&
+    side_1->type == side_2->type &&
+    to_add2t(side_1).side_1->type == side_2->type &&
+    to_add2t(side_1).side_2->type == side_2->type)
   {
     const add2t &add_expr = to_add2t(side_1);
 
@@ -3467,7 +3474,8 @@ expr2tc equality2t::do_simplify() const
       const BigInt &c2 = to_constant_int2t(side_2).value;
       BigInt diff = c2 - c1;
 
-      if (fits_in_width(diff, type->get_width(), is_signedbv_type(type)))
+      if (fits_in_width(
+            diff, side_2->type->get_width(), is_signedbv_type(side_2->type)))
       {
         expr2tc new_const = constant_int2tc(side_2->type, diff);
         return equality2tc(add_expr.side_1, new_const);
@@ -3480,7 +3488,8 @@ expr2tc equality2t::do_simplify() const
       const BigInt &c2 = to_constant_int2t(side_2).value;
       BigInt diff = c2 - c1;
 
-      if (fits_in_width(diff, type->get_width(), is_signedbv_type(type)))
+      if (fits_in_width(
+            diff, side_2->type->get_width(), is_signedbv_type(side_2->type)))
       {
         expr2tc new_const = constant_int2tc(side_2->type, diff);
         return equality2tc(add_expr.side_2, new_const);
@@ -3488,8 +3497,12 @@ expr2tc equality2t::do_simplify() const
     }
   }
 
-  // (x - c1) == c2 -> x == (c2 + c1)
-  if (is_sub2t(side_1) && is_constant_int2t(side_2))
+  // (x - c1) == c2 -> x == (c2 + c1). Same homogeneity requirement.
+  if (
+    is_sub2t(side_1) && is_constant_int2t(side_2) &&
+    side_1->type == side_2->type &&
+    to_sub2t(side_1).side_1->type == side_2->type &&
+    to_sub2t(side_1).side_2->type == side_2->type)
   {
     const sub2t &sub_expr = to_sub2t(side_1);
 
@@ -3499,7 +3512,8 @@ expr2tc equality2t::do_simplify() const
       const BigInt &c2 = to_constant_int2t(side_2).value;
       BigInt sum = c2 + c1;
 
-      if (fits_in_width(sum, type->get_width(), is_signedbv_type(type)))
+      if (fits_in_width(
+            sum, side_2->type->get_width(), is_signedbv_type(side_2->type)))
       {
         expr2tc new_const = constant_int2tc(side_2->type, sum);
         return equality2tc(sub_expr.side_1, new_const);
@@ -3648,7 +3662,13 @@ expr2tc notequal2t::do_simplify() const
   // preserves equality also preserves inequality.
 
   // (x + c1) != c2 -> x != (c2 - c1), and the (c1 + x) != c2 mirror.
-  if (is_add2t(side_1) && is_constant_int2t(side_2))
+  // Same homogeneity requirement as the equality case: the add, BOTH its
+  // operands, and c2 must all share a single arithmetic domain.
+  if (
+    is_add2t(side_1) && is_constant_int2t(side_2) &&
+    side_1->type == side_2->type &&
+    to_add2t(side_1).side_1->type == side_2->type &&
+    to_add2t(side_1).side_2->type == side_2->type)
   {
     const add2t &add_expr = to_add2t(side_1);
     const BigInt &c2 = to_constant_int2t(side_2).value;
@@ -3658,7 +3678,8 @@ expr2tc notequal2t::do_simplify() const
       const BigInt &c1 = to_constant_int2t(add_expr.side_2).value;
       BigInt diff = c2 - c1;
 
-      if (fits_in_width(diff, type->get_width(), is_signedbv_type(type)))
+      if (fits_in_width(
+            diff, side_2->type->get_width(), is_signedbv_type(side_2->type)))
       {
         expr2tc new_const = constant_int2tc(side_2->type, diff);
         return notequal2tc(add_expr.side_1, new_const);
@@ -3670,7 +3691,8 @@ expr2tc notequal2t::do_simplify() const
       const BigInt &c1 = to_constant_int2t(add_expr.side_1).value;
       BigInt diff = c2 - c1;
 
-      if (fits_in_width(diff, type->get_width(), is_signedbv_type(type)))
+      if (fits_in_width(
+            diff, side_2->type->get_width(), is_signedbv_type(side_2->type)))
       {
         expr2tc new_const = constant_int2tc(side_2->type, diff);
         return notequal2tc(add_expr.side_2, new_const);
@@ -3678,8 +3700,12 @@ expr2tc notequal2t::do_simplify() const
     }
   }
 
-  // (x - c1) != c2 -> x != (c2 + c1)
-  if (is_sub2t(side_1) && is_constant_int2t(side_2))
+  // (x - c1) != c2 -> x != (c2 + c1). Same homogeneity requirement.
+  if (
+    is_sub2t(side_1) && is_constant_int2t(side_2) &&
+    side_1->type == side_2->type &&
+    to_sub2t(side_1).side_1->type == side_2->type &&
+    to_sub2t(side_1).side_2->type == side_2->type)
   {
     const sub2t &sub_expr = to_sub2t(side_1);
 
@@ -3689,7 +3715,8 @@ expr2tc notequal2t::do_simplify() const
       const BigInt &c2 = to_constant_int2t(side_2).value;
       BigInt sum = c2 + c1;
 
-      if (fits_in_width(sum, type->get_width(), is_signedbv_type(type)))
+      if (fits_in_width(
+            sum, side_2->type->get_width(), is_signedbv_type(side_2->type)))
       {
         expr2tc new_const = constant_int2tc(side_2->type, sum);
         return notequal2tc(sub_expr.side_1, new_const);
