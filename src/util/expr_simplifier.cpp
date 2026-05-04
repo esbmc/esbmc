@@ -40,10 +40,10 @@ expr2tc expr2t::simplify(bool suppress_reassoc) const
     // gave us: if we're inside a `simplify_no_reassoc` umbrella, that flag
     // must reach every descendant, including the operand of a non-chain op
     // like modulus.
-    const bool this_is_chain_op =
-      expr_id == add_id || expr_id == sub_id || expr_id == neg_id ||
-      expr_id == mul_id || expr_id == bitand_id || expr_id == bitor_id ||
-      expr_id == bitxor_id;
+    const bool this_is_chain_op = expr_id == add_id || expr_id == sub_id ||
+                                  expr_id == neg_id || expr_id == mul_id ||
+                                  expr_id == bitand_id || expr_id == bitor_id ||
+                                  expr_id == bitxor_id;
     const bool operand_suppress = suppress_reassoc || this_is_chain_op;
 
     // Step 1: simplify all sub-operands first. This way do_simplify() always
@@ -436,8 +436,7 @@ expr2tc add2t::do_simplify() const
   // larger expression. Stick to signed where neg is structural.
   if (is_signedbv_type(type) && is_neg2t(side_1) && is_neg2t(side_2))
   {
-    expr2tc sum =
-      add2tc(type, to_neg2t(side_1).value, to_neg2t(side_2).value);
+    expr2tc sum = add2tc(type, to_neg2t(side_1).value, to_neg2t(side_2).value);
     return neg2tc(type, sum);
   }
 
@@ -1304,9 +1303,10 @@ expr2tc pointer_offset2t::do_simplify() const
       // concrete-object case where p is known to be NULL or where the
       // source isn't a dereference at all.
       const bool is_deref_source = is_dereference2t(member.source_value);
-      const expr2tc base_offset = is_deref_source
-        ? pointer_offset2tc(type, to_dereference2t(member.source_value).value)
-        : gen_zero(type);
+      const expr2tc base_offset =
+        is_deref_source
+          ? pointer_offset2tc(type, to_dereference2t(member.source_value).value)
+          : gen_zero(type);
 
       // Union members all have member_offset 0 relative to the union base,
       // so &p->u_member's byte offset is just pointer_offset(p).
@@ -1568,8 +1568,8 @@ expr2tc index2t::do_simplify() const
   {
     const constant_array_of2t &aof = to_constant_array_of2t(src);
     if (
-      is_array_type(aof.type) &&
-      !to_array_type(aof.type).size_is_infinite && is_constant_int2t(idx_e))
+      is_array_type(aof.type) && !to_array_type(aof.type).size_is_infinite &&
+      is_constant_int2t(idx_e))
     {
       const constant_int2t &idx = to_constant_int2t(idx_e);
       if (idx.value.is_negative())
@@ -1884,8 +1884,8 @@ expr2tc and2t::do_simplify() const
 
   // Complementary absorption: x && (!x || y) = x && y. The (!x || y) factor
   // contributes no extra information beyond y when x already holds.
-  auto match_complement = [](const expr2tc &needle, const expr2tc &candidate)
-    -> bool {
+  auto match_complement =
+    [](const expr2tc &needle, const expr2tc &candidate) -> bool {
     return is_not2t(candidate) && to_not2t(candidate).value == needle;
   };
   if (is_or2t(side_2))
@@ -2014,8 +2014,8 @@ expr2tc or2t::do_simplify() const
 
   // Complementary absorption: x || (!x && y) = x || y. The (!x && y) factor
   // contributes no extra information beyond y when x already fails.
-  auto match_complement = [](const expr2tc &needle, const expr2tc &candidate)
-    -> bool {
+  auto match_complement =
+    [](const expr2tc &needle, const expr2tc &candidate) -> bool {
     return is_not2t(candidate) && to_not2t(candidate).value == needle;
   };
   if (is_and2t(side_2))
@@ -2675,9 +2675,11 @@ expr2tc bitxor2t::do_simplify() const
     return side_1;
 
   // x ^ -1 = ~x, -1 ^ x = ~x (toggle-all-bits)
-  if (is_constant_int2t(side_2) && to_constant_int2t(side_2).value == BigInt(-1))
+  if (
+    is_constant_int2t(side_2) && to_constant_int2t(side_2).value == BigInt(-1))
     return bitnot2tc(type, side_1);
-  if (is_constant_int2t(side_1) && to_constant_int2t(side_1).value == BigInt(-1))
+  if (
+    is_constant_int2t(side_1) && to_constant_int2t(side_1).value == BigInt(-1))
     return bitnot2tc(type, side_2);
 
   // ~x ^ ~y = x ^ y
@@ -2918,8 +2920,9 @@ expr2tc shl2t::do_simplify() const
     return side_1;
 
   // (x << c1) << c2 -> x << (c1 + c2) when c1 + c2 < width.
-  if (expr2tc combined =
-        combine_constant_shifts<shl2t>(type, side_1, side_2, is_shl2t, to_shl2t))
+  if (
+    expr2tc combined =
+      combine_constant_shifts<shl2t>(type, side_1, side_2, is_shl2t, to_shl2t))
     return combined;
 
   auto op = [](uint64_t op1, uint64_t op2) { return op1 << op2; };
@@ -2972,8 +2975,9 @@ expr2tc ashr2t::do_simplify() const
   // arithmetic right shift: stacking sign-extending shifts is associative
   // up to the width boundary; at or past width the result is all sign-bit
   // copies, but C UB rules apply and we leave that to overflow checking.
-  if (expr2tc combined = combine_constant_shifts<ashr2t>(
-        type, side_1, side_2, is_ashr2t, to_ashr2t))
+  if (
+    expr2tc combined = combine_constant_shifts<ashr2t>(
+      type, side_1, side_2, is_ashr2t, to_ashr2t))
     return combined;
 
   auto op = [](uint64_t op1, uint64_t op2) {
@@ -3894,14 +3898,16 @@ expr2tc lessthan2t::do_simplify() const
   // Type-extreme bounds. x < TYPE_MIN is always false; nothing in the type's
   // range is less than the minimum representable value. Subsumes the existing
   // "unsigned < 0" rule.
-  if (is_constant_int2t(side_2) &&
-      is_type_min(to_constant_int2t(side_2).value, side_1->type))
+  if (
+    is_constant_int2t(side_2) &&
+    is_type_min(to_constant_int2t(side_2).value, side_1->type))
     return gen_false_expr();
 
   // TYPE_MAX < x is always false; nothing in the type's range exceeds the
   // maximum representable value.
-  if (is_constant_int2t(side_1) &&
-      is_type_max(to_constant_int2t(side_1).value, side_2->type))
+  if (
+    is_constant_int2t(side_1) &&
+    is_type_max(to_constant_int2t(side_1).value, side_2->type))
     return gen_false_expr();
 
   return simplify_relations<Lessthantor, lessthan2t>(type, side_1, side_2);
@@ -3941,13 +3947,15 @@ expr2tc greaterthan2t::do_simplify() const
     return gen_false_expr();
 
   // x > TYPE_MAX is always false; nothing exceeds the max representable.
-  if (is_constant_int2t(side_2) &&
-      is_type_max(to_constant_int2t(side_2).value, side_1->type))
+  if (
+    is_constant_int2t(side_2) &&
+    is_type_max(to_constant_int2t(side_2).value, side_1->type))
     return gen_false_expr();
 
   // TYPE_MIN > x is always false; nothing is below the min representable.
-  if (is_constant_int2t(side_1) &&
-      is_type_min(to_constant_int2t(side_1).value, side_2->type))
+  if (
+    is_constant_int2t(side_1) &&
+    is_type_min(to_constant_int2t(side_1).value, side_2->type))
     return gen_false_expr();
 
   return simplify_relations<Greaterthantor, greaterthan2t>(
@@ -3988,13 +3996,15 @@ expr2tc lessthanequal2t::do_simplify() const
     return gen_true_expr();
 
   // x <= TYPE_MAX is always true; the max representable bounds the type.
-  if (is_constant_int2t(side_2) &&
-      is_type_max(to_constant_int2t(side_2).value, side_1->type))
+  if (
+    is_constant_int2t(side_2) &&
+    is_type_max(to_constant_int2t(side_2).value, side_1->type))
     return gen_true_expr();
 
   // TYPE_MIN <= x is always true; the min representable bounds the type.
-  if (is_constant_int2t(side_1) &&
-      is_type_min(to_constant_int2t(side_1).value, side_2->type))
+  if (
+    is_constant_int2t(side_1) &&
+    is_type_min(to_constant_int2t(side_1).value, side_2->type))
     return gen_true_expr();
 
   return simplify_relations<Lessthanequaltor, lessthanequal2t>(
@@ -4036,13 +4046,15 @@ expr2tc greaterthanequal2t::do_simplify() const
 
   // x >= TYPE_MIN is always true; the min representable bounds the type.
   // Subsumes the existing "unsigned >= 0" rule.
-  if (is_constant_int2t(side_2) &&
-      is_type_min(to_constant_int2t(side_2).value, side_1->type))
+  if (
+    is_constant_int2t(side_2) &&
+    is_type_min(to_constant_int2t(side_2).value, side_1->type))
     return gen_true_expr();
 
   // TYPE_MAX >= x is always true; the max representable bounds the type.
-  if (is_constant_int2t(side_1) &&
-      is_type_max(to_constant_int2t(side_1).value, side_2->type))
+  if (
+    is_constant_int2t(side_1) &&
+    is_type_max(to_constant_int2t(side_1).value, side_2->type))
     return gen_true_expr();
 
   return simplify_relations<Greaterthanequaltor, greaterthanequal2t>(
@@ -4116,8 +4128,11 @@ expr2tc if2t::do_simplify() const
     // type. Returns nil if @p c isn't a sign test.
     auto decode_sign_test =
       [&](const expr2tc &c, expr2tc &x, bool &out_positive) -> bool {
-      auto handle = [&](const expr2tc &s1, const expr2tc &s2,
-                        bool x_is_left, bool positive_when_x_left) -> bool {
+      auto handle = [&](
+                      const expr2tc &s1,
+                      const expr2tc &s2,
+                      bool x_is_left,
+                      bool positive_when_x_left) -> bool {
         const expr2tc &candidate_x = x_is_left ? s1 : s2;
         const expr2tc &candidate_z = x_is_left ? s2 : s1;
         if (!match_zero(candidate_z) || candidate_x->type != type)
@@ -4130,32 +4145,40 @@ expr2tc if2t::do_simplify() const
       if (is_greaterthanequal2t(c))
       {
         const greaterthanequal2t &r = to_greaterthanequal2t(c);
-        if (match_zero(r.side_2)) return handle(r.side_1, r.side_2, true, true);
-        if (match_zero(r.side_1)) return handle(r.side_1, r.side_2, false, true);
+        if (match_zero(r.side_2))
+          return handle(r.side_1, r.side_2, true, true);
+        if (match_zero(r.side_1))
+          return handle(r.side_1, r.side_2, false, true);
         return false;
       }
       // (x > 0) and (0 > x) ≡ (x < 0)
       if (is_greaterthan2t(c))
       {
         const greaterthan2t &r = to_greaterthan2t(c);
-        if (match_zero(r.side_2)) return handle(r.side_1, r.side_2, true, true);
-        if (match_zero(r.side_1)) return handle(r.side_1, r.side_2, false, true);
+        if (match_zero(r.side_2))
+          return handle(r.side_1, r.side_2, true, true);
+        if (match_zero(r.side_1))
+          return handle(r.side_1, r.side_2, false, true);
         return false;
       }
       // (x <= 0) and (0 <= x) ≡ (x >= 0)
       if (is_lessthanequal2t(c))
       {
         const lessthanequal2t &r = to_lessthanequal2t(c);
-        if (match_zero(r.side_2)) return handle(r.side_1, r.side_2, true, false);
-        if (match_zero(r.side_1)) return handle(r.side_1, r.side_2, false, false);
+        if (match_zero(r.side_2))
+          return handle(r.side_1, r.side_2, true, false);
+        if (match_zero(r.side_1))
+          return handle(r.side_1, r.side_2, false, false);
         return false;
       }
       // (x < 0) and (0 < x) ≡ (x > 0)
       if (is_lessthan2t(c))
       {
         const lessthan2t &r = to_lessthan2t(c);
-        if (match_zero(r.side_2)) return handle(r.side_1, r.side_2, true, false);
-        if (match_zero(r.side_1)) return handle(r.side_1, r.side_2, false, false);
+        if (match_zero(r.side_2))
+          return handle(r.side_1, r.side_2, true, false);
+        if (match_zero(r.side_1))
+          return handle(r.side_1, r.side_2, false, false);
         return false;
       }
       return false;
@@ -4324,9 +4347,7 @@ expr2tc overflow_cast2t::do_simplify() const
 
   // Unsigned source whose width fits in the destination: the value is
   // already in [0, 2^src_width - 1] ⊆ [0, 2^bits - 1], so no overflow.
-  if (
-    is_unsignedbv_type(operand->type) &&
-    bits >= operand->type->get_width())
+  if (is_unsignedbv_type(operand->type) && bits >= operand->type->get_width())
     return gen_false_expr();
 
   // Constant operand: directly compute the bound check.
@@ -4525,9 +4546,7 @@ expr2tc concat2t::do_simplify() const
   // Restrict to unsigned/bool sources, where typecast widening is already
   // a zero-extension. For signed, route through the unsigned-of-same-width
   // intermediate so the widening cast becomes zero-extension.
-  if (
-    is_constant_int2t(side_1) &&
-    to_constant_int2t(side_1).value.is_zero())
+  if (is_constant_int2t(side_1) && to_constant_int2t(side_1).value.is_zero())
   {
     if (is_unsignedbv_type(side_2) || is_bool_type(side_2))
       return typecast2tc(type, side_2);
@@ -4619,9 +4638,7 @@ expr2tc extract2t::do_simplify() const
 
   // Full-width extract is a no-op when the types match. extract(x, w-1, 0)
   // selects every bit of x; the rewrite avoids emitting a redundant op.
-  if (
-    lower == 0 && from->type == type &&
-    upper + 1 == from->type->get_width())
+  if (lower == 0 && from->type == type && upper + 1 == from->type->get_width())
     return from;
 
   // extract(concat(a, b), upper, lower) where the extract lies entirely in
@@ -5368,8 +5385,7 @@ expr2tc byte_extract2t::do_simplify() const
     //   3. Endianness flags must match.
     if (
       off1.is_uint64() && off2.is_uint64() && type->get_width() == 8 &&
-      bu.update_value->type->get_width() == 8 &&
-      bu.big_endian == big_endian)
+      bu.update_value->type->get_width() == 8 && bu.big_endian == big_endian)
     {
       uint64_t lo = off1.to_uint64();
       uint64_t r = off2.to_uint64();
@@ -5447,11 +5463,9 @@ expr2tc byte_update2t::do_simplify() const
     return expr2tc();
 
   std::string value = integer2binary(
-    to_constant_int2t(update_value).value,
-    update_value->type->get_width());
+    to_constant_int2t(update_value).value, update_value->type->get_width());
   std::string src_value = integer2binary(
-    to_constant_int2t(source_value).value,
-    source_value->type->get_width());
+    to_constant_int2t(source_value).value, source_value->type->get_width());
 
   // Overflow? The backend will handle that
   int src_offset = to_constant_int2t(source_offset).value.to_int64();

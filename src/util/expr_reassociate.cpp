@@ -90,8 +90,7 @@ void linearize_add_sub(
       s1 = to_sub2t(n).side_1, s2 = to_sub2t(n).side_2;
     else
       return false;
-    return n->type == chain_type &&
-           chain_compatible(s1, chain_type) &&
+    return n->type == chain_type && chain_compatible(s1, chain_type) &&
            chain_compatible(s2, chain_type);
   };
 
@@ -116,8 +115,7 @@ void linearize_add_sub(
   // we don't model "negative pointer term" in the rebuilt chain.
   if (
     is_neg2t(expr) && expr->type == chain_type &&
-    !is_pointer_type(chain_type) &&
-    to_neg2t(expr).value->type == chain_type)
+    !is_pointer_type(chain_type) && to_neg2t(expr).value->type == chain_type)
   {
     linearize_add_sub(to_neg2t(expr).value, chain_type, !negate, out);
     return;
@@ -155,9 +153,8 @@ bool reassoc_safe_type(const type2tc &type)
 /// This always constructs fresh expression nodes. Callers must only invoke it
 /// after proving the term list is meaningfully different from the input chain;
 /// rebuilding an equivalent chain can still affect simplifier change tracking.
-expr2tc rebuild_chain(
-  const type2tc &type,
-  const std::vector<signed_term> &terms)
+expr2tc
+rebuild_chain(const type2tc &type, const std::vector<signed_term> &terms)
 {
   if (terms.empty())
     return gen_zero(type);
@@ -445,9 +442,8 @@ optimize_mul_terms(const std::vector<expr2tc> &terms)
 /// terms is empty (the caller guarantees a non-empty list when commit is
 /// possible: `optimize_mul_terms` always returns at least one term, and the
 /// caller short-circuits on terms.size() < 2 before calling).
-expr2tc rebuild_mul_chain(
-  const type2tc &type,
-  const std::vector<expr2tc> &terms)
+expr2tc
+rebuild_mul_chain(const type2tc &type, const std::vector<expr2tc> &terms)
 {
   if (terms.empty())
     return gen_zero(type); // unreachable in current call path; defensive
@@ -474,16 +470,13 @@ bool reassoc_bitwise_safe_type(const type2tc &type)
 /// rather than produce a wrong answer (mirrors do_bit_munge_operation's
 /// 64-bit-bound for constant folding).
 template <typename U64Op>
-std::optional<BigInt>
-bitwise_fold(const BigInt &a, const BigInt &b, U64Op op)
+std::optional<BigInt> bitwise_fold(const BigInt &a, const BigInt &b, U64Op op)
 {
   // Use the same two's-complement round-trip as do_bit_munge_operation:
   // signed values reach this via int64_t and unsigned via uint64_t. For
   // bitwise ops, what we care about is the underlying bit pattern, so we
   // accept either form as long as it fits in 64 bits.
-  auto fits = [](const BigInt &x) {
-    return x.is_int64() || x.is_uint64();
-  };
+  auto fits = [](const BigInt &x) { return x.is_int64() || x.is_uint64(); };
   if (!fits(a) || !fits(b))
     return std::nullopt;
   uint64_t la = a.is_uint64() ? a.to_uint64() : (uint64_t)a.to_int64();
@@ -545,9 +538,8 @@ void linearize_bitxor(
   out.push_back(expr);
 }
 
-expr2tc rebuild_bitand_chain(
-  const type2tc &type,
-  const std::vector<expr2tc> &terms)
+expr2tc
+rebuild_bitand_chain(const type2tc &type, const std::vector<expr2tc> &terms)
 {
   if (terms.empty())
     return gen_zero(type); // unreachable in current call path; defensive
@@ -557,9 +549,8 @@ expr2tc rebuild_bitand_chain(
   return acc;
 }
 
-expr2tc rebuild_bitor_chain(
-  const type2tc &type,
-  const std::vector<expr2tc> &terms)
+expr2tc
+rebuild_bitor_chain(const type2tc &type, const std::vector<expr2tc> &terms)
 {
   if (terms.empty())
     return gen_zero(type);
@@ -569,9 +560,8 @@ expr2tc rebuild_bitor_chain(
   return acc;
 }
 
-expr2tc rebuild_bitxor_chain(
-  const type2tc &type,
-  const std::vector<expr2tc> &terms)
+expr2tc
+rebuild_bitxor_chain(const type2tc &type, const std::vector<expr2tc> &terms)
 {
   if (terms.empty())
     return gen_zero(type);
@@ -713,8 +703,7 @@ optimize_bitor_terms(const std::vector<expr2tc> &terms)
 /// final zero leaf when total cancellation occurs and no constant was ever
 /// seen (so const_type, which only the constant pass sets, is otherwise
 /// nil and would produce a malformed expression via from_integer).
-std::optional<std::vector<expr2tc>>
-optimize_bitxor_terms(
+std::optional<std::vector<expr2tc>> optimize_bitxor_terms(
   const type2tc &chain_type,
   const std::vector<expr2tc> &terms)
 {
@@ -798,7 +787,8 @@ optimize_bitxor_terms(
   // produce a malformed expression).
   if (result.empty())
   {
-    const type2tc &zero_type = is_nil_type(const_type) ? chain_type : const_type;
+    const type2tc &zero_type =
+      is_nil_type(const_type) ? chain_type : const_type;
     result.push_back(from_integer(BigInt(0), zero_type));
   }
   return result;
