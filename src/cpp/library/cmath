@@ -13,6 +13,9 @@
 namespace std
 {
 
+using ::float_t;
+using ::double_t;
+
 inline float abs(float num)
 {
   return ::fabsf(num);
