@@ -240,8 +240,33 @@ rebuild_chain(const type2tc &type, const std::vector<signed_term> &terms)
 /// Constants are never mutated in place: expr2tc shares storage, so writing
 /// `to_constant_int2t(c).value +=` would corrupt every other use of that
 /// constant in the program.
+/// Check that @p value fits in @p type without modular wrap. Used to gate
+/// pointer-chain folds: each unfolded `add(pointer, ptr, c)` step casts c to
+/// the pointer offset width before the SMT bv add (smt_memspace.cpp). A
+/// fold that wraps a narrow constant (e.g. (s8)100 + (s8)100 = (s8)-56)
+/// would change the sign-extended offset value, silently shifting the
+/// pointer. For non-pointer chains the wrap matches bv semantics, so this
+/// guard is only enforced when the chain root is pointer-typed.
+static bool fits_in_signed_type(const BigInt &value, const type2tc &type)
+{
+  if (!is_signedbv_type(type) && !is_unsignedbv_type(type))
+    return true;
+  const unsigned width = type->get_width();
+  if (is_signedbv_type(type))
+  {
+    BigInt min_val = -(BigInt::power2(width - 1));
+    BigInt max_val = BigInt::power2(width - 1) - 1;
+    return value >= min_val && value <= max_val;
+  }
+  if (value < 0)
+    return false;
+  return value <= BigInt::power2(width) - 1;
+}
+
 std::optional<std::vector<signed_term>>
-optimize_terms(const std::vector<signed_term> &terms)
+optimize_terms(
+  const type2tc &chain_type,
+  const std::vector<signed_term> &terms)
 {
   bool changed = false;
 
@@ -307,10 +332,31 @@ optimize_terms(const std::vector<signed_term> &terms)
 
   if (const_count > 1)
   {
-    // Two or more constants folded into one — that's a real rewrite.
-    if (!acc_value.is_zero())
-      result.push_back({acc_negative, from_integer(acc_value, const_type)});
-    changed = true;
+    // Pointer-chain soundness: each unfolded `add(pointer, ptr, c)` step
+    // sign-extends c to the pointer offset width before the SMT bv add.
+    // Folding two narrow constants whose sum wraps would change the
+    // sign-extended value (e.g. (s8)100 + (s8)100 = (s8)-56). For
+    // non-pointer chains the wrap is part of the bv semantics and the
+    // unfolded chain has the same wrap, so we only refuse the fold for
+    // pointer-typed chains. Treat the constants as opaque non-constant
+    // leaves and keep them in the result.
+    if (
+      is_pointer_type(chain_type) &&
+      !fits_in_signed_type(acc_negative ? -acc_value : acc_value, const_type))
+    {
+      // Re-emit each constant in original signed_term form so the result
+      // matches the input list (no spurious "changed" signal).
+      for (const auto &term : terms)
+        if (is_constant_int2t(term.term) && term.term->type == const_type)
+          result.push_back(term);
+    }
+    else
+    {
+      // Two or more constants folded into one — that's a real rewrite.
+      if (!acc_value.is_zero())
+        result.push_back({acc_negative, from_integer(acc_value, const_type)});
+      changed = true;
+    }
   }
   else if (const_count == 1 && acc_value.is_zero())
   {
@@ -855,7 +901,8 @@ bool reassociate_arith(expr2tc &expr)
   // — defense in depth against a future transform that produces a
   // logically-identical replacement and breaks the simplifier's
   // "nil iff unchanged" contract.
-  std::optional<std::vector<signed_term>> optimized = optimize_terms(terms);
+  std::optional<std::vector<signed_term>> optimized =
+    optimize_terms(expr->type, terms);
   if (!optimized || signed_terms_equal(*optimized, terms))
     return false;
 

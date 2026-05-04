@@ -76,6 +76,36 @@ TEST_CASE("Subtraction simplification: x - x = 0", "[arithmetic][sub]")
 }
 
 TEST_CASE(
+  "Pointer-add fold: skip when same-width sum would wrap",
+  "[arithmetic][add][pointer]")
+{
+  // (p + (s8)100) + (s8)100 — sum is 200 which doesn't fit in signedbv 8.
+  // Each unfolded step sign-extends the offset to pointer width before the
+  // SMT bv add, yielding pointer_offset(p) + 200. Folding to (s8)-56 (200
+  // truncated mod 256) and sign-extending later would yield -56 instead.
+  // The simplifier must refuse the fold to preserve pointer semantics.
+  const type2tc ptr_type = pointer_type2tc(get_int_type(8));
+  const expr2tc p = symbol2tc(ptr_type, "p");
+  const expr2tc c1 =
+    constant_int2tc(signedbv_type2tc(8), BigInt(100));
+  const expr2tc c2 =
+    constant_int2tc(signedbv_type2tc(8), BigInt(100));
+  const expr2tc inner = add2tc(ptr_type, p, c1);
+  const expr2tc outer = add2tc(ptr_type, inner, c2);
+
+  const expr2tc result = outer->simplify();
+
+  if (!is_nil_expr(result))
+  {
+    REQUIRE(is_add2t(result));
+    const add2t &a = to_add2t(result);
+    // The fold must have been skipped — the structural inner add survives.
+    const bool inner_is_add = is_add2t(a.side_1) || is_add2t(a.side_2);
+    REQUIRE(inner_is_add);
+  }
+}
+
+TEST_CASE(
   "Pointer-add fold: skip when offset constants have different types",
   "[arithmetic][add][pointer]")
 {

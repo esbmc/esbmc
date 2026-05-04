@@ -333,6 +333,9 @@ struct Addtor
   }
 };
 
+// Forward declaration; the definition lives further down in this file.
+static bool fits_in_width(const BigInt &value, unsigned width, bool is_signed);
+
 expr2tc add2t::do_simplify() const
 {
   // x + 0 = x, 0 + x = x. Mirrors Addtor::simplify but short-circuits before
@@ -371,38 +374,48 @@ expr2tc add2t::do_simplify() const
       return false;
     };
 
+    // Pointer-add fold soundness: each unfolded `add(pointer, ptr, c)` step
+    // sign-extends c to the pointer offset width before the SMT bv add (see
+    // smt_memspace.cpp:155). Combining two offsets with bv-width wrap into a
+    // single narrow constant changes the sign-extended value:
+    //   (s8)100 sign-ext to s64 = +100, but (s8)-56 sign-ext to s64 = -56.
+    // So the fold is only sound when:
+    //   1. The two constants share a type (no width-mismatch truncation), AND
+    //   2. The mathematical sum fits in that type without wrapping.
+    auto offsets_foldable =
+      [](const expr2tc &c1,
+         const expr2tc &c2,
+         BigInt &folded_out) -> bool {
+      if (c1->type != c2->type)
+        return false;
+      const BigInt &v1 = to_constant_int2t(c1).value;
+      const BigInt &v2 = to_constant_int2t(c2).value;
+      folded_out = v1 + v2;
+      const unsigned width = c1->type->get_width();
+      const bool is_signed = is_signedbv_type(c1->type);
+      return fits_in_width(folded_out, width, is_signed);
+    };
+
     expr2tc base, constant;
+    BigInt folded;
     if (
       is_constant_int2t(side_2) &&
-      split_pointer_add_const(side_1, base, constant))
+      split_pointer_add_const(side_1, base, constant) &&
+      offsets_foldable(constant, side_2, folded))
     {
-      // Only fold when the two offsets share a type. from_integer truncates
-      // to the target width, so combining a narrow inner offset with a
-      // wider outer one would silently shorten the address. The C frontend
-      // promotes pointer offsets to a uniform type, so this guard rarely
-      // fires; it's defense-in-depth for IR consumers that don't.
-      if (constant->type == side_2->type)
-      {
-        const BigInt folded =
-          to_constant_int2t(constant).value + to_constant_int2t(side_2).value;
-        if (folded.is_zero())
-          return base;
-        return add2tc(type, base, from_integer(folded, constant->type));
-      }
+      if (folded.is_zero())
+        return base;
+      return add2tc(type, base, from_integer(folded, constant->type));
     }
 
     if (
       is_constant_int2t(side_1) &&
-      split_pointer_add_const(side_2, base, constant))
+      split_pointer_add_const(side_2, base, constant) &&
+      offsets_foldable(constant, side_1, folded))
     {
-      if (constant->type == side_1->type)
-      {
-        const BigInt folded =
-          to_constant_int2t(constant).value + to_constant_int2t(side_1).value;
-        if (folded.is_zero())
-          return base;
-        return add2tc(type, base, from_integer(folded, constant->type));
-      }
+      if (folded.is_zero())
+        return base;
+      return add2tc(type, base, from_integer(folded, constant->type));
     }
   }
 
