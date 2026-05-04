@@ -1,0 +1,4 @@
+CORE
+main.cpp
+--std c++20 --incremental-bmc -I stubs
+^VERIFICATION SUCCESSFUL$
