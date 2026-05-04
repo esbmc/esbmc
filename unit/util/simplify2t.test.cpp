@@ -76,6 +76,49 @@ TEST_CASE("Subtraction simplification: x - x = 0", "[arithmetic][sub]")
 }
 
 TEST_CASE(
+  "Reassoc: nested mul under add still canonicalizes",
+  "[arithmetic][reassoc]")
+{
+  // x + ((a * 2) * (b * 3)) — the outer add reassoc would treat the mul
+  // subtree as opaque, but the simplifier must still let the mul chain
+  // canonicalize into 6*a*b before the add sees it.
+  const expr2tc x = symbol2tc(get_int_type(32), "x");
+  const expr2tc a = symbol2tc(get_int_type(32), "a");
+  const expr2tc b = symbol2tc(get_int_type(32), "b");
+  const expr2tc two = constant_int2tc(get_int_type(32), BigInt(2));
+  const expr2tc three = constant_int2tc(get_int_type(32), BigInt(3));
+  const expr2tc a2 = mul2tc(get_int_type(32), a, two);
+  const expr2tc b3 = mul2tc(get_int_type(32), b, three);
+  const expr2tc m = mul2tc(get_int_type(32), a2, b3);
+  const expr2tc outer = add2tc(get_int_type(32), x, m);
+
+  const expr2tc result = outer->simplify();
+
+  // The result must collapse the 2*3 constant fold into a single 6.
+  // The exact shape (associativity, operand order) is implementation-defined
+  // but no path through the result should still contain both the literal 2
+  // and the literal 3 — that would mean reassoc was suppressed.
+  REQUIRE(!is_nil_expr(result));
+  std::function<bool(const expr2tc &, const BigInt &)> contains_literal =
+    [&](const expr2tc &e, const BigInt &lit) -> bool {
+    if (is_constant_int2t(e) && to_constant_int2t(e).value == lit)
+      return true;
+    bool found = false;
+    e->foreach_operand(
+      [&](const expr2tc &sub) {
+        if (!is_nil_expr(sub) && contains_literal(sub, lit))
+          found = true;
+      });
+    return found;
+  };
+  // After fold the mul subtree should have a 6, and lose either 2 or 3.
+  REQUIRE(contains_literal(result, BigInt(6)));
+  const bool both =
+    contains_literal(result, BigInt(2)) && contains_literal(result, BigInt(3));
+  REQUIRE_FALSE(both);
+}
+
+TEST_CASE(
   "Pointer-add fold: skip when same-width sum would wrap",
   "[arithmetic][add][pointer]")
 {

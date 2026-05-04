@@ -32,19 +32,23 @@ expr2tc expr2t::simplify(bool suppress_reassoc) const
     if (expr_id == overflow_id)
       return expr2tc();
 
-    // Operands of an add/sub/neg are *inside* our chain — they will be
-    // flattened/folded by our chain-root reassoc step at the end of this
-    // call, so they should not run their own reassoc. Pass true.
-    //
-    // For other expression kinds, propagate whatever suppression the caller
-    // gave us: if we're inside a `simplify_no_reassoc` umbrella, that flag
-    // must reach every descendant, including the operand of a non-chain op
-    // like modulus.
-    const bool this_is_chain_op = expr_id == add_id || expr_id == sub_id ||
-                                  expr_id == neg_id || expr_id == mul_id ||
-                                  expr_id == bitand_id || expr_id == bitor_id ||
-                                  expr_id == bitxor_id;
-    const bool operand_suppress = suppress_reassoc || this_is_chain_op;
+    // Suppress reassoc on operands that are part of *our* chain — those
+    // get folded by our own chain-root reassoc step at the end of this call.
+    // An operand whose root is a *different* chain kind (e.g. a mul under
+    // an add) is not part of our chain, so it must run its own reassoc.
+    // The arith chain spans add/sub/neg; mul, bitand, bitor, bitxor are
+    // each their own chain kind.
+    auto same_chain_kind = [](expr_ids parent, expr_ids child) -> bool {
+      auto is_arith =
+        [](expr_ids id) {
+          return id == add_id || id == sub_id || id == neg_id;
+        };
+      if (is_arith(parent) && is_arith(child))
+        return true;
+      return parent == child &&
+             (parent == mul_id || parent == bitand_id ||
+              parent == bitor_id || parent == bitxor_id);
+    };
 
     // Step 1: simplify all sub-operands first. This way do_simplify() always
     // sees canonical operands and its peepholes can match nested patterns
@@ -67,6 +71,11 @@ expr2tc expr2t::simplify(bool suppress_reassoc) const
 
       if (!is_nil_expr(*e))
       {
+        // Only suppress reassoc on operands that extend our chain.
+        // Otherwise an outer simplify(suppress_reassoc=true) umbrella must
+        // still propagate to *all* descendants.
+        const bool operand_suppress =
+          suppress_reassoc || same_chain_kind(expr_id, (*e)->expr_id);
         tmp = (*e)->simplify(operand_suppress);
         if (!is_nil_expr(tmp))
           changed = true;
