@@ -2469,6 +2469,29 @@ const T &min(const T &left, const T &right)
     return right;
 }
 
+// Returns by value (T) rather than the standard's `const T&` to avoid an IR
+// materialisation issue where `const T&` returns lose their value across the
+// callee scope exit (see issue #4251).
+template <class T>
+T clamp(const T &v, const T &lo, const T &hi)
+{
+  if (v < lo)
+    return lo;
+  if (hi < v)
+    return hi;
+  return v;
+}
+
+template <class T, class Compare>
+T clamp(const T &v, const T &lo, const T &hi, Compare comp)
+{
+  if (comp(v, lo))
+    return lo;
+  if (comp(hi, v))
+    return hi;
+  return v;
+}
+
 template <class FwdIt>
 FwdIt max_element(FwdIt first, FwdIt last)
 {
