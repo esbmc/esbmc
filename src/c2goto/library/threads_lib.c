@@ -32,20 +32,20 @@ extern unsigned short int __ESBMC_num_total_threads;
 extern unsigned short int __ESBMC_num_threads_running;
 extern unsigned short int __ESBMC_blocked_threads_count;
 
-__attribute__((annotate("__ESBMC_inf_size")))
-extern _Bool __ESBMC_pthread_thread_running[1];
-__attribute__((annotate("__ESBMC_inf_size")))
-extern _Bool __ESBMC_pthread_thread_ended[1];
-__attribute__((annotate("__ESBMC_inf_size")))
-extern void *__ESBMC_pthread_end_values[1];
+__attribute__((
+  annotate("__ESBMC_inf_size"))) extern _Bool __ESBMC_pthread_thread_running[1];
+__attribute__((
+  annotate("__ESBMC_inf_size"))) extern _Bool __ESBMC_pthread_thread_ended[1];
+__attribute__((
+  annotate("__ESBMC_inf_size"))) extern void *__ESBMC_pthread_end_values[1];
 
 /* Per-thread storage of the C11 start routine.  Because pthread expects
  * void *(*)(void *) but C11 provides int (*)(void *), we cannot reuse
  * the pthread trampoline directly. */
-__attribute__((annotate("__ESBMC_inf_size")))
-static thrd_start_t __ESBMC_c11_thrd_func[1];
-__attribute__((annotate("__ESBMC_inf_size")))
-static void *__ESBMC_c11_thrd_arg[1];
+__attribute__((
+  annotate("__ESBMC_inf_size"))) static thrd_start_t __ESBMC_c11_thrd_func[1];
+__attribute__((
+  annotate("__ESBMC_inf_size"))) static void *__ESBMC_c11_thrd_arg[1];
 
 static void __ESBMC_c11_thrd_trampoline(void)
 {
