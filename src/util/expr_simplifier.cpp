@@ -376,22 +376,33 @@ expr2tc add2t::do_simplify() const
       is_constant_int2t(side_2) &&
       split_pointer_add_const(side_1, base, constant))
     {
-      const BigInt folded =
-        to_constant_int2t(constant).value + to_constant_int2t(side_2).value;
-      if (folded.is_zero())
-        return base;
-      return add2tc(type, base, from_integer(folded, constant->type));
+      // Only fold when the two offsets share a type. from_integer truncates
+      // to the target width, so combining a narrow inner offset with a
+      // wider outer one would silently shorten the address. The C frontend
+      // promotes pointer offsets to a uniform type, so this guard rarely
+      // fires; it's defense-in-depth for IR consumers that don't.
+      if (constant->type == side_2->type)
+      {
+        const BigInt folded =
+          to_constant_int2t(constant).value + to_constant_int2t(side_2).value;
+        if (folded.is_zero())
+          return base;
+        return add2tc(type, base, from_integer(folded, constant->type));
+      }
     }
 
     if (
       is_constant_int2t(side_1) &&
       split_pointer_add_const(side_2, base, constant))
     {
-      const BigInt folded =
-        to_constant_int2t(constant).value + to_constant_int2t(side_1).value;
-      if (folded.is_zero())
-        return base;
-      return add2tc(type, base, from_integer(folded, constant->type));
+      if (constant->type == side_1->type)
+      {
+        const BigInt folded =
+          to_constant_int2t(constant).value + to_constant_int2t(side_1).value;
+        if (folded.is_zero())
+          return base;
+        return add2tc(type, base, from_integer(folded, constant->type));
+      }
     }
   }
 

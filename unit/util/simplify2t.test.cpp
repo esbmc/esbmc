@@ -76,6 +76,42 @@ TEST_CASE("Subtraction simplification: x - x = 0", "[arithmetic][sub]")
 }
 
 TEST_CASE(
+  "Pointer-add fold: skip when offset constants have different types",
+  "[arithmetic][add][pointer]")
+{
+  // The (p + C1) + C2 fold uses from_integer(C1+C2, C1->type), which
+  // truncates if C2 is wider. Guard against IR shapes where the two
+  // offsets have different bit-widths by leaving the chain unfolded.
+  const type2tc ptr_type = pointer_type2tc(get_int_type(8));
+  const expr2tc p = symbol2tc(ptr_type, "p");
+  // Inner offset: signedbv 8 with value 100.
+  const expr2tc c1 =
+    constant_int2tc(signedbv_type2tc(8), BigInt(100));
+  // Outer offset: signedbv 32 with value 100. Sum = 200, doesn't fit in s8.
+  const expr2tc c2 =
+    constant_int2tc(signedbv_type2tc(32), BigInt(100));
+  const expr2tc inner = add2tc(ptr_type, p, c1);
+  const expr2tc outer = add2tc(ptr_type, inner, c2);
+
+  const expr2tc result = outer->simplify();
+
+  // Either nil (fold skipped) or, if a fold happened, the merged constant
+  // must hold the full 200 — not a truncated 200 mod 256 = 200 (which
+  // happens to fit), nor any wraparound. The guard ensures we never lose
+  // bits by combining differently-sized constants.
+  if (!is_nil_expr(result))
+  {
+    REQUIRE(is_add2t(result));
+    const add2t &a = to_add2t(result);
+    // The fold should have been skipped, so the inner add chain must
+    // still be present — the result is not (p + 200) but (p + 100) + 100
+    // (or some structurally-equivalent shape that retains both constants).
+    const bool inner_is_add = is_add2t(a.side_1) || is_add2t(a.side_2);
+    REQUIRE(inner_is_add);
+  }
+}
+
+TEST_CASE(
   "Subtraction simplification: p - p uses ptrdiff result type",
   "[arithmetic][sub][pointer]")
 {

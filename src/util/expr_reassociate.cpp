@@ -260,9 +260,21 @@ optimize_terms(const std::vector<signed_term> &terms)
 
   // Pass 1: separate constants from non-constants and accumulate the
   // constant portion into a single BigInt.
+  //
+  // Constants are folded only when they all share a single type. If the
+  // chain mixes integer types (e.g. a narrow offset combined with a wide
+  // one), re-emitting the sum with the first type's width would silently
+  // truncate via from_integer. Treat type-incompatible constants as opaque
+  // non-constant leaves to keep them in the term list unchanged.
   for (const auto &term : terms)
   {
     if (!is_constant_int2t(term.term))
+    {
+      result.push_back(term);
+      continue;
+    }
+
+    if (have_const && term.term->type != const_type)
     {
       result.push_back(term);
       continue;
