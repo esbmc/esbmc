@@ -1542,6 +1542,54 @@ TEST_CASE(
 }
 
 TEST_CASE(
+  "Short-circuit pre-pass: if(true, x, dead) folds without walking dead arm",
+  "[short-circuit][simplify]")
+{
+  // Pin contract: when the top-level expression is and/or/if, the
+  // simplifier tries do_simplify() before the operand walk. For
+  // if(true, x, dead) that returns x directly, and the dead arm is
+  // never simplified — useful both for cheap short-circuit and to
+  // avoid dyn_sized_array_excp on a dead arm aborting the whole fold.
+  const type2tc i32 = get_int_type(32);
+  const expr2tc x = symbol2tc(i32, "x");
+  const expr2tc dead = symbol2tc(i32, "dead");
+  const expr2tc cond = gen_true_expr();
+  const expr2tc sel = if2tc(i32, cond, x, dead);
+
+  const expr2tc result = sel->simplify();
+  REQUIRE(!is_nil_expr(result));
+  REQUIRE(result == x);
+}
+
+TEST_CASE(
+  "Short-circuit pre-pass: false && X folds to false",
+  "[short-circuit][simplify]")
+{
+  const type2tc bool_t = get_bool_type();
+  const expr2tc f = gen_false_expr();
+  const expr2tc x = symbol2tc(bool_t, "x");
+  const expr2tc a = and2tc(f, x);
+  const expr2tc result = a->simplify();
+  REQUIRE(!is_nil_expr(result));
+  REQUIRE(is_constant_bool2t(result));
+  REQUIRE(to_constant_bool2t(result).value == false);
+}
+
+TEST_CASE(
+  "Short-circuit pre-pass: true || X folds to true",
+  "[short-circuit][simplify]")
+{
+  const type2tc bool_t = get_bool_type();
+  const expr2tc t = gen_true_expr();
+  const expr2tc x = symbol2tc(bool_t, "x");
+  const expr2tc o = or2tc(t, x);
+  const expr2tc result = o->simplify();
+  REQUIRE(!is_nil_expr(result));
+  REQUIRE(is_constant_bool2t(result));
+  REQUIRE(to_constant_bool2t(result).value == true);
+}
+
+TEST_CASE(
   "byte_update with huge constant offset returns nil instead of throwing",
   "[byte][simplify]")
 {

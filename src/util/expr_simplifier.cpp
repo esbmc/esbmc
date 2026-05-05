@@ -34,6 +34,28 @@ expr2tc expr2t::simplify(bool suppress_reassoc) const
     if (expr_id == overflow_id)
       return expr2tc();
 
+    // Short-circuit pre-pass for and/or/if. The constant-condition folds in
+    // and2t/or2t/if2t::do_simplify only need a top-level constant_bool /
+    // constant_expr check on the operands, so they fire on the original
+    // (un-walked) operands. Trying do_simplify() before the operand walk
+    // gives us two wins:
+    //   - cheap discharge of `false && X`, `true || X`, `if(true, x, y)`
+    //     without recursing into the dead side; and
+    //   - if the dead arm contains a dyn_sized_array_excp, the catch below
+    //     would otherwise return nil for the whole simplify. Folding first
+    //     keeps the result.
+    // Restricted to and/or/if — for arithmetic/bitwise nodes the early
+    // peepholes (e.g. x + 0 = x) need their operands canonical first.
+    if (expr_id == and_id || expr_id == or_id || expr_id == if_id)
+    {
+      expr2tc shortcut = do_simplify();
+      if (!is_nil_expr(shortcut))
+      {
+        expr2tc resimp = shortcut->simplify(suppress_reassoc);
+        return is_nil_expr(resimp) ? shortcut : resimp;
+      }
+    }
+
     // Suppress reassoc on operands that are part of *our* chain — those
     // get folded by our own chain-root reassoc step at the end of this call.
     // An operand whose root is a *different* chain kind (e.g. a mul under
