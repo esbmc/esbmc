@@ -159,6 +159,7 @@ int bounded_loop_unroller::get_loop_bounds(loopst &loop)
     }
 
   int bound = k - k0;
+  assert(bound > 0);
   if ((size_t)bound > unroll_limit)
     return 0;
 
