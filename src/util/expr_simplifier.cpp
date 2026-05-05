@@ -3432,37 +3432,61 @@ static expr2tc simplify_relations(
       const add2t &lhs = to_add2t(simplified_side_1);
       const add2t &rhs = to_add2t(simplified_side_2);
 
-      // Mirror the type-match guards in equality / notequal cancellation
-      // (lines ~3737-3754, ~3914-3933): the surviving offsets must share a
-      // type before we build a relation between them. Pointer-arith chains
-      // can hold the same base while carrying differently-typed offsets.
+      // The shared-base pointer cancellation reduces to a relation between
+      // the two surviving offsets. The synthesized `constructor(a, b)` node
+      // requires a/b to share a type, but pointer-arith chains often carry
+      // differently-typed integer offsets — `arr + (int)5` vs `p + (long)5`
+      // from a p++ chain. When both surviving operands are constant ints
+      // we coerce them to a common type (the wider of the two) so the fold
+      // still fires. Non-constant operands still need matching types.
+      auto cancel =
+        [&](const expr2tc &a, const expr2tc &b) -> expr2tc {
+        expr2tc lhs_op = a, rhs_op = b;
+        if (a->type != b->type)
+        {
+          if (!is_constant_int2t(a) || !is_constant_int2t(b))
+            return expr2tc();
+          const type2tc &common = a->type->get_width() >= b->type->get_width()
+                                    ? a->type
+                                    : b->type;
+          lhs_op = constant_int2tc(common, to_constant_int2t(a).value);
+          rhs_op = constant_int2tc(common, to_constant_int2t(b).value);
+        }
+        expr2tc rel(std::make_shared<constructor>(lhs_op, rhs_op));
+        return typecast_check_return(type, rel);
+      };
+
       if (
         lhs.side_1 == rhs.side_1 && is_constant(lhs.side_2) &&
-        is_constant(rhs.side_2) && lhs.side_2->type == rhs.side_2->type)
+        is_constant(rhs.side_2))
       {
-        expr2tc new_op(std::make_shared<constructor>(lhs.side_2, rhs.side_2));
-        return typecast_check_return(type, new_op);
+        expr2tc r = cancel(lhs.side_2, rhs.side_2);
+        if (!is_nil_expr(r))
+          return r;
       }
       if (
         lhs.side_2 == rhs.side_2 && is_constant(lhs.side_1) &&
-        is_constant(rhs.side_1) && lhs.side_1->type == rhs.side_1->type)
+        is_constant(rhs.side_1))
       {
-        expr2tc new_op(std::make_shared<constructor>(lhs.side_1, rhs.side_1));
-        return typecast_check_return(type, new_op);
+        expr2tc r = cancel(lhs.side_1, rhs.side_1);
+        if (!is_nil_expr(r))
+          return r;
       }
       if (
         lhs.side_1 == rhs.side_2 && is_constant(lhs.side_2) &&
-        is_constant(rhs.side_1) && lhs.side_2->type == rhs.side_1->type)
+        is_constant(rhs.side_1))
       {
-        expr2tc new_op(std::make_shared<constructor>(lhs.side_2, rhs.side_1));
-        return typecast_check_return(type, new_op);
+        expr2tc r = cancel(lhs.side_2, rhs.side_1);
+        if (!is_nil_expr(r))
+          return r;
       }
       if (
         lhs.side_2 == rhs.side_1 && is_constant(lhs.side_1) &&
-        is_constant(rhs.side_2) && lhs.side_1->type == rhs.side_2->type)
+        is_constant(rhs.side_2))
       {
-        expr2tc new_op(std::make_shared<constructor>(lhs.side_1, rhs.side_2));
-        return typecast_check_return(type, new_op);
+        expr2tc r = cancel(lhs.side_1, rhs.side_2);
+        if (!is_nil_expr(r))
+          return r;
       }
     }
 
