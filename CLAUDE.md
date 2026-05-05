@@ -1,6 +1,6 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to coding agents working with this repository. The same workflow rules also live in `CLAUDE.md` (which Claude Code loads automatically); update both files together when changing build, test, style, or post-implementation rules.
 
 ## Project Overview
 
@@ -105,6 +105,15 @@ After implementing any non-trivial coding task, before committing:
 1. **Simplify aggressively.** Remove unnecessary conditional checks, dead code, redundant abstractions, duplicate logic. Re-verify the code still works correctly. Apply the same pass to test code.
 2. **Verify with ESBMC** when the task touches C/C++ code or ESBMC's own headers/frontends. Use the `esbmc-verifier` agent to confirm the patch works and introduces no new errors. For non-ESBMC tasks (e.g. Python frontend, build scripts), run the project's normal lint/typecheck/test commands.
 3. **Code review.** Use the `code-reviewer` agent on the diff. Apply high-confidence findings; explain anything you skip.
+
+## Available Subagents
+
+These specialised agents are configured in `~/.claude/agents/` and should be preferred over ad-hoc Bash invocations when their description fits the task.
+
+- **`esbmc-verifier`** — Recommended formal-verification tool for this repo. Verifies C/C++/Python with ESBMC: inspects GOTO IR (`--goto-functions-only`), VCCs (`--show-vcc`), and the symbol table; applies minimal patches; re-runs ESBMC to confirm `VERIFICATION SUCCESSFUL`; and produces nondet test cases under `regression/`. Invoke for the post-implementation ESBMC step (§Post-implementation Pass #2), for deterministic witnesses when sanitizers cannot reproduce a memory/UB bug (§Regression Tests for Memory/UB Bugs), and when diagnosing unexpected ESBMC results (§Debugging Verification Issues). Defaults to bitwuzla; honours `test.desc` flags when present. For one-shot sanity checks (`esbmc file.c --incremental-bmc`), call `esbmc` directly via Bash instead.
+- **`esbmc-firmware-verifier`** — Three-phase firmware verification (language-level safety → contracts via k-induction → bug-specific negative proofs) with stub-shadowing for hardware dependencies. Use when the verification target is external embedded C/C++, not ESBMC's own code.
+- **`code-reviewer`** — Diff review against the priorities in §Code Review Priorities. Invoke for the post-implementation review step (§Post-implementation Pass #3).
+- **`creduce-reducer`** — Reduces C/C++ programs that trigger an ESBMC bug to a minimal reproducer using C-Reduce with property-preserving interestingness scripts. Use when filing or investigating ESBMC bug reports against large inputs.
 
 ## Regression Tests for Memory/UB Bugs
 
