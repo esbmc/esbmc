@@ -1,27 +1,29 @@
 #include <cassert>
 
-void f() noexcept {}
-void g() {}
-
-template <typename T>
-bool tf_is_noexcept()
+struct NX
 {
-  // noexcept(f()) is value-dependent during template parsing of this body
-  // (T is unused but the body is still parsed in dependent context). Once
-  // the template is instantiated below, Clang resolves it to a definite
-  // value and the IR sees true/false.
-  return noexcept(f());
-}
+  void m() noexcept {}
+};
 
-template <typename T>
-bool tg_is_noexcept()
+struct TH
 {
-  return noexcept(g());
+  void m() {}
+};
+
+// Exercises the CXXNoexceptExpr conversion arm in the C++ frontend across
+// two instantiations of the same template. Each instantiation produces a
+// non-dependent noexcept(t.m()) that resolves to true / false, covering the
+// getValue() branch added in #4088.
+template <typename T>
+bool is_m_noexcept()
+{
+  T t;
+  return noexcept(t.m());
 }
 
 int main()
 {
-  assert(tf_is_noexcept<int>() == true);
-  assert(tg_is_noexcept<int>() == false);
+  assert(is_m_noexcept<NX>() == true);
+  assert(is_m_noexcept<TH>() == false);
   return 0;
 }
