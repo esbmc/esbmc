@@ -428,16 +428,22 @@ exprt python_dict_handler::get_dict_comprehension(const nlohmann::json &element)
   loop_var_assign.location() = location;
   loop_body.copy_to_operands(loop_var_assign);
 
+  // Keep current_block redirected to loop_body across the whole pair build:
+  // get_expr, contains(), get_list_element_info() and other helpers used by
+  // handle_dict_subscript_assign emit DECL/ASSIGN side effects via
+  // add_instruction(), which targets current_block. Restoring too early would
+  // hoist the contains check and the key/value temporaries out of the loop,
+  // freezing them at their pre-loop values and leaving the dict empty.
   code_blockt *saved_block = converter_.current_block;
   converter_.current_block = &loop_body;
   exprt key_expr = converter_.get_expr(element["key"]);
   exprt value_expr = converter_.get_expr(element["value"]);
-  converter_.current_block = saved_block;
 
   // Reuse the normal dict assignment path for each generated pair
   code_blockt pair_block;
   handle_dict_subscript_assign(
     symbol_expr(dict_sym), key_expr, value_expr, location, element, pair_block);
+  converter_.current_block = saved_block;
 
   if (generator.contains("ifs") && !generator["ifs"].empty())
   {
