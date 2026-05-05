@@ -2630,11 +2630,13 @@ expr2tc bitor2t::do_simplify() const
 
     if (match)
     {
-      // Return a canonicalized version where operands are ordered consistently
-      if (or_expr.side_1.get() < or_expr.side_2.get())
-        return bitor2tc(type, or_expr.side_1, or_expr.side_2);
-      else
-        return bitor2tc(type, or_expr.side_2, or_expr.side_1);
+      // Return the OR subexpression unchanged. An earlier version sorted
+      // its operands by raw shared_ptr address to canonicalize the shape,
+      // but that depended on allocation order — making the simplified
+      // tree, pretty-print, and CRC/hash output non-deterministic across
+      // runs. The OR expression already exists in its natural form;
+      // re-emitting it here would just churn the IR.
+      return or_expr_ptr;
     }
   }
 
@@ -3415,30 +3417,34 @@ static expr2tc simplify_relations(
       const add2t &lhs = to_add2t(simplified_side_1);
       const add2t &rhs = to_add2t(simplified_side_2);
 
+      // Mirror the type-match guards in equality / notequal cancellation
+      // (lines ~3737-3754, ~3914-3933): the surviving offsets must share a
+      // type before we build a relation between them. Pointer-arith chains
+      // can hold the same base while carrying differently-typed offsets.
       if (
         lhs.side_1 == rhs.side_1 && is_constant(lhs.side_2) &&
-        is_constant(rhs.side_2))
+        is_constant(rhs.side_2) && lhs.side_2->type == rhs.side_2->type)
       {
         expr2tc new_op(std::make_shared<constructor>(lhs.side_2, rhs.side_2));
         return typecast_check_return(type, new_op);
       }
       if (
         lhs.side_2 == rhs.side_2 && is_constant(lhs.side_1) &&
-        is_constant(rhs.side_1))
+        is_constant(rhs.side_1) && lhs.side_1->type == rhs.side_1->type)
       {
         expr2tc new_op(std::make_shared<constructor>(lhs.side_1, rhs.side_1));
         return typecast_check_return(type, new_op);
       }
       if (
         lhs.side_1 == rhs.side_2 && is_constant(lhs.side_2) &&
-        is_constant(rhs.side_1))
+        is_constant(rhs.side_1) && lhs.side_2->type == rhs.side_1->type)
       {
         expr2tc new_op(std::make_shared<constructor>(lhs.side_2, rhs.side_1));
         return typecast_check_return(type, new_op);
       }
       if (
         lhs.side_2 == rhs.side_1 && is_constant(lhs.side_1) &&
-        is_constant(rhs.side_2))
+        is_constant(rhs.side_2) && lhs.side_1->type == rhs.side_2->type)
       {
         expr2tc new_op(std::make_shared<constructor>(lhs.side_1, rhs.side_2));
         return typecast_check_return(type, new_op);
@@ -5602,10 +5608,21 @@ expr2tc byte_update2t::do_simplify() const
   std::string src_value = integer2binary(
     to_constant_int2t(source_value).value, source_value->type->get_width());
 
-  // Overflow? The backend will handle that
-  int src_offset = to_constant_int2t(source_offset).value.to_int64();
-  if (
-    src_offset * 8 + value.length() > src_value.length() || src_offset * 8 < 0)
+  // Reject offsets that don't fit in unsigned 64-bit, are negative, or
+  // when src_offset * 8 + value.length() would overflow / fall outside
+  // the source. Computing src_offset as a plain `int` and multiplying
+  // by 8 used to silently truncate large constant offsets before the
+  // bounds check, leaving the simplifier path open to crafted IR.
+  const BigInt &off_big = to_constant_int2t(source_offset).value;
+  if (!off_big.is_uint64())
+    return expr2tc();
+  uint64_t src_offset = off_big.to_uint64();
+  // src_offset * 8 must fit in size_t, and the resulting range must lie
+  // within src_value. Use 64-bit arithmetic to avoid the int * 8 wrap.
+  uint64_t bit_offset = 0;
+  if (__builtin_mul_overflow(src_offset, (uint64_t)8, &bit_offset))
+    return expr2tc();
+  if (bit_offset + value.length() > src_value.length())
     return expr2tc();
 
   // Reverse both the source value and the value that will be updated if we are
@@ -5617,7 +5634,7 @@ expr2tc byte_update2t::do_simplify() const
     std::reverse(value.begin(), value.end());
   }
 
-  src_value.replace(src_offset * 8, value.length(), value);
+  src_value.replace(static_cast<size_t>(bit_offset), value.length(), value);
 
   // Reverse back
   if (!big_endian)
