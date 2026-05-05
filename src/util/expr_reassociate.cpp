@@ -581,7 +581,12 @@ std::optional<BigInt> bitwise_fold(const BigInt &a, const BigInt &b, U64Op op)
     return std::nullopt;
   uint64_t la = a.is_uint64() ? a.to_uint64() : (uint64_t)a.to_int64();
   uint64_t lb = b.is_uint64() ? b.to_uint64() : (uint64_t)b.to_int64();
-  return BigInt((int64_t)op(la, lb));
+  // Build the BigInt as unsigned. Casting through int64_t would
+  // sign-extend any high bit set in the result, and from_integer() for
+  // wider destination types (e.g. >64-bit unsignedbv) would then sign-
+  // extend further. e.g. (uint128)(1<<63) & (uint128)(1<<63) must stay
+  // 2^63, not become 2^128 - 2^63.
+  return BigInt((unsigned long long)op(la, lb));
 }
 
 void linearize_bitand(
