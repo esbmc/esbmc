@@ -34,6 +34,8 @@ if (WIN32)
 	  add_compile_options(/bigobj)
 	  add_compile_definitions(/W1)
 	  string(REGEX REPLACE "/W[1-3]" "/W1" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+      # LLVM 22+ Options.inc uses variadic macros that require the conformant preprocessor
+      add_compile_options(/Zc:preprocessor)
       set(OS_Z3_LIBS "")
   else()
 	  message(AUTHOR_WARNING "${CMAKE_CXX_COMPILER_ID} is not tested in Windows. You may run into issues.")
