@@ -1094,23 +1094,6 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     return;
   }
 
-  if (expr.id() == exprt::i_bitnxor)
-  {
-    type = migrate_type(expr.type());
-
-    expr2tc side1, side2;
-    if (expr.operands().size() > 2)
-    {
-      splice_expr(expr, new_expr_ref);
-      return;
-    }
-
-    convert_operand_pair(expr, side1, side2);
-
-    new_expr_ref = bitnxor2tc(type, side1, side2);
-    return;
-  }
-
   if (expr.id() == exprt::i_bitnot)
   {
     type = migrate_type(expr.type());
@@ -2792,15 +2775,6 @@ exprt migrate_expr_back(const expr2tc &ref)
     bitnorval.copy_to_operands(
       migrate_expr_back(ref2.side_1), migrate_expr_back(ref2.side_2));
     return bitnorval;
-  }
-  case expr2t::bitnxor_id:
-  {
-    const bitnxor2t &ref2 = to_bitnxor2t(ref);
-    typet thetype = migrate_type_back(ref->type);
-    exprt bitnxorval("bitnxor", thetype);
-    bitnxorval.copy_to_operands(
-      migrate_expr_back(ref2.side_1), migrate_expr_back(ref2.side_2));
-    return bitnxorval;
   }
   case expr2t::bitnot_id:
   {

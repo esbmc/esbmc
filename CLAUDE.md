@@ -1,6 +1,6 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to coding agents working with this repository. The same workflow rules also live in `CLAUDE.md` (which Claude Code loads automatically); update both files together when changing build, test, style, or post-implementation rules.
 
 ## Project Overview
 
@@ -68,6 +68,20 @@ ctest -R "regression/esbmc/00_big_endian_01" --output-on-failure
 
 Regression test format (`test.desc`): line 1 is `CORE`/`KNOWNBUG`/`FUTURE`/`THOROUGH` (THOROUGH is Linux-only), line 2 is the source file, line 3 is ESBMC flags, line 4+ are expected output regexes. Every PR should include at least two regression tests (one passing, one failing).
 
+**Before committing:**
+
+- Always run the project's test suite. If tests fail, fix the failures before committing — never commit broken or untested code.
+- **Regression suite cap.** When running the full regression suite, cap the run at **5 minutes** (300000 ms) — pass the timeout to the `Bash` tool's `timeout` parameter, or wrap the invocation with `timeout 5m …`. If the suite cannot complete in 5 minutes, narrow the scope (e.g. run only the affected subset) or ask the user before extending the limit.
+- **Lint and typecheck.** Run lint and typecheckers and fix any errors. For Python code, use `pylint`. For C++ code, ensure clang-format compliance (CI enforces this).
+
+## Branching
+
+Before implementing any feature or bug fix, always work on a dedicated branch:
+
+1. Check the current branch — never work directly on `master`.
+2. Create a branch with a descriptive name (e.g. `feat/short-description` or `fix/short-description`).
+3. Confirm the branch is active before making any changes.
+
 ## Code Style
 
 - **C++**: Clang-format (Clang 11), Allman braces, 80-col limit, 2-space indent, no tabs. Config in `.clang-format`.
@@ -83,6 +97,51 @@ Regression test format (`test.desc`): line 1 is `CORE`/`KNOWNBUG`/`FUTURE`/`THOR
 - Tests MUST NOT use mocks, patches, or any form of test doubles. Integration tests are preferred.
 - After implementation, simplify and clean up the code aggressively — remove unnecessary conditional checks while ensuring correctness.
 - Run ESBMC over your solution to formally check that it works and does not introduce new errors.
+
+## Post-implementation Pass
+
+After implementing any non-trivial coding task, before committing:
+
+1. **Simplify aggressively.** Remove unnecessary conditional checks, dead code, redundant abstractions, duplicate logic. Re-verify the code still works correctly. Apply the same pass to test code.
+2. **Verify with ESBMC** when the task touches C/C++ code or ESBMC's own headers/frontends. Use the `esbmc-verifier` agent to confirm the patch works and introduces no new errors. For non-ESBMC tasks (e.g. Python frontend, build scripts), run the project's normal lint/typecheck/test commands.
+3. **Code review.** Use the `code-reviewer` agent on the diff. Apply high-confidence findings; explain anything you skip.
+
+## Available Subagents
+
+These specialised agents are configured in `~/.claude/agents/` and should be preferred over ad-hoc Bash invocations when their description fits the task.
+
+- **`esbmc-verifier`** — Recommended formal-verification tool for this repo. Verifies C/C++/Python with ESBMC: inspects GOTO IR (`--goto-functions-only`), VCCs (`--show-vcc`), and the symbol table; applies minimal patches; re-runs ESBMC to confirm `VERIFICATION SUCCESSFUL`; and produces nondet test cases under `regression/`. Invoke for the post-implementation ESBMC step (§Post-implementation Pass #2), for deterministic witnesses when sanitizers cannot reproduce a memory/UB bug (§Regression Tests for Memory/UB Bugs), and when diagnosing unexpected ESBMC results (§Debugging Verification Issues). Defaults to bitwuzla; honours `test.desc` flags when present. For one-shot sanity checks (`esbmc file.c --incremental-bmc`), call `esbmc` directly via Bash instead.
+- **`esbmc-firmware-verifier`** — Three-phase firmware verification (language-level safety → contracts via k-induction → bug-specific negative proofs) with stub-shadowing for hardware dependencies. Use when the verification target is external embedded C/C++, not ESBMC's own code.
+- **`code-reviewer`** — Diff review against the priorities in §Code Review Priorities. Invoke for the post-implementation review step (§Post-implementation Pass #3).
+- **`creduce-reducer`** — Reduces C/C++ programs that trigger an ESBMC bug to a minimal reproducer using C-Reduce with property-preserving interestingness scripts. Use when filing or investigating ESBMC bug reports against large inputs.
+
+## Regression Tests for Memory/UB Bugs
+
+When fixing a memory-safety or undefined-behaviour bug in C/C++ code:
+
+1. Before applying the fix, write a regression test that reproduces the bug under sanitizers (ASan, UBSan, or MSan as appropriate; TSan for data races).
+2. Compile and run the regression test, and confirm it fails on the unfixed code — either via a clear sanitizer diagnostic or by tripping an embedded `assert` — so the failure mode is reproducible end-to-end, not just inferred.
+3. Apply the fix and re-run the compiled test; confirm it now passes cleanly (assertion holds and no sanitizer diagnostic).
+4. Skip this step for pure logic bugs, build/config issues, or non-C/C++ work — sanitizers do not apply.
+
+If sanitizers do not reproduce the bug (e.g. timing-dependent races, allocator-dependent use-after-free, MSan without instrumented dependencies, optimisation-dependent UB, or input coverage gaps):
+
+1. Try a different sanitizer (ASan ↔ TSan ↔ MSan ↔ UBSan) and vary build flags (`-O0` vs `-O2`, `_GLIBCXX_DEBUG`, `MALLOC_PERTURB_`, `ASAN_OPTIONS=detect_stack_use_after_return=1`).
+2. If still not reproducible under sanitizers, fall back to ESBMC (`esbmc-verifier` agent) to obtain a deterministic witness.
+3. As a last resort, write a regression test that reproduces the observable symptom (wrong output, assertion, crash) without relying on a sanitizer diagnostic, and note in the commit message why sanitizer-based reproduction was not feasible.
+
+## Consulting the C/C++ Standard
+
+When a C/C++ change concerns standard-defined semantics — undefined behaviour, implicit conversions, object lifetime, name lookup, overload resolution, constant evaluation, or similar — consult the relevant standard draft (e.g. the latest C or C++ working draft on open-std.org, or cppreference for a digestible summary) before implementing. Cite the section in the commit message or code comment when it clarifies a non-obvious choice. Skip for routine edits that do not depend on standard semantics.
+
+## Incremental Patch Testing
+
+When a fix involves multiple patches (e.g. N1, N2), apply and test them one at a time:
+
+1. Apply patch N1, then run the relevant tests to check whether the bug is fixed.
+2. If fixed, stop — do not apply further patches.
+3. If not fixed, apply patch N2 and test again. Repeat until the bug is resolved or all patches are exhausted.
+4. Do not apply all patches at once before testing.
 
 ## Code Review Priorities
 
@@ -146,12 +205,18 @@ Look for the `python_user_main` function to see how Python source maps to GOTO i
 
 ## Commit Conventions
 
-Prefix commits with a category tag in brackets, e.g., `[python]`, `[build]`, `[solver]`, `[om]` (operational model). Title: one line, imperative mood, <72 chars. Description: 2–4 lines explaining what changed and why.
+Prefix commits with a category tag in brackets, e.g., `[python]`, `[build]`, `[solver]`, `[om]` (operational model). Title: one line, imperative mood, <72 chars. Description: 2–4 lines explaining what changed and why. Reference the relevant issue/PR with `Fixes #N` when applicable.
+
+**Never squash commits.** Always preserve the full commit history — every individual commit must remain intact. Do not use `git merge --squash`, `git rebase` to squash, or any PR merge strategy that collapses commits.
 
 ## PR Conventions
 
 - Branch from `master` (the default branch)
 - Target PRs to `master`
 - Check formatting with clang-format before submitting
+
+## Issue and PR Labels
+
+Always apply at least one label when creating an issue or PR. Pick the label that matches the affected area — e.g. `python`, `clang-c-frontend`, `solver`, `build`, `docs`. Use `gh label list --repo esbmc/esbmc` to see the available labels, then `gh issue edit <N> --add-label <label>` or `gh pr edit <N> --add-label <label>`. If no existing label fits, ask the user rather than creating a new one.
 
 For module-specific instructions, subdirectory CLAUDE.md files can be added (they load automatically when working in those directories).

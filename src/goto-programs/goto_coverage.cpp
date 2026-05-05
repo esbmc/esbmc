@@ -442,25 +442,26 @@ void goto_coveraget::condition_coverage()
           check there operands.
         */
 
+        // Skip ASSUME instructions: __VERIFIER_assume / __ESBMC_assume
+        // express path constraints, not program logic, so their guards
+        // must not contribute to condition-coverage claims (issue #4291).
+        if (it->is_assume())
+          continue;
+
         // e.g. assert(a == 1);
         if (
-          it->is_assume() ||
-          (it->is_assert() &&
-           it->location.property().as_string() != "replaced assertion"))
+          it->is_assert() &&
+          it->location.property().as_string() != "replaced assertion")
         {
           if (!is_nil_expr(it->guard))
           {
             expr2tc guard = handle_single_guard(it->guard, true);
             gen_cond_cov_assert(guard, expr2tc(), goto_program, it);
             // after adding the instrumentation, we neutralize the original assert
-            if (!it->is_assume())
-            {
-              // do not change assume, as it will modify program's logic
-              if (cov_assume_asserts)
-                replace_assert_to_assume(it);
-              else
-                replace_assert_to_guard(gen_true_expr(), it, false);
-            }
+            if (cov_assume_asserts)
+              replace_assert_to_assume(it);
+            else
+              replace_assert_to_guard(gen_true_expr(), it, false);
           }
         }
 
