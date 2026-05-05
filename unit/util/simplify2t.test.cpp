@@ -1590,6 +1590,51 @@ TEST_CASE(
 }
 
 TEST_CASE(
+  "Reassoc: nested chain inside same-chain child still canonicalizes",
+  "[arithmetic][reassoc][nested]")
+{
+  // x + (y + ((a*2)*(b*3))) — the inner add is a same-chain child of
+  // the outer add, but the mul subtree under it is a *different* chain
+  // kind. An earlier version of operand-walk suppression OR'd a
+  // "same-chain" bit into the operand's suppress_reassoc, which then
+  // propagated through to the mul grandchild and disabled its reassoc.
+  // After the fix, the mul should still canonicalize into 6*a*b.
+  const type2tc i32 = get_int_type(32);
+  const expr2tc x = symbol2tc(i32, "x");
+  const expr2tc y = symbol2tc(i32, "y");
+  const expr2tc a = symbol2tc(i32, "a");
+  const expr2tc b = symbol2tc(i32, "b");
+  const expr2tc two = constant_int2tc(i32, BigInt(2));
+  const expr2tc three = constant_int2tc(i32, BigInt(3));
+  const expr2tc a2 = mul2tc(i32, a, two);
+  const expr2tc b3 = mul2tc(i32, b, three);
+  const expr2tc m = mul2tc(i32, a2, b3);
+  const expr2tc inner = add2tc(i32, y, m);
+  const expr2tc outer = add2tc(i32, x, inner);
+
+  const expr2tc result = outer->simplify();
+  REQUIRE(!is_nil_expr(result));
+
+  // After fold the mul subtree must contain a 6, with neither a 2 nor
+  // a 3 surviving (those would mean reassoc was suppressed).
+  std::function<bool(const expr2tc &, const BigInt &)> contains_literal =
+    [&](const expr2tc &e, const BigInt &lit) -> bool {
+    if (is_constant_int2t(e) && to_constant_int2t(e).value == lit)
+      return true;
+    bool found = false;
+    e->foreach_operand([&](const expr2tc &s) {
+      if (!is_nil_expr(s) && contains_literal(s, lit))
+        found = true;
+    });
+    return found;
+  };
+  REQUIRE(contains_literal(result, BigInt(6)));
+  const bool both =
+    contains_literal(result, BigInt(2)) && contains_literal(result, BigInt(3));
+  REQUIRE_FALSE(both);
+}
+
+TEST_CASE(
   "Concat: contiguous LE byte_extracts collapse to source",
   "[concat][simplify]")
 {

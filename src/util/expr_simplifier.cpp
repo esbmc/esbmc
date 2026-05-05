@@ -21,6 +21,10 @@ expr2tc expr2t::simplify() const
 
 expr2tc expr2t::simplify(bool suppress_reassoc) const
 {
+  // suppress_reassoc here is the cascading umbrella set by the public
+  // API caller (e.g. simplify_no_reassoc): true means peephole-only
+  // walk over the whole subtree, false means normal simplification.
+  // It propagates unchanged into recursive simplify() calls below.
   try
   {
     // Corner case! Don't even try to simplify address of's operands, might end up
@@ -56,27 +60,23 @@ expr2tc expr2t::simplify(bool suppress_reassoc) const
       }
     }
 
-    // Suppress reassoc on operands that are part of *our* chain — those
-    // get folded by our own chain-root reassoc step at the end of this call.
-    // An operand whose root is a *different* chain kind (e.g. a mul under
-    // an add) is not part of our chain, so it must run its own reassoc.
-    // The arith chain spans add/sub/neg; mul, bitand, bitor, bitxor are
-    // each their own chain kind.
-    auto same_chain_kind = [](expr_ids parent, expr_ids child) -> bool {
-      auto is_arith =
-        [](expr_ids id) {
-          return id == add_id || id == sub_id || id == neg_id;
-        };
-      if (is_arith(parent) && is_arith(child))
-        return true;
-      return parent == child &&
-             (parent == mul_id || parent == bitand_id ||
-              parent == bitor_id || parent == bitxor_id);
-    };
-
-    // Step 1: simplify all sub-operands first. This way do_simplify() always
-    // sees canonical operands and its peepholes can match nested patterns
-    // without a second-shot retry.
+    // Step 1: simplify all sub-operands first. This way do_simplify()
+    // always sees canonical operands and its peepholes can match nested
+    // patterns without a second-shot retry.
+    //
+    // Pass our own suppress_reassoc unchanged into operand simplify().
+    // An earlier version OR'd in a "same-chain kind" bit that would tell
+    // a child of the same chain (e.g. add inside add) to skip its own
+    // chain-root reassoc step, on the theory that our step 4 would fold
+    // its chain into ours anyway. That was a perf-only optimization but
+    // had a soundness leak: the same-chain bit propagated through that
+    // child's recursive simplify() into its grandchildren, so an
+    // unrelated nested chain kind (e.g. a mul under our add child) saw
+    // suppress_reassoc=true and never canonicalized. Per Codex review
+    // 26: drop the same-chain skip; the redundant reassoc inside a
+    // same-chain child is locally bounded and produces a canonicalized
+    // sub-chain that our step 4 then merges. Correctness over a small
+    // amount of duplicated work.
     bool changed = false;
     std::list<expr2tc> newoperands;
 
@@ -95,12 +95,7 @@ expr2tc expr2t::simplify(bool suppress_reassoc) const
 
       if (!is_nil_expr(*e))
       {
-        // Only suppress reassoc on operands that extend our chain.
-        // Otherwise an outer simplify(suppress_reassoc=true) umbrella must
-        // still propagate to *all* descendants.
-        const bool operand_suppress =
-          suppress_reassoc || same_chain_kind(expr_id, (*e)->expr_id);
-        tmp = (*e)->simplify(operand_suppress);
+        tmp = (*e)->simplify(suppress_reassoc);
         if (!is_nil_expr(tmp))
           changed = true;
       }
