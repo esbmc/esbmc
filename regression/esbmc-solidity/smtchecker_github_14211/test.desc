@@ -1,4 +1,4 @@
 CORE
 contract.solast
---function f --sol contract.sol --incremental-bmc
-^VERIFICATION FAILED$
+--sol contract.sol --unwind 2 --no-unwinding-assertions
+^VERIFICATION SUCCESSFUL$

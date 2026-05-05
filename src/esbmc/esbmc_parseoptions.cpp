@@ -720,15 +720,70 @@ int esbmc_parseoptionst::doit()
   optionst options;
   get_command_line_options(options);
 
-  // for solidity
-  if (cmdline.isset("sol"))
+  // for solidity: detect .sol files in positional args or via --sol
   {
-    // set default options
-    options.set_option(
-      "no-align-check", true); // no need to check alignment in solidity
-    options.set_option("no-unlimited-scanf-check", true);
-    options.set_option(
-      "force-malloc-success", true); // for calloc in the 'newexpression'
+    bool is_solidity = cmdline.isset("sol");
+    if (!is_solidity)
+    {
+      for (const auto &arg : cmdline.args)
+      {
+        if (arg.size() >= 4 && arg.substr(arg.size() - 4) == ".sol")
+        {
+          is_solidity = true;
+          break;
+        }
+      }
+    }
+    if (is_solidity)
+    {
+      options.set_option(
+        "no-align-check", true); // no need to check alignment in solidity
+      options.set_option("no-unlimited-scanf-check", true);
+      options.set_option(
+        "force-malloc-success", true); // for calloc in the 'newexpression'
+
+      // Auto-select the best SMT backend for Solidity when the user did not
+      // explicitly ask for one. Z3 is significantly slower than modern QF_BV
+      // engines on the 256-bit bit-vector arithmetic pervasive in Solidity
+      // (uint256, mappings, etc.), so prefer Bitwuzla / CVC5 / Boolector.
+      //
+      // Exception: k-induction and incremental-bmc issue many incremental
+      // queries where Z3 has historically been more robust than CVC5; keep
+      // the default (Z3) there so existing regression tests do not regress.
+      const bool incremental_mode =
+        cmdline.isset("k-induction") || cmdline.isset("k-induction-parallel") ||
+        cmdline.isset("incremental-bmc") || cmdline.isset("falsification");
+      const bool user_picked_solver =
+        cmdline.isset("z3") || cmdline.isset("cvc5") ||
+        cmdline.isset("bitwuzla") || cmdline.isset("boolector") ||
+        cmdline.isset("yices") || cmdline.isset("mathsat") ||
+        cmdline.isset("cvc4") || cmdline.isset("smtlib") ||
+        cmdline.isset("default-solver");
+      if (!user_picked_solver && !incremental_mode)
+      {
+        const std::string padded =
+          std::string(" ") + ESBMC_AVAILABLE_SOLVERS + " ";
+        const char *preferred[] = {"bitwuzla", "cvc5", "boolector", "z3"};
+        const char *chosen = nullptr;
+        for (const char *name : preferred)
+        {
+          if (padded.find(std::string(" ") + name + " ") != std::string::npos)
+          {
+            chosen = name;
+            break;
+          }
+        }
+        if (chosen)
+        {
+          options.set_option("default-solver", chosen);
+          log_status(
+            "Solidity: auto-selecting '{}' as SMT backend (Z3 is much "
+            "slower on 256-bit bit-vector arithmetic). Override with "
+            "--z3 / --cvc5 / --bitwuzla / --boolector or --default-solver.",
+            chosen);
+        }
+      }
+    }
   }
 
   // Create and preprocess a GOTO program
@@ -2026,6 +2081,39 @@ bool esbmc_parseoptionst::process_goto_program(
     if (is_coverage && cmdline.args.size() > 1)
       for (size_t i = 1; i < cmdline.args.size(); i++)
         config.ansi_c.include_files.push_back(cmdline.args[i]);
+
+    // For Solidity coverage mode: neutralize the multi-transaction harness loop.
+    // The _ESBMC_Main_* functions contain a while(nondet_bool()) loop that calls
+    // user functions repeatedly. This causes massive symex overhead in coverage
+    // mode where we only need each function executed once. Convert backward GOTOs
+    // (loop back-edges) in _ESBMC_Main* functions to SKIPs so the loop body
+    // executes exactly once.
+    if (is_coverage)
+    {
+      bool is_sol = cmdline.isset("sol");
+      if (!is_sol)
+        for (const auto &arg : cmdline.args)
+          if (arg.size() >= 4 && arg.substr(arg.size() - 4) == ".sol")
+          {
+            is_sol = true;
+            break;
+          }
+      if (is_sol)
+      {
+        Forall_goto_functions (f_it, goto_functions)
+        {
+          std::string fname = f_it->first.as_string();
+          if (fname.find("_ESBMC_Main") == std::string::npos)
+            continue;
+          Forall_goto_program_instructions (it, f_it->second.body)
+          {
+            if (it->is_backwards_goto())
+              it->make_skip();
+          }
+        }
+        goto_functions.update();
+      }
+    }
 
     // Expand --no-standard-checks before goto_check (also expanded before
     // goto_convert in parse_goto_program; re-expanding here is idempotent

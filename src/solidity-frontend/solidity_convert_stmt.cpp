@@ -1,5 +1,12 @@
+/// \file solidity_convert_stmt.cpp
+/// \brief Statement conversion for the Solidity frontend.
+///
+/// Converts Solidity statements (blocks, if/else, for, while, do-while,
+/// return, break, continue, emit, revert, require/assert, variable
+/// declaration statements, expression statements, and try-catch) from
+/// the solc JSON AST into ESBMC's GOTO-level code representation.
+
 #include <solidity-frontend/solidity_convert.h>
-#include <solidity-frontend/solidity_template.h>
 #include <solidity-frontend/typecast.h>
 #include <util/arith_tools.h>
 #include <util/bitvector.h>
@@ -9,11 +16,8 @@
 #include <util/mp_arith.h>
 #include <util/std_expr.h>
 #include <util/message.h>
-#include <regex>
-#include <optional>
-
 #include <fstream>
-#include <iostream>
+#include <set>
 
 void solidity_convertert::reset_auxiliary_vars()
 {
@@ -101,6 +105,12 @@ bool solidity_convertert::get_block(
   {
     const nlohmann::json &stmts = block["statements"];
 
+    // Track unchecked blocks: save/restore flag using RAII pattern
+    const bool is_unchecked = (block["nodeType"] == "UncheckedBlock");
+    const bool prev_unchecked = in_unchecked_block;
+    if (is_unchecked)
+      in_unchecked_block = true;
+
     code_blockt _block;
     unsigned ctr = 0;
     // items() returns a key-value pair with key being the index
@@ -108,6 +118,8 @@ bool solidity_convertert::get_block(
     {
       locationt cl;
       get_location_from_node(stmt_kv.value(), cl);
+      if (in_unchecked_block)
+        cl.set("#sol_unchecked", "1");
 
       exprt statement;
       if (get_statement(stmt_kv.value(), statement))
@@ -145,11 +157,15 @@ bool solidity_convertert::get_block(
 
     _block.end_location(location_end);
     new_expr = _block;
+
+    // Restore unchecked flag
+    in_unchecked_block = prev_unchecked;
     break;
   }
   case SolidityGrammar::BlockT::BlockForStatement:
   case SolidityGrammar::BlockT::BlockIfStatement:
   case SolidityGrammar::BlockT::BlockWhileStatement:
+  case SolidityGrammar::BlockT::BlockDoWhileStatement:
   {
     // this means only one statement in the block
     exprt statement;
@@ -169,7 +185,7 @@ bool solidity_convertert::get_block(
   case SolidityGrammar::BlockT::BlockTError:
   default:
   {
-    assert(!"Unimplemented type in rule block");
+    log_error("Unimplemented type in rule block");
     return true;
   }
   }
@@ -241,7 +257,7 @@ bool solidity_convertert::get_statement(
     }
     else
     {
-      // seperate the decl and assignment
+      // separate the decl and assignment
       for (const auto &it : declgroup.items())
       {
         if (it.value().is_null() || it.value().empty())
@@ -262,11 +278,26 @@ bool solidity_convertert::get_statement(
         if (get_expr(initialValue, tuple_expr))
           return true;
 
+        // Build LHS block preserving original positions so that omitted
+        // elements (null in declarations) map to nil_exprt at the correct
+        // index.  construct_tuple_assigments uses positional "mem{i}" keys,
+        // so the indices must match the RHS tuple struct layout.
         code_blockt lhs_block;
-        for (auto &decl : decls.operands())
-          lhs_block.copy_to_operands(decl.op0()); // nil_expr;
+        unsigned decl_idx = 0;
+        for (const auto &it : declgroup.items())
+        {
+          if (it.value().is_null() || it.value().empty())
+          {
+            lhs_block.copy_to_operands(nil_exprt());
+          }
+          else
+          {
+            assert(decl_idx < decls.operands().size());
+            lhs_block.copy_to_operands(decls.operands()[decl_idx].op0());
+            ++decl_idx;
+          }
+        }
 
-        //TODO FIXME: stmt might not contains right handside
         construct_tuple_assigments(stmt, lhs_block, tuple_expr);
       }
     }
@@ -307,7 +338,8 @@ bool solidity_convertert::get_statement(
           stmt["expression"]["typeDescriptions"], return_exrp_type))
       return true;
 
-    if (return_exrp_type.get("#sol_type") == "TUPLE_RETURNS")
+    if (
+      get_sol_type(return_exrp_type) == SolidityGrammar::SolType::TUPLE_RETURNS)
     {
       if (
         stmt["expression"]["nodeType"].get<std::string>() !=
@@ -323,7 +355,10 @@ bool solidity_convertert::get_statement(
       if (get_tuple_instance_name(*current_functionDecl, tname, tid))
         return true;
       if (context.find_symbol(tid) == nullptr)
+      {
+        log_error("cannot find tuple instance symbol: {}", tid);
         return true;
+      }
 
       // get lhs
       exprt lhs = symbol_expr(*context.find_symbol(tid));
@@ -429,14 +464,29 @@ bool solidity_convertert::get_statement(
     }
 
     typet return_type;
-    if ((*current_functionDecl).contains("returnParameters"))
+    // When inlining a delegate-shadow body, the return statement belongs to
+    // the target function, not the caller. Use the override set by
+    // try_get_delegate_shadow_call so we pick up the target's return type.
+    const nlohmann::json *ret_params_src =
+      delegate_shadow_target_return_params != nullptr
+        ? delegate_shadow_target_return_params
+        : ((*current_functionDecl).contains("returnParameters")
+             ? &(*current_functionDecl)["returnParameters"]
+             : nullptr);
+    if (ret_params_src != nullptr)
     {
-      assert(
-        (*current_functionDecl)["returnParameters"]["id"]
-          .get<std::uint16_t>() ==
-        stmt["functionReturnParameters"].get<std::uint16_t>());
-      if (get_type_description(
-            (*current_functionDecl)["returnParameters"], return_type))
+      // Skip the id-matching assertion when we're overriding — the caller
+      // and the target have different ParameterList ids by construction.
+      if (
+        delegate_shadow_target_return_params == nullptr &&
+        (*current_functionDecl).contains("returnParameters"))
+      {
+        assert(
+          (*current_functionDecl)["returnParameters"]["id"]
+            .get<std::uint16_t>() ==
+          stmt["functionReturnParameters"].get<std::uint16_t>());
+      }
+      if (get_type_description(*ret_params_src, return_type))
         return true;
     }
     else
@@ -583,6 +633,25 @@ bool solidity_convertert::get_statement(
     new_expr = code_while;
     break;
   }
+  case SolidityGrammar::StatementT::DoWhileStatement:
+  {
+    exprt cond = true_exprt();
+    if (get_expr(stmt["condition"], cond))
+      return true;
+
+    codet body = codet();
+    if (get_block(stmt["body"], body))
+      return true;
+
+    convert_expression_to_code(body);
+
+    code_dowhilet code_dowhile;
+    code_dowhile.cond() = cond;
+    code_dowhile.body() = body;
+
+    new_expr = code_dowhile;
+    break;
+  }
   case SolidityGrammar::StatementT::ContinueStatement:
   {
     new_expr = code_continuet();
@@ -629,8 +698,268 @@ bool solidity_convertert::get_statement(
   }
   case SolidityGrammar::StatementT::TryStatement:
   {
-    log_error("Try/Catch is not fully supported yet. Aborting...");
-    return true;
+    // Model try/catch as:
+    //   if (nondet_bool()) { <success_block> } else { <catch_block(s)> }
+    //
+    // The external call result is nondeterministic since ESBMC verifies
+    // one contract at a time and cannot resolve cross-contract calls.
+    // Return variables in the success clause are assigned nondet values.
+
+    if (
+      !stmt.contains("clauses") || !stmt["clauses"].is_array() ||
+      stmt["clauses"].size() < 2)
+    {
+      log_error(
+        "TryStatement must have at least 2 clauses "
+        "(success + catch)");
+      return true;
+    }
+
+    const auto &clauses = stmt["clauses"];
+
+    // --- success branch (first clause) ---
+    const auto &success_clause = clauses[0];
+    code_blockt success_block;
+
+    // Declare return parameters with nondet initial values
+    if (
+      success_clause.contains("parameters") &&
+      success_clause["parameters"].contains("parameters"))
+    {
+      for (const auto &param : success_clause["parameters"]["parameters"])
+      {
+        // Use get_var_decl to declare the variable in the symbol table
+        exprt var_decl;
+        if (get_var_decl(param, var_decl))
+          return true;
+
+        // The variable was declared; now assign it a nondet value
+        // matching its type
+        if (var_decl.is_code() && var_decl.statement() == "decl")
+        {
+          const symbolt &sym =
+            *context.find_symbol(var_decl.op0().identifier());
+          symbol_exprt sym_expr(sym.id, sym.type);
+
+          exprt nondet_val;
+          get_nondet_expr(sym.type, nondet_val);
+
+          code_assignt assign(sym_expr, nondet_val);
+          assign.location() = loc;
+
+          success_block.copy_to_operands(var_decl);
+          success_block.copy_to_operands(assign);
+        }
+        else
+        {
+          success_block.copy_to_operands(var_decl);
+        }
+      }
+    }
+
+    // Convert the success block body
+    exprt success_body;
+    if (get_block(success_clause["block"], success_body))
+      return true;
+    convert_expression_to_code(success_body);
+    success_block.copy_to_operands(success_body);
+
+    // --- catch branch(es) (remaining clauses) ---
+    exprt catch_expr;
+    if (clauses.size() == 2)
+    {
+      // Single catch clause
+      const auto &cc = clauses[1];
+
+      // Declare catch parameters if present (e.g. Error(string memory reason))
+      code_blockt catch_block;
+      if (cc.contains("parameters") && cc["parameters"].contains("parameters"))
+      {
+        for (const auto &param : cc["parameters"]["parameters"])
+        {
+          exprt var_decl;
+          if (get_var_decl(param, var_decl))
+            return true;
+
+          if (var_decl.is_code() && var_decl.statement() == "decl")
+          {
+            const symbolt &sym =
+              *context.find_symbol(var_decl.op0().identifier());
+            symbol_exprt sym_expr(sym.id, sym.type);
+            exprt nondet_val;
+            get_nondet_expr(sym.type, nondet_val);
+            code_assignt assign(sym_expr, nondet_val);
+            assign.location() = loc;
+            catch_block.copy_to_operands(var_decl);
+            catch_block.copy_to_operands(assign);
+          }
+          else
+          {
+            catch_block.copy_to_operands(var_decl);
+          }
+        }
+      }
+
+      exprt catch_body;
+      if (get_block(cc["block"], catch_body))
+        return true;
+      convert_expression_to_code(catch_body);
+      catch_block.copy_to_operands(catch_body);
+      catch_expr = catch_block;
+    }
+    else
+    {
+      // Multiple catch clauses: chain with nondet_bool
+      // Build right-to-left: last clause is the final else
+      const auto &last_cc = clauses[clauses.size() - 1];
+      code_blockt last_block;
+      if (
+        last_cc.contains("parameters") &&
+        last_cc["parameters"].contains("parameters"))
+      {
+        for (const auto &param : last_cc["parameters"]["parameters"])
+        {
+          exprt var_decl;
+          if (get_var_decl(param, var_decl))
+            return true;
+          last_block.copy_to_operands(var_decl);
+        }
+      }
+      exprt last_body;
+      if (get_block(last_cc["block"], last_body))
+        return true;
+      convert_expression_to_code(last_body);
+      last_block.copy_to_operands(last_body);
+
+      catch_expr = last_block;
+
+      // Build if-else chain from second-to-last back to first catch clause
+      for (int i = static_cast<int>(clauses.size()) - 2; i >= 1; --i)
+      {
+        const auto &cc = clauses[i];
+        code_blockt clause_block;
+        if (
+          cc.contains("parameters") && cc["parameters"].contains("parameters"))
+        {
+          for (const auto &param : cc["parameters"]["parameters"])
+          {
+            exprt var_decl;
+            if (get_var_decl(param, var_decl))
+              return true;
+            clause_block.copy_to_operands(var_decl);
+          }
+        }
+        exprt clause_body;
+        if (get_block(cc["block"], clause_body))
+          return true;
+        convert_expression_to_code(clause_body);
+        clause_block.copy_to_operands(clause_body);
+
+        codet if_catch("ifthenelse");
+        if_catch.copy_to_operands(nondet_bool_expr, clause_block, catch_expr);
+        if_catch.location() = loc;
+        catch_expr = if_catch;
+      }
+    }
+
+    convert_expression_to_code(catch_expr);
+
+    // Build top-level: if (nondet_bool()) { success } else { catch }
+    codet try_if("ifthenelse");
+    try_if.copy_to_operands(nondet_bool_expr, success_block, catch_expr);
+    try_if.location() = loc;
+
+    new_expr = try_if;
+    break;
+  }
+  case SolidityGrammar::StatementT::InlineAssemblyStatement:
+  {
+    // Over-approximate inline assembly by havocing all externally referenced
+    // variables. Assembly can read and write any referenced variable, so we
+    // conservatively assign nondet values to each one.
+    code_blockt havoc_block;
+
+    if (
+      stmt.contains("externalReferences") &&
+      stmt["externalReferences"].is_array())
+    {
+      // Collect unique declaration IDs (a variable may appear multiple times)
+      std::set<int> seen_decls;
+      for (const auto &ref : stmt["externalReferences"])
+      {
+        if (!ref.contains("declaration"))
+          continue;
+        int decl_id = ref["declaration"].get<int>();
+        if (!seen_decls.insert(decl_id).second)
+          continue; // already processed
+
+        // Skip .slot/.offset references — we'll havoc the variable itself
+        if (ref.contains("isSlot") && ref["isSlot"].get<bool>())
+          continue;
+        if (ref.contains("isOffset") && ref["isOffset"].get<bool>())
+          continue;
+
+        const nlohmann::json &decl = find_decl_ref(decl_id);
+        if (decl.empty() || decl["nodeType"] != "VariableDeclaration")
+          continue;
+
+        // Resolve the variable to a symbol expression
+        bool is_state =
+          decl.contains("stateVariable") && decl["stateVariable"].get<bool>();
+        exprt var_expr;
+        if (get_var_decl_ref(decl, is_state, var_expr))
+          continue; // best-effort: skip if resolution fails
+
+        // Assign nondet value
+        exprt nondet_val;
+        get_nondet_expr(var_expr.type(), nondet_val);
+        code_assignt assign(var_expr, nondet_val);
+        assign.location() = loc;
+        havoc_block.copy_to_operands(assign);
+      }
+
+      // Also havoc variables referenced via .slot (state variables modified
+      // through sstore). Find their declaration and havoc the variable.
+      for (const auto &ref : stmt["externalReferences"])
+      {
+        if (!ref.contains("declaration"))
+          continue;
+        bool is_slot = ref.contains("isSlot") && ref["isSlot"].get<bool>();
+        if (!is_slot)
+          continue;
+
+        int decl_id = ref["declaration"].get<int>();
+        if (seen_decls.count(decl_id))
+          continue; // already havoc'd above
+        seen_decls.insert(decl_id);
+
+        const nlohmann::json &decl = find_decl_ref(decl_id);
+        if (decl.empty() || decl["nodeType"] != "VariableDeclaration")
+          continue;
+
+        exprt var_expr;
+        if (get_var_decl_ref(decl, true, var_expr))
+          continue;
+
+        exprt nondet_val;
+        get_nondet_expr(var_expr.type(), nondet_val);
+        code_assignt assign(var_expr, nondet_val);
+        assign.location() = loc;
+        havoc_block.copy_to_operands(assign);
+      }
+    }
+
+    if (havoc_block.operands().empty())
+    {
+      // No external references — assembly only touches internal EVM state.
+      // Generate a skip (no-op).
+      new_expr = code_skipt();
+    }
+    else
+    {
+      new_expr = havoc_block;
+    }
+    break;
   }
   case SolidityGrammar::StatementT::StatementTError:
   default:
