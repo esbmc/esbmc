@@ -1590,6 +1590,27 @@ TEST_CASE(
 }
 
 TEST_CASE(
+  "Bitcast chain: don't drop width-changing intermediate cast",
+  "[bitcast][simplify]")
+{
+  // bitcast(bitcast(x:u32, u16), u32) — collapsing to bitcast(x, u32)
+  // would skip the truncation that the intermediate u16 cast performs.
+  // The fold must refuse when widths differ.
+  const type2tc u16 = unsignedbv_type2tc(16);
+  const type2tc u32 = unsignedbv_type2tc(32);
+  const expr2tc x = symbol2tc(u32, "x");
+  const expr2tc inner = bitcast2tc(u16, x);
+  const expr2tc outer = bitcast2tc(u32, inner);
+
+  const expr2tc result = outer->simplify();
+
+  // Either nil (no fold) or unchanged shape — the key contract: the
+  // result must NOT be the bare symbol `x` (which would skip truncation).
+  if (!is_nil_expr(result))
+    REQUIRE_FALSE(result == x);
+}
+
+TEST_CASE(
   "Shift combine: refuse fold when sum doesn't fit shift-count type",
   "[shift][simplify]")
 {
