@@ -842,7 +842,22 @@ bool goto_coveraget::is_target_func(
     abort();
   }
 
-  return sym->name.as_string() == tgt_name;
+  exprt symbol = symbol_expr(*ns.lookup(f));
+  std::string sym_name = symbol.name().as_string();
+  if (sym_name == tgt_name)
+    return true;
+
+  // For Solidity: modifier expansion renames functions from "func" to
+  // "func_modifierName". Support prefix matching so that --function func
+  // matches func_modifierName.
+  if (
+    config.language.lid == language_idt::SOLIDITY &&
+    sym_name.size() > tgt_name.size() &&
+    sym_name.substr(0, tgt_name.size()) == tgt_name &&
+    sym_name[tgt_name.size()] == '_')
+    return true;
+
+  return false;
 }
 
 // negate the condition inside the assertion

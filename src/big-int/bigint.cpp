@@ -1012,7 +1012,7 @@ void BigInt::div(BigInt const &x, BigInt const &y, BigInt &q, BigInt &r)
     onedig_t *b = (onedig_t *)alloca(bl * sizeof(onedig_t));
     memcpy(b, y.digit, bl * sizeof(onedig_t));
 
-    onedig_t scale = onedig_t(base / (1 + b[bl - 1]));
+    onedig_t scale = onedig_t(base / (twodig_t(1) + b[bl - 1]));
     if (scale != 1)
     {
       if ((a[al] = digit_mul(a, al, scale)) != 0)
@@ -1097,7 +1097,7 @@ BigInt &BigInt::operator/=(BigInt const &y)
     onedig_t *b = (onedig_t *)alloca(bl * sizeof(onedig_t));
     memcpy(b, y.digit, bl * sizeof(onedig_t));
 
-    onedig_t scale = onedig_t(base / (1 + b[bl - 1]));
+    onedig_t scale = onedig_t(base / (twodig_t(1) + b[bl - 1]));
     if (scale != 1)
     {
       if ((a[al] = digit_mul(a, al, scale)) != 0)
@@ -1166,7 +1166,7 @@ BigInt &BigInt::operator%=(BigInt const &y)
     onedig_t *b = (onedig_t *)alloca(bl * sizeof(onedig_t));
     memcpy(b, y.digit, bl * sizeof(onedig_t));
 
-    onedig_t scale = onedig_t(base / (1 + b[bl - 1]));
+    onedig_t scale = onedig_t(base / (twodig_t(1) + b[bl - 1]));
     if (scale != 1)
     {
       if ((a[al] = digit_mul(a, al, scale)) != 0)
