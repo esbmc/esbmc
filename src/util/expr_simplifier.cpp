@@ -5637,11 +5637,13 @@ expr2tc byte_update2t::do_simplify() const
   if (!off_big.is_uint64())
     return expr2tc();
   uint64_t src_offset = off_big.to_uint64();
-  // src_offset * 8 must fit in size_t, and the resulting range must lie
-  // within src_value. Use 64-bit arithmetic to avoid the int * 8 wrap.
-  uint64_t bit_offset = 0;
-  if (__builtin_mul_overflow(src_offset, (uint64_t)8, &bit_offset))
+  // src_offset * 8 must fit in uint64_t, and the resulting range must lie
+  // within src_value. Use a portable divide-based overflow check (works
+  // on MSVC, which doesn't expose __builtin_mul_overflow): if multiplying
+  // would overflow, src_offset > UINT64_MAX / 8.
+  if (src_offset > std::numeric_limits<uint64_t>::max() / 8)
     return expr2tc();
+  uint64_t bit_offset = src_offset * 8;
   // Overflow-safe bounds check: a naive bit_offset + value.length() > N
   // can wrap when bit_offset is near UINT64_MAX. Test bit_offset against
   // the source length first, then test the remaining tail length without
