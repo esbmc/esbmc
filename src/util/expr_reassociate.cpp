@@ -396,9 +396,9 @@ optimize_terms(
   // both endpoints and stops the inner search; the outer loop skips dead
   // entries, so the total work is O(n^2) comparisons but only one compact
   // walk afterwards.
-  bool any_cancelled = false;
   if (result.size() >= 2)
   {
+    bool any_cancelled = false;
     std::vector<bool> dead(result.size(), false);
     for (std::size_t i = 0; i < result.size(); ++i)
     {
@@ -897,9 +897,9 @@ std::optional<std::vector<expr2tc>> optimize_bitxor_terms(
   // Pass 2: cancel matching pairs `x ^ x = 0`. Mark-and-compact to avoid
   // O(n^2) vector shifts. No sign tracking; any two structurally-equal
   // leaves cancel.
-  bool any_cancelled_xor = false;
   if (result.size() >= 2)
   {
+    bool any_cancelled = false;
     std::vector<bool> dead(result.size(), false);
     for (std::size_t i = 0; i < result.size(); ++i)
     {
@@ -913,11 +913,11 @@ std::optional<std::vector<expr2tc>> optimize_bitxor_terms(
           continue;
         dead[i] = true;
         dead[j] = true;
-        any_cancelled_xor = true;
+        any_cancelled = true;
         break;
       }
     }
-    if (any_cancelled_xor)
+    if (any_cancelled)
     {
       std::size_t out = 0;
       for (std::size_t i = 0; i < result.size(); ++i)
