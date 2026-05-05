@@ -34,18 +34,18 @@ expr2tc expr2t::simplify(bool suppress_reassoc) const
     if (expr_id == overflow_id)
       return expr2tc();
 
-    // Short-circuit pre-pass for and/or/if. The constant-condition folds in
-    // and2t/or2t/if2t::do_simplify only need a top-level constant_bool /
-    // constant_expr check on the operands, so they fire on the original
-    // (un-walked) operands. Trying do_simplify() before the operand walk
-    // gives us two wins:
-    //   - cheap discharge of `false && X`, `true || X`, `if(true, x, y)`
-    //     without recursing into the dead side; and
-    //   - if the dead arm contains a dyn_sized_array_excp, the catch below
-    //     would otherwise return nil for the whole simplify. Folding first
-    //     keeps the result.
-    // Restricted to and/or/if — for arithmetic/bitwise nodes the early
-    // peepholes (e.g. x + 0 = x) need their operands canonical first.
+    // Short-circuit pre-pass for and/or/if. do_simplify() runs only the
+    // node-local peepholes — it never recurses into operands — so calling
+    // it before the operand walk is cheap. Two wins:
+    //   - decisive-constant folds (false && X, true || X, if(true,x,_),
+    //     if(false,_,y)) discharge without walking the dead operand;
+    //   - if the dead arm contains a dyn_sized_array_excp, the catch
+    //     below would otherwise return nil for the whole simplify.
+    // Algebraic rules that fire here (e.g. if(c,x,x), x&&x, absorption)
+    // can return a result whose sub-expressions still need
+    // canonicalization. The recursive simplify() below handles that.
+    // For arithmetic/bitwise nodes the early peepholes need canonical
+    // operands first, so we keep this restricted to and/or/if.
     if (expr_id == and_id || expr_id == or_id || expr_id == if_id)
     {
       expr2tc shortcut = do_simplify();
