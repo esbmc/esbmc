@@ -1015,15 +1015,12 @@ void goto_symext::symex_assign_bitfield(
       {
         const unsigned w = mask->type->get_width();
         std::string b = integer2binary(v, w);
-        // Width-bit bv with contiguous low ones looks like "0...01...1".
-        size_t first_zero = b.find('0');
+        // integer2binary is MSB-first. A contiguous-low-ones mask has
+        // the form "0*1+" — leading zeros, then ones to the end. So
+        // from the first '1', every subsequent char must also be '1'.
         size_t first_one = b.find('1');
         if (first_one != std::string::npos)
-        {
-          // After the leading zeros, only ones to the end.
-          ok = (first_zero == std::string::npos || first_zero > first_one) &&
-               b.substr(first_one).find('0') == std::string::npos;
-        }
+          ok = b.find('0', first_one) == std::string::npos;
       }
     }
     if (!ok)
