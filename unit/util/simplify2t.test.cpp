@@ -1501,6 +1501,47 @@ TEST_CASE(
 }
 
 TEST_CASE(
+  "Bitwise reassoc: skip fold for >64-bit destination types",
+  "[bitwise][reassoc][wide]")
+{
+  // bitwise_fold uses a 64-bit round-trip, which can't preserve
+  // sign-extension above bit 63 for signedbv > 64. (s128)-2 & (s128)-4
+  // would fold via uint64 to 2^64-4 and from_integer would zero-extend
+  // to the destination — wrong, since the correct result is -4 in s128.
+  // Refuse the fold entirely for >64-bit destination types.
+  const type2tc s128 = signedbv_type2tc(128);
+  const expr2tc x = symbol2tc(s128, "x");
+  const expr2tc neg2 = constant_int2tc(s128, BigInt(-2));
+  const expr2tc neg4 = constant_int2tc(s128, BigInt(-4));
+  // Build a chain (x & -2) & -4 — reassoc would try to fold the
+  // constants. With the >64-bit guard, the fold is refused.
+  const expr2tc inner = bitand2tc(s128, x, neg2);
+  const expr2tc outer = bitand2tc(s128, inner, neg4);
+
+  const expr2tc result = outer->simplify();
+
+  // The result must NOT contain a positive 2^64-4 constant — that would
+  // be the buggy zero-extended fold.
+  std::function<bool(const expr2tc &)> contains_buggy =
+    [&](const expr2tc &e) -> bool {
+    if (is_constant_int2t(e))
+    {
+      const BigInt &v = to_constant_int2t(e).value;
+      // 2^64 - 4 = 18446744073709551612.
+      return v == BigInt::power2(64) - 4;
+    }
+    bool found = false;
+    e->foreach_operand([&](const expr2tc &s) {
+      if (!is_nil_expr(s) && contains_buggy(s))
+        found = true;
+    });
+    return found;
+  };
+  if (!is_nil_expr(result))
+    REQUIRE_FALSE(contains_buggy(result));
+}
+
+TEST_CASE(
   "byte_extract(byte_update(src, OOB, v), OOB) is not folded",
   "[byte][simplify]")
 {

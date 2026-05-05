@@ -566,12 +566,23 @@ bool reassoc_bitwise_safe_type(const type2tc &type)
 }
 
 /// Apply a bitwise op to two BigInts via uint64 round-trip. Returns nullopt
-/// if either input doesn't fit in uint64; caller should bail in that case
-/// rather than produce a wrong answer (mirrors do_bit_munge_operation's
-/// 64-bit-bound for constant folding).
+/// if either input doesn't fit in uint64 OR if the destination type is
+/// wider than 64 bits (mirrors do_bit_munge_operation's 64-bit-bound for
+/// constant folding). The destination width matters because the 64-bit
+/// result needs zero/sign extension to the destination, and we can't
+/// reliably reconstruct the high bits from a 64-bit pattern: e.g.
+/// (s128)-2 & (s128)-4 produces 64-bit 0xFF...FC; with a positive
+/// BigInt that zero-extends to 2^64-4 instead of -4 in s128.
 template <typename U64Op>
-std::optional<BigInt> bitwise_fold(const BigInt &a, const BigInt &b, U64Op op)
+std::optional<BigInt>
+bitwise_fold(const BigInt &a, const BigInt &b, const type2tc &dest, U64Op op)
 {
+  // Refuse to fold for destination types wider than 64 bits. The 64-bit
+  // round-trip can't preserve the sign extension above bit 63 reliably.
+  if (dest && (is_signedbv_type(dest) || is_unsignedbv_type(dest)) &&
+      dest->get_width() > 64)
+    return std::nullopt;
+
   // Use the same two's-complement round-trip as do_bit_munge_operation:
   // signed values reach this via int64_t and unsigned via uint64_t. For
   // bitwise ops, what we care about is the underlying bit pattern, so we
@@ -709,8 +720,8 @@ optimize_bitand_terms(const std::vector<expr2tc> &terms)
     }
     else
     {
-      auto folded =
-        bitwise_fold(acc, v, [](uint64_t a, uint64_t b) { return a & b; });
+      auto folded = bitwise_fold(
+        acc, v, const_type, [](uint64_t a, uint64_t b) { return a & b; });
       if (!folded)
         return std::nullopt; // operands too wide for 64-bit fold; bail
       acc = *folded;
@@ -768,8 +779,8 @@ optimize_bitor_terms(const std::vector<expr2tc> &terms)
     }
     else
     {
-      auto folded =
-        bitwise_fold(acc, v, [](uint64_t a, uint64_t b) { return a | b; });
+      auto folded = bitwise_fold(
+        acc, v, const_type, [](uint64_t a, uint64_t b) { return a | b; });
       if (!folded)
         return std::nullopt;
       acc = *folded;
@@ -837,8 +848,8 @@ std::optional<std::vector<expr2tc>> optimize_bitxor_terms(
     }
     else
     {
-      auto folded =
-        bitwise_fold(acc, v, [](uint64_t a, uint64_t b) { return a ^ b; });
+      auto folded = bitwise_fold(
+        acc, v, const_type, [](uint64_t a, uint64_t b) { return a ^ b; });
       if (!folded)
         return std::nullopt;
       acc = *folded;
