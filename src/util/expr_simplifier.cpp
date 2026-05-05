@@ -122,52 +122,42 @@ expr2tc expr2t::simplify(bool suppress_reassoc) const
     // suppress reassoc and the result is still a chain root (add/sub/neg
     // for arith). The recursive resimplify above means peephole-introduced
     // chain roots are also caught here.
+    //
+    // Gate on expr_id BEFORE cloning. Most expressions in the codebase
+    // aren't chain roots, and the clone(): result fallback was paying for
+    // that path on every simplify() call.
     if (!suppress_reassoc)
     {
-      expr2tc canonical = is_nil_expr(result) ? clone() : result;
-
-      if (
-        canonical->expr_id == add_id || canonical->expr_id == sub_id ||
-        canonical->expr_id == neg_id)
+      // Use the post-step-3 result if it exists; otherwise the original
+      // expr_id is unchanged. Avoid clone() until we know we'll mutate.
+      const expr2t::expr_ids canonical_id =
+        is_nil_expr(result) ? expr_id : result->expr_id;
+      const bool is_arith_chain = canonical_id == add_id ||
+                                  canonical_id == sub_id ||
+                                  canonical_id == neg_id;
+      const bool is_other_chain =
+        canonical_id == mul_id || canonical_id == bitand_id ||
+        canonical_id == bitor_id || canonical_id == bitxor_id;
+      if (is_arith_chain || is_other_chain)
       {
-        if (reassociate_arith(canonical))
+        expr2tc canonical = is_nil_expr(result) ? clone() : result;
+        bool rewrote = false;
+        if (is_arith_chain)
+          rewrote = reassociate_arith(canonical);
+        else if (canonical_id == mul_id)
+          rewrote = reassociate_mul(canonical);
+        else if (canonical_id == bitand_id)
+          rewrote = reassociate_bitand(canonical);
+        else if (canonical_id == bitor_id)
+          rewrote = reassociate_bitor(canonical);
+        else if (canonical_id == bitxor_id)
+          rewrote = reassociate_bitxor(canonical);
+        if (rewrote)
         {
           // Run peepholes on the rebuilt tree so add(x, neg(y)) -> sub(x, y)
           // and friends collapse. simplify_no_reassoc forces
           // suppress_reassoc=true throughout to avoid re-entering the
           // chain-root path.
-          simplify_no_reassoc(canonical);
-          return canonical;
-        }
-      }
-      else if (canonical->expr_id == mul_id)
-      {
-        if (reassociate_mul(canonical))
-        {
-          simplify_no_reassoc(canonical);
-          return canonical;
-        }
-      }
-      else if (canonical->expr_id == bitand_id)
-      {
-        if (reassociate_bitand(canonical))
-        {
-          simplify_no_reassoc(canonical);
-          return canonical;
-        }
-      }
-      else if (canonical->expr_id == bitor_id)
-      {
-        if (reassociate_bitor(canonical))
-        {
-          simplify_no_reassoc(canonical);
-          return canonical;
-        }
-      }
-      else if (canonical->expr_id == bitxor_id)
-      {
-        if (reassociate_bitxor(canonical))
-        {
           simplify_no_reassoc(canonical);
           return canonical;
         }
@@ -342,8 +332,9 @@ struct Addtor
   }
 };
 
-// Forward declaration; the definition lives further down in this file.
+// Forward declarations; definitions live further down in this file.
 static bool fits_in_width(const BigInt &value, unsigned width, bool is_signed);
+static bool is_all_ones_constant(const expr2tc &e);
 
 expr2tc add2t::do_simplify() const
 {
@@ -567,6 +558,21 @@ static bool fits_in_width(const BigInt &value, unsigned width, bool is_signed)
     BigInt max_val = BigInt::power2(width) - 1;
     return value <= max_val;
   }
+}
+
+/// True if @p e is a constant_int that holds the all-ones bit pattern for its
+/// type. For signed bv that's -1 (BigInt(-1)); for unsigned bv that's
+/// 2^width - 1 (UINT_MAX). Useful for bitwise identities like x & all1 = x.
+static bool is_all_ones_constant(const expr2tc &e)
+{
+  if (!is_constant_int2t(e))
+    return false;
+  const BigInt &v = to_constant_int2t(e).value;
+  if (is_signedbv_type(e->type))
+    return v == BigInt(-1);
+  if (is_unsignedbv_type(e->type))
+    return v == BigInt::power2(e->type->get_width()) - 1;
+  return false;
 }
 
 expr2tc sub2t::do_simplify() const
@@ -2316,25 +2322,23 @@ expr2tc bitand2t::do_simplify() const
   if (is_bitnot2t(side_2) && to_bitnot2t(side_2).value == side_1)
     return gen_zero(type);
 
-  // 0 & x = 0, -1 & x = x
+  // 0 & x = 0, all1 & x = x
   if (is_constant_int2t(side_1))
   {
-    const BigInt &val = to_constant_int2t(side_1).value;
-    if (val.is_zero())
+    if (to_constant_int2t(side_1).value.is_zero())
       return side_1; // 0 & x = 0
-    if (val == BigInt(-1))
-      return side_2; // -1 & x = x (all bits set)
   }
+  if (is_all_ones_constant(side_1))
+    return side_2; // all1 & x = x
 
-  // x & 0 = 0, x & -1 = x
+  // x & 0 = 0, x & all1 = x
   if (is_constant_int2t(side_2))
   {
-    const BigInt &val = to_constant_int2t(side_2).value;
-    if (val.is_zero())
+    if (to_constant_int2t(side_2).value.is_zero())
       return side_2; // x & 0 = 0
-    if (val == BigInt(-1))
-      return side_1; // x & -1 = x (all bits set)
   }
+  if (is_all_ones_constant(side_2))
+    return side_1; // x & all1 = x
 
   // (x & y) & y = x & y, (x & y) & x = x & y, and the symmetric forms with
   // the outer and's operands swapped. Idempotence after associativity.
@@ -2412,31 +2416,35 @@ expr2tc bitor2t::do_simplify() const
   if (side_1 == side_2)
     return side_1; // x | x = x
 
-  // x | ~x = -1 (all bits set)
+  // x | ~x = all1 (all bits set). Use the type's all-ones value so the
+  // result preserves type-correct width for unsigned types.
+  auto make_all_ones = [&](const type2tc &t) -> expr2tc {
+    if (is_unsignedbv_type(t))
+      return constant_int2tc(t, BigInt::power2(t->get_width()) - 1);
+    return constant_int2tc(t, BigInt(-1));
+  };
   if (is_bitnot2t(side_1) && to_bitnot2t(side_1).value == side_2)
-    return constant_int2tc(type, -1);
+    return make_all_ones(type);
   if (is_bitnot2t(side_2) && to_bitnot2t(side_2).value == side_1)
-    return constant_int2tc(type, -1);
+    return make_all_ones(type);
 
-  // 0 | x = x, -1 | x = -1
+  // 0 | x = x, all1 | x = all1
   if (is_constant_int2t(side_1))
   {
-    const BigInt &val = to_constant_int2t(side_1).value;
-    if (val.is_zero())
+    if (to_constant_int2t(side_1).value.is_zero())
       return side_2; // 0 | x = x
-    if (val == BigInt(-1))
-      return side_1; // -1 | x = -1
   }
+  if (is_all_ones_constant(side_1))
+    return side_1; // all1 | x = all1
 
-  // x | 0 = x, x | -1 = -1
+  // x | 0 = x, x | all1 = all1
   if (is_constant_int2t(side_2))
   {
-    const BigInt &val = to_constant_int2t(side_2).value;
-    if (val.is_zero())
+    if (to_constant_int2t(side_2).value.is_zero())
       return side_1; // x | 0 = x
-    if (val == BigInt(-1))
-      return side_2; // x | -1 = -1
   }
+  if (is_all_ones_constant(side_2))
+    return side_2; // x | all1 = all1
 
   // Absorption: x | (x & y) = x
   if (is_bitand2t(side_2))
@@ -2693,12 +2701,10 @@ expr2tc bitxor2t::do_simplify() const
   if (is_constant_int2t(side_2) && to_constant_int2t(side_2).value.is_zero())
     return side_1;
 
-  // x ^ -1 = ~x, -1 ^ x = ~x (toggle-all-bits)
-  if (
-    is_constant_int2t(side_2) && to_constant_int2t(side_2).value == BigInt(-1))
+  // x ^ all1 = ~x, all1 ^ x = ~x (toggle-all-bits)
+  if (is_all_ones_constant(side_2))
     return bitnot2tc(type, side_1);
-  if (
-    is_constant_int2t(side_1) && to_constant_int2t(side_1).value == BigInt(-1))
+  if (is_all_ones_constant(side_1))
     return bitnot2tc(type, side_2);
 
   // ~x ^ ~y = x ^ y
