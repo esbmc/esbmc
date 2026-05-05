@@ -3030,6 +3030,18 @@ static expr2tc combine_constant_shifts(
   if (sum >= BigInt(type->get_width()))
     return expr2tc();
 
+  // The combined count must also fit in the shift-count operand's type
+  // without truncation. ESBMC's IR allows the shift-count type to be
+  // narrower than the lhs (the SMT converter zero-extends it to the lhs
+  // width). If the combined sum doesn't fit in outer_amt->type, building
+  // from_integer(sum, outer_amt->type) would silently wrap. Example:
+  // u128 x << u5(20) << u5(20) — sum = 40, outer_amt is u5, 40 wraps to
+  // 8, producing the wrong shift.
+  const unsigned amt_width = outer_amt->type->get_width();
+  const bool amt_signed = is_signedbv_type(outer_amt->type);
+  if (!fits_in_width(sum, amt_width, amt_signed))
+    return expr2tc();
+
   return expr2tc(std::make_shared<ShiftT>(
     type, inner.side_1, from_integer(sum, outer_amt->type)));
 }

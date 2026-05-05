@@ -1590,6 +1590,38 @@ TEST_CASE(
 }
 
 TEST_CASE(
+  "Shift combine: refuse fold when sum doesn't fit shift-count type",
+  "[shift][simplify]")
+{
+  // (u128 x << u5(20)) << u5(20). The combined count (40) doesn't fit
+  // in u5 (range 0..31), so building from_integer(40, u5) would wrap to
+  // 8 and produce x << 8 instead of x << 40. Refuse the fold.
+  const type2tc u128 = unsignedbv_type2tc(128);
+  const type2tc u5 = unsignedbv_type2tc(5);
+  const expr2tc x = symbol2tc(u128, "x");
+  const expr2tc twenty = constant_int2tc(u5, BigInt(20));
+  const expr2tc inner = shl2tc(u128, x, twenty);
+  const expr2tc outer = shl2tc(u128, inner, twenty);
+
+  const expr2tc result = outer->simplify();
+
+  // Either nil (no fold) or a structurally unchanged outer shl. The key
+  // contract: the result must NOT be a single x << 8.
+  if (!is_nil_expr(result))
+  {
+    REQUIRE(is_shl2t(result));
+    const shl2t &s = to_shl2t(result);
+    // If folded, the shift amount must be the correct 40 in some wider
+    // representation — never the wrapped value 8 in u5.
+    if (is_constant_int2t(s.side_2))
+    {
+      const BigInt &amt = to_constant_int2t(s.side_2).value;
+      REQUIRE_FALSE(amt == BigInt(8));
+    }
+  }
+}
+
+TEST_CASE(
   "popcount: signed -1 has all bits set",
   "[popcount][simplify]")
 {
