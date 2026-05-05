@@ -660,18 +660,27 @@ expr2tc sub2t::do_simplify() const
     }
 
     // (w + x) - (y + z) with one shared addend cancels the common term.
+    // Mirror the type-match guard already in equality / notequal
+    // cancellation: a shared operand can hold differently-typed siblings
+    // (pointer-arith chains can have a common pointer base with i32 vs
+    // i64 offsets). Building sub2tc on a mixed-width pair would
+    // synthesize a malformed expression.
     if (is_add2t(side_1) && is_add2t(side_2))
     {
       const add2t &add1 = to_add2t(side_1);
       const add2t &add2 = to_add2t(side_2);
 
-      if (add1.side_1 == add2.side_1)
+      if (
+        add1.side_1 == add2.side_1 && add1.side_2->type == add2.side_2->type)
         return sub2tc(type, add1.side_2, add2.side_2);
-      if (add1.side_1 == add2.side_2)
+      if (
+        add1.side_1 == add2.side_2 && add1.side_2->type == add2.side_1->type)
         return sub2tc(type, add1.side_2, add2.side_1);
-      if (add1.side_2 == add2.side_1)
+      if (
+        add1.side_2 == add2.side_1 && add1.side_1->type == add2.side_2->type)
         return sub2tc(type, add1.side_1, add2.side_2);
-      if (add1.side_2 == add2.side_2)
+      if (
+        add1.side_2 == add2.side_2 && add1.side_1->type == add2.side_1->type)
         return sub2tc(type, add1.side_1, add2.side_1);
     }
   }
