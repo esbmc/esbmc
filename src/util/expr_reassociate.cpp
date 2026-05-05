@@ -179,17 +179,24 @@ rebuild_chain(const type2tc &type, const std::vector<signed_term> &terms)
   // — a pointer-typed add with two integer operands, violating the
   // pointer-arithmetic invariant. The C frontend doesn't currently emit
   // shapes that hit this path, but a future frontend change easily could.
+  // If we're rebuilding a pointer-typed chain and no positive pointer
+  // base is found, refuse the rebuild rather than seeding from an
+  // integer term and producing a malformed pointer expression.
   std::size_t base_idx = 0;
   if (is_pointer_type(type))
   {
+    bool found = false;
     for (std::size_t k = 0; k < terms.size(); ++k)
     {
       if (is_pointer_type(terms[k].term) && !terms[k].negative)
       {
         base_idx = k;
+        found = true;
         break;
       }
     }
+    if (!found)
+      return expr2tc();
   }
 
   // Pointer chains preserve negative offsets via sub2tc directly, not by
@@ -968,7 +975,10 @@ bool reassociate_arith(expr2tc &expr)
   if (!optimized || signed_terms_equal(*optimized, terms))
     return false;
 
-  expr = rebuild_chain(expr->type, *optimized);
+  expr2tc rebuilt = rebuild_chain(expr->type, *optimized);
+  if (is_nil_expr(rebuilt))
+    return false; // rebuild refused (e.g. pointer chain with no base)
+  expr = rebuilt;
   return true;
 }
 

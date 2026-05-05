@@ -2260,9 +2260,22 @@ static expr2tc do_bit_munge_operation(
     const BigInt &bl = int1.value;
     const BigInt &br = int2.value;
 
-    /* the bit pattern in two's complement, including the sign */
-    uint64_t l = bl.to_int64();
-    uint64_t r = br.to_int64();
+    /* The bit pattern in two's complement. Pick to_uint64()/to_int64()
+     * based on each operand's own type so we never cross the int64 sign
+     * boundary on an unsignedbv-with-bit-63-set value. The cast back to
+     * uint64_t recovers the same bit pattern either way, but using the
+     * type-matching accessor is robust under future BigInt changes. Bail
+     * if the value can't be represented in the chosen 64-bit form. */
+    auto fits_uint64 = [](const expr2tc &e, const BigInt &v) {
+      return is_unsignedbv_type(e) ? v.is_uint64() : v.is_int64();
+    };
+    if (!fits_uint64(simplified_side_1, bl) ||
+        !fits_uint64(simplified_side_2, br))
+      return expr2tc();
+    uint64_t l = is_unsignedbv_type(simplified_side_1) ? bl.to_uint64()
+                                                       : (uint64_t)bl.to_int64();
+    uint64_t r = is_unsignedbv_type(simplified_side_2) ? br.to_uint64()
+                                                       : (uint64_t)br.to_int64();
 
     bool is_shift = false;
     bool can_eval = true;
@@ -4029,16 +4042,17 @@ expr2tc lessthan2t::do_simplify() const
 
   // Type-extreme bounds. x < TYPE_MIN is always false; nothing in the type's
   // range is less than the minimum representable value. Subsumes the existing
-  // "unsigned < 0" rule.
+  // "unsigned < 0" rule. Require the constant to share the variable side's
+  // type so we don't fold based on a TYPE_MIN of the wrong domain.
   if (
-    is_constant_int2t(side_2) &&
+    is_constant_int2t(side_2) && side_2->type == side_1->type &&
     is_type_min(to_constant_int2t(side_2).value, side_1->type))
     return gen_false_expr();
 
   // TYPE_MAX < x is always false; nothing in the type's range exceeds the
   // maximum representable value.
   if (
-    is_constant_int2t(side_1) &&
+    is_constant_int2t(side_1) && side_1->type == side_2->type &&
     is_type_max(to_constant_int2t(side_1).value, side_2->type))
     return gen_false_expr();
 
@@ -4079,14 +4093,15 @@ expr2tc greaterthan2t::do_simplify() const
     return gen_false_expr();
 
   // x > TYPE_MAX is always false; nothing exceeds the max representable.
+  // Require the constant to share the variable side's type.
   if (
-    is_constant_int2t(side_2) &&
+    is_constant_int2t(side_2) && side_2->type == side_1->type &&
     is_type_max(to_constant_int2t(side_2).value, side_1->type))
     return gen_false_expr();
 
   // TYPE_MIN > x is always false; nothing is below the min representable.
   if (
-    is_constant_int2t(side_1) &&
+    is_constant_int2t(side_1) && side_1->type == side_2->type &&
     is_type_min(to_constant_int2t(side_1).value, side_2->type))
     return gen_false_expr();
 
@@ -4128,14 +4143,15 @@ expr2tc lessthanequal2t::do_simplify() const
     return gen_true_expr();
 
   // x <= TYPE_MAX is always true; the max representable bounds the type.
+  // Require the constant to share the variable side's type.
   if (
-    is_constant_int2t(side_2) &&
+    is_constant_int2t(side_2) && side_2->type == side_1->type &&
     is_type_max(to_constant_int2t(side_2).value, side_1->type))
     return gen_true_expr();
 
   // TYPE_MIN <= x is always true; the min representable bounds the type.
   if (
-    is_constant_int2t(side_1) &&
+    is_constant_int2t(side_1) && side_1->type == side_2->type &&
     is_type_min(to_constant_int2t(side_1).value, side_2->type))
     return gen_true_expr();
 
@@ -4177,15 +4193,17 @@ expr2tc greaterthanequal2t::do_simplify() const
     return gen_true_expr();
 
   // x >= TYPE_MIN is always true; the min representable bounds the type.
-  // Subsumes the existing "unsigned >= 0" rule.
+  // Subsumes the existing "unsigned >= 0" rule. Require the constant to
+  // share the variable side's type so we don't fold based on the wrong
+  // domain's TYPE_MIN.
   if (
-    is_constant_int2t(side_2) &&
+    is_constant_int2t(side_2) && side_2->type == side_1->type &&
     is_type_min(to_constant_int2t(side_2).value, side_1->type))
     return gen_true_expr();
 
   // TYPE_MAX >= x is always true; the max representable bounds the type.
   if (
-    is_constant_int2t(side_1) &&
+    is_constant_int2t(side_1) && side_1->type == side_2->type &&
     is_type_max(to_constant_int2t(side_1).value, side_2->type))
     return gen_true_expr();
 
