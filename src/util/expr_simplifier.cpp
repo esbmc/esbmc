@@ -2704,28 +2704,40 @@ expr2tc bitor2t::do_simplify() const
 
 expr2tc bitxor2t::do_simplify() const
 {
-  // x ^ x = 0
+  // x ^ x = 0 (gen_zero is type-correct for vectors too)
   if (side_1 == side_2)
     return gen_zero(type);
 
-  // x ^ ~x = -1, ~x ^ x = -1 (complementary toggle covers all bits)
-  if (is_bitnot2t(side_1) && to_bitnot2t(side_1).value == side_2)
-    return constant_int2tc(type, BigInt(-1));
-  if (is_bitnot2t(side_2) && to_bitnot2t(side_2).value == side_1)
-    return constant_int2tc(type, BigInt(-1));
+  // Scalar identity/absorber shortcuts. Skip when type is a vector — a
+  // scalar `constant_int2tc(type, -1)` or a scalar operand return would
+  // corrupt the vector type. distribute_vector_operation below handles
+  // those shapes.
+  if (!is_vector_type(type))
+  {
+    // x ^ ~x = all1, ~x ^ x = all1 (complementary toggle covers all bits)
+    auto make_all_ones = [&](const type2tc &t) -> expr2tc {
+      if (is_unsignedbv_type(t))
+        return constant_int2tc(t, BigInt::power2(t->get_width()) - 1);
+      return constant_int2tc(t, BigInt(-1));
+    };
+    if (is_bitnot2t(side_1) && to_bitnot2t(side_1).value == side_2)
+      return make_all_ones(type);
+    if (is_bitnot2t(side_2) && to_bitnot2t(side_2).value == side_1)
+      return make_all_ones(type);
 
-  // x ^ 0 = x
-  if (is_constant_int2t(side_1) && to_constant_int2t(side_1).value.is_zero())
-    return side_2;
-  // 0 ^ x = x
-  if (is_constant_int2t(side_2) && to_constant_int2t(side_2).value.is_zero())
-    return side_1;
+    // x ^ 0 = x
+    if (is_constant_int2t(side_1) && to_constant_int2t(side_1).value.is_zero())
+      return side_2;
+    // 0 ^ x = x
+    if (is_constant_int2t(side_2) && to_constant_int2t(side_2).value.is_zero())
+      return side_1;
 
-  // x ^ all1 = ~x, all1 ^ x = ~x (toggle-all-bits)
-  if (is_all_ones_constant(side_2))
-    return bitnot2tc(type, side_1);
-  if (is_all_ones_constant(side_1))
-    return bitnot2tc(type, side_2);
+    // x ^ all1 = ~x, all1 ^ x = ~x (toggle-all-bits)
+    if (is_all_ones_constant(side_2))
+      return bitnot2tc(type, side_1);
+    if (is_all_ones_constant(side_1))
+      return bitnot2tc(type, side_2);
+  }
 
   // ~x ^ ~y = x ^ y
   if (is_bitnot2t(side_1) && is_bitnot2t(side_2))
@@ -2767,25 +2779,34 @@ expr2tc bitxor2t::do_simplify() const
 
 expr2tc bitnand2t::do_simplify() const
 {
-  // ~(x & x) = ~x
+  // ~(x & x) = ~x (bitnot2t preserves operand type, vector-safe)
   if (side_1 == side_2)
     return bitnot2tc(type, side_1);
 
-  // x &~ 0 = ~0 = -1, x &~ -1 = ~x. Symmetric for the swapped sides.
-  if (is_constant_int2t(side_2))
+  // Scalar identity/absorber shortcuts. Skip when type is a vector — a
+  // scalar `constant_int2tc(type, -1)` would have the wrong shape.
+  if (!is_vector_type(type))
   {
-    const BigInt &v = to_constant_int2t(side_2).value;
-    if (v.is_zero())
-      return constant_int2tc(type, BigInt(-1));
-    if (v == BigInt(-1))
+    auto make_all_ones = [&](const type2tc &t) -> expr2tc {
+      if (is_unsignedbv_type(t))
+        return constant_int2tc(t, BigInt::power2(t->get_width()) - 1);
+      return constant_int2tc(t, BigInt(-1));
+    };
+
+    // x &~ 0 = ~0 = all1, x &~ all1 = ~x. Symmetric for the swapped sides.
+    if (is_constant_int2t(side_2))
+    {
+      if (to_constant_int2t(side_2).value.is_zero())
+        return make_all_ones(type);
+    }
+    if (is_all_ones_constant(side_2))
       return bitnot2tc(type, side_1);
-  }
-  if (is_constant_int2t(side_1))
-  {
-    const BigInt &v = to_constant_int2t(side_1).value;
-    if (v.is_zero())
-      return constant_int2tc(type, BigInt(-1));
-    if (v == BigInt(-1))
+    if (is_constant_int2t(side_1))
+    {
+      if (to_constant_int2t(side_1).value.is_zero())
+        return make_all_ones(type);
+    }
+    if (is_all_ones_constant(side_1))
       return bitnot2tc(type, side_2);
   }
 
@@ -2805,27 +2826,29 @@ expr2tc bitnand2t::do_simplify() const
 
 expr2tc bitnor2t::do_simplify() const
 {
-  // ~(x | x) = ~x
+  // ~(x | x) = ~x (bitnot2t preserves operand type, vector-safe)
   if (side_1 == side_2)
     return bitnot2tc(type, side_1);
 
-  // x |~ 0 = ~x, x |~ -1 = ~-1 = 0. Symmetric for the swapped sides.
+  // Scalar absorber returns gen_zero(type), which is type-correct for
+  // vectors too. The bitnot2tc(type, ...) returns are also vector-safe.
+  // Only the all-ones absorber matching needs to know about unsigned
+  // width, but gen_zero is vector-safe so we leave the fast path open
+  // for vector cases — wrap nothing here.
   if (is_constant_int2t(side_2))
   {
-    const BigInt &v = to_constant_int2t(side_2).value;
-    if (v.is_zero())
+    if (to_constant_int2t(side_2).value.is_zero())
       return bitnot2tc(type, side_1);
-    if (v == BigInt(-1))
-      return gen_zero(type);
   }
+  if (is_all_ones_constant(side_2))
+    return gen_zero(type);
   if (is_constant_int2t(side_1))
   {
-    const BigInt &v = to_constant_int2t(side_1).value;
-    if (v.is_zero())
+    if (to_constant_int2t(side_1).value.is_zero())
       return bitnot2tc(type, side_2);
-    if (v == BigInt(-1))
-      return gen_zero(type);
   }
+  if (is_all_ones_constant(side_1))
+    return gen_zero(type);
 
   auto op = [](uint64_t op1, uint64_t op2) { return ~(op1 | op2); };
 
@@ -2843,25 +2866,36 @@ expr2tc bitnor2t::do_simplify() const
 
 expr2tc bitnxor2t::do_simplify() const
 {
-  // ~(x ^ x) = ~0 = -1
-  if (side_1 == side_2)
-    return constant_int2tc(type, BigInt(-1));
+  // Scalar identity/absorber shortcuts. Skip when type is a vector — a
+  // scalar `constant_int2tc(type, -1)` or a scalar `side_1`/`side_2`
+  // return would corrupt the vector type. distribute_vector_operation
+  // below handles those shapes.
+  if (!is_vector_type(type))
+  {
+    auto make_all_ones = [&](const type2tc &t) -> expr2tc {
+      if (is_unsignedbv_type(t))
+        return constant_int2tc(t, BigInt::power2(t->get_width()) - 1);
+      return constant_int2tc(t, BigInt(-1));
+    };
 
-  // x ^~ 0 = ~x, x ^~ -1 = x. Symmetric for the swapped sides.
-  if (is_constant_int2t(side_2))
-  {
-    const BigInt &v = to_constant_int2t(side_2).value;
-    if (v.is_zero())
-      return bitnot2tc(type, side_1);
-    if (v == BigInt(-1))
+    // ~(x ^ x) = ~0 = all1
+    if (side_1 == side_2)
+      return make_all_ones(type);
+
+    // x ^~ 0 = ~x, x ^~ all1 = x. Symmetric for the swapped sides.
+    if (is_constant_int2t(side_2))
+    {
+      if (to_constant_int2t(side_2).value.is_zero())
+        return bitnot2tc(type, side_1);
+    }
+    if (is_all_ones_constant(side_2))
       return side_1;
-  }
-  if (is_constant_int2t(side_1))
-  {
-    const BigInt &v = to_constant_int2t(side_1).value;
-    if (v.is_zero())
-      return bitnot2tc(type, side_2);
-    if (v == BigInt(-1))
+    if (is_constant_int2t(side_1))
+    {
+      if (to_constant_int2t(side_1).value.is_zero())
+        return bitnot2tc(type, side_2);
+    }
+    if (is_all_ones_constant(side_1))
       return side_2;
   }
 
@@ -3693,23 +3727,30 @@ expr2tc equality2t::do_simplify() const
     }
   }
 
-  // d + c == d + e -> c == e (cancel common addend)
+  // d + c == d + e -> c == e (cancel common addend). The remaining pair
+  // must share a type — pointer-add shapes can match on a common pointer
+  // base while having differently-typed integer offsets, so building
+  // equality2tc(i32_offset, i64_offset) would corrupt the equality. Guard
+  // each case with an explicit type check.
   if (is_add2t(side_1) && is_add2t(side_2))
   {
     const add2t &add1 = to_add2t(side_1);
     const add2t &add2 = to_add2t(side_2);
-    // Check all four combinations for common operands
     // Case 1: (d + c) == (d + e) -> c == e
-    if (add1.side_1 == add2.side_1)
+    if (
+      add1.side_1 == add2.side_1 && add1.side_2->type == add2.side_2->type)
       return equality2tc(add1.side_2, add2.side_2);
     // Case 2: (d + c) == (e + d) -> c == e
-    if (add1.side_1 == add2.side_2)
+    if (
+      add1.side_1 == add2.side_2 && add1.side_2->type == add2.side_1->type)
       return equality2tc(add1.side_2, add2.side_1);
     // Case 3: (c + d) == (d + e) -> c == e
-    if (add1.side_2 == add2.side_1)
+    if (
+      add1.side_2 == add2.side_1 && add1.side_1->type == add2.side_2->type)
       return equality2tc(add1.side_1, add2.side_2);
     // Case 4: (c + d) == (e + d) -> c == e
-    if (add1.side_2 == add2.side_2)
+    if (
+      add1.side_2 == add2.side_2 && add1.side_1->type == add2.side_1->type)
       return equality2tc(add1.side_1, add2.side_1);
   }
 
@@ -3720,7 +3761,8 @@ expr2tc equality2t::do_simplify() const
     const sub2t &sub2 = to_sub2t(side_2);
 
     // (d - c) == (d - e) -> c == e
-    if (sub1.side_1 == sub2.side_1)
+    if (
+      sub1.side_1 == sub2.side_1 && sub1.side_2->type == sub2.side_2->type)
       return equality2tc(sub1.side_2, sub2.side_2);
   }
 
@@ -3729,7 +3771,8 @@ expr2tc equality2t::do_simplify() const
   {
     const neg2t &neg1 = to_neg2t(side_1);
     const neg2t &neg2 = to_neg2t(side_2);
-    return equality2tc(neg1.value, neg2.value);
+    if (neg1.value->type == neg2.value->type)
+      return equality2tc(neg1.value, neg2.value);
   }
 
   // (~x) == (~y) -> x == y
@@ -3737,7 +3780,8 @@ expr2tc equality2t::do_simplify() const
   {
     const bitnot2t &not1 = to_bitnot2t(side_1);
     const bitnot2t &not2 = to_bitnot2t(side_2);
-    return equality2tc(not1.value, not2.value);
+    if (not1.value->type == not2.value->type)
+      return equality2tc(not1.value, not2.value);
   }
 
   return simplify_relations<Equalitytor, equality2t>(type, side_1, side_2);
@@ -3867,18 +3911,25 @@ expr2tc notequal2t::do_simplify() const
     }
   }
 
-  // d + c != d + e -> c != e (cancel common addend)
+  // d + c != d + e -> c != e (cancel common addend). Mirror of equality;
+  // require the surviving operands to share a type so notequal2tc never
+  // gets a mixed-width pair (e.g. pointer-arith with differently-typed
+  // offsets).
   if (is_add2t(side_1) && is_add2t(side_2))
   {
     const add2t &add1 = to_add2t(side_1);
     const add2t &add2 = to_add2t(side_2);
-    if (add1.side_1 == add2.side_1)
+    if (
+      add1.side_1 == add2.side_1 && add1.side_2->type == add2.side_2->type)
       return notequal2tc(add1.side_2, add2.side_2);
-    if (add1.side_1 == add2.side_2)
+    if (
+      add1.side_1 == add2.side_2 && add1.side_2->type == add2.side_1->type)
       return notequal2tc(add1.side_2, add2.side_1);
-    if (add1.side_2 == add2.side_1)
+    if (
+      add1.side_2 == add2.side_1 && add1.side_1->type == add2.side_2->type)
       return notequal2tc(add1.side_1, add2.side_2);
-    if (add1.side_2 == add2.side_2)
+    if (
+      add1.side_2 == add2.side_2 && add1.side_1->type == add2.side_1->type)
       return notequal2tc(add1.side_1, add2.side_1);
   }
 
@@ -3887,17 +3938,28 @@ expr2tc notequal2t::do_simplify() const
   {
     const sub2t &sub1 = to_sub2t(side_1);
     const sub2t &sub2 = to_sub2t(side_2);
-    if (sub1.side_1 == sub2.side_1)
+    if (
+      sub1.side_1 == sub2.side_1 && sub1.side_2->type == sub2.side_2->type)
       return notequal2tc(sub1.side_2, sub2.side_2);
   }
 
   // (-x) != (-y) -> x != y
   if (is_neg2t(side_1) && is_neg2t(side_2))
-    return notequal2tc(to_neg2t(side_1).value, to_neg2t(side_2).value);
+  {
+    const neg2t &neg1 = to_neg2t(side_1);
+    const neg2t &neg2 = to_neg2t(side_2);
+    if (neg1.value->type == neg2.value->type)
+      return notequal2tc(neg1.value, neg2.value);
+  }
 
   // (~x) != (~y) -> x != y
   if (is_bitnot2t(side_1) && is_bitnot2t(side_2))
-    return notequal2tc(to_bitnot2t(side_1).value, to_bitnot2t(side_2).value);
+  {
+    const bitnot2t &not1 = to_bitnot2t(side_1);
+    const bitnot2t &not2 = to_bitnot2t(side_2);
+    if (not1.value->type == not2.value->type)
+      return notequal2tc(not1.value, not2.value);
+  }
 
   return simplify_relations<Notequaltor, notequal2t>(type, side_1, side_2);
 }
