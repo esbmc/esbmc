@@ -10,6 +10,7 @@
 #include <python-frontend/python_list.h>
 #include <python-frontend/string_builder.h>
 #include <python-frontend/symbol_id.h>
+#include <python-frontend/tuple_handler.h>
 #include <python-frontend/type_handler.h>
 #include <python-frontend/type_utils.h>
 #include <util/arith_tools.h>
@@ -3488,11 +3489,17 @@ exprt function_call_expr::handle_any() const
     throw std::runtime_error("any() takes at most 1 argument");
 
   const auto &arg = args[0];
+  const std::string &arg_type = arg["_type"];
 
-  if (arg["_type"] != "List")
-    throw std::runtime_error("any() currently only supports list literals");
+  if (arg_type == "List" || arg_type == "Tuple")
+    return reduce_iterable_literal_truthiness(arg, ReduceOp::Any);
 
-  return reduce_list_literal_truthiness(arg, ReduceOp::Any);
+  exprt arg_expr = converter_.get_expr(arg);
+  if (converter_.get_tuple_handler().is_tuple_type(arg_expr.type()))
+    return reduce_tuple_expr_truthiness(arg_expr, ReduceOp::Any);
+
+  throw std::runtime_error(
+    "any() currently only supports list/tuple literals or tuple variables");
 }
 
 bool function_call_expr::is_all_call() const
@@ -3518,18 +3525,34 @@ exprt function_call_expr::handle_all()
       "all() takes at most 1 argument, got " + std::to_string(args.size()));
 
   const auto &arg = args[0];
+  const std::string &arg_type = arg["_type"];
 
-  if (arg["_type"] != "List")
+  if (arg_type == "List" || arg_type == "Tuple")
+    return reduce_iterable_literal_truthiness(arg, ReduceOp::All);
+
+  // Non-literal argument: forward to the Python operational model only
+  // when the value is actually a list (pointer to PyListObj). Tuple
+  // values are evaluated by combining the truthiness of each struct
+  // member; anything else gets a clear error rather than being silently
+  // passed to __ESBMC_list_size, which would dereference a non-list
+  // pointer (issue #4295).
+  exprt arg_expr = converter_.get_expr(arg);
+  if (converter_.get_tuple_handler().is_tuple_type(arg_expr.type()))
+    return reduce_tuple_expr_truthiness(arg_expr, ReduceOp::All);
+
+  if (arg_expr.type() == converter_.get_type_handler().get_list_type())
     return handle_general_function_call();
 
-  return reduce_list_literal_truthiness(arg, ReduceOp::All);
+  throw std::runtime_error(
+    "all() currently only supports list/tuple literals, list variables, or "
+    "tuple variables");
 }
 
-exprt function_call_expr::reduce_list_literal_truthiness(
-  const nlohmann::json &list_arg,
+exprt function_call_expr::reduce_iterable_literal_truthiness(
+  const nlohmann::json &iterable_arg,
   ReduceOp op) const
 {
-  const auto &elts = list_arg["elts"];
+  const auto &elts = iterable_arg["elts"];
 
   if (elts.empty())
     return gen_boolean(op == ReduceOp::All);
@@ -3550,6 +3573,37 @@ exprt function_call_expr::reduce_list_literal_truthiness(
       exprt element = converter_.get_expr(elt);
       is_truthy = compute_element_truthiness(element);
     }
+
+    if (first)
+    {
+      result = is_truthy;
+      first = false;
+      continue;
+    }
+
+    result = (op == ReduceOp::Any) ? exprt(or_exprt(result, is_truthy))
+                                   : exprt(and_exprt(result, is_truthy));
+  }
+
+  return result;
+}
+
+exprt function_call_expr::reduce_tuple_expr_truthiness(
+  const exprt &tuple_expr,
+  ReduceOp op) const
+{
+  const struct_typet &tuple_type = to_struct_type(tuple_expr.type());
+  const auto &components = tuple_type.components();
+
+  if (components.empty())
+    return gen_boolean(op == ReduceOp::All);
+
+  exprt result;
+  bool first = true;
+  for (const auto &component : components)
+  {
+    member_exprt member(tuple_expr, component.get_name(), component.type());
+    exprt is_truthy = compute_element_truthiness(member);
 
     if (first)
     {
