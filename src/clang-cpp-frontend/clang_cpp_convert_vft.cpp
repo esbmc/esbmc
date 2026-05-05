@@ -32,6 +32,7 @@ CC_DIAGNOSTIC_POP()
 #include <util/c_types.h>
 #include <util/expr_util.h>
 #include <util/message.h>
+#include <util/std_code.h>
 #include <util/std_expr.h>
 
 #include <optional>
@@ -749,6 +750,39 @@ static std::optional<uint64_t> offset_of_subobject(
   return offset;
 }
 
+const symbolt *clang_cpp_convertert::ensure_bad_cast_symbol()
+{
+  if (bad_cast_symbol_)
+    return bad_cast_symbol_;
+  if (const symbolt *s = ns.lookup("tag-std::bad_cast"))
+    return bad_cast_symbol_ = s;
+
+  // <typeinfo>'s std::bad_cast is only translated when something
+  // references it, so its symbol may not exist yet even after the user
+  // included the header. Resolve std::bad_cast through Clang's hashed
+  // name-lookup tables and force-translate the definition.
+  auto &idents = ASTContext->Idents;
+  auto std_results = ASTContext->getTranslationUnitDecl()->lookup(
+    clang::DeclarationName(&idents.get("std")));
+  for (auto *d : std_results)
+  {
+    auto *ns_decl = clang::dyn_cast<clang::NamespaceDecl>(d);
+    if (!ns_decl)
+      continue;
+    auto bc_results =
+      ns_decl->lookup(clang::DeclarationName(&idents.get("bad_cast")));
+    for (auto *bc : bc_results)
+    {
+      auto *rd = clang::dyn_cast<clang::CXXRecordDecl>(bc);
+      if (!rd || !rd->hasDefinition())
+        continue;
+      get_struct_union_class(*rd);
+      return bad_cast_symbol_ = ns.lookup("tag-std::bad_cast");
+    }
+  }
+  return nullptr;
+}
+
 bool clang_cpp_convertert::build_dynamic_cast(
   const clang::CXXDynamicCastExpr &cast,
   exprt &new_expr)
@@ -972,10 +1006,13 @@ bool clang_cpp_convertert::build_dynamic_cast(
     return match;
   };
 
+  // Reference form: throw std::bad_cast on no-match (the standard
+  // requires this; the catch (bad_cast&) arm of any try/catch then
+  // fires). If <typeinfo> wasn't included in the TU we can't synthesise
+  // the typed throw — fall back to assert(match) so the verification
+  // still distinguishes the failing case rather than silently succeed.
   if (is_reference)
   {
-    // TODO: find a way to throw std::bad_cast
-
     // Clang strips the reference from cast.getType(), so target_type is
     // the un-referenced struct T. Reconstruct the IR-level reference
     // type (pointer-to-T flagged as a reference) for the cast result.
@@ -985,7 +1022,32 @@ bool clang_cpp_convertert::build_dynamic_cast(
     exprt cast_value = src_pointer;
     gen_typecast(ns, cast_value, ref_type);
 
-    new_expr = cast_value;
+    exprt match = arms.empty() ? exprt(false_exprt()) : vptr_match_any();
+
+    code_blockt block;
+    if (const symbolt *bad_cast_sym = ensure_bad_cast_symbol())
+    {
+      typet bad_cast_type = symbol_typet(bad_cast_sym->id);
+      side_effect_exprt throw_op("cpp-throw", bad_cast_type);
+      throw_op.copy_to_operands(side_effect_exprt("nondet", bad_cast_type));
+
+      code_ifthenelset if_throw;
+      if_throw.cond() = not_exprt(match);
+      if_throw.then_case() = code_expressiont(throw_op);
+      block.copy_to_operands(if_throw);
+    }
+    else
+    {
+      code_assertt assert_match(match);
+      assert_match.location().comment(
+        "dynamic_cast<T&> failed; include <typeinfo> for std::bad_cast");
+      block.copy_to_operands(assert_match);
+    }
+    block.copy_to_operands(code_expressiont(cast_value));
+
+    side_effect_exprt stmt_expr("statement_expression", ref_type);
+    stmt_expr.copy_to_operands(block);
+    new_expr = stmt_expr;
     return false;
   }
 

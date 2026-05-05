@@ -526,6 +526,16 @@ protected:
     vtable_classes_per_vptr_;
 
   /*
+   * Locate std::bad_cast in the AST and force-translate it via
+   * get_struct_union_class so its tag symbol is present, then return
+   * the symbol-table entry. Returns nullptr if <typeinfo> wasn't
+   * included in the TU. Cached after the first hit so subsequent
+   * dynamic_cast<T&> calls in the same TU pay no lookup cost.
+   */
+  const symbolt *ensure_bad_cast_symbol();
+  const symbolt *bad_cast_symbol_ = nullptr;
+
+  /*
    * Methods for resolving a clang::MemberExpr to virtual/overriding method
    */
   bool perform_virtual_dispatch(const clang::MemberExpr &member) override;
