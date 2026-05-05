@@ -555,7 +555,11 @@ inline expr2tc distribute_vector_operation(Func func, expr2tc op1, expr2tc op2)
       auto e1 = is_op1_vec ? op : c;
       auto e2 = is_op1_vec ? c : op;
       auto new_op = func(op->type, e1, e2);
-      datatype_member = new_op->do_simplify();
+      // do_simplify() returns nil when no per-op peephole fires. Don't
+      // store nil into the member slot — keep new_op so the lane
+      // expression survives unsimplified for the SMT layer.
+      auto folded = new_op->do_simplify();
+      datatype_member = is_nil_expr(folded) ? new_op : folded;
     }
     return constant_vector2tc(v->type, std::move(members));
   }

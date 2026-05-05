@@ -1590,6 +1590,56 @@ TEST_CASE(
 }
 
 TEST_CASE(
+  "popcount: signed -1 has all bits set",
+  "[popcount][simplify]")
+{
+  // -1 in signedbv 32 has 32 one-bits in two's complement. The previous
+  // implementation counted '1' chars in integer2string(value, 2), which
+  // produced "-1" for negative values and reported just one '1'. Use
+  // integer2binary at the operand width.
+  const type2tc s32 = signedbv_type2tc(32);
+  const expr2tc minus_one = constant_int2tc(s32, BigInt(-1));
+  const expr2tc pc = popcount2tc(minus_one);
+  const expr2tc result = pc->simplify();
+  REQUIRE(!is_nil_expr(result));
+  REQUIRE(is_constant_int2t(result));
+  REQUIRE(to_constant_int2t(result).value == 32);
+}
+
+TEST_CASE(
+  "bswap: u32 0x12345678 -> 0x78563412",
+  "[bswap][simplify]")
+{
+  // Sanity check that the basic bswap fold still works after the
+  // negative-value normalization fix.
+  const type2tc u32 = get_uint_type(32);
+  const expr2tc v = constant_int2tc(u32, BigInt(0x12345678));
+  const expr2tc bs = bswap2tc(u32, v);
+  const expr2tc result = bs->simplify();
+  REQUIRE(!is_nil_expr(result));
+  REQUIRE(is_constant_int2t(result));
+  REQUIRE(to_constant_int2t(result).value == BigInt(0x78563412));
+}
+
+TEST_CASE(
+  "bswap: signedbv 32 -1 stays all-ones",
+  "[bswap][simplify]")
+{
+  // -1 is 0xFFFFFFFF in two's complement; byte-reversing all-ones
+  // yields all-ones. The previous fold computed `(v >> bit) % 256`
+  // on a signed BigInt -1, which gives signed-magnitude byte values
+  // that don't combine back into 0xFFFFFFFF. After normalizing to the
+  // unsigned bit pattern, the result must still be -1 in signed form.
+  const type2tc s32 = signedbv_type2tc(32);
+  const expr2tc v = constant_int2tc(s32, BigInt(-1));
+  const expr2tc bs = bswap2tc(s32, v);
+  const expr2tc result = bs->simplify();
+  REQUIRE(!is_nil_expr(result));
+  REQUIRE(is_constant_int2t(result));
+  REQUIRE(to_constant_int2t(result).value == BigInt(-1));
+}
+
+TEST_CASE(
   "byte_update with huge constant offset returns nil instead of throwing",
   "[byte][simplify]")
 {

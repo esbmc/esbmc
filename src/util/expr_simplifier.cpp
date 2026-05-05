@@ -3181,7 +3181,7 @@ expr2tc typecast2t::do_simplify() const
         return constant_fixedbv2tc(fbv);
       }
 
-      if (is_floatbv_type(simp))
+      if (is_floatbv_type(type))
       {
         if (!is_constant_int2t(rounding_mode))
           return expr2tc();
@@ -3191,8 +3191,10 @@ expr2tc typecast2t::do_simplify() const
         BigInt rm_value = to_constant_int2t(rounding_mode).value;
         fpbv.rounding_mode = ieee_floatt::rounding_modet(rm_value.to_int64());
 
-        fpbv.from_expr(to_constant_floatbv2t(simp).value.to_expr());
-        fpbv.change_spec(to_floatbv_type(migrate_type_back(type)));
+        // Bool -> float: convert the bool's integer value (0 or 1) into
+        // a float of the destination type.
+        fpbv.spec = ieee_float_spect(to_floatbv_type(migrate_type_back(type)));
+        fpbv.from_integer(BigInt(to_constant_bool2t(simp).value));
 
         return constant_floatbv2tc(fpbv);
       }
@@ -5035,7 +5037,13 @@ expr2tc popcount2t::do_simplify() const
   if (!is_constant_int2t(operand))
     return expr2tc();
 
-  std::string bin = integer2string(to_constant_int2t(operand).value, 2);
+  // Use integer2binary at the operand's fixed BV width: integer2string
+  // emits a magnitude/sign textual form (e.g. "-101" for -5), so counting
+  // '1' chars on a negative signed BV value would miss the high one-bits
+  // of two's-complement. integer2binary returns the exact two's-
+  // complement bit pattern.
+  const BigInt &v = to_constant_int2t(operand).value;
+  std::string bin = integer2binary(v, operand->type->get_width());
   return constant_int2tc(type, count(bin.begin(), bin.end(), '1'));
 }
 
@@ -5058,7 +5066,13 @@ expr2tc bswap2t::do_simplify() const
 
   const std::size_t bits_per_byte = 8;
   const std::size_t width = type->get_width();
-  BigInt v = to_constant_int2t(value).value;
+  // Normalize to the unsigned two's-complement bit pattern. BigInt
+  // arithmetic with shifts/modulo on a negative value produces signed
+  // results that don't match byte-level 2c; round-trip through
+  // integer2binary at the fixed width to get the exact bits, then
+  // re-interpret as unsigned.
+  const BigInt &raw = to_constant_int2t(value).value;
+  BigInt v = binary2integer(integer2binary(raw, width), false);
 
   std::vector<BigInt> bytes;
   // take apart
@@ -5074,7 +5088,9 @@ expr2tc bswap2t::do_simplify() const
     bytes.pop_back();
   }
 
-  return constant_int2tc(type, new_value);
+  // For a signedbv result type, from_integer will reinterpret the
+  // unsigned bit pattern as signed via the same binary round-trip.
+  return from_integer(new_value, type);
 }
 
 template <template <typename> class TFunctor, typename constructor>
