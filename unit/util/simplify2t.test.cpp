@@ -179,6 +179,33 @@ TEST_CASE(
 }
 
 TEST_CASE(
+  "Vector mul: scalar zero fold preserves vector type",
+  "[arithmetic][mul][vector]")
+{
+  // mul2t(vec_type, vec, scalar_zero) must NOT return the scalar zero — the
+  // result type is vector, so the rewrite needs to broadcast or stay
+  // structural. The simplifier's pre-vector scalar shortcuts now skip this
+  // case and let distribute_vector_operation handle it.
+  const type2tc i32 = get_int_type(32);
+  const type2tc vec_type = vector_type2tc(i32, gen_ulong(4));
+  std::vector<expr2tc> members{
+    constant_int2tc(i32, BigInt(1)),
+    constant_int2tc(i32, BigInt(2)),
+    constant_int2tc(i32, BigInt(3)),
+    constant_int2tc(i32, BigInt(4))};
+  const expr2tc vec = constant_vector2tc(vec_type, std::move(members));
+  const expr2tc zero = constant_int2tc(i32, BigInt(0));
+  const expr2tc m = mul2tc(vec_type, vec, zero);
+
+  const expr2tc result = m->simplify();
+
+  // Either nil (no fold) or vector-typed. The key contract: the result
+  // type must NOT be the scalar type of the zero operand.
+  if (!is_nil_expr(result))
+    REQUIRE(result->type == vec_type);
+}
+
+TEST_CASE(
   "Pointer-add fold: skip when same-width sum would wrap",
   "[arithmetic][add][pointer]")
 {
