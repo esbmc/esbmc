@@ -192,12 +192,25 @@ rebuild_chain(const type2tc &type, const std::vector<signed_term> &terms)
     }
   }
 
+  // Pointer chains preserve negative offsets via sub2tc directly, not by
+  // wrapping in neg2t and emitting add. Reason: neg2t on an unsigned bv
+  // is modular negation ((2^width - x) mod 2^width), which yields a large
+  // positive value. When that gets sign/zero-extended to the pointer
+  // offset width inside SMT pointer-arith conversion, the pointer moves
+  // forward by ~UINT_MAX instead of backward by x. Emitting
+  // sub2tc(pointer, acc, term) keeps the subtraction at the IR level.
+  // For non-pointer chains, modular wrap matches bv semantics, so the
+  // existing add+neg lowering stays correct.
+  const bool ptr_chain = is_pointer_type(type);
   expr2tc acc = materialize(terms[base_idx]);
   for (std::size_t i = 0; i < terms.size(); ++i)
   {
     if (i == base_idx)
       continue;
-    acc = add2tc(type, acc, materialize(terms[i]));
+    if (ptr_chain && terms[i].negative)
+      acc = sub2tc(type, acc, terms[i].term);
+    else
+      acc = add2tc(type, acc, materialize(terms[i]));
   }
 
   // The caller (expr2t::simplify's chain-root step) runs simplify_no_reassoc
