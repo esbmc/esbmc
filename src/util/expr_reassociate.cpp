@@ -147,8 +147,8 @@ bool reassoc_safe_type(const type2tc &type)
   return is_bv_type(type) || is_bool_type(type) || is_pointer_type(type);
 }
 
-/// Build a balanced-ish add/sub tree from a list of signed terms.
-/// Result's type is @p type. Returns nil if @p terms is empty.
+/// Build a left-leaning add/sub tree from a list of signed terms.
+/// Returns gen_zero(type) if @p terms is empty.
 ///
 /// This always constructs fresh expression nodes. Callers must only invoke it
 /// after proving the term list is meaningfully different from the input chain;
@@ -240,6 +240,7 @@ rebuild_chain(const type2tc &type, const std::vector<signed_term> &terms)
 /// Constants are never mutated in place: expr2tc shares storage, so writing
 /// `to_constant_int2t(c).value +=` would corrupt every other use of that
 /// constant in the program.
+
 /// Check that @p value fits in @p type without modular wrap. Used to gate
 /// pointer-chain folds: each unfolded `add(pointer, ptr, c)` step casts c to
 /// the pointer offset width before the SMT bv add (smt_memspace.cpp). A
@@ -370,25 +371,42 @@ optimize_terms(
     result.push_back(*lone_const);
   }
 
-  // Pass 2: cancel matching X / -X pairs. O(n^2) but n is tiny in practice.
-  for (std::size_t i = 0; i < result.size();)
+  // Pass 2: cancel matching X / -X pairs by marking and compacting. Avoids
+  // the O(n^2) shift cost of repeated vector::erase. Each pair found marks
+  // both endpoints and stops the inner search; the outer loop skips dead
+  // entries, so the total work is O(n^2) comparisons but only one compact
+  // walk afterwards.
+  bool any_cancelled = false;
+  if (result.size() >= 2)
   {
-    bool erased = false;
-    for (std::size_t j = i + 1; j < result.size(); ++j)
+    std::vector<bool> dead(result.size(), false);
+    for (std::size_t i = 0; i < result.size(); ++i)
     {
-      if (result[i].negative == result[j].negative)
+      if (dead[i])
         continue;
-      if (!(result[i].term == result[j].term))
-        continue;
-      // Found X with one sign and X with the other — drop both.
-      result.erase(result.begin() + j);
-      result.erase(result.begin() + i);
-      erased = true;
-      changed = true;
-      break;
+      for (std::size_t j = i + 1; j < result.size(); ++j)
+      {
+        if (dead[j])
+          continue;
+        if (result[i].negative == result[j].negative)
+          continue;
+        if (!(result[i].term == result[j].term))
+          continue;
+        dead[i] = true;
+        dead[j] = true;
+        any_cancelled = true;
+        break;
+      }
     }
-    if (!erased)
-      ++i;
+    if (any_cancelled)
+    {
+      std::size_t out = 0;
+      for (std::size_t i = 0; i < result.size(); ++i)
+        if (!dead[i])
+          result[out++] = std::move(result[i]);
+      result.resize(out);
+      changed = true;
+    }
   }
 
   if (!changed)
@@ -840,23 +858,38 @@ std::optional<std::vector<expr2tc>> optimize_bitxor_terms(
     result.push_back(from_integer(acc, const_type));
   }
 
-  // Pass 2: cancel matching pairs `x ^ x = 0`. No sign tracking; any two
-  // structurally-equal leaves cancel.
-  for (std::size_t i = 0; i < result.size();)
+  // Pass 2: cancel matching pairs `x ^ x = 0`. Mark-and-compact to avoid
+  // O(n^2) vector shifts. No sign tracking; any two structurally-equal
+  // leaves cancel.
+  bool any_cancelled_xor = false;
+  if (result.size() >= 2)
   {
-    bool erased = false;
-    for (std::size_t j = i + 1; j < result.size(); ++j)
+    std::vector<bool> dead(result.size(), false);
+    for (std::size_t i = 0; i < result.size(); ++i)
     {
-      if (!(result[i] == result[j]))
+      if (dead[i])
         continue;
-      result.erase(result.begin() + j);
-      result.erase(result.begin() + i);
-      erased = true;
-      changed = true;
-      break;
+      for (std::size_t j = i + 1; j < result.size(); ++j)
+      {
+        if (dead[j])
+          continue;
+        if (!(result[i] == result[j]))
+          continue;
+        dead[i] = true;
+        dead[j] = true;
+        any_cancelled_xor = true;
+        break;
+      }
     }
-    if (!erased)
-      ++i;
+    if (any_cancelled_xor)
+    {
+      std::size_t out = 0;
+      for (std::size_t i = 0; i < result.size(); ++i)
+        if (!dead[i])
+          result[out++] = std::move(result[i]);
+      result.resize(out);
+      changed = true;
+    }
   }
 
   if (!changed)
