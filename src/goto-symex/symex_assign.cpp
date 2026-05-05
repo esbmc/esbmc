@@ -985,6 +985,14 @@ void goto_symext::symex_assign_bitfield(
   // `lshr(val, 0)` to just `val`, so the lshr wrapper may not be present.
   // Synthesize a zero shft in that case so the rewrite below works
   // uniformly.
+  //
+  // Narrow the fallback to shapes that look like zero-offset bitfield
+  // extractions: the mask must be a constant with contiguous low bits
+  // (e.g. 0xFF, 0x0F). Any other (rtype)X & mask shape is not a
+  // bitfield assignment and we abort fast — Codex review 27 flagged
+  // that the previous unconditional fallback could silently rewrite
+  // unrelated bitand assignments as zero-shift bitfield updates.
+  const expr2tc &mask = to_bitand2t(lhs).side_2;
   expr2tc val, shft;
   if (is_lshr2t(shft_expr))
   {
@@ -993,10 +1001,50 @@ void goto_symext::symex_assign_bitfield(
   }
   else
   {
+    auto is_low_bits_mask = [](const expr2tc &m) {
+      if (!is_constant_int2t(m))
+        return false;
+      const BigInt &v = to_constant_int2t(m).value;
+      if (v.is_zero() || v.is_negative())
+        return false;
+      // Contiguous low-bit mask: v + 1 must be a power of two.
+      // Equivalently, (v & (v + 1)) == 0.
+      const BigInt vp1 = v + 1;
+      return (v - ((v / vp1) * vp1)).is_zero(); // v == k*(v+1) iff k=0
+    };
+    // Stricter: v has contiguous low bits iff v + 1 is a power of two.
+    auto is_pow2 = [](const BigInt &x) {
+      if (x.is_zero() || x.is_negative())
+        return false;
+      const BigInt xm1 = x - 1;
+      // (x & (x-1)) == 0 — using BigInt: x - ((x/(x-1+1)) * (x-1+1)) hard.
+      // Fall back to bit-string scan.
+      std::string b = integer2binary(x, x.is_uint64() ? 64 : 128);
+      // Strip leading zeros.
+      size_t i = b.find('1');
+      if (i == std::string::npos)
+        return false;
+      // The remaining must be "10...0".
+      return b.substr(i + 1).find_first_not_of('0') == std::string::npos;
+    };
+    (void)is_low_bits_mask; // unused inline form; use is_pow2 on v+1
+    bool ok = false;
+    if (is_constant_int2t(mask))
+    {
+      const BigInt &v = to_constant_int2t(mask).value;
+      if (!v.is_negative() && !v.is_zero())
+        ok = is_pow2(v + 1);
+    }
+    if (!ok)
+    {
+      log_error(
+        "symex_assign_bitfield: unrecognized bitand LHS shape (no lshr "
+        "wrapper, mask is not a contiguous low-bit constant)");
+      abort();
+    }
     val = shft_expr;
     shft = gen_zero(shft_expr->type);
   }
-  const expr2tc &mask = to_bitand2t(lhs).side_2;
 
   expr2tc neg_mask, rhs_shft, new_rhs;
 
