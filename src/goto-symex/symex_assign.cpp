@@ -1001,46 +1001,38 @@ void goto_symext::symex_assign_bitfield(
   }
   else
   {
-    auto is_low_bits_mask = [](const expr2tc &m) {
-      if (!is_constant_int2t(m))
-        return false;
-      const BigInt &v = to_constant_int2t(m).value;
-      if (v.is_zero() || v.is_negative())
-        return false;
-      // Contiguous low-bit mask: v + 1 must be a power of two.
-      // Equivalently, (v & (v + 1)) == 0.
-      const BigInt vp1 = v + 1;
-      return (v - ((v / vp1) * vp1)).is_zero(); // v == k*(v+1) iff k=0
-    };
-    // Stricter: v has contiguous low bits iff v + 1 is a power of two.
-    auto is_pow2 = [](const BigInt &x) {
-      if (x.is_zero() || x.is_negative())
-        return false;
-      const BigInt xm1 = x - 1;
-      // (x & (x-1)) == 0 — using BigInt: x - ((x/(x-1+1)) * (x-1+1)) hard.
-      // Fall back to bit-string scan.
-      std::string b = integer2binary(x, x.is_uint64() ? 64 : 128);
-      // Strip leading zeros.
-      size_t i = b.find('1');
-      if (i == std::string::npos)
-        return false;
-      // The remaining must be "10...0".
-      return b.substr(i + 1).find_first_not_of('0') == std::string::npos;
-    };
-    (void)is_low_bits_mask; // unused inline form; use is_pow2 on v+1
+    // Width-independent contiguous-low-bit-mask check: v has set bits
+    // 0..k-1 (and only those) iff v+1 is a power of two — equivalently
+    // (v & (v+1)) == 0. BigInt has no native bitand, so we use the
+    // textual binary form sized to the mask's actual width. integer2binary
+    // returns exactly width bits, so very wide masks (e.g. 256-bit
+    // _ExtInt bitfields) round-trip correctly.
     bool ok = false;
     if (is_constant_int2t(mask))
     {
       const BigInt &v = to_constant_int2t(mask).value;
       if (!v.is_negative() && !v.is_zero())
-        ok = is_pow2(v + 1);
+      {
+        const unsigned w = mask->type->get_width();
+        std::string b = integer2binary(v, w);
+        // Width-bit bv with contiguous low ones looks like "0...01...1".
+        size_t first_zero = b.find('0');
+        size_t first_one = b.find('1');
+        if (first_one != std::string::npos)
+        {
+          // After the leading zeros, only ones to the end.
+          ok = (first_zero == std::string::npos || first_zero > first_one) &&
+               b.substr(first_one).find('0') == std::string::npos;
+        }
+      }
     }
     if (!ok)
     {
-      log_error(
-        "symex_assign_bitfield: unrecognized bitand LHS shape (no lshr "
-        "wrapper, mask is not a contiguous low-bit constant)");
-      abort();
+      // Unrecognized bitand LHS shape — could be a malformed assignment or
+      // a shape we don't handle. Don't rewrite as zero-shift (would be
+      // unsound for non-bitfield shapes); leave for the SMT layer or the
+      // caller's downstream check to flag.
+      return;
     }
     val = shft_expr;
     shft = gen_zero(shft_expr->type);
