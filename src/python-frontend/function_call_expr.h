@@ -337,9 +337,8 @@ private:
    * all() when the argument is a Name bound to a tuple value rather
    * than a tuple literal.
    */
-  exprt reduce_tuple_expr_truthiness(
-    const exprt &tuple_expr,
-    ReduceOp op) const;
+  exprt
+  reduce_tuple_expr_truthiness(const exprt &tuple_expr, ReduceOp op) const;
 
   /**
    * Convert an integer to a string representation in a specific base
