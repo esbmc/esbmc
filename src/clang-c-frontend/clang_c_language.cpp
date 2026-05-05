@@ -18,6 +18,7 @@ CC_DIAGNOSTIC_POP()
 
 #include <util/filesystem.h>
 #include <clang-c-frontend/nested_func_transform.h>
+#include <util/yaml_parser.h>
 
 #include <ac_config.h>
 
@@ -286,6 +287,18 @@ void clang_c_languaget::force_file_type(std::vector<std::string> &compiler_args)
     compiler_args.emplace_back("-std=" + cstd);
 }
 
+// Writes the injected source to a temp file and returns it.
+static std::optional<file_operations::tmp_file>
+write_witness_tmp(const std::string &content)
+{
+  auto tmp = file_operations::create_tmp_file("esbmc-witness.%%%%-%%%%.c");
+  if (!tmp.file())
+    return std::nullopt;
+  std::fwrite(content.c_str(), 1, content.size(), tmp.file());
+  std::fflush(tmp.file());
+  return tmp;
+}
+
 bool clang_c_languaget::parse(const std::string &path)
 {
   // preprocessing
@@ -301,9 +314,30 @@ bool clang_c_languaget::parse(const std::string &path)
   const std::string &actual_path =
     nested_transformed ? nested_transformed->path() : path;
 
+  // Inject witness invariants as __ESBMC_loop_invariant / __ESBMC_assume calls
+  // so that Clang parses them naturally.
+  // #line directives after each injection preserve original line numbers.
+  std::optional<file_operations::tmp_file> witness_injected;
+  if (config.options.get_bool_option("validate-correctness-witness"))
+  {
+    const std::string witness_path = config.options.get_option("witness");
+    auto invariants = yaml_parser::read_invariants(witness_path);
+    if (!invariants.empty())
+    {
+      std::string content =
+        yaml_parser::build_injected_source(actual_path, path, invariants);
+      if (content.empty())
+        log_warning("Failed to build injected source for '{}'", path);
+      else
+        witness_injected = write_witness_tmp(content);
+    }
+  }
+  const std::string &compile_path =
+    witness_injected ? witness_injected->path() : actual_path;
+
   // Get compiler arguments and add the file path
   std::vector<std::string> new_compiler_args = compiler_args("clang-tool");
-  new_compiler_args.push_back(actual_path);
+  new_compiler_args.push_back(compile_path);
 
   if (FILE *f = messaget::state.target("clang", VerbosityLevel::Debug))
   {
