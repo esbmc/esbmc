@@ -119,6 +119,66 @@ TEST_CASE(
 }
 
 TEST_CASE(
+  "Reassoc: (x & c1) & c2 folds constants",
+  "[bitwise][reassoc][bitand]")
+{
+  // (x & 0xF0) & 0x0F  -> x & 0  -> 0
+  const expr2tc x = symbol2tc(get_uint_type(32), "x");
+  const expr2tc c1 = constant_int2tc(get_uint_type(32), BigInt(0xF0));
+  const expr2tc c2 = constant_int2tc(get_uint_type(32), BigInt(0x0F));
+  const expr2tc inner = bitand2tc(get_uint_type(32), x, c1);
+  const expr2tc outer = bitand2tc(get_uint_type(32), inner, c2);
+
+  const expr2tc result = outer->simplify();
+  REQUIRE(!is_nil_expr(result));
+  REQUIRE(is_constant_int2t(result));
+  REQUIRE(to_constant_int2t(result).value == 0);
+}
+
+TEST_CASE(
+  "Reassoc: (x | c1) | c2 folds constants",
+  "[bitwise][reassoc][bitor]")
+{
+  // (x | 0x01) | 0x02  -> x | 0x03
+  const expr2tc x = symbol2tc(get_uint_type(32), "x");
+  const expr2tc c1 = constant_int2tc(get_uint_type(32), BigInt(0x01));
+  const expr2tc c2 = constant_int2tc(get_uint_type(32), BigInt(0x02));
+  const expr2tc inner = bitor2tc(get_uint_type(32), x, c1);
+  const expr2tc outer = bitor2tc(get_uint_type(32), inner, c2);
+
+  const expr2tc result = outer->simplify();
+  REQUIRE(!is_nil_expr(result));
+  REQUIRE(is_bitor2t(result));
+  // The combined constant 0x03 must be present somewhere in the result.
+  std::function<bool(const expr2tc &, const BigInt &)> has =
+    [&](const expr2tc &e, const BigInt &lit) -> bool {
+    if (is_constant_int2t(e) && to_constant_int2t(e).value == lit)
+      return true;
+    bool found = false;
+    e->foreach_operand([&](const expr2tc &s) {
+      if (!is_nil_expr(s) && has(s, lit))
+        found = true;
+    });
+    return found;
+  };
+  REQUIRE(has(result, BigInt(0x03)));
+}
+
+TEST_CASE(
+  "Reassoc: (x ^ y) ^ x cancels to y",
+  "[bitwise][reassoc][bitxor]")
+{
+  const expr2tc x = symbol2tc(get_uint_type(32), "x");
+  const expr2tc y = symbol2tc(get_uint_type(32), "y");
+  const expr2tc inner = bitxor2tc(get_uint_type(32), x, y);
+  const expr2tc outer = bitxor2tc(get_uint_type(32), inner, x);
+
+  const expr2tc result = outer->simplify();
+  REQUIRE(!is_nil_expr(result));
+  REQUIRE(result == y);
+}
+
+TEST_CASE(
   "Pointer-add fold: skip when same-width sum would wrap",
   "[arithmetic][add][pointer]")
 {

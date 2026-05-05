@@ -69,10 +69,12 @@ bool reassociate_bitxor(expr2tc &expr);
 
 /// Run peephole simplification on @p expr, suppressing reassociation.
 ///
-/// Used internally by reassociate_arith's rebuild step to collapse the
-/// freshly-built `add(x, neg(y))` shapes into `sub(x, y)` via the existing
-/// add2t/sub2t peepholes, without re-entering the chain-root reassoc
-/// path in expr2t::simplify.
+/// Called by expr2t::simplify after each successful chain-root reassoc
+/// (arith, mul, and the bitwise variants) to collapse the freshly-rebuilt
+/// shapes — e.g. `add(x, neg(y))` -> `sub(x, y)` via add2t/sub2t peepholes
+/// — without re-entering the chain-root reassoc path. Suppression is
+/// propagated through the whole subtree via the `suppress_reassoc` flag
+/// threaded through expr2t::simplify.
 void simplify_no_reassoc(expr2tc &expr);
 
 #endif
