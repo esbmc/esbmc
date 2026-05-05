@@ -1480,6 +1480,50 @@ TEST_CASE("object_size regression", "[pointer_object]")
   REQUIRE(to_constant_int2t(result).value == 10);
 }
 
+TEST_CASE(
+  "byte_extract(byte_update(src, OFF, v), OFF) folds when in bounds",
+  "[byte][simplify]")
+{
+  // For an in-bounds offset the read-after-write fold is sound: SMT
+  // byte_update writes the byte at OFF, then byte_extract at the same OFF
+  // reads it back as v.
+  const type2tc u32 = get_uint_type(32);
+  const type2tc u8 = get_uint_type(8);
+  const expr2tc src = symbol2tc(u32, "src");
+  const expr2tc v = symbol2tc(u8, "v");
+  const expr2tc off = constant_int2tc(get_int_type(32), BigInt(1));
+  const expr2tc bu = byte_update2tc(u32, src, off, v, false);
+  const expr2tc be = byte_extract2tc(u8, bu, off, false);
+
+  const expr2tc result = be->simplify();
+  REQUIRE(!is_nil_expr(result));
+  REQUIRE(result == v);
+}
+
+TEST_CASE(
+  "byte_extract(byte_update(src, OOB, v), OOB) is not folded",
+  "[byte][simplify]")
+{
+  // For an out-of-bounds offset the SMT byte_update is a no-op (returns
+  // src unchanged) and byte_extract returns the OOB sentinel. Folding to
+  // the update value would replace those backend semantics with the
+  // would-be-written byte, hiding any OOB-read effect.
+  const type2tc u32 = get_uint_type(32);
+  const type2tc u8 = get_uint_type(8);
+  const expr2tc src = symbol2tc(u32, "src");
+  const expr2tc v = symbol2tc(u8, "v");
+  // u32 has 4 bytes; offset 5 is OOB.
+  const expr2tc off_oob = constant_int2tc(get_int_type(32), BigInt(5));
+  const expr2tc bu = byte_update2tc(u32, src, off_oob, v, false);
+  const expr2tc be = byte_extract2tc(u8, bu, off_oob, false);
+
+  const expr2tc result = be->simplify();
+  // Either nil (no fold) or unchanged shape — the key property is that
+  // we do NOT collapse to v.
+  if (!is_nil_expr(result))
+    REQUIRE_FALSE(result == v);
+}
+
 // TODO: Tests that should be valid but... not yet!
 
 #if 0

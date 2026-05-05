@@ -5508,6 +5508,22 @@ expr2tc byte_extract2t::do_simplify() const
     {
       uint64_t lo = off1.to_uint64();
       uint64_t r = off2.to_uint64();
+      // Bounds check: the SMT byte_update lowering treats an out-of-bounds
+      // src_offset as a no-op (smt_byteops.cpp:499-500), and byte_extract
+      // at an OOB offset returns an out_of_bounds_byte_extract sentinel
+      // (smt_byteops.cpp:187-191). Folding the read-after-write to the
+      // update value would replace those backend semantics with the byte
+      // we'd have written, hiding any OOB-read effect. Require both
+      // offsets to be in range; if either is out of bounds, leave the
+      // expression unsimplified.
+      const BigInt source_bytes =
+        type_byte_size(bu.source_value->type, migrate_namespace_lookup);
+      if (
+        !source_bytes.is_uint64() || lo >= source_bytes.to_uint64() ||
+        r >= source_bytes.to_uint64())
+      {
+        return expr2tc();
+      }
       if (r != lo)
       {
         // Update doesn't touch this byte; see through to the original source.
