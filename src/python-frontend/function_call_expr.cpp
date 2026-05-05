@@ -597,6 +597,23 @@ exprt function_call_expr::handle_isinstance() const
     if (expected_type.is_nil())
       throw std::runtime_error("Could not resolve type: " + type_name);
 
+    // String special case: get_typet("str") returns char[0], which the
+    // generic encoding lowers to gen_zero(char[0]) — an empty array
+    // constant. simplify_python_builtins then has to recover the answer
+    // from value-set state, which is fragile (e.g. depends on operational
+    // model layout). When obj's static type is already a char-array or
+    // char-pointer (a Python str), short-circuit to true here.
+    if (
+      expected_type.is_array() &&
+      to_array_type(expected_type).subtype() == char_type())
+    {
+      const typet &obj_type = obj_expr.type();
+      if (
+        (obj_type.is_array() && obj_type.subtype() == char_type()) ||
+        (obj_type.is_pointer() && obj_type.subtype() == char_type()))
+        return true_exprt();
+    }
+
     exprt t;
 
     if (expected_type.is_pointer())
