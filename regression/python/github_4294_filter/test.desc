@@ -1,4 +1,4 @@
 CORE
 main.py
---incremental-bmc
+--smt-symex-guard --unwind 9 --bitwuzla
 ^VERIFICATION SUCCESSFUL$
