@@ -1318,17 +1318,15 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::CXXNoexceptExpr &noexcept_expr =
       static_cast<const clang::CXXNoexceptExpr &>(stmt);
 
+    // A value-dependent noexcept(...) only appears in an un-instantiated
+    // template body; Clang re-converts each instantiation, where getValue()
+    // is well-defined. Conservatively assume "may throw" (false) so the
+    // un-instantiated form is harmless.
     if (noexcept_expr.isValueDependent())
     {
-      std::ostringstream oss;
-      llvm::raw_os_ostream ross(oss);
-      ross << "Conversion of unsupported value-dependent noexcept expr: \"";
-      ross << stmt.getStmtClassName() << "\" to expression"
-           << "\n";
-      stmt.dump(ross, *ASTContext);
-      ross.flush();
-      log_error("{}", oss.str());
-      return true;
+      log_debug("c++", "value-dependent noexcept expr: assuming false");
+      new_expr = false_exprt();
+      break;
     }
 
     if (noexcept_expr.getValue())
