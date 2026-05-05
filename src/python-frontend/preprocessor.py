@@ -69,6 +69,10 @@ class Preprocessor(ast.NodeTransformer):
         self.dataclasses_module_names = {"dataclasses"}
         self._typing_classvar_names = {"ClassVar"}
         self._classes_with_post_init = set()
+        self._dataclass_class_specs = {}
+        self._assert_eq_counter = 0
+        self._known_literal_values = {}
+        self._identity_functions = set()
 
     # Names treated as typing-style generic constructors (subscript = type alias).
     _TYPING_GENERIC_NAMES = (
@@ -1622,11 +1626,30 @@ class Preprocessor(ast.NodeTransformer):
 
     def visit_Assert(self, node):
         node = self.generic_visit(node)
+        if (
+            isinstance(node.test, ast.Compare)
+            and len(node.test.ops) == 1
+            and isinstance(node.test.ops[0], ast.Eq)
+            and len(node.test.comparators) == 1
+        ):
+            left = node.test.left
+            right = node.test.comparators[0]
+            rewritten = self._try_transform_items_set_eq(left, right, node)
+            if rewritten is None:
+                rewritten = self._try_transform_items_set_eq(right, left, node)
+            if rewritten is None:
+                rewritten = self._try_transform_list_tuple_eq(left, right, node)
+            if rewritten is None:
+                rewritten = self._try_transform_list_tuple_eq(right, left, node)
+            if rewritten is not None:
+                node.test = rewritten
+        eq_prefix, maybe_eq_test = self._lower_assert_eq_literal(node.test, node)
+        node.test = maybe_eq_test
         node.test = self._simplify_isinstance(node.test)
         prefix, new_test, _ = self._lower_listcomp_in_expr(node.test)
         node.test = new_test
         dd_inits, node.test = self._lower_defaultdict_reads_in_expr(node.test, node)
-        prefix = dd_inits + prefix
+        prefix = eq_prefix + dd_inits + prefix
         if node.msg:
             msg_prefix, new_msg, _ = self._lower_listcomp_in_expr(node.msg)
             node.msg = new_msg
@@ -1634,6 +1657,160 @@ class Preprocessor(ast.NodeTransformer):
         if prefix:
             return prefix + [node]
         return node
+
+    def _is_assert_literal_shape(self, node):
+        if isinstance(node, ast.Constant):
+            return isinstance(node.value, (str, int, float, bool, type(None)))
+        if isinstance(node, (ast.List, ast.Tuple)):
+            return all(self._is_assert_literal_shape(elt) for elt in node.elts)
+        return False
+
+    def _resolve_known_literal_expr(self, node):
+        if isinstance(node, ast.Name) and node.id in self._known_literal_values:
+            return copy.deepcopy(self._known_literal_values[node.id])
+
+        if (
+            isinstance(node, ast.Subscript)
+            and isinstance(node.value, ast.Name)
+            and node.value.id in self._known_literal_values
+            and isinstance(node.slice, ast.Constant)
+            and isinstance(node.slice.value, int)
+        ):
+            base = self._known_literal_values[node.value.id]
+            idx = node.slice.value
+            if isinstance(base, (ast.List, ast.Tuple)) and 0 <= idx < len(base.elts):
+                return copy.deepcopy(base.elts[idx])
+
+        return node
+
+    def _is_pure_assert_expr(self, node):
+        if isinstance(node, ast.Name):
+            return True
+        if isinstance(node, ast.Attribute):
+            return self._is_pure_assert_expr(node.value)
+        if isinstance(node, ast.Subscript):
+            return self._is_pure_assert_expr(node.value) and self._is_assert_literal_shape(
+                node.slice
+            )
+        return isinstance(node, (ast.List, ast.Tuple)) and all(
+            self._is_pure_assert_expr(elt) or self._is_assert_literal_shape(elt)
+            for elt in node.elts
+        )
+
+    def _build_assert_literal_checks(self, actual_expr, literal_node, source_node):
+        if isinstance(literal_node, ast.Constant):
+            if isinstance(literal_node.value, str):
+                cmp_node = ast.Compare(
+                    left=copy.deepcopy(actual_expr),
+                    ops=[ast.Eq()],
+                    comparators=[copy.deepcopy(literal_node)],
+                )
+                self.ensure_all_locations(cmp_node, source_node)
+                return [cmp_node]
+            cmp_node = ast.Compare(
+                left=copy.deepcopy(actual_expr),
+                ops=[ast.Eq()],
+                comparators=[copy.deepcopy(literal_node)],
+            )
+            self.ensure_all_locations(cmp_node, source_node)
+            return [cmp_node]
+
+        if not isinstance(literal_node, (ast.List, ast.Tuple)):
+            return None
+
+        checks = [
+            ast.Compare(
+                left=ast.Call(
+                    func=self.create_name_node("len", ast.Load(), source_node),
+                    args=[copy.deepcopy(actual_expr)],
+                    keywords=[],
+                ),
+                ops=[ast.Eq()],
+                comparators=[ast.Constant(value=len(literal_node.elts))],
+            )
+        ]
+        self.ensure_all_locations(checks[0], source_node)
+
+        for idx, elt in enumerate(literal_node.elts):
+            sub = ast.Subscript(
+                value=copy.deepcopy(actual_expr),
+                slice=ast.Constant(value=idx),
+                ctx=ast.Load(),
+            )
+            self.ensure_all_locations(sub, source_node)
+            sub_checks = self._build_assert_literal_checks(sub, elt, source_node)
+            if sub_checks is None:
+                return None
+            checks.extend(sub_checks)
+        return checks
+
+    def _lower_assert_eq_literal(self, test_node, source_node):
+        # Disabled by default: this optimization introduced broad semantic/type
+        # inference drift across regression suites. Keep original assert shape
+        # unless explicitly enabled for focused experiments.
+        if not getattr(self, "_enable_assert_eq_literal_lowering", False):
+            return [], test_node
+
+        if not (
+            isinstance(test_node, ast.Compare)
+            and len(test_node.ops) == 1
+            and isinstance(test_node.ops[0], ast.Eq)
+            and len(test_node.comparators) == 1
+        ):
+            return [], test_node
+
+        left = test_node.left
+        right = test_node.comparators[0]
+        left = self._resolve_known_literal_expr(left)
+        right = self._resolve_known_literal_expr(right)
+
+        if self._is_assert_literal_shape(left) and self._is_assert_literal_shape(right):
+            try:
+                result = ast.literal_eval(left) == ast.literal_eval(right)
+                return [], ast.Constant(value=result)
+            except Exception:
+                pass
+
+        literal_node = None
+        expr_node = None
+        if self._is_assert_literal_shape(right) and self._is_pure_assert_expr(left):
+            literal_node = right
+            expr_node = left
+        elif self._is_assert_literal_shape(left) and self._is_pure_assert_expr(right):
+            literal_node = left
+            expr_node = right
+        else:
+            return [], test_node
+
+        # String equality lowering through a synthetic temporary has shown
+        # semantic drift on dataclass attribute reads; keep native equality.
+        if isinstance(literal_node, ast.Constant) and isinstance(literal_node.value, str):
+            return [], test_node
+
+        # Keep non-trivial expressions untouched to avoid semantic/runtime drift
+        # (e.g. subscripts/attributes that may involve model-specific lowering).
+        if not isinstance(expr_node, ast.Name):
+            return [], test_node
+
+        tmp_name = "__esbmc_assert_eq_tmp_{}".format(self._assert_eq_counter)
+        self._assert_eq_counter += 1
+        tmp_assign = ast.Assign(
+            targets=[ast.Name(id=tmp_name, ctx=ast.Store())],
+            value=copy.deepcopy(expr_node),
+        )
+        self.ensure_all_locations(tmp_assign, source_node)
+
+        tmp_load = ast.Name(id=tmp_name, ctx=ast.Load())
+        checks = self._build_assert_literal_checks(tmp_load, literal_node, source_node)
+        if not checks:
+            return [], test_node
+        if len(checks) == 1:
+            new_test = checks[0]
+        else:
+            new_test = ast.BoolOp(op=ast.And(), values=checks)
+            self.ensure_all_locations(new_test, source_node)
+        ast.fix_missing_locations(new_test)
+        return [tmp_assign], new_test
 
     def _extract_type_from_annotation(self, annotation):
         """Extract a simplified type string from a type annotation AST node"""
@@ -3919,7 +4096,8 @@ class Preprocessor(ast.NodeTransformer):
             return None
         base = call_node.func.value
         if isinstance(base, ast.Name):
-            if self.known_variable_types.get(base.id) != 'dict':
+            known_type = self.known_variable_types.get(base.id)
+            if known_type is not None and known_type != 'dict':
                 return None
         return base
 
@@ -3951,21 +4129,31 @@ class Preprocessor(ast.NodeTransformer):
                 return None
             pairs.append((elt.elts[0], elt.elts[1]))
 
-        # Build: set(dict_expr.keys()) == {k1, k2, ...}
-        keys_set = ast.Set(elts=[k for k, v in pairs])
-        keys_attr = ast.Attribute(value=dict_expr, attr='keys', ctx=ast.Load())
-        keys_call = ast.Call(func=keys_attr, args=[], keywords=[])
-        set_keys = ast.Call(func=ast.Name(id='set', ctx=ast.Load()), args=[keys_call], keywords=[])
-        keys_eq = ast.Compare(left=set_keys, ops=[ast.Eq()], comparators=[keys_set])
+        # Avoid set-equality backend path: prove same keys via size + membership.
+        len_eq = ast.Compare(
+            left=ast.Call(
+                func=ast.Name(id='len', ctx=ast.Load()),
+                args=[copy.deepcopy(dict_expr)],
+                keywords=[],
+            ),
+            ops=[ast.Eq()],
+            comparators=[ast.Constant(value=len(pairs))],
+        )
 
-        # Build: d[k1] == v1, d[k2] == v2, ...
-        value_checks = []
+        # Build: (k in d) and d[k] == v for each pair.
+        value_checks = [len_eq]
         for k, v in pairs:
+            key_in_dict = ast.Compare(
+                left=copy.deepcopy(k),
+                ops=[ast.In()],
+                comparators=[copy.deepcopy(dict_expr)],
+            )
             subscript = ast.Subscript(value=dict_expr, slice=k, ctx=ast.Load())
             val_eq = ast.Compare(left=subscript, ops=[ast.Eq()], comparators=[v])
+            value_checks.append(key_in_dict)
             value_checks.append(val_eq)
 
-        result = ast.BoolOp(op=ast.And(), values=[keys_eq] + value_checks)
+        result = ast.BoolOp(op=ast.And(), values=value_checks)
         self.ensure_all_locations(result, source_node)
         ast.fix_missing_locations(result)
         return result
@@ -4014,21 +4202,15 @@ class Preprocessor(ast.NodeTransformer):
         return result
 
     def visit_Compare(self, node):
-        """Transform set(d.items()) == {(k,v),...} comparisons to avoid tuple struct issues."""
+        """Keep comparisons semantically faithful by default.
+
+        Marco F recovery phase 2 disables broad comparison rewrites that were
+        changing assert semantics for unrelated regressions. We still keep
+        assert-specific safe rewrites (_simplify_isinstance), list-comp lowering
+        and defaultdict lowering elsewhere in the pipeline.
+        """
         node = self.generic_visit(node)
-        if len(node.ops) != 1 or not isinstance(node.ops[0], ast.Eq):
-            return node
-        result = (self._try_transform_items_set_eq(
-                      node.left, node.comparators[0], node) or
-                  self._try_transform_list_tuple_eq(
-                      node.left, node.comparators[0], node) or
-                  self._try_transform_list_tuple_eq(
-                      node.comparators[0], node.left, node) or
-                  self._try_transform_items_set_eq(
-                      node.comparators[0], node.left, node))
-        if result is None:
-            return node
-        return result
+        return node
 
     def _is_newtype_call(self, call_node):
         """True if call_node is a typing.NewType(...) call, in any import form."""
@@ -4069,6 +4251,22 @@ class Preprocessor(ast.NodeTransformer):
 
         # First visit child nodes
         node = self.generic_visit(node)
+
+        if len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+            target_name = node.targets[0].id
+            if self._is_assert_literal_shape(node.value):
+                self._known_literal_values[target_name] = copy.deepcopy(node.value)
+            elif (
+                isinstance(node.value, ast.Call)
+                and isinstance(node.value.func, ast.Name)
+                and node.value.func.id in self._identity_functions
+                and len(node.value.args) == 1
+                and not node.value.keywords
+                and self._is_assert_literal_shape(node.value.args[0])
+            ):
+                self._known_literal_values[target_name] = copy.deepcopy(node.value.args[0])
+            else:
+                self._known_literal_values.pop(target_name, None)
 
         # Expand nondet_list && nondet_dict calls inline.
         if (len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)
@@ -4690,6 +4888,16 @@ class Preprocessor(ast.NodeTransformer):
         return node  # transformed node
 
     def visit_FunctionDef(self, node):
+        # Track `def f(x): return x` style pure identity helpers.
+        if (
+            len(node.args.args) == 1
+            and len(node.body) == 1
+            and isinstance(node.body[0], ast.Return)
+            and isinstance(node.body[0].value, ast.Name)
+            and node.body[0].value.id == node.args.args[0].arg
+        ):
+            self._identity_functions.add(node.name)
+
         # Resolve type aliases in return type annotation
         if node.returns is not None:
             node.returns = self._resolve_annotation_aliases(node.returns)
@@ -4903,12 +5111,25 @@ class Preprocessor(ast.NodeTransformer):
                 return True
         return False
 
+    def _class_defines_name(self, class_node, name):
+        for member in class_node.body:
+            if isinstance(member, ast.FunctionDef) and member.name == name:
+                return True
+            if isinstance(member, ast.Assign):
+                for target in member.targets:
+                    if isinstance(target, ast.Name) and target.id == name:
+                        return True
+            if isinstance(member, ast.AnnAssign):
+                if isinstance(member.target, ast.Name) and member.target.id == name:
+                    return True
+        return False
+
     def _validate_post_init_signature(self, class_node, fields, post_init_method):
         """Validate that ``__post_init__`` can receive the declared InitVar values."""
         if post_init_method is None:
             return
 
-        initvar_count = sum(1 for _, _, _, _, kind in fields if kind == "initvar")
+        initvar_count = sum(1 for field in fields if field["kind"] == "initvar")
         total_positional = (
             len(post_init_method.args.posonlyargs) + len(post_init_method.args.args)
         )
@@ -4936,8 +5157,100 @@ class Preprocessor(ast.NodeTransformer):
                 f"expected {initvar_count} InitVar argument(s)"
             )
 
+    def _dataclass_default_options(self):
+        return {
+            "init": True,
+            "repr": True,
+            "eq": True,
+            "order": False,
+            "frozen": False,
+            "unsafe_hash": False,
+            "kw_only": False,
+            "slots": False,
+            "match_args": True,
+        }
+
+    def _field_spec(self, name, annotation, default_expr, factory_expr, kind, options):
+        return {
+            "name": name,
+            "annotation": annotation,
+            "default_expr": default_expr,
+            "factory_expr": factory_expr,
+            "kind": kind,
+            "init": options.get("init", True),
+            "repr": options.get("repr", True),
+            "compare": options.get("compare", True),
+            "hash": options.get("hash", None),
+            "kw_only": options.get("kw_only", False),
+        }
+
+    def _parse_dataclass_bool_option(self, value, option_name):
+        if not isinstance(value, ast.Constant) or not isinstance(value.value, bool):
+            raise SyntaxError(
+                f"dataclass option {option_name!r} must be a boolean literal"
+            )
+        return value.value
+
+    def _parse_dataclass_options(self, class_node):
+        options = self._dataclass_default_options()
+        decorator = next(
+            (
+                dec
+                for dec in class_node.decorator_list
+                if (
+                    isinstance(dec, ast.Name)
+                    and dec.id in self._dataclass_decorator_names
+                )
+                or (
+                    isinstance(dec, ast.Attribute)
+                    and isinstance(dec.value, ast.Name)
+                    and dec.value.id in self.dataclasses_module_names
+                    and dec.attr == "dataclass"
+                )
+                or (
+                    isinstance(dec, ast.Call)
+                    and (
+                        (
+                            isinstance(dec.func, ast.Name)
+                            and dec.func.id in self._dataclass_decorator_names
+                        )
+                        or (
+                            isinstance(dec.func, ast.Attribute)
+                            and isinstance(dec.func.value, ast.Name)
+                            and dec.func.value.id in self.dataclasses_module_names
+                            and dec.func.attr == "dataclass"
+                        )
+                    )
+                )
+            ),
+            None,
+        )
+        if decorator is None:
+            return options
+        if not isinstance(decorator, ast.Call):
+            return options
+        if decorator.args:
+            raise SyntaxError("dataclass decorator does not accept positional arguments")
+        for kw in decorator.keywords:
+            if kw.arg is None:
+                raise SyntaxError("dataclass decorator does not support **kwargs")
+            if kw.arg not in options:
+                raise SyntaxError(f"unsupported dataclass option {kw.arg!r}")
+            options[kw.arg] = self._parse_dataclass_bool_option(kw.value, kw.arg)
+        if options["order"] and not options["eq"]:
+            raise SyntaxError("dataclass option 'order=True' requires 'eq=True'")
+        if options["slots"] and self._class_defines_name(class_node, "__slots__"):
+            raise SyntaxError(
+                "dataclass option 'slots=True' cannot be used when '__slots__' is already defined"
+            )
+        if options["unsafe_hash"] and self._class_defines_name(class_node, "__hash__"):
+            raise SyntaxError(
+                "dataclass option 'unsafe_hash=True' cannot be used when '__hash__' is explicitly defined"
+            )
+        return options
+
     def _parse_field_call(self, default_value):
-        """Decompose ``field(...)`` calls into (default_expr, factory_expr).
+        """Decompose ``field(...)`` calls into (default_expr, factory_expr, options).
 
         Returns a pair where ``default_expr`` is the AST node for the
         ``default=`` value (or the original raw value when ``default_value`` is
@@ -4953,7 +5266,7 @@ class Preprocessor(ast.NodeTransformer):
             constructed object gets a fresh value.
         """
         if not isinstance(default_value, ast.Call):
-            return default_value, None
+            return default_value, None, {}
 
         func = default_value.func
         is_field = (
@@ -4965,23 +5278,41 @@ class Preprocessor(ast.NodeTransformer):
             and func.value.id in self.dataclasses_module_names
         )
         if not is_field:
-            return default_value, None
+            return default_value, None, {}
+
+        if default_value.args:
+            raise SyntaxError("field(...) does not accept positional arguments")
 
         default_expr = None
         factory_expr = None
+        options = {}
+        seen = set()
+        allowed = {"default", "default_factory", "init", "repr", "compare", "hash", "kw_only"}
         for kw in default_value.keywords:
+            if kw.arg is None:
+                raise SyntaxError("field(...) does not support **kwargs")
+            if kw.arg not in allowed:
+                raise SyntaxError(f"unsupported dataclass field option {kw.arg!r}")
+            if kw.arg in seen:
+                raise SyntaxError(f"duplicate dataclass field option {kw.arg!r}")
+            seen.add(kw.arg)
             if kw.arg == "default":
                 default_expr = kw.value
             elif kw.arg == "default_factory":
                 factory_expr = kw.value
-            # TODO(Marco F): per-field flags (init=False, repr=False,
-            # compare=False, hash=False/None, kw_only=...) are silently
-            # ignored here. They require coordinated changes in build_init
-            # (skip the parameter for init=False, still assign the default
-            # in the body) and in the future __repr__/__eq__/__hash__
-            # synthesis (skip excluded fields).
+            elif kw.arg in ("init", "repr", "compare", "kw_only"):
+                options[kw.arg] = self._parse_dataclass_bool_option(kw.value, kw.arg)
+            elif kw.arg == "hash":
+                if isinstance(kw.value, ast.Constant) and kw.value.value in (True, False, None):
+                    options["hash"] = kw.value.value
+                else:
+                    raise SyntaxError(
+                        "dataclass field option 'hash' must be True, False or None"
+                    )
+        if default_expr is not None and factory_expr is not None:
+            raise SyntaxError("field(...) cannot specify both default and default_factory")
         # ``field()`` with no default and no factory is a required field.
-        return default_expr, factory_expr
+        return default_expr, factory_expr, options
 
     def collect_fields(self, class_node):
         """Collect dataclass field specs.
@@ -4989,7 +5320,13 @@ class Preprocessor(ast.NodeTransformer):
         Each entry is ``(name, annotation, default_expr, factory_expr, kind)`` where
         ``kind`` is one of ``instance``, ``initvar`` or ``classvar``.
         """
+        dataclass_options = self._parse_dataclass_options(class_node)
         fields = []
+        inherited_fields = []
+        for base in class_node.bases:
+            if isinstance(base, ast.Name) and base.id in self._dataclass_class_specs:
+                inherited_fields.extend(copy.deepcopy(self._dataclass_class_specs[base.id]["fields"]))
+        by_name = {f["name"]: idx for idx, f in enumerate(inherited_fields)}
         for stmt in class_node.body:
             if not isinstance(stmt, ast.AnnAssign):
                 continue
@@ -4998,11 +5335,29 @@ class Preprocessor(ast.NodeTransformer):
             field_kind, annotation = self._analyze_dataclass_field_annotation(
                 stmt.annotation
             )
-            default_expr, factory_expr = self._parse_field_call(stmt.value)
-            fields.append(
-                (stmt.target.id, annotation, default_expr, factory_expr, field_kind)
+            default_expr, factory_expr, per_field_options = self._parse_field_call(stmt.value)
+            field = self._field_spec(
+                stmt.target.id,
+                annotation,
+                default_expr,
+                factory_expr,
+                field_kind,
+                per_field_options,
             )
-        return fields
+            if dataclass_options["kw_only"] and field["kind"] in ("instance", "initvar"):
+                field["kw_only"] = True
+            if field["kind"] in ("classvar", "initvar"):
+                field["init"] = field["kind"] == "initvar"
+                field["repr"] = False
+                field["compare"] = False
+                field["hash"] = False
+            if field["name"] in by_name:
+                inherited_fields[by_name[field["name"]]] = field
+            else:
+                by_name[field["name"]] = len(inherited_fields)
+                inherited_fields.append(field)
+        fields.extend(inherited_fields)
+        return fields, dataclass_options
 
     def build_init(self, class_node, fields):
         """Build __init__(self, ...) that assigns self.<field> = <field>.
@@ -5034,25 +5389,30 @@ class Preprocessor(ast.NodeTransformer):
         body = []
 
         # Parameters: instance fields except factory-backed ones, plus InitVars.
+        # Factory fields are never added as parameters — they are always
+        # assigned in the body via ``self.<field> = <factory>()``.
         # Compute first defaulted index over this filtered view.
         param_fields = [
-            (name, ann, default_expr, field_kind)
-            for (name, ann, default_expr, factory_expr, field_kind) in fields
-            if field_kind != "classvar"
-            and not (field_kind == "instance" and factory_expr is not None)
+            field
+            for field in fields
+            if field["kind"] != "classvar"
+            and field["init"]
+            and field["factory_expr"] is None
         ]
-        initvar_names = [
-            name for (name, _, _, _, field_kind) in fields if field_kind == "initvar"
-        ]
+        initvar_names = [field["name"] for field in fields if field["kind"] == "initvar"]
+        pos_fields = [field for field in param_fields if not field["kw_only"]]
+        kwonly_fields = [field for field in param_fields if field["kw_only"]]
 
         first_default_idx = None
-        for index, (_, _, default_expr, _) in enumerate(param_fields):
-            if default_expr is not None:
+        for index, field in enumerate(pos_fields):
+            has_default = field["default_expr"] is not None or field["factory_expr"] is not None
+            if has_default:
                 first_default_idx = index
                 break
 
         if first_default_idx is not None:
-            for _, _, default_expr, _ in param_fields[first_default_idx:]:
+            for field in pos_fields[first_default_idx:]:
+                default_expr = field["default_expr"]
                 if default_expr is not None:
                     if not isinstance(default_expr, (ast.Constant, ast.Name)):
                         raise SyntaxError(
@@ -5063,9 +5423,20 @@ class Preprocessor(ast.NodeTransformer):
                     defaults.append(copy.deepcopy(default_expr))
                 else:
                     defaults.append(ast.Constant(value=None))
-
-        for field_name, annotation, _, _ in param_fields:
-            args.append(ast.arg(arg=field_name, annotation=copy.deepcopy(annotation)))
+        kwonlyargs = []
+        kw_defaults = []
+        for field in param_fields:
+            arg = ast.arg(arg=field["name"], annotation=copy.deepcopy(field["annotation"]))
+            if field["kw_only"]:
+                kwonlyargs.append(arg)
+                if field["default_expr"] is not None:
+                    kw_defaults.append(copy.deepcopy(field["default_expr"]))
+                elif field["factory_expr"] is not None:
+                    kw_defaults.append(ast.Constant(value=None))
+                else:
+                    kw_defaults.append(None)
+            else:
+                args.append(arg)
 
         # Body: assign every field, in declaration order. Factory fields use
         # ``self.<field> = <factory>()`` directly; other fields copy from the
@@ -5076,18 +5447,26 @@ class Preprocessor(ast.NodeTransformer):
         # handled by the normal class/parameter typing paths, whereas an
         # explicit ``self.x: Optional[T] = ...`` here can confuse later
         # arithmetic over values proven non-None by guards (see optional7).
-        for field_name, _, _, factory_expr, field_kind in fields:
-            if field_kind != "instance":
+        for field in fields:
+            field_name = field["name"]
+            if field["kind"] != "instance":
                 continue
-
-            if factory_expr is not None:
+            if field["factory_expr"] is not None:
+                # Factory fields are always assigned via the factory call;
+                # they are not exposed as __init__ parameters.
                 rhs = ast.Call(
-                    func=copy.deepcopy(factory_expr),
-                    args=[],
-                    keywords=[],
+                    func=copy.deepcopy(field["factory_expr"]), args=[], keywords=[]
                 )
             else:
-                rhs = self.create_name_node(field_name, ast.Load(), class_node)
+                if field["init"]:
+                    rhs = self.create_name_node(field_name, ast.Load(), class_node)
+                else:
+                    rhs = copy.deepcopy(field["default_expr"])
+                    if rhs is None:
+                        raise SyntaxError(
+                            f"field(init=False) for instance field {field_name!r} "
+                            "requires a default or default_factory"
+                        )
 
             assign_stmt = ast.Assign(
                 targets=[
@@ -5148,8 +5527,8 @@ class Preprocessor(ast.NodeTransformer):
                 posonlyargs=[],
                 args=args,
                 vararg=None,
-                kwonlyargs=[],
-                kw_defaults=[],
+                kwonlyargs=kwonlyargs,
+                kw_defaults=kw_defaults,
                 kwarg=None,
                 defaults=defaults,
             ),
@@ -5162,11 +5541,171 @@ class Preprocessor(ast.NodeTransformer):
         ast.fix_missing_locations(init_func)
         return init_func
 
+    def _build_tuple_from_fields(self, class_node, fields, predicate):
+        tuple_node = ast.Tuple(
+            elts=[
+                ast.Attribute(
+                    value=self.create_name_node("self", ast.Load(), class_node),
+                    attr=field["name"],
+                    ctx=ast.Load(),
+                )
+                for field in fields
+                if field["kind"] == "instance" and predicate(field)
+            ],
+            ctx=ast.Load(),
+        )
+        self.ensure_all_locations(tuple_node, class_node)
+        return tuple_node
+
+    def build_dataclass_repr(self, class_node, fields):
+        parts = [ast.Constant(value=f"{class_node.name}(")]
+        repr_fields = [f for f in fields if f["kind"] == "instance" and f["repr"]]
+        for idx, field in enumerate(repr_fields):
+            prefix = "" if idx == 0 else ", "
+            parts.append(ast.Constant(value=f"{prefix}{field['name']}="))
+            parts.append(
+                ast.Call(
+                    func=self.create_name_node("repr", ast.Load(), class_node),
+                    args=[
+                        ast.Attribute(
+                            value=self.create_name_node("self", ast.Load(), class_node),
+                            attr=field["name"],
+                            ctx=ast.Load(),
+                        )
+                    ],
+                    keywords=[],
+                )
+            )
+        parts.append(ast.Constant(value=")"))
+        ret = ast.Return(value=ast.Call(func=ast.Attribute(value=ast.Constant(value=""), attr="join", ctx=ast.Load()), args=[ast.List(elts=parts, ctx=ast.Load())], keywords=[]))
+        fn = ast.FunctionDef(
+            name="__repr__",
+            args=ast.arguments(posonlyargs=[], args=[ast.arg(arg="self", annotation=None)], vararg=None, kwonlyargs=[], kw_defaults=[], kwarg=None, defaults=[]),
+            body=[ret],
+            decorator_list=[],
+            returns=None,
+            type_comment=None,
+        )
+        self.ensure_all_locations(fn, class_node)
+        ast.fix_missing_locations(fn)
+        return fn
+
+    def build_dataclass_eq(self, class_node, fields):
+        compare_fields = [f for f in fields if f["kind"] == "instance" and f["compare"]]
+        self_tuple = ast.Tuple(elts=[ast.Attribute(value=self.create_name_node("self", ast.Load(), class_node), attr=f["name"], ctx=ast.Load()) for f in compare_fields], ctx=ast.Load())
+        other_tuple = ast.Tuple(elts=[ast.Attribute(value=self.create_name_node("other", ast.Load(), class_node), attr=f["name"], ctx=ast.Load()) for f in compare_fields], ctx=ast.Load())
+        body = [
+            ast.If(
+                test=ast.Call(
+                    func=self.create_name_node("isinstance", ast.Load(), class_node),
+                    args=[
+                        self.create_name_node("other", ast.Load(), class_node),
+                        self.create_name_node(class_node.name, ast.Load(), class_node),
+                    ],
+                    keywords=[],
+                ),
+                body=[
+                    ast.Return(
+                        value=ast.Compare(
+                            left=self_tuple, ops=[ast.Eq()], comparators=[other_tuple]
+                        )
+                    )
+                ],
+                orelse=[ast.Return(value=ast.Constant(value=False))],
+            )
+        ]
+        fn = ast.FunctionDef(
+            name="__eq__",
+            args=ast.arguments(posonlyargs=[], args=[ast.arg(arg="self", annotation=None), ast.arg(arg="other", annotation=None)], vararg=None, kwonlyargs=[], kw_defaults=[], kwarg=None, defaults=[]),
+            body=body,
+            decorator_list=[],
+            returns=None,
+            type_comment=None,
+        )
+        self.ensure_all_locations(fn, class_node)
+        ast.fix_missing_locations(fn)
+        return fn
+
+    def build_dataclass_hash(self, class_node, fields):
+        hash_fields = []
+        for field in fields:
+            if field["kind"] != "instance":
+                continue
+            if field["hash"] is False:
+                continue
+            if field["hash"] is None and not field["compare"]:
+                continue
+            hash_fields.append(field)
+        tup = ast.Tuple(
+            elts=[
+                ast.Attribute(
+                    value=self.create_name_node("self", ast.Load(), class_node),
+                    attr=f["name"],
+                    ctx=ast.Load(),
+                )
+                for f in hash_fields
+            ],
+            ctx=ast.Load(),
+        )
+        fn = ast.FunctionDef(
+            name="__hash__",
+            args=ast.arguments(posonlyargs=[], args=[ast.arg(arg="self", annotation=None)], vararg=None, kwonlyargs=[], kw_defaults=[], kwarg=None, defaults=[]),
+            body=[
+                ast.Return(
+                    value=ast.Call(
+                        func=self.create_name_node("hash", ast.Load(), class_node),
+                        args=[tup],
+                        keywords=[],
+                    )
+                )
+            ],
+            decorator_list=[],
+            returns=None,
+            type_comment=None,
+        )
+        self.ensure_all_locations(fn, class_node)
+        ast.fix_missing_locations(fn)
+        return fn
+
+    def build_dataclass_order(self, class_node, fields, method_name, op_cls):
+        compare_fields = [f for f in fields if f["kind"] == "instance" and f["compare"]]
+        self_tuple = ast.Tuple(elts=[ast.Attribute(value=self.create_name_node("self", ast.Load(), class_node), attr=f["name"], ctx=ast.Load()) for f in compare_fields], ctx=ast.Load())
+        other_tuple = ast.Tuple(elts=[ast.Attribute(value=self.create_name_node("other", ast.Load(), class_node), attr=f["name"], ctx=ast.Load()) for f in compare_fields], ctx=ast.Load())
+        body = [
+            ast.If(
+                test=ast.Call(
+                    func=self.create_name_node("isinstance", ast.Load(), class_node),
+                    args=[
+                        self.create_name_node("other", ast.Load(), class_node),
+                        self.create_name_node(class_node.name, ast.Load(), class_node),
+                    ],
+                    keywords=[],
+                ),
+                body=[
+                    ast.Return(
+                        value=ast.Compare(
+                            left=self_tuple, ops=[op_cls()], comparators=[other_tuple]
+                        )
+                    )
+                ],
+                orelse=[ast.Return(value=ast.Constant(value=False))],
+            )
+        ]
+        fn = ast.FunctionDef(
+            name=method_name,
+            args=ast.arguments(posonlyargs=[], args=[ast.arg(arg="self", annotation=None), ast.arg(arg="other", annotation=None)], vararg=None, kwonlyargs=[], kw_defaults=[], kwarg=None, defaults=[]),
+            body=body,
+            decorator_list=[],
+            returns=None,
+            type_comment=None,
+        )
+        self.ensure_all_locations(fn, class_node)
+        ast.fix_missing_locations(fn)
+        return fn
+
     def build_dataclass_fields_metadata(self, class_node, fields):
         field_names = [
-            field_name
-            for field_name, _, _, _, field_kind in fields
-            if field_kind == "instance"
+            field["name"] for field in fields if field["kind"] == "instance"
         ]
         metadata_assign = ast.Assign(
             targets=[ast.Name(id="__dataclass_fields__", ctx=ast.Store())],
@@ -5190,13 +5729,13 @@ class Preprocessor(ast.NodeTransformer):
         ):
             return class_node
 
-        fields = self.collect_fields(class_node)
+        fields, dataclass_options = self.collect_fields(class_node)
         post_init_method = self._get_post_init_method(class_node)
         active_fields = [
-            field for field in fields if field[4] in ("instance", "initvar")
+            field for field in fields if field["kind"] in ("instance", "initvar")
         ]
         has_post_init_behavior = self._class_has_post_init_behavior(class_node)
-        has_classvars = any(f[4] == "classvar" for f in fields)
+        has_classvars = any(f["kind"] == "classvar" for f in fields)
         if not active_fields and not has_post_init_behavior and not has_classvars:
             return class_node
 
@@ -5210,10 +5749,11 @@ class Preprocessor(ast.NodeTransformer):
         # SyntaxError with a "non-default argument follows default argument"
         # style message.
         seen_default = False
-        for field_name, _, default_expr, factory_expr, field_kind in fields:
-            if field_kind == "classvar":
+        for field in fields:
+            field_name = field["name"]
+            if field["kind"] == "classvar" or field["kw_only"]:
                 continue
-            has_default = default_expr is not None or factory_expr is not None
+            has_default = field["default_expr"] is not None or field["factory_expr"] is not None
             if seen_default and not has_default:
                 raise SyntaxError(
                     f"non-default argument {field_name!r} follows default argument "
@@ -5227,16 +5767,16 @@ class Preprocessor(ast.NodeTransformer):
         # though the synthesized ``__init__`` now uses plain Assign nodes.
         if class_node.name not in self.class_attr_annotations:
             self.class_attr_annotations[class_node.name] = {}
-        for field_name, annotation, _, _, field_kind in fields:
-            if field_kind != "instance":
+        for field in fields:
+            field_name = field["name"]
+            annotation = field["annotation"]
+            if field["kind"] != "instance":
                 continue
             if annotation is not None:
                 self.class_attr_annotations[class_node.name][field_name] = annotation
 
         field_names = {
-            field_name
-            for field_name, _, _, _, field_kind in fields
-            if field_kind in ("instance", "initvar")
+            field["name"] for field in fields if field["kind"] in ("instance", "initvar")
         }
         class_node.body = [
             stmt
@@ -5260,10 +5800,50 @@ class Preprocessor(ast.NodeTransformer):
                 or isinstance(first_stmt.value, ast.Str)
             ):
                 insert_index = 1
-        class_node.body.insert(insert_index, self.build_init(class_node, fields))
+        class_node.body.insert(
+            insert_index,
+            self.build_init(class_node, fields) if dataclass_options["init"] else ast.Pass(),
+        )
+        if dataclass_options["init"] is False:
+            class_node.body.pop(insert_index)
         class_node.body.insert(
             insert_index + 1, self.build_dataclass_fields_metadata(class_node, fields)
         )
+        if dataclass_options["repr"] and not any(
+            isinstance(member, ast.FunctionDef) and member.name == "__repr__"
+            for member in class_node.body
+        ):
+            class_node.body.insert(insert_index + 2, self.build_dataclass_repr(class_node, fields))
+        if dataclass_options["eq"] and not any(
+            isinstance(member, ast.FunctionDef) and member.name == "__eq__"
+            for member in class_node.body
+        ):
+            class_node.body.insert(insert_index + 2, self.build_dataclass_eq(class_node, fields))
+        if dataclass_options["order"]:
+            existing = {m.name for m in class_node.body if isinstance(m, ast.FunctionDef)}
+            for method_name, op in (
+                ("__lt__", ast.Lt),
+                ("__le__", ast.LtE),
+                ("__gt__", ast.Gt),
+                ("__ge__", ast.GtE),
+            ):
+                if method_name not in existing:
+                    class_node.body.insert(
+                        insert_index + 2,
+                        self.build_dataclass_order(class_node, fields, method_name, op),
+                    )
+        should_generate_hash = dataclass_options["unsafe_hash"] or (
+            dataclass_options["eq"] and dataclass_options["frozen"]
+        )
+        if should_generate_hash and not any(
+            isinstance(member, ast.FunctionDef) and member.name == "__hash__"
+            for member in class_node.body
+        ):
+            class_node.body.insert(insert_index + 2, self.build_dataclass_hash(class_node, fields))
+        self._dataclass_class_specs[class_node.name] = {
+            "fields": copy.deepcopy(fields),
+            "options": copy.deepcopy(dataclass_options),
+        }
         return class_node
 
     def _collect_class_attr_annotations(self, class_node):

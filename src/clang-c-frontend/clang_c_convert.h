@@ -185,6 +185,12 @@ protected:
     const typet &orig_type,
     typet &new_type);
 
+  /* If `fd` is a bitfield, replace `t` with the bitfield-wrapped type
+   * carrying the #bitfield/width-N marker symex relies on. No-op otherwise.
+   * Centralises the wrapping logic shared by struct-component construction,
+   * member-expression lowering, and ctor member-initialiser-list lowering. */
+  bool wrap_bitfield_type_if_needed(const clang::FieldDecl &fd, typet &t);
+
   virtual bool get_expr(const clang::Stmt &stmt, exprt &new_expr);
 
   bool get_base_flattened_inits(

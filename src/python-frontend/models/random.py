@@ -1,3 +1,11 @@
+# pylint: disable=undefined-variable,chained-comparison
+# `nondet_int`, `nondet_float`, and `__ESBMC_assume` are ESBMC
+# intrinsics matched by name by the Python converter; they have no
+# Python binding. Chained comparisons are intentionally written in
+# the `a >= x and a <= y` form because they are arguments to
+# `__ESBMC_assume` and we keep them in the same shape as the
+# corresponding C operational models.
+
 # Stubs for random module.
 # See https://docs.python.org/3/library/random.html
 

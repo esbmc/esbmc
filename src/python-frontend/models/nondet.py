@@ -62,6 +62,11 @@ USAGE:
     d = nondet_dict(max_size=10, key_type=nondet_int(), value_type=nondet_bool())
 """
 
+# pylint: disable=undefined-variable
+# `nondet_int`, `nondet_bool`, `__ESBMC_assume`, etc. are ESBMC
+# intrinsics matched by name by the Python converter; they have no
+# Python binding.
+
 from typing import Any
 
 # Shared default maximum size for nondet collections
@@ -91,20 +96,28 @@ def nondet_list(max_size: int = _DEFAULT_NONDET_SIZE, elem_type: Any = None) -> 
     """
     Return a non-deterministic list with specified element type.
 
-    Args:
-        max_size: Maximum size of the list (default: 8).
-                  The actual size will be in range [0, max_size].
-        elem_type: Value returned by type constructor for list elements (default: nondet_int()).
-                   Supported: nondet_int(), nondet_float(), nondet_bool(), nondet_str()
+    Parameters
+    ----------
+    max_size
+        Maximum size of the list (default: 8). The actual size will be in
+        range [0, max_size].
+    elem_type
+        Value returned by type constructor for list elements
+        (default: nondet_int()). Supported: nondet_int(), nondet_float(),
+        nondet_bool(), nondet_str().
 
-    Returns:
-        list: A list with arbitrary size and contents of specified type.
+    Returns
+    -------
+    list
+        A list with arbitrary size and contents of the specified type.
 
-    Examples:
-        x = nondet_list()                                    # int list, size [0, 8]
-        x = nondet_list(5)                                   # int list, size [0, 5]
-        x = nondet_list(elem_type=nondet_float())            # float list, size [0, 8]
-        x = nondet_list(max_size=10, elem_type=nondet_bool())# bool list, size [0, 10]
+    Examples
+    --------
+        x = nondet_list()                                     # int list, size [0, 8]
+        x = nondet_list(5)                                    # int list, size [0, 5]
+        x = nondet_list(elem_type=nondet_float())             # float list, size [0, 8]
+        x = nondet_list(max_size=10, elem_type=nondet_bool()) # bool list, size [0, 10]
+
     """
     # Default to nondet_int if no type specified
     if elem_type is None:
@@ -127,27 +140,36 @@ def nondet_dict(max_size: int = _DEFAULT_NONDET_SIZE,
     """
     Return a non-deterministic dictionary with specified key and value types.
 
-    Note: The preprocessor expands this call inline with concrete sequential
-    keys and fresh nondet values.
-    This model function body is the fallback for non-expanded contexts
-    (e.g. return values, nested exprs).
+    The preprocessor expands this call inline with concrete sequential keys
+    and fresh nondet values. This model function body is the fallback for
+    non-expanded contexts (e.g. return values, nested exprs).
 
-    Args:
-        max_size: Maximum size of the dictionary (default: 8).
-                  The actual size will be in range [0, max_size].
-        key_type: Value returned by type constructor for dictionary keys (default: nondet_int()).
-                  Supported: nondet_int(), nondet_str(), nondet_bool()
-        value_type: Value returned by type constructor for dictionary values (default: nondet_int()).
-                    Supported: nondet_int(), nondet_float(), nondet_bool(), nondet_str()
+    Parameters
+    ----------
+    max_size
+        Maximum size of the dictionary (default: 8). The actual size will be
+        in range [0, max_size].
+    key_type
+        Value returned by type constructor for dictionary keys
+        (default: nondet_int()). Supported: nondet_int(), nondet_str(),
+        nondet_bool().
+    value_type
+        Value returned by type constructor for dictionary values
+        (default: nondet_int()). Supported: nondet_int(), nondet_float(),
+        nondet_bool(), nondet_str().
 
-    Returns:
-        dict: A dictionary with arbitrary size and contents of specified types.
+    Returns
+    -------
+    dict
+        A dictionary with arbitrary size and contents of the specified types.
 
-    Examples:
+    Examples
+    --------
         d = nondet_dict()                    # int->int dict, size [0, 8]
         d = nondet_dict(5)                   # int->int dict, size [0, 5]
         d = nondet_dict(key_type=nondet_str(), value_type=nondet_float())
         d = nondet_dict(max_size=10, key_type=nondet_int(), value_type=nondet_bool())
+
     """
     # Default to nondet_int if no types specified
     if key_type is None:

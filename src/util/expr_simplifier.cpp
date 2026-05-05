@@ -2907,55 +2907,6 @@ expr2tc bitnor2t::do_simplify() const
   return do_bit_munge_operation<bitnor2t>(op, type, side_1, side_2);
 }
 
-expr2tc bitnxor2t::do_simplify() const
-{
-  // Scalar identity/absorber shortcuts. Skip when type is a vector — a
-  // scalar `constant_int2tc(type, -1)` or a scalar `side_1`/`side_2`
-  // return would corrupt the vector type. distribute_vector_operation
-  // below handles those shapes.
-  if (!is_vector_type(type))
-  {
-    auto make_all_ones = [&](const type2tc &t) -> expr2tc {
-      if (is_unsignedbv_type(t))
-        return constant_int2tc(t, BigInt::power2(t->get_width()) - 1);
-      return constant_int2tc(t, BigInt(-1));
-    };
-
-    // ~(x ^ x) = ~0 = all1
-    if (side_1 == side_2)
-      return make_all_ones(type);
-
-    // x ^~ 0 = ~x, x ^~ all1 = x. Symmetric for the swapped sides.
-    if (is_constant_int2t(side_2))
-    {
-      if (to_constant_int2t(side_2).value.is_zero())
-        return bitnot2tc(type, side_1);
-    }
-    if (is_all_ones_constant(side_2))
-      return side_1;
-    if (is_constant_int2t(side_1))
-    {
-      if (to_constant_int2t(side_1).value.is_zero())
-        return bitnot2tc(type, side_2);
-    }
-    if (is_all_ones_constant(side_1))
-      return side_2;
-  }
-
-  auto op = [](uint64_t op1, uint64_t op2) { return ~(op1 ^ op2); };
-
-  // Is a vector operation ? Apply the op
-  if (is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
-  {
-    auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
-      return bitnxor2tc(t, e1, e2);
-    };
-    return distribute_vector_operation(op, side_1, side_2);
-  }
-
-  return do_bit_munge_operation<bitnxor2t>(op, type, side_1, side_2);
-}
-
 expr2tc bitnot2t::do_simplify() const
 {
   // ~(~x) = x (double complement)

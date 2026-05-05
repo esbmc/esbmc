@@ -618,6 +618,15 @@ void dereferencet::check_pointer_alignment(
   const expr2tc &deref_expr,
   const guardt &guard)
 {
+  // Caller has already declared the access is known-unaligned (e.g.
+  // member of a __attribute__((packed)) struct accessed through a
+  // pointer such as `this`). dereference_expr_nonscalar() sets this
+  // flag when walking into a packed-struct member; honour it here so
+  // we mirror the suppression already done at the scalar
+  // check_alignment() site below.
+  if (mode.unaligned)
+    return;
+
   // Only check alignment for scalar read/write operations (excluding code and pointer types)
   if (
     !(is_read(mode) || is_write(mode)) || !is_scalar_type(type) ||

@@ -529,7 +529,6 @@ T interval_domaint::get_interval(const expr2tc &e) const
   case expr2t::bitxor_id:
   case expr2t::bitnand_id:
   case expr2t::bitnor_id:
-  case expr2t::bitnxor_id:
     if (enable_interval_bitwise_arithmetic)
     {
       const auto &bit_op = dynamic_cast<const bit_2ops &>(*e);
@@ -558,8 +557,6 @@ T interval_domaint::get_interval(const expr2tc &e) const
         result = T::bitnot(lhs & rhs);
       else if (is_bitnor2t(e))
         result = T::bitnot(lhs | rhs);
-      else if (is_bitnxor2t(e))
-        result = T::bitnot(lhs ^ rhs);
     }
     break;
 

@@ -1,5 +1,13 @@
+/// \file solidity_convert_builtin.cpp
+/// \brief Built-in function and low-level call handling for the Solidity frontend.
+///
+/// Implements recognition and conversion of Solidity built-in operations:
+/// low-level calls (call, delegatecall, staticcall, transfer, send),
+/// built-in properties (msg.sender, msg.value, block.number, address.balance),
+/// type conversion functions, abi.encode/decode, keccak256/sha256, and the
+/// move_builtin_to_contract() helper for contract-scoped symbol registration.
+
 #include <solidity-frontend/solidity_convert.h>
-#include <solidity-frontend/solidity_template.h>
 #include <solidity-frontend/typecast.h>
 #include <util/arith_tools.h>
 #include <util/bitvector.h>
@@ -9,11 +17,7 @@
 #include <util/mp_arith.h>
 #include <util/std_expr.h>
 #include <util/message.h>
-#include <regex>
-#include <optional>
-
 #include <fstream>
-#include <iostream>
 
 bool solidity_convertert::is_low_level_call(const std::string &name)
 {
@@ -94,13 +98,33 @@ bool solidity_convertert::add_auxiliary_members(
     _ndt_uint,
     contract_name);
   // balance
-  get_builtin_symbol(
-    "$balance",
-    sol_prefix + "$balance",
-    unsignedbv_typet(256),
-    l,
-    _ndt_uint,
-    contract_name);
+  // For payable constructors, initialize $balance to msg.value so that
+  // ether sent via new D{value: amount}() is available during the constructor.
+  // For non-payable constructors, use nondet_uint as before.
+  {
+    exprt balance_init = _ndt_uint;
+    if (json.contains("nodes"))
+    {
+      for (const auto &node : json["nodes"])
+      {
+        if (
+          node["nodeType"] == "FunctionDefinition" && node.contains("kind") &&
+          node["kind"] == "constructor" && node.contains("stateMutability") &&
+          node["stateMutability"] == "payable")
+        {
+          balance_init = symbol_expr(*context.find_symbol("c:@msg_value"));
+          break;
+        }
+      }
+    }
+    get_builtin_symbol(
+      "$balance",
+      sol_prefix + "$balance",
+      unsignedbv_typet(256),
+      l,
+      balance_init,
+      contract_name);
+  }
   // code
   get_builtin_symbol(
     "$code",
@@ -136,7 +160,7 @@ bool solidity_convertert::add_auxiliary_members(
     get_library_function_call_no_args(
       "bytes_pool_init",
       "c:@F@bytes_pool_init",
-      symbol_typet("tag-BytesPool"),
+      symbol_typet(lib_prefix + "BytesPool"),
       l,
       init_call);
 
@@ -144,7 +168,7 @@ bool solidity_convertert::add_auxiliary_members(
     get_builtin_symbol(
       "$dynamic_pool",
       sol_prefix + "$dynamic_pool#",
-      symbol_typet("tag-BytesPool"),
+      symbol_typet(lib_prefix + "BytesPool"),
       l,
       init_call,
       contract_name);
@@ -173,7 +197,7 @@ bool solidity_convertert::add_auxiliary_members(
   }
 
   t = string_t;
-  //t.set("#sol_type", "STRING");
+  //set_sol_type(t, SolidityGrammar::SolType::STRING);
   get_builtin_symbol(
     "_ESBMC_bind_cname",
     sol_prefix + "_ESBMC_bind_cname",
@@ -254,7 +278,7 @@ void solidity_convertert::move_builtin_to_contract(
   }
 }
 
-// this funciton:
+// this function:
 // - move the created auxiliary variables to the constructor
 // - append the symbol as the component to the struct class
 void solidity_convertert::get_builtin_symbol(
@@ -460,7 +484,7 @@ void solidity_convertert::get_builtin_property_expr(
   else if (name == "code" || name == "codehash" || name == "balance")
   {
     t = unsignedbv_typet(256);
-    t.set("#sol_type", "UINT256");
+    set_sol_type(t, SolidityGrammar::SolType::UINT256);
   }
   else
   {
@@ -470,8 +494,9 @@ void solidity_convertert::get_builtin_property_expr(
 
   exprt mem;
   if (
-    base.is_member() && (base.op0().name() == "this" ||
-                         base.op0().type().get("#sol_type") == "CONTRACT"))
+    base.is_member() &&
+    (base.op0().name() == "this" ||
+     get_sol_type(base.op0().type()) == SolidityGrammar::SolType::CONTRACT))
     // e.g. address(_ins_).balance => _ins_.balance
     //      address(this) => this->address
     //TODO: fixme! this pattern match is weak

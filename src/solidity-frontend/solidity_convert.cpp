@@ -1,5 +1,12 @@
+/// \file solidity_convert.cpp
+/// \brief Top-level conversion driver and static member initialization.
+///
+/// Contains the solidity_convertert constructor, the main convert() entry
+/// point that orchestrates the full AST-to-irep2 pipeline, and static member
+/// initialization. The convert() method iterates over top-level AST nodes,
+/// dispatching to contract, declaration, and utility conversion methods.
+
 #include <solidity-frontend/solidity_convert.h>
-#include <solidity-frontend/solidity_template.h>
 #include <solidity-frontend/typecast.h>
 #include <util/arith_tools.h>
 #include <util/bitvector.h>
@@ -13,7 +20,6 @@
 #include <optional>
 
 #include <fstream>
-#include <iostream>
 
 // initialize static members
 const nlohmann::json solidity_convertert::empty_json = nlohmann::json::object();
@@ -26,12 +32,14 @@ solidity_convertert::solidity_convertert(
   nlohmann::json &_ast_json,
   const std::string &_sol_cnts,
   const std::string &_sol_func,
-  const std::string &_contract_path)
+  const std::string &_contract_path,
+  const std::string &_focus_func)
   : context(_context),
     ns(context),
     src_ast_json_array(_ast_json),
     tgt_cnts(_sol_cnts),
     tgt_func(_sol_func),
+    focus_func(_focus_func),
     contract_path(_contract_path),
     current_functionDecl(nullptr),
     current_forStmt(nullptr),
@@ -49,7 +57,8 @@ solidity_convertert::solidity_convertert(
     is_reentry_check(false),
     is_pointer_check(true),
     nondet_bool_expr(),
-    nondet_uint_expr()
+    nondet_uint_expr(),
+    nondet_bytes_dynamic_expr()
 {
   std::ifstream in(_contract_path);
   contract_contents.assign(
@@ -73,12 +82,17 @@ solidity_convertert::solidity_convertert(
   if (!no_pointer_check.empty())
     is_pointer_check = false;
 
-  // initialize nondet_bool
+  // initialize nondet_bool / nondet_uint
   if (
     context.find_symbol("c:@F@nondet_bool") == nullptr ||
     context.find_symbol("c:@F@nondet_uint") == nullptr)
   {
     log_error("Preprocessing error. Cannot find the NONDET symbol");
+    abort();
+  }
+  if (context.find_symbol("c:@F@llc_nondet_bytes") == nullptr)
+  {
+    log_error("Preprocessing error. Cannot find the llc_nondet_bytes symbol");
     abort();
   }
   locationt l;
@@ -87,27 +101,37 @@ solidity_convertert::solidity_convertert(
   get_library_function_call_no_args(
     "nondet_uint", "c:@F@nondet_uint", uint_type(), l, nondet_uint_expr);
 
-  nondet_bool_expr.type().set("#sol_type", "BOOL");
-  nondet_uint_expr.type().set("#sol_type", "UINT256");
+  set_sol_type(nondet_bool_expr.type(), SolidityGrammar::SolType::BOOL);
+  set_sol_type(nondet_uint_expr.type(), SolidityGrammar::SolType::UINT256);
 
   addr_t = unsignedbv_typet(160);
-  addr_t.set("#sol_type", "ADDRESS");
+  set_sol_type(addr_t, SolidityGrammar::SolType::ADDRESS);
 
   addrp_t = unsignedbv_typet(160);
-  addrp_t.set("#sol_type", "ADDRESS_PAYABLE");
+  set_sol_type(addrp_t, SolidityGrammar::SolType::ADDRESS_PAYABLE);
 
   string_t = pointer_typet(signed_char_type());
-  string_t.set("#sol_type", "STRING");
+  set_sol_type(string_t, SolidityGrammar::SolType::STRING);
 
   bool_t = bool_type();
-  bool_t.set("#sol_type", "BOOL");
+  set_sol_type(bool_t, SolidityGrammar::SolType::BOOL);
   bool_t.set("#cpp_type", "bool");
 
-  byte_dynamic_t = symbol_typet(prefix + "BytesDynamic");
-  byte_dynamic_t.set("#sol_type", "BytesDynamic");
+  byte_dynamic_t = symbol_typet(lib_prefix + "BytesDynamic");
+  set_sol_type(byte_dynamic_t, SolidityGrammar::SolType::BYTES_DYN);
 
-  byte_static_t = symbol_typet(prefix + "BytesStatic");
-  byte_static_t.set("#sol_type", "BytesStatic");
+  // initialize nondet_bytes_dynamic_expr — used for LLC return data field
+  get_library_function_call_no_args(
+    "llc_nondet_bytes",
+    "c:@F@llc_nondet_bytes",
+    byte_dynamic_t,
+    l,
+    nondet_bytes_dynamic_expr);
+  set_sol_type(
+    nondet_bytes_dynamic_expr.type(), SolidityGrammar::SolType::BYTES_DYN);
+
+  byte_static_t = symbol_typet(lib_prefix + "BytesStatic");
+  set_sol_type(byte_static_t, SolidityGrammar::SolType::BYTES_STATIC);
 }
 
 // Convert smart contracts into symbol tables
@@ -126,8 +150,83 @@ bool solidity_convertert::convert()
   nlohmann::json &nodes = src_ast_json["nodes"];
 
   // store auxiliary info
-  if (populate_auxilary_vars())
+  if (populate_auxiliary_vars())
     return true;
+
+  // --focus-function validation: must identify a single target contract.
+  // If the source declares exactly one (non-library, non-interface) contract
+  // and --contract was not provided, auto-select it; otherwise require
+  // --contract to disambiguate.
+  if (!focus_func.empty())
+  {
+    if (!tgt_func.empty())
+    {
+      log_error(
+        "--focus-function is incompatible with --function; --function runs "
+        "the named function in isolation with nondet state, while "
+        "--focus-function keeps the full contract harness and restricts "
+        "only the dispatch loop.");
+      return true;
+    }
+
+    std::set<std::string> verifiable;
+    for (const auto &cn : contractNamesList)
+      if (nonContractNamesList.find(cn) == nonContractNamesList.end())
+        verifiable.insert(cn);
+
+    if (tgt_cnt_set.empty())
+    {
+      if (verifiable.size() != 1)
+      {
+        log_error(
+          "--focus-function requires --contract when the source declares "
+          "more than one contract (found {}). Specify which contract owns "
+          "'{}' via --contract <name>.",
+          verifiable.size(),
+          focus_func);
+        return true;
+      }
+      tgt_cnt_set.insert(*verifiable.begin());
+    }
+    else if (tgt_cnt_set.size() != 1)
+    {
+      log_error(
+        "--focus-function requires exactly one --contract target, got {}.",
+        tgt_cnt_set.size());
+      return true;
+    }
+
+    const std::string &focus_cnt = *tgt_cnt_set.begin();
+    bool found = false;
+    auto it = funcSignatures.find(focus_cnt);
+    if (it != funcSignatures.end())
+    {
+      for (const auto &m : it->second)
+      {
+        if (m.name != focus_func)
+          continue;
+        if (
+          m.visibility != "public" && m.visibility != "external" &&
+          config.options.get_option("no-visibility").empty())
+          continue;
+        if (m.name == focus_cnt)
+          continue;
+        if (m.name == "receive" || m.name == "fallback")
+          continue;
+        found = true;
+        break;
+      }
+    }
+    if (!found)
+    {
+      log_error(
+        "--focus-function '{}' is not a public/external function of "
+        "contract '{}'.",
+        focus_func,
+        focus_cnt);
+      return true;
+    }
+  }
 
   // for coverage and trace simplification: update include_files
   auto add_unique = [](const std::string &file) {
@@ -418,11 +517,6 @@ bool solidity_convertert::contract_precheck()
       }
       found_contract_def = true;
       break;
-      //TODO: skip pattern base check as it's not really valuable at the moment.
-      // assert(itr->contains("nodes"));
-      // auto pattern_check =
-      //   std::make_unique<pattern_checker>((*itr)["nodes"], sol_func);
-      // pattern_check->do_pattern_check();
     }
   }
   if (!found_contract_def)
@@ -606,7 +700,7 @@ bool solidity_convertert::check_sol_ver()
   return false;
 }
 
-bool solidity_convertert::populate_auxilary_vars()
+bool solidity_convertert::populate_auxiliary_vars()
 {
   nlohmann::json &nodes = src_ast_json["nodes"];
 
@@ -644,11 +738,6 @@ bool solidity_convertert::populate_auxilary_vars()
       }
       if (linearizedBaseList[c_name].empty())
         return true;
-
-      // auto _json = (*itr)["nodes"];
-      // functionSignature[c_name].insert(c_name); // constructor
-      // for(nlohmann::json::iterator ittr;ittr != _json.end(); ++ittr)
-      // {}
     }
   }
 
@@ -675,7 +764,7 @@ bool solidity_convertert::populate_auxilary_vars()
     {
       for (auto inherit_id : j.second)
       {
-        auto c_def = find_decl_ref(src_ast_json["nodes"], inherit_id);
+        auto c_def = find_decl_ref(inherit_id);
         assert(!c_def.empty());
 
         if (cname == c_def["name"].get<std::string>())
@@ -747,7 +836,7 @@ bool solidity_convertert::populate_auxilary_vars()
     aux_cid = "sol:@" + aux_cname;
 
     string_constantt string(contract_name);
-    string.type().set("#sol_type", "STRING_LITERAL");
+    set_sol_type(string.type(), SolidityGrammar::SolType::STRING_LITERAL);
     typet ct = string_t;
     ct.cmt_constant(true);
     symbolt s;
@@ -801,7 +890,7 @@ bool solidity_convertert::populate_auxilary_vars()
     typet ct = string_t;
     ct.cmt_constant(true);
     array_typet arr_t(ct, size_expr);
-    arr_t.set("#sol_type", "ARRAY");
+    set_sol_type(arr_t, SolidityGrammar::SolType::ARRAY);
     arr_t.set("#sol_array_size", std::to_string(length));
 
     std::string aux_name, aux_id;
@@ -1015,6 +1104,16 @@ bool solidity_convertert::populate_low_level_functions(const std::string &cname)
 
   // send()
   if (get_send_definition(cname, new_expr))
+    return true;
+  move_builtin_to_contract(cname, new_expr, true);
+
+  // staticcall()
+  if (get_staticcall_definition(cname, new_expr))
+    return true;
+  move_builtin_to_contract(cname, new_expr, true);
+
+  // delegatecall()
+  if (get_delegatecall_definition(cname, new_expr))
     return true;
   move_builtin_to_contract(cname, new_expr, true);
 

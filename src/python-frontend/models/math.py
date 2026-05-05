@@ -1,3 +1,21 @@
+# pylint: disable=redefined-builtin,undefined-variable
+# Some functions in this module intentionally shadow Python built-ins
+# (e.g. `pow`) and call ESBMC intrinsics (e.g. `__ESBMC_sin`) that have
+# no Python binding: they are the operational models ESBMC uses to
+# verify Python programs, so they must match the built-in names exactly.
+#
+# pylint: disable=unused-argument
+# Argument names on the abstract __ESBMC_* stubs are part of the API
+# contract matched by ESBMC's converter; the bodies are intentionally
+# `...` and ESBMC supplies the semantics.
+#
+# pylint: disable=consider-using-max-builtin,consider-using-min-builtin,consider-using-in,no-else-return,chained-comparison
+# Branch and comparison shapes in the math model are pinned to the
+# converter's audited support for Compare-And-Compare and explicit
+# if/else forms. Rewriting them as max()/min() / `x in (a, b)` /
+# multi-op Compare would either chain into builtins.py's own max/min
+# model (widening the trusted base) or swap an audited AST shape for
+# one whose semantics the converter would need to re-validate.
 def __ESBMC_expm1(x: float) -> float:
     ...
 

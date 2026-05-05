@@ -1,0 +1,4 @@
+KNOWNBUG
+contract.solast
+--sol contract.sol --contract ProxyMis --unwind 2 --no-unwinding-assertions --no-standard-checks --bound
+^VERIFICATION SUCCESSFUL$

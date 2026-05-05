@@ -1,4 +1,8 @@
-# pylint: disable=function-redefined  # intentional stdlib shadow for ESBMC models
+# pylint: disable=function-redefined,unused-argument
+# Operational-model stubs: stdlib shadows for ESBMC models. Argument
+# names on `__class_getitem__` and `TypeVar` are part of the API contract
+# matched by ESBMC's Python converter, even when the abstract body does
+# not reference them.
 def TypeVar(name, *args, **kwargs) -> type:
     return object
 

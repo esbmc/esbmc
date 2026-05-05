@@ -137,6 +137,7 @@ bool clang_cpp_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
   case clang::Decl::Using:
   case clang::Decl::UsingEnum:
   case clang::Decl::UsingShadow:
+  case clang::Decl::ConstructorUsingShadow:
   case clang::Decl::UsingDirective:
   case clang::Decl::TypeAlias:
   case clang::Decl::NamespaceAlias:
@@ -204,6 +205,23 @@ void clang_cpp_convertert::get_decl_name(
       name += "::" + std::to_string(pd.getFunctionScopeIndex());
       id_suffix = "::" + std::to_string(pd.getFunctionScopeIndex());
       break;
+    }
+    // Unnamed parameter of an inheriting constructor (`using Base::Base;`).
+    // Sema synthesises these params without identifiers; we still need a
+    // stable name so the inheriting ctor body can forward them.
+    if (
+      const auto *ctor = llvm::dyn_cast_or_null<clang::CXXConstructorDecl>(
+        pd.getParentFunctionOrMethod()))
+    {
+      if (ctor->isInheritingConstructor())
+      {
+        std::string parent_name, parent_id;
+        get_decl_name(*ctor, parent_name, parent_id);
+        std::string suffix = "::p" + std::to_string(pd.getFunctionScopeIndex());
+        name = parent_name + suffix;
+        id = parent_id + suffix;
+        return;
+      }
     }
     clang_c_convertert::get_decl_name(nd, name, id);
     return;
@@ -886,6 +904,62 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     break;
   }
 
+  case clang::Stmt::CXXInheritedCtorInitExprClass:
+  {
+    // Synthesised inside a constructor introduced by `using Base::Base;`.
+    // Lower it to a base-ctor call that forwards the enclosing inheriting
+    // constructor's parameters.
+    const clang::CXXInheritedCtorInitExpr &ice =
+      static_cast<const clang::CXXInheritedCtorInitExpr &>(stmt);
+
+    // Virtual bases follow a different lowering: only the most-derived
+    // object constructs them, so naively forwarding here can double-init.
+    // Reject rather than silently miscompile.
+    if (ice.constructsVBase())
+    {
+      log_error(
+        "Inherited constructor for virtual base is not supported yet "
+        "(see #4271)");
+      return true;
+    }
+
+    if (!new_expr.base_ctor_derived())
+    {
+      log_error(
+        "CXXInheritedCtorInitExpr encountered outside a base-class "
+        "initializer context");
+      return true;
+    }
+
+    exprt callee_decl;
+    if (get_decl_ref(*ice.getConstructor(), callee_decl))
+      return true;
+
+    typet type;
+    if (get_type(ice.getType(), type))
+      return true;
+
+    side_effect_expr_function_callt call;
+    call.function() = callee_decl;
+    call.type() = type;
+
+    gen_typecast_base_ctor_call(callee_decl, call, new_expr);
+
+    // Forward the enclosing inheriting constructor's parameters.
+    assert(current_functionDecl);
+    for (const clang::ParmVarDecl *p : current_functionDecl->parameters())
+    {
+      exprt arg;
+      if (get_decl_ref(*p, arg))
+        return true;
+      call.arguments().push_back(arg);
+    }
+
+    call.set("constructor", 1);
+    new_expr.swap(call);
+    break;
+  }
+
   case clang::Stmt::SizeOfPackExprClass:
   {
     const clang::SizeOfPackExpr &size_of_pack =
@@ -1244,17 +1318,15 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::CXXNoexceptExpr &noexcept_expr =
       static_cast<const clang::CXXNoexceptExpr &>(stmt);
 
+    // A value-dependent noexcept(...) only appears in an un-instantiated
+    // template body; Clang re-converts each instantiation, where getValue()
+    // is well-defined. Conservatively assume "may throw" (false) so the
+    // un-instantiated form is harmless.
     if (noexcept_expr.isValueDependent())
     {
-      std::ostringstream oss;
-      llvm::raw_os_ostream ross(oss);
-      ross << "Conversion of unsupported value-dependent noexcept expr: \"";
-      ross << stmt.getStmtClassName() << "\" to expression"
-           << "\n";
-      stmt.dump(ross, *ASTContext);
-      ross.flush();
-      log_error("{}", oss.str());
-      return true;
+      log_debug("c++", "value-dependent noexcept expr: assuming false");
+      new_expr = false_exprt();
+      break;
     }
 
     if (noexcept_expr.getValue())
@@ -1521,10 +1593,19 @@ bool clang_cpp_convertert::get_function_body(
       else if (init->isMemberInitializer())
       {
         // parsing non-static member initializer
+        const clang::FieldDecl *member_decl = init->getMember();
 
         exprt member;
         member.set("#member_init", 1);
-        if (get_decl_ref(*init->getMember(), member))
+        if (get_decl_ref(*member_decl, member))
+          return true;
+
+        // get_decl_ref resolves a bitfield FieldDecl to its underlying integer
+        // type. Mirror the wrapping done by get_member_expr so the LHS
+        // carries the #bitfield/width-N marker symex relies on; otherwise
+        // symex routes through dereferencet's non-scalar path and produces
+        // spurious bounds / alignment VCCs on bitfield members. See #4281.
+        if (wrap_bitfield_type_if_needed(*member_decl, member.type()))
           return true;
 
         build_member_from_component(fd, member);

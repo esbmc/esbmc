@@ -1,3 +1,13 @@
+# pylint: disable=wrong-import-position
+# Imports below the PY3 check are intentional: the check is a hard fail
+# under Python 2 and must run before the Python-3-only imports (ast,
+# importlib.util, etc.) to produce a clean error message instead of an
+# ImportError stack trace.
+#
+# pylint: disable=c-extension-no-member
+# `mypy.api.run` is a real (typed) entry point; pylint only flags it
+# because mypy ships as a compiled extension and is not always installed
+# in the lint environment.
 from __future__ import annotations
 
 import sys
@@ -6,6 +16,7 @@ import sys
 PY3 = sys.version_info[0] == 3
 
 if not PY3:
+    # pylint: disable=consider-using-f-string  # f-strings are a SyntaxError on Python 2
     print("Python version: {}.{}.{}".format(sys.version_info.major, sys.version_info.minor,
                                             sys.version_info.micro))
     print("ERROR: Please ensure Python 3 is available in your environment.")
@@ -24,7 +35,7 @@ from preprocessor import Preprocessor
 def run_mypy_strict(filename):
     """Run mypy in-process when available; skip otherwise."""
     try:
-        from mypy import api as mypy_api
+        from mypy import api as mypy_api  # pylint: disable=import-outside-toplevel
     except ImportError:
         return 0, ""
 
@@ -74,7 +85,7 @@ def is_testing_framework(module_name):
 
 def import_module_by_name(module_name, output_dir):
     if is_unsupported_module(module_name):
-        print("ERROR: \"import {}\" is not supported".format(module_name))
+        print(f"ERROR: \"import {module_name}\" is not supported")
         sys.exit(3)
 
     base_module = module_name.split(".")[0]
@@ -104,8 +115,8 @@ def import_module_by_name(module_name, output_dir):
             except ImportError:
                 pass
 
-        print("ERROR: Module '{}' not found.".format(module_name))
-        print("Please install it with: pip3 install {}".format(module_name))
+        print(f"ERROR: Module '{module_name}' not found.")
+        print(f"Please install it with: pip3 install {module_name}")
         return None
 
 
@@ -166,7 +177,8 @@ def expand_star_import(module) -> list[str] | None:
 
 
 def get_referenced_names(node):
-    """Find all functions and classes referenced in a function or class definition.
+    """
+    Find all functions and classes referenced in a function or class definition.
 
     Returns a set of names that are called as functions or used in type annotations.
     """
@@ -201,6 +213,7 @@ import_aliases = {}
 module_imports = {}
 
 
+# pylint: disable-next=too-many-locals,too-many-branches
 def process_imports(node, output_dir):
     """
     Process import statements in the AST node.
@@ -213,8 +226,9 @@ def process_imports(node, output_dir):
         The directory to save the generated JSON files.
 
     """
+    imported_elements = None
+    module_names = []
     if isinstance(node, (ast.Import)):
-        module_names = []
         for alias_node in node.names:
             module_name = alias_node.name
             alias = alias_node.asname or module_name
@@ -222,13 +236,10 @@ def process_imports(node, output_dir):
             module_names.append(module_name)
         if not module_names:
             return
-        imported_elements = None
     elif isinstance(node, ast.ImportFrom):
         module_name = node.module
-        # If it's a star import, set the list to None to import everything
-        if any(a.name == '*' for a in node.names):
-            imported_elements = None
-        else:
+        # If it's a star import, leave imported_elements as None to import everything
+        if not any(a.name == '*' for a in node.names):
             imported_elements = node.names
         if module_name:
             import_aliases[module_name] = module_name
@@ -438,17 +449,27 @@ def rewrite_relative_import(node, parent_module: str | None):
     node.level = 0
 
 
+# pylint: disable-next=too-many-locals,too-many-branches
 def generate_ast_json(tree, python_filename, elements_to_import, output_dir, module_qualname=None):
     """
     Generate AST JSON from the given Python AST tree.
 
-    Parameters:
-        - tree: The Python AST tree.
-        - python_filename: The filename of the Python source file.
-        - elements_to_import: The elements (classes or functions) to be imported from the module.
-        - output_dir: The directory to save the generated JSON file.
-    """
+    Parameters
+    ----------
+    tree
+        The Python AST tree to serialize.
+    python_filename
+        The filename of the Python source file the tree was parsed from.
+    elements_to_import
+        The elements (classes or functions) to be imported from the module,
+        or None to include everything.
+    output_dir
+        The directory to save the generated JSON file in.
+    module_qualname
+        Fully-qualified module name used to namespace the output filename
+        (e.g. ``pkg.sub.mod``); ``None`` means top-level module.
 
+    """
     # Remove verification-agnostic testing framework imports
     tree = filter_imports(tree)
 
@@ -508,24 +529,27 @@ def generate_ast_json(tree, python_filename, elements_to_import, output_dir, mod
 
     # Write AST JSON to file
     try:
-        with open(json_filename, "w") as json_file:
+        with open(json_filename, "w", encoding="utf-8") as json_file:
             json.dump(ast_json, json_file, indent=4, ensure_ascii=False)
     except Exception as e:
-        print("Error writing JSON file: {}".format(e))
+        print(f"Error writing JSON file: {e}")
 
 
+# pylint: disable-next=too-many-locals,too-many-nested-blocks
 def detect_and_process_submodules(node, processed_submodules, output_dir):
     """
-    Detects the usage of submodules in the AST and processes them.
+    Detect submodule usage in the AST and process each unseen submodule.
 
-    Parameters:
-        - node: The AST node to process for submodules.
-        - import_aliases: Dict mapping aliases to actual module names (e.g., 'np' → 'numpy').
-        - processed_submodules: Set to avoid reprocessing submodules.
-        - output_dir: The directory to save the generated JSON files.
+    Parameters
+    ----------
+    node
+        The AST node to scan for submodule attribute accesses.
+    processed_submodules
+        Set used to avoid reprocessing submodules already handled in this run.
+    output_dir
+        The directory to save the generated JSON files in.
 
     """
-
     if isinstance(node, ast.Attribute):
         value = node.value
         if isinstance(value, ast.Name):
@@ -591,7 +615,7 @@ def main():
         os.makedirs(output_dir)
 
     # Process and convert AST for main file
-    with open(filename, "r") as source:
+    with open(filename, "r", encoding="utf-8") as source:
         tree = ast.parse(source.read())
 
     # Apply AST transformations
@@ -632,7 +656,7 @@ def main():
         if is_imported_model(module_name) and module_name != "typing":
             continue
 
-        with open(python_file) as model:
+        with open(python_file, encoding="utf-8") as model:
             model_tree = ast.parse(model.read())
             # Generate JSON from AST for the memory models.
             generate_ast_json(model_tree, filename, None, output_dir)
