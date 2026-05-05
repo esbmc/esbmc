@@ -27,20 +27,9 @@ __ESBMC_values_equal(const void *a, const void *b, size_t size)
     return *(const uint64_t *)a == *(const uint64_t *)b;
   if (size == 1)
     return *(const uint8_t *)a == *(const uint8_t *)b;
-  // 8-byte-aligned fast paths for small tuple keys (2-4 int/float fields).
-  // Avoids memcmp's per-byte loop which blows up incremental-bmc.
   if (size == 16)
     return ((const uint64_t *)a)[0] == ((const uint64_t *)b)[0] &&
            ((const uint64_t *)a)[1] == ((const uint64_t *)b)[1];
-  if (size == 24)
-    return ((const uint64_t *)a)[0] == ((const uint64_t *)b)[0] &&
-           ((const uint64_t *)a)[1] == ((const uint64_t *)b)[1] &&
-           ((const uint64_t *)a)[2] == ((const uint64_t *)b)[2];
-  if (size == 32)
-    return ((const uint64_t *)a)[0] == ((const uint64_t *)b)[0] &&
-           ((const uint64_t *)a)[1] == ((const uint64_t *)b)[1] &&
-           ((const uint64_t *)a)[2] == ((const uint64_t *)b)[2] &&
-           ((const uint64_t *)a)[3] == ((const uint64_t *)b)[3];
   // Fallback for larger/unusual sizes
   return memcmp(a, b, size) == 0;
 }
@@ -528,6 +517,33 @@ size_t __ESBMC_list_find_index(
   return 0;
 }
 
+// Fast-equal for dict-key lookup. Adds 8-byte-aligned fast paths for tuple
+// keys (sizes 16/24/32) on top of __ESBMC_values_equal's scalar paths.
+// Kept local to list_try_find_index so that generic values_equal callers
+// (list_eq, list_contains, etc.) are not penalised by extra branches.
+static inline bool __ESBMC_key_equal(const void *a, const void *b, size_t size)
+{
+  if (a == b)
+    return true;
+  if (size == 8)
+    return *(const uint64_t *)a == *(const uint64_t *)b;
+  if (size == 1)
+    return *(const uint8_t *)a == *(const uint8_t *)b;
+  if (size == 16)
+    return ((const uint64_t *)a)[0] == ((const uint64_t *)b)[0] &&
+           ((const uint64_t *)a)[1] == ((const uint64_t *)b)[1];
+  if (size == 24)
+    return ((const uint64_t *)a)[0] == ((const uint64_t *)b)[0] &&
+           ((const uint64_t *)a)[1] == ((const uint64_t *)b)[1] &&
+           ((const uint64_t *)a)[2] == ((const uint64_t *)b)[2];
+  if (size == 32)
+    return ((const uint64_t *)a)[0] == ((const uint64_t *)b)[0] &&
+           ((const uint64_t *)a)[1] == ((const uint64_t *)b)[1] &&
+           ((const uint64_t *)a)[2] == ((const uint64_t *)b)[2] &&
+           ((const uint64_t *)a)[3] == ((const uint64_t *)b)[3];
+  return memcmp(a, b, size) == 0;
+}
+
 size_t __ESBMC_list_try_find_index(
   PyListObject *l,
   const void *item,
@@ -544,7 +560,7 @@ size_t __ESBMC_list_try_find_index(
 
     if (elem->type_id == item_type_id && elem->size == item_size)
     {
-      if (__ESBMC_values_equal(elem->value, item, item_size))
+      if (__ESBMC_key_equal(elem->value, item, item_size))
         return i;
     }
 
