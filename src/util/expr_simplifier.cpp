@@ -4768,8 +4768,12 @@ expr2tc concat2t::do_simplify() const
     }
   };
 
+  // Collect concat leaves directly from side_1/side_2 instead of cloning
+  // the whole subtree. The lambda dispatches on the operand's expr_id, so
+  // it doesn't need a wrapping concat2tc to traverse our own children.
   std::vector<expr2tc> leaves;
-  collect_leaves(expr2tc(this->clone()), leaves);
+  collect_leaves(side_1, leaves);
+  collect_leaves(side_2, leaves);
 
   // Quick exit if not enough leaves or not all byte extracts
   if (leaves.size() < 2)

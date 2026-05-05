@@ -1590,6 +1590,35 @@ TEST_CASE(
 }
 
 TEST_CASE(
+  "Concat: contiguous LE byte_extracts collapse to source",
+  "[concat][simplify]")
+{
+  // concat(byte_extract(x:u32, 3), byte_extract(x:u32, 2),
+  //        byte_extract(x:u32, 1), byte_extract(x:u32, 0))
+  // is the little-endian reconstruction of x. After simplification it
+  // should fold back to x. The collect_leaves change must not break
+  // this fold — the lambda walks side_1/side_2 directly instead of
+  // cloning the outer concat.
+  const type2tc u32 = unsignedbv_type2tc(32);
+  const type2tc u8 = unsignedbv_type2tc(8);
+  const type2tc i32 = signedbv_type2tc(32);
+  const expr2tc x = symbol2tc(u32, "x");
+  auto bx = [&](unsigned off) {
+    return byte_extract2tc(
+      u8, x, constant_int2tc(i32, BigInt(off)), false /* little endian */);
+  };
+  // Build concat(bx(3), concat(bx(2), concat(bx(1), bx(0))))
+  const expr2tc inner = concat2tc(unsignedbv_type2tc(16), bx(1), bx(0));
+  const expr2tc mid =
+    concat2tc(unsignedbv_type2tc(24), bx(2), inner);
+  const expr2tc outer = concat2tc(u32, bx(3), mid);
+
+  const expr2tc result = outer->simplify();
+  REQUIRE(!is_nil_expr(result));
+  REQUIRE(result == x);
+}
+
+TEST_CASE(
   "Bitcast chain: don't drop width-changing intermediate cast",
   "[bitcast][simplify]")
 {
