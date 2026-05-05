@@ -732,45 +732,51 @@ struct Multor
 
 expr2tc mul2t::do_simplify() const
 {
-  // x * 0 = 0, 0 * x = 0, x * 1 = x, 1 * x = x. Mirrors Multor::simplify but
-  // short-circuits before simplify_arith_2ops walks the operands.
-  if (is_constant_int2t(side_2))
+  // Scalar identity/absorber shortcuts. Skip when the result type is a
+  // vector — returning a scalar `side_1`/`side_2` (or a scalar neg2t) would
+  // produce a value of the wrong type. Vector shapes go through
+  // simplify_arith_2ops, which calls distribute_vector_operation.
+  if (!is_vector_type(type))
   {
-    const BigInt &v = to_constant_int2t(side_2).value;
-    if (v.is_zero())
-      return side_2;
-    if (v == BigInt(1))
-      return side_1;
+    // x * 0 = 0, 0 * x = 0, x * 1 = x, 1 * x = x.
+    if (is_constant_int2t(side_2))
+    {
+      const BigInt &v = to_constant_int2t(side_2).value;
+      if (v.is_zero())
+        return side_2;
+      if (v == BigInt(1))
+        return side_1;
+    }
+    if (is_constant_int2t(side_1))
+    {
+      const BigInt &v = to_constant_int2t(side_1).value;
+      if (v.is_zero())
+        return side_1;
+      if (v == BigInt(1))
+        return side_2;
+    }
+
+    // (-x) * (-y) -> x * y. Signed-bv only: for unsigned bv, the result is
+    // still equal mod 2^N, but neg2t lowers to (modulus - x) % modulus, so
+    // dropping the negs avoids double-wrap simplification on a larger
+    // expression. Stick to signed where neg is structural.
+    if (is_signedbv_type(type) && is_neg2t(side_1) && is_neg2t(side_2))
+      return mul2tc(type, to_neg2t(side_1).value, to_neg2t(side_2).value);
+
+    // (-x) * y -> -(x * y), x * (-y) -> -(x * y). Signed-bv only for the
+    // same reason as above. Pulls neg outside so reassoc / constant-folding
+    // can see the inner mul.
+    if (is_signedbv_type(type) && is_neg2t(side_1))
+      return neg2tc(type, mul2tc(type, to_neg2t(side_1).value, side_2));
+    if (is_signedbv_type(type) && is_neg2t(side_2))
+      return neg2tc(type, mul2tc(type, side_1, to_neg2t(side_2).value));
+
+    // x * (-1) = -x
+    if (is_constant_int2t(side_2) && to_constant_int2t(side_2).value == -1)
+      return neg2tc(type, side_1);
+    if (is_constant_int2t(side_1) && to_constant_int2t(side_1).value == -1)
+      return neg2tc(type, side_2);
   }
-  if (is_constant_int2t(side_1))
-  {
-    const BigInt &v = to_constant_int2t(side_1).value;
-    if (v.is_zero())
-      return side_1;
-    if (v == BigInt(1))
-      return side_2;
-  }
-
-  // (-x) * (-y) -> x * y. Signed-bv only: for unsigned bv, the result is
-  // still equal mod 2^N, but neg2t lowers to (modulus - x) % modulus, so
-  // dropping the negs avoids double-wrap simplification on a larger
-  // expression. Stick to signed where neg is structural.
-  if (is_signedbv_type(type) && is_neg2t(side_1) && is_neg2t(side_2))
-    return mul2tc(type, to_neg2t(side_1).value, to_neg2t(side_2).value);
-
-  // (-x) * y -> -(x * y), x * (-y) -> -(x * y). Signed-bv only for the same
-  // reason as above. Pulls neg outside so reassoc / constant-folding can see
-  // the inner mul.
-  if (is_signedbv_type(type) && is_neg2t(side_1))
-    return neg2tc(type, mul2tc(type, to_neg2t(side_1).value, side_2));
-  if (is_signedbv_type(type) && is_neg2t(side_2))
-    return neg2tc(type, mul2tc(type, side_1, to_neg2t(side_2).value));
-
-  // x * (-1) = -x
-  if (is_constant_int2t(side_2) && to_constant_int2t(side_2).value == -1)
-    return neg2tc(type, side_1);
-  if (is_constant_int2t(side_1) && to_constant_int2t(side_1).value == -1)
-    return neg2tc(type, side_2);
 
   return simplify_arith_2ops<Multor, mul2t>(type, side_1, side_2);
 }
@@ -2322,23 +2328,30 @@ expr2tc bitand2t::do_simplify() const
   if (is_bitnot2t(side_2) && to_bitnot2t(side_2).value == side_1)
     return gen_zero(type);
 
-  // 0 & x = 0, all1 & x = x
-  if (is_constant_int2t(side_1))
+  // Scalar identity/absorber shortcuts. Skip when the result type is a
+  // vector — returning a scalar `side_1`/`side_2` from a vector-typed op
+  // would corrupt the type. Vector shapes go through the
+  // distribute_vector_operation path below.
+  if (!is_vector_type(type))
   {
-    if (to_constant_int2t(side_1).value.is_zero())
-      return side_1; // 0 & x = 0
-  }
-  if (is_all_ones_constant(side_1))
-    return side_2; // all1 & x = x
+    // 0 & x = 0, all1 & x = x
+    if (is_constant_int2t(side_1))
+    {
+      if (to_constant_int2t(side_1).value.is_zero())
+        return side_1; // 0 & x = 0
+    }
+    if (is_all_ones_constant(side_1))
+      return side_2; // all1 & x = x
 
-  // x & 0 = 0, x & all1 = x
-  if (is_constant_int2t(side_2))
-  {
-    if (to_constant_int2t(side_2).value.is_zero())
-      return side_2; // x & 0 = 0
+    // x & 0 = 0, x & all1 = x
+    if (is_constant_int2t(side_2))
+    {
+      if (to_constant_int2t(side_2).value.is_zero())
+        return side_2; // x & 0 = 0
+    }
+    if (is_all_ones_constant(side_2))
+      return side_1; // x & all1 = x
   }
-  if (is_all_ones_constant(side_2))
-    return side_1; // x & all1 = x
 
   // (x & y) & y = x & y, (x & y) & x = x & y, and the symmetric forms with
   // the outer and's operands swapped. Idempotence after associativity.
@@ -2416,35 +2429,42 @@ expr2tc bitor2t::do_simplify() const
   if (side_1 == side_2)
     return side_1; // x | x = x
 
-  // x | ~x = all1 (all bits set). Use the type's all-ones value so the
-  // result preserves type-correct width for unsigned types.
-  auto make_all_ones = [&](const type2tc &t) -> expr2tc {
-    if (is_unsignedbv_type(t))
-      return constant_int2tc(t, BigInt::power2(t->get_width()) - 1);
-    return constant_int2tc(t, BigInt(-1));
-  };
-  if (is_bitnot2t(side_1) && to_bitnot2t(side_1).value == side_2)
-    return make_all_ones(type);
-  if (is_bitnot2t(side_2) && to_bitnot2t(side_2).value == side_1)
-    return make_all_ones(type);
-
-  // 0 | x = x, all1 | x = all1
-  if (is_constant_int2t(side_1))
+  // Scalar identity/absorber shortcuts. Skip when the result type is a
+  // vector — returning scalar all-ones / `side_1`/`side_2` from a
+  // vector-typed op would corrupt the type. Vector shapes go through the
+  // distribute_vector_operation path below.
+  if (!is_vector_type(type))
   {
-    if (to_constant_int2t(side_1).value.is_zero())
-      return side_2; // 0 | x = x
-  }
-  if (is_all_ones_constant(side_1))
-    return side_1; // all1 | x = all1
+    // x | ~x = all1 (all bits set). Use the type's all-ones value so the
+    // result preserves type-correct width for unsigned types.
+    auto make_all_ones = [&](const type2tc &t) -> expr2tc {
+      if (is_unsignedbv_type(t))
+        return constant_int2tc(t, BigInt::power2(t->get_width()) - 1);
+      return constant_int2tc(t, BigInt(-1));
+    };
+    if (is_bitnot2t(side_1) && to_bitnot2t(side_1).value == side_2)
+      return make_all_ones(type);
+    if (is_bitnot2t(side_2) && to_bitnot2t(side_2).value == side_1)
+      return make_all_ones(type);
 
-  // x | 0 = x, x | all1 = all1
-  if (is_constant_int2t(side_2))
-  {
-    if (to_constant_int2t(side_2).value.is_zero())
-      return side_1; // x | 0 = x
+    // 0 | x = x, all1 | x = all1
+    if (is_constant_int2t(side_1))
+    {
+      if (to_constant_int2t(side_1).value.is_zero())
+        return side_2; // 0 | x = x
+    }
+    if (is_all_ones_constant(side_1))
+      return side_1; // all1 | x = all1
+
+    // x | 0 = x, x | all1 = all1
+    if (is_constant_int2t(side_2))
+    {
+      if (to_constant_int2t(side_2).value.is_zero())
+        return side_1; // x | 0 = x
+    }
+    if (is_all_ones_constant(side_2))
+      return side_2; // x | all1 = all1
   }
-  if (is_all_ones_constant(side_2))
-    return side_2; // x | all1 = all1
 
   // Absorption: x | (x & y) = x
   if (is_bitand2t(side_2))
@@ -2914,6 +2934,13 @@ static expr2tc combine_constant_shifts(
   bool (*is_inner)(const expr2tc &),
   const ShiftT &(*to_inner)(const expr2tc &))
 {
+  // Vector shifts: type->get_width() reports the *total* vector width, not
+  // per-lane. Combining (v4u8 << c1) << c2 with sum < 32 would still wrap
+  // each 8-bit lane past its width and mask shift UB. Skip vectors here
+  // and let do_bit_munge_operation handle them via vector distribution.
+  if (is_vector_type(type))
+    return expr2tc();
+
   if (!is_constant_int2t(outer_amt) || !is_inner(outer_lhs))
     return expr2tc();
 
@@ -3633,6 +3660,12 @@ expr2tc equality2t::do_simplify() const
   // moduli is exactly the odd constants. With c=2 in 8-bit unsigned, for
   // example, x=128 also satisfies x*2 == 0 (mod 256), so dropping the
   // multiplication would silently strengthen the predicate.
+  //
+  // Defensive type guard: equality2tc requires both sides to share a type.
+  // A well-formed mul2t already has homogeneous operands, but if a future
+  // construction path produces a mixed-width mul, the rewritten equality
+  // would mix widths too. Skip the rewrite unless mul.side_*->type matches
+  // side_2->type.
   if (is_mul2t(side_1) && is_constant_int2t(side_2))
   {
     const mul2t &mul_expr = to_mul2t(side_1);
@@ -3640,14 +3673,18 @@ expr2tc equality2t::do_simplify() const
 
     if (c2 == 0)
     {
-      if (is_constant_int2t(mul_expr.side_2))
+      if (
+        is_constant_int2t(mul_expr.side_2) &&
+        mul_expr.side_1->type == side_2->type)
       {
         const BigInt &c1 = to_constant_int2t(mul_expr.side_2).value;
         if (c1.is_odd())
           return equality2tc(mul_expr.side_1, side_2);
       }
 
-      if (is_constant_int2t(mul_expr.side_1))
+      if (
+        is_constant_int2t(mul_expr.side_1) &&
+        mul_expr.side_2->type == side_2->type)
       {
         const BigInt &c1 = to_constant_int2t(mul_expr.side_1).value;
         if (c1.is_odd())
