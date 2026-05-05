@@ -1542,6 +1542,34 @@ TEST_CASE(
 }
 
 TEST_CASE(
+  "byte_update with huge constant offset returns nil instead of throwing",
+  "[byte][simplify]")
+{
+  // Pin overflow safety: a constant byte_update offset near UINT64_MAX/8
+  // must NOT trigger string::replace at a position past end. The
+  // simplifier should bail out (return nil) rather than throw.
+  const type2tc u32 = get_uint_type(32);
+  const type2tc u8 = get_uint_type(8);
+  // Source: 4-byte constant 0
+  const expr2tc src = constant_int2tc(u32, BigInt(0));
+  // Update value: a constant byte
+  const expr2tc v = constant_int2tc(u8, BigInt(0xAB));
+  // Offset: huge, within uint64 but src_offset * 8 must overflow size
+  // checks once added to value.length()
+  const BigInt huge_offset = (BigInt(1) << 60);
+  const expr2tc off = constant_int2tc(get_uint_type(64), huge_offset);
+  const expr2tc bu = byte_update2tc(u32, src, off, v, false);
+
+  // Must not throw.
+  const expr2tc result = bu->simplify();
+  // Either nil (refused) or a structurally-unchanged byte_update; the
+  // contract is: no exception, and the simplifier doesn't fabricate a
+  // value at the impossible position.
+  if (!is_nil_expr(result))
+    REQUIRE(is_byte_update2t(result));
+}
+
+TEST_CASE(
   "byte_extract(byte_update(src, OOB, v), OOB) is not folded",
   "[byte][simplify]")
 {

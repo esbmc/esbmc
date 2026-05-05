@@ -1,3 +1,5 @@
+#include <limits>
+
 #include <util/arith_tools.h>
 #include <util/base_type.h>
 #include <util/c_types.h>
@@ -5622,7 +5624,15 @@ expr2tc byte_update2t::do_simplify() const
   uint64_t bit_offset = 0;
   if (__builtin_mul_overflow(src_offset, (uint64_t)8, &bit_offset))
     return expr2tc();
-  if (bit_offset + value.length() > src_value.length())
+  // Overflow-safe bounds check: a naive bit_offset + value.length() > N
+  // can wrap when bit_offset is near UINT64_MAX. Test bit_offset against
+  // the source length first, then test the remaining tail length without
+  // any addition. Also ensure bit_offset fits the platform's size_t.
+  if (bit_offset > std::numeric_limits<size_t>::max())
+    return expr2tc();
+  if (bit_offset > src_value.length())
+    return expr2tc();
+  if (value.length() > src_value.length() - bit_offset)
     return expr2tc();
 
   // Reverse both the source value and the value that will be updated if we are
