@@ -10,7 +10,18 @@
 #include <irep2/irep2.h>
 #include <irep2/irep2_expr.h>
 #include <irep2/irep2_utils.h>
+#include <util/c_types.h>
+#include <util/config.h>
 #include <util/simplify_expr.h>
+
+namespace
+{
+struct config_init
+{
+  config_init() { config.ansi_c.address_width = 64; }
+};
+const config_init init;
+}
 
 TEST_CASE("Addition simplification: x + (-x) = 0", "[arithmetic][add]")
 {
@@ -206,14 +217,13 @@ TEST_CASE(
 }
 
 TEST_CASE(
-  "Pointer-add fold: skip when same-width sum would wrap",
+  "Pointer-add fold: same-width sum widens to index_type2",
   "[arithmetic][add][pointer]")
 {
-  // (p + (s8)100) + (s8)100 — sum is 200 which doesn't fit in signedbv 8.
-  // Each unfolded step sign-extends the offset to pointer width before the
-  // SMT bv add, yielding pointer_offset(p) + 200. Folding to (s8)-56 (200
-  // truncated mod 256) and sign-extending later would yield -56 instead.
-  // The simplifier must refuse the fold to preserve pointer semantics.
+  // (p + (s8)100) + (s8)100 — naive same-width fold would wrap to (s8)-56.
+  // The simplifier sign-extends both offsets to index_type2 (signed long)
+  // and emits the merged constant at that width, preserving the +200
+  // semantic that pointer-arith expects after sign-extension.
   const type2tc ptr_type = pointer_type2tc(get_int_type(8));
   const expr2tc p = symbol2tc(ptr_type, "p");
   const expr2tc c1 =
@@ -224,51 +234,39 @@ TEST_CASE(
   const expr2tc outer = add2tc(ptr_type, inner, c2);
 
   const expr2tc result = outer->simplify();
-
-  if (!is_nil_expr(result))
-  {
-    REQUIRE(is_add2t(result));
-    const add2t &a = to_add2t(result);
-    // The fold must have been skipped — the structural inner add survives.
-    const bool inner_is_add = is_add2t(a.side_1) || is_add2t(a.side_2);
-    REQUIRE(inner_is_add);
-  }
+  REQUIRE(!is_nil_expr(result));
+  REQUIRE(is_add2t(result));
+  const add2t &a = to_add2t(result);
+  const expr2tc &offset = is_constant_int2t(a.side_2) ? a.side_2 : a.side_1;
+  REQUIRE(is_constant_int2t(offset));
+  REQUIRE(to_constant_int2t(offset).value == BigInt(200));
+  REQUIRE(offset->type == index_type2());
 }
 
 TEST_CASE(
-  "Pointer-add fold: skip when offset constants have different types",
+  "Pointer-add fold: mixed-width offsets fold to index_type2",
   "[arithmetic][add][pointer]")
 {
-  // The (p + C1) + C2 fold uses from_integer(C1+C2, C1->type), which
-  // truncates if C2 is wider. Guard against IR shapes where the two
-  // offsets have different bit-widths by leaving the chain unfolded.
+  // Inner offset signedbv 8 + outer signedbv 32. Both sign-extend to
+  // index_type2 before the merge, so the rebuilt constant is 200 typed at
+  // signed long — no information loss across the differing widths.
   const type2tc ptr_type = pointer_type2tc(get_int_type(8));
   const expr2tc p = symbol2tc(ptr_type, "p");
-  // Inner offset: signedbv 8 with value 100.
   const expr2tc c1 =
     constant_int2tc(signedbv_type2tc(8), BigInt(100));
-  // Outer offset: signedbv 32 with value 100. Sum = 200, doesn't fit in s8.
   const expr2tc c2 =
     constant_int2tc(signedbv_type2tc(32), BigInt(100));
   const expr2tc inner = add2tc(ptr_type, p, c1);
   const expr2tc outer = add2tc(ptr_type, inner, c2);
 
   const expr2tc result = outer->simplify();
-
-  // Either nil (fold skipped) or, if a fold happened, the merged constant
-  // must hold the full 200 — not a truncated 200 mod 256 = 200 (which
-  // happens to fit), nor any wraparound. The guard ensures we never lose
-  // bits by combining differently-sized constants.
-  if (!is_nil_expr(result))
-  {
-    REQUIRE(is_add2t(result));
-    const add2t &a = to_add2t(result);
-    // The fold should have been skipped, so the inner add chain must
-    // still be present — the result is not (p + 200) but (p + 100) + 100
-    // (or some structurally-equivalent shape that retains both constants).
-    const bool inner_is_add = is_add2t(a.side_1) || is_add2t(a.side_2);
-    REQUIRE(inner_is_add);
-  }
+  REQUIRE(!is_nil_expr(result));
+  REQUIRE(is_add2t(result));
+  const add2t &a = to_add2t(result);
+  const expr2tc &offset = is_constant_int2t(a.side_2) ? a.side_2 : a.side_1;
+  REQUIRE(is_constant_int2t(offset));
+  REQUIRE(to_constant_int2t(offset).value == BigInt(200));
+  REQUIRE(offset->type == index_type2());
 }
 
 TEST_CASE(
