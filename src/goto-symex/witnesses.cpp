@@ -1154,6 +1154,7 @@ bool find_nondet_in_expr(const expr2tc &expr)
 
 #include <util/prefix.h>
 #include <boost/property_tree/detail/xml_parser_writer_settings.hpp>
+#include <cassert>
 #include <goto-symex/slice.h>
 #include <irep2/irep2_utils.h>
 
@@ -1193,16 +1194,19 @@ zero_fill_aggregate(const type2tc &expected_type, const expr2tc &value)
     const constant_union2t &cu = to_constant_union2t(value);
     if (cu.datatype_members.size() == 1 && !ut.member_names.empty())
     {
-      // Resolve the active member's declared type; fall back to the
-      // first member if init_field doesn't match (an upstream
-      // inconsistency we should not silently mis-render).
-      size_t idx = 0;
+      // Resolve the active member's declared type. init_field must
+      // name a declared member; a mismatch is an upstream invariant
+      // violation and we refuse to silently emit a malformed witness.
+      size_t idx = ut.member_names.size();
       for (size_t i = 0; i < ut.member_names.size(); ++i)
         if (ut.member_names[i] == cu.init_field)
         {
           idx = i;
           break;
         }
+      assert(
+        idx < ut.member_names.size() &&
+        "constant_union2t::init_field not in union_type2t::member_names");
       std::vector<expr2tc> ops = {
         zero_fill_aggregate(ut.members[idx], cu.datatype_members[0])};
       return constant_union2tc(expected_type, cu.init_field, ops);
