@@ -1195,6 +1195,7 @@ collect_nondet_values(const symex_target_equationt &target, smt_convt &smt_conv)
       // Store the collected value
       collected_nondet_value val;
       val.symbol_name = sym.thename.as_string();
+      val.symbol_expr = nondet_expr;
       val.value_expr = concrete_value;
       val.type = concrete_value->type;
 
@@ -1202,6 +1203,23 @@ collect_nondet_values(const symex_target_equationt &target, smt_convt &smt_conv)
     }
   }
   return results;
+}
+
+expr2tc make_blocking_expr(const std::vector<collected_nondet_value> &nondets)
+{
+  // No nondet inputs collected: return a literal `false` so the caller's
+  // re-solve immediately reports UNSAT and the enumeration loop terminates.
+  if (nondets.empty())
+    return gen_false_expr();
+
+  // Build NOT (sym_1 == val_1 AND sym_2 == val_2 AND ...).
+  expr2tc conj;
+  for (const auto &n : nondets)
+  {
+    expr2tc eq = equality2tc(n.symbol_expr, n.value_expr);
+    conj = conj ? expr2tc(and2tc(conj, eq)) : eq;
+  }
+  return not2tc(conj);
 }
 
 // TestComp XML generation
