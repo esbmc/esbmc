@@ -5,6 +5,7 @@
 #include <util/message/format.h>
 #include <irep2/irep2_expr.h>
 #include <boost/date_time/posix_time/posix_time.hpp>
+#include <cstdio>
 #include <fstream>
 #include <unordered_set>
 #include <algorithm>
@@ -236,7 +237,19 @@ std::string ctest_generator::format_c_value(const expr2tc &value) const
       return "NAN";
     if (fv.is_infinity())
       return fv.get_sign() ? "-INFINITY" : "INFINITY";
-    return fv.to_ansi_c_string();
+    // Print with enough decimal digits to round-trip the IEEE-754 bit
+    // pattern: 17 for 64-bit double, 9 for 32-bit float
+    // (std::numeric_limits<T>::max_digits10).  to_ansi_c_string defaults to 6
+    // digits, which loses bits and lets a satisfying SMT model evaluate
+    // differently in native arithmetic when the test case is compiled.
+    char buf[64];
+    if (fv.spec == ieee_float_spect::double_precision())
+      std::snprintf(buf, sizeof(buf), "%.17g", fv.to_double());
+    else if (fv.spec == ieee_float_spect::single_precision())
+      std::snprintf(buf, sizeof(buf), "%.9gf", fv.to_float());
+    else
+      return fv.to_ansi_c_string();
+    return buf;
   }
   else if (is_constant_bool2t(value))
   {
