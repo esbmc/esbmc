@@ -244,6 +244,7 @@ void clang_c_languaget::build_compiler_args(
     compiler_args.push_back("-D__CRT__NO_INLINE");
     compiler_args.push_back("-D_USE_MATH_DEFINES");
     compiler_args.push_back("-Wno-implicit-function-declaration");
+    compiler_args.push_back("-Wno-incompatible-pointer-types");
   }
 
 #if ESBMC_SVCOMP
