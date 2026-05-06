@@ -1155,6 +1155,73 @@ bool find_nondet_in_expr(const expr2tc &expr)
 #include <util/prefix.h>
 #include <boost/property_tree/detail/xml_parser_writer_settings.hpp>
 #include <goto-symex/slice.h>
+#include <irep2/irep2_utils.h>
+
+// Replace nil and missing aggregate components with zero so every
+// witness renders a complete initialiser. SMT models leave
+// unconstrained fields/elements unspecified; per the SMT-LIB
+// default-model convention we surface them as zero rather than
+// silently dropping them. Walks the *type* (not the value) so missing
+// trailing members of a constant_struct2t are filled, and recurses
+// into nested structs, unions and arrays. The expected type comes from
+// the nondet symbol; the value comes from smt_convt::get() and may be
+// nil at any level.
+static expr2tc
+zero_fill_aggregate(const type2tc &expected_type, const expr2tc &value)
+{
+  if (!value)
+    return gen_zero(expected_type);
+
+  if (is_struct_type(expected_type) && is_constant_struct2t(value))
+  {
+    const struct_type2t &st = to_struct_type(expected_type);
+    const constant_struct2t &cs = to_constant_struct2t(value);
+    std::vector<expr2tc> members;
+    members.reserve(st.members.size());
+    for (size_t i = 0; i < st.members.size(); ++i)
+    {
+      const expr2tc &op =
+        i < cs.datatype_members.size() ? cs.datatype_members[i] : expr2tc();
+      members.push_back(zero_fill_aggregate(st.members[i], op));
+    }
+    return constant_struct2tc(expected_type, members);
+  }
+
+  if (is_union_type(expected_type) && is_constant_union2t(value))
+  {
+    const union_type2t &ut = to_union_type(expected_type);
+    const constant_union2t &cu = to_constant_union2t(value);
+    if (cu.datatype_members.size() == 1 && !ut.member_names.empty())
+    {
+      // Resolve the active member's declared type; fall back to the
+      // first member if init_field doesn't match (an upstream
+      // inconsistency we should not silently mis-render).
+      size_t idx = 0;
+      for (size_t i = 0; i < ut.member_names.size(); ++i)
+        if (ut.member_names[i] == cu.init_field)
+        {
+          idx = i;
+          break;
+        }
+      std::vector<expr2tc> ops = {
+        zero_fill_aggregate(ut.members[idx], cu.datatype_members[0])};
+      return constant_union2tc(expected_type, cu.init_field, ops);
+    }
+  }
+
+  if (is_array_type(expected_type) && is_constant_array2t(value))
+  {
+    const array_type2t &at = to_array_type(expected_type);
+    const constant_array2t &ca = to_constant_array2t(value);
+    std::vector<expr2tc> members;
+    members.reserve(ca.datatype_members.size());
+    for (const auto &elem : ca.datatype_members)
+      members.push_back(zero_fill_aggregate(at.subtype, elem));
+    return constant_array2tc(expected_type, members);
+  }
+
+  return value;
+}
 
 // Shared nondet collection logic (used by both TestComp and CTest)
 std::vector<collected_nondet_value>
@@ -1197,8 +1264,11 @@ collect_nondet_values(const symex_target_equationt &target, smt_convt &smt_conv)
 
       seen_nondets.insert(sym.thename.as_string());
 
-      // Get concrete value
-      auto concrete_value = smt_conv.get(nondet_expr);
+      // Get concrete value, model-completing unconstrained aggregate
+      // components to zero so witnesses render with all fields present
+      // and consistent across the witness set.
+      auto concrete_value =
+        zero_fill_aggregate(nondet_expr->type, smt_conv.get(nondet_expr));
 
       // Store the collected value
       collected_nondet_value val;
