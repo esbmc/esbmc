@@ -1879,9 +1879,11 @@ smt_convt::resultt bmct::multi_property_check(
 
       // Cache option lookups so the per-witness loop body is cheap.
       const std::string cex_output = options.get_option("cex-output");
-      const bool want_graphml =
-        !options.get_option("witness-output-graphml").empty();
-      const bool want_yaml = !options.get_option("witness-output-yaml").empty();
+      const std::string graphml_path =
+        options.get_option("witness-output-graphml");
+      const std::string yaml_path = options.get_option("witness-output-yaml");
+      const bool want_graphml = !graphml_path.empty();
+      const bool want_yaml = !yaml_path.empty();
       const bool want_testcase = options.get_bool_option("generate-testcase");
       const bool want_html = options.get_bool_option("generate-html-report");
       const bool want_json = options.get_bool_option("generate-json-report");
@@ -1914,10 +1916,18 @@ smt_convt::resultt bmct::multi_property_check(
           std::ofstream out(fmt::format("{}-{}", w.ce_index, cex_output));
           show_goto_trace(out, ns, w.trace);
         }
+        // For graphml/yaml the writer reads the path from `options`;
+        // override per-witness so multiple witnesses don't overwrite the
+        // same file (and so it's safe under --parallel-solving).
         if (want_graphml)
-          violation_graphml_goto_trace(options, ns, w.trace);
+          violation_graphml_goto_trace(
+            options,
+            ns,
+            w.trace,
+            fmt::format("{}-{}", w.ce_index, graphml_path));
         if (want_yaml)
-          violation_yaml_goto_trace(options, ns, w.trace);
+          violation_yaml_goto_trace(
+            options, ns, w.trace, fmt::format("{}-{}", w.ce_index, yaml_path));
         if (want_testcase)
           generate_testcase(
             "testcase-" + std::to_string(w.ce_index) + ".xml",

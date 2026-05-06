@@ -136,7 +136,15 @@ public:
     witness_type = t;
     create_initial_edge();
   }
-  void generate_graphml(optionst &options);
+  /// Generate the GraphML witness. The output path is taken from
+  /// `options["witness-output-graphml"]` unless @p output_path_override
+  /// is non-empty, in which case the override wins. Used by
+  /// --all-witnesses to fan out per-witness filenames without
+  /// mutating the global option (which would race under
+  /// --parallel-solving).
+  void generate_graphml(
+    optionst &options,
+    const std::string &output_path_override = "");
   void check_create_new_thread(BigInt thread_id, nodet *prev_node);
 };
 
@@ -157,7 +165,12 @@ public:
   {
     witness_type = t;
   }
-  void generate_yaml(optionst &options);
+  /// Generate the YAML witness. The output path is taken from
+  /// `options["witness-output-yaml"]` unless @p output_path_override
+  /// is non-empty.
+  void generate_yaml(
+    optionst &options,
+    const std::string &output_path_override = "");
 };
 
 /**

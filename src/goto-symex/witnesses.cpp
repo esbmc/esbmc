@@ -18,7 +18,9 @@ typedef boost::property_tree::ptree xmlnodet;
 BigInt nodet::_id = 0;
 BigInt edget::_id = 0;
 
-void grapht::generate_graphml(optionst &options)
+void grapht::generate_graphml(
+  optionst &options,
+  const std::string &output_path_override)
 {
   xmlnodet graphml_node;
   create_graphml(graphml_node);
@@ -54,7 +56,9 @@ void grapht::generate_graphml(optionst &options)
   boost::property_tree::xml_writer_settings<char> settings(' ', 2);
 #endif
 
-  std::string witness_output = options.get_option("witness-output-graphml");
+  std::string witness_output = output_path_override.empty()
+                                 ? options.get_option("witness-output-graphml")
+                                 : output_path_override;
   if (witness_output == "-")
     boost::property_tree::write_xml(std::cout, graphml_node, settings);
   else
@@ -92,7 +96,9 @@ void grapht::create_initial_edge()
   this->edges.push_back(first_edge);
 }
 
-void yamlt::generate_yaml(optionst &options)
+void yamlt::generate_yaml(
+  optionst &options,
+  const std::string &output_path_override)
 {
   YAML::Emitter yaml_emitter;
   if (this->witness_type == yamlt::VIOLATION)
@@ -121,7 +127,9 @@ void yamlt::generate_yaml(optionst &options)
   yaml_emitter << YAML::EndMap;
   yaml_emitter << YAML::EndSeq;
 
-  const std::string witness_output = options.get_option("witness-output-yaml");
+  const std::string witness_output =
+    output_path_override.empty() ? options.get_option("witness-output-yaml")
+                                 : output_path_override;
   if (witness_output == "-")
     std::cout << yaml_emitter.c_str() << std::endl;
   else
