@@ -1910,7 +1910,15 @@ smt_convt::resultt bmct::multi_property_check(
       {
         witness_recordt w;
         build_goto_trace(local_eq, *solver_ptr, w.trace, is_compact_trace);
-        w.nondet_inputs = collect_nondet_values(local_eq, *solver_ptr);
+        // Collecting nondet values walks every SSA step and queries the
+        // solver model per nondet symbol — non-trivial on coverage runs
+        // with many claims and large arrays. Skip it when we don't need
+        // it: the values are only consumed by `make_blocking_expr` (only
+        // when enumerating) and by the multi-witness pretty-printer
+        // (only when --all-witnesses is set, i.e. enumerate==true).
+        // The legacy single-witness renderer does not use them.
+        if (enumerate)
+          w.nondet_inputs = collect_nondet_values(local_eq, *solver_ptr);
         w.ce_index = ce_counter++;
 
         // Emit machine-readable artifacts NOW, while this witness's solver
