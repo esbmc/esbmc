@@ -1,4 +1,4 @@
-# pylint: disable=function-redefined,unused-argument
+# pylint: disable=function-redefined,unused-argument,unused-import
 # Operational-model stubs: stdlib shadows for ESBMC models. Argument
 # names on `__class_getitem__` and `TypeVar` are part of the API contract
 # matched by ESBMC's Python converter, even when the abstract body does
