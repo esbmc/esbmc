@@ -1217,6 +1217,19 @@ zero_fill_aggregate(const type2tc &expected_type, const expr2tc &value)
   {
     const array_type2t &at = to_array_type(expected_type);
     const constant_array2t &ca = to_constant_array2t(value);
+    // For concrete-size arrays the SMT layer (smt_convt::get_array) and
+    // frontend migrators populate one element per declared index, so
+    // datatype_members.size() must match array_size. A shortfall is an
+    // upstream invariant violation and would silently truncate the
+    // witness; refuse to mis-render. Symbolic sizes (VLAs, flexible
+    // arrays) cannot be checked here.
+    if (is_constant_int2t(at.array_size))
+    {
+      const BigInt &n = to_constant_int2t(at.array_size).value;
+      assert(
+        n == BigInt(ca.datatype_members.size()) &&
+        "constant_array2t element count != array_type2t::array_size");
+    }
     std::vector<expr2tc> members;
     members.reserve(ca.datatype_members.size());
     for (const auto &elem : ca.datatype_members)
