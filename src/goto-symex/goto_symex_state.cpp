@@ -510,7 +510,7 @@ void goto_symex_statet::print_stack_trace(unsigned int indent, std::ostream &os)
 
   // Iterate through each call frame printing func name and location.
   src = source;
-  for (it = call_stack.rbegin(); it != call_stack.rend(); it++)
+  for (it = call_stack.rbegin(); it != call_stack.rend(); ++it)
   {
     if (it->function_identifier == "")
     { // Top level call
@@ -545,7 +545,7 @@ std::vector<stack_framet> goto_symex_statet::gen_stack_trace() const
   // Format is a vector of strings, each recording a particular function
   // invocation.
 
-  for (it = call_stack.rbegin(); it != call_stack.rend(); it++)
+  for (it = call_stack.rbegin(); it != call_stack.rend(); ++it)
   {
     src = it->calling_location;
 

@@ -972,29 +972,9 @@ bool clang_cpp_convertert::build_dynamic_cast(
     return match;
   };
 
-  // Reference form: throw std::bad_cast on no-match (the standard
-  // requires this; the catch (bad_cast&) arm of any try/catch then
-  // fires). Without <typeinfo> the bad_cast symbol isn't declared
-  // and we can't synthesise the throw — refuse the cast rather than
-  // silently swallow the failure mode the program may rely on.
   if (is_reference)
   {
-    const symbolt *bad_cast_sym = ns.lookup("tag-std::bad_cast");
-    if (!bad_cast_sym)
-    {
-      log_error("dynamic_cast<T&> requires std::bad_cast — include <typeinfo>");
-      abort();
-    }
-
-    exprt match = arms.empty() ? exprt(false_exprt()) : vptr_match_any();
-
-    typet bad_cast_type = symbol_typet(bad_cast_sym->id);
-    side_effect_exprt throw_op("cpp-throw", bad_cast_type);
-    throw_op.copy_to_operands(side_effect_exprt("nondet", bad_cast_type));
-
-    code_ifthenelset if_throw;
-    if_throw.cond() = not_exprt(match);
-    if_throw.then_case() = code_expressiont(throw_op);
+    // TODO: find a way to throw std::bad_cast
 
     // Clang strips the reference from cast.getType(), so target_type is
     // the un-referenced struct T. Reconstruct the IR-level reference
@@ -1005,13 +985,7 @@ bool clang_cpp_convertert::build_dynamic_cast(
     exprt cast_value = src_pointer;
     gen_typecast(ns, cast_value, ref_type);
 
-    code_blockt block;
-    block.copy_to_operands(if_throw);
-    block.copy_to_operands(code_expressiont(cast_value));
-
-    side_effect_exprt stmt_expr("statement_expression", ref_type);
-    stmt_expr.copy_to_operands(block);
-    new_expr = stmt_expr;
+    new_expr = cast_value;
     return false;
   }
 

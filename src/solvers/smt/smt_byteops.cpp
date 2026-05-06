@@ -507,7 +507,6 @@ smt_astt smt_convt::convert_byte_update_bv_mode(const byte_update2t &data)
   // the bottom, of the reconstructed / merged output. There might not be a
   // middle if the update byte is at the top or the bottom.
   unsigned int top_of_update = (8 * src_offset) + 8;
-  unsigned int bottom_of_update = (8 * src_offset);
 
   smt_astt top;
   if (top_of_update == width_op0)
@@ -534,7 +533,10 @@ smt_astt smt_convt::convert_byte_update_bv_mode(const byte_update2t &data)
     bottom = value;
   }
   else
+  {
+    unsigned int bottom_of_update = (8 * src_offset);
     bottom = mk_extract(src_value, bottom_of_update - 1, 0);
+  }
 
   // Concatenate the top and bottom, and possible middle, together.
   smt_astt concat;

@@ -5,13 +5,18 @@
 #include "tuple"
 #include "utility"
 
+#if __cplusplus >= 201703L
+#  define __ESBMC_ARRAY_CONSTEXPR_17 constexpr
+#else
+#  define __ESBMC_ARRAY_CONSTEXPR_17
+#endif
+
 namespace std
 {
 #if __cplusplus >= 201103L
 template <typename T, std::size_t N>
-class array
+struct array
 {
-public:
   typedef T value_type;
   typedef std::size_t size_type;
   typedef std::ptrdiff_t difference_type;
@@ -22,31 +27,25 @@ public:
   typedef std::reverse_iterator<pointer> reverse_iterator;
   typedef std::reverse_iterator<const_pointer> const_reverse_iterator;
 
-private:
   value_type elems[N];
 
-public:
-  reference operator[](size_type index)
+  __ESBMC_ARRAY_CONSTEXPR_17 reference operator[](size_type index)
   {
-    __ESBMC_assert(index < N, "Index out of bounds");
     return elems[index];
   }
 
-  const_reference operator[](size_type index) const
+  constexpr const_reference operator[](size_type index) const
   {
-    __ESBMC_assert(index < N, "Index out of bounds");
     return elems[index];
   }
 
-  reference at(size_type index)
+  __ESBMC_ARRAY_CONSTEXPR_17 reference at(size_type index)
   {
-    __ESBMC_assert(index < N, "Index out of bounds");
     return elems[index];
   }
 
-  const_reference at(size_type index) const
+  constexpr const_reference at(size_type index) const
   {
-    __ESBMC_assert(index < N, "Index out of bounds");
     return elems[index];
   }
 
@@ -55,52 +54,62 @@ public:
     return N;
   }
 
-  reference front()
+  constexpr bool empty() const noexcept
+  {
+    return N == 0;
+  }
+
+  constexpr size_type max_size() const noexcept
+  {
+    return N;
+  }
+
+  __ESBMC_ARRAY_CONSTEXPR_17 reference front()
   {
     return elems[0];
   }
 
-  const_reference front() const
+  constexpr const_reference front() const
   {
     return elems[0];
   }
 
-  reference back()
+  __ESBMC_ARRAY_CONSTEXPR_17 reference back()
   {
     return elems[N - 1];
   }
 
-  const_reference back() const
+  constexpr const_reference back() const
   {
     return elems[N - 1];
   }
 
-  pointer begin() noexcept
+  __ESBMC_ARRAY_CONSTEXPR_17 pointer begin() noexcept
   {
     return &elems[0];
   }
 
-  const_pointer begin() const noexcept
+  constexpr const_pointer begin() const noexcept
   {
     return &elems[0];
   }
 
-  pointer end() noexcept
+  __ESBMC_ARRAY_CONSTEXPR_17 pointer end() noexcept
   {
     return &elems[N];
   }
 
-  const_pointer end() const noexcept
+  constexpr const_pointer end() const noexcept
   {
     return &elems[N];
   }
 
-  const_pointer cbegin() const noexcept
+  constexpr const_pointer cbegin() const noexcept
   {
     return &elems[0];
   }
 
-  const_pointer cend() const noexcept
+  constexpr const_pointer cend() const noexcept
   {
     return &elems[N];
   }
@@ -137,13 +146,13 @@ public:
   }
 #  endif
 
-  void fill(const_reference value)
+  __ESBMC_ARRAY_CONSTEXPR_17 void fill(const_reference value)
   {
     for (size_type i = 0; i < N; ++i)
       elems[i] = value;
   }
 
-  void swap(array &other) noexcept
+  __ESBMC_ARRAY_CONSTEXPR_17 void swap(array &other) noexcept
   {
     for (size_type i = 0; i < N; ++i)
     {
@@ -153,25 +162,25 @@ public:
     }
   }
 
-  pointer data() noexcept
+  __ESBMC_ARRAY_CONSTEXPR_17 pointer data() noexcept
   {
     return elems;
   }
 
-  const_pointer data() const noexcept
+  constexpr const_pointer data() const noexcept
   {
     return elems;
   }
 };
 
 template <typename T, std::size_t N>
-void swap(array<T, N> &a, array<T, N> &b) noexcept
+__ESBMC_ARRAY_CONSTEXPR_17 void swap(array<T, N> &a, array<T, N> &b) noexcept
 {
   a.swap(b);
 }
 
 template <typename T, std::size_t N>
-bool operator==(const array<T, N> &a, const array<T, N> &b)
+constexpr bool operator==(const array<T, N> &a, const array<T, N> &b)
 {
   for (std::size_t i = 0; i < N; ++i)
   {
@@ -182,13 +191,13 @@ bool operator==(const array<T, N> &a, const array<T, N> &b)
 }
 
 template <typename T, std::size_t N>
-bool operator!=(const array<T, N> &a, const array<T, N> &b)
+constexpr bool operator!=(const array<T, N> &a, const array<T, N> &b)
 {
   return !(a == b);
 }
 
 template <typename T, std::size_t N>
-bool operator<(const array<T, N> &a, const array<T, N> &b)
+constexpr bool operator<(const array<T, N> &a, const array<T, N> &b)
 {
   for (std::size_t i = 0; i < N; ++i)
   {
@@ -201,19 +210,19 @@ bool operator<(const array<T, N> &a, const array<T, N> &b)
 }
 
 template <typename T, std::size_t N>
-bool operator<=(const array<T, N> &a, const array<T, N> &b)
+constexpr bool operator<=(const array<T, N> &a, const array<T, N> &b)
 {
   return !(b < a);
 }
 
 template <typename T, std::size_t N>
-bool operator>(const array<T, N> &a, const array<T, N> &b)
+constexpr bool operator>(const array<T, N> &a, const array<T, N> &b)
 {
   return b < a;
 }
 
 template <typename T, std::size_t N>
-bool operator>=(const array<T, N> &a, const array<T, N> &b)
+constexpr bool operator>=(const array<T, N> &a, const array<T, N> &b)
 {
   return !(a < b);
 }
@@ -221,22 +230,19 @@ bool operator>=(const array<T, N> &a, const array<T, N> &b)
 template <std::size_t I, typename T, std::size_t N>
 constexpr T &get(array<T, N> &a) noexcept
 {
-  __ESBMC_assert(I < N, "Index out of bounds");
-  return a[I];
+  return a.elems[I];
 }
 
 template <std::size_t I, typename T, std::size_t N>
 constexpr const T &get(const array<T, N> &a) noexcept
 {
-  __ESBMC_assert(I < N, "Index out of bounds");
-  return a[I];
+  return a.elems[I];
 }
 
 template <std::size_t I, typename T, std::size_t N>
 constexpr T &&get(array<T, N> &&a) noexcept
 {
-  __ESBMC_assert(I < N, "Index out of bounds");
-  return std::move(a[I]);
+  return std::move(a.elems[I]);
 }
 
 template <typename T, std::size_t N>

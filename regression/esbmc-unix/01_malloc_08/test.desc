@@ -1,4 +1,4 @@
 THOROUGH
 main.c
---unwind 1 --context-bound 1
+--unwind 1 --context-bound 1 --z3
 ^VERIFICATION FAILED$

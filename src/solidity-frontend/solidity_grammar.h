@@ -1,3 +1,11 @@
+/// \file solidity_grammar.h
+/// \brief Solidity grammar enumerations and classification helpers.
+///
+/// Defines enums that mirror the Solidity language grammar (type names,
+/// operators, statement kinds, expression kinds, etc.) and provides functions
+/// to classify solc JSON AST nodes into these categories. Used throughout the
+/// converter to dispatch on AST node types.
+
 #ifndef SOLIDITY_GRAMMAR_H_
 #define SOLIDITY_GRAMMAR_H_
 
@@ -240,6 +248,7 @@ enum BlockT
   BlockForStatement,
   BlockIfStatement,
   BlockWhileStatement,
+  BlockDoWhileStatement,
   BlockExpressionStatement,
   BlockTError
 };
@@ -256,13 +265,15 @@ enum StatementT
   ForStatement,          // rule for-statement
   IfStatement,           // rule if-statement
   WhileStatement,
+  DoWhileStatement,
   StatementTError,
-  ContinueStatement,    // rule continue
-  BreakStatement,       // rule break
-  RevertStatement,      // rule revert
-  EmitStatement,        // rule emit
-  PlaceholderStatement, //rule placeholder
-  TryStatement          // rule try
+  ContinueStatement,      // rule continue
+  BreakStatement,         // rule break
+  RevertStatement,        // rule revert
+  EmitStatement,          // rule emit
+  PlaceholderStatement,   //rule placeholder
+  TryStatement,           // rule try
+  InlineAssemblyStatement // rule inline assembly (havoc)
 };
 StatementT get_statement_t(const nlohmann::json &stmt);
 const char *statement_to_str(StatementT type);
@@ -320,6 +331,7 @@ enum ExpressionT
   UO_Minus,   // -
   UO_Not,     // ~
   UO_LNot,    // !
+  UO_Delete,  // delete
 
   //ternaryOperator
   ConditionalOperatorClass, // ?...:...
@@ -366,6 +378,9 @@ enum ExpressionT
   // equivalent to clang::Stmt::ArraySubscriptExprClass
   // Solidity does NOT provide such rule
   IndexAccess,
+
+  // Array slice access [start:end] on calldata arrays
+  IndexRangeAccess,
 
   // Create a temporary object by keywords 'new'
   // equivalent to clang::Stmt::CXXTemporaryObjectExprClass
@@ -465,6 +480,158 @@ enum VisibilityT
   UnknownT
 };
 VisibilityT get_access_t(const nlohmann::json &ast_node);
+
+// Solidity type annotation stored on irep typet objects via #sol_type attribute.
+// Replaces the previous string-based system with a formal enum for type safety.
+enum class SolType
+{
+  // unsigned integers (uint8 – uint256)
+  UINT8,
+  UINT16,
+  UINT24,
+  UINT32,
+  UINT40,
+  UINT48,
+  UINT56,
+  UINT64,
+  UINT72,
+  UINT80,
+  UINT88,
+  UINT96,
+  UINT104,
+  UINT112,
+  UINT120,
+  UINT128,
+  UINT136,
+  UINT144,
+  UINT152,
+  UINT160,
+  UINT168,
+  UINT176,
+  UINT184,
+  UINT192,
+  UINT200,
+  UINT208,
+  UINT216,
+  UINT224,
+  UINT232,
+  UINT240,
+  UINT248,
+  UINT256,
+
+  // signed integers (int8 – int256)
+  INT8,
+  INT16,
+  INT24,
+  INT32,
+  INT40,
+  INT48,
+  INT56,
+  INT64,
+  INT72,
+  INT80,
+  INT88,
+  INT96,
+  INT104,
+  INT112,
+  INT120,
+  INT128,
+  INT136,
+  INT144,
+  INT152,
+  INT160,
+  INT168,
+  INT176,
+  INT184,
+  INT192,
+  INT200,
+  INT208,
+  INT216,
+  INT224,
+  INT232,
+  INT240,
+  INT248,
+  INT256,
+
+  // other value types
+  BOOL,
+  ADDRESS,
+  ADDRESS_PAYABLE,
+  STRING,
+  ENUM,
+
+  // fixed-size bytes (bytes1 – bytes32)
+  BYTES1,
+  BYTES2,
+  BYTES3,
+  BYTES4,
+  BYTES5,
+  BYTES6,
+  BYTES7,
+  BYTES8,
+  BYTES9,
+  BYTES10,
+  BYTES11,
+  BYTES12,
+  BYTES13,
+  BYTES14,
+  BYTES15,
+  BYTES16,
+  BYTES17,
+  BYTES18,
+  BYTES19,
+  BYTES20,
+  BYTES21,
+  BYTES22,
+  BYTES23,
+  BYTES24,
+  BYTES25,
+  BYTES26,
+  BYTES27,
+  BYTES28,
+  BYTES29,
+  BYTES30,
+  BYTES31,
+  BYTES32,
+
+  // dynamic bytes
+  BYTES_DYN,    // dynamic bytes type
+  BYTES_STATIC, // BytesStatic runtime type (from type conversions)
+
+  // literals / constants
+  INT_CONST,
+  STRING_LITERAL,
+
+  // composite types
+  ARRAY,
+  ARRAY_LITERAL,
+  DYNARRAY,
+  ARRAY_CALLOC,
+  MAPPING,
+  STRUCT,
+
+  // contract / library
+  CONTRACT,
+  LIBRARY,
+
+  // tuples (ESBMC internal)
+  TUPLE_RETURNS,
+  TUPLE_INSTANCE,
+
+  // default / unset
+  UNSET
+};
+
+const char *sol_type_to_str(SolType t);
+SolType str_to_sol_type(const std::string &s);
+SolType elementary_to_sol_type(ElementaryTypeNameT t);
+
+bool is_uint_type(SolType t);
+bool is_int_type(SolType t);
+bool is_integer_type(SolType t);
+bool is_bytesN_type(SolType t);
+bool is_bytes_type(SolType t);
+bool is_address_type(SolType t);
 
 }; // namespace SolidityGrammar
 

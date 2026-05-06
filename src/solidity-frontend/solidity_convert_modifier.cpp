@@ -1,5 +1,12 @@
+/// \file solidity_convert_modifier.cpp
+/// \brief Function and modifier definition conversion for the Solidity frontend.
+///
+/// Converts Solidity function definitions, modifier definitions, and fallback/
+/// receive functions from the solc JSON AST into ESBMC's symbol table and code
+/// representation. Handles parameter lists, return parameters, visibility,
+/// mutability, this-pointer injection, and modifier invocation inlining.
+
 #include <solidity-frontend/solidity_convert.h>
-#include <solidity-frontend/solidity_template.h>
 #include <solidity-frontend/typecast.h>
 #include <util/arith_tools.h>
 #include <util/bitvector.h>
@@ -9,11 +16,7 @@
 #include <util/mp_arith.h>
 #include <util/std_expr.h>
 #include <util/message.h>
-#include <regex>
-#include <optional>
-
 #include <fstream>
-#include <iostream>
 
 bool solidity_convertert::get_function_definition(
   const nlohmann::json &ast_node)
@@ -78,7 +81,8 @@ bool solidity_convertert::get_function_definition(
 
   // special handling for tuple:
   // construct a tuple type and a tuple instance
-  if (type.return_type().get("#sol_type") == "TUPLE_RETURNS")
+  if (
+    get_sol_type(type.return_type()) == SolidityGrammar::SolType::TUPLE_RETURNS)
   {
     exprt dump;
     if (get_tuple_definition(*current_functionDecl))
@@ -142,7 +146,9 @@ bool solidity_convertert::get_function_definition(
     (ast_node["nodeType"] == "EventDefinition" ||
      ast_node["nodeType"] == "ErrorDefinition" ||
      SolidityGrammar::is_sol_library_function(ast_node["id"].get<int>()));
-  if (!is_event_err_lib)
+  bool is_free_function = ast_node.contains("kind") &&
+                          ast_node["kind"].get<std::string>() == "freeFunction";
+  if (!is_event_err_lib && !is_free_function)
     get_function_this_pointer_param(
       c_name, id, debug_modulename, location_begin, type);
 
@@ -170,6 +176,41 @@ bool solidity_convertert::get_function_definition(
   }
 
   added_symbol.type = type;
+
+  // 11.3 Declare named return parameters as local variables.
+  // Solidity allows `returns (uint result) { result = 42; }` where `result`
+  // is both a local variable and the implicit return value. We must emit
+  // DECL + zero-init for each named return parameter so that assignments to
+  // them work correctly in symex, and append an implicit return at the end.
+  std::vector<exprt> named_ret_decls;
+  std::vector<exprt> named_ret_syms;
+  bool has_named_returns = false;
+  if (
+    !is_ctor && ast_node.contains("returnParameters") &&
+    ast_node["returnParameters"].contains("parameters") &&
+    get_sol_type(type.return_type()) != SolidityGrammar::SolType::TUPLE_RETURNS)
+  {
+    for (const auto &rparam : ast_node["returnParameters"]["parameters"])
+    {
+      std::string rname = rparam["name"].get<std::string>();
+      if (rname.empty())
+        continue; // unnamed return parameter — skip
+
+      has_named_returns = true;
+      exprt var_decl;
+      if (get_var_decl(rparam, var_decl))
+        return true;
+      named_ret_decls.push_back(var_decl);
+
+      // Retrieve the symbol we just created
+      std::string rvar_name, rvar_id;
+      if (get_var_decl_name(rparam, rvar_name, rvar_id))
+        return true;
+      const symbolt *sym = context.find_symbol(rvar_id);
+      assert(sym != nullptr);
+      named_ret_syms.push_back(symbol_expr(*sym));
+    }
+  }
 
   // 12. Convert body and embed the body into the same symbol
   // skip for 'unimplemented' functions which has no body,
@@ -202,11 +243,84 @@ bool solidity_convertert::get_function_definition(
           return true;
       }
     }
+
+    // Prepend named return parameter declarations at the start of the body
+    if (has_named_returns && body_exprt.is_code())
+    {
+      code_blockt new_body;
+      for (auto &decl : named_ret_decls)
+        new_body.copy_to_operands(decl);
+      for (auto &op : body_exprt.operands())
+        new_body.copy_to_operands(op);
+
+      // Append implicit return of the named return variable if the body
+      // does not already end with an explicit return statement.
+      bool has_explicit_return = false;
+      if (!new_body.operands().empty())
+      {
+        const exprt &last = new_body.operands().back();
+        if (last.is_code() && last.statement() == "return")
+          has_explicit_return = true;
+      }
+      if (!has_explicit_return && named_ret_syms.size() == 1)
+      {
+        code_returnt implicit_ret;
+        implicit_ret.return_value() = named_ret_syms[0];
+        implicit_ret.location() = location_begin;
+        new_body.copy_to_operands(implicit_ret);
+      }
+
+      body_exprt = new_body;
+    }
+  }
+
+  // For library functions with storage parameters, append a copy-out
+  // assignment to a global $out bridge at the end of the body. The
+  // matching call-site code in solidity_convert_expr.cpp reads from this
+  // bridge after the call to propagate modifications back to the caller.
+  if (
+    is_event_err_lib && ast_node.contains("parameters") &&
+    ast_node["parameters"].contains("parameters"))
+  {
+    for (const auto &p : ast_node["parameters"]["parameters"])
+    {
+      if (!p.contains("storageLocation") || p["storageLocation"] != "storage")
+        continue;
+
+      std::string p_name = p["name"].get<std::string>();
+      std::string p_sym_id =
+        get_library_param_id(c_name, name, p_name, p["id"].get<int>());
+      std::string out_id = p_sym_id + "$out";
+
+      const symbolt *param_sym = context.find_symbol(p_sym_id);
+      if (!param_sym)
+      {
+        log_error("storage-ref bridge: param symbol {} not found", p_sym_id);
+        return true;
+      }
+
+      if (context.find_symbol(out_id) == nullptr)
+      {
+        symbolt out_sym;
+        get_default_symbol(
+          out_sym,
+          debug_modulename,
+          param_sym->type,
+          p_name + "$out",
+          out_id,
+          location_begin);
+        out_sym.static_lifetime = true;
+        out_sym.lvalue = true;
+        out_sym.value = gen_zero(get_complete_type(param_sym->type, ns), true);
+        move_symbol_to_context(out_sym);
+      }
+
+      body_exprt.copy_to_operands(code_assignt(
+        symbol_expr(*context.find_symbol(out_id)), symbol_expr(*param_sym)));
+    }
   }
 
   added_symbol.value = body_exprt;
-
-  //assert(!"done - finished all expr stmt in function?");
 
   // 13. Restore current_functionDecl
   log_debug("solidity", "@@@ Finish parsing function {}", current_functionName);
@@ -412,8 +526,7 @@ bool solidity_convertert::get_func_modifier(
   {
     int modifier_id = (*it)["modifierName"]["referencedDeclaration"];
     // we cannot use reference here, as the src_ast_json got inserted/deleted later
-    const nlohmann::json mod_def =
-      find_decl_ref(src_ast_json["nodes"], modifier_id);
+    const nlohmann::json mod_def = find_decl_ref(modifier_id);
     assert(!mod_def.is_null());
     assert(!mod_def.empty());
 
@@ -571,8 +684,7 @@ bool solidity_convertert::get_func_modifier(
     {
       int next_modifier_id =
         (*next_it)["modifierName"]["referencedDeclaration"];
-      const nlohmann::json &next_mod_def =
-        find_decl_ref(src_ast_json["nodes"], next_modifier_id);
+      const nlohmann::json &next_mod_def = find_decl_ref(next_modifier_id);
 
       std::string next_mod_name = next_mod_def["name"];
       std::string next_aux_func_name, next_aux_func_id;

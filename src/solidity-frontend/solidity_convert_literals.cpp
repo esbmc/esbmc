@@ -1,3 +1,11 @@
+/// \file solidity_convert_literals.cpp
+/// \brief Literal conversion for the Solidity frontend.
+///
+/// Converts Solidity literal values (integer literals, boolean literals,
+/// string literals, address literals, and rational/fixed-point number
+/// literals) from the solc JSON AST into ESBMC's constant expression
+/// representation with appropriate typing.
+
 #include <solidity-frontend/solidity_convert.h>
 #include <util/arith_tools.h>
 #include <util/bitvector.h>
@@ -51,8 +59,6 @@ bool solidity_convertert::convert_integer_literal(
     type);
 
   dest.swap(the_val);
-  return false;
-
   return false;
 }
 
@@ -114,7 +120,7 @@ bool solidity_convertert::convert_string_literal(
   string_constantt string(the_value);
 
   dest.swap(string);
-  dest.type().set("#sol_type", "STRING_LITERAL");
+  set_sol_type(dest.type(), SolidityGrammar::SolType::STRING_LITERAL);
   return false;
 }
 

@@ -236,7 +236,7 @@ bool full_eq(const irept &i1, const irept &i2)
     irept::named_subt::const_iterator i1_it = i1_named_sub.begin();
     irept::named_subt::const_iterator i2_it = i2_named_sub.begin();
 
-    for (; i1_it != i1_named_sub.end(); i1_it++, i2_it++)
+    for (; i1_it != i1_named_sub.end(); ++i1_it, ++i2_it)
       if (
         i1_it->first != i2_it->first || !full_eq(i1_it->second, i2_it->second))
         return false;
@@ -246,7 +246,7 @@ bool full_eq(const irept &i1, const irept &i2)
     irept::named_subt::const_iterator i1_it = i1_comments.begin();
     irept::named_subt::const_iterator i2_it = i2_comments.begin();
 
-    for (; i1_it != i1_comments.end(); i1_it++, i2_it++)
+    for (; i1_it != i1_comments.end(); ++i1_it, ++i2_it)
       if (
         i1_it->first != i2_it->first || !full_eq(i1_it->second, i2_it->second))
         return false;
@@ -337,7 +337,7 @@ int irept::compare(const irept &i) const
 
     for (it1 = get_sub().begin(), it2 = i.get_sub().begin();
          it1 != get_sub().end() && it2 != i.get_sub().end();
-         it1++, it2++)
+         ++it1, ++it2)
     {
       r = it1->compare(*it2);
       if (r != 0)
@@ -357,7 +357,7 @@ int irept::compare(const irept &i) const
 
     for (it1 = get_named_sub().begin(), it2 = i.get_named_sub().begin();
          it1 != get_named_sub().end() && it2 != i.get_named_sub().end();
-         it1++, it2++)
+         ++it1, ++it2)
     {
       r = it1->first.compare(it2->first);
       if (r != 0)

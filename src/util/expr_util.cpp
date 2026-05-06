@@ -53,10 +53,9 @@ exprt gen_zero(const typet &type, bool array_as_array_of)
   }
   else if (type_id == "array")
   {
-    if (array_as_array_of)
+    if (array_as_array_of || to_array_type(type).size().id() == "infinity")
     {
-      result =
-        array_of_exprt(gen_zero(type.subtype(), array_as_array_of), type);
+      result = array_of_exprt(gen_zero(type.subtype(), true), type);
     }
     else
     {

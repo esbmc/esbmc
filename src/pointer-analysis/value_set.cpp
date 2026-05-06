@@ -60,7 +60,7 @@ void value_sett::output(std::ostream &out) const
 
     for (object_mapt::const_iterator o_it = e.object_map.begin();
          o_it != e.object_map.end();
-         o_it++)
+         ++o_it)
     {
       const expr2tc &o = object_numbering[o_it->first];
 
@@ -560,7 +560,7 @@ void value_sett::get_value_set_rec(
 
   if (
     is_bitor2t(expr) || is_bitand2t(expr) || is_bitxor2t(expr) ||
-    is_bitnand2t(expr) || is_bitnor2t(expr) || is_bitnxor2t(expr))
+    is_bitnand2t(expr) || is_bitnor2t(expr))
   {
     assert(expr->get_num_sub_exprs() == 2);
     get_value_set_rec(*expr->get_sub_expr(0), dest, suffix, original_type);
@@ -1260,7 +1260,7 @@ void value_sett::do_free(const expr2tc &op)
 
     for (object_mapt::const_iterator o_it = value.second.object_map.begin();
          o_it != value.second.object_map.end();
-         o_it++)
+         ++o_it)
     {
       const expr2tc &object = object_numbering[o_it->first];
 
@@ -1444,7 +1444,7 @@ void value_sett::do_function_call(
   std::vector<type2tc>::const_iterator it2 = argument_types.begin();
   for (std::vector<irep_idt>::const_iterator it = argument_names.begin();
        it != argument_names.end();
-       it++, it2++)
+       ++it, ++it2)
   {
     const std::string &identifier = it->as_string();
     if (identifier == "")

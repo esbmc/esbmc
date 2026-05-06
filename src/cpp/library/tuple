@@ -27,16 +27,14 @@ public:
   Head head;
   tuple<Tail...> tail;
 
-  // Default constructor
-  tuple() = default;
+  constexpr tuple() = default;
 
-  // Constructor
-  tuple(const Head &head, const Tail &...tail) : head(head), tail(tail...)
+  constexpr tuple(const Head &head, const Tail &...tail)
+    : head(head), tail(tail...)
   {
   }
 
-  // Copy constructor
-  tuple(const tuple &other) : head(other.head), tail(other.tail)
+  constexpr tuple(const tuple &other) : head(other.head), tail(other.tail)
   {
   }
 
@@ -46,18 +44,15 @@ public:
     typename = std::enable_if_t<
       std::is_convertible<UHead, Head>::value &&
       (... && std::is_convertible<UTail, Tail>::value)>>
-  tuple(const tuple<UHead, UTail...> &other)
+  constexpr tuple(const tuple<UHead, UTail...> &other)
     : head(other.head), tail(other.tail)
   {
   }
 
   tuple &operator=(const tuple &other)
   {
-    if (this != &other)
-    {
-      this->head = other.head;
-      this->tail = other.tail;
-    }
+    head = other.head;
+    tail = other.tail;
     return *this;
   }
 
@@ -67,10 +62,6 @@ public:
     this->head = other.head;
     other.head = temp;
     this->tail.swap(other.tail);
-  }
-
-  ~tuple()
-  {
   }
 };
 

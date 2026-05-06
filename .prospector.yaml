@@ -1,0 +1,20 @@
+# Prospector configuration for ESBMC.
+#
+# Codacy runs Prospector, which in turn runs Pyflakes, pylint, pydocstyle,
+# and other Python linters.
+#
+# We disable Pyflakes F821 ("undefined name") globally because the
+# operational-model shims under src/python-frontend/models/ deliberately
+# reference ESBMC intrinsics (__ESBMC_assume, __ESBMC_sin, nondet_bool,
+# nondet_int, __VERIFIER_nondet_bool, ...) that have no Python binding:
+# they are matched by name by ESBMC's Python converter, not resolved at
+# Python runtime. Pyflakes does not honor `# noqa` markers, so per-line
+# suppression is not available.
+#
+# Pylint's E0602 (undefined-variable) still runs via Prospector and
+# catches genuine undefined-name bugs across the rest of the codebase,
+# so we do not lose meaningful coverage.
+
+pyflakes:
+  disable:
+    - F821
