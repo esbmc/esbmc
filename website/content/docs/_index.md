@@ -245,9 +245,9 @@ esbmc file.c --z3
   <li>There is a known issue where a constant-bounded symbol might cause incorrect simplifications.</li>
 </ul>
 
-### Falsification
+## Verification Algorithms
 
-<h3 id="falsification"></h3>
+### Falsification {#falsification}
 
 ```sh
 esbmc file.c --falsification
@@ -259,7 +259,7 @@ esbmc file.c --falsification
 
 <p>The falsification algorithm also offers the option to change the granularity of the increment; the default value is <i>1</i>, but can be increased in order to meet any expected behaviour via --k-step nr. Note that changing the value of the increment can lead to slower verification time and might not present the shortest counterexample possible for a property violation.</p>
 
-<h3 id="incremental-bmc">Incremental BMC</h3>
+### Incremental BMC {#incremental-bmc}
 
 ```sh
 esbmc file.c --incremental-bmc
@@ -272,7 +272,7 @@ assumptions. Normally, this would lead to unsound behaviour, however, the first 
 
 <p>The algorithm also offers the option to change the granularity of the increment; the default value is <i>1</i>, but can be increased in order to meet any expected behaviour via --k-step nr. Note that changing the value of the increment can lead to slower verification time and might not present the shortest counterexample possible for the property violation.</p>
 
-<h3 id="k-induction">k-Induction proof rule</h3>
+### k-Induction proof rule {#k-induction}
 
 ```sh
 esbmc file.c --k-induction
@@ -294,7 +294,7 @@ esbmc file.c --k-induction
 
 <p>The algorithm starts with <i>k = 1</i>. It increases it up to a maximum number of iterations, incrementally analysing the program, until it either finds a bug (i.e., the base case is satisfiable for some <i>k</i>), proves correctness (i.e., the base case is unsatisfiable and either the forward condition or inductive step is unsatisfiable for some <i>k</i>), or exhausts either time or memory constraints.</p>
 
-<h4 id="loop-invariants">Loop Invariant Support</h4>
+## Loop Invariants {#loop-invariants}
 
 ```sh
 esbmc file.c --loop-invariant
@@ -308,14 +308,9 @@ prohibitive or hit iteration limits.
 Loop invariants are specified using the built-in function
 `__ESBMC_loop_invariant(condition)` placed within the loop body.
 
----
-
 ### Verification Modes
 
-As of the latest release, ESBMC provides **two distinct modes** for loop
-invariant verification:
-
----
+ESBMC provides **two distinct modes** for loop invariant verification:
 
 #### `--loop-invariant` — Combined Mode (Default, Recommended)
 
@@ -352,8 +347,6 @@ GOTO loop_head
 | Correct but weak | Passes | Proves property via forward condition |
 | Correct and strong | Passes | Closes at inductive step |
 
----
-
 #### `--loop-invariant-check` — Legacy Mode
 
 The original three-part havoc abstraction is preserved under this flag for
@@ -372,9 +365,8 @@ state without proper constraint propagation.
 > Use `--loop-invariant-check` only when speed is the priority and you
 > understand the false-positive risk.
 
----
-
 ### Example: Basic Loop Invariant Usage
+
 ```c
 int main() {
     int i = 0;
@@ -396,8 +388,6 @@ Verify with:
 esbmc file.c --loop-invariant
 ```
 
----
-
 ### Companion Options
 
 The following options can be combined with the k-induction proof rule to
@@ -409,8 +399,6 @@ produce or strengthen inductive invariants:
   assume statements.
 - `--loop-invariant` — Use user-provided loop invariants with the combined
   k-induction mode (described above).
-
----
 
 ### Known Limitations
 
@@ -429,16 +417,12 @@ incorrect invariant will lead to a failed base-case assertion in
 > `--loop-invariant` combined mode. If you observe such false positives, ensure
 > you are not using `--loop-invariant-check`.
 
----
-
 ### Backward Compatibility
 
 The `--loop-invariant` flag now routes to the new combined mode. The legacy
 behavior is accessible via `--loop-invariant-check`. Programs without loop
 invariant annotations continue to use the standard k-induction unwinding
 approach.
-
----
 
 ### Loop Frame Rule (`--loop-frame-rule`)
 
@@ -483,8 +467,6 @@ nothing.
 > `--loop-frame-rule` requires `--loop-invariant-check`. It does not work with
 > `--loop-invariant` (the combined k-induction mode).
 
----
-
 ### References
 
 [1] Mary Sheeran, Satnam Singh, Gunnar Stålmarck: *Checking Safety Properties
@@ -493,7 +475,7 @@ Using Induction and a SAT-Solver.* FMCAD 2000: 108–125
 [2] Alastair F. Donaldson, Leopold Haller, Daniel Kroening, Philipp Rümmer:
 *Software Verification Using k-Induction.* SAS 2011: 351–368
   
-<h3 id="multiple-files">Verification of modules that rely on larger structures</h3>
+## Verification of modules that rely on larger structures {#multiple-files}
 
 <p>ESBMC can verify code that relies on existing infrastructures and must be compliant with those. Consider the following C program where the verification engineer wants to check whether the assert-statement in line 8 holds.</p> 
 
@@ -582,7 +564,7 @@ SyntaxHighlighter.all()
 16 }
 ```
 
-<h3 id="esbmc-python">Verification of Python Programs</h3>
+## Verification of Python Programs {#esbmc-python}
 
 <p> To enable the verification of Python programs, build ESBMC with the option:
 </br><code>'-DENABLE_PYTHON_FRONTEND=On'</code>.</p>
@@ -695,7 +677,7 @@ $ esbmc <python-file> --function <function-name>
 <p>This command instructs ESBMC to focus only on the specified function, making the verification process more efficient when you are only interested in a particular part of the code.</p>
 
 
-<h3 id="esbmc-solidity">Verification of Solidity Smart Contracts</h3>
+## Verification of Solidity Smart Contracts {#esbmc-solidity}
 
 <p> ESBMC has a frontend to process Solidity source code and hence can verify simple Solidity smart contracts. In order to verify Solidity smart contract, ESBMC should be built with the option <b>'-DENABLE_SOLIDITY_FRONTEND=On'</b>.</p>
 <p> There are three relevant options, which are:</p>
@@ -868,7 +850,7 @@ VERIFICATION FAILED
 <p>We provide a technical report about the verification of Solidity programs <a href="https://arxiv.org/pdf/2111.13117.pdf">here</a>.</p>
 <p>We also provide a Github action for security verification of solidity contracts using ESBMC-solidity <a href="https://github.com/actions-marketplace-validations/alanpjohn_esbmc-solidity-action" target=”_blank”>here</a>.</p>
 
-<h3 id="multiple-property-verification">Multiple Property Verification</h3>
+## Multiple Property Verification {#multiple-property-verification}
 
 ```sh
 esbmc file.c --multi-property
@@ -887,7 +869,7 @@ the current bound. This also activates <b>--no-remove-unreachable</b>.</li>
 </ul>
 <p>An example of multi-property verification can be found in the <b>Code  Coverage Metric</b> section below.</p>
 
-<h3 id="enumerating-all-violating-inputs">Enumerating All Violating Inputs</h3>
+## Enumerating All Violating Inputs {#enumerating-all-violating-inputs}
 
 ```sh
 esbmc file.c --all-witnesses
@@ -936,7 +918,7 @@ Summary: 2 distinct input tuples violate this property
 
 <p>Formally, this is <em>bounded projected model enumeration</em> for a fixed property: the same blocking-clause loop used in SAT-based all-solutions algorithms, lifted to SMT and projected onto the nondet input symbols. The SAT-level construction is classical &mdash; see Kenneth L. McMillan, <em>Applying SAT Methods in Unbounded Symbolic Model Checking</em>, CAV 2002 (<a href="https://doi.org/10.1007/3-540-45657-0_19">doi:10.1007/3-540-45657-0_19</a>) and Orna Grumberg, Assaf Schuster, Avi Yadgar, <em>Memory Efficient All-Solutions SAT Solver and Its Application for Reachability Analysis</em>, FMCAD 2004 (<a href="https://doi.org/10.1007/978-3-540-30494-4_20">doi:10.1007/978-3-540-30494-4_20</a>). The technique is complementary to dynamic-symbolic-execution test generation (KLEE, DART, SAGE), which varies the path condition to maximise code coverage; <b>--all-witnesses</b> instead fixes the failure path and enumerates input vectors on it.</p>
 
-<h3 id="code-coverage-metric">Code Coverage Metric</h3>
+## Code Coverage Metric {#code-coverage-metric}
 <p>
 ESBMC provides a set of coverage metrics to help you measure how much of the state space you've visited. The supported coverage metrics can be listed as follows:</p>
 <ul>
@@ -1083,7 +1065,7 @@ VERIFICATION FAILED
 Note that the <b>--condition-coverage-claims</b> option provides verbose output of claim information, including its condition and location. If only the coverage number is needed, we recommend using the <b>--condition-coverage</b> option instead.
 </p>
 
-<h3 id="smt-backends">Supported SMT backends</h3>
+## Supported SMT backends {#smt-backends}
 <p>ESBMC integrates a number of SMT solvers directly via their respective
   API, but on Unix can also be instructed to communicate with an external
   SMT solver process by a pipe. The following table lists ESBMC's options
@@ -1126,6 +1108,6 @@ Note that the <b>--condition-coverage-claims</b> option provides verbose output 
 
 <p>Remember to quote the <code>CMD</code> string when executing ESBMC.</p>
 
-<h3 id="esbmc-support">ESBMC Support</h3>
+## ESBMC Support {#esbmc-support}
 
 <p>We are still increasing the robustness of ESBMC and also continuously implementing new features, more optimizations and experiencing new encodings. For any question about ESBMC, please contact us via <code>https://github.com/esbmc/esbmc</code>.</p>

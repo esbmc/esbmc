@@ -146,7 +146,7 @@ int generate_sha256_hash_for_file(const char *path, std::string &output)
     return -1;
 
   const size_t bufSize = 32768;
-  char *buffer = (char *)alloca(bufSize);
+  char *buffer = static_cast<char *>(alloca(bufSize));
 
   picosha2::hash256_one_by_one hasher;
   hasher.init();
