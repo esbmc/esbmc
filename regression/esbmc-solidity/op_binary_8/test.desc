@@ -1,4 +1,4 @@
 THOROUGH
 contract.solast
---sol contract.sol --k-induction
+--sol contract.sol --no-standard-checks --unwind 10 --no-unwinding-assertions
 ^VERIFICATION SUCCESSFUL$

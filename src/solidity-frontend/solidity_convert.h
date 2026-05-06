@@ -1,3 +1,13 @@
+/// \file solidity_convert.h
+/// \brief Core AST-to-irep2 converter for the Solidity frontend.
+///
+/// Declares solidity_convertert, which walks the solc JSON AST and translates
+/// Solidity contracts, functions, statements, expressions, and types into
+/// ESBMC's irep2 intermediate representation. This is the central class of
+/// the Solidity frontend; its methods are split across multiple .cpp files
+/// organized by conversion category (declarations, expressions, statements,
+/// types, references, builtins, etc.).
+
 #ifndef SOLIDITY_FRONTEND_SOLIDITY_CONVERT_H_
 #define SOLIDITY_FRONTEND_SOLIDITY_CONVERT_H_
 
@@ -25,7 +35,8 @@ public:
     nlohmann::json &_ast_json,
     const std::string &_sol_cnts,
     const std::string &_sol_func,
-    const std::string &_contract_path);
+    const std::string &_contract_path,
+    const std::string &_focus_func = std::string());
   virtual ~solidity_convertert() = default;
 
   bool convert();
@@ -38,16 +49,30 @@ public:
   static const nlohmann::json &find_parent_contract(
     const nlohmann::json &json,
     const nlohmann::json &target);
+
+  // Pure DFS: find node with matching "id" field in any JSON subtree.
   static const nlohmann::json &
-  find_decl_ref_in_contract(const nlohmann::json &j, int ref_id);
-  static const nlohmann::json &
-  find_decl_ref_global(const nlohmann::json &j, int ref_id);
-  static const nlohmann::json &
-  find_decl_ref_unique_id(const nlohmann::json &json, int ref_id);
-  const nlohmann::json &find_decl_ref(const nlohmann::json &json, int ref_id);
+  find_node_by_id(const nlohmann::json &subtree, int ref_id);
+
+  // Scoped declaration lookup: searches current_baseContractName + libraries
+  // + global scope. Handles virtual/override via overrideMap.
+  // After inheritance merging, node IDs are not unique across contracts,
+  // so this function restricts the search to the correct scope.
+  const nlohmann::json &find_decl_ref(int ref_id);
+
   static const nlohmann::json &find_constructor_ref(int ref_decl_id);
   static const nlohmann::json &
   find_constructor_ref(const std::string &contract_name);
+
+  // Set/get SolType enum on a typet via the #sol_type irep attribute.
+  static void set_sol_type(typet &t, SolidityGrammar::SolType st)
+  {
+    t.set("#sol_type", SolidityGrammar::sol_type_to_str(st));
+  }
+  static SolidityGrammar::SolType get_sol_type(const typet &t)
+  {
+    return SolidityGrammar::str_to_sol_type(t.get("#sol_type").as_string());
+  }
 
   // json nodes that always empty
   // used as the return value for find_constructor_ref when
@@ -106,7 +131,7 @@ protected:
     nlohmann::json &sorted_files);
   bool contract_precheck();
   bool check_sol_ver();
-  bool populate_auxilary_vars();
+  bool populate_auxiliary_vars();
   bool
   populate_function_signature(nlohmann::json &json, const std::string &cname);
   bool populate_low_level_functions(const std::string &cname);
@@ -254,6 +279,15 @@ protected:
   void move_to_front_block(const exprt &expr);
   void move_to_back_block(const exprt &expr);
 
+  // Symbol id of a library function's formal parameter (pure — no reliance on
+  // current_functionName). Shared between the library function body builder
+  // and the call-site copy-back logic so the ID format stays in one place.
+  static std::string get_library_param_id(
+    const std::string &lib_cname,
+    const std::string &func_name,
+    const std::string &param_name,
+    int param_ast_id);
+
   // handle contract variables and functions
   bool
   get_struct_class_fields(const nlohmann::json &ast_node, struct_typet &type);
@@ -278,6 +312,37 @@ protected:
     const nlohmann::json &literal_type,
     const typet &dest_type,
     exprt &new_expr);
+  // Expression handlers (extracted from get_expr switch)
+  bool get_decl_ref_expr(const nlohmann::json &expr, exprt &new_expr);
+  bool get_literal_expr(
+    const nlohmann::json &expr,
+    const nlohmann::json &literal_type,
+    exprt &new_expr);
+  bool get_tuple_expr(
+    const nlohmann::json &expr,
+    const nlohmann::json &literal_type,
+    exprt &new_expr);
+  bool get_call_expr(
+    const nlohmann::json &expr,
+    const nlohmann::json &literal_type,
+    exprt &new_expr);
+  bool get_contract_member_call_expr(
+    const nlohmann::json &expr,
+    const nlohmann::json &literal_type,
+    exprt &new_expr);
+  bool get_index_access_expr(
+    const nlohmann::json &expr,
+    const nlohmann::json &literal_type,
+    exprt &new_expr);
+  bool get_index_range_access_expr(
+    const nlohmann::json &expr,
+    const nlohmann::json &literal_type,
+    exprt &new_expr);
+  bool get_new_object_expr(
+    const nlohmann::json &expr,
+    const nlohmann::json &literal_type,
+    exprt &new_expr);
+
   bool get_binary_operator_expr(const nlohmann::json &expr, exprt &new_expr);
   bool get_compound_assign_expr(
     const nlohmann::json &expr,
@@ -350,6 +415,11 @@ protected:
     const nlohmann::json &decl_ref,
     const nlohmann::json &caller,
     side_effect_expr_function_callt &call);
+  bool get_super_function_call(
+    const nlohmann::json &member_access,
+    const nlohmann::json &call_expr,
+    exprt &new_expr);
+  std::string find_contract_name_for_id(int func_id);
   bool get_ctor_call(
     const nlohmann::json &decl_ref,
     const nlohmann::json &epxr,
@@ -369,13 +439,15 @@ protected:
   bool get_library_function_call(
     const nlohmann::json &decl_ref,
     const nlohmann::json &caller,
-    side_effect_expr_function_callt &call);
+    side_effect_expr_function_callt &call,
+    bool skip_first_param = false);
   bool get_library_function_call(
     const exprt &func,
     const typet &t,
     const nlohmann::json &decl_ref,
     const nlohmann::json &caller,
-    side_effect_expr_function_callt &call);
+    side_effect_expr_function_callt &call,
+    bool skip_first_param = false);
   void get_library_function_call_no_args(
     const std::string &func_name,
     const std::string &func_id,
@@ -399,11 +471,15 @@ protected:
     side_effect_expr_function_callt &_call);
   bool is_esbmc_library_function(const std::string &id);
   bool get_empty_array_ref(const nlohmann::json &ast_node, exprt &new_expr);
+  void get_unique_name(
+    const std::string &name_prefix,
+    const std::string &id_prefix,
+    std::string &aux_name,
+    std::string &aux_id);
   void get_aux_array_name(std::string &aux_name, std::string &aux_id);
   void
   get_aux_array(const exprt &src_expr, const typet &sub_t, exprt &new_expr);
   void get_aux_var(std::string &aux_name, std::string &aux_id);
-  void get_aux_function(std::string &aux_name, std::string &aux_id);
   void get_size_expr(const exprt &rhs, exprt &size_expr);
   void store_update_dyn_array(
     const exprt &dyn_arr,
@@ -431,6 +507,10 @@ protected:
     const nlohmann::json &ast_node,
     const exprt &lhs,
     const exprt &rhs);
+  bool flatten_nested_tuple_assignment(
+    const nlohmann::json &expr,
+    const nlohmann::json &lhs_json,
+    const nlohmann::json &rhs_json);
   void
   get_tuple_assignment(const nlohmann::json &expr, const exprt &lop, exprt rop);
   void get_tuple_function_call(const exprt &op);
@@ -451,16 +531,17 @@ protected:
     const nlohmann::json &map_node,
     typet &key_t,
     typet &value_t,
-    std::string &key_sol_type,
-    std::string &val_sol_type);
+    SolidityGrammar::SolType &key_sol_type,
+    SolidityGrammar::SolType &val_sol_type);
   void gen_mapping_key_typecast(
     const std::string &c_name,
     exprt &pos,
     const locationt &l,
     const typet &key_type);
+  void xor_fold_key_to_64bit(exprt &key);
   bool get_new_mapping_index_access(
     const typet &value_t,
-    const std::string &val_sol_type,
+    SolidityGrammar::SolType val_sol_type,
     bool is_mapping_set,
     const exprt &array,
     const exprt &pos,
@@ -491,6 +572,10 @@ protected:
   bool multi_transaction_verification(const std::string &contractName);
   bool multi_contract_verification_bound(std::set<std::string> &tgt_set);
   bool multi_contract_verification_unbound(std::set<std::string> &tgt_set);
+  bool prepare_harness_entry_functions(
+    const std::set<std::string> &cname_set,
+    std::vector<const symbolt *> &entry_syms);
+  bool register_harness_main(const std::string &sol_id, const codet &func_body);
   void reset_auxiliary_vars();
 
   // auxiliary functions
@@ -594,6 +679,12 @@ protected:
     const exprt &_mem_call,
     const bool is_func_call,
     exprt &new_expr);
+  bool get_bound_low_level_call(
+    const nlohmann::json &expr,
+    const nlohmann::json &literal_type,
+    const std::string &mem_name,
+    const exprt &base,
+    exprt &new_expr);
   bool get_low_level_member_accsss(
     const nlohmann::json &expr,
     const nlohmann::json &options,
@@ -608,8 +699,76 @@ protected:
   get_target_function(const std::string &cname, const std::string &func_name);
   bool get_call_definition(const std::string &cname, exprt &new_expr);
   bool get_call_value_definition(const std::string &cname, exprt &new_expr);
+  // Signature-based dispatch for .call(abi.encodeWithSignature(...)).
+  // Tries to extract a literal signature + arg list from the payload AST;
+  // on success builds an inline typed dispatch helper and fills new_expr.
+  // Returns true on failure (caller should fall back to the generic $call#0).
+  bool try_get_signature_dispatched_call(
+    const nlohmann::json &expr,
+    const nlohmann::json &func_call,
+    const exprt &base,
+    exprt &new_expr);
+  // Storage-context shadow dispatch for
+  // .delegatecall(abi.encodeWithSignature(...)). Tries to locate the target
+  // function in each candidate contract, clone-and-rewrite its body to
+  // operate on the caller's state variables, and inline the dispatch chain
+  // at the current call site. Returns true on failure (caller should fall
+  // back to the generic $delegatecall#0 helper).
+  bool try_get_delegate_shadow_call(
+    const nlohmann::json &expr,
+    const nlohmann::json &func_call,
+    const exprt &base,
+    exprt &new_expr);
+  // Pre-validate that every state-var reference inside target_body resolves
+  // by name and type to a state variable of caller_cname. Returns false
+  // when every referenced state var has an exact match in the caller.
+  bool validate_delegate_shadow_compatible(
+    const std::string &caller_cname,
+    const nlohmann::json &target_body);
+  // Walk an inlined delegate-shadow body and replace every `return X;` with
+  // { ret_lvalue = X; goto end_label; } so the return does not escape the
+  // enclosing caller function. A `return;` (void) becomes a bare goto.
+  void rewrite_returns_for_delegate_shadow(
+    exprt &node,
+    const exprt &ret_lvalue,
+    const std::string &end_label);
+  // Attempt to inline a call to an internal helper inside the currently
+  // inlined delegate-shadow body.  Returns false on success (new_expr is
+  // set to the helper's $dl_ret local or to a skip for void returns, and
+  // the inlined body is pushed to front_block via a wrapper).  Returns
+  // true on failure so the caller can fall back to the normal call path.
+  bool try_inline_delegate_shadow_helper_call(
+    const nlohmann::json &call_expr,
+    const nlohmann::json &fdecl,
+    exprt &new_expr);
+  // Parse abi.encodeWithSignature("sig(T1,T2)", a1, a2) AST.
+  // Returns false and fills sig_literal + args_out on success.
+  bool extract_abi_encode_signature(
+    const nlohmann::json &payload,
+    std::string &sig_literal,
+    std::vector<const nlohmann::json *> &args_out);
+  // Build canonical "name(T1,T2,...)" from a FunctionDefinition AST node,
+  // using the typeDescriptions.typeString of each parameter (spaces stripped).
+  // Returns empty string for ctor/fallback/unnamed or on missing info.
+  std::string build_canonical_signature(const nlohmann::json &func_def);
+  // Look up a function in a contract by its full canonical signature.
+  // Walks src_ast_json to find an external/public FunctionDefinition whose
+  // canonical signature matches. Returns empty_json if not found.
+  const nlohmann::json &find_function_by_signature(
+    const std::string &cname,
+    const std::string &target_sig);
+  // Lazily generate a per-caller helper that dispatches a typed low-level
+  // call to whichever contract's address matches. Helper is registered in
+  // the symbol table; out_sym is set to its symbol.
+  bool get_typed_call_definition(
+    const std::string &caller_cname,
+    const std::string &target_sig,
+    const std::vector<exprt> &arg_exprs,
+    symbolt *&out_sym);
   bool get_transfer_definition(const std::string &cname, exprt &new_expr);
   bool get_send_definition(const std::string &cname, exprt &new_expr);
+  bool get_staticcall_definition(const std::string &cname, exprt &new_expr);
+  bool get_delegatecall_definition(const std::string &cname, exprt &new_expr);
   bool model_transaction(
     const nlohmann::json &expr,
     const exprt &this_expr,
@@ -671,6 +830,10 @@ protected:
   const std::string &tgt_cnts;
   std::set<std::string> tgt_cnt_set;
   const std::string &tgt_func;
+  // focus function: when set, the harness for the target contract
+  // dispatches only this public/external function (constructor + state
+  // init still run). Empty means feature disabled.
+  std::string focus_func;
   //smart contract source file
   const std::string &contract_path;
 
@@ -690,9 +853,12 @@ protected:
   // Use current level of BinOp type as the "anchor" type for numerical literal conversion:
   // In order to remove the unnecessary implicit IntegralCast. We need type of current level of BinaryOperator.
   // All numeric literals will be implicitly converted to this type. Pop it when finishing the current level of BinaryOperator.
-  // TODO: find a better way to deal with implicit type casting if it's not able to cope with compelx rules
+  // TODO: find a better way to deal with implicit type casting if it's not able to cope with complex rules
   std::stack<const nlohmann::json *> current_BinOp_type;
   std::string current_functionName;
+  // Track whether we are inside a Solidity "unchecked { ... }" block.
+  // When true, arithmetic overflow checks should be suppressed.
+  bool in_unchecked_block = false;
 
   // Auxiliary data structures:
   // Inheritance Order Record <contract_name, Contract_id>
@@ -705,6 +871,27 @@ protected:
     structureTypingMap;
   // virtual-override
   std::unordered_map<std::string, std::unordered_map<int, int>> overrideMap;
+  // Storage reference aliases: maps a local storage variable's AST id
+  // to the AST id of its source (e.g. secondWrapper → wrapper).
+  std::unordered_map<int, int> storage_ref_aliases;
+
+  // Delegate-shadow parameter remap: when inlining a target function body
+  // at a .delegatecall(...) call site, references to the target function's
+  // formal parameters (looked up by AST id) are redirected to pre-declared
+  // local variables in the caller's scope. Cleared after each inline.
+  std::unordered_map<int, std::string> delegate_shadow_param_remap;
+  // When non-null, overrides `current_functionDecl["returnParameters"]` for
+  // return-statement conversion. Set while inlining a target function body
+  // into the caller's context so that `return X;` picks up the target's
+  // return type, not the caller's (which may be void).
+  const nlohmann::json *delegate_shadow_target_return_params = nullptr;
+  // Name of the target contract currently being inlined by the delegate
+  // shadow path. When non-empty, function calls inside the inlined body
+  // that target internal/private functions of this contract are inlined
+  // recursively instead of going through the normal call-path (which
+  // would emit a `(TargetContract*)this` cast and silently depend on
+  // struct layout coincidences).
+  std::string delegate_shadow_target_cname;
 
   // contract name list
   std::unordered_map<int, std::string> contractNamesMap;
@@ -723,14 +910,31 @@ protected:
 
   std::unordered_map<std::string, std::vector<func_sig>> funcSignatures;
 
-  // The prefix for the id of each class
+  // The prefix for the id of each class (Solidity-defined structs)
   std::string prefix = "tag-";
+
+  // The prefix for c2goto library struct types (C frontend uses "struct" in tag)
+  std::string lib_prefix = "tag-struct ";
 
   // for auxiliary var name
   int aux_counter;
 
   // bound setting
   bool is_bound;
+
+  // Check if a contract should use "new" expression semantics (dynamic allocation).
+  // In unbound mode with a single verification target, new-expressions are optimized
+  // away (treated as static instances) to reduce state space.
+  bool should_treat_as_new(const std::string &contract_name) const
+  {
+    if (!newContractSet.count(contract_name))
+      return false;
+    if (
+      !is_bound && tgt_cnt_set.count(contract_name) > 0 &&
+      tgt_cnt_set.size() == 1)
+      return false;
+    return true;
+  }
 
   // reentry-check setting
   bool is_reentry_check;
@@ -741,6 +945,7 @@ protected:
   // NONDET
   side_effect_expr_function_callt nondet_bool_expr;
   side_effect_expr_function_callt nondet_uint_expr;
+  side_effect_expr_function_callt nondet_bytes_dynamic_expr;
 
   // type
   typet addr_t;
@@ -760,6 +965,47 @@ private:
   bool get_elementary_type_name_bytesn(
     SolidityGrammar::ElementaryTypeNameT &type,
     typet &out);
+
+  // RAII scope guards for global state variables.
+  // Usage: ScopeGuard<T> guard(member, new_value);
+  // Restores original value on destruction (including early returns/exceptions).
+  template <typename T>
+  class ScopeGuard
+  {
+    T &ref;
+    T saved;
+
+  public:
+    ScopeGuard(T &target, const T &new_val) : ref(target), saved(target)
+    {
+      ref = new_val;
+    }
+    ~ScopeGuard()
+    {
+      ref = saved;
+    }
+    ScopeGuard(const ScopeGuard &) = delete;
+    ScopeGuard &operator=(const ScopeGuard &) = delete;
+  };
+
+  // Stack push guard: pushes on construction, pops on destruction.
+  template <typename T>
+  class StackGuard
+  {
+    std::stack<T> &stk;
+
+  public:
+    StackGuard(std::stack<T> &s, const T &val) : stk(s)
+    {
+      stk.push(val);
+    }
+    ~StackGuard()
+    {
+      stk.pop();
+    }
+    StackGuard(const StackGuard &) = delete;
+    StackGuard &operator=(const StackGuard &) = delete;
+  };
 };
 
 static inline void static_lifetime_init(const contextt &context, codet &dest)
