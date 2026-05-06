@@ -692,28 +692,40 @@ expr2tc sub2t::do_simplify() const
     }
 
     // (w + x) - (y + z) with one shared addend cancels the common term.
-    // Mirror the type-match guard already in equality / notequal
-    // cancellation: a shared operand can hold differently-typed siblings
-    // (pointer-arith chains can have a common pointer base with i32 vs
-    // i64 offsets). Building sub2tc on a mixed-width pair would
-    // synthesize a malformed expression.
+    // Pointer-arith chains can have a common pointer base with mixed-width
+    // integer offsets, and the surviving sub's result type is the parent
+    // sub's type (ptrdiff for pointer-pointer subtraction, otherwise the
+    // arith type) — coerce the operands so the rebuilt sub2tc is valid.
+    auto cancel_sub = [&](expr2tc a, expr2tc b) -> expr2tc {
+      if (!coerce_to_common_type(a, b))
+        return expr2tc();
+      // The arith_2ops invariant requires the operand widths match the
+      // result type's width when neither side is a pointer. For
+      // pointer-pointer cancellation the result type is ptrdiff but the
+      // surviving operands are integer offsets — only fold when widths
+      // match.
+      if (a->type->get_width() != type->get_width())
+        return expr2tc();
+      return sub2tc(type, a, b);
+    };
+
     if (is_add2t(side_1) && is_add2t(side_2))
     {
       const add2t &add1 = to_add2t(side_1);
       const add2t &add2 = to_add2t(side_2);
-
-      if (
-        add1.side_1 == add2.side_1 && add1.side_2->type == add2.side_2->type)
-        return sub2tc(type, add1.side_2, add2.side_2);
-      if (
-        add1.side_1 == add2.side_2 && add1.side_2->type == add2.side_1->type)
-        return sub2tc(type, add1.side_2, add2.side_1);
-      if (
-        add1.side_2 == add2.side_1 && add1.side_1->type == add2.side_2->type)
-        return sub2tc(type, add1.side_1, add2.side_2);
-      if (
-        add1.side_2 == add2.side_2 && add1.side_1->type == add2.side_1->type)
-        return sub2tc(type, add1.side_1, add2.side_1);
+      expr2tc r;
+      if (add1.side_1 == add2.side_1)
+        if (!is_nil_expr(r = cancel_sub(add1.side_2, add2.side_2)))
+          return r;
+      if (add1.side_1 == add2.side_2)
+        if (!is_nil_expr(r = cancel_sub(add1.side_2, add2.side_1)))
+          return r;
+      if (add1.side_2 == add2.side_1)
+        if (!is_nil_expr(r = cancel_sub(add1.side_1, add2.side_2)))
+          return r;
+      if (add1.side_2 == add2.side_2)
+        if (!is_nil_expr(r = cancel_sub(add1.side_1, add2.side_1)))
+          return r;
     }
   }
 
@@ -4456,11 +4468,18 @@ expr2tc if2t::do_simplify() const
   // into the inner if (we're in its false_value position when c is false), so
   // the inner if can be reduced when its condition is c or !c.
 
+  // The if-collapse folds below all reuse `type` for the rebuilt node
+  // while taking operands from the inner if. The if2t constructor asserts
+  // type->type_id == trueval->type->type_id, so when the inner branches
+  // carry a different type (e.g. mixed-width operands after upstream
+  // simplification) we'd crash. Gate each fold on the inner operand's
+  // type matching the outer.
+
   // (c ? x : (c ? y : z)) == (c ? x : z)
   if (is_if2t(false_value))
   {
     const if2t &inner_if = to_if2t(false_value);
-    if (inner_if.cond == cond)
+    if (inner_if.cond == cond && inner_if.false_value->type == type)
       return if2tc(type, cond, true_value, inner_if.false_value);
   }
 
@@ -4471,7 +4490,9 @@ expr2tc if2t::do_simplify() const
     if (is_not2t(inner_if.cond))
     {
       const not2t &inner_neg = to_not2t(inner_if.cond);
-      if (conditions_equivalent(inner_neg.value, cond))
+      if (
+        conditions_equivalent(inner_neg.value, cond) &&
+        inner_if.true_value->type == type)
         return if2tc(type, cond, true_value, inner_if.true_value);
     }
   }
@@ -4483,7 +4504,9 @@ expr2tc if2t::do_simplify() const
     if (is_if2t(false_value))
     {
       const if2t &inner_if = to_if2t(false_value);
-      if (conditions_equivalent(inner_if.cond, neg.value))
+      if (
+        conditions_equivalent(inner_if.cond, neg.value) &&
+        inner_if.true_value->type == type)
         return if2tc(type, inner_if.cond, inner_if.true_value, true_value);
     }
   }
@@ -4496,7 +4519,7 @@ expr2tc if2t::do_simplify() const
   if (is_if2t(true_value))
   {
     const if2t &inner_if = to_if2t(true_value);
-    if (inner_if.cond == cond)
+    if (inner_if.cond == cond && inner_if.true_value->type == type)
       return if2tc(type, cond, inner_if.true_value, false_value);
   }
 
@@ -4507,7 +4530,9 @@ expr2tc if2t::do_simplify() const
     if (is_not2t(inner_if.cond))
     {
       const not2t &inner_neg = to_not2t(inner_if.cond);
-      if (conditions_equivalent(inner_neg.value, cond))
+      if (
+        conditions_equivalent(inner_neg.value, cond) &&
+        inner_if.false_value->type == type)
         return if2tc(type, cond, inner_if.false_value, false_value);
     }
   }
@@ -4519,7 +4544,9 @@ expr2tc if2t::do_simplify() const
     if (is_if2t(true_value))
     {
       const if2t &inner_if = to_if2t(true_value);
-      if (conditions_equivalent(inner_if.cond, neg.value))
+      if (
+        conditions_equivalent(inner_if.cond, neg.value) &&
+        inner_if.false_value->type == type)
         return if2tc(type, cond, inner_if.false_value, false_value);
     }
   }
