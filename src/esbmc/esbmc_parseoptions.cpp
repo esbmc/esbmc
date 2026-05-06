@@ -565,8 +565,7 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("multi-property", true);
     // Don't disturb base-case if the user explicitly picked a different
     // k-induction phase (forward-condition-only or inductive-step-only).
-    if (
-      !cmdline.isset("forward-condition") && !cmdline.isset("inductive-step"))
+    if (!cmdline.isset("forward-condition") && !cmdline.isset("inductive-step"))
       options.set_option("base-case", true);
   }
 
