@@ -9,6 +9,7 @@ extern char *strncat(char *dst, const char *src, size_t n);
 void __byterepair_harness_main(void) {
     // --- Symbolic inputs ---
     char dbuf[16], sbuf[8];
+    // dst starts empty so old strlen(dst) == 0; appended bytes land at 0.
     dbuf[0] = '\0';
     sbuf[7] = '\0';
     char *dst = dbuf;
@@ -21,4 +22,12 @@ void __byterepair_harness_main(void) {
 
     // --- Postcondition assertions ---
     __ESBMC_assert(result == dst, "system property: strncat returns dst");
+
+    // For every index i below min(n, strlen(src)) (i.e. while src has not
+    // terminated yet within the first n bytes), dst[i] == src[i].
+    size_t i;
+    __ESBMC_assert(
+        __ESBMC_forall(&i,
+            !(i < n) || !(i == 0 || src[i - 1] != '\0') || dst[i] == src[i]),
+        "system property: strncat copies up to min(n, strlen(src)) bytes from src into dst");
 }

@@ -9,6 +9,8 @@ extern char *strcat(char *dst, const char *src);
 void __byterepair_harness_main(void) {
     // --- Symbolic inputs ---
     char dbuf[16], sbuf[8];
+    // dst starts empty, so old strlen(dst) == 0 and the appended bytes land
+    // at offset 0 — the post-condition collapses to strcpy's.
     dbuf[0] = '\0';
     sbuf[7] = '\0';
     char *dst = dbuf;
@@ -19,4 +21,12 @@ void __byterepair_harness_main(void) {
 
     // --- Postcondition assertions ---
     __ESBMC_assert(result == dst, "system property: strcat returns dst");
+
+    // For every index i up to and including the first '\0' in src,
+    // dst[i] == src[i] (since old strlen(dst) == 0).
+    size_t i;
+    __ESBMC_assert(
+        __ESBMC_forall(&i,
+            !(i < 8) || !(i == 0 || src[i - 1] != '\0') || dst[i] == src[i]),
+        "system property: strcat appends src to dst, including the null terminator");
 }

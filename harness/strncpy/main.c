@@ -20,4 +20,15 @@ void __byterepair_harness_main(void) {
 
     // --- Postcondition assertions ---
     __ESBMC_assert(result == dst, "system property: strncpy returns dst");
+
+    // For every index i in [0, n):
+    //   - while no '\0' has occurred in src yet, dst[i] == src[i];
+    //   - once src has terminated, the rest of dst is zero-padded.
+    size_t i;
+    __ESBMC_assert(
+        __ESBMC_forall(&i,
+            !(i < n) ||
+            ((i == 0 || src[i - 1] != '\0') ? (dst[i] == src[i])
+                                            : (dst[i] == '\0'))),
+        "system property: strncpy copies up to n bytes and zero-pads after the source terminator");
 }

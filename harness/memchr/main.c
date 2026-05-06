@@ -14,21 +14,15 @@ void __byterepair_harness_main(void) {
     const void *buf = (const void *)buf_arr;
     int ch = nondet_int();
 
-    // --- Precondition assumptions ---
-
     // --- Call under test ---
     void *result = memchr(buf, ch, n);
 
     // --- Postcondition assertions ---
-    // System property: result == NULL iff no byte in [0, n) equals (uchar)ch.
-    int found = 0;
-    __ESBMC_unroll(9);
-    for (size_t k = 0; k < n; k++) {
-        if (((const unsigned char *)buf)[k] == (unsigned char)ch) {
-            found = 1;
-            break;
-        }
-    }
-    __ESBMC_assert((result == ((void *)0)) == (found == 0),
+    // result == NULL iff no byte in [0, n) equals (unsigned char)ch.
+    size_t k;
+    __ESBMC_assert(
+        (result == ((void *)0))
+        == __ESBMC_forall(&k,
+               !(k < n) || ((const unsigned char *)buf)[k] != (unsigned char)ch),
         "system property: memchr returns NULL iff ch not in [buf, buf+n)");
 }

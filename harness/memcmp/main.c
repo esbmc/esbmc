@@ -15,21 +15,16 @@ void __byterepair_harness_main(void) {
     const void *s1 = (const void *)buf1;
     const void *s2 = (const void *)buf2;
 
-    // --- Precondition assumptions ---
-
     // --- Call under test ---
     int result = memcmp(s1, s2, n);
 
     // --- Postcondition assertions ---
-    // System property: result == 0 iff every byte in [0, n) is equal.
-    int all_eq = 1;
-    __ESBMC_unroll(9);
-    for (size_t k = 0; k < n; k++) {
-        if (((const unsigned char *)s1)[k] != ((const unsigned char *)s2)[k]) {
-            all_eq = 0;
-            break;
-        }
-    }
-    __ESBMC_assert((result == 0) == (all_eq != 0),
+    // result == 0 iff every byte in [0, n) is equal.
+    size_t k;
+    __ESBMC_assert(
+        (result == 0)
+        == __ESBMC_forall(&k,
+               !(k < n) || ((const unsigned char *)s1)[k]
+                           == ((const unsigned char *)s2)[k]),
         "system property: memcmp returns 0 iff all n bytes equal");
 }

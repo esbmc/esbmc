@@ -18,5 +18,16 @@ void __byterepair_harness_main(void) {
 
     // --- Postcondition assertions ---
     if (result != ((char *)0))
+    {
+        // The duplicate must contain the same bytes as str up to and
+        // including the null terminator.
+        size_t i;
+        __ESBMC_assert(
+            __ESBMC_forall(&i,
+                !(i < 8) || !(i == 0 || str[i - 1] != '\0')
+                || result[i] == str[i]),
+            "system property: strdup returns a copy with identical bytes through the terminator");
+
         free(result);
+    }
 }

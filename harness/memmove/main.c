@@ -24,9 +24,12 @@ void __byterepair_harness_main(void) {
     void *result = memmove(dest, src, n);
 
     // --- Postcondition assertions ---
-    size_t i = nondet_uint();
-    __ESBMC_assume(i < n);
     __ESBMC_assert(result == dest, "system property: memmove returns dest");
-    __ESBMC_assert(((unsigned char *)dest)[i] == ((const unsigned char *)src)[i],
+
+    size_t i;
+    __ESBMC_assert(
+        __ESBMC_forall(&i,
+            !(i < n) || ((unsigned char *)dest)[i]
+                        == ((const unsigned char *)src)[i]),
         "system property: memmove copies src bytes into dest (disjoint case)");
 }

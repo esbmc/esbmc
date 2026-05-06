@@ -35,18 +35,19 @@ char *strcpy(char *dst, const char *src)
     __ESBMC_requires(__ESBMC_POINTER_OBJECT(dst) != __ESBMC_POINTER_OBJECT(src));
     __ESBMC_ensures(__ESBMC_return_value == dst);
 __ESBMC_HIDE:;
-  // Ensure src pointer is non-null
   __ESBMC_assert(src != ((char *)0), "Source pointer is null");
 
-  __ESBMC_unroll(9);
-  // Constant propagation-friendly loop
+  size_t i = 0;
+  size_t __j;
+  // Invariant: every index already written matches src and was not the
+  // terminator (the loop breaks as soon as it copies '\0').
+  __ESBMC_loop_invariant(
+      __ESBMC_forall(&__j, !(__j < i)
+                            || (dst[__j] == src[__j] && src[__j] != '\0')));
   // __contractor_loop: strcpy:0
-  for (size_t i = 0;; ++i)
+  for (;; ++i)
   {
-    // Copy each character including the null terminator
     dst[i] = src[i];
-
-    // Break when null terminator is copied
     if (src[i] == '\0')
       break;
   }
@@ -66,8 +67,13 @@ char *strncpy(char *dst, const char *src, size_t n)
 __ESBMC_HIDE:;
   char *start = dst;
   size_t copied = 0;
-
-  __ESBMC_unroll(9);
+  size_t __j;
+  // Invariant: every index < copied is bound to a non-terminator byte that
+  // already matches src, and copied is within [0, n].
+  __ESBMC_loop_invariant(
+      copied <= n
+      && __ESBMC_forall(&__j, !(__j < copied)
+                                || (dst[__j] == src[__j] && src[__j] != '\0')));
   // __contractor_loop: strncpy:0
   while (copied < n && src[copied] != '\0')
   {
@@ -106,20 +112,31 @@ char *strncat(char *dst, const char *src, size_t n)
     __ESBMC_ensures(__ESBMC_return_value == dst);
 __ESBMC_HIDE:;
   char *start = dst;
-
-  __ESBMC_unroll(9);
+  size_t end = 0;
+  size_t __j;
+  // Invariant: every byte before end is non-null, so end indexes the
+  // (so-far) earliest possible terminator of the existing dst string.
+  __ESBMC_loop_invariant(
+      __ESBMC_forall(&__j, !(__j < end) || start[__j] != '\0'));
   // __contractor_loop: strncat:0
-  while (*dst++)
-    ;
-  dst--;
+  while (start[end] != '\0')
+    ++end;
 
-  __ESBMC_unroll(9);
+  size_t i = 0;
+  // Invariant: i bytes have been copied from src into start[end..]; each
+  // copied byte was non-null and matches src.
+  __ESBMC_loop_invariant(
+      i <= n
+      && __ESBMC_forall(&__j, !(__j < i)
+                                || (start[end + __j] == src[__j]
+                                    && src[__j] != '\0')));
   // __contractor_loop: strncat:1
-  while (n--)
-    if (!(*dst++ = *src++))
-      return start;
-
-  *dst = '\0';
+  while (i < n && src[i] != '\0')
+  {
+    start[end + i] = src[i];
+    ++i;
+  }
+  start[end + i] = '\0';
   return start;
 }
 
@@ -135,7 +152,11 @@ size_t strlen(const char *s)
         !(__k < __ESBMC_return_value) || s[__k] != '\0'));
 __ESBMC_HIDE:;
   size_t len = 0;
-  __ESBMC_unroll(9);
+  size_t __j;
+  // Invariant: every byte before len is non-null. Combined with the loop
+  // exit condition this gives the strlen post-condition directly.
+  __ESBMC_loop_invariant(
+      __ESBMC_forall(&__j, !(__j < len) || s[__j] != '\0'));
   // __contractor_loop: strlen:0
   while (s[len] != 0)
     len++;
@@ -154,14 +175,19 @@ int strcmp(const char *p1, const char *p2)
 __ESBMC_HIDE:;
   const unsigned char *s1 = (const unsigned char *)p1;
   const unsigned char *s2 = (const unsigned char *)p2;
-  unsigned char c1, c2;
-
-  __ESBMC_unroll(9);
+  size_t i = 0;
+  unsigned char c1 = 0, c2 = 0;
+  size_t __j;
+  // Invariant: every byte at index < i was equal in s1 and s2 and non-null.
+  __ESBMC_loop_invariant(
+      __ESBMC_forall(&__j,
+          !(__j < i) || (s1[__j] == s2[__j] && s1[__j] != '\0')));
   // __contractor_loop: strcmp:0
   do
   {
-    c1 = (unsigned char)*s1++;
-    c2 = (unsigned char)*s2++;
+    c1 = s1[i];
+    c2 = s2[i];
+    ++i;
     if (c1 == '\0')
       return c1 - c2;
   } while (c1 == c2);
@@ -180,8 +206,13 @@ int strncmp(const char *s1, const char *s2, size_t n)
         || __ESBMC_return_value == 1 || __ESBMC_return_value == -1);
 __ESBMC_HIDE:;
   size_t i = 0;
-  unsigned char ch1, ch2;
-  __ESBMC_unroll(9);
+  unsigned char ch1 = 0, ch2 = 0;
+  size_t __j;
+  // Invariant: every index already inspected matched between s1 and s2;
+  // i never exceeds n.
+  __ESBMC_loop_invariant(
+      i <= n
+      && __ESBMC_forall(&__j, !(__j < i) || s1[__j] == s2[__j]));
   // __contractor_loop: strncmp:0
   do
   {
@@ -211,12 +242,17 @@ char *strchr(const char *s, int ch)
     __ESBMC_ensures(__ESBMC_return_value == ((char *)0)
         || *(char *)__ESBMC_return_value == (char)ch);
 __ESBMC_HIDE:;
-  __ESBMC_unroll(9);
+  size_t i = 0;
+  size_t __j;
+  // Invariant: every index < i was a non-null byte different from ch.
+  __ESBMC_loop_invariant(
+      __ESBMC_forall(&__j, !(__j < i)
+                            || (s[__j] != '\0' && s[__j] != (char)ch)));
   // __contractor_loop: strchr:0
-  while (*s && *s != (char)ch)
-    s++;
-  if (*s == (char)ch)
-    return (char *)s;
+  while (s[i] && s[i] != (char)ch)
+    ++i;
+  if (s[i] == (char)ch)
+    return (char *)(s + i);
   return ((char *)0);
 }
 
@@ -239,6 +275,10 @@ __ESBMC_HIDE:;
     return strchr(s, '\0');
 
   found = ((char *)0);
+  // Invariant: every occurrence of c found so far satisfies *found == c
+  // (the post-condition of strrchr); the unroll provides the BMC bound,
+  // since strchr's recursion-through-this-loop is bounded by strlen(s).
+  __ESBMC_loop_invariant(found == ((char *)0) || *found == (char)c);
   __ESBMC_unroll(9);
   // __contractor_loop: strrchr:0
   while ((p = strchr(s, c)) != ((char *)0))
@@ -396,7 +436,10 @@ __ESBMC_HIDE:;
   char *cdst = dst;
   const char *csrc = src;
   size_t i = 0;
-  __ESBMC_unroll(9);
+  size_t __j;
+  __ESBMC_loop_invariant(
+      i <= n
+      && __ESBMC_forall(&__j, !(__j < i) || cdst[__j] == csrc[__j]));
   while (i < n)
   {
     cdst[i] = csrc[i];
@@ -432,8 +475,12 @@ void *__memset_impl(void *s, int c, size_t n)
 {
 __ESBMC_HIDE:;
   char *sp = s;
-  __ESBMC_unroll(9);
-  for (size_t i = 0; i < n; i++)
+  size_t i = 0;
+  size_t __j;
+  __ESBMC_loop_invariant(
+      i <= n
+      && __ESBMC_forall(&__j, !(__j < i) || sp[__j] == (char)c));
+  for (; i < n; i++)
     sp[i] = c;
   return s;
 }
@@ -471,10 +518,16 @@ void *memmove(void *dest, const void *src, size_t n)
 __ESBMC_HIDE:;
   char *cdest = dest;
   const char *csrc = src;
+  size_t __j;
   if (dest - src >= n)
   {
     size_t i = 0;
-    __ESBMC_unroll(9);
+    // No-overlap forward case: csrc bytes are never aliased by an
+    // already-written cdest cell, so the current value of csrc[__j]
+    // equals the pre-call value for any __j we have already copied.
+    __ESBMC_loop_invariant(
+        i <= n
+        && __ESBMC_forall(&__j, !(__j < i) || cdest[__j] == csrc[__j]));
     // __contractor_loop: memmove:0
     while (i < n)
     {
@@ -485,7 +538,10 @@ __ESBMC_HIDE:;
   else
   {
     size_t i = n;
-    __ESBMC_unroll(9);
+    // Overlapping backward case: writes go from high to low so the still-
+    // unread tail csrc[i..n) holds the original values; bytes in [i, n)
+    // have already received the correct (original) source values.
+    __ESBMC_loop_invariant(i <= n);
     // __contractor_loop: memmove:1
     while (i > 0)
     {
@@ -514,18 +570,24 @@ int memcmp(const void *s1, const void *s2, size_t n)
         !(__i < n) || ((const unsigned char *)s1)[__i]
                       == ((const unsigned char *)s2)[__i]));
 __ESBMC_HIDE:;
-  int res = 0;
   const unsigned char *sc1 = s1, *sc2 = s2;
-  __ESBMC_unroll(9);
+  size_t i = 0;
+  size_t total = n;
+  size_t __j;
+  // Invariant: every byte already inspected is equal between sc1 and sc2;
+  // i never exceeds the original length n.
+  __ESBMC_loop_invariant(
+      i <= total
+      && __ESBMC_forall(&__j, !(__j < i) || sc1[__j] == sc2[__j]));
   // __contractor_loop: memcmp:0
-  while (n != 0)
+  while (i < total)
   {
-    res = (*sc1++) - (*sc2++);
+    int res = (int)sc1[i] - (int)sc2[i];
     if (res != 0)
       return res;
-    n--;
+    ++i;
   }
-  return res;
+  return 0;
 }
 
 __ESBMC_contract
@@ -542,13 +604,17 @@ void *memchr(const void *buf, int ch, size_t n)
         || __ESBMC_forall(&__i,
         !(__i < n) || ((const unsigned char *)buf)[__i] != (unsigned char)ch));
 __ESBMC_HIDE:;
-  __ESBMC_unroll(9);
+  const unsigned char *p = (const unsigned char *)buf;
+  size_t i = 0;
+  size_t total = n;
+  size_t __j;
+  // Invariant: every byte at index < i is different from ch; i bounded by n.
+  __ESBMC_loop_invariant(
+      i <= total
+      && __ESBMC_forall(&__j, !(__j < i) || p[__j] != (unsigned char)ch));
   // __contractor_loop: memchr:0
-  while (n && (*(unsigned char *)buf != (unsigned char)ch))
-  {
-    buf = (unsigned char *)buf + 1;
-    n--;
-  }
+  while (i < total && p[i] != (unsigned char)ch)
+    ++i;
 
-  return (n ? (void *)buf : ((void *)0));
+  return (i < total ? (void *)(p + i) : ((void *)0));
 }

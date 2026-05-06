@@ -25,9 +25,11 @@ void __byterepair_harness_main(void) {
     void *result = memset(s, c, n);
 
     // --- Postcondition assertions ---
-    size_t i = nondet_uint();
-    __ESBMC_assume(i < n);
     __ESBMC_assert(result == s, "system property: memset returns s");
-    __ESBMC_assert(((unsigned char *)s)[i] == (unsigned char)c,
+
+    size_t i;
+    __ESBMC_assert(
+        __ESBMC_forall(&i,
+            !(i < n) || ((unsigned char *)s)[i] == (unsigned char)c),
         "system property: memset writes c into every byte of [s, s+n)");
 }

@@ -18,4 +18,13 @@ void __byterepair_harness_main(void) {
 
     // --- Postcondition assertions ---
     __ESBMC_assert(result == dst, "system property: strcpy returns dst");
+
+    // For every index i up to and including the first '\0' in src,
+    // dst[i] == src[i]. Expressed as forall: skip indices past the
+    // terminator (src[i-1] == '\0' && i > 0).
+    size_t i;
+    __ESBMC_assert(
+        __ESBMC_forall(&i,
+            !(i < 8) || !(i == 0 || src[i - 1] != '\0') || dst[i] == src[i]),
+        "system property: strcpy copies every byte up to and including the null terminator");
 }

@@ -23,9 +23,12 @@ void __byterepair_harness_main(void) {
     void *result = memcpy(dst, src, n);
 
     // --- Postcondition assertions ---
-    size_t i = nondet_uint();
-    __ESBMC_assume(i < n);
     __ESBMC_assert(result == dst, "system property: memcpy returns dst");
-    __ESBMC_assert(((unsigned char *)dst)[i] == ((const unsigned char *)src)[i],
+
+    size_t i;
+    __ESBMC_assert(
+        __ESBMC_forall(&i,
+            !(i < n) || ((unsigned char *)dst)[i]
+                        == ((const unsigned char *)src)[i]),
         "system property: memcpy copies every byte of [src, src+n) to [dst, dst+n)");
 }
