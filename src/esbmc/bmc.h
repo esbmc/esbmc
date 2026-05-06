@@ -101,12 +101,32 @@ protected:
     const claim_slicer &claim,
     const bool &is_goto_cov);
 
+  /// Reason why witness enumeration stopped, used in the report footer.
+  enum class enumeration_stop_reasont
+  {
+    Unsat,    // re-solve returned UNSAT — witness set is exhaustive
+    CapHit,   // --max-witnesses limit reached
+    NoInputs, // first witness had no nondet inputs to block
+    Error,    // re-solve returned an error / unknown
+    Disabled, // --all-witnesses not set; single witness reported
+  };
+
+  /// One enumerated witness for a failing property.
+  struct witness_recordt
+  {
+    size_t ce_index;                                   // global ce_counter slot
+    std::vector<collected_nondet_value> nondet_inputs; // input tuple
+    goto_tracet trace;                                 // goto-level trace
+  };
+
+  /// Multi-witness textual reporter. Machine-readable artifacts (cex,
+  /// testcase, html, json, graphml, yaml) are emitted by the caller while
+  /// each witness's solver model is still live; this function only handles
+  /// the human-readable counterexample output.
   virtual void report_multi_property_trace(
     const smt_convt::resultt &res,
-    smt_convt *&solver,
-    const symex_target_equationt &local_eq,
-    const std::atomic<size_t> ce_counter,
-    const goto_tracet &goto_trace,
+    const std::vector<witness_recordt> &witnesses,
+    enumeration_stop_reasont stop_reason,
     const std::string &msg);
 
   void report_coverage_verbose(

@@ -12,9 +12,9 @@ contract _MAIN_ {
         a = bank.a();
     }
     function test() public {
-        a = a + c;
+        uint result = a + c;
 
-        assert(a == 4);
+        assert(result == 4);
     }
 
 }

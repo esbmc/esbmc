@@ -876,14 +876,65 @@ esbmc file.c --multi-property
 
 <p>
 
-ESBMC can verify the satisfiability of all the claims of a given bound. During this multi-property verification, ESBMC does not terminate when a counterexample is found; instead, it continues to run until all bugs have been discovered. There are three relevant options, which are:</p>
+ESBMC can verify the satisfiability of all the claims of a given bound. During this multi-property verification, ESBMC does not terminate when a counterexample is found; instead, it continues to run until all bugs have been discovered. The relevant options are:</p>
 <ul>
 <li><b>multi-property:</b> verifies the satisfiability of all claims of
 the current bound. This also activates <b>--no-remove-unreachable</b>.</li>
 <li><b>multi-fail-fast n:</b> stops after first <b>n</b> VCC violation found in multi-property mode</li>
 <li><b>keep-verified-claims:</b> do not skip verified claims in multi-property verification. With this option enabled, assertions inside the loop body will be verified repeatedly during the unwinding; while with this option disabled, the claims will only get verified once.</li>
+<li><b>all-witnesses:</b> after a property is found violated, enumerate further input vectors that also violate it (until UNSAT or <b>--max-witnesses</b> is reached). Implies <b>--multi-property</b>. See <a href="#enumerating-all-violating-inputs">Enumerating All Violating Inputs</a> below.</li>
+<li><b>max-witnesses n:</b> cap the number of witnesses reported per property (default: 16; 0 = unlimited). Only meaningful with <b>--all-witnesses</b>.</li>
 </ul>
 <p>An example of multi-property verification can be found in the <b>Code  Coverage Metric</b> section below.</p>
+
+<h3 id="enumerating-all-violating-inputs">Enumerating All Violating Inputs</h3>
+
+```sh
+esbmc file.c --all-witnesses
+esbmc file.c --all-witnesses --max-witnesses 4
+```
+
+<p>By default, <b>--multi-property</b> reports a single counterexample per failing property. <b>--all-witnesses</b> instead enumerates <em>distinct concrete input vectors</em> that violate the same property, until the witness set is exhausted (UNSAT) or the cap from <b>--max-witnesses</b> is reached. Useful for fault localisation, test-case mining, and characterising the failing-input sub-domain of a property.</p>
+
+<p>For example, given:</p>
+
+```c
+#include <assert.h>
+int main(void) {
+  int x;                 // nondet
+  if (x > 0) x--; else x++;
+  assert(x != 0);        // violated by x == 1 AND x == -1
+  return 0;
+}
+```
+
+<p><code>esbmc file.c --multi-property</code> reports only one of the violating values; <code>esbmc file.c --all-witnesses</code> reports both:</p>
+
+```
+[Counterexamples – 2 witnesses]
+
+  Witness 1 of 2
+    Inputs : [0] = -1
+  Witness 2 of 2
+    Inputs : [0] = 1
+
+Summary: 2 distinct input tuples violate this property
+         (enumeration stopped: UNSAT after 2 witnesses)
+```
+
+<p>Implementation notes:</p>
+<ul>
+<li>The same SMT instance is re-solved with a blocking clause <code>NOT (sym_1 == val_1 AND ... AND sym_k == val_k)</code> over the nondet input symbols of the previous model. No re-encoding occurs between iterations, so enumerating <em>N</em> witnesses is much cheaper than running ESBMC <em>N</em> times with hand-rolled assumptions.</li>
+<li>Blocking clauses are scoped to a single SMT context frame (<code>push_ctx</code>/<code>pop_ctx</code>) per claim, so the feature is safe under <b>--smt-during-symex</b> (incremental SMT) and does not leak between claims.</li>
+<li>Floating-point nondet inputs receive special handling: when the model picks NaN, the blocking clause excludes the entire NaN equivalence class (one NaN witness, then no more NaN). For any other floatbv value the blocking clause uses bit-pattern equality, so <code>+0</code> and <code>-0</code> are reported as distinct witnesses and finite values are bit-exact. This sidesteps the IEEE-754 <code>fp.eq(NaN, NaN) = false</code> pitfall, which would otherwise turn the blocking clause into a tautology and produce duplicate or non-terminating NaN enumeration.</li>
+<li>Machine-readable artifacts (<b>--cex-output</b>, <b>--generate-testcase</b>, <b>--generate-html-report</b>, <b>--generate-json-report</b>, <b>--witness-output-graphml</b>, <b>--witness-output-yaml</b>) fan out per witness using the existing <code>&lt;ce&gt;-&lt;file&gt;</code> prefix scheme, one file per witness. Per-witness filenames are composed locally with no global option mutation, so the feature is safe under <b>--parallel-solving</b>: concurrent claims write to disjoint files.</li>
+<li>The footer states why enumeration stopped: <em>UNSAT after N</em> (exhaustive), <em>--max-witnesses cap reached</em>, <em>no enumerable nondet inputs</em>, or <em>solver returned error/unknown</em>. Only the first means the witness set is complete.</li>
+<li>Inductive-step SAT means UNKNOWN, not a real counterexample: enumeration is skipped during the inductive step of k-induction.</li>
+</ul>
+
+<p><b>Scaling caveat.</b> The textual report dumps each witness's full goto trace. With slicing on (the default) and small per-witness state counts the output stays readable, but with <b>--no-slice</b> on a deeply unrolled program the report grows quickly &mdash; for example, enumerating 16 witnesses of 200 states each produces ~3 200 state blocks. If you only care about the violating inputs, the per-witness <code>Inputs : ...</code> line is usually all you need; the trace dump is detail-on-demand and the machine-readable per-witness files give the full data without the textual noise. (A future revision may collapse traces 2&hellip;N into diffs against witness 1.)</p>
+
+<p>Formally, this is <em>bounded projected model enumeration</em> for a fixed property: the same blocking-clause loop used in SAT-based all-solutions algorithms, lifted to SMT and projected onto the nondet input symbols. The SAT-level construction is classical &mdash; see Kenneth L. McMillan, <em>Applying SAT Methods in Unbounded Symbolic Model Checking</em>, CAV 2002 (<a href="https://doi.org/10.1007/3-540-45657-0_19">doi:10.1007/3-540-45657-0_19</a>) and Orna Grumberg, Assaf Schuster, Avi Yadgar, <em>Memory Efficient All-Solutions SAT Solver and Its Application for Reachability Analysis</em>, FMCAD 2004 (<a href="https://doi.org/10.1007/978-3-540-30494-4_20">doi:10.1007/978-3-540-30494-4_20</a>). The technique is complementary to dynamic-symbolic-execution test generation (KLEE, DART, SAGE), which varies the path condition to maximise code coverage; <b>--all-witnesses</b> instead fixes the failure path and enumerates input vectors on it.</p>
 
 <h3 id="code-coverage-metric">Code Coverage Metric</h3>
 <p>

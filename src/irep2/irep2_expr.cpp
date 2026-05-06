@@ -367,6 +367,8 @@ static void assert_type_compat_for_with(const type2tc &a, const type2tc &b)
     const array_type2t &bt = to_array_type(b);
     assert_type_compat_for_with(at.subtype, bt.subtype);
     assert(at.size_is_infinite == bt.size_is_infinite);
+    if (at.size_is_infinite)
+      return;
     if (is_symbol2t(at.array_size) || is_symbol2t(bt.array_size))
       return;
     assert(at.array_size == bt.array_size);
