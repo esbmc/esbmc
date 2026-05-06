@@ -37,6 +37,7 @@ public:
   void adjust_decl_block(codet &code) override;
   void adjust_catch(codet &code);
   void adjust_throw_decl(codet &code);
+  void adjust_switch_case_ops(exprt &stmt, const typet &switch_type);
 
   /**
    * methods for expression (exprt) adjustment

@@ -1,3 +1,20 @@
+# pylint: disable=undefined-variable
+# `__VERIFIER_nondet_bool` is an ESBMC intrinsic matched by name by
+# the Python converter; it has no Python binding.
+#
+# pylint: disable=too-many-locals,too-many-branches,too-many-boolean-expressions,line-too-long
+# This module hosts a hand-rolled regex matcher whose control-flow shape
+# is matched to the converter's audited support for Compare/BoolOp nodes.
+# Pylint's complexity thresholds (max-locals=15, max-branches=15,
+# max-bool-expr=5) are tripped by the literal-set tests below; mechanical
+# refactors (extract helper, split function) would require re-validating
+# every regression in regression/python/ that exercises re.match. The
+# matcher is rewritten only when changed for a real reason.
+#
+# pylint: disable=consider-using-in,chained-comparison
+# Equality and range checks are kept as explicit Compare-And-Compare AST
+# nodes; the converter has direct, audited support for those forms.
+
 # Regular Expression Operational Model
 # TODO: Currently, the regex model uses manual pattern recognizers with
 # nondeterministic fallbacks. A proper string solver would handle
@@ -219,7 +236,8 @@ def match(pattern: str, string: str) -> bool:
             i: int = 0
             while i < prefix_len:
                 c: str = pattern[i]
-                if c == '.' or c == '*' or c == '+' or c == '?' or c == '[' or c == ']' or c == '(' or c == ')' or c == '|' or c == '^' or c == '$' or c == '\\':
+                if (c == '.' or c == '*' or c == '+' or c == '?' or c == '[' or c == ']' or c == '('
+                        or c == ')' or c == '|' or c == '^' or c == '$' or c == '\\'):
                     has_meta_in_prefix = True
                     break
                 i = i + 1
@@ -239,7 +257,8 @@ def match(pattern: str, string: str) -> bool:
     k: int = 0
     while k < pattern_len - 1:
         ch: str = pattern[k]
-        if ch == '.' or ch == '*' or ch == '+' or ch == '?' or ch == '[' or ch == ']' or ch == '(' or ch == ')' or ch == '|' or ch == '^' or ch == '$' or ch == '\\':
+        if (ch == '.' or ch == '*' or ch == '+' or ch == '?' or ch == '[' or ch == ']' or ch == '('
+                or ch == ')' or ch == '|' or ch == '^' or ch == '$' or ch == '\\'):
             has_meta = True
             break
         k = k + 1

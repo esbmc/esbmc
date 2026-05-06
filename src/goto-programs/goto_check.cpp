@@ -255,7 +255,22 @@ void goto_checkt::cast_overflow_check(
   const guardt &guard,
   const locationt &loc)
 {
-  if (
+  // For Solidity, narrowing casts (e.g. uint256 → uint8) need overflow checks
+  // even in bitvector mode. Only apply to user .sol code, not C library models.
+  bool is_solidity = (config.language.lid == language_idt::SOLIDITY);
+  if (is_solidity)
+  {
+    if (!enable_overflow_check && !enable_unsigned_overflow_check)
+      return;
+    // Only check casts in .sol files, not C library models
+    const std::string &file = loc.get_file().as_string();
+    if (file.size() < 4 || file.substr(file.size() - 4) != ".sol")
+      return;
+    // Skip overflow checks inside Solidity unchecked blocks
+    if (loc.get("#sol_unchecked") == "1")
+      return;
+  }
+  else if (
     !options.get_bool_option("int-encoding") ||
     (!enable_overflow_check && !enable_unsigned_overflow_check))
     return;
@@ -265,58 +280,33 @@ void goto_checkt::cast_overflow_check(
   if (!is_signedbv_type(resolved_type) && !is_unsignedbv_type(resolved_type))
     return;
 
-  // Create cast overflow check expression
-  expr2tc cast_overflow = overflow_cast2tc(expr, resolved_type->get_width());
+  unsigned int dst_width = resolved_type->get_width();
+  expr2tc cast_overflow;
+  std::string claim_msg;
+
+  if (is_solidity)
+  {
+    // Solidity: check the inner operand (before wrap) against the destination
+    // width — required for narrowing casts like uint256 → uint8.
+    const typecast2t &cast = to_typecast2t(expr);
+    const type2tc &src_type = ns.follow(cast.from->type);
+    if (!is_signedbv_type(src_type) && !is_unsignedbv_type(src_type))
+      return;
+    if (dst_width >= src_type->get_width())
+      return;
+    cast_overflow = overflow_cast2tc(cast.from, dst_width);
+    claim_msg = "Narrowing cast overflow on ";
+  }
+  else
+  {
+    cast_overflow = overflow_cast2tc(expr, dst_width);
+    claim_msg = "Cast arithmetic overflow on ";
+  }
+
   make_not(cast_overflow);
 
   add_guarded_claim(
-    cast_overflow,
-    std::string("Cast arithmetic overflow on ") + get_expr_id(expr),
-    "overflow",
-    loc,
-    guard);
-}
-
-/// Returns true when the left operand `e1` of a left-shift is provably
-/// non-negative from its expression shape alone (no symbolic reasoning).
-/// Covers the firmware/protocol byte-deserialisation idioms that
-/// produced false positives under the strict pre-C++20 shl rule:
-///   - operand has unsigned bit-vector type;
-///   - operand is an integer *widening* promotion of an unsigned-typed
-///     sub-expression (e.g. `int(uint8_t)` after the standard promotion
-///     of `buf[i]`). Same-width or narrowing casts are rejected because
-///     a narrower destination can hold a negative value even when the
-///     source type is unsigned (e.g. `int(uint64_t(-1)) == -1`);
-///   - operand is a non-negative integer constant.
-/// Other shapes (signed `int` symbols, arithmetic on signed values, etc.)
-/// fall through and the caller keeps the overflow claim. This errs on
-/// the side of soundness — a flagged-but-defined shift is a false
-/// positive, never a missed bug.
-///
-/// TODO(layer 2): hook into `--interval-analysis` so a path-qualified
-/// signed `int` known to be `>= 0` (e.g. inside `if (x > 0) { x << 1; }`)
-/// gets the skip too. The value-range table is populated at symex time,
-/// while this check runs at goto-conversion time — closing that phase
-/// gap is the follow-up. Until then the limitation stands; symbolic
-/// non-negativity reasoning is deferred.
-static bool shl_E1_is_known_nonneg(const expr2tc &e1)
-{
-  if (is_unsignedbv_type(e1->type))
-    return true;
-
-  if (is_typecast2t(e1))
-  {
-    const expr2tc &from = to_typecast2t(e1).from;
-    if (
-      is_unsignedbv_type(from->type) &&
-      from->type->get_width() < e1->type->get_width())
-      return true;
-  }
-
-  if (is_constant_int2t(e1) && !to_constant_int2t(e1).value.is_negative())
-    return true;
-
-  return false;
+    cast_overflow, claim_msg + get_expr_id(expr), "overflow", loc, guard);
 }
 
 void goto_checkt::overflow_check(
@@ -331,6 +321,12 @@ void goto_checkt::overflow_check(
 
   // Don't check shift right
   if (is_lshr2t(expr) || is_ashr2t(expr))
+    return;
+
+  // Skip overflow checks inside Solidity unchecked blocks
+  if (
+    config.language.lid == language_idt::SOLIDITY &&
+    loc.get("#sol_unchecked") == "1")
     return;
 
   // First, check type.
@@ -349,34 +345,14 @@ void goto_checkt::overflow_check(
   if (is_pointer_type(*expr->get_sub_expr(0)))
     return;
 
-  // C++20 [expr.shift]/2, as rewritten by P0907 ("Signed integers are
-  // two's complement"), defines the value of `E1 << E2` as the unique
-  // value congruent to `E1 * 2^E2` modulo `2^N`, where `N` is the width
-  // of the result type, *for unsigned `E1` and for signed `E1` with a
-  // non-negative value*. The pre-P0907 "result must be representable in
-  // the result type, otherwise UB" clause was removed: under C++20+,
-  // a signed-`E1` shift whose mathematical product exceeds the signed
-  // range is no longer UB -- the result is the modular value, and the
-  // surrounding cast (e.g. `static_cast<uint32_t>(byte << 24)` in
-  // firmware byte deserialisers) recovers the intended bit pattern.
-  //
-  // The single remaining UB clause is "the behavior is undefined if E1
-  // is negative". The `shl_E1_is_known_nonneg` predicate isolates the
-  // shapes where E1 is provably non-negative; only there does the
-  // arithmetic-overflow claim get suppressed. For signed `E1` that may
-  // be negative the predicate falls through and the claim is preserved,
-  // and `--ub-shift-check` additionally pins the negative-`E1` case
-  // (orthogonal to this site, see goto_checkt::shift_check). Pre-C++20
-  // standards keep the original strict behaviour via
-  // `is_cxx20_or_later`.
-  if (is_shl2t(expr))
-  {
-    const expr2tc &E1 = *expr->get_sub_expr(0);
-    if (
-      is_signedbv_type(E1) && config.language.cpp_std >= cxx_stdt::cpp20 &&
-      shl_E1_is_known_nonneg(E1))
-      return;
-  }
+  // C++20 [expr.shift]/2 (P0907R4/P1236R1) defines signed left-shift as the
+  // unique value congruent to E1 * 2^E2 modulo 2^N for any valid E2, removing
+  // both the negative-E1 UB and the result-overflow UB from earlier standards.
+  // Under C++20+ all signed left-shift overflow is well-defined wrapping.
+  if (
+    is_shl2t(expr) && is_signedbv_type(*expr->get_sub_expr(0)) &&
+    config.language.cpp_std >= cxx_stdt::cpp20)
+    return;
 
   // add overflow subgoal
   expr2tc overflow =
@@ -621,7 +597,12 @@ void goto_checkt::shift_check(
 {
   overflow_check(expr, guard, loc);
 
-  if (!enable_ub_shift_check)
+  // Negative shift distance and distance >= width are UB per C11 §6.5.7p3
+  // and C++ [expr.shift]/1. Run the UB-distance assertions whenever the user
+  // asked for shift UB checks or for general overflow checking.
+  if (
+    !enable_ub_shift_check && !enable_overflow_check &&
+    !enable_unsigned_overflow_check)
     return;
 
   assert(is_lshr2t(expr) || is_ashr2t(expr) || is_shl2t(expr));
@@ -656,7 +637,11 @@ void goto_checkt::shift_check(
 
   expr2tc ub_check = and2tc(right_op_non_negative, right_op_size_check);
 
-  if (is_shl2t(expr) && is_signedbv_type(left_op))
+  // Under C++20+ [expr.shift]/2 (P0907R4/P1236R1), negative E1 left-shift is
+  // defined as wrapping. Only the pre-C++20 standard treats it as UB.
+  if (
+    is_shl2t(expr) && is_signedbv_type(left_op) &&
+    config.language.cpp_std < cxx_stdt::cpp20)
   {
     zero = gen_zero(left_op->type);
     expr2tc left_op_non_negative = greaterthanequal2tc(left_op, zero);
@@ -1229,6 +1214,44 @@ void goto_checkt::goto_check(goto_programt &goto_program)
         check(assign.target, loc);
         check(assign.source, loc);
         is_instance_check(it, goto_program, assign.target, assign.source, loc);
+
+        // Solidity: detect implicit narrowing in assignments like
+        // (signed int)x = (signed int)x + 10  where x is uint8.
+        // The target may be a typecast wrapping a narrower variable.
+        if (
+          config.language.lid == language_idt::SOLIDITY &&
+          (enable_overflow_check || enable_unsigned_overflow_check) &&
+          loc.get("#sol_unchecked") != "1")
+        {
+          const std::string &file = loc.get_file().as_string();
+          if (file.size() >= 4 && file.substr(file.size() - 4) == ".sol")
+          {
+            // Check if the target is a typecast wrapping a narrower variable
+            if (is_typecast2t(assign.target))
+            {
+              const typecast2t &tc = to_typecast2t(assign.target);
+              const type2tc &inner_type = ns.follow(tc.from->type);
+              const type2tc &outer_type = ns.follow(assign.target->type);
+              if (
+                (is_unsignedbv_type(inner_type) ||
+                 is_signedbv_type(inner_type)) &&
+                inner_type->get_width() < outer_type->get_width())
+              {
+                unsigned int narrow_width = inner_type->get_width();
+                expr2tc cast_overflow =
+                  overflow_cast2tc(assign.source, narrow_width);
+                make_not(cast_overflow);
+                guardt guard;
+                add_guarded_claim(
+                  cast_overflow,
+                  "Narrowing assignment overflow",
+                  "overflow",
+                  loc,
+                  guard);
+              }
+            }
+          }
+        }
       }
     }
     else if (i.is_function_call())
