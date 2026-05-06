@@ -3130,25 +3130,13 @@ expr2tc bitcast2t::do_simplify() const
     return from;
   }
 
-  // bitcast(bitcast(x, T1), T2) -> bitcast(x, T2). Sound only when all
-  // three types share the same bit width — otherwise the intermediate
-  // T1 narrows or widens the bit pattern (this file treats integer
-  // bitcasts as typecasts, so a width-changing intermediate would
-  // truncate or extend bits we'd otherwise keep). Gate on width match
-  // for inner -> intermediate -> target.
-  if (is_bitcast2t(from))
-  {
-    const expr2tc &inner = to_bitcast2t(from).from;
-    const unsigned w_inner = inner->type->get_width();
-    const unsigned w_mid = from->type->get_width();
-    const unsigned w_dst = type->get_width();
-    if (w_inner == w_mid && w_mid == w_dst)
-    {
-      if (type == inner->type)
-        return inner;
-      return bitcast2tc(type, inner);
-    }
-  }
+  // bitcast(bitcast(x, T1), T2) chain-collapse intentionally NOT applied:
+  // when the SMT pointer-arith pipeline has cast a pointer through ulong
+  // and back, the round-trip is load-bearing — collapsing it produces a
+  // logically-equivalent but solver-harder formula because the bitcast
+  // boundary is what tells smt_memspace.cpp to materialize pointer object
+  // and offset components (without it, every pointer-as-pointer use stays
+  // an array index, which generates a much larger case-split tree).
 
   // This should be fine, just use typecast
   if (
