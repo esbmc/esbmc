@@ -466,10 +466,8 @@ void bmct::clear_verified_claims_in_goto(
 
 void bmct::report_multi_property_trace(
   const smt_convt::resultt &res,
-  smt_convt *&solver,
-  const symex_target_equationt &local_eq,
-  const std::atomic<size_t> ce_counter,
-  const goto_tracet &goto_trace,
+  const std::vector<witness_recordt> &witnesses,
+  enumeration_stop_reasont stop_reason,
   const std::string &msg)
 {
   if (options.get_bool_option("result-only"))
@@ -478,51 +476,111 @@ void bmct::report_multi_property_trace(
   switch (res)
   {
   case smt_convt::P_UNSATISFIABLE:
-    // UNSAT means that the property was correct up to K
     log_success("Claim '{}' holds up to the current K", msg);
-    break;
+    return;
 
   case smt_convt::P_SATISFIABLE:
-  {
-    std::string output_file = options.get_option("cex-output");
-    if (output_file != "")
-    {
-      std::ofstream out(fmt::format("{}-{}", ce_counter.load(), output_file));
-      show_goto_trace(out, ns, goto_trace);
-    }
-
-    std::string witness_graphml_output =
-      options.get_option("witness-output-graphml");
-    std::string witness_yaml_output = options.get_option("witness-output-yaml");
-    if (!witness_graphml_output.empty())
-      violation_graphml_goto_trace(options, ns, goto_trace);
-
-    if (!witness_yaml_output.empty())
-      violation_yaml_goto_trace(options, ns, goto_trace);
-
-    if (options.get_bool_option("generate-testcase"))
-    {
-      generate_testcase_metadata();
-      generate_testcase(
-        "testcase-" + std::to_string(ce_counter) + ".xml", local_eq, *solver);
-    }
-    if (options.get_bool_option("generate-html-report"))
-      generate_html_report(std::to_string(ce_counter), ns, goto_trace, options);
-
-    if (options.get_bool_option("generate-json-report"))
-      generate_json_report(std::to_string(ce_counter), ns, goto_trace);
-
-    std::ostringstream oss;
-    log_fail("\n[Counterexample]\n");
-    show_goto_trace(oss, ns, goto_trace);
-    log_result("{}", oss.str());
     break;
-  }
 
   default:
     log_fail("Claim '{}' could not be solved", msg);
+    return;
+  }
+
+  // Single-witness textual output: keep the existing "[Counterexample]" form.
+  // This preserves the look of every existing failing test in regression/.
+  // Skip this path when --all-witnesses was requested (stop_reason != Disabled)
+  // so the structured footer is still emitted at N=1 — otherwise a CapHit
+  // with cap=1 would silently look identical to a real "only-one-witness"
+  // result.
+  if (
+    witnesses.size() <= 1 && stop_reason == enumeration_stop_reasont::Disabled)
+  {
+    std::ostringstream oss;
+    log_fail("\n[Counterexample]\n");
+    if (!witnesses.empty())
+      show_goto_trace(oss, ns, witnesses.front().trace);
+    log_result("{}", oss.str());
+    return;
+  }
+
+  // Multi-witness rendering: structured per-witness blocks, then a footer.
+  // Goal: highlight the *inputs* (the part that varies across witnesses) and
+  // avoid dumping N copies of nearly-identical traces. The full trace for
+  // each witness is still emitted unless --compact-trace is on, but they
+  // are clearly separated and labelled.
+  std::ostringstream oss;
+  // ASCII-only header: en-dash and similar non-ASCII glyphs get
+  // mojibake'd on Windows' default cp1252 console, breaking regression
+  // matching and reader output. The box-drawing glyphs further down
+  // are cosmetic and only appear at N>1; ASCII-fallback there is
+  // tracked separately (#4311).
+  oss << "\n[Counterexamples - " << witnesses.size() << " witnesses]\n\n";
+  for (size_t i = 0; i < witnesses.size(); ++i)
+  {
+    const witness_recordt &w = witnesses[i];
+    oss << "  ┌─ Witness " << (i + 1) << " of " << witnesses.size()
+        << " ─────────────────────────────\n";
+    oss << "  │  Inputs : ";
+    if (w.nondet_inputs.empty())
+    {
+      oss << "(none)\n";
+    }
+    else
+    {
+      for (size_t k = 0; k < w.nondet_inputs.size(); ++k)
+      {
+        if (k)
+          oss << ", ";
+        oss << "[" << k
+            << "] = " << from_expr(ns, "", w.nondet_inputs[k].value_expr);
+      }
+      oss << "\n";
+    }
+    oss << "  │  Trace  :\n";
+    {
+      std::ostringstream tr;
+      show_goto_trace(tr, ns, w.trace);
+      // Indent the trace under the box.
+      std::string s = tr.str();
+      std::string indented;
+      indented.reserve(s.size() + 8);
+      indented += "  │    ";
+      for (char c : s)
+      {
+        indented += c;
+        if (c == '\n')
+          indented += "  │    ";
+      }
+      oss << indented << "\n";
+    }
+    oss << "  └──────────────────────────────────────────────\n\n";
+  }
+
+  oss << "Summary: " << witnesses.size()
+      << " distinct input tuples violate this property (enumeration stopped: ";
+  switch (stop_reason)
+  {
+  case enumeration_stop_reasont::Unsat:
+    oss << "UNSAT after " << witnesses.size() << " witnesses";
+    break;
+  case enumeration_stop_reasont::CapHit:
+    oss << "--max-witnesses cap reached";
+    break;
+  case enumeration_stop_reasont::NoInputs:
+    oss << "no enumerable nondet inputs — more witnesses may exist";
+    break;
+  case enumeration_stop_reasont::Error:
+    oss << "solver returned error/unknown — more witnesses may exist";
+    break;
+  case enumeration_stop_reasont::Disabled:
+    oss << "single-witness mode";
     break;
   }
+  oss << ")\n";
+
+  log_fail("\n[Counterexample]\n");
+  log_result("{}", oss.str());
 }
 
 // Prettify C-level expression strings for Solidity coverage reports.
@@ -1806,18 +1864,151 @@ smt_convt::resultt bmct::multi_property_check(
         !options.get_bool_option("compact-trace"))
         is_compact_trace = false;
 
-      goto_tracet goto_trace;
-      build_goto_trace(local_eq, *solver_ptr, goto_trace, is_compact_trace);
+      // --all-witnesses: re-solve with blocking clauses on the nondet input
+      // tuple to enumerate further violating inputs at the current k.
+      // No re-encoding: we only push extra assertions onto the live solver.
+      const bool enumerate = options.get_bool_option("all-witnesses");
+      size_t max_w = 1;
+      if (enumerate)
+      {
+        const std::string mw = options.get_option("max-witnesses");
+        const int mw_val = mw.empty() ? 16 : std::stoi(mw);
+        // 0 means unlimited (only meaningful with --all-witnesses).
+        max_w = (mw_val == 0) ? SIZE_MAX : (size_t)mw_val;
+      }
 
-      // Collect pytest test data if requested (for coverage mode)
-      if (options.get_bool_option("generate-pytest-testcase"))
-        pytest_gen.collect(local_eq, *solver_ptr);
+      std::vector<witness_recordt> witnesses;
+      enumeration_stop_reasont stop_reason =
+        enumerate ? enumeration_stop_reasont::Unsat
+                  : enumeration_stop_reasont::Disabled;
 
-      // Collect ctest test data if requested (for coverage mode)
-      if (options.get_bool_option("generate-ctest-testcase"))
-        ctest_gen.collect(local_eq, *solver_ptr, ns);
+      // Cache option lookups so the per-witness loop body is cheap.
+      const std::string cex_output = options.get_option("cex-output");
+      const std::string graphml_path =
+        options.get_option("witness-output-graphml");
+      const std::string yaml_path = options.get_option("witness-output-yaml");
+      const bool want_graphml = !graphml_path.empty();
+      const bool want_yaml = !yaml_path.empty();
+      const bool want_testcase = options.get_bool_option("generate-testcase");
+      const bool want_html = options.get_bool_option("generate-html-report");
+      const bool want_json = options.get_bool_option("generate-json-report");
+      const bool want_pytest =
+        options.get_bool_option("generate-pytest-testcase");
+      const bool want_ctest =
+        options.get_bool_option("generate-ctest-testcase");
 
-      // Store claim signature
+      // Emit testcase metadata once per claim (not once per witness).
+      if (want_testcase)
+        generate_testcase_metadata();
+
+      // Drive enumeration with a separate variable so the original SAT
+      // outcome stays in `solver_result` for downstream bookkeeping
+      // (final_result, fail-fast counter, claim cleanup).
+      smt_convt::resultt enum_result = solver_result;
+      bool ctx_pushed = false;
+      while (enum_result == smt_convt::P_SATISFIABLE)
+      {
+        witness_recordt w;
+        build_goto_trace(local_eq, *solver_ptr, w.trace, is_compact_trace);
+        // Collecting nondet values walks every SSA step and queries the
+        // solver model per nondet symbol — non-trivial on coverage runs
+        // with many claims and large arrays. Skip it when we don't need
+        // it: the values are only consumed by `make_blocking_expr` (only
+        // when enumerating) and by the multi-witness pretty-printer
+        // (only when --all-witnesses is set, i.e. enumerate==true).
+        // The legacy single-witness renderer does not use them.
+        if (enumerate)
+          w.nondet_inputs = collect_nondet_values(local_eq, *solver_ptr);
+        w.ce_index = ce_counter++;
+
+        // Emit machine-readable artifacts NOW, while this witness's solver
+        // model is still live. After the next dec_solve(), the model is
+        // either gone (UNSAT) or replaced by the next witness's values.
+        if (!cex_output.empty())
+        {
+          std::ofstream out(fmt::format("{}-{}", w.ce_index, cex_output));
+          show_goto_trace(out, ns, w.trace);
+        }
+        // For graphml/yaml the writer reads the path from `options`;
+        // override per-witness so multiple witnesses don't overwrite the
+        // same file (and so it's safe under --parallel-solving).
+        if (want_graphml)
+          violation_graphml_goto_trace(
+            options,
+            ns,
+            w.trace,
+            fmt::format("{}-{}", w.ce_index, graphml_path));
+        if (want_yaml)
+          violation_yaml_goto_trace(
+            options, ns, w.trace, fmt::format("{}-{}", w.ce_index, yaml_path));
+        if (want_testcase)
+          generate_testcase(
+            "testcase-" + std::to_string(w.ce_index) + ".xml",
+            local_eq,
+            *solver_ptr);
+        if (want_html)
+          generate_html_report(
+            std::to_string(w.ce_index), ns, w.trace, options);
+        if (want_json)
+          generate_json_report(std::to_string(w.ce_index), ns, w.trace);
+        if (want_pytest)
+          pytest_gen.collect(local_eq, *solver_ptr);
+        if (want_ctest)
+          ctest_gen.collect(local_eq, *solver_ptr, ns);
+
+        witnesses.push_back(std::move(w));
+
+        if (!enumerate)
+          break;
+        if (witnesses.size() >= max_w)
+        {
+          stop_reason = enumeration_stop_reasont::CapHit;
+          break;
+        }
+
+        // If this witness has no nondet inputs we can't enumerate further —
+        // there's nothing meaningful to block. Mark the reason so the user
+        // doesn't read "UNSAT" as "exhaustive".
+        if (witnesses.back().nondet_inputs.empty())
+        {
+          stop_reason = enumeration_stop_reasont::NoInputs;
+          break;
+        }
+
+        // Open a single SMT context frame the first time we add a blocking
+        // clause. Every subsequent blocking clause goes into the same frame;
+        // the matching pop_ctx() after the loop drops them all in one shot.
+        // This keeps the feature safe under --smt-during-symex, where
+        // solver_ptr aliases the shared runtime_solver: blocking clauses
+        // asserted while enumerating claim A cannot leak into claim B.
+        // (Push must come *after* the first model read — bitwuzla and other
+        // backends invalidate the current model on push.)
+        if (!ctx_pushed)
+        {
+          solver_ptr->push_ctx();
+          ctx_pushed = true;
+        }
+
+        // Block this input tuple and re-solve on the same instance.
+        expr2tc block = make_blocking_expr(witnesses.back().nondet_inputs);
+        solver_ptr->assert_expr(block);
+        enum_result = solver_ptr->dec_solve();
+      }
+
+      // dec_solve() can return P_ERROR / P_SMTLIB; in that case the witness
+      // set is *not* exhaustive — flag it explicitly.
+      if (
+        stop_reason == enumeration_stop_reasont::Unsat &&
+        enum_result != smt_convt::P_UNSATISFIABLE &&
+        enum_result != smt_convt::P_SATISFIABLE)
+        stop_reason = enumeration_stop_reasont::Error;
+
+      // Drop every blocking clause we asserted; the next claim's solve
+      // sees the solver in its pre-enumeration state.
+      if (ctx_pushed)
+        solver_ptr->pop_ctx();
+
+      // Store claim signature (once — multiple witnesses are still one claim)
       if (is_assert_cov)
       {
         std::lock_guard lock(reached_mul_claims_mutex);
@@ -1831,10 +2022,6 @@ smt_convt::resultt bmct::multi_property_check(
         else
           reached_claims.emplace(claim.claim_cstr);
       }
-
-      // update cex number
-      size_t previous_ce_counter;
-      previous_ce_counter = ce_counter++;
 
       // for verbose output of cond coverage
       if (is_vb)
@@ -1850,12 +2037,7 @@ smt_convt::resultt bmct::multi_property_check(
       else if (!is_cov_silent)
       {
         report_multi_property_trace(
-          solver_result,
-          solver_ptr,
-          local_eq,
-          previous_ce_counter,
-          goto_trace,
-          claim.claim_msg);
+          smt_convt::P_SATISFIABLE, witnesses, stop_reason, claim.claim_msg);
       }
 
       {
