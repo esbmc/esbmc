@@ -4,6 +4,7 @@
 
 int ffs(int x)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   if (x == 0)
     return 0;

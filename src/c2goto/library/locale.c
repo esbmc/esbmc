@@ -3,6 +3,7 @@
 
 char *setlocale(int category, const char *locale)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   // If locale is NULL, just query current locale
   if (locale == NULL)

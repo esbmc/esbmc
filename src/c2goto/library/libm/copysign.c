@@ -4,14 +4,14 @@
 #define copysign_def(type, name, signbit_func, abs_func)                       \
   type name(type x, type y)                                                    \
   {                                                                            \
-  __ESBMC_HIDE:;                                                               \
+  /* cppcheck-suppress unusedLabel */ __ESBMC_HIDE:;                           \
     type abs = abs_func(x);                                                    \
     return (signbit_func(y)) ? -abs : abs;                                     \
   }                                                                            \
                                                                                \
   type __##name(type x, type y)                                                \
   {                                                                            \
-  __ESBMC_HIDE:;                                                               \
+  /* cppcheck-suppress unusedLabel */ __ESBMC_HIDE:;                           \
     return name(x, y);                                                         \
   }
 

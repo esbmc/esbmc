@@ -4,14 +4,14 @@
 #define remainder_def(type, name, remquo_func)                                 \
   type name(type x, type y)                                                    \
   {                                                                            \
-  __ESBMC_HIDE:;                                                               \
+  /* cppcheck-suppress unusedLabel */ __ESBMC_HIDE:;                           \
     int quo;                                                                   \
     return remquo_func(x, y, &quo);                                            \
   }                                                                            \
                                                                                \
   type __##name(type x, type y)                                                \
   {                                                                            \
-  __ESBMC_HIDE:;                                                               \
+  /* cppcheck-suppress unusedLabel */ __ESBMC_HIDE:;                           \
     return name(x, y);                                                         \
   }
 

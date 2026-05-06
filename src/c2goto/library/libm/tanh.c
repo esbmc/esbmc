@@ -2,6 +2,7 @@
 
 double tanh(double x)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   double e_pos = exp(x);
   double e_neg = exp(-x);

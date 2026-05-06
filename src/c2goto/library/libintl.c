@@ -3,6 +3,7 @@
 
 char *bindtextdomain(const char *domainname, const char *dirname)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_assert(
     domainname != NULL, "bindtextdomain called with NULL domainname");
@@ -28,6 +29,7 @@ __ESBMC_HIDE:;
 
 char *textdomain(const char *domainname)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   // If domainname is NULL, query current domain
   if (domainname == NULL)

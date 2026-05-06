@@ -7,12 +7,14 @@
 // Python character isalpha - handles ASCII letters only in a single-byte context.
 _Bool __python_char_isalpha(int c)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
 }
 
 size_t __python_strnlen_bounded(const char *s, size_t max_len)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   size_t i = 0;
   while (i < max_len)
@@ -29,6 +31,7 @@ __ESBMC_HIDE:;
 // Python string isalpha - handles ASCII and common two-byte UTF-8 Latin letters.
 _Bool __python_str_isalpha(const char *s)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   if (!s || !*s)
     return 0;
@@ -64,6 +67,7 @@ __ESBMC_HIDE:;
 
 static void __python_str_normalize_range(int *start, int *end, size_t len_s)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   int len_i = (int)len_s;
 
@@ -94,12 +98,14 @@ __ESBMC_HIDE:;
 // Python character isdigit - checks if a single character is a digit
 _Bool __python_char_isdigit(int c)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return (c >= '0' && c <= '9');
 }
 
 _Bool __python_str_isdigit(const char *s)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   if (!s || !*s)
     return 0;
@@ -116,6 +122,7 @@ __ESBMC_HIDE:;
 // Python string isspace: checks if all characters are whitespace
 _Bool __python_str_isspace(const char *s)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   if (!s || !*s)
     return 0;
@@ -137,6 +144,7 @@ __ESBMC_HIDE:;
 // Python string lstrip: removes leading whitespace characters
 const char *__python_str_lstrip(const char *s)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   if (!s)
     return s;
@@ -153,6 +161,7 @@ __ESBMC_HIDE:;
 // Python string rstrip: removes trailing whitespace characters
 const char *__python_str_rstrip(const char *s)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   if (!s)
     return s;
@@ -190,6 +199,7 @@ __ESBMC_HIDE:;
 // Python string strip: removes leading and trailing whitespace characters
 const char *__python_str_strip(const char *s)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   if (!s)
     return s;
@@ -233,6 +243,7 @@ __ESBMC_HIDE:;
 // Python string strip with custom chars - removes chars from both ends
 const char *__python_str_strip_chars(const char *s, const char *chars)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   if (!s)
     return s;
@@ -299,6 +310,7 @@ __ESBMC_HIDE:;
 // Python string lstrip with custom chars - removes chars from left
 const char *__python_str_lstrip_chars(const char *s, const char *chars)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   if (!s)
     return s;
@@ -327,6 +339,7 @@ __ESBMC_HIDE:;
 // Python string rstrip with custom chars - removes chars from right
 const char *__python_str_rstrip_chars(const char *s, const char *chars)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   if (!s)
     return s;
@@ -377,6 +390,7 @@ __ESBMC_HIDE:;
 // Python character islower - checks if a single character is lowercase
 _Bool __python_char_islower(int c)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return (c >= 'a' && c <= 'z');
 }
@@ -384,6 +398,7 @@ __ESBMC_HIDE:;
 // Python string islower - checks if all cased characters are lowercase
 _Bool __python_str_islower(const char *s)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   if (!s || !*s)
     return 0;
@@ -420,6 +435,7 @@ __ESBMC_HIDE:;
 // Python character lower - converts a single character to lowercase
 int __python_char_lower(int c)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   if (c >= 'A' && c <= 'Z')
     return c + ('a' - 'A');
@@ -429,6 +445,7 @@ __ESBMC_HIDE:;
 // Python character upper - converts a single character to uppercase
 int __python_char_upper(int c)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   if (c >= 'a' && c <= 'z')
     return c - ('a' - 'A');
@@ -438,6 +455,7 @@ __ESBMC_HIDE:;
 // Python string lower - converts all characters to lowercase
 char *__python_str_lower(const char *s)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   if (!s)
     return (char *)s;
@@ -467,6 +485,7 @@ __ESBMC_HIDE:;
 // Python string upper - converts all characters to uppercase
 char *__python_str_upper(const char *s)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   if (!s)
     return (char *)s;
@@ -503,6 +522,7 @@ __ESBMC_HIDE:;
 
 int __python_str_find(const char *s1, const char *s2)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   // str.find('') = 0
   if (s2[0] == '\0')
@@ -529,6 +549,7 @@ __ESBMC_HIDE:;
 
 int __python_str_find_range(const char *s1, const char *s2, int start, int end)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   size_t len_s = __python_strnlen_bounded(s1, 1024);
   size_t len_sub = __python_strnlen_bounded(s2, 1024);
@@ -559,6 +580,7 @@ __ESBMC_HIDE:;
 
 int __python_str_rfind(const char *s1, const char *s2)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   size_t len_s = __python_strnlen_bounded(s1, 1024);
   size_t len_sub = __python_strnlen_bounded(s2, 1024);
@@ -585,6 +607,7 @@ __ESBMC_HIDE:;
 
 int __python_str_rfind_range(const char *s1, const char *s2, int start, int end)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   size_t len_s = __python_strnlen_bounded(s1, 1024);
   size_t len_sub = __python_strnlen_bounded(s2, 1024);
@@ -618,6 +641,7 @@ char *__python_str_replace(
   const char *new_sub,
   int count)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   if (!s || !old_sub || !new_sub)
     return (char *)s;
@@ -758,6 +782,7 @@ __ESBMC_HIDE:;
 struct __ESBMC_PyListObj *
 __python_str_split(const char *str, const char *sep, long long maxsplit)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   if (!str)
     return (PyListObject *)0;
@@ -823,6 +848,7 @@ __ESBMC_HIDE:;
 // Python int() builtin - converts string to integer
 int __python_int(const char *s, int base)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   if (!s)
     return 0;
@@ -979,6 +1005,7 @@ __ESBMC_HIDE:;
 // Python chr() builtin - converts Unicode code point to string
 char *__python_chr(int codepoint)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   if (codepoint < 0 || codepoint > 0x10FFFF)
   {
@@ -1029,6 +1056,7 @@ __ESBMC_HIDE:;
 // Python string concatenation - combines two strings
 char *__python_str_concat(const char *s1, const char *s2)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   if (!s1 && !s2)
     return (char *)0;
@@ -1080,6 +1108,7 @@ __ESBMC_HIDE:;
 // Python string repetition - repeats a string count times
 char *__python_str_repeat(const char *s, long long count)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   if (!s)
     return (char *)0;
@@ -1127,6 +1156,7 @@ char *__python_str_slice(
   long long end,
   long long step)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   if (!s)
     return (char *)0;

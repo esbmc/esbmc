@@ -34,6 +34,7 @@ static size_t __ESBMC_atexit_registered = 0;
 
 void __ESBMC_atexit_handler()
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   while (__ESBMC_atexit_count > 0)
   {
@@ -44,6 +45,7 @@ __ESBMC_HIDE:;
 
 int atexit(void (*func)(void))
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_stdlib_atexit_key[__ESBMC_atexit_count].atexit_func = func;
   __ESBMC_atexit_count++;
@@ -56,6 +58,7 @@ __ESBMC_HIDE:;
 #pragma GCC diagnostic ignored "-Winvalid-noreturn"
 void exit(int status)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_atexit_handler();
   // Only check if handlers were registered
@@ -68,6 +71,7 @@ _Bool __ESBMC_no_abnormal_memory_leak(void);
 
 void abort(void)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   if (!__ESBMC_no_abnormal_memory_leak())
     __ESBMC_memory_leak_checks();
@@ -76,6 +80,7 @@ __ESBMC_HIDE:;
 
 void _Exit(int status)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_memory_leak_checks();
   __ESBMC_assume(0);
@@ -84,6 +89,7 @@ __ESBMC_HIDE:;
 
 void *calloc(size_t nmemb, size_t size)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   if (!nmemb)
     return NULL;
@@ -97,6 +103,7 @@ __ESBMC_HIDE:;
 
 long int strtol(const char *str, char **endptr, int base)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   long int result = 0;
   int sign = 1;
@@ -155,6 +162,7 @@ __ESBMC_HIDE:;
 
 float strtof(const char *str, char **endptr)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   float result = 0.0f;
   int sign = 1;
@@ -225,6 +233,7 @@ __ESBMC_HIDE:;
 /* one plus the numeric value, rest is zero */
 static const unsigned char get_atoi_map(unsigned char pos)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   const unsigned char ATOI_MAP[256] = {
     ['0'] = 1,
@@ -244,7 +253,7 @@ __ESBMC_HIDE:;
 #define ATOI_DEF(name, type, TYPE)                                             \
   type name(const char *s)                                                     \
   {                                                                            \
-  __ESBMC_HIDE:;                                                               \
+  /* cppcheck-suppress unusedLabel */ __ESBMC_HIDE:;                           \
     while (isspace(*s))                                                        \
       s++;                                                                     \
     int neg = 0;                                                               \
@@ -275,6 +284,7 @@ ATOI_DEF(atoll, long long, LLONG)
 
 char *getenv(const char *name)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
 
   __ESBMC_assert(name != NULL, "getenv called with NULL pointer");
@@ -304,18 +314,21 @@ __ESBMC_HIDE:;
 
 void *ldv_malloc(size_t size)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return malloc(size);
 }
 
 void *ldv_zalloc(size_t size)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return malloc(size);
 }
 
 size_t strlcat(char *dst, const char *src, size_t siz)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   char *d = dst;
   const char *s = src;
@@ -346,6 +359,7 @@ __ESBMC_HIDE:;
 
 int posix_memalign(void **memptr, size_t align, size_t size)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   if (
     !align || (align & (align - 1)) || /* alignment must be a power of 2 */
@@ -364,6 +378,7 @@ __ESBMC_HIDE:;
 
 void *aligned_alloc(size_t align, size_t size)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   void *r = NULL;
   errno = posix_memalign(&r, align, size);
@@ -372,12 +387,14 @@ __ESBMC_HIDE:;
 
 int rand(void)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return nondet_uint() % ((unsigned)RAND_MAX + 1);
 }
 
 long random(void)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return nondet_ulong() % ((unsigned)INT32_MAX + 1);
 }
@@ -391,6 +408,7 @@ void srand (unsigned int s)
 
 void rev(char *p)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   char *q = &p[strlen(p) - 1];
   char *r = p;
@@ -404,6 +422,7 @@ __ESBMC_HIDE:;
 
 char *itoa(int value, char *str, int base)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   int count = 0;
   bool flag = true;
@@ -439,6 +458,7 @@ __ESBMC_HIDE:;
 
 void _exit(int status)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   // Immediate process termination - end execution path
   __ESBMC_assume(0);

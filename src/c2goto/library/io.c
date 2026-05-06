@@ -38,6 +38,7 @@ static int __esbmc_pipe_fds[2] = {-1, -1}; // track pipe file descriptors
 
 int putchar(int c)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   _Bool error;
   printf("%c", c);
@@ -46,6 +47,7 @@ __ESBMC_HIDE:;
 
 int puts(const char *s)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   _Bool error;
   int ret;
@@ -63,6 +65,7 @@ __ESBMC_HIDE:;
 // Source: https://www.cplusplus.com/reference/cstdio/gets/
 char *gets(char *str)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   size_t i = 0;
 
@@ -95,6 +98,7 @@ __ESBMC_HIDE:;
 
 FILE *fopen(const char *filename, const char *m)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
 #if __ESBMC_SVCOMP
   FILE *f = (void *)1;
@@ -106,6 +110,7 @@ __ESBMC_HIDE:;
 
 int fclose(FILE *stream)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
 // Don't clear pending state here - let it remain for verification
 #if __ESBMC_SVCOMP
@@ -117,6 +122,7 @@ __ESBMC_HIDE:;
 
 FILE *fdopen(int handle, const char *m)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   FILE *f = malloc(sizeof(FILE));
   return f;
@@ -129,6 +135,7 @@ __ESBMC_HIDE:;
 // source: https://www.cplusplus.com/reference/cstdio/fgets/
 char *fgets(char *str, int size, FILE *stream)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   // Set currently reading state
   __esbmc_currently_reading = 1;
@@ -191,6 +198,7 @@ __ESBMC_HIDE:;
 
 size_t fread(void *ptr, size_t size, size_t nitems, FILE *stream)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   size_t nread;
   size_t bytes = nread * size;
@@ -205,6 +213,7 @@ __ESBMC_HIDE:;
 
 int feof(FILE *stream)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   // just return nondet
   return nondet_int();
@@ -212,12 +221,14 @@ __ESBMC_HIDE:;
 
 int ferror(FILE *stream)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return __esbmc_error_state;
 }
 
 int fileno(FILE *stream)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   // just return nondet
   return nondet_int();
@@ -225,6 +236,7 @@ __ESBMC_HIDE:;
 
 int fputs(const char *s, FILE *stream)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   // Clear reading state when writing
   __esbmc_currently_reading = 0;
@@ -251,6 +263,7 @@ __ESBMC_HIDE:;
 
 int fflush(FILE *stream)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   // Clear pending data when flushing
   __esbmc_buffer_pending = 0;
@@ -259,6 +272,7 @@ __ESBMC_HIDE:;
 
 int fpurge(FILE *stream)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   // just return nondet
   return nondet_int();
@@ -266,6 +280,7 @@ __ESBMC_HIDE:;
 
 ssize_t read(int fildes, void *buf, size_t nbyte)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   // For valid file descriptors, succeed with positive bytes read
   if (fildes >= 0 && buf != NULL && nbyte > 0)
@@ -287,48 +302,56 @@ __ESBMC_HIDE:;
 
 int fgetc(FILE *stream)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return nondet_int();
 }
 
 int getc(FILE *stream)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return nondet_int();
 }
 
 int getchar()
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return nondet_int();
 }
 
 int getw(FILE *stream)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return nondet_int();
 }
 
 int fseek(FILE *stream, long offset, int whence)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return nondet_int();
 }
 
 long ftell(FILE *stream)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return nondet_int();
 }
 
 void rewind(FILE *stream)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __esbmc_currently_reading = 0; // Reset reading state
 }
 
 size_t fwrite(const void *ptr, size_t size, size_t nitems, FILE *stream)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   size_t nwrite;
   __ESBMC_assume(nwrite <= nitems);
@@ -337,6 +360,7 @@ __ESBMC_HIDE:;
 
 int fputs_unlocked(const char *s, FILE *stream)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   // Always set pending data when fputs_unlocked is called with valid parameters
   if (stream != NULL)
@@ -349,6 +373,7 @@ __ESBMC_HIDE:;
 
 FILE *fmemopen(void *buf, size_t size, const char *mode)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __esbmc_buffer_pending = 0; // Initialize to empty buffer
   __esbmc_error_state = 0;    // Initialize to no error
@@ -391,18 +416,21 @@ __ESBMC_HIDE:;
 
 size_t __fpending(FILE *stream)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return __esbmc_buffer_pending;
 }
 
 int ferror_unlocked(FILE *stream)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return __esbmc_error_state;
 }
 
 int fputc(int c, FILE *stream)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   // Check if stream is writable (mode 1 or 2)
   if (__esbmc_stream_mode == 0)
@@ -421,12 +449,14 @@ __ESBMC_HIDE:;
 
 int __freading(FILE *stream)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return __esbmc_currently_reading;
 }
 
 off_t lseek(int fd, off_t offset, int whence)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   // Check if this is a pipe file descriptor
   if (fd == __esbmc_pipe_fds[0] || fd == __esbmc_pipe_fds[1])
@@ -460,6 +490,7 @@ __ESBMC_HIDE:;
 
 int open(const char *pathname, int flags, ...)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   int fd = nondet_int();
   __ESBMC_assume(fd >= 0); // open returns non-negative fd on success
@@ -468,6 +499,7 @@ __ESBMC_HIDE:;
 
 ssize_t write(int fd, const void *buf, size_t count)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   // For valid file descriptors, always succeed
   if (fd >= 0 && buf != NULL)
@@ -478,18 +510,21 @@ __ESBMC_HIDE:;
 
 int close(int fd)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return nondet_int(); // can succeed (0) or fail (-1)
 }
 
 int *__errno_location(void)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return &__esbmc_errno;
 }
 
 int pipe(int pipefd[2])
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   // Always succeed for valid input
   if (pipefd != NULL)
@@ -515,12 +550,14 @@ __ESBMC_HIDE:;
 #if defined(_WIN32) || defined(_MSVC)
 int *_errno(void)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return &__esbmc_errno;
 }
 
 int *__errno(void)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return &__esbmc_errno;
 }
@@ -530,6 +567,7 @@ __ESBMC_HIDE:;
 #if defined(_WIN32) || defined(_MSVC)
 FILE *__acrt_iob_func(unsigned index)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   // Windows uses this to get stdin(0), stdout(1), stderr(2)
   static FILE stdin_file, stdout_file, stderr_file;

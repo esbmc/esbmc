@@ -5,7 +5,7 @@
 #define remquo_def(type, name, isnan_func, isinf_func, llrint_func)                    \
   type name(type x, type y, int *quo)                                                  \
   {                                                                                    \
-  __ESBMC_HIDE:;                                                                       \
+  /* cppcheck-suppress unusedLabel */ __ESBMC_HIDE:;                                   \
     /* If either argument is NaN, NaN is returned */                                   \
     if (isnan_func(x) || isnan_func(y))                                                \
       return NAN;                                                                      \
@@ -43,7 +43,7 @@
                                                                                        \
   type __##name(type x, type y, int *quo)                                              \
   {                                                                                    \
-  __ESBMC_HIDE:;                                                                       \
+  /* cppcheck-suppress unusedLabel */ __ESBMC_HIDE:;                                   \
     return name(x, y, quo);                                                            \
   }
 

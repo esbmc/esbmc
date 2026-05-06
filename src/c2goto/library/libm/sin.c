@@ -3,6 +3,7 @@
 
 double sin(double x)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   if (x == 0.0)
     return 0.0;
@@ -13,6 +14,7 @@ __ESBMC_HIDE:;
 
 double __sin(double x)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return sin(x - M_PI_2);
 }

@@ -14,6 +14,7 @@ unsigned int sol_max_cnt;
 
 int _ESBMC_get_addr_array_idx(address_t tgt)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   if (tgt == (address_t)0)
     return -1;
@@ -27,11 +28,13 @@ __ESBMC_HIDE:;
 }
 bool _ESBMC_cmp_cname(const char *c_1, const char *c_2)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return c_1 == c_2;
 }
 void *_ESBMC_get_obj(address_t addr, const char *cname)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   int idx = _ESBMC_get_addr_array_idx(addr);
   if (idx == -1)
@@ -43,6 +46,7 @@ __ESBMC_HIDE:;
 }
 void update_addr_obj(address_t addr, void *obj, const char *cname)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   // __ESBMC_assume(obj != NULL);
   sol_addr_array[sol_max_cnt] = addr;
@@ -52,6 +56,7 @@ __ESBMC_HIDE:;
 }
 address_t _ESBMC_get_unique_address(void *obj, const char *cname)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   // __ESBMC_assume(obj != NULL);
   address_t tmp;
@@ -69,6 +74,7 @@ __ESBMC_HIDE:;
 }
 const char *_ESBMC_get_nondet_cont_name(const char *c_array[], unsigned int len)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   unsigned int rand = nondet_uint() % len;
   return c_array[rand];

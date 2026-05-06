@@ -5,7 +5,7 @@
 #define ceil_def(type, name, rint_func)                                        \
   type name(type f)                                                            \
   {                                                                            \
-  __ESBMC_HIDE:;                                                               \
+  /* cppcheck-suppress unusedLabel */ __ESBMC_HIDE:;                           \
     type result;                                                               \
     int save_round = fegetround();                                             \
     fesetround(FE_UPWARD);                                                     \
@@ -16,7 +16,7 @@
                                                                                \
   type __##name(type f)                                                        \
   {                                                                            \
-  __ESBMC_HIDE:;                                                               \
+  /* cppcheck-suppress unusedLabel */ __ESBMC_HIDE:;                           \
     return name(f);                                                            \
   }
 
@@ -29,6 +29,7 @@ ceil_def(long double, ceill, rintl);
 // This function is used by the Python frontend
 void __ceil_array(const double *v, double *out, int size)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   int i = 0;
   while (i < size)

@@ -17,6 +17,7 @@ char kernel_memory[KERNEL_MEMORY_SPACE]; //mock user memory
 
 static void check_gfp_flags(gfp_t flags)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   // Define all valid flags
   gfp_t valid_flags =
@@ -32,12 +33,14 @@ __ESBMC_HIDE:;
 }
 static void *__kmalloc(size_t size, gfp_t flags)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return malloc(size);
 }
 
 static void *__kmalloc_large(size_t size, gfp_t flags)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   (void)flags; // Ignore flags.
   return malloc(size);
@@ -45,6 +48,7 @@ __ESBMC_HIDE:;
 
 void *kmalloc(int size, int flags)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   // Check size greater than  zero and less than max
   assert(size > 0 && size <= MAX_ALLOC_SIZE);
@@ -66,17 +70,20 @@ __ESBMC_HIDE:;
 
 void kfree(const void *ptr)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   free((void *)ptr);
 }
 void *kmalloc_array(size_t n, size_t size, gfp_t flags)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return __kmalloc(n * size, flags);
 }
 
 void *kcalloc(size_t n, size_t size, gfp_t flags)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   (void)flags;
   return calloc(n, size);
@@ -84,6 +91,7 @@ __ESBMC_HIDE:;
 
 unsigned long copy_to_user(void *to, void *from, unsigned long size)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   //checking on the passed parameters of kernel function
   //the source in kernel space and destination in user space must be valid
@@ -103,6 +111,7 @@ __ESBMC_HIDE:;
 
 unsigned long copy_from_user(void *to, void *from, unsigned long size)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   //the source in user space and destination in kernel space must be valid
   //avoid dereferencing null pointer
@@ -121,6 +130,7 @@ __ESBMC_HIDE:;
 
 void spin_lock_init(spinlock_t *lock)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   //check if the lock is valid
   assert(lock != NULL);
@@ -130,6 +140,7 @@ __ESBMC_HIDE:;
 
 bool spin_lock(spinlock_t *lock)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_assert(lock != NULL, "The lock is null, verfication failed");
 
@@ -152,6 +163,7 @@ __ESBMC_HIDE:;
 
 void spin_unlock(spinlock_t *lock)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_assert(lock != NULL, "The lock is null, verfication failed");
   lock->locked = false;

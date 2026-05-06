@@ -4,6 +4,7 @@ int __ESBMC_rounding_mode = 0;
 
 inline int fegetround(void)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return __ESBMC_rounding_mode == 3   ? FE_DOWNWARD
          : __ESBMC_rounding_mode == 0 ? FE_TONEAREST
@@ -14,6 +15,7 @@ __ESBMC_HIDE:;
 
 inline int fesetround(int rounding_mode)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_rounding_mode = rounding_mode == FE_DOWNWARD     ? 3
                           : rounding_mode == FE_TONEAREST  ? 0

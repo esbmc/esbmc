@@ -36,6 +36,7 @@ static double _atan(double f, int n)
 
 double atan(double x)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   double a;
 
@@ -52,12 +53,14 @@ __ESBMC_HIDE:;
 // Reference: https://numpy.org/doc/stable/reference/generated/numpy.arctan.html
 double arctan(double x)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return atan(x);
 }
 
 double atan2(double v, double u)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   double au, av, f;
 

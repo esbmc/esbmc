@@ -13,6 +13,7 @@ unsigned int esbmc_array_count;
 
 void _ESBMC_array_null_check(int ok)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   if (!ok)
     assert(!"Null Array Pointer");
@@ -20,6 +21,7 @@ __ESBMC_HIDE:;
 
 void _ESBMC_element_null_check(int ok)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   if (!ok)
     assert(!"Null Element Pointer");
@@ -27,6 +29,7 @@ __ESBMC_HIDE:;
 
 void _ESBMC_zero_size_check(int ok)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   if (!ok)
     assert(!"Zero Element Size");
@@ -34,6 +37,7 @@ __ESBMC_HIDE:;
 
 void _ESBMC_pop_empty_check(int ok)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   if (!ok)
     assert(!"Pop From Empty Array");
@@ -41,6 +45,7 @@ __ESBMC_HIDE:;
 
 void _ESBMC_store_array(void *array, size_t length)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   _ESBMC_array_null_check(array != 0);
 
@@ -60,6 +65,7 @@ __ESBMC_HIDE:;
 
 unsigned int _ESBMC_array_length(void *array)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   if (array == NULL)
     return 0;
@@ -76,6 +82,7 @@ __ESBMC_HIDE:;
 
 void *_ESBMC_arrcpy(void *from_array, size_t from_size, size_t size_of)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   _ESBMC_element_null_check(from_array != 0);
   _ESBMC_zero_size_check(size_of != 0);
@@ -90,6 +97,7 @@ __ESBMC_HIDE:;
 
 void *_ESBMC_array_push(void *array, void *element, size_t size_of_element)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   _ESBMC_zero_size_check(size_of_element != 0);
 
@@ -149,6 +157,7 @@ __ESBMC_HIDE:;
 
 void _ESBMC_array_pop(void *array, size_t size_of_element)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   _ESBMC_array_null_check(array != 0);
   _ESBMC_zero_size_check(size_of_element != 0);

@@ -29,6 +29,7 @@ extern unsigned int esbmc_array_count;
 
 uint256_t _max(unsigned int bitwidth, bool is_signed)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_assume(bitwidth > 0 && bitwidth <= 256);
   if (is_signed)
@@ -47,6 +48,7 @@ __ESBMC_HIDE:;
 
 int256_t _min(unsigned int bitwidth, bool is_signed)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   if (is_signed)
   {
@@ -61,12 +63,14 @@ __ESBMC_HIDE:;
 
 unsigned int _creationCode()
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return nondet_uint();
 }
 
 unsigned int _runtimeCode()
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return nondet_uint();
 }
@@ -74,12 +78,14 @@ __ESBMC_HIDE:;
 /* type(I).interfaceId — nondet over-approximation (bytes4) */
 uint32_t _interfaceId()
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return (uint32_t)nondet_uint();
 }
 
 void _ESBMC_check_reentrancy(const bool _ESBMC_mutex)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   if (_ESBMC_mutex)
     assert(!"Reentrancy behavior detected");
@@ -87,6 +93,7 @@ __ESBMC_HIDE:;
 
 void initialize()
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   // we assume it starts from an EOA
   msg_data = (uint256_t)nondet_uint();

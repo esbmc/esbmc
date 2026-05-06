@@ -4,7 +4,7 @@
 #define fdim_def(type, name, isnan_func)                                       \
   type name(type x, type y)                                                    \
   {                                                                            \
-  __ESBMC_HIDE:;                                                               \
+  /* cppcheck-suppress unusedLabel */ __ESBMC_HIDE:;                           \
     if (isnan_func(x) || isnan_func(y))                                        \
       return NAN;                                                              \
                                                                                \
@@ -13,7 +13,7 @@
                                                                                \
   type __##name(type x, type y)                                                \
   {                                                                            \
-  __ESBMC_HIDE:;                                                               \
+  /* cppcheck-suppress unusedLabel */ __ESBMC_HIDE:;                           \
     return name(x, y);                                                         \
   }
 

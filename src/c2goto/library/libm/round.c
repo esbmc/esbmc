@@ -5,7 +5,7 @@
 #define round_def(ret_type, type, name, rint_func, copysign_func, abs_func)    \
   ret_type name(type f)                                                        \
   {                                                                            \
-  __ESBMC_HIDE:;                                                               \
+  /* cppcheck-suppress unusedLabel */ __ESBMC_HIDE:;                           \
     type result;                                                               \
     int save_round = fegetround();                                             \
     fesetround(FE_TOWARDZERO);                                                 \
@@ -16,7 +16,7 @@
                                                                                \
   ret_type __##name(type f)                                                    \
   {                                                                            \
-  __ESBMC_HIDE:;                                                               \
+  /* cppcheck-suppress unusedLabel */ __ESBMC_HIDE:;                           \
     return name(f);                                                            \
   }
 

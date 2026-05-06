@@ -13,24 +13,28 @@
 
 double creal(COMPLEX_DOUBLE z)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return CREAL(z);
 }
 
 double cimag(COMPLEX_DOUBLE z)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return CIMAG(z);
 }
 
 double cabs(COMPLEX_DOUBLE z)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return sqrt(CREAL(z) * CREAL(z) + CIMAG(z) * CIMAG(z));
 }
 
 double carg(COMPLEX_DOUBLE z)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return atan2(CIMAG(z), CREAL(z));
 }

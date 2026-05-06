@@ -7,6 +7,7 @@
 
 uint32_t htonl(uint32_t hostlong)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   if (__ESBMC_is_little_endian())
     return __builtin_bswap32(hostlong);
@@ -15,6 +16,7 @@ __ESBMC_HIDE:;
 
 uint16_t htons(uint16_t hostshort)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   if (__ESBMC_is_little_endian())
     return __builtin_bswap16(hostshort);
@@ -23,6 +25,7 @@ __ESBMC_HIDE:;
 
 uint32_t ntohl(uint32_t netlong)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   if (__ESBMC_is_little_endian())
     return __builtin_bswap32(netlong);
@@ -31,6 +34,7 @@ __ESBMC_HIDE:;
 
 uint16_t ntohs(uint16_t netshort)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   if (__ESBMC_is_little_endian())
     return __builtin_bswap16(netshort);

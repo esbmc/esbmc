@@ -34,6 +34,7 @@ uint256_t block_timestamp;
 /* ── blockhash — nondet abstraction (over-approximate) ─────────── */
 uint256_t blockhash(uint256_t x)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   uint256_t result;
   return result;
@@ -42,6 +43,7 @@ __ESBMC_HIDE:;
 /* ── blobhash (EIP-4844) — nondet abstraction (over-approximate) ─ */
 uint256_t blobhash(uint256_t index)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   uint256_t result;
   return result;
@@ -53,6 +55,7 @@ unsigned int nondet_uint();
 unsigned int _gaslimit;
 void gasConsume()
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   unsigned int consumed = nondet_uint();
   __ESBMC_assume(consumed > 0 && consumed <= _gaslimit);
@@ -60,6 +63,7 @@ __ESBMC_HIDE:;
 }
 uint256_t gasleft()
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   gasConsume(); // always less
   return (uint256_t)_gaslimit;

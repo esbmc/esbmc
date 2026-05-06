@@ -14,6 +14,7 @@ extern unsigned short int __ESBMC_blocked_threads_count;
 
 int sem_init(sem_t *__sem, int __pshared, unsigned int __value)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   // ESBMC does not support shared memory at the moment
@@ -28,6 +29,7 @@ __ESBMC_HIDE:;
 
 static int sem_init_check(sem_t *__sem)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   // check whether this sem has been initialized
   __ESBMC_atomic_begin();
@@ -38,6 +40,7 @@ __ESBMC_HIDE:;
 
 int sem_wait_check(sem_t *__sem)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   _Bool unlocked = 1;
 
@@ -68,6 +71,7 @@ __ESBMC_HIDE:;
 
 int sem_wait_nocheck(sem_t *__sem)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   sem_init_check(__sem);
@@ -81,6 +85,7 @@ __ESBMC_HIDE:;
 
 int sem_post(sem_t *__sem)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   sem_init_check(__sem);
@@ -93,6 +98,7 @@ __ESBMC_HIDE:;
 
 int sem_destroy(sem_t *__sem)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   __ESBMC_sem_lock_field(*__sem) = -1;

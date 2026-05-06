@@ -25,6 +25,7 @@
 
 char *strcpy(char *dst, const char *src)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   // Ensure src pointer is non-null
   __ESBMC_assert(src != NULL, "Source pointer is null");
@@ -45,6 +46,7 @@ __ESBMC_HIDE:;
 
 char *strncpy(char *dst, const char *src, size_t n)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   char *start = dst;
   size_t copied = 0;
@@ -63,6 +65,7 @@ __ESBMC_HIDE:;
 
 char *strcat(char *dst, const char *src)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   strcpy(dst + strlen(dst), src);
   return dst;
@@ -70,6 +73,7 @@ __ESBMC_HIDE:;
 
 char *strncat(char *dst, const char *src, size_t n)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   char *start = dst;
 
@@ -87,6 +91,7 @@ __ESBMC_HIDE:;
 
 size_t strlen(const char *s)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   size_t len = 0;
   while (s[len] != 0)
@@ -96,6 +101,7 @@ __ESBMC_HIDE:;
 
 int strcmp(const char *p1, const char *p2)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   const unsigned char *s1 = (const unsigned char *)p1;
   const unsigned char *s2 = (const unsigned char *)p2;
@@ -114,6 +120,7 @@ __ESBMC_HIDE:;
 
 int strncmp(const char *s1, const char *s2, size_t n)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   size_t i = 0;
   unsigned char ch1, ch2;
@@ -137,6 +144,7 @@ __ESBMC_HIDE:;
 
 char *strchr(const char *s, int ch)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   while (*s && *s != (char)ch)
     s++;
@@ -147,6 +155,7 @@ __ESBMC_HIDE:;
 
 char *strrchr(const char *s, int c)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   const char *found, *p;
 
@@ -169,6 +178,7 @@ __ESBMC_HIDE:;
 
 size_t strspn(const char *s, const char *accept)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   const char *p;
   const char *a;
@@ -190,6 +200,7 @@ __ESBMC_HIDE:;
 
 size_t strcspn(const char *s, const char *reject)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   size_t count = 0;
 
@@ -204,6 +215,7 @@ __ESBMC_HIDE:;
 
 char *strpbrk(const char *s, const char *accept)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   while (*s != '\0')
   {
@@ -219,6 +231,7 @@ __ESBMC_HIDE:;
 
 char *strstr(const char *str1, const char *str2)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   char *cp = (char *)str1;
   char *s1, *s2;
@@ -243,6 +256,7 @@ __ESBMC_HIDE:;
 
 char *strtok(char *str, const char *delim)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   static char *p = 0;
   if (str)
@@ -259,6 +273,7 @@ __ESBMC_HIDE:;
 
 char *strdup(const char *str)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   size_t bufsz;
   bufsz = (strlen(str) + 1);
@@ -271,6 +286,7 @@ __ESBMC_HIDE:;
 
 void *__memcpy_impl(void *dst, const void *src, size_t n)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   char *cdst = dst;
   const char *csrc = src;
@@ -285,6 +301,7 @@ __ESBMC_HIDE:;
 
 void *memcpy(void *dst, const void *src, size_t n)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   void *hax = &__memcpy_impl;
   (void)hax;
@@ -293,6 +310,7 @@ __ESBMC_HIDE:;
 
 void *__memset_impl(void *s, int c, size_t n)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   char *sp = s;
   for (size_t i = 0; i < n; i++)
@@ -302,6 +320,7 @@ __ESBMC_HIDE:;
 
 void *memset(void *s, int c, size_t n)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   void *hax = &__memset_impl;
   (void)hax;
@@ -310,6 +329,7 @@ __ESBMC_HIDE:;
 
 void *memmove(void *dest, const void *src, size_t n)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   char *cdest = dest;
   const char *csrc = src;
@@ -336,6 +356,7 @@ __ESBMC_HIDE:;
 
 int memcmp(const void *s1, const void *s2, size_t n)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   int res = 0;
   const unsigned char *sc1 = s1, *sc2 = s2;
@@ -351,6 +372,7 @@ __ESBMC_HIDE:;
 
 void *memchr(const void *buf, int ch, size_t n)
 {
+// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   while (n && (*(unsigned char *)buf != (unsigned char)ch))
   {
