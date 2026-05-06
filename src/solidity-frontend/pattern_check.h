@@ -1,3 +1,11 @@
+/// \file pattern_check.h
+/// \brief Pattern-based vulnerability detection for Solidity contracts.
+///
+/// Declares pattern_checker, which performs static pattern matching on the
+/// solc JSON AST to detect known vulnerability patterns (e.g., authorization
+/// via tx.origin, reentrancy patterns) without requiring full symbolic
+/// execution. Complements ESBMC's reasoning-based verification pipeline.
+
 #ifndef SOLIDITY_FRONTEND_PATTERN_CHECK_H_
 #define SOLIDITY_FRONTEND_PATTERN_CHECK_H_
 

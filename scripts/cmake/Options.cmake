@@ -59,8 +59,8 @@ option(CORE_REGRESSION_ONLY "Only add tests in the regression that are CORE (def
 
 # these URLs are all for an x86_64 target
 if(WIN32)
-  set(DEFAULT_LLVM_URL "https://github.com/XLiZHI/esbmc/releases/download/v17/llvm+clang+lld-16.0.0-x86_64-windows-msvc-release-mt.zip")
-  set(DEFAULT_LLVM_NAME "llvm+clang+lld-16.0.0-x86_64-windows-msvc-release-mt")
+  set(DEFAULT_LLVM_URL "https://github.com/llvm/llvm-project/releases/download/llvmorg-22.1.4/clang+llvm-22.1.4-x86_64-pc-windows-msvc.tar.xz")
+  set(DEFAULT_LLVM_NAME "clang+llvm-22.1.4-x86_64-pc-windows-msvc")
 
   set(DEFAULT_Z3_URL "https://github.com/Z3Prover/z3/releases/download/z3-4.13.3/z3-4.13.3-x64-win.zip")
   set(DEFAULT_Z3_NAME z3-4.13.3-x64-win)

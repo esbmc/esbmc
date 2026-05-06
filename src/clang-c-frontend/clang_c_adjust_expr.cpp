@@ -143,29 +143,20 @@ void clang_c_adjust::adjust_expr(exprt &expr)
     const struct_union_typet::componentst &new_comp =
       to_struct_union_type(t).components();
     exprt::operandst &ops = expr.operands();
-    if (ops.size() < new_comp.size())
+    /* Only insert padding operands if the expression doesn't already have
+     * them.  The Solidity frontend creates struct expressions via
+     * gen_zero(get_complete_type()), which resolves padding before this
+     * pass, whereas the C frontend relies on this pass to add them. */
+    const bool already_padded = (ops.size() == new_comp.size());
+    for (size_t i = 0; i < new_comp.size(); i++)
     {
-      /* adjust_type() above may have added padding members.
-       * Adjust the init expression accordingly. */
-      for (size_t i = 0; i < new_comp.size(); i++)
+      const struct_union_typet::componentt &c = new_comp[i];
+      if (c.get_is_padding() && !already_padded)
       {
-        const struct_union_typet::componentt &c = new_comp[i];
-        if (c.get_is_padding())
-        {
-          // TODO: should we initialize pads with nondet values?
-          ops.insert(ops.begin() + i, gen_zero(c.type()));
-        }
-        adjust_expr(ops[i]);
+        // TODO: should we initialize pads with nondet values?
+        ops.insert(ops.begin() + i, gen_zero(c.type()));
       }
-    }
-    else
-    {
-      /* Padding already present — the struct expression was re-adjusted
-       * (e.g. adjust_operands followed by a second adjust_expr on the
-       * same node).  Skip insertion; just recursively adjust in place. */
-      assert(ops.size() == new_comp.size());
-      for (auto &op : ops)
-        adjust_expr(op);
+      adjust_expr(ops[i]);
     }
     assert(new_comp.size() == ops.size());
   }

@@ -100,8 +100,6 @@ std::string bitnand2t::field_names[esbmct::num_type_fields] =
   {"side_1", "side_2", "", "", ""};
 std::string bitnor2t::field_names[esbmct::num_type_fields] =
   {"side_1", "side_2", "", "", ""};
-std::string bitnxor2t::field_names[esbmct::num_type_fields] =
-  {"side_1", "side_2", "", "", ""};
 std::string lshr2t::field_names[esbmct::num_type_fields] =
   {"side_1", "side_2", "", "", ""};
 std::string bitnot2t::field_names[esbmct::num_type_fields] =

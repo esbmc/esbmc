@@ -59,20 +59,48 @@ unsigned goto_symext::argument_assignments(
 
   // iterates over the types of the arguments
   for (unsigned int name_idx = 0; name_idx < function_type.arguments.size();
-       ++name_idx, ++it1)
+       ++name_idx)
   {
-    // if you run out of actual arguments there was a mismatch
+    const irep_idt &identifier = function_type.argument_names[name_idx];
+
+    // If we run out of actual arguments before the formal parameter list is
+    // exhausted, the call site disagrees with the function definition.  In
+    // practice this occurs when a function pointer with an unprototyped type
+    // (e.g. void (*g)()) is used to call a function with a different
+    // signature.  Model the missing argument as a nondeterministic value,
+    // mirroring the symmetric "too many arguments" branch below which
+    // silently drops extras.
     if (it1 == arguments.end())
     {
-      claim(gen_false_expr(), "function call: not enough arguments");
-      return UINT_MAX;
-    }
+      log_warning(
+        "function call to '{}': missing argument for parameter '{}'; "
+        "modelled as nondet",
+        id2string(function_identifier),
+        id2string(identifier));
 
-    const irep_idt &identifier = function_type.argument_names[name_idx];
+      if (identifier != "")
+      {
+        const type2tc &arg_type = function_type.arguments[name_idx];
+        expr2tc lhs = symbol2tc(arg_type, identifier);
+        symex_decl(code_decl2tc(arg_type, identifier));
+
+        unsigned int &nondet_count = get_nondet_counter();
+        expr2tc rhs = symbol2tc(
+          arg_type, "nondet$symex::nondet" + i2string(nondet_count++));
+
+        symex_assign(
+          code_assign2tc(lhs, rhs),
+          !options.get_bool_option("generate-html-report"));
+      }
+      continue;
+    }
 
     // Don't assign arguments if they have no name, see regression spec21
     if (identifier == "")
+    {
+      ++it1;
       continue;
+    }
 
     if (is_nil_expr(*it1))
     {
@@ -157,6 +185,8 @@ unsigned goto_symext::argument_assignments(
         code_assign2tc(lhs, rhs),
         !options.get_bool_option("generate-html-report"));
     }
+
+    ++it1;
   }
 
   unsigned va_index = UINT_MAX;

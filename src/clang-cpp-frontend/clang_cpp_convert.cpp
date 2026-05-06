@@ -1318,17 +1318,15 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::CXXNoexceptExpr &noexcept_expr =
       static_cast<const clang::CXXNoexceptExpr &>(stmt);
 
+    // A value-dependent noexcept(...) only appears in an un-instantiated
+    // template body; Clang re-converts each instantiation, where getValue()
+    // is well-defined. Conservatively assume "may throw" (false) so the
+    // un-instantiated form is harmless.
     if (noexcept_expr.isValueDependent())
     {
-      std::ostringstream oss;
-      llvm::raw_os_ostream ross(oss);
-      ross << "Conversion of unsupported value-dependent noexcept expr: \"";
-      ross << stmt.getStmtClassName() << "\" to expression"
-           << "\n";
-      stmt.dump(ross, *ASTContext);
-      ross.flush();
-      log_error("{}", oss.str());
-      return true;
+      log_debug("c++", "value-dependent noexcept expr: assuming false");
+      new_expr = false_exprt();
+      break;
     }
 
     if (noexcept_expr.getValue())
@@ -1595,10 +1593,19 @@ bool clang_cpp_convertert::get_function_body(
       else if (init->isMemberInitializer())
       {
         // parsing non-static member initializer
+        const clang::FieldDecl *member_decl = init->getMember();
 
         exprt member;
         member.set("#member_init", 1);
-        if (get_decl_ref(*init->getMember(), member))
+        if (get_decl_ref(*member_decl, member))
+          return true;
+
+        // get_decl_ref resolves a bitfield FieldDecl to its underlying integer
+        // type. Mirror the wrapping done by get_member_expr so the LHS
+        // carries the #bitfield/width-N marker symex relies on; otherwise
+        // symex routes through dereferencet's non-scalar path and produces
+        // spurious bounds / alignment VCCs on bitfield members. See #4281.
+        if (wrap_bitfield_type_if_needed(*member_decl, member.type()))
           return true;
 
         build_member_from_component(fd, member);

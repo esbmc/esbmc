@@ -159,7 +159,7 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
     struct_union_typet::componentt comp(id, name, t);
     if (fd.isBitField())
     {
-      if (get_bitfield_type(fd, t, comp.type()))
+      if (wrap_bitfield_type_if_needed(fd, comp.type()))
         return true;
 
 #if LLVM_VERSION_MAJOR > 18
@@ -1536,6 +1536,20 @@ bool clang_c_convertert::get_builtin_type(
   }
 
   new_type.set("#cpp_type", c_type);
+  return false;
+}
+
+bool clang_c_convertert::wrap_bitfield_type_if_needed(
+  const clang::FieldDecl &fd,
+  typet &t)
+{
+  if (!fd.isBitField())
+    return false;
+
+  typet bitfield_type;
+  if (get_bitfield_type(fd, t, bitfield_type))
+    return true;
+  t.swap(bitfield_type);
   return false;
 }
 
@@ -3329,6 +3343,27 @@ bool clang_c_convertert::get_cast_expr(
     gen_typecast(ns, expr, type);
     break;
 
+  // Member-pointer casts. ESBMC stores data-member pointers as plain pointers
+  // carrying a "to-member" type attribute and tracks no per-class offset, so
+  // BaseToDerived / Reinterpret reduce to an IR-level retag and
+  // MemberPointerToBoolean to a non-zero check against the same gen_zero
+  // value CK_NullToMemberPointer below produces. typecast_exprt is used
+  // directly: c_typecastt::implicit_typecast_followed's to-member branch
+  // dereferences expr.op0() assuming a literal &Class::member operand, which
+  // segfaults when the operand is a variable of member-pointer type.
+  case clang::CK_BaseToDerivedMemberPointer:
+  case clang::CK_ReinterpretMemberPointer:
+    expr = typecast_exprt(expr, type);
+    break;
+
+  case clang::CK_MemberPointerToBoolean:
+  {
+    exprt cmp("notequal", bool_type());
+    cmp.copy_to_operands(expr, gen_zero(expr.type()));
+    expr = cmp;
+    break;
+  }
+
   case clang::CK_AddressSpaceConversion:
   case clang::CK_NullToPointer:
   case clang::CK_NullToMemberPointer:
@@ -3957,10 +3992,8 @@ bool clang_c_convertert::get_member_expr(
 
   if (const auto *bitfield = memb.getSourceBitField())
   {
-    typet bitfield_type;
-    if (get_bitfield_type(*bitfield, comp_type, bitfield_type))
+    if (wrap_bitfield_type_if_needed(*bitfield, comp_type))
       return true;
-    comp_type.swap(bitfield_type);
   }
 
   std::string id, name;
