@@ -545,6 +545,30 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("multi-property", true);
   }
 
+  // --all-witnesses also activates --multi-property
+  if (cmdline.isset("all-witnesses"))
+  {
+    if (cmdline.isset("max-witnesses"))
+    {
+      int max_w = std::stoi(cmdline.getval("max-witnesses"));
+      if (max_w < 0)
+      {
+        log_error("--max-witnesses must be >= 0 (got {})", max_w);
+        abort();
+      }
+    }
+
+    const bool was_multi = options.get_bool_option("multi-property") ||
+                           cmdline.isset("multi-property");
+    if (!was_multi)
+      log_status("--all-witnesses: auto-enabling --multi-property");
+    options.set_option("multi-property", true);
+    // Don't disturb base-case if the user explicitly picked a different
+    // k-induction phase (forward-condition-only or inductive-step-only).
+    if (!cmdline.isset("forward-condition") && !cmdline.isset("inductive-step"))
+      options.set_option("base-case", true);
+  }
+
   // If multi-property is on, we should set base-case
   if (cmdline.isset("multi-property"))
   {

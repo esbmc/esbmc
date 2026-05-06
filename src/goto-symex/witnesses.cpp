@@ -18,7 +18,9 @@ typedef boost::property_tree::ptree xmlnodet;
 BigInt nodet::_id = 0;
 BigInt edget::_id = 0;
 
-void grapht::generate_graphml(optionst &options)
+void grapht::generate_graphml(
+  optionst &options,
+  const std::string &output_path_override)
 {
   xmlnodet graphml_node;
   create_graphml(graphml_node);
@@ -54,7 +56,9 @@ void grapht::generate_graphml(optionst &options)
   boost::property_tree::xml_writer_settings<char> settings(' ', 2);
 #endif
 
-  std::string witness_output = options.get_option("witness-output-graphml");
+  std::string witness_output = output_path_override.empty()
+                                 ? options.get_option("witness-output-graphml")
+                                 : output_path_override;
   if (witness_output == "-")
     boost::property_tree::write_xml(std::cout, graphml_node, settings);
   else
@@ -92,7 +96,9 @@ void grapht::create_initial_edge()
   this->edges.push_back(first_edge);
 }
 
-void yamlt::generate_yaml(optionst &options)
+void yamlt::generate_yaml(
+  optionst &options,
+  const std::string &output_path_override)
 {
   YAML::Emitter yaml_emitter;
   if (this->witness_type == yamlt::VIOLATION)
@@ -121,7 +127,9 @@ void yamlt::generate_yaml(optionst &options)
   yaml_emitter << YAML::EndMap;
   yaml_emitter << YAML::EndSeq;
 
-  const std::string witness_output = options.get_option("witness-output-yaml");
+  const std::string witness_output =
+    output_path_override.empty() ? options.get_option("witness-output-yaml")
+                                 : output_path_override;
   if (witness_output == "-")
     std::cout << yaml_emitter.c_str() << std::endl;
   else
@@ -1195,6 +1203,7 @@ collect_nondet_values(const symex_target_equationt &target, smt_convt &smt_conv)
       // Store the collected value
       collected_nondet_value val;
       val.symbol_name = sym.thename.as_string();
+      val.symbol_expr = nondet_expr;
       val.value_expr = concrete_value;
       val.type = concrete_value->type;
 
@@ -1202,6 +1211,59 @@ collect_nondet_values(const symex_target_equationt &target, smt_convt &smt_conv)
     }
   }
   return results;
+}
+
+expr2tc make_blocking_expr(const std::vector<collected_nondet_value> &nondets)
+{
+  // No nondet inputs collected: return a literal `false` so the caller's
+  // re-solve immediately reports UNSAT and the enumeration loop terminates.
+  if (nondets.empty())
+    return gen_false_expr();
+
+  // Build NOT (sym_1 == val_1 AND sym_2 == val_2 AND ...).
+  //
+  // Floatbv nondets need special handling on two fronts:
+  //
+  // (a) ESBMC lowers floatbv equality to SMT `fp.eq`, which is IEEE-754
+  //     quiet equality — notably `fp.eq(NaN, NaN) = false`. A plain
+  //     equality blocking clause therefore collapses to `false` when
+  //     the model picks NaN, and the negation becomes a tautology that
+  //     blocks nothing — duplicate witnesses, or non-termination under
+  //     --max-witnesses=0.
+  //
+  // (b) If the model picks NaN, we want to block the entire NaN class
+  //     (all 2^(mantissa-1) NaN bit patterns), not just one. Otherwise
+  //     a user setting --max-witnesses=N quickly fills the witness set
+  //     with bit-distinct NaNs that all render identically as "-NAN".
+  //
+  // So: if the witnessed value is NaN, block `isnan(sym)` directly. For
+  // any other float value compare bit patterns via bitcast to an
+  // unsigned bv of the same width — structural equality, distinguishing
+  // +0 from -0 and finite values exactly.
+  expr2tc conj;
+  for (const auto &n : nondets)
+  {
+    expr2tc eq;
+    if (
+      is_floatbv_type(n.symbol_expr->type) &&
+      is_constant_floatbv2t(n.value_expr) &&
+      to_constant_floatbv2t(n.value_expr).value.is_NaN())
+    {
+      eq = isnan2tc(n.symbol_expr);
+    }
+    else if (is_floatbv_type(n.symbol_expr->type))
+    {
+      type2tc bv_type = get_uint_type(n.symbol_expr->type->get_width());
+      eq = equality2tc(
+        bitcast2tc(bv_type, n.symbol_expr), bitcast2tc(bv_type, n.value_expr));
+    }
+    else
+    {
+      eq = equality2tc(n.symbol_expr, n.value_expr);
+    }
+    conj = conj ? expr2tc(and2tc(conj, eq)) : eq;
+  }
+  return not2tc(conj);
 }
 
 // TestComp XML generation
