@@ -354,6 +354,7 @@ struct Addtor
 // Forward declarations; definitions live further down in this file.
 static bool fits_in_width(const BigInt &value, unsigned width, bool is_signed);
 static bool is_all_ones_constant(const expr2tc &e);
+static bool coerce_to_common_type(expr2tc &a, expr2tc &b);
 
 expr2tc add2t::do_simplify() const
 {
@@ -393,48 +394,44 @@ expr2tc add2t::do_simplify() const
       return false;
     };
 
-    // Pointer-add fold soundness: each unfolded `add(pointer, ptr, c)` step
-    // sign-extends c to the pointer offset width before the SMT bv add (see
-    // smt_memspace.cpp:155). Combining two offsets with bv-width wrap into a
-    // single narrow constant changes the sign-extended value:
-    //   (s8)100 sign-ext to s64 = +100, but (s8)-56 sign-ext to s64 = -56.
-    // So the fold is only sound when:
-    //   1. The two constants share a type (no width-mismatch truncation), AND
-    //   2. The mathematical sum fits in that type without wrapping.
-    auto offsets_foldable =
-      [](const expr2tc &c1,
-         const expr2tc &c2,
-         BigInt &folded_out) -> bool {
-      if (c1->type != c2->type)
-        return false;
-      const BigInt &v1 = to_constant_int2t(c1).value;
-      const BigInt &v2 = to_constant_int2t(c2).value;
-      folded_out = v1 + v2;
-      const unsigned width = c1->type->get_width();
-      const bool is_signed = is_signedbv_type(c1->type);
-      return fits_in_width(folded_out, width, is_signed);
+    // Pointer-add fold: each unfolded `add(pointer, ptr, c)` step
+    // sign-extends c to the pointer offset width (index_type2, signed long)
+    // before the SMT bv add (see smt_memspace.cpp:155). Cast both constants
+    // to the offset type, sum the sign-extended values there, and re-emit
+    // the folded constant at that same type. This avoids a per-operand
+    // type-match guard that would refuse the fold whenever C produces
+    // mixed-width offsets (e.g. `&arr[0] + (int)1 + (long)2`).
+    auto fold_offsets = [](const expr2tc &c1, const expr2tc &c2) -> expr2tc {
+      const type2tc &offset_t = index_type2();
+      auto extend = [&](const expr2tc &c) -> BigInt {
+        const BigInt &v = to_constant_int2t(c).value;
+        const unsigned w = c->type->get_width();
+        const bool is_signed = is_signedbv_type(c->type);
+        return binary2integer(integer2binary(v, w), is_signed);
+      };
+      BigInt folded = extend(c1) + extend(c2);
+      return from_integer(folded, offset_t);
     };
 
     expr2tc base, constant;
-    BigInt folded;
     if (
       is_constant_int2t(side_2) &&
-      split_pointer_add_const(side_1, base, constant) &&
-      offsets_foldable(constant, side_2, folded))
+      split_pointer_add_const(side_1, base, constant))
     {
-      if (folded.is_zero())
+      expr2tc folded = fold_offsets(constant, side_2);
+      if (to_constant_int2t(folded).value.is_zero())
         return base;
-      return add2tc(type, base, from_integer(folded, constant->type));
+      return add2tc(type, base, folded);
     }
 
     if (
       is_constant_int2t(side_1) &&
-      split_pointer_add_const(side_2, base, constant) &&
-      offsets_foldable(constant, side_1, folded))
+      split_pointer_add_const(side_2, base, constant))
     {
-      if (folded.is_zero())
+      expr2tc folded = fold_offsets(constant, side_1);
+      if (to_constant_int2t(folded).value.is_zero())
         return base;
-      return add2tc(type, base, from_integer(folded, constant->type));
+      return add2tc(type, base, folded);
     }
   }
 
@@ -592,6 +589,41 @@ static bool is_all_ones_constant(const expr2tc &e)
   if (is_unsignedbv_type(e->type))
     return v == BigInt::power2(e->type->get_width()) - 1;
   return false;
+}
+
+/// Coerce two operands of a binary fold to a common type so a freshly
+/// rebuilt node is well-formed even when @p a and @p b carry different
+/// concrete bv widths. Picks the wider of the two operand types; for
+/// non-constant operands a type mismatch is unsoundable, so returns false.
+/// Constants are reinterpreted at the common type via integer2binary
+/// round-trip so the bit pattern under sign-extension matches what the SMT
+/// layer would see.
+///
+/// Use whenever a peephole cancellation produces a fresh node from two
+/// surviving operands whose types may diverge — pointer-arith chains commonly
+/// mix `(int)1` with `(long)2` after C-frontend promotion, so a strict
+/// type-match guard would refuse the fold.
+static bool coerce_to_common_type(expr2tc &a, expr2tc &b)
+{
+  if (a->type == b->type)
+    return true;
+  if (!is_constant_int2t(a) || !is_constant_int2t(b))
+    return false;
+  const type2tc &common = a->type->get_width() >= b->type->get_width()
+                            ? a->type
+                            : b->type;
+  auto recast = [&](const expr2tc &v) -> expr2tc {
+    const BigInt &raw = to_constant_int2t(v).value;
+    const unsigned w = v->type->get_width();
+    const bool is_signed = is_signedbv_type(v->type);
+    BigInt extended = binary2integer(integer2binary(raw, w), is_signed);
+    return from_integer(extended, common);
+  };
+  if (a->type != common)
+    a = recast(a);
+  if (b->type != common)
+    b = recast(b);
+  return true;
 }
 
 expr2tc sub2t::do_simplify() const
@@ -3432,27 +3464,14 @@ static expr2tc simplify_relations(
       const add2t &lhs = to_add2t(simplified_side_1);
       const add2t &rhs = to_add2t(simplified_side_2);
 
-      // The shared-base pointer cancellation reduces to a relation between
-      // the two surviving offsets. The synthesized `constructor(a, b)` node
-      // requires a/b to share a type, but pointer-arith chains often carry
-      // differently-typed integer offsets — `arr + (int)5` vs `p + (long)5`
-      // from a p++ chain. When both surviving operands are constant ints
-      // we coerce them to a common type (the wider of the two) so the fold
-      // still fires. Non-constant operands still need matching types.
-      auto cancel =
-        [&](const expr2tc &a, const expr2tc &b) -> expr2tc {
-        expr2tc lhs_op = a, rhs_op = b;
-        if (a->type != b->type)
-        {
-          if (!is_constant_int2t(a) || !is_constant_int2t(b))
-            return expr2tc();
-          const type2tc &common = a->type->get_width() >= b->type->get_width()
-                                    ? a->type
-                                    : b->type;
-          lhs_op = constant_int2tc(common, to_constant_int2t(a).value);
-          rhs_op = constant_int2tc(common, to_constant_int2t(b).value);
-        }
-        expr2tc rel(std::make_shared<constructor>(lhs_op, rhs_op));
+      // Shared-base pointer cancellation reduces to a relation between the
+      // two surviving offsets. Coerce both to a common type so the rebuilt
+      // node is well-formed even when the offsets carry different concrete
+      // bv widths — `arr + (int)c` vs `arr + (long)c` from a p++ chain.
+      auto cancel = [&](expr2tc a, expr2tc b) -> expr2tc {
+        if (!coerce_to_common_type(a, b))
+          return expr2tc();
+        expr2tc rel(std::make_shared<constructor>(a, b));
         return typecast_check_return(type, rel);
       };
 
@@ -3772,31 +3791,33 @@ expr2tc equality2t::do_simplify() const
     }
   }
 
-  // d + c == d + e -> c == e (cancel common addend). The remaining pair
-  // must share a type — pointer-add shapes can match on a common pointer
-  // base while having differently-typed integer offsets, so building
-  // equality2tc(i32_offset, i64_offset) would corrupt the equality. Guard
-  // each case with an explicit type check.
+  // d + c == d + e -> c == e (cancel common addend). When the surviving
+  // operands have differing concrete types (pointer-arith chains often mix
+  // `(int)c` with `(long)e`), coerce both to a common type so the rebuilt
+  // equality is well-formed.
+  auto cancel_eq = [](expr2tc a, expr2tc b) -> expr2tc {
+    if (!coerce_to_common_type(a, b))
+      return expr2tc();
+    return equality2tc(a, b);
+  };
+
   if (is_add2t(side_1) && is_add2t(side_2))
   {
     const add2t &add1 = to_add2t(side_1);
     const add2t &add2 = to_add2t(side_2);
-    // Case 1: (d + c) == (d + e) -> c == e
-    if (
-      add1.side_1 == add2.side_1 && add1.side_2->type == add2.side_2->type)
-      return equality2tc(add1.side_2, add2.side_2);
-    // Case 2: (d + c) == (e + d) -> c == e
-    if (
-      add1.side_1 == add2.side_2 && add1.side_2->type == add2.side_1->type)
-      return equality2tc(add1.side_2, add2.side_1);
-    // Case 3: (c + d) == (d + e) -> c == e
-    if (
-      add1.side_2 == add2.side_1 && add1.side_1->type == add2.side_2->type)
-      return equality2tc(add1.side_1, add2.side_2);
-    // Case 4: (c + d) == (e + d) -> c == e
-    if (
-      add1.side_2 == add2.side_2 && add1.side_1->type == add2.side_1->type)
-      return equality2tc(add1.side_1, add2.side_1);
+    expr2tc r;
+    if (add1.side_1 == add2.side_1)
+      if (!is_nil_expr(r = cancel_eq(add1.side_2, add2.side_2)))
+        return r;
+    if (add1.side_1 == add2.side_2)
+      if (!is_nil_expr(r = cancel_eq(add1.side_2, add2.side_1)))
+        return r;
+    if (add1.side_2 == add2.side_1)
+      if (!is_nil_expr(r = cancel_eq(add1.side_1, add2.side_2)))
+        return r;
+    if (add1.side_2 == add2.side_2)
+      if (!is_nil_expr(r = cancel_eq(add1.side_1, add2.side_1)))
+        return r;
   }
 
   // (d - c) == (d - e) -> c == e (cancel common minuend)
@@ -3804,29 +3825,29 @@ expr2tc equality2t::do_simplify() const
   {
     const sub2t &sub1 = to_sub2t(side_1);
     const sub2t &sub2 = to_sub2t(side_2);
-
-    // (d - c) == (d - e) -> c == e
-    if (
-      sub1.side_1 == sub2.side_1 && sub1.side_2->type == sub2.side_2->type)
-      return equality2tc(sub1.side_2, sub2.side_2);
+    if (sub1.side_1 == sub2.side_1)
+    {
+      expr2tc r = cancel_eq(sub1.side_2, sub2.side_2);
+      if (!is_nil_expr(r))
+        return r;
+    }
   }
 
   // (-x) == (-y) -> x == y
   if (is_neg2t(side_1) && is_neg2t(side_2))
   {
-    const neg2t &neg1 = to_neg2t(side_1);
-    const neg2t &neg2 = to_neg2t(side_2);
-    if (neg1.value->type == neg2.value->type)
-      return equality2tc(neg1.value, neg2.value);
+    expr2tc r = cancel_eq(to_neg2t(side_1).value, to_neg2t(side_2).value);
+    if (!is_nil_expr(r))
+      return r;
   }
 
   // (~x) == (~y) -> x == y
   if (is_bitnot2t(side_1) && is_bitnot2t(side_2))
   {
-    const bitnot2t &not1 = to_bitnot2t(side_1);
-    const bitnot2t &not2 = to_bitnot2t(side_2);
-    if (not1.value->type == not2.value->type)
-      return equality2tc(not1.value, not2.value);
+    expr2tc r =
+      cancel_eq(to_bitnot2t(side_1).value, to_bitnot2t(side_2).value);
+    if (!is_nil_expr(r))
+      return r;
   }
 
   return simplify_relations<Equalitytor, equality2t>(type, side_1, side_2);
@@ -3956,26 +3977,31 @@ expr2tc notequal2t::do_simplify() const
     }
   }
 
-  // d + c != d + e -> c != e (cancel common addend). Mirror of equality;
-  // require the surviving operands to share a type so notequal2tc never
-  // gets a mixed-width pair (e.g. pointer-arith with differently-typed
-  // offsets).
+  // d + c != d + e -> c != e (cancel common addend). Coerce surviving
+  // operands to a common type when their concrete types differ.
+  auto cancel_neq = [](expr2tc a, expr2tc b) -> expr2tc {
+    if (!coerce_to_common_type(a, b))
+      return expr2tc();
+    return notequal2tc(a, b);
+  };
+
   if (is_add2t(side_1) && is_add2t(side_2))
   {
     const add2t &add1 = to_add2t(side_1);
     const add2t &add2 = to_add2t(side_2);
-    if (
-      add1.side_1 == add2.side_1 && add1.side_2->type == add2.side_2->type)
-      return notequal2tc(add1.side_2, add2.side_2);
-    if (
-      add1.side_1 == add2.side_2 && add1.side_2->type == add2.side_1->type)
-      return notequal2tc(add1.side_2, add2.side_1);
-    if (
-      add1.side_2 == add2.side_1 && add1.side_1->type == add2.side_2->type)
-      return notequal2tc(add1.side_1, add2.side_2);
-    if (
-      add1.side_2 == add2.side_2 && add1.side_1->type == add2.side_1->type)
-      return notequal2tc(add1.side_1, add2.side_1);
+    expr2tc r;
+    if (add1.side_1 == add2.side_1)
+      if (!is_nil_expr(r = cancel_neq(add1.side_2, add2.side_2)))
+        return r;
+    if (add1.side_1 == add2.side_2)
+      if (!is_nil_expr(r = cancel_neq(add1.side_2, add2.side_1)))
+        return r;
+    if (add1.side_2 == add2.side_1)
+      if (!is_nil_expr(r = cancel_neq(add1.side_1, add2.side_2)))
+        return r;
+    if (add1.side_2 == add2.side_2)
+      if (!is_nil_expr(r = cancel_neq(add1.side_1, add2.side_1)))
+        return r;
   }
 
   // (d - c) != (d - e) -> c != e (cancel common minuend)
@@ -3983,27 +4009,29 @@ expr2tc notequal2t::do_simplify() const
   {
     const sub2t &sub1 = to_sub2t(side_1);
     const sub2t &sub2 = to_sub2t(side_2);
-    if (
-      sub1.side_1 == sub2.side_1 && sub1.side_2->type == sub2.side_2->type)
-      return notequal2tc(sub1.side_2, sub2.side_2);
+    if (sub1.side_1 == sub2.side_1)
+    {
+      expr2tc r = cancel_neq(sub1.side_2, sub2.side_2);
+      if (!is_nil_expr(r))
+        return r;
+    }
   }
 
   // (-x) != (-y) -> x != y
   if (is_neg2t(side_1) && is_neg2t(side_2))
   {
-    const neg2t &neg1 = to_neg2t(side_1);
-    const neg2t &neg2 = to_neg2t(side_2);
-    if (neg1.value->type == neg2.value->type)
-      return notequal2tc(neg1.value, neg2.value);
+    expr2tc r = cancel_neq(to_neg2t(side_1).value, to_neg2t(side_2).value);
+    if (!is_nil_expr(r))
+      return r;
   }
 
   // (~x) != (~y) -> x != y
   if (is_bitnot2t(side_1) && is_bitnot2t(side_2))
   {
-    const bitnot2t &not1 = to_bitnot2t(side_1);
-    const bitnot2t &not2 = to_bitnot2t(side_2);
-    if (not1.value->type == not2.value->type)
-      return notequal2tc(not1.value, not2.value);
+    expr2tc r =
+      cancel_neq(to_bitnot2t(side_1).value, to_bitnot2t(side_2).value);
+    if (!is_nil_expr(r))
+      return r;
   }
 
   return simplify_relations<Notequaltor, notequal2t>(type, side_1, side_2);
