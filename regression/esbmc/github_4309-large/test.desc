@@ -1,0 +1,6 @@
+CORE
+main.c
+--all-witnesses --max-witnesses 2 --unwind 51 --no-slice
+^VERIFICATION FAILED$
+\[Counterexamples - 2 witnesses\]
+--max-witnesses cap reached

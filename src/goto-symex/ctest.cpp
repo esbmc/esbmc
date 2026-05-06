@@ -132,7 +132,7 @@ std::string ctest_generator::type_to_c_string(const type2tc &type) const
       if (width == 32)
         return "int";
       if (width == 64)
-        return "long long";
+        return "long";
       return "int"; // Default
     }
     else
@@ -144,7 +144,7 @@ std::string ctest_generator::type_to_c_string(const type2tc &type) const
       if (width == 32)
         return "unsigned int";
       if (width == 64)
-        return "unsigned long long";
+        return "unsigned long";
       return "unsigned int"; // Default
     }
   }
@@ -462,11 +462,11 @@ static void write_verifier_header()
   h << "char __VERIFIER_nondet_char(void);\n";
   h << "short __VERIFIER_nondet_short(void);\n";
   h << "int __VERIFIER_nondet_int(void);\n";
-  h << "long long __VERIFIER_nondet_long(void);\n";
+  h << "long __VERIFIER_nondet_long(void);\n";
   h << "unsigned char __VERIFIER_nondet_uchar(void);\n";
   h << "unsigned short __VERIFIER_nondet_ushort(void);\n";
   h << "unsigned int __VERIFIER_nondet_uint(void);\n";
-  h << "unsigned long long __VERIFIER_nondet_ulong(void);\n";
+  h << "unsigned long __VERIFIER_nondet_ulong(void);\n";
   h << "float __VERIFIER_nondet_float(void);\n";
   h << "double __VERIFIER_nondet_double(void);\n";
   h << "/* In C++ 'bool' is a built-in type; in C use _Bool (native C99\n";

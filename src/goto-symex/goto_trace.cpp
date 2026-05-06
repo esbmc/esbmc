@@ -281,7 +281,8 @@ void show_state_header(
 void violation_graphml_goto_trace(
   optionst &options,
   const namespacet &ns,
-  const goto_tracet &goto_trace)
+  const goto_tracet &goto_trace,
+  const std::string &output_path_override)
 {
   grapht graph(grapht::VIOLATION);
   graph.verified_file = options.get_option("input-file");
@@ -316,7 +317,7 @@ void violation_graphml_goto_trace(
 
         /* having printed a property violation, don't print more steps. */
 
-        graph.generate_graphml(options);
+        graph.generate_graphml(options, output_path_override);
         return;
       }
       break;
@@ -357,7 +358,8 @@ void violation_graphml_goto_trace(
 void violation_yaml_goto_trace(
   optionst &options,
   const namespacet &ns,
-  const goto_tracet &goto_trace)
+  const goto_tracet &goto_trace,
+  const std::string &output_path_override)
 {
   yamlt yml(yamlt::VIOLATION);
   yml.verified_file = options.get_option("input-file");
@@ -383,7 +385,7 @@ void violation_yaml_goto_trace(
 
         /* having printed a property violation, don't print more steps. */
 
-        yml.generate_yaml(options);
+        yml.generate_yaml(options, output_path_override);
         return;
       }
       break;

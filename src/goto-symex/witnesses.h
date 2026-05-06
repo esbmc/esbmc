@@ -136,7 +136,15 @@ public:
     witness_type = t;
     create_initial_edge();
   }
-  void generate_graphml(optionst &options);
+  /// Generate the GraphML witness. The output path is taken from
+  /// `options["witness-output-graphml"]` unless @p output_path_override
+  /// is non-empty, in which case the override wins. Used by
+  /// --all-witnesses to fan out per-witness filenames without
+  /// mutating the global option (which would race under
+  /// --parallel-solving).
+  void generate_graphml(
+    optionst &options,
+    const std::string &output_path_override = "");
   void check_create_new_thread(BigInt thread_id, nodet *prev_node);
 };
 
@@ -157,7 +165,12 @@ public:
   {
     witness_type = t;
   }
-  void generate_yaml(optionst &options);
+  /// Generate the YAML witness. The output path is taken from
+  /// `options["witness-output-yaml"]` unless @p output_path_override
+  /// is non-empty.
+  void generate_yaml(
+    optionst &options,
+    const std::string &output_path_override = "");
 };
 
 /**
@@ -273,6 +286,7 @@ void generate_testcase(
 struct collected_nondet_value
 {
   std::string symbol_name; // e.g., "nondet$symex::nondet3"
+  expr2tc symbol_expr;     // The (renamed) symbol2tc as it appears in the SSA
   expr2tc value_expr;      // The concrete value expression
   type2tc type;            // The type
 };
@@ -282,5 +296,16 @@ struct collected_nondet_value
 std::vector<collected_nondet_value> collect_nondet_values(
   const symex_target_equationt &target,
   smt_convt &smt_conv);
+
+/// Build a blocking clause that excludes the given input tuple from future
+/// solver queries: NOT (sym_1 == val_1 AND sym_2 == val_2 AND ...).
+///
+/// Used by --all-witnesses to enumerate distinct input vectors that violate
+/// the same property without re-encoding the SMT instance: assert the
+/// returned expression on the active solver, then re-call dec_solve().
+///
+/// Returns a literal `false` expression when @p nondets is empty (forces
+/// UNSAT on re-solve so the caller's enumeration loop terminates cleanly).
+expr2tc make_blocking_expr(const std::vector<collected_nondet_value> &nondets);
 
 #endif
