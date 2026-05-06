@@ -35,12 +35,63 @@ CC_DIAGNOSTIC_POP()
 #include <util/std_code.h>
 #include <util/std_expr.h>
 
+#include <algorithm>
+#include <functional>
 #include <optional>
+
+void clang_cpp_convertert::pretranslate_bad_cast()
+{
+  // Single targeted Clang name-lookup (not an AST walk) to find
+  // std::bad_cast's CXXRecordDecl and force-translate it via
+  // get_struct_union_class. Run once per TU before any user code is
+  // visited, so build_dynamic_cast<T&>'s ns.lookup hits regardless of
+  // include order or where in the AST the dynamic_cast site sits
+  // relative to <typeinfo>'s namespace iteration. Cost: O(1) per TU.
+  // No-op if <typeinfo> wasn't included (the cast then degrades to
+  // assert(match) — see the reference-form arm in build_dynamic_cast).
+  if (ns.lookup("tag-std::bad_cast"))
+    return;
+
+  auto &idents = ASTContext->Idents;
+  auto std_results = ASTContext->getTranslationUnitDecl()->lookup(
+    clang::DeclarationName(&idents.get("std")));
+  for (auto *d : std_results)
+  {
+    auto *ns_decl = clang::dyn_cast<clang::NamespaceDecl>(d);
+    if (!ns_decl)
+      continue;
+    auto bc_results =
+      ns_decl->lookup(clang::DeclarationName(&idents.get("bad_cast")));
+    for (auto *bc : bc_results)
+    {
+      auto *rd = clang::dyn_cast<clang::CXXRecordDecl>(bc);
+      if (!rd || !rd->hasDefinition())
+        continue;
+      get_struct_union_class(*rd);
+      return;
+    }
+  }
+}
+
+bool clang_cpp_convertert::convert_top_level_decl()
+{
+  if (AST)
+  {
+    ASTContext = &AST->getASTContext();
+    pretranslate_bad_cast();
+  }
+  return clang_c_convertert::convert_top_level_decl();
+}
 
 bool clang_cpp_convertert::get_struct_class_virtual_methods(
   const clang::CXXRecordDecl &cxxrd,
   struct_typet &type)
 {
+  // Register cxxrd against any inherited vptr-class up front so that an
+  // inline body containing dynamic_cast<cxxrd&>(base_ref) — converted by
+  // the loop below — can match its own runtime type.
+  pre_register_inherited_vtables(cxxrd);
+
   for (const auto &md : cxxrd.methods())
   {
     if (!md->isVirtual())
@@ -680,7 +731,13 @@ void clang_cpp_convertert::add_vtable_variable_symbols(
     // Skip abstract classes: no object of an abstract type can exist at
     // runtime, so they can never be the answer to dynamic_cast.
     if (!cxxrd.isAbstract())
-      vtable_classes_per_vptr_[late_cast_symb->id].push_back(&cxxrd);
+    {
+      auto &lst = vtable_classes_per_vptr_[late_cast_symb->id];
+      // pre_register_inherited_vtables may have already added cxxrd; the
+      // duplicate would otherwise produce a redundant OR clause.
+      if (std::find(lst.begin(), lst.end(), &cxxrd) == lst.end())
+        lst.push_back(&cxxrd);
+    }
   }
 }
 
@@ -750,37 +807,44 @@ static std::optional<uint64_t> offset_of_subobject(
   return offset;
 }
 
-const symbolt *clang_cpp_convertert::ensure_bad_cast_symbol()
+void clang_cpp_convertert::pre_register_inherited_vtables(
+  const clang::CXXRecordDecl &cxxrd)
 {
-  if (bad_cast_symbol_)
-    return bad_cast_symbol_;
-  if (const symbolt *s = ns.lookup("tag-std::bad_cast"))
-    return bad_cast_symbol_ = s;
+  // add_vtable_variable_symbols populates vtable_classes_per_vptr_ at the
+  // tail of get_struct_class_virtual_methods, after method bodies have
+  // been converted. That's too late for an inline body that does
+  // dynamic_cast<T&>(src) where T is the enclosing class itself
+  // (e.g. IntCoord::assign casting `const Coord&` to `const IntCoord&`).
+  // Pre-seed the map for every non-virtual ancestor whose vtable type
+  // already exists, so build_dynamic_cast's lookup hits regardless of how
+  // far up the chain it resolves the vptr-class to.
+  //
+  // Abstract: skipped because no object of an abstract type exists at
+  // runtime, so cxxrd can never be the answer to dynamic_cast.
+  if (cxxrd.isAbstract())
+    return;
 
-  // <typeinfo>'s std::bad_cast is only translated when something
-  // references it, so its symbol may not exist yet even after the user
-  // included the header. Resolve std::bad_cast through Clang's hashed
-  // name-lookup tables and force-translate the definition.
-  auto &idents = ASTContext->Idents;
-  auto std_results = ASTContext->getTranslationUnitDecl()->lookup(
-    clang::DeclarationName(&idents.get("std")));
-  for (auto *d : std_results)
-  {
-    auto *ns_decl = clang::dyn_cast<clang::NamespaceDecl>(d);
-    if (!ns_decl)
-      continue;
-    auto bc_results =
-      ns_decl->lookup(clang::DeclarationName(&idents.get("bad_cast")));
-    for (auto *bc : bc_results)
-    {
-      auto *rd = clang::dyn_cast<clang::CXXRecordDecl>(bc);
-      if (!rd || !rd->hasDefinition())
-        continue;
-      get_struct_union_class(*rd);
-      return bad_cast_symbol_ = ns.lookup("tag-std::bad_cast");
-    }
-  }
-  return nullptr;
+  std::function<void(const clang::CXXRecordDecl *)> walk =
+    [&](const clang::CXXRecordDecl *cur) {
+      for (const auto &spec : cur->bases())
+      {
+        if (spec.isVirtual())
+          continue;
+        const auto *base = spec.getType()->getAsCXXRecordDecl();
+        if (!base)
+          continue;
+        std::string base_id, base_name;
+        get_decl_name(*base, base_name, base_id);
+        if (ns.lookup(vtable_type_prefix + base_id))
+        {
+          auto &lst = vtable_classes_per_vptr_[base_id];
+          if (std::find(lst.begin(), lst.end(), &cxxrd) == lst.end())
+            lst.push_back(&cxxrd);
+        }
+        walk(base);
+      }
+    };
+  walk(&cxxrd);
 }
 
 bool clang_cpp_convertert::build_dynamic_cast(
@@ -1008,9 +1072,12 @@ bool clang_cpp_convertert::build_dynamic_cast(
 
   // Reference form: throw std::bad_cast on no-match (the standard
   // requires this; the catch (bad_cast&) arm of any try/catch then
-  // fires). If <typeinfo> wasn't included in the TU we can't synthesise
-  // the typed throw — fall back to assert(match) so the verification
-  // still distinguishes the failing case rather than silently succeed.
+  // fires). std::bad_cast is force-translated once per TU at the start
+  // of convert_top_level_decl (see pretranslate_bad_cast), so a single
+  // ns.lookup here is order-independent and pays no AST-walk cost per
+  // dynamic_cast<T&> site. If the user never included <typeinfo>, the
+  // pretranslate is a no-op and we fall back to assert(match) so a
+  // mismatched cast still fails loudly instead of silently succeeding.
   if (is_reference)
   {
     // Clang strips the reference from cast.getType(), so target_type is
@@ -1025,7 +1092,7 @@ bool clang_cpp_convertert::build_dynamic_cast(
     exprt match = arms.empty() ? exprt(false_exprt()) : vptr_match_any();
 
     code_blockt block;
-    if (const symbolt *bad_cast_sym = ensure_bad_cast_symbol())
+    if (const symbolt *bad_cast_sym = ns.lookup("tag-std::bad_cast"))
     {
       typet bad_cast_type = symbol_typet(bad_cast_sym->id);
       side_effect_exprt throw_op("cpp-throw", bad_cast_type);

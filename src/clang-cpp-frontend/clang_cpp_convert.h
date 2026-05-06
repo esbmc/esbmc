@@ -521,19 +521,34 @@ protected:
    * "tag-Base") to every concrete class that has a vtable variable for
    * that vptr. build_dynamic_cast consults it directly instead of walking
    * every CXXRecordDecl in the TU and probing the symbol table per cast.
+   *
+   * Pre-registered for the class currently being processed (via
+   * pre_register_inherited_vtables) so that dynamic_cast inside an inline
+   * method body sees its own class as a candidate D — the "real"
+   * registration in add_vtable_variable_symbols runs after method bodies
+   * are converted, which is too late for that body.
    */
   std::map<irep_idt, std::vector<const clang::CXXRecordDecl *>>
     vtable_classes_per_vptr_;
 
   /*
-   * Locate std::bad_cast in the AST and force-translate it via
-   * get_struct_union_class so its tag symbol is present, then return
-   * the symbol-table entry. Returns nullptr if <typeinfo> wasn't
-   * included in the TU. Cached after the first hit so subsequent
-   * dynamic_cast<T&> calls in the same TU pay no lookup cost.
+   * Pre-register cxxrd in vtable_classes_per_vptr_ for every base whose
+   * vtable type symbol already exists, so that dynamic_cast<T&>(src) inside
+   * cxxrd's own inline method bodies can identify cxxrd as a candidate D.
+   * Bases are processed before derived classes, so any inherited vptr-class
+   * already has its vtable type symbol in the table.
    */
-  const symbolt *ensure_bad_cast_symbol();
-  const symbolt *bad_cast_symbol_ = nullptr;
+  void pre_register_inherited_vtables(const clang::CXXRecordDecl &cxxrd);
+
+  /*
+   * Override the TU walk to force-translate std::bad_cast (if <typeinfo>
+   * is in the AST) before any user code is converted. This makes
+   * tag-std::bad_cast available regardless of where the dynamic_cast<T&>
+   * site sits relative to <typeinfo>'s namespace iteration — without
+   * paying any cost per dynamic_cast or per CXXRecordDecl.
+   */
+  bool convert_top_level_decl() override;
+  void pretranslate_bad_cast();
 
   /*
    * Methods for resolving a clang::MemberExpr to virtual/overriding method
