@@ -609,9 +609,8 @@ static bool coerce_to_common_type(expr2tc &a, expr2tc &b)
     return true;
   if (!is_constant_int2t(a) || !is_constant_int2t(b))
     return false;
-  const type2tc &common = a->type->get_width() >= b->type->get_width()
-                            ? a->type
-                            : b->type;
+  const type2tc &common =
+    a->type->get_width() >= b->type->get_width() ? a->type : b->type;
   auto recast = [&](const expr2tc &v) -> expr2tc {
     const BigInt &raw = to_constant_int2t(v).value;
     const unsigned w = v->type->get_width();
@@ -2339,13 +2338,16 @@ static expr2tc do_bit_munge_operation(
     auto fits_uint64 = [](const expr2tc &e, const BigInt &v) {
       return is_unsignedbv_type(e) ? v.is_uint64() : v.is_int64();
     };
-    if (!fits_uint64(simplified_side_1, bl) ||
-        !fits_uint64(simplified_side_2, br))
+    if (
+      !fits_uint64(simplified_side_1, bl) ||
+      !fits_uint64(simplified_side_2, br))
       return expr2tc();
-    uint64_t l = is_unsignedbv_type(simplified_side_1) ? bl.to_uint64()
-                                                       : (uint64_t)bl.to_int64();
-    uint64_t r = is_unsignedbv_type(simplified_side_2) ? br.to_uint64()
-                                                       : (uint64_t)br.to_int64();
+    uint64_t l = is_unsignedbv_type(simplified_side_1)
+                   ? bl.to_uint64()
+                   : (uint64_t)bl.to_int64();
+    uint64_t r = is_unsignedbv_type(simplified_side_2)
+                   ? br.to_uint64()
+                   : (uint64_t)br.to_int64();
 
     bool is_shift = false;
     bool can_eval = true;
@@ -3844,8 +3846,7 @@ expr2tc equality2t::do_simplify() const
   // (~x) == (~y) -> x == y
   if (is_bitnot2t(side_1) && is_bitnot2t(side_2))
   {
-    expr2tc r =
-      cancel_eq(to_bitnot2t(side_1).value, to_bitnot2t(side_2).value);
+    expr2tc r = cancel_eq(to_bitnot2t(side_1).value, to_bitnot2t(side_2).value);
     if (!is_nil_expr(r))
       return r;
   }

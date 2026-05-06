@@ -18,10 +18,13 @@ namespace
 {
 struct config_init
 {
-  config_init() { config.ansi_c.address_width = 64; }
+  config_init()
+  {
+    config.ansi_c.address_width = 64;
+  }
 };
 const config_init init;
-}
+} // namespace
 
 TEST_CASE("Addition simplification: x + (-x) = 0", "[arithmetic][add]")
 {
@@ -115,11 +118,10 @@ TEST_CASE(
     if (is_constant_int2t(e) && to_constant_int2t(e).value == lit)
       return true;
     bool found = false;
-    e->foreach_operand(
-      [&](const expr2tc &sub) {
-        if (!is_nil_expr(sub) && contains_literal(sub, lit))
-          found = true;
-      });
+    e->foreach_operand([&](const expr2tc &sub) {
+      if (!is_nil_expr(sub) && contains_literal(sub, lit))
+        found = true;
+    });
     return found;
   };
   // After fold the mul subtree should have a 6, and lose either 2 or 3.
@@ -146,9 +148,7 @@ TEST_CASE(
   REQUIRE(to_constant_int2t(result).value == 0);
 }
 
-TEST_CASE(
-  "Reassoc: (x | c1) | c2 folds constants",
-  "[bitwise][reassoc][bitor]")
+TEST_CASE("Reassoc: (x | c1) | c2 folds constants", "[bitwise][reassoc][bitor]")
 {
   // (x | 0x01) | 0x02  -> x | 0x03
   const expr2tc x = symbol2tc(get_uint_type(32), "x");
@@ -175,9 +175,7 @@ TEST_CASE(
   REQUIRE(has(result, BigInt(0x03)));
 }
 
-TEST_CASE(
-  "Reassoc: (x ^ y) ^ x cancels to y",
-  "[bitwise][reassoc][bitxor]")
+TEST_CASE("Reassoc: (x ^ y) ^ x cancels to y", "[bitwise][reassoc][bitxor]")
 {
   const expr2tc x = symbol2tc(get_uint_type(32), "x");
   const expr2tc y = symbol2tc(get_uint_type(32), "y");
@@ -226,10 +224,8 @@ TEST_CASE(
   // semantic that pointer-arith expects after sign-extension.
   const type2tc ptr_type = pointer_type2tc(get_int_type(8));
   const expr2tc p = symbol2tc(ptr_type, "p");
-  const expr2tc c1 =
-    constant_int2tc(signedbv_type2tc(8), BigInt(100));
-  const expr2tc c2 =
-    constant_int2tc(signedbv_type2tc(8), BigInt(100));
+  const expr2tc c1 = constant_int2tc(signedbv_type2tc(8), BigInt(100));
+  const expr2tc c2 = constant_int2tc(signedbv_type2tc(8), BigInt(100));
   const expr2tc inner = add2tc(ptr_type, p, c1);
   const expr2tc outer = add2tc(ptr_type, inner, c2);
 
@@ -252,10 +248,8 @@ TEST_CASE(
   // signed long — no information loss across the differing widths.
   const type2tc ptr_type = pointer_type2tc(get_int_type(8));
   const expr2tc p = symbol2tc(ptr_type, "p");
-  const expr2tc c1 =
-    constant_int2tc(signedbv_type2tc(8), BigInt(100));
-  const expr2tc c2 =
-    constant_int2tc(signedbv_type2tc(32), BigInt(100));
+  const expr2tc c1 = constant_int2tc(signedbv_type2tc(8), BigInt(100));
+  const expr2tc c2 = constant_int2tc(signedbv_type2tc(32), BigInt(100));
   const expr2tc inner = add2tc(ptr_type, p, c1);
   const expr2tc outer = add2tc(ptr_type, inner, c2);
 
@@ -1652,8 +1646,7 @@ TEST_CASE(
   };
   // Build concat(bx(3), concat(bx(2), concat(bx(1), bx(0))))
   const expr2tc inner = concat2tc(unsignedbv_type2tc(16), bx(1), bx(0));
-  const expr2tc mid =
-    concat2tc(unsignedbv_type2tc(24), bx(2), inner);
+  const expr2tc mid = concat2tc(unsignedbv_type2tc(24), bx(2), inner);
   const expr2tc outer = concat2tc(u32, bx(3), mid);
 
   const expr2tc result = outer->simplify();
@@ -1693,9 +1686,7 @@ TEST_CASE(
   }
 }
 
-TEST_CASE(
-  "popcount: signed -1 has all bits set",
-  "[popcount][simplify]")
+TEST_CASE("popcount: signed -1 has all bits set", "[popcount][simplify]")
 {
   // -1 in signedbv 32 has 32 one-bits in two's complement. The previous
   // implementation counted '1' chars in integer2string(value, 2), which
@@ -1710,9 +1701,7 @@ TEST_CASE(
   REQUIRE(to_constant_int2t(result).value == 32);
 }
 
-TEST_CASE(
-  "bswap: u32 0x12345678 -> 0x78563412",
-  "[bswap][simplify]")
+TEST_CASE("bswap: u32 0x12345678 -> 0x78563412", "[bswap][simplify]")
 {
   // Sanity check that the basic bswap fold still works after the
   // negative-value normalization fix.
@@ -1725,9 +1714,7 @@ TEST_CASE(
   REQUIRE(to_constant_int2t(result).value == BigInt(0x78563412));
 }
 
-TEST_CASE(
-  "bswap: signedbv 32 -1 stays all-ones",
-  "[bswap][simplify]")
+TEST_CASE("bswap: signedbv 32 -1 stays all-ones", "[bswap][simplify]")
 {
   // -1 is 0xFFFFFFFF in two's complement; byte-reversing all-ones
   // yields all-ones. The previous fold computed `(v >> bit) % 256`

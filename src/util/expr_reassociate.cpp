@@ -285,9 +285,7 @@ static bool fits_in_signed_type(const BigInt &value, const type2tc &type)
 }
 
 std::optional<std::vector<signed_term>>
-optimize_terms(
-  const type2tc &chain_type,
-  const std::vector<signed_term> &terms)
+optimize_terms(const type2tc &chain_type, const std::vector<signed_term> &terms)
 {
   bool changed = false;
 
@@ -599,8 +597,9 @@ bitwise_fold(const BigInt &a, const BigInt &b, const type2tc &dest, U64Op op)
 {
   // Refuse to fold for destination types wider than 64 bits. The 64-bit
   // round-trip can't preserve the sign extension above bit 63 reliably.
-  if (dest && (is_signedbv_type(dest) || is_unsignedbv_type(dest)) &&
-      dest->get_width() > 64)
+  if (
+    dest && (is_signedbv_type(dest) || is_unsignedbv_type(dest)) &&
+    dest->get_width() > 64)
     return std::nullopt;
 
   // Use the same two's-complement round-trip as do_bit_munge_operation:
