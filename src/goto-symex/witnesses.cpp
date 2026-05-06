@@ -1213,10 +1213,47 @@ expr2tc make_blocking_expr(const std::vector<collected_nondet_value> &nondets)
     return gen_false_expr();
 
   // Build NOT (sym_1 == val_1 AND sym_2 == val_2 AND ...).
+  //
+  // Floatbv nondets need special handling on two fronts:
+  //
+  // (a) ESBMC lowers floatbv equality to SMT `fp.eq`, which is IEEE-754
+  //     quiet equality — notably `fp.eq(NaN, NaN) = false`. A plain
+  //     equality blocking clause therefore collapses to `false` when
+  //     the model picks NaN, and the negation becomes a tautology that
+  //     blocks nothing — duplicate witnesses, or non-termination under
+  //     --max-witnesses=0.
+  //
+  // (b) If the model picks NaN, we want to block the entire NaN class
+  //     (all 2^(mantissa-1) NaN bit patterns), not just one. Otherwise
+  //     a user setting --max-witnesses=N quickly fills the witness set
+  //     with bit-distinct NaNs that all render identically as "-NAN".
+  //
+  // So: if the witnessed value is NaN, block `isnan(sym)` directly. For
+  // any other float value compare bit patterns via bitcast to an
+  // unsigned bv of the same width — structural equality, distinguishing
+  // +0 from -0 and finite values exactly.
   expr2tc conj;
   for (const auto &n : nondets)
   {
-    expr2tc eq = equality2tc(n.symbol_expr, n.value_expr);
+    expr2tc eq;
+    if (
+      is_floatbv_type(n.symbol_expr->type) &&
+      is_constant_floatbv2t(n.value_expr) &&
+      to_constant_floatbv2t(n.value_expr).value.is_NaN())
+    {
+      eq = isnan2tc(n.symbol_expr);
+    }
+    else if (is_floatbv_type(n.symbol_expr->type))
+    {
+      type2tc bv_type = get_uint_type(n.symbol_expr->type->get_width());
+      eq = equality2tc(
+        bitcast2tc(bv_type, n.symbol_expr),
+        bitcast2tc(bv_type, n.value_expr));
+    }
+    else
+    {
+      eq = equality2tc(n.symbol_expr, n.value_expr);
+    }
     conj = conj ? expr2tc(and2tc(conj, eq)) : eq;
   }
   return not2tc(conj);
