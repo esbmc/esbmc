@@ -40,9 +40,8 @@ __ESBMC_HIDE:;
   size_t __j;
   // Invariant: every index already written matches src and was not the
   // terminator (the loop breaks as soon as it copies '\0').
-  __ESBMC_loop_invariant(
-      __ESBMC_forall(&__j, !(__j < i)
-                            || (dst[__j] == src[__j] && src[__j] != '\0')));
+  __ESBMC_loop_invariant(__ESBMC_forall(
+    &__j, !(__j < i) || (dst[__j] == src[__j] && src[__j] != '\0')));
   // __contractor_loop: strcpy:0
   for (;; ++i)
   {
@@ -69,9 +68,9 @@ __ESBMC_HIDE:;
   // Invariant: every index < copied is bound to a non-terminator byte that
   // already matches src, and copied is within [0, n].
   __ESBMC_loop_invariant(
-      copied <= n
-      && __ESBMC_forall(&__j, !(__j < copied)
-                                || (dst[__j] == src[__j] && src[__j] != '\0')));
+    copied <= n &&
+    __ESBMC_forall(
+      &__j, !(__j < copied) || (dst[__j] == src[__j] && src[__j] != '\0')));
   // __contractor_loop: strncpy:0
   while (copied < n && src[copied] != '\0')
   {
@@ -113,7 +112,7 @@ __ESBMC_HIDE:;
   // Invariant: every byte before end is non-null, so end indexes the
   // (so-far) earliest possible terminator of the existing dst string.
   __ESBMC_loop_invariant(
-      __ESBMC_forall(&__j, !(__j < end) || start[__j] != '\0'));
+    __ESBMC_forall(&__j, !(__j < end) || start[__j] != '\0'));
   // __contractor_loop: strncat:0
   while (start[end] != '\0')
     ++end;
@@ -122,10 +121,9 @@ __ESBMC_HIDE:;
   // Invariant: i bytes have been copied from src into start[end..]; each
   // copied byte was non-null and matches src.
   __ESBMC_loop_invariant(
-      i <= n
-      && __ESBMC_forall(&__j, !(__j < i)
-                                || (start[end + __j] == src[__j]
-                                    && src[__j] != '\0')));
+    i <= n &&
+    __ESBMC_forall(
+      &__j, !(__j < i) || (start[end + __j] == src[__j] && src[__j] != '\0')));
   // __contractor_loop: strncat:1
   while (i < n && src[i] != '\0')
   {
@@ -150,8 +148,7 @@ __ESBMC_HIDE:;
   size_t __j;
   // Invariant: every byte before len is non-null. Combined with the loop
   // exit condition this gives the strlen post-condition directly.
-  __ESBMC_loop_invariant(
-      __ESBMC_forall(&__j, !(__j < len) || s[__j] != '\0'));
+  __ESBMC_loop_invariant(__ESBMC_forall(&__j, !(__j < len) || s[__j] != '\0'));
   // __contractor_loop: strlen:0
   while (s[len] != 0)
     len++;
@@ -174,9 +171,8 @@ __ESBMC_HIDE:;
   unsigned char c1 = 0, c2 = 0;
   size_t __j;
   // Invariant: every byte at index < i was equal in s1 and s2 and non-null.
-  __ESBMC_loop_invariant(
-      __ESBMC_forall(&__j,
-          !(__j < i) || (s1[__j] == s2[__j] && s1[__j] != '\0')));
+  __ESBMC_loop_invariant(__ESBMC_forall(
+    &__j, !(__j < i) || (s1[__j] == s2[__j] && s1[__j] != '\0')));
   // __contractor_loop: strcmp:0
   do
   {
@@ -206,8 +202,7 @@ __ESBMC_HIDE:;
   // Invariant: every index already inspected matched between s1 and s2;
   // i never exceeds n.
   __ESBMC_loop_invariant(
-      i <= n
-      && __ESBMC_forall(&__j, !(__j < i) || s1[__j] == s2[__j]));
+    i <= n && __ESBMC_forall(&__j, !(__j < i) || s1[__j] == s2[__j]));
   // __contractor_loop: strncmp:0
   do
   {
@@ -241,8 +236,7 @@ __ESBMC_HIDE:;
   size_t __j;
   // Invariant: every index < i was a non-null byte different from ch.
   __ESBMC_loop_invariant(
-      __ESBMC_forall(&__j, !(__j < i)
-                            || (s[__j] != '\0' && s[__j] != (char)ch)));
+    __ESBMC_forall(&__j, !(__j < i) || (s[__j] != '\0' && s[__j] != (char)ch)));
   // __contractor_loop: strchr:0
   while (s[i] && s[i] != (char)ch)
     ++i;
@@ -428,8 +422,7 @@ __ESBMC_HIDE:;
   size_t i = 0;
   size_t __j;
   __ESBMC_loop_invariant(
-      i <= n
-      && __ESBMC_forall(&__j, !(__j < i) || cdst[__j] == csrc[__j]));
+    i <= n && __ESBMC_forall(&__j, !(__j < i) || cdst[__j] == csrc[__j]));
   while (i < n)
   {
     cdst[i] = csrc[i];
@@ -470,8 +463,7 @@ __ESBMC_HIDE:;
   size_t i = 0;
   size_t __j;
   __ESBMC_loop_invariant(
-      i <= n
-      && __ESBMC_forall(&__j, !(__j < i) || sp[__j] == (char)c));
+    i <= n && __ESBMC_forall(&__j, !(__j < i) || sp[__j] == (char)c));
   for (; i < n; i++)
     sp[i] = c;
   return s;
@@ -517,8 +509,7 @@ __ESBMC_HIDE:;
     // already-written cdest cell, so the current value of csrc[__j]
     // equals the pre-call value for any __j we have already copied.
     __ESBMC_loop_invariant(
-        i <= n
-        && __ESBMC_forall(&__j, !(__j < i) || cdest[__j] == csrc[__j]));
+      i <= n && __ESBMC_forall(&__j, !(__j < i) || cdest[__j] == csrc[__j]));
     // __contractor_loop: memmove:0
     while (i < n)
     {
@@ -571,8 +562,7 @@ __ESBMC_HIDE:;
   // Invariant: every byte already inspected is equal between sc1 and sc2;
   // i never exceeds the original length n.
   __ESBMC_loop_invariant(
-      i <= total
-      && __ESBMC_forall(&__j, !(__j < i) || sc1[__j] == sc2[__j]));
+    i <= total && __ESBMC_forall(&__j, !(__j < i) || sc1[__j] == sc2[__j]));
   // __contractor_loop: memcmp:0
   while (i < total)
   {
@@ -607,8 +597,8 @@ __ESBMC_HIDE:;
   size_t __j;
   // Invariant: every byte at index < i is different from ch; i bounded by n.
   __ESBMC_loop_invariant(
-      i <= total
-      && __ESBMC_forall(&__j, !(__j < i) || p[__j] != (unsigned char)ch));
+    i <= total &&
+    __ESBMC_forall(&__j, !(__j < i) || p[__j] != (unsigned char)ch));
   // __contractor_loop: memchr:0
   while (i < total && p[i] != (unsigned char)ch)
     ++i;
