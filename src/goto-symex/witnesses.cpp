@@ -1247,8 +1247,7 @@ expr2tc make_blocking_expr(const std::vector<collected_nondet_value> &nondets)
     {
       type2tc bv_type = get_uint_type(n.symbol_expr->type->get_width());
       eq = equality2tc(
-        bitcast2tc(bv_type, n.symbol_expr),
-        bitcast2tc(bv_type, n.value_expr));
+        bitcast2tc(bv_type, n.symbol_expr), bitcast2tc(bv_type, n.value_expr));
     }
     else
     {
