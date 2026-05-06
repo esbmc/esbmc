@@ -149,7 +149,7 @@ static type2tc migrate_type0(const typet &type)
     }
     else
     {
-      exprt sz = (exprt &)type.find(typet::a_size);
+      exprt sz = static_cast<const exprt &>(type.find(typet::a_size));
       simplify(sz);
       migrate_expr(sz, size);
       size = fixup_containerof_in_sizeof(size);
@@ -199,7 +199,7 @@ static type2tc migrate_type0(const typet &type)
 
     for (const auto &comp : comps)
     {
-      type2tc ref = migrate_type((const typet &)comp.type());
+      type2tc ref = migrate_type(comp.type());
 
       members.push_back(ref);
       names.push_back(comp.get(typet::a_name));
@@ -225,7 +225,7 @@ static type2tc migrate_type0(const typet &type)
 
     for (const auto &comp : comps)
     {
-      type2tc ref = migrate_type((const typet &)comp.type());
+      type2tc ref = migrate_type(comp.type());
 
       members.push_back(ref);
       names.push_back(comp.get(typet::a_name));
@@ -263,7 +263,7 @@ static type2tc migrate_type0(const typet &type)
 
     for (const auto &comp : comps)
     {
-      type2tc ref = migrate_type((const typet &)comp.type());
+      type2tc ref = migrate_type(comp.type());
 
       members.push_back(ref);
       names.push_back(comp.get(typet::a_name));
@@ -1788,13 +1788,14 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     if (expr.statement() == "cpp_new" || expr.statement() == "cpp_new[]")
       // These hide the size in a real size field,
-      migrate_expr((const exprt &)expr.cmt_size(), thesize);
+      migrate_expr(static_cast<const exprt &>(expr.cmt_size()), thesize);
     else if (
       expr.statement() != "nondet" && expr.statement() != "function_call")
       // For everything other than nondet,
-      migrate_expr((const exprt &)expr.cmt_size(), thesize);
+      migrate_expr(static_cast<const exprt &>(expr.cmt_size()), thesize);
 
-    type2tc cmt_type = migrate_type((const typet &)expr.cmt_type());
+    type2tc cmt_type =
+      migrate_type(static_cast<const typet &>(expr.cmt_type()));
     type2tc plaintype = migrate_type(expr.type());
 
     sideeffect2t::allockind t;
@@ -2461,7 +2462,7 @@ typet migrate_type_back(const type2tc &ref)
     if (ref2.template_args.size() != 0)
     {
       exprt args("template_args");
-      exprt &arglist = (exprt &)args.add("arguments");
+      exprt &arglist = static_cast<exprt &>(args.add("arguments"));
       for (auto const &it : ref2.template_args)
       {
         typet tmp = migrate_type_back(it);
@@ -2474,7 +2475,7 @@ typet migrate_type_back(const type2tc &ref)
     }
 
     typet ret;
-    ret.swap((irept &)thetype);
+    ret.swap(thetype);
     return ret;
   }
   default:

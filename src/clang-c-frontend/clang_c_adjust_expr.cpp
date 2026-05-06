@@ -617,7 +617,7 @@ void clang_c_adjust::adjust_sizeof(exprt &expr)
   typet type;
   if (expr.operands().size() == 0)
   {
-    type = ((typet &)expr.c_sizeof_type());
+    type = static_cast<const typet &>(expr.c_sizeof_type());
     adjust_type(type);
   }
   else if (expr.operands().size() == 1)
