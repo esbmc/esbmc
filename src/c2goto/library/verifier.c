@@ -1,6 +1,5 @@
 void __VERIFIER_nondet_memory(void *mem, __SIZE_TYPE__ size)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   unsigned char *p = (unsigned char *)mem;
   for (__SIZE_TYPE__ i = 0; i < size; i++)

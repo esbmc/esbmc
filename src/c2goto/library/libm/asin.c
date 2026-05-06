@@ -2,7 +2,6 @@
 
 double asin(double x)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   if (x > 1.0 || x < -1.0)
     return NAN;
@@ -11,14 +10,12 @@ __ESBMC_HIDE:;
 
 double arcsin(double x)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return asin(x);
 }
 
 double __asin(double x)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return asin(x);
 }

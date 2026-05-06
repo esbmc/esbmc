@@ -10,7 +10,6 @@
 /*http://www.geeksforgeeks.org/square-root-of-a-perfect-square/*/
 double sqrt(double n)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   /*We are using n itself as initial approximation
    This can definitely be improved */

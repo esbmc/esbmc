@@ -59,7 +59,6 @@ static char __esbmc_ctime_buf[26];
 /* ── Helper: fill struct tm with constrained nondet values ── */
 static void __esbmc_fill_tm_nondet(struct tm *t)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   t->tm_sec = nondet_int();
   __ESBMC_assume(t->tm_sec >= 0 && t->tm_sec <= 60);
@@ -83,7 +82,6 @@ __ESBMC_HIDE:;
 /* ── time ── */
 time_t time(time_t *tloc)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   time_t res = __VERIFIER_nondet_time_t();
   if (tloc)
@@ -94,7 +92,6 @@ __ESBMC_HIDE:;
 /* ── difftime ── */
 double difftime(time_t end, time_t beginning)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   if (end >= beginning)
     return (double)(end - beginning);
@@ -105,7 +102,6 @@ __ESBMC_HIDE:;
 /* ── clock ── */
 clock_t clock(void)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return __VERIFIER_nondet_clock_t();
 }
@@ -113,7 +109,6 @@ __ESBMC_HIDE:;
 /* ── localtime ── */
 struct tm *localtime(const time_t *timer)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_assert(timer != NULL, "localtime argument must not be NULL");
   __esbmc_localtime_last_input = *timer;
@@ -124,7 +119,6 @@ __ESBMC_HIDE:;
 /* ── gmtime ── */
 struct tm *gmtime(const time_t *timer)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_assert(timer != NULL, "gmtime argument must not be NULL");
   __esbmc_fill_tm_nondet(&__esbmc_gmtime_buf);
@@ -134,7 +128,6 @@ __ESBMC_HIDE:;
 /* ── localtime_r ── */
 struct tm *localtime_r(const time_t *timer, struct tm *buf)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_assert(timer != NULL, "localtime_r timer must not be NULL");
   __ESBMC_assert(buf != NULL, "localtime_r result buffer must not be NULL");
@@ -145,7 +138,6 @@ __ESBMC_HIDE:;
 /* ── gmtime_r ── */
 struct tm *gmtime_r(const time_t *timer, struct tm *buf)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_assert(timer != NULL, "gmtime_r timer must not be NULL");
   __ESBMC_assert(buf != NULL, "gmtime_r result buffer must not be NULL");
@@ -156,7 +148,6 @@ __ESBMC_HIDE:;
 /* ── mktime ── */
 time_t mktime(struct tm *timeptr)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_assert(timeptr != NULL, "mktime argument must not be NULL");
   if (timeptr == NULL)
@@ -186,7 +177,6 @@ __ESBMC_HIDE:;
 /* ── asctime ── */
 char *asctime(const struct tm *timeptr)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_assert(timeptr != NULL, "asctime argument must not be NULL");
   __esbmc_asctime_buf[25] = '\0';
@@ -196,7 +186,6 @@ __ESBMC_HIDE:;
 /* ── ctime ── */
 char *ctime(const time_t *timer)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_assert(timer != NULL, "ctime argument must not be NULL");
   __esbmc_ctime_buf[25] = '\0';
@@ -207,7 +196,6 @@ __ESBMC_HIDE:;
 size_t
 strftime(char *s, size_t maxsize, const char *format, const struct tm *timeptr)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_assert(format != NULL, "strftime format must not be NULL");
   __ESBMC_assert(timeptr != NULL, "strftime timeptr must not be NULL");
@@ -225,7 +213,6 @@ __ESBMC_HIDE:;
 /* ── timespec_get (C11) ── */
 int timespec_get(struct timespec *ts, int base)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_assert(ts != NULL, "timespec_get ts must not be NULL");
   if (base == TIME_UTC)
@@ -241,7 +228,6 @@ __ESBMC_HIDE:;
 /* ── asctime_r (POSIX reentrant) ── */
 char *asctime_r(const struct tm *timeptr, char *buf)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_assert(timeptr != NULL, "asctime_r timeptr must not be NULL");
   __ESBMC_assert(buf != NULL, "asctime_r buf must not be NULL");
@@ -252,7 +238,6 @@ __ESBMC_HIDE:;
 /* ── ctime_r (POSIX reentrant) ── */
 char *ctime_r(const time_t *timer, char *buf)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_assert(timer != NULL, "ctime_r timer must not be NULL");
   __ESBMC_assert(buf != NULL, "ctime_r buf must not be NULL");
@@ -263,7 +248,6 @@ __ESBMC_HIDE:;
 /* ── strptime (POSIX string parsing) ── */
 char *strptime(const char *s, const char *format, struct tm *tm)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_assert(s != NULL, "strptime s must not be NULL");
   __ESBMC_assert(format != NULL, "strptime format must not be NULL");
@@ -286,7 +270,6 @@ __ESBMC_HIDE:;
 /* ── Helper: fill timespec with constrained nondet values ── */
 static void __esbmc_fill_timespec_nondet(struct timespec *ts)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   ts->tv_sec = nondet_long();
   ts->tv_nsec = nondet_long();
@@ -296,7 +279,6 @@ __ESBMC_HIDE:;
 /* ── clock_getres (POSIX) ── */
 int clock_getres(clockid_t clk_id, struct timespec *res)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   /* clk_id validation: only known clock IDs are valid */
   _Bool valid_clock =
@@ -323,7 +305,6 @@ __ESBMC_HIDE:;
 /* ── clock_gettime (POSIX) ── */
 int clock_gettime(clockid_t clk_id, struct timespec *tp)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_assert(tp != NULL, "clock_gettime tp must not be NULL");
 
@@ -351,7 +332,6 @@ __ESBMC_HIDE:;
 /* ── clock_settime (POSIX) ── */
 int clock_settime(clockid_t clk_id, const struct timespec *tp)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_assert(tp != NULL, "clock_settime tp must not be NULL");
 
@@ -374,7 +354,6 @@ int clock_nanosleep(
   const struct timespec *request,
   struct timespec *remain)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_assert(request != NULL, "clock_nanosleep request must not be NULL");
 
@@ -410,7 +389,6 @@ __ESBMC_HIDE:;
 /* ── nanosleep (POSIX) ── */
 int nanosleep(const struct timespec *req, struct timespec *rem)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_assert(req != NULL, "nanosleep req must not be NULL");
 
@@ -446,7 +424,6 @@ static struct tm __esbmc_getdate_buf;
 /* ── timer_create (POSIX) ── */
 int timer_create(clockid_t clockid, struct sigevent *sevp, timer_t *timerid)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_assert(timerid != NULL, "timer_create timerid must not be NULL");
 
@@ -470,7 +447,6 @@ __ESBMC_HIDE:;
 /* ── timer_delete (POSIX) ── */
 int timer_delete(timer_t timerid)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   /* Nondeterministically succeed or fail (invalid timer ID) */
   return nondet_bool() ? 0 : -1;
@@ -483,7 +459,6 @@ int timer_settime(
   const struct itimerspec *new_value,
   struct itimerspec *old_value)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_assert(new_value != NULL, "timer_settime new_value must not be NULL");
 
@@ -511,7 +486,6 @@ __ESBMC_HIDE:;
 /* ── timer_gettime (POSIX) ── */
 int timer_gettime(timer_t timerid, struct itimerspec *curr_value)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_assert(
     curr_value != NULL, "timer_gettime curr_value must not be NULL");
@@ -527,7 +501,6 @@ __ESBMC_HIDE:;
 /* ── timer_getoverrun (POSIX) ── */
 int timer_getoverrun(timer_t timerid)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   /* Return nondet overrun count (0 or positive), or -1 on error */
   _Bool success = nondet_bool();
@@ -543,7 +516,6 @@ __ESBMC_HIDE:;
 /* ── clock_getcpuclockid (POSIX) ── */
 int clock_getcpuclockid(pid_t pid, clockid_t *clock_id)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_assert(
     clock_id != NULL, "clock_getcpuclockid clock_id must not be NULL");
@@ -562,7 +534,6 @@ __ESBMC_HIDE:;
 /* ── tzset (POSIX) ── */
 void tzset(void)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   /* Fill timezone variables with nondet values */
   daylight = nondet_int();
@@ -574,7 +545,6 @@ __ESBMC_HIDE:;
 /* ── getdate (POSIX XSI) ── */
 struct tm *getdate(const char *string)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_assert(string != NULL, "getdate string must not be NULL");
 

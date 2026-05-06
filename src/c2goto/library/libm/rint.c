@@ -4,13 +4,13 @@
 #define rint_def(ret_type, type, name, isnan_func)                             \
   ret_type name(type f)                                                        \
   {                                                                            \
-  /* cppcheck-suppress unusedLabel */ __ESBMC_HIDE:;                           \
+  __ESBMC_HIDE:;                                                               \
     return isnan_func(f);                                                      \
   }                                                                            \
                                                                                \
   ret_type __##name(type f)                                                    \
   {                                                                            \
-  /* cppcheck-suppress unusedLabel */ __ESBMC_HIDE:;                           \
+  __ESBMC_HIDE:;                                                               \
     return name(f);                                                            \
   }
 

@@ -22,7 +22,6 @@ typedef struct BytesStatic
 
 void bytes_dynamic_init_check(const int initialized)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   if (initialized == 0)
     assert(!"Uninitialized Dynamic Bytes");
@@ -30,7 +29,6 @@ __ESBMC_HIDE:;
 
 void bytes_dynamic_bounds_check(size_t index, size_t length)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   if (index >= length)
     assert(!"Out-of-bounds access on Dynamic Bytes");
@@ -38,7 +36,6 @@ __ESBMC_HIDE:;
 
 unsigned char hex_char_to_nibble(char c)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   if ('0' <= c && c <= '9')
     return c - '0';
@@ -51,7 +48,6 @@ __ESBMC_HIDE:;
 
 BytesStatic bytes_static_from_hex(const char *hex_str, size_t len)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   BytesStatic b = {0};
   size_t hex_len = len - 2;
@@ -67,7 +63,6 @@ __ESBMC_HIDE:;
 
 BytesStatic bytes_static_from_string(const char *str, size_t len)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   BytesStatic b = {0};
   if (len > 32)
@@ -81,7 +76,6 @@ __ESBMC_HIDE:;
 
 BytesStatic bytes_static_truncate(const BytesStatic *src, size_t new_len)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   BytesStatic b = {0};
   memcpy(b.data, src->data, new_len);
@@ -91,7 +85,6 @@ __ESBMC_HIDE:;
 
 BytesStatic bytes_static_and(const BytesStatic *a, const BytesStatic *b)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   BytesStatic r = {0};
   for (size_t i = 0; i < a->length; i++)
@@ -104,7 +97,6 @@ __ESBMC_HIDE:;
 
 BytesStatic bytes_static_or(const BytesStatic *a, const BytesStatic *b)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   BytesStatic r = {0};
   for (size_t i = 0; i < a->length; i++)
@@ -117,7 +109,6 @@ __ESBMC_HIDE:;
 
 BytesStatic bytes_static_xor(const BytesStatic *a, const BytesStatic *b)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   BytesStatic r = {0};
   for (size_t i = 0; i < a->length; i++)
@@ -130,7 +121,6 @@ __ESBMC_HIDE:;
 
 uint256_t bytes_static_to_uint(const BytesStatic *b)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   uint256_t result = 0;
   for (size_t i = 0; i < b->length; i++)
@@ -142,7 +132,6 @@ __ESBMC_HIDE:;
 
 BytesStatic bytes_static_from_uint(uint256_t val, size_t len)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   BytesStatic b = {0};
   for (size_t i = 0; i < len; i++)
@@ -156,7 +145,6 @@ __ESBMC_HIDE:;
 
 BytesStatic bytes_static_shl(const BytesStatic *src, unsigned shift_bits)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   uint256_t val = bytes_static_to_uint(src);
   val <<= shift_bits;
@@ -165,7 +153,6 @@ __ESBMC_HIDE:;
 
 BytesStatic bytes_static_shr(const BytesStatic *src, unsigned shift_bits)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   uint256_t val = bytes_static_to_uint(src);
   val >>= shift_bits;
@@ -174,14 +161,12 @@ __ESBMC_HIDE:;
 
 uint256_t bytes_static_to_mapping_key(const BytesStatic *b)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return ((uint256_t)b->length << 248) | bytes_static_to_uint(b);
 }
 
 BytesStatic bytes_static_init_zero(size_t len)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   BytesStatic b = {0};
   b.length = len;
@@ -191,7 +176,6 @@ __ESBMC_HIDE:;
 
 BytesDynamic bytes_dynamic_init_zero(size_t len, BytesPool *pool)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   BytesDynamic b = {0};
   b.offset = pool->pool_cursor;
@@ -209,7 +193,6 @@ void bytes_dynamic_init(
   size_t len,
   BytesPool *pool)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   b->offset = pool->pool_cursor;
   b->length = len;
@@ -224,7 +207,6 @@ void bytes_dynamic_ensure_capacity(
   size_t required,
   BytesPool *pool)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   if (required <= b->capacity)
     return;
@@ -242,7 +224,6 @@ __ESBMC_HIDE:;
 
 BytesDynamic bytes_dynamic_from_static(const BytesStatic *s, BytesPool *pool)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   BytesDynamic b = {0};
   bytes_dynamic_init(&b, s->data, s->length, pool);
@@ -251,7 +232,6 @@ __ESBMC_HIDE:;
 
 BytesDynamic bytes_dynamic_from_string(const char *str, BytesPool *pool)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   BytesDynamic b = {0};
   bytes_dynamic_init(
@@ -262,7 +242,6 @@ __ESBMC_HIDE:;
 BytesDynamic
 bytes_dynamic_from_hex(const char *hex_str, size_t len, BytesPool *pool)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   size_t hex_len = len - 2;
   size_t byte_len = hex_len / 2;
@@ -283,7 +262,6 @@ BytesStatic bytes_static_truncate_from_dynamic(
   size_t new_len,
   const BytesPool *pool)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   bytes_dynamic_init_check(src->initialized);
   BytesStatic b = {0};
@@ -295,7 +273,6 @@ __ESBMC_HIDE:;
 BytesDynamic
 bytes_dynamic_concat(BytesDynamic a, BytesDynamic b, BytesPool *pool)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   bytes_dynamic_init_check(a.initialized);
   bytes_dynamic_init_check(b.initialized);
@@ -312,7 +289,6 @@ __ESBMC_HIDE:;
 
 BytesDynamic bytes_dynamic_copy(const BytesDynamic *src, BytesPool *pool)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   bytes_dynamic_init_check(src->initialized);
   BytesDynamic d = {0};
@@ -327,7 +303,6 @@ __ESBMC_HIDE:;
 
 void bytes_static_set(BytesStatic *b, size_t index, BytesStatic value)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   b->data[index] = value.data[0];
 }
@@ -338,7 +313,6 @@ void bytes_dynamic_set(
   BytesStatic value,
   BytesPool *pool)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   bytes_dynamic_init_check(b->initialized);
   bytes_dynamic_ensure_capacity(b, index + 1, pool);
@@ -351,7 +325,6 @@ __ESBMC_HIDE:;
 
 BytesStatic bytes_static_get(const BytesStatic *b, size_t index)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   BytesStatic r = {0};
   r.data[0] = b->data[index];
@@ -362,7 +335,6 @@ __ESBMC_HIDE:;
 BytesStatic
 bytes_dynamic_get(const BytesDynamic *b, const BytesPool *pool, size_t index)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   bytes_dynamic_init_check(b->initialized);
   bytes_dynamic_bounds_check(index, b->length);
@@ -374,7 +346,6 @@ __ESBMC_HIDE:;
 
 bool bytes_static_equal(const BytesStatic *a, const BytesStatic *b)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   if (a->length != b->length)
     return false;
@@ -386,7 +357,6 @@ bool bytes_dynamic_equal(
   const BytesDynamic *b,
   const BytesPool *pool)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   bytes_dynamic_init_check(a->initialized);
   bytes_dynamic_init_check(b->initialized);
@@ -398,7 +368,6 @@ __ESBMC_HIDE:;
 uint256_t
 bytes_dynamic_to_mapping_key(const BytesDynamic *b, const BytesPool *pool)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   bytes_dynamic_init_check(b->initialized);
   uint256_t result = 0;
@@ -412,7 +381,6 @@ __ESBMC_HIDE:;
 
 void bytes_dynamic_push(BytesDynamic *b, unsigned char value, BytesPool *pool)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   if (!b->initialized)
   {
@@ -429,7 +397,6 @@ __ESBMC_HIDE:;
 
 void bytes_dynamic_pop(BytesDynamic *b, BytesPool *pool)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   bytes_dynamic_init_check(b->initialized);
   bytes_dynamic_bounds_check(0, b->length);
@@ -438,7 +405,6 @@ __ESBMC_HIDE:;
 
 uint256_t bytes_dynamic_to_uint(const BytesDynamic *b, const BytesPool *pool)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   bytes_dynamic_init_check(b->initialized);
   uint256_t result = 0;
@@ -451,7 +417,6 @@ __ESBMC_HIDE:;
 
 char *bytes_static_to_string(const BytesStatic *b)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   char *out = (char *)malloc(b->length + 1);
   for (size_t i = 0; i < b->length; i++)
@@ -464,7 +429,6 @@ __ESBMC_HIDE:;
 
 char *bytes_dynamic_to_string(const BytesDynamic *b, const BytesPool *pool)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   bytes_dynamic_init_check(b->initialized);
   char *out = (char *)malloc(b->length + 1);
@@ -478,7 +442,6 @@ __ESBMC_HIDE:;
 
 BytesStatic bytes_static_extend(const BytesStatic *src, size_t new_len)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   BytesStatic out = {0};
   memcpy(out.data, src->data, src->length);
@@ -489,7 +452,6 @@ __ESBMC_HIDE:;
 
 BytesStatic bytes_static_resize(const BytesStatic *src, size_t new_len)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   if (new_len == src->length)
   {
@@ -510,7 +472,6 @@ BytesStatic bytes_static_extend_from_dynamic(
   size_t new_len,
   const BytesPool *pool)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   bytes_dynamic_init_check(src->initialized);
   BytesStatic b = {0};
@@ -525,7 +486,6 @@ BytesStatic bytes_static_resize_from_dynamic(
   size_t new_len,
   const BytesPool *pool)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   bytes_dynamic_init_check(src->initialized);
   if (new_len == src->length)
@@ -547,7 +507,6 @@ __ESBMC_HIDE:;
 
 BytesPool bytes_pool_init(unsigned char *pool_data)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   BytesPool pool = {pool_data, 0};
   return pool;

@@ -46,7 +46,7 @@ typedef __uint128_t __UINT128_TYPE__;
 #define FREXP(name, type, pre)                                                 \
   type name(type x, int *exp)                                                  \
   {                                                                            \
-  /* cppcheck-suppress unusedLabel */ __ESBMC_HIDE:;                           \
+  __ESBMC_HIDE:;                                                               \
     if (!isfinite(x))                                                          \
       return x;                                                                \
     if (x == 0)                                                                \
@@ -74,7 +74,7 @@ typedef __uint128_t __UINT128_TYPE__;
 #define LDEXP(name, type, pre, suff, SUFF)                                     \
   type name(type x, int exp)                                                   \
   {                                                                            \
-  /* cppcheck-suppress unusedLabel */ __ESBMC_HIDE:;                           \
+  __ESBMC_HIDE:;                                                               \
     if (!isfinite(x) || x == 0.0##suff)                                        \
       return x;                                                                \
     TYPE(pre) v, m;                                                            \

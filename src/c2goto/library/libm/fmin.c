@@ -4,7 +4,7 @@
 #define fmin_def(type, name, isnan_func)                                       \
   type name(type x, type y)                                                    \
   {                                                                            \
-  /* cppcheck-suppress unusedLabel */ __ESBMC_HIDE:;                           \
+  __ESBMC_HIDE:;                                                               \
     int x_is_nan = isnan_func(x);                                              \
     int y_is_nan = isnan_func(y);                                              \
                                                                                \
@@ -24,7 +24,7 @@
                                                                                \
   type __##name(type x, type y)                                                \
   {                                                                            \
-  /* cppcheck-suppress unusedLabel */ __ESBMC_HIDE:;                           \
+  __ESBMC_HIDE:;                                                               \
     return name(x, y);                                                         \
   }
 

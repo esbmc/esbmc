@@ -5,7 +5,7 @@
 #define modff_def(type, name, nearbyint_func, copysign_func, isinf_func)       \
   type name(type value, type *iptr)                                            \
   {                                                                            \
-  /* cppcheck-suppress unusedLabel */ __ESBMC_HIDE:;                           \
+  __ESBMC_HIDE:;                                                               \
     int save_round = fegetround();                                             \
     fesetround(FE_TOWARDZERO);                                                 \
     *iptr = nearbyint_func(value);                                             \
@@ -15,7 +15,7 @@
                                                                                \
   type __##name(type value, type *iptr)                                        \
   {                                                                            \
-  /* cppcheck-suppress unusedLabel */ __ESBMC_HIDE:;                           \
+  __ESBMC_HIDE:;                                                               \
     return name(value, iptr);                                                  \
   }
 

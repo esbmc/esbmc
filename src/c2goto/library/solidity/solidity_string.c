@@ -8,7 +8,6 @@
 
 char *string_concat(char *x, char *y)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   size_t xlen = strnlen(x, 256);
   if (xlen < 256)
@@ -18,7 +17,6 @@ __ESBMC_HIDE:;
 
 char get_char(int digit)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   char charstr[] = "0123456789ABCDEF";
   return charstr[digit];
@@ -26,7 +24,6 @@ __ESBMC_HIDE:;
 
 void sol_rev(char *p)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   size_t n = strnlen(p, 256);
   if (n == 0)
@@ -43,7 +40,6 @@ __ESBMC_HIDE:;
 
 char *i256toa(int256_t value)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   // we might have memory leak as we will not free this afterwards
   char *str = (char *)malloc(256 * sizeof(char));
@@ -84,7 +80,6 @@ __ESBMC_HIDE:;
 
 char *u256toa(uint256_t value)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   char *str = (char *)malloc(256 * sizeof(char));
   uint256_t base = (uint256_t)10;
@@ -109,7 +104,6 @@ __ESBMC_HIDE:;
 
 char *decToHexa(int n)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   char *hexaDeciNum = (char *)malloc(256 * sizeof(char));
   hexaDeciNum[0] = '\0';
@@ -145,7 +139,6 @@ __ESBMC_HIDE:;
 
 char *ASCIItoHEX(const char *ascii)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   char *hex = (char *)malloc(256 * sizeof(char));
   hex[0] = '\0';
@@ -162,7 +155,6 @@ __ESBMC_HIDE:;
 
 uint256_t hexdec(const char *hex)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   /*https://stackoverflow.com/questions/10324/convert-a-hexadecimal-string-to-an-integer-efficiently-in-c*/
 
@@ -191,7 +183,6 @@ __ESBMC_HIDE:;
 
 uint256_t str2uint(const char *str)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   // Pure: same string contents -> same uint256_t.
   // The previous hexdec(ASCIItoHEX(str)) implementation went through malloc,
@@ -216,7 +207,6 @@ __ESBMC_HIDE:;
 // re-evaluated per chunk.
 uint64_t _ESBMC_str_key_fold64(uint256_t key)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   uint64_t k0 = (uint64_t)key;
   uint64_t k1 = (uint64_t)(key >> (uint256_t)64);
@@ -228,7 +218,6 @@ __ESBMC_HIDE:;
 // string assign
 void _str_assign(char **str1, const char *str2)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   // Ensure str1 is a valid pointer (not NULL)
   if (str1 == NULL)
@@ -259,7 +248,6 @@ __attribute__((annotate("__ESBMC_inf_size"))) char _ESBMC_rand_str[1];
 
 char *nondet_string()
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   size_t len = nondet_uint();
   // __ESBMC_assume(len < SIZE_MAX);

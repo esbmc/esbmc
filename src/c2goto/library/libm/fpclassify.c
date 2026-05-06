@@ -9,7 +9,7 @@
 #  define _signbit(type, name)                                                 \
     int name(type d)                                                           \
     {                                                                          \
-    /* cppcheck-suppress unusedLabel */ __ESBMC_HIDE:;                         \
+    __ESBMC_HIDE:;                                                             \
       return __builtin_signbit((float)d);                                      \
     }
 
@@ -24,7 +24,7 @@ _signbit(float, _fdsign);
 #define classify_def(type, name, isnan_func, isinf_func, isnormal_func)        \
   classify_return_type name(type f)                                            \
   {                                                                            \
-  /* cppcheck-suppress unusedLabel */ __ESBMC_HIDE:;                           \
+  __ESBMC_HIDE:;                                                               \
     return isnan_func(f)      ? FP_NAN                                         \
            : isinf_func(f)    ? FP_INFINITE                                    \
            : f == 0           ? FP_ZERO                                        \

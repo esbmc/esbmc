@@ -1,6 +1,5 @@
 char *strerror(int errnum)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   char *sys_errlist[] = {
     /*  0                 */ "No error",
@@ -109,7 +108,6 @@ __ESBMC_HIDE:;
 
 void error(int status, int errnum, const char *format, ...)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   // Print error message (modeled as no-op for verification)
   // If status is non-zero, the function would normally exit

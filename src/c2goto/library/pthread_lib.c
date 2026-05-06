@@ -109,7 +109,6 @@ __attribute__((annotate(
 
 static void insert_key_value(pthread_key_t key, const void *value)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   pthread_t thread = __ESBMC_get_thread_id();
   __ESBMC_pthread_thread_key[thread].thread = thread;
@@ -119,7 +118,6 @@ __ESBMC_HIDE:;
 
 static __ESBMC_thread_key *search_key(pthread_key_t key)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   pthread_t thread = __ESBMC_get_thread_id();
   if (
@@ -133,7 +131,6 @@ __ESBMC_HIDE:;
 
 static int delete_key(__ESBMC_thread_key *l)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   pthread_t thread = __ESBMC_get_thread_id();
   if (&__ESBMC_pthread_thread_key[thread] == l)
@@ -148,7 +145,6 @@ __ESBMC_HIDE:;
 
 void __ESBMC_pthread_start_main_hook(void)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   __ESBMC_num_total_threads++;
@@ -158,7 +154,6 @@ __ESBMC_HIDE:;
 
 void __ESBMC_pthread_end_main_hook(void)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   // We want to be able to access this internal accounting data atomically,
   // but that'll never be permitted by POR, which will see the access and try
@@ -170,7 +165,6 @@ __ESBMC_HIDE:;
 
 void pthread_exec_key_destructors(void)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   // At thread exit, if a key value has a non-NULL destructor pointer,
@@ -194,7 +188,6 @@ __ESBMC_HIDE:;
 
 void pthread_trampoline(void)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   pthread_t threadid = __ESBMC_get_thread_id();
   struct __pthread_start_data startdata =
@@ -226,7 +219,6 @@ int pthread_create(
   void *(*start_routine)(void *),
   void *arg)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   struct __pthread_start_data startdata = {start_routine, arg};
 
@@ -251,7 +243,6 @@ __ESBMC_HIDE:;
 #pragma GCC diagnostic ignored "-Winvalid-noreturn"
 void pthread_exit(void *retval)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
 
@@ -280,7 +271,6 @@ __ESBMC_HIDE:;
 
 pthread_t pthread_self(void)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return __ESBMC_get_thread_id();
 }
@@ -288,7 +278,6 @@ __ESBMC_HIDE:;
 /** Deliver a pending cancellation if cancelstate is PTHREAD_CANCEL_ENABLE. */
 void pthread_testcancel(void)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   pthread_t tid = __ESBMC_get_thread_id();
@@ -303,7 +292,6 @@ __ESBMC_HIDE:;
 /** Send a cancellation request to thread th. */
 int pthread_cancel(pthread_t th)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   __ESBMC_pthread_cancel_requested[(int)th] = 1;
@@ -314,7 +302,6 @@ __ESBMC_HIDE:;
 /** Set the calling thread's cancellability state. */
 int pthread_setcancelstate(int state, int *oldstate)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   pthread_t tid = __ESBMC_get_thread_id();
@@ -328,7 +315,6 @@ __ESBMC_HIDE:;
 /** Set the calling thread's cancellation type. */
 int pthread_setcanceltype(int type, int *oldtype)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   pthread_t tid = __ESBMC_get_thread_id();
@@ -341,7 +327,6 @@ __ESBMC_HIDE:;
 
 int pthread_join_switch(pthread_t thread, void **retval)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   pthread_testcancel();
   __ESBMC_atomic_begin();
@@ -375,7 +360,6 @@ __ESBMC_HIDE:;
 
 int pthread_join_noswitch(pthread_t thread, void **retval)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   pthread_testcancel();
   __ESBMC_atomic_begin();
@@ -401,7 +385,6 @@ int pthread_mutex_init(
   pthread_mutex_t *mutex,
   const pthread_mutexattr_t *mutexattr)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   __ESBMC_mutex_lock_field(*mutex) = 0;
@@ -413,7 +396,6 @@ __ESBMC_HIDE:;
 
 int pthread_mutex_initializer(pthread_mutex_t *mutex)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   // check whether this mutex has been initialized via
   // PTHREAD_MUTEX_INITIALIZER
@@ -426,7 +408,6 @@ __ESBMC_HIDE:;
 
 int pthread_mutex_lock_noassert(pthread_mutex_t *mutex)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   pthread_mutex_initializer(mutex);
@@ -438,7 +419,6 @@ __ESBMC_HIDE:;
 
 int pthread_mutex_lock_nocheck(pthread_mutex_t *mutex)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   pthread_mutex_initializer(mutex);
@@ -450,7 +430,6 @@ __ESBMC_HIDE:;
 
 int pthread_mutex_unlock_noassert(pthread_mutex_t *mutex)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   __ESBMC_mutex_lock_field(*mutex) = 0;
@@ -460,7 +439,6 @@ __ESBMC_HIDE:;
 
 int pthread_mutex_unlock_nocheck(pthread_mutex_t *mutex)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   __ESBMC_assert(
@@ -472,7 +450,6 @@ __ESBMC_HIDE:;
 
 int pthread_mutex_lock_check(pthread_mutex_t *mutex)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   _Bool unlocked = 1;
 
@@ -507,7 +484,6 @@ __ESBMC_HIDE:;
 
 int pthread_mutex_unlock_check(pthread_mutex_t *mutex)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   __ESBMC_assert(
@@ -519,7 +495,6 @@ __ESBMC_HIDE:;
 
 int pthread_mutex_trylock(pthread_mutex_t *mutex)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
 
@@ -540,7 +515,6 @@ PTHREAD_MUTEX_TRYLOCK_END:
 // the mutex object becomes, in effect, uninitialized.
 int pthread_mutex_destroy_check(pthread_mutex_t *mutex)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   __ESBMC_assert(
@@ -560,7 +534,6 @@ __ESBMC_HIDE:;
 
 int pthread_mutex_destroy(pthread_mutex_t *mutex)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   __ESBMC_mutex_lock_field(*mutex) = -1;
@@ -579,7 +552,6 @@ int pthread_rwlock_init(
   pthread_rwlock_t *lock,
   const pthread_rwlockattr_t *attr)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   __ESBMC_rwlock_readers(lock) = 0;
@@ -590,7 +562,6 @@ __ESBMC_HIDE:;
 
 int pthread_rwlock_rdlock(pthread_rwlock_t *lock)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   __ESBMC_assume(!__ESBMC_rwlock_writer(lock));
@@ -601,7 +572,6 @@ __ESBMC_HIDE:;
 
 int pthread_rwlock_tryrdlock(pthread_rwlock_t *lock)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
 
@@ -619,7 +589,6 @@ __ESBMC_HIDE:;
 
 int pthread_rwlock_trywrlock(pthread_rwlock_t *lock)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   if (__ESBMC_rwlock_writer(lock) != 0 || __ESBMC_rwlock_readers(lock) != 0)
@@ -634,7 +603,6 @@ __ESBMC_HIDE:;
 
 int pthread_rwlock_unlock(pthread_rwlock_t *lock)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   if (__ESBMC_rwlock_writer(lock))
@@ -647,7 +615,6 @@ __ESBMC_HIDE:;
 
 int pthread_rwlock_wrlock(pthread_rwlock_t *lock)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   __ESBMC_assume(
@@ -664,7 +631,6 @@ __ESBMC_HIDE:;
 // variable cond.
 int pthread_cond_broadcast(pthread_cond_t *cond)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   __ESBMC_cond_lock_field(*cond) = 0;
@@ -677,7 +643,6 @@ int pthread_cond_init(
   pthread_cond_t *cond,
   __const pthread_condattr_t *cond_attr)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   __ESBMC_cond_lock_field(*cond) = 0;
@@ -687,7 +652,6 @@ __ESBMC_HIDE:;
 
 int pthread_cond_destroy(pthread_cond_t *__cond)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   __ESBMC_cond_lock_field(*__cond) = 0;
@@ -697,7 +661,6 @@ __ESBMC_HIDE:;
 
 extern int pthread_cond_signal(pthread_cond_t *__cond)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   __ESBMC_cond_lock_field(*__cond) = 0;
@@ -708,7 +671,6 @@ __ESBMC_HIDE:;
 static void
 do_pthread_cond_wait(pthread_cond_t *cond, pthread_mutex_t *mutex, _Bool assrt)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   {
@@ -788,7 +750,6 @@ __ESBMC_HIDE:;
 
 int pthread_cond_wait_nocheck(pthread_cond_t *cond, pthread_mutex_t *mutex)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   do_pthread_cond_wait(cond, mutex, 0);
   return 0;
@@ -796,7 +757,6 @@ __ESBMC_HIDE:;
 
 int pthread_cond_wait_check(pthread_cond_t *cond, pthread_mutex_t *mutex)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   do_pthread_cond_wait(cond, mutex, 1);
   return 0;
@@ -809,7 +769,6 @@ __ESBMC_HIDE:;
 // source: https://linux.die.net/man/3/pthread_key_create
 int pthread_key_create(pthread_key_t *key, void (*destructor)(void *))
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   __ESBMC_assert(
@@ -830,7 +789,6 @@ __ESBMC_HIDE:;
 // source: https://linux.die.net/man/3/pthread_getspecific
 void *pthread_getspecific(pthread_key_t key)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   // If no thread-specific data value is associated with key,
@@ -854,7 +812,6 @@ __ESBMC_HIDE:;
 // source: https://linux.die.net/man/3/pthread_setspecific
 int pthread_setspecific(pthread_key_t key, const void *value)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   insert_key_value(key, value);
@@ -868,7 +825,6 @@ __ESBMC_HIDE:;
 // source: https://man7.org/linux/man-pages/man3/pthread_equal.3.html
 int pthread_equal(pthread_t tid1, pthread_t tid2)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   // If the two thread IDs are equal,
   // it returns a nonzero value;
@@ -889,7 +845,6 @@ __ESBMC_HIDE:;
 // source: https://man7.org/linux/man-pages/man3/pthread_detach.3.html
 int pthread_detach(pthread_t threadid)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   int result = 0;

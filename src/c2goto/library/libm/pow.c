@@ -51,7 +51,6 @@ static double pow_by_squaring(double x, uint32_t n)
 
 double pow(double x, double y)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   if (x == 1.0 || y == 0.0)
     return 1.0;
@@ -144,7 +143,6 @@ __ESBMC_HIDE:;
 
 double __pow(double base, double exponent)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return pow(base, exponent);
 }

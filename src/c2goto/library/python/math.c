@@ -3,35 +3,30 @@
 // Python wrappers
 double __ESBMC_sin(double x)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return sin(x);
 }
 
 double __ESBMC_cos(double x)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return cos(x);
 }
 
 double __ESBMC_sqrt(double x)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return sqrt(x);
 }
 
 double __ESBMC_exp(double x)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return exp(x);
 }
 
 double __ESBMC_log(double x)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_assert(x > 0.0, "math domain error");
 
@@ -42,28 +37,24 @@ __ESBMC_HIDE:;
 
 double __ESBMC_acos(double x)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return acos(x);
 }
 
 double __ESBMC_atan(double x)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return atan(x);
 }
 
 double __ESBMC_atan2(double y, double x)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return atan2(y, x);
 }
 
 double __ESBMC_log2(double x)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_assert(x > 0.0, "math domain error");
   return log2(x);
@@ -71,42 +62,36 @@ __ESBMC_HIDE:;
 
 double __ESBMC_pow(double x, double y)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return pow(x, y);
 }
 
 double __ESBMC_fabs(double x)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return fabs(x);
 }
 
 double __ESBMC_trunc(double x)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return trunc(x);
 }
 
 double __ESBMC_fmod(double x, double y)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return fmod(x, y);
 }
 
 double __ESBMC_copysign(double x, double y)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return copysign(x, y);
 }
 
 double __ESBMC_tan(double x)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   /* Python math.tan wrapper */
   return tan(x);
@@ -114,7 +99,6 @@ __ESBMC_HIDE:;
 
 double __ESBMC_asin(double x)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   /* Python math.asin wrapper */
   return asin(x);
@@ -122,7 +106,6 @@ __ESBMC_HIDE:;
 
 double __ESBMC_sinh(double x)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   /* Python math.sinh wrapper */
   return sinh(x);
@@ -130,7 +113,6 @@ __ESBMC_HIDE:;
 
 double __ESBMC_cosh(double x)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   /* Python math.cosh wrapper */
   return cosh(x);
@@ -138,7 +120,6 @@ __ESBMC_HIDE:;
 
 double __ESBMC_tanh(double x)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   /* Python math.tanh wrapper */
   return tanh(x);
@@ -146,7 +127,6 @@ __ESBMC_HIDE:;
 
 double __ESBMC_log10(double x)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   /* Python math.log10 wrapper */
   __ESBMC_assert(x > 0.0, "math domain error");
@@ -155,28 +135,24 @@ __ESBMC_HIDE:;
 
 double __ESBMC_inf(void)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return INFINITY;
 }
 
 double __ESBMC_nan(void)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return NAN;
 }
 
 double __ESBMC_expm1(double x)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return expm1(x);
 }
 
 double __ESBMC_log1p(double x)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_assert(x > -1.0, "math domain error");
   return log1p(x);
@@ -184,21 +160,18 @@ __ESBMC_HIDE:;
 
 double __ESBMC_exp2(double x)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return exp2(x);
 }
 
 double __ESBMC_asinh(double x)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return asinh(x);
 }
 
 double __ESBMC_acosh(double x)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_assert(x >= 1.0, "math domain error");
   return acosh(x);
@@ -206,7 +179,6 @@ __ESBMC_HIDE:;
 
 double __ESBMC_atanh(double x)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   __ESBMC_assert(x > -1.0 && x < 1.0, "math domain error");
   return atanh(x);
@@ -214,7 +186,6 @@ __ESBMC_HIDE:;
 
 double __ESBMC_hypot(double x, double y)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return hypot(x, y);
 }

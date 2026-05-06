@@ -12,3 +12,4 @@
 unusedLabel:src/c2goto/library/*
 unusedLabel:src/c2goto/library/libm/*
 unusedLabel:src/c2goto/library/python/*
+unusedLabel:src/c2goto/library/solidity/*

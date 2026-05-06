@@ -22,7 +22,6 @@
 /* ── abi.encode(...)  ────────────────────────────────────────────────── */
 uint256_t abi_encode(uint256_t x)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return x;
 }
@@ -30,7 +29,6 @@ __ESBMC_HIDE:;
 /* ── abi.encodePacked(...)  ──────────────────────────────────────────── */
 uint256_t abi_encodePacked(uint256_t x)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return x;
 }
@@ -38,7 +36,6 @@ __ESBMC_HIDE:;
 /* ── abi.encodeWithSelector(bytes4 selector, ...)  ───────────────────── */
 uint256_t abi_encodeWithSelector(uint256_t x)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return x;
 }
@@ -46,7 +43,6 @@ __ESBMC_HIDE:;
 /* ── abi.encodeWithSignature(string memory signature, ...)  ──────────── */
 uint256_t abi_encodeWithSignature(uint256_t x)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return x;
 }
@@ -54,7 +50,6 @@ __ESBMC_HIDE:;
 /* ── abi.encodeCall(function, (...))  ────────────────────────────────── */
 uint256_t abi_encodeCall(uint256_t x)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return x;
 }
@@ -71,7 +66,6 @@ __ESBMC_HIDE:;
  */
 uint256_t abi_decode(uint256_t x)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   uint256_t result;
   return result;

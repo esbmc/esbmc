@@ -18,7 +18,6 @@
 /* integer power: base**exp using binary exponentiation */
 uint256_t sol_pow_uint(uint256_t base, uint256_t exp)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   uint256_t result = 1;
   while (exp > 0)
@@ -42,7 +41,6 @@ typedef unsigned BIGINT(512) uint512_t;
 
 uint256_t addmod(uint256_t x, uint256_t y, uint256_t k)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   uint512_t wide = (uint512_t)x + (uint512_t)y;
   return (uint256_t)(wide % (uint512_t)k);
@@ -50,7 +48,6 @@ __ESBMC_HIDE:;
 
 uint256_t mulmod(uint256_t x, uint256_t y, uint256_t k)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   uint512_t wide = (uint512_t)x * (uint512_t)y;
   return (uint256_t)(wide % (uint512_t)k);
@@ -72,7 +69,6 @@ __ESBMC_HIDE:;
  */
 BytesDynamic llc_nondet_bytes(void)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   BytesDynamic result;
   result.initialized = 1;
@@ -82,7 +78,6 @@ __ESBMC_HIDE:;
 /* selfdestruct */
 void selfdestruct()
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   exit(0);
 }

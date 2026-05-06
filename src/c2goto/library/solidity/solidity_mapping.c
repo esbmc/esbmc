@@ -22,7 +22,6 @@ struct mapping_t
 
 void *map_get_raw(struct _ESBMC_Mapping a[], address_t addr, uint256_t key)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   struct _ESBMC_Mapping *cur = a[0].next;
   while (cur)
@@ -40,7 +39,6 @@ void map_set_raw(
   uint256_t key,
   void *val)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   struct _ESBMC_Mapping *n = (struct _ESBMC_Mapping *)malloc(sizeof *n);
   n->addr = addr;
@@ -53,7 +51,6 @@ __ESBMC_HIDE:;
 /* uint256_t */
 void map_uint_set(struct mapping_t *m, uint256_t k, uint256_t v)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   uint256_t *p = (uint256_t *)malloc(sizeof *p);
   *p = v;
@@ -61,7 +58,6 @@ __ESBMC_HIDE:;
 }
 uint256_t map_uint_get(struct mapping_t *m, uint256_t k)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   uint256_t *p = (uint256_t *)map_get_raw(m->base, m->addr, k);
   return p ? *p : (uint256_t)0;
@@ -70,7 +66,6 @@ __ESBMC_HIDE:;
 /* int256_t */
 void map_int_set(struct mapping_t *m, uint256_t k, int256_t v)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   int256_t *p = (int256_t *)malloc(sizeof *p);
   *p = v;
@@ -78,7 +73,6 @@ __ESBMC_HIDE:;
 }
 int256_t map_int_get(struct mapping_t *m, uint256_t k)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   int256_t *p = (int256_t *)map_get_raw(m->base, m->addr, k);
   return p ? *p : (int256_t)0;
@@ -87,7 +81,6 @@ __ESBMC_HIDE:;
 /* string */
 void map_string_set(struct mapping_t *m, uint256_t k, char *v)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   char **p = (char **)malloc(sizeof *p);
   *p = v;
@@ -95,7 +88,6 @@ __ESBMC_HIDE:;
 }
 char *map_string_get(struct mapping_t *m, uint256_t k)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   char **p = (char **)map_get_raw(m->base, m->addr, k);
   return p ? *p : (char *)0;
@@ -104,7 +96,6 @@ __ESBMC_HIDE:;
 /* bool */
 void map_bool_set(struct mapping_t *m, uint256_t k, bool v)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   bool *p = (bool *)malloc(sizeof *p);
   *p = v;
@@ -113,7 +104,6 @@ __ESBMC_HIDE:;
 
 bool map_bool_get(struct mapping_t *m, uint256_t k)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   bool *p = (bool *)map_get_raw(m->base, m->addr, k);
   return p ? *p : false;
@@ -122,7 +112,6 @@ __ESBMC_HIDE:;
 /* generic */
 void map_generic_set(struct mapping_t *m, uint256_t k, const void *v, size_t sz)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   void *p = malloc(sz);
   memcpy(p, v, sz);
@@ -130,7 +119,6 @@ __ESBMC_HIDE:;
 }
 void *map_generic_get(struct mapping_t *m, uint256_t k)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return map_get_raw(m->base, m->addr, k);
 }
@@ -149,7 +137,6 @@ struct mapping_t_fast
 
 void *map_get_raw_fast(struct _ESBMC_Mapping_fast a[], uint256_t key)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   struct _ESBMC_Mapping_fast *cur = a[0].next;
   while (cur)
@@ -163,7 +150,6 @@ __ESBMC_HIDE:;
 
 void map_set_raw_fast(struct _ESBMC_Mapping_fast a[], uint256_t key, void *val)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   struct _ESBMC_Mapping_fast *n =
     (struct _ESBMC_Mapping_fast *)malloc(sizeof *n);
@@ -176,7 +162,6 @@ __ESBMC_HIDE:;
 /* uint256_t */
 void map_uint_set_fast(struct mapping_t_fast *m, uint256_t k, uint256_t v)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   uint256_t *p = (uint256_t *)malloc(sizeof *p);
   *p = v;
@@ -184,7 +169,6 @@ __ESBMC_HIDE:;
 }
 uint256_t map_uint_get_fast(struct mapping_t_fast *m, uint256_t k)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   uint256_t *p = (uint256_t *)map_get_raw_fast(m->base, k);
   return p ? *p : (uint256_t)0;
@@ -193,7 +177,6 @@ __ESBMC_HIDE:;
 /* int256_t */
 void map_int_set_fast(struct mapping_t_fast *m, uint256_t k, int256_t v)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   int256_t *p = (int256_t *)malloc(sizeof *p);
   *p = v;
@@ -201,7 +184,6 @@ __ESBMC_HIDE:;
 }
 int256_t map_int_get_fast(struct mapping_t_fast *m, uint256_t k)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   int256_t *p = (int256_t *)map_get_raw_fast(m->base, k);
   return p ? *p : (int256_t)0;
@@ -210,7 +192,6 @@ __ESBMC_HIDE:;
 /* string */
 void map_string_set_fast(struct mapping_t_fast *m, uint256_t k, char *v)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   char **p = (char **)malloc(sizeof *p);
   *p = v;
@@ -218,7 +199,6 @@ __ESBMC_HIDE:;
 }
 char *map_string_get_fast(struct mapping_t_fast *m, uint256_t k)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   char **p = (char **)map_get_raw_fast(m->base, k);
   return p ? *p : (char *)0;
@@ -227,7 +207,6 @@ __ESBMC_HIDE:;
 /* bool */
 void map_bool_set_fast(struct mapping_t_fast *m, uint256_t k, bool v)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   bool *p = (bool *)malloc(sizeof *p);
   *p = v;
@@ -235,7 +214,6 @@ __ESBMC_HIDE:;
 }
 bool map_bool_get_fast(struct mapping_t_fast *m, uint256_t k)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   bool *p = (bool *)map_get_raw_fast(m->base, k);
   return p ? *p : false;
@@ -248,7 +226,6 @@ void map_generic_set_fast(
   const void *v,
   size_t sz)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   void *p = malloc(sz);
   memcpy(p, v, sz);
@@ -256,7 +233,6 @@ __ESBMC_HIDE:;
 }
 void *map_generic_get_fast(struct mapping_t_fast *m, uint256_t k)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return map_get_raw_fast(m->base, k);
 }

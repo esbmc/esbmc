@@ -25,28 +25,24 @@
 
 uint256_t keccak256(uint256_t x)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return ~x;
 }
 
 uint256_t sha256(uint256_t x)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return ~(x + 1);
 }
 
 address_t ripemd160(uint256_t x)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return (address_t)(~(x + 2));
 }
 
 address_t ecrecover(uint256_t hash, unsigned int v, uint256_t r, uint256_t s)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return (address_t)(~hash);
 }

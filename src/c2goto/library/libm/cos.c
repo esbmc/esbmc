@@ -3,7 +3,6 @@
 
 double cos(double x)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   double t, s;
   int p;
@@ -25,7 +24,6 @@ __ESBMC_HIDE:;
 
 double __cos(double x)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   return cos(x);
 }

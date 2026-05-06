@@ -5,7 +5,7 @@
 #define floor_def(type, name, rint_func)                                       \
   type name(type f)                                                            \
   {                                                                            \
-  /* cppcheck-suppress unusedLabel */ __ESBMC_HIDE:;                           \
+  __ESBMC_HIDE:;                                                               \
     type result;                                                               \
     int save_round = fegetround();                                             \
     fesetround(FE_DOWNWARD);                                                   \
@@ -16,7 +16,7 @@
                                                                                \
   type __##name(type f)                                                        \
   {                                                                            \
-  /* cppcheck-suppress unusedLabel */ __ESBMC_HIDE:;                           \
+  __ESBMC_HIDE:;                                                               \
     return name(f);                                                            \
   }
 

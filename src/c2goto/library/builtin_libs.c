@@ -51,7 +51,6 @@ union __esbmc_cheri_cap128
 
 __SIZE_TYPE__ __esbmc_cheri_base_get(void *__capability cap)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   union __esbmc_cheri_cap128 u = {cap};
   cc128_cap_t comp;
@@ -62,7 +61,6 @@ __ESBMC_HIDE:;
 
 __SIZE_TYPE__ __esbmc_cheri_perms_get(void *__capability cap)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   union __esbmc_cheri_cap128 u = {cap};
   cc128_cap_t comp;
@@ -75,7 +73,6 @@ __ESBMC_HIDE:;
 
 __UINT16_TYPE__ __esbmc_cheri_flags_get(void *__capability cap)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   union __esbmc_cheri_cap128 u = {cap};
   cc128_cap_t comp;
@@ -85,7 +82,6 @@ __ESBMC_HIDE:;
 
 __UINT32_TYPE__ __esbmc_cheri_type_get(void *__capability cap)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   union __esbmc_cheri_cap128 u = {cap};
   cc128_cap_t comp;
@@ -96,7 +92,6 @@ __ESBMC_HIDE:;
 
 _Bool __esbmc_cheri_sealed_get(void *__capability cap)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
   union __esbmc_cheri_cap128 u = {cap};
   cc128_cap_t comp;
@@ -108,7 +103,6 @@ __ESBMC_HIDE:;
 void *__capability
 __esbmc_cheri_bounds_set(void *__capability cap, __SIZE_TYPE__ sz)
 {
-// cppcheck-suppress unusedLabel
 __ESBMC_HIDE:;
 #    if 1
   union __esbmc_cheri_cap128 u = {cap};
