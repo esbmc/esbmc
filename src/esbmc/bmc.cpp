@@ -532,8 +532,12 @@ void bmct::report_multi_property_trace(
       {
         if (k)
           oss << ", ";
-        oss << "[" << k
-            << "] = " << from_expr(ns, "", w.nondet_inputs[k].value_expr);
+        // Use WITNESS presentation to render bit-distinct floats with
+        // round-trippable precision; otherwise the default HUMAN flags
+        // collapse e.g. several near-MAX floats to the same string.
+        oss << "[" << k << "] = "
+            << from_expr(
+                 ns, "", w.nondet_inputs[k].value_expr, presentationt::WITNESS);
       }
       oss << "\n";
     }
