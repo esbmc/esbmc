@@ -548,17 +548,6 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   // --all-witnesses also activates --multi-property
   if (cmdline.isset("all-witnesses"))
   {
-    // The blocking-clause loop reuses the per-claim solver instance. Under
-    // --smt-during-symex that solver aliases the global runtime_solver and
-    // is shared across claims, so blocking clauses would leak between
-    // claims. Refuse the combination instead of silently producing wrong
-    // results.
-    if (cmdline.isset("smt-during-symex"))
-    {
-      log_error("--all-witnesses is not compatible with --smt-during-symex");
-      abort();
-    }
-
     if (cmdline.isset("max-witnesses"))
     {
       int max_w = std::stoi(cmdline.getval("max-witnesses"));

@@ -1899,6 +1899,7 @@ smt_convt::resultt bmct::multi_property_check(
       // outcome stays in `solver_result` for downstream bookkeeping
       // (final_result, fail-fast counter, claim cleanup).
       smt_convt::resultt enum_result = solver_result;
+      bool ctx_pushed = false;
       while (enum_result == smt_convt::P_SATISFIABLE)
       {
         witness_recordt w;
@@ -1952,6 +1953,20 @@ smt_convt::resultt bmct::multi_property_check(
           break;
         }
 
+        // Open a single SMT context frame the first time we add a blocking
+        // clause. Every subsequent blocking clause goes into the same frame;
+        // the matching pop_ctx() after the loop drops them all in one shot.
+        // This keeps the feature safe under --smt-during-symex, where
+        // solver_ptr aliases the shared runtime_solver: blocking clauses
+        // asserted while enumerating claim A cannot leak into claim B.
+        // (Push must come *after* the first model read — bitwuzla and other
+        // backends invalidate the current model on push.)
+        if (!ctx_pushed)
+        {
+          solver_ptr->push_ctx();
+          ctx_pushed = true;
+        }
+
         // Block this input tuple and re-solve on the same instance.
         expr2tc block = make_blocking_expr(witnesses.back().nondet_inputs);
         solver_ptr->assert_expr(block);
@@ -1965,6 +1980,11 @@ smt_convt::resultt bmct::multi_property_check(
         enum_result != smt_convt::P_UNSATISFIABLE &&
         enum_result != smt_convt::P_SATISFIABLE)
         stop_reason = enumeration_stop_reasont::Error;
+
+      // Drop every blocking clause we asserted; the next claim's solve
+      // sees the solver in its pre-enumeration state.
+      if (ctx_pushed)
+        solver_ptr->pop_ctx();
 
       // Store claim signature (once — multiple witnesses are still one claim)
       if (is_assert_cov)
