@@ -23,17 +23,16 @@
 #undef memmove
 #undef memchr
 
-__ESBMC_contract
-char *strcpy(char *dst, const char *src)
+__ESBMC_contract char *strcpy(char *dst, const char *src)
 {
-    __ESBMC_requires(dst != ((void *)0));
-    __ESBMC_requires(src != ((void *)0));
-    __ESBMC_requires(__ESBMC_get_object_size(dst) >= 1);
-    __ESBMC_requires(__ESBMC_get_object_size(src) >= 1);
-    /* glibc forbids overlap between [dst, dst+strlen(src)+1) and src;
+  __ESBMC_requires(dst != ((void *)0));
+  __ESBMC_requires(src != ((void *)0));
+  __ESBMC_requires(__ESBMC_get_object_size(dst) >= 1);
+  __ESBMC_requires(__ESBMC_get_object_size(src) >= 1);
+  /* glibc forbids overlap between [dst, dst+strlen(src)+1) and src;
        different objects covers the common case. */
-    __ESBMC_requires(__ESBMC_POINTER_OBJECT(dst) != __ESBMC_POINTER_OBJECT(src));
-    __ESBMC_ensures(__ESBMC_return_value == dst);
+  __ESBMC_requires(__ESBMC_POINTER_OBJECT(dst) != __ESBMC_POINTER_OBJECT(src));
+  __ESBMC_ensures(__ESBMC_return_value == dst);
 __ESBMC_HIDE:;
   __ESBMC_assert(src != ((char *)0), "Source pointer is null");
 
@@ -55,15 +54,14 @@ __ESBMC_HIDE:;
   return dst;
 }
 
-__ESBMC_contract
-char *strncpy(char *dst, const char *src, size_t n)
+__ESBMC_contract char *strncpy(char *dst, const char *src, size_t n)
 {
-    __ESBMC_requires(dst != ((void *)0));
-    __ESBMC_requires(src != ((void *)0));
-    __ESBMC_requires(__ESBMC_get_object_size(dst) >= n);
-    __ESBMC_requires(__ESBMC_get_object_size(src) >= 1);
-    __ESBMC_requires(__ESBMC_POINTER_OBJECT(dst) != __ESBMC_POINTER_OBJECT(src));
-    __ESBMC_ensures(__ESBMC_return_value == dst);
+  __ESBMC_requires(dst != ((void *)0));
+  __ESBMC_requires(src != ((void *)0));
+  __ESBMC_requires(__ESBMC_get_object_size(dst) >= n);
+  __ESBMC_requires(__ESBMC_get_object_size(src) >= 1);
+  __ESBMC_requires(__ESBMC_POINTER_OBJECT(dst) != __ESBMC_POINTER_OBJECT(src));
+  __ESBMC_ensures(__ESBMC_return_value == dst);
 __ESBMC_HIDE:;
   char *start = dst;
   size_t copied = 0;
@@ -87,29 +85,27 @@ __ESBMC_HIDE:;
   return start;
 }
 
-__ESBMC_contract
-char *strcat(char *dst, const char *src)
+__ESBMC_contract char *strcat(char *dst, const char *src)
 {
-    __ESBMC_requires(dst != ((void *)0));
-    __ESBMC_requires(src != ((void *)0));
-    __ESBMC_requires(__ESBMC_get_object_size(dst) >= 1);
-    __ESBMC_requires(__ESBMC_get_object_size(src) >= 1);
-    __ESBMC_requires(__ESBMC_POINTER_OBJECT(dst) != __ESBMC_POINTER_OBJECT(src));
-    __ESBMC_ensures(__ESBMC_return_value == dst);
+  __ESBMC_requires(dst != ((void *)0));
+  __ESBMC_requires(src != ((void *)0));
+  __ESBMC_requires(__ESBMC_get_object_size(dst) >= 1);
+  __ESBMC_requires(__ESBMC_get_object_size(src) >= 1);
+  __ESBMC_requires(__ESBMC_POINTER_OBJECT(dst) != __ESBMC_POINTER_OBJECT(src));
+  __ESBMC_ensures(__ESBMC_return_value == dst);
 __ESBMC_HIDE:;
   strcpy(dst + strlen(dst), src);
   return dst;
 }
 
-__ESBMC_contract
-char *strncat(char *dst, const char *src, size_t n)
+__ESBMC_contract char *strncat(char *dst, const char *src, size_t n)
 {
-    __ESBMC_requires(dst != ((void *)0));
-    __ESBMC_requires(src != ((void *)0));
-    __ESBMC_requires(__ESBMC_get_object_size(dst) >= 1);
-    __ESBMC_requires(__ESBMC_get_object_size(src) >= 1);
-    __ESBMC_requires(__ESBMC_POINTER_OBJECT(dst) != __ESBMC_POINTER_OBJECT(src));
-    __ESBMC_ensures(__ESBMC_return_value == dst);
+  __ESBMC_requires(dst != ((void *)0));
+  __ESBMC_requires(src != ((void *)0));
+  __ESBMC_requires(__ESBMC_get_object_size(dst) >= 1);
+  __ESBMC_requires(__ESBMC_get_object_size(src) >= 1);
+  __ESBMC_requires(__ESBMC_POINTER_OBJECT(dst) != __ESBMC_POINTER_OBJECT(src));
+  __ESBMC_ensures(__ESBMC_return_value == dst);
 __ESBMC_HIDE:;
   char *start = dst;
   size_t end = 0;
@@ -140,16 +136,15 @@ __ESBMC_HIDE:;
   return start;
 }
 
-__ESBMC_contract
-size_t strlen(const char *s)
+__ESBMC_contract size_t strlen(const char *s)
 {
-    size_t __k;
-    __ESBMC_requires(s != ((void *)0));
-    __ESBMC_requires(__ESBMC_get_object_size(s) >= 1);
-    /* result is the index of the first '\0' in s. */
-    __ESBMC_ensures(s[__ESBMC_return_value] == '\0');
-    __ESBMC_ensures(__ESBMC_forall(&__k,
-        !(__k < __ESBMC_return_value) || s[__k] != '\0'));
+  size_t __k;
+  __ESBMC_requires(s != ((void *)0));
+  __ESBMC_requires(__ESBMC_get_object_size(s) >= 1);
+  /* result is the index of the first '\0' in s. */
+  __ESBMC_ensures(s[__ESBMC_return_value] == '\0');
+  __ESBMC_ensures(
+    __ESBMC_forall(&__k, !(__k < __ESBMC_return_value) || s[__k] != '\0'));
 __ESBMC_HIDE:;
   size_t len = 0;
   size_t __j;
@@ -163,15 +158,15 @@ __ESBMC_HIDE:;
   return len;
 }
 
-__ESBMC_contract
-int strcmp(const char *p1, const char *p2)
+__ESBMC_contract int strcmp(const char *p1, const char *p2)
 {
-    __ESBMC_requires(p1 != ((void *)0));
-    __ESBMC_requires(p2 != ((void *)0));
-    __ESBMC_requires(__ESBMC_get_object_size(p1) >= 1);
-    __ESBMC_requires(__ESBMC_get_object_size(p2) >= 1);
-    __ESBMC_ensures(__ESBMC_return_value == 0
-        || __ESBMC_return_value < 0 || __ESBMC_return_value > 0);
+  __ESBMC_requires(p1 != ((void *)0));
+  __ESBMC_requires(p2 != ((void *)0));
+  __ESBMC_requires(__ESBMC_get_object_size(p1) >= 1);
+  __ESBMC_requires(__ESBMC_get_object_size(p2) >= 1);
+  __ESBMC_ensures(
+    __ESBMC_return_value == 0 || __ESBMC_return_value < 0 ||
+    __ESBMC_return_value > 0);
 __ESBMC_HIDE:;
   const unsigned char *s1 = (const unsigned char *)p1;
   const unsigned char *s2 = (const unsigned char *)p2;
@@ -195,15 +190,15 @@ __ESBMC_HIDE:;
   return c1 - c2;
 }
 
-__ESBMC_contract
-int strncmp(const char *s1, const char *s2, size_t n)
+__ESBMC_contract int strncmp(const char *s1, const char *s2, size_t n)
 {
-    __ESBMC_requires(s1 != ((void *)0));
-    __ESBMC_requires(s2 != ((void *)0));
-    __ESBMC_requires(__ESBMC_get_object_size(s1) >= n);
-    __ESBMC_requires(__ESBMC_get_object_size(s2) >= n);
-    __ESBMC_ensures(__ESBMC_return_value == 0
-        || __ESBMC_return_value == 1 || __ESBMC_return_value == -1);
+  __ESBMC_requires(s1 != ((void *)0));
+  __ESBMC_requires(s2 != ((void *)0));
+  __ESBMC_requires(__ESBMC_get_object_size(s1) >= n);
+  __ESBMC_requires(__ESBMC_get_object_size(s2) >= n);
+  __ESBMC_ensures(
+    __ESBMC_return_value == 0 || __ESBMC_return_value == 1 ||
+    __ESBMC_return_value == -1);
 __ESBMC_HIDE:;
   size_t i = 0;
   unsigned char ch1 = 0, ch2 = 0;
@@ -232,15 +227,15 @@ __ESBMC_HIDE:;
   return 0;
 }
 
-__ESBMC_contract
-char *strchr(const char *s, int ch)
+__ESBMC_contract char *strchr(const char *s, int ch)
 {
-    __ESBMC_requires(s != ((void *)0));
-    __ESBMC_requires(__ESBMC_get_object_size(s) >= 1);
-    /* Returns pointer into s where ch first occurs, or NULL if absent.
+  __ESBMC_requires(s != ((void *)0));
+  __ESBMC_requires(__ESBMC_get_object_size(s) >= 1);
+  /* Returns pointer into s where ch first occurs, or NULL if absent.
        (When ch == '\0', returns pointer to the terminator.) */
-    __ESBMC_ensures(__ESBMC_return_value == ((char *)0)
-        || *(char *)__ESBMC_return_value == (char)ch);
+  __ESBMC_ensures(
+    __ESBMC_return_value == ((char *)0) ||
+    *(char *)__ESBMC_return_value == (char)ch);
 __ESBMC_HIDE:;
   size_t i = 0;
   size_t __j;
@@ -256,14 +251,14 @@ __ESBMC_HIDE:;
   return ((char *)0);
 }
 
-__ESBMC_contract
-char *strrchr(const char *s, int c)
+__ESBMC_contract char *strrchr(const char *s, int c)
 {
-    __ESBMC_requires(s != ((void *)0));
-    __ESBMC_requires(__ESBMC_get_object_size(s) >= 1);
-    /* Returns pointer to the last occurrence of c in s, or NULL. */
-    __ESBMC_ensures(__ESBMC_return_value == ((char *)0)
-        || *(char *)__ESBMC_return_value == (char)c);
+  __ESBMC_requires(s != ((void *)0));
+  __ESBMC_requires(__ESBMC_get_object_size(s) >= 1);
+  /* Returns pointer to the last occurrence of c in s, or NULL. */
+  __ESBMC_ensures(
+    __ESBMC_return_value == ((char *)0) ||
+    *(char *)__ESBMC_return_value == (char)c);
 __ESBMC_HIDE:;
   const char *found, *p;
 
@@ -290,13 +285,12 @@ __ESBMC_HIDE:;
   return (char *)found;
 }
 
-__ESBMC_contract
-size_t strspn(const char *s, const char *accept)
+__ESBMC_contract size_t strspn(const char *s, const char *accept)
 {
-    __ESBMC_requires(s != ((void *)0));
-    __ESBMC_requires(accept != ((void *)0));
-    __ESBMC_requires(__ESBMC_get_object_size(s) >= 1);
-    __ESBMC_requires(__ESBMC_get_object_size(accept) >= 1);
+  __ESBMC_requires(s != ((void *)0));
+  __ESBMC_requires(accept != ((void *)0));
+  __ESBMC_requires(__ESBMC_get_object_size(s) >= 1);
+  __ESBMC_requires(__ESBMC_get_object_size(accept) >= 1);
 __ESBMC_HIDE:;
   const char *p;
   const char *a;
@@ -320,13 +314,12 @@ __ESBMC_HIDE:;
   return count;
 }
 
-__ESBMC_contract
-size_t strcspn(const char *s, const char *reject)
+__ESBMC_contract size_t strcspn(const char *s, const char *reject)
 {
-    __ESBMC_requires(s != ((void *)0));
-    __ESBMC_requires(reject != ((void *)0));
-    __ESBMC_requires(__ESBMC_get_object_size(s) >= 1);
-    __ESBMC_requires(__ESBMC_get_object_size(reject) >= 1);
+  __ESBMC_requires(s != ((void *)0));
+  __ESBMC_requires(reject != ((void *)0));
+  __ESBMC_requires(__ESBMC_get_object_size(s) >= 1);
+  __ESBMC_requires(__ESBMC_get_object_size(reject) >= 1);
 __ESBMC_HIDE:;
   size_t count = 0;
 
@@ -341,13 +334,12 @@ __ESBMC_HIDE:;
   return count;
 }
 
-__ESBMC_contract
-char *strpbrk(const char *s, const char *accept)
+__ESBMC_contract char *strpbrk(const char *s, const char *accept)
 {
-    __ESBMC_requires(s != ((void *)0));
-    __ESBMC_requires(accept != ((void *)0));
-    __ESBMC_requires(__ESBMC_get_object_size(s) >= 1);
-    __ESBMC_requires(__ESBMC_get_object_size(accept) >= 1);
+  __ESBMC_requires(s != ((void *)0));
+  __ESBMC_requires(accept != ((void *)0));
+  __ESBMC_requires(__ESBMC_get_object_size(s) >= 1);
+  __ESBMC_requires(__ESBMC_get_object_size(accept) >= 1);
 __ESBMC_HIDE:;
   __ESBMC_unroll(9);
   // __contractor_loop: strpbrk:0
@@ -365,13 +357,12 @@ __ESBMC_HIDE:;
   return ((char *)0);
 }
 
-__ESBMC_contract
-char *strstr(const char *str1, const char *str2)
+__ESBMC_contract char *strstr(const char *str1, const char *str2)
 {
-    __ESBMC_requires(str1 != ((void *)0));
-    __ESBMC_requires(str2 != ((void *)0));
-    __ESBMC_requires(__ESBMC_get_object_size(str1) >= 1);
-    __ESBMC_requires(__ESBMC_get_object_size(str2) >= 1);
+  __ESBMC_requires(str1 != ((void *)0));
+  __ESBMC_requires(str2 != ((void *)0));
+  __ESBMC_requires(__ESBMC_get_object_size(str1) >= 1);
+  __ESBMC_requires(__ESBMC_get_object_size(str2) >= 1);
 __ESBMC_HIDE:;
   char *cp = (char *)str1;
   char *s1, *s2;
@@ -414,12 +405,11 @@ __ESBMC_HIDE:;
   return str;
 }
 
-__ESBMC_contract
-char *strdup(const char *str)
+__ESBMC_contract char *strdup(const char *str)
 {
-    __ESBMC_requires(str != ((void *)0));
-    __ESBMC_requires(__ESBMC_get_object_size(str) >= 1);
-    /* Returns either NULL (alloc failure) or a pointer to a heap copy. */
+  __ESBMC_requires(str != ((void *)0));
+  __ESBMC_requires(__ESBMC_get_object_size(str) >= 1);
+  /* Returns either NULL (alloc failure) or a pointer to a heap copy. */
 __ESBMC_HIDE:;
   size_t bufsz;
   bufsz = (strlen(str) + 1);
@@ -448,23 +438,25 @@ __ESBMC_HIDE:;
   return dst;
 }
 
-__ESBMC_contract
-void *memcpy(void *dst, const void *src, size_t n)
+__ESBMC_contract void *memcpy(void *dst, const void *src, size_t n)
 {
-    size_t __i;
-    __ESBMC_requires(dst != ((void *)0));
-    __ESBMC_requires(src != ((void *)0));
-    __ESBMC_requires(__ESBMC_get_object_size(dst) >= n);
-    __ESBMC_requires(__ESBMC_get_object_size(src) >= n);
-    /* glibc says memcpy is UB when [dst, dst+n) and [src, src+n) overlap.
+  size_t __i;
+  __ESBMC_requires(dst != ((void *)0));
+  __ESBMC_requires(src != ((void *)0));
+  __ESBMC_requires(__ESBMC_get_object_size(dst) >= n);
+  __ESBMC_requires(__ESBMC_get_object_size(src) >= n);
+  /* glibc says memcpy is UB when [dst, dst+n) and [src, src+n) overlap.
        Two pointers don't overlap iff they point to different objects, or
        (within the same object) one range ends before the other begins. */
-    __ESBMC_requires(__ESBMC_POINTER_OBJECT(dst) != __ESBMC_POINTER_OBJECT(src)
-        || __ESBMC_POINTER_OFFSET(dst) + n <= __ESBMC_POINTER_OFFSET(src)
-        || __ESBMC_POINTER_OFFSET(src) + n <= __ESBMC_POINTER_OFFSET(dst));
-    __ESBMC_ensures(__ESBMC_return_value == dst);
-    __ESBMC_ensures(__ESBMC_forall(&__i,
-        !(__i < n) || ((unsigned char *)dst)[__i] == ((const unsigned char *)src)[__i]));
+  __ESBMC_requires(
+    __ESBMC_POINTER_OBJECT(dst) != __ESBMC_POINTER_OBJECT(src) ||
+    __ESBMC_POINTER_OFFSET(dst) + n <= __ESBMC_POINTER_OFFSET(src) ||
+    __ESBMC_POINTER_OFFSET(src) + n <= __ESBMC_POINTER_OFFSET(dst));
+  __ESBMC_ensures(__ESBMC_return_value == dst);
+  __ESBMC_ensures(__ESBMC_forall(
+    &__i,
+    !(__i < n) ||
+      ((unsigned char *)dst)[__i] == ((const unsigned char *)src)[__i]));
 __ESBMC_HIDE:;
   void *hax = &__memcpy_impl;
   (void)hax;
@@ -485,36 +477,35 @@ __ESBMC_HIDE:;
   return s;
 }
 
-__ESBMC_contract
-void *memset(void *s, int c, size_t n)
+__ESBMC_contract void *memset(void *s, int c, size_t n)
 {
-    size_t __i;
-    __ESBMC_requires(s != ((void *)0));
-    __ESBMC_requires(__ESBMC_get_object_size(s) >= n);
-    __ESBMC_ensures(__ESBMC_return_value == s);
-    __ESBMC_ensures(__ESBMC_forall(&__i,
-        !(__i < n) || ((unsigned char *)s)[__i] == (unsigned char)c));
+  size_t __i;
+  __ESBMC_requires(s != ((void *)0));
+  __ESBMC_requires(__ESBMC_get_object_size(s) >= n);
+  __ESBMC_ensures(__ESBMC_return_value == s);
+  __ESBMC_ensures(__ESBMC_forall(
+    &__i, !(__i < n) || ((unsigned char *)s)[__i] == (unsigned char)c));
 __ESBMC_HIDE:;
   void *hax = &__memset_impl;
   (void)hax;
   return __ESBMC_memset(s, c, n);
 }
 
-__ESBMC_contract
-void *memmove(void *dest, const void *src, size_t n)
+__ESBMC_contract void *memmove(void *dest, const void *src, size_t n)
 {
-    size_t __i;
-    __ESBMC_requires(dest != ((void *)0));
-    __ESBMC_requires(src != ((void *)0));
-    __ESBMC_requires(__ESBMC_get_object_size(dest) >= n);
-    __ESBMC_requires(__ESBMC_get_object_size(src) >= n);
-    __ESBMC_ensures(__ESBMC_return_value == dest);
-    /* memmove explicitly allows overlap, so the post-call src bytes may
+  size_t __i;
+  __ESBMC_requires(dest != ((void *)0));
+  __ESBMC_requires(src != ((void *)0));
+  __ESBMC_requires(__ESBMC_get_object_size(dest) >= n);
+  __ESBMC_requires(__ESBMC_get_object_size(src) >= n);
+  __ESBMC_ensures(__ESBMC_return_value == dest);
+  /* memmove explicitly allows overlap, so the post-call src bytes may
        differ from the pre-call values; the spec is "dest[i] equals the
        value src[i] held at function entry". */
-    __ESBMC_ensures(__ESBMC_forall(&__i,
-        !(__i < n) || ((unsigned char *)dest)[__i]
-                      == __ESBMC_old(((const unsigned char *)src)[__i])));
+  __ESBMC_ensures(__ESBMC_forall(
+    &__i,
+    !(__i < n) || ((unsigned char *)dest)[__i] ==
+                    __ESBMC_old(((const unsigned char *)src)[__i])));
 __ESBMC_HIDE:;
   char *cdest = dest;
   const char *csrc = src;
@@ -552,23 +543,26 @@ __ESBMC_HIDE:;
   return dest;
 }
 
-__ESBMC_contract
-int memcmp(const void *s1, const void *s2, size_t n)
+__ESBMC_contract int memcmp(const void *s1, const void *s2, size_t n)
 {
-    size_t __i;
-    __ESBMC_requires(s1 != ((void *)0));
-    __ESBMC_requires(s2 != ((void *)0));
-    __ESBMC_requires(__ESBMC_get_object_size(s1) >= n);
-    __ESBMC_requires(__ESBMC_get_object_size(s2) >= n);
-    /* result == 0 iff all n bytes are equal (lexicographic equality). */
-    __ESBMC_ensures(!__ESBMC_forall(&__i,
-        !(__i < n) || ((const unsigned char *)s1)[__i]
-                      == ((const unsigned char *)s2)[__i])
-        || __ESBMC_return_value == 0);
-    __ESBMC_ensures(__ESBMC_return_value != 0
-        || __ESBMC_forall(&__i,
-        !(__i < n) || ((const unsigned char *)s1)[__i]
-                      == ((const unsigned char *)s2)[__i]));
+  size_t __i;
+  __ESBMC_requires(s1 != ((void *)0));
+  __ESBMC_requires(s2 != ((void *)0));
+  __ESBMC_requires(__ESBMC_get_object_size(s1) >= n);
+  __ESBMC_requires(__ESBMC_get_object_size(s2) >= n);
+  /* result == 0 iff all n bytes are equal (lexicographic equality). */
+  __ESBMC_ensures(
+    !__ESBMC_forall(
+      &__i,
+      !(__i < n) ||
+        ((const unsigned char *)s1)[__i] == ((const unsigned char *)s2)[__i]) ||
+    __ESBMC_return_value == 0);
+  __ESBMC_ensures(
+    __ESBMC_return_value != 0 ||
+    __ESBMC_forall(
+      &__i,
+      !(__i < n) ||
+        ((const unsigned char *)s1)[__i] == ((const unsigned char *)s2)[__i]));
 __ESBMC_HIDE:;
   const unsigned char *sc1 = s1, *sc2 = s2;
   size_t i = 0;
@@ -590,19 +584,22 @@ __ESBMC_HIDE:;
   return 0;
 }
 
-__ESBMC_contract
-void *memchr(const void *buf, int ch, size_t n)
+__ESBMC_contract void *memchr(const void *buf, int ch, size_t n)
 {
-    size_t __i;
-    __ESBMC_requires(buf != ((void *)0));
-    __ESBMC_requires(__ESBMC_get_object_size(buf) >= n);
-    /* result == NULL iff no byte in [0, n) equals (unsigned char)ch. */
-    __ESBMC_ensures(!__ESBMC_forall(&__i,
-        !(__i < n) || ((const unsigned char *)buf)[__i] != (unsigned char)ch)
-        || __ESBMC_return_value == ((void *)0));
-    __ESBMC_ensures(__ESBMC_return_value != ((void *)0)
-        || __ESBMC_forall(&__i,
-        !(__i < n) || ((const unsigned char *)buf)[__i] != (unsigned char)ch));
+  size_t __i;
+  __ESBMC_requires(buf != ((void *)0));
+  __ESBMC_requires(__ESBMC_get_object_size(buf) >= n);
+  /* result == NULL iff no byte in [0, n) equals (unsigned char)ch. */
+  __ESBMC_ensures(
+    !__ESBMC_forall(
+      &__i,
+      !(__i < n) || ((const unsigned char *)buf)[__i] != (unsigned char)ch) ||
+    __ESBMC_return_value == ((void *)0));
+  __ESBMC_ensures(
+    __ESBMC_return_value != ((void *)0) ||
+    __ESBMC_forall(
+      &__i,
+      !(__i < n) || ((const unsigned char *)buf)[__i] != (unsigned char)ch));
 __ESBMC_HIDE:;
   const unsigned char *p = (const unsigned char *)buf;
   size_t i = 0;
