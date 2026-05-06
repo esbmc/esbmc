@@ -2,7 +2,7 @@ CORE
 main.c
 --all-witnesses --unwind 51 --no-slice
 ^VERIFICATION FAILED$
-\[Counterexamples – 2 witnesses\]
+\[Counterexamples - 2 witnesses\]
 Inputs : \[0\] = -1
 Inputs : \[0\] = 1
 UNSAT after 2 witnesses

@@ -2,5 +2,5 @@ CORE
 main.c
 --all-witnesses
 ^VERIFICATION FAILED$
-\[Counterexamples – 5 witnesses\]
+\[Counterexamples - 5 witnesses\]
 UNSAT after 5 witnesses

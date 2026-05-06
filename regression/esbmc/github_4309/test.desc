@@ -2,7 +2,7 @@ CORE
 main.c
 --all-witnesses
 ^VERIFICATION FAILED$
-\[Counterexamples – 2 witnesses\]
+\[Counterexamples - 2 witnesses\]
 Witness 1 of 2
 Witness 2 of 2
 Inputs : \[0\] = -1

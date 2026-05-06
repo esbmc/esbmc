@@ -510,7 +510,12 @@ void bmct::report_multi_property_trace(
   // each witness is still emitted unless --compact-trace is on, but they
   // are clearly separated and labelled.
   std::ostringstream oss;
-  oss << "\n[Counterexamples – " << witnesses.size() << " witnesses]\n\n";
+  // ASCII-only header: en-dash and similar non-ASCII glyphs get
+  // mojibake'd on Windows' default cp1252 console, breaking regression
+  // matching and reader output. The box-drawing glyphs further down
+  // are cosmetic and only appear at N>1; ASCII-fallback there is
+  // tracked separately (#4311).
+  oss << "\n[Counterexamples - " << witnesses.size() << " witnesses]\n\n";
   for (size_t i = 0; i < witnesses.size(); ++i)
   {
     const witness_recordt &w = witnesses[i];
