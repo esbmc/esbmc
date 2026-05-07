@@ -448,8 +448,7 @@ void goto_symex_statet::fixup_renamed_type(
     }
     catch (const type2t::symbolic_type_excp &)
     {
-      if (origsubtype != newsubtype)
-        expr = typecast2tc(orig_type, expr);
+      expr = typecast2tc(orig_type, expr);
       return;
     }
 
