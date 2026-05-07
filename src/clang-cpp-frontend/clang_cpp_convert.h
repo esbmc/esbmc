@@ -540,15 +540,7 @@ protected:
    */
   void pre_register_inherited_vtables(const clang::CXXRecordDecl &cxxrd);
 
-  /*
-   * Override the TU walk to force-translate std::bad_cast (if <typeinfo>
-   * is in the AST) before any user code is converted. This makes
-   * tag-std::bad_cast available regardless of where the dynamic_cast<T&>
-   * site sits relative to <typeinfo>'s namespace iteration — without
-   * paying any cost per dynamic_cast or per CXXRecordDecl.
-   */
   bool convert_top_level_decl() override;
-  void pretranslate_bad_cast();
 
   /*
    * Methods for resolving a clang::MemberExpr to virtual/overriding method

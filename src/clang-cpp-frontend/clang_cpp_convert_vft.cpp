@@ -38,47 +38,10 @@ CC_DIAGNOSTIC_POP()
 #include <functional>
 #include <optional>
 
-void clang_cpp_convertert::pretranslate_bad_cast()
-{
-  // Single targeted Clang name-lookup (not an AST walk) to find
-  // std::bad_cast's CXXRecordDecl and force-translate it via
-  // get_struct_union_class. Run once per TU before any user code is
-  // visited, so build_dynamic_cast<T&>'s ns.lookup hits regardless of
-  // include order or where in the AST the dynamic_cast site sits
-  // relative to <typeinfo>'s namespace iteration. Cost: O(1) per TU.
-  // No-op if <typeinfo> wasn't included (the cast then degrades to
-  // assert(match) — see the reference-form arm in build_dynamic_cast).
-  if (ns.lookup("tag-std::bad_cast"))
-    return;
-
-  auto &idents = ASTContext->Idents;
-  auto std_results = ASTContext->getTranslationUnitDecl()->lookup(
-    clang::DeclarationName(&idents.get("std")));
-  for (auto *d : std_results)
-  {
-    auto *ns_decl = clang::dyn_cast<clang::NamespaceDecl>(d);
-    if (!ns_decl)
-      continue;
-    auto bc_results =
-      ns_decl->lookup(clang::DeclarationName(&idents.get("bad_cast")));
-    for (auto *bc : bc_results)
-    {
-      auto *rd = clang::dyn_cast<clang::CXXRecordDecl>(bc);
-      if (!rd || !rd->hasDefinition())
-        continue;
-      get_struct_union_class(*rd);
-      return;
-    }
-  }
-}
-
 bool clang_cpp_convertert::convert_top_level_decl()
 {
   if (AST)
-  {
     ASTContext = &AST->getASTContext();
-    pretranslate_bad_cast();
-  }
   return clang_c_convertert::convert_top_level_decl();
 }
 
@@ -1059,14 +1022,9 @@ bool clang_cpp_convertert::build_dynamic_cast(
     return match;
   };
 
-  // Reference form: throw std::bad_cast on no-match (the standard
-  // requires this; the catch (bad_cast&) arm of any try/catch then
-  // fires). std::bad_cast is force-translated once per TU at the start
-  // of convert_top_level_decl (see pretranslate_bad_cast), so a single
-  // ns.lookup here is order-independent and pays no AST-walk cost per
-  // dynamic_cast<T&> site. If the user never included <typeinfo>, the
-  // pretranslate is a no-op and we fall back to assert(match) so a
-  // mismatched cast still fails loudly instead of silently succeeding.
+  // Reference form: if the vptr check fails, call __ESBMC_throw_bad_cast()
+  // which symex resolves to a std::bad_cast throw at verification time.
+  // This decouples the frontend from <typeinfo> inclusion order entirely.
   if (is_reference)
   {
     // Clang strips the reference from cast.getType(), so target_type is
@@ -1080,25 +1038,19 @@ bool clang_cpp_convertert::build_dynamic_cast(
 
     exprt match = arms.empty() ? exprt(false_exprt()) : vptr_match_any();
 
-    code_blockt block;
-    if (const symbolt *bad_cast_sym = ns.lookup("tag-std::bad_cast"))
-    {
-      typet bad_cast_type = symbol_typet(bad_cast_sym->id);
-      side_effect_exprt throw_op("cpp-throw", bad_cast_type);
-      throw_op.copy_to_operands(side_effect_exprt("nondet", bad_cast_type));
+    code_typet throw_func_type;
+    throw_func_type.return_type() = empty_typet();
+    symbol_exprt throw_func("c:@F@__ESBMC_throw_bad_cast", throw_func_type);
 
-      code_ifthenelset if_throw;
-      if_throw.cond() = not_exprt(match);
-      if_throw.then_case() = code_expressiont(throw_op);
-      block.copy_to_operands(if_throw);
-    }
-    else
-    {
-      code_assertt assert_match(match);
-      assert_match.location().comment(
-        "dynamic_cast<T&> failed; include <typeinfo> for std::bad_cast");
-      block.copy_to_operands(assert_match);
-    }
+    code_function_callt throw_call;
+    throw_call.function() = throw_func;
+
+    code_ifthenelset if_throw;
+    if_throw.cond() = not_exprt(match);
+    if_throw.then_case() = throw_call;
+
+    code_blockt block;
+    block.copy_to_operands(if_throw);
     block.copy_to_operands(code_expressiont(cast_value));
 
     side_effect_exprt stmt_expr("statement_expression", ref_type);
