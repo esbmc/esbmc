@@ -434,19 +434,67 @@ void goto_coveraget::k_path_coverage()
 
         for (size_t mask = 0; mask < pcombos; ++mask)
         {
-          // Build the prefix witness for this direction mask.
+          // Build the prefix witness for this direction mask, while
+          // tracking (stored-guard, polarity) pairs so we can drop mask
+          // combinations that are unsat by construction.
+          //
+          // ESBMC's `simplify` recognises 2-term `p ∧ ¬p` but does not
+          // fold chained forms like `p ∧ q ∧ ¬p` to FALSE — it would
+          // instrument a tautological `assert(¬(p ∧ q ∧ ¬p))` that can
+          // never be falsified, permanently inflating the denominator.
+          // Catching this at construction time is sound (we only drop
+          // witnesses we can prove unsat by syntactic structure) and
+          // preserves the single-term behaviour of the simplifier.
+          //
+          // Phase-1 limitation: this only catches *syntactic* same-atom
+          // contradictions (same stored guard with opposing polarities).
+          // Semantically contradictory pairs across different stored
+          // expressions — e.g. `(x == 1) ∧ (x == 2)` from successive
+          // switch-case branches — require comparison-domain reasoning
+          // and are out of scope for this PR.
           expr2tc pwit;
+          std::vector<std::pair<expr2tc, bool>> atoms;
+          atoms.reserve(pdepth);
+          bool contradictory = false;
           for (size_t i = 0; i < pdepth; ++i)
           {
-            expr2tc d =
-              (mask & (size_t(1) << i)) ? active[i] : gen_not_expr(active[i]);
+            const bool pol = (mask & (size_t(1) << i)) != 0;
+            for (const auto &[h, p] : atoms)
+            {
+              if (h == active[i] && p != pol)
+              {
+                contradictory = true;
+                break;
+              }
+            }
+            if (contradictory)
+              break;
+            atoms.emplace_back(active[i], pol);
+            expr2tc d = pol ? active[i] : gen_not_expr(active[i]);
             pwit = is_nil_expr(pwit) ? d : gen_and_expr(pwit, d);
           }
+          if (contradictory)
+            continue;
 
-          // Emit one goal per current direction.
+          // Emit one goal per current direction. Skip the direction if
+          // it would contradict an atom already in the prefix.
           const expr2tc current_neg = gen_not_expr(current_guard);
-          for (const expr2tc &cdir : {current_guard, current_neg})
+          for (size_t cd = 0; cd < 2; ++cd)
           {
+            const bool cdir_pol = (cd == 0);
+            bool cdir_conflict = false;
+            for (const auto &[h, p] : atoms)
+            {
+              if (h == current_guard && p != cdir_pol)
+              {
+                cdir_conflict = true;
+                break;
+              }
+            }
+            if (cdir_conflict)
+              continue;
+
+            const expr2tc &cdir = cdir_pol ? current_guard : current_neg;
             expr2tc full = is_nil_expr(pwit) ? cdir : gen_and_expr(pwit, cdir);
             simplify(full);
 
@@ -753,7 +801,8 @@ void goto_coveraget::gen_cond_cov_assert(
   if (n == 0)
     return; // atom
 
-  auto recurse_all = [&]() {
+  auto recurse_all = [&]()
+  {
     for (std::size_t i = 0; i < n; ++i)
       gen_cond_cov_assert(*ptr->get_sub_expr(i), pre_cond, goto_program, it);
   };
@@ -908,9 +957,8 @@ expr2tc goto_coveraget::handle_single_guard(
   if (is_nil_expr(expr))
     return expr;
   const std::size_t n = expr->get_num_sub_exprs();
-  auto recurse = [this](const expr2tc &e, bool tl) {
-    return handle_single_guard(e, tl);
-  };
+  auto recurse = [this](const expr2tc &e, bool tl)
+  { return handle_single_guard(e, tl); };
 
   // --- Rule 1: Atomic expressions ---
   // If the expression has no operands (a symbol or constant),
@@ -1010,8 +1058,8 @@ void goto_coveraget::handle_operands_guard(
     {
       // we do not need to add a !=false at top level
       // e.g. return x?1:0 != return (x?1:0)!=false
-      target->Foreach_operand(
-        [this](expr2tc &op) { op = handle_single_guard(op, false); });
+      target->Foreach_operand([this](expr2tc &op)
+                              { op = handle_single_guard(op, false); });
     }
     gen_cond_cov_assert(target, pre_cond, goto_program, it);
   }
