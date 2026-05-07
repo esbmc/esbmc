@@ -425,21 +425,6 @@ void goto_symex_statet::fixup_renamed_type(
     type2tc origsubtype = orig.subtype;
     type2tc newsubtype = newtype.subtype;
 
-    // Handle symbol subtypes -- we can't rename these, because there are (some)
-    // pointers to incomplete types, that here we end up trying to get a
-    // concrete type for. Which is incorrect.
-    // So instead, if one of the subtypes is a symbol type, and it isn't
-    // identical to the other type, insert a typecast. This might lead to some
-    // needless casts.
-    if (is_symbol_type(origsubtype) || is_symbol_type(newsubtype))
-    {
-      if (origsubtype != newsubtype)
-      {
-        expr = typecast2tc(orig_type, expr);
-      }
-      return;
-    }
-
     // Cease caring about anything that points at code types: pointer arithmetic
     // applied to this is already broken.
     if (is_code_type(origsubtype) || is_code_type(newsubtype))
@@ -449,17 +434,23 @@ void goto_symex_statet::fixup_renamed_type(
       return;
 
     // Fetch the (bit) size of the pointer subtype.
+    // We can't rename pointers to incomplete types (symbol subtypes, or arrays
+    // thereof), because here we'd end up trying to get a concrete type for
+    // them, which is incorrect. If get_width() throws symbolic_type_excp,
+    // treat the subtype as unresolvable: insert a typecast when the types
+    // differ (which might lead to some needless casts) and bail out.
     unsigned int origsize, newsize;
 
-    if (is_empty_type(origsubtype))
-      origsize = 8;
-    else
-      origsize = origsubtype->get_width();
-
-    if (is_empty_type(newsubtype))
-      newsize = 8;
-    else
-      newsize = newsubtype->get_width();
+    try
+    {
+      origsize = is_empty_type(origsubtype) ? 8 : origsubtype->get_width();
+      newsize = is_empty_type(newsubtype) ? 8 : newsubtype->get_width();
+    }
+    catch (const type2t::symbolic_type_excp &)
+    {
+      expr = typecast2tc(orig_type, expr);
+      return;
+    }
 
     // If the renaming process has changed the size of the pointer subtype, this
     // will break all kinds of pointer arith; insert a cast.

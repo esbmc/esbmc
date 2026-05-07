@@ -714,6 +714,12 @@ void report_coverage(
   bool is_branch_func_cov =
     options.get_bool_option("branch-function-coverage") ||
     options.get_bool_option("branch-function-coverage-claims");
+  // `k-path-coverage` itself stores the CLI integer N; the dedicated
+  // boolean enable flag is set by parseoptions when either CLI flag is
+  // present. This avoids `get_bool_option("k-path-coverage")` returning 0
+  // (false) for valid invocations like `--k-path-coverage` (no value) or
+  // `--k-path-coverage=0` (rejected at parse time, but defensive here).
+  bool is_k_path_cov = options.get_bool_option("k-path-coverage-enabled");
 
   if (is_assert_cov)
   {
@@ -916,6 +922,24 @@ void report_coverage(
       log_result("Branch Coverage: N/A (no branches)");
   }
 
+  else if (is_k_path_cov)
+  {
+    const size_t total = goto_coveraget::total_kpath;
+    const size_t tracked_instance = reached_claims.size();
+    log_success("\n[Coverage]\n");
+    log_result("k-Path Witnesses : {}", total);
+    log_result("Reached : {}", tracked_instance);
+
+    if (options.get_bool_option("k-path-coverage-claims"))
+      for (const auto &claim : reached_claims)
+        log_status("  {}", prettify_solidity_expr(claim));
+
+    if (total != 0)
+      log_result("k-Path Coverage: {}%", tracked_instance * 100.0 / total);
+    else
+      log_result("k-Path Coverage: N/A (no k-path goals)");
+  }
+
   // Generate JSON coverage report
   if (options.get_bool_option("cov-report-json"))
   {
@@ -926,6 +950,8 @@ void report_coverage(
       cov_type = "branch";
     else if (is_branch_func_cov)
       cov_type = "branch-function";
+    else if (is_k_path_cov)
+      cov_type = "k-path";
     else if (is_cond_cov)
       cov_type = "condition";
     else if (is_assert_cov)
@@ -1636,6 +1662,11 @@ smt_convt::resultt bmct::multi_property_check(
   bool is_branch_func_cov =
     options.get_bool_option("branch-function-coverage") ||
     options.get_bool_option("branch-function-coverage-claims");
+  // "k-Path Cov" — keyed off the dedicated boolean (see line ~717
+  // comment); needed in the is_goto_cov disjunction so the
+  // claim_slicer reads the witness comment, matching the form stored
+  // in goto_coveraget::all_claims.
+  bool is_k_path_cov = options.get_bool_option("k-path-coverage-enabled");
 
   // is_vb: enable verbose output coverage info if the option "--verbosity coverage:N" is set, where N should larger than 0
   // By enabling this, we will output the coverage information when handling each instrumentation assertion.
@@ -1694,6 +1725,7 @@ smt_convt::resultt bmct::multi_property_check(
                        &is_vb,
                        &is_branch_cov,
                        &is_branch_func_cov,
+                       &is_k_path_cov,
                        &is_keep_verified,
                        &is_fail_fast,
                        &fail_fast_limit,
@@ -1711,9 +1743,18 @@ smt_convt::resultt bmct::multi_property_check(
     // Since this is just a copy, we probably don't need a lock
     symex_target_equationt local_eq = eq;
 
-    // Set up the current claim and disable slice info output
-    bool is_goto_cov =
-      is_assert_cov || is_cond_cov || is_branch_cov || is_branch_func_cov;
+    // Set up the current claim and disable slice info output.
+    // `is_goto_cov` flips claim_slicer's `claim_msg` source: in goto-cov
+    // modes the slicer reads the comment (the original witness/guard
+    // text we stored in insert_assert); otherwise it reads the negated
+    // assertion expression. k-path goals are stored the same way as
+    // branch / condition goals, so they must be in this disjunction —
+    // otherwise the claim_sig built at line ~1751 disagrees with the
+    // form in goto_coveraget::all_claims and every JSON entry shows up
+    // as uncovered even when reached_claims has the matching reached
+    // signature (PR #4330 review).
+    bool is_goto_cov = is_assert_cov || is_cond_cov || is_branch_cov ||
+                       is_branch_func_cov || is_k_path_cov;
     claim_slicer claim(i, false, is_goto_cov, ns);
     claim.run(local_eq.SSA_steps);
 

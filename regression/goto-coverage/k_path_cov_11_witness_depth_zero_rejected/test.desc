@@ -1,0 +1,4 @@
+CORE
+main.c
+--k-path-coverage=2 --k-path-witness-depth=0 --unwind 2 --no-unwinding-assertions
+^ERROR: --k-path-witness-depth requires a positive integer \(got 0\)$

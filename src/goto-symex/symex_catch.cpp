@@ -88,31 +88,12 @@ bool goto_symext::is_python_exception_subtype(
   return false;
 }
 
-bool goto_symext::symex_throw()
+bool goto_symext::symex_throw_dispatch(const expr2tc &throw_code)
 {
   irep_idt catch_name = "missing";
   const goto_programt::const_targett *catch_insn = nullptr;
-  const goto_programt::instructiont &instruction = *cur_state->source.pc;
-
-  // get the list of exceptions thrown
-  const code_cpp_throw2t &throw_ref = to_code_cpp_throw2t(instruction.code);
+  const code_cpp_throw2t &throw_ref = to_code_cpp_throw2t(throw_code);
   const std::vector<irep_idt> &exceptions_thrown = throw_ref.exception_list;
-
-  // Handle rethrows
-  if (handle_rethrow(throw_ref.operand, instruction))
-    return true;
-
-  // Save the throw
-  last_throw = const_cast<goto_programt::instructiont *>(&instruction);
-
-  // Log at debug level: the throw may be infeasible or caught; for uncaught
-  // exceptions, the error VCC is generated via claim(gen_false_expr()) below.
-  log_debug(
-    "symex",
-    "Exception thrown of type {} at file {} line {}",
-    exceptions_thrown.begin()->as_string(),
-    instruction.location.file(),
-    instruction.location.line());
 
   // We check before iterate over the throw list to save time:
   // If there is no catch, we return an error
@@ -198,12 +179,10 @@ bool goto_symext::symex_throw()
         // Skip restoration on first match (old_id_number == -1) to avoid unnecessary
         // deep copy that causes crashes on macOS with Python exceptions.
         if (old_id_number != (unsigned)-1)
-        {
           cur_state->call_stack = old_stack;
-        }
         cur_state->guard.make_true();
 
-        update_throw_target(except, c_it->second, instruction.code);
+        update_throw_target(except, c_it->second, throw_code);
         catch_insn = &c_it->second;
         catch_name = c_it->first;
       }
@@ -224,7 +203,7 @@ bool goto_symext::symex_throw()
         if (c_it != except->catch_map.end())
         {
           // Make the jump to void*
-          update_throw_target(except, c_it->second, instruction.code);
+          update_throw_target(except, c_it->second, throw_code);
           catch_insn = &c_it->second;
           catch_name = c_it->first;
         }
@@ -236,7 +215,7 @@ bool goto_symext::symex_throw()
 
         if (c_it != except->catch_map.end())
         {
-          update_throw_target(except, c_it->second, instruction.code, true);
+          update_throw_target(except, c_it->second, throw_code, true);
           catch_insn = &c_it->second;
           catch_name = c_it->first;
         }
@@ -270,6 +249,76 @@ bool goto_symext::symex_throw()
     (*catch_insn)->location.line());
 
   return true;
+}
+
+bool goto_symext::symex_throw()
+{
+  const goto_programt::instructiont &instruction = *cur_state->source.pc;
+  const code_cpp_throw2t &throw_ref = to_code_cpp_throw2t(instruction.code);
+
+  if (handle_rethrow(throw_ref.operand, instruction))
+    return true;
+
+  last_throw = const_cast<goto_programt::instructiont *>(&instruction);
+
+  log_debug(
+    "symex",
+    "Exception thrown of type {} at file {} line {}",
+    throw_ref.exception_list.begin()->as_string(),
+    instruction.location.file(),
+    instruction.location.line());
+
+  return symex_throw_dispatch(instruction.code);
+}
+
+bool goto_symext::symex_throw_bad_cast()
+{
+  // Reuse the previously constructed instruction if available.
+  if (!bad_cast_throw.code)
+  {
+    const symbolt *bad_cast_sym = ns.lookup("tag-std::bad_cast");
+    if (!bad_cast_sym)
+    {
+      // <typeinfo> not included — emit a hard failure directly.
+      claim(
+        gen_false_expr(),
+        "dynamic_cast<T&> failed; include <typeinfo> for std::bad_cast");
+      return true;
+    }
+
+    // Build exception_list: concrete type + all direct base classes,
+    // stripping the "tag-" prefix to match the catch-side convention.
+    std::vector<irep_idt> exception_list;
+    const std::string type_id = id2string(bad_cast_sym->id);
+    exception_list.emplace_back(type_id.substr(4)); // "std::bad_cast"
+    if (bad_cast_sym->type.id() == "struct")
+    {
+      const struct_typet &st = to_struct_type(bad_cast_sym->type);
+      const exprt &bases = static_cast<const exprt &>(st.find("bases"));
+      if (bases.is_not_nil())
+        for (const auto &base : bases.get_sub())
+          exception_list.emplace_back(id2string(base.id()).substr(4));
+    }
+
+    // Build a nondet operand of bad_cast type for the thrown object.
+    type2tc bad_cast_type = migrate_type(bad_cast_sym->type);
+    expr2tc nondet_op = sideeffect2tc(
+      bad_cast_type,
+      expr2tc(),
+      expr2tc(),
+      std::vector<expr2tc>(),
+      type2tc(),
+      sideeffect2t::nondet);
+    replace_nondet(nondet_op);
+
+    bad_cast_throw.make_throw();
+    bad_cast_throw.code = code_cpp_throw2tc(nondet_op, exception_list);
+    last_throw = &bad_cast_throw;
+  }
+
+  log_debug("symex", "dynamic_cast<T&> failure: throwing std::bad_cast");
+
+  return symex_throw_dispatch(bad_cast_throw.code);
 }
 
 bool goto_symext::terminate_handler()

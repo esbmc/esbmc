@@ -1,0 +1,4 @@
+CORE
+main.c
+--k-path-coverage=31 --unwind 2 --no-unwinding-assertions
+^ERROR: --k-path-coverage=N requires 1 <= N <= 30 \(got 31\)$

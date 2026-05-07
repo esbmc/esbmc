@@ -24,6 +24,7 @@ extern "C"
 #include <util/filesystem.h>
 #include <csignal>
 #include <cstdlib>
+#include <limits>
 #include <util/expr_util.h>
 #include <iostream>
 #include <goto-programs/add_race_assertions.h>
@@ -2098,7 +2099,9 @@ bool esbmc_parseoptionst::process_goto_program(
                   cmdline.isset("branch-coverage") ||
                   cmdline.isset("branch-coverage-claims") ||
                   cmdline.isset("branch-function-coverage") ||
-                  cmdline.isset("branch-function-coverage-claims");
+                  cmdline.isset("branch-function-coverage-claims") ||
+                  cmdline.isset("k-path-coverage") ||
+                  cmdline.isset("k-path-coverage-claims");
 
     // For coverage mode, treat extra input files (cmdline.args[1:]) as include
     // files so that the coverage location_pool covers all input sources.
@@ -2441,6 +2444,112 @@ bool esbmc_parseoptionst::process_goto_program(
       goto_coveraget tmp(ns, goto_functions, filename);
       tmp.cov_assume_asserts = cmdline.isset("cov-assume-asserts");
       tmp.branch_function_coverage();
+    }
+
+    if (
+      cmdline.isset("k-path-coverage") ||
+      cmdline.isset("k-path-coverage-claims"))
+    {
+      // Hard cap on the prefix depth. Goal count per branch grows as
+      // 2^(N-1), and (N-1) >= 64 would overflow size_t in `1 << pdepth`.
+      // 30 leaves 2^29 goals/branch — already far above any reasonable
+      // --k-path-max-goals — and gives a comfortable safety margin from
+      // the size_t shift limit. Defense-in-depth: also enforced inside
+      // goto_coveraget::k_path_coverage().
+      static constexpr int K_PATH_N_MAX = 30;
+
+      options.set_option("base-case", true);
+      options.set_option("multi-property", true);
+      options.set_option("keep-verified-claims", false);
+      options.set_option("no-pointer-check", true);
+      // Separate boolean enable flag in the option_map. Required because
+      // `optionst::get_bool_option(name)` is `atoi(value)`, so storing the
+      // CLI int value of `--k-path-coverage` (which is `0` for the no-arg
+      // case under boost's implicit_value, or any user-supplied integer)
+      // would silently mis-report the feature as disabled in bmc.cpp.
+      options.set_option("k-path-coverage-enabled", true);
+
+      if (cmdline.isset("unwind"))
+        options.set_option("no-unwinding-assertions", true);
+
+      std::string filename = cmdline.args[0];
+      goto_coveraget tmp(ns, goto_functions, filename);
+      if (cmdline.isset("function"))
+        tmp.set_target(cmdline.getval("function"));
+      tmp.cov_assume_asserts = cmdline.isset("cov-assume-asserts");
+
+      // Resolve N: explicit --k-path-coverage=N > --unwind > fallback 4.
+      // The CLI option uses implicit_value(INT_MIN), so `--k-path-coverage`
+      // without `=N` parses as INT_MIN (the "no value" sentinel) and falls
+      // through to --unwind / 4. Any other non-positive value (incl.
+      // explicit `=0` or `=-1`) is rejected — silently falling through
+      // would defeat the user's intent.
+      const int K_PATH_N_SENTINEL = std::numeric_limits<int>::min();
+      int n_arg = K_PATH_N_SENTINEL;
+      if (cmdline.isset("k-path-coverage"))
+        n_arg = atoi(cmdline.getval("k-path-coverage"));
+      if (n_arg > 0)
+      {
+        if (n_arg > K_PATH_N_MAX)
+        {
+          log_error(
+            "--k-path-coverage=N requires 1 <= N <= {} (got {})",
+            K_PATH_N_MAX,
+            n_arg);
+          return true;
+        }
+        tmp.k_path_n = static_cast<size_t>(n_arg);
+      }
+      else if (n_arg != K_PATH_N_SENTINEL)
+      {
+        // Explicit non-positive value — reject rather than silently
+        // falling back.
+        log_error(
+          "--k-path-coverage=N requires 1 <= N <= {} (got {})",
+          K_PATH_N_MAX,
+          n_arg);
+        return true;
+      }
+      else if (cmdline.isset("unwind"))
+      {
+        int u = atoi(cmdline.getval("unwind"));
+        if (u <= 0 || u > K_PATH_N_MAX)
+        {
+          log_error(
+            "--k-path-coverage cannot derive N from --unwind={} (must be "
+            "in 1..{}); pass --k-path-coverage=N explicitly",
+            u,
+            K_PATH_N_MAX);
+          return true;
+        }
+        tmp.k_path_n = static_cast<size_t>(u);
+      }
+      else
+      {
+        tmp.k_path_n = 4;
+        log_status(
+          "--k-path-coverage: no N or --unwind specified; defaulting to "
+          "N=4");
+      }
+
+      auto read_positive = [&](const char *flag, size_t &dst) -> bool {
+        if (!cmdline.isset(flag))
+          return true;
+        int v = atoi(cmdline.getval(flag));
+        if (v <= 0)
+        {
+          log_error("--{} requires a positive integer (got {})", flag, v);
+          return false;
+        }
+        dst = static_cast<size_t>(v);
+        return true;
+      };
+      if (!read_positive("k-path-witness-depth", tmp.k_path_witness_depth))
+        return true;
+      if (!read_positive("k-path-max-goals", tmp.k_path_max_goals))
+        return true;
+
+      tmp.k_path_coverage();
     }
 
     if (cmdline.isset("negating-property"))
