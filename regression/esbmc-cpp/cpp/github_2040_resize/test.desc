@@ -1,0 +1,4 @@
+CORE
+main.cpp
+--smt-symex-guard
+^VERIFICATION SUCCESSFUL$

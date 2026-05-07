@@ -368,8 +368,10 @@ public:
   {
     buf = static_cast<T *>(malloc(sizeof(T) * n));
     __ESBMC_assume(buf);
-    for (int i = 0; i < n; i++)
-      buf[i] = T();
+    // For default-constructible T, value-initialise per [vector.cons]; for
+    // T with only user-provided non-default constructors, leave slots nondet
+    // so the size-only ctor still parses (issue #2040).
+    __value_init_range(0, n);
     _size = n;
     _capacity = n;
   }
@@ -605,10 +607,10 @@ public:
       _capacity = sz;
     }
 
-    // Initialize new elements with default values
-    for (unsigned int n = _size; n < sz; n++)
-      buf[n] = T();
-
+    // For default-constructible T, value-initialise per [vector.capacity];
+    // for T with only user-provided non-default constructors, leave new
+    // slots nondet so resize(n) still parses (issue #2040).
+    __value_init_range(_size, sz);
     _size = sz;
     return;
   }
@@ -924,6 +926,23 @@ private:
   T null_value()
   {
     return T();
+  }
+
+  // Value-initialise slots [lo, hi) when T is default-constructible.
+  // The non-default-constructible overload is selected for types whose
+  // only constructor is user-provided (issue #2040), and is a no-op so
+  // the surrounding ctor/resize body still instantiates.
+  template <typename U = T>
+  typename std::enable_if<std::is_constructible<U>::value>::type
+  __value_init_range(size_type lo, size_type hi)
+  {
+    for (size_type i = lo; i < hi; ++i)
+      buf[i] = U();
+  }
+  template <typename U = T>
+  typename std::enable_if<!std::is_constructible<U>::value>::type
+  __value_init_range(size_type, size_type)
+  {
   }
 };
 
