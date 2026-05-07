@@ -2,6 +2,7 @@
 #include <irep2/irep2_utils.h>
 
 #include <algorithm>
+#include <cassert>
 #include <deque>
 #include <vector>
 
@@ -338,9 +339,17 @@ void goto_coveraget::k_path_coverage()
   log_progress("Adding k-path coverage assertions (n={})...", k_path_n);
   total_kpath = 0;
 
-  if (k_path_n == 0)
+  // Defense-in-depth: parseoptions rejects N==0 and N>30 at the CLI, but
+  // re-check here in case the method is invoked via another code path.
+  // 30 keeps `1 << pdepth` well below the size_t shift limit and below
+  // any reasonable goal cap.
+  static constexpr size_t K_PATH_N_MAX = 30;
+  if (k_path_n == 0 || k_path_n > K_PATH_N_MAX)
   {
-    log_error("--k-path-coverage requires N >= 1");
+    log_error(
+      "--k-path-coverage requires 1 <= N <= {} (got {})",
+      K_PATH_N_MAX,
+      k_path_n);
     abort();
   }
 
@@ -396,17 +405,22 @@ void goto_coveraget::k_path_coverage()
           target_num = it->target_number;
 
         const expr2tc current_guard = it->guard;
+        // pdepth is bounded by k_path_n - 1 <= K_PATH_N_MAX - 1 = 29
+        // (enforced above), so the shift below cannot overflow. Assert as
+        // a tripwire — silent overflow would be unsound.
         const size_t pdepth = std::min(prefix.size(), k_path_n - 1);
-        const size_t pcombos = pdepth >= 64 ? 0 : (size_t(1) << pdepth);
+        assert(pdepth < 30 && "pdepth bounded by parseoptions cap");
+        const size_t pcombos = size_t(1) << pdepth;
         const size_t branch_goals = 2 * pcombos;
 
-        if (function_goals + branch_goals > k_path_max_goals)
+        if (
+          branch_goals > k_path_max_goals ||
+          function_goals > k_path_max_goals - branch_goals)
         {
           log_error(
             "k-path coverage: per-function goal count would exceed "
             "--k-path-max-goals={} in '{}'. Lower --k-path-coverage=N "
-            "(currently {}) or use --branch-coverage / "
-            "--prime-path-coverage (Phase 2).",
+            "(currently {}) or raise --k-path-max-goals.",
             k_path_max_goals,
             id2string(f_it->first),
             k_path_n);

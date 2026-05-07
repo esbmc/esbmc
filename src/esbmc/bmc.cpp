@@ -714,8 +714,12 @@ void report_coverage(
   bool is_branch_func_cov =
     options.get_bool_option("branch-function-coverage") ||
     options.get_bool_option("branch-function-coverage-claims");
-  bool is_k_path_cov = options.get_bool_option("k-path-coverage") ||
-                       options.get_bool_option("k-path-coverage-claims");
+  // `k-path-coverage` itself stores the CLI integer N; the dedicated
+  // boolean enable flag is set by parseoptions when either CLI flag is
+  // present. This avoids `get_bool_option("k-path-coverage")` returning 0
+  // (false) for valid invocations like `--k-path-coverage` (no value) or
+  // `--k-path-coverage=0` (rejected at parse time, but defensive here).
+  bool is_k_path_cov = options.get_bool_option("k-path-coverage-enabled");
 
   if (is_assert_cov)
   {

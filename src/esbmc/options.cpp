@@ -1,6 +1,7 @@
 #include <boost/program_options/value_semantic.hpp>
 #include <esbmc/esbmc_parseoptions.h>
 #include <fstream>
+#include <limits>
 #include <solvers/solver_config.h>
 #include <util/cmdline.h>
 
@@ -701,10 +702,15 @@ const struct group_opt_templ all_cmd_options[] = {
       NULL,
       "Enable branch-coverage-ext and shows all reached claims"},
      {"k-path-coverage",
-      boost::program_options::value<int>()->implicit_value(0)->value_name("N"),
+      // INT_MIN is the implicit_value sentinel for "no =N supplied".
+      // -1 / 0 are explicit user inputs and rejected at parse time;
+      // INT_MIN is unambiguous since no user would ever type it.
+      boost::program_options::value<int>()
+        ->implicit_value(std::numeric_limits<int>::min())
+        ->value_name("N"),
       "Show the coverage of k-path witnesses (PathCrawler-style; "
-      "Williams et al., EDCC 2005). N is the prefix depth; if omitted, "
-      "tied to --unwind, falling back to 4 when --unwind is unset"},
+      "Williams et al., EDCC 2005). N is the prefix depth (1..30); if "
+      "omitted, tied to --unwind, falling back to 4 when --unwind is unset"},
      {"k-path-coverage-claims",
       NULL,
       "Enable --k-path-coverage with default N (use --k-path-coverage=N "
