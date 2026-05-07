@@ -1200,28 +1200,31 @@ exprt python_list::handle_range_slice(
     (array.type() != list_type && array.type().is_array()) ||
     (array.type().is_pointer() && array.type().subtype() == char_type());
 
+  // Determine step value (default 1). Python raises ValueError on step==0;
+  // we silently fall back to 1 so verification proceeds.
+  bool has_step =
+    slice_node.contains("step") && !slice_node["step"].is_null();
+  long long step_val = 1;
+  if (has_step)
+  {
+    const auto &step_node = slice_node["step"];
+    if (step_node["_type"] == "UnaryOp" && step_node["op"]["_type"] == "USub")
+    {
+      step_val =
+        -(long long)step_node["operand"]["value"].get<std::int64_t>();
+    }
+    else if (step_node["_type"] == "Constant")
+    {
+      step_val = step_node["value"].get<std::int64_t>();
+    }
+  }
+  if (step_val == 0)
+    step_val = 1;
+  bool negative_step = (step_val < 0);
+
   if (is_string_slice)
   {
     locationt location = converter_.get_location_from_decl(slice_node);
-
-    // Determine step value (default 1)
-    bool has_step =
-      slice_node.contains("step") && !slice_node["step"].is_null();
-    long long step_val = 1;
-    if (has_step)
-    {
-      const auto &step_node = slice_node["step"];
-      if (step_node["_type"] == "UnaryOp" && step_node["op"]["_type"] == "USub")
-      {
-        step_val =
-          -(long long)step_node["operand"]["value"].get<std::int64_t>();
-      }
-      else if (step_node["_type"] == "Constant")
-      {
-        step_val = step_node["value"].get<std::int64_t>();
-      }
-    }
-    bool negative_step = (step_val < 0);
 
     // For pointer types (function parameters), delegate to __python_str_slice
     // which uses __ESBMC_alloca and survives function returns.
@@ -1553,55 +1556,99 @@ exprt python_list::handle_range_slice(
     }
   };
 
-  const exprt lower_expr = get_list_bound("lower", false);
-  exprt upper_expr = get_list_bound("upper", true);
+  // Compute list size symbol — needed for clamping (positive step) and
+  // for the size-1 default (negative step).
+  const symbolt *size_func =
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_size");
+  if (!size_func)
+    throw std::runtime_error("__ESBMC_list_size not found in symbol table");
 
-  // Clamp upper bound to the current list size to match Python slicing
-  // semantics (e.g., l[0:100] on a 5-element list).
+  side_effect_expr_function_callt size_call;
+  size_call.function() = symbol_expr(*size_func);
+  if (array.type().is_pointer())
+    size_call.arguments().push_back(array);
+  else
+    size_call.arguments().push_back(address_of_exprt(array));
+  size_call.type() = size_type();
+  size_call.location() = location;
+
+  symbolt &size_sym = converter_.create_tmp_symbol(
+    list_value_, "$slice_size$", size_type(), exprt());
+  code_declt size_decl(symbol_expr(size_sym));
+  size_decl.copy_to_operands(size_call);
+  converter_.add_instruction(size_decl);
+
+  // Counter type: signed for negative step (must reach -1 sentinel without
+  // unsigned underflow); unsigned otherwise to match the existing IR shape
+  // for the common step==1 case.
+  const typet counter_type = negative_step ? signed_size_type() : size_type();
+
+  // Resolve lower bound. Default depends on step direction.
+  exprt lower_expr;
+  if (
+    negative_step &&
+    (!slice_node.contains("lower") || slice_node["lower"].is_null()))
   {
-    const symbolt *size_func =
-      converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_size");
-    if (!size_func)
-      throw std::runtime_error("__ESBMC_list_size not found in symbol table");
-
-    side_effect_expr_function_callt size_call;
-    size_call.function() = symbol_expr(*size_func);
-    if (array.type().is_pointer())
-      size_call.arguments().push_back(array);
-    else
-      size_call.arguments().push_back(address_of_exprt(array));
-    size_call.type() = size_type();
-    size_call.location() = location;
-
-    symbolt &size_sym = converter_.create_tmp_symbol(
-      list_value_, "$slice_size$", size_type(), exprt());
-    code_declt size_decl(symbol_expr(size_sym));
-    size_decl.copy_to_operands(size_call);
-    converter_.add_instruction(size_decl);
-
-    exprt upper_ge_size(">=", bool_type());
-    upper_ge_size.copy_to_operands(upper_expr, symbol_expr(size_sym));
-    upper_expr = if_exprt(upper_ge_size, symbol_expr(size_sym), upper_expr);
-    upper_expr.type() = size_type();
+    // Negative step default: size - 1
+    exprt size_signed =
+      typecast_exprt(symbol_expr(size_sym), signed_size_type());
+    lower_expr =
+      minus_exprt(size_signed, from_integer(1, signed_size_type()));
+  }
+  else
+  {
+    exprt lower_raw = get_list_bound("lower", false);
+    lower_expr =
+      negative_step ? typecast_exprt(lower_raw, signed_size_type()) : lower_raw;
   }
 
-  // Initialize counter: int counter = lower
+  // Resolve upper bound. Default depends on step direction.
+  exprt upper_expr;
+  if (
+    negative_step &&
+    (!slice_node.contains("upper") || slice_node["upper"].is_null()))
+  {
+    // Negative step default: -1 (one before index 0)
+    upper_expr = from_integer(-1, signed_size_type());
+  }
+  else
+  {
+    exprt upper_raw = get_list_bound("upper", true);
+    if (negative_step)
+    {
+      upper_expr = typecast_exprt(upper_raw, signed_size_type());
+    }
+    else
+    {
+      // Positive step: clamp upper to size (Python: l[0:100] on len-5 list).
+      exprt upper_ge_size(">=", bool_type());
+      upper_ge_size.copy_to_operands(upper_raw, symbol_expr(size_sym));
+      upper_expr = if_exprt(upper_ge_size, symbol_expr(size_sym), upper_raw);
+      upper_expr.type() = size_type();
+    }
+  }
+
+  // Initialize counter at lower.
   symbolt &counter = converter_.create_tmp_symbol(
-    list_value_, "counter", size_type(), lower_expr);
+    list_value_, "counter", counter_type, lower_expr);
   code_assignt counter_init(symbol_expr(counter), lower_expr);
   converter_.add_instruction(counter_init);
 
-  // Build while loop: while (counter < upper)
-  exprt loop_condition("<", bool_type());
-  loop_condition.operands().push_back(symbol_expr(counter));
-  loop_condition.operands().push_back(upper_expr);
+  // Loop condition: counter < upper (positive step) or counter > upper
+  // (negative step). Negative step uses signed comparison thanks to the
+  // signed counter/upper type.
+  exprt loop_condition(negative_step ? ">" : "<", bool_type());
+  loop_condition.copy_to_operands(symbol_expr(counter), upper_expr);
 
-  // Build loop body
+  // Loop body
   code_blockt loop_body;
 
-  // Get element at current index
+  exprt index_expr = symbol_expr(counter);
+  if (negative_step)
+    index_expr = typecast_exprt(index_expr, size_type());
+
   const exprt list_at_call =
-    build_list_at_call(array, symbol_expr(counter), list_value_);
+    build_list_at_call(array, index_expr, list_value_);
   const symbolt &at_result = converter_.create_tmp_symbol(
     list_value_,
     "tmp_list_at",
@@ -1612,13 +1659,10 @@ exprt python_list::handle_range_slice(
   at_decl.copy_to_operands(list_at_call);
   loop_body.copy_to_operands(at_decl);
 
-  // Push element to sliced list
   const symbolt *push_func =
     converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_push_object");
   if (!push_func)
-  {
     throw std::runtime_error("Push function symbol not found");
-  }
 
   side_effect_expr_function_callt push_call;
   push_call.function() = symbol_expr(*push_func);
@@ -1630,23 +1674,26 @@ exprt python_list::handle_range_slice(
   push_call.location() = location;
   loop_body.copy_to_operands(converter_.convert_expression_to_code(push_call));
 
-  // Increment counter
-  exprt increment("+");
-  increment.copy_to_operands(symbol_expr(counter));
-  increment.copy_to_operands(gen_one(int_type()));
+  // counter += step_val. step_val is signed; for positive step it's >0 and
+  // converts to size_type cleanly via from_integer.
+  exprt step_const = from_integer(step_val, counter_type);
+  exprt increment("+", counter_type);
+  increment.copy_to_operands(symbol_expr(counter), step_const);
   code_assignt counter_update(symbol_expr(counter), increment);
   loop_body.copy_to_operands(counter_update);
 
-  // Create and execute while loop
   codet while_loop;
   while_loop.set_statement("while");
   while_loop.copy_to_operands(loop_condition, loop_body);
   converter_.add_instruction(while_loop);
 
-  // Update type map for sliced elements (only if both bounds are constant literals)
+  // Update type map for sliced elements (only if both bounds are constant
+  // literals AND step is the default 1 — for step != 1 the slice index
+  // mapping is no longer lower + i, so the per-index type map would be
+  // wrong; skip the refinement in that case).
   if (
-    slice_node.contains("lower") && slice_node["lower"].is_object() &&
-    slice_node["lower"].contains("_type") &&
+    step_val == 1 && slice_node.contains("lower") &&
+    slice_node["lower"].is_object() && slice_node["lower"].contains("_type") &&
     slice_node["lower"]["_type"] == "Constant" &&
     slice_node["lower"].contains("value") && slice_node.contains("upper") &&
     slice_node["upper"].is_object() && slice_node["upper"].contains("_type") &&
