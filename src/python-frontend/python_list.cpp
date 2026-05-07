@@ -1202,16 +1202,14 @@ exprt python_list::handle_range_slice(
 
   // Determine step value (default 1). Python raises ValueError on step==0;
   // we silently fall back to 1 so verification proceeds.
-  bool has_step =
-    slice_node.contains("step") && !slice_node["step"].is_null();
+  bool has_step = slice_node.contains("step") && !slice_node["step"].is_null();
   long long step_val = 1;
   if (has_step)
   {
     const auto &step_node = slice_node["step"];
     if (step_node["_type"] == "UnaryOp" && step_node["op"]["_type"] == "USub")
     {
-      step_val =
-        -(long long)step_node["operand"]["value"].get<std::int64_t>();
+      step_val = -(long long)step_node["operand"]["value"].get<std::int64_t>();
     }
     else if (step_node["_type"] == "Constant")
     {
@@ -1592,8 +1590,7 @@ exprt python_list::handle_range_slice(
     // Negative step default: size - 1
     exprt size_signed =
       typecast_exprt(symbol_expr(size_sym), signed_size_type());
-    lower_expr =
-      minus_exprt(size_signed, from_integer(1, signed_size_type()));
+    lower_expr = minus_exprt(size_signed, from_integer(1, signed_size_type()));
   }
   else
   {
@@ -1647,8 +1644,7 @@ exprt python_list::handle_range_slice(
   if (negative_step)
     index_expr = typecast_exprt(index_expr, size_type());
 
-  const exprt list_at_call =
-    build_list_at_call(array, index_expr, list_value_);
+  const exprt list_at_call = build_list_at_call(array, index_expr, list_value_);
   const symbolt &at_result = converter_.create_tmp_symbol(
     list_value_,
     "tmp_list_at",
