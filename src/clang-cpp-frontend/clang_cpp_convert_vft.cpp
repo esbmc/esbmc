@@ -32,14 +32,21 @@ CC_DIAGNOSTIC_POP()
 #include <util/c_types.h>
 #include <util/expr_util.h>
 #include <util/message.h>
+#include <util/std_code.h>
 #include <util/std_expr.h>
 
+#include <functional>
 #include <optional>
 
 bool clang_cpp_convertert::get_struct_class_virtual_methods(
   const clang::CXXRecordDecl &cxxrd,
   struct_typet &type)
 {
+  // Register cxxrd against any inherited vptr-class up front so that an
+  // inline body containing dynamic_cast<cxxrd&>(base_ref) — converted by
+  // the loop below — can match its own runtime type.
+  pre_register_inherited_vtables(cxxrd);
+
   for (const auto &md : cxxrd.methods())
   {
     if (!md->isVirtual())
@@ -679,7 +686,7 @@ void clang_cpp_convertert::add_vtable_variable_symbols(
     // Skip abstract classes: no object of an abstract type can exist at
     // runtime, so they can never be the answer to dynamic_cast.
     if (!cxxrd.isAbstract())
-      vtable_classes_per_vptr_[late_cast_symb->id].push_back(&cxxrd);
+      vtable_classes_per_vptr_[late_cast_symb->id].insert(&cxxrd);
   }
 }
 
@@ -747,6 +754,42 @@ static std::optional<uint64_t> offset_of_subobject(
     cur = base;
   }
   return offset;
+}
+
+void clang_cpp_convertert::pre_register_inherited_vtables(
+  const clang::CXXRecordDecl &cxxrd)
+{
+  // add_vtable_variable_symbols populates vtable_classes_per_vptr_ at the
+  // tail of get_struct_class_virtual_methods, after method bodies have
+  // been converted. That's too late for an inline body that does
+  // dynamic_cast<T&>(src) where T is the enclosing class itself
+  // (e.g. IntCoord::assign casting `const Coord&` to `const IntCoord&`).
+  // Pre-seed the map for every non-virtual ancestor whose vtable type
+  // already exists, so build_dynamic_cast's lookup hits regardless of how
+  // far up the chain it resolves the vptr-class to.
+  //
+  // Abstract: skipped because no object of an abstract type exists at
+  // runtime, so cxxrd can never be the answer to dynamic_cast.
+  if (cxxrd.isAbstract())
+    return;
+
+  std::function<void(const clang::CXXRecordDecl *)> walk =
+    [&](const clang::CXXRecordDecl *cur) {
+      for (const auto &spec : cur->bases())
+      {
+        if (spec.isVirtual())
+          continue;
+        const auto *base = spec.getType()->getAsCXXRecordDecl();
+        if (!base)
+          continue;
+        std::string base_id, base_name;
+        get_decl_name(*base, base_name, base_id);
+        if (ns.lookup(vtable_type_prefix + base_id))
+          vtable_classes_per_vptr_[base_id].insert(&cxxrd);
+        walk(base);
+      }
+    };
+  walk(&cxxrd);
 }
 
 bool clang_cpp_convertert::build_dynamic_cast(
@@ -972,10 +1015,11 @@ bool clang_cpp_convertert::build_dynamic_cast(
     return match;
   };
 
+  // Reference form: if the vptr check fails, call __ESBMC_throw_bad_cast()
+  // which symex resolves to a std::bad_cast throw at verification time.
+  // This decouples the frontend from <typeinfo> inclusion order entirely.
   if (is_reference)
   {
-    // TODO: find a way to throw std::bad_cast
-
     // Clang strips the reference from cast.getType(), so target_type is
     // the un-referenced struct T. Reconstruct the IR-level reference
     // type (pointer-to-T flagged as a reference) for the cast result.
@@ -985,7 +1029,26 @@ bool clang_cpp_convertert::build_dynamic_cast(
     exprt cast_value = src_pointer;
     gen_typecast(ns, cast_value, ref_type);
 
-    new_expr = cast_value;
+    exprt match = arms.empty() ? exprt(false_exprt()) : vptr_match_any();
+
+    code_typet throw_func_type;
+    throw_func_type.return_type() = empty_typet();
+    symbol_exprt throw_func("c:@F@__ESBMC_throw_bad_cast", throw_func_type);
+
+    code_function_callt throw_call;
+    throw_call.function() = throw_func;
+
+    code_ifthenelset if_throw;
+    if_throw.cond() = not_exprt(match);
+    if_throw.then_case() = throw_call;
+
+    code_blockt block;
+    block.copy_to_operands(if_throw);
+    block.copy_to_operands(code_expressiont(cast_value));
+
+    side_effect_exprt stmt_expr("statement_expression", ref_type);
+    stmt_expr.copy_to_operands(block);
+    new_expr = stmt_expr;
     return false;
   }
 
