@@ -528,7 +528,7 @@ protected:
    * registration in add_vtable_variable_symbols runs after method bodies
    * are converted, which is too late for that body.
    */
-  std::map<irep_idt, std::vector<const clang::CXXRecordDecl *>>
+  std::map<irep_idt, std::unordered_set<const clang::CXXRecordDecl *>>
     vtable_classes_per_vptr_;
 
   /*

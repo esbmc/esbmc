@@ -35,7 +35,6 @@ CC_DIAGNOSTIC_POP()
 #include <util/std_code.h>
 #include <util/std_expr.h>
 
-#include <algorithm>
 #include <functional>
 #include <optional>
 
@@ -731,13 +730,7 @@ void clang_cpp_convertert::add_vtable_variable_symbols(
     // Skip abstract classes: no object of an abstract type can exist at
     // runtime, so they can never be the answer to dynamic_cast.
     if (!cxxrd.isAbstract())
-    {
-      auto &lst = vtable_classes_per_vptr_[late_cast_symb->id];
-      // pre_register_inherited_vtables may have already added cxxrd; the
-      // duplicate would otherwise produce a redundant OR clause.
-      if (std::find(lst.begin(), lst.end(), &cxxrd) == lst.end())
-        lst.push_back(&cxxrd);
-    }
+      vtable_classes_per_vptr_[late_cast_symb->id].insert(&cxxrd);
   }
 }
 
@@ -836,11 +829,7 @@ void clang_cpp_convertert::pre_register_inherited_vtables(
         std::string base_id, base_name;
         get_decl_name(*base, base_name, base_id);
         if (ns.lookup(vtable_type_prefix + base_id))
-        {
-          auto &lst = vtable_classes_per_vptr_[base_id];
-          if (std::find(lst.begin(), lst.end(), &cxxrd) == lst.end())
-            lst.push_back(&cxxrd);
-        }
+          vtable_classes_per_vptr_[base_id].insert(&cxxrd);
         walk(base);
       }
     };
