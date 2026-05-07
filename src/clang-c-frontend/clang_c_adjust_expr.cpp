@@ -479,8 +479,7 @@ void clang_c_adjust::adjust_index(index_exprt &index)
     index.move_to_operands(addition);
     index.id("dereference");
   }
-  else if (
-    !final_array_type.is_array() && !final_array_type.is_vector())
+  else if (!final_array_type.is_array() && !final_array_type.is_vector())
   {
     // The base isn't array, vector, or pointer — typically a struct that
     // appears in array context because two TUs declared the same external
