@@ -100,8 +100,11 @@ void clang_cpp_adjust::adjust_side_effect(side_effect_exprt &expr)
   {
     adjust_operands(expr);
 
-    exprt &initializer = (exprt &)expr.find("initializer");
-    adjust_expr(initializer);
+    if (expr.find("initializer").is_not_nil())
+    {
+      exprt &initializer = static_cast<exprt &>(expr.add("initializer"));
+      adjust_expr(initializer);
+    }
   }
   else if (statement == "assign")
   {
@@ -342,7 +345,8 @@ void clang_cpp_adjust::align_se_function_call_return_type(
 {
   // align the side effect's type at callsite with the
   // function return type. But ignore constructors
-  const typet &return_type = (typet &)f_op.type().return_type();
+  const typet &return_type =
+    static_cast<const typet &>(f_op.type().return_type());
   if (return_type.id() != "constructor" && return_type.is_not_nil())
     expr.type() = return_type;
 }
