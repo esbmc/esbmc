@@ -535,7 +535,21 @@ def generate_ast_json(tree, python_filename, elements_to_import, output_dir, mod
         print(f"Error writing JSON file: {e}")
 
 
-# pylint: disable-next=too-many-locals,too-many-nested-blocks
+def _emit_submodule_asts(module_dir, base_module, output_dir):
+    for root, _dirs, files in os.walk(module_dir):
+        for file in files:
+            if not file.endswith('.py'):
+                continue
+            full_path = os.path.join(root, file)
+            try:
+                with open(full_path, "r", encoding="utf-8") as f:
+                    tree = ast.parse(f.read())
+            except UnicodeDecodeError:
+                continue
+            generate_ast_json(tree, full_path, None,
+                              f"{output_dir}/{base_module}")
+
+
 def detect_and_process_submodules(node, processed_submodules, output_dir):
     """
     Detect submodule usage in the AST and process each unseen submodule.
@@ -550,49 +564,34 @@ def detect_and_process_submodules(node, processed_submodules, output_dir):
         The directory to save the generated JSON files in.
 
     """
-    if isinstance(node, ast.Attribute):
-        value = node.value
-        if isinstance(value, ast.Name):
-            alias = value.id
-            base_module = import_aliases.get(alias)
+    if not isinstance(node, ast.Attribute):
+        return
+    value = node.value
+    if not isinstance(value, ast.Name):
+        return
 
-            # Only process submodules of supported model modules
-            if not base_module or not is_imported_model(base_module):
-                return
+    alias = value.id
+    base_module = import_aliases.get(alias)
 
-            full_module = f"{base_module}.{node.attr}"
+    # Only process submodules of supported model modules
+    if not base_module or not is_imported_model(base_module):
+        return
 
-            # Avoid reprocessing the same submodule
-            if full_module in processed_submodules:
-                return
-            processed_submodules.add(full_module)
+    full_module = f"{base_module}.{node.attr}"
 
-            try:
-                module = import_module_by_name(full_module, output_dir)
-            except SystemExit:
-                return
+    # Avoid reprocessing the same submodule
+    if full_module in processed_submodules:
+        return
+    processed_submodules.add(full_module)
 
-            if isinstance(module, str):
-                file_path = module
-            else:
-                file_path = module.__file__
+    try:
+        module = import_module_by_name(full_module, output_dir)
+    except SystemExit:
+        return
 
-            if file_path.endswith('__init__.py') or os.path.isdir(file_path):
-                module_dir = os.path.dirname(file_path)
-            else:
-                module_dir = os.path.dirname(file_path)
-
-            for root, _dirs, files in os.walk(module_dir):
-                for file in files:
-                    if file.endswith('.py'):
-                        full_path = os.path.join(root, file)
-                        try:
-                            with open(full_path, "r", encoding="utf-8") as f:
-                                tree = ast.parse(f.read())
-                                generate_ast_json(tree, full_path, None,
-                                                  output_dir + "/" + base_module)
-                        except UnicodeDecodeError:
-                            continue
+    file_path = module if isinstance(module, str) else module.__file__
+    module_dir = os.path.dirname(file_path)
+    _emit_submodule_asts(module_dir, base_module, output_dir)
 
 
 def main():
