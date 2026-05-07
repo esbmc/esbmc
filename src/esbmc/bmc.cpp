@@ -1662,6 +1662,11 @@ smt_convt::resultt bmct::multi_property_check(
   bool is_branch_func_cov =
     options.get_bool_option("branch-function-coverage") ||
     options.get_bool_option("branch-function-coverage-claims");
+  // "k-Path Cov" — keyed off the dedicated boolean (see line ~717
+  // comment); needed in the is_goto_cov disjunction so the
+  // claim_slicer reads the witness comment, matching the form stored
+  // in goto_coveraget::all_claims.
+  bool is_k_path_cov = options.get_bool_option("k-path-coverage-enabled");
 
   // is_vb: enable verbose output coverage info if the option "--verbosity coverage:N" is set, where N should larger than 0
   // By enabling this, we will output the coverage information when handling each instrumentation assertion.
@@ -1720,6 +1725,7 @@ smt_convt::resultt bmct::multi_property_check(
                        &is_vb,
                        &is_branch_cov,
                        &is_branch_func_cov,
+                       &is_k_path_cov,
                        &is_keep_verified,
                        &is_fail_fast,
                        &fail_fast_limit,
@@ -1729,7 +1735,8 @@ smt_convt::resultt bmct::multi_property_check(
                        &is,
                        &is_color,
                        &YELLOW,
-                       &runtime_solver](const size_t &i) {
+                       &runtime_solver](const size_t &i)
+  {
     //"multi-fail-fast n": stop after first n SATs found.
     if (is_fail_fast && fail_fast_cnt >= fail_fast_limit)
       return;
@@ -1737,9 +1744,18 @@ smt_convt::resultt bmct::multi_property_check(
     // Since this is just a copy, we probably don't need a lock
     symex_target_equationt local_eq = eq;
 
-    // Set up the current claim and disable slice info output
-    bool is_goto_cov =
-      is_assert_cov || is_cond_cov || is_branch_cov || is_branch_func_cov;
+    // Set up the current claim and disable slice info output.
+    // `is_goto_cov` flips claim_slicer's `claim_msg` source: in goto-cov
+    // modes the slicer reads the comment (the original witness/guard
+    // text we stored in insert_assert); otherwise it reads the negated
+    // assertion expression. k-path goals are stored the same way as
+    // branch / condition goals, so they must be in this disjunction —
+    // otherwise the claim_sig built at line ~1751 disagrees with the
+    // form in goto_coveraget::all_claims and every JSON entry shows up
+    // as uncovered even when reached_claims has the matching reached
+    // signature (PR #4330 review).
+    bool is_goto_cov = is_assert_cov || is_cond_cov || is_branch_cov ||
+                       is_branch_func_cov || is_k_path_cov;
     claim_slicer claim(i, false, is_goto_cov, ns);
     claim.run(local_eq.SSA_steps);
 
@@ -1797,9 +1813,9 @@ smt_convt::resultt bmct::multi_property_check(
     }
 
     // Store solver name initially but not again
-    std::call_once(summary.solver_name_flag, [&]() {
-      summary.solver_name = solver_ptr->solver_text();
-    });
+    std::call_once(
+      summary.solver_name_flag,
+      [&]() { summary.solver_name = solver_ptr->solver_text(); });
     // In coverage mode, only report instrumented coverage claims
     bool is_cov_silent =
       is_goto_cov && claim.claim_property != "instrumented assertion";
