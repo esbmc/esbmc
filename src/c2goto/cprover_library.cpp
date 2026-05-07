@@ -45,6 +45,11 @@ extern "C"
   extern const uint8_t clib64_fp_cherip_buf[];
   extern const unsigned int clib32_fp_cherip_buf_size;
   extern const unsigned int clib64_fp_cherip_buf_size;
+
+#ifdef ENABLE_SOLIDITY_FRONTEND
+  extern const uint8_t sol64_buf[];
+  extern const unsigned int sol64_buf_size;
+#endif
 }
 
 namespace
@@ -246,6 +251,149 @@ const static std::vector<std::string> python_c_models = {
   "__ESBMC_list_reverse",
   "__ESBMC_list_push_dict_ptr",
   "__ESBMC_list_lt"};
+
+// Solidity operational model functions
+const static std::vector<std::string> solidity_c_models = {
+  // blockchain (solidity_blockchain.c)
+  "blockhash",
+  "blobhash",
+  "gasConsume",
+  "gasleft",
+  // builtins (solidity_builtins.c)
+  "sol_pow_uint",
+  "addmod",
+  "mulmod",
+  "llc_nondet_bytes",
+  "selfdestruct",
+  // abi (solidity_abi.c)
+  "abi_encode",
+  "abi_encodePacked",
+  "abi_encodeWithSelector",
+  "abi_encodeWithSignature",
+  "abi_encodeCall",
+  "abi_decode",
+  // crypto (solidity_crypto.c)
+  "keccak256",
+  "sha256",
+  "ripemd160",
+  "ecrecover",
+  "string_concat",
+  // bytes (solidity_bytes.c)
+  "bytes_dynamic_init_check",
+  "bytes_dynamic_bounds_check",
+  "hex_char_to_nibble",
+  "bytes_static_from_hex",
+  "bytes_static_from_string",
+  "bytes_static_truncate",
+  "bytes_static_and",
+  "bytes_static_or",
+  "bytes_static_xor",
+  "bytes_static_to_uint",
+  "bytes_static_from_uint",
+  "bytes_static_shl",
+  "bytes_static_shr",
+  "bytes_static_to_mapping_key",
+  "bytes_static_init_zero",
+  "bytes_static_set",
+  "bytes_static_get",
+  "bytes_static_equal",
+  "bytes_static_to_string",
+  "bytes_static_extend",
+  "bytes_static_resize",
+  "bytes_static_extend_from_dynamic",
+  "bytes_static_resize_from_dynamic",
+  "bytes_static_truncate_from_dynamic",
+  "bytes_dynamic_init_zero",
+  "bytes_dynamic_init",
+  "bytes_dynamic_ensure_capacity",
+  "bytes_dynamic_from_static",
+  "bytes_dynamic_from_string",
+  "bytes_dynamic_from_hex",
+  "bytes_dynamic_concat",
+  "bytes_dynamic_copy",
+  "bytes_dynamic_set",
+  "bytes_dynamic_get",
+  "bytes_dynamic_equal",
+  "bytes_dynamic_to_mapping_key",
+  "bytes_dynamic_push",
+  "bytes_dynamic_pop",
+  "bytes_dynamic_to_uint",
+  "bytes_dynamic_to_string",
+  "bytes_pool_init",
+  // mapping (solidity_mapping.c)
+  "map_get_raw",
+  "map_set_raw",
+  "map_uint_set",
+  "map_uint_get",
+  "map_int_set",
+  "map_int_get",
+  "map_string_set",
+  "map_string_get",
+  "map_bool_set",
+  "map_bool_get",
+  "map_generic_set",
+  "map_generic_get",
+  "map_get_raw_fast",
+  "map_set_raw_fast",
+  "map_uint_set_fast",
+  "map_uint_get_fast",
+  "map_int_set_fast",
+  "map_int_get_fast",
+  "map_string_set_fast",
+  "map_string_get_fast",
+  "map_bool_set_fast",
+  "map_bool_get_fast",
+  "map_generic_set_fast",
+  "map_generic_get_fast",
+  // array (solidity_array.c)
+  "_ESBMC_array_null_check",
+  "_ESBMC_element_null_check",
+  "_ESBMC_zero_size_check",
+  "_ESBMC_pop_empty_check",
+  "_ESBMC_store_array",
+  "_ESBMC_array_length",
+  "_ESBMC_arrcpy",
+  "_ESBMC_array_push",
+  "_ESBMC_array_pop",
+  // units (solidity_units.c)
+  "_ESBMC_wei",
+  "_ESBMC_gwei",
+  "_ESBMC_szabo",
+  "_ESBMC_finney",
+  "_ESBMC_ether",
+  "_ESBMC_seconds",
+  "_ESBMC_minutes",
+  "_ESBMC_hours",
+  "_ESBMC_days",
+  "_ESBMC_weeks",
+  "_ESBMC_years",
+  // string (solidity_string.c)
+  "get_char",
+  "sol_rev",
+  "i256toa",
+  "u256toa",
+  "decToHexa",
+  "ASCIItoHEX",
+  "hexdec",
+  "str2uint",
+  "_ESBMC_str_key_fold64",
+  "_str_assign",
+  "nondet_string",
+  // address (solidity_address.c)
+  "_ESBMC_get_addr_array_idx",
+  "_ESBMC_cmp_cname",
+  "_ESBMC_get_obj",
+  "update_addr_obj",
+  "_ESBMC_get_unique_address",
+  "_ESBMC_get_nondet_cont_name",
+  // misc (solidity_misc.c)
+  "_max",
+  "_min",
+  "_creationCode",
+  "_runtimeCode",
+  "_interfaceId",
+  "_ESBMC_check_reentrancy",
+  "initialize"};
 } // namespace
 
 static void generate_symbol_deps(
@@ -381,6 +529,27 @@ void add_cprover_library(contextt &context, const languaget *language)
   if (language && language->id() == "python")
     goto_reader.set_functions_to_read(python_c_models);
 
+  // Solidity uses a separate, smaller goto binary (sol64) for fast loading.
+  // No whitelist needed: sol64 contains ONLY Solidity symbols.
+  const uint8_t *lib_start;
+  unsigned int lib_size;
+  bool is_solidity = false;
+#ifdef ENABLE_SOLIDITY_FRONTEND
+  if (language && language->id() == "solidity_ast")
+  {
+    lib_start = sol64_buf;
+    lib_size = sol64_buf_size;
+    is_solidity = true;
+  }
+  else
+#endif
+  {
+    if (language && language->id() == "python")
+      goto_reader.set_functions_to_read(python_c_models);
+    lib_start = clib->start;
+    lib_size = clib->size;
+  }
+
   /* Python: actively has a function filter
    *    - not everything makes it into new_ctx
    *    - ignored symbols go into ignored_ctx
@@ -390,7 +559,7 @@ void add_cprover_library(contextt &context, const languaget *language)
    */
   contextt ignored_ctx;
   if (goto_reader.read_goto_binary_array(
-        clib->start, clib->size, new_ctx, ignored_ctx, goto_functions))
+        lib_start, lib_size, new_ctx, ignored_ctx, goto_functions))
     abort();
 
   // Traverse symbols and get dependencies from both their nested types and values
@@ -414,27 +583,28 @@ void add_cprover_library(contextt &context, const languaget *language)
   symbol_deps.insert(joincheck);
 
   /* Iterate through the new_ctx symbols, figure out which ones to go into store_ctx
-   *    For Python this is everything: new_ctx already has a filtering layer
+   *    For Python/Solidity this is everything: new_ctx already has a filtering layer
    *    For other frontends, only add symbols that exist already in context but value empty
    * store_ctx is what actually gets merged into the existing, final context
    */
+
+  // Determine whether this language uses a whitelist-based loading strategy.
+  // Python: uses whitelist with clib64 → symbols split between new_ctx/ignored_ctx.
+  // Solidity: uses dedicated sol64 binary → ALL symbols in new_ctx, no whitelist.
+  bool uses_whitelist = language && language->id() == "python";
 
   new_ctx.foreach_operand([&context,
                            &store_ctx,
                            &symbol_deps,
                            &to_include,
-                           &language](const symbolt &s) {
+                           &is_solidity,
+                           &uses_whitelist](const symbolt &s) {
     const symbolt *symbol = context.find_symbol(s.id);
     if (
-      (language && language->id() == "python") ||
+      (is_solidity || uses_whitelist) ||
       (symbol != nullptr && symbol->value.is_nil()))
     {
       store_ctx.add(s);
-
-      // ingest_symbol takes this added symbol and goes through symbol_deps
-      // it only moves dependencies from symbol_deps to to_include
-      //    if they're dependencies for a symbol that is definitely being included
-      //    (i.e. in store_ctx)
       ingest_symbol(s.id, symbol_deps, to_include);
     }
   });
@@ -442,14 +612,12 @@ void add_cprover_library(contextt &context, const languaget *language)
   /* Now iterate through the dependencies that we know we want to add (due to ingest_symbol filter)
    * These will be symbols that didn't make it into store_ctx
    *
-   * For Python:
-   *    - symbols that didn't make it into store_ctx didn't make it because they're not in new_ctx
-   *    - they will be found in ignored_ctx
-   *
-   * For other frontends:
-   *    - every symbol made it into new_ctx (no ignored_ctx)
-   *    - not every symbol made it into store_ctx from new_ctx
-   *    - they will be found in new_ctx
+   * For Python (whitelist):
+   *    - symbols not in whitelist go to ignored_ctx, dependencies found there
+   * For Solidity (dedicated binary, no whitelist):
+   *    - all symbols already in new_ctx, dependencies found in new_ctx
+   * For other frontends (no filter):
+   *    - everything in new_ctx, dependencies found in new_ctx
    */
   for (std::list<irep_idt>::const_iterator nameit = to_include.begin();
        nameit != to_include.end();
@@ -457,8 +625,7 @@ void add_cprover_library(contextt &context, const languaget *language)
   {
     symbolt *s;
 
-    // Look in the appropriate place for this symbol
-    if ((language && language->id() == "python"))
+    if (uses_whitelist)
     {
       s = ignored_ctx.find_symbol(*nameit);
     }
@@ -471,12 +638,7 @@ void add_cprover_library(contextt &context, const languaget *language)
     {
       store_ctx.add(*s);
 
-      /* Python frontend hasn't looked for dependencies for symbols that aren't in
-       * the function whitelist, (since they're not put in new_ctx); other frontends
-       * have these dependencies already available in symbol_deps.
-       * Therefore add dependencies that result from this new symbol
-       */
-      if (language && language->id() == "python")
+      if (uses_whitelist)
       {
         generate_symbol_deps(s->id, s->value, symbol_deps);
         generate_symbol_deps(s->id, s->type, symbol_deps);

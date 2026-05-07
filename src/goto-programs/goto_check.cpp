@@ -255,7 +255,22 @@ void goto_checkt::cast_overflow_check(
   const guardt &guard,
   const locationt &loc)
 {
-  if (
+  // For Solidity, narrowing casts (e.g. uint256 → uint8) need overflow checks
+  // even in bitvector mode. Only apply to user .sol code, not C library models.
+  bool is_solidity = (config.language.lid == language_idt::SOLIDITY);
+  if (is_solidity)
+  {
+    if (!enable_overflow_check && !enable_unsigned_overflow_check)
+      return;
+    // Only check casts in .sol files, not C library models
+    const std::string &file = loc.get_file().as_string();
+    if (file.size() < 4 || file.substr(file.size() - 4) != ".sol")
+      return;
+    // Skip overflow checks inside Solidity unchecked blocks
+    if (loc.get("#sol_unchecked") == "1")
+      return;
+  }
+  else if (
     !options.get_bool_option("int-encoding") ||
     (!enable_overflow_check && !enable_unsigned_overflow_check))
     return;
@@ -265,16 +280,33 @@ void goto_checkt::cast_overflow_check(
   if (!is_signedbv_type(resolved_type) && !is_unsignedbv_type(resolved_type))
     return;
 
-  // Create cast overflow check expression
-  expr2tc cast_overflow = overflow_cast2tc(expr, resolved_type->get_width());
+  unsigned int dst_width = resolved_type->get_width();
+  expr2tc cast_overflow;
+  std::string claim_msg;
+
+  if (is_solidity)
+  {
+    // Solidity: check the inner operand (before wrap) against the destination
+    // width — required for narrowing casts like uint256 → uint8.
+    const typecast2t &cast = to_typecast2t(expr);
+    const type2tc &src_type = ns.follow(cast.from->type);
+    if (!is_signedbv_type(src_type) && !is_unsignedbv_type(src_type))
+      return;
+    if (dst_width >= src_type->get_width())
+      return;
+    cast_overflow = overflow_cast2tc(cast.from, dst_width);
+    claim_msg = "Narrowing cast overflow on ";
+  }
+  else
+  {
+    cast_overflow = overflow_cast2tc(expr, dst_width);
+    claim_msg = "Cast arithmetic overflow on ";
+  }
+
   make_not(cast_overflow);
 
   add_guarded_claim(
-    cast_overflow,
-    std::string("Cast arithmetic overflow on ") + get_expr_id(expr),
-    "overflow",
-    loc,
-    guard);
+    cast_overflow, claim_msg + get_expr_id(expr), "overflow", loc, guard);
 }
 
 void goto_checkt::overflow_check(
@@ -289,6 +321,12 @@ void goto_checkt::overflow_check(
 
   // Don't check shift right
   if (is_lshr2t(expr) || is_ashr2t(expr))
+    return;
+
+  // Skip overflow checks inside Solidity unchecked blocks
+  if (
+    config.language.lid == language_idt::SOLIDITY &&
+    loc.get("#sol_unchecked") == "1")
     return;
 
   // First, check type.
@@ -1176,6 +1214,44 @@ void goto_checkt::goto_check(goto_programt &goto_program)
         check(assign.target, loc);
         check(assign.source, loc);
         is_instance_check(it, goto_program, assign.target, assign.source, loc);
+
+        // Solidity: detect implicit narrowing in assignments like
+        // (signed int)x = (signed int)x + 10  where x is uint8.
+        // The target may be a typecast wrapping a narrower variable.
+        if (
+          config.language.lid == language_idt::SOLIDITY &&
+          (enable_overflow_check || enable_unsigned_overflow_check) &&
+          loc.get("#sol_unchecked") != "1")
+        {
+          const std::string &file = loc.get_file().as_string();
+          if (file.size() >= 4 && file.substr(file.size() - 4) == ".sol")
+          {
+            // Check if the target is a typecast wrapping a narrower variable
+            if (is_typecast2t(assign.target))
+            {
+              const typecast2t &tc = to_typecast2t(assign.target);
+              const type2tc &inner_type = ns.follow(tc.from->type);
+              const type2tc &outer_type = ns.follow(assign.target->type);
+              if (
+                (is_unsignedbv_type(inner_type) ||
+                 is_signedbv_type(inner_type)) &&
+                inner_type->get_width() < outer_type->get_width())
+              {
+                unsigned int narrow_width = inner_type->get_width();
+                expr2tc cast_overflow =
+                  overflow_cast2tc(assign.source, narrow_width);
+                make_not(cast_overflow);
+                guardt guard;
+                add_guarded_claim(
+                  cast_overflow,
+                  "Narrowing assignment overflow",
+                  "overflow",
+                  loc,
+                  guard);
+              }
+            }
+          }
+        }
       }
     }
     else if (i.is_function_call())

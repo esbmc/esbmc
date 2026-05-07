@@ -1,5 +1,5 @@
 # Operational model for datetime module
-# pylint: disable=function-redefined  # intentional stdlib shadow for ESBMC models
+# pylint: disable=function-redefined,unused-wildcard-import  # intentional stdlib shadow for ESBMC models
 
 
 class datetime:

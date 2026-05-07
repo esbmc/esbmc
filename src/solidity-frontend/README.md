@@ -7,15 +7,28 @@ The ESBMC Solidity frontend accepts smart contracts written in the Solidity lang
 
 ## Usage
 
-### AST generation
+### Quick start
 
-Generate the compact AST JSON using the Solidity compiler (`solc`):
+Pass a `.sol` file directly to ESBMC — it will automatically find and invoke `solc`:
+
+```sh
+esbmc example.sol --k-induction
+```
+
+ESBMC searches for `solc` in this order: `--solc-bin <path>` > `$SOLC` environment variable > `solc` in `$PATH`. You can specify a particular solc binary:
+
+```sh
+esbmc --solc-bin /path/to/solc example.sol --k-induction
+```
+
+### Manual AST generation (legacy)
+
+You can also generate the AST yourself and pass both files:
 
 ```sh
 solc --ast-compact-json example.sol > example.solast
+esbmc --sol example.sol example.solast --k-induction
 ```
-
-The frontend expects the contract source file and its AST JSON as inputs.
 
 Note that different versions of `solc` may produce slightly different AST formats and also support different Solidity syntaxes. The frontend is currently developed and tested against **Solidity 0.8.0**.
 
@@ -24,11 +37,9 @@ Note that different versions of `solc` may produce slightly different AST format
 
 ### Bug detection
 
-Enable the solidity frontend with the `--sol` option. Example:
-
 ```sh
 # use --multi-property if you want to report all found bugs at once
-esbmc --sol example.sol example.solast --k-induction
+esbmc example.sol --k-induction --multi-property
 ```
 
 As with ESBMC in general, ESBMC-Solidity supports common bug classes, including arithmetic overflow/underflow, division by zero, null-dereference, array-out-of-bounds, assertion violations, etc. Use ESBMC command-line options to enable or configure specific checks (e.g. overflow checks, pointer checks, etc.).
@@ -90,19 +101,19 @@ This mode is particularly useful for analysing the behaviour of a multi-contract
 * Detecting overflow/underflow:
 
 ```sh
-esbmc --sol MyContract.sol MyContract.solast --overflow-check --unsigned-overflow-check
+esbmc MyContract.sol --overflow-check --unsigned-overflow-check
 ```
 
 * Running k-induction with solidity frontend:
 
 ```sh
-esbmc --sol example.sol example.solast --k-induction --multi-property
+esbmc example.sol --k-induction --multi-property
 ```
 
 * Bounded analysis :
 
 ```sh
-esbmc --sol example.sol example.solast --bound --contract Vulnerable --function withdraw
+esbmc example.sol --bound --contract Vulnerable --function withdraw
 ```
 
 ## Notes
@@ -112,8 +123,20 @@ esbmc --sol example.sol example.solast --bound --contract Vulnerable --function 
 * ESBMC's performance is currently affected by the integer bitwidth, especially when `mapping` is involved. For example, `mapping(uint256 => string)` requires more unwinding steps to solve compared to `mapping(uint8 => string)`. You can try the experimental option `--16` to set the machine word size to 16 bits and improve performance.
 * Since the minimal supported machine word size is 16, overflow/underflow checks for `uint8` and `int8` are not currently supported.
 
+### Cryptographic hash function abstraction
+
+ESBMC models `keccak256`, `sha256`, `ripemd160`, `ecrecover`, `blockhash`, and `blobhash` as **nondeterministic (nondet) functions**: each call returns a fully unconstrained symbolic value. The real hash algorithm is **not** computed.
+
+This is an **over-approximation** — the verifier considers every possible return value, including the real one. Consequences:
+
+* **No false negatives (sound for safety):** if the verifier reports VERIFICATION SUCCESSFUL, the property truly holds under all possible hash outputs.
+* **Possible false positives (spurious counterexamples):** the verifier may report VERIFICATION FAILED for properties that are actually safe, because it explores hash outputs that cannot occur in reality.
+* **No functional consistency:** two calls to `keccak256(x)` with identical `x` may return *different* nondet values. Properties that rely on "same input → same output" (e.g., commit-reveal patterns, hash-based equality checks) cannot be verified and will produce false alarms.
+
+The operational models are in `src/c2goto/library/solidity/solidity_builtins.c`.
+
 ## For Developers
 
-* The Solidity Frontend convert solidity statement into CPP-style IR -- each contract is considered as a class. Yet no other C++ specific syntax are used, meaning all statements are convert to C-style IR. Data structure like `mapping`, `Bytes` are written as C-struct internally. For more details, check `solidity_template.cpp`.
+* The Solidity Frontend converts Solidity statements into CPP-style IR -- each contract is considered as a class. Yet no other C++ specific syntax are used, meaning all statements are converted to C-style IR. Data structures like `mapping`, `Bytes` are written as C-struct internally. Operational models are pre-compiled via the c2goto pipeline (see `src/c2goto/library/solidity/`).
 * The blockchain state is encoded as properties within each contract, such as `address`, `codehash`, `balance`, etc. Note that while in reality a balance is bound to an address, in our modelling it is bound to each contract instance.
 * For multi-contract programs, the JSON of each contract is parsed separately. Inheritance is mainly handled by merging the corresponding AST JSON files.

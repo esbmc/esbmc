@@ -1,5 +1,13 @@
+/// \file solidity_convert_contract.cpp
+/// \brief Contract-level conversion for the Solidity frontend.
+///
+/// Handles the top-level conversion of Solidity contracts: iterating over
+/// contract body elements (state variables, functions, structs, enums,
+/// events, errors, modifiers), registering the contract struct type in the
+/// symbol table, generating static lifetime initialization, and managing
+/// the contract-scoped conversion context.
+
 #include <solidity-frontend/solidity_convert.h>
-#include <solidity-frontend/solidity_template.h>
 #include <solidity-frontend/typecast.h>
 #include <util/arith_tools.h>
 #include <util/bitvector.h>
@@ -9,11 +17,8 @@
 #include <util/mp_arith.h>
 #include <util/std_expr.h>
 #include <util/message.h>
-#include <regex>
-#include <optional>
-
 #include <fstream>
-#include <iostream>
+
 /*
   e.g. x = func();
   ==>  x = nondet();
@@ -520,7 +525,7 @@ nlohmann::json solidity_convertert::reorder_arguments(
 
   std::vector<std::string> param_order;
   const auto &decl_ref =
-    find_decl_ref(src_ast_json, callee_expr_json["referencedDeclaration"]);
+    find_decl_ref(callee_expr_json["referencedDeclaration"]);
   // check if the function has parameters and store the order
   if (
     decl_ref.contains("parameters") &&
@@ -662,39 +667,14 @@ bool solidity_convertert::multi_transaction_verification(
   This function perform multi-transaction verification on each contract in isolation.
   To do so, we construct nondetered switch_case;
 */
-bool solidity_convertert::multi_contract_verification_bound(
-  std::set<std::string> &tgt_set)
+// Shared: call multi_transaction_verification for each contract and collect
+// the resulting _ESBMC_Main_X entry function symbols.
+bool solidity_convertert::prepare_harness_entry_functions(
+  const std::set<std::string> &cname_set,
+  std::vector<const symbolt *> &entry_syms)
 {
-  log_debug("solidity", "multi_contract_verification_bound");
-  // 0. initialize "sol_main" body and switch body
-  codet func_body, switch_body;
-  static_lifetime_init(context, switch_body);
-  static_lifetime_init(context, func_body);
-
-  switch_body.make_block();
-  func_body.make_block();
-
-  // add __ESBMC_HIDE
-  code_labelt label;
-  label.set_label("__ESBMC_HIDE");
-  label.code() = code_skipt();
-  func_body.operands().push_back(label);
-
-  // initialize
-
-  // 1. construct switch-case
-  int cnt = 0;
-  std::set<std::string> cname_set;
-  if (!tgt_set.empty())
-    cname_set = tgt_set;
-  else
-    cname_set =
-      std::set<std::string>(contractNamesList.begin(), contractNamesList.end());
-
   for (const auto &c_name : cname_set)
   {
-    // 1.1 construct multi-transaction verification entry function
-    // function "_ESBMC_Main_contractname" will be created and inserted to the symbol table.
     if (multi_transaction_verification(c_name))
     {
       log_error(
@@ -703,18 +683,6 @@ bool solidity_convertert::multi_contract_verification_bound(
       return true;
     }
 
-    // 1.2 construct a "case n"
-    exprt case_cond = constant_exprt(
-      integer2binary(cnt, bv_width(int_type())),
-      integer2string(cnt),
-      int_type());
-
-    // 1.3 construct case body: entry function + break
-    codet case_body;
-    static_lifetime_init(context, case_body);
-    case_body.make_block();
-
-    // func_call: _ESBMC_Main_contractname
     const std::string sub_sol_id =
       "sol:@C@" + c_name + "@F@_ESBMC_Main_" + c_name + "#";
     if (context.find_symbol(sub_sol_id) == nullptr)
@@ -722,61 +690,32 @@ bool solidity_convertert::multi_contract_verification_bound(
       log_error("Cannot find the {}'s main function {}", c_name, sub_sol_id);
       return true;
     }
-
-    const symbolt &func = *context.find_symbol(sub_sol_id);
-    code_function_callt func_expr;
-    func_expr.location() = func.location;
-    func_expr.function() = symbol_expr(func);
-    case_body.move_to_operands(func_expr);
-
-    // break statement
-    exprt break_expr = code_breakt();
-    case_body.move_to_operands(break_expr);
-
-    // 1.4 construct case statement
-    code_switch_caset switch_case;
-    switch_case.case_op() = case_cond;
-    convert_expression_to_code(case_body);
-    switch_case.code() = to_code(case_body);
-
-    // 1.5 move to switch body
-    switch_body.move_to_operands(switch_case);
-
-    // update case number counter
-    ++cnt;
+    entry_syms.push_back(context.find_symbol(sub_sol_id));
   }
+  return false;
+}
 
-  // 2. move switch to func_body
-  // 2.1 construct nondet_uint jump condition
-  side_effect_expr_function_callt cond_expr = nondet_uint_expr;
-
-  // 2.2 construct switch statement
-  code_switcht code_switch;
-  code_switch.value() = cond_expr;
-  code_switch.body() = switch_body;
-  func_body.move_to_operands(code_switch);
-
-  // 3. add "sol_main" to symbol table
-  symbolt new_symbol;
-  code_typet main_type;
-  typet e_type = empty_typet();
-  e_type.set("cpp_type", "void");
-  main_type.return_type() = e_type;
-  std::string sol_id;
-  if (!tgt_set.empty())
-    sol_id = "sol:@C@" + *tgt_set.begin() + "@F@_ESBMC_Main#";
-  else
-    sol_id = "sol:@F@_ESBMC_Main#";
+// Shared: create the _ESBMC_Main symbol and register it in the context.
+bool solidity_convertert::register_harness_main(
+  const std::string &sol_id,
+  const codet &func_body)
+{
   const std::string sol_name = "_ESBMC_Main";
-
   if (context.find_symbol(prefix + *contractNamesList.begin()) == nullptr)
   {
     log_error("Cannot find the main function");
     return true;
   }
-  // use first contract's location
+
   const symbolt &contract =
     *context.find_symbol(prefix + *contractNamesList.begin());
+
+  symbolt new_symbol;
+  code_typet main_type;
+  typet e_type = empty_typet();
+  e_type.set("cpp_type", "void");
+  main_type.return_type() = e_type;
+
   new_symbol.location = contract.location;
   std::string debug_modulename =
     get_modulename_from_path(contract.location.file().as_string());
@@ -793,106 +732,120 @@ bool solidity_convertert::multi_contract_verification_bound(
   new_symbol.file_local = false;
 
   symbolt &added_symbol = *context.move_symbol_to_context(new_symbol);
-
-  // no params
   main_type.make_ellipsis();
-
   added_symbol.type = main_type;
   added_symbol.value = func_body;
   config.main = sol_name;
   return false;
 }
 
-// for unbound, we verify each contract individually
-bool solidity_convertert::multi_contract_verification_unbound(
+bool solidity_convertert::multi_contract_verification_bound(
   std::set<std::string> &tgt_set)
 {
-  log_debug("solidity", "multi_contract_verification_unbound");
+  log_debug("solidity", "multi_contract_verification_bound");
+
   codet func_body;
   static_lifetime_init(context, func_body);
   func_body.make_block();
 
-  // add __ESBMC_HIDE
   code_labelt label;
   label.set_label("__ESBMC_HIDE");
   label.code() = code_skipt();
   func_body.operands().push_back(label);
 
-  // initialize
   std::set<std::string> cname_set;
   if (!tgt_set.empty())
     cname_set = tgt_set;
   else
     cname_set =
       std::set<std::string>(contractNamesList.begin(), contractNamesList.end());
-  for (const auto &c_name : cname_set)
+
+  // Build entry functions for each contract
+  std::vector<const symbolt *> entry_syms;
+  if (prepare_harness_entry_functions(cname_set, entry_syms))
+    return true;
+
+  // Assemble switch(nondet_uint()) { case 0: Main_A(); ... }
+  codet switch_body;
+  static_lifetime_init(context, switch_body);
+  switch_body.make_block();
+
+  int cnt = 0;
+  for (const auto *sym : entry_syms)
   {
-    // construct multi-transaction verification entry function
-    // function "_ESBMC_Main_contractname" will be created and inserted to the symbol table.
-    if (multi_transaction_verification(c_name))
-    {
-      log_error(
-        "Failed to construct multi-transaction verification for contract {}",
-        c_name);
-      return true;
-    }
+    exprt case_cond = constant_exprt(
+      integer2binary(cnt, bv_width(int_type())),
+      integer2string(cnt),
+      int_type());
 
-    // func_call: _ESBMC_Main_contractname
-    const std::string sub_sol_id =
-      "sol:@C@" + c_name + "@F@_ESBMC_Main_" + c_name + "#";
-    if (context.find_symbol(sub_sol_id) == nullptr)
-    {
-      log_error("Cannot find the {}'s main function {}", c_name, sub_sol_id);
-      return true;
-    }
+    codet case_body;
+    static_lifetime_init(context, case_body);
+    case_body.make_block();
 
-    const symbolt &func = *context.find_symbol(sub_sol_id);
     code_function_callt func_expr;
-    func_expr.location() = func.location;
-    func_expr.function() = symbol_expr(func);
+    func_expr.location() = sym->location;
+    func_expr.function() = symbol_expr(*sym);
+    case_body.move_to_operands(func_expr);
+    exprt break_expr = code_breakt();
+    case_body.move_to_operands(break_expr);
+
+    code_switch_caset switch_case;
+    switch_case.case_op() = case_cond;
+    convert_expression_to_code(case_body);
+    switch_case.code() = to_code(case_body);
+    switch_body.move_to_operands(switch_case);
+    ++cnt;
+  }
+
+  code_switcht code_switch;
+  code_switch.value() = nondet_uint_expr;
+  code_switch.body() = switch_body;
+  func_body.move_to_operands(code_switch);
+
+  std::string sol_id;
+  if (!tgt_set.empty())
+    sol_id = "sol:@C@" + *tgt_set.begin() + "@F@_ESBMC_Main#";
+  else
+    sol_id = "sol:@F@_ESBMC_Main#";
+
+  return register_harness_main(sol_id, func_body);
+}
+
+// For unbound, we verify each contract sequentially in isolation
+bool solidity_convertert::multi_contract_verification_unbound(
+  std::set<std::string> &tgt_set)
+{
+  log_debug("solidity", "multi_contract_verification_unbound");
+
+  codet func_body;
+  static_lifetime_init(context, func_body);
+  func_body.make_block();
+
+  code_labelt label;
+  label.set_label("__ESBMC_HIDE");
+  label.code() = code_skipt();
+  func_body.operands().push_back(label);
+
+  std::set<std::string> cname_set;
+  if (!tgt_set.empty())
+    cname_set = tgt_set;
+  else
+    cname_set =
+      std::set<std::string>(contractNamesList.begin(), contractNamesList.end());
+
+  // Build entry functions for each contract
+  std::vector<const symbolt *> entry_syms;
+  if (prepare_harness_entry_functions(cname_set, entry_syms))
+    return true;
+
+  // Call each entry function sequentially
+  for (const auto *sym : entry_syms)
+  {
+    code_function_callt func_expr;
+    func_expr.location() = sym->location;
+    func_expr.function() = symbol_expr(*sym);
     func_body.move_to_operands(func_expr);
   }
 
-  // add "sol_main" to symbol table
-  symbolt new_symbol;
-  code_typet main_type;
-  typet e_type = empty_typet();
-  e_type.set("cpp_type", "void");
-  main_type.return_type() = e_type;
-  const std::string sol_id = "sol:@F@_ESBMC_Main#";
-  const std::string sol_name = "_ESBMC_Main";
-
-  if (context.find_symbol(prefix + *contractNamesList.begin()) == nullptr)
-  {
-    log_error("Cannot find the main function");
-    return true;
-  }
-  // use first contract's location
-  const symbolt &contract =
-    *context.find_symbol(prefix + *contractNamesList.begin());
-  new_symbol.location = contract.location;
-  std::string debug_modulename =
-    get_modulename_from_path(contract.location.file().as_string());
-  get_default_symbol(
-    new_symbol,
-    debug_modulename,
-    main_type,
-    sol_name,
-    sol_id,
-    new_symbol.location);
-
-  new_symbol.lvalue = true;
-  new_symbol.is_extern = false;
-  new_symbol.file_local = false;
-
-  symbolt &added_symbol = *context.move_symbol_to_context(new_symbol);
-
-  // no params
-  main_type.make_ellipsis();
-
-  added_symbol.type = main_type;
-  added_symbol.value = func_body;
-  config.main = sol_name;
-
-  return false;
+  return register_harness_main("sol:@F@_ESBMC_Main#", func_body);
 }
