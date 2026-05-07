@@ -1,0 +1,6 @@
+CORE
+main.c
+--all-witnesses --max-witnesses 1
+^VERIFICATION FAILED$
+Witness 1 of 1
+--max-witnesses cap reached

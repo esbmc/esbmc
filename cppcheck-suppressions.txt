@@ -1,0 +1,15 @@
+# Cppcheck suppressions for ESBMC.
+#
+# Each line: <id>:<glob>[:<line>]
+# Run cppcheck with: --suppressions-list=cppcheck-suppressions.txt
+#
+# __ESBMC_HIDE:; is a sentinel label scanned for by
+# goto_convert_functionst::hide() in src/goto-programs/goto_convert_functions.cpp.
+# When present on any instruction in a function body, the goto-converter marks
+# the function as hidden so its steps are suppressed in counterexamples and
+# excluded from coverage reporting (see src/goto-programs/goto_coverage.cpp).
+# The label is intentionally never branched to; do not remove it.
+unusedLabel:src/c2goto/library/*
+unusedLabel:src/c2goto/library/libm/*
+unusedLabel:src/c2goto/library/python/*
+unusedLabel:src/c2goto/library/solidity/*
