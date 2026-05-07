@@ -459,7 +459,7 @@ enum ImplicitCastTypeT
 
   ImplicitCastTypeTError
 };
-ImplicitCastTypeT get_implicit_cast_type_t(std::string cast);
+ImplicitCastTypeT get_implicit_cast_type_t(const std::string &cast);
 const char *implicit_cast_type_to_str(ImplicitCastTypeT type);
 
 // the function visibility

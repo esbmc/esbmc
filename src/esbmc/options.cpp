@@ -280,7 +280,16 @@ const struct group_opt_templ all_cmd_options[] = {
      "Show YAML correctness witness c_expression parse tree"},
     {"witness",
      boost::program_options::value<std::string>()->value_name("<path>"),
-     "Set the witness path"}}},
+     "Set the witness path"},
+    {"all-witnesses",
+     NULL,
+     "After a property fails, enumerate further input vectors that also "
+     "violate it (until UNSAT or --max-witnesses is reached). "
+     "Implies --multi-property."},
+    {"max-witnesses",
+     boost::program_options::value<int>()->default_value(16)->value_name("n"),
+     "Cap the number of witnesses reported per property "
+     "(default: 16; 0 = unlimited). Only meaningful with --all-witnesses."}}},
   {"Output",
    {{"output-goto",
      boost::program_options::value<std::string>(),
@@ -519,15 +528,6 @@ const struct group_opt_templ all_cmd_options[] = {
    {{"multi-property",
      NULL,
      "Verify satisfiability of all claims of the current bound"},
-    {"all-witnesses",
-     NULL,
-     "After a property fails, enumerate further input vectors that also "
-     "violate it (until UNSAT or --max-witnesses is reached). "
-     "Implies --multi-property."},
-    {"max-witnesses",
-     boost::program_options::value<int>()->default_value(16)->value_name("n"),
-     "Cap the number of witnesses reported per property "
-     "(default: 16; 0 = unlimited). Only meaningful with --all-witnesses."},
     {"no-standard-checks", NULL, "Disable default checks"},
     {"no-assertions", NULL, "Ignore assertions"},
     {"no-bounds-check", NULL, "Do not do array bounds check"},
