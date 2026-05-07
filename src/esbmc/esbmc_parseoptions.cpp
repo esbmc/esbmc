@@ -1456,7 +1456,8 @@ int esbmc_parseoptionst::do_bmc_strategy(
   // proof or refutation has been found.  In multi-property mode the loop may
   // have continued past an earlier violation, so we must return 1 even when
   // the closing step (FC/IS) itself succeeds.
-  auto conclude = [&]() -> int {
+  auto conclude = [&]() -> int
+  {
     // In coverage mode violations are expected; always report success.
     if (any_violation_found && !is_coverage)
     {
@@ -2098,7 +2099,9 @@ bool esbmc_parseoptionst::process_goto_program(
                   cmdline.isset("branch-coverage") ||
                   cmdline.isset("branch-coverage-claims") ||
                   cmdline.isset("branch-function-coverage") ||
-                  cmdline.isset("branch-function-coverage-claims");
+                  cmdline.isset("branch-function-coverage-claims") ||
+                  cmdline.isset("k-path-coverage") ||
+                  cmdline.isset("k-path-coverage-claims");
 
     // For coverage mode, treat extra input files (cmdline.args[1:]) as include
     // files so that the coverage location_pool covers all input sources.
@@ -2443,6 +2446,75 @@ bool esbmc_parseoptionst::process_goto_program(
       tmp.branch_function_coverage();
     }
 
+    if (
+      cmdline.isset("k-path-coverage") ||
+      cmdline.isset("k-path-coverage-claims"))
+    {
+      options.set_option("base-case", true);
+      options.set_option("multi-property", true);
+      options.set_option("keep-verified-claims", false);
+      options.set_option("no-pointer-check", true);
+
+      if (cmdline.isset("unwind"))
+        options.set_option("no-unwinding-assertions", true);
+
+      std::string filename = cmdline.args[0];
+      goto_coveraget tmp(ns, goto_functions, filename);
+      if (cmdline.isset("function"))
+        tmp.set_target(cmdline.getval("function"));
+      tmp.cov_assume_asserts = cmdline.isset("cov-assume-asserts");
+
+      // Resolve N: explicit --k-path-coverage=N > --unwind > fallback 4.
+      // Reject non-positive values explicitly — `--unwind -1` (used elsewhere
+      // for "unbounded") would otherwise cast to SIZE_MAX and disable the
+      // per-function deque trim, growing goals without bound.
+      int n_arg = 0;
+      if (cmdline.isset("k-path-coverage"))
+        n_arg = atoi(cmdline.getval("k-path-coverage"));
+      if (n_arg > 0)
+        tmp.k_path_n = static_cast<size_t>(n_arg);
+      else if (cmdline.isset("unwind"))
+      {
+        int u = atoi(cmdline.getval("unwind"));
+        if (u <= 0)
+        {
+          log_error(
+            "--k-path-coverage cannot derive N from --unwind={}; pass "
+            "--k-path-coverage=N explicitly",
+            u);
+          return true;
+        }
+        tmp.k_path_n = static_cast<size_t>(u);
+      }
+      else
+      {
+        tmp.k_path_n = 4;
+        log_status(
+          "--k-path-coverage: no N or --unwind specified; defaulting to "
+          "N=4");
+      }
+
+      auto read_positive = [&](const char *flag, size_t &dst) -> bool
+      {
+        if (!cmdline.isset(flag))
+          return true;
+        int v = atoi(cmdline.getval(flag));
+        if (v <= 0)
+        {
+          log_error("--{} requires a positive integer (got {})", flag, v);
+          return false;
+        }
+        dst = static_cast<size_t>(v);
+        return true;
+      };
+      if (!read_positive("k-path-witness-depth", tmp.k_path_witness_depth))
+        return true;
+      if (!read_positive("k-path-max-goals", tmp.k_path_max_goals))
+        return true;
+
+      tmp.k_path_coverage();
+    }
+
     if (cmdline.isset("negating-property"))
     {
       std::string tgt_fname = cmdline.getval("negating-property");
@@ -2690,18 +2762,20 @@ void esbmc_parseoptionst::add_property_monitors(
 {
   std::map<std::string, std::pair<std::set<std::string>, expr2tc>> monitors;
 
-  context.foreach_operand([this, &monitors](const symbolt &s) {
-    if (
-      !has_prefix(s.name, "__ESBMC_property_") ||
-      s.name.as_string().find("$type") != std::string::npos)
-      return;
+  context.foreach_operand(
+    [this, &monitors](const symbolt &s)
+    {
+      if (
+        !has_prefix(s.name, "__ESBMC_property_") ||
+        s.name.as_string().find("$type") != std::string::npos)
+        return;
 
-    // strip prefix "__ESBMC_property_"
-    std::string prop_name = s.name.as_string().substr(17);
-    std::set<std::string> used_syms;
-    expr2tc main_expr = calculate_a_property_monitor(prop_name, used_syms);
-    monitors[prop_name] = std::pair{used_syms, main_expr};
-  });
+      // strip prefix "__ESBMC_property_"
+      std::string prop_name = s.name.as_string().substr(17);
+      std::set<std::string> used_syms;
+      expr2tc main_expr = calculate_a_property_monitor(prop_name, used_syms);
+      monitors[prop_name] = std::pair{used_syms, main_expr};
+    });
 
   if (monitors.size() == 0)
     return;
@@ -2796,10 +2870,12 @@ static void collect_symbol_names(
   }
   else
   {
-    e->foreach_operand([&prefix, &used_syms](const expr2tc &e) {
-      if (!is_nil_expr(e))
-        collect_symbol_names(e, prefix, used_syms);
-    });
+    e->foreach_operand(
+      [&prefix, &used_syms](const expr2tc &e)
+      {
+        if (!is_nil_expr(e))
+          collect_symbol_names(e, prefix, used_syms);
+      });
   }
 }
 
@@ -2891,9 +2967,8 @@ static unsigned int calc_globals_used(const namespacet &ns, const expr2tc &expr)
   {
     unsigned int globals = 0;
 
-    expr->foreach_operand([&globals, &ns](const expr2tc &e) {
-      globals += calc_globals_used(ns, e);
-    });
+    expr->foreach_operand([&globals, &ns](const expr2tc &e)
+                          { globals += calc_globals_used(ns, e); });
     return globals;
   }
 
@@ -2982,42 +3057,43 @@ void esbmc_parseoptionst::process_function_contracts(
   // This includes functions with:
   // 1. Explicit contract clauses (__ESBMC_requires, __ESBMC_ensures, __ESBMC_assigns)
   // 2. __attribute__((annotate("__ESBMC_contract"))) annotation
-  auto collect_functions_with_contracts =
-    [&contracts, &goto_functions, &ctx]() {
-      std::set<std::string> result;
-      forall_goto_functions (it, goto_functions)
+  auto collect_functions_with_contracts = [&contracts, &goto_functions, &ctx]()
+  {
+    std::set<std::string> result;
+    forall_goto_functions (it, goto_functions)
+    {
+      if (!it->second.body_available)
+        continue;
+
+      std::string func_name = id2string(it->first);
+
+      // Use is_compiler_generated (which correctly handles C++ USR IDs like
+      // "c:@F@fst#*1I#") instead of a raw '#' string filter, which would
+      // incorrectly skip all C++ functions with parameters.
+      if (contracts.is_compiler_generated(func_name))
+        continue;
+
+      // Check for explicit contract clauses in function body
+      if (contracts.has_contracts(it->second.body))
       {
-        if (!it->second.body_available)
-          continue;
-
-        std::string func_name = id2string(it->first);
-
-        // Use is_compiler_generated (which correctly handles C++ USR IDs like
-        // "c:@F@fst#*1I#") instead of a raw '#' string filter, which would
-        // incorrectly skip all C++ functions with parameters.
-        if (contracts.is_compiler_generated(func_name))
-          continue;
-
-        // Check for explicit contract clauses in function body
-        if (contracts.has_contracts(it->second.body))
-        {
-          result.insert(func_name);
-          continue;
-        }
-
-        // Check for __attribute__((annotate("__ESBMC_contract"))) annotation
-        symbolt *func_sym = ctx.find_symbol(it->first);
-        if (func_sym && contracts.is_annotated_contract_function(*func_sym))
-        {
-          result.insert(func_name);
-        }
+        result.insert(func_name);
+        continue;
       }
-      return result;
-    };
+
+      // Check for __attribute__((annotate("__ESBMC_contract"))) annotation
+      symbolt *func_sym = ctx.find_symbol(it->first);
+      if (func_sym && contracts.is_annotated_contract_function(*func_sym))
+      {
+        result.insert(func_name);
+      }
+    }
+    return result;
+  };
 
   // Lambda function to process function list (handles "*" wildcard)
-  auto process_function_list = [&collect_functions_with_contracts](
-                                 const std::list<std::string> &func_list) {
+  auto process_function_list =
+    [&collect_functions_with_contracts](const std::list<std::string> &func_list)
+  {
     std::set<std::string> result;
     for (const auto &func : func_list)
     {
@@ -3072,21 +3148,22 @@ void esbmc_parseoptionst::process_function_contracts(
 
   // Lambda to collect ONLY functions with __ESBMC_contract annotation
   auto collect_annotated_contract_functions =
-    [&contracts, &goto_functions, &ctx]() {
-      std::set<std::string> result;
-      forall_goto_functions (it, goto_functions)
-      {
-        if (!it->second.body_available)
-          continue;
-        std::string func_name = id2string(it->first);
-        if (contracts.is_compiler_generated(func_name))
-          continue;
-        symbolt *func_sym = ctx.find_symbol(it->first);
-        if (func_sym && contracts.is_annotated_contract_function(*func_sym))
-          result.insert(func_name);
-      }
-      return result;
-    };
+    [&contracts, &goto_functions, &ctx]()
+  {
+    std::set<std::string> result;
+    forall_goto_functions (it, goto_functions)
+    {
+      if (!it->second.body_available)
+        continue;
+      std::string func_name = id2string(it->first);
+      if (contracts.is_compiler_generated(func_name))
+        continue;
+      symbolt *func_sym = ctx.find_symbol(it->first);
+      if (func_sym && contracts.is_annotated_contract_function(*func_sym))
+        result.insert(func_name);
+    }
+    return result;
+  };
 
   // Process --enforce-all-contracts
   if (has_enforce_all)

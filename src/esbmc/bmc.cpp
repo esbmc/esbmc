@@ -714,6 +714,8 @@ void report_coverage(
   bool is_branch_func_cov =
     options.get_bool_option("branch-function-coverage") ||
     options.get_bool_option("branch-function-coverage-claims");
+  bool is_k_path_cov = options.get_bool_option("k-path-coverage") ||
+                       options.get_bool_option("k-path-coverage-claims");
 
   if (is_assert_cov)
   {
@@ -916,6 +918,24 @@ void report_coverage(
       log_result("Branch Coverage: N/A (no branches)");
   }
 
+  else if (is_k_path_cov)
+  {
+    const size_t total = goto_coveraget::total_kpath;
+    const size_t tracked_instance = reached_claims.size();
+    log_success("\n[Coverage]\n");
+    log_result("k-Path Witnesses : {}", total);
+    log_result("Reached : {}", tracked_instance);
+
+    if (options.get_bool_option("k-path-coverage-claims"))
+      for (const auto &claim : reached_claims)
+        log_status("  {}", prettify_solidity_expr(claim));
+
+    if (total != 0)
+      log_result("k-Path Coverage: {}%", tracked_instance * 100.0 / total);
+    else
+      log_result("k-Path Coverage: N/A (no k-path goals)");
+  }
+
   // Generate JSON coverage report
   if (options.get_bool_option("cov-report-json"))
   {
@@ -926,6 +946,8 @@ void report_coverage(
       cov_type = "branch";
     else if (is_branch_func_cov)
       cov_type = "branch-function";
+    else if (is_k_path_cov)
+      cov_type = "k-path";
     else if (is_cond_cov)
       cov_type = "condition";
     else if (is_assert_cov)
@@ -1703,7 +1725,8 @@ smt_convt::resultt bmct::multi_property_check(
                        &is,
                        &is_color,
                        &YELLOW,
-                       &runtime_solver](const size_t &i) {
+                       &runtime_solver](const size_t &i)
+  {
     //"multi-fail-fast n": stop after first n SATs found.
     if (is_fail_fast && fail_fast_cnt >= fail_fast_limit)
       return;
@@ -1771,9 +1794,9 @@ smt_convt::resultt bmct::multi_property_check(
     }
 
     // Store solver name initially but not again
-    std::call_once(summary.solver_name_flag, [&]() {
-      summary.solver_name = solver_ptr->solver_text();
-    });
+    std::call_once(
+      summary.solver_name_flag,
+      [&]() { summary.solver_name = solver_ptr->solver_text(); });
     // In coverage mode, only report instrumented coverage claims
     bool is_cov_silent =
       is_goto_cov && claim.claim_property != "instrumented assertion";

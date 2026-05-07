@@ -700,6 +700,24 @@ const struct group_opt_templ all_cmd_options[] = {
      {"branch-function-coverage-claims",
       NULL,
       "Enable branch-coverage-ext and shows all reached claims"},
+     {"k-path-coverage",
+      boost::program_options::value<int>()->implicit_value(0)->value_name("N"),
+      "Show the coverage of k-path witnesses (PathCrawler-style; "
+      "Williams et al., EDCC 2005). N is the prefix depth; if omitted, "
+      "tied to --unwind, falling back to 4 when --unwind is unset"},
+     {"k-path-coverage-claims",
+      NULL,
+      "Enable --k-path-coverage with default N (use --k-path-coverage=N "
+      "directly to override) and show all reached claims"},
+     {"k-path-witness-depth",
+      boost::program_options::value<int>()->default_value(8)->value_name("D"),
+      "Cap on post-simplification witness expression depth in --k-path-"
+      "coverage; deeper witnesses are dropped (default 8)"},
+     {"k-path-max-goals",
+      boost::program_options::value<int>()->default_value(10000)->value_name(
+        "M"),
+      "Per-function goal cap for --k-path-coverage; on overflow the "
+      "instrumentation aborts rather than truncating (default 10000)"},
      {"assign-param-nondet",
       NULL,
       "Explicitly assign every function parameters to NONDET in function "
