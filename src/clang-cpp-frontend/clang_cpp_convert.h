@@ -540,8 +540,6 @@ protected:
    */
   void pre_register_inherited_vtables(const clang::CXXRecordDecl &cxxrd);
 
-  bool convert_top_level_decl() override;
-
   /*
    * Methods for resolving a clang::MemberExpr to virtual/overriding method
    */

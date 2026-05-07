@@ -38,13 +38,6 @@ CC_DIAGNOSTIC_POP()
 #include <functional>
 #include <optional>
 
-bool clang_cpp_convertert::convert_top_level_decl()
-{
-  if (AST)
-    ASTContext = &AST->getASTContext();
-  return clang_c_convertert::convert_top_level_decl();
-}
-
 bool clang_cpp_convertert::get_struct_class_virtual_methods(
   const clang::CXXRecordDecl &cxxrd,
   struct_typet &type)
