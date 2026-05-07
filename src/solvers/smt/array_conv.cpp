@@ -492,7 +492,7 @@ array_convt::get_array_elem(smt_astt a, uint64_t index, const type2tc &subtype)
   // Basically, we have to do a linear search of all the indexes to find one
   // that matches the index argument.
   idx_record_containert::const_iterator it;
-  for (it = indexes.begin(); it != indexes.end(); it++, i++)
+  for (it = indexes.begin(); it != indexes.end(); ++it, i++)
   {
     const expr2tc &e = it->idx;
     expr2tc e2 = ctx->get(e);

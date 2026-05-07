@@ -268,11 +268,11 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
     else if (
       uint_string_to_type_map.count(typeString) ||
       int_string_to_type_map.count(typeString) || typeString == "bool" ||
-      typeString == "string" || typeString.find("literal_string") == 0 ||
+      typeString == "string" || typeString.starts_with("literal_string") ||
       typeString == "string storage ref" ||
       typeString == "string storage pointer" || typeString == "string memory" ||
       typeString == "address payable" || typeString == "address" ||
-      typeString.compare(0, 5, "bytes") == 0)
+      typeString.starts_with("bytes"))
     {
       // For state var declaration,
       return ElementaryTypeName;
@@ -410,7 +410,7 @@ ElementaryTypeNameT get_elementary_type_name_t(const nlohmann::json &type_name)
     // Will not be used
     return RA_LITERAL;
   }
-  if (typeString.find("literal_string") == 0)
+  if (typeString.starts_with("literal_string"))
   {
     return STRING_LITERAL;
   }
@@ -1232,7 +1232,7 @@ const char *func_decl_ref_to_str(FunctionDeclRefT type)
 }
 
 // auxiliary type for implicit casting
-ImplicitCastTypeT get_implicit_cast_type_t(std::string cast)
+ImplicitCastTypeT get_implicit_cast_type_t(const std::string &cast)
 {
   if (cast == "LValueToRValue")
   {
