@@ -1200,10 +1200,10 @@ exprt python_list::handle_range_slice(
     (array.type() != list_type && array.type().is_array()) ||
     (array.type().is_pointer() && array.type().subtype() == char_type());
 
-  // Determine step value (default 1). Python raises ValueError on step==0;
-  // we silently fall back to 1 so verification proceeds.
+  // Determine step value (default 1).
   bool has_step = slice_node.contains("step") && !slice_node["step"].is_null();
   long long step_val = 1;
+  bool literal_zero_step = false;
   if (has_step)
   {
     const auto &step_node = slice_node["step"];
@@ -1215,9 +1215,24 @@ exprt python_list::handle_range_slice(
     {
       step_val = step_node["value"].get<std::int64_t>();
     }
+    if (step_val == 0)
+    {
+      literal_zero_step = true;
+      step_val = 1; // continue with valid value to keep IR consistent
+    }
   }
-  if (step_val == 0)
-    step_val = 1;
+  // Python raises ValueError on step==0; emit a failing assertion so
+  // verification reports it rather than silently producing a slice.
+  // code_assertt does not insert assume(false), so the rest of the slice
+  // IR still runs with step_val==1 — that is harmless: the violation is
+  // already reported by the checker.
+  if (literal_zero_step)
+  {
+    code_assertt step_assert(gen_boolean(false));
+    step_assert.location() = converter_.get_location_from_decl(slice_node);
+    step_assert.location().comment("ValueError: slice step cannot be zero");
+    converter_.add_instruction(step_assert);
+  }
   bool negative_step = (step_val < 0);
 
   if (is_string_slice)
@@ -1453,109 +1468,9 @@ exprt python_list::handle_range_slice(
   symbolt &sliced_list = create_list();
   const locationt location = converter_.get_location_from_decl(list_value_);
 
-  auto get_list_bound =
-    [&](const std::string &bound_name, bool is_upper) -> exprt {
-    if (slice_node.contains(bound_name) && !slice_node[bound_name].is_null())
-    {
-      const auto &bound_node = slice_node[bound_name];
-      exprt bound_expr = converter_.get_expr(bound_node);
-
-      // Resolve negative index: convert to (list_size + negative_bound)
-      bool is_negative = false;
-
-      // UnaryOp USub in the AST (e.g. -1 represented as USub(1))
-      if (
-        bound_node.contains("_type") && bound_node["_type"] == "UnaryOp" &&
-        bound_node.contains("op") && bound_node["op"]["_type"] == "USub")
-      {
-        is_negative = true;
-      }
-
-      if (is_negative)
-      {
-        // Compute: list_size + bound_expr  (bound_expr is negative)
-        const symbolt *size_func =
-          converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_size");
-        if (!size_func)
-          throw std::runtime_error(
-            "__ESBMC_list_size not found in symbol table");
-
-        side_effect_expr_function_callt size_call;
-        size_call.function() = symbol_expr(*size_func);
-
-        // Check if array is already a pointer, don't take address again
-        if (array.type().is_pointer())
-          size_call.arguments().push_back(array); // Already a pointer
-        else
-          size_call.arguments().push_back(
-            address_of_exprt(array)); // Take address
-        size_call.type() = size_type();
-        size_call.location() = converter_.get_location_from_decl(list_value_);
-
-        symbolt &size_sym = converter_.create_tmp_symbol(
-          list_value_, "$list_size$", size_type(), exprt());
-        code_declt size_decl(symbol_expr(size_sym));
-        size_decl.copy_to_operands(size_call);
-        converter_.add_instruction(size_decl);
-
-        // Compute resolved = list_size + bound_expr (bound_expr is negative)
-        // detect underflow by signed arithmetic.
-        typet signed_t = signed_size_type();
-        exprt size_signed = typecast_exprt(symbol_expr(size_sym), signed_t);
-        exprt bound_signed = typecast_exprt(bound_expr, signed_t);
-        exprt resolved_signed("+", signed_t);
-        resolved_signed.copy_to_operands(size_signed, bound_signed);
-
-        // Clamp to 0 if negative
-        // list(0, list_size + bound)
-        exprt zero_signed = from_integer(0, signed_t);
-        exprt is_neg("<", bool_type());
-        is_neg.copy_to_operands(resolved_signed, zero_signed);
-        exprt clamped = if_exprt(is_neg, zero_signed, resolved_signed);
-        clamped.type() = signed_t;
-
-        return typecast_exprt(clamped, size_type());
-      }
-
-      return bound_expr;
-    }
-
-    if (is_upper)
-    {
-      const symbolt *size_func =
-        converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_size");
-      if (!size_func)
-        throw std::runtime_error("__ESBMC_list_size not found in symbol table");
-
-      side_effect_expr_function_callt size_call;
-      size_call.function() = symbol_expr(*size_func);
-
-      // Check if array is already a pointer, don't take address again
-      if (array.type().is_pointer())
-        size_call.arguments().push_back(array); // Already a pointer
-      else
-        size_call.arguments().push_back(
-          address_of_exprt(array)); // Take address
-
-      size_call.type() = size_type();
-      size_call.location() = converter_.get_location_from_decl(list_value_);
-
-      symbolt &size_sym = converter_.create_tmp_symbol(
-        list_value_, "$list_size$", size_type(), exprt());
-      code_declt size_decl(symbol_expr(size_sym));
-      size_decl.copy_to_operands(size_call);
-      converter_.add_instruction(size_decl);
-
-      return symbol_expr(size_sym);
-    }
-    else
-    {
-      return gen_zero(size_type());
-    }
-  };
-
-  // Compute list size symbol — needed for clamping (positive step) and
-  // for the size-1 default (negative step).
+  // Compute list size symbol once. Both bound resolution and (for negative
+  // step) the size-1 default reuse this temporary instead of re-emitting
+  // __ESBMC_list_size calls.
   const symbolt *size_func =
     converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_size");
   if (!size_func)
@@ -1579,51 +1494,69 @@ exprt python_list::handle_range_slice(
   // Counter type: signed for negative step (must reach -1 sentinel without
   // unsigned underflow); unsigned otherwise to match the existing IR shape
   // for the common step==1 case.
-  const typet counter_type = negative_step ? signed_size_type() : size_type();
+  const typet signed_t = signed_size_type();
+  const typet counter_type = negative_step ? signed_t : size_type();
 
-  // Resolve lower bound. Default depends on step direction.
-  exprt lower_expr;
-  if (
-    negative_step &&
-    (!slice_node.contains("lower") || slice_node["lower"].is_null()))
-  {
-    // Negative step default: size - 1
-    exprt size_signed =
-      typecast_exprt(symbol_expr(size_sym), signed_size_type());
-    lower_expr = minus_exprt(size_signed, from_integer(1, signed_size_type()));
-  }
-  else
-  {
-    exprt lower_raw = get_list_bound("lower", false);
-    lower_expr =
-      negative_step ? typecast_exprt(lower_raw, signed_size_type()) : lower_raw;
-  }
+  // Resolve a slice bound following CPython's slice.indices(len) semantics.
+  // Returns an expression of `counter_type`. We always work through signed
+  // arithmetic so negative bounds (literal or runtime), the -1 stop sentinel,
+  // and the clamp tree stay representable.
+  auto resolve_bound =
+    [&](const std::string &name, bool is_upper) -> exprt {
+    const exprt size_signed = typecast_exprt(symbol_expr(size_sym), signed_t);
+    const exprt zero_s = from_integer(0, signed_t);
+    const exprt one_s = from_integer(1, signed_t);
 
-  // Resolve upper bound. Default depends on step direction.
-  exprt upper_expr;
-  if (
-    negative_step &&
-    (!slice_node.contains("upper") || slice_node["upper"].is_null()))
-  {
-    // Negative step default: -1 (one before index 0)
-    upper_expr = from_integer(-1, signed_size_type());
-  }
-  else
-  {
-    exprt upper_raw = get_list_bound("upper", true);
-    if (negative_step)
+    // Step 1: produce a signed `resolved` value.
+    //   - missing bound → step-direction default
+    //   - present bound → val (signed); if val < 0 add size at runtime so the
+    //     fix also covers non-literal negative bounds like xs[5:b:-1].
+    exprt resolved;
+    if (!slice_node.contains(name) || slice_node[name].is_null())
     {
-      upper_expr = typecast_exprt(upper_raw, signed_size_type());
+      if (negative_step)
+        resolved = is_upper ? from_integer(-1, signed_t)
+                            : minus_exprt(size_signed, one_s);
+      else
+        resolved = is_upper ? size_signed : zero_s;
     }
     else
     {
-      // Positive step: clamp upper to size (Python: l[0:100] on len-5 list).
-      exprt upper_ge_size(">=", bool_type());
-      upper_ge_size.copy_to_operands(upper_raw, symbol_expr(size_sym));
-      upper_expr = if_exprt(upper_ge_size, symbol_expr(size_sym), upper_raw);
-      upper_expr.type() = size_type();
+      exprt val_signed =
+        typecast_exprt(converter_.get_expr(slice_node[name]), signed_t);
+      exprt size_plus_val("+", signed_t);
+      size_plus_val.copy_to_operands(size_signed, val_signed);
+      exprt is_neg("<", bool_type());
+      is_neg.copy_to_operands(val_signed, zero_s);
+      resolved = if_exprt(is_neg, size_plus_val, val_signed);
+      resolved.type() = signed_t;
     }
-  }
+
+    // Step 2: clamp to the CPython-defined window for this step direction.
+    //   pos step: [0, size]                  (start and stop)
+    //   neg step start: [-1, size-1]
+    //   neg step stop:  [-1, size-1] (stop>=size is harmless — the loop
+    //                                terminates immediately — but we clamp
+    //                                to keep the expression in a known range)
+    const exprt under = negative_step ? from_integer(-1, signed_t) : zero_s;
+    const exprt over =
+      negative_step ? minus_exprt(size_signed, one_s) : size_signed;
+
+    exprt is_under("<", bool_type());
+    is_under.copy_to_operands(resolved, under);
+    exprt c1 = if_exprt(is_under, under, resolved);
+    c1.type() = signed_t;
+
+    exprt is_over(">", bool_type());
+    is_over.copy_to_operands(c1, over);
+    exprt c2 = if_exprt(is_over, over, c1);
+    c2.type() = signed_t;
+
+    return negative_step ? c2 : typecast_exprt(c2, size_type());
+  };
+
+  exprt lower_expr = resolve_bound("lower", false);
+  exprt upper_expr = resolve_bound("upper", true);
 
   // Initialize counter at lower.
   symbolt &counter = converter_.create_tmp_symbol(
