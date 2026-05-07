@@ -1069,6 +1069,12 @@ void goto_symext::run_intrinsic(
   if (has_prefix(symname, "c:@F@__ESBMC_unroll"))
     return;
 
+  if (symname == "c:@F@__ESBMC_throw_bad_cast")
+  {
+    symex_throw_bad_cast();
+    return;
+  }
+
   log_error(
     "Function call to non-intrinsic prefixed with __ESBMC (fatal)\n"
     "The name in question: {}\n"

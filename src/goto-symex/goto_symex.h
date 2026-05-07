@@ -524,6 +524,14 @@ protected:
   /** Walk back up stack frame looking for exception handler. */
   bool symex_throw();
 
+  /** Core throw dispatch: match throw_code against stack_catch and jump.
+   *  Called by symex_throw() and symex_throw_bad_cast(). */
+  bool symex_throw_dispatch(const expr2tc &throw_code);
+
+  /** Handle dynamic_cast<T&> failure: resolve std::bad_cast from the
+   *  namespace and dispatch the exception through the normal throw path. */
+  bool symex_throw_bad_cast();
+
   /** Register exception handler on stack. */
   void symex_catch();
 
@@ -1167,6 +1175,10 @@ protected:
 
   /** Pointer to last thrown exception. */
   goto_programt::instructiont *last_throw;
+
+  /** Backing storage for last_throw when the throw originates from the
+   *  __ESBMC_throw_bad_cast intrinsic rather than a real THROW instruction. */
+  goto_programt::instructiont bad_cast_throw;
 
   /** Map of currently active exception targets, i.e. instructions where an
    *  exception is going to be merged in in the future. Keys are iterators to
