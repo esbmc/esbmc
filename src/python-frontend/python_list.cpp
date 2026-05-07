@@ -1501,8 +1501,7 @@ exprt python_list::handle_range_slice(
   // Returns an expression of `counter_type`. We always work through signed
   // arithmetic so negative bounds (literal or runtime), the -1 stop sentinel,
   // and the clamp tree stay representable.
-  auto resolve_bound =
-    [&](const std::string &name, bool is_upper) -> exprt {
+  auto resolve_bound = [&](const std::string &name, bool is_upper) -> exprt {
     const exprt size_signed = typecast_exprt(symbol_expr(size_sym), signed_t);
     const exprt zero_s = from_integer(0, signed_t);
     const exprt one_s = from_integer(1, signed_t);
