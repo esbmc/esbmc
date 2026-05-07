@@ -13,8 +13,10 @@ class InitVar:
 
 
 def dataclass(_cls=None, **kwargs):
+
     def wrap(cls):
         return cls
+
     if _cls is None:
         return wrap
     return wrap(_cls)
