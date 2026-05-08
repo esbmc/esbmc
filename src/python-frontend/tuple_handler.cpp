@@ -3,6 +3,7 @@
 #include <python-frontend/type_handler.h>
 #include <python-frontend/symbol_id.h>
 #include <util/arith_tools.h>
+#include <util/base_type.h>
 #include <util/c_types.h>
 #include <util/std_code.h>
 #include <util/std_expr.h>
@@ -129,8 +130,63 @@ exprt tuple_handler::handle_tuple_subscript(
   }
   else
   {
-    throw std::runtime_error(
-      "Tuple subscript with non-constant index is not supported");
+    // Non-constant index: build an if-expression chain selecting the matching
+    // element. Only supported when every tuple component has the same type,
+    // since the result must have a single type. Issues a runtime
+    // out-of-range assertion for indices outside [-N, N).
+    const auto &components = tuple_type.components();
+    if (components.empty())
+      throw std::runtime_error(
+        "Tuple subscript on empty tuple is not supported");
+
+    const typet &first_type = components.front().type();
+    for (const auto &comp : components)
+    {
+      if (!base_type_eq(comp.type(), first_type, converter_.ns))
+        throw std::runtime_error(
+          "Tuple subscript with non-constant index requires all elements to "
+          "have the same type");
+    }
+
+    const size_t n = components.size();
+    typet idx_type = index_expr.type();
+
+    // Normalise negative indices: idx_norm = i < 0 ? i + n : i
+    exprt n_expr = from_integer(BigInt(n), idx_type);
+    exprt zero_idx = gen_zero(idx_type);
+    exprt is_neg = binary_relation_exprt(index_expr, "<", zero_idx);
+    exprt plus_n = plus_exprt(index_expr, n_expr);
+    plus_n.type() = idx_type;
+    if_exprt idx_norm(is_neg, plus_n, index_expr);
+    idx_norm.type() = idx_type;
+
+    // Bounds: 0 <= idx_norm < n
+    exprt lo_ok = binary_relation_exprt(idx_norm, ">=", zero_idx);
+    exprt hi_ok = binary_relation_exprt(idx_norm, "<", n_expr);
+    exprt in_bounds = and_exprt(lo_ok, hi_ok);
+    code_assertt bounds_assert(in_bounds);
+    if (element.contains("lineno"))
+      bounds_assert.location() = converter_.get_location_from_decl(element);
+    bounds_assert.location().comment("Tuple index out of range");
+    converter_.add_instruction(bounds_assert);
+
+    // Build chain: i==n-1 ? element_(n-1) : (... ? ... : element_0)
+    exprt chain = member_exprt(array, components[0].get_name(), first_type);
+    for (size_t k = 1; k < n; ++k)
+    {
+      exprt member =
+        member_exprt(array, components[k].get_name(), components[k].type());
+      exprt cond =
+        binary_relation_exprt(idx_norm, "=", from_integer(BigInt(k), idx_type));
+      if_exprt sel(cond, member, chain);
+      sel.type() = first_type;
+      chain = sel;
+    }
+
+    if (element.contains("lineno"))
+      chain.location() = converter_.get_location_from_decl(element);
+
+    return chain;
   }
 
   // Handle negative indices (Python-style: -1 means last element)

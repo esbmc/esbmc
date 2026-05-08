@@ -24,6 +24,16 @@ public:
   void branch_coverage();
   void branch_function_coverage();
 
+  // k-path coverage: at each branch, emit goals for every combination of the
+  // last (n-1) branch directions and the current direction (Williams et al.,
+  // EDCC 2005). A goal is `assert(!witness)`; SAT means the path is reachable
+  // and the goal is marked covered by multi_property_check, mirroring the
+  // branch_coverage convention. The structural AND-chain preserves SSA merge
+  // friendliness up to depth_cap; past depth_cap the witness is too deep to
+  // hand to the solver and is dropped (a Phase-2 ghost-flag fallback is
+  // tracked in #4325). Goal count is bounded by max_goals per function.
+  void k_path_coverage();
+
   void insert_assert(
     goto_programt &goto_program,
     goto_programt::targett &it,
@@ -73,11 +83,24 @@ public:
   static std::set<std::pair<std::string, std::string>> total_cond;
   static size_t total_branch;
   static size_t total_func_branch;
+  static size_t total_kpath;
   // all instrumented claims (condition, location) for JSON report
   static std::set<std::pair<std::string, std::string>> all_claims;
 
   std::string target_function = "";
   bool cov_assume_asserts = false;
+
+  // k-path coverage knobs (see #4325 "Decided defaults").
+  // n  : prefix depth — number of consecutive branches in each witness
+  //      (default 4 if --unwind is unset, else --unwind).
+  // d  : post-simplification depth cap on the witness expression tree.
+  //      Witnesses deeper than d are skipped in Phase 1 (no ghost-flag
+  //      fallback yet — see #4325).
+  // m  : per-function goal cap. On overflow, instrumentation aborts with
+  //      an actionable error rather than silently truncating.
+  size_t k_path_n = 4;
+  size_t k_path_witness_depth = 8;
+  size_t k_path_max_goals = 10000;
 
 protected:
   // turn a OP b OP c into a list a, b, c

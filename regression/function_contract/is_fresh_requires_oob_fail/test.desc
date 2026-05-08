@@ -1,0 +1,5 @@
+CORE
+main.c
+--function foo --enforce-contract foo
+^VERIFICATION FAILED$
+^.*dereference failure: array bounds violated.*$

@@ -107,14 +107,13 @@ typedef struct thread_key
 __attribute__((annotate(
   "__ESBMC_inf_size"))) static __ESBMC_thread_key __ESBMC_pthread_thread_key[1];
 
-static int insert_key_value(pthread_key_t key, const void *value)
+static void insert_key_value(pthread_key_t key, const void *value)
 {
 __ESBMC_HIDE:;
   pthread_t thread = __ESBMC_get_thread_id();
   __ESBMC_pthread_thread_key[thread].thread = thread;
   __ESBMC_pthread_thread_key[thread].key = key;
   __ESBMC_pthread_thread_key[thread].value = value;
-  return 0;
 }
 
 static __ESBMC_thread_key *search_key(pthread_key_t key)
@@ -776,29 +775,12 @@ __ESBMC_HIDE:;
     key != NULL,
     "In pthread_key_create, key parameter must be different than NULL.");
   // the value NULL shall be associated with the new key in all active threads
-  int result = insert_key_value(__ESBMC_next_thread_key, NULL);
+  insert_key_value(__ESBMC_next_thread_key, NULL);
   __ESBMC_thread_key_destructors[__ESBMC_next_thread_key] = destructor;
   // store the newly created key value at *key
   *key = __ESBMC_next_thread_key++;
-  // check whether we have failed to insert the key into our list.
-  if (result < 0)
-  {
-    if (nondet_bool())
-    {
-      // Insufficient memory exists to create the key.
-      result = ENOMEM;
-    }
-    else
-    {
-      // The system lacked the necessary resources
-      // to create another thread-specific data key, or
-      // the system-imposed limit on the total number of
-      // keys per process {PTHREAD_KEYS_MAX} has been exceeded.
-      result = EAGAIN;
-    }
-  }
   __ESBMC_atomic_end();
-  return result;
+  return 0;
 }
 
 // The pthread_getspecific() function shall return
@@ -831,20 +813,10 @@ __ESBMC_HIDE:;
 int pthread_setspecific(pthread_key_t key, const void *value)
 {
 __ESBMC_HIDE:;
-  int result;
   __ESBMC_atomic_begin();
-  result = insert_key_value(key, value);
-  if (result < 0)
-  {
-    // Insufficient memory exists to associate
-    // the value with the key.
-    result = ENOMEM;
-  }
-  else if (value == NULL)
-  {
-    // The key value is invalid.
-    result = EINVAL;
-  }
+  insert_key_value(key, value);
+  // The key value is invalid when value is NULL.
+  int result = (value == NULL) ? EINVAL : 0;
   __ESBMC_atomic_end();
   return result;
 }

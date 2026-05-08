@@ -7,24 +7,22 @@ weight: 4
 
 ## Control Flow and Loops
 
-- `for` loops support direct iteration over `range()`, lists, and strings. Iteration over tuples and generators is not yet supported.
-- Comprehensions (list, dict, set, generator) are not supported.
+- `for` loops support direct iteration over `range()`, lists, strings, and generators (functions using `yield` and generator expressions). Iteration over tuples is not yet supported.
+- List comprehensions and generator expressions are supported. Set comprehensions are not supported (`Unsupported expression SetComp`). Dictionary comprehensions are accepted by the parser but produce a dictionary whose subsequent key lookups raise `KeyError`.
 - Iteration over dictionaries via `d.keys()`, `d.values()`, and `d.items()` is supported inside `for` loops (see [Supported Features — Dictionaries](./supported-features#dictionaries)).
 
 ## Context Managers
 
-- Only the non-exceptional execution path is modelled: `__enter__` is called before the body and `__exit__` is called after, but exception propagation and suppression via the `__exit__` return value are not yet supported.
+- `__enter__` is invoked before the body and `__exit__` after. Exceptions raised inside the `with` block propagate, but `__exit__`'s return value is ignored: returning `True` does not suppress the exception.
 
 ## Lists
 
-- String slicing does not support a step value (e.g., `s[::2]` is not supported).
 - `list.sort()` does not support the `key` or `reverse` keyword arguments.
 - `sorted()` does not support the `key` or `reverse` keyword arguments.
 
 ## Sets
 
-- Set methods (`.add()`, `.discard()`, `.remove()`, `.update()`, `.issubset()`, `.issuperset()`, `.symmetric_difference()`) are not supported; use binary operators (`-`, `&`, `|`) instead.
-- Set ordering operators (`<`, `<=`, `>`, `>=` for subset/superset relations) are not supported.
+- Set methods `.add()`, `.discard()`, `.update()`, `.issubset()`, `.issuperset()`, and `.symmetric_difference()` are not supported; use binary operators (`-`, `&`, `|`) instead. (`.remove()` happens to work because sets share the underlying list model.)
 - `frozenset` is not supported.
 
 ## Dictionaries
@@ -41,13 +39,13 @@ weight: 4
 
 ## Complex Numbers
 
-- The `complex()` constructor does not support string arguments (e.g., `complex("1+2j")` is not supported).
+- The `complex()` constructor accepts string arguments only when the string is a compile-time constant (e.g., `complex("1+2j")` is folded by the frontend). Constructing from a runtime string fails with "Unhandled symbol format in string extraction".
 - `cmath.polar()` and `cmath.rect()` rely on the `atan2` model; results may differ from CPython in edge cases involving signed zeros and NaN.
 
 ## Built-in Functions
 
 - `min()` and `max()` support two-argument form and single-list form only; the `key` and `default` keyword arguments are not supported.
-- `any()` and `all()` currently support only list literals as arguments; other iterable types are not supported.
+- `any()` and `all()` currently support only list literals as arguments. `any()` rejects other iterables with a parse-time error; `all()` may trigger a dereference failure on non-list iterables.
 - `sum()` supports `int` and `float` element types only; the optional `start` argument is not supported.
 - `sorted()` supports `int`, `float`, and `str` element types only; `key` and `reverse` keyword arguments are not supported.
 - `input()` is modelled as a nondeterministic string with a maximum length of 256 characters (under-approximation).
@@ -57,14 +55,12 @@ weight: 4
 ## Lambda Expressions
 
 - Return type inference is naive and defaults to `double`.
-- Higher-order and nested lambda expressions are not supported.
 - Parameter types are assumed to be `double` for simplicity.
 
 ## F-Strings
 
 - Complex expressions inside f-strings may have limited support.
 - Only basic integer (`:d`, `:i`) and float (`:.Nf`) format specs are supported; advanced format specs (e.g., string alignment `:>10`, `:<5`) are not.
-- Nested f-strings are not supported.
 - Custom format specifications for user-defined types are not supported.
 
 ## Union and Any Types

@@ -402,17 +402,6 @@ smt_astt z3_convt::mk_bvnot(smt_astt a)
   }
 }
 
-smt_astt z3_convt::mk_bvnxor(smt_astt a, smt_astt b)
-{
-  assert(
-    (a->sort->id == SMT_SORT_INT) || (b->sort->id == SMT_SORT_INT) ||
-    (a->sort->get_data_width() == b->sort->get_data_width()));
-  return new_ast(
-    !(to_solver_smt_ast<z3_smt_ast>(a)->a ^
-      to_solver_smt_ast<z3_smt_ast>(b)->a),
-    a->sort);
-}
-
 smt_astt z3_convt::mk_bvnor(smt_astt a, smt_astt b)
 {
   assert(
@@ -754,10 +743,9 @@ smt_astt z3_convt::mk_bvsge(smt_astt a, smt_astt b)
 smt_astt z3_convt::mk_eq(smt_astt a, smt_astt b)
 {
   assert(a->sort->get_data_width() == b->sort->get_data_width());
-  return new_ast(
-    (to_solver_smt_ast<z3_smt_ast>(a)->a ==
-     to_solver_smt_ast<z3_smt_ast>(b)->a),
-    boolean_sort);
+  auto &za = to_solver_smt_ast<z3_smt_ast>(a)->a;
+  auto &zb = to_solver_smt_ast<z3_smt_ast>(b)->a;
+  return new_ast(za == zb, boolean_sort);
 }
 
 smt_astt z3_convt::mk_neq(smt_astt a, smt_astt b)
@@ -846,12 +834,9 @@ smt_astt z3_convt::mk_sign_ext(smt_astt a, unsigned int topwidth)
 
 smt_astt z3_convt::mk_zero_ext(smt_astt a, unsigned int topwidth)
 {
+  auto &za = to_solver_smt_ast<z3_smt_ast>(a)->a;
   smt_sortt s = mk_bv_sort(a->sort->get_data_width() + topwidth);
-  return new_ast(
-    z3::to_expr(
-      z3_ctx,
-      Z3_mk_zero_ext(z3_ctx, topwidth, to_solver_smt_ast<z3_smt_ast>(a)->a)),
-    s);
+  return new_ast(z3::to_expr(z3_ctx, Z3_mk_zero_ext(z3_ctx, topwidth, za)), s);
 }
 
 smt_astt z3_convt::mk_concat(smt_astt a, smt_astt b)
@@ -1076,7 +1061,8 @@ smt_astt z3_smt_ast::project(smt_convt *conv, unsigned int elem) const
   assert(elem < data.members.size());
   const smt_sort *idx_sort = conv->convert_sort(data.members[elem]);
 
-  return z3_conv->new_ast(z3_conv->mk_tuple_select(a, elem), idx_sort);
+  z3::expr selected = z3_conv->mk_tuple_select(a, elem);
+  return z3_conv->new_ast(selected, idx_sort);
 }
 
 smt_astt z3_convt::tuple_create(const expr2tc &structdef)

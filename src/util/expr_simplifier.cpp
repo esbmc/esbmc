@@ -2337,22 +2337,6 @@ expr2tc bitnor2t::do_simplify() const
   return do_bit_munge_operation<bitnor2t>(op, type, side_1, side_2);
 }
 
-expr2tc bitnxor2t::do_simplify() const
-{
-  auto op = [](uint64_t op1, uint64_t op2) { return ~(op1 ^ op2); };
-
-  // Is a vector operation ? Apply the op
-  if (is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
-  {
-    auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
-      return bitnxor2tc(t, e1, e2);
-    };
-    return distribute_vector_operation(op, side_1, side_2);
-  }
-
-  return do_bit_munge_operation<bitnxor2t>(op, type, side_1, side_2);
-}
-
 expr2tc bitnot2t::do_simplify() const
 {
   // ~(~x) = x (double complement)

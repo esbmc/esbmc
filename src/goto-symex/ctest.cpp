@@ -5,6 +5,7 @@
 #include <util/message/format.h>
 #include <irep2/irep2_expr.h>
 #include <boost/date_time/posix_time/posix_time.hpp>
+#include <cstdio>
 #include <fstream>
 #include <unordered_set>
 #include <algorithm>
@@ -131,7 +132,7 @@ std::string ctest_generator::type_to_c_string(const type2tc &type) const
       if (width == 32)
         return "int";
       if (width == 64)
-        return "long long";
+        return "long";
       return "int"; // Default
     }
     else
@@ -143,7 +144,7 @@ std::string ctest_generator::type_to_c_string(const type2tc &type) const
       if (width == 32)
         return "unsigned int";
       if (width == 64)
-        return "unsigned long long";
+        return "unsigned long";
       return "unsigned int"; // Default
     }
   }
@@ -227,7 +228,28 @@ std::string ctest_generator::format_c_value(const expr2tc &value) const
   }
   else if (is_constant_floatbv2t(value))
   {
-    return to_constant_floatbv2t(value).value.to_ansi_c_string();
+    const ieee_floatt &fv = to_constant_floatbv2t(value).value;
+    // ieee_floatt::to_ansi_c_string emits "+INFINITY"/"-INFINITY"/"+NAN"/"-NAN"
+    // for non-finite values. The leading '+' and the macro names without a
+    // header are not portable C, so normalise to the standard <math.h>
+    // macros INFINITY and NAN, which the generated test file includes.
+    if (fv.is_NaN())
+      return "NAN";
+    if (fv.is_infinity())
+      return fv.get_sign() ? "-INFINITY" : "INFINITY";
+    // Print with enough decimal digits to round-trip the IEEE-754 bit
+    // pattern: 17 for 64-bit double, 9 for 32-bit float
+    // (std::numeric_limits<T>::max_digits10).  to_ansi_c_string defaults to 6
+    // digits, which loses bits and lets a satisfying SMT model evaluate
+    // differently in native arithmetic when the test case is compiled.
+    char buf[64];
+    if (fv.spec == ieee_float_spect::double_precision())
+      std::snprintf(buf, sizeof(buf), "%.17g", fv.to_double());
+    else if (fv.spec == ieee_float_spect::single_precision())
+      std::snprintf(buf, sizeof(buf), "%.9gf", fv.to_float());
+    else
+      return fv.to_ansi_c_string();
+    return buf;
   }
   else if (is_constant_bool2t(value))
   {
@@ -379,6 +401,8 @@ static void write_c_test_file(
     f << "// Test case " << index << " of " << total << "\n";
   f << "// This file provides concrete implementations of "
        "__VERIFIER_nondet_* functions\n\n";
+  // Provides INFINITY and NAN macros referenced by float test values.
+  f << "#include <math.h>\n\n";
   // Providing a definition here avoids linker errors.
   f << "void __VERIFIER_assume(int cond) { (void)cond; }\n\n";
   write_nondet_functions(f, type_values, c_types, "_Bool");
@@ -398,6 +422,8 @@ static void write_cpp_test_file(
     f << "// Test case " << index << " of " << total << "\n";
   f << "// This file provides concrete implementations of "
        "__VERIFIER_nondet_* functions\n\n";
+  // Provides INFINITY and NAN macros referenced by float test values.
+  f << "#include <cmath>\n\n";
   f << "extern \"C\" {\n\n";
   f << "void __VERIFIER_assume(int cond) { (void)cond; }\n\n";
   write_nondet_functions(f, type_values, c_types, "bool");
@@ -436,11 +462,11 @@ static void write_verifier_header()
   h << "char __VERIFIER_nondet_char(void);\n";
   h << "short __VERIFIER_nondet_short(void);\n";
   h << "int __VERIFIER_nondet_int(void);\n";
-  h << "long long __VERIFIER_nondet_long(void);\n";
+  h << "long __VERIFIER_nondet_long(void);\n";
   h << "unsigned char __VERIFIER_nondet_uchar(void);\n";
   h << "unsigned short __VERIFIER_nondet_ushort(void);\n";
   h << "unsigned int __VERIFIER_nondet_uint(void);\n";
-  h << "unsigned long long __VERIFIER_nondet_ulong(void);\n";
+  h << "unsigned long __VERIFIER_nondet_ulong(void);\n";
   h << "float __VERIFIER_nondet_float(void);\n";
   h << "double __VERIFIER_nondet_double(void);\n";
   h << "/* In C++ 'bool' is a built-in type; in C use _Bool (native C99\n";

@@ -238,7 +238,7 @@ bool claim_slicer::run(symex_target_equationt::SSA_stepst &steps)
   size_t counter = 1;
   for (symex_target_equationt::SSA_stepst::iterator it = steps.begin();
        it != steps.end();
-       it++)
+       ++it)
   {
     // just find the next assertion
     if (it->is_assert())

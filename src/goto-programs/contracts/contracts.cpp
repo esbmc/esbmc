@@ -999,23 +999,35 @@ goto_programt code_contractst::generate_checking_wrapper(
       stripped = to_typecast2t(stripped).from;
 
     // Determine the lvalue to assign the malloc result to.
+    //
+    // __ESBMC_is_fresh(EXPR, n) means "EXPR points to a fresh n-byte
+    // allocation".  The malloc result therefore goes INTO EXPR — EXPR is
+    // already the pointer-typed lvalue we want to write.  Two equivalent
+    // surface forms appear in practice:
+    //
+    //   __ESBMC_is_fresh(p,  n)   — bare pointer (the canonical form per
+    //                                docs/function-contracts.md);
+    //                                stripped is the pointer expression p.
+    //   __ESBMC_is_fresh(&p, n)   — address-of-variable form;
+    //                                stripped is &p, so the lvalue is *(&p) = p.
+    //
+    // Both forms must end up assigning the malloc result to p itself, never
+    // to *p.  Earlier revisions had a "fallback" else branch that emitted
+    // *p = malloc(...), which dereferenced an uninitialised p and tripped
+    // alignment / pointer-validity checks before the body even ran.
     expr2tc ptr_var;
     if (is_address_of2t(stripped))
     {
-      // &var → ptr_var = var (the pointer variable itself, e.g. hdr_len)
+      // &var → assign to var (peel the address-of).
       ptr_var = to_address_of2t(stripped).ptr_obj;
     }
     else
     {
-      // Fallback: dereference the (possibly stripped) pointer.
-      expr2tc ptr_to_deref =
-        is_pointer_type(stripped->type) ? stripped : info.ptr_arg;
+      // Bare pointer expression — assign directly to it.
       assert(
-        is_pointer_type(ptr_to_deref->type) && "ptr_arg must be pointer type");
-      type2tc inner_type = to_pointer_type(ptr_to_deref->type).subtype;
-      if (is_empty_type(inner_type))
-        inner_type = pointer_type2tc(get_empty_type());
-      ptr_var = dereference2tc(inner_type, ptr_to_deref);
+        is_pointer_type(stripped->type) &&
+        "__ESBMC_is_fresh first argument must be pointer-typed");
+      ptr_var = stripped;
     }
 
     // Use u8 as the alloc element type so that size_expr (in bytes) equals
@@ -1048,6 +1060,9 @@ goto_programt code_contractst::generate_checking_wrapper(
   // Collect the set of params already allocated by __ESBMC_is_fresh so that
   // add_pointer_validity_assumptions can skip them (avoids overwriting a
   // correctly-sized is_fresh allocation with a single-element malloc).
+  // Both surface forms must be recognised: __ESBMC_is_fresh(&p, n) yields
+  // an address_of2t over symbol p; __ESBMC_is_fresh(p, n) yields the
+  // bare symbol expression p.
   std::set<irep_idt> is_fresh_allocated_params;
   for (const auto &info : is_fresh_calls)
   {
@@ -1059,6 +1074,10 @@ goto_programt code_contractst::generate_checking_wrapper(
       const expr2tc &obj = to_address_of2t(stripped).ptr_obj;
       if (is_symbol2t(obj))
         is_fresh_allocated_params.insert(to_symbol2t(obj).thename);
+    }
+    else if (is_symbol2t(stripped))
+    {
+      is_fresh_allocated_params.insert(to_symbol2t(stripped).thename);
     }
   }
 

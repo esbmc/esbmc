@@ -159,7 +159,7 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
     struct_union_typet::componentt comp(id, name, t);
     if (fd.isBitField())
     {
-      if (get_bitfield_type(fd, t, comp.type()))
+      if (wrap_bitfield_type_if_needed(fd, comp.type()))
         return true;
 
 #if LLVM_VERSION_MAJOR > 18
@@ -1539,6 +1539,20 @@ bool clang_c_convertert::get_builtin_type(
   return false;
 }
 
+bool clang_c_convertert::wrap_bitfield_type_if_needed(
+  const clang::FieldDecl &fd,
+  typet &t)
+{
+  if (!fd.isBitField())
+    return false;
+
+  typet bitfield_type;
+  if (get_bitfield_type(fd, t, bitfield_type))
+    return true;
+  t.swap(bitfield_type);
+  return false;
+}
+
 bool clang_c_convertert::get_bitfield_type(
   const clang::FieldDecl &fd,
   const typet &orig_type,
@@ -1574,30 +1588,39 @@ bool clang_c_convertert::get_bitfield_type(
   return false;
 }
 
-// Flatten Clang's InitListExpr for a struct into a linear sequence of Expr*
+// Flatten Clang's InitListExpr for a struct into a linear sequence of exprt
 // that matches ESBMC's flat component layout.
 //
 // In C++17/20, aggregate-initializing a derived struct `struct D : B { ... }`
 // produces an InitListExpr where the first sub-expressions are themselves
-// InitListExprs for each base-class sub-object.  ESBMC's IR instead pulls all
-// base-class components into D's own component list (see
-// get_base_components_methods).  This helper recursively expands base-class
-// sub-object InitListExprs so that the resulting flat_inits vector is
-// element-for-element with ESBMC's component list.
+// InitListExprs (or CXXConstructExprs) for each base-class sub-object. ESBMC's
+// IR instead pulls all base-class components into D's own component list (see
+// get_base_components_methods). This helper recursively expands base-class
+// sub-object entries so that the resulting flat vector is element-for-element
+// with ESBMC's component list.
+//
+// For a CXXConstructExpr base (e.g. from `Derived d{}`), the expression is
+// converted once and each of its non-bitfield fields is pushed as a
+// member_exprt, keeping types aligned without duplication.
 //
 // Note: get_base_components_methods uses an alphabetically-ordered base_map,
 // so for multiple-inheritance the component order may not match declaration
 // order.  Single-inheritance (the common case) is unaffected.
-static void get_base_flattened_inits(
+bool clang_c_convertert::get_base_flattened_inits(
   const clang::InitListExpr &init,
-  std::vector<const clang::Expr *> &flat)
+  std::vector<exprt> &flat)
 {
   const auto *cxxrd = init.getType()->getAsCXXRecordDecl();
   if (!cxxrd || cxxrd->getNumBases() == 0)
   {
     for (unsigned j = 0, n = init.getNumInits(); j < n; ++j)
-      flat.push_back(init.getInit(j));
-    return;
+    {
+      exprt val;
+      if (get_expr(*init.getInit(j), val))
+        return true;
+      flat.push_back(std::move(val));
+    }
+    return false;
   }
 
   for (unsigned j = 0, n = init.getNumInits(); j < n; ++j)
@@ -1612,17 +1635,27 @@ static void get_base_flattened_inits(
     {
       if (const auto *nested = llvm::dyn_cast<clang::InitListExpr>(e))
       {
-        get_base_flattened_inits(*nested, flat);
+        if (get_base_flattened_inits(*nested, flat))
+          return true;
         continue;
       }
-      log_warning(
-        "clang-c-frontend",
-        "base-class initializer is not an InitListExpr; "
-        "flat initializer may be misaligned for type {}",
-        e->getType().getAsString());
+      // CXXConstructExpr base initializer (e.g. from `Derived d{}`): convert
+      // once and expand each field as a member_exprt so types stay aligned.
+      exprt base_expr;
+      if (get_expr(*e, base_expr))
+        return true;
+      for (const auto &field :
+           to_struct_type(ns.follow(base_expr.type())).components())
+        if (!field.get_is_unnamed_bitfield())
+          flat.push_back(member_exprt(base_expr, field.name(), field.type()));
+      continue;
     }
-    flat.push_back(e);
+    exprt val;
+    if (get_expr(*e, val))
+      return true;
+    flat.push_back(std::move(val));
   }
+  return false;
 }
 
 bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
@@ -2294,8 +2327,9 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       // In C++17/20 aggregate-init of a derived struct, Clang places one
       // InitListExpr per base-class sub-object, but ESBMC's IR flattens all
       // base-class components into the struct. Flatten before matching.
-      std::vector<const clang::Expr *> flat_inits;
-      get_base_flattened_inits(init_stmt, flat_inits);
+      std::vector<exprt> flat_inits;
+      if (get_base_flattened_inits(init_stmt, flat_inits))
+        return true;
 
       unsigned int num = static_cast<unsigned>(flat_inits.size());
       for (unsigned int i = 0, j = 0; (i < inits.operands().size() && j < num);
@@ -2310,10 +2344,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
             continue;
         }
 
-        // Get the value being initialized
-        exprt init;
-        if (get_expr(*flat_inits[j++], init))
-          return true;
+        exprt init = flat_inits[j++];
 
         typet elem_type;
         if (t.is_struct())
@@ -2322,6 +2353,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
           elem_type = to_array_type(t).subtype();
         else
           elem_type = to_vector_type(t).subtype();
+
         gen_typecast(ns, init, elem_type);
         inits.operands().at(i) = init;
       }
@@ -3311,6 +3343,27 @@ bool clang_c_convertert::get_cast_expr(
     gen_typecast(ns, expr, type);
     break;
 
+  // Member-pointer casts. ESBMC stores data-member pointers as plain pointers
+  // carrying a "to-member" type attribute and tracks no per-class offset, so
+  // BaseToDerived / Reinterpret reduce to an IR-level retag and
+  // MemberPointerToBoolean to a non-zero check against the same gen_zero
+  // value CK_NullToMemberPointer below produces. typecast_exprt is used
+  // directly: c_typecastt::implicit_typecast_followed's to-member branch
+  // dereferences expr.op0() assuming a literal &Class::member operand, which
+  // segfaults when the operand is a variable of member-pointer type.
+  case clang::CK_BaseToDerivedMemberPointer:
+  case clang::CK_ReinterpretMemberPointer:
+    expr = typecast_exprt(expr, type);
+    break;
+
+  case clang::CK_MemberPointerToBoolean:
+  {
+    exprt cmp("notequal", bool_type());
+    cmp.copy_to_operands(expr, gen_zero(expr.type()));
+    expr = cmp;
+    break;
+  }
+
   case clang::CK_AddressSpaceConversion:
   case clang::CK_NullToPointer:
   case clang::CK_NullToMemberPointer:
@@ -3939,10 +3992,8 @@ bool clang_c_convertert::get_member_expr(
 
   if (const auto *bitfield = memb.getSourceBitField())
   {
-    typet bitfield_type;
-    if (get_bitfield_type(*bitfield, comp_type, bitfield_type))
+    if (wrap_bitfield_type_if_needed(*bitfield, comp_type))
       return true;
-    comp_type.swap(bitfield_type);
   }
 
   std::string id, name;
