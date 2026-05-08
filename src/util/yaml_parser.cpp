@@ -2,6 +2,7 @@
 #include <fstream>
 #include <unordered_map>
 #include <sstream>
+#include <util/message.h>
 
 std::vector<invariant> yaml_parser::read_invariants(const std::string &path)
 {
@@ -72,6 +73,85 @@ invariant::Type yaml_parser::type_from_string(const std::string &s)
     return invariant::location_transition_invariant;
 
   log_error("Unknown invariant type: {}", s);
+  abort();
+}
+
+std::vector<waypoint> yaml_parser::get_waypoints(const std::string &path)
+{
+  std::vector<waypoint> result;
+  try
+  {
+    YAML::Node root = YAML::LoadFile(path);
+    if (!root || !root.IsSequence())
+      return result;
+
+    for (const auto &entry : root)
+    {
+      const auto &content = entry["content"];
+      if (!content || !content.IsSequence())
+        continue;
+
+      for (const auto &item : content)
+      {
+        const auto &seg = item["segment"];
+        if (!seg || !seg.IsSequence())
+          continue;
+
+        for (const auto &wp_node : seg)
+        {
+          const auto &node = wp_node["waypoint"];
+          if (!node)
+            continue;
+          result.push_back(parse_waypoint(node));
+        }
+      }
+    }
+  }
+  catch (const YAML::Exception &e)
+  {
+    log_error("Failed to parse violation witness YAML '{}': {}", path, e.what());
+  }
+  return result;
+}
+
+waypoint yaml_parser::parse_waypoint(const YAML::Node &node)
+{
+  waypoint wp;
+
+  if (node["type"])
+    wp.type = waypoint_type_from_string(node["type"].as<std::string>());
+
+  const auto &constraint = node["constraint"];
+  if (constraint && constraint["value"])
+    wp.value = constraint["value"].as<std::string>();
+
+  const auto &loc = node["location"];
+  if (loc)
+  {
+    if (loc["line"])
+      wp.line = BigInt(loc["line"].as<std::string>().c_str(), 10);
+    if (loc["function"])
+      wp.function = loc["function"].as<std::string>();
+  }
+
+  return wp;
+}
+
+waypoint::Type
+yaml_parser::waypoint_type_from_string(const std::string &s)
+{
+  if (s == "assumption")
+    return waypoint::assumption;
+  if (s == "target")
+    return waypoint::target;
+  if (s == "function_enter")
+    return waypoint::function_enter;
+  if (s == "function_return")
+    return waypoint::function_return;
+  if (s == "branching")
+    return waypoint::branching;
+
+  log_error("Unknown waypoint type: {}", s);
   abort();
 }
 

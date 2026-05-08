@@ -9,6 +9,7 @@ class yaml_parser
 {
 public:
   static std::vector<invariant> read_invariants(const std::string &path);
+  static std::vector<waypoint> get_waypoints(const std::string &path);
 
   // Reads the source file at `source_path` and returns a new source string
   // with witness intrinsic calls inserted before each annotated line.
@@ -22,4 +23,7 @@ public:
 private:
   static invariant parse_invariant(const YAML::Node &node);
   static invariant::Type type_from_string(const std::string &s);
+
+  static waypoint parse_waypoint(const YAML::Node &node);
+  static waypoint::Type waypoint_type_from_string(const std::string &s);
 };
