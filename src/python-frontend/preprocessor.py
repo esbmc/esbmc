@@ -77,6 +77,8 @@ class Preprocessor(ast.NodeTransformer):
         self._dataclass_class_specs = {}
         self._needs_dataclass_field_helper = False
         self._needs_dataclass_replace_error_helper = False
+        self._needs_dataclass_getattr_helper = False
+        self._needs_dataclass_initvar_import = False
         self._assert_eq_counter = 0
         self._known_literal_values = {}
         self._identity_functions = set()
@@ -425,6 +427,10 @@ class Preprocessor(ast.NodeTransformer):
 
         # Transform the module as usual
         node = self.generic_visit(node)
+
+        if self._needs_dataclass_initvar_import:
+            self._ensure_dataclass_initvar_import(node)
+
         # If we used range loops, inject helper functions at the beginning
         if self.helper_functions_added:
             helper_functions = self._create_helper_functions()
@@ -442,7 +448,46 @@ class Preprocessor(ast.NodeTransformer):
             helper_fn = self._build_dataclass_replace_error_helper(node)
             node.body = [helper_fn] + node.body
 
+        if self._needs_dataclass_getattr_helper:
+            helper_fn = self._build_dataclass_getattr_helper(node)
+            node.body = [helper_fn] + node.body
+
         return node
+
+    def _ensure_dataclass_initvar_import(self, module_node):
+        for stmt in module_node.body:
+            if isinstance(stmt, ast.ImportFrom) and stmt.module == "dataclasses":
+                if any(alias.name in ("InitVar", "*") for alias in stmt.names):
+                    return
+
+        import_stmt = ast.ImportFrom(
+            module="dataclasses",
+            names=[ast.alias(name="InitVar", asname=None)],
+            level=0,
+        )
+        self.ensure_all_locations(import_stmt, module_node)
+        ast.fix_missing_locations(import_stmt)
+
+        insert_index = 0
+        if module_node.body:
+            first_stmt = module_node.body[0]
+            if isinstance(first_stmt, ast.Expr) and (
+                (
+                    isinstance(first_stmt.value, ast.Constant)
+                    and isinstance(first_stmt.value.value, str)
+                )
+                or isinstance(first_stmt.value, ast.Str)
+            ):
+                insert_index = 1
+
+        while insert_index < len(module_node.body):
+            stmt = module_node.body[insert_index]
+            if isinstance(stmt, ast.ImportFrom) and stmt.module == "__future__":
+                insert_index += 1
+                continue
+            break
+
+        module_node.body.insert(insert_index, import_stmt)
 
     def _build_dataclass_field_helper_class(self, source_node):
         init_fn = ast.FunctionDef(
@@ -508,6 +553,41 @@ class Preprocessor(ast.NodeTransformer):
                         keywords=[],
                     ),
                     cause=None,
+                )
+            ],
+            decorator_list=[],
+            returns=None,
+            type_comment=None,
+        )
+        self.ensure_all_locations(fn, source_node)
+        ast.fix_missing_locations(fn)
+        return fn
+
+    def _build_dataclass_getattr_helper(self, source_node):
+        fn = ast.FunctionDef(
+            name="__ESBMC_dataclass_getattr",
+            args=ast.arguments(
+                posonlyargs=[],
+                args=[
+                    ast.arg(arg="obj", annotation=None),
+                    ast.arg(arg="name", annotation=ast.Name(id="str", ctx=ast.Load())),
+                ],
+                vararg=None,
+                kwonlyargs=[],
+                kw_defaults=[],
+                kwarg=None,
+                defaults=[],
+            ),
+            body=[
+                ast.Return(
+                    value=ast.Call(
+                        func=ast.Name(id="getattr", ctx=ast.Load()),
+                        args=[
+                            ast.Name(id="obj", ctx=ast.Load()),
+                            ast.Name(id="name", ctx=ast.Load()),
+                        ],
+                        keywords=[],
+                    )
                 )
             ],
             decorator_list=[],
@@ -704,8 +784,9 @@ class Preprocessor(ast.NodeTransformer):
             attr="name",
             ctx=ast.Load(),
         )
+        self._needs_dataclass_getattr_helper = True
         dataclass_value_expr = ast.Call(
-            func=ast.Name(id="getattr", ctx=ast.Load()),
+            func=ast.Name(id="__ESBMC_dataclass_getattr", ctx=ast.Load()),
             args=[
                 ast.Name(id=value_name, ctx=ast.Load()),
                 ast.Attribute(
@@ -5477,10 +5558,6 @@ class Preprocessor(ast.NodeTransformer):
         prefix, lowered_value, lowered_type = self._lower_listcomp_in_expr(node.value)
         node.value = lowered_value
         if prefix:
-            if not all(isinstance(t, ast.Name) for t in node.targets):
-                raise NotImplementedError(
-                    "List comprehension assignment requires simple target names"
-                )
             # lowered_value is a Name node referencing the same temp variable;
             # sharing it across assignments correctly models Python's single-evaluation
             # semantics for chained assignments (a = b = expr evaluates expr once).
@@ -5490,7 +5567,8 @@ class Preprocessor(ast.NodeTransformer):
                 self._copy_location_info(node, assign)
                 self.ensure_all_locations(assign, node)
                 ast.fix_missing_locations(assign)
-                self.known_variable_types[target.id] = lowered_type
+                if isinstance(target, ast.Name):
+                    self.known_variable_types[target.id] = lowered_type
                 assigns.append(assign)
             return prefix + assigns
 
@@ -6210,6 +6288,13 @@ class Preprocessor(ast.NodeTransformer):
                 self.known_variable_types[arg.arg] = param_type
                 self.variable_annotations[arg.arg] = arg.annotation
 
+        # Keyword-only parameters participate in assignments/type checks too.
+        for arg in node.args.kwonlyargs:
+            if arg.annotation is not None:
+                param_type = self._extract_type_from_annotation(arg.annotation)
+                self.known_variable_types[arg.arg] = param_type
+                self.variable_annotations[arg.arg] = arg.annotation
+
         # Determine the qualified name for methods
         if hasattr(self, "current_class_name") and self.current_class_name:
             qualified_name = f"{self.current_class_name}.{node.name}"
@@ -6743,6 +6828,12 @@ class Preprocessor(ast.NodeTransformer):
             else:
                 args.append(arg)
 
+        # Register synthesized dataclass __init__ keyword-only parameters
+        # before generic visiting so call-site validation can consume them.
+        self.functionKwonlyParams[f"{class_node.name}.__init__"] = [
+            field["name"] for field in kwonly_fields
+        ]
+
         # Body: assign every field, in declaration order. Factory fields use
         # ``self.<field> = <factory>()`` directly; other fields copy from the
         # corresponding parameter.
@@ -7121,6 +7212,8 @@ class Preprocessor(ast.NodeTransformer):
             return class_node
 
         fields, dataclass_options = self.collect_fields(class_node)
+        if any(field["kind"] == "initvar" for field in fields):
+            self._needs_dataclass_initvar_import = True
         post_init_method = self._get_post_init_method(class_node)
         active_fields = [
             field for field in fields if field["kind"] in ("instance", "initvar")
