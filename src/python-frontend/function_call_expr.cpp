@@ -4559,11 +4559,16 @@ exprt function_call_expr::handle_general_function_call()
     return handle_round(arg);
   }
 
+  // sum() accepts an optional start argument (sum(iterable, start)); accept
+  // both 1- and 2-arg forms so the typed dispatch picks sum / sum_float
+  // consistently. The other builtins below remain 1-arg only.
+  const size_t n_args = call_["args"].size();
+  const bool is_sorted_min_max =
+    func_name == "min" || func_name == "max" || func_name == "sorted";
   if (
     !is_user_imported &&
-    (func_name == "min" || func_name == "max" || func_name == "sorted" ||
-     func_name == "sum") &&
-    call_["args"].size() == 1)
+    ((is_sorted_min_max && n_args == 1) ||
+     (func_name == "sum" && (n_args == 1 || n_args == 2))))
   {
     exprt list_arg = converter_.get_expr(call_["args"][0]);
     typet elem_type;
