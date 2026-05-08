@@ -774,6 +774,57 @@ bool __ESBMC_list_remove(
   return false;
 }
 
+/* set.add(elem) — append elem to the underlying list iff it is not
+ * already present. Returns true when the set was modified. */
+bool __ESBMC_set_add(
+  PyListObject *s,
+  const void *item,
+  size_t item_type_id,
+  size_t item_size)
+{
+  __ESBMC_assert(s != NULL, "ValueError: set is null");
+
+  if (__ESBMC_list_contains(s, item, item_type_id, item_size))
+    return false;
+
+  return __ESBMC_list_push(s, item, item_type_id, item_size, 0, 0);
+}
+
+/* set.discard(elem) — like list.remove but silent when the element is
+ * absent. Returns true when an element was removed. */
+bool __ESBMC_set_discard(
+  PyListObject *s,
+  const void *item,
+  size_t item_type_id,
+  size_t item_size)
+{
+  __ESBMC_assert(s != NULL, "ValueError: set is null");
+
+  size_t i = 0;
+  while (i < s->size)
+  {
+    const PyObject *elem = &s->items[i];
+
+    if (elem->type_id == item_type_id && elem->size == item_size)
+    {
+      if (__ESBMC_values_equal(elem->value, item, item_size))
+      {
+        size_t j = i;
+        while (j < s->size - 1)
+        {
+          s->items[j] = s->items[j + 1];
+          j++;
+        }
+        s->size--;
+        return true;
+      }
+    }
+    i++;
+  }
+
+  return false;
+}
+
 void __ESBMC_list_sort(PyListObject *l, int type_flag, uint64_t float_type_id)
 {
   if (!l || l->size <= 1)
