@@ -2420,6 +2420,120 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     break;
   }
 
+  // C++20 parenthesised aggregate initialisation: S s(1, 2). Per
+  // [dcl.init.general] in N4861, the args bind positionally to non-static
+  // data members in declaration order, with base sub-objects flattened
+  // into the same flat sequence the way they are for InitListExpr.
+  case clang::Stmt::CXXParenListInitExprClass:
+  {
+    const clang::CXXParenListInitExpr &init_stmt =
+      static_cast<const clang::CXXParenListInitExpr &>(stmt);
+
+    typet t;
+    if (get_type(init_stmt.getType(), t))
+      return true;
+
+    t = get_complete_type(t, ns);
+    auto args = init_stmt.getInitExprs();
+    exprt inits;
+
+    if (t.is_struct() || t.is_array() || t.is_vector())
+    {
+      inits = gen_zero(t);
+
+      // Mirror InitListExpr: when the target has base sub-objects, replace
+      // any arg whose type is a direct base with its flattened scalar
+      // fields so the positional mapping lines up with ESBMC's flattened
+      // struct components.
+      std::vector<exprt> flat_inits;
+      const auto *cxxrd = init_stmt.getType()->getAsCXXRecordDecl();
+      const bool has_bases = cxxrd && cxxrd->getNumBases() > 0;
+      for (const clang::Expr *e : args)
+      {
+        if (has_bases)
+        {
+          const clang::Type *etype =
+            e->getType().getCanonicalType().getTypePtr();
+          bool is_base = llvm::any_of(
+            cxxrd->bases(), [&](const clang::CXXBaseSpecifier &base) {
+              return base.getType().getCanonicalType().getTypePtr() == etype;
+            });
+          if (is_base)
+          {
+            exprt base_expr;
+            if (get_expr(*e, base_expr))
+              return true;
+            for (const auto &field :
+                 to_struct_type(ns.follow(base_expr.type())).components())
+              if (!field.get_is_unnamed_bitfield())
+                flat_inits.push_back(
+                  member_exprt(base_expr, field.name(), field.type()));
+            continue;
+          }
+        }
+        exprt val;
+        if (get_expr(*e, val))
+          return true;
+        flat_inits.push_back(std::move(val));
+      }
+
+      const unsigned num = static_cast<unsigned>(flat_inits.size());
+      for (unsigned i = 0, j = 0;
+           i < inits.operands().size() && j < num;
+           ++i)
+      {
+        const struct_union_typet::componentt *c = nullptr;
+        if (t.is_struct())
+        {
+          c = &to_struct_union_type(t).components()[i];
+          assert(!c->get_is_padding());
+          if (c->get_is_unnamed_bitfield())
+            continue;
+        }
+
+        exprt init = flat_inits[j++];
+
+        typet elem_type;
+        if (t.is_struct())
+          elem_type = c->type();
+        else if (t.is_array())
+          elem_type = to_array_type(t).subtype();
+        else
+          elem_type = to_vector_type(t).subtype();
+
+        gen_typecast(ns, init, elem_type);
+        inits.operands().at(i) = init;
+      }
+    }
+    else if (t.is_union())
+    {
+      inits = gen_zero(t);
+      if (!args.empty())
+      {
+        assert(args.size() == 1);
+        exprt init;
+        if (get_expr(*args[0], init))
+          return true;
+        inits.operands().at(0) = init;
+        if (auto *fd = init_stmt.getInitializedFieldInUnion())
+          to_union_expr(inits).set_component_name(fd->getName().str());
+      }
+    }
+    else if (args.empty())
+    {
+      inits = gen_zero(t);
+    }
+    else
+    {
+      assert(args.size() == 1);
+      if (get_expr(*args[0], inits))
+        return true;
+    }
+
+    new_expr = inits;
+    break;
+  }
+
   case clang::Stmt::GenericSelectionExprClass:
   {
     const clang::GenericSelectionExpr &gen =
