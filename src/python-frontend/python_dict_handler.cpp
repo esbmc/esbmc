@@ -428,16 +428,22 @@ exprt python_dict_handler::get_dict_comprehension(const nlohmann::json &element)
   loop_var_assign.location() = location;
   loop_body.copy_to_operands(loop_var_assign);
 
+  // Keep current_block redirected to loop_body across the whole pair build:
+  // get_expr, contains(), get_list_element_info() and other helpers used by
+  // handle_dict_subscript_assign emit DECL/ASSIGN side effects via
+  // add_instruction(), which targets current_block. Restoring too early would
+  // hoist the contains check and the key/value temporaries out of the loop,
+  // freezing them at their pre-loop values and leaving the dict empty.
   code_blockt *saved_block = converter_.current_block;
   converter_.current_block = &loop_body;
   exprt key_expr = converter_.get_expr(element["key"]);
   exprt value_expr = converter_.get_expr(element["value"]);
-  converter_.current_block = saved_block;
 
   // Reuse the normal dict assignment path for each generated pair
   code_blockt pair_block;
   handle_dict_subscript_assign(
     symbol_expr(dict_sym), key_expr, value_expr, location, element, pair_block);
+  converter_.current_block = saved_block;
 
   if (generator.contains("ifs") && !generator["ifs"].empty())
   {
@@ -2056,11 +2062,57 @@ exprt python_dict_handler::handle_dict_setdefault(
   return symbol_expr(result_var);
 }
 
+exprt python_dict_handler::handle_dict_copy(
+  const exprt &dict_expr,
+  const nlohmann::json &call_node)
+{
+  if (!call_node["args"].empty())
+    throw std::runtime_error("dict.copy() takes no arguments");
+
+  locationt location = converter_.get_location_from_decl(call_node);
+  struct_typet dict_type = get_dict_struct_type();
+  typet list_type = type_handler_.get_list_type();
+
+  // Resolve __ESBMC_list_copy: returns a new PyListObject* with the same
+  // elements as its argument. Used here on both keys and values lists.
+  const symbolt *list_copy_func =
+    symbol_table_.find_symbol("c:@F@__ESBMC_list_copy");
+  if (!list_copy_func)
+    throw std::runtime_error("__ESBMC_list_copy not found");
+
+  // Allocate destination dict.
+  symbolt &new_dict_sym =
+    converter_.create_tmp_symbol(call_node, "$dict_copy$", dict_type, exprt());
+  code_declt new_dict_decl(symbol_expr(new_dict_sym));
+  new_dict_decl.location() = location;
+  converter_.add_instruction(new_dict_decl);
+
+  // Copy each list independently so mutating the copy leaves the source
+  // untouched.
+  auto copy_list_member = [&](const irep_idt &name) {
+    member_exprt src(dict_expr, name, list_type);
+    member_exprt dst(symbol_expr(new_dict_sym), name, list_type);
+    code_function_callt copy_call;
+    copy_call.function() = symbol_expr(*list_copy_func);
+    copy_call.arguments().push_back(src);
+    copy_call.lhs() = dst;
+    copy_call.type() = list_type;
+    copy_call.location() = location;
+    converter_.add_instruction(copy_call);
+  };
+
+  copy_list_member("keys");
+  copy_list_member("values");
+
+  return symbol_expr(new_dict_sym);
+}
+
 bool python_dict_handler::is_value_returning_method(
   const std::string &method_name)
 {
   return method_name == "pop" || method_name == "get" ||
-         method_name == "setdefault" || method_name == "popitem";
+         method_name == "setdefault" || method_name == "popitem" ||
+         method_name == "copy";
 }
 
 // Retrieve a typed value from a PyObj's void* value field.

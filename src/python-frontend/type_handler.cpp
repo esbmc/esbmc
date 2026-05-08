@@ -558,6 +558,14 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
 
   if (!is_defined)
   {
+    // Imported free functions (e.g. "from dataclasses import replace") can
+    // appear in call expressions and should not be treated as unknown type
+    // names during inference.
+    const std::string import_probe =
+      "py:" + converter_.python_file() + "@" + ast_type;
+    if (converter_.find_imported_symbol(import_probe) != nullptr)
+      return any_type();
+
     const nlohmann::json &decl =
       json_utils::find_var_decl(ast_type, "", converter_.ast());
     if (!decl.empty() && decl.contains("value") && decl["value"].is_object())

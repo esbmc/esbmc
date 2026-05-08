@@ -83,6 +83,7 @@ extern "C" {
 )";
   intrinsics.append(clang_c_languaget::internal_additions());
   intrinsics.append(R"(
+void __ESBMC_throw_bad_cast(void);
 #undef _Bool
 #pragma pop_macro("_Bool")
 })");

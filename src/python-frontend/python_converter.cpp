@@ -1740,6 +1740,13 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     return dict_handler_->compare(lhs, rhs, op);
   }
 
+  // Handle tuple +/* before list operations (tuple structs would otherwise
+  // fall through to the generic struct-arithmetic path and silently produce
+  // a struct of the original size).
+  exprt tuple_result = handle_tuple_operations(op, lhs, rhs, element);
+  if (!tuple_result.is_nil())
+    return tuple_result;
+
   // Handle list operations
   exprt list_result =
     handle_list_operations(op, lhs, rhs, left, right, element);
@@ -1950,6 +1957,84 @@ exprt python_converter::handle_array_operations(
   if (op == "Add")
     return string_handler_.handle_string_concatenation_with_promotion(
       lhs, rhs, left, right);
+
+  return nil_exprt();
+}
+
+exprt python_converter::handle_tuple_operations(
+  const std::string &op,
+  exprt &lhs,
+  exprt &rhs,
+  const nlohmann::json &element)
+{
+  const bool lhs_is_tuple = tuple_handler_->is_tuple_type(lhs.type());
+  const bool rhs_is_tuple = tuple_handler_->is_tuple_type(rhs.type());
+
+  // Concatenation: (a, b) + (c, d) == (a, b, c, d).
+  if (op == "Add" && lhs_is_tuple && rhs_is_tuple)
+  {
+    const auto &lhs_components = to_struct_type(lhs.type()).components();
+    const auto &rhs_components = to_struct_type(rhs.type()).components();
+
+    std::vector<typet> element_types;
+    element_types.reserve(lhs_components.size() + rhs_components.size());
+    for (const auto &c : lhs_components)
+      element_types.push_back(c.type());
+    for (const auto &c : rhs_components)
+      element_types.push_back(c.type());
+
+    struct_typet new_type =
+      tuple_handler_->create_tuple_struct_type(element_types);
+
+    struct_exprt result(new_type);
+    for (const auto &c : lhs_components)
+      result.copy_to_operands(member_exprt(lhs, c.get_name(), c.type()));
+    for (const auto &c : rhs_components)
+      result.copy_to_operands(member_exprt(rhs, c.get_name(), c.type()));
+
+    if (element.contains("lineno"))
+      result.location() = get_location_from_decl(element);
+    return result;
+  }
+
+  // Repetition: (a, b) * 3 == (a, b, a, b, a, b). Requires a constant
+  // non-negative repeat count, since the result type must be known.
+  if (op == "Mult" && (lhs_is_tuple || rhs_is_tuple))
+  {
+    exprt &tuple = lhs_is_tuple ? lhs : rhs;
+    exprt &count = lhs_is_tuple ? rhs : lhs;
+
+    if (
+      !count.is_constant() ||
+      !(count.type().is_signedbv() || count.type().is_unsignedbv()))
+      return nil_exprt();
+
+    BigInt n_big = binary2integer(
+      to_constant_expr(count).value().c_str(), count.type().is_signedbv());
+    if (n_big < 0)
+      n_big = 0;
+    const size_t n = n_big.to_int64();
+
+    const auto &components = to_struct_type(tuple.type()).components();
+
+    std::vector<typet> element_types;
+    element_types.reserve(components.size() * n);
+    for (size_t i = 0; i < n; ++i)
+      for (const auto &c : components)
+        element_types.push_back(c.type());
+
+    struct_typet new_type =
+      tuple_handler_->create_tuple_struct_type(element_types);
+
+    struct_exprt result(new_type);
+    for (size_t i = 0; i < n; ++i)
+      for (const auto &c : components)
+        result.copy_to_operands(member_exprt(tuple, c.get_name(), c.type()));
+
+    if (element.contains("lineno"))
+      result.location() = get_location_from_decl(element);
+    return result;
+  }
 
   return nil_exprt();
 }
@@ -2547,11 +2632,25 @@ python_converter::find_imported_symbol(const std::string &symbol_id) const
   // When the symbol has a class component (py:main@C@Foo@F@bar),
   // use the class name for matching against import names.
   auto parsed = ::symbol_id::from_string(symbol_id);
-  const std::string &lookup_name =
+  std::string lookup_name =
     !parsed.get_class().empty()
       ? parsed.get_class()
       : (parsed.get_function().empty() ? parsed.get_object()
                                        : parsed.get_function());
+
+  // symbol_id::from_string currently parses class/function components but not
+  // trailing object names (e.g. py:file@replace). Recover that case from raw
+  // text so imported free functions are still resolved.
+  if (lookup_name.empty())
+  {
+    const std::size_t at = symbol_id.rfind('@');
+    if (at != std::string::npos && at + 1 < symbol_id.size())
+    {
+      lookup_name = symbol_id.substr(at + 1);
+      if (lookup_name == "C" || lookup_name == "F")
+        lookup_name.clear();
+    }
+  }
 
   auto find_in_import = [&](const nlohmann::json &obj) -> symbolt * {
     if (
@@ -2593,6 +2692,30 @@ python_converter::find_imported_symbol(const std::string &symbol_id) const
         symbolt *func_symbol =
           symbol_table_.find_symbol(imported_symbol.c_str()))
         return func_symbol;
+
+      // Imported free functions are often looked up as object symbols in the
+      // caller scope (e.g., py:main@replace). Also probe the equivalent
+      // function-id form in the imported module (py:module@F@replace).
+      if (!lookup_name.empty())
+      {
+        ::symbol_id imported_sid = ::symbol_id::from_string(imported_symbol);
+        imported_sid.set_class("");
+        imported_sid.set_object("");
+        imported_sid.set_attribute("");
+        imported_sid.set_function(lookup_name);
+
+        if (
+          symbolt *func_symbol =
+            symbol_table_.find_symbol(imported_sid.to_string().c_str()))
+          return func_symbol;
+
+        imported_sid.set_function("");
+        imported_sid.set_object(lookup_name);
+        if (
+          symbolt *obj_symbol =
+            symbol_table_.find_symbol(imported_sid.to_string().c_str()))
+          return obj_symbol;
+      }
     }
 
     return nullptr;
@@ -5726,6 +5849,11 @@ symbolt *python_converter::create_symbol_for_unannotated_assign(
         // popitem() returns (key, value) tuple — infer the full tuple type
         inferred_type =
           dict_handler_->get_popitem_tuple_type(symbol_expr(*obj_sym));
+      }
+      else if (method == "copy")
+      {
+        // copy() returns a new dict, not a single element value.
+        inferred_type = dict_handler_->get_dict_struct_type();
       }
       else
       {
