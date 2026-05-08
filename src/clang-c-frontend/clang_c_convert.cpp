@@ -2478,9 +2478,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       }
 
       const unsigned num = static_cast<unsigned>(flat_inits.size());
-      for (unsigned i = 0, j = 0;
-           i < inits.operands().size() && j < num;
-           ++i)
+      for (unsigned i = 0, j = 0; i < inits.operands().size() && j < num; ++i)
       {
         const struct_union_typet::componentt *c = nullptr;
         if (t.is_struct())
