@@ -4566,9 +4566,8 @@ exprt function_call_expr::handle_general_function_call()
   const bool is_sorted_min_max =
     func_name == "min" || func_name == "max" || func_name == "sorted";
   if (
-    !is_user_imported &&
-    ((is_sorted_min_max && n_args == 1) ||
-     (func_name == "sum" && (n_args == 1 || n_args == 2))))
+    !is_user_imported && ((is_sorted_min_max && n_args == 1) ||
+                          (func_name == "sum" && (n_args == 1 || n_args == 2))))
   {
     exprt list_arg = converter_.get_expr(call_["args"][0]);
     typet elem_type;
