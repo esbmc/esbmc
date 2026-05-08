@@ -176,8 +176,8 @@ exprt tuple_handler::handle_tuple_subscript(
     {
       exprt member =
         member_exprt(array, components[k].get_name(), components[k].type());
-      exprt cond = binary_relation_exprt(
-        idx_norm, "=", from_integer(BigInt(k), idx_type));
+      exprt cond =
+        binary_relation_exprt(idx_norm, "=", from_integer(BigInt(k), idx_type));
       if_exprt sel(cond, member, chain);
       sel.type() = first_type;
       chain = sel;
