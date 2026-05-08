@@ -88,11 +88,9 @@ void k_path_spanning_sett::finalize()
   //
   // Instrumentation runs once per build; even at the default per-function
   // cap of k_path_max_goals=10000 the cost is amortised.
-  std::sort(
-    goals_.begin(),
-    goals_.end(),
-    [](const goal_t &a, const goal_t &b)
-    { return a.atoms.size() < b.atoms.size(); });
+  std::sort(goals_.begin(), goals_.end(), [](const goal_t &a, const goal_t &b) {
+    return a.atoms.size() < b.atoms.size();
+  });
 
   for (size_t i = 0; i < goals_.size(); ++i)
   {

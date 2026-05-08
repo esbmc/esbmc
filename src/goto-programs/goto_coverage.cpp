@@ -856,8 +856,7 @@ void goto_coveraget::gen_cond_cov_assert(
   if (n == 0)
     return; // atom
 
-  auto recurse_all = [&]()
-  {
+  auto recurse_all = [&]() {
     for (std::size_t i = 0; i < n; ++i)
       gen_cond_cov_assert(*ptr->get_sub_expr(i), pre_cond, goto_program, it);
   };
@@ -1012,8 +1011,9 @@ expr2tc goto_coveraget::handle_single_guard(
   if (is_nil_expr(expr))
     return expr;
   const std::size_t n = expr->get_num_sub_exprs();
-  auto recurse = [this](const expr2tc &e, bool tl)
-  { return handle_single_guard(e, tl); };
+  auto recurse = [this](const expr2tc &e, bool tl) {
+    return handle_single_guard(e, tl);
+  };
 
   // --- Rule 1: Atomic expressions ---
   // If the expression has no operands (a symbol or constant),
@@ -1113,8 +1113,8 @@ void goto_coveraget::handle_operands_guard(
     {
       // we do not need to add a !=false at top level
       // e.g. return x?1:0 != return (x?1:0)!=false
-      target->Foreach_operand([this](expr2tc &op)
-                              { op = handle_single_guard(op, false); });
+      target->Foreach_operand(
+        [this](expr2tc &op) { op = handle_single_guard(op, false); });
     }
     gen_cond_cov_assert(target, pre_cond, goto_program, it);
   }
