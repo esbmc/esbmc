@@ -6,6 +6,7 @@
 #include <python-frontend/string_handler_utils.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/string_builder.h>
+#include <python-frontend/tuple_handler.h>
 #include <python-frontend/type_utils.h>
 #include <python-frontend/symbol_id.h>
 #include <util/arith_tools.h>
@@ -4338,6 +4339,16 @@ exprt string_handler::handle_string_attribute_call(
       cached_receiver_expr = converter_.get_expr(receiver_json);
     return *cached_receiver_expr;
   };
+
+  // Tuple receivers reuse method names that overlap with string methods
+  // (count, index). Defer to the regular dispatch table so the tuple-aware
+  // handler runs instead of evaluating those as string methods.
+  if (method_name == "count" || method_name == "index")
+  {
+    exprt recv = get_receiver_expr();
+    if (converter_.get_tuple_handler().is_tuple_type(recv.type()))
+      return nil_exprt();
+  }
 
   std::optional<locationt> cached_location;
   auto get_location = [&]() -> locationt {

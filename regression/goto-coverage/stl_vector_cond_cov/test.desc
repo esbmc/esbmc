@@ -1,0 +1,7 @@
+THOROUGH
+main.cpp
+--condition-coverage --unwind 4 --no-unwinding-assertions
+^Reached Conditions:  6
+^Total Conditions:  6
+^Condition Coverage: 50%
+^VERIFICATION FAILED$

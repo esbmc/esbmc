@@ -275,6 +275,10 @@ private:
   exprt
   handle_min_max(const std::string &func_name, irep_idt comparison_op) const;
 
+  // Tuple method detection and handling (count, index)
+  bool is_tuple_method_call() const;
+  exprt handle_tuple_method() const;
+
   // Dict method detection and handling
   bool is_dict_method_call() const;
   exprt handle_dict_method() const;
@@ -309,7 +313,7 @@ private:
   exprt validate_re_module_args() const;
 
   bool is_any_call() const;
-  exprt handle_any() const;
+  exprt handle_any();
   bool is_all_call() const;
   exprt handle_all();
 
@@ -324,12 +328,21 @@ private:
   };
 
   /*
-   * Reduce a list literal by combining the truthiness of its elements.
-   * Used by both any() and all().
+   * Reduce a list or tuple literal by combining the truthiness of its
+   * elements. Used by both any() and all().
    */
-  exprt reduce_list_literal_truthiness(
-    const nlohmann::json &list_arg,
+  exprt reduce_iterable_literal_truthiness(
+    const nlohmann::json &iterable_arg,
     ReduceOp op) const;
+
+  /*
+   * Reduce a tuple-typed expression (struct with tag-tuple* type) by
+   * combining the truthiness of its members. Used by both any() and
+   * all() when the argument is a Name bound to a tuple value rather
+   * than a tuple literal.
+   */
+  exprt
+  reduce_tuple_expr_truthiness(const exprt &tuple_expr, ReduceOp op) const;
 
   /**
    * Convert an integer to a string representation in a specific base

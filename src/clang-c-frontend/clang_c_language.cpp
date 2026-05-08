@@ -244,6 +244,7 @@ void clang_c_languaget::build_compiler_args(
     compiler_args.push_back("-D__CRT__NO_INLINE");
     compiler_args.push_back("-D_USE_MATH_DEFINES");
     compiler_args.push_back("-Wno-implicit-function-declaration");
+    compiler_args.push_back("-Wno-incompatible-pointer-types");
   }
 
 #if ESBMC_SVCOMP
@@ -369,10 +370,13 @@ void clang_c_languaget::set_language_version()
 {
   const auto &ls =
     clang::LangStandard::getLangStandardForKind(AST->getLangOpts().LangStd);
-#if LLVM_VERSION_MAJOR >= 17
+#if LLVM_VERSION_MAJOR >= 19
   if (ls.isC2y())
     config.language.c_std = c_stdt::c26;
   else if (ls.isC23())
+    config.language.c_std = c_stdt::c23;
+#elif LLVM_VERSION_MAJOR >= 17
+  if (ls.isC23())
     config.language.c_std = c_stdt::c23;
 #else
   if (ls.isC2x())

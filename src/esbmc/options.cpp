@@ -1,6 +1,7 @@
 #include <boost/program_options/value_semantic.hpp>
 #include <esbmc/esbmc_parseoptions.h>
 #include <fstream>
+#include <limits>
 #include <solvers/solver_config.h>
 #include <util/cmdline.h>
 
@@ -280,7 +281,16 @@ const struct group_opt_templ all_cmd_options[] = {
      "Show YAML correctness witness c_expression parse tree"},
     {"witness",
      boost::program_options::value<std::string>()->value_name("<path>"),
-     "Set the witness path"}}},
+     "Set the witness path"},
+    {"all-witnesses",
+     NULL,
+     "After a property fails, enumerate further input vectors that also "
+     "violate it (until UNSAT or --max-witnesses is reached). "
+     "Implies --multi-property."},
+    {"max-witnesses",
+     boost::program_options::value<int>()->default_value(16)->value_name("n"),
+     "Cap the number of witnesses reported per property "
+     "(default: 16; 0 = unlimited). Only meaningful with --all-witnesses."}}},
   {"Output",
    {{"output-goto",
      boost::program_options::value<std::string>(),
@@ -691,6 +701,29 @@ const struct group_opt_templ all_cmd_options[] = {
      {"branch-function-coverage-claims",
       NULL,
       "Enable branch-coverage-ext and shows all reached claims"},
+     {"k-path-coverage",
+      // INT_MIN is the implicit_value sentinel for "no =N supplied".
+      // -1 / 0 are explicit user inputs and rejected at parse time;
+      // INT_MIN is unambiguous since no user would ever type it.
+      boost::program_options::value<int>()
+        ->implicit_value(std::numeric_limits<int>::min())
+        ->value_name("N"),
+      "Show the coverage of k-path witnesses (PathCrawler-style; "
+      "Williams et al., EDCC 2005). N is the prefix depth (1..30); if "
+      "omitted, tied to --unwind, falling back to 4 when --unwind is unset"},
+     {"k-path-coverage-claims",
+      NULL,
+      "Enable --k-path-coverage with default N (use --k-path-coverage=N "
+      "directly to override) and show all reached claims"},
+     {"k-path-witness-depth",
+      boost::program_options::value<int>()->default_value(8)->value_name("D"),
+      "Cap on post-simplification witness expression depth in --k-path-"
+      "coverage; deeper witnesses are dropped (default 8)"},
+     {"k-path-max-goals",
+      boost::program_options::value<int>()->default_value(10000)->value_name(
+        "M"),
+      "Per-function goal cap for --k-path-coverage; on overflow the "
+      "instrumentation aborts rather than truncating (default 10000)"},
      {"assign-param-nondet",
       NULL,
       "Explicitly assign every function parameters to NONDET in function "

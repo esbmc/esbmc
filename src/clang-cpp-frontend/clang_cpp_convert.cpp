@@ -1238,22 +1238,11 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
         return true;
 
     // When body is not a block (single-statement without braces), it is a raw
-    // expression or non-block code node. Inserting the loop variable declaration
-    // directly into its operands would corrupt the expression structure. Wrap in
-    // a block first so that the prepend targets a statement list.
-    if (body.get_statement() != "block")
-    {
-      convert_expression_to_code(body);
-      code_blockt new_body;
-      new_body.location() = body.location();
-      new_body.operands().push_back(body);
-      body = new_body;
-    }
-    if (loop_var)
-    {
-      codet::operandst &ops = body.operands();
-      ops.insert(ops.begin(), loop);
-    }
+    // expression or non-block code node.
+    convert_expression_to_code(body);
+    body.make_block();
+    codet::operandst &ops = body.operands();
+    ops.insert(ops.begin(), loop);
 
     code_fort code_for;
     code_for.init() = decls;
