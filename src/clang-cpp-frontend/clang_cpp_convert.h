@@ -521,9 +521,24 @@ protected:
    * "tag-Base") to every concrete class that has a vtable variable for
    * that vptr. build_dynamic_cast consults it directly instead of walking
    * every CXXRecordDecl in the TU and probing the symbol table per cast.
+   *
+   * Pre-registered for the class currently being processed (via
+   * pre_register_inherited_vtables) so that dynamic_cast inside an inline
+   * method body sees its own class as a candidate D — the "real"
+   * registration in add_vtable_variable_symbols runs after method bodies
+   * are converted, which is too late for that body.
    */
-  std::map<irep_idt, std::vector<const clang::CXXRecordDecl *>>
+  std::map<irep_idt, std::unordered_set<const clang::CXXRecordDecl *>>
     vtable_classes_per_vptr_;
+
+  /*
+   * Pre-register cxxrd in vtable_classes_per_vptr_ for every base whose
+   * vtable type symbol already exists, so that dynamic_cast<T&>(src) inside
+   * cxxrd's own inline method bodies can identify cxxrd as a candidate D.
+   * Bases are processed before derived classes, so any inherited vptr-class
+   * already has its vtable type symbol in the table.
+   */
+  void pre_register_inherited_vtables(const clang::CXXRecordDecl &cxxrd);
 
   /*
    * Methods for resolving a clang::MemberExpr to virtual/overriding method

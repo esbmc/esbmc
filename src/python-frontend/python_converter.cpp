@@ -2547,11 +2547,25 @@ python_converter::find_imported_symbol(const std::string &symbol_id) const
   // When the symbol has a class component (py:main@C@Foo@F@bar),
   // use the class name for matching against import names.
   auto parsed = ::symbol_id::from_string(symbol_id);
-  const std::string &lookup_name =
+  std::string lookup_name =
     !parsed.get_class().empty()
       ? parsed.get_class()
       : (parsed.get_function().empty() ? parsed.get_object()
                                        : parsed.get_function());
+
+  // symbol_id::from_string currently parses class/function components but not
+  // trailing object names (e.g. py:file@replace). Recover that case from raw
+  // text so imported free functions are still resolved.
+  if (lookup_name.empty())
+  {
+    const std::size_t at = symbol_id.rfind('@');
+    if (at != std::string::npos && at + 1 < symbol_id.size())
+    {
+      lookup_name = symbol_id.substr(at + 1);
+      if (lookup_name == "C" || lookup_name == "F")
+        lookup_name.clear();
+    }
+  }
 
   auto find_in_import = [&](const nlohmann::json &obj) -> symbolt * {
     if (
@@ -2593,6 +2607,30 @@ python_converter::find_imported_symbol(const std::string &symbol_id) const
         symbolt *func_symbol =
           symbol_table_.find_symbol(imported_symbol.c_str()))
         return func_symbol;
+
+      // Imported free functions are often looked up as object symbols in the
+      // caller scope (e.g., py:main@replace). Also probe the equivalent
+      // function-id form in the imported module (py:module@F@replace).
+      if (!lookup_name.empty())
+      {
+        ::symbol_id imported_sid = ::symbol_id::from_string(imported_symbol);
+        imported_sid.set_class("");
+        imported_sid.set_object("");
+        imported_sid.set_attribute("");
+        imported_sid.set_function(lookup_name);
+
+        if (
+          symbolt *func_symbol =
+            symbol_table_.find_symbol(imported_sid.to_string().c_str()))
+          return func_symbol;
+
+        imported_sid.set_function("");
+        imported_sid.set_object(lookup_name);
+        if (
+          symbolt *obj_symbol =
+            symbol_table_.find_symbol(imported_sid.to_string().c_str()))
+          return obj_symbol;
+      }
     }
 
     return nullptr;
