@@ -15,6 +15,7 @@
 #include <util/std_expr.h>
 #include <util/string2array.h>
 #include <vector>
+#include <util/yaml_parser.h>
 
 unsigned int execution_statet::node_count = 0;
 unsigned int execution_statet::dynamic_counter = 0;
@@ -62,6 +63,14 @@ execution_statet::execution_statet(
     (*goto_program).instructions.end(),
     goto_program,
     0);
+
+  // Violation-witness: load waypoints from witness file and attach to initial state.
+  if (options.get_bool_option("validate-violation-witness"))
+  {
+    const std::string &witness_path = options.get_option("witness");
+    if (!witness_path.empty())
+      state.witness_waypoints = yaml_parser::get_waypoints(witness_path);
+  }
 
   threads_state.push_back(state);
   preserved_paths.emplace_back();

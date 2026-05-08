@@ -556,3 +556,28 @@ std::vector<stack_framet> goto_symex_statet::gen_stack_trace() const
 
   return trace;
 }
+
+const waypoint *goto_symex_statet::peek_witness_waypoint(
+  waypoint::Type type,
+  const irep_idt &function,
+  const BigInt &line) const
+{
+  if (witness_cursor >= witness_waypoints.size())
+    return nullptr;
+
+  const waypoint &wp = witness_waypoints[witness_cursor];
+  if (wp.type != type)
+    return nullptr;
+  if (!wp.function.empty() && wp.function != id2string(function))
+    return nullptr;
+  if (wp.line != BigInt(-1) && wp.line != line)
+    return nullptr;
+
+  return &wp;
+}
+
+void goto_symex_statet::advance_witness_cursor()
+{
+  if (witness_cursor < witness_waypoints.size())
+    ++witness_cursor;
+}
