@@ -3344,7 +3344,8 @@ exprt function_call_expr::handle_set_method() const
   exprt elem = converter_.get_expr(args[0]);
 
   python_list helper(converter_, call_);
-  return helper.build_set_membership_call(*set_symbol, call_, elem, method_name);
+  return helper.build_set_membership_call(
+    *set_symbol, call_, elem, method_name);
 }
 
 bool function_call_expr::is_list_method_call() const
