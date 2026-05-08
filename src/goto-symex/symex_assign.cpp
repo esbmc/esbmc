@@ -980,60 +980,10 @@ void goto_symext::symex_assign_bitfield(
   const expr2tc &cast_expr = to_bitand2t(lhs).side_1;
   assert(is_typecast2t(cast_expr));
   const expr2tc &shft_expr = to_typecast2t(cast_expr).from;
-
-  // When the bitfield is at bit offset 0, the simplifier collapses
-  // `lshr(val, 0)` to just `val`, so the lshr wrapper may not be present.
-  // Synthesize a zero shft in that case so the rewrite below works
-  // uniformly.
-  //
-  // Narrow the fallback to shapes that look like zero-offset bitfield
-  // extractions: the mask must be a constant with contiguous low bits
-  // (e.g. 0xFF, 0x0F). Any other (rtype)X & mask shape is not a
-  // bitfield assignment and we abort fast — Codex review 27 flagged
-  // that the previous unconditional fallback could silently rewrite
-  // unrelated bitand assignments as zero-shift bitfield updates.
+  assert(is_lshr2t(shft_expr));
+  const expr2tc &val = to_lshr2t(shft_expr).side_1;
+  const expr2tc &shft = to_lshr2t(shft_expr).side_2;
   const expr2tc &mask = to_bitand2t(lhs).side_2;
-  expr2tc val, shft;
-  if (is_lshr2t(shft_expr))
-  {
-    val = to_lshr2t(shft_expr).side_1;
-    shft = to_lshr2t(shft_expr).side_2;
-  }
-  else
-  {
-    // Width-independent contiguous-low-bit-mask check: v has set bits
-    // 0..k-1 (and only those) iff v+1 is a power of two — equivalently
-    // (v & (v+1)) == 0. BigInt has no native bitand, so we use the
-    // textual binary form sized to the mask's actual width. integer2binary
-    // returns exactly width bits, so very wide masks (e.g. 256-bit
-    // _ExtInt bitfields) round-trip correctly.
-    bool ok = false;
-    if (is_constant_int2t(mask))
-    {
-      const BigInt &v = to_constant_int2t(mask).value;
-      if (!v.is_negative() && !v.is_zero())
-      {
-        const unsigned w = mask->type->get_width();
-        std::string b = integer2binary(v, w);
-        // integer2binary is MSB-first. A contiguous-low-ones mask has
-        // the form "0*1+" — leading zeros, then ones to the end. So
-        // from the first '1', every subsequent char must also be '1'.
-        size_t first_one = b.find('1');
-        if (first_one != std::string::npos)
-          ok = b.find('0', first_one) == std::string::npos;
-      }
-    }
-    if (!ok)
-    {
-      // Unrecognized bitand LHS shape — could be a malformed assignment or
-      // a shape we don't handle. Don't rewrite as zero-shift (would be
-      // unsound for non-bitfield shapes); leave for the SMT layer or the
-      // caller's downstream check to flag.
-      return;
-    }
-    val = shft_expr;
-    shft = gen_zero(shft_expr->type);
-  }
 
   expr2tc neg_mask, rhs_shft, new_rhs;
 
