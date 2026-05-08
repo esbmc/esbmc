@@ -683,11 +683,26 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     call.function() = callee_expr;
     call.type() = type;
 
-    // Do args
-    for (const clang::Expr *arg : operator_call.arguments())
+    // C++23 allows a static operator(): `static int operator()(int);`. Clang
+    // still puts the object expression as arg 0 of the CXXOperatorCallExpr,
+    // but a static method has no implicit-object parameter, so passing the
+    // object would clash with the function's actual signature. Skip it.
+    auto args = operator_call.arguments();
+    auto begin = args.begin();
+    const auto *direct = operator_call.getDirectCallee();
+    if (
+      const auto *md =
+        llvm::dyn_cast_or_null<clang::CXXMethodDecl>(direct);
+      md && md->isStatic())
+    {
+      assert(begin != args.end());
+      ++begin;
+    }
+
+    for (auto it = begin; it != args.end(); ++it)
     {
       exprt single_arg;
-      if (get_expr(*arg, single_arg))
+      if (get_expr(**it, single_arg))
         return true;
 
       call.arguments().push_back(single_arg);
