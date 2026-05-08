@@ -436,6 +436,21 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("witness", witness);
   }
 
+  if (cmdline.isset("validate-violation-witness"))
+  {
+    const std::string witness = cmdline.getval("witness");
+    const boost::filesystem::path wp(witness);
+    if (wp.extension() != ".yaml" && wp.extension() != ".yml")
+    {
+      log_error(
+        "Witness file has extension {}, expected yaml or yml.",
+        wp.extension().string());
+      abort();
+    }
+    options.set_option("validate-violation-witness", true);
+    options.set_option("witness", witness);
+  }
+
   // --loop-invariant implicitly enables k-induction solving so that
   // do_bmc_strategy runs the full base/forward/inductive-step loop.
   if (
