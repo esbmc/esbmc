@@ -2081,8 +2081,8 @@ exprt python_dict_handler::handle_dict_copy(
     throw std::runtime_error("__ESBMC_list_copy not found");
 
   // Allocate destination dict.
-  symbolt &new_dict_sym = converter_.create_tmp_symbol(
-    call_node, "$dict_copy$", dict_type, exprt());
+  symbolt &new_dict_sym =
+    converter_.create_tmp_symbol(call_node, "$dict_copy$", dict_type, exprt());
   code_declt new_dict_decl(symbol_expr(new_dict_sym));
   new_dict_decl.location() = location;
   converter_.add_instruction(new_dict_decl);
