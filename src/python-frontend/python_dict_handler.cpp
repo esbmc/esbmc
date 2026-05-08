@@ -2062,11 +2062,57 @@ exprt python_dict_handler::handle_dict_setdefault(
   return symbol_expr(result_var);
 }
 
+exprt python_dict_handler::handle_dict_copy(
+  const exprt &dict_expr,
+  const nlohmann::json &call_node)
+{
+  if (!call_node["args"].empty())
+    throw std::runtime_error("dict.copy() takes no arguments");
+
+  locationt location = converter_.get_location_from_decl(call_node);
+  struct_typet dict_type = get_dict_struct_type();
+  typet list_type = type_handler_.get_list_type();
+
+  // Resolve __ESBMC_list_copy: returns a new PyListObject* with the same
+  // elements as its argument. Used here on both keys and values lists.
+  const symbolt *list_copy_func =
+    symbol_table_.find_symbol("c:@F@__ESBMC_list_copy");
+  if (!list_copy_func)
+    throw std::runtime_error("__ESBMC_list_copy not found");
+
+  // Allocate destination dict.
+  symbolt &new_dict_sym =
+    converter_.create_tmp_symbol(call_node, "$dict_copy$", dict_type, exprt());
+  code_declt new_dict_decl(symbol_expr(new_dict_sym));
+  new_dict_decl.location() = location;
+  converter_.add_instruction(new_dict_decl);
+
+  // Copy each list independently so mutating the copy leaves the source
+  // untouched.
+  auto copy_list_member = [&](const irep_idt &name) {
+    member_exprt src(dict_expr, name, list_type);
+    member_exprt dst(symbol_expr(new_dict_sym), name, list_type);
+    code_function_callt copy_call;
+    copy_call.function() = symbol_expr(*list_copy_func);
+    copy_call.arguments().push_back(src);
+    copy_call.lhs() = dst;
+    copy_call.type() = list_type;
+    copy_call.location() = location;
+    converter_.add_instruction(copy_call);
+  };
+
+  copy_list_member("keys");
+  copy_list_member("values");
+
+  return symbol_expr(new_dict_sym);
+}
+
 bool python_dict_handler::is_value_returning_method(
   const std::string &method_name)
 {
   return method_name == "pop" || method_name == "get" ||
-         method_name == "setdefault" || method_name == "popitem";
+         method_name == "setdefault" || method_name == "popitem" ||
+         method_name == "copy";
 }
 
 // Retrieve a typed value from a PyObj's void* value field.

@@ -142,21 +142,21 @@ def min_str(iterable: list[str]) -> str:
     return result
 
 
-# def any(iterable: list[Any]) -> bool:
-#     """Return True if any element of the iterable is true."""
-#     i: int = 0
-#     length: int = len(iterable)
-#     while i < length:
-#         element: bool = iterable[i]
-#         if element:
-#             return True
-#         i = i + 1
-#     return False
+def any(iterable: list[Any]) -> bool:
+    """Return True if any element of the iterable is true."""
+    i: int = 0
+    length: int = len(iterable)
+    while i < length:
+        element: bool = iterable[i]
+        if element:
+            return True
+        i = i + 1
+    return False
 
 
-def sum(iterable: list[int]) -> int:
-    """Return the sum of all elements in an iterable of integers."""
-    result: int = 0
+def sum(iterable: list[int], start: int = 0) -> int:
+    """Return start plus the sum of all elements in an iterable of integers."""
+    result: int = start
     i: int = 0
     length: int = len(iterable)
     while i < length:
@@ -166,9 +166,9 @@ def sum(iterable: list[int]) -> int:
     return result
 
 
-def sum_float(iterable: list[float]) -> float:
-    """Return the sum of all elements in an iterable of floats."""
-    result: float = 0.0
+def sum_float(iterable: list[float], start: float = 0.0) -> float:
+    """Return start plus the sum of all elements in an iterable of floats."""
+    result: float = start
     i: int = 0
     length: int = len(iterable)
     while i < length:

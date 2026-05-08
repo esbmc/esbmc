@@ -5765,6 +5765,11 @@ symbolt *python_converter::create_symbol_for_unannotated_assign(
         inferred_type =
           dict_handler_->get_popitem_tuple_type(symbol_expr(*obj_sym));
       }
+      else if (method == "copy")
+      {
+        // copy() returns a new dict, not a single element value.
+        inferred_type = dict_handler_->get_dict_struct_type();
+      }
       else
       {
         inferred_type = dict_handler_->resolve_expected_type_for_dict_subscript(
