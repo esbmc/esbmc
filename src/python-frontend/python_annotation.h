@@ -357,6 +357,10 @@ private:
       {
         var_node =
           find_annotated_assign(var_name, (*parent_func)["args"]["args"]);
+        // Also search keyword-only args
+        if (var_node.empty() && (*parent_func)["args"].contains("kwonlyargs"))
+          var_node = find_annotated_assign(
+            var_name, (*parent_func)["args"]["kwonlyargs"]);
       }
 
       if (!has_annotation(var_node) && (*parent_func).contains("body"))
@@ -2346,11 +2350,21 @@ private:
     {
       rhs_node =
         find_annotated_assign(rhs_var_name, (*current_func)["args"]["args"]);
+      // Also search keyword-only args
+      if (rhs_node.empty() && (*current_func)["args"].contains("kwonlyargs"))
+        rhs_node = find_annotated_assign(
+          rhs_var_name, (*current_func)["args"]["kwonlyargs"]);
     }
 
     // Find RHS variable in the current function args
     if (rhs_node.empty() && body.contains("args"))
+    {
       rhs_node = find_annotated_assign(rhs_var_name, body["args"]["args"]);
+      // Also search keyword-only args
+      if (rhs_node.empty() && body["args"].contains("kwonlyargs"))
+        rhs_node =
+          find_annotated_assign(rhs_var_name, body["args"]["kwonlyargs"]);
+    }
 
     // Find RHS variable node in the global scope
     if (rhs_node.empty())
@@ -4009,13 +4023,7 @@ private:
           elem["targets"][0].contains("_type") &&
           elem["targets"][0]["_type"] == "Name" &&
           elem["targets"][0].contains("id") &&
-          elem["targets"][0]["id"].template get<std::string>() == node_name &&
-          elem.contains("value") && elem["value"].is_object() &&
-          elem["value"].contains("_type") &&
-          // Keep assign-based lookup for simple RHS forms used by frontend
-          // inference (e.g. Name/Attribute/BinOp), but avoid Call-based
-          // expressions that can trigger heavy paths in known buggy cases.
-          elem["value"]["_type"] != "Call") ||
+          elem["targets"][0]["id"].template get<std::string>() == node_name) ||
          (elem["_type"] == "arg" && elem["arg"] == node_name)))
       {
         return elem;
