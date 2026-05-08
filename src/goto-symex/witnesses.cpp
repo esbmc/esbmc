@@ -1193,21 +1193,20 @@ static expr2tc zero_fill_aggregate(
     const struct_type2t &st = to_struct_type(expected_type);
     expr2tc effective = value;
     if (!effective || !is_constant_struct2t(effective))
-      effective = smt_conv.get_by_ast(
-        expected_type, smt_conv.convert_ast(root_expr));
-    const constant_struct2t *cs =
-      (effective && is_constant_struct2t(effective))
-        ? &to_constant_struct2t(effective)
-        : nullptr;
+      effective =
+        smt_conv.get_by_ast(expected_type, smt_conv.convert_ast(root_expr));
+    const constant_struct2t *cs = (effective && is_constant_struct2t(effective))
+                                    ? &to_constant_struct2t(effective)
+                                    : nullptr;
     std::vector<expr2tc> members;
     members.reserve(st.members.size());
     for (size_t i = 0; i < st.members.size(); ++i)
     {
       expr2tc field_root =
         member2tc(st.members[i], root_expr, st.member_names[i]);
-      expr2tc field_val =
-        (cs && i < cs->datatype_members.size()) ? cs->datatype_members[i]
-                                                : expr2tc();
+      expr2tc field_val = (cs && i < cs->datatype_members.size())
+                            ? cs->datatype_members[i]
+                            : expr2tc();
       members.push_back(
         zero_fill_aggregate(st.members[i], field_val, field_root, smt_conv));
     }
@@ -1245,8 +1244,8 @@ static expr2tc zero_fill_aggregate(
     const array_type2t &at = to_array_type(expected_type);
     expr2tc effective = value;
     if (!effective || !is_constant_array2t(effective))
-      effective = smt_conv.get_by_ast(
-        expected_type, smt_conv.convert_ast(root_expr));
+      effective =
+        smt_conv.get_by_ast(expected_type, smt_conv.convert_ast(root_expr));
     if (effective && is_constant_array2t(effective))
     {
       const constant_array2t &ca = to_constant_array2t(effective);
