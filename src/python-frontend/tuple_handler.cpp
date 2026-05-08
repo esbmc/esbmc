@@ -112,8 +112,8 @@ exprt tuple_handler::handle_tuple_subscript(
     const auto &components = tuple_type.components();
     const long long n = static_cast<long long>(components.size());
 
-    auto resolve_const = [&](const std::string &key,
-                             long long fallback) -> long long {
+    auto resolve_const =
+      [&](const std::string &key, long long fallback) -> long long {
       if (!slice.contains(key) || slice[key].is_null())
         return fallback;
       exprt e = converter_.get_expr(slice[key]);
@@ -134,10 +134,8 @@ exprt tuple_handler::handle_tuple_subscript(
     if (step == 0)
       throw std::runtime_error("slice step cannot be zero");
 
-    long long lower = resolve_const(
-      "lower", step > 0 ? 0 : n - 1);
-    long long upper = resolve_const(
-      "upper", step > 0 ? n : -n - 1);
+    long long lower = resolve_const("lower", step > 0 ? 0 : n - 1);
+    long long upper = resolve_const("upper", step > 0 ? n : -n - 1);
 
     auto clamp = [n](long long v, bool is_lower, long long step) -> long long {
       if (v < 0)
