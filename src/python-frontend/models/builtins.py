@@ -142,16 +142,16 @@ def min_str(iterable: list[str]) -> str:
     return result
 
 
-# def any(iterable: list[Any]) -> bool:
-#     """Return True if any element of the iterable is true."""
-#     i: int = 0
-#     length: int = len(iterable)
-#     while i < length:
-#         element: bool = iterable[i]
-#         if element:
-#             return True
-#         i = i + 1
-#     return False
+def any(iterable: list[Any]) -> bool:
+    """Return True if any element of the iterable is true."""
+    i: int = 0
+    length: int = len(iterable)
+    while i < length:
+        element: bool = iterable[i]
+        if element:
+            return True
+        i = i + 1
+    return False
 
 
 def sum(iterable: list[int]) -> int:

@@ -3490,7 +3490,7 @@ bool function_call_expr::is_any_call() const
   return func_name == "any";
 }
 
-exprt function_call_expr::handle_any() const
+exprt function_call_expr::handle_any()
 {
   const auto keywords =
     call_.contains("keywords") ? call_["keywords"] : nlohmann::json::array();
@@ -3508,15 +3508,21 @@ exprt function_call_expr::handle_any() const
   const auto &arg = args[0];
   const std::string &arg_type = arg["_type"];
 
-  if (arg_type == "List" || arg_type == "Tuple")
+  if (arg_type == "List" || arg_type == "Tuple" || arg_type == "Set")
     return reduce_iterable_literal_truthiness(arg, ReduceOp::Any);
 
   exprt arg_expr = converter_.get_expr(arg);
   if (converter_.get_tuple_handler().is_tuple_type(arg_expr.type()))
     return reduce_tuple_expr_truthiness(arg_expr, ReduceOp::Any);
 
+  // Set / frozenset variables share the PyListObject* representation, so
+  // forward to the list-backed any() model.
+  if (arg_expr.type() == converter_.get_type_handler().get_list_type())
+    return handle_general_function_call();
+
   throw std::runtime_error(
-    "any() currently only supports list/tuple literals or tuple variables");
+    "any() currently only supports list/tuple/set literals or list, set, or "
+    "tuple variables");
 }
 
 bool function_call_expr::is_all_call() const
@@ -3544,7 +3550,7 @@ exprt function_call_expr::handle_all()
   const auto &arg = args[0];
   const std::string &arg_type = arg["_type"];
 
-  if (arg_type == "List" || arg_type == "Tuple")
+  if (arg_type == "List" || arg_type == "Tuple" || arg_type == "Set")
     return reduce_iterable_literal_truthiness(arg, ReduceOp::All);
 
   // Non-literal argument: forward to the Python operational model only
@@ -3557,11 +3563,13 @@ exprt function_call_expr::handle_all()
   if (converter_.get_tuple_handler().is_tuple_type(arg_expr.type()))
     return reduce_tuple_expr_truthiness(arg_expr, ReduceOp::All);
 
+  // Sets share the PyListObject* representation, so the list-backed all()
+  // model handles set variables transparently.
   if (arg_expr.type() == converter_.get_type_handler().get_list_type())
     return handle_general_function_call();
 
   throw std::runtime_error(
-    "all() currently only supports list/tuple literals, list variables, or "
+    "all() currently only supports list/tuple/set literals, list, set, or "
     "tuple variables");
 }
 

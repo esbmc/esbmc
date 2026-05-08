@@ -309,7 +309,7 @@ private:
   exprt validate_re_module_args() const;
 
   bool is_any_call() const;
-  exprt handle_any() const;
+  exprt handle_any();
   bool is_all_call() const;
   exprt handle_all();
 
