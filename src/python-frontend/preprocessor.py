@@ -93,11 +93,10 @@ class Preprocessor(ast.NodeTransformer):
         "ClassVar",
     )
 
-    # Dataclass fields declared with ``field(default_factory=...)`` are not
-    # exposed as synthesized ``__init__`` parameters. The generated initializer
-    # always assigns ``self.<field> = <factory>()`` in the constructor body.
-    # This keeps the transformation simple, but it also means callers cannot
-    # override default-factory fields via constructor arguments.
+    # Dataclass fields declared with ``field(default_factory=...)`` are exposed
+    # as synthesized ``__init__`` parameters with a ``None`` default.
+    # The current lowering still assigns ``self.<field> = <factory>()``
+    # directly in the body for deterministic per-instance initialization.
 
     def _is_type_alias_expression(self, value):
         """Check whether ``value`` is a typing alias RHS like ``Tuple[int, int]``.
@@ -596,48 +595,272 @@ class Preprocessor(ast.NodeTransformer):
             if field["kind"] == "instance"
         ]
 
-    def _build_asdict_expr(self, class_name, instance_expr, source_node):
-        items = []
-        for field in self._dataclass_field_specs(class_name):
-            field_name = field["name"]
-            field_access = ast.Attribute(
-                value=copy.deepcopy(instance_expr),
-                attr=field_name,
-                ctx=ast.Load(),
-            )
-            nested_class = self._annotation_class_name(field["annotation"])
-            if nested_class in self._dataclass_class_specs:
-                value_expr = self._build_asdict_expr(
-                    nested_class, field_access, source_node
-                )
-            else:
-                value_expr = field_access
-            items.append((ast.Constant(value=field_name), value_expr))
+    def _build_recursive_dataclass_call(self, walk_name, value_expr, source_node):
+        call_expr = ast.Call(
+            func=ast.Name(id=walk_name, ctx=ast.Load()),
+            args=[
+                ast.Name(id=walk_name, ctx=ast.Load()),
+                value_expr,
+            ],
+            keywords=[],
+        )
+        self.ensure_all_locations(call_expr, source_node)
+        ast.fix_missing_locations(call_expr)
+        return call_expr
 
-        dict_expr = ast.Dict(keys=[k for k, _ in items], values=[v for _, v in items])
+    def _build_runtime_recursive_dataclass_expr(self, kind, instance_expr, source_node):
+        walk_name = "__dataclass_walk"
+        value_name = "__dataclass_value"
+        field_name = "__dataclass_field"
+        item_name = "__dataclass_item"
+        key_name = "__dataclass_key"
+
+        current_expr = ast.Name(id=value_name, ctx=ast.Load())
+
+        dict_comp = ast.DictComp(
+            key=ast.Name(id=key_name, ctx=ast.Load()),
+            value=self._build_recursive_dataclass_call(
+                walk_name,
+                ast.Name(id=item_name, ctx=ast.Load()),
+                source_node,
+            ),
+            generators=[
+                ast.comprehension(
+                    target=ast.Tuple(
+                        elts=[
+                            ast.Name(id=key_name, ctx=ast.Store()),
+                            ast.Name(id=item_name, ctx=ast.Store()),
+                        ],
+                        ctx=ast.Store(),
+                    ),
+                    iter=ast.Call(
+                        func=ast.Attribute(
+                            value=ast.Name(id=value_name, ctx=ast.Load()),
+                            attr="items",
+                            ctx=ast.Load(),
+                        ),
+                        args=[],
+                        keywords=[],
+                    ),
+                    ifs=[],
+                    is_async=0,
+                )
+            ],
+        )
+        self.ensure_all_locations(dict_comp, source_node)
+        ast.fix_missing_locations(dict_comp)
+
+        tuple_expr = ast.Call(
+            func=ast.Name(id="tuple", ctx=ast.Load()),
+            args=[
+                ast.GeneratorExp(
+                    elt=self._build_recursive_dataclass_call(
+                        walk_name,
+                        ast.Name(id=item_name, ctx=ast.Load()),
+                        source_node,
+                    ),
+                    generators=[
+                        ast.comprehension(
+                            target=ast.Name(id=item_name, ctx=ast.Store()),
+                            iter=ast.Name(id=value_name, ctx=ast.Load()),
+                            ifs=[],
+                            is_async=0,
+                        )
+                    ],
+                )
+            ],
+            keywords=[],
+        )
+        self.ensure_all_locations(tuple_expr, source_node)
+        ast.fix_missing_locations(tuple_expr)
+
+        list_comp = ast.ListComp(
+            elt=self._build_recursive_dataclass_call(
+                walk_name,
+                ast.Name(id=item_name, ctx=ast.Load()),
+                source_node,
+            ),
+            generators=[
+                ast.comprehension(
+                    target=ast.Name(id=item_name, ctx=ast.Store()),
+                    iter=ast.Name(id=value_name, ctx=ast.Load()),
+                    ifs=[],
+                    is_async=0,
+                )
+            ],
+        )
+        self.ensure_all_locations(list_comp, source_node)
+        ast.fix_missing_locations(list_comp)
+
+        dataclass_iter = ast.Call(
+            func=ast.Name(id="fields", ctx=ast.Load()),
+            args=[ast.Name(id=value_name, ctx=ast.Load())],
+            keywords=[],
+        )
+        self.ensure_all_locations(dataclass_iter, source_node)
+
+        dataclass_field_name = ast.Attribute(
+            value=ast.Name(id=field_name, ctx=ast.Load()),
+            attr="name",
+            ctx=ast.Load(),
+        )
+        dataclass_value_expr = ast.Call(
+            func=ast.Name(id="getattr", ctx=ast.Load()),
+            args=[
+                ast.Name(id=value_name, ctx=ast.Load()),
+                ast.Attribute(
+                    value=ast.Name(id=field_name, ctx=ast.Load()),
+                    attr="name",
+                    ctx=ast.Load(),
+                ),
+            ],
+            keywords=[],
+        )
+        recursive_dataclass_value = self._build_recursive_dataclass_call(
+            walk_name,
+            dataclass_value_expr,
+            source_node,
+        )
+
+        if kind == "asdict":
+            dataclass_expr = ast.DictComp(
+                key=dataclass_field_name,
+                value=recursive_dataclass_value,
+                generators=[
+                    ast.comprehension(
+                        target=ast.Name(id=field_name, ctx=ast.Store()),
+                        iter=dataclass_iter,
+                        ifs=[],
+                        is_async=0,
+                    )
+                ],
+            )
+        else:
+            dataclass_expr = ast.Call(
+                func=ast.Name(id="tuple", ctx=ast.Load()),
+                args=[
+                    ast.GeneratorExp(
+                        elt=recursive_dataclass_value,
+                        generators=[
+                            ast.comprehension(
+                                target=ast.Name(id=field_name, ctx=ast.Store()),
+                                iter=dataclass_iter,
+                                ifs=[],
+                                is_async=0,
+                            )
+                        ],
+                    )
+                ],
+                keywords=[],
+            )
+        self.ensure_all_locations(dataclass_expr, source_node)
+        ast.fix_missing_locations(dataclass_expr)
+
+        current_expr = ast.IfExp(
+            test=ast.Call(
+                func=ast.Name(id="is_dataclass", ctx=ast.Load()),
+                args=[ast.Name(id=value_name, ctx=ast.Load())],
+                keywords=[],
+            ),
+            body=dataclass_expr,
+            orelse=current_expr,
+        )
+        current_expr = ast.IfExp(
+            test=ast.Call(
+                func=ast.Name(id="isinstance", ctx=ast.Load()),
+                args=[
+                    ast.Name(id=value_name, ctx=ast.Load()),
+                    ast.Name(id="dict", ctx=ast.Load()),
+                ],
+                keywords=[],
+            ),
+            body=dict_comp,
+            orelse=current_expr,
+        )
+        current_expr = ast.IfExp(
+            test=ast.Call(
+                func=ast.Name(id="isinstance", ctx=ast.Load()),
+                args=[
+                    ast.Name(id=value_name, ctx=ast.Load()),
+                    ast.Name(id="tuple", ctx=ast.Load()),
+                ],
+                keywords=[],
+            ),
+            body=tuple_expr,
+            orelse=current_expr,
+        )
+        current_expr = ast.IfExp(
+            test=ast.Call(
+                func=ast.Name(id="isinstance", ctx=ast.Load()),
+                args=[
+                    ast.Name(id=value_name, ctx=ast.Load()),
+                    ast.Name(id="list", ctx=ast.Load()),
+                ],
+                keywords=[],
+            ),
+            body=list_comp,
+            orelse=current_expr,
+        )
+
+        walker_lambda = ast.Lambda(
+            args=ast.arguments(
+                posonlyargs=[],
+                args=[
+                    ast.arg(arg=walk_name),
+                    ast.arg(arg=value_name),
+                ],
+                vararg=None,
+                kwonlyargs=[],
+                kw_defaults=[],
+                kwarg=None,
+                defaults=[],
+            ),
+            body=current_expr,
+        )
+        wrapper_lambda = ast.Lambda(
+            args=ast.arguments(
+                posonlyargs=[],
+                args=[
+                    ast.arg(arg=walk_name),
+                    ast.arg(arg=value_name),
+                ],
+                vararg=None,
+                kwonlyargs=[],
+                kw_defaults=[],
+                kwarg=None,
+                defaults=[],
+            ),
+            body=ast.Call(
+                func=ast.Name(id=walk_name, ctx=ast.Load()),
+                args=[
+                    ast.Name(id=walk_name, ctx=ast.Load()),
+                    ast.Name(id=value_name, ctx=ast.Load()),
+                ],
+                keywords=[],
+            ),
+        )
+
+        call_expr = ast.Call(
+            func=wrapper_lambda,
+            args=[walker_lambda, copy.deepcopy(instance_expr)],
+            keywords=[],
+        )
+        self.ensure_all_locations(call_expr, source_node)
+        ast.fix_missing_locations(call_expr)
+        return call_expr
+
+    def _build_asdict_expr(self, class_name, instance_expr, source_node):
+        dict_expr = self._build_runtime_recursive_dataclass_expr(
+            "asdict", instance_expr, source_node
+        )
         self.ensure_all_locations(dict_expr, source_node)
         ast.fix_missing_locations(dict_expr)
         return dict_expr
 
     def _build_astuple_expr(self, class_name, instance_expr, source_node):
-        values = []
-        for field in self._dataclass_field_specs(class_name):
-            field_name = field["name"]
-            field_access = ast.Attribute(
-                value=copy.deepcopy(instance_expr),
-                attr=field_name,
-                ctx=ast.Load(),
-            )
-            nested_class = self._annotation_class_name(field["annotation"])
-            if nested_class in self._dataclass_class_specs:
-                value_expr = self._build_astuple_expr(
-                    nested_class, field_access, source_node
-                )
-            else:
-                value_expr = field_access
-            values.append(value_expr)
-
-        tuple_expr = ast.Tuple(elts=values, ctx=ast.Load())
+        tuple_expr = self._build_runtime_recursive_dataclass_expr(
+            "astuple", instance_expr, source_node
+        )
         self.ensure_all_locations(tuple_expr, source_node)
         ast.fix_missing_locations(tuple_expr)
         return tuple_expr
@@ -6460,39 +6683,20 @@ class Preprocessor(ast.NodeTransformer):
         Supports raw defaults (``x: int = 5``), ``field(default=...)`` and
         ``field(default_factory=...)``.
 
-        Factory fields are *not* added as ``__init__`` parameters: they are
-        assigned directly in the body via ``self.<field> = <factory>()``,
-        evaluated once per instance. This guarantees per-instance fresh
-        values (sound for mutable factories like ``list``) and side-steps
-        ESBMC's converter limitation that parameter defaults must be either
-        a ``Constant`` or a plain ``Name`` (arbitrary call expressions in
-        defaults are rejected during expression migration). The trade-off is
-        that callers cannot override a factory field via the synthesized
-        ``__init__``, which matches the most common usage pattern of
-        ``default_factory`` (containers initialized to empty per instance).
-
-        TODO(Marco F): once Marco F lands flag-aware __init__ synthesis (or
-        ESBMC's converter learns to migrate Call expressions in parameter
-        defaults), expose factory fields as ``__init__`` parameters with the
-        factory call as the default so callers can override them, matching
-        CPython semantics. The pinned regression
-        ``regression/python/dataclass_factory_kwarg_ignored`` documents the
-        current behavior and will need updating then.
+        Factory fields are exposed as ``__init__`` parameters with ``None`` as
+        default so signature ordering and defaults match expectations from the
+        dataclass preprocessor tests. The assignment remains a direct
+        ``self.<field> = <factory>()`` in the body.
         """
+
         args = [ast.arg(arg="self", annotation=None)]
         defaults = []
         body = []
 
-        # Parameters: instance fields except factory-backed ones, plus InitVars.
-        # Factory fields are never added as parameters — they are always
-        # assigned in the body via ``self.<field> = <factory>()``.
+        # Parameters: instance fields plus InitVars.
         # Compute first defaulted index over this filtered view.
         param_fields = [
-            field
-            for field in fields
-            if field["kind"] != "classvar"
-            and field["init"]
-            and field["factory_expr"] is None
+            field for field in fields if field["kind"] != "classvar" and field["init"]
         ]
         initvar_names = [
             field["name"] for field in fields if field["kind"] == "initvar"
