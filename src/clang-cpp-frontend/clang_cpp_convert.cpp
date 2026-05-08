@@ -1795,10 +1795,18 @@ bool clang_cpp_convertert::get_function_params(
   const clang::CXXMethodDecl &cxxmd =
     static_cast<const clang::CXXMethodDecl &>(fd);
 
-  // If it's a C-style function, fallback to C mode
+  // If it's a C-style function, fallback to C mode.
   // Static methods don't have the this arg and can be handled as
-  // C functions
-  if (!fd.isCXXClassMember() || cxxmd.isStatic())
+  // C functions.  C++23 explicit object member functions (deducing this,
+  //
+  //   int g(this S const& self);
+  //
+  // [dcl.fct]/p6, N4861) likewise have no implicit this: the object
+  // expression is the first regular parameter, so route them through the
+  // same path.
+  if (
+    !fd.isCXXClassMember() || cxxmd.isStatic() ||
+    cxxmd.isExplicitObjectMemberFunction())
     return clang_c_convertert::get_function_params(fd, params);
 
   // Add this pointer to first arg
