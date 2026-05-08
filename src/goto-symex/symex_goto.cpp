@@ -106,6 +106,30 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
   // by process_instruction (ASSIGN / ASSUME / DEAD), which is sufficient for
   // tracking loop counters.
 
+  // Violation-witness: force branch direction when a branching waypoint matches.
+  if (!cur_state->witness_waypoints.empty())
+  {
+    const auto &loc = cur_state->source.pc->location;
+    const irep_idt &func = loc.get_function();
+    BigInt line(loc.get_line().c_str(), 10);
+
+    const waypoint *wp = cur_state->peek_witness_waypoint(
+      waypoint::branching, func, line);
+    if (wp)
+    {
+      // value="true" means the (possibly flipped) condition was true at the
+      // witness.  For a non-flipped GOTO, a true condition means fall-through
+      // (not taken); for flipped it means taken.
+      bool direction_true = (wp->value == "true");
+      bool goto_taken = instruction.flipped_guard ? direction_true : !direction_true;
+      if (goto_taken)
+        new_guard_true = true;
+      else
+        new_guard_false = true;
+      cur_state->advance_witness_cursor();
+    }
+  }
+
   if (new_guard_false)
   {
     // reset unwinding counter
