@@ -3044,6 +3044,9 @@ exprt function_call_expr::handle_dict_method() const
   if (method_name == "popitem")
     return converter_.get_dict_handler()->handle_dict_popitem(dict_expr, call_);
 
+  if (method_name == "copy")
+    return converter_.get_dict_handler()->handle_dict_copy(dict_expr, call_);
+
   throw std::runtime_error("Unsupported dict method: " + method_name);
 }
 
@@ -3208,6 +3211,25 @@ bool function_call_expr::is_list_method_call() const
     // A BinOp receiver (e.g., (s1 - s2).pop()) is always a set/list: dicts
     // do not support arithmetic operators. handle_list_pop() already handles
     // this case, so route it here before the symbol-type check.
+    if (
+      call_["func"].contains("value") &&
+      call_["func"]["value"].contains("_type") &&
+      call_["func"]["value"]["_type"] == "BinOp")
+      return true;
+
+    std::string dummy;
+    const symbolt *sym = get_object_list_symbol(dummy);
+    const typet list_type = type_handler_.get_list_type();
+    return sym != nullptr && sym->type == list_type;
+  }
+
+  // "copy" is shared between list and dict. Treat as list.copy() only when
+  // the receiver resolves to a list symbol; otherwise let dispatch fall
+  // through to handle_dict_method().
+  if (method_name == "copy")
+  {
+    // BinOp receivers (e.g. (s1 - s2).copy()) are list-like, since dicts do
+    // not support arithmetic operators.
     if (
       call_["func"].contains("value") &&
       call_["func"]["value"].contains("_type") &&
