@@ -2426,9 +2426,13 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     }
     else
     {
-      expr2tc lt = lessthan2tc(abs.value, gen_zero(abs.value->type));
+      // Lower as `(x >= 0) ? x : -x`. The opposite-sense `(x < 0) ? -x : x`
+      // is logically equivalent but bitwuzla preprocesses the `>= 0` shape
+      // significantly faster. Fixes a 7x regression on
+      // sv-benchmarks/c/xcsp/AllInterval-017.
+      expr2tc ge = greaterthanequal2tc(abs.value, gen_zero(abs.value->type));
       expr2tc neg = neg2tc(abs.value->type, abs.value);
-      expr2tc ite = if2tc(abs.type, lt, neg, abs.value);
+      expr2tc ite = if2tc(abs.type, ge, abs.value, neg);
 
       a = convert_ast(ite);
     }
