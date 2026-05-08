@@ -2832,8 +2832,8 @@ class Preprocessor(ast.NodeTransformer):
                     self.ensure_all_locations(ast.Expr(value=enter_call), node)
                 )
 
-        result.extend(node.body)
-
+        # Build the list of __exit__ calls (reverse order, non-exceptional path).
+        exit_calls = []
         for i in range(len(node.items) - 1, -1, -1):
             mgr_name = f"__esbmc_mgr_{exit_start + i}"
             exit_call = ast.Call(
@@ -2849,7 +2849,43 @@ class Preprocessor(ast.NodeTransformer):
                 ],
                 keywords=[],
             )
-            result.append(self.ensure_all_locations(ast.Expr(value=exit_call), node))
+            exit_calls.append(self.ensure_all_locations(ast.Expr(value=exit_call), node))
+
+        # If every context manager's __exit__ statically returns True, wrap the
+        # body and exit calls in a try/except BaseException: pass so any
+        # exception raised inside the with block is suppressed, matching
+        # CPython semantics. Other __exit__ shapes preserve today's behaviour
+        # (exception propagates without consulting __exit__).
+        suppress = (
+            hasattr(self, "_exit_suppresses_all")
+            and len(node.items) > 0
+            and all(
+                isinstance(item.context_expr, ast.Call)
+                and isinstance(item.context_expr.func, ast.Name)
+                and item.context_expr.func.id in self._exit_suppresses_all
+                for item in node.items
+            )
+        )
+
+        if suppress:
+            try_node = ast.Try(
+                body=list(node.body) + exit_calls,
+                handlers=[
+                    ast.ExceptHandler(
+                        type=ast.Name(id="BaseException", ctx=ast.Load()),
+                        name=None,
+                        body=[ast.Pass()],
+                    )
+                ],
+                orelse=[],
+                finalbody=[],
+            )
+            self.ensure_all_locations(try_node, node)
+            ast.fix_missing_locations(try_node)
+            result.append(try_node)
+        else:
+            result.extend(node.body)
+            result.extend(exit_calls)
 
         return result
 
@@ -5859,10 +5895,28 @@ class Preprocessor(ast.NodeTransformer):
 
         node = self.expand_dataclass(node)
         self._collect_class_attr_annotations(node)
+        self._record_exit_suppresses_all(node)
         self.generic_visit(node)
 
         self.current_class_name = old_class_name
         return node
+
+    def _record_exit_suppresses_all(self, class_node):
+        """Cache classes whose __exit__ unconditionally returns True so
+        visit_With can suppress exceptions from the body."""
+        if not hasattr(self, "_exit_suppresses_all"):
+            self._exit_suppresses_all = set()
+        for member in class_node.body:
+            if (
+                isinstance(member, ast.FunctionDef)
+                and member.name == "__exit__"
+                and len(member.body) == 1
+                and isinstance(member.body[0], ast.Return)
+                and isinstance(member.body[0].value, ast.Constant)
+                and member.body[0].value.value is True
+            ):
+                self._exit_suppresses_all.add(class_node.name)
+                return
 
     def is_dataclass(self, class_node):
         """Return True when a class is decorated with @dataclass.
