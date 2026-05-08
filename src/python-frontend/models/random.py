@@ -44,6 +44,57 @@ def getrandbits(k: int) -> int:
     return value
 
 
+def seed(a: int = 0) -> None:
+    """random.seed(a) — no-op stub.
+
+    The non-determinism of nondet_int / nondet_float already covers any
+    seed-dependent outcome the program could observe, so seeding has no
+    observable effect under verification.
+    """
+    return
+
+
+def choice(seq: list[int]) -> int:
+    """random.choice(seq) — return a non-deterministic element of `seq`.
+
+    Models the choice as `seq[i]` for a constrained nondet index. Raises
+    IndexError on an empty sequence, matching CPython.
+    """
+    n: int = len(seq)
+    if n <= 0:
+        raise IndexError("Cannot choose from an empty sequence")
+    i: int = nondet_int()
+    __ESBMC_assume(i >= 0 and i < n)
+    return seq[i]
+
+
+def shuffle(lst: list[int]) -> None:
+    """random.shuffle(lst) — permutes `lst` in place.
+
+    Under-approximation: leaves the list untouched. A precise model would
+    nondet-shuffle the elements, but doing so requires expressing
+    permutation constraints over `lst`, which is out of scope here.
+    """
+    return
+
+
+def sample(population: list[int], k: int) -> list[int]:
+    """random.sample(population, k) — k distinct elements from population.
+
+    Returns the first `k` elements of `population` as an under-approximation;
+    a precise model would pick `k` distinct nondet indices.
+    """
+    n: int = len(population)
+    if k < 0 or k > n:
+        raise ValueError("Sample larger than population or is negative")
+    result: list[int] = []
+    i: int = 0
+    while i < k:
+        result.append(population[i])
+        i = i + 1
+    return result
+
+
 def randrange(start: int, stop: int = None, step: int = 1) -> int:
     # Handle the single-argument case: randrange(stop)
     if stop is None:
