@@ -925,6 +925,7 @@ ESBMC provides a set of coverage metrics to help you measure how much of the sta
 <li><b>Assertion Coverage</b> measures how well the assertions within a program are tested.</li>
 <li><b>Condition Coverage</b> measures how well the Boolean expressions in the code have been tested.</li>
 <li><b>Branch Coverage</b> measures how well every possible branch (or path) in a decision point of the code has been executed.</li>
+<li><b>K-Path Coverage</b> measures coverage of bounded sequences of conditional-branch outcomes (PathCrawler-style); enabled with <b>--k-path-coverage[=N]</b>. See the <a href="/docs/coverage/#k-path-coverage">coverage page</a> for details.</li>
   </ul>
 
   <p>
