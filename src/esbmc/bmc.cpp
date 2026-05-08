@@ -925,17 +925,28 @@ void report_coverage(
   else if (is_k_path_cov)
   {
     const size_t total = goto_coveraget::total_kpath;
+    const size_t spanning = goto_coveraget::total_kpath_spanning;
     const size_t tracked_instance = reached_claims.size();
     log_success("\n[Coverage]\n");
     log_result("k-Path Witnesses : {}", total);
+    log_result("Spanning Set : {}", spanning);
     log_result("Reached : {}", tracked_instance);
 
     if (options.get_bool_option("k-path-coverage-claims"))
       for (const auto &claim : reached_claims)
         log_status("  {}", prettify_solidity_expr(claim));
 
-    if (total != 0)
-      log_result("k-Path Coverage: {}%", tracked_instance * 100.0 / total);
+    // Phase-2 (issue #4335): denominator is the spanning-set size — the
+    // number of maximal goals under the atom-multiset subsumption order
+    // (Marré-Bertolino, IEEE TSE 2003). Subsumed goals never widen the
+    // denominator since covering a maximal goal implies covering its
+    // subsumed prefixes. Cap at 100% in case `tracked_instance` exceeds
+    // |spanning_set| due to subsumed-and-reached emissions.
+    if (spanning != 0)
+    {
+      const double pct = tracked_instance * 100.0 / spanning;
+      log_result("k-Path Coverage: {}%", pct > 100.0 ? 100.0 : pct);
+    }
     else
       log_result("k-Path Coverage: N/A (no k-path goals)");
   }
@@ -982,6 +993,18 @@ void report_coverage(
       claim_entry["column"] = loc["column"];
       claim_entry["function"] = loc["function"];
       claim_entry["status"] = covered ? "covered" : "uncovered";
+      // k-path Phase-2 (#4335): annotate each claim as feasible (a
+      // maximal element of the subsumption lattice and thus part of the
+      // spanning set) or spanning-set-redundant (subsumed by a stronger
+      // emitted goal — covering it adds no information beyond covering
+      // its subsumer).
+      if (is_k_path_cov)
+      {
+        const auto &redundant = goto_coveraget::k_path_spanning_redundant;
+        claim_entry["feasibility"] = redundant.count({claim_msg, claim_loc}) > 0
+                                       ? "spanning-set-redundant"
+                                       : "feasible";
+      }
       claims_json.push_back(claim_entry);
     }
 

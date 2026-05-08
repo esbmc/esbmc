@@ -1,4 +1,5 @@
 #include <goto-programs/goto_coverage.h>
+#include <goto-programs/k_path_spanning.h>
 #include <irep2/irep2_utils.h>
 
 #include <algorithm>
@@ -12,6 +13,9 @@ std::set<std::pair<std::string, std::string>> goto_coveraget::total_cond;
 size_t goto_coveraget::total_branch = 0;
 size_t goto_coveraget::total_func_branch = 0;
 size_t goto_coveraget::total_kpath = 0;
+size_t goto_coveraget::total_kpath_spanning = 0;
+std::set<std::pair<std::string, std::string>>
+  goto_coveraget::k_path_spanning_redundant;
 std::set<std::pair<std::string, std::string>> goto_coveraget::all_claims;
 
 std::string goto_coveraget::get_filename_from_path(std::string path)
@@ -338,6 +342,9 @@ void goto_coveraget::k_path_coverage()
 {
   log_progress("Adding k-path coverage assertions (n={})...", k_path_n);
   total_kpath = 0;
+  total_kpath_spanning = 0;
+  k_path_spanning_redundant.clear();
+  k_path_spanning_sett spanning;
 
   // Defense-in-depth: parseoptions rejects N==0 and N>30 at the CLI, but
   // re-check here in case the method is invoked via another code path.
@@ -515,6 +522,15 @@ void goto_coveraget::k_path_coverage()
 
             std::string idf = from_expr(ns, "", full);
             insert_assert(goto_program, it, neg_full, idf);
+
+            // Record the goal's full atom multiset (prefix + current
+            // direction) so the spanning-set analysis can drop subsumed
+            // emissions from the coverage denominator.
+            std::vector<std::pair<expr2tc, bool>> goal_atoms = atoms;
+            goal_atoms.emplace_back(current_guard, cdir_pol);
+            spanning.add_goal(
+              std::move(goal_atoms), idf, it->location.as_string());
+
             ++function_goals;
           }
         }
@@ -528,6 +544,26 @@ void goto_coveraget::k_path_coverage()
 
   total_kpath = get_total_instrument();
   all_claims = get_total_cond_assert();
+
+  // Compute the spanning-set after every goal has been collected. The
+  // resulting size is the Phase-2 denominator; redundant_claims feeds the
+  // JSON `feasibility` field.
+  //
+  // Invariant: each insert_assert call above corresponds to exactly one
+  // spanning.add_goal call with the same `(idf, location)` key, and the
+  // simplifier never collapses two semantically distinct witnesses to
+  // the same idf string. Together these mean spanning.spanning_size() is
+  // bounded above by all_claims.size() + |redundant|, which is what
+  // allows the bmc.cpp coverage cap to make sense. Any future change
+  // that moves goal emission, reuses an idf across distinct witnesses,
+  // or alters from_expr() formatting must preserve this 1:1 mapping or
+  // the percentage will silently deflate.
+  spanning.finalize();
+  total_kpath_spanning = spanning.spanning_size();
+  for (const auto &claim : all_claims)
+    if (spanning.is_redundant(claim.first, claim.second))
+      k_path_spanning_redundant.insert(claim);
+
   goto_functions.update();
 }
 
