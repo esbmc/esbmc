@@ -1145,18 +1145,17 @@ static bool parse_format_padding(
   width = 0;
   rest = format;
 
-  if (format.size() >= 2 &&
-      (format[1] == '<' || format[1] == '>' || format[1] == '^' ||
-       format[1] == '='))
+  if (
+    format.size() >= 2 && (format[1] == '<' || format[1] == '>' ||
+                           format[1] == '^' || format[1] == '='))
   {
     fill = format[0];
     align = format[1];
     rest = format.substr(2);
   }
   else if (
-    !format.empty() &&
-    (format[0] == '<' || format[0] == '>' || format[0] == '^' ||
-     format[0] == '='))
+    !format.empty() && (format[0] == '<' || format[0] == '>' ||
+                        format[0] == '^' || format[0] == '='))
   {
     align = format[0];
     rest = format.substr(1);
@@ -1228,7 +1227,8 @@ exprt string_handler::apply_format_specification(
     // Extract the literal characters; bail out if the body isn't a
     // string-constant or constant char array we can read.
     std::string content = extract_string_from_array_operands(body);
-    if (content.empty() && !body.is_constant() && body.id() != "string-constant")
+    if (
+      content.empty() && !body.is_constant() && body.id() != "string-constant")
       return body;
     if (align == '\0')
       align = (expr.type().is_signedbv() || expr.type().is_unsignedbv() ||
