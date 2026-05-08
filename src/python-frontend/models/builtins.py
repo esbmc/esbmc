@@ -142,21 +142,21 @@ def min_str(iterable: list[str]) -> str:
     return result
 
 
-# def any(iterable: list[Any]) -> bool:
-#     """Return True if any element of the iterable is true."""
-#     i: int = 0
-#     length: int = len(iterable)
-#     while i < length:
-#         element: bool = iterable[i]
-#         if element:
-#             return True
-#         i = i + 1
-#     return False
+def any(iterable: list[Any]) -> bool:
+    """Return True if any element of the iterable is true."""
+    i: int = 0
+    length: int = len(iterable)
+    while i < length:
+        element: bool = iterable[i]
+        if element:
+            return True
+        i = i + 1
+    return False
 
 
-def sum(iterable: list[int]) -> int:
-    """Return the sum of all elements in an iterable of integers."""
-    result: int = 0
+def sum(iterable: list[int], start: int = 0) -> int:
+    """Return start plus the sum of all elements in an iterable of integers."""
+    result: int = start
     i: int = 0
     length: int = len(iterable)
     while i < length:
@@ -166,9 +166,9 @@ def sum(iterable: list[int]) -> int:
     return result
 
 
-def sum_float(iterable: list[float]) -> float:
-    """Return the sum of all elements in an iterable of floats."""
-    result: float = 0.0
+def sum_float(iterable: list[float], start: float = 0.0) -> float:
+    """Return start plus the sum of all elements in an iterable of floats."""
+    result: float = start
     i: int = 0
     length: int = len(iterable)
     while i < length:
@@ -178,7 +178,7 @@ def sum_float(iterable: list[float]) -> float:
     return result
 
 
-def sorted(iterable: list[int]) -> list[int]:
+def sorted(iterable: list[int], reverse: bool = False) -> list[int]:
     """Return a new sorted list from the items in iterable."""
     # Create a copy of the list
     result: list[int] = []
@@ -190,7 +190,7 @@ def sorted(iterable: list[int]) -> list[int]:
         result.append(iterable[i])
         i = i + 1
 
-    # Bubble sort (simple and verifier-friendly)
+    # Bubble sort ascending (simple and verifier-friendly)
     n: int = len(result)
     i = 0
     while i < n:
@@ -204,10 +204,20 @@ def sorted(iterable: list[int]) -> list[int]:
             j = j + 1
         i = i + 1
 
+    # Reverse in place for descending order.
+    if reverse:
+        i = 0
+        half: int = n // 2
+        while i < half:
+            t: int = result[i]
+            result[i] = result[n - 1 - i]
+            result[n - 1 - i] = t
+            i = i + 1
+
     return result
 
 
-def sorted_float(iterable: list[float]) -> list[float]:
+def sorted_float(iterable: list[float], reverse: bool = False) -> list[float]:
     """Return a new sorted list from the items in iterable."""
     result: list[float] = []
     i: int = 0
@@ -229,10 +239,19 @@ def sorted_float(iterable: list[float]) -> list[float]:
             j = j + 1
         i = i + 1
 
+    if reverse:
+        i = 0
+        half: int = n // 2
+        while i < half:
+            t: float = result[i]
+            result[i] = result[n - 1 - i]
+            result[n - 1 - i] = t
+            i = i + 1
+
     return result
 
 
-def sorted_str(iterable: list[str]) -> list[str]:
+def sorted_str(iterable: list[str], reverse: bool = False) -> list[str]:
     """Return a new sorted list from the items in iterable."""
     result: list[str] = []
     i: int = 0
@@ -253,5 +272,14 @@ def sorted_str(iterable: list[str]) -> list[str]:
                 result[j + 1] = temp
             j = j + 1
         i = i + 1
+
+    if reverse:
+        i = 0
+        half: int = n // 2
+        while i < half:
+            t: str = result[i]
+            result[i] = result[n - 1 - i]
+            result[n - 1 - i] = t
+            i = i + 1
 
     return result
