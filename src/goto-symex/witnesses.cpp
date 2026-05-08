@@ -1153,8 +1153,135 @@ bool find_nondet_in_expr(const expr2tc &expr)
 }
 
 #include <util/prefix.h>
+#include <util/c_types.h>
 #include <boost/property_tree/detail/xml_parser_writer_settings.hpp>
+#include <cassert>
 #include <goto-symex/slice.h>
+#include <irep2/irep2_utils.h>
+
+// Replace nil and missing aggregate components with zero (and
+// re-query the solver for partially-resolved aggregates) so every
+// witness renders a complete initialiser. SMT models leave
+// unconstrained fields/elements unspecified; per the SMT-LIB
+// default-model convention we surface them as zero rather than
+// silently dropping them. Walks the *type* (not the value) so missing
+// trailing members of a constant_struct2t are filled, and recurses
+// into nested structs, unions and arrays.
+//
+// The expected type comes from the nondet symbol; `value` is what
+// smt_convt::get() returned for `root_expr` and may be nil at any
+// level. Some backends (notably Z3) return outer aggregates whose
+// nested struct/array fields are not expanded — e.g. `{ .c=N,
+// .i=member(sym).i }` for a struct whose `.i` member is itself a
+// struct, because smt_convt::get's member-id case skips the tuple
+// re-query when the result is struct-typed. When `value` isn't the
+// matching constant_* for an aggregate type, we re-resolve it via
+// get_by_ast on the converted root expression — that path goes
+// through the AST-based tuple_get which recurses through nested
+// tuple-selects and produces fully materialised leaves. This keeps
+// the multi-witness blocking clause sound: make_blocking_expr builds
+// equalities against value_expr, so any unresolved subterm there
+// would block nothing.
+static expr2tc zero_fill_aggregate(
+  const type2tc &expected_type,
+  const expr2tc &value,
+  const expr2tc &root_expr,
+  smt_convt &smt_conv)
+{
+  if (is_struct_type(expected_type))
+  {
+    const struct_type2t &st = to_struct_type(expected_type);
+    expr2tc effective = value;
+    if (!effective || !is_constant_struct2t(effective))
+      effective =
+        smt_conv.get_by_ast(expected_type, smt_conv.convert_ast(root_expr));
+    const constant_struct2t *cs = (effective && is_constant_struct2t(effective))
+                                    ? &to_constant_struct2t(effective)
+                                    : nullptr;
+    std::vector<expr2tc> members;
+    members.reserve(st.members.size());
+    for (size_t i = 0; i < st.members.size(); ++i)
+    {
+      expr2tc field_root =
+        member2tc(st.members[i], root_expr, st.member_names[i]);
+      expr2tc field_val = (cs && i < cs->datatype_members.size())
+                            ? cs->datatype_members[i]
+                            : expr2tc();
+      members.push_back(
+        zero_fill_aggregate(st.members[i], field_val, field_root, smt_conv));
+    }
+    return constant_struct2tc(expected_type, members);
+  }
+
+  if (is_union_type(expected_type) && value && is_constant_union2t(value))
+  {
+    const union_type2t &ut = to_union_type(expected_type);
+    const constant_union2t &cu = to_constant_union2t(value);
+    if (cu.datatype_members.size() == 1 && !ut.member_names.empty())
+    {
+      // Resolve the active member's declared type. init_field must
+      // name a declared member; a mismatch is an upstream invariant
+      // violation and we refuse to silently emit a malformed witness.
+      size_t idx = ut.member_names.size();
+      for (size_t i = 0; i < ut.member_names.size(); ++i)
+        if (ut.member_names[i] == cu.init_field)
+        {
+          idx = i;
+          break;
+        }
+      assert(
+        idx < ut.member_names.size() &&
+        "constant_union2t::init_field not in union_type2t::member_names");
+      expr2tc field_root = member2tc(ut.members[idx], root_expr, cu.init_field);
+      std::vector<expr2tc> ops = {zero_fill_aggregate(
+        ut.members[idx], cu.datatype_members[0], field_root, smt_conv)};
+      return constant_union2tc(expected_type, cu.init_field, ops);
+    }
+  }
+
+  if (is_array_type(expected_type))
+  {
+    const array_type2t &at = to_array_type(expected_type);
+    expr2tc effective = value;
+    if (!effective || !is_constant_array2t(effective))
+      effective =
+        smt_conv.get_by_ast(expected_type, smt_conv.convert_ast(root_expr));
+    if (effective && is_constant_array2t(effective))
+    {
+      const constant_array2t &ca = to_constant_array2t(effective);
+      // For concrete-size arrays the SMT layer (smt_convt::get_array) and
+      // frontend migrators populate one element per declared index, so
+      // datatype_members.size() must match array_size. A shortfall is an
+      // upstream invariant violation and would silently truncate the
+      // witness; refuse to mis-render. Symbolic sizes (VLAs, flexible
+      // arrays) cannot be checked here.
+      if (is_constant_int2t(at.array_size))
+      {
+        const BigInt &n = to_constant_int2t(at.array_size).value;
+        assert(
+          n == BigInt(ca.datatype_members.size()) &&
+          "constant_array2t element count != array_type2t::array_size");
+      }
+      std::vector<expr2tc> members;
+      members.reserve(ca.datatype_members.size());
+      for (size_t i = 0; i < ca.datatype_members.size(); ++i)
+      {
+        expr2tc idx_root =
+          index2tc(at.subtype, root_expr, constant_int2tc(index_type2(), i));
+        members.push_back(zero_fill_aggregate(
+          at.subtype, ca.datatype_members[i], idx_root, smt_conv));
+      }
+      return constant_array2tc(expected_type, members);
+    }
+  }
+
+  // Primitive (or unhandled aggregate) leaf. A nil or non-constant value
+  // means the solver didn't materialise it — fall back to zero.
+  if (!value || !is_constant_expr(value))
+    return gen_zero(expected_type);
+
+  return value;
+}
 
 // Shared nondet collection logic (used by both TestComp and CTest)
 std::vector<collected_nondet_value>
@@ -1197,8 +1324,14 @@ collect_nondet_values(const symex_target_equationt &target, smt_convt &smt_conv)
 
       seen_nondets.insert(sym.thename.as_string());
 
-      // Get concrete value
-      auto concrete_value = smt_conv.get(nondet_expr);
+      // Get concrete value, model-completing unconstrained aggregate
+      // components to zero so witnesses render with all fields present
+      // and consistent across the witness set. `nondet_expr` is the live
+      // root for re-querying any nested aggregate the backend left
+      // unexpanded (e.g. Z3 returns `{ .c=N, .i=member(sym).i }` for a
+      // struct whose nested `.i` field is itself a struct).
+      auto concrete_value = zero_fill_aggregate(
+        nondet_expr->type, smt_conv.get(nondet_expr), nondet_expr, smt_conv);
 
       // Store the collected value
       collected_nondet_value val;
