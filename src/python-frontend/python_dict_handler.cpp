@@ -1402,6 +1402,59 @@ typet python_dict_handler::resolve_expected_type_for_dict_subscript(
       if (kind == "Dict")
         return get_dict_struct_type();
     }
+    // Empty literal `d = {}`: scan the enclosing function for the first
+    // `d[k] = Klass(...)` and use that class's struct as the subscript
+    // value type. Heuristic: top-level statements only, first match wins.
+    // Without it, d[k] reads on an empty literal default to char*.
+    if (
+      var_decl.contains("value") && var_decl["value"].is_object() &&
+      var_decl["value"].value("_type", std::string()) == "Dict" &&
+      (!var_decl["value"].contains("values") ||
+       !var_decl["value"]["values"].is_array() ||
+       var_decl["value"]["values"].empty()))
+    {
+      std::vector<std::string> fn_path =
+        json_utils::split_function_path(converter_.get_current_func_name());
+      if (!fn_path.empty())
+      {
+        const auto &func_node = json_utils::find_function_by_path(
+          converter_.get_ast_json(), fn_path);
+        if (
+          !func_node.empty() && func_node.contains("body") &&
+          func_node["body"].is_array())
+        {
+          for (const auto &stmt : func_node["body"])
+          {
+            if (
+              !stmt.contains("_type") || stmt["_type"] != "Assign" ||
+              !stmt.contains("targets") || !stmt["targets"].is_array() ||
+              stmt["targets"].empty())
+              continue;
+            const auto &tgt = stmt["targets"][0];
+            if (
+              !tgt.is_object() ||
+              tgt.value("_type", std::string()) != "Subscript" ||
+              !tgt.contains("value") || !tgt["value"].is_object() ||
+              tgt["value"].value("_type", std::string()) != "Name" ||
+              tgt["value"].value("id", std::string()) != var_name ||
+              !stmt.contains("value") || !stmt["value"].is_object())
+              continue;
+            const auto &rhs = stmt["value"];
+            if (
+              rhs.value("_type", std::string()) == "Call" &&
+              rhs.contains("func") && rhs["func"].is_object() &&
+              rhs["func"].value("_type", std::string()) == "Name" &&
+              rhs["func"].contains("id"))
+            {
+              const std::string class_name =
+                rhs["func"]["id"].get<std::string>();
+              if (json_utils::is_class(class_name, converter_.get_ast_json()))
+                return symbol_typet("tag-" + class_name);
+            }
+          }
+        }
+      }
+    }
     if (no_annotation)
       return empty_typet();
   }
