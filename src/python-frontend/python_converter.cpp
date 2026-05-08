@@ -2004,8 +2004,9 @@ exprt python_converter::handle_tuple_operations(
     exprt &tuple = lhs_is_tuple ? lhs : rhs;
     exprt &count = lhs_is_tuple ? rhs : lhs;
 
-    if (!count.is_constant() ||
-        !(count.type().is_signedbv() || count.type().is_unsignedbv()))
+    if (
+      !count.is_constant() ||
+      !(count.type().is_signedbv() || count.type().is_unsignedbv()))
       return nil_exprt();
 
     BigInt n_big = binary2integer(
