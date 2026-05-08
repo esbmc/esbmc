@@ -17,7 +17,6 @@ weight: 4
 
 ## Lists
 
-- List slicing silently ignores the step value (e.g., `xs[::2]` returns the entire list, not every second element). String slicing with a step is supported.
 - `list.sort()` does not support the `key` or `reverse` keyword arguments.
 - `sorted()` does not support the `key` or `reverse` keyword arguments.
 

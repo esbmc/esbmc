@@ -99,7 +99,7 @@ protected:
   const clang::FunctionDecl *current_functionDecl;
 
   bool convert_builtin_types();
-  bool convert_top_level_decl();
+  virtual bool convert_top_level_decl();
 
   /**
    *  Since this class is inherited by clang-cpp-frontend,

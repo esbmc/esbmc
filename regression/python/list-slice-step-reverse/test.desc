@@ -1,0 +1,4 @@
+THOROUGH
+main.py
+--unwind 7 --no-standard-checks --smt-symex-guard --bitwuzla
+^VERIFICATION SUCCESSFUL$
