@@ -2,6 +2,7 @@
 
 #include <irep2/irep2.h>
 
+#include <cstdint>
 #include <set>
 #include <string>
 #include <utility>
@@ -47,13 +48,15 @@ public:
   // preserved (the contradiction filter in goto_coverage drops opposite-
   // polarity duplicates before this point, but identical-polarity
   // duplicates can still appear when the same guard repeats in the
-  // sliding window — see test 8).
-  using atom_set_t = std::vector<atom_t>;
+  // sliding window — see test 8). Named *_multiset_t to make the
+  // duplicate-preserving semantics explicit at the call site.
+  using atom_multiset_t = std::vector<atom_t>;
 
   // Record a goal that has been emitted as an instrumented assertion. The
   // (claim_msg, claim_loc) pair is the same key used in
   // goto_coveraget::all_claims and the JSON report.
-  void add_goal(atom_set_t atoms, std::string claim_msg, std::string claim_loc);
+  void
+  add_goal(atom_multiset_t atoms, std::string claim_msg, std::string claim_loc);
 
   // Compute the spanning set. After this call, spanning_size() returns
   // |maximal_set| and is_redundant(msg, loc) returns true iff every goal
@@ -82,7 +85,18 @@ public:
 private:
   struct goal_t
   {
-    atom_set_t atoms; // sorted by expr2tc address then polarity
+    // Sorted by atom_lt — a deep structural ordering (expr2tc::operator<
+    // followed by polarity). Sorting is required for std::includes-based
+    // multiset subset checks in is_proper_multiset_subset.
+    atom_multiset_t atoms;
+    // Bloom-style 64-bit signature: one bit set per atom hash modulo 64.
+    // Used as a fast necessary condition before the deep multiset compare:
+    // for `small ⊂ big`, every bit in small.signature must appear in
+    // big.signature, so (small.signature & big.signature) == small.signature
+    // is implied. False positives are possible (two distinct atoms can
+    // collide on the same bucket); a false signature match always falls
+    // back to the structural check, so soundness is preserved.
+    uint64_t signature = 0;
     std::string msg;
     std::string loc;
     bool maximal = true;

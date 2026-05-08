@@ -545,19 +545,38 @@ void goto_coveraget::k_path_coverage()
   total_kpath = get_total_instrument();
   all_claims = get_total_cond_assert();
 
+  // Soundness invariant: each insert_assert call above paired with
+  // exactly one spanning.add_goal call, so the number of goals tracked
+  // in the spanning analysis must equal the number of instrumented
+  // assertions counted in the goto programs. A divergence means the
+  // emission path diverged from the spanning bookkeeping (e.g. a future
+  // edit added an insert_assert without the matching add_goal, or vice
+  // versa) and the spanning-set denominator would be silently wrong.
+  // ESBMC is a verifier — we abort rather than report an unsound
+  // coverage percentage.
+  if (spanning.total() != static_cast<size_t>(total_kpath))
+  {
+    log_error(
+      "k-path coverage: internal invariant violated — spanning.total()={} "
+      "but get_total_instrument()={}. Each instrumented assertion must "
+      "have a matching spanning.add_goal entry. Aborting rather than "
+      "report an unsound coverage percentage.",
+      spanning.total(),
+      total_kpath);
+    abort();
+  }
+
   // Compute the spanning-set after every goal has been collected. The
   // resulting size is the Phase-2 denominator; redundant_claims feeds the
   // JSON `feasibility` field.
   //
-  // Invariant: each insert_assert call above corresponds to exactly one
-  // spanning.add_goal call with the same `(idf, location)` key, and the
-  // simplifier never collapses two semantically distinct witnesses to
-  // the same idf string. Together these mean spanning.spanning_size() is
+  // Secondary invariant: the simplifier never collapses two semantically
+  // distinct witnesses to the same idf string, so spanning_size_ is
   // bounded above by all_claims.size() + |redundant|, which is what
   // allows the bmc.cpp coverage cap to make sense. Any future change
-  // that moves goal emission, reuses an idf across distinct witnesses,
-  // or alters from_expr() formatting must preserve this 1:1 mapping or
-  // the percentage will silently deflate.
+  // that reuses an idf across distinct witnesses or alters from_expr()
+  // formatting must preserve this 1:1 mapping or the percentage will
+  // silently deflate.
   spanning.finalize();
   total_kpath_spanning = spanning.spanning_size();
   for (const auto &claim : all_claims)
@@ -837,7 +856,8 @@ void goto_coveraget::gen_cond_cov_assert(
   if (n == 0)
     return; // atom
 
-  auto recurse_all = [&]() {
+  auto recurse_all = [&]()
+  {
     for (std::size_t i = 0; i < n; ++i)
       gen_cond_cov_assert(*ptr->get_sub_expr(i), pre_cond, goto_program, it);
   };
@@ -992,9 +1012,8 @@ expr2tc goto_coveraget::handle_single_guard(
   if (is_nil_expr(expr))
     return expr;
   const std::size_t n = expr->get_num_sub_exprs();
-  auto recurse = [this](const expr2tc &e, bool tl) {
-    return handle_single_guard(e, tl);
-  };
+  auto recurse = [this](const expr2tc &e, bool tl)
+  { return handle_single_guard(e, tl); };
 
   // --- Rule 1: Atomic expressions ---
   // If the expression has no operands (a symbol or constant),
@@ -1094,8 +1113,8 @@ void goto_coveraget::handle_operands_guard(
     {
       // we do not need to add a !=false at top level
       // e.g. return x?1:0 != return (x?1:0)!=false
-      target->Foreach_operand(
-        [this](expr2tc &op) { op = handle_single_guard(op, false); });
+      target->Foreach_operand([this](expr2tc &op)
+                              { op = handle_single_guard(op, false); });
     }
     gen_cond_cov_assert(target, pre_cond, goto_program, it);
   }
