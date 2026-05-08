@@ -184,6 +184,24 @@ void clang_cpp_convertert::get_decl_name(
       break;
     }
     break;
+
+  case clang::Decl::Decomposition:
+  {
+    // C++17 structured binding holder: synthesise a stable name from
+    // location since the DecompositionDecl is unnamed in the source.
+    // Clang's USR generator does not handle DecompositionDecl, so derive
+    // the id from the location too rather than falling through.
+    locationt location_begin;
+    get_location_from_decl(nd, location_begin);
+    std::string location_begin_str = location_begin.file().as_string() + "_" +
+                                     location_begin.function().as_string() +
+                                     "_" + location_begin.line().as_string() +
+                                     "_" + location_begin.column().as_string();
+    name = "__decomp_at_" + location_begin_str;
+    std::replace(name.begin(), name.end(), '.', '_');
+    id = "c:@" + name;
+    return;
+  }
   case clang::Decl::ParmVar:
   {
     const clang::ParmVarDecl &pd = static_cast<const clang::ParmVarDecl &>(nd);
@@ -1959,6 +1977,16 @@ bool clang_cpp_convertert::get_decl_ref(
 
   switch (decl.getKind())
   {
+  // C++17 structured binding: each name resolves to a sub-expression of
+  // the holder, e.g. `__decomp.first`, so references substitute directly.
+  case clang::Decl::Binding:
+  {
+    const auto &bd = static_cast<const clang::BindingDecl &>(decl);
+    if (const clang::Expr *e = bd.getBinding())
+      return get_expr(*e, new_expr);
+    break;
+  }
+
   case clang::Decl::ParmVar:
   {
     // first follow the base conversion flow to fill new_expr

@@ -118,10 +118,19 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
   // Declaration of variables
   case clang::Decl::Var:
   case clang::Decl::VarTemplateSpecialization:
+  // C++17 structured binding: `auto [a, b] = expr;`. The DecompositionDecl
+  // holds the source object as an unnamed VarDecl; references to each
+  // BindingDecl expand to its getBinding() expression in get_decl_ref.
+  case clang::Decl::Decomposition:
   {
     const clang::VarDecl &vd = static_cast<const clang::VarDecl &>(decl);
     return get_var(vd, new_expr);
   }
+
+  // BindingDecls have no standalone storage; their references resolve to
+  // the holder's binding sub-expression in get_decl_ref. Skip here.
+  case clang::Decl::Binding:
+    break;
 
   // Declaration of function's parameter
   case clang::Decl::ParmVar:
