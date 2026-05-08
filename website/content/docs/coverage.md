@@ -3,11 +3,11 @@ title: Coverage Analysis
 weight: 10
 ---
 
-ESBMC supports coverage analysis for branch, condition, and assertion coverage. This helps identify which code paths have been tested in your program.
+ESBMC supports coverage analysis for branch, condition, assertion, and k-path coverage. This helps identify which code paths have been tested in your program.
 
 ## Usage
 
-ESBMC provides three coverage analysis modes:
+ESBMC provides four coverage analysis modes:
 
 ```bash
 # Branch coverage
@@ -18,6 +18,9 @@ esbmc example.c --condition-coverage
 
 # Assertion coverage
 esbmc example.c --assertion-coverage
+
+# K-path coverage (PathCrawler-style bounded path coverage)
+esbmc example.c --k-path-coverage
 ```
 
 ## Coverage Modes
@@ -180,6 +183,53 @@ Total Assertion Instances: 2
 Reached Assertion Instances: 2
 Assertion Instances Coverage: 100%
 ```
+
+### K-Path Coverage
+
+K-path coverage is a PathCrawler-style bounded path-coverage criterion. At every conditional branch `if (g) goto L`, ESBMC emits a witness goal for each combination of the previous *(n−1)* prior branch directions and the current direction. Each goal is discharged by the same multi-property engine used for branch coverage: a SAT verdict marks the corresponding bounded path as reachable, and the coverage percentage is reached witnesses divided by total witnesses.
+
+This sits between branch coverage (length-1 prefixes only) and full path enumeration (exponential in the number of branches). With `n = 2` the metric is equivalent to *boundary-interior* coverage; larger *n* exposes correlations that branch coverage alone cannot distinguish.
+
+**Flags:**
+
+| Flag | Meaning |
+|---|---|
+| `--k-path-coverage[=N]` | Enable k-path coverage with prefix length `N`. If `N` is omitted, defaults to `--unwind`, falling back to 4 |
+| `--k-path-coverage-claims` | List each reached witness with its guard sequence and source location |
+| `--k-path-witness-depth=D` | Post-simplification depth cap on witness guards (default 8); witnesses whose simplified guard exceeds `D` are dropped |
+| `--k-path-max-goals=M` | Per-function goal cap (default 10000); on overflow ESBMC aborts with an actionable error rather than silently truncating |
+
+**Example (loop body with one branch):**
+
+```c
+int main()
+{
+  int x;
+  for (int i = 0; i < 3; i++)
+  {
+    if (x > 0)
+      x = x - 1;
+    else
+      x = x + 1;
+  }
+  return x;
+}
+```
+
+```bash
+$ esbmc example.c --k-path-coverage=2 --unwind 4 --no-unwinding-assertions
+...
+[Coverage]
+k-Path Witnesses : 6
+Reached : 4
+k-Path Coverage: 66.66666666666667%
+```
+
+The remaining unreached witnesses correspond to bounded paths where the loop guard becomes correlated with `x > 0` after one iteration — a relationship that `--branch-coverage` cannot expose, since each branch is reachable in isolation.
+
+**Phase-1 limitations.** The current implementation walks the goto program linearly to collect prior branch guards, which over-approximates the prefix when branches join: witnesses may reference variables mutated between the branches they constrain, so a witness reported as unreached may simply be infeasible rather than indicative of missing test inputs. Witnesses whose post-simplification depth exceeds `--k-path-witness-depth` are dropped (no ghost-flag fallback yet), and infeasible witnesses count toward the denominator. A proper CFG analysis, ghost-flag fallback, and spanning-set scoring are tracked under issue [#4325](https://github.com/esbmc/esbmc/issues/4325) for follow-up phases.
+
+**References.** The criterion follows Williams, Marre, Mouy, and Roger, *PathCrawler: Automatic Generation of Path Tests by Combining Static and Dynamic Analysis*, EDCC 2005 ([doi:10.1007/11408901_21](https://doi.org/10.1007/11408901_21)); is closely related to the test-specification language of Holzer, Schallhart, Tautschnig, and Veith, *FShell: Systematic Test Case Generation for Dynamic Analysis and Measurement*, CAV 2008 ([doi:10.1007/978-3-540-70545-1_20](https://doi.org/10.1007/978-3-540-70545-1_20)); and grounds the loop-unrolling parameterisation in Huang, Meyer, and Weber, *Loop Unrolling: Formal Definition and Application to Testing*, ICTSS 2025 ([doi:10.1007/978-3-032-05188-2_2](https://doi.org/10.1007/978-3-032-05188-2_2)).
 
 ## Supported Languages
 
