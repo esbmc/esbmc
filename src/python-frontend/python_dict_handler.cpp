@@ -1402,9 +1402,10 @@ typet python_dict_handler::resolve_expected_type_for_dict_subscript(
       if (kind == "Dict")
         return get_dict_struct_type();
     }
-    // Empty literal `d = {}`: scan the enclosing function for the first
-    // `d[k] = Klass(...)` and use that class's struct as the subscript
-    // value type. Heuristic: top-level statements only, first match wins.
+    // Empty literal `d = {}`:
+    // scan the enclosing function for the first `d[k] = Klass(...)`
+    // and use that class's struct as the subscript value type.
+    // top-level statements only, first match wins.
     // Without it, d[k] reads on an empty literal default to char*.
     if (
       var_decl.contains("value") && var_decl["value"].is_object() &&
@@ -1417,8 +1418,8 @@ typet python_dict_handler::resolve_expected_type_for_dict_subscript(
         json_utils::split_function_path(converter_.get_current_func_name());
       if (!fn_path.empty())
       {
-        const auto &func_node = json_utils::find_function_by_path(
-          converter_.get_ast_json(), fn_path);
+        const auto &func_node =
+          json_utils::find_function_by_path(converter_.get_ast_json(), fn_path);
         if (
           !func_node.empty() && func_node.contains("body") &&
           func_node["body"].is_array())

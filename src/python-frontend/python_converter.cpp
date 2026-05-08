@@ -1526,8 +1526,9 @@ exprt python_converter::handle_string_type_mismatch(
   if (!((lhs_is_string && !rhs_is_string) || (!lhs_is_string && rhs_is_string)))
     return nil_exprt(); // No mismatch, return nil to indicate no action taken
 
-  // Bail out on void* vs string; the caller's strcmp path handles it
-  // instead of folding to a static False (the void* may hold a string).
+  // Bail out on void* vs string;
+  // the caller's strcmp path handles it nstead of folding to a static False
+  // (the void* may hold a string).
   auto is_void_ptr = [](const typet &t) {
     return t.is_pointer() && t.subtype().id() == "empty";
   };
@@ -1801,9 +1802,9 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     return string_result;
   }
 
-  // void* vs string: emit `strcmp(a, b) op 0` instead of decaying to pointer
-  // equality or returning a static False. Hits when one side is an
-  // unannotated class attribute holding a string.
+  // void* vs string: emit `strcmp(a, b) op 0`
+  // instead of decaying to pointer quality or returning a static False.
+  // Hits when one side is an unannotated class attribute holding a string.
   if (op == "Eq" || op == "NotEq")
   {
     auto is_void_ptr = [](const typet &t) {
@@ -4849,8 +4850,8 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     const nlohmann::json &slice = element["slice"];
     typet array_type = ns.follow(array.type());
 
-    // Unwrap pointer-to-dict so d[key] reaches the dict handler when d is
-    // held by pointer (e.g. dict-of-class-value via the symbol table).
+    // Unwrap pointer-to-dict so d[key] reaches the dict handler when
+    // d isheld by pointer (e.g. dict-of-class-value via the symbol table).
     typet array_type_for_dict = array_type;
     bool array_is_dict_pointer = false;
     if (array_type_for_dict.is_pointer())
@@ -4870,8 +4871,9 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     }
 
     // Handle dictionary subscript with type inference from annotations
-    if (array_type_for_dict.is_struct() &&
-        dict_handler_->is_dict_type(array_type_for_dict))
+    if (
+      array_type_for_dict.is_struct() &&
+      dict_handler_->is_dict_type(array_type_for_dict))
     {
       // Dereference once so the handler operates on the dict struct.
       if (array_is_dict_pointer)
