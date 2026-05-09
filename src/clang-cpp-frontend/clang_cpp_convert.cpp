@@ -690,10 +690,8 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     auto args = operator_call.arguments();
     auto begin = args.begin();
     const auto *direct = operator_call.getDirectCallee();
-    if (
-      const auto *md =
-        llvm::dyn_cast_or_null<clang::CXXMethodDecl>(direct);
-      md && md->isStatic())
+    if (const auto *md = llvm::dyn_cast_or_null<clang::CXXMethodDecl>(direct);
+        md && md->isStatic())
     {
       assert(begin != args.end());
       ++begin;
