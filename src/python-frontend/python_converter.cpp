@@ -2887,14 +2887,29 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     return python_list::build_list_from_range(*this, range_args, element);
   }
 
-  // Handle set(iterable) calls
+  // Handle set(iterable) and frozenset(iterable) calls. frozenset is
+  // modelled as a regular set: the verifier doesn't reason about
+  // immutability, so the only divergence (rejecting mutation methods)
+  // is academic for the safety properties we check.
   if (
-    element["func"]["_type"] == "Name" && element["func"]["id"] == "set" &&
+    element["func"]["_type"] == "Name" &&
+    (element["func"]["id"] == "set" ||
+     element["func"]["id"] == "frozenset") &&
     element.contains("args") && element["args"].size() == 1)
   {
     exprt iterable_expr = get_expr(element["args"][0]);
     python_set set_handler(*this, element);
     return set_handler.get_from_iterable(iterable_expr, element);
+  }
+
+  // frozenset() with no args — empty frozenset.
+  if (
+    element["func"]["_type"] == "Name" &&
+    element["func"]["id"] == "frozenset" &&
+    (!element.contains("args") || element["args"].empty()))
+  {
+    python_set set_handler(*this, element);
+    return set_handler.get_empty_set();
   }
 
   // Handle list(...) calls
