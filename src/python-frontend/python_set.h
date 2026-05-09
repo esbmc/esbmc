@@ -80,6 +80,23 @@ public:
     const nlohmann::json &element);
 
   /**
+   * @brief Emit the IR for a binary set method (issubset / update /
+   *        symmetric_difference) called on @p self with @p other.
+   *
+   * - issubset returns a bool expression.
+   * - update mutates @p self in place and returns nil.
+   * - symmetric_difference returns a fresh set expression.
+   *
+   * Reuses the same loop / contains / push primitives as
+   * build_set_union_call to keep encoding consistent.
+   */
+  exprt build_set_method_call(
+    const symbolt &self,
+    const exprt &other,
+    const nlohmann::json &element,
+    const std::string &method_name);
+
+  /**
    * @brief Handle set operations (difference, intersection, union)
    * Entry point for all set binary operations
    * @param converter Reference to python_converter
@@ -102,6 +119,20 @@ private:
    * @return Symbol representing the underlying list structure
    */
   symbolt &create_set_list();
+
+  /**
+   * @brief Walk @p source list, push every element into @p sink whose
+   *        membership in @p ref matches @p want_in_ref. Used by
+   *        update / symmetric_difference to express "elements not in X"
+   *        and "elements in X" filters with a single helper.
+   */
+  static void emit_filtered_extend(
+    python_converter &converter,
+    const exprt &source_expr,
+    const exprt &ref_expr,
+    const symbolt &sink,
+    bool want_in_ref,
+    const nlohmann::json &element);
 
   python_converter &converter_;
   const nlohmann::json &set_value_;
