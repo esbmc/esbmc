@@ -3874,8 +3874,7 @@ bool clang_c_convertert::get_binary_operator_expr(
       log_error("BO_Cmp: result type is not a struct");
       return true;
     }
-    auto make_value = [&](int v) -> exprt
-    {
+    auto make_value = [&](int v) -> exprt {
       exprt s = gen_zero(ct);
       if (!s.operands().empty())
       {
