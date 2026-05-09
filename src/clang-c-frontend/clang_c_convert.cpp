@@ -268,6 +268,10 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
   // the underlying type defined by the typedef, so we don't need
   // to add them to the context
   case clang::Decl::Typedef:
+
+  // CTAD deduction guides (C++17): clang materialises specialisations
+  // through the guide, so the guide itself has no runtime form.
+  case clang::Decl::CXXDeductionGuide:
     break;
 
   // We pretty much ignore this information, clang does the expansion for us.
@@ -1280,6 +1284,20 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     if (get_type(at.desugar(), new_type))
       return true;
 
+    break;
+  }
+
+  // C++17/20 class template argument deduction (CTAD): a class template
+  // name written without explicit args resolves through deduction to a
+  // concrete specialisation; lower to that specialisation.
+  case clang::Type::DeducedTemplateSpecialization:
+  {
+    const clang::DeducedType &dt =
+      static_cast<const clang::DeducedType &>(the_type);
+    if (dt.getDeducedType().isNull())
+      return true;
+    if (get_type(dt.getDeducedType(), new_type))
+      return true;
     break;
   }
 
