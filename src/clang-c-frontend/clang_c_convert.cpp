@@ -1394,6 +1394,11 @@ bool clang_c_convertert::get_builtin_type(
     c_type = "unsigned_wchar_t";
     break;
 
+  case clang::BuiltinType::Char8:
+    new_type = unsigned_char_type();
+    c_type = "char8_t";
+    break;
+
   case clang::BuiltinType::Char16:
     new_type = char16_type();
     c_type = "char16_t";
