@@ -275,6 +275,10 @@ private:
   exprt
   handle_min_max(const std::string &func_name, irep_idt comparison_op) const;
 
+  // Tuple method detection and handling (count, index)
+  bool is_tuple_method_call() const;
+  exprt handle_tuple_method() const;
+
   // Dict method detection and handling
   bool is_dict_method_call() const;
   exprt handle_dict_method() const;
