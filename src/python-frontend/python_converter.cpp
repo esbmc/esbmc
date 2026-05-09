@@ -1740,6 +1740,13 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     return dict_handler_->compare(lhs, rhs, op);
   }
 
+  // Handle tuple +/* before list operations (tuple structs would otherwise
+  // fall through to the generic struct-arithmetic path and silently produce
+  // a struct of the original size).
+  exprt tuple_result = handle_tuple_operations(op, lhs, rhs, element);
+  if (!tuple_result.is_nil())
+    return tuple_result;
+
   // Handle list operations
   exprt list_result =
     handle_list_operations(op, lhs, rhs, left, right, element);
@@ -1950,6 +1957,84 @@ exprt python_converter::handle_array_operations(
   if (op == "Add")
     return string_handler_.handle_string_concatenation_with_promotion(
       lhs, rhs, left, right);
+
+  return nil_exprt();
+}
+
+exprt python_converter::handle_tuple_operations(
+  const std::string &op,
+  exprt &lhs,
+  exprt &rhs,
+  const nlohmann::json &element)
+{
+  const bool lhs_is_tuple = tuple_handler_->is_tuple_type(lhs.type());
+  const bool rhs_is_tuple = tuple_handler_->is_tuple_type(rhs.type());
+
+  // Concatenation: (a, b) + (c, d) == (a, b, c, d).
+  if (op == "Add" && lhs_is_tuple && rhs_is_tuple)
+  {
+    const auto &lhs_components = to_struct_type(lhs.type()).components();
+    const auto &rhs_components = to_struct_type(rhs.type()).components();
+
+    std::vector<typet> element_types;
+    element_types.reserve(lhs_components.size() + rhs_components.size());
+    for (const auto &c : lhs_components)
+      element_types.push_back(c.type());
+    for (const auto &c : rhs_components)
+      element_types.push_back(c.type());
+
+    struct_typet new_type =
+      tuple_handler_->create_tuple_struct_type(element_types);
+
+    struct_exprt result(new_type);
+    for (const auto &c : lhs_components)
+      result.copy_to_operands(member_exprt(lhs, c.get_name(), c.type()));
+    for (const auto &c : rhs_components)
+      result.copy_to_operands(member_exprt(rhs, c.get_name(), c.type()));
+
+    if (element.contains("lineno"))
+      result.location() = get_location_from_decl(element);
+    return result;
+  }
+
+  // Repetition: (a, b) * 3 == (a, b, a, b, a, b). Requires a constant
+  // non-negative repeat count, since the result type must be known.
+  if (op == "Mult" && (lhs_is_tuple || rhs_is_tuple))
+  {
+    exprt &tuple = lhs_is_tuple ? lhs : rhs;
+    exprt &count = lhs_is_tuple ? rhs : lhs;
+
+    if (
+      !count.is_constant() ||
+      !(count.type().is_signedbv() || count.type().is_unsignedbv()))
+      return nil_exprt();
+
+    BigInt n_big = binary2integer(
+      to_constant_expr(count).value().c_str(), count.type().is_signedbv());
+    if (n_big < 0)
+      n_big = 0;
+    const size_t n = n_big.to_int64();
+
+    const auto &components = to_struct_type(tuple.type()).components();
+
+    std::vector<typet> element_types;
+    element_types.reserve(components.size() * n);
+    for (size_t i = 0; i < n; ++i)
+      for (const auto &c : components)
+        element_types.push_back(c.type());
+
+    struct_typet new_type =
+      tuple_handler_->create_tuple_struct_type(element_types);
+
+    struct_exprt result(new_type);
+    for (size_t i = 0; i < n; ++i)
+      for (const auto &c : components)
+        result.copy_to_operands(member_exprt(tuple, c.get_name(), c.type()));
+
+    if (element.contains("lineno"))
+      result.location() = get_location_from_decl(element);
+    return result;
+  }
 
   return nil_exprt();
 }
