@@ -3313,6 +3313,41 @@ exprt function_call_expr::handle_list_reverse() const
   return reverse_call;
 }
 
+bool function_call_expr::is_set_method_call() const
+{
+  if (call_["func"]["_type"] != "Attribute")
+    return false;
+
+  const std::string &method_name = function_id_.get_function();
+  if (method_name != "add" && method_name != "discard")
+    return false;
+
+  std::string dummy;
+  const symbolt *sym = get_object_list_symbol(dummy);
+  return sym != nullptr && sym->is_set;
+}
+
+exprt function_call_expr::handle_set_method() const
+{
+  const std::string &method_name = function_id_.get_function();
+  const auto &args = call_["args"];
+
+  if (args.size() != 1)
+    throw std::runtime_error(method_name + "() takes exactly one argument");
+
+  std::string set_display_name;
+  const symbolt *set_symbol = get_object_list_symbol(set_display_name);
+  materialize_list_symbol(set_symbol);
+  if (!set_symbol)
+    throw std::runtime_error("Set variable not found: " + set_display_name);
+
+  exprt elem = converter_.get_expr(args[0]);
+
+  python_list helper(converter_, call_);
+  return helper.build_set_membership_call(
+    *set_symbol, call_, elem, method_name);
+}
+
 bool function_call_expr::is_list_method_call() const
 {
   if (call_["func"]["_type"] != "Attribute")
@@ -3938,6 +3973,12 @@ function_call_expr::get_dispatch_table()
     {[this]() { return is_tuple_method_call(); },
      [this]() { return handle_tuple_method(); },
      "tuple methods"},
+
+    // Set methods (add, discard) — matched before list methods so set
+    // receivers don't fall through to the list handler.
+    {[this]() { return is_set_method_call(); },
+     [this]() { return handle_set_method(); },
+     "set methods"},
 
     // List methods
     {[this]() { return is_list_method_call(); },

@@ -1043,10 +1043,11 @@ void goto_symext::run_intrinsic(
     return;
   }
 
-  // PythonList methods
+  // PythonList / dict / set methods
   if (
     has_prefix(symname, "c:@F@__ESBMC_list") ||
-    has_prefix(symname, "c:@F@__ESBMC_dict"))
+    has_prefix(symname, "c:@F@__ESBMC_dict") ||
+    has_prefix(symname, "c:@F@__ESBMC_set"))
   {
     bump_call(func_call, symname);
     return;

@@ -240,6 +240,20 @@ public:
     const exprt &elem);
 
   /**
+   * @brief Emit a call to a set membership-mutating C model function.
+   *
+   * Used to implement set.add() and set.discard(): both wrap the same C
+   * argument layout (set, &elem, type_id, size) returning bool. The
+   * @p method_name selects between "add" and "discard"; the dispatcher
+   * resolves it to "__ESBMC_set_add" / "__ESBMC_set_discard".
+   */
+  exprt build_set_membership_call(
+    const symbolt &set,
+    const nlohmann::json &op,
+    const exprt &elem,
+    const std::string &method_name);
+
+  /**
    * @brief Return the number of type entries recorded for a list.
    *
    * Provides a safe, bounded count of the elements stored in list_type_map
