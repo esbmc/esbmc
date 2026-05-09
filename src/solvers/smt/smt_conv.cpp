@@ -2461,8 +2461,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
 
     expr2tc lt = lessthan2tc(cw.side_1, cw.side_2);
     expr2tc eq = equality2tc(cw.side_1, cw.side_2);
-    expr2tc inner =
-      if2tc(cw.type, eq, make_value(0), make_value(1));
+    expr2tc inner = if2tc(cw.type, eq, make_value(0), make_value(1));
     expr2tc outer = if2tc(cw.type, lt, make_value(-1), inner);
     a = convert_ast(outer);
     break;
