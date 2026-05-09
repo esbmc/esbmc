@@ -53,8 +53,7 @@ void clang_cpp_maint::adjust_init(code_assignt &assignment, codet &adjusted)
     // Use code_assignt rather than code_declt: globals already have storage,
     // so a decl is dropped by goto-conversion and the zero-init would be lost.
     namespacet ns(context);
-    exprt zero =
-      gen_zero(get_complete_type(assignment.lhs().type(), ns), true);
+    exprt zero = gen_zero(get_complete_type(assignment.lhs().type(), ns), true);
     if (zero.is_not_nil())
     {
       // Guard against gen_zero returning nil for unresolved/dependent types
