@@ -3854,6 +3854,54 @@ bool clang_c_convertert::get_binary_operator_expr(
     new_expr = exprt("ptr_mem", t);
     break;
 
+  // C++20 three-way comparison `a <=> b`. Lower to a conditional that
+  // produces a comparison-category struct value:
+  //   lhs <  rhs  ->  T{-1}    (less)
+  //   lhs == rhs  ->  T{ 0}    (equivalent / equal)
+  //   else        ->  T{ 1}    (greater)
+  // Per [expr.spaceship] in N4861. The std::strong_ordering /
+  // weak_ordering / partial_ordering types in <compare> all share a
+  // single signed-char first field; t has already been resolved to that
+  // struct type by get_type(). For floating-point operands the standard
+  // also requires a partial_ordering::unordered case for NaN, which
+  // this lowering does not yet model — direct float spaceship will
+  // miss that branch but otherwise behave correctly for ordered values.
+  case clang::BO_Cmp:
+  {
+    typet ct = get_complete_type(t, ns);
+    if (!ct.is_struct())
+    {
+      log_error("BO_Cmp: result type is not a struct");
+      return true;
+    }
+    auto make_value = [&](int v) -> exprt
+    {
+      exprt s = gen_zero(ct);
+      if (!s.operands().empty())
+      {
+        typet field_t = to_struct_type(ct).components().front().type();
+        s.operands().at(0) = constant_exprt(
+          integer2binary(v, config.ansi_c.char_width),
+          integer2string(v),
+          field_t);
+      }
+      return s;
+    };
+
+    exprt eq_cond("=", bool_type());
+    eq_cond.copy_to_operands(lhs, rhs);
+    exprt eq_branch("if", ct);
+    eq_branch.copy_to_operands(eq_cond, make_value(0), make_value(1));
+
+    exprt lt_cond("<", bool_type());
+    lt_cond.copy_to_operands(lhs, rhs);
+    exprt outer("if", ct);
+    outer.copy_to_operands(lt_cond, make_value(-1), eq_branch);
+
+    new_expr = outer;
+    return false;
+  }
+
   default:
   {
     const clang::CompoundAssignOperator &compop =
