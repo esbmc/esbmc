@@ -3854,6 +3854,14 @@ bool clang_c_convertert::get_binary_operator_expr(
     new_expr = exprt("ptr_mem", t);
     break;
 
+  // C++20 three-way comparison `a <=> b`. Build a dedicated irep node
+  // with id "<=>"; migrate.cpp lowers it to cmp_three_way2t, and the
+  // SMT backend expands it to the ITE chain (less/equivalent/greater)
+  // with the operands captured once.  Per [expr.spaceship] in N4861.
+  case clang::BO_Cmp:
+    new_expr = exprt(exprt::i_cmp_three_way, t);
+    break;
+
   default:
   {
     const clang::CompoundAssignOperator &compop =
