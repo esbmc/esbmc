@@ -1131,6 +1131,82 @@ std::string string_handler::float_to_string(
   return oss.str();
 }
 
+// Parse the leading [[fill]align][width] portion of a Python format spec.
+// Returns true if any padding parameters were extracted; on success, *rest
+// is set to the remainder of the spec (precision/type) for further handling.
+static bool parse_format_padding(
+  const std::string &format,
+  char &fill,
+  char &align,
+  int &width,
+  std::string &rest)
+{
+  fill = ' ';
+  align = '\0';
+  width = 0;
+  rest = format;
+
+  if (
+    format.size() >= 2 && (format[1] == '<' || format[1] == '>' ||
+                           format[1] == '^' || format[1] == '='))
+  {
+    fill = format[0];
+    align = format[1];
+    rest = format.substr(2);
+  }
+  else if (
+    !format.empty() && (format[0] == '<' || format[0] == '>' ||
+                        format[0] == '^' || format[0] == '='))
+  {
+    align = format[0];
+    rest = format.substr(1);
+  }
+
+  size_t i = 0;
+  while (i < rest.size() && std::isdigit(static_cast<unsigned char>(rest[i])))
+    ++i;
+  if (i > 0)
+  {
+    try
+    {
+      width = std::stoi(rest.substr(0, i));
+    }
+    catch (...)
+    {
+      width = 0;
+    }
+    rest = rest.substr(i);
+  }
+
+  return align != '\0' || width > 0;
+}
+
+// Apply fill/align/width padding to a literal string per Python's
+// format-spec mini-language. Returns padded as a fresh char_array expr.
+static std::string
+apply_padding(const std::string &input, char fill, char align, int width)
+{
+  if (width <= 0 || static_cast<int>(input.size()) >= width)
+    return input;
+
+  size_t pad = static_cast<size_t>(width) - input.size();
+  switch (align)
+  {
+  case '<':
+    return input + std::string(pad, fill);
+  case '^':
+  {
+    size_t left = pad / 2;
+    size_t right = pad - left;
+    return std::string(left, fill) + input + std::string(right, fill);
+  }
+  case '>':
+  case '=':
+  default:
+    return std::string(pad, fill) + input;
+  }
+}
+
 exprt string_handler::apply_format_specification(
   const exprt &expr,
   const std::string &format)
@@ -1138,6 +1214,35 @@ exprt string_handler::apply_format_specification(
   // Basic format specification handling
   if (format.empty())
     return convert_to_string(expr);
+
+  // Pad/align prefix ([[fill]align][width]). Default-align right for
+  // numerics and left for strings, matching CPython.
+  char fill, align;
+  int width;
+  std::string rest;
+  if (parse_format_padding(format, fill, align, width, rest) && rest.empty())
+  {
+    exprt body = convert_to_string(expr);
+    if (!body.type().is_array() || body.type().subtype() != char_type())
+      return body;
+    // Extract the literal characters; bail out if the body isn't a
+    // string-constant or constant char array we can read.
+    std::string content = extract_string_from_array_operands(body);
+    if (
+      content.empty() && !body.is_constant() && body.id() != "string-constant")
+      return body;
+    if (align == '\0')
+      align = (expr.type().is_signedbv() || expr.type().is_unsignedbv() ||
+               expr.type().is_floatbv() || expr.type().is_bool())
+                ? '>'
+                : '<';
+    std::string padded = apply_padding(content, fill, align, width);
+    typet string_type =
+      type_handler_.build_array(char_type(), padded.size() + 1);
+    std::vector<unsigned char> chars(padded.begin(), padded.end());
+    chars.push_back('\0');
+    return make_char_array_expr(chars, string_type);
+  }
 
   // Handle integer formatting
   if (format == "d" || format == "i")
