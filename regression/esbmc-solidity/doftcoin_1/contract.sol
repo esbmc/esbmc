@@ -55,7 +55,7 @@ contract BasicToken is ERC20 {
     }
 }
 
-contract Doftcoin is BasicToken {
+contract Doftcoin is BasicToken, owned {
     string public name;
     string public symbol;
     uint256 public decimals;
@@ -97,6 +97,7 @@ contract Doftcoin is BasicToken {
     }
 
     function mintToken(address _target, uint256 _mintedAmount) public {
+        require(msg.sender == owner);
         balanceOf[msg.sender] = _totalSupply;
         uint balanceOf_target = balanceOf[_target];
         balanceOf_target += _mintedAmount;
