@@ -78,34 +78,52 @@ endif()
 # clang executable, which in, e.g., Ubuntu, lives in a package separate from
 # libclang-cpp.so.
 
-try_run(TRY_CLANG_RUNS TRY_CLANG_COMPILES ${CMAKE_CURRENT_BINARY_DIR}
-        ${PROJECT_SOURCE_DIR}/scripts/cmake/try_clang.cc
-        CMAKE_FLAGS -DINCLUDE_DIRECTORIES=${CLANG_INCLUDE_DIRS}
-        LINK_LIBRARIES ${ESBMC_CLANG_LIBS}
-        COMPILE_OUTPUT_VARIABLE TRY_CLANG_COMPILE_OUTPUT
-        RUN_OUTPUT_VARIABLE CLANG_RESOURCE_DIR)
-
-if (NOT TRY_CLANG_COMPILES)
-  message(FATAL_ERROR "Cannot compile against Clang: ${TRY_CLANG_COMPILE_OUTPUT}")
+if(CMAKE_CROSSCOMPILING)
+  # When cross-compiling we cannot run host binaries, so just verify that
+  # we can compile against Clang and compute CLANG_RESOURCE_DIR from the
+  # LLVM version variables that are already available.
+  try_compile(TRY_CLANG_COMPILES ${CMAKE_CURRENT_BINARY_DIR}
+              ${PROJECT_SOURCE_DIR}/scripts/cmake/try_clang.cc
+              CMAKE_FLAGS -DINCLUDE_DIRECTORIES=${CLANG_INCLUDE_DIRS}
+              LINK_LIBRARIES ${ESBMC_CLANG_LIBS}
+              OUTPUT_VARIABLE TRY_CLANG_COMPILE_OUTPUT)
+  if (NOT TRY_CLANG_COMPILES)
+    message(FATAL_ERROR "Cannot compile against Clang: ${TRY_CLANG_COMPILE_OUTPUT}")
+  endif()
+else()
+  try_run(TRY_CLANG_RUNS TRY_CLANG_COMPILES ${CMAKE_CURRENT_BINARY_DIR}
+          ${PROJECT_SOURCE_DIR}/scripts/cmake/try_clang.cc
+          CMAKE_FLAGS -DINCLUDE_DIRECTORIES=${CLANG_INCLUDE_DIRS}
+          LINK_LIBRARIES ${ESBMC_CLANG_LIBS}
+          COMPILE_OUTPUT_VARIABLE TRY_CLANG_COMPILE_OUTPUT
+          RUN_OUTPUT_VARIABLE CLANG_RESOURCE_DIR)
+  if (NOT TRY_CLANG_COMPILES)
+    message(FATAL_ERROR "Cannot compile against Clang: ${TRY_CLANG_COMPILE_OUTPUT}")
+  endif()
+  if (TRY_CLANG_RUNS EQUAL 0)
+    string(STRIP "${CLANG_RESOURCE_DIR}" CLANG_RESOURCE_DIR)
+    # see clang-toolings's injectResourceDir():
+    # <https://clang.llvm.org/doxygen/Tooling_8cpp_source.html#l00462>
+    if (NOT ("${CLANG_RESOURCE_DIR}" STREQUAL ""))
+      set(CLANG_RESOURCE_DIR "${CLANG_INSTALL_PREFIX}/bin/${CLANG_RESOURCE_DIR}")
+    endif()
+  endif()
 endif()
 
-if (TRY_CLANG_RUNS EQUAL 0)
-  string(STRIP "${CLANG_RESOURCE_DIR}" CLANG_RESOURCE_DIR)
-  # see clang-toolings's injectResourceDir():
-  # <https://clang.llvm.org/doxygen/Tooling_8cpp_source.html#l00462>
-  if (NOT ("${CLANG_RESOURCE_DIR}" STREQUAL ""))
-    set(CLANG_RESOURCE_DIR "${CLANG_INSTALL_PREFIX}/bin/${CLANG_RESOURCE_DIR}")
-  elseif (${LLVM_VERSION_MAJOR} LESS 16)
+# Fallback: compute CLANG_RESOURCE_DIR from LLVM version if not yet determined
+if (NOT CLANG_RESOURCE_DIR OR "${CLANG_RESOURCE_DIR}" STREQUAL "")
+  if (${LLVM_VERSION_MAJOR} LESS 16)
     set(CLANG_RESOURCE_DIR "${CLANG_INSTALL_PREFIX}/lib${LLVM_LIBDIR_SUFFIX}/clang/${LLVM_VERSION_MAJOR}.${LLVM_VERSION_MINOR}.${LLVM_VERSION_PATCH}")
   else()
     set(CLANG_RESOURCE_DIR "${CLANG_INSTALL_PREFIX}/lib${LLVM_LIBDIR_SUFFIX}/clang/${LLVM_VERSION_MAJOR}")
   endif()
-  message(STATUS "Clang resource dir: ${CLANG_RESOURCE_DIR}")
-  set(ESBMC_CLANG_HEADER_DIR "${CLANG_RESOURCE_DIR}/include")
-  if (NOT IS_DIRECTORY "${ESBMC_CLANG_HEADER_DIR}")
-    message(STATUS "Failed to determine path to Clang headers: not a directory: ${ESBMC_CLANG_HEADER_DIR}")
-    unset(ESBMC_CLANG_HEADER_DIR)
-  endif()
+endif()
+
+message(STATUS "Clang resource dir: ${CLANG_RESOURCE_DIR}")
+set(ESBMC_CLANG_HEADER_DIR "${CLANG_RESOURCE_DIR}/include")
+if (NOT IS_DIRECTORY "${ESBMC_CLANG_HEADER_DIR}")
+  message(STATUS "Failed to determine path to Clang headers: not a directory: ${ESBMC_CLANG_HEADER_DIR}")
+  unset(ESBMC_CLANG_HEADER_DIR)
 endif()
 
 if (NOT ${OVERRIDE_CLANG_HEADER_DIR} STREQUAL "")
