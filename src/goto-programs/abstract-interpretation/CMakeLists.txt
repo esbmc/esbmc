@@ -1,4 +1,12 @@
-add_library(abstract-interpretation ai.cpp ai_domain.cpp interval_domain.cpp interval_analysis.cpp gcse.cpp)
+add_library(abstract-interpretation
+  ai.cpp
+  ai_domain.cpp
+  interval_domain.cpp
+  interval_analysis.cpp
+  gcse.cpp
+  linear_equality_domain.cpp
+  linear_equality_analysis.cpp
+)
 target_include_directories(abstract-interpretation
         PUBLIC ${Boost_INCLUDE_DIRS})
 
