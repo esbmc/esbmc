@@ -286,6 +286,10 @@ private:
   // Dict class method detection (e.g. dict.fromkeys([1, 2, 3]))
   bool is_dict_class_method_call() const;
 
+  // Set method detection and handling
+  bool is_set_method_call() const;
+  exprt handle_set_method() const;
+
   // List method detection and handling
   bool is_list_method_call() const;
   exprt handle_list_method() const;
