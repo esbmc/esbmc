@@ -118,10 +118,19 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
   // Declaration of variables
   case clang::Decl::Var:
   case clang::Decl::VarTemplateSpecialization:
+  // C++17 structured binding: `auto [a, b] = expr;`. The DecompositionDecl
+  // holds the source object as an unnamed VarDecl; references to each
+  // BindingDecl expand to its getBinding() expression in get_decl_ref.
+  case clang::Decl::Decomposition:
   {
     const clang::VarDecl &vd = static_cast<const clang::VarDecl &>(decl);
     return get_var(vd, new_expr);
   }
+
+  // BindingDecls have no standalone storage; their references resolve to
+  // the holder's binding sub-expression in get_decl_ref. Skip here.
+  case clang::Decl::Binding:
+    break;
 
   // Declaration of function's parameter
   case clang::Decl::ParmVar:
@@ -1394,6 +1403,11 @@ bool clang_c_convertert::get_builtin_type(
     c_type = "unsigned_wchar_t";
     break;
 
+  case clang::BuiltinType::Char8:
+    new_type = unsigned_char_type();
+    c_type = "char8_t";
+    break;
+
   case clang::BuiltinType::Char16:
     new_type = char16_type();
     c_type = "char16_t";
@@ -2645,7 +2659,23 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       if_expr.copy_to_operands(else_expr);
     }
 
-    new_expr = if_expr;
+    // C++17 init-statement: `if (init; cond)`. Wrap the init and the
+    // resulting if in a block so the init's side-effects (in particular,
+    // the initialiser of any variable declared there) are emitted.
+    if (const clang::Stmt *init_stmt = ifstmt.getInit())
+    {
+      exprt init;
+      if (get_expr(*init_stmt, init))
+        return true;
+      convert_expression_to_code(init);
+
+      code_blockt block;
+      block.move_to_operands(init);
+      block.copy_to_operands(if_expr);
+      new_expr = block;
+    }
+    else
+      new_expr = if_expr;
     break;
   }
 
@@ -2671,7 +2701,21 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     switch_code.value() = cond;
     switch_code.body() = body;
 
-    new_expr = switch_code;
+    // C++17 init-statement: `switch (init; cond)`. Wrap as for IfStmt.
+    if (const clang::Stmt *init_stmt = switch_stmt.getInit())
+    {
+      exprt init;
+      if (get_expr(*init_stmt, init))
+        return true;
+      convert_expression_to_code(init);
+
+      code_blockt block;
+      block.move_to_operands(init);
+      block.copy_to_operands(switch_code);
+      new_expr = block;
+    }
+    else
+      new_expr = switch_code;
     break;
   }
 
