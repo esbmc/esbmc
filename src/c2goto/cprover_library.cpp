@@ -250,7 +250,9 @@ const static std::vector<std::string> python_c_models = {
   "__ESBMC_list_sort",
   "__ESBMC_list_reverse",
   "__ESBMC_list_push_dict_ptr",
-  "__ESBMC_list_lt"};
+  "__ESBMC_list_lt",
+  "__ESBMC_set_add",
+  "__ESBMC_set_discard"};
 
 // Solidity operational model functions
 const static std::vector<std::string> solidity_c_models = {
