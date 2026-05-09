@@ -184,6 +184,24 @@ void clang_cpp_convertert::get_decl_name(
       break;
     }
     break;
+
+  case clang::Decl::Decomposition:
+  {
+    // C++17 structured binding holder: synthesise a stable name from
+    // location since the DecompositionDecl is unnamed in the source.
+    // Clang's USR generator does not handle DecompositionDecl, so derive
+    // the id from the location too rather than falling through.
+    locationt location_begin;
+    get_location_from_decl(nd, location_begin);
+    std::string location_begin_str = location_begin.file().as_string() + "_" +
+                                     location_begin.function().as_string() +
+                                     "_" + location_begin.line().as_string() +
+                                     "_" + location_begin.column().as_string();
+    name = "__decomp_at_" + location_begin_str;
+    std::replace(name.begin(), name.end(), '.', '_');
+    id = "c:@" + name;
+    return;
+  }
   case clang::Decl::ParmVar:
   {
     const clang::ParmVarDecl &pd = static_cast<const clang::ParmVarDecl &>(nd);
@@ -683,11 +701,24 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     call.function() = callee_expr;
     call.type() = type;
 
-    // Do args
-    for (const clang::Expr *arg : operator_call.arguments())
+    // C++23 allows a static operator(): `static int operator()(int);`. Clang
+    // still puts the object expression as arg 0 of the CXXOperatorCallExpr,
+    // but a static method has no implicit-object parameter, so passing the
+    // object would clash with the function's actual signature. Skip it.
+    auto args = operator_call.arguments();
+    auto begin = args.begin();
+    const auto *direct = operator_call.getDirectCallee();
+    if (const auto *md = llvm::dyn_cast_or_null<clang::CXXMethodDecl>(direct);
+        md && md->isStatic())
+    {
+      assert(begin != args.end());
+      ++begin;
+    }
+
+    for (auto it = begin; it != args.end(); ++it)
     {
       exprt single_arg;
-      if (get_expr(*arg, single_arg))
+      if (get_expr(**it, single_arg))
         return true;
 
       call.arguments().push_back(single_arg);
@@ -1795,10 +1826,18 @@ bool clang_cpp_convertert::get_function_params(
   const clang::CXXMethodDecl &cxxmd =
     static_cast<const clang::CXXMethodDecl &>(fd);
 
-  // If it's a C-style function, fallback to C mode
+  // If it's a C-style function, fallback to C mode.
   // Static methods don't have the this arg and can be handled as
-  // C functions
-  if (!fd.isCXXClassMember() || cxxmd.isStatic())
+  // C functions.  C++23 explicit object member functions (deducing this,
+  //
+  //   int g(this S const& self);
+  //
+  // [dcl.fct]/p6, N4861) likewise have no implicit this: the object
+  // expression is the first regular parameter, so route them through the
+  // same path.
+  if (
+    !fd.isCXXClassMember() || cxxmd.isStatic() ||
+    cxxmd.isExplicitObjectMemberFunction())
     return clang_c_convertert::get_function_params(fd, params);
 
   // Add this pointer to first arg
@@ -1959,6 +1998,16 @@ bool clang_cpp_convertert::get_decl_ref(
 
   switch (decl.getKind())
   {
+  // C++17 structured binding: each name resolves to a sub-expression of
+  // the holder, e.g. `__decomp.first`, so references substitute directly.
+  case clang::Decl::Binding:
+  {
+    const auto &bd = static_cast<const clang::BindingDecl &>(decl);
+    if (const clang::Expr *e = bd.getBinding())
+      return get_expr(*e, new_expr);
+    break;
+  }
+
   case clang::Decl::ParmVar:
   {
     // first follow the base conversion flow to fill new_expr
