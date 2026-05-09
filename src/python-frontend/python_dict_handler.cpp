@@ -2777,6 +2777,79 @@ exprt python_dict_handler::handle_dict_fromkeys(const nlohmann::json &call_node)
   return symbol_expr(dict_sym);
 }
 
+exprt python_dict_handler::handle_dict_constructor(
+  const nlohmann::json &call_node)
+{
+  if (!call_node.contains("args") || !call_node["args"].is_array())
+    return nil_exprt();
+  const auto &args = call_node["args"];
+  if (args.size() != 1)
+    return nil_exprt();
+
+  // Unwrap a single set/list/tuple/frozenset wrapper around the iterable.
+  // dict(set([(k,v),...])) and dict(list([...])) are common patterns.
+  const nlohmann::json *arg = &args[0];
+  if (
+    arg->value("_type", "") == "Call" && arg->contains("func") &&
+    (*arg)["func"].value("_type", "") == "Name")
+  {
+    const std::string id = (*arg)["func"].value("id", "");
+    if (
+      (id == "set" || id == "list" || id == "tuple" || id == "frozenset") &&
+      arg->contains("args") && (*arg)["args"].is_array() &&
+      (*arg)["args"].size() == 1)
+    {
+      arg = &(*arg)["args"][0];
+    }
+  }
+
+  const std::string &arg_type = arg->value("_type", "");
+  if (arg_type != "List" && arg_type != "Tuple" && arg_type != "Set")
+    return nil_exprt();
+  if (!arg->contains("elts") || !(*arg)["elts"].is_array())
+    return nil_exprt();
+
+  nlohmann::json keys = nlohmann::json::array();
+  nlohmann::json values = nlohmann::json::array();
+  for (const auto &elt : (*arg)["elts"])
+  {
+    // (k, v) tuple element.
+    if (
+      elt.value("_type", "") == "Tuple" && elt.contains("elts") &&
+      elt["elts"].is_array() && elt["elts"].size() == 2)
+    {
+      keys.push_back(elt["elts"][0]);
+      values.push_back(elt["elts"][1]);
+      continue;
+    }
+    // 2-char string Constant: dict(["ab"]) → {'a': 'b'}.
+    if (
+      elt.value("_type", "") == "Constant" && elt.contains("value") &&
+      elt["value"].is_string() && elt["value"].get<std::string>().size() == 2)
+    {
+      const std::string s = elt["value"].get<std::string>();
+      nlohmann::json k = elt;
+      nlohmann::json v = elt;
+      k["value"] = std::string(1, s[0]);
+      v["value"] = std::string(1, s[1]);
+      keys.push_back(std::move(k));
+      values.push_back(std::move(v));
+      continue;
+    }
+    // Anything else (mixed forms, non-2-char strings, etc.): give up.
+    return nil_exprt();
+  }
+
+  // Hand off to the Dict-literal lowering used for {k:v, ...}.
+  nlohmann::json synthetic_dict = call_node;
+  synthetic_dict.erase("args");
+  synthetic_dict.erase("func");
+  synthetic_dict["_type"] = "Dict";
+  synthetic_dict["keys"] = std::move(keys);
+  synthetic_dict["values"] = std::move(values);
+  return get_dict_literal(synthetic_dict);
+}
+
 exprt python_dict_handler::handle_dict_update(
   const exprt &dict_expr,
   const nlohmann::json &call_node)

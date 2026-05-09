@@ -497,6 +497,23 @@ public:
   exprt handle_dict_fromkeys(const nlohmann::json &call_node);
 
   /**
+   * @brief Handles dict(iterable) constructor calls.
+   *
+   * Synthesises a Dict literal from the iterable and routes through
+   * get_dict_literal. Supported iterable forms:
+   * - list/tuple/set of 2-tuples: dict([(k1,v1), (k2,v2), ...])
+   * - list of 2-char strings: dict(["ab", "cd"])
+   * - set wrapping any of the above: dict(set([(k,v),...]))
+   *
+   * Returns nil_exprt for unsupported forms; the caller may then throw a
+   * clean error rather than generating broken GOTO that crashes BMC.
+   *
+   * @param call_node The function call AST node (Call(Name("dict"), [arg])).
+   * @return Expression for the resulting dict symbol, or nil_exprt.
+   */
+  exprt handle_dict_constructor(const nlohmann::json &call_node);
+
+  /**
    * @brief Compares two dictionaries for equality or inequality
    *
    * Implements Python's dictionary comparison semantics by performing
