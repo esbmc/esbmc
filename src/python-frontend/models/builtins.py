@@ -88,6 +88,60 @@ def max_str(iterable: list[str]) -> str:
     return result
 
 
+def max_default(iterable: list[int], default: int) -> int:
+    """Return the max of an iterable of ints, or default if empty."""
+    if len(iterable) == 0:
+        return default
+
+    i: int = 1
+    length: int = len(iterable)
+    result: int = iterable[0]
+
+    while i < length:
+        element: int = iterable[i]
+        if element > result:
+            result = element
+        i = i + 1
+
+    return result
+
+
+def max_default_float(iterable: list[float], default: float) -> float:
+    """Return the max of an iterable of floats, or default if empty."""
+    if len(iterable) == 0:
+        return default
+
+    i: int = 1
+    length: int = len(iterable)
+    result: float = iterable[0]
+
+    while i < length:
+        element: float = iterable[i]
+        if element > result:
+            result = element
+        i = i + 1
+
+    return result
+
+
+def max_default_str(iterable: list[str], default: str) -> str:
+    """Return the max of an iterable of strings, or default if empty."""
+    if len(iterable) == 0:
+        return default
+
+    i: int = 1
+    length: int = len(iterable)
+    result: str = iterable[0]
+
+    while i < length:
+        element: str = iterable[i]
+        if element > result:
+            result = element
+        i = i + 1
+
+    return result
+
+
 def min(iterable: list[int]) -> int:
     """Return the minimum element from an iterable of integers."""
     if len(iterable) == 0:
@@ -152,6 +206,60 @@ def any(iterable: list[Any]) -> bool:
             return True
         i = i + 1
     return False
+
+
+def min_default(iterable: list[int], default: int) -> int:
+    """Return the min of an iterable of ints, or default if empty."""
+    if len(iterable) == 0:
+        return default
+
+    i: int = 1
+    length: int = len(iterable)
+    result: int = iterable[0]
+
+    while i < length:
+        element: int = iterable[i]
+        if element < result:
+            result = element
+        i = i + 1
+
+    return result
+
+
+def min_default_float(iterable: list[float], default: float) -> float:
+    """Return the min of an iterable of floats, or default if empty."""
+    if len(iterable) == 0:
+        return default
+
+    i: int = 1
+    length: int = len(iterable)
+    result: float = iterable[0]
+
+    while i < length:
+        element: float = iterable[i]
+        if element < result:
+            result = element
+        i = i + 1
+
+    return result
+
+
+def min_default_str(iterable: list[str], default: str) -> str:
+    """Return the min of an iterable of strings, or default if empty."""
+    if len(iterable) == 0:
+        return default
+
+    i: int = 1
+    length: int = len(iterable)
+    result: str = iterable[0]
+
+    while i < length:
+        element: str = iterable[i]
+        if element < result:
+            result = element
+        i = i + 1
+
+    return result
 
 
 def sum(iterable: list[int], start: int = 0) -> int:
