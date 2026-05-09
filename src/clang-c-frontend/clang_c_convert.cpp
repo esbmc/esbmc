@@ -259,6 +259,10 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
   // the underlying type defined by the typedef, so we don't need
   // to add them to the context
   case clang::Decl::Typedef:
+
+  // CTAD deduction guides (C++17): clang materialises specialisations
+  // through the guide, so the guide itself has no runtime form.
+  case clang::Decl::CXXDeductionGuide:
     break;
 
   // We pretty much ignore this information, clang does the expansion for us.
