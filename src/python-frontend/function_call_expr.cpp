@@ -4753,6 +4753,25 @@ exprt function_call_expr::handle_general_function_call()
   const size_t n_args = call_["args"].size();
   const bool is_sorted_min_max =
     func_name == "min" || func_name == "max" || func_name == "sorted";
+
+  // min(iter, default=...) / max(iter, default=...) route to *_default
+  // variants that fall back to the supplied default when iter is empty
+  // instead of raising ValueError.
+  bool has_default_kwarg = false;
+  exprt default_kwarg_value;
+  if ((func_name == "min" || func_name == "max") && call_.contains("keywords"))
+  {
+    for (const auto &kw : call_["keywords"])
+    {
+      if (kw.value("arg", "") == "default")
+      {
+        has_default_kwarg = true;
+        default_kwarg_value = converter_.get_expr(kw["value"]);
+        break;
+      }
+    }
+  }
+
   if (
     !is_user_imported && ((is_sorted_min_max && n_args == 1) ||
                           (func_name == "sum" && (n_args == 1 || n_args == 2))))
@@ -4770,7 +4789,7 @@ exprt function_call_expr::handle_general_function_call()
       // when passing the list to max_float/min_float model functions.
       if (
         elem_type.is_floatbv() && (func_name == "min" || func_name == "max") &&
-        python_list::has_mixed_numeric_types(list_id))
+        python_list::has_mixed_numeric_types(list_id) && !has_default_kwarg)
       {
         irep_idt comparison_op =
           (func_name == "max") ? exprt::i_gt : exprt::i_lt;
@@ -4780,6 +4799,8 @@ exprt function_call_expr::handle_general_function_call()
       }
     }
     // Dispatch to typed builtin based on element type
+    if (has_default_kwarg)
+      actual_func_name += "_default";
     if (!elem_type.is_nil())
     {
       if (elem_type.is_floatbv())
@@ -5704,7 +5725,10 @@ exprt function_call_expr::handle_general_function_call()
   // Forward keyword arguments to their parameter slots so the callee
   // receives the supplied value. The validation loop below only fills in
   // default values for *missing* params, so kwargs would otherwise be
-  // marked "provided" yet never actually passed.
+  // marked "provided" yet never actually passed. Subsumes the
+  // min/max-default specific path: with the *_default models exposing a
+  // named `default` parameter, the generic forwarding lands the value in
+  // the right slot for free.
   if (call_.contains("keywords") && call_["keywords"].is_array())
   {
     for (const auto &kw : call_["keywords"])
