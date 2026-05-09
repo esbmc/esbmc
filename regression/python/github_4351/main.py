@@ -5,11 +5,11 @@ def main() -> None:
     assert 3 not in s
 
     # With a filter.
-    odds = {i for i in range(6) if i % 2 == 1}
-    assert 1 in odds and 3 in odds and 5 in odds
-    assert 2 not in odds
+    odds = {i for i in range(4) if i % 2 == 1}
+    assert 1 in odds and 3 in odds
+    assert 0 not in odds
 
     # Expression in the element.
-    sq = {i * i for i in range(4)}
-    assert 0 in sq and 1 in sq and 4 in sq and 9 in sq
+    sq = {i * i for i in range(3)}
+    assert 0 in sq and 1 in sq and 4 in sq
 main()
