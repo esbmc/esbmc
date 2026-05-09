@@ -1252,6 +1252,12 @@ class Preprocessor(ast.NodeTransformer):
                 self.statements.extend(prefix)
                 return result
 
+            lowered_min_max = self.preprocessor._lower_min_max_with_key_call(node)
+            if lowered_min_max is not None:
+                prefix, result = lowered_min_max
+                self.statements.extend(prefix)
+                return result
+
             return self.generic_visit(node)
 
     @staticmethod
@@ -1848,6 +1854,104 @@ class Preprocessor(ast.NodeTransformer):
         new_expr = lowerer.visit(expr)
         result_type = self._infer_type_from_value(new_expr)
         return lowerer.statements, new_expr, result_type
+
+    def _lower_min_max_with_key_call(self, call_node):
+        """Lower min/max(iterable, key=lambda x: x[K]) for literal-list iterables.
+
+        Mirrors _lower_sorted_with_key_call: handles only the narrow pattern of
+        a list literal of tuples plus a one-arg lambda body of the form
+        ``param[K]`` with a constant integer index. Returns (prefix, expr) on
+        success, or None when the pattern does not apply (caller falls back to
+        the regular dispatch, which today drops the key= keyword).
+        """
+        if not (
+            isinstance(call_node, ast.Call)
+            and isinstance(call_node.func, ast.Name)
+            and call_node.func.id in ("min", "max")
+            and len(call_node.args) == 1
+        ):
+            return None
+
+        key_kw = None
+        default_kw = None
+        for kw in call_node.keywords:
+            if kw.arg == "key":
+                if key_kw is not None:
+                    return None
+                key_kw = kw
+            elif kw.arg == "default":
+                # default= is honoured by the typed _default model variants
+                # added in #4360; keep it on the call so the regular dispatch
+                # forwards it.
+                default_kw = kw
+            else:
+                return None
+
+        if key_kw is None or not isinstance(key_kw.value, ast.Lambda):
+            return None
+
+        key_lambda = key_kw.value
+        if len(key_lambda.args.args) != 1:
+            return None
+
+        param_name = key_lambda.args.args[0].arg
+        body = key_lambda.body
+        if not (
+            isinstance(body, ast.Subscript)
+            and isinstance(body.value, ast.Name)
+            and body.value.id == param_name
+            and isinstance(body.slice, ast.Constant)
+            and isinstance(body.slice.value, int)
+            and body.slice.value >= 0
+        ):
+            return None
+
+        key_index = body.slice.value
+        iterable_expr = call_node.args[0]
+
+        iterable_literal = None
+        if isinstance(iterable_expr, ast.List):
+            iterable_literal = iterable_expr
+        elif isinstance(iterable_expr, ast.Name):
+            iterable_literal = self.list_literal_values.get(iterable_expr.id)
+
+        if iterable_literal is None:
+            return None
+
+        if not iterable_literal.elts:
+            # Empty iterable — defer to the regular dispatch so the empty
+            # case (default= or ValueError) is handled uniformly.
+            return None
+
+        key_values = []
+        for elt in iterable_literal.elts:
+            if not (isinstance(elt, ast.Tuple) and key_index < len(elt.elts)):
+                return None
+            key_node = elt.elts[key_index]
+            if not isinstance(key_node, ast.Constant):
+                return None
+            key_values.append(key_node.value)
+
+        is_min = call_node.func.id == "min"
+        # Pick the index whose key is the minimum / maximum, breaking ties
+        # toward the first occurrence (matches CPython semantics).
+        best_idx = 0
+        for i in range(1, len(key_values)):
+            if is_min:
+                if key_values[i] < key_values[best_idx]:
+                    best_idx = i
+            else:
+                if key_values[i] > key_values[best_idx]:
+                    best_idx = i
+
+        # Suppress the unused default_kw warning while keeping the variable
+        # available for future extension (e.g. empty iterable + default=).
+        del default_kw
+
+        result = copy.deepcopy(iterable_literal.elts[best_idx])
+        self.ensure_all_locations(result, call_node)
+        ast.fix_missing_locations(result)
+        return [], result
 
     def _lower_sorted_with_key_call(self, call_node):
         """Lower sorted(iterable, key=lambda x: x[K]) for literal-list iterables."""
