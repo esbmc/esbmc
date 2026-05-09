@@ -1,0 +1,227 @@
+#ifndef ESBMC_ANY
+#define ESBMC_ANY
+
+#include "type_traits"
+#include "typeinfo"
+#include "utility"
+
+// Minimal C++17 <any> operational model.  Heap-allocates a copy of the
+// stored value and tags it with the standard typeid so any_cast<T>() can
+// gate access at runtime.  Per [any] in N4861/P0220.  Out of scope:
+// in_place_type construction, emplace, the small-object optimisation,
+// throwing bad_any_cast (the OM aborts via __ESBMC_assert instead).
+
+namespace std
+{
+
+class bad_any_cast
+{
+};
+
+class any
+{
+public:
+  // Public so the free any_cast<T>() helpers can read the slot without
+  // needing a friend declaration for every instantiation.
+  void *__ptr_ = nullptr;
+  // We store typeid(T).name() rather than &typeid(T) because ESBMC's
+  // CXXTypeidExpr lowering produces a fresh temporary type_info per
+  // evaluation, so taking its address would dangle.  The name pointer
+  // is a stable string-literal address, comparable with ==.
+  const char *__type_name_ = nullptr;
+  void (*__deleter_)(void *) = nullptr;
+  void *(*__copier_)(const void *) = nullptr;
+
+  constexpr any() noexcept = default;
+
+  template <class T>
+  any(T &&v)
+  {
+    using D = typename decay<T>::type;
+    __ptr_ = new D(std::forward<T>(v));
+    __type_name_ = __tag<D>();
+    __deleter_ = &__delete_for<D>;
+    __copier_ = &__copy_for<D>;
+  }
+
+  any(const any &o)
+  {
+    if (o.has_value())
+    {
+      __ptr_ = o.__copier_(o.__ptr_);
+      __type_name_ = o.__type_name_;
+      __deleter_ = o.__deleter_;
+      __copier_ = o.__copier_;
+    }
+  }
+
+  any(any &&o) noexcept
+    : __ptr_(o.__ptr_),
+      __type_name_(o.__type_name_),
+      __deleter_(o.__deleter_),
+      __copier_(o.__copier_)
+  {
+    o.__ptr_ = nullptr;
+    o.__type_name_ = nullptr;
+    o.__deleter_ = nullptr;
+    o.__copier_ = nullptr;
+  }
+
+  ~any()
+  {
+    reset();
+  }
+
+  any &operator=(const any &o)
+  {
+    if (this != &o)
+    {
+      any tmp(o);
+      swap(tmp);
+    }
+    return *this;
+  }
+
+  any &operator=(any &&o) noexcept
+  {
+    if (this != &o)
+    {
+      reset();
+      __ptr_ = o.__ptr_;
+      __type_name_ = o.__type_name_;
+      __deleter_ = o.__deleter_;
+      __copier_ = o.__copier_;
+      o.__ptr_ = nullptr;
+      o.__type_name_ = nullptr;
+      o.__deleter_ = nullptr;
+      o.__copier_ = nullptr;
+    }
+    return *this;
+  }
+
+  template <class T>
+  any &operator=(T &&v)
+  {
+    any tmp(std::forward<T>(v));
+    swap(tmp);
+    return *this;
+  }
+
+  void reset() noexcept
+  {
+    if (__ptr_)
+    {
+      __deleter_(__ptr_);
+      __ptr_ = nullptr;
+      __type_name_ = nullptr;
+      __deleter_ = nullptr;
+      __copier_ = nullptr;
+    }
+  }
+
+  void swap(any &o) noexcept
+  {
+    void *p = __ptr_;
+    const char *t = __type_name_;
+    void (*d)(void *) = __deleter_;
+    void *(*c)(const void *) = __copier_;
+    __ptr_ = o.__ptr_;
+    __type_name_ = o.__type_name_;
+    __deleter_ = o.__deleter_;
+    __copier_ = o.__copier_;
+    o.__ptr_ = p;
+    o.__type_name_ = t;
+    o.__deleter_ = d;
+    o.__copier_ = c;
+  }
+
+  bool has_value() const noexcept
+  {
+    return __ptr_ != nullptr;
+  }
+
+  // type() is intentionally omitted in this OM: it would have to return
+  // a reference to a stable type_info, but ESBMC's typeid lowering gives
+  // us a fresh temporary on each evaluation. Code that needs to compare
+  // the stored type should call any_cast<T>() against an expected T.
+
+  // Type tag: the address of the typeid name string.  Routed through a
+  // helper function template so the lookup uses the same lexical typeid
+  // expression at construction and at cast — ESBMC's typeid lowering
+  // produces a per-call-site string, so going through a single template
+  // gives a stable per-T address.
+  template <class T>
+  static const char *__tag()
+  {
+    return typeid(T).name();
+  }
+
+private:
+  template <class T>
+  static void __delete_for(void *p)
+  {
+    delete static_cast<T *>(p);
+  }
+  template <class T>
+  static void *__copy_for(const void *p)
+  {
+    return new T(*static_cast<const T *>(p));
+  }
+};
+
+inline void swap(any &a, any &b) noexcept
+{
+  a.swap(b);
+}
+
+template <class T>
+T any_cast(const any &a)
+{
+  using D = typename remove_cv<typename remove_reference<T>::type>::type;
+  __ESBMC_assert(
+    a.has_value() && any::template __tag<D>() == a.__type_name_,
+    "bad_any_cast");
+  return *static_cast<const D *>(a.__ptr_);
+}
+
+template <class T>
+T any_cast(any &a)
+{
+  using D = typename remove_cv<typename remove_reference<T>::type>::type;
+  __ESBMC_assert(
+    a.has_value() && any::template __tag<D>() == a.__type_name_,
+    "bad_any_cast");
+  return *static_cast<D *>(a.__ptr_);
+}
+
+template <class T>
+T any_cast(any &&a)
+{
+  using D = typename remove_cv<typename remove_reference<T>::type>::type;
+  __ESBMC_assert(
+    a.has_value() && any::template __tag<D>() == a.__type_name_,
+    "bad_any_cast");
+  return std::move(*static_cast<D *>(a.__ptr_));
+}
+
+template <class T>
+const T *any_cast(const any *a) noexcept
+{
+  if (
+    !a || !a->has_value() || any::template __tag<T>() != a->__type_name_)
+    return nullptr;
+  return static_cast<const T *>(a->__ptr_);
+}
+
+template <class T>
+T *any_cast(any *a) noexcept
+{
+  if (
+    !a || !a->has_value() || any::template __tag<T>() != a->__type_name_)
+    return nullptr;
+  return static_cast<T *>(a->__ptr_);
+}
+
+} // namespace std
+
+#endif

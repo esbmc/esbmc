@@ -8,6 +8,7 @@
 #include <python-frontend/string_handler_utils.h>
 #include <python-frontend/python_exception_handler.h>
 #include <python-frontend/python_list.h>
+#include <python-frontend/python_set.h>
 #include <python-frontend/string_builder.h>
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/tuple_handler.h>
@@ -3319,7 +3320,10 @@ bool function_call_expr::is_set_method_call() const
     return false;
 
   const std::string &method_name = function_id_.get_function();
-  if (method_name != "add" && method_name != "discard")
+  if (
+    method_name != "add" && method_name != "discard" &&
+    method_name != "issubset" && method_name != "update" &&
+    method_name != "symmetric_difference")
     return false;
 
   std::string dummy;
@@ -3341,11 +3345,20 @@ exprt function_call_expr::handle_set_method() const
   if (!set_symbol)
     throw std::runtime_error("Set variable not found: " + set_display_name);
 
-  exprt elem = converter_.get_expr(args[0]);
+  // add/discard take a single element value.
+  if (method_name == "add" || method_name == "discard")
+  {
+    exprt elem = converter_.get_expr(args[0]);
+    python_list helper(converter_, call_);
+    return helper.build_set_membership_call(
+      *set_symbol, call_, elem, method_name);
+  }
 
-  python_list helper(converter_, call_);
-  return helper.build_set_membership_call(
-    *set_symbol, call_, elem, method_name);
+  // issubset / update / symmetric_difference take another set/iterable.
+  exprt other = converter_.get_expr(args[0]);
+  python_set set_helper(converter_, call_);
+  return set_helper.build_set_method_call(
+    *set_symbol, other, call_, method_name);
 }
 
 bool function_call_expr::is_list_method_call() const
