@@ -1,0 +1,10 @@
+CORE
+main.c
+--all-witnesses --incremental-bmc
+^VERIFICATION FAILED$
+\[Counterexamples - 5 witnesses\]
+Witness 1 of 5[^\n]*\n[^\n]*Inputs[^\n]*\.x=[^\n]*\.y=
+Witness 2 of 5[^\n]*\n[^\n]*Inputs[^\n]*\.x=[^\n]*\.y=
+Witness 3 of 5[^\n]*\n[^\n]*Inputs[^\n]*\.x=[^\n]*\.y=
+Witness 4 of 5[^\n]*\n[^\n]*Inputs[^\n]*\.x=[^\n]*\.y=
+Witness 5 of 5[^\n]*\n[^\n]*Inputs[^\n]*\.x=[^\n]*\.y=
