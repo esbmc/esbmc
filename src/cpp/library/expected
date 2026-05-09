@@ -1,0 +1,211 @@
+#ifndef ESBMC_EXPECTED
+#define ESBMC_EXPECTED
+
+#include "type_traits"
+#include "utility"
+
+// Minimal C++23 <expected> operational model: enough for code that
+// returns std::expected<T,E>, constructs from T or from std::unexpected,
+// and reads back has_value() / value() / error() / *e / e->.
+//
+// The implementation uses a discriminator + two members rather than a
+// proper tagged union, which is far simpler to lower through ESBMC's
+// converter and is observably equivalent for verification (no real
+// destructors or non-trivial member layouts to worry about).
+//
+// Per [expected] in N4861/P0323. Out-of-scope for this OM:
+// monadic and_then / or_else / transform; in_place / unexpect tags;
+// and reference-typed expected<T&,E>.
+
+namespace std
+{
+
+// Tag for the in-place T constructor.
+struct in_place_t
+{
+  explicit constexpr in_place_t() = default;
+};
+inline constexpr in_place_t in_place{};
+
+// Tag for the in-place E constructor.
+struct unexpect_t
+{
+  explicit constexpr unexpect_t() = default;
+};
+inline constexpr unexpect_t unexpect{};
+
+template <class E>
+class unexpected
+{
+  E __err_;
+
+public:
+  constexpr unexpected(const unexpected &) = default;
+  constexpr unexpected(unexpected &&) = default;
+
+  template <class Err = E>
+  constexpr explicit unexpected(Err &&e) : __err_(std::forward<Err>(e))
+  {
+  }
+
+  constexpr const E &error() const & noexcept
+  {
+    return __err_;
+  }
+  constexpr E &error() & noexcept
+  {
+    return __err_;
+  }
+  constexpr E &&error() && noexcept
+  {
+    return std::move(__err_);
+  }
+  constexpr const E &&error() const && noexcept
+  {
+    return std::move(__err_);
+  }
+};
+
+// Deduction guide.
+template <class E>
+unexpected(E) -> unexpected<E>;
+
+template <class T, class E>
+class expected
+{
+  bool __has_;
+  T __val_;
+  E __err_;
+
+public:
+  using value_type = T;
+  using error_type = E;
+  using unexpected_type = unexpected<E>;
+
+  constexpr expected() : __has_(true), __val_(), __err_()
+  {
+  }
+
+  constexpr expected(const expected &) = default;
+  constexpr expected(expected &&) = default;
+
+  template <
+    class U = T,
+    typename = typename std::enable_if<
+      !std::is_same<typename std::decay<U>::type, expected>::value>::type>
+  constexpr expected(U &&v) : __has_(true), __val_(std::forward<U>(v)), __err_()
+  {
+  }
+
+  template <class G>
+  constexpr expected(const unexpected<G> &u)
+    : __has_(false), __val_(), __err_(u.error())
+  {
+  }
+
+  template <class G>
+  constexpr expected(unexpected<G> &&u)
+    : __has_(false), __val_(), __err_(std::move(u).error())
+  {
+  }
+
+  constexpr explicit expected(in_place_t) : __has_(true), __val_(), __err_()
+  {
+  }
+
+  template <class... Args>
+  constexpr explicit expected(in_place_t, Args &&...args)
+    : __has_(true), __val_(std::forward<Args>(args)...), __err_()
+  {
+  }
+
+  template <class... Args>
+  constexpr explicit expected(unexpect_t, Args &&...args)
+    : __has_(false), __val_(), __err_(std::forward<Args>(args)...)
+  {
+  }
+
+  constexpr bool has_value() const noexcept
+  {
+    return __has_;
+  }
+  constexpr explicit operator bool() const noexcept
+  {
+    return __has_;
+  }
+
+  constexpr T &value() &
+  {
+    return __val_;
+  }
+  constexpr const T &value() const &
+  {
+    return __val_;
+  }
+  constexpr T &&value() &&
+  {
+    return std::move(__val_);
+  }
+  constexpr const T &&value() const &&
+  {
+    return std::move(__val_);
+  }
+
+  constexpr E &error() & noexcept
+  {
+    return __err_;
+  }
+  constexpr const E &error() const & noexcept
+  {
+    return __err_;
+  }
+  constexpr E &&error() && noexcept
+  {
+    return std::move(__err_);
+  }
+  constexpr const E &&error() const && noexcept
+  {
+    return std::move(__err_);
+  }
+
+  constexpr T &operator*() & noexcept
+  {
+    return __val_;
+  }
+  constexpr const T &operator*() const & noexcept
+  {
+    return __val_;
+  }
+  constexpr T &&operator*() && noexcept
+  {
+    return std::move(__val_);
+  }
+  constexpr const T &&operator*() const && noexcept
+  {
+    return std::move(__val_);
+  }
+
+  constexpr T *operator->() noexcept
+  {
+    return &__val_;
+  }
+  constexpr const T *operator->() const noexcept
+  {
+    return &__val_;
+  }
+
+  template <class U>
+  constexpr T value_or(U &&def) const &
+  {
+    return __has_ ? __val_ : static_cast<T>(std::forward<U>(def));
+  }
+  template <class U>
+  constexpr T value_or(U &&def) &&
+  {
+    return __has_ ? std::move(__val_) : static_cast<T>(std::forward<U>(def));
+  }
+};
+
+} // namespace std
+
+#endif
