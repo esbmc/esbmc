@@ -3,12 +3,14 @@
 
 
 class InitVar:
+
     @classmethod
     def __class_getitem__(cls, item):
         return cls
 
 
 class Field:
+
     def __init__(self, name):
         self.name = name
 
