@@ -383,30 +383,46 @@ std::optional<BigInt> compute_post_value(const counter_loop_info &c)
   return std::nullopt; // unhandled relation/sign combo
 }
 
-/// Try to rewrite a for/while-shape loop as a single `i = post_value`
+/// Try to rewrite a counter-shaped loop as a single `i = post_value`
 /// assignment. Returns true on success and mutates @p body.
+///
+/// @p exit_guard is `!cond` — the condition under which control falls
+/// through past the loop. The caller normalizes this so we don't need
+/// to discriminate the IR shape (for/while loop_head's guard is
+/// `!cond` already; do-while back-edge's guard is `cond` and the
+/// caller negates).
+///
+/// @p is_dowhile says whether the loop runs its body unconditionally
+/// once before the first guard test. Affects compute_post_value: for
+/// do-while we step `init` by `step` before applying the standard
+/// formula, modelling the at-least-one-iteration semantics.
 bool try_step_recognition(
   goto_programt &body,
   inst_iter loop_head,
   inst_iter loop_exit,
-  inst_iter body_first)
+  inst_iter body_first,
+  const expr2tc &exit_guard,
+  bool is_dowhile)
 {
-  // Only handle for/while shape — loop_head is the exit IF. Do-while
-  // step recognition needs a different init-finding strategy (init
-  // comes from BEFORE the do-block, not before loop_head; and the
-  // first iteration runs unconditionally, so the first-iter post-state
-  // differs).
-  if (!loop_head->is_goto() || loop_head->is_backwards_goto())
-    return false;
-
   counter_loop_info info;
-  if (!parse_guard(loop_head->guard, info))
+  if (!parse_guard(exit_guard, info))
     return false;
   const irep_idt induction_name = to_symbol2t(info.induction_sym).thename;
   if (!parse_step(body_first, loop_exit, induction_name, info))
     return false;
   if (!parse_init(body.instructions.begin(), loop_head, induction_name, info))
     return false;
+
+  // do-while runs the body once unconditionally — fold one step of the
+  // induction var into init before applying the standard formula. After
+  // this, the rest of the iteration is identical to for/while semantics.
+  if (is_dowhile)
+  {
+    if (info.step_negative)
+      info.init -= info.step;
+    else
+      info.init += info.step;
+  }
 
   std::optional<BigInt> post = compute_post_value(info);
   if (!post)
@@ -521,17 +537,27 @@ bool simplify_function_once(goto_functiont &fn)
     // loop code starts after the back-edge.
     inst_iter body_first;
     inst_iter after_loop;
+    expr2tc exit_guard;
+    bool is_dowhile;
     if (loop_head->is_goto() && !loop_head->is_backwards_goto())
     {
       if (loop_head->targets.size() != 1)
         continue;
       body_first = std::next(loop_head);
       after_loop = *loop_head->targets.begin();
+      // The IF's guard is `!cond` already — the exit condition.
+      exit_guard = loop_head->guard;
+      is_dowhile = false;
     }
     else
     {
       body_first = loop_head;
       after_loop = std::next(loop_exit);
+      // Back-edge's guard is `cond` (continuation). Negate for the
+      // exit condition. make_not strips an outer `not` if present.
+      exit_guard = loop_exit->guard;
+      make_not(exit_guard);
+      is_dowhile = true;
     }
 
     name_set modified;
@@ -556,7 +582,8 @@ bool simplify_function_once(goto_functiont &fn)
     //
     // Interval analysis has already run, so symbolic bounds proven to
     // be singletons are now constant_int2t.
-    if (try_step_recognition(body, loop_head, loop_exit, body_first))
+    if (try_step_recognition(
+          body, loop_head, loop_exit, body_first, exit_guard, is_dowhile))
     {
       changed = true;
       continue;
