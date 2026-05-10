@@ -13,6 +13,21 @@
 #include <util/pretty.h>
 #include <util/std_expr.h>
 
+bool goto_symex_utils::is_alloca_return_value_name(const std::string &name)
+{
+  static const std::string prefix = "return_value$_alloca$";
+  size_t pos = name.rfind(prefix);
+  if (pos == std::string::npos)
+    return false;
+  size_t rest = pos + prefix.size();
+  if (rest == name.size())
+    return false;
+  for (size_t i = rest; i < name.size(); ++i)
+    if (name[i] < '0' || name[i] > '9')
+      return false;
+  return true;
+}
+
 bool goto_symext::get_unwind_recursion(
   const irep_idt &identifier,
   BigInt unwind)
@@ -613,9 +628,7 @@ void goto_symext::pop_frame()
     frame.level1.get_ident_name(l1_sym);
 
     // Call free on alloca'd objects
-    if (
-      it.base_name.as_string().find("return_value$_alloca$") !=
-      std::string::npos)
+    if (goto_symex_utils::is_alloca_return_value_name(it.base_name.as_string()))
       symex_free(code_free2tc(l1_sym));
 
     // Erase from level 1 propagation

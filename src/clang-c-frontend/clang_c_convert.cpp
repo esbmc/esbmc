@@ -3243,7 +3243,6 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     break;
   }
 
-  // Unsupported extensions (optional don't care)
   case clang::Stmt::BuiltinBitCastExprClass:
   {
     const clang::BuiltinBitCastExpr &cast =
@@ -3256,7 +3255,18 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     if (get_expr(*cast.getSubExpr(), new_expr))
       return true;
 
-    gen_typecast(ns, new_expr, t);
+    // __builtin_bit_cast / std::bit_cast must reinterpret the value's
+    // byte-level representation, NOT perform an arithmetic conversion.  Using
+    // gen_typecast here would, e.g., turn `bit_cast<float>(uint32_t{0xFFFFFFFF})`
+    // into the float value 4.29e9 rather than the IEEE-NaN whose bits match
+    // the input.  Use the irep1 "bitcast" node, which migrates to bitcast2tc
+    // and is handled by symex as a byte-level reinterpret.  See #4191.
+    if (new_expr.type() != t)
+    {
+      exprt bc("bitcast", t);
+      bc.copy_to_operands(new_expr);
+      new_expr.swap(bc);
+    }
     break;
   }
 
