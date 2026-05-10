@@ -2430,6 +2430,14 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       // is logically equivalent but bitwuzla preprocesses the `>= 0` shape
       // significantly faster. Fixes a 7x regression on
       // sv-benchmarks/c/xcsp/AllInterval-017.
+      //
+      // The branch-free `bvsub(bvxor(x, ashr(x, w-1)), ashr(x, w-1))`
+      // form was tried (it's the canonical SMT-LIB abs encoding) and is
+      // ~8x slower on AllInterval-017 under bitwuzla — the ite form
+      // gives the solver a clean case-split that meshes with the
+      // surrounding all-distinct + abs-difference chain, while the xor
+      // form mixes the sign bit into bitvector arithmetic and seems to
+      // defeat term-graph sharing in this pattern.
       expr2tc ge = greaterthanequal2tc(abs.value, gen_zero(abs.value->type));
       expr2tc neg = neg2tc(abs.value->type, abs.value);
       expr2tc ite = if2tc(abs.type, ge, abs.value, neg);
