@@ -45,6 +45,7 @@
   BOOST_PP_LIST_CONS(greaterthan,                                              \
   BOOST_PP_LIST_CONS(lessthanequal,                                            \
   BOOST_PP_LIST_CONS(greaterthanequal,                                         \
+  BOOST_PP_LIST_CONS(cmp_three_way,                                            \
   BOOST_PP_LIST_CONS(not,                                                      \
   BOOST_PP_LIST_CONS(and,                                                      \
   BOOST_PP_LIST_CONS(or,                                                       \
@@ -135,7 +136,7 @@
   BOOST_PP_LIST_CONS(isinstance,                                               \
   BOOST_PP_LIST_CONS(hasattr,                                                  \
   BOOST_PP_LIST_CONS(isnone,                                                   \
-  BOOST_PP_LIST_NIL)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+  BOOST_PP_LIST_NIL))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
 // clang-format on
 
 // Even crazier forward decls,

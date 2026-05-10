@@ -381,6 +381,7 @@ irep_idt exprt::i_lt = dstring("<");
 irep_idt exprt::i_gt = dstring(">");
 irep_idt exprt::i_le = dstring("<=");
 irep_idt exprt::i_ge = dstring(">=");
+irep_idt exprt::i_cmp_three_way = dstring("<=>");
 irep_idt exprt::i_bitand = dstring("bitand");
 irep_idt exprt::i_bitor = dstring("bitor");
 irep_idt exprt::i_bitxor = dstring("bitxor");

@@ -1307,6 +1307,18 @@ expr2tc gen_byte_memcpy(
   const size_t num_of_bytes,
   const size_t src_offset,
   const size_t dst_offset);
+
+/**
+ * Returns true iff `name` is the goto-program return-value temp for an
+ * `alloca` / `__builtin_alloca` call, i.e. exactly matches
+ * `<L1-prefix?>return_value$_alloca$<digits>`.  Used to identify which
+ * locals symex must free when the calling function returns.
+ *
+ * A previous substring-only check fired on any user identifier containing
+ * `_alloca$` (e.g. a method literally named `alloca$te`), causing symex to
+ * free a non-alloca'd dynamic object.  See #2095.
+ */
+bool is_alloca_return_value_name(const std::string &name);
 } // namespace goto_symex_utils
 
 #endif

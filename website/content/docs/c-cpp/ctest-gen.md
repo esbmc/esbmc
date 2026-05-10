@@ -4,7 +4,7 @@ title: C/C++ CTest Test Case Generation
 
 ## Overview
 
-ESBMC supports the automatic generation of CTest branch-coverage test cases for C and C++ programs.
+ESBMC supports the automatic generation of CTest test cases for C and C++ programs from `--branch-coverage` or `--k-path-coverage` runs. Each reached coverage witness is materialised as a runnable CTest case with a concrete `__VERIFIER_nondet_*` implementation derived from the SMT model.
 
 ## Dependencies
 - CMake (includes CTest)
@@ -23,12 +23,23 @@ esbmc program.c --branch-coverage --generate-ctest-testcase
 esbmc program.cpp --branch-coverage --generate-ctest-testcase
 ```
 
-This will generate:
+Generate multiple test cases (k-path coverage mode):
+
+```bash
+esbmc program.c   --k-path-coverage --generate-ctest-testcase
+esbmc program.cpp --k-path-coverage=2 --unwind 4 --no-unwinding-assertions --generate-ctest-testcase
+```
+
+The two modes differ in what each generated test exercises: `--branch-coverage` produces one test per reached branch direction, while `--k-path-coverage[=N]` produces one test per reached *bounded path* of length up to `N` conditional branches (PathCrawler-style). For programs with correlated branches or loops, k-path coverage typically yields more tests, each pinning down a longer prefix of branch outcomes. See the [Coverage Analysis](/docs/coverage/#k-path-coverage) page for the full description of `--k-path-coverage` and its supporting flags (`--k-path-witness-depth`, `--k-path-max-goals`).
+
+Both modes generate:
 - `test_case_1.c` / `test_case_1.cpp`, `test_case_2.c` / `test_case_2.cpp`, ... - Test case implementations
 - `CMakeLists.txt` - CMake build configuration
 - `esbmc_verifier.h` - Forward declarations for `__VERIFIER_*` functions (force-included automatically)
 
 The output file extension (`.c` or `.cpp`) and CMake language (`C` or `CXX`) are determined automatically from the input file extension. Files with `.cpp`, `.cc`, or `.cxx` extensions are treated as C++.
+
+When two reached witnesses resolve to the same nondet input vector, the second is dropped — ESBMC prints `Skipped N duplicate test case(s).` so the generated test count may be smaller than the reached-witness count reported in `[Coverage]`. This is most visible under `--k-path-coverage`, where multiple bounded-path goals can share a single witness model.
 
 ### Input Format
 
@@ -198,6 +209,52 @@ void __VERIFIER_assume(int cond);
 }
 #endif
 ```
+
+### K-Path Worked Example
+
+The k-path coverage mode is most informative on programs with correlated branches or loop bodies, where individual branch coverage misses interesting input combinations. The following loop-body example mirrors `regression/goto-coverage/k_path_cov_2/`:
+
+**`loop.c`**:
+```c
+extern int __VERIFIER_nondet_int(void);
+
+int main(void)
+{
+  int x = __VERIFIER_nondet_int();
+  for (int i = 0; i < 3; i++)
+  {
+    if (x > 0)
+      x = x - 1;
+    else
+      x = x + 1;
+  }
+  return x;
+}
+```
+
+Run ESBMC with `--k-path-coverage=2` (prefix length 2) and `--unwind 4` so the loop is fully unrolled:
+
+```bash
+esbmc loop.c --k-path-coverage=2 --unwind 4 --no-unwinding-assertions --generate-ctest-testcase
+```
+
+Expected coverage report and test-case generation summary:
+
+```
+[Coverage]
+
+k-Path Witnesses : 6
+Reached : 4
+k-Path Coverage: 66.66666666666667%
+Skipped 7 duplicate test case(s).
+Generated 3 CTest test case(s) with CMakeLists.txt
+```
+
+Of the six bounded-path goals, four are reachable; the remaining two are infeasible because `x > 0` does not flip across iterations without an external write. The multi-property witness loop calls into the test-case collector once per SAT verdict, accumulating ten raw witness models across the four reached goals (each goal can produce more than one model under multi-property enumeration). The dedup pass keys on the concrete `__VERIFIER_nondet_int` vector and keeps the three distinct ones — reported as `Skipped 7 duplicate test case(s).` — producing `test_case_1.c`, `test_case_2.c`, and `test_case_3.c`.
+
+**Tuning knobs.** The supporting flags `--k-path-witness-depth=D` (post-simplification depth cap on witness guards, default 8) and `--k-path-max-goals=M` (per-function goal cap, default 10000) are propagated through to test-case generation unchanged: a witness that gets dropped under `--k-path-witness-depth` also produces no CTest case, and a goal-cap overflow aborts the run before any test cases are written. See [Coverage Analysis](/docs/coverage/#k-path-coverage) for details.
+
+**Phase-1 limitation.** The k-path instrumentation walks the goto program linearly to collect prior branch guards, which over-approximates the prefix when branches join: some witnesses reported as unreached are simply infeasible rather than indicative of missing test inputs. The number of generated test cases is therefore a lower bound on the reachable bounded paths. Tracked in [issue #4325](https://github.com/esbmc/esbmc/issues/4325).
 
 ### Compiling and Running Tests
 
