@@ -131,16 +131,21 @@ public:
     {
       pointer = i.pointer;
       pos = i.pos;
+      it_str = i.it_str;
     }
 
     iterator()
     {
       pointer = NULL;
+      pos = 0;
+      it_str = NULL;
     }
 
     iterator(char *p_pointer)
     {
       pointer = p_pointer;
+      pos = 0;
+      it_str = p_pointer;
     }
 
     iterator &operator=(const const_iterator &right)
@@ -154,6 +159,7 @@ public:
     {
       this->pointer = right.pointer;
       this->pos = right.pos;
+      this->it_str = right.it_str;
       return *this;
     }
 
@@ -175,7 +181,8 @@ public:
       iterator buffer;
       buffer.pointer = pointer - sizeof(char) * n;
       buffer.pos = pos - n;
-      __ESBMC_assert(buffer.pos > 0, "underflow");
+      buffer.it_str = it_str;
+      __ESBMC_assert(buffer.pos >= 0, "underflow");
       return buffer;
     }
 
@@ -1031,11 +1038,7 @@ public:
 
   basic_string<CharT, Traits, Alloc>::iterator begin() const
   {
-    int i;
-    basic_string<CharT, Traits, Alloc>::iterator first(this->str);
-    first.pos = 0;
-    first.it_str = this->str;
-    return first;
+    return basic_string<CharT, Traits, Alloc>::iterator(this->str);
   }
 
   basic_string<CharT, Traits, Alloc>::iterator end() const
@@ -1068,21 +1071,18 @@ public:
   basic_string<CharT, Traits, Alloc> &
   append(InputIterator first, InputIterator last)
   {
-    __ESBMC_assert(
-      first != NULL, "The first parameter must be different than NULL");
-    __ESBMC_assert(
-      last != NULL, "The second parameter must be different than NULL");
     __ESBMC_assert(first >= 0, "The first parameter must be greater than zero");
     __ESBMC_assert(last >= 0, "The second parameter must be greater than zero");
     int rhsLen = first;
     char c = last;
     int totalLen = this->_size + rhsLen;
     basic_string<CharT, Traits, Alloc> temp(totalLen);
-    int i, j, k;
+    int i, j;
     for (i = 0; i < this->_size; i++)
-      temp[i] = this->str[i];
-    for (j = i, k = 0; j < temp._size; j++, k++)
+      temp.str[i] = this->str[i];
+    for (j = i; j < totalLen; j++)
       temp.str[j] = c;
+    temp.str[totalLen] = '\0';
     *this = temp;
     return *this;
   }
