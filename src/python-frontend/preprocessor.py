@@ -2086,6 +2086,16 @@ class Preprocessor(ast.NodeTransformer):
         return node
 
     def visit_Expr(self, node):
+        # Lower `xs.sort(key=...)` to `xs = sorted(xs, key=...)` BEFORE
+        # generic_visit, since visit_Call invalidates the
+        # `list_literal_values[xs]` entry on `xs.sort()` (sort is a
+        # mutating list method). The existing sorted-with-key folding
+        # depends on that entry, so the rewrite has to fire while it's
+        # still tracked.
+        rewritten = self._maybe_rewrite_list_sort_with_key(node)
+        if rewritten is not None:
+            return rewritten
+
         node = self.generic_visit(node)
 
         # Handle standalone next(g)
@@ -2106,6 +2116,37 @@ class Preprocessor(ast.NodeTransformer):
         if prefix:
             return prefix + [node]
         return node
+
+    def _maybe_rewrite_list_sort_with_key(self, expr_node):
+        """If expr_node is `name.sort(key=lambda ...)` (with optional reverse=),
+        rewrite to `name = sorted(name, key=..., reverse=...)`. Returns the
+        replacement Assign, or None when the pattern does not apply."""
+        call = expr_node.value
+        if not (
+            isinstance(call, ast.Call)
+            and isinstance(call.func, ast.Attribute)
+            and call.func.attr == "sort"
+            and isinstance(call.func.value, ast.Name)
+            and not call.args
+        ):
+            return None
+        has_key = any(kw.arg == "key" for kw in call.keywords)
+        if not has_key:
+            return None  # plain reverse= keeps today's path
+        target_name = call.func.value.id
+        sorted_call = ast.Call(
+            func=ast.Name(id="sorted", ctx=ast.Load()),
+            args=[ast.Name(id=target_name, ctx=ast.Load())],
+            keywords=[copy.deepcopy(kw) for kw in call.keywords],
+        )
+        assign = ast.Assign(
+            targets=[ast.Name(id=target_name, ctx=ast.Store())],
+            value=sorted_call,
+        )
+        ast.copy_location(sorted_call, expr_node)
+        ast.copy_location(assign, expr_node)
+        ast.fix_missing_locations(assign)
+        return self.visit(assign)
 
     def visit_If(self, node):
         node = self.generic_visit(node)

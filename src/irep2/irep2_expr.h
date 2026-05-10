@@ -1494,6 +1494,7 @@ irep_typedefs(lessthan, relation_data);
 irep_typedefs(greaterthan, relation_data);
 irep_typedefs(lessthanequal, relation_data);
 irep_typedefs(greaterthanequal, relation_data);
+irep_typedefs(cmp_three_way, relation_data);
 irep_typedefs(not, bool_1op);
 irep_typedefs(and, logic_2ops);
 irep_typedefs(or, logic_2ops);
@@ -2145,6 +2146,33 @@ public:
   {
   }
   greaterthanequal2t(const greaterthanequal2t &ref) = default;
+
+  expr2tc do_simplify() const override;
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+/** C++20 three-way comparison `a <=> b`. Result type is the
+ * comparison-category struct (`std::strong_ordering` /
+ * `std::weak_ordering` / `std::partial_ordering`); the discriminating
+ * signed-char member sits at the start of the struct. The expansion to
+ *
+ *   side_1 <  side_2  ->  T{-1}    (less)
+ *   side_1 == side_2  ->  T{ 0}    (equivalent / equal)
+ *   else              ->  T{ 1}    (greater)
+ *
+ * is performed at the SMT layer rather than the AST level so the
+ * semantic node survives through symex / value_set / interval analysis,
+ * and operands are captured once.  Per [expr.spaceship] in N4861.
+ * @extends relation_data */
+class cmp_three_way2t : public cmp_three_way_expr_methods
+{
+public:
+  cmp_three_way2t(const type2tc &t, const expr2tc &v1, const expr2tc &v2)
+    : cmp_three_way_expr_methods(t, cmp_three_way_id, v1, v2)
+  {
+  }
+  cmp_three_way2t(const cmp_three_way2t &ref) = default;
 
   expr2tc do_simplify() const override;
 

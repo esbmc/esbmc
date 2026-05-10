@@ -31,6 +31,7 @@ static const char *expr_names[] = {
   "greaterthan",
   "lessthanequal",
   "greaterthanequal",
+  "cmp_three_way",
   "not",
   "and",
   "or",
