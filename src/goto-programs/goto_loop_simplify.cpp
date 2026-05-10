@@ -1,6 +1,7 @@
 #include <goto-programs/goto_loop_simplify.h>
 #include <goto-programs/loopst.h>
 #include <irep2/irep2_utils.h>
+#include <util/arith_tools.h>
 #include <util/config.h>
 #include <unordered_set>
 
@@ -124,6 +125,334 @@ void erase_loop(inst_iter loop_head, inst_iter loop_exit)
     it->make_skip();
 }
 
+/// Information extracted from a recognised counter loop.
+struct counter_loop_info
+{
+  enum relation_kind
+  {
+    LT,
+    LE,
+    GT,
+    GE
+  };
+
+  expr2tc induction_sym; // original symbol2tc (for the post-value ASSIGN)
+  BigInt init;
+  BigInt bound;
+  BigInt step;       // positive integer; sign is encoded in step_negative
+  bool step_negative; // true if i = i - step (decrementing loop)
+  relation_kind rel;
+  type2tc type;
+};
+
+/// Try to parse @p guard as `i REL constant` or `constant REL i`, where
+/// REL ∈ {<, <=, >, >=}. Returns true and fills @p info on success.
+/// The induction var's type and symbol2tc are recorded.
+bool parse_guard(const expr2tc &guard, counter_loop_info &info)
+{
+  // The IF instruction's guard is `!cond` where cond was the original
+  // loop condition. Strip the outer `not`.
+  if (!is_not2t(guard))
+    return false;
+  const expr2tc &cond = to_not2t(guard).value;
+
+  expr2tc lhs, rhs;
+  if (is_lessthan2t(cond))
+  {
+    lhs = to_lessthan2t(cond).side_1;
+    rhs = to_lessthan2t(cond).side_2;
+    info.rel = counter_loop_info::LT;
+  }
+  else if (is_lessthanequal2t(cond))
+  {
+    lhs = to_lessthanequal2t(cond).side_1;
+    rhs = to_lessthanequal2t(cond).side_2;
+    info.rel = counter_loop_info::LE;
+  }
+  else if (is_greaterthan2t(cond))
+  {
+    lhs = to_greaterthan2t(cond).side_1;
+    rhs = to_greaterthan2t(cond).side_2;
+    info.rel = counter_loop_info::GT;
+  }
+  else if (is_greaterthanequal2t(cond))
+  {
+    lhs = to_greaterthanequal2t(cond).side_1;
+    rhs = to_greaterthanequal2t(cond).side_2;
+    info.rel = counter_loop_info::GE;
+  }
+  else
+    return false;
+
+  // One side must be the induction var (a symbol2t), the other a
+  // constant_int2t. Constant on the right is the canonical shape; if
+  // it's on the left, flip the relation.
+  if (is_symbol2t(lhs) && is_constant_int2t(rhs))
+  {
+    info.induction_sym = lhs;
+    info.bound = to_constant_int2t(rhs).value;
+  }
+  else if (is_constant_int2t(lhs) && is_symbol2t(rhs))
+  {
+    info.induction_sym = rhs;
+    info.bound = to_constant_int2t(lhs).value;
+    // Flip: `c < i` ≡ `i > c`, etc.
+    switch (info.rel)
+    {
+    case counter_loop_info::LT:
+      info.rel = counter_loop_info::GT;
+      break;
+    case counter_loop_info::LE:
+      info.rel = counter_loop_info::GE;
+      break;
+    case counter_loop_info::GT:
+      info.rel = counter_loop_info::LT;
+      break;
+    case counter_loop_info::GE:
+      info.rel = counter_loop_info::LE;
+      break;
+    }
+  }
+  else
+    return false;
+
+  if (!is_bv_type(info.induction_sym))
+    return false;
+  info.type = info.induction_sym->type;
+  return true;
+}
+
+/// Find the single ASSIGN to the induction var in [body_first, body_last).
+/// Must be of the form `i = i + STEP` or `i = i - STEP` with STEP a
+/// constant_int. Other ASSIGNs in the body disqualify (would have other
+/// modified vars). Returns true on success and fills the step fields.
+bool parse_step(
+  inst_iter body_first,
+  inst_iter body_last,
+  const irep_idt &induction_name,
+  counter_loop_info &info)
+{
+  bool found = false;
+  for (inst_iter it = body_first; it != body_last; ++it)
+  {
+    if (
+      it->is_location() || it->is_skip() || it->is_decl() ||
+      it->type == DEAD)
+      continue;
+    if (!it->is_assign())
+      return false;
+
+    const code_assign2t &a = to_code_assign2t(it->code);
+    if (!is_symbol2t(a.target))
+      return false;
+    if (to_symbol2t(a.target).thename != induction_name)
+      return false;
+
+    // RHS must be `i + const` or `i - const` (induction var first).
+    expr2tc rhs_lhs, rhs_rhs;
+    bool is_sub;
+    if (is_add2t(a.source))
+    {
+      rhs_lhs = to_add2t(a.source).side_1;
+      rhs_rhs = to_add2t(a.source).side_2;
+      is_sub = false;
+    }
+    else if (is_sub2t(a.source))
+    {
+      rhs_lhs = to_sub2t(a.source).side_1;
+      rhs_rhs = to_sub2t(a.source).side_2;
+      is_sub = true;
+    }
+    else
+      return false;
+
+    // Canonical form: induction var on the left, constant on the right.
+    // Symmetric for add only (sub is non-commutative).
+    if (is_symbol2t(rhs_lhs) && is_constant_int2t(rhs_rhs))
+    {
+      if (to_symbol2t(rhs_lhs).thename != induction_name)
+        return false;
+    }
+    else if (!is_sub && is_constant_int2t(rhs_lhs) && is_symbol2t(rhs_rhs))
+    {
+      if (to_symbol2t(rhs_rhs).thename != induction_name)
+        return false;
+      std::swap(rhs_lhs, rhs_rhs);
+    }
+    else
+      return false;
+
+    BigInt step_val = to_constant_int2t(rhs_rhs).value;
+    if (step_val.is_zero())
+      return false;
+    if (step_val.is_negative())
+    {
+      // i = i + (-k) is the same as i = i - k.
+      step_val.negate();
+      is_sub = !is_sub;
+    }
+    info.step = step_val;
+    info.step_negative = is_sub;
+
+    if (found)
+      return false; // multiple non-trivial assigns — give up
+    found = true;
+  }
+  return found;
+}
+
+/// Walk backwards from @p loop_head looking for `ASSIGN i = INIT` where
+/// INIT is a constant_int. Skips LOCATION/SKIP/DECL/DEAD. Stops at the
+/// first non-trivial instruction. Returns true on success.
+bool parse_init(
+  inst_iter begin,
+  inst_iter loop_head,
+  const irep_idt &induction_name,
+  counter_loop_info &info)
+{
+  if (loop_head == begin)
+    return false;
+  inst_iter it = loop_head;
+  while (it != begin)
+  {
+    --it;
+    if (
+      it->is_location() || it->is_skip() || it->is_decl() ||
+      it->type == DEAD)
+      continue;
+    if (!it->is_assign())
+      return false;
+    const code_assign2t &a = to_code_assign2t(it->code);
+    if (!is_symbol2t(a.target))
+      return false;
+    if (to_symbol2t(a.target).thename != induction_name)
+      return false;
+    if (!is_constant_int2t(a.source))
+      return false;
+    info.init = to_constant_int2t(a.source).value;
+    return true;
+  }
+  return false;
+}
+
+/// Compute the post-loop value of the induction variable from a recognized
+/// counter loop. Returns std::nullopt if no iterations happen or the
+/// computation would overflow `info.type`.
+std::optional<BigInt> compute_post_value(const counter_loop_info &c)
+{
+  // Decrementing loop: only handle GT/GE for now (canonical `for(i=N-1;
+  // i>=0; i--)`). Symmetric to increment via reflection.
+  // To keep v1 narrow: only handle `i < bound` with step > 0 and
+  // `i > bound` with step < 0.
+  if (!c.step_negative && c.rel == counter_loop_info::LT)
+  {
+    if (c.init >= c.bound)
+      return c.init; // zero iterations
+    BigInt span = c.bound - c.init;
+    // ceiling division: (span + step - 1) / step
+    BigInt n = (span + c.step - 1) / c.step;
+    return c.init + n * c.step;
+  }
+  if (!c.step_negative && c.rel == counter_loop_info::LE)
+  {
+    if (c.init > c.bound)
+      return c.init;
+    // Exit when i > bound, i.e. i >= bound+1. Reduce to LT case.
+    BigInt target = c.bound + 1;
+    BigInt span = target - c.init;
+    BigInt n = (span + c.step - 1) / c.step;
+    return c.init + n * c.step;
+  }
+  if (c.step_negative && c.rel == counter_loop_info::GT)
+  {
+    if (c.init <= c.bound)
+      return c.init;
+    BigInt span = c.init - c.bound;
+    BigInt n = (span + c.step - 1) / c.step;
+    return c.init - n * c.step;
+  }
+  if (c.step_negative && c.rel == counter_loop_info::GE)
+  {
+    if (c.init < c.bound)
+      return c.init;
+    BigInt target = c.bound - 1;
+    BigInt span = c.init - target;
+    BigInt n = (span + c.step - 1) / c.step;
+    return c.init - n * c.step;
+  }
+  return std::nullopt; // unhandled relation/sign combo
+}
+
+/// Try to rewrite a for/while-shape loop as a single `i = post_value`
+/// assignment. Returns true on success and mutates @p body.
+bool try_step_recognition(
+  goto_programt &body,
+  inst_iter loop_head,
+  inst_iter loop_exit,
+  inst_iter body_first)
+{
+  // Only handle for/while shape — loop_head is the exit IF. Do-while
+  // step recognition needs a different init-finding strategy (init
+  // comes from BEFORE the do-block, not before loop_head; and the
+  // first iteration runs unconditionally, so the first-iter post-state
+  // differs).
+  if (!loop_head->is_goto() || loop_head->is_backwards_goto())
+    return false;
+
+  counter_loop_info info;
+  if (!parse_guard(loop_head->guard, info))
+    return false;
+  const irep_idt induction_name = to_symbol2t(info.induction_sym).thename;
+  if (!parse_step(body_first, loop_exit, induction_name, info))
+    return false;
+  if (!parse_init(body.instructions.begin(), loop_head, induction_name, info))
+    return false;
+
+  std::optional<BigInt> post = compute_post_value(info);
+  if (!post)
+    return false;
+
+  // Verify the post value fits in the induction var's type. integer2binary
+  // would assert on values that don't fit; check by re-encoding and
+  // comparing.
+  BigInt fitted = *post;
+  // For bit-vector types, range is [type_min, type_max]. arith_tools
+  // exposes is_type_min/is_type_max; simplest check: round-trip through
+  // from_integer and ensure no truncation. from_integer is permissive,
+  // so we re-derive the bit width and check magnitude.
+  const unsigned width = info.type->get_width();
+  BigInt bound_hi;
+  BigInt bound_lo;
+  if (is_signedbv_type(info.type))
+  {
+    bound_hi = BigInt(1) << (width - 1);
+    --bound_hi; // 2^(w-1) - 1
+    bound_lo = -bound_hi - 1; // -2^(w-1)
+  }
+  else
+  {
+    bound_hi = (BigInt(1) << width) - 1;
+    bound_lo = 0;
+  }
+  if (fitted < bound_lo || fitted > bound_hi)
+    return false;
+
+  // Build the rewrite fragment: ASSIGN i = post_value.
+  goto_programt fragment;
+  inst_iter t = fragment.add_instruction(ASSIGN);
+  t->code = code_assign2tc(
+    info.induction_sym, constant_int2tc(info.type, fitted));
+  t->location = loop_head->location;
+
+  body.insert_swap(loop_head, fragment);
+
+  // loop_head iterator now points to the inserted ASSIGN; the original
+  // IF lives at std::next(loop_head). SKIP the IF, body, and back-edge.
+  for (inst_iter sk = std::next(loop_head); sk != std::next(loop_exit); ++sk)
+    sk->make_skip();
+  return true;
+}
+
 /// One pass over a function. Returns true iff any loop was erased (so
 /// the caller can iterate to fixpoint).
 bool simplify_function_once(goto_functiont &fn)
@@ -209,19 +538,29 @@ bool simplify_function_once(goto_functiont &fn)
     if (!body_is_safe(body_first, loop_exit, loop_head, modified))
       continue;
 
-    // Erase only when every modified var dies immediately after the loop
-    // — the loop has no observable effect on post-loop state. Loops whose
-    // modified vars escape are left alone: a havoc-and-assume rewrite
-    // would over-approximate the post-state (e.g. losing `i == N` for
-    // `for(i=0;i<N;i++) ;`), turning provable assertions into spurious
-    // failures, and could introduce unsoundness via array-index havoc
-    // (e.g. strlen's `s[len]` guard with havoc'd len).
-    if (!modified_vars_die_immediately(
+    // Path 1: every modified var dies immediately after the loop.
+    // Loop has no observable effect — erase it entirely.
+    if (modified_vars_die_immediately(
           after_loop, body.instructions.end(), modified))
+    {
+      erase_loop(loop_head, loop_exit);
+      changed = true;
       continue;
+    }
 
-    erase_loop(loop_head, loop_exit);
-    changed = true;
+    // Path 2: vars escape, but the loop may be a recognizable counter
+    // pattern (`for(i=INIT; i<BOUND; i++)` with constants) — derive the
+    // exact post-value and rewrite to `i = post_value`. Strictly precise:
+    // unlike havoc+assume, this preserves the assertion `i == N` after
+    // a `for(i=0;i<N;i++);` loop.
+    //
+    // Interval analysis has already run, so symbolic bounds proven to
+    // be singletons are now constant_int2t.
+    if (try_step_recognition(body, loop_head, loop_exit, body_first))
+    {
+      changed = true;
+      continue;
+    }
   }
 
   return changed;
