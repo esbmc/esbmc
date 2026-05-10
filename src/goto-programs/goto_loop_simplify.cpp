@@ -146,10 +146,33 @@ bool simplify_function_once(goto_functiont &fn)
     inst_iter loop_head = *it->targets.begin();
     inst_iter loop_exit = it;
 
-    // Self-loops are already handled by goto_loopst::find_function_loops's
-    // make_assumption rewrite. Skip them here.
+    // Self-loops `A: IF cond GOTO A` / `A: GOTO A` — rewrite to ASSUME
+    // in place. Mirrors goto_loopst::find_function_loops's rewrite,
+    // which only fires when a loop-discovering pass is enabled
+    // (interval-analysis, k-induction, loop-invariant, contractor).
+    // Doing it here makes the rewrite unconditional for plain BMC.
+    // symex_goto.cpp's self-loop handler stays as a defensive fallback
+    // for modes that skip this pass (--termination, --unwinding-
+    // assertions).
     if (loop_head == loop_exit)
+    {
+      if (is_true(it->guard))
+      {
+        // Unconditional infinite loop: kill the path.
+        it->make_assumption(gen_false_expr());
+      }
+      else
+      {
+        // `IF cond GOTO self` exits exactly when !cond; the post-loop
+        // state is constrained by !cond. Copy the guard out before
+        // make_assumption (clear() runs first, resetting it).
+        expr2tc cond = it->guard;
+        make_not(cond);
+        it->make_assumption(cond);
+      }
+      changed = true;
       continue;
+    }
 
     // Two loop shapes the C/C++ frontend produces:
     //
