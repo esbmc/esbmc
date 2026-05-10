@@ -1031,15 +1031,24 @@ void goto_convertt::do_function_call_symbol(
     std::string description = "assertion ";
     get_string_constant(arguments[0], description);
 
-    if (options.get_bool_option("no-assertions"))
-      return;
+    if (!options.get_bool_option("no-assertions"))
+    {
+      goto_programt::targett t = dest.add_instruction(ASSERT);
+      t->guard = gen_false_expr();
+      t->location = function.location();
+      t->location.user_provided(true);
+      t->location.property("assertion");
+      t->location.comment(description);
+    }
 
-    goto_programt::targett t = dest.add_instruction(ASSERT);
-    t->guard = gen_false_expr();
-    t->location = function.location();
-    t->location.user_provided(true);
-    t->location.property("assertion");
-    t->location.comment(description);
+    // __assert_fail / __assert_rtn are __noreturn — stop the path even
+    // when assertions are suppressed, otherwise downstream end-of-main
+    // checks (e.g. memory-leak / memtrack) fire on paths that should
+    // already have terminated.
+    goto_programt::targett a = dest.add_instruction(ASSUME);
+    a->guard = gen_false_expr();
+    a->location = function.location();
+    a->location.user_provided(true);
     // we ignore any LHS
   }
   else if (config.ansi_c.target.is_freebsd() && base_name == "__assert")
@@ -1055,15 +1064,21 @@ void goto_convertt::do_function_call_symbol(
     std::string description = "assertion ";
     get_string_constant(arguments[3], description);
 
-    if (options.get_bool_option("no-assertions"))
-      return;
+    if (!options.get_bool_option("no-assertions"))
+    {
+      goto_programt::targett t = dest.add_instruction(ASSERT);
+      t->guard = gen_false_expr();
+      t->location = function.location();
+      t->location.user_provided(true);
+      t->location.property("assertion");
+      t->location.comment(description);
+    }
 
-    goto_programt::targett t = dest.add_instruction(ASSERT);
-    t->guard = gen_false_expr();
-    t->location = function.location();
-    t->location.user_provided(true);
-    t->location.property("assertion");
-    t->location.comment(description);
+    // FreeBSD __assert is __noreturn — see __assert_fail above.
+    goto_programt::targett a = dest.add_instruction(ASSUME);
+    a->guard = gen_false_expr();
+    a->location = function.location();
+    a->location.user_provided(true);
     // we ignore any LHS
   }
   else if (base_name == "_wassert")
@@ -1079,15 +1094,21 @@ void goto_convertt::do_function_call_symbol(
     std::string description = "assertion ";
     get_string_constant(arguments[0], description);
 
-    if (options.get_bool_option("no-assertions"))
-      return;
+    if (!options.get_bool_option("no-assertions"))
+    {
+      goto_programt::targett t = dest.add_instruction(ASSERT);
+      t->guard = gen_false_expr();
+      t->location = function.location();
+      t->location.user_provided(true);
+      t->location.property("assertion");
+      t->location.comment(description);
+    }
 
-    goto_programt::targett t = dest.add_instruction(ASSERT);
-    t->guard = gen_false_expr();
-    t->location = function.location();
-    t->location.user_provided(true);
-    t->location.property("assertion");
-    t->location.comment(description);
+    // _wassert is __noreturn — see __assert_fail above.
+    goto_programt::targett a = dest.add_instruction(ASSUME);
+    a->guard = gen_false_expr();
+    a->location = function.location();
+    a->location.user_provided(true);
     // we ignore any LHS
   }
   else if (base_name == "operator new")
