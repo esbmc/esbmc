@@ -932,6 +932,15 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     return;
   }
 
+  if (expr.id() == exprt::i_cmp_three_way)
+  {
+    expr2tc side1, side2;
+    convert_operand_pair(expr, side1, side2);
+    type2tc t = migrate_type(expr.type());
+    new_expr_ref = cmp_three_way2tc(t, side1, side2);
+    return;
+  }
+
   if (expr.id() == exprt::i_ge)
   {
     expr2tc side1, side2;
@@ -2694,6 +2703,14 @@ exprt migrate_expr_back(const expr2tc &ref)
     greaterthanequal.copy_to_operands(
       migrate_expr_back(ref2.side_1), migrate_expr_back(ref2.side_2));
     return greaterthanequal;
+  }
+  case expr2t::cmp_three_way_id:
+  {
+    const cmp_three_way2t &ref2 = to_cmp_three_way2t(ref);
+    exprt cmp(exprt::i_cmp_three_way, migrate_type_back(ref2.type));
+    cmp.copy_to_operands(
+      migrate_expr_back(ref2.side_1), migrate_expr_back(ref2.side_2));
+    return cmp;
   }
   case expr2t::not_id:
   {

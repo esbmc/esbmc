@@ -21,6 +21,7 @@ expr_typedefs2(lessthan, relation_data);
 expr_typedefs2(greaterthan, relation_data);
 expr_typedefs2(lessthanequal, relation_data);
 expr_typedefs2(greaterthanequal, relation_data);
+expr_typedefs2(cmp_three_way, relation_data);
 expr_typedefs2(same_object, same_object_data);
 expr_typedefs3(byte_extract, byte_extract_data);
 expr_typedefs4(byte_update, byte_update_data);

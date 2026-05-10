@@ -2434,6 +2434,38 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     }
     break;
   }
+  case expr2t::cmp_three_way_id:
+  {
+    // C++20 spaceship `a <=> b`. Lower to the equivalent ITE chain
+    // producing a comparison-category struct value:
+    //   side_1 <  side_2  ->  T{-1}    (less)
+    //   side_1 == side_2  ->  T{ 0}    (equivalent / equal)
+    //   else              ->  T{ 1}    (greater)
+    // Operands are captured once via the recursive convert_ast on the
+    // children — preserving the IR-level cmp_three_way2t up to here.
+    const cmp_three_way2t &cw = to_cmp_three_way2t(expr);
+
+    auto make_value = [&](int v) -> expr2tc {
+      const struct_type2t &st = to_struct_type(cw.type);
+      std::vector<expr2tc> ops;
+      ops.reserve(st.members.size());
+      for (size_t i = 0; i < st.members.size(); ++i)
+      {
+        if (i == 0)
+          ops.push_back(constant_int2tc(st.members[0], BigInt(v)));
+        else
+          ops.push_back(gen_zero(st.members[i]));
+      }
+      return constant_struct2tc(cw.type, std::move(ops));
+    };
+
+    expr2tc lt = lessthan2tc(cw.side_1, cw.side_2);
+    expr2tc eq = equality2tc(cw.side_1, cw.side_2);
+    expr2tc inner = if2tc(cw.type, eq, make_value(0), make_value(1));
+    expr2tc outer = if2tc(cw.type, lt, make_value(-1), inner);
+    a = convert_ast(outer);
+    break;
+  }
   case expr2t::lessthan_id:
   {
     const lessthan2t &lt = to_lessthan2t(expr);

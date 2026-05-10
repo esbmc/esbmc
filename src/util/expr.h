@@ -250,6 +250,7 @@ public:
   static irep_idt i_gt;
   static irep_idt i_le;
   static irep_idt i_ge;
+  static irep_idt i_cmp_three_way;
   static irep_idt i_bitand;
   static irep_idt i_bitor;
   static irep_idt i_bitxor;
