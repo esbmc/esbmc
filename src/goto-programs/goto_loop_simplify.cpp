@@ -2,19 +2,12 @@
 #include <goto-programs/loopst.h>
 #include <irep2/irep2_utils.h>
 #include <util/config.h>
-#include <unordered_map>
 #include <unordered_set>
 
 namespace
 {
 using inst_iter = goto_programt::instructionst::iterator;
 using name_set = std::unordered_set<irep_idt, irep_id_hash>;
-/// Maps a modified symbol's name to the first symbol2tc expression that
-/// referenced it inside the loop body. We need the expression (not just
-/// the name) to build the havoc ASSIGN, which requires the symbol2t's
-/// full state (renaming level, num fields, type, etc.) — reconstructing
-/// from name + type alone is fragile.
-using modified_map = std::unordered_map<irep_idt, expr2tc, irep_id_hash>;
 
 /// Collect names of every plain symbol2t reachable in @p expr.
 void collect_symbol_names(const expr2tc &expr, name_set &out)
@@ -29,8 +22,8 @@ void collect_symbol_names(const expr2tc &expr, name_set &out)
 
 /// Body-shape predicate. @p body_first is the first instruction inside
 /// the loop body; @p body_last is the back-edge instruction. Returns
-/// true and fills @p modified iff every instruction in
-/// [body_first, body_last) is one of:
+/// true and fills @p modified with the names of every variable assigned
+/// in the body iff every instruction in [body_first, body_last) is one of:
 ///   - LOCATION / SKIP / DECL / DEAD
 ///   - ASSIGN to a non-pointer symbol2t
 /// AND body_last is a backwards GOTO targetting @p loop_head. Anything
@@ -38,13 +31,13 @@ void collect_symbol_names(const expr2tc &expr, name_set &out)
 /// disqualifies the loop.
 ///
 /// The back-edge may be unconditional (for/while shape) or conditional
-/// (do-while shape). We don't care which here — the caller picks the
-/// right exit guard.
+/// (do-while shape). We don't care which here — shape discrimination is
+/// the caller's job.
 bool body_is_safe(
   inst_iter body_first,
   inst_iter body_last,
   inst_iter loop_head,
-  modified_map &modified)
+  name_set &modified)
 {
   if (!body_last->is_backwards_goto())
     return false;
@@ -72,10 +65,7 @@ bool body_is_safe(
         return false;
       if (is_pointer_type(a.target))
         return false;
-      // Insert preserves the first symbol2tc seen for each name. We keep
-      // the original (pre-renaming) expression so havoc can rebuild a
-      // valid ASSIGN.
-      modified.emplace(to_symbol2t(a.target).thename, a.target);
+      modified.insert(to_symbol2t(a.target).thename);
       continue;
     }
 
@@ -96,11 +86,9 @@ bool body_is_safe(
 bool modified_vars_die_immediately(
   inst_iter after_exit,
   inst_iter end,
-  const modified_map &modified)
+  const name_set &modified)
 {
-  name_set alive;
-  for (const auto &kv : modified)
-    alive.insert(kv.first);
+  name_set alive(modified);
 
   for (inst_iter it = after_exit; it != end && !alive.empty(); ++it)
   {
@@ -136,57 +124,7 @@ void erase_loop(inst_iter loop_head, inst_iter loop_exit)
     it->make_skip();
 }
 
-/// Rewrite a side-effecting empty-body loop in place with the havoc +
-/// assume(exit_cond) pattern. The havoc gives each modified var an
-/// unconstrained value; the assume constrains them to satisfy the exit
-/// condition. Sound for safety BMC because the loop's only effect on
-/// post-loop state was setting these vars to a value satisfying the
-/// exit condition — exactly what we now express.
-///
-/// Works uniformly for while/for (loop_head is the exit IF, exit_guard
-/// is its guard `!cond`) and do-while (loop_head is the body, exit_guard
-/// is the negation of the back-edge's guard `cond`).
-void rewrite_loop_with_havoc(
-  goto_programt &program,
-  inst_iter loop_head,
-  inst_iter loop_exit,
-  const expr2tc &exit_guard,
-  const modified_map &modified)
-{
-  locationt loc = loop_head->location;
-
-  // Build the fragment: havocs + ASSUME(exit_cond). insert_swap places
-  // it AT loop_head's position, pushing the original instructions down.
-  // After insert_swap, the loop_head iterator points to the first
-  // fragment instruction; the original head lives at
-  // std::next(loop_head, fragment_size).
-  goto_programt fragment;
-  for (const auto &kv : modified)
-  {
-    const expr2tc &sym = kv.second;
-    inst_iter t = fragment.add_instruction(ASSIGN);
-    t->code = code_assign2tc(sym, gen_nondet(sym->type));
-    t->location = loc;
-  }
-  {
-    inst_iter t = fragment.add_instruction(ASSUME);
-    t->guard = exit_guard;
-    t->location = loc;
-  }
-
-  const size_t fragment_size = fragment.instructions.size();
-  program.insert_swap(loop_head, fragment);
-
-  // SKIP the original head, body, and back-edge. loop_exit's iterator
-  // is stable across insert_swap.
-  inst_iter original_head = loop_head;
-  for (size_t i = 0; i < fragment_size; ++i)
-    ++original_head;
-  for (inst_iter it = original_head; it != std::next(loop_exit); ++it)
-    it->make_skip();
-}
-
-/// One pass over a function. Returns true iff any loop was rewritten (so
+/// One pass over a function. Returns true iff any loop was erased (so
 /// the caller can iterate to fixpoint).
 bool simplify_function_once(goto_functiont &fn)
 {
@@ -226,60 +164,40 @@ bool simplify_function_once(goto_functiont &fn)
     //              IF cond GOTO loop_head (conditional back-edge)
     //
     // Discrimination: if loop_head is a forward GOTO, it's the for/while
-    // exit IF — body starts after it, exit condition is loop_head's
-    // guard (already `!cond`). Otherwise it's do-while — body starts at
-    // loop_head, exit condition is the negation of the back-edge's guard.
+    // exit IF — body starts after it, post-loop code starts at the IF's
+    // target. Otherwise it's do-while — body starts at loop_head, post-
+    // loop code starts after the back-edge.
     inst_iter body_first;
     inst_iter after_loop;
-    expr2tc exit_guard;
     if (loop_head->is_goto() && !loop_head->is_backwards_goto())
     {
-      // for/while shape.
       if (loop_head->targets.size() != 1)
         continue;
       body_first = std::next(loop_head);
       after_loop = *loop_head->targets.begin();
-      exit_guard = loop_head->guard; // already !cond
     }
     else
     {
-      // do-while shape: the back-edge IS the conditional. The exit
-      // condition is the negation of the back-edge's guard.
       body_first = loop_head;
       after_loop = std::next(loop_exit);
-      exit_guard = loop_exit->guard;
-      make_not(exit_guard);
     }
 
-    modified_map modified;
+    name_set modified;
     if (!body_is_safe(body_first, loop_exit, loop_head, modified))
       continue;
 
-    // Path 1: every modified var dies immediately after the loop. The
-    // loop has no observable effect; erase it entirely.
-    if (modified_vars_die_immediately(
+    // Erase only when every modified var dies immediately after the loop
+    // — the loop has no observable effect on post-loop state. Loops whose
+    // modified vars escape are left alone: a havoc-and-assume rewrite
+    // would over-approximate the post-state (e.g. losing `i == N` for
+    // `for(i=0;i<N;i++) ;`), turning provable assertions into spurious
+    // failures, and could introduce unsoundness via array-index havoc
+    // (e.g. strlen's `s[len]` guard with havoc'd len).
+    if (!modified_vars_die_immediately(
           after_loop, body.instructions.end(), modified))
-    {
-      erase_loop(loop_head, loop_exit);
-      changed = true;
       continue;
-    }
 
-    // Path 2: vars escape. The loop's post-state matters, but its body
-    // is still empty-body-shaped (only ASSIGNs to non-pointer locals,
-    // no calls/asserts/assumes). Replace with havoc + assume(exit-cond).
-    //
-    // The havoc gives each modified var any value the type allows; the
-    // assume constrains them to satisfy the exit condition. Subsequent
-    // code sees a sound (possibly weaker) view of the post-loop state.
-    //
-    // Bails are already enforced by body_is_safe: no pointer-typed
-    // modified vars (avoids alias-unsoundness from havoc'ing pointers),
-    // no observable side effects in the body.
-    if (modified.empty())
-      continue; // nothing to havoc; nothing useful left to do
-
-    rewrite_loop_with_havoc(body, loop_head, loop_exit, exit_guard, modified);
+    erase_loop(loop_head, loop_exit);
     changed = true;
   }
 

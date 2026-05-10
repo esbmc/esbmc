@@ -2260,15 +2260,17 @@ bool esbmc_parseoptionst::process_goto_program(
       }
     }
 
-    // Eliminate goto-level no-op loops (empty body, dead modified vars)
-    // before any analysis sees them. Skipped under --termination /
-    // --unwinding-assertions because loop presence is observable there.
-    goto_loop_simplify(goto_functions);
-
     if (cmdline.isset("interval-analysis") || cmdline.isset("goto-contractor"))
     {
       interval_analysis(goto_functions, ns, options);
     }
+
+    // Eliminate goto-level no-op loops (empty body, dead modified vars).
+    // Runs after interval analysis so future step-recognition variants can
+    // use the interval results for tight-bound rewrites. Skipped under
+    // --termination / --unwinding-assertions because loop presence is
+    // observable in those modes.
+    goto_loop_simplify(goto_functions);
 
     bool is_k_induction = cmdline.isset("inductive-step") ||
                           cmdline.isset("k-induction") ||
