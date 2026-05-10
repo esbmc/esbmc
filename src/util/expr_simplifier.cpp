@@ -4264,30 +4264,12 @@ expr2tc greaterthanequal2t::do_simplify() const
     type, side_1, side_2);
 }
 
-// Build a comparison-category struct value with the discriminant set to v.
-// All three categories (strong/weak/partial) layout the discriminant as the
-// first field, so writing operand[0] is enough.
-static expr2tc make_cmp_value(const type2tc &t, int v)
-{
-  if (!is_struct_type(t))
-    return expr2tc();
-  const struct_type2t &st = to_struct_type(t);
-  if (st.members.empty())
-    return expr2tc();
-  std::vector<expr2tc> ops;
-  ops.reserve(st.members.size());
-  for (size_t i = 0; i < st.members.size(); ++i)
-  {
-    if (i == 0)
-      ops.push_back(constant_int2tc(st.members[0], BigInt(v)));
-    else
-      ops.push_back(gen_zero(st.members[i]));
-  }
-  return constant_struct2tc(t, std::move(ops));
-}
-
 expr2tc cmp_three_way2t::do_simplify() const
 {
+  auto cmp_int = [](const BigInt &a, const BigInt &b) {
+    return (a < b) ? -1 : (a == b ? 0 : 1);
+  };
+
   // Self-comparison on a non-float type is always equivalent. (Floats need
   // partial_ordering::unordered for NaN; leave that case alone.)
   if (side_1 == side_2 && !is_floatbv_type(side_1) && !is_floatbv_type(side_2))
@@ -4298,8 +4280,41 @@ expr2tc cmp_three_way2t::do_simplify() const
   {
     const BigInt &a = to_constant_int2t(side_1).value;
     const BigInt &b = to_constant_int2t(side_2).value;
-    int v = (a < b) ? -1 : (a == b ? 0 : 1);
-    return make_cmp_value(type, v);
+    return make_cmp_value(type, cmp_int(a, b));
+  }
+
+  // Same-base pointer ordering. (&arr+c1) <=> (&arr+c2) folds to T{cmp(c1,c2)}
+  // — this is well-defined per [expr.spaceship]/4 because both operands point
+  // into the same array object (or one past the end). Mirrors the shared-base
+  // cancellation in simplify_relations: same four permutations of base/offset.
+  // Pointers into different objects are unspecified and intentionally left
+  // alone.
+  if (
+    is_add2t(side_1) && is_add2t(side_2) && is_pointer_type(side_1) &&
+    is_pointer_type(side_2))
+  {
+    const add2t &lhs = to_add2t(side_1);
+    const add2t &rhs = to_add2t(side_2);
+
+    auto fold = [&](const expr2tc &a, const expr2tc &b) -> expr2tc {
+      if (!is_constant_int2t(a) || !is_constant_int2t(b))
+        return expr2tc();
+      return make_cmp_value(
+        type, cmp_int(to_constant_int2t(a).value, to_constant_int2t(b).value));
+    };
+
+    if (lhs.side_1 == rhs.side_1)
+      if (expr2tc r = fold(lhs.side_2, rhs.side_2); !is_nil_expr(r))
+        return r;
+    if (lhs.side_2 == rhs.side_2)
+      if (expr2tc r = fold(lhs.side_1, rhs.side_1); !is_nil_expr(r))
+        return r;
+    if (lhs.side_1 == rhs.side_2)
+      if (expr2tc r = fold(lhs.side_2, rhs.side_1); !is_nil_expr(r))
+        return r;
+    if (lhs.side_2 == rhs.side_1)
+      if (expr2tc r = fold(lhs.side_1, rhs.side_2); !is_nil_expr(r))
+        return r;
   }
 
   return expr2tc();
