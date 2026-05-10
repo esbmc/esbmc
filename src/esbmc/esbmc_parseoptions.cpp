@@ -33,6 +33,7 @@ extern "C"
 #include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/goto_inline.h>
 #include <goto-programs/goto_k_induction.h>
+#include <goto-programs/goto_loop_simplify.h>
 #include <goto-programs/goto_loop_invariant.h>
 #include <goto-programs/abstract-interpretation/interval_analysis.h>
 #include <goto-programs/abstract-interpretation/gcse.h>
@@ -2232,6 +2233,11 @@ bool esbmc_parseoptionst::process_goto_program(
         cse.run(goto_functions);
       }
     }
+
+    // Eliminate goto-level no-op loops (empty body, dead modified vars)
+    // before any analysis sees them. Skipped under --termination /
+    // --unwinding-assertions because loop presence is observable there.
+    goto_loop_simplify(goto_functions);
 
     if (cmdline.isset("interval-analysis") || cmdline.isset("goto-contractor"))
     {
