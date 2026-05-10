@@ -2225,6 +2225,44 @@ bool clang_cpp_convertert::get_member_expr(
   if (perform_virtual_dispatch(memb))
     return get_vft_binding_expr(memb, new_expr);
 
+  // Lazy-register a body-less symbol for member calls whose enclosing
+  // class was already completed by an earlier translation unit. Without
+  // this, a template method first instantiated in *this* TU (e.g.
+  // `std::vector<bool>::resize` first used in Solver.cpp after the class
+  // was completed while parsing lista7paa.cpp) would never be added to
+  // the context, and `adjust_cpp_member` would later fail to resolve it
+  // (issue #4416). The signature is enough: the body-less stub is sound
+  // because symex falls back to nondet for the return and havocs pointer
+  // args at call sites with `body_available=false`. Constructors
+  // are unreached here (CXXConstructExpr path); destructors and lambda
+  // `operator()` go through this branch and are handled identically.
+  // See also `get_method` for the canonical full-body version.
+  if (
+    const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(memb.getMemberDecl()))
+  {
+    std::string id, name;
+    get_decl_name(*md, name, id);
+    if (!id.empty() && context.find_symbol(id) == nullptr)
+    {
+      typet sym_type;
+      if (get_type(md->getType(), sym_type))
+        return true;
+      symbolt symbol;
+      locationt loc;
+      get_location_from_decl(*md, loc);
+      get_default_symbol(
+        symbol,
+        get_modulename_from_path(loc.file().as_string()),
+        sym_type,
+        name,
+        id,
+        loc);
+      symbol.lvalue = true;
+      symbol.is_extern = true;
+      context.move_symbol_to_context(symbol);
+    }
+  }
+
   return clang_c_convertert::get_member_expr(memb, new_expr);
 }
 
