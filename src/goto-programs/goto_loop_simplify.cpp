@@ -601,6 +601,37 @@ bool simplify_function_once(goto_functiont &fn)
       is_dowhile = true;
     }
 
+    // Under --termination: if the exit guard simplifies to constant
+    // false, the loop's only exit edge is never taken — `while(1) { }`,
+    // `for(;;) { }`. Rewrite the loop head to `assume(false)` so the
+    // path is killed (correct model of a non-terminating execution: no
+    // post-loop state is ever reached). The termination reduction then
+    // sees the assert(false) marker as unreachable, IS reports UNSAT,
+    // and we conclude non-termination.
+    //
+    // Gated to --termination only: under default BMC the unwinding
+    // assertion is the user-visible signal of non-termination, and
+    // collapsing the loop to assume(false) would silently suppress it.
+    // (See body_is_safe-independent check above — we DO want this to
+    // fire even when the body is non-trivial, as long as the exit guard
+    // is constant false, because under --termination "no exit edge"
+    // dominates "body has side effects".)
+    if (config.options.get_bool_option("termination"))
+    {
+      expr2tc exit_guard_simp = exit_guard;
+      simplify(exit_guard_simp);
+      if (is_false(exit_guard_simp))
+      {
+        loop_head->make_assumption(gen_false_expr());
+        erase_loop(std::next(loop_head), loop_exit);
+        changed = true;
+      }
+      // Under --termination, ONLY the assume(false) rewrite is sound:
+      // Path 1 erasure and Path 2 step recognition would also silently
+      // hide loops whose presence matters for the termination reduction.
+      continue;
+    }
+
     name_set modified;
     if (!body_is_safe(body_first, loop_exit, loop_head, modified))
       continue;
@@ -643,12 +674,34 @@ void simplify_function(goto_functiont &fn)
 
 void goto_loop_simplify(goto_functionst &goto_functions)
 {
-  // Skipped under --termination or --unwinding-assertions: in those modes
-  // an empty loop's presence is itself observable (it can fail to
-  // terminate, or violate the unwind assertion).
+  // Skipped under --unwinding-assertions: an empty loop's presence is
+  // itself observable (it can violate the unwind assertion).
+  //
+  // Skipped when computing coverage: erasing loops drops branch points
+  // that the coverage instrumentation expects to count, distorting the
+  // reported numbers.
+  //
+  // Under --termination the pass DOES run, but only the constant-false
+  // exit-guard branch in simplify_function_once fires (gated there).
+  // Path 1 erasure and Path 2 step recognition are skipped because they
+  // would also discard loops whose presence is observable under the
+  // termination reduction.
+  if (config.options.get_bool_option("unwinding-assertions"))
+    return;
+
   if (
-    config.options.get_bool_option("termination") ||
-    config.options.get_bool_option("unwinding-assertions"))
+    config.options.get_bool_option("assertion-coverage") ||
+    config.options.get_bool_option("assertion-coverage-claims") ||
+    config.options.get_bool_option("branch-coverage") ||
+    config.options.get_bool_option("branch-coverage-claims") ||
+    config.options.get_bool_option("branch-function-coverage") ||
+    config.options.get_bool_option("branch-function-coverage-claims") ||
+    config.options.get_bool_option("condition-coverage") ||
+    config.options.get_bool_option("condition-coverage-claims") ||
+    config.options.get_bool_option("condition-coverage-rm") ||
+    config.options.get_bool_option("condition-coverage-claims-rm") ||
+    config.options.get_bool_option("k-path-coverage") ||
+    config.options.get_bool_option("k-path-coverage-claims"))
     return;
 
   Forall_goto_functions (it, goto_functions)
