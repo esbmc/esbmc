@@ -127,8 +127,10 @@ void goto_symext::symex_dead(const expr2tc code)
   // Rename it to level 1
   cur_state->top().level1.get_ident_name(l1_sym);
 
-  // Call free on alloca'd objects
-  if (identifier.as_string().find("return_value$_alloca$") != std::string::npos)
+  // Call free on alloca'd objects.  See is_alloca_return_value_name() —
+  // substring matching here previously fired on any user identifier
+  // containing `_alloca$`.
+  if (goto_symex_utils::is_alloca_return_value_name(identifier.as_string()))
     symex_free(code_free2tc(l1_sym));
 
   // Erase from level 1 propagation

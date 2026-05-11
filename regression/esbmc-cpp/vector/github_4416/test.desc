@@ -1,0 +1,4 @@
+CORE
+main.cpp
+holder.cpp --unwind 1 --no-pointer-check --no-bounds-check --no-unwinding-assertions
+^VERIFICATION SUCCESSFUL$

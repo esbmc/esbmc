@@ -8,6 +8,7 @@
 #include <python-frontend/string_handler_utils.h>
 #include <python-frontend/python_exception_handler.h>
 #include <python-frontend/python_list.h>
+#include <python-frontend/python_set.h>
 #include <python-frontend/string_builder.h>
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/tuple_handler.h>
@@ -2973,6 +2974,85 @@ exprt function_call_expr::handle_list_pop() const
   return list_helper.build_pop_list_call(*list_symbol, index_expr, call_);
 }
 
+bool function_call_expr::is_tuple_method_call() const
+{
+  if (call_["func"]["_type"] != "Attribute")
+    return false;
+
+  const std::string &method_name = function_id_.get_function();
+  if (method_name != "count" && method_name != "index")
+    return false;
+
+  exprt receiver = converter_.get_expr(call_["func"]["value"]);
+  return converter_.get_tuple_handler().is_tuple_type(receiver.type());
+}
+
+exprt function_call_expr::handle_tuple_method() const
+{
+  const std::string &method_name = function_id_.get_function();
+  const auto &args = call_["args"];
+  if (args.size() != 1)
+    throw std::runtime_error(
+      "tuple." + method_name + "() takes exactly one argument");
+
+  exprt receiver = converter_.get_expr(call_["func"]["value"]);
+  const struct_typet &tuple_type = to_struct_type(receiver.type());
+  const auto &components = tuple_type.components();
+
+  exprt elem = converter_.get_expr(args[0]);
+
+  if (method_name == "count")
+  {
+    // sum(t.element_i == elem ? 1 : 0)
+    typet result_type = int_type();
+    exprt total = gen_zero(result_type);
+    for (const auto &comp : components)
+    {
+      exprt member = member_exprt(receiver, comp.get_name(), comp.type());
+      exprt eq = equality_exprt(member, elem);
+      if_exprt sel(eq, gen_one(result_type), gen_zero(result_type));
+      sel.type() = result_type;
+      total = plus_exprt(total, sel);
+      total.type() = result_type;
+    }
+    return total;
+  }
+
+  // method_name == "index"
+  // Return the smallest k for which t.element_k == elem; assert if absent.
+  if (components.empty())
+    throw std::runtime_error("tuple.index() on empty tuple");
+
+  // Build "any matched" guard so we can assert the element is present.
+  typet result_type = int_type();
+  exprt any_match = gen_boolean(false);
+  for (const auto &comp : components)
+  {
+    exprt member = member_exprt(receiver, comp.get_name(), comp.type());
+    exprt eq = equality_exprt(member, elem);
+    any_match = or_exprt(any_match, eq);
+  }
+  code_assertt found_assert(any_match);
+  found_assert.location() = converter_.get_location_from_decl(call_);
+  found_assert.location().comment("ValueError: tuple.index(x): x not in tuple");
+  converter_.add_instruction(found_assert);
+
+  // Build chain right-to-left: result_(n-1) is index n-1, falling back to
+  // earlier matches as we walk backwards. Net effect: leftmost match wins.
+  size_t n = components.size();
+  exprt result = from_integer(BigInt(n - 1), result_type);
+  for (size_t k = n - 1; k-- > 0;)
+  {
+    exprt member =
+      member_exprt(receiver, components[k].get_name(), components[k].type());
+    exprt eq = equality_exprt(member, elem);
+    if_exprt sel(eq, from_integer(BigInt(k), result_type), result);
+    sel.type() = result_type;
+    result = sel;
+  }
+  return result;
+}
+
 bool function_call_expr::is_dict_method_call() const
 {
   if (call_["func"]["_type"] != "Attribute")
@@ -3232,6 +3312,53 @@ exprt function_call_expr::handle_list_reverse() const
   python_list::reverse_type_info(list_symbol->id.as_string());
 
   return reverse_call;
+}
+
+bool function_call_expr::is_set_method_call() const
+{
+  if (call_["func"]["_type"] != "Attribute")
+    return false;
+
+  const std::string &method_name = function_id_.get_function();
+  if (
+    method_name != "add" && method_name != "discard" &&
+    method_name != "issubset" && method_name != "update" &&
+    method_name != "symmetric_difference")
+    return false;
+
+  std::string dummy;
+  const symbolt *sym = get_object_list_symbol(dummy);
+  return sym != nullptr && sym->is_set;
+}
+
+exprt function_call_expr::handle_set_method() const
+{
+  const std::string &method_name = function_id_.get_function();
+  const auto &args = call_["args"];
+
+  if (args.size() != 1)
+    throw std::runtime_error(method_name + "() takes exactly one argument");
+
+  std::string set_display_name;
+  const symbolt *set_symbol = get_object_list_symbol(set_display_name);
+  materialize_list_symbol(set_symbol);
+  if (!set_symbol)
+    throw std::runtime_error("Set variable not found: " + set_display_name);
+
+  // add/discard take a single element value.
+  if (method_name == "add" || method_name == "discard")
+  {
+    exprt elem = converter_.get_expr(args[0]);
+    python_list helper(converter_, call_);
+    return helper.build_set_membership_call(
+      *set_symbol, call_, elem, method_name);
+  }
+
+  // issubset / update / symmetric_difference take another set/iterable.
+  exprt other = converter_.get_expr(args[0]);
+  python_set set_helper(converter_, call_);
+  return set_helper.build_set_method_call(
+    *set_symbol, other, call_, method_name);
 }
 
 bool function_call_expr::is_list_method_call() const
@@ -3853,6 +3980,18 @@ function_call_expr::get_dispatch_table()
      },
      [this]() { return converter_.get_expr(call_["func"]["value"]); },
      "__iter__ on builtin iterables"},
+
+    // Tuple methods (count, index) — matched before list/dict so a tuple
+    // receiver doesn't fall through to either.
+    {[this]() { return is_tuple_method_call(); },
+     [this]() { return handle_tuple_method(); },
+     "tuple methods"},
+
+    // Set methods (add, discard) — matched before list methods so set
+    // receivers don't fall through to the list handler.
+    {[this]() { return is_set_method_call(); },
+     [this]() { return handle_set_method(); },
+     "set methods"},
 
     // List methods
     {[this]() { return is_list_method_call(); },
@@ -4668,6 +4807,25 @@ exprt function_call_expr::handle_general_function_call()
   const size_t n_args = call_["args"].size();
   const bool is_sorted_min_max =
     func_name == "min" || func_name == "max" || func_name == "sorted";
+
+  // min(iter, default=...) / max(iter, default=...) route to *_default
+  // variants that fall back to the supplied default when iter is empty
+  // instead of raising ValueError.
+  bool has_default_kwarg = false;
+  exprt default_kwarg_value;
+  if ((func_name == "min" || func_name == "max") && call_.contains("keywords"))
+  {
+    for (const auto &kw : call_["keywords"])
+    {
+      if (kw.value("arg", "") == "default")
+      {
+        has_default_kwarg = true;
+        default_kwarg_value = converter_.get_expr(kw["value"]);
+        break;
+      }
+    }
+  }
+
   if (
     !is_user_imported && ((is_sorted_min_max && n_args == 1) ||
                           (func_name == "sum" && (n_args == 1 || n_args == 2))))
@@ -4685,7 +4843,7 @@ exprt function_call_expr::handle_general_function_call()
       // when passing the list to max_float/min_float model functions.
       if (
         elem_type.is_floatbv() && (func_name == "min" || func_name == "max") &&
-        python_list::has_mixed_numeric_types(list_id))
+        python_list::has_mixed_numeric_types(list_id) && !has_default_kwarg)
       {
         irep_idt comparison_op =
           (func_name == "max") ? exprt::i_gt : exprt::i_lt;
@@ -4695,6 +4853,8 @@ exprt function_call_expr::handle_general_function_call()
       }
     }
     // Dispatch to typed builtin based on element type
+    if (has_default_kwarg)
+      actual_func_name += "_default";
     if (!elem_type.is_nil())
     {
       if (elem_type.is_floatbv())
@@ -5619,7 +5779,10 @@ exprt function_call_expr::handle_general_function_call()
   // Forward keyword arguments to their parameter slots so the callee
   // receives the supplied value. The validation loop below only fills in
   // default values for *missing* params, so kwargs would otherwise be
-  // marked "provided" yet never actually passed.
+  // marked "provided" yet never actually passed. Subsumes the
+  // min/max-default specific path: with the *_default models exposing a
+  // named `default` parameter, the generic forwarding lands the value in
+  // the right slot for free.
   if (call_.contains("keywords") && call_["keywords"].is_array())
   {
     for (const auto &kw : call_["keywords"])

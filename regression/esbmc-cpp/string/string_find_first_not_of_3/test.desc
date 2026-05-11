@@ -1,0 +1,4 @@
+CORE
+main.cpp
+--incremental-bmc --no-unwinding-assertions --timeout 120
+^VERIFICATION SUCCESSFUL$

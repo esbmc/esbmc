@@ -107,6 +107,88 @@ exprt tuple_handler::handle_tuple_subscript(
       "Subscript on non-tuple struct type: " + tuple_type.tag().as_string());
   }
 
+  // Slicing: t[lower:upper:step]. Build a fresh sub-tuple at compile time.
+  if (slice.contains("_type") && slice["_type"] == "Slice")
+  {
+    const auto &components = tuple_type.components();
+    const long long n = static_cast<long long>(components.size());
+
+    auto resolve_const =
+      [&](const std::string &key, long long fallback) -> long long {
+      if (!slice.contains(key) || slice[key].is_null())
+        return fallback;
+      exprt e = converter_.get_expr(slice[key]);
+      if (e.is_constant())
+        return binary2integer(to_constant_expr(e).value().c_str(), true)
+          .to_int64();
+      if (
+        e.id() == "unary-" && e.operands().size() == 1 &&
+        e.operands()[0].is_constant())
+        return -binary2integer(
+                  to_constant_expr(e.operands()[0]).value().c_str(), true)
+                  .to_int64();
+      throw std::runtime_error(
+        "Tuple slice with non-constant " + key + " is not supported");
+    };
+
+    long long step = resolve_const("step", 1);
+    if (step == 0)
+      throw std::runtime_error("slice step cannot be zero");
+
+    long long lower = resolve_const("lower", step > 0 ? 0 : n - 1);
+    long long upper = resolve_const("upper", step > 0 ? n : -n - 1);
+
+    auto clamp = [n](long long v, bool is_lower, long long step) -> long long {
+      if (v < 0)
+        v += n;
+      if (step > 0)
+      {
+        if (v < 0)
+          v = 0;
+        if (v > n)
+          v = n;
+      }
+      else
+      {
+        // step < 0: clamp to [-1, n-1]
+        if (v < -1)
+          v = -1;
+        if (v >= n)
+          v = n - 1;
+      }
+      (void)is_lower;
+      return v;
+    };
+
+    lower = clamp(lower, true, step);
+    upper = clamp(upper, false, step);
+
+    // Collect the indices that survive the slice.
+    std::vector<size_t> kept;
+    if (step > 0)
+      for (long long i = lower; i < upper; i += step)
+        kept.push_back(static_cast<size_t>(i));
+    else
+      for (long long i = lower; i > upper; i += step)
+        kept.push_back(static_cast<size_t>(i));
+
+    // Build the sub-tuple struct.
+    std::vector<typet> elem_types;
+    elem_types.reserve(kept.size());
+    for (size_t k : kept)
+      elem_types.push_back(components[k].type());
+    struct_typet new_type = create_tuple_struct_type(elem_types);
+
+    struct_exprt result(new_type);
+    for (size_t k : kept)
+      result.copy_to_operands(
+        member_exprt(array, components[k].get_name(), components[k].type()));
+
+    if (element.contains("lineno"))
+      result.location() = converter_.get_location_from_decl(element);
+    return result;
+  }
+
   // Convert subscript to member access
   exprt index_expr = converter_.get_expr(slice);
 

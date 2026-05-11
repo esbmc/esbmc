@@ -4,6 +4,7 @@
 #include <util/c_types.h>
 #include <util/destructor.h>
 #include <util/expr_util.h>
+#include <util/message.h>
 
 clang_cpp_adjust::clang_cpp_adjust(contextt &_context)
   : clang_c_adjust(_context)
@@ -195,7 +196,18 @@ void clang_cpp_adjust::adjust_cpp_member(member_exprt &expr)
    *      * id: <setX_clang_ID>
    */
   const symbolt *comp_symb = ns.lookup(expr.component_name());
-  assert(comp_symb);
+  if (!comp_symb)
+  {
+    log_error(
+      "{}: unresolved C++ member component `{}` at {} (struct-op type "
+      "id `{}`, member type id `{}`)",
+      __func__,
+      expr.component_name(),
+      expr.location().as_string(),
+      expr.struct_op().type().id_string(),
+      expr.type().id_string());
+    abort();
+  }
   // compoment's type shall be the same as member_exprt's type
   // and both are of the type `code`
   assert(comp_symb->type.is_code());

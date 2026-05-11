@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--k-path-coverage=2 --unwind 4 --no-unwinding-assertions --generate-ctest-testcase
+^Generated 3 CTest test case\(s\) with CMakeLists\.txt
+^VERIFICATION FAILED$
