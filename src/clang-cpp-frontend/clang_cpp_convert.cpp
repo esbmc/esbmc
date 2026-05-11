@@ -1642,7 +1642,8 @@ bool clang_cpp_convertert::build_destructor_chain(
       continue;
     const typet base_this_type = dtor_code_type.arguments().at(0).type();
 
-    exprt this_expr = symbol_exprt(this_it->second.first, this_it->second.second);
+    exprt this_expr =
+      symbol_exprt(this_it->second.first, this_it->second.second);
     gen_typecast(ns, this_expr, base_this_type);
 
     dtor_call.arguments().push_back(this_expr);
