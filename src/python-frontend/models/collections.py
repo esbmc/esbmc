@@ -27,6 +27,36 @@ def defaultdict(default_factory: Optional[Any] = None, *args, **kwargs) -> dict:
     return {}
 
 
+def deque(iterable: list[int] = None, maxlen: int = -1) -> list[int]:
+    """collections.deque(iterable=()) — modelled as a plain list.
+
+    Approximation: deque is treated as a list backing store, exposing the
+    same `append` / `pop` / `__len__` / subscript surface that the
+    frontend already supports for lists. `appendleft` / `popleft` /
+    `extendleft` and the `maxlen` rollover are NOT modelled; programs
+    relying on the FIFO end will need a richer model.
+    """
+    if iterable is None:
+        return []
+    result: list[int] = []
+    i: int = 0
+    n: int = len(iterable)
+    while i < n:
+        result.append(iterable[i])
+        i = i + 1
+    return result
+
+
+def OrderedDict(*args, **kwargs) -> dict:
+    """collections.OrderedDict — modelled as a plain dict.
+
+    Insertion order is already preserved by the dict model, so the
+    OrderedDict-specific methods (`move_to_end`) are the only divergence;
+    `popitem` is already available via the dict interface.
+    """
+    return {}
+
+
 class Counter:
     """Simplified Counter model: maps (int, int) keys to integer counts."""
 

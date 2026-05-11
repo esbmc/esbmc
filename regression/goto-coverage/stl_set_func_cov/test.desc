@@ -1,0 +1,7 @@
+THOROUGH
+main.cpp
+--branch-function-coverage --unwind 4 --no-unwinding-assertions
+^Function Entry Points & Branches : 5
+^Reached : 3
+^Branch Coverage: 60%
+^VERIFICATION FAILED$

@@ -1,0 +1,135 @@
+#ifndef ESBMC_FILESYSTEM
+#define ESBMC_FILESYSTEM
+
+#include "cstring"
+#include "string"
+
+// Minimal C++17 <filesystem> operational model.
+//
+// Provides std::filesystem::path with a small set of value-only
+// operations: construction from string/char*, append (operator/= and
+// operator/), string()/c_str(), filename()/parent_path()/extension(),
+// and equality.  Nothing in this OM touches the real filesystem;
+// state-querying functions like exists() return non-deterministic
+// values so symex explores both branches.
+//
+// Per [filesystem] in N4861.  Out of scope: directory_iterator, the
+// permissions / file_status / file_time_type / weakly_canonical APIs,
+// formatter integration, and the noexcept-overload set.
+
+namespace std
+{
+namespace filesystem
+{
+
+class path
+{
+public:
+  using value_type = char;
+  using string_type = ::std::string;
+
+  path() = default;
+  path(const char *s) : __p_(s ? s : "")
+  {
+  }
+  path(const ::std::string &s) : __p_(s)
+  {
+  }
+  path(const path &) = default;
+  path(path &&) = default;
+  path &operator=(const path &) = default;
+  path &operator=(path &&) = default;
+
+  path &operator/=(const path &p)
+  {
+    if (!p.__p_.empty())
+    {
+      if (!__p_.empty() && __p_.back() != '/')
+        __p_ += '/';
+      __p_ += p.__p_;
+    }
+    return *this;
+  }
+
+  path &operator+=(const path &p)
+  {
+    __p_ += p.__p_;
+    return *this;
+  }
+
+  const ::std::string &native() const noexcept
+  {
+    return __p_;
+  }
+  const value_type *c_str() const noexcept
+  {
+    return __p_.c_str();
+  }
+  ::std::string string() const
+  {
+    return __p_;
+  }
+  bool empty() const noexcept
+  {
+    return __p_.empty();
+  }
+  void clear() noexcept
+  {
+    __p_ = ::std::string();
+  }
+
+  // filename / parent_path / extension / stem omitted: ESBMC's <string>
+  // OM does not provide a const-qualified two-argument substr(), which
+  // these helpers would need to slice the underlying buffer.  Code that
+  // wants those decompositions can call into ::std::string directly via
+  // native()/string().
+
+  friend bool operator==(const path &a, const path &b) noexcept
+  {
+    return a.__p_ == b.__p_;
+  }
+  friend bool operator!=(const path &a, const path &b) noexcept
+  {
+    return !(a == b);
+  }
+  friend path operator/(const path &a, const path &b)
+  {
+    path r = a;
+    r /= b;
+    return r;
+  }
+
+  // Field is public-by-name (mangled) so it does not collide with user
+  // code, but accessible to friend free functions inside this OM.
+  ::std::string __p_;
+};
+
+// State-querying free functions: return non-deterministic results so
+// callers explore both true and false branches under symex.
+inline bool exists(const path &)
+{
+  return nondet_bool();
+}
+inline bool is_regular_file(const path &)
+{
+  return nondet_bool();
+}
+inline bool is_directory(const path &)
+{
+  return nondet_bool();
+}
+
+// Pure path-manipulation utilities that do not need filesystem state.
+inline path current_path()
+{
+  return path("/");
+}
+inline bool equivalent(const path &a, const path &b)
+{
+  return a == b;
+}
+
+} // namespace filesystem
+} // namespace std
+
+#endif

@@ -767,6 +767,20 @@ private:
     const nlohmann::json &element);
 
   /**
+   * @brief Handles tuple `+` (concat) and `*` (repeat) operators.
+   *
+   * Concatenation builds a new tuple struct whose components are the
+   * concatenation of the operand tuples; repetition with a constant int
+   * builds an n-fold repeat. Returns nil_exprt for non-tuple operands or
+   * unsupported variants (e.g. variable repeat count).
+   */
+  exprt handle_tuple_operations(
+    const std::string &op,
+    exprt &lhs,
+    exprt &rhs,
+    const nlohmann::json &element);
+
+  /**
    * @brief Handles type mismatches in relational operations.
    *
    * Processes single-character comparisons and float-vs-string comparisons.

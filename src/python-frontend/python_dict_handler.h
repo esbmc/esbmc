@@ -472,6 +472,18 @@ public:
   handle_dict_update(const exprt &dict_expr, const nlohmann::json &call_node);
 
   /**
+   * @brief Handles dict.copy() method calls.
+   * Returns a shallow copy of the dictionary: a new dict whose keys and
+   * values lists are independent copies of the source's, so mutating the
+   * copy does not affect the original.
+   * @param dict_expr The source dictionary expression
+   * @param call_node The function call AST node
+   * @return Expression representing the copied dict.
+   */
+  exprt
+  handle_dict_copy(const exprt &dict_expr, const nlohmann::json &call_node);
+
+  /**
    * @brief Handles dict.fromkeys() class method calls.
    *
    * Implements dict.fromkeys(iterable, value=None):

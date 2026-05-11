@@ -925,7 +925,7 @@ ESBMC provides a set of coverage metrics to help you measure how much of the sta
 <li><b>Assertion Coverage</b> measures how well the assertions within a program are tested.</li>
 <li><b>Condition Coverage</b> measures how well the Boolean expressions in the code have been tested.</li>
 <li><b>Branch Coverage</b> measures how well every possible branch (or path) in a decision point of the code has been executed.</li>
-<li><b>K-Path Coverage</b> measures coverage of bounded sequences of conditional-branch outcomes (PathCrawler-style); enabled with <b>--k-path-coverage[=N]</b>. See the <a href="/docs/coverage/#k-path-coverage">coverage page</a> for details.</li>
+<li><b>K-Path Coverage</b> measures how well bounded sequences of conditional-branch outcomes have been exercised: at every conditional branch, ESBMC emits one witness per combination of the previous <em>(N&minus;1)</em> branch directions and the current direction, and reports the fraction of those witnesses that the SMT engine can satisfy (PathCrawler-style). Enabled with <b>--k-path-coverage[=N]</b>; see the <a href="/docs/coverage/#k-path-coverage">coverage page</a> for details.</li>
   </ul>
 
   <p>
@@ -1064,6 +1064,36 @@ VERIFICATION FAILED
 
 <p>
 Note that the <b>--condition-coverage-claims</b> option provides verbose output of claim information, including its condition and location. If only the coverage number is needed, we recommend using the <b>--condition-coverage</b> option instead.
+</p>
+
+<p>For k-path coverage, ESBMC is invoked as follows. Note that <b>--k-path-coverage</b> forces base-case semantics for its multi-property goals and should not be combined with <b>--k-induction</b> — the k-induction forward-condition and inductive-step phases do not soundly evaluate bounded-path witnesses, so use <b>--unwind</b> to bound loops instead:</p>
+
+```sh
+esbmc example.c --k-path-coverage=2 --unwind 4 --no-unwinding-assertions
+```
+
+<p>For the same C program shown above, ESBMC produces the following coverage report. The prefix length <em>N</em>=2 means each goal pins down the previous and current branch directions; the linear-walk over-approximation in Phase 1 lets some infeasible goals enter the denominator, so the reached fraction is a lower bound on the true bounded-path coverage:</p>
+
+```
+[Coverage]
+
+k-Path Witnesses : 14
+Reached : 8
+k-Path Coverage: 57.142857142857146%
+
+VERIFICATION FAILED
+```
+
+<p>
+<ul>
+  <li><b>k-Path Witnesses:</b> the total number of bounded-path goals emitted across all conditional branches in the goto program. For each branch, ESBMC enumerates combinations of the previous <em>(N&minus;1)</em> branch directions and the current direction, so this count grows with prefix length and branch density.</li>
+  <li><b>Reached:</b> the number of bounded paths the SMT engine satisfied. Each reached witness corresponds to a concrete input that drives the program down that bounded path.</li>
+  <li><b>k-Path Coverage:</b> obtained by dividing reached by total. Witnesses are emitted before path-feasibility analysis, so under deeply correlated branches some witnesses may be infeasible and counted in the denominator. See <a href="/docs/coverage/#k-path-coverage">Coverage Analysis</a> for the supporting flags <b>--k-path-witness-depth</b> and <b>--k-path-max-goals</b>, and for the Phase-1 over-approximation caveat.</li>
+</ul>
+</p>
+
+<p>
+Both <b>--branch-coverage</b> and <b>--k-path-coverage</b> can be paired with <b>--generate-ctest-testcase</b> to materialise the reached witnesses as runnable CTest cases driven by concrete <code>__VERIFIER_nondet_*</code> values; see <a href="/docs/c-cpp/ctest-gen/">C/C++ CTest Test Case Generation</a>.
 </p>
 
 ## Supported SMT backends {#smt-backends}

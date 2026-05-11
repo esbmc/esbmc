@@ -275,12 +275,20 @@ private:
   exprt
   handle_min_max(const std::string &func_name, irep_idt comparison_op) const;
 
+  // Tuple method detection and handling (count, index)
+  bool is_tuple_method_call() const;
+  exprt handle_tuple_method() const;
+
   // Dict method detection and handling
   bool is_dict_method_call() const;
   exprt handle_dict_method() const;
 
   // Dict class method detection (e.g. dict.fromkeys([1, 2, 3]))
   bool is_dict_class_method_call() const;
+
+  // Set method detection and handling
+  bool is_set_method_call() const;
+  exprt handle_set_method() const;
 
   // List method detection and handling
   bool is_list_method_call() const;
@@ -309,7 +317,7 @@ private:
   exprt validate_re_module_args() const;
 
   bool is_any_call() const;
-  exprt handle_any() const;
+  exprt handle_any();
   bool is_all_call() const;
   exprt handle_all();
 
