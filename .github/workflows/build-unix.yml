@@ -35,6 +35,7 @@ jobs:
         run: ./scripts/build.sh ${{ inputs.build-flags }}
         env:
           CMAKE_BUILD_PARALLEL_LEVEL: ${{ runner.os == 'Linux' && '16' || '4' }}
+          PIP_BREAK_SYSTEM_PACKAGES: "1"
 
       - uses: actions/upload-artifact@v4
         with:
