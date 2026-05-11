@@ -5,40 +5,31 @@
 // Contributed by Nathan Sidwell 14 Sep 2002 <nathan@codesourcery.com>
 
 // PR 7768 template dtor pretty function wrong
+//
+// ESBMC uses the Clang frontend, whose __PRETTY_FUNCTION__ format
+// ("X<void>::X() [T = void]") differs from GCC's
+// ("X<T>::X() [with T = void]"). The implementation-defined wording is
+// allowed to differ across compilers; this regression asserts the form
+// ESBMC actually produces.
 
 #include <string.h>
 
-static size_t current = 0;
-static bool error = false;
+static bool ctor_ok = false;
+static bool dtor_ok = false;
 
-static char const *names[] =
-{
-  "X<T>::X() [with T = void]",
-  "X<T>::~X() [with T = void]",
-  0
-};
-
-void Verify (char const *ptr)
-{
-  error = strcmp (ptr, names[current++]);
-}
-  
 template <typename T>
 struct X
 {
-  X() { Verify (__PRETTY_FUNCTION__); }
-  ~X() { Verify (__PRETTY_FUNCTION__); }
+  X()  { ctor_ok = (strcmp(__PRETTY_FUNCTION__, "X<void>::X() [T = void]") == 0); }
+  ~X() { dtor_ok = (strcmp(__PRETTY_FUNCTION__, "X<void>::~X() [T = void]") == 0); }
 };
 
 int main()
 {
   {
     X<void> x;
-    
-    if (error)
-      assert(0 == ( current));
+    assert(ctor_ok);
   }
-  if (error)
-    assert(0 == ( current));
+  assert(dtor_ok);
   return 0;
 }
