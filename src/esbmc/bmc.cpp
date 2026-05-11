@@ -926,27 +926,39 @@ void report_coverage(
   {
     const size_t total = goto_coveraget::total_kpath;
     const size_t spanning = goto_coveraget::total_kpath_spanning;
-    const size_t tracked_instance = reached_claims.size();
+
+    // Phase-2 (issue #4335): both numerator and denominator must restrict
+    // to maximal goals under the atom-multiset subsumption order (Marré-
+    // Bertolino, IEEE TSE 2003). Filter reached_claims against
+    // k_path_spanning_redundant so a reached-but-subsumed goal does not
+    // inflate the numerator against the maximal-only denominator.
+    const auto &redundant = goto_coveraget::k_path_spanning_redundant;
+    auto is_maximal = [&redundant](const std::string &claim_sig)
+    {
+      // claim_sig = "msg\tloc"; loc has no tabs, so rfind is robust if a
+      // future emission path puts a tab in msg.
+      const auto tab = claim_sig.rfind('\t');
+      return redundant.count(
+               {claim_sig.substr(0, tab), claim_sig.substr(tab + 1)}) == 0;
+    };
+
+    const size_t tracked_instance =
+      std::count_if(reached_claims.begin(), reached_claims.end(), is_maximal);
+
     log_success("\n[Coverage]\n");
     log_result("k-Path Witnesses : {}", total);
     log_result("Spanning Set : {}", spanning);
     log_result("Reached : {}", tracked_instance);
 
+    // Listing shows every reached claim regardless of maximality so the
+    // user can see which subsumed goals were also reached — this is a
+    // diagnostic flag, not a coverage-formula display.
     if (options.get_bool_option("k-path-coverage-claims"))
       for (const auto &claim : reached_claims)
         log_status("  {}", prettify_solidity_expr(claim));
 
-    // Phase-2 (issue #4335): denominator is the spanning-set size — the
-    // number of maximal goals under the atom-multiset subsumption order
-    // (Marré-Bertolino, IEEE TSE 2003). Subsumed goals never widen the
-    // denominator since covering a maximal goal implies covering its
-    // subsumed prefixes. Cap at 100% in case `tracked_instance` exceeds
-    // |spanning_set| due to subsumed-and-reached emissions.
     if (spanning != 0)
-    {
-      const double pct = tracked_instance * 100.0 / spanning;
-      log_result("k-Path Coverage: {}%", pct > 100.0 ? 100.0 : pct);
-    }
+      log_result("k-Path Coverage: {}%", tracked_instance * 100.0 / spanning);
     else
       log_result("k-Path Coverage: N/A (no k-path goals)");
   }
@@ -1023,6 +1035,11 @@ void report_coverage(
     report["summary"]["total"] = total;
     report["summary"]["covered"] = covered_count;
     report["summary"]["uncovered"] = total - covered_count;
+    // TODO(#4335): for k-path coverage, this still uses the Phase-1
+    // all/all formula and so diverges from the terminal `k-Path
+    // Coverage` line, which is the spanning-set-filtered percentage.
+    // `claim_entry["feasibility"]` is already populated above, so a
+    // follow-up can compute the maximal-only ratio here.
     report["summary"]["percentage"] =
       total > 0 ? covered_count * 100.0 / total : 0.0;
 

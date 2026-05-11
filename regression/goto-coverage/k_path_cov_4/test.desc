@@ -3,6 +3,6 @@ main.c
 --k-path-coverage=2 --unwind 2 --no-unwinding-assertions
 ^k-Path Witnesses : 6$
 ^Spanning Set : 4$
-^Reached : 4$
-^k-Path Coverage: 100%$
+^Reached : 2$
+^k-Path Coverage: 50%$
 ^VERIFICATION FAILED$

@@ -3,20 +3,20 @@
 //
 // Three correlated branches at N=3. Each subsequent branch is fully
 // determined by `(a > 0)`, so out of the 14 emitted goals (2 depth-1 +
-// 4 depth-2 + 8 depth-3) only 6 are feasible — 2 at each prefix
-// length. Phase-1 reports 6/14 ≈ 42.86%.
+// 4 depth-2 + 8 depth-3) only 6 are reachable — 2 at each prefix
+// length. Phase-1 would report 6/14 ≈ 42.86%.
 //
-// Spanning-set scoring drops the 6 subsumed shorter-prefix goals
-// (every depth-1 and depth-2 atom-set is a proper subset of at least
-// one depth-3 atom-set), leaving 8 maximal depth-3 emissions in the
-// denominator. Reaching the 2 feasible depth-3 witnesses plus their
-// 4 reached depth-{1,2} subsumed prefixes yields 6 / 8 = 75% — a
-// strictly tighter lower bound than Phase-1 without ever exceeding
-// the true coverage of 25% (only 2 of 8 maximal goals are reachable).
+// Spanning-set scoring restricts both numerator and denominator to
+// the maximal subsumption-order elements. Every depth-1 and depth-2
+// atom-set is a proper subset of at least one depth-3 atom-set, so
+// the 6 subsumed shorter-prefix goals leave the spanning set, and
+// only the 8 depth-3 maximal emissions remain. Of those 8, just the
+// 2 consistent depth-3 paths are reachable, yielding 2 / 8 = 25%
+// — the exact spanning-set coverage when correlated branches keep
+// most maximal goals genuinely unreachable.
 //
-// Differs from test 4 (which uses N=2 and reaches 100%) by exercising
-// the spanning-set machinery on a *partial* coverage case where some
-// maximal goals stay genuinely uncovered.
+// Differs from test 4 (which uses N=2 and reaches 50%) by exercising
+// the spanning-set machinery on a deeper partial-coverage case.
 int main()
 {
   int a;
