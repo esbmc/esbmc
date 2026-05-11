@@ -3457,22 +3457,46 @@ bool clang_c_convertert::get_cast_expr(
     //     byte offset here would corrupt the symbolic model.
     //   - 'Base2 *o = new Derived()' — parent is not MemberExpr at all.
     //     Must remain unadjusted for ESBMC's delete model.
-    // NOTE: 'static_cast<B8*>(ptr)->eval()' is not yet handled correctly
-    // (separate issue tracked by the github_3876_static_cast KNOWNBUG test).
+    //
+    // The check walks through transparent wrapper expressions (casts, parens)
+    // to handle cases like 'static_cast<B8*>(ptr)->eval()'.
     bool is_method_receiver = false;
     {
-      auto parents = ASTContext->getParents(cast);
-      if (!parents.empty())
+      const clang::Stmt *node = &cast;
+      while (true)
       {
-        const clang::MemberExpr *me = parents.begin()->get<clang::MemberExpr>();
-        if (me)
+        auto parents = ASTContext->getParents(*node);
+        if (parents.empty())
+          break;
+
+        if (const auto *me = parents.begin()->get<clang::MemberExpr>())
         {
           auto grandparents = ASTContext->getParents(*me);
           if (
             !grandparents.empty() &&
             grandparents.begin()->get<clang::CXXMemberCallExpr>())
             is_method_receiver = true;
+          break;
         }
+
+        const clang::Stmt *parent_stmt = parents.begin()->get<clang::Stmt>();
+        if (!parent_stmt)
+          break;
+
+        // Walk through transparent wrappers
+        if (
+          llvm::isa<clang::ParenExpr>(parent_stmt) ||
+          llvm::isa<clang::ImplicitCastExpr>(parent_stmt) ||
+          llvm::isa<clang::CXXStaticCastExpr>(parent_stmt) ||
+          llvm::isa<clang::CStyleCastExpr>(parent_stmt) ||
+          llvm::isa<clang::CXXFunctionalCastExpr>(parent_stmt) ||
+          llvm::isa<clang::CXXConstCastExpr>(parent_stmt))
+        {
+          node = parent_stmt;
+          continue;
+        }
+
+        break;
       }
     }
 
