@@ -145,16 +145,47 @@ struct counter_loop_info
   type2tc type;
 };
 
-/// Try to parse @p guard as `i REL constant` or `constant REL i`, where
-/// REL ∈ {<, <=, >, >=}. Returns true and fills @p info on success.
-/// The induction var's type and symbol2tc are recorded.
+/// Negate a relation kind: `<` ↔ `>=`, `<=` ↔ `>`.
+counter_loop_info::relation_kind negate_relation(
+  counter_loop_info::relation_kind r)
+{
+  switch (r)
+  {
+  case counter_loop_info::LT:
+    return counter_loop_info::GE;
+  case counter_loop_info::LE:
+    return counter_loop_info::GT;
+  case counter_loop_info::GT:
+    return counter_loop_info::LE;
+  case counter_loop_info::GE:
+    return counter_loop_info::LT;
+  }
+  return counter_loop_info::LT; // unreachable
+}
+
+/// Try to parse @p guard as the EXIT condition of a counter loop.
+/// Accepts both shapes the frontend / interval analysis produce:
+///   - `!(REL(i, c))` — original IF !cond form (cond is the
+///     continuation, the inner REL is the continuation relation).
+///   - `REL(i, c)` — interval-analysis-rewritten form (REL is the
+///     exit relation directly).
+///
+/// Stores the CONTINUATION relation in @p info.rel (so the post-value
+/// formulas can stay phrased in terms of "iterate while cond").
 bool parse_guard(const expr2tc &guard, counter_loop_info &info)
 {
-  // The IF instruction's guard is `!cond` where cond was the original
-  // loop condition. Strip the outer `not`.
-  if (!is_not2t(guard))
-    return false;
-  const expr2tc &cond = to_not2t(guard).value;
+  expr2tc cond;
+  bool inner_is_continuation;
+  if (is_not2t(guard))
+  {
+    cond = to_not2t(guard).value;
+    inner_is_continuation = true;
+  }
+  else
+  {
+    cond = guard;
+    inner_is_continuation = false;
+  }
 
   expr2tc lhs, rhs;
   if (is_lessthan2t(cond))
@@ -183,6 +214,11 @@ bool parse_guard(const expr2tc &guard, counter_loop_info &info)
   }
   else
     return false;
+
+  // If the parsed relation is the exit form, negate it to recover the
+  // continuation form expected downstream.
+  if (!inner_is_continuation)
+    info.rel = negate_relation(info.rel);
 
   // One side must be the induction var (a symbol2t), the other a
   // constant_int2t. Constant on the right is the canonical shape; if
@@ -545,7 +581,11 @@ bool simplify_function_once(goto_functiont &fn)
         continue;
       body_first = std::next(loop_head);
       after_loop = *loop_head->targets.begin();
-      // The IF's guard is `!cond` already — the exit condition.
+      // The IF's guard IS the exit condition (semantically: "GOTO E
+      // if true"). Shape: typically `!(cond)` for non-simplified
+      // input, or the un-negated exit relation (`i >= N`) when
+      // interval analysis already rewrote it. parse_guard handles
+      // both.
       exit_guard = loop_head->guard;
       is_dowhile = false;
     }
@@ -553,8 +593,9 @@ bool simplify_function_once(goto_functiont &fn)
     {
       body_first = loop_head;
       after_loop = std::next(loop_exit);
-      // Back-edge's guard is `cond` (continuation). Negate for the
-      // exit condition. make_not strips an outer `not` if present.
+      // Back-edge's guard is the continuation `cond` (jump back if
+      // true). Negate for the exit condition. make_not strips an
+      // outer `not` if present so the result stays canonical.
       exit_guard = loop_exit->guard;
       make_not(exit_guard);
       is_dowhile = true;
