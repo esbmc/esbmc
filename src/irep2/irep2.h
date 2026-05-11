@@ -129,6 +129,7 @@
   BOOST_PP_LIST_CONS(signbit,                                                  \
   BOOST_PP_LIST_CONS(concat,                                                   \
   BOOST_PP_LIST_CONS(extract,                                                  \
+  BOOST_PP_LIST_CONS(phi,                                                      \
   BOOST_PP_LIST_CONS(capability_base,                                          \
   BOOST_PP_LIST_CONS(capability_top,                                           \
   BOOST_PP_LIST_CONS(forall,                                                   \
@@ -136,7 +137,7 @@
   BOOST_PP_LIST_CONS(isinstance,                                               \
   BOOST_PP_LIST_CONS(hasattr,                                                  \
   BOOST_PP_LIST_CONS(isnone,                                                   \
-  BOOST_PP_LIST_NIL))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+  BOOST_PP_LIST_NIL)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
 // clang-format on
 
 // Even crazier forward decls,
