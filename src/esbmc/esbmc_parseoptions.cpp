@@ -1599,11 +1599,17 @@ int esbmc_parseoptionst::do_bmc_strategy(
       //
       // IS SAT is NOT a success condition: it only witnesses one
       // terminating path from one havoc'd state, which doesn't prove
-      // all paths terminate. A program like
-      //   `while (x > 0) { if (nondet()) x--; }`
-      // has a terminating witness AND a stuttering non-terminating
-      // path; the IS finds the former but the property fails on the
-      // latter. Treat IS SAT as inconclusive and iterate k.
+      // all paths terminate.
+      //
+      // IS UNSAT is only sound when the k-induction havoc actually
+      // covered the loop variables. Under --add-symex-value-sets,
+      // loops that only modify pointers are SKIPPED by the havoc
+      // transform (see goto_k_induction.cpp:91-94), so the IS just
+      // runs the concrete initial state forward. IS UNSAT then means
+      // "loop hasn't exited within k iters from initial state" —
+      // which says nothing about non-termination; the loop may simply
+      // need more iters. Disable the IS non-termination signal in
+      // that mode and rely on FC alone.
       //
       // Skip IS for k = 1 (degenerates to a base-case check).
       if (does_forward_condition_hold(options, goto_functions, k_step)
@@ -1616,7 +1622,8 @@ int esbmc_parseoptionst::do_bmc_strategy(
         return 0;
       }
 
-      if (k_step > 1)
+      bool is_havoc_reliable = !options.get_bool_option("add-symex-value-sets");
+      if (k_step > 1 && is_havoc_reliable)
       {
         tvt is_res = is_inductive_step_violated(options, goto_functions, k_step);
         if (is_res.is_false())
