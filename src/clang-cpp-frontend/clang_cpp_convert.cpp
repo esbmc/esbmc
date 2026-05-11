@@ -1549,11 +1549,16 @@ bool clang_cpp_convertert::build_destructor_chain(
     return false;
 
   // Locate `this` for the destructor we're synthesising. Both member and
-  // base chains build their argument from `this`.
+  // base chains build their argument from `this`. By the time
+  // get_function_body runs for a CXXDestructor, the implicit `this`
+  // parameter must already have been registered in this_map by
+  // get_function; a miss is a frontend invariant violation, not a
+  // routinely-skippable case.
   std::size_t this_addr = reinterpret_cast<std::size_t>(fd.getFirstDecl());
   auto this_it = this_map.find(this_addr);
-  if (this_it == this_map.end())
-    return false;
+  assert(
+    this_it != this_map.end() &&
+    "destructor reached body synthesis without a registered `this`");
   const typet this_ptr_type = this_it->second.second;
 
   // 1. Member-subobject destructors, in reverse declaration order.
@@ -1567,6 +1572,10 @@ bool clang_cpp_convertert::build_destructor_chain(
     clang::QualType field_qt = field->getType();
 
     // Only class-typed members can have a destructor to call.
+    // TODO: array-of-class members (`T member[N]`) are silently skipped
+    // here because getAsCXXRecordDecl() returns null for array types.
+    // C++ [class.dtor]/9 requires element destructors to run in reverse
+    // index order; covered by KNOWNBUG `cpp/dtor_array_member`.
     if (!field_qt->getAsCXXRecordDecl())
       continue;
 
@@ -1596,6 +1605,11 @@ bool clang_cpp_convertert::build_destructor_chain(
 
   // 2. Base-subobject destructors, in reverse declaration order.
   //    Virtual bases are handled by the most-derived class only; skip here.
+  //    TODO: ESBMC does not yet model the Itanium ABI's split between the
+  //    complete-object destructor (D1, walks virtual bases exactly once) and
+  //    the base-object destructor (D2, skips them). Until that split exists,
+  //    virtual bases are never destroyed; covered by KNOWNBUG
+  //    `cpp/dtor_virtual_base`.
   std::vector<const clang::CXXBaseSpecifier *> bases;
   for (const auto &b : parent->bases())
     bases.push_back(&b);
