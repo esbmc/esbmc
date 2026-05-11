@@ -37,6 +37,12 @@ public:
   BigInt interleaving_number;
   BigInt interleaving_failed;
 
+  /// Last CEX trace built by error_trace(). Populated for SAT results,
+  /// empty otherwise. K-induction's outer driver inspects this after an
+  /// inductive-step refutation to extract loop-variable values for the
+  /// next-k hint (see learn_k_from_is_trace).
+  goto_tracet last_error_trace;
+
   virtual smt_convt::resultt start_bmc();
   virtual smt_convt::resultt run(std::shared_ptr<symex_target_equationt> &eq);
   virtual ~bmct() = default;

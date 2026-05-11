@@ -1654,9 +1654,10 @@ int esbmc_parseoptionst::do_bmc_strategy(
       // Don't run inductive step for k_step == 1
       if (k_step > 1)
       {
-        if (
-          !is_bcv && is_inductive_step_violated(options, goto_functions, k_step)
-                       .is_false())
+        uint64_t is_hint = 0;
+        tvt is_res =
+          is_inductive_step_violated(options, goto_functions, k_step, is_hint);
+        if (!is_bcv && is_res.is_false())
         {
           if (is_coverage)
             report_coverage(
@@ -1667,6 +1668,13 @@ int esbmc_parseoptionst::do_bmc_strategy(
               ctest_gen);
           return conclude();
         }
+        // IS produced a refutation. If its CEX exposes a larger
+        // loop-variable value than the current hint, raise the hint.
+        // The hint is consumed at most once (hint_consumed gates the
+        // jump below), but we keep updating it across IS iterations
+        // so the value adopted is the max the IS model ever picked.
+        if (is_res.is_true() && is_hint > fc_hint && !hint_consumed)
+          fc_hint = is_hint;
       }
     }
     // termination
@@ -1961,6 +1969,27 @@ static uint64_t learn_k_from_goto_bounds(const goto_functionst &goto_functions)
   return best;
 }
 
+/// Dynamic fallback: scan an inductive-step CEX trace for the largest
+/// constant-int value the model assigned to any variable. Used when the
+/// static goto-bounds scan returned 0 (loop bound is symbolic in the
+/// IR — e.g. `for(i=0; i<n; i++)` where `n` is a function parameter
+/// that interval analysis couldn't fold). The IS picks the model's
+/// adversarial value, which for loop-bound patterns is often the bound
+/// the loop will reach.
+///
+/// Considers only ASSIGNMENT steps. Returns 0 when no usable signal.
+static uint64_t learn_k_from_cex_assignments(const goto_tracet &trace)
+{
+  uint64_t best = 0;
+  for (const auto &step : trace.steps)
+  {
+    if (!step.is_assignment())
+      continue;
+    collect_max_int_constant(step.value, best);
+  }
+  return best;
+}
+
 tvt esbmc_parseoptionst::does_forward_condition_hold(
   optionst &options,
   goto_functionst &goto_functions,
@@ -2033,8 +2062,11 @@ tvt esbmc_parseoptionst::does_forward_condition_hold(
 tvt esbmc_parseoptionst::is_inductive_step_violated(
   optionst &options,
   goto_functionst &goto_functions,
-  const uint64_t &k_step)
+  const uint64_t &k_step,
+  uint64_t &next_k_hint)
 {
+  next_k_hint = 0;
+
   if (options.get_bool_option("disable-inductive-step"))
     return tvt(tvt::TV_UNKNOWN);
 
@@ -2064,6 +2096,8 @@ tvt esbmc_parseoptionst::is_inductive_step_violated(
   switch (res)
   {
   case smt_convt::P_SATISFIABLE:
+    // IS refutation: model exists. Scan it for the next-k hint.
+    next_k_hint = learn_k_from_cex_assignments(bmc.last_error_trace);
     return tvt(tvt::TV_TRUE);
 
   case smt_convt::P_SMTLIB:

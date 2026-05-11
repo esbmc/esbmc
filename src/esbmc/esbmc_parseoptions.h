@@ -85,10 +85,15 @@ protected:
     goto_functionst &goto_functions,
     const uint64_t &k_step);
 
+  /// Run the inductive-step check at @p k_step.
+  /// On TV_TRUE (refutation, model exists), populates @p next_k_hint with
+  /// the largest constant-int value the model assigned in the CEX. Used
+  /// as a dynamic next-k hint when the static goto-bounds hint is 0.
   tvt is_inductive_step_violated(
     optionst &options,
     goto_functionst &goto_functions,
-    const uint64_t &k_step);
+    const uint64_t &k_step,
+    uint64_t &next_k_hint);
 
   void diagnose_unknown_properties(
     optionst &options,
