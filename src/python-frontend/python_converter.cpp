@@ -5227,31 +5227,17 @@ void python_converter::handle_assignment_type_adjustments(
     lambda_handler_->handle_lambda_assignment(lhs_symbol, lhs, rhs);
     return;
   }
-  // Keep Optional[T] assignments type-stable: assigning `None` or `T`
-  // should always store an Optional[T] value.
-  else if (
-    lhs_symbol && lhs_symbol->type.is_struct() &&
-    to_struct_type(lhs_symbol->type).tag().as_string().starts_with("tag-Optional_"))
-  {
-    if (rhs.type() == none_type())
-      rhs = wrap_in_optional(rhs, lhs_symbol->type);
-    else if (
-      !(rhs.type().is_struct() &&
-        to_struct_type(rhs.type()).tag().as_string().starts_with("tag-Optional_")))
-      rhs = wrap_in_optional(rhs, lhs_symbol->type);
-    lhs.type() = lhs_symbol->type;
-  }
   // Handle tuple assignments with generic tuple annotation
   else if (
-    lhs_symbol && rhs.type().id() == "struct" &&
-    (lhs_symbol->type.id() == "empty" || lhs_symbol->type == none_type()))
+    lhs_symbol && lhs_symbol->type.id() == "empty" &&
+    rhs.type().id() == "struct")
   {
     const struct_typet &rhs_struct = to_struct_type(rhs.type());
 
     // Check if RHS is a tuple (has tuple tag pattern)
     if (rhs_struct.tag().as_string().find("tag-tuple") == 0)
     {
-      // Update symbol type from empty/None to concrete tuple type
+      // Update symbol type from empty to concrete tuple type
       lhs_symbol->type = rhs.type();
       lhs.type() = rhs.type();
       lhs_symbol->value = rhs;
@@ -5367,23 +5353,12 @@ void python_converter::handle_assignment_type_adjustments(
         }
       }
     }
-  else if (rhs.type() == none_type())
-  {
-      // Keep unannotated `x = None` stable as Optional[Any] so later
-      // assignments can be merged without None-vs-value type crashes.
-      if (lhs_symbol->type.id().empty() || lhs_symbol->type == none_type())
-      {
-        typet opt_any = type_handler_.build_optional_type(any_type());
-        lhs_symbol->type = opt_any;
-        lhs.type() = opt_any;
-        rhs = wrap_in_optional(rhs, opt_any);
-      }
-      else
-      {
-        lhs_symbol->type = rhs.type();
-        lhs.type() = rhs.type();
-      }
-  }
+    else if (rhs.type() == none_type())
+    {
+      // Adjust pointer_type() to pointer_typet(empty_typet())
+      lhs_symbol->type = rhs.type();
+      lhs.type() = rhs.type();
+    }
     // No annotation or preprocessor-inferred Any: propagate rhs type to lhs.
     else if (
       (!has_annotation ||
@@ -7559,43 +7534,7 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
       }
     }
 
-    // irep2 if2t requires branch types to exactly match result_type.
-    // Coerce both branches when resolve_ternary_type returns a widened type
-    // (for example tuple-specific vs tuple-generic forms).
-    if (then.type() != result_type)
-      then = typecast_exprt(then, result_type);
-    if (else_expr.type() != result_type)
-      else_expr = typecast_exprt(else_expr, result_type);
-
-    // Prefer statement lowering to avoid irep2 `if2t` type-id assertions in
-    // mixed Optional/tuple paths.
-    if (current_block)
-    {
-      symbolt ifexp_tmp = create_return_temp_variable(
-        result_type, get_location_from_decl(ast_node), "ifexp");
-      symbol_table_.add(ifexp_tmp);
-      exprt ifexp_tmp_expr = symbol_expr(ifexp_tmp);
-
-      code_declt ifexp_decl(ifexp_tmp_expr);
-      ifexp_decl.location() = get_location_from_decl(ast_node);
-      current_block->copy_to_operands(ifexp_decl);
-
-      code_assignt then_assign(ifexp_tmp_expr, then);
-      then_assign.location() = get_location_from_decl(ast_node["body"]);
-      code_assignt else_assign(ifexp_tmp_expr, else_expr);
-      else_assign.location() = get_location_from_decl(ast_node["orelse"]);
-
-      code_ifthenelset if_stmt;
-      if_stmt.location() = get_location_from_decl(ast_node);
-      if_stmt.cond() = cond;
-      if_stmt.then_case() = then_assign;
-      if_stmt.else_case() = else_assign;
-      current_block->copy_to_operands(if_stmt);
-
-      return ifexp_tmp_expr;
-    }
-
-    // Fallback when there is no statement block to append temporaries.
+    // Create fully symbolic if expression
     exprt if_expr("if", result_type);
     if_expr.copy_to_operands(cond, then, else_expr);
     return if_expr;

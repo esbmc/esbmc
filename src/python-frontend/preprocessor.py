@@ -3241,6 +3241,16 @@ class Preprocessor(ast.NodeTransformer):
         tuple(sorted([elem, elem2]))) can infer the element type from the loop
         variable when the iterable has a known generic annotation like List[float].
         """
+        if (
+            not isinstance(node.iter, ast.Call)
+            or not isinstance(node.iter.func, ast.Name)
+            or node.iter.func.id != "enumerate"
+            or len(node.iter.args) < 1
+            or not isinstance(node.target, (ast.Tuple, ast.List))
+            or len(node.target.elts) < 2
+        ):
+            return
+
         iterable = node.iter.args[0]
         annotation_id = self._get_iterable_type_annotation(iterable)
         element_type = self._get_element_type_from_container(annotation_id, iterable)
