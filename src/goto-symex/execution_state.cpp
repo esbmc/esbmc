@@ -273,13 +273,20 @@ void execution_statet::symex_step(reachability_treet &art)
       (instruction.function == "c:@F@main" ||
        instruction.function == "c:@F@main#") &&
       !options.get_bool_option("deadlock-check") &&
-      !options.get_bool_option("memory-leak-check"))
+      !options.get_bool_option("memory-leak-check") &&
+      !options.get_bool_option("termination"))
     {
       // check whether we reached the end of the main function and
       // whether we are not checking for (local and global) deadlocks and memory leaks.
       // We should end the main thread to avoid exploring further interleavings
       // TODO: once we support at_exit, we should check this code
       // TODO: we should support verifying memory leaks in multi-threaded C programs.
+      //
+      // Skipped under --termination: the strategy inserts an
+      // `assert(false)` after the main() call in __ESBMC_main to
+      // detect terminating paths. The assume(false) here would kill
+      // the path before reaching that marker; the assertion would
+      // never become a VCC.
       assume(gen_false_expr());
       end_thread();
       interleaving_unviable = true;
