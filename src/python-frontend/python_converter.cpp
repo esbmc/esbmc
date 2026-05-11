@@ -2946,8 +2946,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
   // is academic for the safety properties we check.
   if (
     element["func"]["_type"] == "Name" &&
-    (element["func"]["id"] == "set" ||
-     element["func"]["id"] == "frozenset") &&
+    (element["func"]["id"] == "set" || element["func"]["id"] == "frozenset") &&
     element.contains("args") && element["args"].size() == 1)
   {
     exprt iterable_expr = get_expr(element["args"][0]);
