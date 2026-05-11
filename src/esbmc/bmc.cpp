@@ -1026,6 +1026,23 @@ void report_coverage(
       if (c["status"] == "covered")
         covered_count++;
 
+    // For k-path coverage, restrict the summary to maximal goals so the
+    // JSON percentage matches the terminal spanning-set-filtered output.
+    // Individual claims keep their `feasibility` annotation so consumers
+    // that want raw counts can still derive them from the `claims` array.
+    if (is_k_path_cov)
+    {
+      total = 0;
+      covered_count = 0;
+      for (const auto &c : claims_json)
+        if (c["feasibility"] == "feasible")
+        {
+          ++total;
+          if (c["status"] == "covered")
+            ++covered_count;
+        }
+    }
+
     json report;
     report["coverage_type"] = cov_type;
     report["source_files"] = json::array();
@@ -1035,11 +1052,6 @@ void report_coverage(
     report["summary"]["total"] = total;
     report["summary"]["covered"] = covered_count;
     report["summary"]["uncovered"] = total - covered_count;
-    // TODO(#4335): for k-path coverage, this still uses the Phase-1
-    // all/all formula and so diverges from the terminal `k-Path
-    // Coverage` line, which is the spanning-set-filtered percentage.
-    // `claim_entry["feasibility"]` is already populated above, so a
-    // follow-up can compute the maximal-only ratio here.
     report["summary"]["percentage"] =
       total > 0 ? covered_count * 100.0 / total : 0.0;
 
