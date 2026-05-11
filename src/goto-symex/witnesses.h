@@ -85,10 +85,20 @@ public:
     target,
     function_enter,
     function_return,
-    branching
+    branching,
+    unknown // sentinel for unrecognised types — get_waypoints skips these
   };
 
-  Type type;
+  enum Action
+  {
+    follow, // must be passed exactly once (normal traversal)
+    avoid,  // must never be passed
+    cycle   // must be passed infinitely (liveness witnesses)
+  };
+
+  Type type = unknown;
+  Action action = follow;
+  int segment_idx = 0; // index of the containing segment (0-based)
   std::string file;
   std::string value;
   std::string format;
@@ -105,10 +115,11 @@ public:
     loop_invariant,
     loop_transition_invariant,
     location_invariant,
-    location_transition_invariant
+    location_transition_invariant,
+    unknown // sentinel for unrecognised types
   };
 
-  Type type;
+  Type type = unknown;
   std::string file;
   std::string value;
   std::string format;

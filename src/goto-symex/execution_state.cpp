@@ -64,12 +64,29 @@ execution_statet::execution_statet(
     goto_program,
     0);
 
-  // Violation-witness: load waypoints from witness file and attach to initial state.
+  // Violation-witness: populate branching waypoints (for symex_goto) and build
+  // the assumption-segment lookup table (for run_intrinsic).
+  // avoid-action waypoints are excluded: they constrain paths that must NOT
+  // be taken and are not represented in our forward-replay model.
   if (options.get_bool_option("validate-violation-witness"))
   {
     const std::string &witness_path = options.get_option("witness");
     if (!witness_path.empty())
-      state.witness_waypoints = yaml_parser::get_waypoints(witness_path);
+    {
+      for (const auto &wp : yaml_parser::get_waypoints(witness_path))
+      {
+        if (wp.action == waypoint::avoid)
+          continue;
+        if (wp.type == waypoint::branching || wp.type == waypoint::target)
+          state.witness_waypoints.push_back(wp);
+        else if (wp.type == waypoint::assumption && wp.line >= 0)
+        {
+          irep_idt line_id(std::to_string(wp.line.to_int64()));
+          state.witness_assumption_line_segments[line_id].push_back(
+            wp.segment_idx);
+        }
+      }
+    }
   }
 
   threads_state.push_back(state);
@@ -248,6 +265,20 @@ void execution_statet::symex_step(reachability_treet &art)
   // We use this to break when we are about to run an instruction through symex
   if (break_insn != 0 && break_insn == instruction.location_number)
     breakpoint();
+
+  // Violation-witness: match target waypoints.  A target marks the exact
+  // instruction where the specification violation occurs; it carries no
+  // constraint and is never "evaluated" — we simply advance the cursor when
+  // execution arrives at that location, confirming the witness path led here.
+  if (!cur_state->witness_waypoints.empty())
+  {
+    const auto &loc = instruction.location;
+    BigInt line(loc.get_line().c_str(), 10);
+    const waypoint *wp =
+      cur_state->peek_witness_waypoint(waypoint::target, loc.get_function(), line);
+    if (wp)
+      cur_state->advance_witness_cursor();
+  }
 
   switch (instruction.type)
   {

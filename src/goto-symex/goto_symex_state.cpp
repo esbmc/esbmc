@@ -579,5 +579,11 @@ const waypoint *goto_symex_statet::peek_witness_waypoint(
 void goto_symex_statet::advance_witness_cursor()
 {
   if (witness_cursor < witness_waypoints.size())
+  {
+    // A follow waypoint marks the end of its segment; advance the segment
+    // counter so that run_intrinsic will gate assumption injection correctly.
+    if (witness_waypoints[witness_cursor].action == waypoint::follow)
+      ++current_witness_segment;
     ++witness_cursor;
+  }
 }

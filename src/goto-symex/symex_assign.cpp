@@ -1003,83 +1003,33 @@ void goto_symext::symex_assign_bitfield(
   return symex_assign_rec(val, full_lhs, new_rhs, full_rhs, guard, hidden);
 }
 
-/// Parse the VALUE part of a witness constraint string "LHS == VALUE"
-/// and produce a constant expr2tc of the given type.
-/// Returns a nil expr2tc if parsing fails.
-static expr2tc parse_witness_constraint_value(
-  const std::string &constraint,
-  const type2tc &type)
-{
-  // Extract value after " == "
-  std::string val = constraint;
-  const std::string sep = " == ";
-  auto pos = constraint.find(sep);
-  if (pos != std::string::npos)
-    val = constraint.substr(pos + sep.size());
-
-  // Trim trailing whitespace and semicolons
-  while (!val.empty() && (val.back() == ';' || std::isspace((unsigned char)val.back())))
-    val.pop_back();
-
-  if (val.empty())
-    return expr2tc();
-
-  if (is_bv_type(type) || is_unsignedbv_type(type) || is_signedbv_type(type))
-  {
-    try
-    {
-      // BigInt ctor from decimal string
-      BigInt v(val.c_str(), 10);
-      return constant_int2tc(type, v);
-    }
-    catch (...)
-    {
-      return expr2tc();
-    }
-  }
-
-  if (is_bool_type(type))
-  {
-    bool v = (val == "1" || val == "true");
-    return (v ? gen_true_expr() : gen_false_expr());
-  }
-
-  return expr2tc();
-}
-
 void goto_symext::replace_nondet(expr2tc &expr)
 {
   if (
     is_sideeffect2t(expr) && to_sideeffect2t(expr).kind == sideeffect2t::nondet)
   {
+    // Violation-witness: pop the front entry only when its source line matches
+    // the current instruction, ensuring each assumption is applied to the
+    // correct nondet call and not to an unrelated one on a different line.
+    // witness_fired_pcs in run_intrinsic guarantees each call site enqueues
+    // at most once, so no static-bool guard is needed in the injected source.
+    if (!cur_state->witness_value_queue.empty())
+    {
+      const auto &[wp_line, wp_val] = cur_state->witness_value_queue.front();
+      if (wp_line == cur_state->source.pc->location.get_line())
+      {
+        expr2tc val = wp_val;
+        cur_state->witness_value_queue.pop();
+        if (val->type != expr->type)
+          val = typecast2tc(expr->type, val);
+        expr = val;
+        return;
+      }
+    }
+
     unsigned int &nondet_count = get_nondet_counter();
     expr =
       symbol2tc(expr->type, "nondet$symex::nondet" + i2string(nondet_count++));
-
-    // Violation-witness: if an assumption waypoint matches the current location,
-    // add ASSUME(nondet_sym == witness_value) to constrain the nondet choice.
-    if (!cur_state->witness_waypoints.empty())
-    {
-      const auto &loc = cur_state->source.pc->location;
-      const irep_idt &func = loc.get_function();
-      BigInt line(loc.get_line().c_str(), 10);
-
-      const waypoint *wp = cur_state->peek_witness_waypoint(
-        waypoint::assumption, func, line);
-      if (wp)
-      {
-        expr2tc val = parse_witness_constraint_value(wp->value, expr->type);
-        if (!is_nil_expr(val))
-          assume(equality2tc(expr, val));
-        else
-          log_warning(
-            "witness: could not parse assumption '{}' at {}:{}",
-            wp->value,
-            id2string(func),
-            integer2string(line));
-        cur_state->advance_witness_cursor();
-      }
-    }
   }
   else
   {
