@@ -674,19 +674,38 @@ void simplify_function(goto_functiont &fn)
 
 void goto_loop_simplify(goto_functionst &goto_functions)
 {
-  // Skipped under --unwinding-assertions: an empty loop's presence is
-  // itself observable (it can violate the unwind assertion).
+  // Gated on the user explicitly opting out of the unwinding-
+  // assertion signal (--no-unwinding-assertions) or opting into the
+  // termination reduction (--termination). Outside these two modes
+  // the pass is a no-op.
   //
-  // Skipped when computing coverage: erasing loops drops branch points
-  // that the coverage instrumentation expects to count, distorting the
-  // reported numbers.
+  // Why the gate matters: by default, ESBMC emits an unwinding
+  // assertion at every loop back-edge that fires when the loop
+  // hasn't fully unwound within --unwind k. That assertion is the
+  // user-visible non-termination signal at the chosen depth.
+  // Erasing or rewriting a loop in goto_loop_simplify would suppress
+  // that signal even when the loop body is otherwise side-effect-
+  // free, breaking the verification contract (cf. regression/
+  // bitwuzla/get_model_values, regression/parallel-solving/uthash-1).
   //
-  // Under --termination the pass DOES run, but only the constant-false
-  // exit-guard branch in simplify_function_once fires (gated there).
-  // Path 1 erasure and Path 2 step recognition are skipped because they
-  // would also discard loops whose presence is observable under the
-  // termination reduction.
-  if (config.options.get_bool_option("unwinding-assertions"))
+  // What each mode does:
+  //   --no-unwinding-assertions: Path 1 (erase dead loops with no
+  //     escaping side effects) and Path 2 (step recognition for
+  //     constant-bound counter loops) run. The self-loop and
+  //     constant-false-exit-guard rewrites stay off — symex's loop
+  //     handling already does the right thing in that mode.
+  //
+  //   --termination: only the constant-false-exit-guard rewrite (and
+  //     the single-instruction self-loop rewrite) fire — both gated
+  //     inside simplify_function_once. Path 1 and Path 2 are skipped
+  //     because they would discard loops whose presence is observable
+  //     under the termination reduction.
+  //
+  // Coverage modes: also skipped — erasing loops drops branch points
+  // the coverage instrumentation needs to count.
+  if (
+    !config.options.get_bool_option("no-unwinding-assertions") &&
+    !config.options.get_bool_option("termination"))
     return;
 
   if (
