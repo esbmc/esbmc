@@ -400,9 +400,8 @@ protected:
   // runs at noreturn termination points (e.g. __assert_fail) before
   // the path is truncated with ASSUME false.  The intrinsic is a no-op
   // when --memory-leak-check is off, so it is safe to call always.
-  void emit_noreturn_memleak_checks(
-    const locationt &location,
-    goto_programt &dest);
+  void
+  emit_noreturn_memleak_checks(const locationt &location, goto_programt &dest);
 
   // some built-in functions
   void do_abort(
