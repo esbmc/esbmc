@@ -24,7 +24,9 @@ std::vector<invariant> yaml_parser::read_invariants(const std::string &path)
         const auto &inv_node = c["invariant"];
         if (!inv_node)
           continue;
-        result.push_back(parse_invariant(inv_node));
+        invariant inv = parse_invariant(inv_node);
+        if (inv.type != invariant::unknown)
+          result.push_back(std::move(inv));
       }
     }
   }
@@ -72,19 +74,29 @@ invariant::Type yaml_parser::type_from_string(const std::string &s)
   if (s == "location_transition_invariant")
     return invariant::location_transition_invariant;
 
-  log_error("Unknown invariant type: {}", s);
-  abort();
+  log_warning("Unknown invariant type '{}', skipping invariant", s);
+  return invariant::unknown;
 }
 
 std::vector<waypoint> yaml_parser::get_waypoints(const std::string &path)
 {
-  std::vector<waypoint> result;
+  // Cache the parse result: ESBMC calls get_waypoints twice per run (frontend
+  // injection and symex init) on the same file.  The static avoids redundant
+  // file I/O and YAML parsing on the second call.
+  static std::string cached_path;
+  static std::vector<waypoint> cached_result;
+  if (path == cached_path)
+    return cached_result;
+
+  cached_path = path;
+  cached_result.clear();
   try
   {
     YAML::Node root = YAML::LoadFile(path);
     if (!root || !root.IsSequence())
-      return result;
+      return cached_result;
 
+    int seg_idx = 0;
     for (const auto &entry : root)
     {
       const auto &content = entry["content"];
@@ -102,16 +114,22 @@ std::vector<waypoint> yaml_parser::get_waypoints(const std::string &path)
           const auto &node = wp_node["waypoint"];
           if (!node)
             continue;
-          result.push_back(parse_waypoint(node));
+          waypoint wp = parse_waypoint(node);
+          if (wp.type == waypoint::unknown)
+            continue;
+          wp.segment_idx = seg_idx;
+          cached_result.push_back(std::move(wp));
         }
+        ++seg_idx;
       }
     }
   }
   catch (const YAML::Exception &e)
   {
     log_error("Failed to parse violation witness YAML '{}': {}", path, e.what());
+    cached_path.clear();
   }
-  return result;
+  return cached_result;
 }
 
 waypoint yaml_parser::parse_waypoint(const YAML::Node &node)
@@ -120,6 +138,8 @@ waypoint yaml_parser::parse_waypoint(const YAML::Node &node)
 
   if (node["type"])
     wp.type = waypoint_type_from_string(node["type"].as<std::string>());
+  if (node["action"])
+    wp.action = action_from_string(node["action"].as<std::string>());
 
   const auto &constraint = node["constraint"];
   if (constraint && constraint["value"])
@@ -128,6 +148,8 @@ waypoint yaml_parser::parse_waypoint(const YAML::Node &node)
   const auto &loc = node["location"];
   if (loc)
   {
+    if (loc["file_name"])
+      wp.file = loc["file_name"].as<std::string>();
     if (loc["line"])
       wp.line = BigInt(loc["line"].as<std::string>().c_str(), 10);
     if (loc["function"])
@@ -137,8 +159,7 @@ waypoint yaml_parser::parse_waypoint(const YAML::Node &node)
   return wp;
 }
 
-waypoint::Type
-yaml_parser::waypoint_type_from_string(const std::string &s)
+waypoint::Type yaml_parser::waypoint_type_from_string(const std::string &s)
 {
   if (s == "assumption")
     return waypoint::assumption;
@@ -151,8 +172,77 @@ yaml_parser::waypoint_type_from_string(const std::string &s)
   if (s == "branching")
     return waypoint::branching;
 
-  log_error("Unknown waypoint type: {}", s);
-  abort();
+  log_warning("Unknown waypoint type '{}', skipping waypoint", s);
+  return waypoint::unknown;
+}
+
+waypoint::Action yaml_parser::action_from_string(const std::string &s)
+{
+  if (s == "follow")
+    return waypoint::follow;
+  if (s == "avoid")
+    return waypoint::avoid;
+  if (s == "cycle")
+    return waypoint::cycle;
+
+  log_warning("Unknown waypoint action '{}', treating as follow", s);
+  return waypoint::follow;
+}
+
+std::string yaml_parser::build_violation_witness_source(
+  const std::string &source_path,
+  const std::string &original_path,
+  const std::vector<waypoint> &waypoints)
+{
+  // Group assumption waypoints by line number in order.
+  // Skip avoid-action waypoints (must never be passed) and invalid lines.
+  std::unordered_map<size_t, std::vector<const waypoint *>> by_line;
+  by_line.reserve(waypoints.size());
+  for (const auto &wp : waypoints)
+  {
+    if (wp.type != waypoint::assumption)
+      continue;
+    if (wp.action == waypoint::avoid)
+      continue;
+    if (wp.line < 0)
+      continue;
+    by_line[static_cast<size_t>(wp.line.to_int64())].push_back(&wp);
+  }
+
+  if (by_line.empty())
+    return {};
+
+  std::ifstream in(source_path);
+  if (!in)
+    return {};
+
+  std::ostringstream out;
+  std::string line_text;
+  size_t line_num = 0;
+
+  while (std::getline(in, line_text))
+  {
+    ++line_num;
+    auto it = by_line.find(line_num);
+    if (it != by_line.end())
+    {
+      // Inject each assumption as a bare call under a #line directive so the
+      // GOTO instruction carries the original source location.  Loop-safety
+      // (fire at most once) is handled in run_intrinsic via witness_fired_pcs
+      // — no static-bool guard needed here, keeping the GOTO IR clean.
+      out << "#line " << line_num << " \"" << original_path << "\"\n";
+      for (const waypoint *wp : it->second)
+      {
+        out << "__ESBMC_witness_assume((_Bool)(" << wp->value << "));\n";
+        log_progress(
+          "Injecting witness assumption at line {}: {}", line_num, wp->value);
+      }
+      out << "#line " << line_num << " \"" << original_path << "\"\n";
+    }
+    out << line_text << "\n";
+  }
+
+  return out.str();
 }
 
 std::string yaml_parser::build_injected_source(
