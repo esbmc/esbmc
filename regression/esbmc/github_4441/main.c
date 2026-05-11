@@ -7,7 +7,10 @@
  * unreachable on the post-noreturn fall-through path.
  *
  * Expected: VERIFICATION SUCCESSFUL on valid-memsafety semantics
- * (--memory-leak-check --no-reachable-memory-leak --no-assertions).
+ * (--memory-leak-check --no-reachable-memory-leak --no-assertions
+ * --no-abnormal-memory-leak — same flags SV-COMP's valid-memsafety
+ * wrapper uses; --no-abnormal-memory-leak suppresses leak checks at
+ * abnormal-termination points like abort() / __assert_fail).
  */
 
 #include <stdlib.h>

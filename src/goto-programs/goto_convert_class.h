@@ -395,6 +395,15 @@ protected:
     const irep_idt &id,
     std::list<exprt> &dest);
 
+  // Emit a call to the __ESBMC_memory_leak_checks intrinsic — mirrors
+  // abort()'s body in src/c2goto/library/stdlib.c so the leak walker
+  // runs at noreturn termination points (e.g. __assert_fail) before
+  // the path is truncated with ASSUME false.  The intrinsic is a no-op
+  // when --memory-leak-check is off, so it is safe to call always.
+  void emit_noreturn_memleak_checks(
+    const locationt &location,
+    goto_programt &dest);
+
   // some built-in functions
   void do_abort(
     const exprt &lhs,
