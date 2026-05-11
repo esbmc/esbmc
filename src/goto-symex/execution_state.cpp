@@ -236,10 +236,13 @@ void execution_statet::symex_step(reachability_treet &art)
     (base_case || forward_condition) && instruction.inductive_step_instruction)
   {
     // This assertion will prevent us of having weird side-effects (issue #538)
-    // e.g. having inductive step instructions in a incremental strategy
+    // e.g. having inductive step instructions in a incremental strategy.
+    // --termination also legitimately produces inductive-step instructions
+    // (the post-main assert(false) marker inserted by goto_termination).
     assert(
-      k_induction &&
-      "Inductive step instructions should be set only for k-induction");
+      (k_induction || options.get_bool_option("termination")) &&
+      "Inductive step instructions should be set only for k-induction "
+      "or termination");
     cur_state->source.pc++;
     return;
   }

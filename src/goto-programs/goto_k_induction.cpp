@@ -43,33 +43,34 @@ void goto_termination(goto_functionst &goto_functions)
   if (function == goto_functions.function_map.end())
     return;
 
-  auto it = function->second.body.instructions.begin();
-  while (it != function->second.body.instructions.end())
-  {
-    if (it->is_function_call())
-    {
-      auto const &call = to_code_function_call2t(it->code);
-      if (to_symbol2t(call.function).thename.as_string() == "c:@F@main")
-        break;
-    }
-    it++;
-  }
-  assert(it != function->second.body.instructions.end());
+  // Place the termination marker right before __ESBMC_main's
+  // END_FUNCTION. Inserting after a specific FUNCTION_CALL (e.g. the
+  // c:@F@main call) would be fragile — C++ name mangling, the Python
+  // frontend (python_user_main), and --function-renamed entries all
+  // produce different callee symbols, and assert-aborting on a
+  // missing match would crash the strategy. Inserting at end-of-
+  // wrapper is shape-agnostic: control reaches it exactly when the
+  // program is about to return from __ESBMC_main, which is the
+  // semantic point we want to detect.
+  auto end_it = function->second.body.instructions.begin();
+  while (end_it != function->second.body.instructions.end() &&
+         end_it->type != END_FUNCTION)
+    ++end_it;
+  if (end_it == function->second.body.instructions.end())
+    return; // no END_FUNCTION; nothing safe to anchor to
 
-  // Insert `assert(false)` immediately after the main() call. Mark
-  // it `inductive_step_instruction` so that execution_state.cpp:215
-  // skips it during base_case and forward_condition (we don't want
-  // FC's "all states reachable" proof to be derailed by an always-
-  // false VCC) — it only fires in the inductive step, where it
-  // serves as the "did we reach end-of-main from a havoc'd iterate?"
-  // probe.
+  // Insert `assert(false)` immediately before __ESBMC_main's
+  // END_FUNCTION. Mark it `inductive_step_instruction` so that
+  // execution_state.cpp:215 skips it during base_case and
+  // forward_condition (we don't want FC's "all states reachable"
+  // proof to be derailed by an always-false VCC) — it only fires in
+  // the inductive step, where it serves as the "did we reach end-of-
+  // main from a havoc'd iterate?" probe.
   //
   // Use `insert` (not `insert_swap`): we want to INSERT before the
-  // next instruction, preserving it. insert_swap would overwrite
-  // whatever is at that position (atexit_handler, pthread_end_main_hook).
-  ++it;
+  // target, preserving it. insert_swap would overwrite the target.
   auto inserted = function->second.body.instructions.insert(
-    it, goto_programt::instructiont());
+    end_it, goto_programt::instructiont());
   inserted->type = ASSERT;
   inserted->guard = gen_false_expr();
   inserted->location.comment("termination");
