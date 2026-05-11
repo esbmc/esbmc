@@ -937,8 +937,7 @@ void report_coverage(
     // k_path_spanning_redundant so a reached-but-subsumed goal does not
     // inflate the numerator against the maximal-only denominator.
     const auto &redundant = goto_coveraget::k_path_spanning_redundant;
-    auto is_maximal = [&redundant](const std::string &claim_sig)
-    {
+    auto is_maximal = [&redundant](const std::string &claim_sig) {
       // claim_sig = "msg\tloc"; loc has no tabs, so rfind is robust if a
       // future emission path puts a tab in msg.
       const auto tab = claim_sig.rfind('\t');
