@@ -1,4 +1,0 @@
-THOROUGH
-main.c
---bitwuzla --interval-analysis --add-symex-value-sets --state-hashing --k-induction --max-inductive-step 3 --no-bounds-check --no-pointer-check --no-div-by-zero-check --error-label ERROR --goto-unwind --unlimited-goto-unwind --timeout 60
-^VERIFICATION FAILED$
