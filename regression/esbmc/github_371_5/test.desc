@@ -1,4 +1,4 @@
 CORE
 main.c
---incremental-bmc -Wno-error=implicit-function-declaration
+-Wno-error=implicit-function-declaration --no-unwinding-assertions --unwind 6
 ^VERIFICATION FAILED$

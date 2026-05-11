@@ -1,4 +1,4 @@
 CORE
 main.c
---incremental-bmc --interval-analysis
+--interval-analysis --no-unwinding-assertions --unwind 8
 ^VERIFICATION FAILED$
