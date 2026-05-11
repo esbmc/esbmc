@@ -1364,10 +1364,16 @@ void execution_statet::state_hashing_level2t::make_assignment(
   // If there's no body to the assignment, don't hash.
   if (!is_nil_expr(assigned_value))
   {
-    // XXX - consider whether to use l1 names instead. Recursion, reentrancy.
+    // Key on (thename, level1_num, thread_num): the base C identifier alone
+    // collides across recursion frames and across threads (e.g. two threads'
+    // local `tid` share thename and overwrite each other's hash entry, losing
+    // per-thread state in the merged hash).
     crypto_hash hash = owner->update_hash_for_assignment(assigned_value);
-    std::string orig_name = to_symbol2t(lhs_sym).thename.as_string();
-    current_hashes[orig_name] = hash;
+    const symbol2t &sym = to_symbol2t(lhs_sym);
+    std::string key = sym.thename.as_string() + "?" +
+                      std::to_string(sym.level1_num) + "&" +
+                      std::to_string(sym.thread_num);
+    current_hashes[key] = hash;
   }
 }
 
