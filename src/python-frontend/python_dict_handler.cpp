@@ -1403,9 +1403,10 @@ typet python_dict_handler::resolve_expected_type_for_dict_subscript(
         return get_dict_struct_type();
     }
     // Empty literal `d = {}`:
-    // scan the enclosing function for the first `d[k] = Klass(...)`
-    // and use that class's struct as the subscript value type.
-    // top-level statements only, first match wins.
+    // scan the enclosing function's top-level statements and pick the most
+    // recent `d[k] = Klass(...)` assignment as the subscript value type.
+    // A later `d = {}` re-init resets the candidate so the next assignment
+    // dominates — keeps the inferred type aligned with the live dict.
     // Without it, d[k] reads on an empty literal default to char*.
     if (
       var_decl.contains("value") && var_decl["value"].is_object() &&
@@ -1424,6 +1425,8 @@ typet python_dict_handler::resolve_expected_type_for_dict_subscript(
           !func_node.empty() && func_node.contains("body") &&
           func_node["body"].is_array())
         {
+          symbol_typet candidate;
+          bool have_candidate = false;
           for (const auto &stmt : func_node["body"])
           {
             if (
@@ -1432,6 +1435,22 @@ typet python_dict_handler::resolve_expected_type_for_dict_subscript(
               stmt["targets"].empty())
               continue;
             const auto &tgt = stmt["targets"][0];
+
+            // `d = {}` re-init clears the candidate;
+            // the next subscript assignment dominates.
+            if (
+              tgt.is_object() && tgt.value("_type", std::string()) == "Name" &&
+              tgt.value("id", std::string()) == var_name &&
+              stmt.contains("value") && stmt["value"].is_object() &&
+              stmt["value"].value("_type", std::string()) == "Dict" &&
+              (!stmt["value"].contains("values") ||
+               !stmt["value"]["values"].is_array() ||
+               stmt["value"]["values"].empty()))
+            {
+              have_candidate = false;
+              continue;
+            }
+
             if (
               !tgt.is_object() ||
               tgt.value("_type", std::string()) != "Subscript" ||
@@ -1450,9 +1469,14 @@ typet python_dict_handler::resolve_expected_type_for_dict_subscript(
               const std::string class_name =
                 rhs["func"]["id"].get<std::string>();
               if (json_utils::is_class(class_name, converter_.get_ast_json()))
-                return symbol_typet("tag-" + class_name);
+              {
+                candidate = symbol_typet("tag-" + class_name);
+                have_candidate = true;
+              }
             }
           }
+          if (have_candidate)
+            return candidate;
         }
       }
     }

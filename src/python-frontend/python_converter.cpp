@@ -1527,7 +1527,7 @@ exprt python_converter::handle_string_type_mismatch(
     return nil_exprt(); // No mismatch, return nil to indicate no action taken
 
   // Bail out on void* vs string;
-  // the caller's strcmp path handles it nstead of folding to a static False
+  // the caller's strcmp path handles it instead of folding to a static False
   // (the void* may hold a string).
   auto is_void_ptr = [](const typet &t) {
     return t.is_pointer() && t.subtype().id() == "empty";
@@ -1803,7 +1803,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   }
 
   // void* vs string: emit `strcmp(a, b) op 0`
-  // instead of decaying to pointer quality or returning a static False.
+  // instead of decaying to pointer equality or returning a static False.
   // Hits when one side is an unannotated class attribute holding a string.
   if (op == "Eq" || op == "NotEq")
   {
@@ -4851,7 +4851,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     typet array_type = ns.follow(array.type());
 
     // Unwrap pointer-to-dict so d[key] reaches the dict handler when
-    // d isheld by pointer (e.g. dict-of-class-value via the symbol table).
+    // d is held by pointer (e.g. dict-of-class-value via the symbol table).
     typet array_type_for_dict = array_type;
     bool array_is_dict_pointer = false;
     if (array_type_for_dict.is_pointer())
