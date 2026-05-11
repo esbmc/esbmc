@@ -1540,6 +1540,10 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
 // \param options - options for setting the verification strategy
 // and controlling symbolic execution
 // \param goto_functions - GOTO program under verification
+
+// Forward decls; definitions follow `do_bmc_strategy` for grouping.
+static uint64_t learn_k_from_goto_bounds(const goto_functionst &goto_functions);
+
 int esbmc_parseoptionst::do_bmc_strategy(
   optionst &options,
   goto_functionst &goto_functions)
@@ -1588,10 +1592,19 @@ int esbmc_parseoptionst::do_bmc_strategy(
     return 0;
   };
 
-  // Trying all bounds from 1 to "max_k_step" in "k_step_inc"
+  // Pre-compute a k hint from the goto program's loop bounds. The
+  // k-induction transformation has already run and inserted pre-loop
+  // ASSUMEs containing the bound literals (e.g. `i >= 64` in popcount's
+  // pop4). Use this as a shortcut: if it exceeds the next sequential k,
+  // jump to it directly instead of stepping through intermediate
+  // values. The FC will close at exactly that k.
+  uint64_t fc_hint = learn_k_from_goto_bounds(goto_functions);
+  bool hint_consumed = false;
+
+  // Trying all bounds from 1 to "max_k_step" in "k_step_inc".
   uint64_t last_k_step = k_step_base;
-  for (uint64_t k_step = k_step_base; k_step <= max_k_step;
-       k_step += k_step_inc)
+  uint64_t k_step = k_step_base;
+  while (k_step <= max_k_step)
   {
     last_k_step = k_step;
     // k-induction
@@ -1770,12 +1783,36 @@ int esbmc_parseoptionst::do_bmc_strategy(
         return conclude();
       }
     }
+
     // falsification
     if (options.get_bool_option("falsification"))
     {
       if (is_base_case_violated(options, goto_functions, k_step).is_true())
         return 1;
     }
+
+    // Bump k. The default increment is `k_step_inc`. If we found a loop
+    // bound in the goto program that exceeds the next sequential k,
+    // jump directly to that value — the FC will close at exactly that
+    // k. Apply the hint at most once so we don't spin if the FC fails
+    // to close at the hinted value. Raise max_k_step if the hint
+    // exceeds it, since otherwise we'd hit the cap before the proof
+    // closes.
+    uint64_t next_k = k_step + k_step_inc;
+    if (!hint_consumed && fc_hint > next_k)
+    {
+      log_status(
+        "Goto program exposes loop bound {:d}; "
+        "skipping k_step from {:d} to {:d}",
+        fc_hint,
+        next_k,
+        fc_hint);
+      next_k = fc_hint;
+      if (fc_hint > max_k_step)
+        max_k_step = fc_hint;
+      hint_consumed = true;
+    }
+    k_step = next_k;
   }
 
   if (
@@ -1857,6 +1894,63 @@ tvt esbmc_parseoptionst::is_base_case_violated(
 //    TV_FALSE if all reachable loops have at most "k_step" iterations
 // for all input values in "goto_functions".
 //    TV_UNKNOWN - otherwise.
+/// Recursively scan @p expr for constant_int2t leaves and update @p best
+/// with the largest non-negative value found. Caps at 1<<20 to avoid
+/// catastrophic jumps when the program contains huge unrelated constants
+/// (INT_MAX, ULONG_MAX, etc.).
+static void collect_max_int_constant(const expr2tc &expr, uint64_t &best)
+{
+  if (is_nil_expr(expr))
+    return;
+  if (is_constant_int2t(expr))
+  {
+    const BigInt &v = to_constant_int2t(expr).value;
+    if (!v.is_negative() && v.is_uint64())
+    {
+      uint64_t lv = v.to_uint64();
+      // Reject obviously-unrelated huge constants — they're not loop
+      // bounds, just type-max sentinels or pointer offsets.
+      constexpr uint64_t SANE_CAP = 1ULL << 20;
+      if (lv > SANE_CAP)
+        return;
+      if (lv > best)
+        best = lv;
+    }
+    return;
+  }
+  expr->foreach_operand(
+    [&best](const expr2tc &e) { collect_max_int_constant(e, best); });
+}
+
+/// Pre-compute the next-k hint by scanning the goto program for loop-
+/// bound constants. The k-induction transformation has run by this point
+/// and inserts a pre-loop ASSUME of the entry condition containing the
+/// loop bound literals (e.g. `ASSUME !(x == 0 || i >= 64)` for popcount).
+/// Walk all ASSUME and back-edge GOTO instructions, collect integer
+/// constants from their guards, return the max.
+///
+/// Returns 0 when no usable bound is found (caller falls back to the
+/// normal k-step increment).
+static uint64_t learn_k_from_goto_bounds(const goto_functionst &goto_functions)
+{
+  uint64_t best = 0;
+  for (const auto &fn : goto_functions.function_map)
+  {
+    if (!fn.second.body_available)
+      continue;
+    for (const auto &ins : fn.second.body.instructions)
+    {
+      // Loop bound constants live in two places after k-induction has
+      // transformed the program: the inserted entry ASSUMEs, and the
+      // back-edge IF guards (which still mention `i < N` in the
+      // non-simplified copy).
+      if (ins.is_assume() || ins.is_backwards_goto() || ins.is_goto())
+        collect_max_int_constant(ins.guard, best);
+    }
+  }
+  return best;
+}
+
 tvt esbmc_parseoptionst::does_forward_condition_hold(
   optionst &options,
   goto_functionst &goto_functions,
