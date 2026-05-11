@@ -2265,13 +2265,6 @@ bool esbmc_parseoptionst::process_goto_program(
       interval_analysis(goto_functions, ns, options);
     }
 
-    // Eliminate goto-level no-op loops (empty body, dead modified vars).
-    // Runs after interval analysis so future step-recognition variants can
-    // use the interval results for tight-bound rewrites. Skipped under
-    // --termination / --unwinding-assertions because loop presence is
-    // observable in those modes.
-    goto_loop_simplify(goto_functions);
-
     bool is_k_induction = cmdline.isset("inductive-step") ||
                           cmdline.isset("k-induction") ||
                           cmdline.isset("k-induction-parallel");
@@ -2324,6 +2317,14 @@ bool esbmc_parseoptionst::process_goto_program(
     }
 
     goto_check(ns, options, goto_functions);
+
+    // Eliminate goto-level no-op loops (empty body, dead modified vars).
+    // Runs AFTER goto_check so that any check assertions inserted into a
+    // loop body (overflow, div-by-zero, bounds, ...) make body_is_safe
+    // refuse the erasure — preserving checks that would otherwise be
+    // silently dropped. Skipped under --termination / --unwinding-
+    // assertions because loop presence is observable in those modes.
+    goto_loop_simplify(goto_functions);
 
     if (options.get_bool_option("atomicity-check"))
       goto_atomicity_check(goto_functions, ns, context);
