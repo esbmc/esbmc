@@ -1040,15 +1040,21 @@ void goto_convertt::do_function_call_symbol(
       t->location.property("assertion");
       t->location.comment(description);
     }
-
-    // __assert_fail / __assert_rtn are __noreturn — stop the path even
-    // when assertions are suppressed, otherwise downstream end-of-main
-    // checks (e.g. memory-leak / memtrack) fire on paths that should
-    // already have terminated.
-    goto_programt::targett a = dest.add_instruction(ASSUME);
-    a->guard = gen_false_expr();
-    a->location = function.location();
-    a->location.user_provided(true);
+    else
+    {
+      // __assert_fail / __assert_rtn are __noreturn — when assertions
+      // are suppressed there is no ASSERT to terminate the path, so emit
+      // an explicit ASSUME false; otherwise downstream end-of-main
+      // checks (e.g. memory-leak / memtrack) fire on paths that should
+      // already have terminated.  When assertions are enabled, the
+      // ASSERT above handles termination and we deliberately leave the
+      // post-assert path open so multi-property / coverage checks can
+      // still observe sibling claims, matching pre-#4441 behaviour.
+      goto_programt::targett a = dest.add_instruction(ASSUME);
+      a->guard = gen_false_expr();
+      a->location = function.location();
+      a->location.user_provided(true);
+    }
     // we ignore any LHS
   }
   else if (config.ansi_c.target.is_freebsd() && base_name == "__assert")
@@ -1073,12 +1079,14 @@ void goto_convertt::do_function_call_symbol(
       t->location.property("assertion");
       t->location.comment(description);
     }
-
-    // FreeBSD __assert is __noreturn — see __assert_fail above.
-    goto_programt::targett a = dest.add_instruction(ASSUME);
-    a->guard = gen_false_expr();
-    a->location = function.location();
-    a->location.user_provided(true);
+    else
+    {
+      // FreeBSD __assert is __noreturn — see __assert_fail above.
+      goto_programt::targett a = dest.add_instruction(ASSUME);
+      a->guard = gen_false_expr();
+      a->location = function.location();
+      a->location.user_provided(true);
+    }
     // we ignore any LHS
   }
   else if (base_name == "_wassert")
@@ -1103,12 +1111,14 @@ void goto_convertt::do_function_call_symbol(
       t->location.property("assertion");
       t->location.comment(description);
     }
-
-    // _wassert is __noreturn — see __assert_fail above.
-    goto_programt::targett a = dest.add_instruction(ASSUME);
-    a->guard = gen_false_expr();
-    a->location = function.location();
-    a->location.user_provided(true);
+    else
+    {
+      // _wassert is __noreturn — see __assert_fail above.
+      goto_programt::targett a = dest.add_instruction(ASSUME);
+      a->guard = gen_false_expr();
+      a->location = function.location();
+      a->location.user_provided(true);
+    }
     // we ignore any LHS
   }
   else if (base_name == "operator new")
