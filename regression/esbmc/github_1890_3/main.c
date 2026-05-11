@@ -1,19 +1,15 @@
 #include <assert.h>
 
-void func()
-{
-   for (int i = 0; i <= 1; i++)
-      assert(0 && "1");
-}
-void func2()
-{
-
-   assert(0 && "2");
-}
 int main()
 {
-   func();
-   int x = 0;
-   10 / x;
-   func2();
+   int num = 0;
+   int a = 5 / num; // division by zero in line 6
+
+   for (int i = 0; i <= 10; i++)
+   {
+      assert(1);
+   }
+
+   int num1 = 0;
+   int b = 5 / num1; // division by zero in line 14
 }

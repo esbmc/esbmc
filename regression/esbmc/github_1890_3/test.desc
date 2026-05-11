@@ -1,5 +1,8 @@
 CORE
-main.c 
+main.c
 --multi-property --incremental-bmc
 ^VERIFICATION FAILED$
 \bdivision by zero\b
+\bnum != 0\b
+\bdivision by zero\b
+\bnum1 != 0\b
