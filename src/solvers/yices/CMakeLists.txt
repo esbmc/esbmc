@@ -2,8 +2,6 @@ set(Yices_MIN_VERSION "2.6.1")
 
 if(DEFINED Yices_DIR)
     set(ENABLE_YICES ON)
-elseif(EXISTS $ENV{HOME}/yices)
-    set(ENABLE_YICES ON)
 
 else()
     if(ENABLE_YICES AND DOWNLOAD_DEPENDENCIES)
