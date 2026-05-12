@@ -153,6 +153,17 @@ protected:
   build_member_from_component(const clang::FunctionDecl &fd, exprt &component);
 
   /*
+   * Append the implicit chain of member-subobject and base-subobject
+   * destructor calls to the body of a CXXDestructor. C++ [class.dtor]/9
+   * requires that, after the user-written body runs, each non-static data
+   * member is destroyed in reverse declaration order, then each direct
+   * non-virtual base in reverse declaration order. Clang does not emit
+   * these calls in the AST body (they are codegen-only in a real compiler),
+   * so the C++ frontend has to synthesise them here.
+   */
+  bool build_destructor_chain(const clang::FunctionDecl &fd, code_blockt &body);
+
+  /*
    * Add additional annotations for class/struct/union fields
    * Arguments:
    *  field: clang AST node representing the field we are dealing with
