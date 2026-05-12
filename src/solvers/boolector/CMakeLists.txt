@@ -10,7 +10,7 @@ else()
     # Sadly... Boolector requires some manual execution
     # before invoking its scripts. Thus, we can't use
     # FetchContent here
-    CPMAddPackage(
+    cpmaddpackage(
       NAME boolector
       DOWNLOAD_ONLY YES
       GITHUB_REPOSITORY rafaelsamenezes/boolector

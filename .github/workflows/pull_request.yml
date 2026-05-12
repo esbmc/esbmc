@@ -80,6 +80,31 @@ jobs:
       if: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
 
 
+  # Check CMake files with cmakelint
+  cmake-lint:
+    name: Check CMake style (cmakelint)
+    runs-on: ubuntu-slim
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Install cmakelint
+        run: pip install cmakelint
+      - name: Run cmakelint on tracked CMake files
+        shell: bash
+        run: |
+          mapfile -t files < <(
+            git ls-files '*.cmake' 'CMakeLists.txt' '**/CMakeLists.txt' '**/*.cmake'
+          )
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "No CMake files to lint."
+            exit 0
+          fi
+          cmakelint --config=.cmakelintrc "${files[@]}"
+
+
   # Check project with YAPF
   python-style:
       name: Check Python code style (YAPF)
