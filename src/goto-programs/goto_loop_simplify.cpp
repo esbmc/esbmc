@@ -641,7 +641,15 @@ bool simplify_function_once(goto_functiont &fn)
     if (modified_vars_die_immediately(
           after_loop, body.instructions.end(), modified))
     {
-      erase_loop(loop_head, loop_exit);
+      if (modified.empty() && !is_dowhile)
+      {
+        loop_head->make_assumption(exit_guard);
+        erase_loop(std::next(loop_head), loop_exit);
+      }
+      else
+      {
+        erase_loop(loop_head, loop_exit);
+      }
       changed = true;
       continue;
     }
