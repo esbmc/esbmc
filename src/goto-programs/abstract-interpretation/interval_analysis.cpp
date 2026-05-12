@@ -151,18 +151,18 @@ inline void instrument_symbol_constraints(
   // original `insert_swap(it++, ...)` post-condition of pointing one
   // past the original instruction.
   std::size_t insertion_count = 0;
-  auto insert_at_target = [&](const std::vector<expr2tc> &constraints,
-                              bool inductive_step_only) {
-    if (constraints.empty())
-      return;
-    goto_programt::instructiont instruction;
-    instruction.make_assumption(conjunction(constraints));
-    instruction.inductive_step_instruction = inductive_step_only;
-    instruction.location = it->location;
-    instruction.function = it->function;
-    goto_function.body.insert_swap(it, instruction);
-    ++insertion_count;
-  };
+  auto insert_at_target =
+    [&](const std::vector<expr2tc> &constraints, bool inductive_step_only) {
+      if (constraints.empty())
+        return;
+      goto_programt::instructiont instruction;
+      instruction.make_assumption(conjunction(constraints));
+      instruction.inductive_step_instruction = inductive_step_only;
+      instruction.location = it->location;
+      instruction.function = it->function;
+      goto_function.body.insert_swap(it, instruction);
+      ++insertion_count;
+    };
 
   insert_at_target(float_constraints, false);
   insert_at_target(non_float_constraints, config.options.is_kind());
