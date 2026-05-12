@@ -89,7 +89,6 @@ static const char *expr_names[] = {
   "sideeffect",
   "code_block",
   "code_assign",
-  "code_init",
   "code_decl",
   "code_dead",
   "code_printf",

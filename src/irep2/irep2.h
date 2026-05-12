@@ -103,7 +103,6 @@
   BOOST_PP_LIST_CONS(sideeffect,                                               \
   BOOST_PP_LIST_CONS(code_block,                                               \
   BOOST_PP_LIST_CONS(code_assign,                                              \
-  BOOST_PP_LIST_CONS(code_init,                                                \
   BOOST_PP_LIST_CONS(code_decl,                                                \
   BOOST_PP_LIST_CONS(code_dead,                                                \
   BOOST_PP_LIST_CONS(code_printf,                                              \
@@ -136,7 +135,7 @@
   BOOST_PP_LIST_CONS(isinstance,                                               \
   BOOST_PP_LIST_CONS(hasattr,                                                  \
   BOOST_PP_LIST_CONS(isnone,                                                   \
-  BOOST_PP_LIST_NIL))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+  BOOST_PP_LIST_NIL)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
 // clang-format on
 
 // Even crazier forward decls,

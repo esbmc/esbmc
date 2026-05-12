@@ -1550,7 +1550,6 @@ irep_typedefs(dynamic_size, object_ops);
 irep_typedefs(sideeffect, sideeffect_data);
 irep_typedefs(code_block, code_block_data);
 irep_typedefs(code_assign, code_assign_data);
-irep_typedefs(code_init, code_assign_data);
 irep_typedefs(code_decl, code_decl_data);
 irep_typedefs(code_dead, code_decl_data);
 irep_typedefs(code_printf, code_printf_data);
@@ -3363,19 +3362,6 @@ public:
   {
   }
   code_assign2t(const code_assign2t &ref) = default;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
-// NB: code_init2t is a specialization of code_assign2t
-class code_init2t : public code_init_expr_methods
-{
-public:
-  code_init2t(const expr2tc &target, const expr2tc &source)
-    : code_init_expr_methods(get_empty_type(), code_init_id, target, source)
-  {
-  }
-  code_init2t(const code_init2t &ref) = default;
 
   static std::string field_names[esbmct::num_type_fields];
 };

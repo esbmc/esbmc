@@ -1491,11 +1491,6 @@ void value_sett::apply_code(const expr2tc &code)
     const code_assign2t &ref = to_code_assign2t(code);
     assign(ref.target, ref.source);
   }
-  else if (is_code_init2t(code))
-  {
-    const code_init2t &ref = to_code_init2t(code);
-    assign(ref.target, ref.source);
-  }
   else if (is_code_decl2t(code))
   {
     const code_decl2t &ref = to_code_decl2t(code);

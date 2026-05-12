@@ -192,8 +192,6 @@ std::string code_block2t::field_names[esbmct::num_type_fields] =
   {"operands", "", "", "", ""};
 std::string code_assign2t::field_names[esbmct::num_type_fields] =
   {"target", "source", "", "", ""};
-std::string code_init2t::field_names[esbmct::num_type_fields] =
-  {"target", "source", "", "", ""};
 std::string code_decl2t::field_names[esbmct::num_type_fields] =
   {"value", "", "", "", ""};
 std::string code_dead2t::field_names[esbmct::num_type_fields] =
