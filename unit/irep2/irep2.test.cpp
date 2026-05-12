@@ -166,6 +166,63 @@ SCENARIO(
   }
 }
 
+// Regression for the BigInt CRC path silently dropping bytes past 256 and
+// ignoring the sign. Before the fix, two oversized BigInts that differ only
+// past the buffer cutoff produced the same CRC, and negating a value did not
+// change its CRC.
+SCENARIO("BigInt CRC handles sign and oversized values", "[core][irep2]")
+{
+  // Build a hex string of `nibbles` characters, padded with leading zeros if
+  // shorter. Two helpers keep the test cases readable below.
+  auto hex_of_length = [](std::size_t nibbles, char tail_digit) {
+    std::string s(nibbles, '0');
+    s.front() = 'f'; // ensure number is large, not zero-padded into the void
+    s.back() = tail_digit;
+    return s;
+  };
+  auto crc_of = [](const std::string &hex) {
+    BigInt v(hex.c_str(), 16);
+    type2tc ty = get_int_type(64);
+    expr2tc e = constant_int2tc(ty, v);
+    return e->crc();
+  };
+
+  GIVEN("Positive vs negative of the same small magnitude")
+  {
+    type2tc ty = get_int_type(64);
+    expr2tc pos = constant_int2tc(ty, BigInt(5));
+    expr2tc neg = constant_int2tc(ty, BigInt(-5));
+    THEN("CRCs differ")
+    {
+      REQUIRE(pos->crc() != neg->crc());
+    }
+  }
+
+  GIVEN("Two oversized BigInts that differ only past byte 256 of the dump")
+  {
+    // 1024 hex digits = 512 bytes of magnitude; comfortably beyond the
+    // 256-byte stack buffer. The two strings are identical for the leading
+    // 512 nibbles (covering the first 256 bytes of dumped magnitude) and
+    // differ only in the final nibble.
+    std::string base = hex_of_length(1024, '1');
+    std::string variant = base;
+    variant.back() = '2';
+    THEN("CRCs differ")
+    {
+      REQUIRE(crc_of(base) != crc_of(variant));
+    }
+  }
+
+  GIVEN("Equal oversized BigInts built independently")
+  {
+    std::string s = hex_of_length(1024, 'a');
+    THEN("CRCs are equal")
+    {
+      REQUIRE(crc_of(s) == crc_of(s));
+    }
+  }
+}
+
 // Regression for do_type_lt(const type2tc &, const type2tc &) dereferencing
 // side1/side2 before checking for nil. The expr2tc overload above already
 // handles nulls; the type2tc overload should be symmetric.

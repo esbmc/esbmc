@@ -489,50 +489,52 @@ void do_type_hash(const symbol_data::renaming_level &theval, crypto_hash &hash)
   hash.ingest((void *)&theval, sizeof(theval));
 }
 
+// BigInt::dump writes only the magnitude (most-significant-byte first, left-
+// padded with zeros) and reports false when the supplied buffer is too small.
+// Try a stack buffer for the common case; on overflow, double a heap buffer
+// until the dump succeeds. The sign byte is fed first so +x and -x do not
+// collide.
+namespace
+{
+template <typename Sink>
+void feed_bigint(const BigInt &theint, Sink &&sink)
+{
+  // Always include the sign so +x and -x do not collide.
+  const uint8_t sign = theint.is_positive() ? 1 : 0;
+  sink(&sign, sizeof(sign));
+
+  if (theint.is_zero())
+    return;
+
+  std::array<unsigned char, 256> stack_buf;
+  if (theint.dump(stack_buf.data(), stack_buf.size()))
+  {
+    sink(stack_buf.data(), stack_buf.size());
+    return;
+  }
+
+  std::vector<unsigned char> heap_buf(stack_buf.size() * 2);
+  while (!theint.dump(heap_buf.data(), heap_buf.size()))
+    heap_buf.resize(heap_buf.size() * 2);
+  sink(heap_buf.data(), heap_buf.size());
+}
+} // namespace
+
 size_t do_type_crc(const BigInt &theint)
 {
-  if (theint.is_zero())
-    return boost::hash<uint8_t>()(0);
-
   size_t crc = 0;
-  std::array<unsigned char, 256> buffer;
-  if (theint.dump(buffer.data(), buffer.size()))
-  {
-    for (unsigned int i = 0; i < buffer.size(); i++)
-      boost::hash_combine(crc, buffer[i]);
-  }
-  else
-  {
-    // bigint is too large to fit in that static buffer. This is insane; but
-    // rather than wasting time heap allocing we'll just skip recording data,
-    // at the price of possible crc collisions.
-    ;
-  }
+  feed_bigint(theint, [&](const unsigned char *data, size_t len) {
+    for (size_t i = 0; i < len; ++i)
+      boost::hash_combine(crc, data[i]);
+  });
   return crc;
 }
 
 void do_type_hash(const BigInt &theint, crypto_hash &hash)
 {
-  // Zero has no data in bigints.
-  if (theint.is_zero())
-  {
-    uint8_t val = 0;
-    hash.ingest(&val, sizeof(val));
-    return;
-  }
-
-  std::array<unsigned char, 256> buffer;
-  if (theint.dump(buffer.data(), buffer.size()))
-  {
-    hash.ingest(buffer.data(), buffer.size());
-  }
-  else
-  {
-    // bigint is too large to fit in that static buffer. This is insane; but
-    // rather than wasting time heap allocing we'll just skip recording data,
-    // at the price of possible crc collisions.
-    ;
-  }
+  feed_bigint(theint, [&](const unsigned char *data, size_t len) {
+    hash.ingest(data, len);
+  });
 }
 
 size_t do_type_crc(const fixedbvt &theval)
