@@ -1,4 +1,4 @@
 CORE
 main.c
---overflow-check --incremental-bmc
+--overflow-check --unwind 1
 ^VERIFICATION SUCCESSFUL$

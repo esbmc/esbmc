@@ -9,7 +9,7 @@ elseif(EXISTS $ENV{HOME}/cvc4)
 else()
     if(ENABLE_CVC4 AND DOWNLOAD_DEPENDENCIES)
         # TODO: Replace this file when we go for CVC5!
-        CPMAddPackage(
+        cpmaddpackage(
             NAME cvc5
             DOWNLOAD_ONLY YES
             GITHUB_REPOSITORY cvc5/cvc5

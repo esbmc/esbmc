@@ -1,4 +1,4 @@
 CORE
 main.py
---incremental-bmc --smt-during-symex --smt-symex-guard --z3
+--smt-during-symex --smt-symex-guard --z3 --no-unwinding-assertions --unwind 6
 ^VERIFICATION FAILED$

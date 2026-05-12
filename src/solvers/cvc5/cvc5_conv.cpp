@@ -743,32 +743,6 @@ smt_astt cvc5_convt::mk_bvnot(smt_astt a)
     a->sort);
 }
 
-smt_astt cvc5_convt::mk_bvnor(smt_astt a, smt_astt b)
-{
-  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
-  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
-  assert(a->sort->get_data_width() == b->sort->get_data_width());
-  return new_ast(
-    slv.mkTerm(
-      cvc5::Kind::BITVECTOR_NOR,
-      {to_solver_smt_ast<cvc5_smt_ast>(a)->a,
-       to_solver_smt_ast<cvc5_smt_ast>(b)->a}),
-    a->sort);
-}
-
-smt_astt cvc5_convt::mk_bvnand(smt_astt a, smt_astt b)
-{
-  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
-  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
-  assert(a->sort->get_data_width() == b->sort->get_data_width());
-  return new_ast(
-    slv.mkTerm(
-      cvc5::Kind::BITVECTOR_NAND,
-      {to_solver_smt_ast<cvc5_smt_ast>(a)->a,
-       to_solver_smt_ast<cvc5_smt_ast>(b)->a}),
-    a->sort);
-}
-
 smt_astt cvc5_convt::mk_bvxor(smt_astt a, smt_astt b)
 {
   assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);

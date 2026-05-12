@@ -254,8 +254,6 @@ public:
   static irep_idt i_bitand;
   static irep_idt i_bitor;
   static irep_idt i_bitxor;
-  static irep_idt i_bitnand;
-  static irep_idt i_bitnor;
   static irep_idt i_bitnot;
   static irep_idt i_ashr;
   static irep_idt i_lshr;

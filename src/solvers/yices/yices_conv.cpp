@@ -322,30 +322,6 @@ smt_astt yices_convt::mk_bvnot(smt_astt a)
   return new_ast(yices_bvnot(to_solver_smt_ast<yices_smt_ast>(a)->a), a->sort);
 }
 
-smt_astt yices_convt::mk_bvnor(smt_astt a, smt_astt b)
-{
-  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
-  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
-  assert(a->sort->get_data_width() == b->sort->get_data_width());
-  return new_ast(
-    yices_bvnor(
-      to_solver_smt_ast<yices_smt_ast>(a)->a,
-      to_solver_smt_ast<yices_smt_ast>(b)->a),
-    a->sort);
-}
-
-smt_astt yices_convt::mk_bvnand(smt_astt a, smt_astt b)
-{
-  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
-  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
-  assert(a->sort->get_data_width() == b->sort->get_data_width());
-  return new_ast(
-    yices_bvnand(
-      to_solver_smt_ast<yices_smt_ast>(a)->a,
-      to_solver_smt_ast<yices_smt_ast>(b)->a),
-    a->sort);
-}
-
 smt_astt yices_convt::mk_bvxor(smt_astt a, smt_astt b)
 {
   assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);

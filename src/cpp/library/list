@@ -320,6 +320,9 @@ public:
   {
   }
 
+  typedef iterator const_iterator;
+  typedef reverse_iterator const_reverse_iterator;
+
   iterator begin()
   {
     return iterator(this, _sentinel_next);
@@ -328,6 +331,25 @@ public:
   iterator end()
   {
     return iterator(this, SENTINEL);
+  }
+
+  // Const overloads. The node-based iterator stores a non-const owner
+  // pointer so reading via _next_idx / _prev_idx can resolve the
+  // sentinel boundary; cast away const on the receiver, the iterator
+  // itself does not mutate the list.
+  const_iterator begin() const
+  {
+    const_iterator it;
+    it.owner = const_cast<list<T> *>(this);
+    it.idx = _sentinel_next;
+    return it;
+  }
+  const_iterator end() const
+  {
+    const_iterator it;
+    it.owner = const_cast<list<T> *>(this);
+    it.idx = SENTINEL;
+    return it;
   }
 
   reverse_iterator rbegin()

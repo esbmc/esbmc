@@ -14,7 +14,7 @@ else()
 endif()
 
 if(ENABLE_CVC5)
-    message(STATUS "Looking for CVC5 at: ${CVC5_DIR}") 
+    message(STATUS "Looking for CVC5 at: ${CVC5_DIR}")
     find_package(cvc5 REQUIRED
             HINTS ${CVC5_DIR}/lib/cmake ${CVC5_DIR}/lib64/cmake $ENV{HOME}/cvc5)
     message(STATUS "Found CVC5 at: ${cvc5_DIR}")

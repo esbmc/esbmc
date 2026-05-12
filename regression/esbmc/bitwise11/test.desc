@@ -1,4 +1,4 @@
 CORE
 main.c
---z3 --ir --no-simplify --incremental-bmc
+--z3 --ir --no-simplify --unwind 6
 ^VERIFICATION SUCCESSFUL$
