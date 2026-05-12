@@ -2721,8 +2721,9 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
 
     // We only want expressions of typecast(address_of(symbol)) or address_of(symbol).
     {
-      if (is_typecast2t(symbol) && is_address_of2t(to_typecast2t(symbol).from))
-        symbol = to_address_of2t(to_typecast2t(symbol).from).ptr_obj;
+      if (const typecast2t *tc = try_to_typecast2t(symbol);
+          tc && is_address_of2t(tc->from))
+        symbol = to_address_of2t(tc->from).ptr_obj;
 
       else if (is_address_of2t(symbol))
         symbol = to_address_of2t(symbol).ptr_obj;

@@ -3762,6 +3762,10 @@ public:
   {                                                                            \
     return irep2_checked_expr_cast<name##2t>(                                  \
       *t.get(), expr2t::name##_id, #name);                                     \
+  }                                                                            \
+  inline const name##2t *try_to_##name##2t(const expr2tc &t)                   \
+  {                                                                            \
+    return is_##name##2t(t) ? &to_##name##2t(t) : nullptr;                     \
   }
 
 // Boost preprocessor magic to iterate over all exprs,
