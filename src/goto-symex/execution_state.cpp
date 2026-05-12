@@ -71,15 +71,6 @@ execution_statet::execution_statet(
 
   atomic_numbers.push_back(0);
 
-  if (DFS_traversed.size() <= state.source.thread_nr)
-  {
-    DFS_traversed.push_back(false);
-  }
-  else
-  {
-    DFS_traversed[state.source.thread_nr] = false;
-  }
-
   thread_start_data.emplace_back();
 
   // Initial mpor tracking.
@@ -96,8 +87,6 @@ execution_statet::execution_statet(
   last_insn = nullptr;
   node_count = 0;
   nondet_count = 0;
-  DFS_traversed.reserve(1);
-  DFS_traversed[0] = false;
   mon_thread_warning = false;
 
   thread_cswitch_threshold = (options.get_bool_option("ltl")) ? 3 : 2;
@@ -133,7 +122,6 @@ execution_statet &execution_statet::operator=(const execution_statet &ex)
   threads_state = ex.threads_state;
   preserved_paths = ex.preserved_paths;
   atomic_numbers = ex.atomic_numbers;
-  DFS_traversed = ex.DFS_traversed;
   thread_start_data = ex.thread_start_data;
   last_active_thread = ex.last_active_thread;
   last_insn = ex.last_insn;
@@ -368,21 +356,6 @@ void execution_statet::switch_to_thread(unsigned int i)
   cur_state = &threads_state[active_thread];
 }
 
-bool execution_statet::dfs_explore_thread(unsigned int tid)
-{
-  if (DFS_traversed.at(tid))
-    return false;
-
-  if (threads_state.at(tid).call_stack.empty())
-    return false;
-
-  if (threads_state.at(tid).thread_ended)
-    return false;
-
-  DFS_traversed.at(tid) = true;
-  return true;
-}
-
 bool execution_statet::check_if_ileaves_blocked()
 {
   if (owning_rt->get_CS_bound() != -1 && CS_number >= owning_rt->get_CS_bound())
@@ -422,7 +395,6 @@ void execution_statet::end_thread()
 void execution_statet::update_after_switch_point()
 {
   execute_guard();
-  resetDFS_traversed();
 
   // MPOR records the variables accessed in last transition taken; we're
   // starting a new transition, so for the current thread, clear records.
@@ -710,15 +682,6 @@ unsigned int execution_statet::add_thread(const goto_programt *prog)
   preserved_paths.emplace_back();
   atomic_numbers.push_back(0);
 
-  if (DFS_traversed.size() <= new_state.source.thread_nr)
-  {
-    DFS_traversed.push_back(false);
-  }
-  else
-  {
-    DFS_traversed[new_state.source.thread_nr] = false;
-  }
-
   thread_start_data.emplace_back();
 
   // We invalidated all threads_state refs, so reset cur_state ptr.
@@ -741,8 +704,9 @@ unsigned int execution_statet::add_thread(const goto_programt *prog)
 
   // While we've recorded the new thread as starting in the designated program,
   // it might not run immediately, thus must have it's path preserved:
-  preserved_paths[thread_nr].push_back(std::make_pair(
-    prog->instructions.begin(), goto_statet(threads_state[thread_nr])));
+  preserved_paths[thread_nr].push_back(
+    std::make_pair(
+      prog->instructions.begin(), goto_statet(threads_state[thread_nr])));
 
   return threads_state.size() - 1; // thread ID, zero based
 }
@@ -928,9 +892,8 @@ void execution_statet::get_expr_globals(
     }
   }
 
-  expr->foreach_operand([this, &globals_list, &ns](const expr2tc &e) {
-    get_expr_globals(ns, e, globals_list);
-  });
+  expr->foreach_operand([this, &globals_list, &ns](const expr2tc &e)
+                        { get_expr_globals(ns, e, globals_list); });
 }
 
 bool execution_statet::check_mpor_dependency(unsigned int j, unsigned int l)

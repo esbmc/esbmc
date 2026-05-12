@@ -22,8 +22,8 @@
  *
  *  To do this, the primary piece of information stored is a stack of
  *  execution_statets, with each ex_state representing a context switch point
- *  reached. A vector<bool> in each ex_state represents which context switches
- *  from this path have been explored already.
+ *  reached. A parallel scheduler frame records which context switches from
+ *  each point have been explored already.
  *
  *  The algorithm is to run until the program completes, then feed the trace
  *  to the caller. From then on, when asked to generate a new trace we:
@@ -129,6 +129,9 @@ public:
    *  @return True if thread is viable; false otherwise.
    */
   bool check_thread_viable(unsigned int tid, bool quiet) const;
+
+  /** Mark the active thread as already explored in the current scheduler frame. */
+  void mark_active_thread_explored();
 
   /**
    *  Check whether current ex_state is a state hash collision.
@@ -253,6 +256,22 @@ public:
   bool main_thread_ended;
 
 protected:
+  struct scheduler_framet
+  {
+    std::vector<bool> explored_threads;
+
+    void ensure_thread_count(unsigned int count);
+    void reset(unsigned int count);
+    void mark_all_explored();
+    bool is_explored(unsigned int tid) const;
+    void mark_explored(unsigned int tid);
+  };
+
+  scheduler_framet &get_cur_scheduler_frame();
+  const scheduler_framet &get_cur_scheduler_frame() const;
+  bool dfs_explore_thread(unsigned int tid);
+  void reset_scheduler_frame(scheduler_framet &frame, unsigned int count);
+
   /** Stack of execution states representing current interleaving.
    *  See reachability_treet algorithm for how this is used. Is initialized
    *  with a single execution_statet in it, with a function call to "main" set
@@ -261,8 +280,12 @@ protected:
    *  @see print_ileave_trace
    */
   std::list<std::shared_ptr<execution_statet>> execution_states;
+  /** Scheduler data parallel to execution_states. */
+  std::list<scheduler_framet> scheduler_frames;
   /** Iterator recording the execution_statet in stack we're operating on */
   std::list<std::shared_ptr<execution_statet>>::iterator cur_state_it;
+  /** Iterator recording the scheduler frame paired with cur_state_it */
+  std::list<scheduler_framet>::iterator cur_scheduler_it;
   /** "Global" symex target for output from --schedule exploration */
   std::shared_ptr<symex_targett> schedule_target;
   /** Target template; from which all targets are cloned.

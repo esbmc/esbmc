@@ -42,6 +42,7 @@ void reachability_treet::setup_for_new_explore()
   std::shared_ptr<symex_targett> targ;
 
   execution_states.clear();
+  scheduler_frames.clear();
 
   has_complete_formula = false;
 
@@ -70,7 +71,11 @@ void reachability_treet::setup_for_new_explore()
   }
 
   execution_states.emplace_back(s);
+  scheduler_framet scheduler_frame;
+  scheduler_frame.reset(s->threads_state.size());
+  scheduler_frames.push_back(scheduler_frame);
   cur_state_it = execution_states.begin();
+  cur_scheduler_it = scheduler_frames.begin();
   targ->push_ctx(); // Start with a depth of 1.
 }
 
@@ -87,6 +92,54 @@ const execution_statet &reachability_treet::get_cur_state() const
 bool reachability_treet::has_more_states()
 {
   return execution_states.size() > 0;
+}
+
+void reachability_treet::scheduler_framet::ensure_thread_count(
+  unsigned int count)
+{
+  if (explored_threads.size() < count)
+    explored_threads.resize(count, false);
+}
+
+void reachability_treet::scheduler_framet::reset(unsigned int count)
+{
+  explored_threads.assign(count, false);
+}
+
+void reachability_treet::scheduler_framet::mark_all_explored()
+{
+  for (auto &&it : explored_threads)
+    it = true;
+}
+
+bool reachability_treet::scheduler_framet::is_explored(unsigned int tid) const
+{
+  return tid < explored_threads.size() && explored_threads[tid];
+}
+
+void reachability_treet::scheduler_framet::mark_explored(unsigned int tid)
+{
+  ensure_thread_count(tid + 1);
+  explored_threads[tid] = true;
+}
+
+reachability_treet::scheduler_framet &
+reachability_treet::get_cur_scheduler_frame()
+{
+  return *cur_scheduler_it;
+}
+
+const reachability_treet::scheduler_framet &
+reachability_treet::get_cur_scheduler_frame() const
+{
+  return *cur_scheduler_it;
+}
+
+void reachability_treet::reset_scheduler_frame(
+  scheduler_framet &frame,
+  unsigned int count)
+{
+  frame.reset(count);
 }
 
 int reachability_treet::get_CS_bound() const
@@ -108,8 +161,9 @@ bool reachability_treet::check_for_hash_collision() const
 
 void reachability_treet::post_hash_collision_cleanup()
 {
-  for (auto &&it : get_cur_state().DFS_traversed)
-    it = true;
+  scheduler_framet &frame = get_cur_scheduler_frame();
+  frame.ensure_thread_count(get_cur_state().threads_state.size());
+  frame.mark_all_explored();
 }
 
 void reachability_treet::update_hash_collision_set()
@@ -129,6 +183,7 @@ void reachability_treet::create_next_state()
   {
     auto new_state = ex_state.clone();
     execution_states.push_back(new_state);
+    scheduler_frames.push_back(get_cur_scheduler_frame());
 
     /* Make it active, make it follow on from previous state... */
     if (new_state->get_active_state_number() != next_thread_id)
@@ -136,6 +191,8 @@ void reachability_treet::create_next_state()
 
     new_state->switch_to_thread(next_thread_id);
     new_state->update_after_switch_point();
+    reset_scheduler_frame(
+      scheduler_frames.back(), new_state->threads_state.size());
   }
 }
 
@@ -154,13 +211,13 @@ bool reachability_treet::step_next_state()
 unsigned int
 reachability_treet::decide_ileave_direction(execution_statet &ex_state)
 {
-  auto is_thread_schedulable = [&](int tid) {
-    return check_thread_viable(tid, true) && ex_state.dfs_explore_thread(tid);
-  };
+  auto is_thread_schedulable = [&](int tid)
+  { return check_thread_viable(tid, true) && dfs_explore_thread(tid); };
 
   signed int tid = 0, user_tid = 0;
 
   // Get thread ID from user if interactive mode is enabled
+  get_cur_scheduler_frame().ensure_thread_count(ex_state.threads_state.size());
   tid = get_cur_state().active_thread + 1;
   if (interactive_ileaves)
   {
@@ -207,17 +264,21 @@ bool reachability_treet::is_has_complete_formula()
 void reachability_treet::switch_to_next_execution_state()
 {
   std::list<std::shared_ptr<execution_statet>>::iterator it = cur_state_it;
+  std::list<scheduler_framet>::iterator sit = cur_scheduler_it;
   ++it;
+  ++sit;
 
   if (it != execution_states.end())
   {
     cur_state_it++;
+    cur_scheduler_it++;
   }
   else
   {
     if (step_next_state())
     {
       cur_state_it++;
+      cur_scheduler_it++;
     }
     else
     {
@@ -239,16 +300,23 @@ bool reachability_treet::reset_to_unexplored_state()
   // all depths from the current execution state are explored, so delete it.
 
   auto it = cur_state_it--;
+  auto sit = cur_scheduler_it--;
   execution_states.erase(it);
+  scheduler_frames.erase(sit);
 
   while (execution_states.size() > 0 && !step_next_state())
   {
     it = cur_state_it--;
+    sit = cur_scheduler_it--;
     execution_states.erase(it);
+    scheduler_frames.erase(sit);
   }
 
   if (execution_states.size() > 0)
+  {
     cur_state_it++;
+    cur_scheduler_it++;
+  }
 
   if (execution_states.size() && !smt_during_symex)
   {
@@ -272,25 +340,36 @@ bool reachability_treet::reset_to_unexplored_state()
 void reachability_treet::go_next_state()
 {
   std::list<std::shared_ptr<execution_statet>>::iterator it = cur_state_it;
+  std::list<scheduler_framet>::iterator sit = cur_scheduler_it;
   it++;
+  sit++;
   if (it != execution_states.end())
+  {
     cur_state_it++;
+    cur_scheduler_it++;
+  }
   else
   {
     while (execution_states.size() > 0 && !step_next_state())
     {
       it = cur_state_it;
+      sit = cur_scheduler_it;
       cur_state_it--;
+      cur_scheduler_it--;
 
       // For the last one:
       if (execution_states.size() == 1)
         (*it)->add_memory_leak_checks();
 
       execution_states.erase(it);
+      scheduler_frames.erase(sit);
     }
 
     if (execution_states.size() > 0)
+    {
       cur_state_it++;
+      cur_scheduler_it++;
+    }
   }
 }
 
@@ -311,7 +390,7 @@ bool reachability_treet::check_thread_viable(unsigned int tid, bool quiet) const
 {
   const execution_statet &ex = get_cur_state();
 
-  if (ex.DFS_traversed.at(tid) == true)
+  if (get_cur_scheduler_frame().is_explored(tid))
   {
     if (!quiet)
       log_status("Thread unschedulable as it's already been explored");
@@ -347,6 +426,27 @@ bool reachability_treet::check_thread_viable(unsigned int tid, bool quiet) const
     return false;
   }
 
+  return true;
+}
+
+void reachability_treet::mark_active_thread_explored()
+{
+  get_cur_scheduler_frame().mark_explored(get_cur_state().active_thread);
+}
+
+bool reachability_treet::dfs_explore_thread(unsigned int tid)
+{
+  scheduler_framet &frame = get_cur_scheduler_frame();
+  if (frame.is_explored(tid))
+    return false;
+
+  if (get_cur_state().threads_state.at(tid).call_stack.empty())
+    return false;
+
+  if (get_cur_state().threads_state.at(tid).thread_ended)
+    return false;
+
+  frame.mark_explored(tid);
   return true;
 }
 

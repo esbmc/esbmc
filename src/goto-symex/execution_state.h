@@ -26,10 +26,6 @@ class reachability_treet;
  *  there's a vector of goto_symex_statet's recording a set of threads and
  *  their state (call stack, program counter).
  *
- *  We also contain a few things that technically should be in
- *  reachability_treet, such as DFS_traversed recording what context switches
- *  have been taken.
- *
  *  A large amount of functionality is implemented by extending goto_symext.
  *  The idea is that reachability_treet symex_step's this object until we
  *  notify it about a context switch point. We catch some threading-specific
@@ -139,13 +135,6 @@ public:
   int get_context_switch()
   {
     return CS_number;
-  }
-
-  /** Reset record of what context switches were taken from this ex_state */
-  void resetDFS_traversed()
-  {
-    for (unsigned int i = 0; i < threads_state.size(); i++)
-      DFS_traversed.at(i) = false;
   }
 
   /** Fetch the thread ID of the current active thread */
@@ -316,17 +305,6 @@ public:
    *  conditions on all the previous switches that have happened.
    */
   void execute_guard();
-
-  /**
-   *  Attempt to explore a thread.
-   *  Checks the current DFS state to see whether this thread has already been
-   *  explored, or whether there are other reasons to not explore it. If it's
-   *  explorable, we return true, *and* mark it as explored in DFS_traversed
-   *  @see DFS_traversed.
-   *  @param tid Thread ID we wish to explore.
-   *  @return True if the desired thread is explorable now.
-   */
-  bool dfs_explore_thread(unsigned int tid);
 
   /**
    *  Test to see if interleavings are blocked by the current state.
@@ -514,10 +492,6 @@ public:
    *  atomic begins and ends. A nonzero atomic number for a thread means that
    *  interleavings are disabled currently. */
   std::vector<unsigned int> atomic_numbers;
-  /** Record of which context switches have been taken from this state.
-   *  Every time a context switch is taken, the bool in this vector is set to
-   *  true at the corresponding thread IDs index. */
-  std::vector<bool> DFS_traversed;
   /** Storage for threading libraries thread start data. See version history
    *  of when this was introduced to fully understand why; essentially this
    *  is a workaround to prevent too much nondeterminism entering into the
@@ -639,7 +613,7 @@ public:
           ? std::shared_ptr<state_hashing_level2t>(
               new state_hashing_level2t(*this))
           : std::shared_ptr<ex_state_level2t>(new ex_state_level2t(*this)),
-        options){};
+        options) {};
 
   dfs_execution_statet(const dfs_execution_statet &ref) = default;
   std::shared_ptr<execution_statet> clone() const override;
