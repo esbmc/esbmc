@@ -280,14 +280,19 @@ void execution_statet::claim(const expr2tc &expr, const std::string &msg)
 
 void execution_statet::symex_goto(const expr2tc &old_guard)
 {
-  guardt parent_guard = threads_state[active_thread].guard;
-  last_transition.parent_guard = parent_guard;
+  last_transition.parent_guard = threads_state[active_thread].guard;
 
   goto_symext::symex_goto(old_guard);
-  record_goto_transition(parent_guard);
 
   if (threads_state.size() >= thread_cswitch_threshold)
     analyze_read(old_guard);
+}
+
+void execution_statet::record_branch_sibling(
+  goto_programt::const_targett target,
+  statet::merge_state_listt::iterator sibling)
+{
+  last_transition.branch = branch_resultt{target, sibling};
 }
 
 void execution_statet::assume(const expr2tc &assumption)
@@ -412,23 +417,6 @@ void execution_statet::update_after_switch_point()
   }
 }
 
-void execution_statet::record_goto_transition(const guardt &parent_guard)
-{
-  const auto *instruction = last_transition.instruction;
-  assert(instruction != nullptr && "GOTO transition has no instruction");
-  assert(instruction->type == GOTO && "GOTO transition recorded for non-GOTO");
-
-  statet &state = get_active_state();
-
-  // If the current guard did not change, the GOTO condition evaluated false and
-  // no sibling path was generated for the transition result.
-  if (parent_guard == state.guard)
-    return;
-
-  assert(instruction->targets.size() == 1);
-  last_transition.branch_target = *instruction->targets.begin();
-}
-
 void execution_statet::preserve_last_paths(const transition_resultt &transition)
 {
   // If the thread terminated, there are no paths to preserve: this is the final
@@ -454,58 +442,14 @@ void execution_statet::preserve_last_paths(const transition_resultt &transition)
   if (!ls.guard.is_false() || !is_cur_state_guard_false(ls.guard.as_expr()))
     pp.push_back(std::make_pair(ls.source.pc, merge_statet(ls)));
 
-  if (transition.branch_target)
+  if (transition.branch)
   {
-    assert(transition.parent_guard && "Branch transition without parent guard");
-
-    auto it = ls.top().merge_state_map.find(*transition.branch_target);
-    assert(
-      it != ls.top().merge_state_map.end() &&
-      "Nonexistant preserved-path target?");
-    auto &statelist = it->second;
-
-    // There may be multiple paths in the map to be merged at that location, for
-    // example if it's the loop end. Detect two circumstances: first where the
-    // guard of the to-be-merged state is identical to the pre-GOTO guard,
-    // meaning that the GOTO we executed had an unconditionally-true guard.
-    // Second where the current-path guard plus the to-be-merged guard is equal
-    // to the branch parent guard: in that case, these can only be the two
-    // descendant paths from the pre-GOTO state.
-    const merge_statet *tomerge = nullptr;
-    for (const merge_statet &gs : statelist)
-    {
-      bool merge = false;
-
-      if (gs.guard == *transition.parent_guard)
-      {
-        merge = true;
-      }
-      else
-      {
-        guardt tmp(ls.guard);
-        tmp |= gs.guard;
-
-        expr2tc foo = tmp.as_expr();
-        expr2tc bar = transition.parent_guard->as_expr();
-        do_simplify(foo);
-        do_simplify(bar);
-
-        if (foo == bar)
-          merge = true;
-      }
-
-      if (merge)
-      {
-        assert(tomerge == nullptr && "Multiple branching to-preserve paths?");
-        tomerge = &gs;
-      }
-    }
-
-    // We _must_ have found a path to merge, or the current-state guard would
-    // have matched parent_guard earlier.
-    assert(tomerge != nullptr);
-
-    pp.emplace_back(*transition.branch_target, merge_statet(*tomerge));
+    // The GOTO that produced this transition pushed a sibling merge_statet
+    // onto ls.top().merge_state_map[transition.branch->target]. We captured
+    // an iterator to it at the time, so no further scan or guard matching
+    // is needed.
+    pp.emplace_back(
+      transition.branch->target, merge_statet(*transition.branch->sibling));
   }
 
   // We must have picked up at least one path to merge

@@ -201,6 +201,7 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
     cur_state->top().merge_state_map[new_state_pc];
 
   merge_state_list.emplace_back(*cur_state);
+  record_branch_sibling(new_state_pc, std::prev(merge_state_list.end()));
 
   // adjust guards
   if (new_guard_true)

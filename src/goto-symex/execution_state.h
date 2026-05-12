@@ -47,12 +47,22 @@ public:
   // Convenience typedef
   typedef goto_symex_statet::merge_statet merge_statet;
 
+  struct branch_resultt
+  {
+    /** Instruction at which the sibling path will be merged in. */
+    goto_programt::const_targett target;
+    /** Direct reference to the sibling merge_statet in
+     *  cur_state->top().merge_state_map[target]. Stable because
+     *  std::list iterators don't invalidate. */
+    goto_symex_statet::merge_state_listt::iterator sibling;
+  };
+
   struct transition_resultt
   {
     unsigned int thread_id = 0;
     const goto_programt::instructiont *instruction = nullptr;
     std::optional<guardt> parent_guard;
-    std::optional<goto_programt::const_targett> branch_target;
+    std::optional<branch_resultt> branch;
   };
 
 public:
@@ -351,7 +361,10 @@ public:
   void preserve_last_paths(const transition_resultt &transition);
   void cull_all_paths();
   void restore_last_paths();
-  void record_goto_transition(const guardt &parent_guard);
+
+  void record_branch_sibling(
+    goto_programt::const_targett target,
+    statet::merge_state_listt::iterator sibling) override;
 
   /**
    *  Analyze the contents of an assignment for threading.
