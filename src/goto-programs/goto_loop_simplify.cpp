@@ -139,15 +139,15 @@ struct counter_loop_info
   expr2tc induction_sym; // original symbol2tc (for the post-value ASSIGN)
   BigInt init;
   BigInt bound;
-  BigInt step;       // positive integer; sign is encoded in step_negative
+  BigInt step;        // positive integer; sign is encoded in step_negative
   bool step_negative; // true if i = i - step (decrementing loop)
   relation_kind rel;
   type2tc type;
 };
 
 /// Negate a relation kind: `<` ↔ `>=`, `<=` ↔ `>`.
-counter_loop_info::relation_kind negate_relation(
-  counter_loop_info::relation_kind r)
+counter_loop_info::relation_kind
+negate_relation(counter_loop_info::relation_kind r)
 {
   switch (r)
   {
@@ -271,9 +271,7 @@ bool parse_step(
   bool found = false;
   for (inst_iter it = body_first; it != body_last; ++it)
   {
-    if (
-      it->is_location() || it->is_skip() || it->is_decl() ||
-      it->type == DEAD)
+    if (it->is_location() || it->is_skip() || it->is_decl() || it->type == DEAD)
       continue;
     if (!it->is_assign())
       return false;
@@ -352,9 +350,7 @@ bool parse_init(
   while (it != begin)
   {
     --it;
-    if (
-      it->is_location() || it->is_skip() || it->is_decl() ||
-      it->type == DEAD)
+    if (it->is_location() || it->is_skip() || it->is_decl() || it->type == DEAD)
       continue;
     if (!it->is_assign())
       return false;
@@ -478,7 +474,7 @@ bool try_step_recognition(
   if (is_signedbv_type(info.type))
   {
     bound_hi = BigInt(1) << (width - 1);
-    --bound_hi; // 2^(w-1) - 1
+    --bound_hi;               // 2^(w-1) - 1
     bound_lo = -bound_hi - 1; // -2^(w-1)
   }
   else
@@ -492,8 +488,8 @@ bool try_step_recognition(
   // Build the rewrite fragment: ASSIGN i = post_value.
   goto_programt fragment;
   inst_iter t = fragment.add_instruction(ASSIGN);
-  t->code = code_assign2tc(
-    info.induction_sym, constant_int2tc(info.type, fitted));
+  t->code =
+    code_assign2tc(info.induction_sym, constant_int2tc(info.type, fitted));
   t->location = loop_head->location;
 
   body.insert_swap(loop_head, fragment);
@@ -515,8 +511,7 @@ bool simplify_function_once(goto_functiont &fn)
   goto_programt &body = fn.body;
   bool changed = false;
 
-  for (inst_iter it = body.instructions.begin();
-       it != body.instructions.end();
+  for (inst_iter it = body.instructions.begin(); it != body.instructions.end();
        ++it)
   {
     if (!it->is_backwards_goto())
