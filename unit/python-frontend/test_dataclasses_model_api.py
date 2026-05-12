@@ -1,6 +1,7 @@
 import importlib.util
 import os
 
+import pytest
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 MODEL_PATH = os.path.join(ROOT, "src", "python-frontend", "models", "dataclasses.py")
@@ -89,8 +90,5 @@ def test_replace_rejects_unknown_field():
         def __init__(self, x):
             self.x = x
 
-    try:
+    with pytest.raises(TypeError, match="unexpected field name"):
         model.replace(C(1), y=2)
-        assert False
-    except TypeError as exc:
-        assert "unexpected field name" in str(exc)

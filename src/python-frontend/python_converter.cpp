@@ -6820,7 +6820,8 @@ typet python_converter::resolve_variable_type(
   const std::string &var_name,
   const locationt &loc)
 {
-  nlohmann::json decl_node = get_var_node(var_name, *ast_json);
+  std::string function = loc.get_function().as_string();
+  nlohmann::json decl_node = find_var_decl(var_name, function, *ast_json);
 
   if (!decl_node.empty())
   {
@@ -6852,7 +6853,6 @@ typet python_converter::resolve_variable_type(
   }
 
   std::string filename = loc.get_file().as_string();
-  std::string function = loc.get_function().as_string();
   std::string symbol_id = "py:" + filename + "@F@" + function + "@" + var_name;
 
   const symbolt *sym = symbol_table_.find_symbol(symbol_id);
