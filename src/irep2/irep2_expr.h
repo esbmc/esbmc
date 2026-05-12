@@ -2075,105 +2075,33 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-/** Equality expression. Evaluate whether two exprs are the same. Always has
- *  boolean type. @extends relation_data */
-class equality2t : public equality_expr_methods
-{
-public:
-  equality2t(const expr2tc &v1, const expr2tc &v2)
-    : equality_expr_methods(get_bool_type(), equality_id, v1, v2)
-  {
+/** Defines one of the six binary boolean relation nodes. Each takes two
+ *  operands of any matching scalar/pointer type, has boolean result type,
+ *  routes through its generated _expr_methods base for cmp/lt/crc/hash,
+ *  and provides an out-of-line do_simplify override in
+ *  src/util/expr_simplifier.cpp. The concrete class names and the
+ *  generated is_<name>2t / to_<name>2t helpers are preserved verbatim.
+ *  @extends relation_data */
+#define ESBMC_DEFINE_RELATION2T(name)                                          \
+  class name##2t : public name##_expr_methods                                  \
+  {                                                                            \
+  public:                                                                      \
+    name##2t(const expr2tc &v1, const expr2tc &v2)                             \
+      : name##_expr_methods(get_bool_type(), name##_id, v1, v2)                \
+    {                                                                          \
+    }                                                                          \
+    name##2t(const name##2t &ref) = default;                                   \
+    expr2tc do_simplify() const override;                                      \
+    static std::string field_names[esbmct::num_type_fields];                   \
   }
-  equality2t(const equality2t &ref) = default;
 
-  expr2tc do_simplify() const override;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
-/** Inequality expression. Evaluate whether two exprs are different. Always has
- *  boolean type. @extends relation_data */
-class notequal2t : public notequal_expr_methods
-{
-public:
-  notequal2t(const expr2tc &v1, const expr2tc &v2)
-    : notequal_expr_methods(get_bool_type(), notequal_id, v1, v2)
-  {
-  }
-  notequal2t(const notequal2t &ref) = default;
-
-  expr2tc do_simplify() const override;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
-/** Lessthan relation. Evaluate whether expression is less than another. Always
- *  has boolean type. @extends relation_data */
-class lessthan2t : public lessthan_expr_methods
-{
-public:
-  lessthan2t(const expr2tc &v1, const expr2tc &v2)
-    : lessthan_expr_methods(get_bool_type(), lessthan_id, v1, v2)
-  {
-  }
-  lessthan2t(const lessthan2t &ref) = default;
-
-  expr2tc do_simplify() const override;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
-/** Greaterthan relation. Evaluate whether expression is greater than another.
- * Always has boolean type. @extends relation_data */
-class greaterthan2t : public greaterthan_expr_methods
-{
-public:
-  greaterthan2t(const expr2tc &v1, const expr2tc &v2)
-    : greaterthan_expr_methods(get_bool_type(), greaterthan_id, v1, v2)
-  {
-  }
-  greaterthan2t(const greaterthan2t &ref) = default;
-
-  expr2tc do_simplify() const override;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
-/** Lessthanequal relation. Evaluate whether expression is less-than or
- * equal to another. Always has boolean type. @extends relation_data */
-class lessthanequal2t : public lessthanequal_expr_methods
-{
-public:
-  lessthanequal2t(const expr2tc &v1, const expr2tc &v2)
-    : lessthanequal_expr_methods(get_bool_type(), lessthanequal_id, v1, v2)
-  {
-  }
-  lessthanequal2t(const lessthanequal2t &ref) = default;
-
-  expr2tc do_simplify() const override;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
-/** Greaterthanequal relation. Evaluate whether expression is greater-than or
- * equal to another. Always has boolean type. @extends relation_data */
-class greaterthanequal2t : public greaterthanequal_expr_methods
-{
-public:
-  greaterthanequal2t(const expr2tc &v1, const expr2tc &v2)
-    : greaterthanequal_expr_methods(
-        get_bool_type(),
-        greaterthanequal_id,
-        v1,
-        v2)
-  {
-  }
-  greaterthanequal2t(const greaterthanequal2t &ref) = default;
-
-  expr2tc do_simplify() const override;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
+ESBMC_DEFINE_RELATION2T(equality);
+ESBMC_DEFINE_RELATION2T(notequal);
+ESBMC_DEFINE_RELATION2T(lessthan);
+ESBMC_DEFINE_RELATION2T(greaterthan);
+ESBMC_DEFINE_RELATION2T(lessthanequal);
+ESBMC_DEFINE_RELATION2T(greaterthanequal);
+#undef ESBMC_DEFINE_RELATION2T
 
 /** C++20 three-way comparison `a <=> b`. Result type is the
  * comparison-category struct (`std::strong_ordering` /
