@@ -6,6 +6,7 @@
 #include <irep2/irep2_type.h>
 #include <irep2/irep2_expr.h>
 #include <irep2/irep2_utils.h>
+#include <util/message/format.h>
 #include <util/migrate.h>
 #include <util/std_types.h>
 
@@ -124,6 +125,20 @@ static const char *expr_names[] = {
 static_assert(
   sizeof(expr_names) == (expr2t::end_expr_id * sizeof(char *)),
   "Missing expr name");
+
+void irep2_bad_expr_cast(unsigned actual, unsigned expected, const char *target)
+{
+  const char *actual_name =
+    (actual < expr2t::end_expr_id) ? expr_names[actual] : "<out-of-range>";
+  const char *expected_name = (expected < expr2t::end_expr_id)
+                                ? expr_names[expected]
+                                : "<out-of-range>";
+  throw irep2_cast_error(fmt::format(
+    "irep2: to_{}2t() called on expr whose expr_id is {} (target {})",
+    expected_name,
+    actual_name,
+    target));
+}
 
 /*************************** Base expr2t definitions **************************/
 

@@ -13,6 +13,7 @@
 #include <boost/mp11.hpp>
 #include <functional>
 #include <mutex>
+#include <stdexcept>
 #include <util/compiler_defs.h>
 #include <util/crypto_hash.h>
 #include <util/irep_idt.h>
@@ -1372,5 +1373,73 @@ struct type2_hash
     return ref->crc();
   }
 };
+
+// Exception thrown by irep2_checked_type_cast / irep2_checked_expr_cast when
+// the runtime id does not match the requested derived type. A bad to_*2t /
+// to_*_type was always a logic bug — surfacing it as an exception keeps the
+// failure deterministic in every build mode (rather than the undefined
+// behaviour the previous NDEBUG dynamic_cast→static_cast redefine produced)
+// while staying recoverable for callers that want to handle it.
+class irep2_cast_error : public std::logic_error
+{
+public:
+  using std::logic_error::logic_error;
+};
+
+// Diagnose a bad to_* downcast and throw irep2_cast_error. Out-of-line and
+// [[noreturn]] so the happy path stays a single compare+branch and the
+// compiler does not pessimise the inlined helpers.
+[[noreturn]] void
+irep2_bad_type_cast(unsigned actual, unsigned expected, const char *target);
+[[noreturn]] void
+irep2_bad_expr_cast(unsigned actual, unsigned expected, const char *target);
+
+// Checked downcast for type2t / expr2t hierarchies. The is_*_type / is_*2t
+// predicates already do a single enum compare; these helpers do the same
+// check before a static_cast, so a bad to_*2t throws irep2_cast_error in
+// every build mode rather than invoking undefined behaviour under NDEBUG.
+template <typename Derived>
+inline Derived &irep2_checked_type_cast(
+  type2t &t,
+  type2t::type_ids expected,
+  const char *target_name)
+{
+  if (t.type_id != expected)
+    irep2_bad_type_cast(t.type_id, expected, target_name);
+  return static_cast<Derived &>(t);
+}
+
+template <typename Derived>
+inline const Derived &irep2_checked_type_cast(
+  const type2t &t,
+  type2t::type_ids expected,
+  const char *target_name)
+{
+  if (t.type_id != expected)
+    irep2_bad_type_cast(t.type_id, expected, target_name);
+  return static_cast<const Derived &>(t);
+}
+
+template <typename Derived>
+inline Derived &irep2_checked_expr_cast(
+  expr2t &e,
+  expr2t::expr_ids expected,
+  const char *target_name)
+{
+  if (e.expr_id != expected)
+    irep2_bad_expr_cast(e.expr_id, expected, target_name);
+  return static_cast<Derived &>(e);
+}
+
+template <typename Derived>
+inline const Derived &irep2_checked_expr_cast(
+  const expr2t &e,
+  expr2t::expr_ids expected,
+  const char *target_name)
+{
+  if (e.expr_id != expected)
+    irep2_bad_expr_cast(e.expr_id, expected, target_name);
+  return static_cast<const Derived &>(e);
+}
 
 #endif /* IREP2_H_ */

@@ -166,6 +166,40 @@ SCENARIO(
   }
 }
 
+// Regression for the NDEBUG dynamic_cast→static_cast redefine: a bad to_*2t /
+// to_*_type used to invoke UB in release builds. The checked-cast helpers now
+// throw irep2_cast_error in every build mode.
+SCENARIO("bad to_* downcasts throw irep2_cast_error", "[core][irep2]")
+{
+  GIVEN("A bool type passed to to_signedbv_type")
+  {
+    type2tc bool_ty = get_bool_type();
+    THEN("the cast throws")
+    {
+      REQUIRE_THROWS_AS(to_signedbv_type(bool_ty), irep2_cast_error);
+    }
+  }
+
+  GIVEN("A constant_int expr passed to to_add2t")
+  {
+    type2tc int_ty = get_uint_type(config.ansi_c.word_size);
+    expr2tc lit = constant_int2tc(int_ty, BigInt(7));
+    THEN("the cast throws")
+    {
+      REQUIRE_THROWS_AS(to_add2t(lit), irep2_cast_error);
+    }
+  }
+
+  GIVEN("A bool type passed to to_bool_type (matching kind)")
+  {
+    type2tc bool_ty = get_bool_type();
+    THEN("the cast succeeds")
+    {
+      REQUIRE_NOTHROW(to_bool_type(bool_ty));
+    }
+  }
+}
+
 // Regression for the BigInt CRC path silently dropping bytes past 256 and
 // ignoring the sign. Before the fix, two oversized BigInts that differ only
 // past the buffer cutoff produced the same CRC, and negating a value did not

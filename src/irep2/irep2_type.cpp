@@ -47,6 +47,20 @@ std::string get_type_id(const type2t &type)
   return std::string(type_names[type.type_id]);
 }
 
+void irep2_bad_type_cast(unsigned actual, unsigned expected, const char *target)
+{
+  const char *actual_name =
+    (actual < type2t::end_type_id) ? type_names[actual] : "<out-of-range>";
+  const char *expected_name = (expected < type2t::end_type_id)
+                                ? type_names[expected]
+                                : "<out-of-range>";
+  throw irep2_cast_error(fmt::format(
+    "irep2: to_{}_type() called on type whose type_id is {} (target {})",
+    expected_name,
+    actual_name,
+    target));
+}
+
 type2t::type2t(type_ids id) : type_id(id), crc_val(0)
 {
 }

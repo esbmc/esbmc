@@ -3724,10 +3724,9 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-// Same deal as for "type_macros".
-#ifdef NDEBUG
-#  define dynamic_cast static_cast
-#endif
+// Same deal as for "type_macros": is_<name>2t predicates plus to_<name>2t
+// downcasts routed through irep2_checked_expr_cast so a bad to_*2t throws
+// irep2_cast_error in every build mode.
 #define expr_macros(name)                                                      \
   inline bool is_##name##2t(const expr2tc &t)                                  \
   {                                                                            \
@@ -3739,11 +3738,13 @@ public:
   }                                                                            \
   inline const name##2t & to_##name##2t(const expr2tc &t)                      \
   {                                                                            \
-    return dynamic_cast<const name##2t &>(*t);                                 \
+    return irep2_checked_expr_cast<const name##2t>(                            \
+      *t, expr2t::name##_id, #name);                                           \
   }                                                                            \
   inline name##2t & to_##name##2t(expr2tc & t)                                 \
   {                                                                            \
-    return dynamic_cast<name##2t &>(*t.get());                                 \
+    return irep2_checked_expr_cast<name##2t>(                                  \
+      *t.get(), expr2t::name##_id, #name);                                     \
   }
 
 // Boost preprocessor magic to iterate over all exprs,
@@ -3751,8 +3752,5 @@ public:
 BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_MACROS_ENUM, foo, ESBMC_LIST_OF_EXPRS)
 
 #undef expr_macros
-#ifdef dynamic_cast
-#  undef dynamic_cast
-#endif
 
 #endif /* IREP2_EXPR_H_ */

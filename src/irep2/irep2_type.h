@@ -714,12 +714,11 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-// Generate some "is-this-a-blah" macros, and type conversion macros. This is
-// fine in terms of using/ keywords in syntax, because the preprocessor
-// preprocesses everything out.
-#ifdef NDEBUG
-#  define dynamic_cast static_cast
-#endif
+// Generate "is_<name>_type" predicates and "to_<name>_type" downcasts. The
+// downcasts route through irep2_checked_type_cast so a bad to_*_type throws
+// irep2_cast_error in every build mode rather than invoking undefined
+// behaviour under NDEBUG (the previous design redefined dynamic_cast as
+// static_cast in release).
 #define type_macros(name)                                                      \
   inline bool is_##name##_type(const expr2tc &e)                               \
   {                                                                            \
@@ -731,19 +730,23 @@ public:
   }                                                                            \
   inline const name##_type2t &to_##name##_type(const type2tc &t)               \
   {                                                                            \
-    return dynamic_cast<const name##_type2t &>(*t.get());                      \
+    return irep2_checked_type_cast<const name##_type2t>(                       \
+      *t.get(), type2t::name##_id, #name);                                     \
   }                                                                            \
   inline name##_type2t &to_##name##_type(type2tc &t)                           \
   {                                                                            \
-    return dynamic_cast<name##_type2t &>(*t.get());                            \
+    return irep2_checked_type_cast<name##_type2t>(                             \
+      *t.get(), type2t::name##_id, #name);                                     \
   }                                                                            \
   inline name##_type2t &to_##name##_type(type2t &t)                            \
   {                                                                            \
-    return dynamic_cast<name##_type2t &>(t);                                   \
+    return irep2_checked_type_cast<name##_type2t>(                             \
+      t, type2t::name##_id, #name);                                            \
   }                                                                            \
   inline const name##_type2t &to_##name##_type(const type2t &t)                \
   {                                                                            \
-    return dynamic_cast<const name##_type2t &>(t);                             \
+    return irep2_checked_type_cast<const name##_type2t>(                       \
+      t, type2t::name##_id, #name);                                            \
   }
 
 type_macros(bool);
@@ -762,8 +765,5 @@ type_macros(floatbv);
 type_macros(complex);
 type_macros(cpp_name);
 #undef type_macros
-#ifdef dynamic_cast
-#  undef dynamic_cast
-#endif
 
 #endif /* IREP2_TYPE_H_ */
