@@ -452,15 +452,15 @@ void execution_statet::preserve_last_paths(const transition_resultt &transition)
   // Add the current path to the set of paths to be preserved. Don't do this
   // if the current guard is false, though.
   if (!ls.guard.is_false() || !is_cur_state_guard_false(ls.guard.as_expr()))
-    pp.push_back(std::make_pair(ls.source.pc, goto_statet(ls)));
+    pp.push_back(std::make_pair(ls.source.pc, merge_statet(ls)));
 
   if (transition.branch_target)
   {
     assert(transition.parent_guard && "Branch transition without parent guard");
 
-    auto it = ls.top().goto_state_map.find(*transition.branch_target);
+    auto it = ls.top().merge_state_map.find(*transition.branch_target);
     assert(
-      it != ls.top().goto_state_map.end() &&
+      it != ls.top().merge_state_map.end() &&
       "Nonexistant preserved-path target?");
     auto &statelist = it->second;
 
@@ -471,8 +471,8 @@ void execution_statet::preserve_last_paths(const transition_resultt &transition)
     // Second where the current-path guard plus the to-be-merged guard is equal
     // to the branch parent guard: in that case, these can only be the two
     // descendant paths from the pre-GOTO state.
-    const goto_statet *tomerge = nullptr;
-    for (const goto_statet &gs : statelist)
+    const merge_statet *tomerge = nullptr;
+    for (const merge_statet &gs : statelist)
     {
       bool merge = false;
 
@@ -505,7 +505,7 @@ void execution_statet::preserve_last_paths(const transition_resultt &transition)
     // have matched parent_guard earlier.
     assert(tomerge != nullptr);
 
-    pp.emplace_back(*transition.branch_target, goto_statet(*tomerge));
+    pp.emplace_back(*transition.branch_target, merge_statet(*tomerge));
   }
 
   // We must have picked up at least one path to merge
@@ -546,13 +546,13 @@ void execution_statet::cull_all_paths()
   // back in at some point in the future.
   for (auto &frame : cur_state->call_stack)
   {
-    frame.goto_state_map.clear();
+    frame.merge_state_map.clear();
   }
 }
 
 void execution_statet::restore_last_paths()
 {
-  // For each preserved path: create a fresh new goto_statet with data values
+  // For each preserved path: create a fresh new merge_statet with data values
   // created from the present values of l2-renaming and value set, as we
   // (presumably) switch back in from a different thread. Then schedule the
   // states to be merged in at their original locations.
@@ -569,16 +569,16 @@ void execution_statet::restore_last_paths()
     // if we have more than one state at a given location to merge.
     if (
       options.get_bool_option("no-goto-merge") &&
-      cur_state->top().goto_state_map[loc].size() != 0)
+      cur_state->top().merge_state_map[loc].size() != 0)
     {
       log_error(
         "There are goto statements that shouldn't be merged at this point");
       abort();
     }
-    // Create a fresh new goto_statet to be merged in at the target insn
-    cur_state->top().goto_state_map[loc].emplace_back(*cur_state);
+    // Create a fresh new merge_statet to be merged in at the target insn
+    cur_state->top().merge_state_map[loc].emplace_back(*cur_state);
     // Get ref to it
-    auto &new_gs = *cur_state->top().goto_state_map[loc].begin();
+    auto &new_gs = *cur_state->top().merge_state_map[loc].begin();
 
     // Proceed to fill new_gs with old data. Ideally this would be a method...
     new_gs.num_instructions = gs.num_instructions;
@@ -712,7 +712,7 @@ unsigned int execution_statet::add_thread(const goto_programt *prog)
   // it might not run immediately, thus must have it's path preserved:
   preserved_paths[thread_nr].push_back(
     std::make_pair(
-      prog->instructions.begin(), goto_statet(threads_state[thread_nr])));
+      prog->instructions.begin(), merge_statet(threads_state[thread_nr])));
 
   return threads_state.size() - 1; // thread ID, zero based
 }

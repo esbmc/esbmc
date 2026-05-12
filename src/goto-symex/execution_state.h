@@ -45,7 +45,7 @@ class execution_statet : public goto_symext
 public:
   class ex_state_level2t; // Forward dec
   // Convenience typedef
-  typedef goto_symex_statet::goto_statet goto_statet;
+  typedef goto_symex_statet::merge_statet merge_statet;
 
   struct transition_resultt
   {
@@ -492,10 +492,10 @@ public:
   std::vector<goto_symex_statet> threads_state;
   /** Preserved paths. After switching out of a thread, only the paths active
    *  at the time the switch occurred are allowed to live, and are stored
-   *  here. Format is: for each thread, a list of paths, which are made up
-   *  of an insn number where the path merges and it's goto_statet when we
-   *  switched away. Preserved paths can only be in the top() frame.  */
-  std::vector<std::list<std::pair<goto_programt::const_targett, goto_statet>>>
+   *  here. Format is: for each thread, a list of paths made from the
+   *  instruction where the path merges and the merge_statet snapshot captured
+   *  when we switched away. Preserved paths can only be in the top() frame. */
+  std::vector<std::list<std::pair<goto_programt::const_targett, merge_statet>>>
     preserved_paths;
   /** Atomic section count. Every time an atomic begin is executed, the
    *  atomic_number corresponding to the thread is incremented, allowing nested

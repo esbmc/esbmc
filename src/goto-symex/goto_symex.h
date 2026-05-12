@@ -96,7 +96,7 @@ public:
       : target(std::move(t)),
         total_claims(claims),
         remaining_claims(remain),
-        simplified_claims(simplified){};
+        simplified_claims(simplified) {};
     std::shared_ptr<symex_targett> target;
     unsigned int total_claims;
     unsigned int remaining_claims;
@@ -267,21 +267,22 @@ protected:
    *  Merge pointer tracking value sets in a phi function.
    *  See merge_gotos - when we're merging states together due to previous
    *  jumps, this function implements the merging of pointer tracking data.
-   *  @param goto_state Previously executed goto state to be merged in.
+   *  @param merge_state Previously recorded merge snapshot to be merged in.
    *  @param dest Thread state for previous jump to be merged into.
    */
-  void merge_value_sets(const statet::goto_statet &goto_state);
+  void merge_value_sets(const statet::merge_statet &merge_state);
 
-  void merge_locality(const statet::goto_statet &goto_state);
+  void merge_locality(const statet::merge_statet &merge_state);
 
   /**
-   *  Join together a previous jump state into thread state.
+   *  Join a previous jump's merge snapshot into the active thread state.
    *  This combines together two thread states by using if-then-elses to decide
    *  the new value of a variable, according to the truth of the guards of the
    *  states being joined.
-   *  @param goto_state The previous jumps state to be merged into the current
+   *  @param merge_state Previous jump snapshot to be merged into the current
+   *  state.
    */
-  void phi_function(const statet::goto_statet &goto_state);
+  void phi_function(const statet::merge_statet &merge_state);
 
   /**
    *  Test whether unwinding bound has been exceeded.
