@@ -1445,7 +1445,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     if (!cu.init_field.empty())
     {
       const union_type2t &ut = to_union_type(expr->type);
-      unsigned c = ut.get_component_number(cu.init_field);
+      unsigned c = ut.get_component_number(cu.init_field).value();
       /* Can only initialize unions by expressions of same type as init_field */
       assert(src_expr->type->type_id == ut.members[c]->type_id);
     }
@@ -2115,7 +2115,8 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       const union_type2t &tu = to_union_type(expr->type);
       assert(is_constant_string2t(with.update_field));
       unsigned c =
-        tu.get_component_number(to_constant_string2t(with.update_field).value);
+        tu.get_component_number(to_constant_string2t(with.update_field).value)
+          .value();
       uint64_t mem_bits = type_byte_size_bits(tu.members[c]).to_uint64();
       expr2tc upd = bitcast2tc(
         get_uint_type(mem_bits), typecast2tc(tu.members[c], with.update_value));

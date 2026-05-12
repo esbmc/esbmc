@@ -1,6 +1,7 @@
 #ifndef IREP2_TYPE_H_
 #define IREP2_TYPE_H_
 
+#include <optional>
 #include <irep2/irep2.h>
 #include <util/type.h>
 
@@ -63,14 +64,15 @@ public:
   }
   struct_union_data(const struct_union_data &ref) = default;
 
-  /** Fetch index number of member. Given a textual name of a member of a
-   *  struct or union, this method will look up what index it is into the
-   *  vector of types that make up this struct/union. Always returns the correct
-   *  index, if you give it a name that isn't part of this struct/union it'll
-   *  abort.
+  /** Fetch index number of member. Looks up the position of @p name in
+   *  member_names. Returns std::nullopt when there is no match or more
+   *  than one match (the latter is malformed IR); callers that treat
+   *  either case as a logic bug should `.value()` the result and let
+   *  std::bad_optional_access surface, or assert before unwrapping.
    *  @param name Name of member of this struct/union to look up.
-   *  @return Index into members/member_names vectors */
-  unsigned int get_component_number(const irep_idt &name) const;
+   *  @return Index into members/member_names vectors, or nullopt. */
+  std::optional<unsigned int>
+  get_component_number(const irep_idt &name) const;
 
   const std::vector<type2tc> &get_structure_members() const;
   const std::vector<irep_idt> &get_structure_member_names() const;

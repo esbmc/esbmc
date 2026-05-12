@@ -2945,8 +2945,8 @@ public:
       source->type->type_id == type2t::complex_id);
     auto *data = dynamic_cast<const struct_union_data *>(source->type.get());
     assert(data);
-    /* internally asserts consistency conditions */
-    data->get_component_number(memb);
+    /* member must exist exactly once in the parent struct/union */
+    assert(data->get_component_number(memb).has_value());
 #endif
   }
   member2t(const member2t &ref) = default;

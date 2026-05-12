@@ -429,9 +429,10 @@ void with2t::assert_consistency() const
       dynamic_cast<const struct_union_data *>(source_value->type.get());
     assert(d);
     assert(update_field->expr_id == constant_string_id);
-    unsigned c =
+    auto c =
       d->get_component_number(to_constant_string2t(update_field).value);
-    assert_type_compat_for_with(update_value->type, d->members[c]);
+    assert(c.has_value());
+    assert_type_compat_for_with(update_value->type, d->members[*c]);
   }
   assert(type == source_value->type);
 }
