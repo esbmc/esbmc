@@ -226,13 +226,25 @@ public:
     }
     reverse_iterator &operator--()
     {
-      idx = owner->_next_idx(idx);
+      // Reverse iteration: --rit moves forward in the underlying list.
+      // From rend (idx == SENTINEL), --rit must land on the first forward
+      // element so that *(--rend()) reads the front of the list per std::
+      // reverse_iterator semantics. _next_idx(SENTINEL) returns SENTINEL
+      // (the correct behaviour for forward ++end()), so handle the
+      // boundary explicitly here.
+      if (idx == SENTINEL)
+        idx = owner->_sentinel_next;
+      else
+        idx = owner->_next_idx(idx);
       return *this;
     }
     reverse_iterator operator--(int)
     {
       reverse_iterator tmp(*this);
-      idx = owner->_next_idx(idx);
+      if (idx == SENTINEL)
+        idx = owner->_sentinel_next;
+      else
+        idx = owner->_next_idx(idx);
       return tmp;
     }
 
@@ -272,21 +284,34 @@ public:
       push_back(*it);
   }
 
+  // Bulk pool copy bounded by x._next_free (the high-water mark — slots
+  // at indices >= _next_free have never been allocated and are
+  // unreachable through prev/next links). Copying by index instead of
+  // walking the linked list via x._pool[i].next_idx lets ESBMC unroll
+  // with a concrete index bound: under a low --unwind the loop
+  // terminates naturally at x._next_free, instead of speculatively
+  // unrolling to --unwind with a fresh LIST_MAX_SIZE-way case split per
+  // step on the symbolic next_idx.
   list(const list<T> &x)
   {
-    _init();
-    for (size_type i = x._sentinel_next; i != SENTINEL; i = x._pool[i].next_idx)
-      push_back(x._pool[i].data);
+    _sentinel_prev = x._sentinel_prev;
+    _sentinel_next = x._sentinel_next;
+    _next_free = x._next_free;
+    _size = x._size;
+    for (size_type i = 0; i < x._next_free; i++)
+      _pool[i] = x._pool[i];
   }
 
   list<T> &operator=(const list<T> &x)
   {
     if (this != &x)
     {
-      _init();
-      for (size_type i = x._sentinel_next; i != SENTINEL;
-           i = x._pool[i].next_idx)
-        push_back(x._pool[i].data);
+      _sentinel_prev = x._sentinel_prev;
+      _sentinel_next = x._sentinel_next;
+      _next_free = x._next_free;
+      _size = x._size;
+      for (size_type i = 0; i < x._next_free; i++)
+        _pool[i] = x._pool[i];
     }
     return *this;
   }
@@ -464,6 +489,28 @@ public:
     x.erase(i);
   }
 
+  // Range splice. Moves [first, last) out of x and re-inserts it before
+  // position. Self-splice-safe (x may alias *this): 'next' is captured
+  // before insert/erase so the loop never reads through an erased node.
+  // 'last' is taken by value, so even when x and *this overlap, its idx
+  // is stable across the erases (we never erase the node at last).
+  void splice(
+    iterator position,
+    list<value_type> &x,
+    iterator first,
+    iterator last)
+  {
+    iterator it = first;
+    while (it != last)
+    {
+      iterator next = it;
+      ++next;
+      insert(position, *it);
+      x.erase(it);
+      it = next;
+    }
+  }
+
   void remove(const value_type &value)
   {
     iterator it = begin();
@@ -592,19 +639,28 @@ public:
   // element, scans the prefix [begin, it) for the first node whose
   // value is not less than *it, then unlinks *it and re-links it before
   // that scan position. Stable for equal keys.
+  //
+  // Both loops are bounded by SENTINEL (== LIST_MAX_SIZE) step counters
+  // so ESBMC's symbolic unrolling stays inside the pool size, instead of
+  // speculatively unrolling to --unwind through pool[i].next_idx chains.
   void sort()
   {
     if (_size < 2)
       return;
     iterator it = begin();
     ++it;
-    while (it != end())
+    size_type outer = 0;
+    while (outer < SENTINEL && it != end())
     {
       iterator next_it = it;
       ++next_it;
       iterator scan = begin();
-      while (scan != it && !(*it < *scan))
+      size_type inner = 0;
+      while (inner < SENTINEL && scan != it && !(*it < *scan))
+      {
         ++scan;
+        ++inner;
+      }
       if (scan != it)
       {
         size_type n = it.idx;
@@ -612,6 +668,7 @@ public:
         _link_before(n, scan.idx);
       }
       it = next_it;
+      ++outer;
     }
   }
 
@@ -622,13 +679,18 @@ public:
       return;
     iterator it = begin();
     ++it;
-    while (it != end())
+    size_type outer = 0;
+    while (outer < SENTINEL && it != end())
     {
       iterator next_it = it;
       ++next_it;
       iterator scan = begin();
-      while (scan != it && !comp(*it, *scan))
+      size_type inner = 0;
+      while (inner < SENTINEL && scan != it && !comp(*it, *scan))
+      {
         ++scan;
+        ++inner;
+      }
       if (scan != it)
       {
         size_type n = it.idx;
@@ -636,6 +698,7 @@ public:
         _link_before(n, scan.idx);
       }
       it = next_it;
+      ++outer;
     }
   }
 
@@ -682,8 +745,12 @@ bool operator==(const list<int> &x, const list<int> &y)
     return false;
   list<int>::size_type ix = x._sentinel_next;
   list<int>::size_type iy = y._sentinel_next;
-  while (ix != list<int>::SENTINEL)
+  // Static step bound so ESBMC stops unrolling at LIST_MAX_SIZE
+  // (== SENTINEL) instead of speculatively unrolling to --unwind.
+  for (list<int>::size_type step = 0; step < list<int>::SENTINEL; step++)
   {
+    if (ix == list<int>::SENTINEL)
+      return iy == list<int>::SENTINEL;
     if (x._pool[ix].data != y._pool[iy].data)
       return false;
     ix = x._pool[ix].next_idx;
@@ -703,8 +770,10 @@ bool operator==(const list<double> &x, const list<double> &y)
     return false;
   list<double>::size_type ix = x._sentinel_next;
   list<double>::size_type iy = y._sentinel_next;
-  while (ix != list<double>::SENTINEL)
+  for (list<double>::size_type step = 0; step < list<double>::SENTINEL; step++)
   {
+    if (ix == list<double>::SENTINEL)
+      return iy == list<double>::SENTINEL;
     if (x._pool[ix].data != y._pool[iy].data)
       return false;
     ix = x._pool[ix].next_idx;
