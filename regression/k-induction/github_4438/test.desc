@@ -1,0 +1,4 @@
+CORE
+main.c
+--k-induction --interval-analysis --floatbv --error-label ERROR --k-step 2 --max-inductive-step 3 --32 --z3
+^VERIFICATION SUCCESSFUL$

@@ -116,18 +116,33 @@ inline void instrument_symbol_constraints(
   if (state_iterator == interval_analysis.state_map.end())
     return;
   const interval_domaint &d = state_iterator->second;
+  bool constrains_float = false;
   for (const auto &symbol_expr : symbols)
   {
     expr2tc tmp = d.make_expression(symbol_expr);
     if (!is_true(tmp))
+    {
       symbol_constraints.push_back(tmp);
+      if (is_floatbv_type(symbol_expr->type))
+        constrains_float = true;
+    }
   }
 
   if (!symbol_constraints.empty())
   {
     goto_programt::instructiont instruction;
     instruction.make_assumption(conjunction(symbol_constraints));
-    instruction.inductive_step_instruction = config.options.is_kind();
+    // Float interval bounds expand to `lower <= x` and `x <= upper`
+    // (or `x == c` in singleton intervals), all of which evaluate
+    // to false when x is NaN (IEEE 754).  The base case relies on
+    // these interval-derived assumes to propagate range-restricting
+    // guards (e.g. `if (a <= x && x <= b)`) forward to later
+    // program points.  Tagging them inductive-step-only loses that
+    // propagation and lets the base case observe spurious NaN
+    // traces produced by libm operational models such as
+    // expf/logf — see issue #4438.
+    instruction.inductive_step_instruction =
+      config.options.is_kind() && !constrains_float;
     instruction.location = it->location;
     instruction.function = it->function;
     goto_function.body.insert_swap(it++, instruction);
