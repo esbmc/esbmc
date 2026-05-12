@@ -1,4 +1,4 @@
 CORE
 test.c
---incremental-bmc
+--no-unwinding-assertions --unwind 1
 ^VERIFICATION FAILED$

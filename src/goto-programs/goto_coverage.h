@@ -84,6 +84,16 @@ public:
   static size_t total_branch;
   static size_t total_func_branch;
   static size_t total_kpath;
+  // |spanning_set| under Marré-Bertolino subsumption (issue #4335 PR1).
+  // Equals total_kpath when no goal is subsumed by another. Used as the
+  // denominator of the k-path coverage percentage to drop the lower
+  // bound contribution of redundant subsumed goals.
+  static size_t total_kpath_spanning;
+  // (msg, loc) pairs whose every emission is non-maximal. JSON report
+  // marks these as "spanning-set-redundant" and they are excluded from
+  // the spanning-set denominator.
+  static std::set<std::pair<std::string, std::string>>
+    k_path_spanning_redundant;
   // all instrumented claims (condition, location) for JSON report
   static std::set<std::pair<std::string, std::string>> all_claims;
 

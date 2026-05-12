@@ -2426,9 +2426,21 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     }
     else
     {
-      expr2tc lt = lessthan2tc(abs.value, gen_zero(abs.value->type));
+      // Lower as `(x >= 0) ? x : -x`. The opposite-sense `(x < 0) ? -x : x`
+      // is logically equivalent but bitwuzla preprocesses the `>= 0` shape
+      // significantly faster. Fixes a 7x regression on
+      // sv-benchmarks/c/xcsp/AllInterval-017.
+      //
+      // The branch-free `bvsub(bvxor(x, ashr(x, w-1)), ashr(x, w-1))`
+      // form was tried (it's the canonical SMT-LIB abs encoding) and is
+      // ~8x slower on AllInterval-017 under bitwuzla — the ite form
+      // gives the solver a clean case-split that meshes with the
+      // surrounding all-distinct + abs-difference chain, while the xor
+      // form mixes the sign bit into bitvector arithmetic and seems to
+      // defeat term-graph sharing in this pattern.
+      expr2tc ge = greaterthanequal2tc(abs.value, gen_zero(abs.value->type));
       expr2tc neg = neg2tc(abs.value->type, abs.value);
-      expr2tc ite = if2tc(abs.type, lt, neg, abs.value);
+      expr2tc ite = if2tc(abs.type, ge, abs.value, neg);
 
       a = convert_ast(ite);
     }
@@ -2445,24 +2457,11 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     // children — preserving the IR-level cmp_three_way2t up to here.
     const cmp_three_way2t &cw = to_cmp_three_way2t(expr);
 
-    auto make_value = [&](int v) -> expr2tc {
-      const struct_type2t &st = to_struct_type(cw.type);
-      std::vector<expr2tc> ops;
-      ops.reserve(st.members.size());
-      for (size_t i = 0; i < st.members.size(); ++i)
-      {
-        if (i == 0)
-          ops.push_back(constant_int2tc(st.members[0], BigInt(v)));
-        else
-          ops.push_back(gen_zero(st.members[i]));
-      }
-      return constant_struct2tc(cw.type, std::move(ops));
-    };
-
     expr2tc lt = lessthan2tc(cw.side_1, cw.side_2);
     expr2tc eq = equality2tc(cw.side_1, cw.side_2);
-    expr2tc inner = if2tc(cw.type, eq, make_value(0), make_value(1));
-    expr2tc outer = if2tc(cw.type, lt, make_value(-1), inner);
+    expr2tc inner = if2tc(
+      cw.type, eq, make_cmp_value(cw.type, 0), make_cmp_value(cw.type, 1));
+    expr2tc outer = if2tc(cw.type, lt, make_cmp_value(cw.type, -1), inner);
     a = convert_ast(outer);
     break;
   }

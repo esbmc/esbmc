@@ -5,8 +5,9 @@
 // chained one, so without a contradiction check at instrumentation time
 // these tautological `assert(¬(g ∧ q ∧ ¬g))` assertions sat permanently
 // uncovered, inflating the denominator. Three sequential branches on
-// the same guard with k=3 should yield exactly 6 reachable witnesses
-// (2 per branch), all covered.
+// the same guard with k=3 emit 6 non-tautological witnesses (2 per
+// branch), of which only the 2 depth-3 emissions are maximal; both
+// are reachable, giving 2/2 = 100% spanning-set coverage.
 int main()
 {
   int a;
