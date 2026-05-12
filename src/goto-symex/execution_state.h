@@ -10,6 +10,7 @@
 
 #include <list>
 #include <map>
+#include <memory>
 #include <optional>
 #include <set>
 #include <irep2/irep2.h>
@@ -45,6 +46,14 @@ public:
   class ex_state_level2t; // Forward dec
   // Convenience typedef
   typedef goto_symex_statet::goto_statet goto_statet;
+
+  struct transition_resultt
+  {
+    unsigned int thread_id = 0;
+    const goto_programt::instructiont *instruction = nullptr;
+    std::optional<guardt> parent_guard;
+    std::optional<goto_programt::const_targett> branch_target;
+  };
 
 public:
   /**
@@ -339,9 +348,10 @@ public:
    */
   void update_after_switch_point();
 
-  void preserve_last_paths();
+  void preserve_last_paths(const transition_resultt &transition);
   void cull_all_paths();
   void restore_last_paths();
+  void record_goto_transition(const guardt &parent_guard);
 
   /**
    *  Analyze the contents of an assignment for threading.
@@ -499,8 +509,8 @@ public:
   std::vector<expr2tc> thread_start_data;
   /** Last active thread's ID. */
   unsigned int last_active_thread;
-  /** Last executed insn -- sometimes necessary for analysis. */
-  const goto_programt::instructiont *last_insn;
+  /** Explicit result of the last symbolic transition taken. */
+  transition_resultt last_transition;
   /** Global L2 state of this execution_statet. It's also copied as a reference
    *  into each threads own state. */
   std::shared_ptr<ex_state_level2t> state_level2;
@@ -521,10 +531,6 @@ public:
    *  Means that there is no path from here on where any assertion may
    *  become satisfiable. */
   bool interleaving_unviable;
-  /** State guard prior to a GOTO instruction causing a cswitch. Any thread
-   *  interleaved after a GOTO will be composed with this guard, rather than
-   *  the guard from any of the branches of the GOTO itself. */
-  std::optional<guardt> branch_parent_guard;
   /** TID of monitor thread, for monitor intrinsics. */
   unsigned int monitor_tid;
   /** Whether monitor_tid is set. */
