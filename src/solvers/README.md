@@ -11,6 +11,48 @@ C API).  The most thorough in-source documentation is the file-level
 Doxygen comment at the top of [`smt/smt_conv.h`](smt/smt_conv.h) — start
 there if you want a deep dive.
 
+## Where this fits in the ESBMC pipeline
+
+If you are new to ESBMC, read the top-level
+[`ARCHITECTURE.md`](../../ARCHITECTURE.md) first — it has the diagram
+and prose overview of the full verification pipeline.  The short version:
+
+    source  →  AST  →  GOTO program  →  symex / SSA  →  SMT formula  →  solver  →  model
+                                                       └──────────  src/solvers/  ──────────┘
+
+This directory owns the last two stages.  Its inputs are SSA-form
+expressions in ESBMC's typed internal representation; its outputs are
+SMT terms in a back-end solver's API and, on `SAT`, a model that is
+decoded back into ESBMC values.
+
+Neighbouring layers that this module collaborates with — read these
+when something in `smt_convt` is not behaving the way you expect:
+
+- [`src/irep2/`](../irep2/README.md) — the typed expression / type IR
+  (`expr2tc`, `type2tc`).  Every input to `smt_convt::convert` is an
+  `expr2tc`; understanding the IR is a prerequisite for understanding
+  what the converter is destructuring.
+- [`src/pointer-analysis/`](../pointer-analysis/README.md) — ESBMC's
+  memory model.  Pointer dereferencing happens *upstream* of this
+  directory; `smt_convt` only sees the lowered byte / array operations.
+- [`src/goto-symex/`](../goto-symex/) — symbolic execution.  Anything
+  involving control-flow guards, dynamic allocation, or pointer
+  liveness belongs there, not here.
+
+User-facing theory and developer docs on the website mirror parts of
+this pipeline and are worth a skim:
+
+- [SMT Formula Generation](../../website/content/docs/theory/smt-formula-generation.md)
+  — how to dump and inspect the formula ESBMC produces (`--smtlib
+  --smt-formula-only`).  Essential for debugging a new backend or
+  encoding.
+- [Adding New Expressions](../../website/content/docs/development/Adding-new-expressions.md)
+  — narrative walkthrough (quantifier example) of taking a new
+  expression all the way from a frontend down to SMT.  Touches every
+  layer above this directory and the encoding hooks inside it.
+- [Architecture](../../website/content/docs/development/architecture.md)
+  — project structure and conventions for contributors.
+
 ## Directory layout
 
 | Path | Contents |
@@ -104,7 +146,8 @@ reference and the wiki as background.
 - `src/solvers/solver_config.h.in` — add the `#cmakedefine <NAME>`.
 - `src/esbmc/options.cpp` — register the `--<solver>` command-line flag.
 - `src/esbmc/esbmc_parseoptions.cpp` — extend solver-selection.
-- `BUILDING.md` — install/dependency notes for the new solver.
+- Top-level [`README.md`](../../README.md) and `scripts/build.sh` —
+  install/dependency notes for the new solver.
 - `.github/workflows/build.yml` and `.github/workflows/release.yml` —
   add the new solver to the CI matrix.
 - `regression/esbmc/` — add at least one passing and one failing
@@ -132,8 +175,8 @@ The in-tree exemplar is the `--ir-ieee` real-arithmetic FP mode
   the pointer/memory model.
 - `src/solvers/smt/smt_conv.{h,cpp}` — encoding flag, any new
   `smt_func_kind` entries, and the encoding hook itself.
-- `src/solvers/smt/simplify_expr.cpp` — simplification rules for new
-  operators, if any.
+- `src/util/simplify_expr.cpp` — simplification rules for new operators,
+  if any.
 - Each affected backend — typically `bitwuzla/`, `boolector/`, and the
   text backend `smtlib/smtlib_conv.cpp`.
 
@@ -163,15 +206,33 @@ to an unconstrained (weak) enclosure.
 
 ## Further reading
 
+In-tree, in this directory:
+
 - File-level Doxygen comment in [`smt/smt_conv.h`](smt/smt_conv.h) —
   authoritative description of what `smt_convt` flattens and why.
 - [`bitwuzla/bitwuzla_conv.{h,cpp}`](bitwuzla/) — canonical small
   backend, recommended starting point for new integrations.
 - [`solve.cpp`](solve.cpp) — factory plumbing and default-solver
   priority list.
-- Wiki: [Integrate a new SMT solver][wiki-solver] (long-form, written
-  against `z3/`).
-- Wiki: [Implement a new SMT theory][wiki-theory] (long-form, narrative
+
+In-tree, neighbouring layers:
+
+- [`ARCHITECTURE.md`](../../ARCHITECTURE.md) — top-level pipeline.
+- [`src/irep2/README.md`](../irep2/README.md) — the expression IR
+  consumed here.
+- [`src/pointer-analysis/README.md`](../pointer-analysis/README.md) —
+  ESBMC's memory model.
+- [SMT Formula Generation](../../website/content/docs/theory/smt-formula-generation.md)
+  and [Adding New Expressions](../../website/content/docs/development/Adding-new-expressions.md)
+  on the project website.
+- [`CONTRIBUTIONS.md`](../../CONTRIBUTIONS.md) — general contribution
+  workflow.
+
+On the wiki:
+
+- [Integrate a new SMT solver][wiki-solver] (long-form, written against
+  `z3/`).
+- [Implement a new SMT theory][wiki-theory] (long-form, narrative
   walkthrough).
 
 [wiki-solver]: https://github.com/esbmc/esbmc/wiki/Integrate-a-new-SMT-solver-into-the-ESBMC-backend
