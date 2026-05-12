@@ -5161,20 +5161,6 @@ smt_astt smt_convt::mk_bvnot(smt_astt a)
   abort();
 }
 
-smt_astt smt_convt::mk_bvnor(smt_astt a, smt_astt b)
-{
-  (void)a;
-  (void)b;
-  abort();
-}
-
-smt_astt smt_convt::mk_bvnand(smt_astt a, smt_astt b)
-{
-  (void)a;
-  (void)b;
-  abort();
-}
-
 smt_astt smt_convt::mk_bvxor(smt_astt a, smt_astt b)
 {
   (void)a;
