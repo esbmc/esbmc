@@ -1,5 +1,5 @@
 CORE
 main.c 
---multi-property --incremental-bmc
+--multi-property --no-unwinding-assertions --unwind 3
 ^VERIFICATION FAILED$
 \bdivision by zero\b
