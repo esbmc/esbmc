@@ -96,6 +96,30 @@ for instance, anything that touches pointer dereferencing, control-flow
 guards, or dynamic allocation — that work belongs in symbolic execution,
 not here.
 
+### Lifecycle of one query
+
+Symex hands `smt_convt` an SSA program one expression at a time and
+later asks for a verdict.  The sequence of calls is:
+
+    smt_convt::assert_expr(expr2tc)
+        └─> convert_ast(expr2tc)              // defined in smt_conv.cpp
+                └─> mk_* family               // your overrides build native terms
+        └─> assert_ast(smt_astt)              // your override hands term to solver
+
+    ... repeat for every SSA assertion ...
+
+    dec_solve()                               // your override invokes the solver
+        └─> returns SAT / UNSAT / UNKNOWN
+
+    if SAT:
+        get_bool / get_bv / get_array_elem    // your overrides read the model
+
+`push_ctx` / `pop_ctx` bracket incremental queries.  This is the only
+temporal contract a backend must honour: terms produced by `mk_*` are
+asserted via `assert_ast`, the solver is invoked exactly once per
+verdict via `dec_solve`, and model values are extracted only after a
+SAT result.
+
 ## Adding a new SMT backend
 
 The canonical small reference is `bitwuzla/`.  There is also a longer
@@ -105,7 +129,28 @@ That page is written against `z3/` as the template and some of its
 line-number citations have drifted; treat `bitwuzla/` as the up-to-date
 reference and the wiki as background.
 
-**In-tree (under `src/solvers/`):**
+### Quick start
+
+1. Copy `bitwuzla/` to `<name>/` and rename `bitwuzla` → `<name>`
+   throughout.  Replace Bitwuzla API calls with your solver's API; keep
+   the class hierarchy intact.
+2. Wire it into the build and CLI as described in *In-tree* and
+   *Out-of-tree* below.
+3. From a clean rebuild, smoke-test with a one-line C program:
+
+   ```sh
+   echo 'int main(){int x; assert(x == x);}' > t.c
+   esbmc t.c --<name>          # expect: VERIFICATION SUCCESSFUL
+   esbmc t.c --<name> --smtlib --smt-formula-only --output /dev/stdout
+   ```
+
+   The first command exercises the full lifecycle (`convert_ast` →
+   `assert_ast` → `dec_solve` → no model needed); the second dumps the
+   formula your backend would receive — invaluable when a real query
+   misbehaves.  Once that works, run the regression suite filtered by
+   `-L esbmc` with your `--<name>` flag wired in.
+
+### In-tree (under `src/solvers/`)
 
 1. Create `src/solvers/<name>/` with `<name>_conv.{h,cpp}` and a
    `CMakeLists.txt`.
@@ -115,18 +160,51 @@ reference and the wiki as background.
    `class <name>_convt : public smt_convt, public array_iface, public fp_convt`
    (mirror `bitwuzla_convt`).  Drop `array_iface` / `fp_convt` if the
    solver lacks native arrays / FP and you intend to use the fall-backs.
-4. Implement the mandatory overrides — by family:
+4. Implement the overrides.  The base class declares ~50 virtual methods;
+   build them up in this order — each stage produces a backend that can
+   run progressively richer programs.
+
+   **Stage 1 — Core (minimum to compile and solve a trivial query).**
+   These methods are pure-virtual in `smt_convt`, or their defaults
+   `abort()`.  Without them the class will not instantiate, or will die
+   on the first call.
+
+   - Solver lifecycle: `assert_ast`, `dec_solve`, `push_ctx`, `pop_ctx`,
+     `solver_text`.
+   - Sorts: `mk_bool_sort`, `mk_bv_sort`.
+   - Literals and symbols: `mk_smt_bool`, `mk_smt_bv`, `mk_smt_symbol`.
+   - Boolean glue: `mk_and`, `mk_or`, `mk_not`, `mk_eq`, `mk_neq`,
+     `mk_ite`.
+   - Bit slicing: `mk_extract`, `mk_sign_ext`, `mk_zero_ext`,
+     `mk_concat`.
+   - Model readback: `get_bool`, `get_bv`.
+
+   At this point a trivial program with `--<name>` should reach
+   `VERIFICATION SUCCESSFUL` / `FAILED` cleanly.
+
+   **Stage 2 — Common (any non-trivial C program needs these).**
+
    - Bit-vector arithmetic and logic: `mk_bv{add,sub,mul,sdiv,udiv,smod,umod,shl,ashr,lshr,neg,not,and,or,xor}`.
-   - Boolean: `mk_{and,or,xor,not,implies}`, `mk_ite`.
-   - Comparison and equality: `mk_bv{ult,slt,ugt,sgt,ule,sle,uge,sge}`, `mk_eq`, `mk_neq`.
-   - Arrays: `mk_store`, `mk_select`, `convert_array_of`.
-   - Sort constructors: `mk_bool_sort`, `mk_bv_sort`, `mk_array_sort`, `mk_fbv_sort`, `mk_bvfp_sort`, `mk_bvfp_rm_sort`.
-   - Literals and symbols: `mk_smt_{bool,int,real,bv,symbol}`, `mk_array_symbol`.
-   - Bit slicing: `mk_extract`, `mk_sign_ext`, `mk_zero_ext`, `mk_concat`.
-   - Solver control: `assert_ast`, `dec_solve`, `push_ctx`, `pop_ctx`, `solver_text`.
-   - Model readback: `get_bool`, `get_bv`, `get_array_elem`.
-   - Overflow + quantifiers: `overflow_arith`, `mk_quantifier`.
-   - Debug helpers: `dump_smt`, `print_model`.
+   - Bit-vector comparison: `mk_bv{ult,slt,ugt,sgt,ule,sle,uge,sge}`.
+   - Boolean extras: `mk_xor`, `mk_implies`.
+   - Arrays: `mk_array_sort`, `mk_array_symbol`, `mk_store`,
+     `mk_select`, `convert_array_of`, `get_array_elem`.
+   - Floats (BV-encoded): `mk_fbv_sort`, `mk_bvfp_sort`,
+     `mk_bvfp_rm_sort`.
+
+   After Stage 2, most of the `regression/esbmc` suite should run.
+
+   **Stage 3 — Advanced and optional.**
+
+   - Integer / real theories: `mk_smt_int`, `mk_smt_real` — only needed
+     for solvers used with `--ir-ieee` or other non-BV encodings.
+   - Quantifiers: `mk_quantifier` — required only if you intend to
+     support `__ESBMC_forall` / `__ESBMC_exists`.
+   - Overflow: `overflow_arith` — if your solver has native overflow
+     predicates; otherwise the BV fall-back is fine.
+   - Debug helpers: `dump_smt`, `print_model` — non-functional but
+     greatly speed up triage; implement before Stage 2 if you can.
+
 5. Expose a factory function
    `smt_convt *create_new_<name>_solver(const optionst &, const namespacet &, ...)`
    and register it in [`solve.cpp`](solve.cpp): add a `solver_creator`
@@ -182,6 +260,13 @@ The in-tree exemplar is the `--ir-ieee` real-arithmetic FP mode
 
 ## Real-arithmetic FP mode (`--ir-ieee`)
 
+**Intuition.** Floating-point operations are approximated using
+real-arithmetic constraints with sound, symmetric error bounds: every
+FP result is bracketed by `[r − ε, r + ε]` where `r` is the exact real
+value and `ε` envelops the round-to-nearest rounding error.  The
+encoding is cheaper for solvers without native FP, and never reports a
+false `UNSAT`.
+
 When `--ir-ieee` is set, floating-point operations are encoded in real
 arithmetic rather than bit-precise FP.  `smt_convt::apply_ieee754_semantics`
 (in `smt/smt_conv.cpp`) wraps each real-valued FP result in a sound
@@ -203,6 +288,48 @@ Epsilon constants come from four helpers in `smt_conv.cpp`
 digit so the parsed value is `>=` the true power of two — preserving
 soundness of the enclosure.  Non-standard FP formats currently fall back
 to an unconstrained (weak) enclosure.
+
+## Debugging and validation
+
+A few habits will save hours when bringing up a new backend or encoding:
+
+- **Dump the formula and read it.**  Even when your backend is selected,
+  point ESBMC at the text backend to inspect what was produced:
+
+  ```sh
+  esbmc t.c --smtlib --smt-formula-only --output t.smt2
+  ```
+
+  Cross-check the dumped term shape against what your backend's
+  `mk_*` overrides produce.  See the website page
+  [SMT Formula Generation](../../website/content/docs/theory/smt-formula-generation.md)
+  for the supported dump options.
+- **Use `dump_smt` / `print_model`.**  Both are virtual hooks on
+  `smt_convt`; implementing them early turns "the solver said no" into
+  "here is the assertion that failed and the model the solver returned".
+- **Watch for sort mismatches.**  Most native solver APIs reject
+  applications whose argument sorts disagree; ESBMC will surface that as
+  an abort deep inside `mk_func_app`.  When you see one, log the sorts
+  of the offending arguments before calling the solver — the smallest
+  reproducer is usually an `assert_ast` on a single equality.
+- **Validate model readback on bit-vectors of every width you support.**
+  `get_bv` is invoked on widths from 1 up to 64+ (and beyond for
+  multi-word integers); a backend that silently truncates large values
+  will pass small regression tests and fail subtly on the full suite.
+  The simplest regression is an `__ESBMC_assume(x == 0xDEADBEEFCAFEBABE)`
+  followed by an `assert(x == 0)` — a wrong-width readback will pass.
+- **Compare against `bitwuzla` and `z3`.**  Both are mature; if all
+  three backends agree on a test the encoding is almost certainly
+  right.  ESBMC's CI matrix does exactly this.  Disagreement is your
+  signal to dump the formula.
+- **Re-build operational-model files when relevant.**  Files under
+  `src/c2goto/library/` and `src/cpp/library/` are mangled by
+  `flail.py` and linked into the `esbmc` binary; edits there are
+  invisible until the binary is rebuilt.
+- **Sanitizers are your friend on the C++ side.**  A backend that
+  forgets to ref-count or releases a term twice will only crash
+  intermittently in CI; build with `-fsanitize=address,undefined` for
+  the development loop.
 
 ## Further reading
 
