@@ -10,8 +10,6 @@ expr_typedefs2(implies, logic_2ops);
 expr_typedefs2(bitand, bit_2ops);
 expr_typedefs2(bitor, bit_2ops);
 expr_typedefs2(bitxor, bit_2ops);
-expr_typedefs2(bitnand, bit_2ops);
-expr_typedefs2(bitnor, bit_2ops);
 expr_typedefs2(lshr, bit_2ops);
 expr_typedefs1(bitnot, bitnot_data);
 expr_typedefs1(neg, arith_1op);

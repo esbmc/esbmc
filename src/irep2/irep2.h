@@ -54,8 +54,6 @@
   BOOST_PP_LIST_CONS(bitand,                                                   \
   BOOST_PP_LIST_CONS(bitor,                                                    \
   BOOST_PP_LIST_CONS(bitxor,                                                   \
-  BOOST_PP_LIST_CONS(bitnand,                                                  \
-  BOOST_PP_LIST_CONS(bitnor,                                                   \
   BOOST_PP_LIST_CONS(bitnot,                                                   \
   BOOST_PP_LIST_CONS(lshr,                                                     \
   BOOST_PP_LIST_CONS(neg,                                                      \
@@ -135,7 +133,7 @@
   BOOST_PP_LIST_CONS(isinstance,                                               \
   BOOST_PP_LIST_CONS(hasattr,                                                  \
   BOOST_PP_LIST_CONS(isnone,                                                   \
-  BOOST_PP_LIST_NIL)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+  BOOST_PP_LIST_NIL)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
 // clang-format on
 
 // Even crazier forward decls,

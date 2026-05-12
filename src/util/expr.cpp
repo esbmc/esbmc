@@ -385,8 +385,6 @@ irep_idt exprt::i_cmp_three_way = dstring("<=>");
 irep_idt exprt::i_bitand = dstring("bitand");
 irep_idt exprt::i_bitor = dstring("bitor");
 irep_idt exprt::i_bitxor = dstring("bitxor");
-irep_idt exprt::i_bitnand = dstring("bitnand");
-irep_idt exprt::i_bitnor = dstring("bitnor");
 irep_idt exprt::i_bitnot = dstring("bitnot");
 irep_idt exprt::i_ashr = dstring("ashr");
 irep_idt exprt::i_lshr = dstring("lshr");

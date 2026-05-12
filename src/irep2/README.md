@@ -197,8 +197,6 @@ inside an expression tree.
 | `bitand` | Bitwise AND. |
 | `bitor` | Bitwise OR. |
 | `bitxor` | Bitwise XOR. |
-| `bitnand` | Bitwise NAND. |
-| `bitnor` | Bitwise NOR. |
 | `bitnot` | Bitwise NOT. |
 | `shl` | Logical shift left. |
 | `lshr` | Logical shift right (zero-fill). |

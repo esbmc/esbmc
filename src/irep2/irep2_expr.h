@@ -1503,8 +1503,6 @@ irep_typedefs(implies, logic_2ops);
 irep_typedefs(bitand, bit_2ops);
 irep_typedefs(bitor, bit_2ops);
 irep_typedefs(bitxor, bit_2ops);
-irep_typedefs(bitnand, bit_2ops);
-irep_typedefs(bitnor, bit_2ops);
 irep_typedefs(lshr, bit_2ops);
 irep_typedefs(bitnot, bitnot_data);
 irep_typedefs(neg, arith_1op);
@@ -2316,46 +2314,6 @@ public:
   {
   }
   bitxor2t(const bitxor2t &ref) = default;
-
-  expr2tc do_simplify() const override;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
-/** Bit nand operation. Perform bit nand between two bitvector operands. Types of
- *  this expr and both operands must match. @extends bit_2ops */
-class bitnand2t : public bitnand_expr_methods
-{
-public:
-  /** Primary constructor.
-   *  @param t Type of this expr.
-   *  @param s1 Operand 1.
-   *  @param s2 Operand 2. */
-  bitnand2t(const type2tc &t, const expr2tc &s1, const expr2tc &s2)
-    : bitnand_expr_methods(t, bitnand_id, s1, s2)
-  {
-  }
-  bitnand2t(const bitnand2t &ref) = default;
-
-  expr2tc do_simplify() const override;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
-/** Bit nor operation. Perform bit nor between two bitvector operands. Types of
- *  this expr and both operands must match. @extends bit_2ops */
-class bitnor2t : public bitnor_expr_methods
-{
-public:
-  /** Primary constructor.
-   *  @param t Type of this expr.
-   *  @param s1 Operand 1.
-   *  @param s2 Operand 2. */
-  bitnor2t(const type2tc &t, const expr2tc &s1, const expr2tc &s2)
-    : bitnor_expr_methods(t, bitnor_id, s1, s2)
-  {
-  }
-  bitnor2t(const bitnor2t &ref) = default;
 
   expr2tc do_simplify() const override;
 

@@ -2623,16 +2623,6 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     a = mk_bvxor(args[0], args[1]);
     break;
   }
-  case expr2t::bitnand_id:
-  {
-    a = mk_bvnand(args[0], args[1]);
-    break;
-  }
-  case expr2t::bitnor_id:
-  {
-    a = mk_bvnor(args[0], args[1]);
-    break;
-  }
   case expr2t::bitnot_id:
   {
     a = mk_bvnot(args[0]);

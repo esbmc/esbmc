@@ -40,8 +40,6 @@ static const char *expr_names[] = {
   "bitand",
   "bitor",
   "bitxor",
-  "bitnand",
-  "bitnor",
   "bitnot",
   "lshr",
   "neg",
