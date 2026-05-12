@@ -1,0 +1,4 @@
+CORE
+main.c
+--state-hashing --no-por --smt-symex-guard --bitwuzla --unwind 2
+^VERIFICATION FAILED$
