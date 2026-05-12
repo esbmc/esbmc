@@ -143,7 +143,7 @@ execution_statet &execution_statet::operator=(const execution_statet &ex)
   node_id = ex.node_id;
   global_value_set = ex.global_value_set;
   interleaving_unviable = ex.interleaving_unviable;
-  pre_goto_guard = ex.pre_goto_guard;
+  branch_parent_guard = ex.branch_parent_guard;
   mon_thread_warning = ex.mon_thread_warning;
 
   monitor_tid = ex.monitor_tid;
@@ -164,30 +164,6 @@ execution_statet &execution_statet::operator=(const execution_statet &ex)
   dependency_chain = ex.dependency_chain;
   mpor_says_no = ex.mpor_says_no;
   cswitch_forced = ex.cswitch_forced;
-
-  // Vastly irritatingly, we have to iterate through existing level2t objects
-  // updating their ex_state references. There isn't an elegant way of updating
-  // them, it seems, while keeping the symex stuff ignorant of ex_state.
-  // Oooooo, so this is where auto types would be useful...
-  for (auto &it : threads_state)
-  {
-    for (goto_symex_statet::call_stackt::iterator it2 = it.call_stack.begin();
-         it2 != it.call_stack.end();
-         it2++)
-    {
-      for (auto &it3 : it2->goto_state_map)
-      {
-        for (goto_symex_statet::goto_state_listt::iterator it4 =
-               it3.second.begin();
-             it4 != it3.second.begin();
-             it4++)
-        {
-          ex_state_level2t &l2 = dynamic_cast<ex_state_level2t &>(it4->level2);
-          l2.owner = this;
-        }
-      }
-    }
-  }
 
   state_level2->owner = this;
 
@@ -300,7 +276,7 @@ void execution_statet::symex_assign(
   const bool hidden,
   const guardt &guard)
 {
-  pre_goto_guard = guardt();
+  branch_parent_guard.reset();
 
   goto_symext::symex_assign(code, hidden, guard);
 
@@ -310,7 +286,7 @@ void execution_statet::symex_assign(
 
 void execution_statet::claim(const expr2tc &expr, const std::string &msg)
 {
-  pre_goto_guard = guardt();
+  branch_parent_guard.reset();
 
   goto_symext::claim(expr, msg);
 
@@ -320,7 +296,7 @@ void execution_statet::claim(const expr2tc &expr, const std::string &msg)
 
 void execution_statet::symex_goto(const expr2tc &old_guard)
 {
-  pre_goto_guard = threads_state[active_thread].guard;
+  branch_parent_guard = threads_state[active_thread].guard;
 
   goto_symext::symex_goto(old_guard);
 
@@ -330,7 +306,7 @@ void execution_statet::symex_goto(const expr2tc &old_guard)
 
 void execution_statet::assume(const expr2tc &assumption)
 {
-  pre_goto_guard = guardt();
+  branch_parent_guard.reset();
 
   goto_symext::assume(assumption);
 
@@ -494,8 +470,9 @@ void execution_statet::preserve_last_paths()
   // Now then -- was it a goto? And did we actually branch to it? Detect this
   // by examining how the guard has changed: if there's no change, then the
   // GOTO condition must have evaluated to false.
-  bool no_branch = (pre_goto_guard == ls.guard);
-  if (last_insn->type == GOTO && !no_branch)
+  const bool branched = last_insn->type == GOTO && branch_parent_guard &&
+                        *branch_parent_guard != ls.guard;
+  if (branched)
   {
     // We know where it branched to: fetch a reference to the list of all states
     // to be merged in there
@@ -509,17 +486,17 @@ void execution_statet::preserve_last_paths()
 
     // There may be multiple paths in the map to be merged at that location,
     // for example if it's the loop end. Detect two circumstances: first where
-    // the guard of the to-be-merged state is identical to the pre-goto guard,
+    // the guard of the to-be-merged state is identical to the pre-GOTO guard,
     // meaning that the GOTO we executed had an unconditionally-true guard.
     // Second where the current-path guard plus the to-be-merged guard is equal
-    // to the pre-goto guard: in that case, these can only be the two descendant
-    // paths from the pre-goto state.
+    // to the branch parent guard: in that case, these can only be the two
+    // descendant paths from the pre-GOTO state.
     const goto_statet *tomerge = nullptr;
     for (const goto_statet &gs : statelist)
     {
       bool merge = false;
 
-      if (gs.guard == pre_goto_guard)
+      if (gs.guard == *branch_parent_guard)
       {
         merge = true;
       }
@@ -529,7 +506,7 @@ void execution_statet::preserve_last_paths()
         tmp |= gs.guard;
 
         expr2tc foo = tmp.as_expr();
-        expr2tc bar = pre_goto_guard.as_expr();
+        expr2tc bar = branch_parent_guard->as_expr();
         do_simplify(foo);
         do_simplify(bar);
 
@@ -546,7 +523,7 @@ void execution_statet::preserve_last_paths()
     }
 
     // We _must_ have found a path to merge, or the current-state guard would
-    // have matched pre_goto_guard earlier
+    // have matched branch_parent_guard earlier
     assert(tomerge != nullptr);
 
     // Alas, copies.
@@ -672,24 +649,16 @@ void execution_statet::execute_guard()
   expr2tc guard_expr = get_guard_identifier();
   expr2tc parent_guard;
 
-  // Check if the `pre_goto_guard` condition is false.
-  if (pre_goto_guard.is_false())
+  // Preserve the existing false-guard handling for context switches taken
+  // immediately after a branch, but keep the branch parent state explicit.
+  if (branch_parent_guard && branch_parent_guard->is_false())
   {
-    // If `pre_goto_guard` is false, create a temporary guard (`tmp`)
-    // that combines `pre_goto_guard` with the guard of the last active thread.
-    guardt tmp = pre_goto_guard;
-
-    // Use the OR operator to merge `pre_goto_guard` with the guard of the
-    // last active thread, stored in `threads_state[last_active_thread].guard`.
+    guardt tmp = *branch_parent_guard;
     tmp |= threads_state[last_active_thread].guard;
-
-    // Assign the resulting combined expression to `parent_guard`.
     parent_guard = tmp.as_expr();
   }
   else
   {
-    // If `pre_goto_guard` is not false, assign the guard of the last active thread
-    // directly to `parent_guard` without any modifications.
     parent_guard = threads_state[last_active_thread].guard.as_expr();
   }
 

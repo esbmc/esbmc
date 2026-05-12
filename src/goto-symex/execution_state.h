@@ -10,6 +10,7 @@
 
 #include <list>
 #include <map>
+#include <optional>
 #include <set>
 #include <irep2/irep2.h>
 #include <util/message.h>
@@ -549,7 +550,7 @@ public:
   /** State guard prior to a GOTO instruction causing a cswitch. Any thread
    *  interleaved after a GOTO will be composed with this guard, rather than
    *  the guard from any of the branches of the GOTO itself. */
-  guardt pre_goto_guard;
+  std::optional<guardt> branch_parent_guard;
   /** TID of monitor thread, for monitor intrinsics. */
   unsigned int monitor_tid;
   /** Whether monitor_tid is set. */
