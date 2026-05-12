@@ -1,4 +1,4 @@
 CORE
 main.py
---function starred_unpack --incremental-bmc
+--function starred_unpack --unwind 1
 ^VERIFICATION SUCCESSFUL$

@@ -36,7 +36,6 @@ expr_typedefs2(dereference, dereference_data);
 expr_typedefs5(sideeffect, sideeffect_data);
 expr_typedefs1(code_block, code_block_data);
 expr_typedefs2(code_assign, code_assign_data);
-expr_typedefs2(code_init, code_assign_data);
 expr_typedefs1(code_decl, code_decl_data);
 expr_typedefs1(code_dead, code_decl_data);
 expr_typedefs1(code_printf, code_printf_data);

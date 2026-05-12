@@ -242,7 +242,7 @@ The denominator is 5: three function entries (`main`, `helper`, `unused` — `ma
 
 ### K-Path Coverage
 
-K-path coverage is a PathCrawler-style bounded path-coverage criterion. At every conditional branch `if (g) goto L`, ESBMC emits a witness goal for each combination of the previous *(n−1)* prior branch directions and the current direction. Each goal is discharged by the same multi-property engine used for branch coverage: a SAT verdict marks the corresponding bounded path as reachable, and the coverage percentage is reached witnesses divided by total witnesses.
+K-path coverage is a PathCrawler-style bounded path-coverage criterion. At every conditional branch `if (g) goto L`, ESBMC emits a witness goal for each combination of the previous *(n−1)* prior branch directions and the current direction. Each goal is discharged by the same multi-property engine used for branch coverage: a SAT verdict marks the corresponding bounded path as reachable. The coverage percentage uses Marré-Bertolino spanning-set scoring (IEEE TSE 29(11), 2003) — both numerator and denominator restrict to maximal goals under the atom-multiset subsumption order, so subsumed shorter-prefix goals never inflate the score.
 
 This sits between branch coverage (length-1 prefixes only) and full path enumeration (exponential in the number of branches). With `n = 2` the metric is equivalent to *boundary-interior* coverage; larger *n* exposes correlations that branch coverage alone cannot distinguish.
 
@@ -277,13 +277,14 @@ $ esbmc example.c --k-path-coverage=2 --unwind 4 --no-unwinding-assertions
 ...
 [Coverage]
 k-Path Witnesses : 6
-Reached : 4
-k-Path Coverage: 66.66666666666667%
+Spanning Set : 4
+Reached : 2
+k-Path Coverage: 50%
 ```
 
-The remaining unreached witnesses correspond to bounded paths where the loop guard becomes correlated with `x > 0` after one iteration — a relationship that `--branch-coverage` cannot expose, since each branch is reachable in isolation.
+Six witnesses are emitted (two length-1 at the loop-exit guard plus four length-2 at the inner branch) but only the four length-2 form the spanning set; the two length-1 are subsumed. Of those four maximal goals, two are structurally unreachable — you cannot be inside the loop body with the exit guard already true — so the spanning-set coverage is 2/4 = 50%. The 50% honestly reflects that the loop guard and `x > 0` are correlated after entry, a relationship `--branch-coverage` cannot expose since each branch is reachable in isolation.
 
-**Phase-1 limitations.** The current implementation walks the goto program linearly to collect prior branch guards, which over-approximates the prefix when branches join: witnesses may reference variables mutated between the branches they constrain, so a witness reported as unreached may simply be infeasible rather than indicative of missing test inputs. Witnesses whose post-simplification depth exceeds `--k-path-witness-depth` are dropped (no ghost-flag fallback yet), and infeasible witnesses count toward the denominator. A proper CFG analysis, ghost-flag fallback, and spanning-set scoring are tracked under issue [#4325](https://github.com/esbmc/esbmc/issues/4325) for follow-up phases.
+**Phase-2 limitations.** Subsumption uses structural multiset containment, which is a sound but not complete approximation: a reachable goal whose structural subsumer is unreachable will be dropped from the numerator alongside its subsumer, leaving the percentage too pessimistic in those cases. Implementation pruning also collects prior branch guards by linear walk over the goto program, which over-approximates the prefix when branches join, and witnesses whose post-simplification depth exceeds `--k-path-witness-depth` are dropped with no ghost-flag fallback yet. Proper CFG analysis and ghost-flag fallback are tracked under issue [#4325](https://github.com/esbmc/esbmc/issues/4325).
 
 **References.**
 

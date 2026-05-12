@@ -929,17 +929,39 @@ void report_coverage(
   else if (is_k_path_cov)
   {
     const size_t total = goto_coveraget::total_kpath;
-    const size_t tracked_instance = reached_claims.size();
+    const size_t spanning = goto_coveraget::total_kpath_spanning;
+
+    // Phase-2 (issue #4335): both numerator and denominator must restrict
+    // to maximal goals under the atom-multiset subsumption order (Marré-
+    // Bertolino, IEEE TSE 2003). Filter reached_claims against
+    // k_path_spanning_redundant so a reached-but-subsumed goal does not
+    // inflate the numerator against the maximal-only denominator.
+    const auto &redundant = goto_coveraget::k_path_spanning_redundant;
+    auto is_maximal = [&redundant](const std::string &claim_sig) {
+      // claim_sig = "msg\tloc"; loc has no tabs, so rfind is robust if a
+      // future emission path puts a tab in msg.
+      const auto tab = claim_sig.rfind('\t');
+      return redundant.count(
+               {claim_sig.substr(0, tab), claim_sig.substr(tab + 1)}) == 0;
+    };
+
+    const size_t tracked_instance =
+      std::count_if(reached_claims.begin(), reached_claims.end(), is_maximal);
+
     log_success("\n[Coverage]\n");
     log_result("k-Path Witnesses : {}", total);
+    log_result("Spanning Set : {}", spanning);
     log_result("Reached : {}", tracked_instance);
 
+    // Listing shows every reached claim regardless of maximality so the
+    // user can see which subsumed goals were also reached — this is a
+    // diagnostic flag, not a coverage-formula display.
     if (options.get_bool_option("k-path-coverage-claims"))
       for (const auto &claim : reached_claims)
         log_status("  {}", prettify_solidity_expr(claim));
 
-    if (total != 0)
-      log_result("k-Path Coverage: {}%", tracked_instance * 100.0 / total);
+    if (spanning != 0)
+      log_result("k-Path Coverage: {}%", tracked_instance * 100.0 / spanning);
     else
       log_result("k-Path Coverage: N/A (no k-path goals)");
   }
@@ -986,6 +1008,18 @@ void report_coverage(
       claim_entry["column"] = loc["column"];
       claim_entry["function"] = loc["function"];
       claim_entry["status"] = covered ? "covered" : "uncovered";
+      // k-path Phase-2 (#4335): annotate each claim as feasible (a
+      // maximal element of the subsumption lattice and thus part of the
+      // spanning set) or spanning-set-redundant (subsumed by a stronger
+      // emitted goal — covering it adds no information beyond covering
+      // its subsumer).
+      if (is_k_path_cov)
+      {
+        const auto &redundant = goto_coveraget::k_path_spanning_redundant;
+        claim_entry["feasibility"] = redundant.count({claim_msg, claim_loc}) > 0
+                                       ? "spanning-set-redundant"
+                                       : "feasible";
+      }
       claims_json.push_back(claim_entry);
     }
 
@@ -994,6 +1028,23 @@ void report_coverage(
     for (const auto &c : claims_json)
       if (c["status"] == "covered")
         covered_count++;
+
+    // For k-path coverage, restrict the summary to maximal goals so the
+    // JSON percentage matches the terminal spanning-set-filtered output.
+    // Individual claims keep their `feasibility` annotation so consumers
+    // that want raw counts can still derive them from the `claims` array.
+    if (is_k_path_cov)
+    {
+      total = 0;
+      covered_count = 0;
+      for (const auto &c : claims_json)
+        if (c["feasibility"] == "feasible")
+        {
+          ++total;
+          if (c["status"] == "covered")
+            ++covered_count;
+        }
+    }
 
     json report;
     report["coverage_type"] = cov_type;

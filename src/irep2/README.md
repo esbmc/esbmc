@@ -197,8 +197,6 @@ inside an expression tree.
 | `bitand` | Bitwise AND. |
 | `bitor` | Bitwise OR. |
 | `bitxor` | Bitwise XOR. |
-| `bitnand` | Bitwise NAND. |
-| `bitnor` | Bitwise NOR. |
 | `bitnot` | Bitwise NOT. |
 | `shl` | Logical shift left. |
 | `lshr` | Logical shift right (zero-fill). |
@@ -324,7 +322,6 @@ ordinary expression tree. Their type is `empty` unless noted.
 |------|-------------|
 | `code_block` | Sequence of statements. |
 | `code_assign` | `target = source`. |
-| `code_init` | Initialisation assignment (specialised `code_assign` — relevant for object lifetime). |
 | `code_decl` | Declaration of a local with a given type and name (starts its lifetime). |
 | `code_dead` | End of a local's lifetime — symex stops trusting reads through it. |
 | `code_return` | `return expr;` (or `return;` if operand is nil). |

@@ -57,8 +57,6 @@ void ssa_features::check(const expr2tc &e)
   case expr2t::bitor_id:
   case expr2t::bitand_id:
   case expr2t::bitxor_id:
-  case expr2t::bitnand_id:
-  case expr2t::bitnor_id:
   {
     features.insert(SSA_FEATURES::BITWISE_OPERATIONS);
     const auto &bit_op = dynamic_cast<const bit_2ops &>(*e);
