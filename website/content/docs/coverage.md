@@ -3,11 +3,11 @@ title: Coverage Analysis
 weight: 10
 ---
 
-ESBMC supports coverage analysis for branch, condition, assertion, and k-path coverage. This helps identify which code paths have been tested in your program.
+ESBMC supports coverage analysis for branches, conditions, assertions, branches plus function entry, and bounded k-path. This helps identify which code paths have been exercised in your program.
 
 ## Usage
 
-ESBMC provides four coverage analysis modes:
+ESBMC provides five primary coverage modes:
 
 ```bash
 # Branch coverage
@@ -16,12 +16,17 @@ esbmc example.c --branch-coverage
 # Condition coverage
 esbmc example.c --condition-coverage
 
-# Assertion coverage
-esbmc example.c --assertion-coverage
+# Assertion coverage (use a sound unwinding strategy, e.g. k-induction)
+esbmc example.c --k-induction --assertion-coverage
+
+# Branch + function-entry coverage
+esbmc example.c --branch-function-coverage
 
 # K-path coverage (PathCrawler-style bounded path coverage)
 esbmc example.c --k-path-coverage
 ```
+
+Each mode also has a `*-claims` variant that lists every reached witness with its source location (e.g. `--branch-coverage-claims`, `--condition-coverage-claims`, `--assertion-coverage-claims`, `--branch-function-coverage-claims`, `--k-path-coverage-claims`).
 
 ## Coverage Modes
 
@@ -49,10 +54,10 @@ int main() {
 $ esbmc example.c --branch-coverage
 ...
 [Coverage]
+
 Branches : 2
 Reached : 1
 Branch Coverage: 50%
-
 ```
 
 The **Branch Coverage: 50%** shows incomplete coverage. The output indicates that `n <= 0` is needed to cover the else branch.
@@ -71,12 +76,15 @@ int main() {
 $ esbmc example.c --branch-coverage
 ...
 [Coverage]
+
 Branches : 2
 Reached : 2
 Branch Coverage: 100%
 ```
 
 The **Branch Coverage: 100%** indicates all branches have been tested.
+
+**Listing reached branches.** Add `--branch-coverage-claims` to print each reached branch guard with its source location alongside the summary.
 
 ### Condition Coverage
 
@@ -93,7 +101,7 @@ int validate(int x, int y) {
 }
 
 int main() {
-    validate(5, 3);   
+    validate(5, 3);
     return 0;
 }
 ```
@@ -127,22 +135,30 @@ int main() {
     return 0;
 }
 ```
+
 Note: Due to short-circuit evaluation in `&&`, when `x>0` is false, `y>0` is never evaluated. To test `y>0` as both true and false, `x>0` must be true in those tests.
+
+**Listing reached sub-expressions.** Add `--condition-coverage-claims` to print each condition with a per-polarity `SATISFIED` / `UNSATISFIED` verdict and its source location.
+
+**Disabling short-circuit handling.** `--condition-coverage-rm` (and its claims-aware counterpart `--condition-coverage-claims-rm`) drop the short-circuit handling step. The metric then reports all sub-expressions independently of evaluation order — useful when contrasting MC/DC-style counts against the short-circuit-aware default.
 
 ### Assertion Coverage
 
-Assertion coverage verifies that all assertions in the code are reached and tested. This ensures that all validation checks are exercised.
+Assertion coverage verifies that all assertions in the code are reached. This ensures every validation check is exercised by some input.
+
+> **Note.** Use a sound unwinding strategy when running assertion coverage. The examples below pair `--assertion-coverage` with `--k-induction` so that all loop iterations are considered; bounded `--unwind N` works too, provided `N` is large enough for the program. With `--k-induction`, ESBMC prints a `[Coverage]` block per phase (base case, forward condition, inductive step); the final block is the verdict.
 
 **Example:**
 
 ```c
+#include <assert.h>
 int process(int n) {
     if (n > 10) {
-        assert(n < 100);  
+        assert(n < 100);
         return n * 2;
     }
     else {
-        assert(n < 10);   
+        assert(n < 10);
         return n + 2;
     }
     return n;
@@ -155,9 +171,10 @@ int main() {
 ```
 
 ```bash
-$ esbmc example.c --assertion-coverage
+$ esbmc example.c --k-induction --assertion-coverage
 ...
 [Coverage]
+
 Total Asserts: 2
 Total Assertion Instances: 2
 Reached Assertion Instances: 1
@@ -175,14 +192,53 @@ int main() {
 ```
 
 ```bash
-$ esbmc example.c --assertion-coverage
+$ esbmc example.c --k-induction --assertion-coverage
 ...
 [Coverage]
+
 Total Asserts: 2
 Total Assertion Instances: 2
 Reached Assertion Instances: 2
 Assertion Instances Coverage: 100%
 ```
+
+**Listing reached assertions.** Add `--assertion-coverage-claims` to print each reached assertion guard with its source location.
+
+### Branch + Function Entry Coverage
+
+`--branch-function-coverage` extends branch coverage with a witness for every function entry point. The resulting percentage therefore exposes both unreached branches and entirely unreached functions — a common gap that plain branch coverage hides when a function is never called.
+
+**Example:**
+
+```c
+int helper(int n) {
+    if (n > 0)
+        return n;
+    else
+        return -n;
+}
+
+int unused(int n) {
+    return n + 1;
+}
+
+int main() {
+    helper(5);
+    return 0;
+}
+```
+
+```bash
+$ esbmc example.c --branch-function-coverage
+...
+[Coverage]
+
+Function Entry Points & Branches : 5
+Reached : 3
+Branch Coverage: 60%
+```
+
+The denominator is 5: three function entries (`main`, `helper`, `unused` — `main` counts because the entry-point itself is an instrumented witness) plus two branches inside `helper`. `unused` and the `n <= 0` branch of `helper` remain unreached, giving 3/5 = 60%. Add `--branch-function-coverage-claims` to print which entries and branches were reached.
 
 ### K-Path Coverage
 
@@ -194,10 +250,10 @@ This sits between branch coverage (length-1 prefixes only) and full path enumera
 
 | Flag | Meaning |
 |---|---|
-| `--k-path-coverage[=N]` | Enable k-path coverage with prefix length `N`. If `N` is omitted, defaults to `--unwind`, falling back to 4 |
-| `--k-path-coverage-claims` | List each reached witness with its guard sequence and source location |
-| `--k-path-witness-depth=D` | Post-simplification depth cap on witness guards (default 8); witnesses whose simplified guard exceeds `D` are dropped |
-| `--k-path-max-goals=M` | Per-function goal cap (default 10000); on overflow ESBMC aborts with an actionable error rather than silently truncating |
+| `--k-path-coverage[=N]` | Enable k-path coverage with prefix length `N`. If `N` is omitted, defaults to `--unwind`, falling back to 4. |
+| `--k-path-coverage-claims` | List each reached witness with its guard sequence and source location. |
+| `--k-path-witness-depth=D` | Post-simplification depth cap on witness guards (default 8); witnesses whose simplified guard exceeds `D` are dropped. |
+| `--k-path-max-goals=M` | Per-function goal cap (default 10000); on overflow ESBMC aborts with an actionable error rather than silently truncating. |
 
 **Example (loop body with one branch):**
 
@@ -229,7 +285,11 @@ The remaining unreached witnesses correspond to bounded paths where the loop gua
 
 **Phase-1 limitations.** The current implementation walks the goto program linearly to collect prior branch guards, which over-approximates the prefix when branches join: witnesses may reference variables mutated between the branches they constrain, so a witness reported as unreached may simply be infeasible rather than indicative of missing test inputs. Witnesses whose post-simplification depth exceeds `--k-path-witness-depth` are dropped (no ghost-flag fallback yet), and infeasible witnesses count toward the denominator. A proper CFG analysis, ghost-flag fallback, and spanning-set scoring are tracked under issue [#4325](https://github.com/esbmc/esbmc/issues/4325) for follow-up phases.
 
-**References.** The criterion follows Williams, Marre, Mouy, and Roger, *PathCrawler: Automatic Generation of Path Tests by Combining Static and Dynamic Analysis*, EDCC 2005 ([doi:10.1007/11408901_21](https://doi.org/10.1007/11408901_21)); is closely related to the test-specification language of Holzer, Schallhart, Tautschnig, and Veith, *FShell: Systematic Test Case Generation for Dynamic Analysis and Measurement*, CAV 2008 ([doi:10.1007/978-3-540-70545-1_20](https://doi.org/10.1007/978-3-540-70545-1_20)); and grounds the loop-unrolling parameterisation in Huang, Meyer, and Weber, *Loop Unrolling: Formal Definition and Application to Testing*, ICTSS 2025 ([doi:10.1007/978-3-032-05188-2_2](https://doi.org/10.1007/978-3-032-05188-2_2)).
+**References.**
+
+- Williams, Marre, Mouy, and Roger, *PathCrawler: Automatic Generation of Path Tests by Combining Static and Dynamic Analysis*, EDCC 2005 — [doi:10.1007/11408901_21](https://doi.org/10.1007/11408901_21).
+- Holzer, Schallhart, Tautschnig, and Veith, *FShell: Systematic Test Case Generation for Dynamic Analysis and Measurement*, CAV 2008 — [doi:10.1007/978-3-540-70545-1_20](https://doi.org/10.1007/978-3-540-70545-1_20).
+- Huang, Meyer, and Weber, *Loop Unrolling: Formal Definition and Application to Testing*, ICTSS 2025 — [doi:10.1007/978-3-032-05188-2_2](https://doi.org/10.1007/978-3-032-05188-2_2).
 
 ## Supported Languages
 
@@ -277,6 +337,7 @@ is_positive(10)
 $ esbmc example.py --branch-coverage
 ...
 [Coverage]
+
 Branches : 2
 Reached : 1
 Branch Coverage: 50%
@@ -327,7 +388,7 @@ validate_positive(5)
 ```
 
 ```bash
-$ esbmc example.py --assertion-coverage
+$ esbmc example.py --k-induction --assertion-coverage
 ...
 [Coverage]
 
@@ -383,6 +444,12 @@ ESBMC also supports coverage computation while taking assertions into account vi
 $ esbmc example.c --branch-coverage --cov-assume-asserts
 ```
 
+Use **`--no-cov-asserts`** to exclude the surrounding guard from each assertion's reachability claim. This counts an assertion as reached whenever control flow reaches its source location, regardless of whether the guard that protects it is satisfiable — useful when measuring how many `assert` *statements* the test inputs touch, rather than how many distinct *instances* the guard makes feasible.
+
+```bash
+$ esbmc example.c --k-induction --assertion-coverage --no-cov-asserts
+```
+
 ## JSON Output and HTML Report
 
 ESBMC supports exporting and formatting coverage summaries. First, use **`--cov-report-json`** to generate a JSON coverage report (`cov-report.json`). For example:
@@ -397,7 +464,6 @@ Next, run the Python script located in the ESBMC **scripts** directory:
 $ python3 scripts/cov-report.py cov-report.json -o .
 ```
 
-![Example LCOV-style HTML coverage report generated by cov-report.py](../../static/images/cov.png)
-<center>Figure: Example LCOV-style HTML coverage report generated by cov-report.py.</center>
+![Figure: Example LCOV-style HTML coverage report generated by cov-report.py.](../../static/images/cov.png)
 
 This script reads the JSON file produced by `esbmc --cov-report-json` and generates an LCOV-style HTML report, including annotated source code and per-file coverage summaries.
