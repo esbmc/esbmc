@@ -90,7 +90,7 @@ public:
   /**
    *  Walks back to an unexplored context switch.
    *  Follows the algorithm described in reachability_treet, and walk back up
-   *  the stack of current execution_states to find a context-switch that
+   *  the stack of current exploration_frames to find a context-switch that
    *  hasn't yet been explored.
    *  @return True if there are more states to be explored
    */
@@ -267,25 +267,27 @@ protected:
     void mark_explored(unsigned int tid);
   };
 
+  struct exploration_framet
+  {
+    std::shared_ptr<execution_statet> state;
+    scheduler_framet scheduler;
+  };
+
   scheduler_framet &get_cur_scheduler_frame();
   const scheduler_framet &get_cur_scheduler_frame() const;
   bool dfs_explore_thread(unsigned int tid);
-  void reset_scheduler_frame(scheduler_framet &frame, unsigned int count);
+  void erase_current_frame();
 
-  /** Stack of execution states representing current interleaving.
-   *  See reachability_treet algorithm for how this is used. Is initialized
-   *  with a single execution_statet in it, with a function call to "main" set
-   *  up to be explored. During exploration has various numbers of ex_states
-   *  contained in the list. At end of exploration, contains zero.
+  /** Stack of exploration frames representing the current interleaving.
+   *  Each frame owns one execution state plus the scheduler bookkeeping for
+   *  the context-switch point that led to it. The stack is initialized with a
+   *  single frame containing the "main" state. During exploration it contains
+   *  various numbers of frames; at the end it is empty.
    *  @see print_ileave_trace
    */
-  std::list<std::shared_ptr<execution_statet>> execution_states;
-  /** Scheduler data parallel to execution_states. */
-  std::list<scheduler_framet> scheduler_frames;
-  /** Iterator recording the execution_statet in stack we're operating on */
-  std::list<std::shared_ptr<execution_statet>>::iterator cur_state_it;
-  /** Iterator recording the scheduler frame paired with cur_state_it */
-  std::list<scheduler_framet>::iterator cur_scheduler_it;
+  std::list<exploration_framet> exploration_frames;
+  /** Iterator recording the exploration frame we're operating on. */
+  std::list<exploration_framet>::iterator cur_frame_it;
   /** "Global" symex target for output from --schedule exploration */
   std::shared_ptr<symex_targett> schedule_target;
   /** Target template; from which all targets are cloned.

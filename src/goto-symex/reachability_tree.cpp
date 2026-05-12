@@ -41,8 +41,7 @@ void reachability_treet::setup_for_new_explore()
 {
   std::shared_ptr<symex_targett> targ;
 
-  execution_states.clear();
-  scheduler_frames.clear();
+  exploration_frames.clear();
 
   has_complete_formula = false;
 
@@ -70,28 +69,27 @@ void reachability_treet::setup_for_new_explore()
     schedule_target = nullptr;
   }
 
-  execution_states.emplace_back(s);
-  scheduler_framet scheduler_frame;
-  scheduler_frame.reset(s->threads_state.size());
-  scheduler_frames.push_back(scheduler_frame);
-  cur_state_it = execution_states.begin();
-  cur_scheduler_it = scheduler_frames.begin();
+  exploration_framet frame;
+  frame.state = std::shared_ptr<execution_statet>(s);
+  frame.scheduler.reset(s->threads_state.size());
+  exploration_frames.push_back(frame);
+  cur_frame_it = exploration_frames.begin();
   targ->push_ctx(); // Start with a depth of 1.
 }
 
 execution_statet &reachability_treet::get_cur_state()
 {
-  return **cur_state_it;
+  return *cur_frame_it->state;
 }
 
 const execution_statet &reachability_treet::get_cur_state() const
 {
-  return **cur_state_it;
+  return *cur_frame_it->state;
 }
 
 bool reachability_treet::has_more_states()
 {
-  return execution_states.size() > 0;
+  return !exploration_frames.empty();
 }
 
 void reachability_treet::scheduler_framet::ensure_thread_count(
@@ -126,20 +124,13 @@ void reachability_treet::scheduler_framet::mark_explored(unsigned int tid)
 reachability_treet::scheduler_framet &
 reachability_treet::get_cur_scheduler_frame()
 {
-  return *cur_scheduler_it;
+  return cur_frame_it->scheduler;
 }
 
 const reachability_treet::scheduler_framet &
 reachability_treet::get_cur_scheduler_frame() const
 {
-  return *cur_scheduler_it;
-}
-
-void reachability_treet::reset_scheduler_frame(
-  scheduler_framet &frame,
-  unsigned int count)
-{
-  frame.reset(count);
+  return cur_frame_it->scheduler;
 }
 
 int reachability_treet::get_CS_bound() const
@@ -182,8 +173,7 @@ void reachability_treet::create_next_state()
   if (next_thread_id != ex_state.threads_state.size())
   {
     auto new_state = ex_state.clone();
-    execution_states.push_back(new_state);
-    scheduler_frames.push_back(get_cur_scheduler_frame());
+    exploration_frames.push_back({new_state, get_cur_scheduler_frame()});
 
     /* Make it active, make it follow on from previous state... */
     if (new_state->get_active_state_number() != next_thread_id)
@@ -191,8 +181,7 @@ void reachability_treet::create_next_state()
 
     new_state->switch_to_thread(next_thread_id);
     new_state->update_after_switch_point();
-    reset_scheduler_frame(
-      scheduler_frames.back(), new_state->threads_state.size());
+    exploration_frames.back().scheduler.reset(new_state->threads_state.size());
   }
 }
 
@@ -263,22 +252,18 @@ bool reachability_treet::is_has_complete_formula()
 
 void reachability_treet::switch_to_next_execution_state()
 {
-  std::list<std::shared_ptr<execution_statet>>::iterator it = cur_state_it;
-  std::list<scheduler_framet>::iterator sit = cur_scheduler_it;
+  auto it = cur_frame_it;
   ++it;
-  ++sit;
 
-  if (it != execution_states.end())
+  if (it != exploration_frames.end())
   {
-    cur_state_it++;
-    cur_scheduler_it++;
+    cur_frame_it++;
   }
   else
   {
     if (step_next_state())
     {
-      cur_state_it++;
-      cur_scheduler_it++;
+      cur_frame_it++;
     }
     else
     {
@@ -299,90 +284,69 @@ bool reachability_treet::reset_to_unexplored_state()
   // the last on the list. If we can, it's an unexplored state, if we can't,
   // all depths from the current execution state are explored, so delete it.
 
-  auto it = cur_state_it--;
-  auto sit = cur_scheduler_it--;
-  execution_states.erase(it);
-  scheduler_frames.erase(sit);
+  erase_current_frame();
 
-  while (execution_states.size() > 0 && !step_next_state())
+  while (exploration_frames.size() > 0 && !step_next_state())
   {
-    it = cur_state_it--;
-    sit = cur_scheduler_it--;
-    execution_states.erase(it);
-    scheduler_frames.erase(sit);
+    erase_current_frame();
   }
 
-  if (execution_states.size() > 0)
-  {
-    cur_state_it++;
-    cur_scheduler_it++;
-  }
+  if (exploration_frames.size() > 0)
+    cur_frame_it++;
 
-  if (execution_states.size() && !smt_during_symex)
+  if (exploration_frames.size() && !smt_during_symex)
   {
     // When backtracking, erase all the assertions from the equation before
     // continuing forwards. They've all already been checked, in the trace we
     // just backtracked from. Thus there's no point in checking them again.
     symex_target_equationt *eq =
-      static_cast<symex_target_equationt *>((*cur_state_it)->target.get());
+      static_cast<symex_target_equationt *>(cur_frame_it->state->target.get());
     unsigned int num_asserts = eq->clear_assertions();
 
     // Remove them from the count of remaining assertions to check. This allows
     // for more traces to be discarded because they do not contain any
     // unchecked assertions.
-    (*cur_state_it)->total_claims -= num_asserts;
-    (*cur_state_it)->remaining_claims -= num_asserts;
+    cur_frame_it->state->total_claims -= num_asserts;
+    cur_frame_it->state->remaining_claims -= num_asserts;
   }
 
-  return execution_states.size();
+  return exploration_frames.size();
 }
 
 void reachability_treet::go_next_state()
 {
-  std::list<std::shared_ptr<execution_statet>>::iterator it = cur_state_it;
-  std::list<scheduler_framet>::iterator sit = cur_scheduler_it;
+  auto it = cur_frame_it;
   it++;
-  sit++;
-  if (it != execution_states.end())
+  if (it != exploration_frames.end())
   {
-    cur_state_it++;
-    cur_scheduler_it++;
+    cur_frame_it++;
   }
   else
   {
-    while (execution_states.size() > 0 && !step_next_state())
+    while (exploration_frames.size() > 0 && !step_next_state())
     {
-      it = cur_state_it;
-      sit = cur_scheduler_it;
-      cur_state_it--;
-      cur_scheduler_it--;
-
       // For the last one:
-      if (execution_states.size() == 1)
-        (*it)->add_memory_leak_checks();
+      if (exploration_frames.size() == 1)
+        cur_frame_it->state->add_memory_leak_checks();
 
-      execution_states.erase(it);
-      scheduler_frames.erase(sit);
+      erase_current_frame();
     }
 
-    if (execution_states.size() > 0)
-    {
-      cur_state_it++;
-      cur_scheduler_it++;
-    }
+    if (exploration_frames.size() > 0)
+      cur_frame_it++;
   }
 }
 
 void reachability_treet::print_ileave_trace() const
 {
-  std::list<std::shared_ptr<execution_statet>>::const_iterator it;
   int i = 0;
 
   log_status("Context switch trace for interleaving:");
-  for (it = execution_states.begin(); it != execution_states.end(); ++it, ++i)
+  for (const auto &frame : exploration_frames)
   {
     log_status("Context switch point {}", i);
-    (*it)->print_stack_traces(4);
+    frame.state->print_stack_traces(4);
+    ++i;
   }
 }
 
@@ -450,9 +414,25 @@ bool reachability_treet::dfs_explore_thread(unsigned int tid)
   return true;
 }
 
+void reachability_treet::erase_current_frame()
+{
+  if (exploration_frames.empty())
+    return;
+
+  if (cur_frame_it == exploration_frames.begin())
+  {
+    cur_frame_it = exploration_frames.erase(cur_frame_it);
+    return;
+  }
+
+  auto prev = std::prev(cur_frame_it);
+  exploration_frames.erase(cur_frame_it);
+  cur_frame_it = prev;
+}
+
 goto_symext::symex_resultt reachability_treet::get_next_formula()
 {
-  assert(execution_states.size() > 0 && "Must setup RT before exploring");
+  assert(!exploration_frames.empty() && "Must setup RT before exploring");
 
   while (!is_has_complete_formula())
   {
@@ -490,7 +470,7 @@ goto_symext::symex_resultt reachability_treet::get_next_formula()
     switch_to_next_execution_state();
   }
 
-  (*cur_state_it)->add_memory_leak_checks();
+  cur_frame_it->state->add_memory_leak_checks();
 
   has_complete_formula = false;
 
