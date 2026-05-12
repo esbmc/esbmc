@@ -120,25 +120,53 @@ void goto_convertt::get_alloc_size(typet &alloc_type, exprt &alloc_size)
   }
 }
 
-void goto_convertt::emit_noreturn_memleak_checks(
+void goto_convertt::emit_assert_fail_noreturn(
   const locationt &location,
   goto_programt &dest)
 {
+  // __assert_fail / __assert_rtn / FreeBSD __assert / _wassert are
+  // __noreturn.  Under --no-assertions the family-specific ASSERT false
+  // is suppressed, leaving symex to fall through past the call --- which
+  // is unsound for end-of-main memory-property walkers (valid-memsafety
+  // / valid-memcleanup spuriously report "forgotten memory" on
+  // post-noreturn paths --- see #4441).
+  //
+  // Gate the noreturn truncation on --memory-leak-check: it is the
+  // property set whose end-of-main walker is sensitive to fall-through
+  // past noreturn calls.  Other --no-assertions clients
+  // (--data-races-check-only, --overflow-check, plain --no-assertions)
+  // intentionally treat the assertion as fully suppressed and need the
+  // call to remain a no-op --- otherwise the implicit ASSUME false
+  // silently turns user assert(cond) into assume(cond), pruning paths
+  // where cond is false and hiding bugs that manifest on those paths
+  // (e.g. SV-COMP no-data-race qw2004-2 / mcslock --- see #4442 review).
+  if (!config.options.get_bool_option("memory-leak-check"))
+    return;
+
   // Mirror abort()'s body in src/c2goto/library/stdlib.c: only invoke
   // the leak walker when abnormal-termination leak checks are enabled.
   // --no-abnormal-memory-leak is what SV-COMP's valid-memsafety wrapper
   // sets to keep leaks-on-abort/__assert_fail out of the verdict;
   // valid-memcleanup leaves it unset, so the walker fires there.
-  if (config.options.get_bool_option("no-abnormal-memory-leak"))
-    return;
-  const symbolt *s = context.find_symbol("c:@F@__ESBMC_memory_leak_checks");
-  if (s == nullptr)
-    return;
-  code_function_callt call;
-  call.function() = symbol_expr(*s);
-  call.location() = location;
-  do_function_call(
-    call.lhs(), call.function(), call.arguments(), location, dest);
+  if (!config.options.get_bool_option("no-abnormal-memory-leak"))
+  {
+    const symbolt *s = context.find_symbol("c:@F@__ESBMC_memory_leak_checks");
+    if (s != nullptr)
+    {
+      code_function_callt call;
+      call.function() = symbol_expr(*s);
+      call.location() = location;
+      do_function_call(
+        call.lhs(), call.function(), call.arguments(), location, dest);
+    }
+  }
+
+  // ASSUME false truncates the post-noreturn path so the end-of-main
+  // walker sees only paths that genuinely reached the end of main.
+  goto_programt::targett a = dest.add_instruction(ASSUME);
+  a->guard = gen_false_expr();
+  a->location = location;
+  a->location.user_provided(true);
 }
 
 void goto_convertt::do_printf(
@@ -1062,30 +1090,7 @@ void goto_convertt::do_function_call_symbol(
       t->location.comment(description);
     }
     else
-    {
-      // __assert_fail / __assert_rtn are __noreturn — when assertions
-      // are suppressed there is no ASSERT to terminate the path, so we
-      // need to truncate it explicitly; otherwise downstream end-of-main
-      // checks (e.g. memory-leak / memtrack) fire on paths that should
-      // already have terminated.  When assertions are enabled, the
-      // ASSERT above handles termination and we deliberately leave the
-      // post-assert path open so multi-property / coverage checks can
-      // still observe sibling claims, matching pre-#4441 behaviour.
-      //
-      // The C standard says __assert_fail invokes abort(); SV-COMP's
-      // valid-memcleanup semantics treat abnormal termination as a
-      // checkpoint where outstanding heap counts as a leak.  Mirror
-      // abort()'s body (src/c2goto/library/stdlib.c) by invoking the
-      // memory-leak walker before truncating, so real cleanup
-      // violations behind a noreturn assert (e.g. SV-COMP
-      // list-ext-properties/simple-ext) are still reported.  The
-      // intrinsic is a no-op when --memory-leak-check is off.
-      emit_noreturn_memleak_checks(function.location(), dest);
-      goto_programt::targett a = dest.add_instruction(ASSUME);
-      a->guard = gen_false_expr();
-      a->location = function.location();
-      a->location.user_provided(true);
-    }
+      emit_assert_fail_noreturn(function.location(), dest);
     // we ignore any LHS
   }
   else if (config.ansi_c.target.is_freebsd() && base_name == "__assert")
@@ -1111,14 +1116,7 @@ void goto_convertt::do_function_call_symbol(
       t->location.comment(description);
     }
     else
-    {
-      // FreeBSD __assert is __noreturn — see __assert_fail above.
-      emit_noreturn_memleak_checks(function.location(), dest);
-      goto_programt::targett a = dest.add_instruction(ASSUME);
-      a->guard = gen_false_expr();
-      a->location = function.location();
-      a->location.user_provided(true);
-    }
+      emit_assert_fail_noreturn(function.location(), dest);
     // we ignore any LHS
   }
   else if (base_name == "_wassert")
@@ -1144,14 +1142,7 @@ void goto_convertt::do_function_call_symbol(
       t->location.comment(description);
     }
     else
-    {
-      // _wassert is __noreturn — see __assert_fail above.
-      emit_noreturn_memleak_checks(function.location(), dest);
-      goto_programt::targett a = dest.add_instruction(ASSUME);
-      a->guard = gen_false_expr();
-      a->location = function.location();
-      a->location.user_provided(true);
-    }
+      emit_assert_fail_noreturn(function.location(), dest);
     // we ignore any LHS
   }
   else if (base_name == "operator new")

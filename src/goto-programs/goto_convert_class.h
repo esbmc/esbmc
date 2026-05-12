@@ -395,13 +395,19 @@ protected:
     const irep_idt &id,
     std::list<exprt> &dest);
 
-  // Emit a call to the __ESBMC_memory_leak_checks intrinsic — mirrors
-  // abort()'s body in src/c2goto/library/stdlib.c so the leak walker
-  // runs at noreturn termination points (e.g. __assert_fail) before
-  // the path is truncated with ASSUME false.  The intrinsic is a no-op
-  // when --memory-leak-check is off, so it is safe to call always.
+  // Emit the post-noreturn truncation for __assert_fail-family calls
+  // (__assert_fail / __assert_rtn / FreeBSD __assert / _wassert) under
+  // --no-assertions.  Fires only when --memory-leak-check is enabled
+  // (i.e. valid-memsafety / valid-memcleanup): the leak walker is
+  // invoked --- mirroring abort()'s body in
+  // src/c2goto/library/stdlib.c --- and then ASSUME false truncates
+  // the path.  Otherwise the call is a no-op so user assert(cond)
+  // does not silently become assume(cond) under property modes that
+  // intentionally suppress assertions (no-data-race, plain
+  // --no-assertions).  See PR #4442 review for the no-data-race
+  // regression that motivated the gate.
   void
-  emit_noreturn_memleak_checks(const locationt &location, goto_programt &dest);
+  emit_assert_fail_noreturn(const locationt &location, goto_programt &dest);
 
   // some built-in functions
   void do_abort(
