@@ -13,11 +13,12 @@ jobs:
 
   build-ubuntu:
     uses: ./.github/workflows/build-unix.yml
-    name: static llvm-21 DebugOpt
+    name: static llvm-21 Debug + coverage
     with:
       operating-system: ubuntu-24.04
-      build-flags: '-b DebugOpt -e ON'
+      build-flags: '-b Debug -k ON -e ON'
       testing: true
+      coverage: true
 
   build-windows:
     uses: ./.github/workflows/build-windows.yml
@@ -135,41 +136,23 @@ jobs:
           if: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
 
   coverage:
-    name: Build and upload coverage to Codecov
+    name: Upload coverage to Codecov
+    needs: build-ubuntu
+    # Keep uploading even when the gating build-ubuntu run reports test
+    # failures — the artifact is produced with if: always() upstream and we
+    # want flaky-test PRs to still contribute a coverage data point.
+    if: ${{ always() && needs.build-ubuntu.result != 'cancelled' && needs.build-ubuntu.result != 'skipped' }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - name: Install dependencies and build with coverage
-        env:
-          LLVM_PROFILE_FILE: "/tmp/esbmc-coverage/coverage-%m.profraw"
-        run: ./scripts/build.sh -b Debug -k ON
-      - name: Run tests
-        env:
-          LLVM_PROFILE_FILE: "/tmp/esbmc-coverage/coverage-%m.profraw"
-        run: mkdir -p build/coverage && cd build/ && ctest -j4 --progress . || true
-      - name: Merge coverage data
-        run: llvm-profdata merge -sparse /tmp/esbmc-coverage/*.profraw -o build/merged.profdata
-      - name: Generate lcov coverage report
-        run: |
-          llvm-cov export -format=lcov \
-            -instr-profile=build/merged.profdata \
-            build/src/esbmc/esbmc \
-            > coverage.info
-      - name: Filter out uninteresting paths
-        run: |
-          lcov --ignore-errors inconsistent --ignore-errors corrupt \
-               --ignore-errors unused --remove coverage.info \
-               '/usr/*' \
-               '*/build/*' \
-               --output-file coverage.info
+      - name: Download coverage report
+        uses: actions/download-artifact@v4
+        with:
+          # Artifact name comes from build-unix.yml; keep in lockstep with
+          # build-ubuntu's operating-system input above.
+          name: coverage-info-ubuntu-24.04
       - name: Upload to Codecov
         uses: codecov/codecov-action@v4
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage.info
-      - name: Save coverage artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-report
-          path: coverage.info
-          retention-days: 5    

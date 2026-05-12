@@ -16,6 +16,11 @@ on:
             description: "Whether to run tests (regression) for this build"
             required: true
             type: boolean
+        coverage:
+            description: "Run tests with coverage instrumentation and upload coverage.info"
+            required: false
+            type: boolean
+            default: false
     workflow_call:
       inputs:
         operating-system:
@@ -30,6 +35,11 @@ on:
             description: "Whether to run tests (regression) for this build"
             required: true
             type: boolean
+        coverage:
+            description: "Run tests with coverage instrumentation and upload coverage.info"
+            required: false
+            type: boolean
+            default: false
 
 jobs:
   build-unix:
@@ -39,6 +49,7 @@ jobs:
       operating-system: ${{ inputs.operating-system }}
       build-flags: ${{ inputs.build-flags }}
       testing: ${{ inputs.testing }}
+      coverage: ${{ inputs.coverage }}
 
   build-windows:
     if: ${{ startsWith(inputs.operating-system, 'windows-') }}
