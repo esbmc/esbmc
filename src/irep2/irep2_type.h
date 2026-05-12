@@ -518,9 +518,14 @@ public:
   array_type2t(const type2tc &_subtype, const expr2tc &size, bool inf)
     : array_type_methods(array_id, _subtype, size, inf)
   {
-    // If we can simplify the array size, do so
-    // XXX, this is probably massively inefficient. Some kind of boundary in
-    // the checking process should exist to eliminate this requirement.
+    // Constant-fold the size expression so identical array types compare
+    // equal regardless of how their size was constructed (frontends and
+    // migration paths sometimes hand us add/sub trees that simplify to a
+    // literal). Calling full simplify() on every array construction is
+    // wasteful — most sizes are already literals — and is tracked as a
+    // perf cleanup item (Track D in IREP2_IMPROVEMENTS.md / D3); the
+    // long-term fix is to normalise sizes at the frontend / migration
+    // boundary instead of here.
     if (!is_nil_expr(size))
     {
       assert(

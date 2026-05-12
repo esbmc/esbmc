@@ -218,6 +218,31 @@ public:
 class symbol_data : public expr2t
 {
 public:
+  /** Symex renaming level.
+   *
+   * Symbolic execution rewrites a symbol into successively more specific
+   * variants as it threads constraints through the SSA program:
+   *
+   *   - level0          — the raw symbol straight from the frontend, no
+   *                       activation/SSA decoration applied yet.
+   *   - level1          — annotated with the function activation record
+   *                       (level1_num) and owning thread (thread_num); the
+   *                       symbol refers to a particular per-thread, per-call
+   *                       instance of a local.
+   *   - level2          — additionally annotated with an SSA assignment
+   *                       counter (level2_num, node_num); the symbol refers
+   *                       to a specific value version of that local.
+   *   - level1_global   — like level1, but for a globally-scoped symbol
+   *                       (no activation record applies; it is shared
+   *                       across functions).
+   *   - level2_global   — like level2, but for a globally-scoped symbol.
+   *
+   * See src/goto-symex/renaming.cpp for the exact transitions; level1 and
+   * level2 are produced by renaming::level1t::rename() and
+   * renaming::level2t::get_ident_name() respectively, and the _global
+   * variants are emitted when the symbol is not found in the current_names
+   * map (i.e. it has no activation record because it is a global).
+   */
   enum renaming_level
   {
     level0,
@@ -2636,9 +2661,8 @@ class ieee_sqrt2t : public ieee_sqrt_expr_methods
 public:
   /** Primary constructor.
    *  @param type Type of this expr.
-   *  @param v1 First operand.
-   *  @param v2 Second operand.
-   *  @param rm rounding mode. */
+   *  @param v1 Operand to take the square root of.
+   *  @param rm Rounding mode. */
   ieee_sqrt2t(const type2tc &type, const expr2tc &v1, const expr2tc &rm)
     : ieee_sqrt_expr_methods(type, ieee_sqrt_id, v1, rm)
   {

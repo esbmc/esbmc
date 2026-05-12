@@ -3,6 +3,18 @@
 
 /** @file irep2.h
  *  Classes and definitions for non-stringy internal representation.
+ *
+ *  Threading contract: irep2 nodes (type2t, expr2t) are designed for
+ *  single-writer / thread-confined construction and rewriting. The
+ *  copy-on-write detach in irep_container relies on shared_ptr::use_count(),
+ *  which is documented as approximate under concurrent access (typical
+ *  implementations use std::memory_order_relaxed); the crc cache is guarded
+ *  by an in-node std::mutex, but the surrounding mutation paths
+ *  (operator-> / non-const get() invalidating crc_val, foreach_operand
+ *  exposing mutable handles) are not designed to be safe under concurrent
+ *  writers. Treat an irep2 tree as owned by a single rewriter at a time;
+ *  publish to other threads only once mutation is complete, and only for
+ *  read-only consumption.
  */
 
 #include <big-int/bigint.hh>
