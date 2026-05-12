@@ -330,9 +330,7 @@ void execution_statet::symex_goto(const expr2tc &old_guard)
 
 void execution_statet::assume(const expr2tc &assumption)
 {
-  // ASSUME narrows the active path, so preserve the previous guard just as we
-  // do for GOTO.
-  pre_goto_guard = threads_state[active_thread].guard;
+  pre_goto_guard = guardt();
 
   goto_symext::assume(assumption);
 
@@ -553,14 +551,6 @@ void execution_statet::preserve_last_paths()
 
     // Alas, copies.
     pp.emplace_back(std::make_pair(target_insn_it, goto_statet(*tomerge)));
-  }
-  else if (last_insn->type == ASSUME && !no_branch)
-  {
-    // ASSUME has no explicit sibling in goto_state_map. Preserve the path from
-    // before the assumption so a context switch at this point can resume it.
-    goto_statet pre_assume_state(ls);
-    pre_assume_state.guard = pre_goto_guard;
-    pp.emplace_back(std::make_pair(std::prev(ls.source.pc), pre_assume_state));
   }
 
   // We must have picked up at least one path to merge
