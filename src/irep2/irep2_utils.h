@@ -365,7 +365,7 @@ inline expr2tc gen_nondet(const type2tc &type)
     expr2tc(),
     std::vector<expr2tc>(),
     type2tc(),
-    sideeffect2t::nondet);
+    sideeffect2t::allockind::nondet);
 }
 
 inline expr2tc gen_zero(const type2tc &type, bool array_as_array_of = false)

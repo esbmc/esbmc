@@ -350,7 +350,7 @@ expr2tc goto_symext::model_allocation_failure(
       expr2tc(),
       std::vector<expr2tc>(),
       type2tc(),
-      sideeffect2t::nondet);
+      sideeffect2t::allockind::nondet);
     replace_nondet(alloc_fail);
 
     expr2tc null_ptr = symbol2tc(result->type, "NULL");
@@ -624,7 +624,7 @@ expr2tc goto_symext::symex_mem(
       expr2tc(),
       std::vector<expr2tc>(),
       type2tc(),
-      sideeffect2t::nondet);
+      sideeffect2t::allockind::nondet);
     replace_nondet(choice);
 
     rhs = if2tc(rhs->type, choice, rhs, null_sym);

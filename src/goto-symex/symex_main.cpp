@@ -896,7 +896,7 @@ void goto_symext::run_intrinsic(
         expr2tc(),
         std::vector<expr2tc>(),
         type2tc(),
-        sideeffect2t::nondet);
+        sideeffect2t::allockind::nondet);
 
       symex_assign(code_assign2tc(item.object, val), false, cur_state->guard);
     }

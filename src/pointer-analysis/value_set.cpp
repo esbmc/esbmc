@@ -402,9 +402,9 @@ void value_sett::get_value_set_rec(
     const sideeffect2t &side = to_sideeffect2t(expr);
     switch (side.kind)
     {
-    case sideeffect2t::alloca:
-    case sideeffect2t::realloc:
-    case sideeffect2t::malloc:
+    case sideeffect2t::allockind::alloca:
+    case sideeffect2t::allockind::realloc:
+    case sideeffect2t::allockind::malloc:
     {
       assert(suffix == "");
       const type2tc &dynamic_type = side.alloctype;
@@ -416,8 +416,8 @@ void value_sett::get_value_set_rec(
       return;
     }
 
-    case sideeffect2t::cpp_new:
-    case sideeffect2t::cpp_new_arr:
+    case sideeffect2t::allockind::cpp_new:
+    case sideeffect2t::allockind::cpp_new_arr:
     {
       assert(suffix == "");
       assert(is_pointer_type(side.type));
@@ -432,7 +432,7 @@ void value_sett::get_value_set_rec(
       return;
     }
 
-    case sideeffect2t::nondet:
+    case sideeffect2t::allockind::nondet:
       // Introduction of nondeterminism does not introduce new pointer vars
       return;
 

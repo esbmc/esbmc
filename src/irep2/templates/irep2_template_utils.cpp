@@ -461,7 +461,7 @@ void do_type_hash(const unsigned int &theval, crypto_hash &hash)
 
 size_t do_type_crc(const sideeffect_data::allockind &theval)
 {
-  return boost::hash<uint8_t>()(theval);
+  return boost::hash<uint8_t>()(static_cast<uint8_t>(theval));
 }
 
 void do_type_hash(const sideeffect_data::allockind &theval, crypto_hash &hash)

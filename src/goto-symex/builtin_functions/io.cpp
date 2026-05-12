@@ -287,7 +287,7 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
         expr2tc(),
         std::vector<expr2tc>(),
         type2tc(),
-        sideeffect2t::nondet);
+        sideeffect2t::allockind::nondet);
       replace_nondet(nondet);
       expr2tc lo =
         constant_int2tc(int_type2(), BigInt(printf_formatter.min_outlen));
@@ -435,7 +435,7 @@ void goto_symext::symex_input(const code_function_call2t &func_call)
         expr2tc(),
         std::vector<expr2tc>(),
         type2tc(),
-        sideeffect2t::nondet);
+        sideeffect2t::allockind::nondet);
 
       symex_assign(code_assign2tc(item.object, val), false, cur_state->guard);
     }

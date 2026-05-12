@@ -354,7 +354,7 @@ static expr2tc inline_temporary_variables(
         // Special case: if RHS is an old_snapshot sideeffect, DON'T inline further
         if (
           is_sideeffect2t(assign.value) &&
-          to_sideeffect2t(assign.value).kind == sideeffect2t::old_snapshot)
+          to_sideeffect2t(assign.value).kind == sideeffect2t::allockind::old_snapshot)
         {
           return expr;
         }
@@ -389,7 +389,7 @@ static expr2tc inline_temporary_variables(
         // Skip NONDET (initialization)
         if (
           is_sideeffect2t(assign.value) &&
-          to_sideeffect2t(assign.value).kind == sideeffect2t::nondet)
+          to_sideeffect2t(assign.value).kind == sideeffect2t::allockind::nondet)
         {
           continue;
         }
@@ -410,7 +410,7 @@ static expr2tc inline_temporary_variables(
         // Special case: if RHS is an old_snapshot sideeffect, DON'T inline further
         if (
           is_sideeffect2t(assign.value) &&
-          to_sideeffect2t(assign.value).kind == sideeffect2t::old_snapshot)
+          to_sideeffect2t(assign.value).kind == sideeffect2t::allockind::old_snapshot)
         {
           return expr;
         }
@@ -583,7 +583,7 @@ code_contractst::extract_assigns_from_body(const goto_programt &function_body)
       // Check if RHS is a sideeffect with assigns_target
       if (
         is_sideeffect2t(assign.source) &&
-        to_sideeffect2t(assign.source).kind == sideeffect2t::assigns_target)
+        to_sideeffect2t(assign.source).kind == sideeffect2t::allockind::assigns_target)
       {
         const sideeffect2t &se = to_sideeffect2t(assign.source);
         expr2tc target_expr = se.operand;
@@ -1039,7 +1039,7 @@ goto_programt code_contractst::generate_checking_wrapper(
       info.size_expr,
       std::vector<expr2tc>(),
       char_type,
-      sideeffect2t::malloc);
+      sideeffect2t::allockind::malloc);
 
     goto_programt::targett assign_inst = wrapper.add_instruction(ASSIGN);
     assign_inst->code = code_assign2tc(ptr_var, malloc_expr);
@@ -1865,7 +1865,7 @@ bool code_contractst::is_old_call(const expr2tc &expr) const
   if (is_sideeffect2t(expr))
   {
     const sideeffect2t &se = to_sideeffect2t(expr);
-    return se.kind == sideeffect2t::old_snapshot;
+    return se.kind == sideeffect2t::allockind::old_snapshot;
   }
 
   return false;
@@ -2023,7 +2023,7 @@ code_contractst::collect_old_snapshots_from_body(
       if (is_sideeffect2t(assign.source))
       {
         const sideeffect2t &se = to_sideeffect2t(assign.source);
-        if (se.kind == sideeffect2t::old_snapshot)
+        if (se.kind == sideeffect2t::allockind::old_snapshot)
         {
           // Found an old_snapshot assignment!
           // The operand is the original expression, the target is the temp variable
@@ -3140,7 +3140,7 @@ bool code_contractst::has_contracts(const goto_programt &function_body) const
       const code_assign2t &assign = to_code_assign2t(it->code);
       if (
         is_sideeffect2t(assign.source) &&
-        to_sideeffect2t(assign.source).kind == sideeffect2t::assigns_target)
+        to_sideeffect2t(assign.source).kind == sideeffect2t::allockind::assigns_target)
       {
         return true;
       }
@@ -3705,7 +3705,7 @@ void code_contractst::add_pointer_validity_assumptions(
         alloc_size,
         std::vector<expr2tc>(),
         pointed_to_type,
-        sideeffect2t::malloc);
+        sideeffect2t::allockind::malloc);
 
       auto assign_inst = wrapper.add_instruction(ASSIGN);
       assign_inst->code = code_assign2tc(p, malloc_expr);
@@ -3812,7 +3812,7 @@ void code_contractst::add_pointer_validity_assumptions(
           alloc_size,
           std::vector<expr2tc>(),
           pointed_to_type,
-          sideeffect2t::malloc);
+          sideeffect2t::allockind::malloc);
 
         auto assign_inst = wrapper.add_instruction(ASSIGN);
         assign_inst->code = code_assign2tc(p, malloc_expr);

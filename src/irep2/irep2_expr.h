@@ -1061,7 +1061,7 @@ class sideeffect_data : public expr2t
 public:
   /** Enumeration identifying each particular kind of side effect. The values
    *  themselves are entirely self explanatory. */
-  enum allockind
+  enum class allockind
   {
     malloc,
     realloc,

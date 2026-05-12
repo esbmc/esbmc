@@ -234,26 +234,26 @@ void goto_symext::handle_sideeffect(
 {
   switch (effect.kind)
   {
-  case sideeffect2t::cpp_new:
-  case sideeffect2t::cpp_new_arr:
+  case sideeffect2t::allockind::cpp_new:
+  case sideeffect2t::allockind::cpp_new_arr:
     symex_cpp_new(lhs, effect, guard);
     break;
-  case sideeffect2t::realloc:
+  case sideeffect2t::allockind::realloc:
     symex_realloc(lhs, effect, guardt());
     break;
-  case sideeffect2t::malloc:
+  case sideeffect2t::allockind::malloc:
     symex_malloc(lhs, effect, guard);
     break;
-  case sideeffect2t::alloca:
+  case sideeffect2t::allockind::alloca:
     symex_alloca(lhs, effect, guard);
     break;
-  case sideeffect2t::va_arg:
+  case sideeffect2t::allockind::va_arg:
     symex_va_arg(lhs, effect, guard);
     break;
-  case sideeffect2t::printf2:
+  case sideeffect2t::allockind::printf2:
     // Do nothing for printf
     break;
-  case sideeffect2t::old_snapshot:
+  case sideeffect2t::allockind::old_snapshot:
     // __ESBMC_old() snapshots are handled during contract processing.
     // If we encounter one here, it means we're in the original function body
     // (contracts_original_xxx) where the ensures/requires clause is still present.
@@ -272,7 +272,7 @@ void goto_symext::handle_sideeffect(
       symex_assign(code_assign2tc(lhs, result), true, guard);
     }
     break;
-  case sideeffect2t::assigns_target:
+  case sideeffect2t::allockind::assigns_target:
     // __ESBMC_assigns() targets are handled during contract processing
     // In --enforce-contract mode, the assigns clause is extracted and checked,
     // but we don't need to execute anything here during symex.
@@ -1007,7 +1007,7 @@ void goto_symext::symex_assign_bitfield(
 void goto_symext::replace_nondet(expr2tc &expr)
 {
   if (
-    is_sideeffect2t(expr) && to_sideeffect2t(expr).kind == sideeffect2t::nondet)
+    is_sideeffect2t(expr) && to_sideeffect2t(expr).kind == sideeffect2t::allockind::nondet)
   {
     unsigned int &nondet_count = get_nondet_counter();
     expr =

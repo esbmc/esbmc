@@ -1775,22 +1775,22 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     sideeffect2t::allockind t;
     if (expr.statement() == "malloc")
-      t = sideeffect2t::malloc;
+      t = sideeffect2t::allockind::malloc;
     else if (expr.statement() == "realloc")
-      t = sideeffect2t::realloc;
+      t = sideeffect2t::allockind::realloc;
     else if (expr.statement() == "alloca")
-      t = sideeffect2t::alloca;
+      t = sideeffect2t::allockind::alloca;
     else if (expr.statement() == "cpp_new")
-      t = sideeffect2t::cpp_new;
+      t = sideeffect2t::allockind::cpp_new;
     else if (expr.statement() == "cpp_new[]")
-      t = sideeffect2t::cpp_new_arr;
+      t = sideeffect2t::allockind::cpp_new_arr;
     else if (expr.statement() == "nondet")
-      t = sideeffect2t::nondet;
+      t = sideeffect2t::allockind::nondet;
     else if (expr.statement() == "va_arg")
-      t = sideeffect2t::va_arg;
+      t = sideeffect2t::allockind::va_arg;
     else if (expr.statement() == "function_call")
     {
-      t = sideeffect2t::function_call;
+      t = sideeffect2t::allockind::function_call;
       const exprt &arguments = expr.op1();
       forall_operands (it, arguments)
       {
@@ -1816,7 +1816,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     }
     else if (expr.statement() == "printf2")
     {
-      t = sideeffect2t::printf2;
+      t = sideeffect2t::allockind::printf2;
       for (auto const &it : expr.operands())
       {
         expr2tc tmp_op;
@@ -1826,34 +1826,34 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     }
     else if (expr.statement() == "preincrement")
     {
-      t = sideeffect2t::preincrement;
+      t = sideeffect2t::allockind::preincrement;
       migrate_expr(expr.op0(), new_expr_ref);
     }
     else if (expr.statement() == "postincrement")
     {
-      t = sideeffect2t::postincrement;
+      t = sideeffect2t::allockind::postincrement;
       migrate_expr(expr.op0(), new_expr_ref);
     }
     else if (expr.statement() == "predecrement")
     {
-      t = sideeffect2t::predecrement;
+      t = sideeffect2t::allockind::predecrement;
       migrate_expr(expr.op0(), new_expr_ref);
     }
     else if (expr.statement() == "postdecrement")
     {
-      t = sideeffect2t::predecrement;
+      t = sideeffect2t::allockind::predecrement;
       migrate_expr(expr.op0(), new_expr_ref);
     }
     else if (expr.statement() == "old_snapshot")
     {
       // __ESBMC_old() in function contracts
-      t = sideeffect2t::old_snapshot;
+      t = sideeffect2t::allockind::old_snapshot;
       migrate_expr(expr.op0(), new_expr_ref);
     }
     else if (expr.statement() == "assigns_target")
     {
       // __ESBMC_assigns() in function contracts
-      t = sideeffect2t::assigns_target;
+      t = sideeffect2t::allockind::assigns_target;
       migrate_expr(expr.op0(), new_expr_ref);
     }
     else
@@ -3236,7 +3236,7 @@ exprt migrate_expr_back(const expr2tc &ref)
     if (!is_nil_expr(ref2.size))
       size = migrate_expr_back(ref2.size);
 
-    if (ref2.kind == sideeffect2t::function_call)
+    if (ref2.kind == sideeffect2t::allockind::function_call)
     {
       // "Operand" is 1st op,
       exprt operand = migrate_expr_back(ref2.operand);
@@ -3246,7 +3246,7 @@ exprt migrate_expr_back(const expr2tc &ref)
         args.copy_to_operands(migrate_expr_back(argument));
       theexpr.copy_to_operands(operand, args);
     }
-    else if (ref2.kind == sideeffect2t::nondet)
+    else if (ref2.kind == sideeffect2t::allockind::nondet)
     {
       ; // Do nothing
     }
@@ -3261,46 +3261,46 @@ exprt migrate_expr_back(const expr2tc &ref)
 
     switch (ref2.kind)
     {
-    case sideeffect2t::malloc:
+    case sideeffect2t::allockind::malloc:
       theexpr.statement("malloc");
       break;
-    case sideeffect2t::realloc:
+    case sideeffect2t::allockind::realloc:
       theexpr.statement("realloc");
       break;
-    case sideeffect2t::alloca:
+    case sideeffect2t::allockind::alloca:
       theexpr.statement("alloca");
       break;
-    case sideeffect2t::cpp_new:
+    case sideeffect2t::allockind::cpp_new:
       theexpr.statement("cpp_new");
       break;
-    case sideeffect2t::cpp_new_arr:
+    case sideeffect2t::allockind::cpp_new_arr:
       theexpr.statement("cpp_new[]");
       break;
-    case sideeffect2t::nondet:
+    case sideeffect2t::allockind::nondet:
       theexpr.statement("nondet");
       break;
-    case sideeffect2t::va_arg:
+    case sideeffect2t::allockind::va_arg:
       theexpr.statement("va_arg");
       break;
-    case sideeffect2t::function_call:
+    case sideeffect2t::allockind::function_call:
       theexpr.statement("function_call");
       break;
-    case sideeffect2t::preincrement:
+    case sideeffect2t::allockind::preincrement:
       theexpr.statement("preincrement");
       break;
-    case sideeffect2t::postincrement:
+    case sideeffect2t::allockind::postincrement:
       theexpr.statement("postincrement");
       break;
-    case sideeffect2t::predecrement:
+    case sideeffect2t::allockind::predecrement:
       theexpr.statement("predecrement");
       break;
-    case sideeffect2t::postdecrement:
+    case sideeffect2t::allockind::postdecrement:
       theexpr.statement("postdecrement");
       break;
-    case sideeffect2t::old_snapshot:
+    case sideeffect2t::allockind::old_snapshot:
       theexpr.statement("old_snapshot");
       break;
-    case sideeffect2t::assigns_target:
+    case sideeffect2t::allockind::assigns_target:
       theexpr.statement("assigns_target");
       break;
     default:
