@@ -340,6 +340,9 @@ int do_type_lt(
   const std::vector<expr2tc> &side1,
   const std::vector<expr2tc> &side2)
 {
+  if (side1.size() != side2.size())
+    return side1.size() < side2.size() ? -1 : 1;
+
   int tmp = 0;
   std::vector<expr2tc>::const_iterator it2 = side2.begin();
   for (auto const &it : side1)

@@ -38,6 +38,20 @@ expr2tc gen_testing_struct(unsigned int a, unsigned int b)
   return constant_struct2tc(testing_struct2t(), members);
 }
 
+// Build a constant_array2t whose member vector has `count` ulong elements,
+// each initialised to its index. The array type uses an infinite-sized array
+// so its identity does not depend on the member count.
+expr2tc gen_testing_array(unsigned int count)
+{
+  type2tc subtype = get_uint_type(config.ansi_c.word_size);
+  type2tc array_ty = array_type2tc(subtype, expr2tc(), true);
+  std::vector<expr2tc> members;
+  members.reserve(count);
+  for (unsigned int i = 0; i < count; ++i)
+    members.push_back(gen_ulong(i));
+  return constant_array2tc(array_ty, members);
+}
+
 void test_constructed_equally(const expr2tc e1, const expr2tc e2)
 {
   crypto_hash c_hash;
@@ -112,6 +126,41 @@ SCENARIO("irep2 hashing", "[core][irep2]")
     {
       for (auto &e : expressions)
         test_constructed_differently(e.first, e.second);
+    }
+  }
+}
+
+// Regression for do_type_lt(const std::vector<expr2tc>&, ...) iterating past
+// the end of the shorter vector when operand vectors have different lengths.
+// Before the fix the longer side dereferences side2.end(); with ASan this
+// trips an OOB read, otherwise the comparison can return a stale value or
+// crash depending on heap layout.
+SCENARIO(
+  "constant_array2t ordering with unequal member counts",
+  "[core][irep2]")
+{
+  GIVEN("Two constant_array2ts with different numbers of members")
+  {
+    expr2tc small = gen_testing_array(2);
+    expr2tc big = gen_testing_array(5);
+
+    THEN("operator< is a strict weak ordering across both directions")
+    {
+      // Neither direction may dereference past either vector. Both calls
+      // must terminate without OOB access, and they must be consistent
+      // (not both true).
+      bool small_lt_big = (*small < *big);
+      bool big_lt_small = (*big < *small);
+      REQUIRE(small_lt_big != big_lt_small);
+    }
+
+    THEN("ltchecked is antisymmetric and non-zero")
+    {
+      int forward = small->ltchecked(*big);
+      int reverse = big->ltchecked(*small);
+      REQUIRE(forward != 0);
+      REQUIRE(reverse != 0);
+      REQUIRE(forward == -reverse);
     }
   }
 }
