@@ -1809,9 +1809,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
       if (expr.base_name().empty())
         assert(!"No base_name for code_printf2t");
-      std::string bs_name = expr.base_name().as_string();
-
-      new_expr_ref = code_printf2tc(args, bs_name);
+      new_expr_ref = code_printf2tc(args, expr.base_name());
       return;
     }
     else if (expr.statement() == "printf2")
@@ -1907,9 +1905,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     if (expr.base_name().empty())
       assert(!"No base_name for code_printf2t");
-    std::string bs_name = expr.base_name().as_string();
-
-    new_expr_ref = code_printf2tc(ops, bs_name);
+    new_expr_ref = code_printf2tc(ops, expr.base_name());
     return;
   }
 

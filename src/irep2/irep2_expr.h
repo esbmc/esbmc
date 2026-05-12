@@ -1209,15 +1209,16 @@ public:
     const type2tc &t,
     expr2t::expr_ids id,
     std::vector<expr2tc> v,
-    const std::string &b)
+    const irep_idt &b)
     : code_base(t, id), operands(std::move(v)), bs_name(b)
   {
   }
   code_printf_data(const code_printf_data &ref) = default;
 
   std::vector<expr2tc> operands;
-  // Base name
-  std::string bs_name;
+  // Base name of the printf-family function being captured
+  // (e.g. "printf", "fprintf"); interned via irep_idt.
+  irep_idt bs_name;
 
   // Type mangling:
   typedef esbmct::field_traits<
@@ -3367,7 +3368,7 @@ public:
 class code_printf2t : public code_printf_expr_methods
 {
 public:
-  code_printf2t(const std::vector<expr2tc> &opers, const std::string &b)
+  code_printf2t(const std::vector<expr2tc> &opers, const irep_idt &b)
     : code_printf_expr_methods(get_empty_type(), code_printf_id, opers, b)
   {
   }

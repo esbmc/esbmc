@@ -28,7 +28,7 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
     return;
   }
 
-  const std::string &base_name = new_rhs.bs_name;
+  const irep_idt &base_name = new_rhs.bs_name;
 
   // get the format string base on the bs_name
   irep_idt fmt;
