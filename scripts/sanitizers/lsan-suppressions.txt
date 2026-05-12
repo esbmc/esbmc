@@ -1,0 +1,9 @@
+# LeakSanitizer suppressions for ESBMC.
+#
+# Format: one rule per line, comments start with '#'.
+#   leak:<function or source-path substring>
+#
+# Keep each rule paired with the issue that tracks the underlying leak.
+# See: https://github.com/google/sanitizers/wiki/AddressSanitizerLeakSanitizer
+#
+# (empty — populated as the bring-up CI run surfaces findings)
