@@ -401,8 +401,8 @@ int do_type_lt(const expr2tc &side1, const expr2tc &side2)
 
 int do_type_lt(const type2tc &side1, const type2tc &side2)
 {
-  if (*side1.get() == *side2.get())
-    return 0; // Both may be null;
+  if (side1.get() == side2.get())
+    return 0; // Catch nulls
   else if (side1.get() == nullptr)
     return -1;
   else if (side2.get() == nullptr)

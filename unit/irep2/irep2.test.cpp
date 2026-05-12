@@ -1,6 +1,7 @@
 #define CATCH_CONFIG_MAIN // This tells Catch to provide a main() - only do this in one cpp file
 #include <catch2/catch.hpp>
 #include <irep2/irep2.h>
+#include <irep2/irep2_template_utils.h>
 #include <irep2/irep2_utils.h>
 #include <util/crypto_hash.h>
 
@@ -158,6 +159,61 @@ SCENARIO(
     {
       int forward = small->ltchecked(*big);
       int reverse = big->ltchecked(*small);
+      REQUIRE(forward != 0);
+      REQUIRE(reverse != 0);
+      REQUIRE(forward == -reverse);
+    }
+  }
+}
+
+// Regression for do_type_lt(const type2tc &, const type2tc &) dereferencing
+// side1/side2 before checking for nil. The expr2tc overload above already
+// handles nulls; the type2tc overload should be symmetric.
+SCENARIO("do_type_lt(type2tc, type2tc) with nil sides", "[core][irep2]")
+{
+  type2tc nil_ty;
+  type2tc int_ty = get_uint_type(config.ansi_c.word_size);
+  type2tc bool_ty = get_bool_type();
+
+  GIVEN("Both sides nil")
+  {
+    THEN("comparison is 0")
+    {
+      REQUIRE(do_type_lt(nil_ty, nil_ty) == 0);
+    }
+  }
+
+  GIVEN("Only the left side is nil")
+  {
+    THEN("comparison is negative")
+    {
+      REQUIRE(do_type_lt(nil_ty, int_ty) < 0);
+    }
+  }
+
+  GIVEN("Only the right side is nil")
+  {
+    THEN("comparison is positive")
+    {
+      REQUIRE(do_type_lt(int_ty, nil_ty) > 0);
+    }
+  }
+
+  GIVEN("Two non-nil, equal types")
+  {
+    THEN("comparison is 0")
+    {
+      type2tc int_ty_2 = get_uint_type(config.ansi_c.word_size);
+      REQUIRE(do_type_lt(int_ty, int_ty_2) == 0);
+    }
+  }
+
+  GIVEN("Two non-nil, differing types")
+  {
+    THEN("comparison is antisymmetric and non-zero")
+    {
+      int forward = do_type_lt(int_ty, bool_ty);
+      int reverse = do_type_lt(bool_ty, int_ty);
       REQUIRE(forward != 0);
       REQUIRE(reverse != 0);
       REQUIRE(forward == -reverse);
