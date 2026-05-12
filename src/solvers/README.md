@@ -1,5 +1,11 @@
 # `src/solvers/` — ESBMC's SMT backend
 
+*This document is intended for developers extending ESBMC with new SMT
+backends or new SMT encodings.  If you are just trying to **use** an
+existing solver, the project [`README.md`](../../README.md) and the
+[setup docs](../../website/content/docs/setup.md) on the website are
+the right starting points.*
+
 This directory reduces SSA programs produced by ESBMC's symbolic execution
 engine into SMT formulae, hands them to a back-end solver, and reads the
 resulting model back out.  Backends are pluggable: each lives in its own
@@ -150,6 +156,13 @@ reference and the wiki as background.
    misbehaves.  Once that works, run the regression suite filtered by
    `-L esbmc` with your `--<name>` flag wired in.
 
+   If the first command does *not* return `VERIFICATION SUCCESSFUL`,
+   the cause is almost always in Stage 1: a missing literal builder
+   (`mk_smt_bool` / `mk_smt_bv` / `mk_smt_symbol`) or equality
+   (`mk_eq`), or a broken solver hand-off (`assert_ast` / `dec_solve`).
+   Start by implementing `dump_smt` and re-running with
+   `--smt-formula-only` to see exactly what your backend produced.
+
 ### In-tree (under `src/solvers/`)
 
 1. Create `src/solvers/<name>/` with `<name>_conv.{h,cpp}` and a
@@ -180,7 +193,9 @@ reference and the wiki as background.
    - Model readback: `get_bool`, `get_bv`.
 
    At this point a trivial program with `--<name>` should reach
-   `VERIFICATION SUCCESSFUL` / `FAILED` cleanly.
+   `VERIFICATION SUCCESSFUL` / `FAILED` cleanly.  **This is your first
+   milestone — the backend is correctly wired end-to-end and every
+   subsequent stage is additive.**
 
    **Stage 2 — Common (any non-trivial C program needs these).**
 
