@@ -9,7 +9,6 @@
 #include <goto-symex/renaming.h>
 #include <goto-symex/symex_target.h>
 #include <pointer-analysis/value_set.h>
-#include <queue>
 #include <stack>
 #include <string>
 #include <unordered_set>
@@ -17,6 +16,7 @@
 #include <util/guard.h>
 #include <util/i2string.h>
 #include <irep2/irep2.h>
+#include <memory>
 #include <vector>
 #include <goto-symex/witnesses.h>
 
@@ -473,49 +473,15 @@ public:
 
   // --- Violation-witness replay state ---
 
-  /// Ordered list of branching waypoints parsed from the violation witness.
-  /// Assumption waypoints are handled via source injection; only branching
-  /// waypoints remain here for use by symex_goto.
-  std::vector<waypoint> witness_waypoints;
+  /// witness_segs[seg][wp]: all actionable waypoints (assumption + branching,
+  /// target excluded), unified per-segment index.  Shared across forked states
+  /// (read-only after init) so operator= is O(1) for this field.
+  std::shared_ptr<const std::vector<std::vector<waypoint>>> witness_segs;
+  size_t cur_seg = 0;
+  size_t cur_wp = 0;
 
-  /// Index of the next unconsumed branching waypoint.
-  size_t witness_cursor = 0;
-
-  /// Returns a pointer to the current waypoint if its type and location match
-  /// the given arguments, nullptr otherwise.  Does NOT advance the cursor.
-  const waypoint *peek_witness_waypoint(
-    waypoint::Type type,
-    const irep_idt &function,
-    const BigInt &line) const;
-
-  /// Consume the current waypoint and advance the cursor.
-  void advance_witness_cursor();
-
-  /// Queue of (source-line, value) pairs collected from injected
-  /// __ESBMC_witness_assume calls.  replace_nondet pops an entry only when
-  /// the current instruction's source line matches, ensuring each concrete
-  /// value is applied to the correct nondet call.
-  /// irep_idt is an interned string: comparison is a single integer compare,
-  /// avoiding as_string() + stoll() on every nondet encounter.
-  std::queue<std::pair<irep_idt, expr2tc>> witness_value_queue;
-
-  /// Program counters that have already pushed a value to witness_value_queue.
-  /// Prevents loop unrolling from pushing the same assumption multiple times;
-  /// deduplication is pure host-side C++ with zero SMT overhead.
-  std::unordered_set<goto_programt::const_targett, const_target_hash>
-    witness_fired_pcs;
-
-  /// Index of the currently active witness segment (0-based).
-  /// Incremented each time a follow-action waypoint is consumed, reflecting
-  /// the spec rule that only the current segment's waypoints may be evaluated.
-  int current_witness_segment = 0;
-
-  /// Maps source-line irep_idt → set of segment indices that have an
-  /// assumption waypoint at that line.  Populated at construction time;
-  /// lets run_intrinsic skip injected calls that belong to a future or
-  /// already-passed segment without scanning the full waypoint list.
-  std::unordered_map<irep_idt, std::vector<int>, irep_id_hash>
-    witness_assumption_line_segments;
+  /// Advance the cursor to the next waypoint (wraps to next segment at end).
+  void advance_witness_position();
 
 };
 

@@ -1078,64 +1078,29 @@ void goto_symext::run_intrinsic(
 
   if (symname == "c:@F@__ESBMC_witness_assume")
   {
-    // The whole assumption expression (e.g. "x == 5") was injected as a _Bool
-    // argument so Clang parsed it with correct types.  Only process each call
-    // site once — witness_fired_pcs guards against loop re-execution with zero
-    // SMT overhead (pure host-side bookkeeping, no extra SSA variables).
-    if (!cur_state->witness_fired_pcs.insert(cur_state->source.pc).second)
+    if (!validate_witness)
       return;
 
-    // Segment gate: only process this assumption if its source line has at
-    // least one assumption belonging to the currently active segment.  This
-    // implements the spec rule that only the current segment's waypoints may
-    // be evaluated at any given time.
-    if (!cur_state->witness_assumption_line_segments.empty())
-    {
-      irep_idt cur_line = cur_state->source.pc->location.get_line();
-      auto it = cur_state->witness_assumption_line_segments.find(cur_line);
-      if (it == cur_state->witness_assumption_line_segments.end())
-        return;
-      bool in_segment = false;
-      for (int seg : it->second)
-      {
-        if (seg == cur_state->current_witness_segment)
-        {
-          in_segment = true;
-          break;
-        }
-      }
-      if (!in_segment)
-        return;
-    }
+    // operands: [seg_idx_const, wp_idx_const, constraint]
+    if (func_call.operands.size() < 3)
+      return;
+    size_t seg_idx =
+      to_constant_int2t(func_call.operands[0]).value.to_uint64();
+    size_t wp_idx =
+      to_constant_int2t(func_call.operands[1]).value.to_uint64();
 
-    if (!func_call.operands.empty())
-    {
-      expr2tc arg = func_call.operands[0];
-      cur_state->rename(arg);
+    if (seg_idx != cur_state->cur_seg || wp_idx != cur_state->cur_wp)
+      return;
 
-      // Peel off typecasts inserted by the (_Bool)(...) cast in the injection.
-      while (is_typecast2t(arg))
-        arg = to_typecast2t(arg).from;
+    const waypoint &wp = (*cur_state->witness_segs)[seg_idx][wp_idx];
+    expr2tc arg = func_call.operands[2];
+    cur_state->rename(arg);
 
-      expr2tc value;
-      if (is_equality2t(arg))
-      {
-        const equality2t &eq = to_equality2t(arg);
-        // Prefer the constant/literal side; fall back to side_2.
-        if (is_constant_expr(eq.side_2) || !is_constant_expr(eq.side_1))
-          value = eq.side_2;
-        else
-          value = eq.side_1;
-      }
-      else
-      {
-        // Plain boolean expression — push as-is.
-        value = arg;
-      }
-
-      cur_state->witness_value_queue.push(
-        {cur_state->source.pc->location.get_line(), std::move(value)});
-    }
+    if (wp.action == waypoint::avoid)
+      assume(not2tc(arg));
+    else
+      assume(arg);
+    cur_state->advance_witness_position();
     return;
   }
 

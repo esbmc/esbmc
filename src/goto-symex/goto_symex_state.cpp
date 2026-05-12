@@ -43,6 +43,9 @@ goto_symex_statet &goto_symex_statet::operator=(const goto_symex_statet &state)
   function_unwind = state.function_unwind;
   use_value_set = state.use_value_set;
   call_stack = state.call_stack;
+  witness_segs = state.witness_segs;
+  cur_seg = state.cur_seg;
+  cur_wp = state.cur_wp;
   return *this;
 }
 
@@ -557,33 +560,14 @@ std::vector<stack_framet> goto_symex_statet::gen_stack_trace() const
   return trace;
 }
 
-const waypoint *goto_symex_statet::peek_witness_waypoint(
-  waypoint::Type type,
-  const irep_idt &function,
-  const BigInt &line) const
+void goto_symex_statet::advance_witness_position()
 {
-  if (witness_cursor >= witness_waypoints.size())
-    return nullptr;
-
-  const waypoint &wp = witness_waypoints[witness_cursor];
-  if (wp.type != type)
-    return nullptr;
-  if (!wp.function.empty() && wp.function != id2string(function))
-    return nullptr;
-  if (wp.line != BigInt(-1) && wp.line != line)
-    return nullptr;
-
-  return &wp;
-}
-
-void goto_symex_statet::advance_witness_cursor()
-{
-  if (witness_cursor < witness_waypoints.size())
+  if (!witness_segs || cur_seg >= witness_segs->size())
+    return;
+  ++cur_wp;
+  if (cur_wp >= (*witness_segs)[cur_seg].size())
   {
-    // A follow waypoint marks the end of its segment; advance the segment
-    // counter so that run_intrinsic will gate assumption injection correctly.
-    if (witness_waypoints[witness_cursor].action == waypoint::follow)
-      ++current_witness_segment;
-    ++witness_cursor;
+    ++cur_seg;
+    cur_wp = 0;
   }
 }

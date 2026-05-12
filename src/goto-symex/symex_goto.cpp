@@ -106,27 +106,34 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
   // by process_instruction (ASSIGN / ASSUME / DEAD), which is sufficient for
   // tracking loop counters.
 
-  // Violation-witness: force branch direction when a branching waypoint matches.
-  if (!cur_state->witness_waypoints.empty())
+  // Violation-witness: steer branch direction if the current waypoint is a
+  // branching at this location.  Both seg and wp must match (strict ordering).
+  if (validate_witness &&
+      cur_state->cur_seg < cur_state->witness_segs->size())
   {
-    const auto &loc = cur_state->source.pc->location;
-    const irep_idt &func = loc.get_function();
-    BigInt line(loc.get_line().c_str(), 10);
-
-    const waypoint *wp = cur_state->peek_witness_waypoint(
-      waypoint::branching, func, line);
-    if (wp)
+    const auto &seg = (*cur_state->witness_segs)[cur_state->cur_seg];
+    if (cur_state->cur_wp < seg.size())
     {
-      // value="true" means the (possibly flipped) condition was true at the
-      // witness.  For a non-flipped GOTO, a true condition means fall-through
-      // (not taken); for flipped it means taken.
-      bool direction_true = (wp->value == "true");
-      bool goto_taken = instruction.flipped_guard ? direction_true : !direction_true;
-      if (goto_taken)
-        new_guard_true = true;
-      else
-        new_guard_false = true;
-      cur_state->advance_witness_cursor();
+      const waypoint &wp = seg[cur_state->cur_wp];
+      if (wp.type == waypoint::branching)
+      {
+        const auto &loc = cur_state->source.pc->location;
+        if (
+          !wp.line_id.empty() &&
+          wp.line_id == loc.get_line() &&
+          (wp.function_id.empty() || wp.function_id == loc.get_function()))
+        {
+          const bool is_avoid = (wp.action == waypoint::avoid);
+          bool direction_true = (wp.value == "true") ^ is_avoid;
+          bool goto_taken =
+            instruction.flipped_guard ? direction_true : !direction_true;
+          if (goto_taken)
+            new_guard_true = true;
+          else
+            new_guard_false = true;
+          cur_state->advance_witness_position();
+        }
+      }
     }
   }
 

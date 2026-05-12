@@ -47,7 +47,8 @@ goto_symext::goto_symext(
     k_induction(options.is_kind()),
     base_case(options.get_bool_option("base-case")),
     forward_condition(options.get_bool_option("forward-condition")),
-    inductive_step(options.get_bool_option("inductive-step"))
+    inductive_step(options.get_bool_option("inductive-step")),
+    validate_witness(options.get_bool_option("validate-violation-witness"))
 {
   const std::string &set = options.get_option("unwindset");
   unsigned int length = set.length();
@@ -1008,25 +1009,6 @@ void goto_symext::replace_nondet(expr2tc &expr)
   if (
     is_sideeffect2t(expr) && to_sideeffect2t(expr).kind == sideeffect2t::nondet)
   {
-    // Violation-witness: pop the front entry only when its source line matches
-    // the current instruction, ensuring each assumption is applied to the
-    // correct nondet call and not to an unrelated one on a different line.
-    // witness_fired_pcs in run_intrinsic guarantees each call site enqueues
-    // at most once, so no static-bool guard is needed in the injected source.
-    if (!cur_state->witness_value_queue.empty())
-    {
-      const auto &[wp_line, wp_val] = cur_state->witness_value_queue.front();
-      if (wp_line == cur_state->source.pc->location.get_line())
-      {
-        expr2tc val = wp_val;
-        cur_state->witness_value_queue.pop();
-        if (val->type != expr->type)
-          val = typecast2tc(expr->type, val);
-        expr = val;
-        return;
-      }
-    }
-
     unsigned int &nondet_count = get_nondet_counter();
     expr =
       symbol2tc(expr->type, "nondet$symex::nondet" + i2string(nondet_count++));
