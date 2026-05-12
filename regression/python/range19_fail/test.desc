@@ -1,4 +1,4 @@
 CORE
 main.py
---incremental-bmc
+--no-unwinding-assertions --unwind 2
 ^VERIFICATION FAILED$

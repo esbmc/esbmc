@@ -1,4 +1,4 @@
 CORE
 main.c
---incremental-bmc --max-k-step 5 --32 -Wno-error=implicit-function-declaration
+--max-k-step 5 --32 -Wno-error=implicit-function-declaration --no-unwinding-assertions --unwind 1
 ^VERIFICATION FAILED$

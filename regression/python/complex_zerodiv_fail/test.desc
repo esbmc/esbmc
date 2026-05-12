@@ -1,4 +1,4 @@
 CORE
 main.py
---incremental-bmc --overflow-check
+--overflow-check --no-unwinding-assertions --unwind 1
 ^VERIFICATION FAILED$

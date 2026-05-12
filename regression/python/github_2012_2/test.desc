@@ -1,4 +1,4 @@
 CORE
 main.py
---incremental-bmc --z3
+--z3 --unwind 1
 ^VERIFICATION SUCCESSFUL$
