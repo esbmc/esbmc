@@ -1382,20 +1382,97 @@ void python_converter::convert_function_calls_to_side_effects(
     to_side_effect_call(rhs);
 }
 
-/// Handle chained comparisons
+/// Handle chained comparisons.
+///
+/// Per Python [expressions]/6.10, `a OP1 b OP2 c` is equivalent to
+/// `(a OP1 b) and (b OP2 c)` where each pivot is evaluated *at most
+/// once*.  Each occurrence of a `Call`-typed pivot in irep1 is a
+/// separately deep-copyable subtree that goto-conversion lowers to its
+/// own `FUNCTION_CALL`, so the natural "split into pairs" lowering
+/// double-counts every interior pivot — `f() < g() < h()` produced
+/// four `nxt()` calls in the GOTO instead of three.
+///
+/// Hoist each pivot whose conversion produced a `code_function_call_t`
+/// into a fresh local temp via an explicit DECL + ASSIGN emitted into
+/// `current_block`, then reference the temp from every relation.  This
+/// gives goto-conversion exactly one `FUNCTION_CALL` per source pivot.
 exprt python_converter::handle_chained_comparisons_logic(
   const nlohmann::json &element,
   exprt &bin_expr)
 {
-  exprt cond("and", bool_type());
-  cond.move_to_operands(bin_expr); // bin_expr compares left and comparators[0]
+  const auto &comparators = element["comparators"];
+  const size_t n = comparators.size();
 
-  for (size_t i = 0; i + 1 < element["comparators"].size(); ++i)
+  // Helper: if `e` is a (statement-form) code_function_call_t or an
+  // (expression-form) side_effect_expr_function_callt, emit a fresh
+  // local temp, DECL it, drive the call's return into it, and return a
+  // symbol_exprt for the temp.  Anything else (already-hoisted symbol,
+  // literal, …) is returned unchanged.
+  //
+  // Both shapes appear at this point: build_binary_expression() runs
+  // convert_function_calls_to_side_effects on lhs/rhs before producing
+  // bin_expr, so bin_expr.op1() is in side-effect form; while the
+  // get_expr() we issue inside the loop below for comparators[k>=1]
+  // returns the statement form.
+  auto hoist_call = [&](exprt e) -> exprt
+  {
+    const bool is_stmt_call = e.is_function_call();
+    const bool is_sideeffect_call =
+      (e.id() == "sideeffect" && e.statement() == "function_call");
+    if (!is_stmt_call && !is_sideeffect_call)
+      return e;
+    // No surrounding block to anchor DECL/ASSIGN against — fall back to
+    // the previous behaviour (one Call subtree per relation arm, the
+    // pivot is double-evaluated).  Should not happen at function scope.
+    if (!current_block)
+      return e;
+
+    locationt loc = e.location();
+    symbolt sym =
+      create_return_temp_variable(e.type(), loc, "chain_pivot");
+    symbol_table_.add(sym);
+    exprt sym_expr = symbol_expr(sym);
+
+    code_declt decl(sym_expr);
+    decl.location() = loc;
+    current_block->copy_to_operands(decl);
+
+    if (is_stmt_call)
+    {
+      // code_function_call_t: op0() is the LHS receiving the return.
+      e.op0() = sym_expr;
+      current_block->copy_to_operands(e);
+    }
+    else
+    {
+      // side_effect_expr_function_callt: assign through code_assign,
+      // and goto-conversion will hoist the side effect into a single
+      // FUNCTION_CALL.
+      code_assignt assign(sym_expr, e);
+      assign.location() = loc;
+      current_block->copy_to_operands(assign);
+    }
+    return sym_expr;
+  };
+
+  // Convert each comparator once.  comparators[0] is already embedded as
+  // bin_expr.op1() — replace that subtree with the hoisted symbol so the
+  // first relation and the chain step share the same SSA name.
+  std::vector<exprt> pivots;
+  pivots.reserve(n);
+  bin_expr.op1() = hoist_call(bin_expr.op1());
+  pivots.push_back(bin_expr.op1());
+  for (size_t k = 1; k < n; ++k)
+    pivots.push_back(hoist_call(get_expr(comparators[k])));
+
+  exprt cond("and", bool_type());
+  cond.move_to_operands(bin_expr);
+
+  for (size_t i = 0; i + 1 < n; ++i)
   {
     std::string op(element["ops"][i + 1]["_type"].get<std::string>());
-    exprt logical_expr(map_operator(op, bool_type()), bool_type());
-    exprt op1 = get_expr(element["comparators"][i]);
-    exprt op2 = get_expr(element["comparators"][i + 1]);
+    exprt op1 = pivots[i];
+    exprt op2 = pivots[i + 1];
 
     convert_function_calls_to_side_effects(op1, op2);
 
@@ -1418,6 +1495,7 @@ exprt python_converter::handle_chained_comparisons_logic(
     }
     else
     {
+      exprt logical_expr(map_operator(op, bool_type()), bool_type());
       logical_expr.copy_to_operands(op1);
       logical_expr.copy_to_operands(op2);
       cond.move_to_operands(logical_expr);
