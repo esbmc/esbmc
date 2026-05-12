@@ -109,15 +109,20 @@ std::vector<waypoint> yaml_parser::get_waypoints(const std::string &path)
         if (!seg || !seg.IsSequence())
           continue;
 
+        int wp_count = 0;
         for (const auto &wp_node : seg)
         {
           const auto &node = wp_node["waypoint"];
           if (!node)
             continue;
           waypoint wp = parse_waypoint(node);
-          if (wp.type == waypoint::unknown)
+          if (wp.type == waypoint::unknown || wp.type == waypoint::target)
             continue;
           wp.segment_idx = seg_idx;
+          wp.wp_idx_in_seg = wp_count++;
+          if (wp.line != c_nonset)
+            wp.line_id = irep_idt(integer2string(wp.line));
+          wp.function_id = irep_idt(wp.function);
           cached_result.push_back(std::move(wp));
         }
         ++seg_idx;
@@ -194,17 +199,12 @@ std::string yaml_parser::build_violation_witness_source(
   const std::string &original_path,
   const std::vector<waypoint> &waypoints)
 {
-  // Group assumption waypoints by line number in order.
-  // Skip avoid-action waypoints (must never be passed) and invalid lines.
+  // Inject after the source line so declarations are in scope.
   std::unordered_map<size_t, std::vector<const waypoint *>> by_line;
   by_line.reserve(waypoints.size());
   for (const auto &wp : waypoints)
   {
-    if (wp.type != waypoint::assumption)
-      continue;
-    if (wp.action == waypoint::avoid)
-      continue;
-    if (wp.line < 0)
+    if (wp.type != waypoint::assumption || wp.line < 0)
       continue;
     by_line[static_cast<size_t>(wp.line.to_int64())].push_back(&wp);
   }
@@ -223,23 +223,24 @@ std::string yaml_parser::build_violation_witness_source(
   while (std::getline(in, line_text))
   {
     ++line_num;
+    out << line_text << "\n";
+
     auto it = by_line.find(line_num);
     if (it != by_line.end())
     {
-      // Inject each assumption as a bare call under a #line directive so the
-      // GOTO instruction carries the original source location.  Loop-safety
-      // (fire at most once) is handled in run_intrinsic via witness_fired_pcs
-      // — no static-bool guard needed here, keeping the GOTO IR clean.
       out << "#line " << line_num << " \"" << original_path << "\"\n";
       for (const waypoint *wp : it->second)
       {
-        out << "__ESBMC_witness_assume((_Bool)(" << wp->value << "));\n";
+        out << "__ESBMC_witness_assume(" << wp->segment_idx << ", "
+            << wp->wp_idx_in_seg << ", (_Bool)(" << wp->value << "));\n";
         log_progress(
-          "Injecting witness assumption at line {}: {}", line_num, wp->value);
+          "Injecting {} assumption at line {}: {}",
+          wp->action == waypoint::avoid ? "avoid" : "follow",
+          line_num,
+          wp->value);
       }
-      out << "#line " << line_num << " \"" << original_path << "\"\n";
+      out << "#line " << (line_num + 1) << " \"" << original_path << "\"\n";
     }
-    out << line_text << "\n";
   }
 
   return out.str();

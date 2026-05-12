@@ -98,13 +98,17 @@ public:
 
   Type type = unknown;
   Action action = follow;
-  int segment_idx = 0; // index of the containing segment (0-based)
+  int segment_idx = 0;
+  int wp_idx_in_seg = 0;
   std::string file;
   std::string value;
   std::string format;
   BigInt line = c_nonset;
   BigInt column = c_nonset;
   std::string function;
+  // Pre-interned for O(1) comparison during symex hot path.
+  irep_idt line_id;
+  irep_idt function_id;
 };
 
 class invariant
