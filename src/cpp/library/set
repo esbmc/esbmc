@@ -520,7 +520,7 @@ public:
   }
 
   template <class Iterator>
-  iterator insert(Iterator first, Iterator last)
+  void insert(Iterator first, Iterator last)
   {
     __ESBMC_assert(
       last > first,
@@ -531,8 +531,10 @@ public:
   }
 
   // modifiers:
-  // multiset insert should maintain sorted order and allow duplicates
-  std::pair<iterator, bool> insert(const value_type &x)
+  // multiset insert should maintain sorted order and allow duplicates.
+  // Returns iterator (not pair<iterator,bool>): the bool would be meaningless
+  // for multiset since duplicates are always inserted (C++ standard).
+  iterator insert(const value_type &x)
   {
     // Find the correct position to insert while maintaining sorted order
     int insert_pos = 0;
@@ -551,15 +553,13 @@ public:
     buf[insert_pos] = x;
     _size++;
 
-    // For multiset, always return true (duplicates allowed)
-    return make_pair(iterator(buf, insert_pos), true);
+    return iterator(buf, insert_pos);
   }
 
   iterator insert(iterator position, const value_type &x)
   {
     // For multiset, we ignore position hint and maintain sorted order
-    auto result = insert(x);
-    return result.first;
+    return insert(x);
   }
 
   void erase(iterator position)
@@ -1230,7 +1230,7 @@ public:
   }
 
   template <class Iterator>
-  iterator insert(Iterator first, Iterator last)
+  void insert(Iterator first, Iterator last)
   {
     __ESBMC_assert(
       last > first,
