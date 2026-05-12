@@ -1,6 +1,6 @@
 CORE
 main.py
---incremental-bmc
+--unwind 6
 ^VERIFICATION SUCCESSFUL$
 
 

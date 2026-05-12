@@ -1,4 +1,4 @@
 CORE
 main.py
---incremental-bmc --bitwuzla
+--bitwuzla --unwind 6
 ^VERIFICATION SUCCESSFUL$
