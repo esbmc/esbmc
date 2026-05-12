@@ -544,32 +544,46 @@ public:
 
   unsigned int get_width() const override;
 
-  /** Exception for invalid manipulations of an infinitely sized array. No
-   *  actual data stored. */
-  class inf_sized_array_excp
+  /** Common base for the two array-sizing exceptions thrown by
+   *  array_type2t::get_width (and friends). Lets callers `catch (const
+   *  array_size_excp &)` for unified handling, or one of the concrete
+   *  subclasses below when they need to distinguish infinite from
+   *  dynamic. Derives from std::exception so generic exception
+   *  machinery (e.g. catch(std::exception &)) sees them too. */
+  class array_size_excp : public std::exception
   {
-    virtual const char *what() const throw()
+  public:
+    const char *what() const noexcept override
+    {
+      return "array size is not statically known";
+    }
+  };
+
+  /** Exception for invalid manipulations of an infinitely sized array.
+   *  No payload — the array carries no concrete size. */
+  class inf_sized_array_excp : public array_size_excp
+  {
+  public:
+    const char *what() const noexcept override
     {
       return "infinite sized array encountered";
     }
   };
 
-  /** Exception for invalid manipultions of dynamically sized arrays.
-   *  Stores the size of the array in the exception; this way the catcher
-   *  has it immediately to hand. */
-  class dyn_sized_array_excp
+  /** Exception for invalid manipulations of dynamically sized arrays.
+   *  Stores the symbolic size of the array so the catcher has it
+   *  immediately to hand. */
+  class dyn_sized_array_excp : public array_size_excp
   {
   public:
     dyn_sized_array_excp(const expr2tc &_size) : size(_size)
     {
     }
 
-    virtual const char *what() const throw()
+    const char *what() const noexcept override
     {
       return "Sizeof nondeterministically sized array encountered";
     }
-
-    virtual ~dyn_sized_array_excp() = default;
 
     expr2tc size;
   };
