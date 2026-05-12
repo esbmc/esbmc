@@ -59,11 +59,15 @@ jobs:
         # when tests set TIMEOUT via set_tests_properties (regression/CMakeLists.txt),
         # so we override the cache variable that feeds it and reconfigure.
         cmake -DESBMC_REGRESS_TIMEOUT=120 .
-        # On macOS, only run Python tests.
+        # macOS PR: only the python/ suite (anchored — excludes python-intensive
+        # and python-coverage, which already run on Linux). The Python frontend is
+        # the one part of ESBMC whose toolchain materially differs across OSes
+        # (Homebrew Python, stdlib paths); the rest of the regression suite is
+        # platform-portable and covered by the Linux PR job.
         # On PR Linux, skip python-intensive to keep fast feedback.
-        # On other systems/events, run all tests.
+        # On other systems/events (push, dispatch), run everything.
         if [[ "${{ inputs.operating-system }}" =~ ^macos ]]; then
-          ctest -j4 --output-on-failure --progress -L python
+          ctest -j4 --output-on-failure --progress -L '^python/$'
         elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
           ctest -j4 --output-on-failure --progress -LE python-intensive .
         else
