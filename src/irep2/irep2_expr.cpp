@@ -43,7 +43,8 @@ expr2t::expr2t(const type2tc &_type, expr_ids id)
 {
 }
 
-expr2t::expr2t(const expr2t &ref) : expr_id(ref.expr_id), type(ref.type)
+expr2t::expr2t(const expr2t &ref)
+  : irep2t(), expr_id(ref.expr_id), type(ref.type)
 {
   // Snapshot the cached CRC. Relaxed is enough: callers must already
   // honour the single-writer contract documented in irep2.h, and the

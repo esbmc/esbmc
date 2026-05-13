@@ -55,7 +55,7 @@ type2t::type2t(type_ids id) : type_id(id), crc_val(0)
 {
 }
 
-type2t::type2t(const type2t &ref) : type_id(ref.type_id)
+type2t::type2t(const type2t &ref) : irep2t(), type_id(ref.type_id)
 {
   // Snapshot the cached CRC under the single-writer contract; see
   // irep2.h header note. The fresh atomic starts with whatever value
