@@ -6,7 +6,7 @@ if(DOWNLOAD_DEPENDENCIES AND (NOT DEFINED IBEX_DIR))
       add_compile_options(-Wno-error)
    endif()
    include(CPM)
-   CPMAddPackage(
+   cpmaddpackage(
       NAME ibex
       DOWNLOAD_ONLY YES
       URL https://github.com/ibex-team/ibex-lib/archive/refs/tags/ibex-2.9.1.tar.gz)

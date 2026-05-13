@@ -6,13 +6,13 @@ else()
     if(ENABLE_BITWUZLA AND DOWNLOAD_DEPENDENCIES)
         # See Boolector configurations for more details about this
 
-        CPMAddPackage(
+        cpmaddpackage(
             NAME bitwuzla
             DOWNLOAD_ONLY YES
             GITHUB_REPOSITORY bitwuzla/bitwuzla
             GIT_TAG 0.9.0)
 
-	  message("[bitwuzla] Source-dir: ${bitwuzla_SOURCE_DIR} ")
+    message("[bitwuzla] Source-dir: ${bitwuzla_SOURCE_DIR} ")
         message("[bitwuzla] Configuring project:  ./configure.py --prefix ${bitwuzla_BINARY_DIR}")
         execute_process(COMMAND python3 ./configure.py --prefix ${bitwuzla_BINARY_DIR} --no-fpexp
           WORKING_DIRECTORY "${bitwuzla_SOURCE_DIR}")
@@ -21,7 +21,7 @@ else()
         message("[bitwuzla] Building...")
         execute_process(COMMAND meson install
           WORKING_DIRECTORY ${bitwuzla_SOURCE_DIR}/build
-	  COMMAND_ECHO STDOUT)
+    COMMAND_ECHO STDOUT)
 
         set(Bitwuzla_DIR ${bitwuzla_BINARY_DIR})
     endif()

@@ -15,7 +15,7 @@ add_library(gotoprograms goto_convert.cpp goto_function.cpp goto_main.cpp
 add_library(gotoalgorithms loop_unroll.cpp mark_decl_as_non_det.cpp assign_params_as_non_det.cpp)
 
 if(ENABLE_GOTO_CONTRACTOR)
-    include(FindIbex)
+    include(SetupIbex)
     add_library(gotocontractor goto_contractor.cpp)
     target_include_directories(gotocontractor PUBLIC ${IBEX_INCLUDE_DIRS} ${IBEX_INCLUDE_DIRS}/ibex ${IBEX_INCLUDE_DIRS}/ibex/3rd)
     target_link_libraries(gotocontractor PUBLIC algorithms gotoprograms PkgConfig::IBEX)

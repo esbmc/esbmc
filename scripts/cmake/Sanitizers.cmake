@@ -9,7 +9,7 @@ if(CMAKE_BUILD_TYPE STREQUAL "Sanitizer")
 
     set_property(CACHE SANITIZER_TYPE PROPERTY STRINGS
             "TSAN" "ASAN" "LSAN" "MSAN" "UBSAN")
-    
+
     # ThreadSanitizer
     set(TSAN_FLAGS "-fsanitize=thread -g -O1")
     # AddressSanitizer

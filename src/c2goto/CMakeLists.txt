@@ -53,7 +53,7 @@ function(foreach_in_cross_product fn)
   foreach_in_cross_product_rec(${fn} "" "" ${ARGN})
 endfunction()
 
-if (ESBMC_BUNDLE_LIBC)
+if(ESBMC_BUNDLE_LIBC)
 
   set(archs --64)
   if(ENABLE_BUNDLE_LIBC_32BIT)
@@ -84,23 +84,23 @@ if (ESBMC_BUNDLE_LIBC)
 
   foreach_in_cross_product(clib_join_argv cherimodes floats archs)
 
-  set (clib64_config clib64.c --64 --fixedbv -D__ESBMC_FIXEDBV)
-  set (clib64f_config clib64_fp.c --64 --floatbv)
-  set (inputs clib64_config clib64f_config)
+  set(clib64_config clib64.c --64 --fixedbv -D__ESBMC_FIXEDBV)
+  set(clib64f_config clib64_fp.c --64 --floatbv)
+  set(inputs clib64_config clib64f_config)
   if(ENABLE_BUNDLE_LIBC_32BIT)
-    set (clib32_config clib32.c --32 --fixedbv -D__ESBMC_FIXEDBV)
-    set (clib32f_config clib32_fp.c --32 --floatbv)
-    set (inputs clib32_config
+    set(clib32_config clib32.c --32 --fixedbv -D__ESBMC_FIXEDBV)
+    set(clib32f_config clib32_fp.c --32 --floatbv)
+    set(inputs clib32_config
       clib64_config
       clib32f_config
       clib64f_config)
   endif()
 
   if(ESBMC_CHERI_HYBRID_SYSROOT)
-    set (clib32_cherih_config clib32_cherih.c --32 --fixedbv -D__ESBMC_FIXEDBV --cheri hybrid --sysroot "${ESBMC_CHERI_HYBRID_SYSROOT}")
-    set (clib64_cherih_config clib64_cherih.c --64 --fixedbv -D__ESBMC_FIXEDBV --cheri hybrid --sysroot "${ESBMC_CHERI_HYBRID_SYSROOT}")
-    set (clib32f_cherih_config clib32_fp_cherih.c --32 --floatbv --cheri hybrid --sysroot "${ESBMC_CHERI_HYBRID_SYSROOT}")
-    set (clib64f_cherih_config clib64_fp_cherih.c --64 --floatbv --cheri hybrid --sysroot "${ESBMC_CHERI_HYBRID_SYSROOT}")
+    set(clib32_cherih_config clib32_cherih.c --32 --fixedbv -D__ESBMC_FIXEDBV --cheri hybrid --sysroot "${ESBMC_CHERI_HYBRID_SYSROOT}")
+    set(clib64_cherih_config clib64_cherih.c --64 --fixedbv -D__ESBMC_FIXEDBV --cheri hybrid --sysroot "${ESBMC_CHERI_HYBRID_SYSROOT}")
+    set(clib32f_cherih_config clib32_fp_cherih.c --32 --floatbv --cheri hybrid --sysroot "${ESBMC_CHERI_HYBRID_SYSROOT}")
+    set(clib64f_cherih_config clib64_fp_cherih.c --64 --floatbv --cheri hybrid --sysroot "${ESBMC_CHERI_HYBRID_SYSROOT}")
     list(APPEND inputs
               #clib32_cherih_config
               clib64_cherih_config
@@ -109,10 +109,10 @@ if (ESBMC_BUNDLE_LIBC)
   endif()
 
   if(ESBMC_CHERI_PURECAP_SYSROOT)
-    set (clib32_cherip_config clib32_cherip.c --32 --fixedbv -D__ESBMC_FIXEDBV --cheri purecap --sysroot "${ESBMC_CHERI_PURECAP_SYSROOT}")
-    set (clib64_cherip_config clib64_cherip.c --64 --fixedbv -D__ESBMC_FIXEDBV --cheri purecap --sysroot "${ESBMC_CHERI_PURECAP_SYSROOT}")
-    set (clib32f_cherip_config clib32_fp_cherip.c --32 --floatbv --cheri purecap --sysroot "${ESBMC_CHERI_PURECAP_SYSROOT}")
-    set (clib64f_cherip_config clib64_fp_cherip.c --64 --floatbv --cheri purecap --sysroot "${ESBMC_CHERI_PURECAP_SYSROOT}")
+    set(clib32_cherip_config clib32_cherip.c --32 --fixedbv -D__ESBMC_FIXEDBV --cheri purecap --sysroot "${ESBMC_CHERI_PURECAP_SYSROOT}")
+    set(clib64_cherip_config clib64_cherip.c --64 --fixedbv -D__ESBMC_FIXEDBV --cheri purecap --sysroot "${ESBMC_CHERI_PURECAP_SYSROOT}")
+    set(clib32f_cherip_config clib32_fp_cherip.c --32 --floatbv --cheri purecap --sysroot "${ESBMC_CHERI_PURECAP_SYSROOT}")
+    set(clib64f_cherip_config clib64_fp_cherip.c --64 --floatbv --cheri purecap --sysroot "${ESBMC_CHERI_PURECAP_SYSROOT}")
     list(APPEND inputs
               #clib32_cherip_config
               clib64_cherip_config
@@ -151,7 +151,7 @@ function(mangle_clib output)
 
   # For each config, generate clib*.c and clib*.goto file in the current binary directory
   foreach(in_f ${ARGN})
-    set (in_f "${${in_f}}")
+    set(in_f "${${in_f}}")
     list(GET in_f 0 out_name)
     list(SUBLIST in_f 1 -1 in_flags)
     file(RELATIVE_PATH out_file ${CMAKE_CURRENT_SOURCE_DIR}
