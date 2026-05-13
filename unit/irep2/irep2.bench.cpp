@@ -176,3 +176,52 @@ TEST_CASE("irep2 microbench: is_/to_/try_to_ dispatch", "[bench]")
     return a ? &a->side_1 : static_cast<const expr2tc *>(nullptr);
   };
 }
+
+TEST_CASE("irep2 microbench: irep_idt-bearing CRC", "[bench]")
+{
+  config.ansi_c.word_size = 32;
+
+  // D7 target: symbol2t has an irep_idt "thename" field. crc() on a
+  // symbol used to call std::hash<std::string>(as_string()), which
+  // re-walked the entire char array per call. The cached identity is
+  // available cheaply via irep_idt::hash().
+  expr2tc sym1 =
+    symbol2tc(word_type(), "some_quite_long_symbol_name_to_punish_hashing_v1");
+  expr2tc sym2 =
+    symbol2tc(word_type(), "some_quite_long_symbol_name_to_punish_hashing_v2");
+
+  BENCHMARK("crc symbol (cold, fresh tree)")
+  {
+    expr2tc fresh = symbol2tc(
+      word_type(), "some_quite_long_symbol_name_to_punish_hashing_v3");
+    return fresh->crc();
+  };
+  BENCHMARK("crc symbol pair (warm)")
+  {
+    return sym1->crc() ^ sym2->crc();
+  };
+
+  // struct_type2t carries a std::vector<irep_idt> of member names.
+  // do_type_crc(const std::vector<irep_idt> &) is the second D7 site.
+  type2tc struct_ty = []() {
+    std::vector<type2tc> mtypes{word_type(), word_type(), word_type()};
+    std::vector<irep_idt> mnames{
+      "field_alpha_with_some_length",
+      "field_beta_with_some_length",
+      "field_gamma_with_some_length"};
+    return struct_type2tc(mtypes, mnames, mnames, "test_struct_for_bench");
+  }();
+
+  BENCHMARK("crc struct type cold")
+  {
+    std::vector<type2tc> mtypes{word_type(), word_type(), word_type()};
+    std::vector<irep_idt> mnames{
+      "field_alpha_with_some_length",
+      "field_beta_with_some_length",
+      "field_gamma_with_some_length"};
+    type2tc fresh =
+      struct_type2tc(mtypes, mnames, mnames, "test_struct_for_bench");
+    return fresh->crc();
+  };
+  BENCHMARK("crc struct type warm") { return struct_ty->crc(); };
+}

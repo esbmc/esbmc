@@ -589,9 +589,13 @@ void do_type_hash(const std::vector<type2tc> &theval, crypto_hash &hash)
 
 size_t do_type_crc(const std::vector<irep_idt> &theval)
 {
+  // irep_idt is an interned dstring: its hash() returns the stable
+  // table index, unique per string identity within the process. Mix
+  // that directly instead of looking up the std::string and hashing
+  // its char array per element.
   size_t crc = 0;
   for (auto const &it : theval)
-    esbmct::hash_combine(crc, it.as_string());
+    esbmct::hash_combine(crc, it.hash());
 
   return crc;
 }
@@ -599,7 +603,10 @@ size_t do_type_crc(const std::vector<irep_idt> &theval)
 void do_type_hash(const std::vector<irep_idt> &theval, crypto_hash &hash)
 {
   for (auto const &it : theval)
-    hash.ingest((void *)it.as_string().c_str(), it.as_string().size());
+  {
+    size_t id = it.hash();
+    hash.ingest(&id, sizeof(id));
+  }
 }
 
 size_t do_type_crc(const expr2tc &theval)
@@ -630,12 +637,13 @@ void do_type_hash(const type2tc &theval, crypto_hash &hash)
 
 size_t do_type_crc(const irep_idt &theval)
 {
-  return std::hash<std::string>{}(theval.as_string());
+  return theval.hash();
 }
 
 void do_type_hash(const irep_idt &theval, crypto_hash &hash)
 {
-  hash.ingest((void *)theval.as_string().c_str(), theval.as_string().size());
+  size_t id = theval.hash();
+  hash.ingest(&id, sizeof(id));
 }
 
 size_t do_type_crc(const type2t::type_ids &i)
