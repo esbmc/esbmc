@@ -2787,7 +2787,7 @@ exprt python_dict_handler::handle_dict_constructor(
     return nil_exprt();
 
   // Unwrap a single set/list/tuple/frozenset wrapper around the iterable.
-  // dict(set([(k,v),...])) and dict(list([...])) are common patterns.
+  // dict(set([(k,v),...])) and dict(list([])) are common patterns.
   const nlohmann::json *arg = &args[0];
   if (
     arg->value("_type", "") == "Call" && arg->contains("func") &&
@@ -2836,7 +2836,7 @@ exprt python_dict_handler::handle_dict_constructor(
       values.push_back(std::move(v));
       continue;
     }
-    // Anything else (mixed forms, non-2-char strings, etc.): give up.
+    // Anything else.
     return nil_exprt();
   }
 

@@ -505,8 +505,10 @@ public:
    * - list of 2-char strings: dict(["ab", "cd"])
    * - set wrapping any of the above: dict(set([(k,v),...]))
    *
-   * Returns nil_exprt for unsupported forms; the caller may then throw a
-   * clean error rather than generating broken GOTO that crashes BMC.
+   * Returns nil_exprt for unsupported forms. The caller falls back to
+   * generic call dispatch, which may produce broken GOTO for iterables
+   * this handler does not recognise — extend the matcher above rather
+   * than relying on the fallback for new forms.
    *
    * @param call_node The function call AST node (Call(Name("dict"), [arg])).
    * @return Expression for the resulting dict symbol, or nil_exprt.

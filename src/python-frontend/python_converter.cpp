@@ -2990,9 +2990,10 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     // iterables (e.g. list("abc") or list(42)).
   }
 
-  // Handle dict(iterable) constructor: lower to a Dict literal so it routes
-  // through the existing dict path. Without this, the iterable is processed
-  // as a list and later ".items()" / ".keys()" accesses crash BMC.
+  // Handle dict(iterable) constructor:
+  // lower to a Dict literal so it routes through the existing dict path.
+  // Without this, the iterable is processed as a list
+  // and later ".items()" / ".keys()" accesses crash BMC.
   if (
     element["func"]["_type"] == "Name" && element["func"]["id"] == "dict" &&
     element.contains("args") && element["args"].is_array() &&

@@ -5376,40 +5376,69 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
                 return None
         return base
 
-    def _get_items_dict_expr(self, node):
-        """Return dict_expr if node is set(X) where X is a dict_items source, else None."""
-        if not (
-            isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Name)
-            and node.func.id == "set"
-            and len(node.args) == 1
-            and not getattr(node, "keywords", [])
-        ):
-            return None
-        arg = node.args[0]
-        if isinstance(arg, ast.Name) and arg.id in self.dict_items_vars:
-            return self.dict_items_vars[arg.id]
-        return self._get_dict_expr_from_items_call(arg)
+    def _get_items_dict_expr(self, node, wrappers):
+        """Return (dict_expr, wrapper) if node is W(X) where W in `wrappers` and X is a dict_items source.
 
-    def _get_list_items_dict_expr(self, node):
-        """Return dict_expr if node is list(X) or sorted(X) where X is a dict_items source.
-
-        Both wrappers materialise the dict's (key, value) pairs as a list. For
-        equality assertions ESBMC's dict model treats them with set-equality
-        semantics (iteration/sort order is not modelled).
+        Returns (None, None) on no match. The wrapper name lets the caller
+        apply soundness checks that depend on which wrapper is in use
+        (list/sorted/set differ in ordering semantics).
         """
         if not (
             isinstance(node, ast.Call)
             and isinstance(node.func, ast.Name)
-            and node.func.id in ("list", "sorted")
+            and node.func.id in wrappers
             and len(node.args) == 1
             and not getattr(node, "keywords", [])
         ):
-            return None
+            return None, None
+        wrapper = node.func.id
         arg = node.args[0]
         if isinstance(arg, ast.Name) and arg.id in self.dict_items_vars:
-            return self.dict_items_vars[arg.id]
-        return self._get_dict_expr_from_items_call(arg)
+            return self.dict_items_vars[arg.id], wrapper
+        dict_expr = self._get_dict_expr_from_items_call(arg)
+        return (dict_expr, wrapper) if dict_expr is not None else (None, None)
+
+    @staticmethod
+    def _all_constants_distinct(elts):
+        """Return True iff all elts are ast.Constant with statically distinct hashable values."""
+        if not all(isinstance(e, ast.Constant) for e in elts):
+            return False
+        values = [e.value for e in elts]
+        try:
+            return len(set(values)) == len(values)
+        except TypeError:
+            return False
+
+    @staticmethod
+    def _is_sorted_const_list(elts, *, by="self"):
+        """Return True iff elts is statically known to be sorted (ascending).
+
+        by="self": each elt is ast.Constant, sort by elt.value.
+        by="first": each elt is ast.Tuple of Constants, sort by first element.
+
+        Returns False if any elt is non-Constant or has incomparable types
+        (conservative — bail when sortedness cannot be statically verified).
+        """
+        if len(elts) <= 1:
+            return True
+        keys = []
+        for e in elts:
+            if by == "self":
+                if not isinstance(e, ast.Constant):
+                    return False
+                keys.append(e.value)
+            else:
+                if not (
+                    isinstance(e, ast.Tuple)
+                    and e.elts
+                    and isinstance(e.elts[0], ast.Constant)
+                ):
+                    return False
+                keys.append(e.elts[0].value)
+        try:
+            return all(keys[i] <= keys[i + 1] for i in range(len(keys) - 1))
+        except TypeError:
+            return False
 
     def _try_transform_items_set_eq(self, set_side, literal_side, source_node):
         """Transform set(d.items()) == {(k,v),...} into dict membership checks.
@@ -5418,7 +5447,7 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         This avoids tuple struct comparison and uses only proven-working primitives.
         Returns the new AST node, or None if the pattern doesn't match.
         """
-        dict_expr = self._get_items_dict_expr(set_side)
+        dict_expr, _ = self._get_items_dict_expr(set_side, ("set",))
         if dict_expr is None:
             return None
         if not isinstance(literal_side, ast.Set) or not literal_side.elts:
@@ -5459,7 +5488,12 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         return result
 
     def _get_dict_view_call(self, node, attr):
-        """If node is sorted(X)/list(X)/set(X) where X is d.<attr>(), return the dict expression."""
+        """If node is W(d.<attr>()) where W in {list, sorted, set}, return (dict_expr, wrapper).
+
+        Returns (None, None) on no match. The wrapper name lets the caller
+        enforce wrapper-vs-literal-type compatibility (e.g. set wrapper
+        requires a Set literal, list/sorted requires a List literal).
+        """
         if not (
             isinstance(node, ast.Call)
             and isinstance(node.func, ast.Name)
@@ -5467,7 +5501,8 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
             and len(node.args) == 1
             and not getattr(node, "keywords", [])
         ):
-            return None
+            return None, None
+        wrapper = node.func.id
         inner = node.args[0]
         if not (
             isinstance(inner, ast.Call)
@@ -5476,26 +5511,41 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
             and not inner.args
             and not getattr(inner, "keywords", [])
         ):
-            return None
+            return None, None
         base = inner.func.value
         if isinstance(base, ast.Name):
             known_type = self.known_variable_types.get(base.id)
             if known_type is not None and known_type != "dict":
-                return None
-        return base
+                return None, None
+        return base, wrapper
 
     def _try_transform_keys_view_eq(self, view_side, literal_side, source_node):
-        """Transform sorted/list(d.keys()) == [literal] into membership checks.
+        """Transform W(d.keys()) == literal into membership checks, where W is one of
+        list/sorted/set.
 
         Rewrites to ``len(d) == N and k1 in d and k2 in d ...`` — set-equality
-        semantics, which matches how ESBMC's dict model treats key order.
+        semantics. Soundness guards (each bails when violated):
+        - wrapper-vs-literal type: set ↔ ast.Set; list/sorted ↔ ast.List
+          (CPython makes ``list == set`` always False otherwise).
+        - sorted wrapper: literal must be statically sorted ascending
+          (otherwise CPython is always False but the rewrite would say True).
+        - list wrapper: literal must have at most one element
+          (ESBMC's dict model does not preserve insertion order).
         """
-        dict_expr = self._get_dict_view_call(view_side, "keys")
+        dict_expr, wrapper = self._get_dict_view_call(view_side, "keys")
         if dict_expr is None:
             return None
-        if not isinstance(literal_side, (ast.List, ast.Set)):
-            return None
+        if wrapper == "set":
+            if not isinstance(literal_side, ast.Set):
+                return None
+        else:
+            if not isinstance(literal_side, ast.List):
+                return None
         keys = list(literal_side.elts)
+        if wrapper == "sorted" and not self._is_sorted_const_list(keys):
+            return None
+        if wrapper == "list" and len(keys) > 1:
+            return None
         len_eq = ast.Compare(
             left=ast.Call(
                 func=ast.Name(id="len", ctx=ast.Load()),
@@ -5524,18 +5574,31 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         return result
 
     def _try_transform_values_view_eq(self, view_side, literal_side, source_node):
-        """Transform sorted/list(d.values()) == [literal] into membership checks.
+        """Transform list/sorted(d.values()) == [literal] into membership checks.
 
-        Rewrites to ``len(d) == N and v1 in d.values() and ...``. Correct only
-        when literal values are distinct (set-equality semantics) — sufficient
-        for typical dict-content assertions where ordering is not modelled.
+        Rewrites to ``len(d) == N and v1 in d.values() and ...``. Soundness
+        guards (each bails when violated):
+        - set wrapper is rejected entirely: dict values may repeat, so the
+          rewrite cannot soundly relate ``len(d)`` to ``len(literal_set)``.
+        - literal must be ast.List of distinct Constants (duplicates would
+          collapse to fewer ``in`` checks but pass the length test, turning
+          a False assertion into True).
+        - sorted wrapper: literal must be statically sorted ascending.
+        - list wrapper: literal must have at most one element (insertion
+          order is not modelled).
         """
-        dict_expr = self._get_dict_view_call(view_side, "values")
-        if dict_expr is None:
+        dict_expr, wrapper = self._get_dict_view_call(view_side, "values")
+        if dict_expr is None or wrapper == "set":
             return None
-        if not isinstance(literal_side, (ast.List, ast.Set)):
+        if not isinstance(literal_side, ast.List):
             return None
         values = list(literal_side.elts)
+        if values and not self._all_constants_distinct(values):
+            return None
+        if wrapper == "sorted" and not self._is_sorted_const_list(values):
+            return None
+        if wrapper == "list" and len(values) > 1:
+            return None
         len_eq = ast.Compare(
             left=ast.Call(
                 func=ast.Name(id="len", ctx=ast.Load()),
@@ -5573,13 +5636,18 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         return result
 
     def _try_transform_items_list_eq(self, list_side, literal_side, source_node):
-        """Transform list(d.items()) == [(k,v),...] into dict membership checks.
+        """Transform list/sorted(d.items()) == [(k,v),...] into dict membership checks.
 
-        ESBMC's dict model does not guarantee iteration order, so the
-        list-form comparison is treated as set-equality semantics — the same
-        safer membership rewrite used for ``set(d.items())``.
+        Rewrites to ``len(d) == N and k_i in d and d[k_i] == v_i`` per pair.
+        Soundness guards:
+        - sorted wrapper: literal must be statically sorted by first tuple
+          element (CPython sorts tuples by key first; an unsorted literal
+          would compare False but the rewrite would say True).
+        - list wrapper: literal must have at most one pair (ESBMC's dict
+          model does not preserve insertion order).
         """
-        dict_expr = self._get_list_items_dict_expr(list_side)
+        dict_expr, wrapper = self._get_items_dict_expr(
+            list_side, ("list", "sorted"))
         if dict_expr is None:
             return None
         if not isinstance(literal_side, ast.List):
@@ -5589,6 +5657,12 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
             if not (isinstance(elt, ast.Tuple) and len(elt.elts) == 2):
                 return None
             pairs.append((elt.elts[0], elt.elts[1]))
+        if wrapper == "sorted" and not self._is_sorted_const_list(
+            literal_side.elts, by="first"
+        ):
+            return None
+        if wrapper == "list" and len(pairs) > 1:
+            return None
 
         len_eq = ast.Compare(
             left=ast.Call(
