@@ -45,6 +45,7 @@ extern "C"
 #include <goto-programs/show_claims.h>
 #include <goto-programs/loop_unroll.h>
 #include <goto-programs/goto_check_uninit_vars.h>
+#include <goto-programs/goto_check_unchecked_return.h>
 #include <goto-programs/mark_decl_as_non_det.h>
 #include <goto-programs/assign_params_as_non_det.h>
 #include <goto2c/goto2c.h>
@@ -730,6 +731,13 @@ int esbmc_parseoptionst::doit()
     if (cmdline.isset("uninitialised-vars-check"))
       goto_preprocess_algorithms.emplace_back(
         std::make_unique<goto_check_uninit_vars>(context));
+
+    // Unchecked-return-value check (CWE-252). Runs as a preprocessing
+    // algorithm so the inserted ASSERTs participate in the same path-
+    // condition pruning as the rest of the goto-program.
+    if (cmdline.isset("unchecked-return-value-check"))
+      goto_preprocess_algorithms.emplace_back(
+        std::make_unique<goto_check_unchecked_return>(context));
 
     // Explicitly marking all declared variables as "nondet"
     goto_preprocess_algorithms.emplace_back(
