@@ -77,31 +77,38 @@ expr2tc expr2t::simplify(bool suppress_reassoc) const
     // same-chain child is locally bounded and produces a canonicalized
     // sub-chain that our step 4 then merges. Correctness over a small
     // amount of duplicated work.
+    // Single-pass operand walk via foreach_operand: visits every operand
+    // exactly once, with no per-step get_sub_expr(idx) re-walk from index
+    // zero. The indexed form was O(F * N) per node (F = number of fields,
+    // N = number of operands in the widest vector field), which dominated
+    // simplify() on wide constant_array / chain expressions.
     bool changed = false;
     std::list<expr2tc> newoperands;
+    size_t idx = 0;
+    const bool is_with = expr_id == with_id;
 
-    for (size_t idx = 0; idx < get_num_sub_exprs(); idx++)
-    {
+    foreach_operand([&](const expr2tc &e) {
       expr2tc tmp;
-      const expr2tc *e = get_sub_expr(idx);
 
-      if (expr_id == with_id && idx == 0 && is_with2t(*e))
+      // Don't simplify the first operand of a with-of-with: it's already
+      // been simplified at construction time.
+      if (is_with && idx == 0 && is_with2t(e))
       {
-        // Don't simplify the first operand of a with-of-with: it's already
-        // been simplified at construction time.
         newoperands.push_back(tmp);
-        continue;
+        ++idx;
+        return;
       }
 
-      if (!is_nil_expr(*e))
+      if (!is_nil_expr(e))
       {
-        tmp = (*e)->simplify(suppress_reassoc);
+        tmp = e->simplify(suppress_reassoc);
         if (!is_nil_expr(tmp))
           changed = true;
       }
 
       newoperands.push_back(tmp);
-    }
+      ++idx;
+    });
 
     // Step 2: build the "current" form of the expression — either the
     // original (if no operand changed) or a clone with rewritten operands.
