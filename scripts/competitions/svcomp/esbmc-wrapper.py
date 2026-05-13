@@ -89,6 +89,10 @@ def run(cmd_line):
   return out
 
 def parse_result(the_output, prop):
+  # ESBMC also prints a "  CWE: CWE-NNN" line after each violated-property
+  # comment (see docs/cwe-mapping.md) and may emit a SARIF report under
+  # --sarif-output. Both are purely informational; the SV-COMP category is
+  # still derived from the unchanged freeform comment strings below.
 
   # Parse output
   if "Timed out" in the_output:

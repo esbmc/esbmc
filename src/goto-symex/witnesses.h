@@ -30,6 +30,7 @@ public:
   bool cycle_head = false;
   std::string invariant;
   std::string invariant_scope;
+  std::string cwe; // comma-separated CWE list (e.g. "CWE-476, CWE-125")
   nodet(void)
   {
     id = "N" + integer2string(_id);

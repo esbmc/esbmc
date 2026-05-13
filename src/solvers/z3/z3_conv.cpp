@@ -402,28 +402,6 @@ smt_astt z3_convt::mk_bvnot(smt_astt a)
   }
 }
 
-smt_astt z3_convt::mk_bvnor(smt_astt a, smt_astt b)
-{
-  assert(
-    (a->sort->id == SMT_SORT_INT) || (b->sort->id == SMT_SORT_INT) ||
-    (a->sort->get_data_width() == b->sort->get_data_width()));
-  return new_ast(
-    !(to_solver_smt_ast<z3_smt_ast>(a)->a |
-      to_solver_smt_ast<z3_smt_ast>(b)->a),
-    a->sort);
-}
-
-smt_astt z3_convt::mk_bvnand(smt_astt a, smt_astt b)
-{
-  assert(
-    (a->sort->id == SMT_SORT_INT) || (b->sort->id == SMT_SORT_INT) ||
-    (a->sort->get_data_width() == b->sort->get_data_width()));
-  return new_ast(
-    !(to_solver_smt_ast<z3_smt_ast>(a)->a &
-      to_solver_smt_ast<z3_smt_ast>(b)->a),
-    a->sort);
-}
-
 smt_astt z3_convt::mk_bvxor(smt_astt a, smt_astt b)
 {
   if (int_encoding)

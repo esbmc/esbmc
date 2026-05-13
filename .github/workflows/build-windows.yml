@@ -47,4 +47,15 @@ jobs:
       if: ${{ inputs.testing == true }}
       run: |
         cd build
-        ctest -j4 --output-on-failure --progress . -C RelWithDebInfo
+        # Windows PR: only the platform-portable C core (regression/esbmc) and
+        # regression/floats, the floating-point semantics suite. Linux already
+        # exercises the full regression suite on every PR; running it again on
+        # Windows mostly costs runner time. Tests genuinely Windows-specific
+        # (path handling, line endings, Clang frontend) live inside esbmc/.
+        # On push events, run everything.
+        if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+          ctest -j4 --output-on-failure --progress -L 'esbmc/|floats/' . -C RelWithDebInfo
+        else
+          ctest -j4 --output-on-failure --progress . -C RelWithDebInfo
+        fi
+      shell: bash

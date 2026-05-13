@@ -22,6 +22,7 @@ add_library(usr_utils usr_utils.cpp)
 
 add_library(util_esbmc xml_irep.cpp xml.cpp
         arith_tools.cpp base_type.cpp cmdline.cpp config.cpp config_file.cpp context.cpp
+        cwe_mapping.cpp
         expr_util.cpp i2string.cpp location.cpp
         mp_arith.cpp namespace.cpp parseoptions.cpp rename.cpp
         threeval.cpp typecheck.cpp bitvector.cpp parser.cpp replace_symbol.cpp

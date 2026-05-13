@@ -1526,6 +1526,15 @@ exprt python_converter::handle_string_type_mismatch(
   if (!((lhs_is_string && !rhs_is_string) || (!lhs_is_string && rhs_is_string)))
     return nil_exprt(); // No mismatch, return nil to indicate no action taken
 
+  // Bail out on void* vs string;
+  // the caller's strcmp path handles it instead of folding to a static False
+  // (the void* may hold a string).
+  auto is_void_ptr = [](const typet &t) {
+    return t.is_pointer() && t.subtype().id() == "empty";
+  };
+  if (is_void_ptr(lhs.type()) || is_void_ptr(rhs.type()))
+    return nil_exprt();
+
   exprt lhs_char_value = python_char_utils::get_char_value_as_int(lhs, false);
   exprt rhs_char_value = python_char_utils::get_char_value_as_int(rhs, false);
 
@@ -1798,6 +1807,50 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     if (element.contains("comparators") && element["comparators"].size() > 1)
       return handle_chained_comparisons_logic(element, string_result);
     return string_result;
+  }
+
+  // void* vs string: emit `strcmp(a, b) op 0`
+  // instead of decaying to pointer equality or returning a static False.
+  // Hits when one side is an unannotated class attribute holding a string.
+  if (op == "Eq" || op == "NotEq")
+  {
+    auto is_void_ptr = [](const typet &t) {
+      return t.is_pointer() && t.subtype().id() == "empty";
+    };
+    auto is_string_like = [](const typet &t) {
+      return (t.is_array() || t.is_pointer()) && t.subtype() == char_type();
+    };
+    const bool lhs_void = is_void_ptr(lhs.type());
+    const bool rhs_void = is_void_ptr(rhs.type());
+    if (
+      (lhs_void && is_string_like(rhs.type())) ||
+      (rhs_void && is_string_like(lhs.type())))
+    {
+      const symbolt *strcmp_symbol = symbol_table_.find_symbol("c:@F@strcmp");
+      if (strcmp_symbol)
+      {
+        // Normalise each side to char*: cast void*, take base address of arrays.
+        const typet char_ptr = pointer_typet(char_type());
+        auto as_char_ptr = [&](const exprt &e) -> exprt {
+          if (is_void_ptr(e.type()))
+            return typecast_exprt(e, char_ptr);
+          if (e.type().is_array())
+            return string_handler_.get_array_base_address(e);
+          return e;
+        };
+
+        side_effect_expr_function_callt strcmp_call;
+        strcmp_call.function() = symbol_expr(*strcmp_symbol);
+        strcmp_call.arguments() = {as_char_ptr(lhs), as_char_ptr(rhs)};
+        strcmp_call.location() = get_location_from_decl(element);
+        strcmp_call.type() = int_type();
+
+        exprt result(map_operator(op, bool_type()), bool_type());
+        result.copy_to_operands(strcmp_call, gen_zero(int_type()));
+        result.location() = get_location_from_decl(element);
+        return result;
+      }
+    }
   }
 
   // Handle type mismatches
@@ -2893,8 +2946,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
   // is academic for the safety properties we check.
   if (
     element["func"]["_type"] == "Name" &&
-    (element["func"]["id"] == "set" ||
-     element["func"]["id"] == "frozenset") &&
+    (element["func"]["id"] == "set" || element["func"]["id"] == "frozenset") &&
     element.contains("args") && element["args"].size() == 1)
   {
     exprt iterable_expr = get_expr(element["args"][0]);
@@ -4897,6 +4949,19 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     const nlohmann::json &slice = element["slice"];
     typet array_type = ns.follow(array.type());
 
+    // Unwrap pointer-to-dict so d[key] reaches the dict handler when
+    // d is held by pointer (e.g. dict-of-class-value via the symbol table).
+    typet array_type_for_dict = array_type;
+    bool array_is_dict_pointer = false;
+    if (array_type_for_dict.is_pointer())
+    {
+      typet pointed = ns.follow(array_type_for_dict.subtype());
+      if (pointed.is_struct() && dict_handler_->is_dict_type(pointed))
+      {
+        array_type_for_dict = pointed;
+        array_is_dict_pointer = true;
+      }
+    }
     // Handle tuple subscripting - tuples are structs, not arrays
     if (tuple_handler_->is_tuple_type(array_type))
     {
@@ -4905,8 +4970,18 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     }
 
     // Handle dictionary subscript with type inference from annotations
-    if (array_type.is_struct() && dict_handler_->is_dict_type(array_type))
+    if (
+      array_type_for_dict.is_struct() &&
+      dict_handler_->is_dict_type(array_type_for_dict))
     {
+      // Dereference once so the handler operates on the dict struct.
+      if (array_is_dict_pointer)
+      {
+        dereference_exprt deref(array, array_type_for_dict);
+        deref.type() = array_type_for_dict;
+        array = std::move(deref);
+      }
+
       // Try to resolve the expected return type from the dict's type annotation
       typet expected_type =
         dict_handler_->resolve_expected_type_for_dict_subscript(array);
