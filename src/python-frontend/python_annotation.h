@@ -3567,9 +3567,13 @@ private:
     for (auto &stmt : while_stmt["body"])
     {
       // Look for pattern: loop_var: Any = iterable[ESBMC_index_N]
+      // A bare annotation like `x: int` has value == null; nlohmann::json's
+      // `contains("value")` returns true for present-but-null members, so an
+      // explicit is_null() guard is required to avoid a type_error on the
+      // subsequent subscript.
       if (
         stmt["_type"] == "AnnAssign" && stmt.contains("value") &&
-        stmt["value"]["_type"] == "Subscript")
+        !stmt["value"].is_null() && stmt["value"]["_type"] == "Subscript")
       {
         if (!stmt["value"]["value"].contains("id"))
           continue;
