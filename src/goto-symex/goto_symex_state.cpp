@@ -18,6 +18,8 @@ goto_symex_statet::goto_symex_statet(
 {
   use_value_set = true;
   num_instructions = 0;
+  cur_seg = 0;
+  cur_wp = 0;
   thread_ended = false;
   guard.make_true();
 }
@@ -562,10 +564,10 @@ std::vector<stack_framet> goto_symex_statet::gen_stack_trace() const
 
 void goto_symex_statet::advance_witness_position()
 {
-  if (!witness_segs || cur_seg >= witness_segs->size())
+  if (cur_seg >= witness_segs.size())
     return;
   ++cur_wp;
-  if (cur_wp >= (*witness_segs)[cur_seg].size())
+  if (cur_wp >= witness_segs[cur_seg].size())
   {
     ++cur_seg;
     cur_wp = 0;

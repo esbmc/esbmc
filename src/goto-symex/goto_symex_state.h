@@ -474,11 +474,10 @@ public:
   // --- Violation-witness replay state ---
 
   /// witness_segs[seg][wp]: all actionable waypoints (assumption + branching,
-  /// target excluded), unified per-segment index.  Shared across forked states
-  /// (read-only after init) so operator= is O(1) for this field.
-  std::shared_ptr<const std::vector<std::vector<waypoint>>> witness_segs;
-  size_t cur_seg = 0;
-  size_t cur_wp = 0;
+  /// target excluded), unified per-segment index.
+  std::vector<std::vector<waypoint>> witness_segs;
+  size_t cur_seg;
+  size_t cur_wp;
 
   /// Advance the cursor to the next waypoint (wraps to next segment at end).
   void advance_witness_position();

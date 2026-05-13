@@ -125,6 +125,12 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
     check_incremental(new_expr, msg))
     return; // Verification succeeded, no further action needed
 
+  if (
+    validate_witness && !witness_target_line.empty() &&
+    !has_prefix(msg, "unwinding assertion loop") &&
+    cur_state->source.pc->location.get_line() != witness_target_line)
+    new_expr = gen_true_expr();
+
   // add assertion to the target equation
   assertion(new_expr, msg);
 
@@ -1092,7 +1098,7 @@ void goto_symext::run_intrinsic(
     if (seg_idx != cur_state->cur_seg || wp_idx != cur_state->cur_wp)
       return;
 
-    const waypoint &wp = (*cur_state->witness_segs)[seg_idx][wp_idx];
+    const waypoint &wp = cur_state->witness_segs[seg_idx][wp_idx];
     expr2tc arg = func_call.operands[2];
     cur_state->rename(arg);
 

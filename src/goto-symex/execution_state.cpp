@@ -64,7 +64,7 @@ execution_statet::execution_statet(
     goto_program,
     0);
 
-  if (options.get_bool_option("validate-violation-witness"))
+  if (validate_witness)
   {
     const std::string &witness_path = options.get_option("witness");
     if (!witness_path.empty())
@@ -72,12 +72,13 @@ execution_statet::execution_statet(
       const auto &wps = yaml_parser::get_waypoints(witness_path);
       if (!wps.empty())
       {
-        auto segs = std::make_shared<std::vector<std::vector<waypoint>>>(
-          wps.back().segment_idx + 1);
+        state.witness_segs.resize(wps.back().segment_idx + 1);
         for (const auto &wp : wps)
-          (*segs)[wp.segment_idx].push_back(wp);
-        state.witness_segs = std::move(segs);
+          state.witness_segs[wp.segment_idx].push_back(wp);
       }
+      waypoint target;
+      if (yaml_parser::get_target_waypoint(witness_path, target))
+        witness_target_line = target.line_id;
     }
   }
 
@@ -174,6 +175,8 @@ execution_statet &execution_statet::operator=(const execution_statet &ex)
   smt_thread_guard = ex.smt_thread_guard;
   stack_limit = ex.stack_limit;
   no_return_value_opt = ex.no_return_value_opt;
+  validate_witness = ex.validate_witness;
+  witness_target_line = ex.witness_target_line;
 
   CS_number = ex.CS_number;
 

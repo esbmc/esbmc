@@ -109,9 +109,9 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
   // Violation-witness: steer branch direction if the current waypoint is a
   // branching at this location.  Both seg and wp must match (strict ordering).
   if (validate_witness &&
-      cur_state->cur_seg < cur_state->witness_segs->size())
+      cur_state->cur_seg < cur_state->witness_segs.size())
   {
-    const auto &seg = (*cur_state->witness_segs)[cur_state->cur_seg];
+    const auto &seg = cur_state->witness_segs[cur_state->cur_seg];
     if (cur_state->cur_wp < seg.size())
     {
       const waypoint &wp = seg[cur_state->cur_wp];
