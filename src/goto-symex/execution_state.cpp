@@ -654,9 +654,8 @@ unsigned int execution_statet::add_thread(const goto_programt *prog)
 
   // While we've recorded the new thread as starting in the designated program,
   // it might not run immediately, thus must have it's path preserved:
-  preserved_paths[thread_nr].push_back(
-    std::make_pair(
-      prog->instructions.begin(), merge_statet(threads_state[thread_nr])));
+  preserved_paths[thread_nr].push_back(std::make_pair(
+    prog->instructions.begin(), merge_statet(threads_state[thread_nr])));
 
   return threads_state.size() - 1; // thread ID, zero based
 }
@@ -842,8 +841,9 @@ void execution_statet::get_expr_globals(
     }
   }
 
-  expr->foreach_operand([this, &globals_list, &ns](const expr2tc &e)
-                        { get_expr_globals(ns, e, globals_list); });
+  expr->foreach_operand([this, &globals_list, &ns](const expr2tc &e) {
+    get_expr_globals(ns, e, globals_list);
+  });
 }
 
 bool execution_statet::check_mpor_dependency(unsigned int j, unsigned int l)

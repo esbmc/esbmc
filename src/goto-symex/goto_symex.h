@@ -96,7 +96,7 @@ public:
       : target(std::move(t)),
         total_claims(claims),
         remaining_claims(remain),
-        simplified_claims(simplified) {};
+        simplified_claims(simplified){};
     std::shared_ptr<symex_targett> target;
     unsigned int total_claims;
     unsigned int remaining_claims;
