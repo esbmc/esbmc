@@ -1090,10 +1090,8 @@ void goto_symext::run_intrinsic(
     // operands: [seg_idx_const, wp_idx_const, constraint]
     if (func_call.operands.size() < 3)
       return;
-    size_t seg_idx =
-      to_constant_int2t(func_call.operands[0]).value.to_uint64();
-    size_t wp_idx =
-      to_constant_int2t(func_call.operands[1]).value.to_uint64();
+    size_t seg_idx = to_constant_int2t(func_call.operands[0]).value.to_uint64();
+    size_t wp_idx = to_constant_int2t(func_call.operands[1]).value.to_uint64();
 
     if (seg_idx != cur_state->cur_seg || wp_idx != cur_state->cur_wp)
       return;

@@ -481,7 +481,6 @@ public:
 
   /// Advance the cursor to the next waypoint (wraps to next segment at end).
   void advance_witness_position();
-
 };
 
 #endif

@@ -108,8 +108,7 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
 
   // Violation-witness: steer branch direction if the current waypoint is a
   // branching at this location.  Both seg and wp must match (strict ordering).
-  if (validate_witness &&
-      cur_state->cur_seg < cur_state->witness_segs.size())
+  if (validate_witness && cur_state->cur_seg < cur_state->witness_segs.size())
   {
     const auto &seg = cur_state->witness_segs[cur_state->cur_seg];
     if (cur_state->cur_wp < seg.size())
@@ -119,8 +118,7 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
       {
         const auto &loc = cur_state->source.pc->location;
         if (
-          !wp.line_id.empty() &&
-          wp.line_id == loc.get_line() &&
+          !wp.line_id.empty() && wp.line_id == loc.get_line() &&
           (wp.function_id.empty() || wp.function_id == loc.get_function()))
         {
           const bool is_avoid = (wp.action == waypoint::avoid);

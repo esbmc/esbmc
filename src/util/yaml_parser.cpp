@@ -152,7 +152,8 @@ std::vector<waypoint> yaml_parser::get_waypoints(const std::string &path)
   }
   catch (const YAML::Exception &e)
   {
-    log_error("Failed to parse violation witness YAML '{}': {}", path, e.what());
+    log_error(
+      "Failed to parse violation witness YAML '{}': {}", path, e.what());
     wp_cache.path.clear();
   }
   return wp_cache.waypoints;
