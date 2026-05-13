@@ -17,8 +17,8 @@
 #include <vector>
 #include <util/yaml_parser.h>
 
-unsigned int execution_statet::node_count = 0;
-unsigned int execution_statet::dynamic_counter = 0;
+thread_local unsigned int execution_statet::node_count = 0;
+thread_local unsigned int execution_statet::dynamic_counter = 0;
 
 execution_statet::execution_statet(
   const goto_functionst &goto_functions,
