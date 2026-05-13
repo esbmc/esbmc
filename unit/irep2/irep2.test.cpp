@@ -1,5 +1,6 @@
 #define CATCH_CONFIG_MAIN // This tells Catch to provide a main() - only do this in one cpp file
 #include <catch2/catch.hpp>
+#include <limits>
 #include <irep2/irep2.h>
 #include <irep2/irep2_template_utils.h>
 #include <irep2/irep2_utils.h>
@@ -384,4 +385,103 @@ SCENARIO(
     }
   }
 #endif // NDEBUG
+}
+
+// Copy-on-write: a non-const access through a sharing container must
+// clone, leaving the other handles bound to the original (unchanged)
+// node. Verifies the contract documented at irep_container::get() and
+// in the irep2.h threading-contract preamble.
+SCENARIO("COW detach leaves the other handle unchanged", "[core][irep2]")
+{
+  // Helper: const get() does not detach, so it's safe for identity
+  // comparison without perturbing the refcount.
+  auto raw = [](const expr2tc &c) { return c.get(); };
+
+  GIVEN("Two containers sharing a single underlying node")
+  {
+    expr2tc a = gen_ulong(11);
+    expr2tc b = a; // refcount 2, both point to the same node
+    REQUIRE(raw(a) == raw(b));
+
+    WHEN("the first handle is mutated via non-const access")
+    {
+      // Non-const get() triggers detach(): a clones to a fresh node,
+      // b keeps the original. After this call, a and b alias
+      // different underlying objects.
+      (void)a.get();
+
+      THEN("a and b now point to distinct nodes")
+      {
+        REQUIRE(raw(a) != raw(b));
+      }
+      THEN("the structural value of both is still equal")
+      {
+        REQUIRE(*a == *b);
+      }
+    }
+  }
+
+  GIVEN("A container with refcount 1 (no sharing)")
+  {
+    expr2tc a = gen_ulong(13);
+    const expr2t *before = raw(a);
+    WHEN("the sole owner takes a mutable view")
+    {
+      (void)a.get();
+      THEN("no clone happens — the underlying pointer is unchanged")
+      {
+        REQUIRE(raw(a) == before);
+      }
+    }
+  }
+}
+
+// get_sub_expr(idx) is contractually nullable: it returns nullptr
+// when idx is past the operand count. Several simplify paths and
+// the indexed-loop bench rely on this for bounds termination.
+SCENARIO("get_sub_expr returns nullptr past the operand count", "[core][irep2]")
+{
+  GIVEN("A binary expression (add2t) with two operands")
+  {
+    type2tc word = get_uint_type(config.ansi_c.word_size);
+    expr2tc e = add2tc(word, gen_ulong(1), gen_ulong(2));
+
+    THEN("the two in-range indices return non-null sub-expressions")
+    {
+      REQUIRE(e->get_sub_expr(0) != nullptr);
+      REQUIRE(e->get_sub_expr(1) != nullptr);
+    }
+    THEN("indices >= get_num_sub_exprs() return nullptr")
+    {
+      const size_t n = e->get_num_sub_exprs();
+      REQUIRE(n == 2);
+      REQUIRE(e->get_sub_expr(n) == nullptr);
+      REQUIRE(e->get_sub_expr(n + 5) == nullptr);
+      REQUIRE(e->get_sub_expr(std::numeric_limits<size_t>::max()) == nullptr);
+    }
+  }
+
+  GIVEN("A constant_array2t with multiple elements")
+  {
+    expr2tc arr = gen_testing_array(4);
+    THEN("each element is reachable and out-of-range returns nullptr")
+    {
+      const size_t n = arr->get_num_sub_exprs();
+      REQUIRE(n == 4);
+      for (size_t i = 0; i < n; ++i)
+        REQUIRE(arr->get_sub_expr(i) != nullptr);
+      REQUIRE(arr->get_sub_expr(n) == nullptr);
+    }
+  }
+
+  GIVEN("A leaf expression with no sub-expressions")
+  {
+    expr2tc leaf = gen_ulong(42);
+    THEN("get_num_sub_exprs is zero and every index returns nullptr")
+    {
+      REQUIRE(leaf->get_num_sub_exprs() == 0);
+      REQUIRE(leaf->get_sub_expr(0) == nullptr);
+      REQUIRE(leaf->get_sub_expr(1) == nullptr);
+    }
+  }
 }
