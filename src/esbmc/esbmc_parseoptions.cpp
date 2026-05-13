@@ -2295,7 +2295,7 @@ bool esbmc_parseoptionst::process_goto_program(
       // ASSUME(INV) injected at end of loop body + k-induction (Branch 2).
       remove_no_op(goto_functions);
       goto_loop_invariant_combined(goto_functions);
-      goto_k_induction(goto_functions);
+      goto_k_induction(goto_functions, options);
     }
     else
     {
@@ -2305,7 +2305,7 @@ bool esbmc_parseoptionst::process_goto_program(
         remove_no_op(goto_functions);
 
       if (is_k_induction)
-        goto_k_induction(goto_functions);
+        goto_k_induction(goto_functions, options);
 
       if (cmdline.isset("loop-invariant-check"))
       {
