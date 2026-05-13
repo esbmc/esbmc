@@ -1007,7 +1007,8 @@ void goto_symext::symex_assign_bitfield(
 void goto_symext::replace_nondet(expr2tc &expr)
 {
   if (
-    is_sideeffect2t(expr) && to_sideeffect2t(expr).kind == sideeffect2t::allockind::nondet)
+    is_sideeffect2t(expr) &&
+    to_sideeffect2t(expr).kind == sideeffect2t::allockind::nondet)
   {
     unsigned int &nondet_count = get_nondet_counter();
     expr =

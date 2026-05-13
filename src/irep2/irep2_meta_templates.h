@@ -24,7 +24,6 @@
 
 namespace esbmct
 {
-
 template <class derived, class baseclass, typename traits>
 auto irep_methods2<derived, baseclass, traits>::clone() const
   -> base_container2tc
@@ -130,9 +129,8 @@ void irep_methods2<derived, baseclass, traits>::hash(crypto_hash &h) const
 }
 
 template <class derived, class baseclass, typename traits>
-const expr2tc *
-irep_methods2<derived, baseclass, traits>::get_sub_expr_impl(size_t desired)
-  const
+const expr2tc *irep_methods2<derived, baseclass, traits>::get_sub_expr_impl(
+  size_t desired) const
 {
   const derived *self = static_cast<const derived *>(this);
   const expr2tc *result = nullptr;
@@ -143,8 +141,7 @@ irep_methods2<derived, baseclass, traits>::get_sub_expr_impl(size_t desired)
     using F = decltype(field);
     using R = typename F::result_type;
     if constexpr (
-      std::is_same_v<R, expr2tc> ||
-      std::is_same_v<R, std::vector<expr2tc>>)
+      std::is_same_v<R, expr2tc> || std::is_same_v<R, std::vector<expr2tc>>)
     {
       const expr2tc *ptr = nullptr;
       if (do_get_sub_expr(self->*F::value, desired, cur, ptr))
@@ -167,8 +164,7 @@ irep_methods2<derived, baseclass, traits>::get_sub_expr_nc_impl(size_t desired)
     using F = decltype(field);
     using R = typename F::result_type;
     if constexpr (
-      std::is_same_v<R, expr2tc> ||
-      std::is_same_v<R, std::vector<expr2tc>>)
+      std::is_same_v<R, expr2tc> || std::is_same_v<R, std::vector<expr2tc>>)
     {
       expr2tc *ptr = nullptr;
       if (do_get_sub_expr_nc(self->*F::value, desired, cur, ptr))

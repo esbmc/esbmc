@@ -2092,7 +2092,7 @@ public:
       : name##_expr_methods(get_bool_type(), name##_id, v1, v2)                \
     {                                                                          \
     }                                                                          \
-    name##2t(const name##2t &ref) = default;                                   \
+    name##2t(const name##2t & ref) = default;                                  \
     expr2tc do_simplify() const override;                                      \
     static std::string field_names[esbmct::num_type_fields];                   \
   }
@@ -3689,7 +3689,7 @@ public:
     return irep2_checked_expr_cast<name##2t>(                                  \
       *t.get(), expr2t::name##_id, #name);                                     \
   }                                                                            \
-  inline const name##2t *try_to_##name##2t(const expr2tc &t)                   \
+  inline const name##2t * try_to_##name##2t(const expr2tc &t)                  \
   {                                                                            \
     return is_##name##2t(t) ? &to_##name##2t(t) : nullptr;                     \
   }

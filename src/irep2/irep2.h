@@ -450,10 +450,11 @@ typedef std::list<member_entryt> list_of_memberst;
 class irep2t
 {
 public:
-  irep2t() noexcept : refcount(0)
+  irep2t() noexcept
+    : refcount(0)
 #ifndef NDEBUG
-    ,
-    writer_thread(0)
+      ,
+      writer_thread(0)
 #endif
   {
   }
@@ -461,10 +462,11 @@ public:
   // a brand new object that no container has yet adopted. The single
   // copy site that matters is clone(), which always wraps the result
   // in an irep_container immediately afterwards.
-  irep2t(const irep2t &) noexcept : refcount(0)
+  irep2t(const irep2t &) noexcept
+    : refcount(0)
 #ifndef NDEBUG
-    ,
-    writer_thread(0)
+      ,
+      writer_thread(0)
 #endif
   {
   }
@@ -510,10 +512,7 @@ public:
       // concurrent writer we fall through to the mismatch assert
       // below, which is the contract violation.
       if (writer_thread.compare_exchange_strong(
-            prev,
-            me,
-            std::memory_order_release,
-            std::memory_order_acquire))
+            prev, me, std::memory_order_release, std::memory_order_acquire))
         return;
     }
     assert(
@@ -1252,8 +1251,7 @@ public:
   static void for_each_field(F &&f)
   {
     std::apply(
-      [&](auto... entries) { (f(entries), ...); },
-      typename traits::fields{});
+      [&](auto... entries) { (f(entries), ...); }, typename traits::fields{});
   }
 
   // Method bodies live in irep2_meta_templates.h, which is included
@@ -1328,8 +1326,7 @@ public:
     return this->get_num_sub_exprs_impl();
   }
 
-  void foreach_operand_impl_const(
-    expr2t::const_op_delegate &f) const override
+  void foreach_operand_impl_const(expr2t::const_op_delegate &f) const override
   {
     this->foreach_operand_impl_const_inner(f);
   }
@@ -1358,8 +1355,8 @@ public:
   {
   }
 
-  void foreach_subtype_impl_const(
-    type2t::const_subtype_delegate &f) const override
+  void
+  foreach_subtype_impl_const(type2t::const_subtype_delegate &f) const override
   {
     this->foreach_subtype_impl_const_inner(f);
   }
@@ -1413,7 +1410,6 @@ public:
 irep2_bad_type_cast(unsigned actual, unsigned expected, const char *target);
 [[noreturn]] void
 irep2_bad_expr_cast(unsigned actual, unsigned expected, const char *target);
-
 
 // Checked downcast for type2t / expr2t hierarchies. The is_*_type / is_*2t
 // predicates already do a single enum compare; these helpers do the same

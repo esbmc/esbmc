@@ -62,8 +62,7 @@ public:
    *  std::bad_optional_access surface, or assert before unwrapping.
    *  @param name Name of member of this struct/union to look up.
    *  @return Index into members/member_names vectors, or nullopt. */
-  std::optional<unsigned int>
-  get_component_number(const irep_idt &name) const;
+  std::optional<unsigned int> get_component_number(const irep_idt &name) const;
 
   const std::vector<type2tc> &get_structure_members() const;
   const std::vector<irep_idt> &get_structure_member_names() const;

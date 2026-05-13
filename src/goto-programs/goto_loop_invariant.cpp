@@ -295,7 +295,8 @@ static bool is_trivial_rhs(const expr2tc &expr)
   if (is_constant_bool2t(expr))
     return true;
   if (
-    is_sideeffect2t(expr) && to_sideeffect2t(expr).kind == sideeffect2t::allockind::nondet)
+    is_sideeffect2t(expr) &&
+    to_sideeffect2t(expr).kind == sideeffect2t::allockind::nondet)
     return true;
   return false;
 }

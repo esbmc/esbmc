@@ -42,9 +42,8 @@ void irep2_bad_type_cast(unsigned actual, unsigned expected, const char *target)
 {
   const char *actual_name =
     (actual < type2t::end_type_id) ? type_names[actual] : "<out-of-range>";
-  const char *expected_name = (expected < type2t::end_type_id)
-                                ? type_names[expected]
-                                : "<out-of-range>";
+  const char *expected_name =
+    (expected < type2t::end_type_id) ? type_names[expected] : "<out-of-range>";
   throw irep2_cast_error(fmt::format(
     "irep2: to_{}_type() called on type whose type_id is {} (target {})",
     expected_name,
@@ -61,8 +60,8 @@ type2t::type2t(const type2t &ref) : type_id(ref.type_id)
   // Snapshot the cached CRC under the single-writer contract; see
   // irep2.h header note. The fresh atomic starts with whatever value
   // ref had at this moment, or 0 if ref had not been crc-ed yet.
-  crc_val.store(ref.crc_val.load(std::memory_order_relaxed),
-                std::memory_order_relaxed);
+  crc_val.store(
+    ref.crc_val.load(std::memory_order_relaxed), std::memory_order_relaxed);
 }
 
 bool type2t::operator==(const type2t &ref) const

@@ -27,9 +27,8 @@ void irep2_bad_expr_cast(unsigned actual, unsigned expected, const char *target)
 {
   const char *actual_name =
     (actual < expr2t::end_expr_id) ? expr_names[actual] : "<out-of-range>";
-  const char *expected_name = (expected < expr2t::end_expr_id)
-                                ? expr_names[expected]
-                                : "<out-of-range>";
+  const char *expected_name =
+    (expected < expr2t::end_expr_id) ? expr_names[expected] : "<out-of-range>";
   throw irep2_cast_error(fmt::format(
     "irep2: to_{}2t() called on expr whose expr_id is {} (target {})",
     expected_name,
@@ -49,8 +48,8 @@ expr2t::expr2t(const expr2t &ref) : expr_id(ref.expr_id), type(ref.type)
   // Snapshot the cached CRC. Relaxed is enough: callers must already
   // honour the single-writer contract documented in irep2.h, and the
   // copy is itself a new value not yet visible to anyone else.
-  crc_val.store(ref.crc_val.load(std::memory_order_relaxed),
-                std::memory_order_relaxed);
+  crc_val.store(
+    ref.crc_val.load(std::memory_order_relaxed), std::memory_order_relaxed);
 }
 
 bool expr2t::operator==(const expr2t &ref) const
@@ -333,8 +332,7 @@ void with2t::assert_consistency() const
       dynamic_cast<const struct_union_data *>(source_value->type.get());
     assert(d);
     assert(update_field->expr_id == constant_string_id);
-    auto c =
-      d->get_component_number(to_constant_string2t(update_field).value);
+    auto c = d->get_component_number(to_constant_string2t(update_field).value);
     assert(c.has_value());
     assert_type_compat_for_with(update_value->type, d->members[*c]);
   }

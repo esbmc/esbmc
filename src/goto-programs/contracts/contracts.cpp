@@ -354,7 +354,8 @@ static expr2tc inline_temporary_variables(
         // Special case: if RHS is an old_snapshot sideeffect, DON'T inline further
         if (
           is_sideeffect2t(assign.value) &&
-          to_sideeffect2t(assign.value).kind == sideeffect2t::allockind::old_snapshot)
+          to_sideeffect2t(assign.value).kind ==
+            sideeffect2t::allockind::old_snapshot)
         {
           return expr;
         }
@@ -410,7 +411,8 @@ static expr2tc inline_temporary_variables(
         // Special case: if RHS is an old_snapshot sideeffect, DON'T inline further
         if (
           is_sideeffect2t(assign.value) &&
-          to_sideeffect2t(assign.value).kind == sideeffect2t::allockind::old_snapshot)
+          to_sideeffect2t(assign.value).kind ==
+            sideeffect2t::allockind::old_snapshot)
         {
           return expr;
         }
@@ -583,7 +585,8 @@ code_contractst::extract_assigns_from_body(const goto_programt &function_body)
       // Check if RHS is a sideeffect with assigns_target
       if (
         is_sideeffect2t(assign.source) &&
-        to_sideeffect2t(assign.source).kind == sideeffect2t::allockind::assigns_target)
+        to_sideeffect2t(assign.source).kind ==
+          sideeffect2t::allockind::assigns_target)
       {
         const sideeffect2t &se = to_sideeffect2t(assign.source);
         expr2tc target_expr = se.operand;
@@ -3140,7 +3143,8 @@ bool code_contractst::has_contracts(const goto_programt &function_body) const
       const code_assign2t &assign = to_code_assign2t(it->code);
       if (
         is_sideeffect2t(assign.source) &&
-        to_sideeffect2t(assign.source).kind == sideeffect2t::allockind::assigns_target)
+        to_sideeffect2t(assign.source).kind ==
+          sideeffect2t::allockind::assigns_target)
       {
         return true;
       }
