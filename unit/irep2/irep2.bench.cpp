@@ -72,6 +72,20 @@ TEST_CASE("irep2 microbench: simplify operand walk", "[bench]")
 
   BENCHMARK("simplify add-chain depth=64") { return chain64->simplify(); };
   BENCHMARK("simplify add-chain depth=256") { return chain256->simplify(); };
+
+  // Repeat-simplify: call simplify() a second time on the result of
+  // the first simplification. Anchors what re-simplification costs
+  // today (no idempotency marker), in case a future change tries to
+  // short-circuit this path.
+  expr2tc once64 = chain64->simplify();
+  if (is_nil_expr(once64))
+    once64 = chain64;
+  expr2tc once256 = chain256->simplify();
+  if (is_nil_expr(once256))
+    once256 = chain256;
+
+  BENCHMARK("re-simplify add-chain depth=64") { return once64->simplify(); };
+  BENCHMARK("re-simplify add-chain depth=256") { return once256->simplify(); };
 }
 
 TEST_CASE("irep2 microbench: indexed sub-expr access", "[bench]")
