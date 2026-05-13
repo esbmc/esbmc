@@ -3679,10 +3679,6 @@ public:
   {                                                                            \
     return t->expr_id == expr2t::name##_id;                                    \
   }                                                                            \
-  inline bool is_##name##2t(const expr2t &r)                                   \
-  {                                                                            \
-    return r.expr_id == expr2t::name##_id;                                     \
-  }                                                                            \
   inline const name##2t & to_##name##2t(const expr2tc &t)                      \
   {                                                                            \
     return irep2_checked_expr_cast<const name##2t>(                            \

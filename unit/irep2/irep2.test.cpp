@@ -311,3 +311,77 @@ SCENARIO("do_type_lt(type2tc, type2tc) with nil sides", "[core][irep2]")
     }
   }
 }
+
+// Positive coverage for the debug-only single-writer stamp on irep2t.
+// In NDEBUG builds the stamp doesn't exist and this scenario is a
+// no-op (the storage and helpers are compiled out); we keep the test
+// always-defined-but-conditional-bodied so the test count is stable
+// across build modes.
+SCENARIO(
+  "irep2t writer-thread stamp tracks ownership transitions",
+  "[core][irep2]")
+{
+#ifdef NDEBUG
+  // Stamp is compiled out; there is nothing to observe. Pass through.
+  SUCCEED("writer-thread stamp is disabled in release builds");
+#else
+  GIVEN("A freshly constructed expr2tc")
+  {
+    expr2tc e = gen_ulong(42);
+    THEN("the writer stamp is initially clear")
+    {
+      REQUIRE(
+        e->writer_thread.load(std::memory_order_relaxed) == std::uintptr_t{0});
+    }
+
+    WHEN("we obtain a mutable reference")
+    {
+      // Trigger the non-const get(), which detaches (no-op here, we're
+      // the sole owner) and stamps the writer slot.
+      (void)e.get();
+      THEN("the stamp matches the current thread's tag")
+      {
+        std::uintptr_t tag = irep2t::current_thread_tag();
+        REQUIRE(e->writer_thread.load(std::memory_order_relaxed) == tag);
+      }
+
+      AND_WHEN("we mutate the same expr again from the same thread")
+      {
+        // No-op fast path: mark_writer sees a matching stamp and
+        // returns without touching the atomic.
+        (void)e.get();
+        THEN("the stamp is still ours")
+        {
+          REQUIRE(
+            e->writer_thread.load(std::memory_order_relaxed) ==
+            irep2t::current_thread_tag());
+        }
+      }
+    }
+  }
+
+  GIVEN("Two containers sharing one node, then dropping back to one")
+  {
+    expr2tc a = gen_ulong(7);
+    (void)a.get(); // stamp the node as written by us
+    REQUIRE(
+      a->writer_thread.load(std::memory_order_relaxed) ==
+      irep2t::current_thread_tag());
+
+    {
+      expr2tc b = a; // refcount 2; stamp is still 'us'
+      REQUIRE(
+        a->writer_thread.load(std::memory_order_relaxed) ==
+        irep2t::current_thread_tag());
+      // b goes out of scope here; release() observes refcount transition
+      // from 2 → 1 and clears the stamp so the remaining owner gets a
+      // clean slate.
+    }
+    THEN("the stamp is cleared once refcount returns to 1")
+    {
+      REQUIRE(
+        a->writer_thread.load(std::memory_order_relaxed) == std::uintptr_t{0});
+    }
+  }
+#endif // NDEBUG
+}

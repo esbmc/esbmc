@@ -747,16 +747,6 @@ public:
     return irep2_checked_type_cast<name##_type2t>(                             \
       *t.get(), type2t::name##_id, #name);                                     \
   }                                                                            \
-  inline name##_type2t &to_##name##_type(type2t &t)                            \
-  {                                                                            \
-    return irep2_checked_type_cast<name##_type2t>(                             \
-      t, type2t::name##_id, #name);                                            \
-  }                                                                            \
-  inline const name##_type2t &to_##name##_type(const type2t &t)                \
-  {                                                                            \
-    return irep2_checked_type_cast<const name##_type2t>(                       \
-      t, type2t::name##_id, #name);                                            \
-  }                                                                            \
   inline const name##_type2t *try_to_##name##_type(const type2tc &t)           \
   {                                                                            \
     return is_##name##_type(t) ? &to_##name##_type(t) : nullptr;               \

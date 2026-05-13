@@ -11,9 +11,6 @@
 #include <util/std_types.h>
 
 template <typename T>
-class register_irep_methods;
-
-template <typename T>
 void do_type2string(
   const T &thething,
   unsigned int idx,

@@ -5,24 +5,37 @@
  *  Classes and definitions for non-stringy internal representation.
  *
  *  Threading contract: irep2 nodes (type2t, expr2t) are designed for
- *  single-writer / thread-confined construction and rewriting. The
- *  copy-on-write detach in irep_container relies on shared_ptr::use_count(),
- *  which is documented as approximate under concurrent access (typical
- *  implementations use std::memory_order_relaxed); the crc cache is guarded
- *  by an in-node std::mutex, but the surrounding mutation paths
- *  (operator-> / non-const get() invalidating crc_val, foreach_operand
- *  exposing mutable handles) are not designed to be safe under concurrent
- *  writers. Treat an irep2 tree as owned by a single rewriter at a time;
- *  publish to other threads only once mutation is complete, and only for
- *  read-only consumption.
+ *  single-writer / thread-confined construction and rewriting.
+ *
+ *  Ownership is handled by an intrusive atomic refcount sitting on
+ *  every node (irep2t::refcount); irep_container is a raw pointer
+ *  that increments on copy, decrements on destruction, and deletes
+ *  the pointee when the count drops to zero. The refcount is atomic
+ *  so two containers holding the same node can be dropped from
+ *  different threads safely, but the *pointee's* state is not — only
+ *  one thread at a time may obtain a mutable view (the non-const
+ *  irep_container::get() / operator-> / operator*, which detach if
+ *  refcount > 1 and otherwise hand back the underlying object).
+ *
+ *  The CRC cache (irep2t::crc_val) is a single std::atomic<size_t>
+ *  with 0 meaning "not yet computed". Readers do an acquire load,
+ *  producers compute on a stack local and release-store the result,
+ *  so concurrent readers see either 0 (and recompute, getting the
+ *  same value) or the final cache entry — never a half-mixed state.
+ *
+ *  Treat an irep2 tree as owned by a single rewriter at a time;
+ *  publish to other threads only once mutation is complete and only
+ *  for read-only consumption.
  */
 
 #include <big-int/bigint.hh>
 #include <atomic>
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <stdexcept>
+#include <thread>
 #include <tuple>
 #include <type_traits>
 #include <utility>
@@ -196,31 +209,41 @@ public:
   }
 
   // Const accessors: hand out the pointee without detaching, since
-  // they're const operations.
-  const T &operator*() const noexcept
+  // they're const operations. Prefer these whenever you only need to
+  // read the node — they are O(1) atomic-free pointer loads.
+  [[nodiscard]] const T &operator*() const noexcept
   {
     return *ptr_;
   }
 
-  const T *operator->() const noexcept
+  [[nodiscard]] const T *operator->() const noexcept
   {
     return ptr_;
   }
 
-  const T *get() const noexcept
+  [[nodiscard]] const T *get() const noexcept
   {
     return ptr_;
   }
 
-  // Non-const accessors detach: if the pointee is shared we clone
-  // into a fresh refcount-1 object and rebind, then invalidate the
-  // CRC cache on the (now uniquely-owned) copy.
+  // Non-const accessors detach: if the pointee is shared (refcount > 1)
+  // we clone into a fresh refcount-1 object and rebind, then invalidate
+  // the CRC cache on the (now uniquely-owned) copy. **WARNING:** even
+  // when no actual mutation follows, calling these allocates+copies on
+  // every shared node touch — favour the const overloads above when a
+  // read is enough.
   T *get()
   {
     detach();
     // Single-writer contract: relaxed is enough to invalidate the
     // cache; the next crc() recomputation will publish via release.
     ptr_->crc_val.store(0, std::memory_order_relaxed);
+#ifndef NDEBUG
+    // Stamp the current thread as the writer of this (now uniquely
+    // owned) node; if another thread is already inside a mutable
+    // access on the same node, mark_writer asserts.
+    ptr_->mark_writer();
+#endif
     return ptr_;
   }
 
@@ -364,7 +387,8 @@ private:
   {
     if (!ptr_)
       return;
-    if (ptr_->refcount.fetch_sub(1, std::memory_order_release) == 1)
+    unsigned int prev = ptr_->refcount.fetch_sub(1, std::memory_order_release);
+    if (prev == 1)
     {
       // Acquire fence prevents the delete (and any side-effects of
       // the destructor) from being reordered before the final
@@ -372,6 +396,16 @@ private:
       std::atomic_thread_fence(std::memory_order_acquire);
       delete ptr_;
     }
+#ifndef NDEBUG
+    else if (prev == 2)
+    {
+      // We were one of exactly two owners and just dropped out; the
+      // remaining sole owner is free to mutate. Clear the writer
+      // stamp so they get a clean slate (the next non-const get()
+      // will re-stamp).
+      ptr_->clear_writer();
+    }
+#endif
   }
 
   T *ptr_;
@@ -417,6 +451,10 @@ class irep2t
 {
 public:
   irep2t() noexcept : refcount(0)
+#ifndef NDEBUG
+    ,
+    writer_thread(0)
+#endif
   {
   }
   // Copy constructor must NOT propagate the refcount: a fresh copy is
@@ -424,6 +462,10 @@ public:
   // copy site that matters is clone(), which always wraps the result
   // in an irep_container immediately afterwards.
   irep2t(const irep2t &) noexcept : refcount(0)
+#ifndef NDEBUG
+    ,
+    writer_thread(0)
+#endif
   {
   }
   // Refcount is per-object identity; assignment is meaningless on the
@@ -432,6 +474,59 @@ public:
   virtual ~irep2t() = default;
 
   mutable std::atomic<unsigned int> refcount;
+
+#ifndef NDEBUG
+  // Debug-only writer-thread stamp. The threading contract says irep2
+  // nodes are single-writer; on the first mutable access through an
+  // irep_container, the container stamps this slot with a hash of the
+  // current thread id (0 means "no writer"). Subsequent mutable
+  // accesses compare — a mismatch means two threads are trying to
+  // mutate the same uniquely-owned node, which is the contract
+  // violation we want to catch. The stamp clears when the refcount
+  // drops back to 1 in release(), so a single-owner-handoff across
+  // threads (publish, then a new owner mutates) works correctly.
+  // Compiled out entirely under NDEBUG. uintptr_t is used (rather
+  // than std::thread::id directly) so the atomic is guaranteed
+  // lock-free on every platform we target.
+  mutable std::atomic<std::uintptr_t> writer_thread;
+
+  static std::uintptr_t current_thread_tag() noexcept
+  {
+    auto h = std::hash<std::thread::id>{}(std::this_thread::get_id());
+    // 0 is the "no writer" sentinel; if the hash collides with 0
+    // (vanishingly unlikely but possible), bump it.
+    return h == 0 ? 1 : static_cast<std::uintptr_t>(h);
+  }
+
+  void mark_writer() const noexcept
+  {
+    std::uintptr_t me = current_thread_tag();
+    std::uintptr_t prev = writer_thread.load(std::memory_order_acquire);
+    if (prev == me)
+      return; // already mine, common fast path
+    if (prev == 0)
+    {
+      // Race-free attempt to claim the slot. If we lose the CAS to a
+      // concurrent writer we fall through to the mismatch assert
+      // below, which is the contract violation.
+      if (writer_thread.compare_exchange_strong(
+            prev,
+            me,
+            std::memory_order_release,
+            std::memory_order_acquire))
+        return;
+    }
+    assert(
+      prev == me &&
+      "irep2 single-writer contract violated: a second thread tried to "
+      "mutate a node already being mutated by another thread");
+  }
+
+  void clear_writer() const noexcept
+  {
+    writer_thread.store(0, std::memory_order_release);
+  }
+#endif
 };
 
 /** Base class for all types.
@@ -1065,7 +1160,6 @@ public:
   typedef field_traits<type2t::type_ids, type2t, &type2t::type_id>
     type_id_field;
   typedef std::tuple<type_id_field, Args...> fields;
-  static constexpr unsigned int num_fields = sizeof...(Args) + 1;
   typedef type2t base2t;
 };
 
@@ -1082,7 +1176,6 @@ public:
     expr_id_field;
   typedef field_traits<type2tc, expr2t, &expr2t::type> type_field;
   typedef std::tuple<expr_id_field, type_field, Args...> fields;
-  static constexpr unsigned int num_fields = sizeof...(Args) + 2;
   typedef expr2t base2t;
 };
 
@@ -1097,7 +1190,6 @@ public:
   typedef field_traits<const expr2t::expr_ids, expr2t, &expr2t::expr_id>
     expr_id_field;
   typedef std::tuple<expr_id_field, Args...> fields;
-  static constexpr unsigned int num_fields = sizeof...(Args) + 1;
   typedef expr2t base2t;
 };
 
@@ -1321,6 +1413,7 @@ public:
 irep2_bad_type_cast(unsigned actual, unsigned expected, const char *target);
 [[noreturn]] void
 irep2_bad_expr_cast(unsigned actual, unsigned expected, const char *target);
+
 
 // Checked downcast for type2t / expr2t hierarchies. The is_*_type / is_*2t
 // predicates already do a single enum compare; these helpers do the same
