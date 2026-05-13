@@ -19,9 +19,18 @@
 /// Tracked variables are automatic-storage, lvalue, non-extern,
 /// non-`return_value$*`, non-`__ESBMC_` locals whose type is either a
 /// scalar (`_Bool`, signed/unsigned integer, fixed-point, floating-point)
-/// or a fixed-size 1-D array of such a scalar. Pointers (covered under
-/// CWE-908), VLAs, multi-dim arrays, structs, and unions remain out of
-/// scope.
+/// or a fixed-size 1-D array of such a scalar whose element count is a
+/// constant in `[1, kMaxShadowedArraySize]` (see the .cpp). Pointers
+/// (covered under CWE-908), VLAs, multi-dim arrays, structs, unions, and
+/// oversize arrays remain out of scope.
+///
+/// Cost: every tracked array of length `N` allocates a parallel
+/// `bool[N]` shadow and emits per-element `ASSERT`/`ASSIGN` instructions
+/// at reads/writes, plus a `constant_array_of(true, N)` on any address-of
+/// or whole-array assignment. The `kMaxShadowedArraySize` cap exists to
+/// keep this from inflating the SMT encoding on programs with very large
+/// fixed-size buffers; arrays above the cap are simply not tracked
+/// (matching the pre-extension behaviour for that variable).
 ///
 /// The pass must run **before** `mark_decl_as_non_det`, which would
 /// otherwise rewrite every uninitialised `DECL` into a `DECL; ASSIGN nondet`

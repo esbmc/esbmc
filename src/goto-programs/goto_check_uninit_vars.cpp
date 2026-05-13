@@ -10,6 +10,15 @@
 
 namespace
 {
+/// Maximum element count of a fixed-size array we will shadow per-element.
+/// Above this threshold the parallel `bool[N]` shadow (and the `array-of`
+/// initialiser / whole-flip writes that go with it) inflates the SMT
+/// encoding more than the precision is worth, so the array is left
+/// untracked — same observable behaviour as before PR #4507 for that
+/// variable. Tuned to cover typical stack/firmware buffers (a few KB) while
+/// avoiding blow-up on programs like `int buf[100000];`.
+constexpr uint64_t kMaxShadowedArraySize = 4096;
+
 /// Element types tracked for uninitialised-read detection (CWE-457). Pointers
 /// are reported under CWE-908; aggregates (struct/union) are out of scope.
 bool is_scalar_element_id(const irep_idt &id)
@@ -19,9 +28,10 @@ bool is_scalar_element_id(const irep_idt &id)
 }
 
 /// Build the shadow type matching a tracked user local. Scalars get a single
-/// `bool`; fixed-size 1-D arrays of scalars get a parallel `bool[N]`. Returns
-/// nil for anything else (pointers, VLAs, infinite/incomplete arrays,
-/// multi-dim arrays, aggregates).
+/// `bool`; fixed-size 1-D arrays of scalars whose constant length is at
+/// most `kMaxShadowedArraySize` get a parallel `bool[N]`. Returns nil for
+/// anything else: pointers, VLAs (non-constant length), infinite/incomplete
+/// arrays, multi-dim arrays, aggregates, and oversize arrays.
 type2tc shadow_type_for(const typet &user_type)
 {
   if (is_scalar_element_id(user_type.id()))
@@ -36,6 +46,13 @@ type2tc shadow_type_for(const typet &user_type)
   type2tc migrated = migrate_type(user_type);
   const array_type2t &arr = to_array_type(migrated);
   if (arr.size_is_infinite || is_nil_expr(arr.array_size))
+    return type2tc();
+  // VLAs reach here with a runtime-expression size; require a constant.
+  if (!is_constant_int2t(arr.array_size))
+    return type2tc();
+  const BigInt &n = to_constant_int2t(arr.array_size).value;
+  if (n.is_negative() || n.is_zero() ||
+      n.compare(static_cast<unsigned long long>(kMaxShadowedArraySize)) > 0)
     return type2tc();
   return array_type2tc(get_bool_type(), arr.array_size, false);
 }
