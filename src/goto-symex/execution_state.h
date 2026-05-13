@@ -95,7 +95,11 @@ public:
    *  Does what you might expect, but also updates any ex_state_level2t objects
    *  in the new execution_statet to point at the right object. */
   execution_statet(const execution_statet &ex);
-  execution_statet &operator=(const execution_statet &ex);
+  /** Defaulted op=. Not used by the copy constructor (which would lose
+   *  the state_level2 clone invariant); kept defaulted so any future
+   *  direct assignment is a compiler-generated member-wise copy that
+   *  automatically picks up new fields. */
+  execution_statet &operator=(const execution_statet &ex) = default;
 
   /**
    *  Default destructor.
