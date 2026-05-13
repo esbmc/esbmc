@@ -32,5 +32,5 @@ public:
 protected:
   contextt &context;
 
-  bool runOnFunction(std::pair<const dstring, goto_functiont> &F) override;
+  bool runOnFunction(std::pair<const irep_idt, goto_functiont> &F) override;
 };

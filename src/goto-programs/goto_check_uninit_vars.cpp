@@ -142,7 +142,7 @@ void collect(
 } // namespace
 
 bool goto_check_uninit_vars::runOnFunction(
-  std::pair<const dstring, goto_functiont> &F)
+  std::pair<const irep_idt, goto_functiont> &F)
 {
   if (!F.second.body_available)
     return false;
