@@ -1948,6 +1948,9 @@ private:
           json_utils::find_imported_function(ast_, func_name);
         auto module = module_manager_->get_module(import_node["module"]);
 
+        if (!module)
+          throw std::runtime_error("module not found");
+
         // Try to get it as a function first
         try
         {
