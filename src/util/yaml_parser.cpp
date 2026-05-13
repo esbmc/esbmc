@@ -80,7 +80,6 @@ invariant::Type yaml_parser::type_from_string(const std::string &s)
 
 namespace
 {
-// Pre-intern location fields for O(1) comparison during symex hot path.
 void intern_location(waypoint &wp)
 {
   if (wp.line != c_nonset)
@@ -97,7 +96,7 @@ struct
   waypoint target;
   bool has_target = false;
 } wp_cache;
-} // namespace
+}
 
 std::vector<waypoint> yaml_parser::get_waypoints(const std::string &path)
 {

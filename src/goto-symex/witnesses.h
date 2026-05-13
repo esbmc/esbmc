@@ -86,14 +86,14 @@ public:
     function_enter,
     function_return,
     branching,
-    unknown // sentinel for unrecognised types — get_waypoints skips these
+    unknown
   };
 
   enum Action
   {
-    follow, // must be passed exactly once (normal traversal)
+    follow, // must be passed exactly once
     avoid,  // must never be passed
-    cycle   // must be passed infinitely (liveness witnesses)
+    cycle   // must be passed infinitely
   };
 
   Type type = unknown;
@@ -106,7 +106,6 @@ public:
   BigInt line = c_nonset;
   BigInt column = c_nonset;
   std::string function;
-  // Pre-interned for O(1) comparison during symex hot path.
   irep_idt line_id;
   irep_idt function_id;
 };
@@ -120,7 +119,7 @@ public:
     loop_transition_invariant,
     location_invariant,
     location_transition_invariant,
-    unknown // sentinel for unrecognised types
+    unknown
   };
 
   Type type = unknown;
