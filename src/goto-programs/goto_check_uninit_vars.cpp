@@ -51,8 +51,9 @@ type2tc shadow_type_for(const typet &user_type)
   if (!is_constant_int2t(arr.array_size))
     return type2tc();
   const BigInt &n = to_constant_int2t(arr.array_size).value;
-  if (n.is_negative() || n.is_zero() ||
-      n.compare(static_cast<unsigned long long>(kMaxShadowedArraySize)) > 0)
+  if (
+    n.is_negative() || n.is_zero() ||
+    n.compare(static_cast<unsigned long long>(kMaxShadowedArraySize)) > 0)
     return type2tc();
   return array_type2tc(get_bool_type(), arr.array_size, false);
 }
