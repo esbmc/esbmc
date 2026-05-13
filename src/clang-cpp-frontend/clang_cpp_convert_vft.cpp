@@ -603,7 +603,7 @@ void clang_cpp_convertert::build_vtable_map(
       vtable_value_map[class_id]; // switch_map = switch_table
     exprt e = symbol_exprt(method.get_name(), code_type);
 
-    dstring virtual_name = method.get("virtual_name");
+    irep_idt virtual_name = method.get("virtual_name");
     assert(!virtual_name.empty());
     if (method.get_bool("is_pure_virtual"))
     {

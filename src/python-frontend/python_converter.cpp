@@ -3846,7 +3846,7 @@ bool python_converter::is_bytes_literal(const nlohmann::json &element)
     const typet &subtype = current_element_type.subtype();
     if (subtype.id() == "unsignedbv")
     {
-      // Convert dstring width to integer
+      // Convert irep_idt width to integer
       const irep_idt &width_str = subtype.width();
       try
       {

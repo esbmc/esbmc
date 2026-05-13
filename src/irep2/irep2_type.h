@@ -28,7 +28,7 @@ class cpp_name_type2t;
 class symbol_type_data : public type2t
 {
 public:
-  symbol_type_data(type2t::type_ids id, const dstring sym_name)
+  symbol_type_data(type2t::type_ids id, const irep_idt sym_name)
     : type2t(id), symbol_name(sym_name)
   {
   }
@@ -365,7 +365,7 @@ class symbol_type2t : public symbol_type_methods
 {
 public:
   /** Primary constructor. @param sym_name Name of symbolic type. */
-  symbol_type2t(const dstring &sym_name)
+  symbol_type2t(const irep_idt &sym_name)
     : symbol_type_methods(symbol_id, sym_name)
   {
   }
