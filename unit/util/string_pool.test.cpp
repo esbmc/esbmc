@@ -280,8 +280,7 @@ TEST_CASE("global container: multiple insertions", "[global][static]")
   unsigned id3 = get_string_pool()["global_3"];
 
   REQUIRE(id3 >= 1);
-  REQUIRE(
-    std::string(get_string_pool().c_str(id3)) == std::string("global_3"));
+  REQUIRE(std::string(get_string_pool().c_str(id3)) == std::string("global_3"));
 }
 
 TEST_CASE(
