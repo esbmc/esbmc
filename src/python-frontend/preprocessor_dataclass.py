@@ -11,6 +11,14 @@ this mixin only adds methods.
 import ast
 import copy
 
+# Internal helper variable names used by the runtime dataclass walker
+# emitted by ``_build_runtime_recursive_dataclass_expr``.
+_WALK = "__dataclass_walk"
+_VALUE = "__dataclass_value"
+_FIELD = "__dataclass_field"
+_ITEM = "__dataclass_item"
+_KEY = "__dataclass_key"
+
 
 class DataclassMixin:
     def _ensure_dataclass_initvar_import(self, module_node):
@@ -157,38 +165,40 @@ class DataclassMixin:
         ast.fix_missing_locations(fn)
         return fn
 
+    # Mapping from ``dataclasses`` attribute name to the API kind used by
+    # ``_dataclass_api_kind`` / ``_rewrite_dataclass_api_call``. The bare-name
+    # path additionally consults the per-instance alias sets registered in
+    # ``__init__``.
+    _DATACLASS_API_ATTR_KINDS = {
+        "is_dataclass": "is_dataclass",
+        "fields": "fields",
+        "asdict": "asdict",
+        "astuple": "astuple",
+        "replace": "replace",
+    }
+
+    def _dataclass_api_kind_from_name(self, name):
+        if name in self._dataclass_is_dataclass_names:
+            return "is_dataclass"
+        if name in self._dataclass_fields_api_names:
+            return "fields"
+        if name in self._dataclass_asdict_names:
+            return "asdict"
+        if name in self._dataclass_astuple_names:
+            return "astuple"
+        if name in self._dataclass_replace_names:
+            return "replace"
+        return None
+
     def _dataclass_api_kind(self, node):
         if isinstance(node.func, ast.Name):
-            name = node.func.id
-            if name in self._dataclass_is_dataclass_names:
-                return "is_dataclass"
-            if name in self._dataclass_fields_api_names:
-                return "fields"
-            if name in self._dataclass_asdict_names:
-                return "asdict"
-            if name in self._dataclass_astuple_names:
-                return "astuple"
-            if name in self._dataclass_replace_names:
-                return "replace"
-            return None
-
+            return self._dataclass_api_kind_from_name(node.func.id)
         if (
             isinstance(node.func, ast.Attribute)
             and isinstance(node.func.value, ast.Name)
             and node.func.value.id in self.dataclasses_module_names
         ):
-            attr = node.func.attr
-            if attr == "is_dataclass":
-                return "is_dataclass"
-            if attr == "fields":
-                return "fields"
-            if attr == "asdict":
-                return "asdict"
-            if attr == "astuple":
-                return "astuple"
-            if attr == "replace":
-                return "replace"
-
+            return self._DATACLASS_API_ATTR_KINDS.get(node.func.attr)
         return None
 
     def _dataclass_instance_type_of_expr(self, expr):
@@ -306,34 +316,29 @@ class DataclassMixin:
         ast.fix_missing_locations(result)
         return result
 
-    def _build_runtime_recursive_dataclass_expr(self, kind, instance_expr, source_node):
-        walk_name = "__dataclass_walk"
-        value_name = "__dataclass_value"
-        field_name = "__dataclass_field"
-        item_name = "__dataclass_item"
-        key_name = "__dataclass_key"
+    def _walk_recurse_on_item(self, source_node):
+        return self._build_recursive_dataclass_call(
+            _WALK,
+            ast.Name(id=_ITEM, ctx=ast.Load()),
+            source_node,
+        )
 
-        current_expr = ast.Name(id=value_name, ctx=ast.Load())
-
-        dict_comp = ast.DictComp(
-            key=ast.Name(id=key_name, ctx=ast.Load()),
-            value=self._build_recursive_dataclass_call(
-                walk_name,
-                ast.Name(id=item_name, ctx=ast.Load()),
-                source_node,
-            ),
+    def _build_walk_dict_comp(self, source_node):
+        node = ast.DictComp(
+            key=ast.Name(id=_KEY, ctx=ast.Load()),
+            value=self._walk_recurse_on_item(source_node),
             generators=[
                 ast.comprehension(
                     target=ast.Tuple(
                         elts=[
-                            ast.Name(id=key_name, ctx=ast.Store()),
-                            ast.Name(id=item_name, ctx=ast.Store()),
+                            ast.Name(id=_KEY, ctx=ast.Store()),
+                            ast.Name(id=_ITEM, ctx=ast.Store()),
                         ],
                         ctx=ast.Store(),
                     ),
                     iter=ast.Call(
                         func=ast.Attribute(
-                            value=ast.Name(id=value_name, ctx=ast.Load()),
+                            value=ast.Name(id=_VALUE, ctx=ast.Load()),
                             attr="items",
                             ctx=ast.Load(),
                         ),
@@ -345,200 +350,149 @@ class DataclassMixin:
                 )
             ],
         )
-        self.ensure_all_locations(dict_comp, source_node)
-        ast.fix_missing_locations(dict_comp)
+        self.ensure_all_locations(node, source_node)
+        ast.fix_missing_locations(node)
+        return node
 
-        tuple_expr = ast.Call(
-            func=ast.Name(id="tuple", ctx=ast.Load()),
-            args=[
-                ast.GeneratorExp(
-                    elt=self._build_recursive_dataclass_call(
-                        walk_name,
-                        ast.Name(id=item_name, ctx=ast.Load()),
-                        source_node,
-                    ),
-                    generators=[
-                        ast.comprehension(
-                            target=ast.Name(id=item_name, ctx=ast.Store()),
-                            iter=ast.Name(id=value_name, ctx=ast.Load()),
-                            ifs=[],
-                            is_async=0,
-                        )
-                    ],
-                )
-            ],
-            keywords=[],
+    def _build_walk_iter_call(self, builder, source_node):
+        """Return ``builder(elt)`` over the items of ``_VALUE``.
+
+        ``builder`` must be ``ast.ListComp`` or wrap ``ast.GeneratorExp``;
+        the generator iterates ``_VALUE`` binding ``_ITEM`` on each step.
+        """
+        elt = self._walk_recurse_on_item(source_node)
+        gen = ast.comprehension(
+            target=ast.Name(id=_ITEM, ctx=ast.Store()),
+            iter=ast.Name(id=_VALUE, ctx=ast.Load()),
+            ifs=[],
+            is_async=0,
         )
-        self.ensure_all_locations(tuple_expr, source_node)
-        ast.fix_missing_locations(tuple_expr)
+        node = builder(elt, gen)
+        self.ensure_all_locations(node, source_node)
+        ast.fix_missing_locations(node)
+        return node
 
-        list_comp = ast.ListComp(
-            elt=self._build_recursive_dataclass_call(
-                walk_name,
-                ast.Name(id=item_name, ctx=ast.Load()),
-                source_node,
-            ),
-            generators=[
-                ast.comprehension(
-                    target=ast.Name(id=item_name, ctx=ast.Store()),
-                    iter=ast.Name(id=value_name, ctx=ast.Load()),
-                    ifs=[],
-                    is_async=0,
-                )
-            ],
-        )
-        self.ensure_all_locations(list_comp, source_node)
-        ast.fix_missing_locations(list_comp)
-
+    def _build_walk_dataclass_expr(self, kind, source_node):
+        self._needs_dataclass_getattr_helper = True
         dataclass_iter = ast.Call(
             func=ast.Name(id="fields", ctx=ast.Load()),
-            args=[ast.Name(id=value_name, ctx=ast.Load())],
+            args=[ast.Name(id=_VALUE, ctx=ast.Load())],
             keywords=[],
         )
         self.ensure_all_locations(dataclass_iter, source_node)
-
-        dataclass_field_name = ast.Attribute(
-            value=ast.Name(id=field_name, ctx=ast.Load()),
+        field_name_attr = ast.Attribute(
+            value=ast.Name(id=_FIELD, ctx=ast.Load()),
             attr="name",
             ctx=ast.Load(),
         )
-        self._needs_dataclass_getattr_helper = True
-        dataclass_value_expr = ast.Call(
-            func=ast.Name(id="__ESBMC_dataclass_getattr", ctx=ast.Load()),
-            args=[
-                ast.Name(id=value_name, ctx=ast.Load()),
-                ast.Attribute(
-                    value=ast.Name(id=field_name, ctx=ast.Load()),
-                    attr="name",
-                    ctx=ast.Load(),
-                ),
-            ],
-            keywords=[],
+        recursive_value = self._build_recursive_dataclass_call(
+            _WALK,
+            ast.Call(
+                func=ast.Name(id="__ESBMC_dataclass_getattr", ctx=ast.Load()),
+                args=[
+                    ast.Name(id=_VALUE, ctx=ast.Load()),
+                    ast.Attribute(
+                        value=ast.Name(id=_FIELD, ctx=ast.Load()),
+                        attr="name",
+                        ctx=ast.Load(),
+                    ),
+                ],
+                keywords=[],
+            ),
+            source_node,
         )
-        recursive_dataclass_value = self._build_recursive_dataclass_call(
-            walk_name,
-            dataclass_value_expr,
+        gen = ast.comprehension(
+            target=ast.Name(id=_FIELD, ctx=ast.Store()),
+            iter=dataclass_iter,
+            ifs=[],
+            is_async=0,
+        )
+        if kind == "asdict":
+            node = ast.DictComp(
+                key=field_name_attr, value=recursive_value, generators=[gen]
+            )
+        else:
+            node = ast.Call(
+                func=ast.Name(id="tuple", ctx=ast.Load()),
+                args=[ast.GeneratorExp(elt=recursive_value, generators=[gen])],
+                keywords=[],
+            )
+        self.ensure_all_locations(node, source_node)
+        ast.fix_missing_locations(node)
+        return node
+
+    @staticmethod
+    def _walk_isinstance_ifexp(type_name, body, orelse):
+        return ast.IfExp(
+            test=ast.Call(
+                func=ast.Name(id="isinstance", ctx=ast.Load()),
+                args=[
+                    ast.Name(id=_VALUE, ctx=ast.Load()),
+                    ast.Name(id=type_name, ctx=ast.Load()),
+                ],
+                keywords=[],
+            ),
+            body=body,
+            orelse=orelse,
+        )
+
+    @staticmethod
+    def _walker_two_arg_args():
+        return ast.arguments(
+            posonlyargs=[],
+            args=[ast.arg(arg=_WALK), ast.arg(arg=_VALUE)],
+            vararg=None,
+            kwonlyargs=[],
+            kw_defaults=[],
+            kwarg=None,
+            defaults=[],
+        )
+
+    def _build_runtime_recursive_dataclass_expr(self, kind, instance_expr, source_node):
+        # Build the per-shape branches that the walker dispatches on.
+        dataclass_branch = self._build_walk_dataclass_expr(kind, source_node)
+        dict_branch = self._build_walk_dict_comp(source_node)
+        tuple_branch = self._build_walk_iter_call(
+            lambda elt, gen: ast.Call(
+                func=ast.Name(id="tuple", ctx=ast.Load()),
+                args=[ast.GeneratorExp(elt=elt, generators=[gen])],
+                keywords=[],
+            ),
+            source_node,
+        )
+        list_branch = self._build_walk_iter_call(
+            lambda elt, gen: ast.ListComp(elt=elt, generators=[gen]),
             source_node,
         )
 
-        if kind == "asdict":
-            dataclass_expr = ast.DictComp(
-                key=dataclass_field_name,
-                value=recursive_dataclass_value,
-                generators=[
-                    ast.comprehension(
-                        target=ast.Name(id=field_name, ctx=ast.Store()),
-                        iter=dataclass_iter,
-                        ifs=[],
-                        is_async=0,
-                    )
-                ],
-            )
-        else:
-            dataclass_expr = ast.Call(
-                func=ast.Name(id="tuple", ctx=ast.Load()),
-                args=[
-                    ast.GeneratorExp(
-                        elt=recursive_dataclass_value,
-                        generators=[
-                            ast.comprehension(
-                                target=ast.Name(id=field_name, ctx=ast.Store()),
-                                iter=dataclass_iter,
-                                ifs=[],
-                                is_async=0,
-                            )
-                        ],
-                    )
-                ],
-                keywords=[],
-            )
-        self.ensure_all_locations(dataclass_expr, source_node)
-        ast.fix_missing_locations(dataclass_expr)
-
-        current_expr = ast.IfExp(
+        # Chain the branches: list ? tuple ? dict ? dataclass ? value
+        current = ast.Name(id=_VALUE, ctx=ast.Load())
+        current = ast.IfExp(
             test=ast.Call(
                 func=ast.Name(id="is_dataclass", ctx=ast.Load()),
-                args=[ast.Name(id=value_name, ctx=ast.Load())],
+                args=[ast.Name(id=_VALUE, ctx=ast.Load())],
                 keywords=[],
             ),
-            body=dataclass_expr,
-            orelse=current_expr,
+            body=dataclass_branch,
+            orelse=current,
         )
-        current_expr = ast.IfExp(
-            test=ast.Call(
-                func=ast.Name(id="isinstance", ctx=ast.Load()),
-                args=[
-                    ast.Name(id=value_name, ctx=ast.Load()),
-                    ast.Name(id="dict", ctx=ast.Load()),
-                ],
-                keywords=[],
-            ),
-            body=dict_comp,
-            orelse=current_expr,
-        )
-        current_expr = ast.IfExp(
-            test=ast.Call(
-                func=ast.Name(id="isinstance", ctx=ast.Load()),
-                args=[
-                    ast.Name(id=value_name, ctx=ast.Load()),
-                    ast.Name(id="tuple", ctx=ast.Load()),
-                ],
-                keywords=[],
-            ),
-            body=tuple_expr,
-            orelse=current_expr,
-        )
-        current_expr = ast.IfExp(
-            test=ast.Call(
-                func=ast.Name(id="isinstance", ctx=ast.Load()),
-                args=[
-                    ast.Name(id=value_name, ctx=ast.Load()),
-                    ast.Name(id="list", ctx=ast.Load()),
-                ],
-                keywords=[],
-            ),
-            body=list_comp,
-            orelse=current_expr,
-        )
+        current = self._walk_isinstance_ifexp("dict", dict_branch, current)
+        current = self._walk_isinstance_ifexp("tuple", tuple_branch, current)
+        current = self._walk_isinstance_ifexp("list", list_branch, current)
 
-        walker_lambda = ast.Lambda(
-            args=ast.arguments(
-                posonlyargs=[],
-                args=[
-                    ast.arg(arg=walk_name),
-                    ast.arg(arg=value_name),
-                ],
-                vararg=None,
-                kwonlyargs=[],
-                kw_defaults=[],
-                kwarg=None,
-                defaults=[],
-            ),
-            body=current_expr,
-        )
+        # Wrap the body in lambdas to allow recursive dispatch via Y-combinator.
+        walker_lambda = ast.Lambda(args=self._walker_two_arg_args(), body=current)
         wrapper_lambda = ast.Lambda(
-            args=ast.arguments(
-                posonlyargs=[],
-                args=[
-                    ast.arg(arg=walk_name),
-                    ast.arg(arg=value_name),
-                ],
-                vararg=None,
-                kwonlyargs=[],
-                kw_defaults=[],
-                kwarg=None,
-                defaults=[],
-            ),
+            args=self._walker_two_arg_args(),
             body=ast.Call(
-                func=ast.Name(id=walk_name, ctx=ast.Load()),
+                func=ast.Name(id=_WALK, ctx=ast.Load()),
                 args=[
-                    ast.Name(id=walk_name, ctx=ast.Load()),
-                    ast.Name(id=value_name, ctx=ast.Load()),
+                    ast.Name(id=_WALK, ctx=ast.Load()),
+                    ast.Name(id=_VALUE, ctx=ast.Load()),
                 ],
                 keywords=[],
             ),
         )
-
         call_expr = ast.Call(
             func=wrapper_lambda,
             args=[walker_lambda, copy.deepcopy(instance_expr)],
@@ -576,6 +530,102 @@ class DataclassMixin:
         ast.fix_missing_locations(tuple_expr)
         return tuple_expr
 
+    def _rewrite_dataclass_replace_call(self, instance_class, target, node):
+        """Rewrite ``replace(obj, k=v, ...)`` into ``Cls(...)`` when possible.
+
+        Returns ``node`` unchanged if a ``**kwargs`` splat prevents resolution,
+        or an error-helper call when an unknown field is referenced.
+        """
+        if any(kw.arg is None for kw in node.keywords):
+            return node
+        field_specs = self._dataclass_field_specs(instance_class)
+        allowed_names = {field["name"] for field in field_specs}
+        keyword_names = {kw.arg for kw in node.keywords}
+        if keyword_names and not keyword_names.issubset(allowed_names):
+            self._needs_dataclass_replace_error_helper = True
+            result = ast.Call(
+                func=ast.Name(
+                    id="__ESBMC_dataclass_replace_invalid_field", ctx=ast.Load()
+                ),
+                args=[],
+                keywords=[],
+            )
+            self.ensure_all_locations(result, node)
+            ast.fix_missing_locations(result)
+            return result
+
+        replacements = {kw.arg: kw.value for kw in node.keywords}
+        ctor_args = []
+        for field in field_specs:
+            field_name = field["name"]
+            if field_name in replacements:
+                ctor_args.append(replacements[field_name])
+            else:
+                ctor_args.append(
+                    ast.Attribute(
+                        value=copy.deepcopy(target),
+                        attr=field_name,
+                        ctx=ast.Load(),
+                    )
+                )
+        result = ast.Call(
+            func=ast.Name(id=instance_class, ctx=ast.Load()),
+            args=ctor_args,
+            keywords=[],
+        )
+        self.ensure_all_locations(result, node)
+        ast.fix_missing_locations(result)
+        return result
+
+    def _rewrite_dataclass_fields_call(self, node, effective_class):
+        """Rewrite ``fields(Cls or instance)`` into a literal list of fields."""
+        self._needs_dataclass_field_helper = True
+        field_objs = [
+            ast.Call(
+                func=ast.Name(id="__ESBMC_DataclassField", ctx=ast.Load()),
+                args=[ast.Constant(value=field["name"])],
+                keywords=[],
+            )
+            for field in self._dataclass_field_specs(effective_class)
+        ]
+        result = ast.List(elts=field_objs, ctx=ast.Load())
+        self.ensure_all_locations(result, node)
+        ast.fix_missing_locations(result)
+        return result
+
+    def _rewrite_is_dataclass_call(self, node, target, class_name, instance_class):
+        if class_name is not None or instance_class is not None:
+            result = ast.Constant(value=True)
+            self.ensure_all_locations(result, node)
+            return result
+        if isinstance(target, ast.Constant):
+            result = ast.Constant(value=False)
+            self.ensure_all_locations(result, node)
+            return result
+        return node
+
+    # Handlers for ``replace(obj, ...)``-style APIs that need a resolved
+    # ``instance_class``. Looked up by ``_rewrite_dataclass_api_call``.
+    _DATACLASS_INSTANCE_HANDLERS = {
+        "asdict": "_build_asdict_expr",
+        "astuple": "_build_astuple_expr",
+        "replace": "_rewrite_dataclass_replace_call",
+    }
+
+    def _rewrite_dataclass_fields_kind(self, node, class_name, instance_class):
+        effective_class = class_name or instance_class
+        if effective_class is None:
+            return node
+        return self._rewrite_dataclass_fields_call(node, effective_class)
+
+    def _rewrite_dataclass_instance_kind(self, kind, node, target, instance_class):
+        if instance_class is None:
+            return node
+        handler_name = self._DATACLASS_INSTANCE_HANDLERS.get(kind)
+        if handler_name is None:
+            return node
+        return getattr(self, handler_name)(instance_class, target, node)
+
     def _rewrite_dataclass_api_call(self, node):
         kind = self._dataclass_api_kind(node)
         if kind is None or len(node.args) != 1:
@@ -586,83 +636,16 @@ class DataclassMixin:
         instance_class = self._dataclass_instance_type_of_expr(target)
 
         if kind == "is_dataclass":
-            if class_name is not None or instance_class is not None:
-                result = ast.Constant(value=True)
-                self.ensure_all_locations(result, node)
-                return result
-            if isinstance(target, ast.Constant):
-                result = ast.Constant(value=False)
-                self.ensure_all_locations(result, node)
-                return result
-
-        if kind == "fields":
-            effective_class = class_name or instance_class
-            if effective_class is not None:
-                self._needs_dataclass_field_helper = True
-                field_objs = []
-                for field in self._dataclass_field_specs(effective_class):
-                    field_objs.append(
-                        ast.Call(
-                            func=ast.Name(id="__ESBMC_DataclassField", ctx=ast.Load()),
-                            args=[ast.Constant(value=field["name"])],
-                            keywords=[],
-                        )
-                    )
-                result = ast.List(elts=field_objs, ctx=ast.Load())
-                self.ensure_all_locations(result, node)
-                ast.fix_missing_locations(result)
-                return result
-
-        if kind == "asdict" and instance_class is not None:
-            return self._build_asdict_expr(instance_class, target, node)
-
-        if kind == "astuple" and instance_class is not None:
-            return self._build_astuple_expr(instance_class, target, node)
-
-        if kind == "replace" and instance_class is not None:
-            if any(kw.arg is None for kw in node.keywords):
-                return node
-            field_specs = self._dataclass_field_specs(instance_class)
-            allowed_names = {field["name"] for field in field_specs}
-            keyword_names = {kw.arg for kw in node.keywords}
-            if keyword_names and not keyword_names.issubset(allowed_names):
-                self._needs_dataclass_replace_error_helper = True
-                result = ast.Call(
-                    func=ast.Name(
-                        id="__ESBMC_dataclass_replace_invalid_field", ctx=ast.Load()
-                    ),
-                    args=[],
-                    keywords=[],
-                )
-                self.ensure_all_locations(result, node)
-                ast.fix_missing_locations(result)
-                return result
-
-            replacements = {kw.arg: kw.value for kw in node.keywords}
-            ctor_args = []
-            for field in field_specs:
-                field_name = field["name"]
-                if field_name in replacements:
-                    ctor_args.append(replacements[field_name])
-                else:
-                    ctor_args.append(
-                        ast.Attribute(
-                            value=copy.deepcopy(target),
-                            attr=field_name,
-                            ctx=ast.Load(),
-                        )
-                    )
-
-            result = ast.Call(
-                func=ast.Name(id=instance_class, ctx=ast.Load()),
-                args=ctor_args,
-                keywords=[],
+            return self._rewrite_is_dataclass_call(
+                node, target, class_name, instance_class
             )
-            self.ensure_all_locations(result, node)
-            ast.fix_missing_locations(result)
-            return result
-
-        return node
+        if kind == "fields":
+            return self._rewrite_dataclass_fields_kind(
+                node, class_name, instance_class
+            )
+        return self._rewrite_dataclass_instance_kind(
+            kind, node, target, instance_class
+        )
 
     def is_dataclass(self, class_node):
         """Return True when a class is decorated with @dataclass.
@@ -824,13 +807,20 @@ class DataclassMixin:
             "match_args": True,
         }
 
-    def _field_spec(self, name, annotation, default_expr, factory_expr, kind, options):
+    def _field_spec(self, name, annotation, defaults, options):
+        """Return a normalized field spec.
+
+        ``defaults`` is the ``(default_expr, factory_expr)`` pair returned by
+        ``_parse_field_call``. ``options`` carries per-field flags plus
+        ``"kind"`` (one of ``instance``, ``initvar``, ``classvar``).
+        """
+        default_expr, factory_expr = defaults
         return {
             "name": name,
             "annotation": annotation,
             "default_expr": default_expr,
             "factory_expr": factory_expr,
-            "kind": kind,
+            "kind": options["kind"],
             "init": options.get("init", True),
             "repr": options.get("repr", True),
             "compare": options.get("compare", True),
@@ -901,14 +891,56 @@ class DataclassMixin:
             )
         if options["unsafe_hash"] and self._class_defines_name(class_node, "__hash__"):
             raise SyntaxError(
-                "dataclass option 'unsafe_hash=True' cannot be used when '__hash__' is explicitly defined"
+                "dataclass option 'unsafe_hash=True' cannot be used when "
+                "'__hash__' is explicitly defined"
             )
         return options
+
+    _FIELD_ALLOWED_OPTS = frozenset(
+        {"default", "default_factory", "init", "repr", "compare", "hash", "kw_only"}
+    )
+    _FIELD_BOOL_OPTS = frozenset({"init", "repr", "compare", "kw_only"})
+
+    def _is_field_call(self, call_node):
+        """Return True if ``call_node`` invokes ``dataclasses.field``."""
+        func = call_node.func
+        if isinstance(func, ast.Name):
+            return func.id in self._dataclass_field_names
+        return (
+            isinstance(func, ast.Attribute)
+            and func.attr == "field"
+            and isinstance(func.value, ast.Name)
+            and func.value.id in self.dataclasses_module_names
+        )
+
+    def _parse_field_hash_value(self, value):
+        if isinstance(value, ast.Constant) and value.value in (True, False, None):
+            return value.value
+        raise SyntaxError(
+            "dataclass field option 'hash' must be True, False or None"
+        )
+
+    def _apply_field_keyword(self, kw, state):
+        """Mutate ``state`` with the value carried by ``kw``.
+
+        ``state`` is the dict ``{"default_expr": ..., "factory_expr": ...,
+        "options": {...}}`` populated by ``_parse_field_call``.
+        """
+        if kw.arg == "default":
+            state["default_expr"] = kw.value
+        elif kw.arg == "default_factory":
+            state["factory_expr"] = kw.value
+        elif kw.arg in self._FIELD_BOOL_OPTS:
+            state["options"][kw.arg] = self._parse_dataclass_bool_option(
+                kw.value, kw.arg
+            )
+        else:  # kw.arg == "hash"
+            state["options"]["hash"] = self._parse_field_hash_value(kw.value)
 
     def _parse_field_call(self, default_value):
         """Decompose ``field(...)`` calls into (default_expr, factory_expr, options).
 
-        Returns a pair where ``default_expr`` is the AST node for the
+        Returns a triple where ``default_expr`` is the AST node for the
         ``default=`` value (or the original raw value when ``default_value`` is
         not a ``field(...)`` call), and ``factory_expr`` is the AST node passed
         as ``default_factory=`` (or ``None`` when not present).
@@ -921,68 +953,32 @@ class DataclassMixin:
           * desugar ``default_factory=`` into a per-instance call so each
             constructed object gets a fresh value.
         """
-        if not isinstance(default_value, ast.Call):
-            return default_value, None, {}
-
-        func = default_value.func
-        is_field = (
-            isinstance(func, ast.Name) and func.id in self._dataclass_field_names
-        ) or (
-            isinstance(func, ast.Attribute)
-            and func.attr == "field"
-            and isinstance(func.value, ast.Name)
-            and func.value.id in self.dataclasses_module_names
-        )
-        if not is_field:
+        if not isinstance(default_value, ast.Call) or not self._is_field_call(
+            default_value
+        ):
             return default_value, None, {}
 
         if default_value.args:
             raise SyntaxError("field(...) does not accept positional arguments")
 
-        default_expr = None
-        factory_expr = None
-        options = {}
+        state = {"default_expr": None, "factory_expr": None, "options": {}}
         seen = set()
-        allowed = {
-            "default",
-            "default_factory",
-            "init",
-            "repr",
-            "compare",
-            "hash",
-            "kw_only",
-        }
         for kw in default_value.keywords:
             if kw.arg is None:
                 raise SyntaxError("field(...) does not support **kwargs")
-            if kw.arg not in allowed:
+            if kw.arg not in self._FIELD_ALLOWED_OPTS:
                 raise SyntaxError(f"unsupported dataclass field option {kw.arg!r}")
             if kw.arg in seen:
                 raise SyntaxError(f"duplicate dataclass field option {kw.arg!r}")
             seen.add(kw.arg)
-            if kw.arg == "default":
-                default_expr = kw.value
-            elif kw.arg == "default_factory":
-                factory_expr = kw.value
-            elif kw.arg in ("init", "repr", "compare", "kw_only"):
-                options[kw.arg] = self._parse_dataclass_bool_option(kw.value, kw.arg)
-            elif kw.arg == "hash":
-                if isinstance(kw.value, ast.Constant) and kw.value.value in (
-                    True,
-                    False,
-                    None,
-                ):
-                    options["hash"] = kw.value.value
-                else:
-                    raise SyntaxError(
-                        "dataclass field option 'hash' must be True, False or None"
-                    )
-        if default_expr is not None and factory_expr is not None:
+            self._apply_field_keyword(kw, state)
+
+        if state["default_expr"] is not None and state["factory_expr"] is not None:
             raise SyntaxError(
                 "field(...) cannot specify both default and default_factory"
             )
         # ``field()`` with no default and no factory is a required field.
-        return default_expr, factory_expr, options
+        return state["default_expr"], state["factory_expr"], state["options"]
 
     def collect_fields(self, class_node):
         """Collect dataclass field specs.
@@ -1010,12 +1006,12 @@ class DataclassMixin:
             default_expr, factory_expr, per_field_options = self._parse_field_call(
                 stmt.value
             )
+            per_field_options = dict(per_field_options)
+            per_field_options["kind"] = field_kind
             field = self._field_spec(
                 stmt.target.id,
                 annotation,
-                default_expr,
-                factory_expr,
-                field_kind,
+                (default_expr, factory_expr),
                 per_field_options,
             )
             if dataclass_options["kw_only"] and field["kind"] in (
@@ -1036,24 +1032,9 @@ class DataclassMixin:
         fields.extend(inherited_fields)
         return fields, dataclass_options
 
-    def build_init(self, class_node, fields):
-        """Build __init__(self, ...) that assigns self.<field> = <field>.
-
-        Supports raw defaults (``x: int = 5``), ``field(default=...)`` and
-        ``field(default_factory=...)``.
-
-        Factory fields are exposed as ``__init__`` parameters with ``None`` as
-        default so signature ordering and defaults match expectations from the
-        dataclass preprocessor tests. The assignment remains a direct
-        ``self.<field> = <factory>()`` in the body.
-        """
-
-        args = [ast.arg(arg="self", annotation=None)]
-        defaults = []
-        body = []
-
-        # Parameters: instance fields plus InitVars.
-        # Compute first defaulted index over this filtered view.
+    @staticmethod
+    def _partition_init_fields(fields):
+        """Split fields into (param_fields, pos_fields, kwonly_fields, initvar_names)."""
         param_fields = [
             field for field in fields if field["kind"] != "classvar" and field["init"]
         ]
@@ -1062,29 +1043,40 @@ class DataclassMixin:
         ]
         pos_fields = [field for field in param_fields if not field["kw_only"]]
         kwonly_fields = [field for field in param_fields if field["kw_only"]]
+        return param_fields, pos_fields, kwonly_fields, initvar_names
 
+    @staticmethod
+    def _build_init_positional_defaults(pos_fields):
+        """Return positional ``defaults`` list mirroring trailing pos_fields."""
         first_default_idx = None
         for index, field in enumerate(pos_fields):
-            has_default = (
-                field["default_expr"] is not None or field["factory_expr"] is not None
-            )
-            if has_default:
+            if field["default_expr"] is not None or field["factory_expr"] is not None:
                 first_default_idx = index
                 break
+        if first_default_idx is None:
+            return []
+        defaults = []
+        for field in pos_fields[first_default_idx:]:
+            default_expr = field["default_expr"]
+            if default_expr is not None:
+                if not isinstance(default_expr, (ast.Constant, ast.Name)):
+                    raise SyntaxError(
+                        "unsupported dataclass default expression: "
+                        "synthesized __init__ defaults must be a Constant "
+                        "or a simple Name"
+                    )
+                defaults.append(copy.deepcopy(default_expr))
+            else:
+                defaults.append(ast.Constant(value=None))
+        return defaults
 
-        if first_default_idx is not None:
-            for field in pos_fields[first_default_idx:]:
-                default_expr = field["default_expr"]
-                if default_expr is not None:
-                    if not isinstance(default_expr, (ast.Constant, ast.Name)):
-                        raise SyntaxError(
-                            "unsupported dataclass default expression: "
-                            "synthesized __init__ defaults must be a Constant "
-                            "or a simple Name"
-                        )
-                    defaults.append(copy.deepcopy(default_expr))
-                else:
-                    defaults.append(ast.Constant(value=None))
+    def _build_init_args(self, class_node, fields):
+        """Return (args, defaults, kwonlyargs, kw_defaults, initvar_names)."""
+        param_fields, pos_fields, kwonly_fields, initvar_names = (
+            self._partition_init_fields(fields)
+        )
+        args = [ast.arg(arg="self", annotation=None)]
+        defaults = self._build_init_positional_defaults(pos_fields)
         kwonlyargs = []
         kw_defaults = []
         for field in param_fields:
@@ -1101,98 +1093,124 @@ class DataclassMixin:
                     kw_defaults.append(None)
             else:
                 args.append(arg)
-
         # Register synthesized dataclass __init__ keyword-only parameters
         # before generic visiting so call-site validation can consume them.
         self.functionKwonlyParams[f"{class_node.name}.__init__"] = [
             field["name"] for field in kwonly_fields
         ]
+        return args, defaults, kwonlyargs, kw_defaults, initvar_names
 
-        # Body: assign every field, in declaration order. Factory fields use
-        # ``self.<field> = <factory>()`` directly; other fields copy from the
-        # corresponding parameter.
-        #
-        # Emit plain ``Assign`` statements rather than ``AnnAssign`` for
-        # ``self.<field>``. Optional-typed instance attributes are already
-        # handled by the normal class/parameter typing paths, whereas an
-        # explicit ``self.x: Optional[T] = ...`` here can confuse later
-        # arithmetic over values proven non-None by guards (see optional7).
+    def _build_init_field_rhs(self, class_node, field):
+        """Return the RHS expression for an instance field assignment."""
+        field_name = field["name"]
+        if field["factory_expr"] is not None:
+            # Factory fields are always assigned via the factory call;
+            # they are not exposed as __init__ parameters.
+            return ast.Call(
+                func=copy.deepcopy(field["factory_expr"]), args=[], keywords=[]
+            )
+        if field["init"]:
+            return self.create_name_node(field_name, ast.Load(), class_node)
+        rhs = copy.deepcopy(field["default_expr"])
+        if rhs is None:
+            raise SyntaxError(
+                f"field(init=False) for instance field {field_name!r} "
+                "requires a default or default_factory"
+            )
+        return rhs
+
+    def _build_init_field_assigns(self, class_node, fields):
+        """Build ``self.<field> = ...`` assignments for instance fields.
+
+        Emits plain ``Assign`` statements rather than ``AnnAssign`` for
+        ``self.<field>``. Optional-typed instance attributes are already
+        handled by the normal class/parameter typing paths, whereas an
+        explicit ``self.x: Optional[T] = ...`` here can confuse later
+        arithmetic over values proven non-None by guards (see optional7).
+        """
+        body = []
         for field in fields:
-            field_name = field["name"]
             if field["kind"] != "instance":
                 continue
-            if field["factory_expr"] is not None:
-                # Factory fields are always assigned via the factory call;
-                # they are not exposed as __init__ parameters.
-                rhs = ast.Call(
-                    func=copy.deepcopy(field["factory_expr"]), args=[], keywords=[]
-                )
-            else:
-                if field["init"]:
-                    rhs = self.create_name_node(field_name, ast.Load(), class_node)
-                else:
-                    rhs = copy.deepcopy(field["default_expr"])
-                    if rhs is None:
-                        raise SyntaxError(
-                            f"field(init=False) for instance field {field_name!r} "
-                            "requires a default or default_factory"
-                        )
-
             assign_stmt = ast.Assign(
                 targets=[
                     ast.Attribute(
                         value=self.create_name_node("self", ast.Load(), class_node),
-                        attr=field_name,
+                        attr=field["name"],
                         ctx=ast.Store(),
                     )
                 ],
-                value=rhs,
+                value=self._build_init_field_rhs(class_node, field),
             )
             self.ensure_all_locations(assign_stmt, class_node)
             body.append(assign_stmt)
+        return body
 
+    def _build_post_init_call_stmt(self, class_node, initvar_names):
+        """Return an ``Expr`` calling ``__post_init__`` or ``None``.
+
+        When the class defines ``__post_init__`` directly, the call is
+        addressed as ``ClassName.__post_init__(self, *initvars)`` so the
+        unbound-method form is preserved. Otherwise, if the class merely
+        inherits a ``__post_init__`` (detected by behavior), the call uses
+        the bound form ``self.__post_init__(*initvars)``.
+        """
         post_init_method = self._get_post_init_method(class_node)
         if post_init_method is not None:
-            post_init_call = ast.Expr(
-                value=ast.Call(
-                    func=ast.Attribute(
-                        value=self.create_name_node(
-                            class_node.name, ast.Load(), class_node
-                        ),
-                        attr="__post_init__",
-                        ctx=ast.Load(),
+            call = ast.Call(
+                func=ast.Attribute(
+                    value=self.create_name_node(
+                        class_node.name, ast.Load(), class_node
                     ),
-                    args=[self.create_name_node("self", ast.Load(), class_node)]
-                    + [
-                        self.create_name_node(initvar_name, ast.Load(), class_node)
-                        for initvar_name in initvar_names
-                    ],
-                    keywords=[],
-                )
+                    attr="__post_init__",
+                    ctx=ast.Load(),
+                ),
+                args=[self.create_name_node("self", ast.Load(), class_node)]
+                + [
+                    self.create_name_node(name, ast.Load(), class_node)
+                    for name in initvar_names
+                ],
+                keywords=[],
             )
-            self.ensure_all_locations(post_init_call, class_node)
-            body.append(post_init_call)
         elif self._class_has_post_init_behavior(class_node):
-            post_init_call = ast.Expr(
-                value=ast.Call(
-                    func=ast.Attribute(
-                        value=self.create_name_node("self", ast.Load(), class_node),
-                        attr="__post_init__",
-                        ctx=ast.Load(),
-                    ),
-                    args=[
-                        self.create_name_node(initvar_name, ast.Load(), class_node)
-                        for initvar_name in initvar_names
-                    ],
-                    keywords=[],
-                )
+            call = ast.Call(
+                func=ast.Attribute(
+                    value=self.create_name_node("self", ast.Load(), class_node),
+                    attr="__post_init__",
+                    ctx=ast.Load(),
+                ),
+                args=[
+                    self.create_name_node(name, ast.Load(), class_node)
+                    for name in initvar_names
+                ],
+                keywords=[],
             )
-            self.ensure_all_locations(post_init_call, class_node)
-            body.append(post_init_call)
+        else:
+            return None
+        stmt = ast.Expr(value=call)
+        self.ensure_all_locations(stmt, class_node)
+        return stmt
 
+    def build_init(self, class_node, fields):
+        """Build __init__(self, ...) that assigns self.<field> = <field>.
+
+        Supports raw defaults (``x: int = 5``), ``field(default=...)`` and
+        ``field(default_factory=...)``.
+
+        Factory fields are exposed as ``__init__`` parameters with ``None`` as
+        default so signature ordering and defaults match expectations from the
+        dataclass preprocessor tests. The assignment remains a direct
+        ``self.<field> = <factory>()`` in the body.
+        """
+        args, defaults, kwonlyargs, kw_defaults, initvar_names = (
+            self._build_init_args(class_node, fields)
+        )
+        body = self._build_init_field_assigns(class_node, fields)
+        post_init_stmt = self._build_post_init_call_stmt(class_node, initvar_names)
+        if post_init_stmt is not None:
+            body.append(post_init_stmt)
         if not body:
             body = [ast.Pass()]
-
         init_func = ast.FunctionDef(
             name="__init__",
             args=ast.arguments(
@@ -1474,41 +1492,15 @@ class DataclassMixin:
         ast.fix_missing_locations(metadata_assign)
         return metadata_assign
 
-    def expand_dataclass(self, class_node):
-        """Inject a minimal generated __init__ for dataclass-decorated classes."""
-        if not self.is_dataclass(class_node):
-            return class_node
+    @staticmethod
+    def _validate_dataclass_field_ordering(class_node, fields):
+        """Raise SyntaxError if a non-default field follows a defaulted one.
 
-        if any(
-            isinstance(member, ast.FunctionDef) and member.name == "__init__"
-            for member in class_node.body
-        ):
-            return class_node
-
-        fields, dataclass_options = self.collect_fields(class_node)
-        if any(field["kind"] == "initvar" for field in fields):
-            self._needs_dataclass_initvar_import = True
-        post_init_method = self._get_post_init_method(class_node)
-        active_fields = [
-            field for field in fields if field["kind"] in ("instance", "initvar")
-        ]
-        has_post_init_behavior = self._class_has_post_init_behavior(class_node)
-        has_classvars = any(f["kind"] == "classvar" for f in fields)
-        if not active_fields and not has_post_init_behavior and not has_classvars:
-            return class_node
-
-        self._validate_post_init_signature(class_node, fields, post_init_method)
-        if has_post_init_behavior:
-            self._classes_with_post_init.add(class_node.name)
-
-        # Validate field ordering: once a field has a default (raw,
-        # ``field(default=...)`` or ``field(default_factory=...)``), every
-        # subsequent field must also have one. We report this as a
-        # SyntaxError with a "non-default argument follows default argument"
-        # style message.
+        Mirrors CPython's ``non-default argument follows default argument``
+        diagnostic. Class variables and keyword-only fields are exempt.
+        """
         seen_default = False
         for field in fields:
-            field_name = field["name"]
             if field["kind"] == "classvar" or field["kw_only"]:
                 continue
             has_default = (
@@ -1516,25 +1508,27 @@ class DataclassMixin:
             )
             if seen_default and not has_default:
                 raise SyntaxError(
-                    f"non-default argument {field_name!r} follows default argument "
-                    f"in dataclass {class_node.name!r} "
+                    f"non-default argument {field['name']!r} follows default "
+                    f"argument in dataclass {class_node.name!r} "
                     f"(line {class_node.lineno})"
                 )
             if has_default:
                 seen_default = True
 
-        # Preserve field annotations for later attribute-type lookups even
-        # though the synthesized ``__init__`` now uses plain Assign nodes.
+    def _record_dataclass_attr_annotations(self, class_node, fields):
+        """Preserve instance-field annotations for later attribute lookups."""
         if class_node.name not in self.class_attr_annotations:
             self.class_attr_annotations[class_node.name] = {}
         for field in fields:
-            field_name = field["name"]
-            annotation = field["annotation"]
             if field["kind"] != "instance":
                 continue
+            annotation = field["annotation"]
             if annotation is not None:
-                self.class_attr_annotations[class_node.name][field_name] = annotation
+                self.class_attr_annotations[class_node.name][field["name"]] = annotation
 
+    @staticmethod
+    def _strip_field_annassigns(class_node, fields):
+        """Remove ``x: T [= ...]`` declarations now subsumed by ``__init__``."""
         field_names = {
             field["name"]
             for field in fields
@@ -1550,41 +1544,48 @@ class DataclassMixin:
             )
         ]
 
-        # Insert __init__ after docstring (if present) to preserve class docstring semantics
-        insert_index = 0
-        if class_node.body:
-            first_stmt = class_node.body[0]
-            if isinstance(first_stmt, ast.Expr) and (
-                (
-                    isinstance(first_stmt.value, ast.Constant)
-                    and isinstance(first_stmt.value.value, str)
-                )
-                or isinstance(first_stmt.value, ast.Str)
-            ):
-                insert_index = 1
-        class_node.body.insert(
-            insert_index,
+    @staticmethod
+    def _compute_init_insert_index(class_node):
+        """Return 1 if the class body opens with a docstring, else 0."""
+        if not class_node.body:
+            return 0
+        first_stmt = class_node.body[0]
+        if isinstance(first_stmt, ast.Expr) and (
             (
-                self.build_init(class_node, fields)
-                if dataclass_options["init"]
-                else ast.Pass()
-            ),
+                isinstance(first_stmt.value, ast.Constant)
+                and isinstance(first_stmt.value.value, str)
+            )
+            or isinstance(first_stmt.value, ast.Str)
+        ):
+            return 1
+        return 0
+
+    @staticmethod
+    def _class_defines_method(class_node, method_name):
+        return any(
+            isinstance(member, ast.FunctionDef) and member.name == method_name
+            for member in class_node.body
         )
-        if dataclass_options["init"] is False:
-            class_node.body.pop(insert_index)
+
+    def _inject_dataclass_synth_methods(
+        self, class_node, fields, dataclass_options, insert_index
+    ):
+        """Insert __init__/fields metadata/__repr__/__eq__/order/__hash__."""
+        if dataclass_options["init"]:
+            class_node.body.insert(
+                insert_index, self.build_init(class_node, fields)
+            )
         class_node.body.insert(
             insert_index + 1, self.build_dataclass_fields_metadata(class_node, fields)
         )
-        if dataclass_options["repr"] and not any(
-            isinstance(member, ast.FunctionDef) and member.name == "__repr__"
-            for member in class_node.body
+        if dataclass_options["repr"] and not self._class_defines_method(
+            class_node, "__repr__"
         ):
             class_node.body.insert(
                 insert_index + 2, self.build_dataclass_repr(class_node, fields)
             )
-        if dataclass_options["eq"] and not any(
-            isinstance(member, ast.FunctionDef) and member.name == "__eq__"
-            for member in class_node.body
+        if dataclass_options["eq"] and not self._class_defines_method(
+            class_node, "__eq__"
         ):
             class_node.body.insert(
                 insert_index + 2, self.build_dataclass_eq(class_node, fields)
@@ -1602,21 +1603,55 @@ class DataclassMixin:
                 if method_name not in existing:
                     class_node.body.insert(
                         insert_index + 2,
-                        self.build_dataclass_order(class_node, fields, method_name, op),
+                        self.build_dataclass_order(
+                            class_node, fields, method_name, op
+                        ),
                     )
         should_generate_hash = dataclass_options["unsafe_hash"] or (
             dataclass_options["eq"] and dataclass_options["frozen"]
         )
-        if should_generate_hash and not any(
-            isinstance(member, ast.FunctionDef) and member.name == "__hash__"
-            for member in class_node.body
+        if should_generate_hash and not self._class_defines_method(
+            class_node, "__hash__"
         ):
             class_node.body.insert(
                 insert_index + 2, self.build_dataclass_hash(class_node, fields)
             )
+
+    def expand_dataclass(self, class_node):
+        """Inject a minimal generated __init__ for dataclass-decorated classes."""
+        if not self.is_dataclass(class_node):
+            return class_node
+        if self._class_defines_method(class_node, "__init__"):
+            return class_node
+
+        fields, dataclass_options = self.collect_fields(class_node)
+        if any(field["kind"] == "initvar" for field in fields):
+            self._needs_dataclass_initvar_import = True
+
+        active_fields = [
+            field for field in fields if field["kind"] in ("instance", "initvar")
+        ]
+        has_post_init_behavior = self._class_has_post_init_behavior(class_node)
+        has_classvars = any(f["kind"] == "classvar" for f in fields)
+        if not active_fields and not has_post_init_behavior and not has_classvars:
+            return class_node
+
+        post_init_method = self._get_post_init_method(class_node)
+        self._validate_post_init_signature(class_node, fields, post_init_method)
+        if has_post_init_behavior:
+            self._classes_with_post_init.add(class_node.name)
+
+        self._validate_dataclass_field_ordering(class_node, fields)
+        self._record_dataclass_attr_annotations(class_node, fields)
+        self._strip_field_annassigns(class_node, fields)
+
+        insert_index = self._compute_init_insert_index(class_node)
+        self._inject_dataclass_synth_methods(
+            class_node, fields, dataclass_options, insert_index
+        )
+
         self._dataclass_class_specs[class_node.name] = {
             "fields": copy.deepcopy(fields),
             "options": copy.deepcopy(dataclass_options),
         }
         return class_node
-
