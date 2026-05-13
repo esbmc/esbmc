@@ -38,7 +38,8 @@ and every backend (symex, SMT, goto2c) consumes. It replaces the older
 | `irep2_expr.h` / `irep2_expr.cpp` | Concrete expression classes (`constant_int2t`, `symbol2t`, `add2t`, `if2t`, `code_assign2t`, ...) and their *data* base classes (`constant_int_data`, `arith_2ops`, ...). |
 | `irep2_utils.h` | Inline predicates and helpers (`is_bv_type`, `is_number_type`, `is_scalar_type`, `is_multi_dimensional_array`, simplification helpers). |
 | `irep2_templates.h` | CRTP-style scaffolding (`register_irep_methods`, `do_type2string`, `do_get_sub_expr`) that materialises `pretty`, `cmp`, `lt`, `do_crc`, `hash`, `clone`, and operand iteration for each node. |
-| `irep2_templates_expr.h`, `irep2_templates_types.h`, `irep2_template_utils.h`, `irep2_meta_templates.h` | Per-field trait machinery (`field_traits`, `expr2t_traits`, `type2t_traits`) and the metaprogramming that walks them. |
+| `irep2_template_utils.h`, `irep2_meta_templates.h` | Per-field trait machinery (`field_traits`, `expr2t_traits`, `type2t_traits`) and the metaprogramming that walks them. |
+| `irep2_instantiate.h` | `ESBMC_INSTANTIATE_TYPE` / `ESBMC_INSTANTIATE_EXPR` macros used by the per-node `templates/*.cpp` to force out-of-line emission of the `irep_methods2` chain. Replaces the historic `irep_typedefs0..6` hand-unrolled family. |
 | `templates/*.cpp` | Out-of-line explicit instantiations of the per-node template methods (split into several TUs to keep compile times manageable). |
 | `CMakeLists.txt` | Builds the `irep2` static library (depends on `bigint`, Boost, `fmt`, and privately `crypto_hash`). |
 
