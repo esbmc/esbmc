@@ -4,12 +4,11 @@
 #include <goto-programs/goto_functions.h>
 #include <goto-programs/goto_loops.h>
 #include <util/guard.h>
-#include <util/options.h>
 #include <irep2/irep2_expr.h>
 
-void goto_k_induction(goto_functionst &goto_functions, optionst &options);
+void goto_k_induction(goto_functionst &goto_functions);
 
-void goto_termination(goto_functionst &goto_functions, optionst &options);
+void goto_termination(goto_functionst &goto_functions);
 
 class goto_k_inductiont : public goto_loopst
 {
@@ -17,22 +16,14 @@ public:
   goto_k_inductiont(
     const irep_idt &_function_name,
     goto_functionst &_goto_functions,
-    goto_functiont &_goto_function,
-    optionst &_options)
-    : goto_loopst(_function_name, _goto_functions, _goto_function),
-      options(_options)
+    goto_functiont &_goto_function)
+    : goto_loopst(_function_name, _goto_functions, _goto_function)
   {
     if (function_loops.size())
       goto_k_induction();
   }
 
 protected:
-  /// Reference to the BMC driver's options so the pass can flip
-  /// `disable-inductive-step` when it encounters a loop that the IS
-  /// cannot soundly cover (today: pointer-only loops under
-  /// --add-symex-value-sets).
-  optionst &options;
-
   typedef std::unordered_map<unsigned, guardt> guardst;
   guardst guards;
 

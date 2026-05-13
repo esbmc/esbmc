@@ -5,20 +5,20 @@
 #include <util/i2string.h>
 #include <util/std_expr.h>
 
-void goto_k_induction(goto_functionst &goto_functions, optionst &options)
+void goto_k_induction(goto_functionst &goto_functions)
 {
   Forall_goto_functions (it, goto_functions)
     if (it->second.body_available)
-      goto_k_inductiont(it->first, goto_functions, it->second, options);
+      goto_k_inductiont(it->first, goto_functions, it->second);
 
   goto_functions.update();
 }
 
-void goto_termination(goto_functionst &goto_functions, optionst &options)
+void goto_termination(goto_functionst &goto_functions)
 {
   Forall_goto_functions (it, goto_functions)
     if (it->second.body_available)
-      goto_k_inductiont(it->first, goto_functions, it->second, options);
+      goto_k_inductiont(it->first, goto_functions, it->second);
   goto_functions.update();
 
   auto function = goto_functions.function_map.find("__ESBMC_main");
@@ -61,35 +61,6 @@ void goto_k_inductiont::goto_k_induction()
     if (function_loop.get_modified_loop_vars().empty())
       continue;
 
-    if (
-      config.options.get_bool_option("add-symex-value-sets") &&
-      function_loop.contains_only_pointers())
-    {
-      // The loop's only modified vars are pointers. Under
-      // --add-symex-value-sets the nondet havoc for pointers is suppressed
-      // (make_nondet_assign skips pointer LHSs), so we'd produce a
-      // degenerate inductive step that havocs nothing. Skip the whole
-      // loop transformation and disable IS for the run — matches the
-      // precedent for unsupported constructs (recursion in
-      // symex_function.cpp:43, threads in builtin_functions/threads.cpp:129).
-      // Tell the user once so the missing IS coverage isn't a silent
-      // surprise; if IS was already disabled (or never enabled) by an
-      // earlier construct, the warnings just stack up by loop.
-      const auto &loc = function_loop.get_original_loop_head()->location;
-      log_warning(
-        "k-induction: skipping loop at {} (function {}) — all modified "
-        "variables are pointers and --add-symex-value-sets is enabled.",
-        loc.as_string(),
-        id2string(function_name));
-      if (!options.get_bool_option("disable-inductive-step"))
-      {
-        log_warning(
-          "k-induction: disabling inductive step because a pointer-only "
-          "loop cannot be inductively havoc'd under --add-symex-value-sets.");
-        options.set_option("disable-inductive-step", true);
-      }
-      continue;
-    }
     // Start the loop conversion
     convert_finite_loop(function_loop);
   }
@@ -261,13 +232,6 @@ void goto_k_inductiont::make_nondet_assign(
   goto_programt dest;
   for (auto const &lhs : loop_vars)
   {
-    // do not assign nondeterministic value to pointers if we assume
-    // objects extracted from the value set analysis
-    if (
-      config.options.get_bool_option("add-symex-value-sets") &&
-      is_pointer_type(lhs))
-      continue;
-
     // Generate a nondeterministic value for the loop variable
     expr2tc rhs = gen_nondet(lhs->type);
 
