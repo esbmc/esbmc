@@ -154,186 +154,38 @@ std::string type_to_string(const irep_idt &theval, int)
   return theval.as_string();
 }
 
-bool do_type_cmp(const bool &side1, const bool &side2)
-{
-  return (side1 == side2) ? true : false;
-}
-
-bool do_type_cmp(const unsigned int &side1, const unsigned int &side2)
-{
-  return (side1 == side2) ? true : false;
-}
-
-bool do_type_cmp(
-  const sideeffect_data::allockind &side1,
-  const sideeffect_data::allockind &side2)
-{
-  return (side1 == side2) ? true : false;
-}
-
-bool do_type_cmp(
-  const constant_string_data::kindt &side1,
-  const constant_string_data::kindt &side2)
-{
-  return side1 == side2;
-}
-
-bool do_type_cmp(
-  const symbol_data::renaming_level &side1,
-  const symbol_data::renaming_level &side2)
-{
-  return (side1 == side2) ? true : false;
-}
-
-bool do_type_cmp(const BigInt &side1, const BigInt &side2)
-{
-  // BigInt has its own equality operator.
-  return (side1 == side2) ? true : false;
-}
-
-bool do_type_cmp(const fixedbvt &side1, const fixedbvt &side2)
-{
-  return (side1 == side2) ? true : false;
-}
-
-bool do_type_cmp(const ieee_floatt &side1, const ieee_floatt &side2)
-{
-  return (side1 == side2) ? true : false;
-}
-
-bool do_type_cmp(
-  const std::vector<expr2tc> &side1,
-  const std::vector<expr2tc> &side2)
-{
-  return (side1 == side2);
-}
-
-bool do_type_cmp(
-  const std::vector<type2tc> &side1,
-  const std::vector<type2tc> &side2)
-{
-  return (side1 == side2);
-}
-
-bool do_type_cmp(
-  const std::vector<irep_idt> &side1,
-  const std::vector<irep_idt> &side2)
-{
-  return (side1 == side2);
-}
-
-bool do_type_cmp(const expr2tc &side1, const expr2tc &side2)
-{
-  if (side1.get() == side2.get())
-    return true; // Catch null
-  else if (side1.get() == nullptr || side2.get() == nullptr)
-    return false;
-  else
-    return (side1 == side2);
-}
-
-bool do_type_cmp(const type2tc &side1, const type2tc &side2)
-{
-  if (side1.get() == side2.get())
-    return true; // both null ptr check
-  if (side1.get() == nullptr || side2.get() == nullptr)
-    return false; // One of them is null, the other isn't
-  return (side1 == side2);
-}
-
-bool do_type_cmp(const irep_idt &side1, const irep_idt &side2)
-{
-  return (side1 == side2);
-}
+// Trivial do_type_cmp overloads (bool, unsigned int, the small enums,
+// BigInt, fixedbvt, ieee_floatt, std::vector<expr2tc|type2tc|irep_idt>,
+// expr2tc, type2tc, irep_idt) are covered by the primary template
+// `template <class T> bool do_type_cmp(const T &, const T &)` in
+// irep2_template_utils.h, which forwards to `operator==`. The two
+// overloads below are dummies: the recursive walk only reaches a
+// type_ids / expr_ids field when the parent base class has already
+// short-circuited equality on the id, so the answer is invariantly
+// true and we save an enum compare per call.
 
 bool do_type_cmp(const type2t::type_ids &, const type2t::type_ids &)
 {
-  return true; // Dummy field comparison.
+  return true;
 }
 
 bool do_type_cmp(const expr2t::expr_ids &, const expr2t::expr_ids &)
 {
-  return true; // Dummy field comparison.
+  return true;
 }
 
-int do_type_lt(const bool &side1, const bool &side2)
-{
-  if (side1 < side2)
-    return -1;
-  else if (side2 < side1)
-    return 1;
-  else
-    return 0;
-}
-
-int do_type_lt(const unsigned int &side1, const unsigned int &side2)
-{
-  if (side1 < side2)
-    return -1;
-  else if (side2 < side1)
-    return 1;
-  else
-    return 0;
-}
-
-int do_type_lt(
-  const sideeffect_data::allockind &side1,
-  const sideeffect_data::allockind &side2)
-{
-  if (side1 < side2)
-    return -1;
-  else if (side2 < side1)
-    return 1;
-  else
-    return 0;
-}
-
-int do_type_lt(
-  const constant_string_data::kindt &side1,
-  const constant_string_data::kindt &side2)
-{
-  if (side1 < side2)
-    return -1;
-  else if (side2 < side1)
-    return 1;
-  else
-    return 0;
-}
-
-int do_type_lt(
-  const symbol_data::renaming_level &side1,
-  const symbol_data::renaming_level &side2)
-{
-  if (side1 < side2)
-    return -1;
-  else if (side2 < side1)
-    return 1;
-  else
-    return 0;
-}
+// Trivial do_type_lt overloads (bool, unsigned int, the small enums,
+// fixedbvt, ieee_floatt, irep_idt, std::vector<irep_idt>) are covered
+// by the primary template `template <class T> int do_type_lt(const T &,
+// const T &)` in irep2_template_utils.h, which returns the trinary
+// (-1/0/1) of operator<. The non-trivial cases below need their own
+// dispatch.
 
 int do_type_lt(const BigInt &side1, const BigInt &side2)
 {
-  // BigInt also has its own less than comparator.
+  // BigInt has a native compare() that already returns the trinary,
+  // saving one operator< call vs the primary template.
   return side1.compare(side2);
-}
-
-int do_type_lt(const fixedbvt &side1, const fixedbvt &side2)
-{
-  if (side1 < side2)
-    return -1;
-  else if (side1 > side2)
-    return 1;
-  return 0;
-}
-
-int do_type_lt(const ieee_floatt &side1, const ieee_floatt &side2)
-{
-  if (side1 < side2)
-    return -1;
-  else if (side1 > side2)
-    return 1;
-  return 0;
 }
 
 int do_type_lt(
@@ -376,17 +228,6 @@ int do_type_lt(
   return 0;
 }
 
-int do_type_lt(
-  const std::vector<irep_idt> &side1,
-  const std::vector<irep_idt> &side2)
-{
-  if (side1 < side2)
-    return -1;
-  else if (side2 < side1)
-    return 1;
-  return 0;
-}
-
 int do_type_lt(const expr2tc &side1, const expr2tc &side2)
 {
   if (side1.get() == side2.get())
@@ -411,15 +252,6 @@ int do_type_lt(const type2tc &side1, const type2tc &side2)
     return side1->ltchecked(*side2.get());
 }
 
-int do_type_lt(const irep_idt &side1, const irep_idt &side2)
-{
-  if (side1 < side2)
-    return -1;
-  if (side2 < side1)
-    return 1;
-  return 0;
-}
-
 int do_type_lt(const type2t::type_ids &, const type2t::type_ids &)
 {
   return 0; // Dummy field comparison
@@ -430,64 +262,14 @@ int do_type_lt(const expr2t::expr_ids &, const expr2t::expr_ids &)
   return 0; // Dummy field comparison
 }
 
-size_t do_type_crc(const bool &theval)
-{
-  return std::hash<bool>{}(theval);
-}
-
-void do_type_hash(const bool &thebool, crypto_hash &hash)
-{
-  if (thebool)
-  {
-    uint8_t tval = 1;
-    hash.ingest(&tval, sizeof(tval));
-  }
-  else
-  {
-    uint8_t tval = 0;
-    hash.ingest(&tval, sizeof(tval));
-  }
-}
-
-size_t do_type_crc(const unsigned int &theval)
-{
-  return std::hash<unsigned int>{}(theval);
-}
-
-void do_type_hash(const unsigned int &theval, crypto_hash &hash)
-{
-  hash.ingest((void *)&theval, sizeof(theval));
-}
-
-size_t do_type_crc(const sideeffect_data::allockind &theval)
-{
-  return std::hash<uint8_t>{}(static_cast<uint8_t>(theval));
-}
-
-void do_type_hash(const sideeffect_data::allockind &theval, crypto_hash &hash)
-{
-  hash.ingest((void *)&theval, sizeof(theval));
-}
-
-size_t do_type_crc(const constant_string_data::kindt &theval)
-{
-  return std::hash<uint8_t>{}(theval);
-}
-
-void do_type_hash(const constant_string_data::kindt &theval, crypto_hash &hash)
-{
-  hash.ingest((void *)&theval, sizeof(theval));
-}
-
-size_t do_type_crc(const symbol_data::renaming_level &theval)
-{
-  return std::hash<uint8_t>{}(theval);
-}
-
-void do_type_hash(const symbol_data::renaming_level &theval, crypto_hash &hash)
-{
-  hash.ingest((void *)&theval, sizeof(theval));
-}
+// Trivial do_type_crc / do_type_hash overloads for bool, unsigned int
+// and the small enums (sideeffect_data::allockind,
+// constant_string_data::kindt, symbol_data::renaming_level) are
+// covered by the primary templates in irep2_template_utils.h:
+// std::hash<T> (or std::hash<underlying_type_t<T>> for enums) for crc
+// and raw POD ingestion for hash. The two *_ids dummies and the rest
+// of the catalogue (BigInt, fixedbvt, ieee_floatt, expr2tc, type2tc,
+// irep_idt, vectors) keep their explicit bodies below.
 
 // BigInt::dump writes only the magnitude (most-significant-byte first, left-
 // padded with zeros) and reports false when the supplied buffer is too small.

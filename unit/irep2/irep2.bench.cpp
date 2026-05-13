@@ -256,3 +256,56 @@ TEST_CASE("irep2 microbench: array/vector type construction", "[bench]")
     return array_type2tc(subtype, add_size, false);
   };
 }
+
+TEST_CASE("irep2 microbench: cmp / lt on real nodes", "[bench]")
+{
+  config.ansi_c.word_size = 32;
+
+  // operator== and operator< dispatch through the irep_methods2 fold,
+  // which calls do_type_cmp / do_type_lt for each field. The benches
+  // below stress those field-type dispatches across the catalogue:
+  //
+  //  * bv_type2t       — unsigned int + type_ids
+  //  * pointer_type2t  — type2tc + bool + type_ids
+  //  * symbol2t        — irep_idt + enum (renaming_level) + several uint
+  //  * struct_type2t   — std::vector<type2tc> + std::vector<irep_idt>
+  //  * add2t           — expr2tc x2 + type2tc
+  //
+  // Identical (structurally-equal) pairs to exercise the equality-true
+  // path; distinct pairs to exercise the early-exit-on-mismatch path.
+
+  type2tc bv32_a = unsignedbv_type2tc(32);
+  type2tc bv32_b = unsignedbv_type2tc(32);
+  type2tc bv64 = unsignedbv_type2tc(64);
+
+  BENCHMARK("operator==(bv32, bv32) — equal") { return bv32_a == bv32_b; };
+  BENCHMARK("operator==(bv32, bv64) — width differs")
+  {
+    return bv32_a == bv64;
+  };
+  BENCHMARK("operator<(bv32, bv64)") { return bv32_a < bv64; };
+
+  type2tc ptr_a = pointer_type2tc(bv32_a);
+  type2tc ptr_b = pointer_type2tc(bv32_a);
+  BENCHMARK("operator==(ptr, ptr) — equal") { return ptr_a == ptr_b; };
+
+  expr2tc sym_a = symbol2tc(bv32_a, "some_quite_long_symbol_name");
+  expr2tc sym_b = symbol2tc(bv32_a, "some_quite_long_symbol_name");
+  expr2tc sym_c = symbol2tc(bv32_a, "different_symbol_name_here");
+  BENCHMARK("operator==(symbol, symbol) — equal") { return sym_a == sym_b; };
+  BENCHMARK("operator==(symbol, symbol) — name differs")
+  {
+    return sym_a == sym_c;
+  };
+
+  std::vector<type2tc> mtypes{bv32_a, bv32_a, bv32_a};
+  std::vector<irep_idt> mnames{"a", "b", "c"};
+  type2tc s_a = struct_type2tc(mtypes, mnames, mnames, "S");
+  type2tc s_b = struct_type2tc(mtypes, mnames, mnames, "S");
+  BENCHMARK("operator==(struct, struct) — equal") { return s_a == s_b; };
+
+  expr2tc add_a = add2tc(bv32_a, gen_const(1), gen_const(2));
+  expr2tc add_b = add2tc(bv32_a, gen_const(1), gen_const(2));
+  BENCHMARK("operator==(add, add) — equal") { return add_a == add_b; };
+  BENCHMARK("operator<(add, add)") { return add_a < add_b; };
+}

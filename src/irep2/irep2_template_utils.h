@@ -1,5 +1,7 @@
 #pragma once
 #include <memory>
+#include <type_traits>
+#include <util/crypto_hash.h>
 #include <util/fixedbv.h>
 #include <util/i2string.h>
 #include <util/ieee_float.h>
@@ -8,6 +10,22 @@
 #include <irep2/irep2_utils.h>
 #include <util/migrate.h>
 #include <util/std_types.h>
+
+/* The functions below form a small, fixed catalogue of operations the
+ * irep_methods2 fold expressions invoke on every field of every node:
+ * pretty-printing, comparison, ordering, CRC, and SHA-1 ingestion.
+ *
+ * Most field types (bool, unsigned int, the small enums, BigInt,
+ * fixedbvt, ieee_floatt, irep_idt) share an entirely mechanical
+ * implementation: `operator==` for cmp, the (-1/0/1) trinary on
+ * `operator<` for lt, `std::hash<T>` for crc, raw POD ingestion for
+ * hash. A primary template covers these by default; load-bearing
+ * cases (BigInt's sign-aware CRC, the std::vector<...> overloads, the
+ * null-safe expr2tc/type2tc dispatch, irep_idt's interned-index
+ * hashing, the dummy `*_ids` stubs that preserve the parent-class
+ * id-mix invariant) are declared explicitly below and win overload
+ * resolution.
+ */
 
 std::string type_to_string(const bool &thebool, int);
 
@@ -37,153 +55,98 @@ std::string type_to_string(const type2tc &theval, int indent);
 
 std::string type_to_string(const irep_idt &theval, int);
 
-bool do_type_cmp(const bool &side1, const bool &side2);
+/* Primary comparison: structural equality. Picked up by trivially-
+ * comparable field types (bool, unsigned int, the enums, BigInt,
+ * fixedbvt, ieee_floatt, irep_idt, std::vector<irep_idt>, and the
+ * `irep_container`-mediated expr2tc/type2tc/std::vector<expr2tc|
+ * type2tc>). */
+template <class T>
+inline bool do_type_cmp(const T &side1, const T &side2)
+{
+  return side1 == side2;
+}
 
-bool do_type_cmp(const unsigned int &side1, const unsigned int &side2);
+/* Primary ordering: trinary on operator<. Same coverage as
+ * do_type_cmp. Specialisations below for expr2tc/type2tc replace this
+ * with a single ltchecked dispatch (vs the double `<` here) and for
+ * BigInt with its native compare(). */
+template <class T>
+inline int do_type_lt(const T &side1, const T &side2)
+{
+  if (side1 < side2)
+    return -1;
+  if (side2 < side1)
+    return 1;
+  return 0;
+}
 
-bool do_type_cmp(
-  const sideeffect_data::allockind &side1,
-  const sideeffect_data::allockind &side2);
+/* Primary CRC: std::hash<T> for non-enums; for enums, cast to uint8_t
+ * before hashing so the byte width matches the previous explicit
+ * std::hash<uint8_t> overloads bit-for-bit (enum class without a
+ * fixed underlying type defaults to int, so a naive
+ * std::hash<underlying_type_t<T>> would change the hash value and
+ * break wire compatibility with on-disk caches / state hashes).
+ * Specialisations below for BigInt / fixedbvt / ieee_floatt /
+ * expr2tc / type2tc / irep_idt / vectors / the *_ids dummies
+ * override this. */
+template <class T>
+inline size_t do_type_crc(const T &theval)
+{
+  if constexpr (std::is_enum_v<T>)
+    return std::hash<uint8_t>{}(static_cast<uint8_t>(theval));
+  else
+    return std::hash<T>{}(theval);
+}
 
-bool do_type_cmp(
-  const constant_string_data::kindt &side1,
-  const constant_string_data::kindt &side2);
+/* Primary SHA-1 ingestion: raw POD bytes. Specialisations below pick
+ * up irep_idt (ingest interned id, not the underlying string), the
+ * dispatched types (BigInt/fixedbvt/ieee_floatt route through BigInt
+ * sign-aware ingestion; expr2tc/type2tc dispatch to the contained
+ * node's hash()), and the *_ids dummies. */
+template <class T>
+inline void do_type_hash(const T &theval, crypto_hash &hash)
+{
+  hash.ingest((void *)&theval, sizeof(theval));
+}
 
-bool do_type_cmp(
-  const symbol_data::renaming_level &side1,
-  const symbol_data::renaming_level &side2);
-
-bool do_type_cmp(const BigInt &side1, const BigInt &side2);
-
-bool do_type_cmp(const fixedbvt &side1, const fixedbvt &side2);
-
-bool do_type_cmp(const ieee_floatt &side1, const ieee_floatt &side2);
-
-bool do_type_cmp(
-  const std::vector<expr2tc> &side1,
-  const std::vector<expr2tc> &side2);
-
-bool do_type_cmp(
-  const std::vector<type2tc> &side1,
-  const std::vector<type2tc> &side2);
-
-bool do_type_cmp(
-  const std::vector<irep_idt> &side1,
-  const std::vector<irep_idt> &side2);
-
-bool do_type_cmp(const expr2tc &side1, const expr2tc &side2);
-
-bool do_type_cmp(const type2tc &side1, const type2tc &side2);
-
-bool do_type_cmp(const irep_idt &side1, const irep_idt &side2);
+/* Explicit overloads: load-bearing specialisations for the field
+ * types whose semantics differ from the primary templates above. */
 
 bool do_type_cmp(const type2t::type_ids &, const type2t::type_ids &);
-
 bool do_type_cmp(const expr2t::expr_ids &, const expr2t::expr_ids &);
 
-int do_type_lt(const bool &side1, const bool &side2);
-
-int do_type_lt(const unsigned int &side1, const unsigned int &side2);
-
-int do_type_lt(
-  const sideeffect_data::allockind &side1,
-  const sideeffect_data::allockind &side2);
-
-int do_type_lt(
-  const constant_string_data::kindt &side1,
-  const constant_string_data::kindt &side2);
-
-int do_type_lt(
-  const symbol_data::renaming_level &side1,
-  const symbol_data::renaming_level &side2);
-
 int do_type_lt(const BigInt &side1, const BigInt &side2);
-
-int do_type_lt(const fixedbvt &side1, const fixedbvt &side2);
-
-int do_type_lt(const ieee_floatt &side1, const ieee_floatt &side2);
-
 int do_type_lt(
   const std::vector<expr2tc> &side1,
   const std::vector<expr2tc> &side2);
 int do_type_lt(
   const std::vector<type2tc> &side1,
   const std::vector<type2tc> &side2);
-
-int do_type_lt(
-  const std::vector<irep_idt> &side1,
-  const std::vector<irep_idt> &side2);
-
 int do_type_lt(const expr2tc &side1, const expr2tc &side2);
-
 int do_type_lt(const type2tc &side1, const type2tc &side2);
-
-int do_type_lt(const irep_idt &side1, const irep_idt &side2);
-
 int do_type_lt(const type2t::type_ids &, const type2t::type_ids &);
-
 int do_type_lt(const expr2t::expr_ids &, const expr2t::expr_ids &);
 
-size_t do_type_crc(const bool &theval);
-
-void do_type_hash(const bool &thebool, crypto_hash &hash);
-
-size_t do_type_crc(const unsigned int &theval);
-
-void do_type_hash(const unsigned int &theval, crypto_hash &hash);
-
-size_t do_type_crc(const sideeffect_data::allockind &theval);
-
-void do_type_hash(const sideeffect_data::allockind &theval, crypto_hash &hash);
-
-size_t do_type_crc(const constant_string_data::kindt &theval);
-
-void do_type_hash(const constant_string_data::kindt &theval, crypto_hash &hash);
-
-size_t do_type_crc(const symbol_data::renaming_level &theval);
-
-void do_type_hash(const symbol_data::renaming_level &theval, crypto_hash &hash);
-
 size_t do_type_crc(const BigInt &theint);
-
-void do_type_hash(const BigInt &theint, crypto_hash &hash);
-
 size_t do_type_crc(const fixedbvt &theval);
-
-void do_type_hash(const fixedbvt &theval, crypto_hash &hash);
-
 size_t do_type_crc(const ieee_floatt &theval);
-
-void do_type_hash(const ieee_floatt &theval, crypto_hash &hash);
-
 size_t do_type_crc(const std::vector<expr2tc> &theval);
-
-void do_type_hash(const std::vector<expr2tc> &theval, crypto_hash &hash);
-
 size_t do_type_crc(const std::vector<type2tc> &theval);
-
-void do_type_hash(const std::vector<type2tc> &theval, crypto_hash &hash);
-
 size_t do_type_crc(const std::vector<irep_idt> &theval);
-
-void do_type_hash(const std::vector<irep_idt> &theval, crypto_hash &hash);
-
 size_t do_type_crc(const expr2tc &theval);
-
-void do_type_hash(const expr2tc &theval, crypto_hash &hash);
-
 size_t do_type_crc(const type2tc &theval);
-
-void do_type_hash(const type2tc &theval, crypto_hash &hash);
-
 size_t do_type_crc(const irep_idt &theval);
-
-void do_type_hash(const irep_idt &theval, crypto_hash &hash);
-
 size_t do_type_crc(const type2t::type_ids &i);
-
-void do_type_hash(const type2t::type_ids &, crypto_hash &);
-
 size_t do_type_crc(const expr2t::expr_ids &i);
 
+void do_type_hash(const BigInt &theint, crypto_hash &hash);
+void do_type_hash(const fixedbvt &theval, crypto_hash &hash);
+void do_type_hash(const ieee_floatt &theval, crypto_hash &hash);
+void do_type_hash(const std::vector<expr2tc> &theval, crypto_hash &hash);
+void do_type_hash(const std::vector<type2tc> &theval, crypto_hash &hash);
+void do_type_hash(const std::vector<irep_idt> &theval, crypto_hash &hash);
+void do_type_hash(const expr2tc &theval, crypto_hash &hash);
+void do_type_hash(const type2tc &theval, crypto_hash &hash);
+void do_type_hash(const irep_idt &theval, crypto_hash &hash);
+void do_type_hash(const type2t::type_ids &, crypto_hash &);
 void do_type_hash(const expr2t::expr_ids &, crypto_hash &);
