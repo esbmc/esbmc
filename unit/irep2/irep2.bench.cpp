@@ -80,7 +80,7 @@ TEST_CASE("irep2 microbench: indexed sub-expr access", "[bench]")
 
   // Wide vector field: get_sub_expr(idx) walks the std::vector<expr2tc>
   // from index 0 every call. The full loop is therefore O(n^2) in n =
-  // count. D4 collapses this to a single for_each_field pass.
+  // count. The single-pass operand walk in simplify() collapses this.
   expr2tc arr256 = build_constant_array(256);
   expr2tc arr1024 = build_constant_array(1024);
 
@@ -103,7 +103,8 @@ TEST_CASE("irep2 microbench: indexed sub-expr access", "[bench]")
 
   // Single-pass Foreach_operand: control case. The cost of *visiting*
   // every operand once, with no indexed re-walks. Distance between this
-  // and the indexed loop above is the headroom D4 can reclaim.
+  // and the indexed loop above is the headroom the single-pass walk
+  // reclaims.
   BENCHMARK("foreach_operand single pass count=256")
   {
     unsigned ops = 0;
@@ -141,9 +142,9 @@ TEST_CASE("irep2 microbench: CRC cache", "[bench]")
 {
   config.ansi_c.word_size = 32;
 
-  // F2 turned crc() into an acquire/release atomic with sentinel-zero:
-  // first call computes + publishes, every subsequent call is a single
-  // acquire load. The two benchmarks pin both halves of that contract.
+  // crc() is an acquire/release atomic with sentinel-zero: first call
+  // computes + publishes, every subsequent call is a single acquire
+  // load. The two benchmarks pin both halves of that contract.
   expr2tc chain64 = build_add_chain(64);
 
   BENCHMARK("crc cold (fresh tree)")
@@ -158,9 +159,9 @@ TEST_CASE("irep2 microbench: is_/to_/try_to_ dispatch", "[bench]")
 {
   config.ansi_c.word_size = 32;
 
-  // The tag-check + downcast path. F4 made these macro-generated and
-  // identical-shaped; this bench is a noise-floor anchor for D10 and
-  // any future audit that changes the dispatch surface.
+  // The tag-check + downcast path. These are macro-generated and
+  // identical-shaped; this bench is a noise-floor anchor for any
+  // future audit that changes the dispatch surface.
   expr2tc add = add2tc(word_type(), gen_const(1), gen_const(2));
 
   BENCHMARK("is_add2t + to_add2t round-trip")
@@ -181,10 +182,9 @@ TEST_CASE("irep2 microbench: irep_idt-bearing CRC", "[bench]")
 {
   config.ansi_c.word_size = 32;
 
-  // D7 target: symbol2t has an irep_idt "thename" field. crc() on a
-  // symbol used to call std::hash<std::string>(as_string()), which
-  // re-walked the entire char array per call. The cached identity is
-  // available cheaply via irep_idt::hash().
+  // symbol2t has an irep_idt "thename" field. The crc() implementation
+  // uses irep_idt::hash() (the interned table index) rather than
+  // hashing the underlying std::string char-by-char.
   expr2tc sym1 =
     symbol2tc(word_type(), "some_quite_long_symbol_name_to_punish_hashing_v1");
   expr2tc sym2 =
@@ -201,8 +201,8 @@ TEST_CASE("irep2 microbench: irep_idt-bearing CRC", "[bench]")
     return sym1->crc() ^ sym2->crc();
   };
 
-  // struct_type2t carries a std::vector<irep_idt> of member names.
-  // do_type_crc(const std::vector<irep_idt> &) is the second D7 site.
+  // struct_type2t carries a std::vector<irep_idt> of member names —
+  // a second site that benefits from the same hashing approach.
   type2tc struct_ty = []() {
     std::vector<type2tc> mtypes{word_type(), word_type(), word_type()};
     std::vector<irep_idt> mnames{
@@ -230,11 +230,9 @@ TEST_CASE("irep2 microbench: array/vector type construction", "[bench]")
 {
   config.ansi_c.word_size = 32;
 
-  // D3 target: array_type2t / vector_type2t constructors used to call
-  // simplify() unconditionally on the size expression. Even when the
-  // size is already a constant_int — the common case from frontends —
-  // simplify() walked the operand fold + virtual do_simplify() before
-  // returning nil. D3 short-circuits on constant_int.
+  // array_type2t / vector_type2t constructors short-circuit when the
+  // size expression is already a constant_int (the common case from
+  // frontends), so simplify() is only invoked on non-canonical sizes.
   type2tc subtype = word_type();
   expr2tc lit_size = constant_int2tc(subtype, BigInt(64));
 
@@ -248,7 +246,7 @@ TEST_CASE("irep2 microbench: array/vector type construction", "[bench]")
   };
 
   // Non-trivial size: an add tree the constructor will still simplify.
-  // Anchors that D3 doesn't break the original folding contract.
+  // Anchors that the fast-path doesn't break the folding contract.
   expr2tc add_size =
     add2tc(subtype, constant_int2tc(subtype, BigInt(30)),
            constant_int2tc(subtype, BigInt(34)));
