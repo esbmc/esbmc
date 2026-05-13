@@ -510,19 +510,22 @@ public:
     : array_type_methods(array_id, _subtype, size, inf)
   {
     // Constant-fold the size expression so identical array types compare
-    // equal regardless of how their size was constructed (frontends and
-    // migration paths sometimes hand us add/sub trees that simplify to a
-    // literal). Calling full simplify() on every array construction is
-    // wasteful — most sizes are already literals — the long-term fix is
-    // to normalise sizes at the frontend / migration boundary instead.
+    // equal regardless of how their size was constructed. Skip the work
+    // when the size is already a constant_int (the common case from the
+    // frontend) — simplify() would just return nil for it but the walk
+    // still costs a few cycles. Long-term fix is to normalise sizes at
+    // the frontend / migration boundary instead.
     if (!is_nil_expr(size))
     {
       assert(
         size->type->type_id == signedbv_id ||
         size->type->type_id == unsignedbv_id);
-      expr2tc sz = size->simplify();
-      if (!is_nil_expr(sz))
-        array_size = sz;
+      if (size->expr_id != expr2t::constant_int_id)
+      {
+        expr2tc sz = size->simplify();
+        if (!is_nil_expr(sz))
+          array_size = sz;
+      }
     }
   }
   array_type2t(const array_type2t &ref) = default;
@@ -592,10 +595,9 @@ public:
   vector_type2t(const type2tc &_subtype, const expr2tc &size)
     : vector_type_methods(vector_id, _subtype, size, false)
   {
-    // If we can simplify the array size, do so
-    // XXX, this is probably massively inefficient. Some kind of boundary in
-    // the checking process should exist to eliminate this requirement.
-    if (!is_nil_expr(size))
+    // Mirror array_type2t: skip simplify() when the size is already a
+    // literal. See note in array_type2t for the normalisation rationale.
+    if (!is_nil_expr(size) && size->expr_id != expr2t::constant_int_id)
     {
       expr2tc sz = size->simplify();
       if (!is_nil_expr(sz))

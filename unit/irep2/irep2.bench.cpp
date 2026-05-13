@@ -225,3 +225,36 @@ TEST_CASE("irep2 microbench: irep_idt-bearing CRC", "[bench]")
   };
   BENCHMARK("crc struct type warm") { return struct_ty->crc(); };
 }
+
+TEST_CASE("irep2 microbench: array/vector type construction", "[bench]")
+{
+  config.ansi_c.word_size = 32;
+
+  // D3 target: array_type2t / vector_type2t constructors used to call
+  // simplify() unconditionally on the size expression. Even when the
+  // size is already a constant_int — the common case from frontends —
+  // simplify() walked the operand fold + virtual do_simplify() before
+  // returning nil. D3 short-circuits on constant_int.
+  type2tc subtype = word_type();
+  expr2tc lit_size = constant_int2tc(subtype, BigInt(64));
+
+  BENCHMARK("array_type2t with constant_int size")
+  {
+    return array_type2tc(subtype, lit_size, false);
+  };
+  BENCHMARK("vector_type2t with constant_int size")
+  {
+    return vector_type2tc(subtype, lit_size);
+  };
+
+  // Non-trivial size: an add tree the constructor will still simplify.
+  // Anchors that D3 doesn't break the original folding contract.
+  expr2tc add_size =
+    add2tc(subtype, constant_int2tc(subtype, BigInt(30)),
+           constant_int2tc(subtype, BigInt(34)));
+
+  BENCHMARK("array_type2t with add() size (folds to constant)")
+  {
+    return array_type2tc(subtype, add_size, false);
+  };
+}
