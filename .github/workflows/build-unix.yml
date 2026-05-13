@@ -14,6 +14,11 @@ on:
         description: "Whether to run tests (regression) for this build"
         required: true
         type: boolean
+      coverage:
+        description: "Run tests with coverage instrumentation and upload coverage.info"
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   build:
@@ -40,7 +45,7 @@ jobs:
       with:
         name: release-${{ inputs.operating-system }}-${{ inputs.build-flags }}
         path: ./release
-    
+
     - name: Check Python regression tests
       if: ${{ inputs.testing == true }}
       run: |
@@ -54,11 +59,22 @@ jobs:
       run: |
         # Set PATH to include Python 3.12 and user-installed tools (mypy, meson, etc.)
         export PATH="$(brew --prefix python@3.12)/bin:$HOME/Library/Python/3.12/bin:$PATH"
+        if [[ "${{ inputs.coverage }}" == "true" ]]; then
+          export LLVM_PROFILE_FILE="/tmp/esbmc-coverage/coverage-%m.profraw"
+          mkdir -p /tmp/esbmc-coverage
+        fi
         cd build/
         # Cap the per-test TIMEOUT property at 120s. ctest --timeout is ignored
         # when tests set TIMEOUT via set_tests_properties (regression/CMakeLists.txt),
         # so we override the cache variable that feeds it and reconfigure.
-        cmake -DESBMC_REGRESS_TIMEOUT=120 .
+        # In coverage mode, scripts/build.sh -k ON pinned CORE_REGRESSION_ONLY=ON
+        # to keep the build fast; override it here so the suite that runs is the
+        # same one a non-coverage Linux build would run.
+        if [[ "${{ inputs.coverage }}" == "true" ]]; then
+          cmake -DESBMC_REGRESS_TIMEOUT=120 -DCORE_REGRESSION_ONLY=OFF .
+        else
+          cmake -DESBMC_REGRESS_TIMEOUT=120 .
+        fi
         # macOS PR: only the python/ suite (anchored — excludes python-intensive
         # and python-coverage, which already run on Linux). The Python frontend is
         # the one part of ESBMC whose toolchain materially differs across OSes
@@ -73,3 +89,28 @@ jobs:
         else
           ctest -j4 --output-on-failure --progress .
         fi
+
+    - name: Merge coverage data and export lcov report
+      # Run even if ctest reported failures so coverage data is still
+      # captured for the runs that did execute. The ctest step itself
+      # remains the gating signal for the job.
+      if: ${{ always() && inputs.coverage == true && inputs.testing == true }}
+      run: |
+        llvm-profdata merge -sparse /tmp/esbmc-coverage/*.profraw -o build/merged.profdata
+        llvm-cov export -format=lcov \
+          -instr-profile=build/merged.profdata \
+          build/src/esbmc/esbmc \
+          > coverage.info
+        lcov --ignore-errors inconsistent --ignore-errors corrupt \
+             --ignore-errors unused --remove coverage.info \
+             '/usr/*' \
+             '*/build/*' \
+             --output-file coverage.info
+
+    - name: Upload coverage report
+      if: ${{ always() && inputs.coverage == true && inputs.testing == true }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-info-${{ inputs.operating-system }}
+        path: coverage.info
+        retention-days: 5
