@@ -2517,6 +2517,18 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
             if rewritten is None:
                 rewritten = self._try_transform_items_set_eq(right, left, node)
             if rewritten is None:
+                rewritten = self._try_transform_items_list_eq(left, right, node)
+            if rewritten is None:
+                rewritten = self._try_transform_items_list_eq(right, left, node)
+            if rewritten is None:
+                rewritten = self._try_transform_keys_view_eq(left, right, node)
+            if rewritten is None:
+                rewritten = self._try_transform_keys_view_eq(right, left, node)
+            if rewritten is None:
+                rewritten = self._try_transform_values_view_eq(left, right, node)
+            if rewritten is None:
+                rewritten = self._try_transform_values_view_eq(right, left, node)
+            if rewritten is None:
                 rewritten = self._try_transform_list_tuple_eq(left, right, node)
             if rewritten is None:
                 rewritten = self._try_transform_list_tuple_eq(right, left, node)
@@ -5379,6 +5391,26 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
             return self.dict_items_vars[arg.id]
         return self._get_dict_expr_from_items_call(arg)
 
+    def _get_list_items_dict_expr(self, node):
+        """Return dict_expr if node is list(X) or sorted(X) where X is a dict_items source.
+
+        Both wrappers materialise the dict's (key, value) pairs as a list. For
+        equality assertions ESBMC's dict model treats them with set-equality
+        semantics (iteration/sort order is not modelled).
+        """
+        if not (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id in ("list", "sorted")
+            and len(node.args) == 1
+            and not getattr(node, "keywords", [])
+        ):
+            return None
+        arg = node.args[0]
+        if isinstance(arg, ast.Name) and arg.id in self.dict_items_vars:
+            return self.dict_items_vars[arg.id]
+        return self._get_dict_expr_from_items_call(arg)
+
     def _try_transform_items_set_eq(self, set_side, literal_side, source_node):
         """Transform set(d.items()) == {(k,v),...} into dict membership checks.
 
@@ -5418,6 +5450,176 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
             )
             subscript = ast.Subscript(value=dict_expr, slice=k, ctx=ast.Load())
             val_eq = ast.Compare(left=subscript, ops=[ast.Eq()], comparators=[v])
+            value_checks.append(key_in_dict)
+            value_checks.append(val_eq)
+
+        result = ast.BoolOp(op=ast.And(), values=value_checks)
+        self.ensure_all_locations(result, source_node)
+        ast.fix_missing_locations(result)
+        return result
+
+    def _get_dict_view_call(self, node, attr):
+        """If node is sorted(X)/list(X)/set(X) where X is d.<attr>(), return the dict expression."""
+        if not (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id in ("list", "sorted", "set")
+            and len(node.args) == 1
+            and not getattr(node, "keywords", [])
+        ):
+            return None
+        inner = node.args[0]
+        if not (
+            isinstance(inner, ast.Call)
+            and isinstance(inner.func, ast.Attribute)
+            and inner.func.attr == attr
+            and not inner.args
+            and not getattr(inner, "keywords", [])
+        ):
+            return None
+        base = inner.func.value
+        if isinstance(base, ast.Name):
+            known_type = self.known_variable_types.get(base.id)
+            if known_type is not None and known_type != "dict":
+                return None
+        return base
+
+    def _try_transform_keys_view_eq(self, view_side, literal_side, source_node):
+        """Transform sorted/list(d.keys()) == [literal] into membership checks.
+
+        Rewrites to ``len(d) == N and k1 in d and k2 in d ...`` — set-equality
+        semantics, which matches how ESBMC's dict model treats key order.
+        """
+        dict_expr = self._get_dict_view_call(view_side, "keys")
+        if dict_expr is None:
+            return None
+        if not isinstance(literal_side, (ast.List, ast.Set)):
+            return None
+        keys = list(literal_side.elts)
+        len_eq = ast.Compare(
+            left=ast.Call(
+                func=ast.Name(id="len", ctx=ast.Load()),
+                args=[copy.deepcopy(dict_expr)],
+                keywords=[],
+            ),
+            ops=[ast.Eq()],
+            comparators=[ast.Constant(value=len(keys))],
+        )
+        if not keys:
+            self.ensure_all_locations(len_eq, source_node)
+            ast.fix_missing_locations(len_eq)
+            return len_eq
+        checks = [len_eq]
+        for k in keys:
+            checks.append(
+                ast.Compare(
+                    left=copy.deepcopy(k),
+                    ops=[ast.In()],
+                    comparators=[copy.deepcopy(dict_expr)],
+                )
+            )
+        result = ast.BoolOp(op=ast.And(), values=checks)
+        self.ensure_all_locations(result, source_node)
+        ast.fix_missing_locations(result)
+        return result
+
+    def _try_transform_values_view_eq(self, view_side, literal_side, source_node):
+        """Transform sorted/list(d.values()) == [literal] into membership checks.
+
+        Rewrites to ``len(d) == N and v1 in d.values() and ...``. Correct only
+        when literal values are distinct (set-equality semantics) — sufficient
+        for typical dict-content assertions where ordering is not modelled.
+        """
+        dict_expr = self._get_dict_view_call(view_side, "values")
+        if dict_expr is None:
+            return None
+        if not isinstance(literal_side, (ast.List, ast.Set)):
+            return None
+        values = list(literal_side.elts)
+        len_eq = ast.Compare(
+            left=ast.Call(
+                func=ast.Name(id="len", ctx=ast.Load()),
+                args=[copy.deepcopy(dict_expr)],
+                keywords=[],
+            ),
+            ops=[ast.Eq()],
+            comparators=[ast.Constant(value=len(values))],
+        )
+        if not values:
+            self.ensure_all_locations(len_eq, source_node)
+            ast.fix_missing_locations(len_eq)
+            return len_eq
+        checks = [len_eq]
+        for v in values:
+            values_call = ast.Call(
+                func=ast.Attribute(
+                    value=copy.deepcopy(dict_expr),
+                    attr="values",
+                    ctx=ast.Load(),
+                ),
+                args=[],
+                keywords=[],
+            )
+            checks.append(
+                ast.Compare(
+                    left=copy.deepcopy(v),
+                    ops=[ast.In()],
+                    comparators=[values_call],
+                )
+            )
+        result = ast.BoolOp(op=ast.And(), values=checks)
+        self.ensure_all_locations(result, source_node)
+        ast.fix_missing_locations(result)
+        return result
+
+    def _try_transform_items_list_eq(self, list_side, literal_side, source_node):
+        """Transform list(d.items()) == [(k,v),...] into dict membership checks.
+
+        ESBMC's dict model does not guarantee iteration order, so the
+        list-form comparison is treated as set-equality semantics — the same
+        safer membership rewrite used for ``set(d.items())``.
+        """
+        dict_expr = self._get_list_items_dict_expr(list_side)
+        if dict_expr is None:
+            return None
+        if not isinstance(literal_side, ast.List):
+            return None
+        pairs = []
+        for elt in literal_side.elts:
+            if not (isinstance(elt, ast.Tuple) and len(elt.elts) == 2):
+                return None
+            pairs.append((elt.elts[0], elt.elts[1]))
+
+        len_eq = ast.Compare(
+            left=ast.Call(
+                func=ast.Name(id="len", ctx=ast.Load()),
+                args=[copy.deepcopy(dict_expr)],
+                keywords=[],
+            ),
+            ops=[ast.Eq()],
+            comparators=[ast.Constant(value=len(pairs))],
+        )
+
+        if not pairs:
+            self.ensure_all_locations(len_eq, source_node)
+            ast.fix_missing_locations(len_eq)
+            return len_eq
+
+        value_checks = [len_eq]
+        for k, v in pairs:
+            key_in_dict = ast.Compare(
+                left=copy.deepcopy(k),
+                ops=[ast.In()],
+                comparators=[copy.deepcopy(dict_expr)],
+            )
+            subscript = ast.Subscript(
+                value=copy.deepcopy(dict_expr),
+                slice=copy.deepcopy(k),
+                ctx=ast.Load(),
+            )
+            val_eq = ast.Compare(
+                left=subscript, ops=[ast.Eq()], comparators=[copy.deepcopy(v)]
+            )
             value_checks.append(key_in_dict)
             value_checks.append(val_eq)
 

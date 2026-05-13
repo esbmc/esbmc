@@ -348,6 +348,18 @@ symbol_id function_call_builder::build_function_id() const
         arg.contains("func") && arg["func"].contains("id") &&
         arg["func"]["id"] == "set")
         func_name = kGetObjectSize;
+      else if (
+        arg.contains("func") && arg["func"].contains("id") &&
+        arg["func"]["id"] == "dict")
+      {
+        // len(dict(...))
+        // route to dict-aware size handler.
+        func_name = "__ESBMC_len_dict";
+        function_id.clear();
+        function_id.set_prefix("esbmc:");
+        function_id.set_function(func_name);
+        return function_id;
+      }
     }
     else if (arg["_type"] == "List")
       func_name = kGetObjectSize;
