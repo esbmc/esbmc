@@ -129,10 +129,9 @@ std::string_view cwe_name(unsigned id)
 {
   const auto &table = names();
   auto it = std::lower_bound(
-    table.begin(),
-    table.end(),
-    id,
-    [](const name_entry_t &e, unsigned v) { return e.id < v; });
+    table.begin(), table.end(), id, [](const name_entry_t &e, unsigned v) {
+      return e.id < v;
+    });
   if (it != table.end() && it->id == id)
     return it->name;
   return {};
