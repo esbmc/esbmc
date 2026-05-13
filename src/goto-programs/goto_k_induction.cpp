@@ -260,17 +260,18 @@ void goto_k_inductiont::make_nondet_assign(
 
 static bool contains_rec(const expr2tc &expr, const loopst::loop_varst &vars)
 {
+  // Check this node first: if it's a tracked symbol, we're done.
+  if (is_symbol2t(expr) && vars.find(expr) != vars.end())
+    return true;
+
+  // Otherwise recurse into operands and stop at the first match.
   bool res = false;
   expr->foreach_operand([&vars, &res](const expr2tc &e) {
-    if (!is_nil_expr(e))
-      res = contains_rec(e, vars) || res;
-    return res;
+    if (res || is_nil_expr(e))
+      return;
+    res = contains_rec(e, vars);
   });
-
-  if (!is_symbol2t(expr))
-    return res;
-
-  return (vars.find(expr) != vars.end()) || res;
+  return res;
 }
 
 void goto_k_inductiont::remove_unrelated_loop_cond(
