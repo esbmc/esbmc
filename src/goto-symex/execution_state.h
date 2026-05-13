@@ -20,24 +20,26 @@
 class reachability_treet;
 
 /**
- *  Class representing a global state of variables and threads.
- *  This is made up of two parts: first a "level 2" state and value_set pair
- *  of objects, recording the SSA numbers of variables assigned to, and
- *  what particular pointers can possibly point at (the value set). Then,
- *  there's a vector of goto_symex_statet's recording a set of threads and
- *  their state (call stack, program counter).
+ *  Thread-aware symex state explored by reachability_treet.
  *
- *  A large amount of functionality is implemented by extending goto_symext.
- *  The idea is that reachability_treet symex_step's this object until we
- *  notify it about a context switch point. We catch some threading-specific
- *  instructions in execution_statet::symex_step, and pass the rest to
- *  goto_symext::symex_step. And rather than spraying hooks over goto_symext to
- *  detect context switch points, we override a few virtual functions and pass
- *  the operations being observed back up to reachability_treet.
+ *  Holds the global SSA renaming state (level 2) and value set, plus a
+ *  vector of per-thread goto_symex_statet recording each thread's call
+ *  stack, program counter, and local guard. reachability_treet drives this
+ *  object one instruction at a time via symex_step; threading-specific
+ *  instructions (thread spawn, atomic begin/end, yield, monitor) are
+ *  handled here while the rest fall through to goto_symext::symex_step.
  *
- *  Some circumstances require goto_symext fetching data from execution_statet,
- *  such as fetching our thread number or suchlike, or creating a new thread.
- *  These are handled through intrinsic function calls.
+ *  Context switches are not detected by ad-hoc hooks. Instead, every
+ *  symex_step records the executed transition into last_transition
+ *  (thread id, optional parent guard, optional branch_resultt). When the
+ *  scheduler later decides to switch threads, preserve_last_paths reads
+ *  last_transition to know which deferred-merge snapshots to carry across
+ *  the switch — including a direct iterator to the branch sibling pushed
+ *  by goto_symext::symex_goto via the record_branch_sibling hook.
+ *
+ *  goto_symext occasionally needs data only execution_statet has (current
+ *  thread id, the ability to spawn a new thread); those flow back through
+ *  __ESBMC_* intrinsic calls dispatched in symex_step.
  */
 
 class execution_statet : public goto_symext
@@ -202,7 +204,9 @@ public:
    *  Take one instruction and interpret it. Can result in any action, such as
    *  a thread ending, causing a context switch, a function call being taken,
    *  a thread being created, and so forth.
-   *  @param art reachability_treet we're operating with (defunct?)
+   *  @param art reachability_treet driving the exploration; forwarded to
+   *             goto_symext::symex_step so threading intrinsics can call
+   *             back into it.
    */
   void symex_step(reachability_treet &art) override;
 

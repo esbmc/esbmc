@@ -20,29 +20,31 @@
  *  and when notified of context-switch generating operations, attempts to
  *  interleave threads in all possible ways.
  *
- *  To do this, the primary piece of information stored is a stack of
- *  execution_statets, with each ex_state representing a context switch point
- *  reached. A parallel scheduler frame records which context switches from
- *  each point have been explored already.
+ *  The primary piece of state is a stack of exploration_framet, each
+ *  pairing one execution_statet (the program state at a context-switch
+ *  point) with a scheduler_framet that tracks which switches from that
+ *  point have already been explored.
  *
- *  The algorithm is to run until the program completes, then feed the trace
+ *  The algorithm is to run until the program completes and feed the trace
  *  to the caller. From then on, when asked to generate a new trace we:
  *
- *    -# Remove the final ex_state from the stack
- *    -# Move to the new final ex_state on the stack
+ *    -# Pop the final exploration frame.
+ *    -# Move to the new final frame on the stack.
  *    -# Inspect whether we've explored all switches from this state.
- *      If yes, goto 1
- *    -# Pick a context switch to take from the current state, mark as explored
- *    -# Duplicate the final ex_state onto the end of the stack
- *    -# Move to the new end of stack; make the ex_state take the context
- *      switch we picked.
- *    -# Continue symbolic execution from here. Fin.
+ *       If yes, goto 1.
+ *    -# Pick a context switch to take from the current state and mark it
+ *       explored on the frame's scheduler.
+ *    -# Push a fresh exploration frame: a clone of the execution state
+ *       paired with a default scheduler_framet sized to the new thread
+ *       count.
+ *    -# In the new top frame, switch to the chosen thread and continue
+ *       symbolic execution from there. Fin.
  *
- *  There are various scheduling possiblities. The default is depth-first
- *  search, where we just follow the algorithm above and return all the traces
- *  to the caller. The "schedule" way combines all paths into one trace, which
- *  is then solved once. Round-robin switches to the next thread in the set of
- *  threads when a context switch point occurs.
+ *  There are various scheduling possibilities. The default is depth-first
+ *  search, where we just follow the algorithm above and return all the
+ *  traces to the caller. The "schedule" way combines all paths into one
+ *  trace, which is then solved once. Round-robin switches to the next
+ *  thread in the set of threads when a context-switch point occurs.
  *
  *  Some kind of scheduling interface/api would be good for the future.
  */
