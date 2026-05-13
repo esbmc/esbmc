@@ -458,33 +458,7 @@ public:
   typedef esbmct::expr2t_traits<side_1_field, side_2_field> traits;
 };
 
-class bitops : public expr2t
-{
-public:
-  bitops(const type2tc &t, expr2t::expr_ids id) : expr2t(t, id)
-  {
-  }
-  bitops(const bitops &ref) = default;
-};
-
-class bitnot_data : public bitops
-{
-public:
-  bitnot_data(const type2tc &t, expr2t::expr_ids id, const expr2tc &v)
-    : bitops(t, id), value(v)
-  {
-  }
-  bitnot_data(const bitnot_data &ref) = default;
-
-  expr2tc value;
-
-  // Type mangling:
-  typedef esbmct::field_traits<expr2tc, bitnot_data, &bitnot_data::value>
-    value_field;
-  typedef esbmct::expr2t_traits<value_field> traits;
-};
-
-class bit_2ops : public bitops
+class bit_2ops : public expr2t
 {
 public:
   bit_2ops(
@@ -492,7 +466,7 @@ public:
     expr2t::expr_ids id,
     const expr2tc &s1,
     const expr2tc &s2)
-    : bitops(t, id), side_1(s1), side_2(s2)
+    : expr2t(t, id), side_1(s1), side_2(s2)
   {
   }
   bit_2ops(const bit_2ops &ref) = default;
@@ -1532,7 +1506,7 @@ irep_typedefs(bitand, bit_2ops);
 irep_typedefs(bitor, bit_2ops);
 irep_typedefs(bitxor, bit_2ops);
 irep_typedefs(lshr, bit_2ops);
-irep_typedefs(bitnot, bitnot_data);
+irep_typedefs(bitnot, arith_1op);
 irep_typedefs(neg, arith_1op);
 irep_typedefs(abs, arith_1op);
 irep_typedefs(add, arith_2ops);
@@ -2105,6 +2079,285 @@ ESBMC_DEFINE_RELATION2T(lessthanequal);
 ESBMC_DEFINE_RELATION2T(greaterthanequal);
 #undef ESBMC_DEFINE_RELATION2T
 
+/* The macros below fold sets of `*2t` classes that share both a base
+ * data class AND a constructor shape. Grouping is strict on those two
+ * properties so any constructor-time invariant we add later applies
+ * uniformly to every class in a macro's family. */
+
+/** Arithmetic two-operand node (`add`/`sub`/`mul`/`div`/`modulus`).
+ *  @extends arith_2ops */
+#define ESBMC_DEFINE_ARITH_2OP(name)                                           \
+  class name##2t : public name##_expr_methods                                  \
+  {                                                                            \
+  public:                                                                      \
+    name##2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2)        \
+      : name##_expr_methods(type, name##_id, v1, v2)                           \
+    {                                                                          \
+    }                                                                          \
+    name##2t(const name##2t & ref) = default;                                  \
+    expr2tc do_simplify() const override;                                      \
+    static std::string field_names[esbmct::num_type_fields];                   \
+  }
+
+ESBMC_DEFINE_ARITH_2OP(add);
+ESBMC_DEFINE_ARITH_2OP(sub);
+ESBMC_DEFINE_ARITH_2OP(mul);
+ESBMC_DEFINE_ARITH_2OP(div);
+ESBMC_DEFINE_ARITH_2OP(modulus);
+#undef ESBMC_DEFINE_ARITH_2OP
+
+/** Bitwise / shift two-operand node (`bitand`/`bitor`/`bitxor`/
+ *  `shl`/`ashr`/`lshr`). @extends bit_2ops */
+#define ESBMC_DEFINE_BIT_2OP(name)                                             \
+  class name##2t : public name##_expr_methods                                  \
+  {                                                                            \
+  public:                                                                      \
+    name##2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2)        \
+      : name##_expr_methods(type, name##_id, v1, v2)                           \
+    {                                                                          \
+    }                                                                          \
+    name##2t(const name##2t & ref) = default;                                  \
+    expr2tc do_simplify() const override;                                      \
+    static std::string field_names[esbmct::num_type_fields];                   \
+  }
+
+ESBMC_DEFINE_BIT_2OP(bitand);
+ESBMC_DEFINE_BIT_2OP(bitor);
+ESBMC_DEFINE_BIT_2OP(bitxor);
+ESBMC_DEFINE_BIT_2OP(lshr);
+ESBMC_DEFINE_BIT_2OP(shl);
+ESBMC_DEFINE_BIT_2OP(ashr);
+#undef ESBMC_DEFINE_BIT_2OP
+
+/** Arithmetic one-operand node (`neg`/`abs`/`bswap`/`bitnot`).
+ *  @extends arith_1op */
+#define ESBMC_DEFINE_ARITH_1OP(name)                                           \
+  class name##2t : public name##_expr_methods                                  \
+  {                                                                            \
+  public:                                                                      \
+    name##2t(const type2tc &type, const expr2tc &v)                            \
+      : name##_expr_methods(type, name##_id, v)                                \
+    {                                                                          \
+    }                                                                          \
+    name##2t(const name##2t & ref) = default;                                  \
+    expr2tc do_simplify() const override;                                      \
+    static std::string field_names[esbmct::num_type_fields];                   \
+  }
+
+ESBMC_DEFINE_ARITH_1OP(neg);
+ESBMC_DEFINE_ARITH_1OP(abs);
+ESBMC_DEFINE_ARITH_1OP(bitnot);
+ESBMC_DEFINE_ARITH_1OP(bswap);
+#undef ESBMC_DEFINE_ARITH_1OP
+
+/** Pointer one-operand node (`pointer_object`/`pointer_capability`).
+ *  @extends pointer_ops */
+#define ESBMC_DEFINE_POINTER_1OP(name)                                         \
+  class name##2t : public name##_expr_methods                                  \
+  {                                                                            \
+  public:                                                                      \
+    name##2t(const type2tc &type, const expr2tc &v)                            \
+      : name##_expr_methods(type, name##_id, v)                                \
+    {                                                                          \
+    }                                                                          \
+    name##2t(const name##2t & ref) = default;                                  \
+    expr2tc do_simplify() const override;                                      \
+    static std::string field_names[esbmct::num_type_fields];                   \
+  }
+
+ESBMC_DEFINE_POINTER_1OP(pointer_object);
+ESBMC_DEFINE_POINTER_1OP(pointer_capability);
+#undef ESBMC_DEFINE_POINTER_1OP
+
+/** Logical two-operand boolean-result node. Used for `and`/`or`/`xor`/
+ *  `implies` and the Python runtime predicates `isinstance`/`hasattr`/
+ *  `isnone`. Implicit `get_bool_type()` result. @extends logic_2ops */
+#define ESBMC_DEFINE_LOGIC_2OP(name)                                           \
+  class name##2t : public name##_expr_methods                                  \
+  {                                                                            \
+  public:                                                                      \
+    name##2t(const expr2tc &s1, const expr2tc &s2)                             \
+      : name##_expr_methods(get_bool_type(), name##_id, s1, s2)                \
+    {                                                                          \
+    }                                                                          \
+    name##2t(const name##2t & ref) = default;                                  \
+    expr2tc do_simplify() const override;                                      \
+    static std::string field_names[esbmct::num_type_fields];                   \
+  }
+
+ESBMC_DEFINE_LOGIC_2OP(and);
+ESBMC_DEFINE_LOGIC_2OP(or);
+ESBMC_DEFINE_LOGIC_2OP(xor);
+ESBMC_DEFINE_LOGIC_2OP(implies);
+ESBMC_DEFINE_LOGIC_2OP(isinstance);
+ESBMC_DEFINE_LOGIC_2OP(hasattr);
+ESBMC_DEFINE_LOGIC_2OP(isnone);
+#undef ESBMC_DEFINE_LOGIC_2OP
+
+/** FP classification single-operand predicate (`isnan`/`isinf`/
+ *  `isnormal`/`isfinite`). Implicit `get_bool_type()` result.
+ *  @extends bool_1op */
+#define ESBMC_DEFINE_FP_PREDICATE_1OP(name)                                    \
+  class name##2t : public name##_expr_methods                                  \
+  {                                                                            \
+  public:                                                                      \
+    name##2t(const expr2tc &operand)                                           \
+      : name##_expr_methods(get_bool_type(), name##_id, operand)               \
+    {                                                                          \
+    }                                                                          \
+    name##2t(const name##2t & ref) = default;                                  \
+    expr2tc do_simplify() const override;                                      \
+    static std::string field_names[esbmct::num_type_fields];                   \
+  }
+
+ESBMC_DEFINE_FP_PREDICATE_1OP(isnan);
+ESBMC_DEFINE_FP_PREDICATE_1OP(isinf);
+ESBMC_DEFINE_FP_PREDICATE_1OP(isnormal);
+ESBMC_DEFINE_FP_PREDICATE_1OP(isfinite);
+#undef ESBMC_DEFINE_FP_PREDICATE_1OP
+
+/** Pointer-object boolean predicate (`valid_object`/`races_check`/
+ *  `deallocated_obj`). Implicit `get_bool_type()` result.
+ *  @extends object_ops */
+#define ESBMC_DEFINE_OBJECT_PREDICATE_1OP(name)                                \
+  class name##2t : public name##_expr_methods                                  \
+  {                                                                            \
+  public:                                                                      \
+    name##2t(const expr2tc &operand)                                           \
+      : name##_expr_methods(get_bool_type(), name##_id, operand)               \
+    {                                                                          \
+    }                                                                          \
+    name##2t(const name##2t & ref) = default;                                  \
+    expr2tc do_simplify() const override;                                      \
+    static std::string field_names[esbmct::num_type_fields];                   \
+  }
+
+ESBMC_DEFINE_OBJECT_PREDICATE_1OP(valid_object);
+ESBMC_DEFINE_OBJECT_PREDICATE_1OP(races_check);
+ESBMC_DEFINE_OBJECT_PREDICATE_1OP(deallocated_obj);
+#undef ESBMC_DEFINE_OBJECT_PREDICATE_1OP
+
+/** Pointer-object size-returning op (`capability_base`/`capability_top`/
+ *  `dynamic_size`). Implicit `size_type2()` result. @extends object_ops */
+#define ESBMC_DEFINE_OBJECT_SIZE_1OP(name)                                     \
+  class name##2t : public name##_expr_methods                                  \
+  {                                                                            \
+  public:                                                                      \
+    name##2t(const expr2tc &operand)                                           \
+      : name##_expr_methods(size_type2(), name##_id, operand)                  \
+    {                                                                          \
+    }                                                                          \
+    name##2t(const name##2t & ref) = default;                                  \
+    expr2tc do_simplify() const override;                                      \
+    static std::string field_names[esbmct::num_type_fields];                   \
+  }
+
+ESBMC_DEFINE_OBJECT_SIZE_1OP(dynamic_size);
+ESBMC_DEFINE_OBJECT_SIZE_1OP(capability_base);
+ESBMC_DEFINE_OBJECT_SIZE_1OP(capability_top);
+#undef ESBMC_DEFINE_OBJECT_SIZE_1OP
+
+/** Single-operand overflow-family op returning int32 (`signbit`/
+ *  `popcount`). @extends overflow_ops */
+#define ESBMC_DEFINE_OVERFLOW_INT32_1OP(name)                                  \
+  class name##2t : public name##_expr_methods                                  \
+  {                                                                            \
+  public:                                                                      \
+    name##2t(const expr2tc &operand)                                           \
+      : name##_expr_methods(get_int32_type(), name##_id, operand)              \
+    {                                                                          \
+    }                                                                          \
+    name##2t(const name##2t & ref) = default;                                  \
+    expr2tc do_simplify() const override;                                      \
+    static std::string field_names[esbmct::num_type_fields];                   \
+  }
+
+ESBMC_DEFINE_OVERFLOW_INT32_1OP(signbit);
+ESBMC_DEFINE_OVERFLOW_INT32_1OP(popcount);
+#undef ESBMC_DEFINE_OVERFLOW_INT32_1OP
+
+/** Marker node holding only a `type` (no operands), derived from
+ *  expr2t directly. Used for `unknown`/`invalid`/`null_object`.
+ *  @extends expr2t */
+#define ESBMC_DEFINE_TYPE_ONLY(name)                                           \
+  class name##2t : public name##_expr_methods                                  \
+  {                                                                            \
+  public:                                                                      \
+    name##2t(const type2tc &type) : name##_expr_methods(type, name##_id)       \
+    {                                                                          \
+    }                                                                          \
+    name##2t(const name##2t & ref) = default;                                  \
+    expr2tc do_simplify() const override;                                      \
+    static std::string field_names[esbmct::num_type_fields];                   \
+  }
+
+ESBMC_DEFINE_TYPE_ONLY(unknown);
+ESBMC_DEFINE_TYPE_ONLY(invalid);
+ESBMC_DEFINE_TYPE_ONLY(null_object);
+#undef ESBMC_DEFINE_TYPE_ONLY
+
+/** `code_*` statement with empty type and a single `expr2tc` operand
+ *  (`code_expression`/`code_return`/`code_free`/`code_cpp_del_array`/
+ *  `code_cpp_delete`). @extends code_expression_data */
+#define ESBMC_DEFINE_CODE_EXPRESSION_1OP(name)                                 \
+  class name##2t : public name##_expr_methods                                  \
+  {                                                                            \
+  public:                                                                      \
+    name##2t(const expr2tc &operand)                                           \
+      : name##_expr_methods(get_empty_type(), name##_id, operand)              \
+    {                                                                          \
+    }                                                                          \
+    name##2t(const name##2t & ref) = default;                                  \
+    expr2tc do_simplify() const override;                                      \
+    static std::string field_names[esbmct::num_type_fields];                   \
+  }
+
+ESBMC_DEFINE_CODE_EXPRESSION_1OP(code_expression);
+ESBMC_DEFINE_CODE_EXPRESSION_1OP(code_return);
+ESBMC_DEFINE_CODE_EXPRESSION_1OP(code_free);
+ESBMC_DEFINE_CODE_EXPRESSION_1OP(code_cpp_del_array);
+ESBMC_DEFINE_CODE_EXPRESSION_1OP(code_cpp_delete);
+#undef ESBMC_DEFINE_CODE_EXPRESSION_1OP
+
+/** `code_*` declaration carrying `(type, irep_idt name)`. Used for
+ *  `code_decl`/`code_dead`. @extends code_decl_data */
+#define ESBMC_DEFINE_CODE_DECL(name)                                           \
+  class name##2t : public name##_expr_methods                                  \
+  {                                                                            \
+  public:                                                                      \
+    name##2t(const type2tc &type, const irep_idt &n)                           \
+      : name##_expr_methods(type, name##_id, n)                                \
+    {                                                                          \
+    }                                                                          \
+    name##2t(const name##2t & ref) = default;                                  \
+    expr2tc do_simplify() const override;                                      \
+    static std::string field_names[esbmct::num_type_fields];                   \
+  }
+
+ESBMC_DEFINE_CODE_DECL(code_decl);
+ESBMC_DEFINE_CODE_DECL(code_dead);
+#undef ESBMC_DEFINE_CODE_DECL
+
+/** `code_*` C++ throw-decl carrying a single `std::vector<irep_idt>`
+ *  of exception names. Used for `code_cpp_throw_decl`/
+ *  `code_cpp_throw_decl_end`. @extends code_cpp_throw_decl_data */
+#define ESBMC_DEFINE_CODE_CPP_THROW_DECL(name)                                 \
+  class name##2t : public name##_expr_methods                                  \
+  {                                                                            \
+  public:                                                                      \
+    name##2t(const std::vector<irep_idt> &names)                               \
+      : name##_expr_methods(get_empty_type(), name##_id, names)                \
+    {                                                                          \
+    }                                                                          \
+    name##2t(const name##2t & ref) = default;                                  \
+    expr2tc do_simplify() const override;                                      \
+    static std::string field_names[esbmct::num_type_fields];                   \
+  }
+
+ESBMC_DEFINE_CODE_CPP_THROW_DECL(code_cpp_throw_decl);
+ESBMC_DEFINE_CODE_CPP_THROW_DECL(code_cpp_throw_decl_end);
+#undef ESBMC_DEFINE_CODE_CPP_THROW_DECL
+
 /** C++20 three-way comparison `a <=> b`. Result type is the
  * comparison-category struct (`std::strong_ordering` /
  * `std::weak_ordering` / `std::partial_ordering`); the discriminating
@@ -2142,302 +2395,6 @@ public:
   {
   }
   not2t(const not2t &ref) = default;
-
-  expr2tc do_simplify() const override;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
-/** And operation. Computes boolean value of (side_1 & side_2). Always results
- *  in boolean type. @extends logic_2ops */
-class and2t : public and_expr_methods
-{
-public:
-  /** Primary constructor. @param s1 Operand 1. @param s2 Operand 2. */
-  and2t(const expr2tc &s1, const expr2tc &s2)
-    : and_expr_methods(get_bool_type(), and_id, s1, s2)
-  {
-  }
-  and2t(const and2t &ref) = default;
-
-  expr2tc do_simplify() const override;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
-/** Or operation. Computes boolean value of (side_1 | side_2). Always results
- *  in boolean type. @extends logic_2ops */
-class or2t : public or_expr_methods
-{
-public:
-  /** Primary constructor. @param s1 Operand 1. @param s2 Operand 2. */
-  or2t(const expr2tc &s1, const expr2tc &s2)
-    : or_expr_methods(get_bool_type(), or_id, s1, s2)
-  {
-  }
-  or2t(const or2t &ref) = default;
-
-  expr2tc do_simplify() const override;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
-/** Xor operation. Computes boolean value of (side_1 ^ side_2). Always results
- *  in boolean type. @extends logic_2ops */
-class xor2t : public xor_expr_methods
-{
-public:
-  /** Primary constructor. @param s1 Operand 1. @param s2 Operand 2. */
-  xor2t(const expr2tc &s1, const expr2tc &s2)
-    : xor_expr_methods(get_bool_type(), xor_id, s1, s2)
-  {
-  }
-  xor2t(const xor2t &ref) = default;
-
-  expr2tc do_simplify() const override;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
-/** Implies operation. Computes boolean value of (side_1 -> side_2). Always
- *  results in boolean type. @extends logic_2ops */
-class implies2t : public implies_expr_methods
-{
-public:
-  /** Primary constructor. @param s1 Operand 1. @param s2 Operand 2. */
-  implies2t(const expr2tc &s1, const expr2tc &s2)
-    : implies_expr_methods(get_bool_type(), implies_id, s1, s2)
-  {
-  }
-  implies2t(const implies2t &ref) = default;
-
-  expr2tc do_simplify() const override;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
-/** Bit and operation. Perform bit and between two bitvector operands. Types of
- *  this expr and both operands must match. @extends bit_2ops */
-class bitand2t : public bitand_expr_methods
-{
-public:
-  /** Primary constructor.
-   *  @param t Type of this expr.
-   *  @param s1 Operand 1.
-   *  @param s2 Operand 2. */
-  bitand2t(const type2tc &t, const expr2tc &s1, const expr2tc &s2)
-    : bitand_expr_methods(t, bitand_id, s1, s2)
-  {
-  }
-  bitand2t(const bitand2t &ref) = default;
-
-  expr2tc do_simplify() const override;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
-/** Bit or operation. Perform bit or between two bitvector operands. Types of
- *  this expr and both operands must match. @extends bit_2ops */
-class bitor2t : public bitor_expr_methods
-{
-public:
-  /** Primary constructor.
-   *  @param t Type of this expr.
-   *  @param s1 Operand 1.
-   *  @param s2 Operand 2. */
-  bitor2t(const type2tc &t, const expr2tc &s1, const expr2tc &s2)
-    : bitor_expr_methods(t, bitor_id, s1, s2)
-  {
-  }
-  bitor2t(const bitor2t &ref) = default;
-
-  expr2tc do_simplify() const override;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
-/** Bit xor operation. Perform bit xor between two bitvector operands. Types of
- *  this expr and both operands must match. @extends bit_2ops */
-class bitxor2t : public bitxor_expr_methods
-{
-public:
-  /** Primary constructor.
-   *  @param t Type of this expr.
-   *  @param s1 Operand 1.
-   *  @param s2 Operand 2. */
-  bitxor2t(const type2tc &t, const expr2tc &s1, const expr2tc &s2)
-    : bitxor_expr_methods(t, bitxor_id, s1, s2)
-  {
-  }
-  bitxor2t(const bitxor2t &ref) = default;
-
-  expr2tc do_simplify() const override;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
-/** Bit not operation. Invert bits in bitvector operand. Operand must have the
- *  same type as this expr. @extends bitnot_data */
-class bitnot2t : public bitnot_expr_methods
-{
-public:
-  /** Primary constructor.
-   *  @param type Type of this expr.
-   *  @param v Value to invert */
-  bitnot2t(const type2tc &type, const expr2tc &v)
-    : bitnot_expr_methods(type, bitnot_id, v)
-  {
-  }
-  bitnot2t(const type2tc &type, const expr2tc &v, const expr2tc &)
-    : bitnot_expr_methods(type, bitnot_id, v)
-  {
-  }
-  bitnot2t(const bitnot2t &ref) = default;
-
-  expr2tc do_simplify() const override;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
-/** Logical shift right. Shifts operand 1 to the right by the number of bits in
- *  operand 2, with zeros shifted into empty spaces. All types must be integers,
- *  will probably find that the shifted value type must match the expr type.
- *  @extends bit_2ops */
-class lshr2t : public lshr_expr_methods
-{
-public:
-  /** Primary constructor.
-   *  @param t Type of this expression.
-   *  @param s1 Value to be shifted.
-   *  @param s2 Number of bits to shift by, potentially nondeterministic. */
-  lshr2t(const type2tc &t, const expr2tc &s1, const expr2tc &s2)
-    : lshr_expr_methods(t, lshr_id, s1, s2)
-  {
-  }
-  lshr2t(const lshr2t &ref) = default;
-
-  expr2tc do_simplify() const override;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
-/** Arithmetic negation. Negate the operand, which must be a number type. Operand
- *  type must match expr type. @extends arith_1op */
-class neg2t : public neg_expr_methods
-{
-public:
-  /** Primary constructor.
-   *  @param type Type of this expr.
-   *  @param val Value to negate. */
-  neg2t(const type2tc &type, const expr2tc &val)
-    : neg_expr_methods(type, neg_id, val)
-  {
-  }
-  neg2t(const neg2t &ref) = default;
-
-  expr2tc do_simplify() const override;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
-/** Arithmetic abs. Take absolute value of the operand, which must be a number
- *  type. Operand type must match expr type. @extends arith_1op */
-class abs2t : public abs_expr_methods
-{
-public:
-  /** Primary constructor.
-   *  @param type Type of this expr.
-   *  @param val Value to abs. */
-  abs2t(const type2tc &type, const expr2tc &val)
-    : abs_expr_methods(type, abs_id, val)
-  {
-  }
-  abs2t(const abs2t &ref) = default;
-
-  expr2tc do_simplify() const override;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
-/** Addition operation. Adds two operands together. Must both be numeric types.
- *  Types of both operands and expr type should match.
- *
- *  @extends arith_2ops */
-class add2t : public add_expr_methods
-{
-public:
-  /** Primary constructor.
-   *  @param type Type of this expr.
-   *  @param v1 First operand.
-   *  @param v2 Second operand. */
-  add2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2)
-    : add_expr_methods(type, add_id, v1, v2)
-  {
-  }
-  add2t(const add2t &ref) = default;
-
-  expr2tc do_simplify() const override;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
-/** Subtraction operation. Subtracts second operand from first operand. Must both
- *  be numeric types. Types of both operands and expr type should match.
- *  @extends arith_2ops */
-class sub2t : public sub_expr_methods
-{
-public:
-  /** Primary constructor.
-   *  @param type Type of this expr.
-   *  @param v1 First operand.
-   *  @param v2 Second operand. */
-  sub2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2)
-    : sub_expr_methods(type, sub_id, v1, v2)
-  {
-  }
-  sub2t(const sub2t &ref) = default;
-
-  expr2tc do_simplify() const override;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
-/** Multiplication operation. Multiplies the two operands. Must both be numeric
- *  types. Types of both operands and expr type should match.
- *  @extends arith_2ops */
-class mul2t : public mul_expr_methods
-{
-public:
-  /** Primary constructor.
-   *  @param type Type of this expr.
-   *  @param v1 First operand.
-   *  @param v2 Second operand. */
-  mul2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2)
-    : mul_expr_methods(type, mul_id, v1, v2)
-  {
-  }
-  mul2t(const mul2t &ref) = default;
-
-  expr2tc do_simplify() const override;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
-/** Division operation. Divides first operand by second operand. Must both be
- *  numeric types. Types of both operands and expr type should match.
- *  @extends arith_2ops */
-class div2t : public div_expr_methods
-{
-public:
-  /** Primary constructor.
-   *  @param type Type of this expr.
-   *  @param v1 First operand.
-   *  @param v2 Second operand. */
-  div2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2)
-    : div_expr_methods(type, div_id, v1, v2)
-  {
-  }
-  div2t(const div2t &ref) = default;
 
   expr2tc do_simplify() const override;
 
@@ -2525,70 +2482,6 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-/** Modulus operation. Takes modulus of first operand divided by 2nd operand.
- *  Should both be integer types. Types of both operands and expr type should
- *  match. @extends arith_2ops */
-class modulus2t : public modulus_expr_methods
-{
-public:
-  /** Primary constructor.
-   *  @param type Type of this expr.
-   *  @param v1 First operand.
-   *  @param v2 Second operand. */
-  modulus2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2)
-    : modulus_expr_methods(type, modulus_id, v1, v2)
-  {
-  }
-  modulus2t(const modulus2t &ref) = default;
-
-  expr2tc do_simplify() const override;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
-/** Shift left operation. Shifts contents of first operand left by number of
- *  bit positions indicated by the second operand. Both must be integers.
- * @extends bit_2ops */
-class shl2t : public shl_expr_methods
-{
-public:
-  /** Primary constructor.
-   *  @param type Type of this expr.
-   *  @param v1 Value to shift.
-   *  @param v2 Number of bits to to shift by. */
-  shl2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2)
-    : shl_expr_methods(type, shl_id, v1, v2)
-  {
-  }
-  shl2t(const shl2t &ref) = default;
-
-  expr2tc do_simplify() const override;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
-/** Arithmetic Shift right operation. Shifts contents of first operand right by
- *  number of bit positions indicated by the second operand, preserving sign of
- *  original number. Both must be integers. Types of both operands and expr type
- *  should match. @extends arith_2ops */
-class ashr2t : public ashr_expr_methods
-{
-public:
-  /** Primary constructor.
-   *  @param type Type of this expr.
-   *  @param v1 Value to shift.
-   *  @param v2 Number of bits to to shift by. */
-  ashr2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2)
-    : ashr_expr_methods(type, ashr_id, v1, v2)
-  {
-  }
-  ashr2t(const ashr2t &ref) = default;
-
-  expr2tc do_simplify() const override;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
 /** Same-object operation. Checks whether two operands with pointer type have the
  *  same pointer object or not. Always has boolean result.
  *  @extends same_object_data */
@@ -2625,38 +2518,6 @@ public:
   pointer_offset2t(const pointer_offset2t &ref) = default;
 
   expr2tc do_simplify() const override;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
-/** Extract pointer object. From an expression of pointer type, produce the
- *  pointer object that this pointer points into. @extends pointer_ops */
-class pointer_object2t : public pointer_object_expr_methods
-{
-public:
-  /** Primary constructor.
-   *  @param type Model basic integer type.
-   *  @param ptrobj Pointer object to get object from. */
-  pointer_object2t(const type2tc &type, const expr2tc &ptrobj)
-    : pointer_object_expr_methods(type, pointer_object_id, ptrobj)
-  {
-  }
-  pointer_object2t(const pointer_object2t &ref) = default;
-
-  expr2tc do_simplify() const override;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
-/** @extends pointer_ops */
-class pointer_capability2t : public pointer_capability_expr_methods
-{
-public:
-  pointer_capability2t(const type2tc &type, const expr2tc &ptrobj)
-    : pointer_capability_expr_methods(type, pointer_capability_id, ptrobj)
-  {
-  }
-  pointer_capability2t(const pointer_capability2t &ref) = default;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2877,23 +2738,6 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-/** Is operand not-a-number. Used to implement C library isnan function for
- *  float/double values. Boolean result. @extends arith_1op */
-class isnan2t : public isnan_expr_methods
-{
-public:
-  /** Primary constructor. @param value Number value to test for nan */
-  isnan2t(const expr2tc &value)
-    : isnan_expr_methods(get_bool_type(), isnan_id, value)
-  {
-  }
-  isnan2t(const isnan2t &ref) = default;
-
-  expr2tc do_simplify() const override;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
 /** Check whether operand overflows. Operand must be either add, subtract,
  *  or multiply, and have integer operands themselves. If the result of the
  *  operation doesn't fit in the bitwidth of the operands, this expr evaluates
@@ -2958,48 +2802,6 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-/** Record unknown data value. Exclusively for use in pointer analysis to record
- *  the fact that we point at an unknown item of data. @extends expr2t */
-class unknown2t : public unknown_expr_methods
-{
-public:
-  /** Primary constructor. @param type Type of unknown data item */
-  unknown2t(const type2tc &type) : unknown_expr_methods(type, unknown_id)
-  {
-  }
-  unknown2t(const unknown2t &ref) = default;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
-/** Record invalid data value. Exclusively for use in pointer analysis to record
- *  the fact that what we point at is guaranteed to be invalid or nonexistant.
- *  @extends expr2t */
-class invalid2t : public invalid_expr_methods
-{
-public:
-  invalid2t(const type2tc &type) : invalid_expr_methods(type, invalid_id)
-  {
-  }
-  invalid2t(const invalid2t &ref) = default;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
-/** Record null pointer value. Exclusively for use in pointer analysis to record
- *  the fact that a pointer can be NULL. @extends expr2t */
-class null_object2t : public null_object_expr_methods
-{
-public:
-  null_object2t(const type2tc &type)
-    : null_object_expr_methods(type, null_object_id)
-  {
-  }
-  null_object2t(const null_object2t &ref) = default;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
 /** Record a dynamicly allocated object. Exclusively for use in pointer analysis.
  *  @extends dynamic_object_data */
 class dynamic_object2t : public dynamic_object_expr_methods
@@ -3034,106 +2836,6 @@ public:
   {
   }
   dereference2t(const dereference2t &ref) = default;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
-/** Test whether ptr is valid. Expanded at symex time to look up whether or not
- *  the pointer operand is invalid (i.e., doesn't point at something and thus
- *  would be invalid to dereference). Boolean result. @extends object_ops */
-class valid_object2t : public valid_object_expr_methods
-{
-public:
-  /** Primary constructor. @param operand Pointer value to examine for validity*/
-  valid_object2t(const expr2tc &operand)
-    : valid_object_expr_methods(get_bool_type(), valid_object_id, operand)
-  {
-  }
-  valid_object2t(const valid_object2t &ref) = default;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
-class races_check2t : public races_check_expr_methods
-{
-public:
-  races_check2t(const expr2tc &operand)
-    : races_check_expr_methods(get_bool_type(), races_check_id, operand)
-  {
-  }
-  races_check2t(const races_check2t &ref) = default;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
-class isinstance2t : public isinstance_expr_methods
-{
-public:
-  isinstance2t(const expr2tc &value, const expr2tc &type)
-    : isinstance_expr_methods(get_bool_type(), isinstance_id, value, type)
-  {
-  }
-  isinstance2t(const isinstance2t &ref) = default;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
-class hasattr2t : public hasattr_expr_methods
-{
-public:
-  hasattr2t(const expr2tc &value, const expr2tc &attr)
-    : hasattr_expr_methods(get_bool_type(), hasattr_id, value, attr)
-  {
-  }
-  hasattr2t(const hasattr2t &ref) = default;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
-class isnone2t : public isnone_expr_methods
-{
-public:
-  isnone2t(const expr2tc &lhs, const expr2tc &rhs)
-    : isnone_expr_methods(get_bool_type(), isnone_id, lhs, rhs)
-  {
-  }
-
-  isnone2t(const isnone2t &ref) = default;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
-/** Test pointer for deallocation. Check for use after free: this irep is
- *  expanded at symex time to look up whether or not the operand is a) an invalid
- *  object, and b) if it is, whether it's been marked as being deallocated.
- *  Evalutes to true if that's the case. @extends object_ops */
-class deallocated_obj2t : public deallocated_obj_expr_methods
-{
-public:
-  /** Primary constructor. @param operand Pointer to check for deallocation */
-  deallocated_obj2t(const expr2tc &operand)
-    : deallocated_obj_expr_methods(get_bool_type(), deallocated_obj_id, operand)
-  {
-  }
-  deallocated_obj2t(const deallocated_obj2t &ref) = default;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
-/** Retrieve dynamic size of pointer obj. For a dynamically allocated pointer
- *  object, retrieves its potentially nondeterministic object size. Expanded at
- *  symex time to access a modelling array. Not sure what happens if you feed
- *  it a nondynamic pointer, it'll probably give you a free variable.
- *  @extends object_ops */
-class dynamic_size2t : public dynamic_size_expr_methods
-{
-public:
-  /** Primary constructor. @param operand Pointer object to fetch size for. */
-  dynamic_size2t(const expr2tc &operand)
-    : dynamic_size_expr_methods(size_type2(), dynamic_size_id, operand)
-  {
-  }
-  dynamic_size2t(const dynamic_size2t &ref) = default;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -3199,30 +2901,6 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class code_decl2t : public code_decl_expr_methods
-{
-public:
-  code_decl2t(const type2tc &t, const irep_idt &name)
-    : code_decl_expr_methods(t, code_decl_id, name)
-  {
-  }
-  code_decl2t(const code_decl2t &ref) = default;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
-class code_dead2t : public code_dead_expr_methods
-{
-public:
-  code_dead2t(const type2tc &t, const irep_idt &name)
-    : code_dead_expr_methods(t, code_dead_id, name)
-  {
-  }
-  code_dead2t(const code_dead2t &ref) = default;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
 class code_printf2t : public code_printf_expr_methods
 {
 public:
@@ -3235,30 +2913,6 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class code_expression2t : public code_expression_expr_methods
-{
-public:
-  code_expression2t(const expr2tc &oper)
-    : code_expression_expr_methods(get_empty_type(), code_expression_id, oper)
-  {
-  }
-  code_expression2t(const code_expression2t &ref) = default;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
-class code_return2t : public code_return_expr_methods
-{
-public:
-  code_return2t(const expr2tc &oper)
-    : code_return_expr_methods(get_empty_type(), code_return_id, oper)
-  {
-  }
-  code_return2t(const code_return2t &ref) = default;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
 class code_skip2t : public code_skip_expr_methods
 {
 public:
@@ -3266,18 +2920,6 @@ public:
   {
   }
   code_skip2t(const code_skip2t &ref) = default;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
-class code_free2t : public code_free_expr_methods
-{
-public:
-  code_free2t(const expr2tc &oper)
-    : code_free_expr_methods(get_empty_type(), code_free_id, oper)
-  {
-  }
-  code_free2t(const code_free2t &ref) = default;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -3373,33 +3015,6 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class code_cpp_del_array2t : public code_cpp_del_array_expr_methods
-{
-public:
-  code_cpp_del_array2t(const expr2tc &v)
-    : code_cpp_del_array_expr_methods(
-        get_empty_type(),
-        code_cpp_del_array_id,
-        v)
-  {
-  }
-  code_cpp_del_array2t(const code_cpp_del_array2t &ref) = default;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
-class code_cpp_delete2t : public code_cpp_delete_expr_methods
-{
-public:
-  code_cpp_delete2t(const expr2tc &v)
-    : code_cpp_delete_expr_methods(get_empty_type(), code_cpp_delete_id, v)
-  {
-  }
-  code_cpp_delete2t(const code_cpp_delete2t &ref) = default;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
 class code_cpp_catch2t : public code_cpp_catch_expr_methods
 {
 public:
@@ -3420,120 +3035,6 @@ public:
   {
   }
   code_cpp_throw2t(const code_cpp_throw2t &ref) = default;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
-class code_cpp_throw_decl2t : public code_cpp_throw_decl_expr_methods
-{
-public:
-  code_cpp_throw_decl2t(const std::vector<irep_idt> &l)
-    : code_cpp_throw_decl_expr_methods(
-        get_empty_type(),
-        code_cpp_throw_decl_id,
-        l)
-  {
-  }
-  code_cpp_throw_decl2t(const code_cpp_throw_decl2t &ref) = default;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
-class code_cpp_throw_decl_end2t : public code_cpp_throw_decl_end_expr_methods
-{
-public:
-  code_cpp_throw_decl_end2t(const std::vector<irep_idt> &exl)
-    : code_cpp_throw_decl_end_expr_methods(
-        get_empty_type(),
-        code_cpp_throw_decl_end_id,
-        exl)
-  {
-  }
-  code_cpp_throw_decl_end2t(const code_cpp_throw_decl_end2t &ref) = default;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
-class isinf2t : public isinf_expr_methods
-{
-public:
-  isinf2t(const expr2tc &val)
-    : isinf_expr_methods(get_bool_type(), isinf_id, val)
-  {
-  }
-  isinf2t(const isinf2t &ref) = default;
-
-  expr2tc do_simplify() const override;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
-class isnormal2t : public isnormal_expr_methods
-{
-public:
-  isnormal2t(const expr2tc &val)
-    : isnormal_expr_methods(get_bool_type(), isnormal_id, val)
-  {
-  }
-  isnormal2t(const isnormal2t &ref) = default;
-
-  expr2tc do_simplify() const override;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
-class isfinite2t : public isfinite_expr_methods
-{
-public:
-  isfinite2t(const expr2tc &val)
-    : isfinite_expr_methods(get_bool_type(), isfinite_id, val)
-  {
-  }
-  isfinite2t(const isfinite2t &ref) = default;
-
-  expr2tc do_simplify() const override;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
-class signbit2t : public signbit_expr_methods
-{
-public:
-  signbit2t(const expr2tc &val)
-    : signbit_expr_methods(get_int32_type(), signbit_id, val)
-  {
-  }
-  signbit2t(const signbit2t &ref) = default;
-
-  expr2tc do_simplify() const override;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
-class bswap2t : public bswap_expr_methods
-{
-public:
-  bswap2t(const type2tc &type, const expr2tc &val)
-    : bswap_expr_methods(type, bswap_id, val)
-  {
-  }
-  bswap2t(const bswap2t &ref) = default;
-
-  expr2tc do_simplify() const override;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
-class popcount2t : public popcount_expr_methods
-{
-public:
-  popcount2t(const expr2tc &val)
-    : popcount_expr_methods(get_int32_type(), popcount_id, val)
-  {
-  }
-  popcount2t(const popcount2t &ref) = default;
-
-  expr2tc do_simplify() const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -3569,32 +3070,6 @@ public:
   extract2t(const extract2t &ref) = default;
 
   expr2tc do_simplify() const override;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
-class capability_base2t : public capability_base_expr_methods
-{
-public:
-  /** Primary constructor. @param operand Pointer object to fetch size for. */
-  capability_base2t(const expr2tc &operand)
-    : capability_base_expr_methods(size_type2(), capability_base_id, operand)
-  {
-  }
-  capability_base2t(const capability_base2t &ref) = default;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
-class capability_top2t : public capability_top_expr_methods
-{
-public:
-  /** Primary constructor. @param operand Pointer object to fetch size for. */
-  capability_top2t(const expr2tc &operand)
-    : capability_top_expr_methods(size_type2(), capability_top_id, operand)
-  {
-  }
-  capability_top2t(const capability_top2t &ref) = default;
 
   static std::string field_names[esbmct::num_type_fields];
 };

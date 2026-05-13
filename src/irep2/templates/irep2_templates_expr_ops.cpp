@@ -12,7 +12,7 @@ ESBMC_INSTANTIATE_EXPR(bitand, bit_2ops);
 ESBMC_INSTANTIATE_EXPR(bitor, bit_2ops);
 ESBMC_INSTANTIATE_EXPR(bitxor, bit_2ops);
 ESBMC_INSTANTIATE_EXPR(lshr, bit_2ops);
-ESBMC_INSTANTIATE_EXPR(bitnot, bitnot_data);
+ESBMC_INSTANTIATE_EXPR(bitnot, arith_1op);
 ESBMC_INSTANTIATE_EXPR(neg, arith_1op);
 ESBMC_INSTANTIATE_EXPR(abs, arith_1op);
 ESBMC_INSTANTIATE_EXPR(add, arith_2ops);

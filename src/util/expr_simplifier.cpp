@@ -1359,6 +1359,11 @@ expr2tc pointer_object2t::do_simplify() const
   return expr2tc();
 }
 
+expr2tc pointer_capability2t::do_simplify() const
+{
+  return expr2tc();
+}
+
 expr2tc pointer_offset2t::do_simplify() const
 {
   // XXX - this could be better. But the current implementation catches most
@@ -5741,3 +5746,36 @@ expr2tc byte_update2t::do_simplify() const
     constant_int2tc(
       get_uint_type(src_value.length()), string2integer(src_value, 2)));
 }
+
+// Nil-returning do_simplify stubs for classes that ride a fold macro
+// declaring an out-of-line override but have no per-class simplification
+// rule yet. Each just defers to expr2t's default behaviour.
+#define ESBMC_NIL_SIMPLIFY(name)                                               \
+  expr2tc name##2t::do_simplify() const                                        \
+  {                                                                            \
+    return expr2tc();                                                          \
+  }
+
+ESBMC_NIL_SIMPLIFY(valid_object)
+ESBMC_NIL_SIMPLIFY(races_check)
+ESBMC_NIL_SIMPLIFY(deallocated_obj)
+ESBMC_NIL_SIMPLIFY(unknown)
+ESBMC_NIL_SIMPLIFY(invalid)
+ESBMC_NIL_SIMPLIFY(null_object)
+ESBMC_NIL_SIMPLIFY(capability_base)
+ESBMC_NIL_SIMPLIFY(capability_top)
+ESBMC_NIL_SIMPLIFY(dynamic_size)
+ESBMC_NIL_SIMPLIFY(code_expression)
+ESBMC_NIL_SIMPLIFY(code_return)
+ESBMC_NIL_SIMPLIFY(code_free)
+ESBMC_NIL_SIMPLIFY(code_cpp_del_array)
+ESBMC_NIL_SIMPLIFY(code_cpp_delete)
+ESBMC_NIL_SIMPLIFY(code_decl)
+ESBMC_NIL_SIMPLIFY(code_dead)
+ESBMC_NIL_SIMPLIFY(code_cpp_throw_decl)
+ESBMC_NIL_SIMPLIFY(code_cpp_throw_decl_end)
+ESBMC_NIL_SIMPLIFY(isinstance)
+ESBMC_NIL_SIMPLIFY(hasattr)
+ESBMC_NIL_SIMPLIFY(isnone)
+
+#undef ESBMC_NIL_SIMPLIFY
