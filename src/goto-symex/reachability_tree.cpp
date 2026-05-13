@@ -173,7 +173,7 @@ void reachability_treet::create_next_state()
   if (next_thread_id != ex_state.threads_state.size())
   {
     auto new_state = ex_state.clone();
-    exploration_frames.push_back({new_state, get_cur_scheduler_frame()});
+    exploration_frames.push_back({new_state, scheduler_framet{}});
 
     /* Make it active, make it follow on from previous state... */
     if (new_state->get_active_state_number() != next_thread_id)

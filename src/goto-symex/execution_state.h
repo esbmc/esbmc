@@ -60,7 +60,6 @@ public:
   struct transition_resultt
   {
     unsigned int thread_id = 0;
-    const goto_programt::instructiont *instruction = nullptr;
     std::optional<guardt> parent_guard;
     std::optional<branch_resultt> branch;
   };
@@ -552,8 +551,6 @@ public:
   unsigned int monitor_from_tid;
   /** Whether monitor_from_tid is set */
   bool mon_from_tid;
-  /** Have we warned of an ended monitor thread already?. */
-  bool mon_thread_warning;
   /** Minimum number of threads to exist to consider a context switch.
    *  In certain special cases, such as LTL checking, various pieces of
    *  code and information are bunged into separate threads which aren't

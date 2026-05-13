@@ -86,7 +86,6 @@ execution_statet::execution_statet(
   last_active_thread = 0;
   node_count = 0;
   nondet_count = 0;
-  mon_thread_warning = false;
 
   thread_cswitch_threshold = (options.get_bool_option("ltl")) ? 3 : 2;
 }
@@ -130,7 +129,6 @@ execution_statet &execution_statet::operator=(const execution_statet &ex)
   node_id = ex.node_id;
   global_value_set = ex.global_value_set;
   interleaving_unviable = ex.interleaving_unviable;
-  mon_thread_warning = ex.mon_thread_warning;
 
   monitor_tid = ex.monitor_tid;
   tid_is_set = ex.tid_is_set;
@@ -162,7 +160,6 @@ void execution_statet::symex_step(reachability_treet &art)
   const goto_programt::instructiont &instruction = *state.source.pc;
   last_transition = transition_resultt();
   last_transition.thread_id = active_thread;
-  last_transition.instruction = &instruction;
 
   merge_gotos();
 
@@ -1073,13 +1070,15 @@ void execution_statet::switch_to_monitor()
 {
   if (threads_state[monitor_tid].thread_ended)
   {
-    if (!mon_thread_warning)
+    // Warn at most once per process: the message is informational and not
+    // tied to which execution_statet noticed the ended monitor.
+    static bool warned = false;
+    if (!warned)
     {
       log_error(
         "Switching to ended monitor; you need to increase its "
         "context or prefix bound");
-
-      mon_thread_warning = true;
+      warned = true;
     }
 
     return;
