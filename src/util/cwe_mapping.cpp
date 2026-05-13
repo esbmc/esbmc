@@ -95,6 +95,7 @@ const std::vector<entry_t> &rules_table()
       {"atomicity violation",
        {"atomicity-violation", "Atomicity violation", {362, 366}}},
       {"data race on", {"data-race", "Data race", {362, 366}}},
+      {"Deadlocked state", {"deadlock", "Deadlock", {833}}},
       // Reachability.
       {"unreachable code reached",
        {"reachable-error", "Reachable error/assertion", {617}}},
@@ -146,6 +147,7 @@ const std::map<unsigned, std::string_view> &names_map()
     {823, "Use of Out-of-range Pointer Offset"},
     {824, "Access of Uninitialized Pointer"},
     {825, "Expired Pointer Dereference"},
+    {833, "Deadlock"},
     {908, "Use of Uninitialized Resource"},
     {1335, "Incorrect Bitwise Shift of Integer"},
   };
