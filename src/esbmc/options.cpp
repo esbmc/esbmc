@@ -259,6 +259,10 @@ const struct group_opt_templ all_cmd_options[] = {
      boost::program_options::value<std::string>()->value_name("path"),
      "Generate the verification result witness in both Yaml and GraphML "
      "format"},
+    {"sarif-output",
+     boost::program_options::value<std::string>()->value_name("{ path | - }"),
+     "Generate a SARIF 2.1.0 report of the violation; use '-' for stdout. "
+     "Each result is annotated with the matching CWE ids (CWE 4.20)."},
     {"witness-output-graphml",
      boost::program_options::value<std::string>()->value_name("{ path | - }"),
      "Generate the verification result witness in GraphML format; use '-' for "

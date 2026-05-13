@@ -649,6 +649,9 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("witness-output-graphml", filename + ".graphml");
   }
 
+  if (cmdline.isset("sarif-output"))
+    options.set_option("sarif-output", cmdline.getval("sarif-output"));
+
   config.options = options;
 }
 

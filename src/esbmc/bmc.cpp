@@ -25,6 +25,7 @@
 #include <goto-symex/build_goto_trace.h>
 #include <goto-symex/goto_trace.h>
 #include <goto-symex/features.h>
+#include <goto-symex/sarif.h>
 #include <goto-symex/xml_goto_trace.h>
 #include <langapi/language_util.h>
 #include <langapi/languages.h>
@@ -150,6 +151,9 @@ void bmct::error_trace(smt_convt &smt_conv, const symex_target_equationt &eq)
 
   if (witness_yaml_output != "")
     violation_yaml_goto_trace(options, ns, goto_trace);
+
+  if (!options.get_option("sarif-output").empty())
+    sarif_goto_trace(options, ns, goto_trace);
 
   if (options.get_bool_option("generate-testcase"))
   {
