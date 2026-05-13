@@ -18,8 +18,6 @@
  */
 
 #include <big-int/bigint.hh>
-#include <boost/preprocessor/list/adt.hpp>
-#include <boost/preprocessor/list/for_each.hpp>
 #include <atomic>
 #include <cstddef>
 #include <functional>
@@ -33,123 +31,11 @@
 #include <util/irep_idt.h>
 #include <util/irep.h>
 
-// Ahead of time: a list of all expressions and types, in a preprocessing
-// list, for enumerating later. Should avoid manually enumerating anywhere
-// else.
-
-// clang-format off
-#define ESBMC_LIST_OF_EXPRS                                                    \
-  BOOST_PP_LIST_CONS(constant_int,                                             \
-  BOOST_PP_LIST_CONS(constant_fixedbv,                                         \
-  BOOST_PP_LIST_CONS(constant_floatbv,                                         \
-  BOOST_PP_LIST_CONS(constant_bool,                                            \
-  BOOST_PP_LIST_CONS(constant_string,                                          \
-  BOOST_PP_LIST_CONS(constant_struct,                                          \
-  BOOST_PP_LIST_CONS(constant_union,                                           \
-  BOOST_PP_LIST_CONS(constant_array,                                           \
-  BOOST_PP_LIST_CONS(constant_vector,                                          \
-  BOOST_PP_LIST_CONS(constant_array_of,                                        \
-  BOOST_PP_LIST_CONS(symbol,                                                   \
-  BOOST_PP_LIST_CONS(typecast,                                                 \
-  BOOST_PP_LIST_CONS(bitcast,                                                  \
-  BOOST_PP_LIST_CONS(nearbyint,                                                \
-  BOOST_PP_LIST_CONS(if,                                                       \
-  BOOST_PP_LIST_CONS(equality,                                                 \
-  BOOST_PP_LIST_CONS(notequal,                                                 \
-  BOOST_PP_LIST_CONS(lessthan,                                                 \
-  BOOST_PP_LIST_CONS(greaterthan,                                              \
-  BOOST_PP_LIST_CONS(lessthanequal,                                            \
-  BOOST_PP_LIST_CONS(greaterthanequal,                                         \
-  BOOST_PP_LIST_CONS(cmp_three_way,                                            \
-  BOOST_PP_LIST_CONS(not,                                                      \
-  BOOST_PP_LIST_CONS(and,                                                      \
-  BOOST_PP_LIST_CONS(or,                                                       \
-  BOOST_PP_LIST_CONS(xor,                                                      \
-  BOOST_PP_LIST_CONS(implies,                                                  \
-  BOOST_PP_LIST_CONS(bitand,                                                   \
-  BOOST_PP_LIST_CONS(bitor,                                                    \
-  BOOST_PP_LIST_CONS(bitxor,                                                   \
-  BOOST_PP_LIST_CONS(bitnot,                                                   \
-  BOOST_PP_LIST_CONS(lshr,                                                     \
-  BOOST_PP_LIST_CONS(neg,                                                      \
-  BOOST_PP_LIST_CONS(abs,                                                      \
-  BOOST_PP_LIST_CONS(add,                                                      \
-  BOOST_PP_LIST_CONS(sub,                                                      \
-  BOOST_PP_LIST_CONS(mul,                                                      \
-  BOOST_PP_LIST_CONS(div,                                                      \
-  BOOST_PP_LIST_CONS(ieee_add,                                                 \
-  BOOST_PP_LIST_CONS(ieee_sub,                                                 \
-  BOOST_PP_LIST_CONS(ieee_mul,                                                 \
-  BOOST_PP_LIST_CONS(ieee_div,                                                 \
-  BOOST_PP_LIST_CONS(ieee_fma,                                                 \
-  BOOST_PP_LIST_CONS(ieee_sqrt,                                                \
-  BOOST_PP_LIST_CONS(popcount,                                                 \
-  BOOST_PP_LIST_CONS(bswap,                                                    \
-  BOOST_PP_LIST_CONS(modulus,                                                  \
-  BOOST_PP_LIST_CONS(shl,                                                      \
-  BOOST_PP_LIST_CONS(ashr,                                                     \
-  BOOST_PP_LIST_CONS(dynamic_object,                                           \
-  BOOST_PP_LIST_CONS(same_object,                                              \
-  BOOST_PP_LIST_CONS(pointer_offset,                                           \
-  BOOST_PP_LIST_CONS(pointer_object,                                           \
-  BOOST_PP_LIST_CONS(pointer_capability,                                       \
-  BOOST_PP_LIST_CONS(address_of,                                               \
-  BOOST_PP_LIST_CONS(byte_extract,                                             \
-  BOOST_PP_LIST_CONS(byte_update,                                              \
-  BOOST_PP_LIST_CONS(with,                                                     \
-  BOOST_PP_LIST_CONS(member,                                                   \
-  BOOST_PP_LIST_CONS(member_ref,                                               \
-  BOOST_PP_LIST_CONS(ptr_mem,                                                  \
-  BOOST_PP_LIST_CONS(index,                                                    \
-  BOOST_PP_LIST_CONS(isnan,                                                    \
-  BOOST_PP_LIST_CONS(overflow,                                                 \
-  BOOST_PP_LIST_CONS(overflow_cast,                                            \
-  BOOST_PP_LIST_CONS(overflow_neg,                                             \
-  BOOST_PP_LIST_CONS(unknown,                                                  \
-  BOOST_PP_LIST_CONS(invalid,                                                  \
-  BOOST_PP_LIST_CONS(null_object,                                              \
-  BOOST_PP_LIST_CONS(dereference,                                              \
-  BOOST_PP_LIST_CONS(valid_object,                                             \
-  BOOST_PP_LIST_CONS(races_check,                                              \
-  BOOST_PP_LIST_CONS(deallocated_obj,                                          \
-  BOOST_PP_LIST_CONS(dynamic_size,                                             \
-  BOOST_PP_LIST_CONS(sideeffect,                                               \
-  BOOST_PP_LIST_CONS(code_block,                                               \
-  BOOST_PP_LIST_CONS(code_assign,                                              \
-  BOOST_PP_LIST_CONS(code_decl,                                                \
-  BOOST_PP_LIST_CONS(code_dead,                                                \
-  BOOST_PP_LIST_CONS(code_printf,                                              \
-  BOOST_PP_LIST_CONS(code_expression,                                          \
-  BOOST_PP_LIST_CONS(code_return,                                              \
-  BOOST_PP_LIST_CONS(code_skip,                                                \
-  BOOST_PP_LIST_CONS(code_free,                                                \
-  BOOST_PP_LIST_CONS(code_goto,                                                \
-  BOOST_PP_LIST_CONS(object_descriptor,                                        \
-  BOOST_PP_LIST_CONS(code_function_call,                                       \
-  BOOST_PP_LIST_CONS(code_comma,                                               \
-  BOOST_PP_LIST_CONS(invalid_pointer,                                          \
-  BOOST_PP_LIST_CONS(code_asm,                                                 \
-  BOOST_PP_LIST_CONS(code_cpp_del_array,                                       \
-  BOOST_PP_LIST_CONS(code_cpp_delete,                                          \
-  BOOST_PP_LIST_CONS(code_cpp_catch,                                           \
-  BOOST_PP_LIST_CONS(code_cpp_throw,                                           \
-  BOOST_PP_LIST_CONS(code_cpp_throw_decl,                                      \
-  BOOST_PP_LIST_CONS(code_cpp_throw_decl_end,                                  \
-  BOOST_PP_LIST_CONS(isinf,                                                    \
-  BOOST_PP_LIST_CONS(isnormal,                                                 \
-  BOOST_PP_LIST_CONS(isfinite,                                                 \
-  BOOST_PP_LIST_CONS(signbit,                                                  \
-  BOOST_PP_LIST_CONS(concat,                                                   \
-  BOOST_PP_LIST_CONS(extract,                                                  \
-  BOOST_PP_LIST_CONS(capability_base,                                          \
-  BOOST_PP_LIST_CONS(capability_top,                                           \
-  BOOST_PP_LIST_CONS(forall,                                                   \
-  BOOST_PP_LIST_CONS(exists,                                                   \
-  BOOST_PP_LIST_CONS(isinstance,                                               \
-  BOOST_PP_LIST_CONS(hasattr,                                                  \
-  BOOST_PP_LIST_CONS(isnone,                                                   \
-  BOOST_PP_LIST_NIL)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
-// clang-format on
+// The list of irep2 expression kinds lives in expr_kinds.inc; the
+// list of type kinds lives in type_kinds.inc. Every consumer (the
+// enum entries, the per-kind forward declarations, the is/to/try_to
+// predicate generators, the pretty name tables) #include the matching
+// .inc with a redefining IREP2_EXPR / IREP2_TYPE macro.
 
 // Even crazier forward decls,
 namespace esbmct
@@ -211,13 +97,10 @@ private:
 
 /** Mix a value into a running hash seed.
  *
- *  Bit-compatible with boost::hash_combine's traditional implementation
- *  (the golden-ratio magic + shift mix) so historic CRC values are
- *  preserved across the migration off Boost.Hash. std::hash is used as
- *  the per-type hasher, which gives us std::hash<T>'s contract on
- *  integral / string-like types. There is no std::hash_combine in the
- *  standard library (yet — see WG21 proposals); this 3-line inline
- *  helper is the stdlib-equivalent we promised in TrackF.md.
+ *  Traditional golden-ratio magic + shift mix. std::hash is used as
+ *  the per-type hasher. There is no std::hash_combine in the standard
+ *  library (yet — see WG21 proposals); this 3-line inline helper is
+ *  the stdlib-equivalent.
  */
 template <class T>
 inline void hash_combine(std::size_t &seed, const T &v)
@@ -236,8 +119,7 @@ class constant_vector2t;
  *  Holds a raw `T *` to an irep2-derived node and manages its intrusive
  *  refcount: construction increments, destruction decrements, the
  *  pointee is deleted when the count reaches zero. Single allocation
- *  per node — no separate control block, no `shared_ptr` indirection —
- *  which is the point of F3.
+ *  per node — no separate control block, no `shared_ptr` indirection.
  *
  *  The container also implements the historic copy-on-write contract:
  *  the only way to obtain a non-const `T *` / `T &` is via the
@@ -506,10 +388,8 @@ typedef irep_container<expr2t> expr2tc;
  *  container is `irep_container<T::base_type>` (i.e. `type2tc` or
  *  `expr2tc`).
  *
- *  Equivalent to the historic `make_shared<T>(...)` + cast-to-base
- *  pattern, but matched to the F3 ownership model: a single
- *  allocation, no separate control block, exception-safe (if any
- *  argument constructor throws, the `new` hasn't run yet; if the
+ *  Single allocation, no separate control block, exception-safe (if
+ *  any argument constructor throws, the `new` hasn't run yet; if the
  *  `new` itself throws, no leak; the only ordering between `new`
  *  succeeding and the container adopting it is straight-line code
  *  inside this function).
@@ -528,11 +408,10 @@ typedef std::pair<std::string, std::string> member_entryt;
 typedef std::list<member_entryt> list_of_memberst;
 
 /** Base class for every irep2 node. Carries the intrusive refcount
- *  used by irep_container; the cell sits inside the node itself rather
- *  than in a separate shared_ptr control block, which is the whole
- *  point of F3. Container construction increments; container
- *  destruction decrements and deletes when the count reaches zero.
- *  See irep2.h's threading-contract preamble for the ordering rules.
+ *  used by irep_container; the cell sits inside the node itself.
+ *  Container construction increments; container destruction
+ *  decrements and deletes when the count reaches zero. See irep2.h's
+ *  threading-contract preamble for the ordering rules.
  */
 class irep2t
 {
@@ -562,24 +441,14 @@ public:
 class type2t : public irep2t
 {
 public:
-  /** Enumeration identifying each sort of type. */
+  /** Enumeration identifying each sort of type. Driven by
+   *  type_kinds.inc; see that file's header for the IREP2_TYPE(kind,
+   *  pretty_name) contract. */
   enum type_ids
   {
-    bool_id,
-    empty_id,
-    symbol_id,
-    struct_id,
-    union_id,
-    code_id,
-    array_id,
-    vector_id,
-    pointer_id,
-    unsignedbv_id,
-    signedbv_id,
-    fixedbv_id,
-    floatbv_id,
-    complex_id,
-    cpp_name_id,
+#define IREP2_TYPE(kind, pretty) kind##_id,
+#include <irep2/type_kinds.inc>
+#undef IREP2_TYPE
     end_type_id
   };
 
@@ -799,11 +668,13 @@ public:
    */
   enum expr_ids
   {
-// Boost preprocessor magic: enumerate over each expression and pump out
-// a foo_id enum element. See list of ireps at top of file.
-#define _ESBMC_IREP2_EXPRID_ENUM(r, data, elem) BOOST_PP_CAT(elem, _id),
-    BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_EXPRID_ENUM, foo, ESBMC_LIST_OF_EXPRS)
-      end_expr_id
+// The single source of truth for the kind list lives in
+// expr_kinds.inc; see that file's header for the IREP2_EXPR(kind,
+// pretty_name) contract.
+#define IREP2_EXPR(kind, pretty) kind##_id,
+#include <irep2/expr_kinds.inc>
+#undef IREP2_EXPR
+    end_expr_id
   };
 
   /** Type for list of constant expr operands */
@@ -1230,13 +1101,9 @@ public:
   typedef expr2t base2t;
 };
 
-// Declaration of irep and expr methods templates. The historic five-parameter
-// signature (with `fields` and `enable` template arguments) supported the
-// recursive irep_methods2 chain, where each level peeled one field off
-// `fields` via mp_pop_front and SFINAE'd a terminating specialisation on
-// `mp_empty<fields>`. The flat design (F1) walks `traits::fields` as a
-// std::tuple in a single class via fold expressions, so those parameters
-// are gone.
+// Declaration of irep and expr methods templates. The class walks
+// `traits::fields` (a std::tuple of field_traits entries) via fold
+// expressions in a single non-recursive class.
 template <class derived, class baseclass, typename traits>
 class irep_methods2;
 template <class derived, class baseclass, typename traits>
@@ -1288,8 +1155,7 @@ public:
   // The trait list is a std::tuple of field_traits<R, C, R C::*> entries.
   // for_each_field instantiates a default-constructed field_traits per
   // element (they carry only constexpr state) and lets the caller use
-  // decltype(f) to recover R / C / value. Pure C++17 — no boost::mp11
-  // required for the iteration itself.
+  // decltype(f) to recover R / C / value.
   template <typename F>
   static void for_each_field(F &&f)
   {

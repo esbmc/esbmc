@@ -12,7 +12,7 @@
 //
 // The implementations walk traits::fields (a std::tuple of
 // field_traits<R, C, R C::*> entries) via the for_each_field helper
-// defined on irep_methods2; pure C++17 fold expressions, no boost::mp11.
+// defined on irep_methods2.
 
 #include <memory>
 #include <type_traits>

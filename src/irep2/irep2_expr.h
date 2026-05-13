@@ -13,11 +13,14 @@
 // only expect the types below, it's be extremely difficult to hack new ones in.
 
 // Start of definitions for expressions. Forward decls
-
-// Iterate, in the preprocessor, over all expr ids and produce a forward
-// class declaration for them
-#define _ESBMC_IREP2_FWD_DEC(r, data, elem) class BOOST_PP_CAT(elem, 2t);
-BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_FWD_DEC, foo, ESBMC_LIST_OF_EXPRS)
+//
+// Forward-declare a concrete <kind>2t class for every entry in the
+// expr_kinds.inc manifest. The same manifest drives the expr_ids
+// enum (in irep2.h) and the is_/to_/try_to_ predicate generators
+// further down this file.
+#define IREP2_EXPR(kind, pretty) class kind##2t;
+#include <irep2/expr_kinds.inc>
+#undef IREP2_EXPR
 
 // Data definitions.
 
@@ -3695,9 +3698,12 @@ public:
     return is_##name##2t(t) ? &to_##name##2t(t) : nullptr;                     \
   }
 
-// Boost preprocessor magic to iterate over all exprs,
-#define _ESBMC_IREP2_MACROS_ENUM(r, data, elem) expr_macros(elem);
-BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_MACROS_ENUM, foo, ESBMC_LIST_OF_EXPRS)
+// Instantiate the is_/to_/try_to_ predicate triple for every kind in
+// expr_kinds.inc. Same manifest as the enum and forward declarations
+// above, so adding a kind is a single line there.
+#define IREP2_EXPR(kind, pretty) expr_macros(kind)
+#include <irep2/expr_kinds.inc>
+#undef IREP2_EXPR
 
 #undef expr_macros
 

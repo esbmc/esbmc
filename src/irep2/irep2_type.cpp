@@ -12,27 +12,19 @@
 
 /*************************** Base type2t definitions **************************/
 
+// Pretty names indexed by type2t::type_ids. Driven by type_kinds.inc;
+// adding a new type kind there automatically populates this table.
+// The static_assert guards against the array drifting out of sync
+// with the enum (which is also generated from the same .inc).
 static const char *type_names[] = {
-  "bool",
-  "empty",
-  "symbol",
-  "struct",
-  "union",
-  "code",
-  "array",
-  "vector",
-  "pointer",
-  "unsignedbv",
-  "signedbv",
-  "fixedbv",
-  "floatbv",
-  "complex",
-  "cpp_name"};
-// If this fires, you've added/removed a type id, and need to update the list
-// above (which is ordered according to the enum list)
+#define IREP2_TYPE(kind, pretty) pretty,
+#include <irep2/type_kinds.inc>
+#undef IREP2_TYPE
+};
 static_assert(
   sizeof(type_names) == (type2t::end_type_id * sizeof(char *)),
-  "Missing type name");
+  "type_names[] disagrees with type2t::type_ids — somebody edited "
+  "the manifest without going through type_kinds.inc");
 
 template <>
 class base_to_names<type2t>

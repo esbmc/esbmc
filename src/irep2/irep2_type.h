@@ -5,24 +5,15 @@
 #include <irep2/irep2.h>
 #include <util/type.h>
 
-// Start with forward class definitions
-
-class bool_type2t;
-class empty_type2t;
-class symbol_type2t;
-class struct_type2t;
-class union_type2t;
+// Forward-declare a concrete <kind>_type2t class for every entry in
+// type_kinds.inc. The same manifest drives the type_ids enum in
+// irep2.h and the is_/to_/try_to_ predicate generators below.
+#define IREP2_TYPE(kind, pretty) class kind##_type2t;
+#include <irep2/type_kinds.inc>
+#undef IREP2_TYPE
+// bv_type2t is a shared base of unsignedbv_type2t and signedbv_type2t;
+// it isn't itself a kind in the manifest so forward-declare it here.
 class bv_type2t;
-class unsignedbv_type2t;
-class signedbv_type2t;
-class code_type2t;
-class array_type2t;
-class vector_type2t;
-class pointer_type2t;
-class fixedbv_type2t;
-class floatbv_type2t;
-class complex_type2t;
-class cpp_name_type2t;
 
 // We also require in advance, the actual classes that store type data.
 
@@ -523,10 +514,8 @@ public:
     // equal regardless of how their size was constructed (frontends and
     // migration paths sometimes hand us add/sub trees that simplify to a
     // literal). Calling full simplify() on every array construction is
-    // wasteful — most sizes are already literals — and is tracked as a
-    // perf cleanup item (Track D in IREP2_IMPROVEMENTS.md / D3); the
-    // long-term fix is to normalise sizes at the frontend / migration
-    // boundary instead of here.
+    // wasteful — most sizes are already literals — the long-term fix is
+    // to normalise sizes at the frontend / migration boundary instead.
     if (!is_nil_expr(size))
     {
       assert(
@@ -773,21 +762,11 @@ public:
     return is_##name##_type(t) ? &to_##name##_type(t) : nullptr;               \
   }
 
-type_macros(bool);
-type_macros(empty);
-type_macros(symbol);
-type_macros(struct);
-type_macros(union);
-type_macros(code);
-type_macros(array);
-type_macros(vector);
-type_macros(pointer);
-type_macros(unsignedbv);
-type_macros(signedbv);
-type_macros(fixedbv);
-type_macros(floatbv);
-type_macros(complex);
-type_macros(cpp_name);
+// Instantiate the is_/to_/try_to_ predicate triple for every kind in
+// type_kinds.inc. Same manifest as the enum and forward declarations.
+#define IREP2_TYPE(kind, pretty) type_macros(kind);
+#include <irep2/type_kinds.inc>
+#undef IREP2_TYPE
 #undef type_macros
 
 #endif /* IREP2_TYPE_H_ */
