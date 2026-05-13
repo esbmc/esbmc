@@ -519,10 +519,13 @@ void execution_statet::restore_last_paths()
         "There are goto statements that shouldn't be merged at this point");
       abort();
     }
-    // Create a fresh new merge_statet to be merged in at the target insn
-    cur_state->top().merge_state_map[loc].emplace_back(*cur_state);
-    // Get ref to it
-    auto &new_gs = *cur_state->top().merge_state_map[loc].begin();
+    // Create a fresh new merge_statet to be merged in at the target insn.
+    // Capture the inserted element directly: if the list already has older
+    // entries at this location (a different preserved path joining at the
+    // same instruction), reading .begin() would alias the wrong entry and
+    // corrupt it via the writes below.
+    auto &new_gs =
+      cur_state->top().merge_state_map[loc].emplace_back(*cur_state);
 
     // Proceed to fill new_gs with old data. Ideally this would be a method...
     new_gs.num_instructions = gs.num_instructions;
