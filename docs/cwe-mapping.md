@@ -6,6 +6,11 @@ to **MITRE CWE 4.20** (published 2024-11-19,
 <https://cwe.mitre.org/data/index.html>) and only retains ids whose
 Vulnerability Mapping Usage is `ALLOWED` or `ALLOWED-WITH-REVIEW`.
 
+ESBMC currently distinguishes **28 unique CWE identifiers** across
+**23 violation kinds**: CWE-120, 121, 125, 129, 131, 190, 191, 193,
+362, 366, 369, 401, 415, 416, 469, 476, 562, 590, 617, 681, 761,
+787, 822, 823, 824, 825, 908, 1335.
+
 The CWE ids appear in:
 
 - the textual counterexample, on a `CWE: CWE-476, CWE-125` line
