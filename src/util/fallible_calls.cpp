@@ -1,5 +1,6 @@
 #include <util/fallible_calls.h>
 
+#include <cassert>
 #include <irep2/irep2_utils.h>
 
 const std::vector<fallible_call_t> &fallible_calls()
@@ -42,7 +43,10 @@ const std::vector<fallible_call_t> &fallible_calls()
 /// rewriting user-level calls (`pthread_mutex_lock` →
 /// `pthread_mutex_lock_noassert` / `_nocheck`, etc.). Without this every
 /// pthread entry on the whitelist would be dead — the goto-program
-/// carries the suffixed name, not the C-level one.
+/// carries the suffixed name, not the C-level one. The suffix list must
+/// stay in sync with `src/c2goto/library/pthread_lib.c`; the
+/// `fallible_calls_test` Catch suite asserts every pthread_* whitelist
+/// entry resolves through both suffixes, so drift trips that test.
 static std::string_view strip_om_suffix(std::string_view name)
 {
   static constexpr std::string_view suffixes[] = {"_noassert", "_nocheck"};
@@ -75,5 +79,6 @@ expr2tc success_predicate(success_kind kind, const expr2tc &ret_value)
   case success_kind::zero:
     return equality2tc(ret_value, zero);
   }
-  __builtin_unreachable();
+  assert(false && "unhandled success_kind");
+  abort();
 }

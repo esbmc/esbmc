@@ -87,17 +87,26 @@ void scan_forward(
   if (is_nil_expr(call.ret) || !is_symbol2t(call.ret))
     return;
   irep_idt tracked = to_symbol2t(call.ret).thename;
-  expr2tc tracked_expr = call.ret;
+  // The success predicate is always built against `call.ret` — the
+  // synthetic temp the Clang frontend introduces — never against the
+  // propagation target, whose type may differ (e.g. a downcast from
+  // `ssize_t` to `int` would let `>= 0` vacuously hold). `tracked` is the
+  // name we walk the CFG with; the predicate operand is fixed.
+  const expr2tc predicate_value = call.ret;
 
-  const auto emit = [&](goto_programt::targett at)
-  { insert_assertion(body, at, tracked_expr, fc, fn_name, pretty_name(context, tracked)); };
+  const auto emit = [&](goto_programt::targett at) {
+    insert_assertion(
+      body, at, predicate_value, fc, fn_name, pretty_name(context, tracked));
+  };
 
   for (auto it = std::next(call_it); it != body.instructions.end(); ++it)
   {
-    // Path-narrowing constructs that read the tracked value (GOTO guards
-    // and __ESBMC_assume) confine the assertion's path condition, so we
-    // leave the use alone.
-    if (it->is_goto() || it->is_assume())
+    // Path-narrowing constructs that read the tracked value (GOTO guards,
+    // __ESBMC_assume, an existing ASSERT) confine the assertion's path
+    // condition, so we leave the use alone. An ASSERT the user already
+    // wrote — or one a previous run of this pass inserted — is itself a
+    // check, not an unchecked use.
+    if (it->is_goto() || it->is_assume() || it->is_assert())
     {
       if (reads_symbol(it->guard, tracked))
         return;
@@ -109,12 +118,11 @@ void scan_forward(
       const code_assign2t &a = to_code_assign2t(it->code);
 
       // Pure propagation: `lhs = (cast)? tracked`. v1 tracks a single
-      // alias hop, dropping the old binding — adequate for the
-      // `tmp = f(...); user = tmp` pattern that the Clang frontend emits.
+      // alias hop — adequate for the `tmp = f(...); user = tmp` pattern
+      // the Clang frontend emits.
       if (strip_cast_symbol(a.source) == tracked && is_symbol2t(a.target))
       {
         tracked = to_symbol2t(a.target).thename;
-        tracked_expr = a.target;
         continue;
       }
 
@@ -145,8 +153,8 @@ void scan_forward(
       continue;
     }
 
-    // RETURN, ASSERT, OTHER (e.g. FREE, dead-object marker) — any read of
-    // the tracked symbol is an unchecked use.
+    // RETURN, OTHER (e.g. FREE, dead-object marker) — any read of the
+    // tracked symbol is an unchecked use.
     if (reads_symbol(it->code, tracked) || reads_symbol(it->guard, tracked))
     {
       emit(it);

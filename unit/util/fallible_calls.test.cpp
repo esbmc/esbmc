@@ -56,3 +56,28 @@ TEST_CASE("fallible_calls table is non-empty and free of duplicates",
     for (size_t j = i + 1; j < table.size(); ++j)
       REQUIRE(table[i].name != table[j].name);
 }
+
+TEST_CASE(
+  "every pthread_* whitelist entry resolves through OM suffixes",
+  "[util][fallible_calls]")
+{
+  // Guards against drift between this whitelist and the OM suffixes
+  // emitted by src/c2goto/library/pthread_lib.c. If pthread_lib.c is
+  // taught a new suffix without updating strip_om_suffix, this test
+  // fires immediately rather than silently dead-coding every pthread
+  // entry.
+  for (const fallible_call_t &fc : fallible_calls())
+  {
+    if (std::string_view(fc.name).substr(0, 8) != "pthread_")
+      continue;
+    for (std::string_view suffix : {"_noassert", "_nocheck"})
+    {
+      std::string mangled = std::string(fc.name) + std::string(suffix);
+      const fallible_call_t *resolved = find_fallible(mangled);
+      INFO("mangled callee: " << mangled);
+      REQUIRE(resolved != nullptr);
+      REQUIRE(resolved->name == fc.name);
+      REQUIRE(resolved->kind == fc.kind);
+    }
+  }
+}
