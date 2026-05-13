@@ -1,5 +1,4 @@
 #include <memory>
-#include <boost/functional/hash.hpp>
 #include <util/fixedbv.h>
 #include <util/i2string.h>
 #include <util/ieee_float.h>
@@ -66,10 +65,12 @@ type2t::type2t(type_ids id) : type_id(id), crc_val(0)
 }
 
 type2t::type2t(const type2t &ref) : type_id(ref.type_id)
-// NOTE: crc_mutex not mentioned here so fresh mutex is created.
 {
-  std::lock_guard lock(ref.crc_mutex);
-  crc_val = ref.crc_val;
+  // Snapshot the cached CRC under the single-writer contract; see
+  // irep2.h header note. The fresh atomic starts with whatever value
+  // ref had at this moment, or 0 if ref had not been crc-ed yet.
+  crc_val.store(ref.crc_val.load(std::memory_order_relaxed),
+                std::memory_order_relaxed);
 }
 
 bool type2t::operator==(const type2t &ref) const
@@ -136,8 +137,10 @@ size_t type2t::crc() const
 
 size_t type2t::do_crc() const
 {
-  boost::hash_combine(this->crc_val, (uint8_t)type_id);
-  return this->crc_val;
+  size_t v = this->crc_val.load(std::memory_order_relaxed);
+  esbmct::hash_combine(v, (uint8_t)type_id);
+  this->crc_val.store(v, std::memory_order_release);
+  return v;
 }
 
 void type2t::hash(crypto_hash &hash) const

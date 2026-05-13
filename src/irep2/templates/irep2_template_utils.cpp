@@ -432,7 +432,7 @@ int do_type_lt(const expr2t::expr_ids &, const expr2t::expr_ids &)
 
 size_t do_type_crc(const bool &theval)
 {
-  return boost::hash<bool>()(theval);
+  return std::hash<bool>{}(theval);
 }
 
 void do_type_hash(const bool &thebool, crypto_hash &hash)
@@ -451,7 +451,7 @@ void do_type_hash(const bool &thebool, crypto_hash &hash)
 
 size_t do_type_crc(const unsigned int &theval)
 {
-  return boost::hash<unsigned int>()(theval);
+  return std::hash<unsigned int>{}(theval);
 }
 
 void do_type_hash(const unsigned int &theval, crypto_hash &hash)
@@ -461,7 +461,7 @@ void do_type_hash(const unsigned int &theval, crypto_hash &hash)
 
 size_t do_type_crc(const sideeffect_data::allockind &theval)
 {
-  return boost::hash<uint8_t>()(static_cast<uint8_t>(theval));
+  return std::hash<uint8_t>{}(static_cast<uint8_t>(theval));
 }
 
 void do_type_hash(const sideeffect_data::allockind &theval, crypto_hash &hash)
@@ -471,7 +471,7 @@ void do_type_hash(const sideeffect_data::allockind &theval, crypto_hash &hash)
 
 size_t do_type_crc(const constant_string_data::kindt &theval)
 {
-  return boost::hash<uint8_t>()(theval);
+  return std::hash<uint8_t>{}(theval);
 }
 
 void do_type_hash(const constant_string_data::kindt &theval, crypto_hash &hash)
@@ -481,7 +481,7 @@ void do_type_hash(const constant_string_data::kindt &theval, crypto_hash &hash)
 
 size_t do_type_crc(const symbol_data::renaming_level &theval)
 {
-  return boost::hash<uint8_t>()(theval);
+  return std::hash<uint8_t>{}(theval);
 }
 
 void do_type_hash(const symbol_data::renaming_level &theval, crypto_hash &hash)
@@ -525,7 +525,7 @@ size_t do_type_crc(const BigInt &theint)
   size_t crc = 0;
   feed_bigint(theint, [&](const unsigned char *data, size_t len) {
     for (size_t i = 0; i < len; ++i)
-      boost::hash_combine(crc, data[i]);
+      esbmct::hash_combine(crc, data[i]);
   });
   return crc;
 }
@@ -561,7 +561,7 @@ size_t do_type_crc(const std::vector<expr2tc> &theval)
 {
   size_t crc = 0;
   for (auto const &it : theval)
-    boost::hash_combine(crc, it->do_crc());
+    esbmct::hash_combine(crc, it->do_crc());
 
   return crc;
 }
@@ -576,7 +576,7 @@ size_t do_type_crc(const std::vector<type2tc> &theval)
 {
   size_t crc = 0;
   for (auto const &it : theval)
-    boost::hash_combine(crc, it->do_crc());
+    esbmct::hash_combine(crc, it->do_crc());
 
   return crc;
 }
@@ -591,7 +591,7 @@ size_t do_type_crc(const std::vector<irep_idt> &theval)
 {
   size_t crc = 0;
   for (auto const &it : theval)
-    boost::hash_combine(crc, it.as_string());
+    esbmct::hash_combine(crc, it.as_string());
 
   return crc;
 }
@@ -606,7 +606,7 @@ size_t do_type_crc(const expr2tc &theval)
 {
   if (theval.get() != nullptr)
     return theval->do_crc();
-  return boost::hash<uint8_t>()(0);
+  return std::hash<uint8_t>{}(0);
 }
 
 void do_type_hash(const expr2tc &theval, crypto_hash &hash)
@@ -619,7 +619,7 @@ size_t do_type_crc(const type2tc &theval)
 {
   if (theval.get() != nullptr)
     return theval->do_crc();
-  return boost::hash<uint8_t>()(0);
+  return std::hash<uint8_t>{}(0);
 }
 
 void do_type_hash(const type2tc &theval, crypto_hash &hash)
@@ -630,7 +630,7 @@ void do_type_hash(const type2tc &theval, crypto_hash &hash)
 
 size_t do_type_crc(const irep_idt &theval)
 {
-  return boost::hash<std::string>()(theval.as_string());
+  return std::hash<std::string>{}(theval.as_string());
 }
 
 void do_type_hash(const irep_idt &theval, crypto_hash &hash)
@@ -640,7 +640,7 @@ void do_type_hash(const irep_idt &theval, crypto_hash &hash)
 
 size_t do_type_crc(const type2t::type_ids &i)
 {
-  return boost::hash<uint8_t>()(i);
+  return std::hash<uint8_t>{}(i);
 }
 
 void do_type_hash(const type2t::type_ids &, crypto_hash &)
@@ -650,7 +650,7 @@ void do_type_hash(const type2t::type_ids &, crypto_hash &)
 
 size_t do_type_crc(const expr2t::expr_ids &i)
 {
-  return boost::hash<uint8_t>()(i);
+  return std::hash<uint8_t>{}(i);
 }
 
 void do_type_hash(const expr2t::expr_ids &, crypto_hash &)

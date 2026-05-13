@@ -16,8 +16,6 @@
 
 #include <memory>
 #include <type_traits>
-#include <boost/functional/hash.hpp>
-
 #include <irep2/irep2_type.h>
 #include <irep2/irep2_expr.h>
 #include <irep2/irep2_utils.h>
@@ -102,16 +100,25 @@ int irep_methods2<derived, baseclass, traits>::lt(const base2t &ref) const
 template <class derived, class baseclass, typename traits>
 size_t irep_methods2<derived, baseclass, traits>::do_crc() const
 {
-  std::lock_guard<std::mutex> lock(this->crc_mutex);
-  if (this->crc_val != 0)
-    return this->crc_val;
+  // Check the cache first. The acquire load also synchronises with the
+  // release store at the bottom of this function — if another reader
+  // sees a non-zero value, it sees the full state that fed into it.
+  if (size_t cached = this->crc_val.load(std::memory_order_acquire);
+      cached != 0)
+    return cached;
 
   const derived *self = static_cast<const derived *>(this);
+  // Compute on a local so hash_combine doesn't see partial writes to
+  // the cache. Publishing once at the end means concurrent readers
+  // either see 0 (and recompute, getting the same value) or the final
+  // value — never a half-mixed state.
+  size_t v = 0;
   for_each_field([&](auto field) {
     using F = decltype(field);
-    boost::hash_combine(this->crc_val, do_type_crc(self->*F::value));
+    esbmct::hash_combine(v, do_type_crc(self->*F::value));
   });
-  return this->crc_val;
+  this->crc_val.store(v, std::memory_order_release);
+  return v;
 }
 
 template <class derived, class baseclass, typename traits>

@@ -18,14 +18,16 @@
  */
 
 #include <big-int/bigint.hh>
-#include <boost/crc.hpp>
-#include <boost/functional/hash_fwd.hpp>
 #include <boost/preprocessor/list/adt.hpp>
 #include <boost/preprocessor/list/for_each.hpp>
+#include <atomic>
+#include <cstddef>
 #include <functional>
-#include <mutex>
+#include <memory>
 #include <stdexcept>
 #include <tuple>
+#include <type_traits>
+#include <utility>
 #include <util/compiler_defs.h>
 #include <util/crypto_hash.h>
 #include <util/irep_idt.h>
@@ -156,6 +158,72 @@ template <typename... Args>
 class expr2t_traits;
 template <typename... Args>
 class type2t_traits;
+
+/** Type-erased callable reference: non-owning, two pointers wide, no
+ *  heap allocation. Replaces the historic `std::function` delegates
+ *  used by foreach_operand / foreach_subtype. The contract is a
+ *  borrowed reference to the underlying callable — the function_ref
+ *  must not outlive whatever it was constructed from.
+ *
+ *  The unparenthesised primary template is left undefined; only the
+ *  R(Args...) specialisation is usable, matching the std::function
+ *  surface we are replacing.
+ */
+template <typename Signature>
+class function_ref;
+
+template <typename R, typename... Args>
+class function_ref<R(Args...)>
+{
+public:
+  template <
+    typename F,
+    typename = std::enable_if_t<
+      !std::is_same_v<std::decay_t<F>, function_ref> &&
+      std::is_invocable_r_v<R, F &, Args...>>>
+  function_ref(F &&fn) noexcept
+    : invoke_(&function_ref::call<std::remove_reference_t<F>>),
+      ctx_(const_cast<void *>(static_cast<const void *>(std::addressof(fn))))
+  {
+  }
+
+  R operator()(Args... args) const
+  {
+    if constexpr (std::is_void_v<R>)
+      invoke_(ctx_, std::forward<Args>(args)...);
+    else
+      return invoke_(ctx_, std::forward<Args>(args)...);
+  }
+
+private:
+  template <typename F>
+  static R call(void *p, Args... args)
+  {
+    if constexpr (std::is_void_v<R>)
+      (*static_cast<F *>(p))(std::forward<Args>(args)...);
+    else
+      return (*static_cast<F *>(p))(std::forward<Args>(args)...);
+  }
+
+  R (*invoke_)(void *, Args...);
+  void *ctx_;
+};
+
+/** Mix a value into a running hash seed.
+ *
+ *  Bit-compatible with boost::hash_combine's traditional implementation
+ *  (the golden-ratio magic + shift mix) so historic CRC values are
+ *  preserved across the migration off Boost.Hash. std::hash is used as
+ *  the per-type hasher, which gives us std::hash<T>'s contract on
+ *  integral / string-like types. There is no std::hash_combine in the
+ *  standard library (yet — see WG21 proposals); this 3-line inline
+ *  helper is the stdlib-equivalent we promised in TrackF.md.
+ */
+template <class T>
+inline void hash_combine(std::size_t &seed, const T &v)
+{
+  seed ^= std::hash<T>{}(v) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+}
 } // namespace esbmct
 
 class type2t;
@@ -244,7 +312,11 @@ public:
   {
     detach();
     T *tmp = std::shared_ptr<T>::get();
-    tmp->crc_val = 0;
+    // Mutation invalidates the cached CRC. memory_order_relaxed is
+    // sufficient: the single-writer contract (see file header) means
+    // there is no concurrent reader observing this store before its
+    // synchronising release on subsequent crc() recomputation.
+    tmp->crc_val.store(0, std::memory_order_relaxed);
     return tmp;
   }
 
@@ -300,12 +372,12 @@ public:
   size_t crc() const
   {
     const T *foo = get();
-    {
-      std::lock_guard<std::mutex> lock(foo->crc_mutex);
-      if (foo->crc_val != 0)
-        return foo->crc_val;
-    }
-
+    // Acquire ordering on the load so a non-zero cached value also
+    // synchronises with the writer that produced it (do_crc()'s release
+    // store), and we observe whatever node state went into computing it.
+    if (size_t cached = foo->crc_val.load(std::memory_order_acquire);
+        cached != 0)
+      return cached;
     return foo->do_crc();
   }
 
@@ -435,8 +507,13 @@ public:
     }
   };
 
-  typedef std::function<void(const type2tc &t)> const_subtype_delegate;
-  typedef std::function<void(type2tc &t)> subtype_delegate;
+  // Non-owning callable references. The historic typedefs were
+  // std::function<void(...)>, which allocated for any non-trivially-
+  // copyable lambda capture and indirected through the std::function
+  // type-erasure. function_ref is two pointers wide and inlines into
+  // the caller's stack frame.
+  typedef esbmct::function_ref<void(const type2tc &)> const_subtype_delegate;
+  typedef esbmct::function_ref<void(type2tc &)> subtype_delegate;
 
 protected:
   /** Primary constructor.
@@ -576,14 +653,14 @@ public:
   template <typename T>
   void foreach_subtype(T &&t) const
   {
-    const_subtype_delegate wrapped(std::cref(t));
+    const_subtype_delegate wrapped(t);
     foreach_subtype_impl_const(wrapped);
   }
 
   template <typename T>
   void Foreach_subtype(T &&t)
   {
-    subtype_delegate wrapped(std::ref(t));
+    subtype_delegate wrapped(t);
     foreach_subtype_impl(wrapped);
   }
 
@@ -591,8 +668,13 @@ public:
   // XXX XXX XXX this should be const
   type_ids type_id;
 
-  mutable size_t crc_val;
-  mutable std::mutex crc_mutex;
+  // CRC cache: 0 means "not yet computed". Atomic so concurrent readers
+  // see either the prior value or the fresh one — never a torn read.
+  // Writers respect the single-writer contract documented at the top of
+  // this header; the cache is therefore safe to set without a lock as
+  // long as readers and the (single) writer share happens-before via the
+  // atomic.
+  mutable std::atomic<size_t> crc_val;
 };
 
 /** Fetch identifying name for a type.
@@ -637,8 +719,9 @@ public:
   /** Type for list of non-constant expr operands */
   typedef std::list<expr2tc *> Expr_operands;
 
-  typedef std::function<void(const expr2tc &expr)> const_op_delegate;
-  typedef std::function<void(expr2tc &expr)> op_delegate;
+  // Non-owning callable references; see commentary on type2t's variants.
+  typedef esbmct::function_ref<void(const expr2tc &)> const_op_delegate;
+  typedef esbmct::function_ref<void(expr2tc &)> op_delegate;
 
 protected:
   /** Primary constructor.
@@ -840,14 +923,16 @@ public:
   template <typename T>
   void foreach_operand(T &&t) const
   {
-    const_op_delegate wrapped(std::cref(t));
+    // function_ref borrows the caller's callable directly; no
+    // type-erasure allocation.
+    const_op_delegate wrapped(t);
     foreach_operand_impl_const(wrapped);
   }
 
   template <typename T>
   void Foreach_operand(T &&t)
   {
-    op_delegate wrapped(std::ref(t));
+    op_delegate wrapped(t);
     foreach_operand_impl(wrapped);
   }
 
@@ -857,8 +942,8 @@ public:
   /** Type of this expr. All exprs have a type. */
   type2tc type;
 
-  mutable size_t crc_val;
-  mutable std::mutex crc_mutex;
+  // CRC cache; see commentary on type2t::crc_val.
+  mutable std::atomic<size_t> crc_val;
 };
 
 inline bool is_nil_expr(const expr2tc &exp)

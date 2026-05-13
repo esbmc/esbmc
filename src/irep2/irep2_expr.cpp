@@ -1,5 +1,4 @@
 #include <memory>
-#include <boost/functional/hash.hpp>
 #include <util/fixedbv.h>
 #include <util/i2string.h>
 #include <util/ieee_float.h>
@@ -149,8 +148,11 @@ expr2t::expr2t(const type2tc &_type, expr_ids id)
 
 expr2t::expr2t(const expr2t &ref) : expr_id(ref.expr_id), type(ref.type)
 {
-  std::lock_guard lock(ref.crc_mutex);
-  crc_val = ref.crc_val;
+  // Snapshot the cached CRC. Relaxed is enough: callers must already
+  // honour the single-writer contract documented in irep2.h, and the
+  // copy is itself a new value not yet visible to anyone else.
+  crc_val.store(ref.crc_val.load(std::memory_order_relaxed),
+                std::memory_order_relaxed);
 }
 
 bool expr2t::operator==(const expr2t &ref) const
@@ -214,9 +216,13 @@ size_t expr2t::crc() const
 
 size_t expr2t::do_crc() const
 {
-  boost::hash_combine(this->crc_val, type->do_crc());
-  boost::hash_combine(this->crc_val, (uint8_t)expr_id);
-  return this->crc_val;
+  // The atomic crc_val is the cache cell; hash_combine wants a plain
+  // size_t reference. Work on a local, then publish.
+  size_t v = this->crc_val.load(std::memory_order_relaxed);
+  esbmct::hash_combine(v, type->do_crc());
+  esbmct::hash_combine(v, (uint8_t)expr_id);
+  this->crc_val.store(v, std::memory_order_release);
+  return v;
 }
 
 void expr2t::hash(crypto_hash &hash) const

@@ -1,6 +1,5 @@
 #pragma once
 #include <memory>
-#include <boost/functional/hash.hpp>
 #include <util/fixedbv.h>
 #include <util/i2string.h>
 #include <util/ieee_float.h>
