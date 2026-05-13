@@ -34,10 +34,15 @@ struct cwe_rule_t
 // load time, so longer keys always win regardless of declaration order in
 // the source. Returns a fallback rule with empty `cwes` and
 // `sarif_id = "esbmc-assertion"` when no entry matches.
-const cwe_rule_t &cwe_rule_for(const std::string &comment);
+//
+// Takes std::string_view so that callers passing `const char *` or
+// `std::string` do not construct a temporary `std::string` (and GCC's
+// -Wdangling-reference cannot mistake the returned reference for one bound
+// into a temporary).
+const cwe_rule_t &cwe_rule_for(std::string_view comment);
 
 // Convenience wrapper: returns `cwe_rule_for(comment).cwes`.
-std::vector<unsigned> cwe_for(const std::string &comment);
+std::vector<unsigned> cwe_for(std::string_view comment);
 
 // Formats a list of ids as "CWE-476, CWE-125". Returns the empty string when
 // `ids` is empty.

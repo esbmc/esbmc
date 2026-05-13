@@ -153,17 +153,17 @@ const std::map<unsigned, std::string_view> &names_map()
 }
 } // namespace
 
-const cwe_rule_t &cwe_rule_for(const std::string &comment)
+const cwe_rule_t &cwe_rule_for(std::string_view comment)
 {
   static const cwe_rule_t fallback{
     "esbmc-assertion", "ESBMC assertion violation", {}};
   for (const auto &e : rules_table())
-    if (comment.find(e.substring) != std::string::npos)
+    if (comment.find(e.substring) != std::string_view::npos)
       return e.rule;
   return fallback;
 }
 
-std::vector<unsigned> cwe_for(const std::string &comment)
+std::vector<unsigned> cwe_for(std::string_view comment)
 {
   return cwe_rule_for(comment).cwes;
 }
