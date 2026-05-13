@@ -54,8 +54,27 @@ public:
     /** Instruction at which the sibling path will be merged in. */
     goto_programt::const_targett target;
     /** Direct reference to the sibling merge_statet in
-     *  cur_state->top().merge_state_map[target]. Stable because
-     *  std::list iterators don't invalidate. */
+     *  cur_state->top().merge_state_map[target]. std::list iterators
+     *  don't invalidate on inserts/erases of other nodes.
+     *
+     *  WARNING: this iterator is bound to the merge_state_map of the
+     *  execution_statet that *recorded* it. When the reachability tree
+     *  clones an execution_statet via create_next_state(), the clone
+     *  rebuilds its own threads_state / merge_state_maps but the
+     *  defaulted operator= still copies this iterator unchanged. On
+     *  the clone, sibling therefore points into the **parent**'s
+     *  merge_state_map.
+     *
+     *  This is currently sound because (a) the parent's exploration
+     *  frame stays alive in exploration_frames until backtrack and
+     *  (b) the only consumer (preserve_last_paths, called once from
+     *  update_after_switch_point) runs before anything mutates the
+     *  parent's merge_state_map. If you add code that mutates the
+     *  parent's merge_state_map between clone and preserve, or that
+     *  consumes this iterator later than the very next switch, the
+     *  iterator dereference will read corrupted data — fix by
+     *  snapshotting the {guard, num_instructions, value_set} at record
+     *  time instead of storing the iterator. */
     goto_symex_statet::merge_state_listt::iterator sibling;
   };
 

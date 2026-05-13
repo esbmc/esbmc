@@ -403,6 +403,15 @@ void execution_statet::preserve_last_paths(const transition_resultt &transition)
     // onto ls.top().merge_state_map[transition.branch->target]. We captured
     // an iterator to it at the time, so no further scan or guard matching
     // is needed.
+    //
+    // Sanity: the map entry for the recorded target must still exist.
+    // See branch_resultt::sibling docs for why the iterator can survive
+    // the clone but stays load-bearing: this assertion does NOT catch
+    // a dangling iterator, only the easier case where the list entry
+    // itself disappeared.
+    assert(
+      ls.top().merge_state_map.count(transition.branch->target) &&
+      "preserved branch target missing from merge_state_map");
     pp.emplace_back(
       transition.branch->target, merge_statet(*transition.branch->sibling));
   }
