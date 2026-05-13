@@ -1,6 +1,7 @@
 #include <goto-symex/sarif.h>
 
 #include <ac_config.h>
+#include <charconv>
 #include <fstream>
 #include <iostream>
 #include <map>
@@ -14,79 +15,16 @@ using json = nlohmann::json;
 
 namespace
 {
-struct rule_t
+unsigned parse_line(std::string_view s)
 {
-  const char *substring;
-  const char *id;
-  const char *name;
-};
-
-// Stable rule descriptors keyed off the violation comment. Order matches
-// util/cwe_mapping.cpp: longest substring first.
-const rule_t &rule_for(const std::string &comment)
-{
-  static const rule_t table[] = {
-    {"dereference failure: invalidated dynamic object freed",
-     "invalidated-dynamic-object-freed",
-     "Freed dynamic object dereference"},
-    {"dereference failure: invalid pointer freed",
-     "invalid-pointer-freed",
-     "Free of invalid pointer"},
-    {"dereference failure: invalidated dynamic object",
-     "invalidated-dynamic-object",
-     "Dereference of invalidated dynamic object"},
-    {"dereference failure: accessed expired variable pointer",
-     "expired-pointer-dereference",
-     "Expired pointer dereference"},
-    {"dereference failure: free() of non-dynamic memory",
-     "free-non-dynamic-memory",
-     "free() of non-dynamic memory"},
-    {"dereference failure: forgotten memory",
-     "memory-leak",
-     "Forgotten memory (leak)"},
-    {"dereference failure: NULL pointer",
-     "null-pointer-dereference",
-     "NULL pointer dereference"},
-    {"dereference failure: memset of memory segment",
-     "memset-out-of-bounds",
-     "memset out of bounds"},
-    {"dereference failure on memcpy: reading memory segment",
-     "memcpy-out-of-bounds",
-     "memcpy out of bounds"},
-    {"dereference failure: invalid pointer",
-     "invalid-pointer-dereference",
-     "Invalid pointer dereference"},
-    {"Operand of free must have zero pointer offset",
-     "free-non-zero-offset",
-     "free() with non-zero pointer offset"},
-    {"array bounds violated", "array-bounds-violated", "Array bounds violated"},
-    {"Access to object out of bounds",
-     "object-out-of-bounds",
-     "Access to object out of bounds"},
-    {"Same object violation",
-     "same-object-violation",
-     "Same-object pointer comparison violation"},
-    {"Cast arithmetic overflow",
-     "cast-arithmetic-overflow",
-     "Cast arithmetic overflow"},
-    {"arithmetic overflow", "arithmetic-overflow", "Arithmetic overflow"},
-    {"division by zero", "division-by-zero", "Division by zero"},
-    {"NaN on", "nan", "NaN result"},
-    {"undefined behavior on shift operation",
-     "shift-undefined-behavior",
-     "Undefined behavior on shift"},
-    {"atomicity violation", "atomicity-violation", "Atomicity violation"},
-    {"data race on", "data-race", "Data race"},
-    {"unreachable code reached",
-     "reachable-error",
-     "Reachable error/assertion"},
-  };
-  static const rule_t fallback{
-    nullptr, "esbmc-assertion", "ESBMC assertion violation"};
-  for (const auto &e : table)
-    if (comment.find(e.substring) != std::string::npos)
-      return e;
-  return fallback;
+  // Non-throwing decimal parse. Returns 0 on empty / non-numeric input —
+  // both are valid SARIF (region.startLine is optional, so we omit it in
+  // the caller when the parse yields 0).
+  unsigned v = 0;
+  if (s.empty())
+    return 0;
+  auto res = std::from_chars(s.data(), s.data() + s.size(), v);
+  return res.ec == std::errc{} ? v : 0u;
 }
 } // namespace
 
@@ -99,7 +37,9 @@ void sarif_goto_trace(
   if (out_path.empty())
     return;
 
-  // Collect violation steps and the rules / CWE ids they exercise.
+  // Collect violation steps and the rules / CWE ids they exercise. The
+  // substring-to-rule mapping comes from util/cwe_mapping — single source of
+  // truth shared with the textual / JSON / GraphML outputs.
   struct result_t
   {
     std::string rule_id;
@@ -109,7 +49,7 @@ void sarif_goto_trace(
     std::vector<unsigned> cwes;
   };
   std::vector<result_t> results;
-  std::map<std::string, std::string> rule_names;          // id -> name
+  std::map<std::string, std::string> rule_descs; // id -> short description
   std::map<std::string, std::vector<unsigned>> rule_cwes; // id -> ids
   std::set<unsigned> all_cwes;
 
@@ -118,16 +58,15 @@ void sarif_goto_trace(
     if (step.type != goto_trace_stept::ASSERT || step.guard)
       continue;
 
-    const rule_t &rule = rule_for(step.comment);
+    const cwe_rule_t &rule = cwe_rule_for(step.comment);
     result_t r;
-    r.rule_id = rule.id;
+    r.rule_id = rule.sarif_id;
     r.message = step.comment.empty() ? "Assertion check" : step.comment;
     r.file = step.pc->location.get_file().as_string();
-    if (!step.pc->location.get_line().empty())
-      r.line = std::stoul(step.pc->location.get_line().as_string());
-    r.cwes = cwe_for(step.comment);
+    r.line = parse_line(step.pc->location.get_line().as_string());
+    r.cwes = rule.cwes;
 
-    rule_names[r.rule_id] = rule.name;
+    rule_descs[r.rule_id] = rule.short_description;
     rule_cwes[r.rule_id] = r.cwes;
     for (unsigned id : r.cwes)
       all_cwes.insert(id);
@@ -147,13 +86,16 @@ void sarif_goto_trace(
   run["tool"]["driver"]["version"] = ESBMC_VERSION;
   run["tool"]["driver"]["informationUri"] = "https://esbmc.org";
 
+  // SARIF §3.49.7: reportingDescriptor.name is a `simpleName` (no spaces,
+  // letters/digits/period/underscore only). The human-readable text goes in
+  // shortDescription; we omit `name` entirely because the stable identifier
+  // is already `id`.
   json rules = json::array();
-  for (const auto &[id, name] : rule_names)
+  for (const auto &[id, desc] : rule_descs)
   {
     json rule;
     rule["id"] = id;
-    rule["name"] = name;
-    rule["shortDescription"]["text"] = name;
+    rule["shortDescription"]["text"] = desc;
     json tags = json::array();
     for (unsigned cwe : rule_cwes[id])
       tags.push_back("external/cwe/cwe-" + std::to_string(cwe));
@@ -176,14 +118,14 @@ void sarif_goto_trace(
     {
       json t;
       t["id"] = std::to_string(id);
+      // taxon.name is also a simpleName; the CWE numeric id meets that, and
+      // the MITRE title goes in shortDescription.
       std::string_view name = cwe_name(id);
       if (!name.empty())
-      {
-        t["name"] = std::string(name);
         t["shortDescription"]["text"] = std::string(name);
-      }
-      t["helpUri"] = "https://cwe.mitre.org/data/definitions/" +
-                     std::to_string(id) + ".html";
+      t["helpUri"] =
+        "https://cwe.mitre.org/data/definitions/" + std::to_string(id) +
+        ".html";
       taxa.push_back(t);
     }
     taxonomy["taxa"] = taxa;
