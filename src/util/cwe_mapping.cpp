@@ -1,9 +1,9 @@
 #include <util/cwe_mapping.h>
 
 #include <algorithm>
-#include <cstring>
 #include <map>
 #include <string>
+#include <string_view>
 
 // ESBMC property-violation -> CWE mapping, pinned to CWE 4.20 (2024-11-19).
 //
@@ -20,7 +20,11 @@ namespace
 {
 struct entry_t
 {
-  const char *substring;
+  // string_view (not raw `const char *`) so the length is captured at
+  // construction from the underlying string literal — no runtime strlen,
+  // no risk of an over-read on a non-null-terminated input (Codacy /
+  // Flawfinder CWE-126).
+  std::string_view substring;
   cwe_rule_t rule;
 };
 
@@ -101,9 +105,10 @@ const std::vector<entry_t> &rules_table()
     // (e.g. "invalidated dynamic object freed" vs "invalidated dynamic
     // object") are resolved deterministically regardless of declaration
     // order. stable_sort keeps tied-length entries in source order.
-    std::stable_sort(t.begin(), t.end(), [](const entry_t &a, const entry_t &b) {
-      return std::strlen(a.substring) > std::strlen(b.substring);
-    });
+    std::stable_sort(
+      t.begin(), t.end(), [](const entry_t &a, const entry_t &b) {
+        return a.substring.size() > b.substring.size();
+      });
     return t;
   }();
   return table;
