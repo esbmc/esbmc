@@ -152,13 +152,13 @@ public:
   }
 
   /** Get the number of context switches performed by this ex_state */
-  int get_context_switch()
+  int get_context_switch() const
   {
     return CS_number;
   }
 
   /** Fetch the thread ID of the current active thread */
-  unsigned int get_active_state_number()
+  unsigned int get_active_state_number() const
   {
     return active_thread;
   }
@@ -286,7 +286,7 @@ public:
    *  @see atomic_numbers
    *  @return Atomic number count for current thread state.
    */
-  unsigned int get_active_atomic_number();
+  unsigned int get_active_atomic_number() const;
 
   /** Increase current threads atomic number count */
   void increment_active_atomic_number();

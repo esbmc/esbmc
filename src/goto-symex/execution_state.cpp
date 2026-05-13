@@ -320,7 +320,7 @@ const goto_symex_statet &execution_statet::get_active_state() const
   return threads_state.at(active_thread);
 }
 
-unsigned int execution_statet::get_active_atomic_number()
+unsigned int execution_statet::get_active_atomic_number() const
 {
   return atomic_numbers.at(active_thread);
 }
@@ -460,9 +460,14 @@ void execution_statet::preserve_last_paths(const transition_resultt &transition)
     // class, but that code is way too fragile. Instead, continue with an ended
     // thread that infects all other threads with it's false guard until we
     // complete.
-    // It's unclear how to distinguish this case from an error in this code
-    // here.
-    // XXX methodise this
+    // We can't tell the assume(0) case apart from an internal logic bug that
+    // also produced an empty preserved-paths list. Log so traces are
+    // greppable; the normal path is a legitimate assume(0).
+    log_debug(
+      "symex",
+      "preserve_last_paths: no paths preserved for thread {}, ending it "
+      "(usually assume(0); investigate if you don't expect one here)",
+      last_active_thread);
     threads_state[last_active_thread].thread_ended = true;
     atomic_numbers[last_active_thread] = 0;
   }

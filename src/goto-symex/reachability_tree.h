@@ -20,10 +20,12 @@
  *  and when notified of context-switch generating operations, attempts to
  *  interleave threads in all possible ways.
  *
- *  The primary piece of state is a stack of exploration_framet, each
- *  pairing one execution_statet (the program state at a context-switch
- *  point) with a scheduler_framet that tracks which switches from that
- *  point have already been explored.
+ *  The primary piece of state is an ordered sequence of
+ *  exploration_framet (a std::list, intentionally — we hand out
+ *  iterators that must stay stable across pushes/erases elsewhere in
+ *  the sequence), each pairing one execution_statet (the program state
+ *  at a context-switch point) with a scheduler_framet that tracks
+ *  which switches from that point have already been explored.
  *
  *  The algorithm is to run until the program completes and feed the trace
  *  to the caller. From then on, when asked to generate a new trace we:
@@ -267,7 +269,7 @@ protected:
 
     void ensure_thread_count(unsigned int count);
     void reset(unsigned int count);
-    void mark_all_explored();
+    void mark_all_explored(unsigned int count);
     bool is_explored(unsigned int tid) const;
     void mark_explored(unsigned int tid);
   };

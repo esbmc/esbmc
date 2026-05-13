@@ -104,10 +104,10 @@ void reachability_treet::scheduler_framet::reset(unsigned int count)
   explored_threads.assign(count, false);
 }
 
-void reachability_treet::scheduler_framet::mark_all_explored()
+void reachability_treet::scheduler_framet::mark_all_explored(unsigned int count)
 {
-  for (auto &&it : explored_threads)
-    it = true;
+  ensure_thread_count(count);
+  std::fill(explored_threads.begin(), explored_threads.end(), true);
 }
 
 bool reachability_treet::scheduler_framet::is_explored(unsigned int tid) const
@@ -152,9 +152,8 @@ bool reachability_treet::check_for_hash_collision() const
 
 void reachability_treet::post_hash_collision_cleanup()
 {
-  scheduler_framet &frame = get_cur_scheduler_frame();
-  frame.ensure_thread_count(get_cur_state().threads_state.size());
-  frame.mark_all_explored();
+  get_cur_scheduler_frame().mark_all_explored(
+    get_cur_state().threads_state.size());
 }
 
 void reachability_treet::update_hash_collision_set()
@@ -478,10 +477,8 @@ bool reachability_treet::setup_next_formula()
 
 goto_symext::symex_resultt reachability_treet::generate_schedule_formula()
 {
-  int total_states = 0;
   while (has_more_states())
   {
-    total_states++;
     while ((!get_cur_state().has_cswitch_point_occured() ||
             get_cur_state().check_if_ileaves_blocked()) &&
            get_cur_state().can_execution_continue())
