@@ -29,12 +29,10 @@ template <class derived, class baseclass, typename traits>
 auto irep_methods2<derived, baseclass, traits>::clone() const
   -> base_container2tc
 {
-  // Single allocation: std::make_shared puts the control block ahead of
-  // the data, then we wrap that shared_ptr in an irep_container.
-  // Bypassing the irep_container constructor that detaches is fine here
-  // because the new object is uniquely owned.
-  return base_container2tc(
-    std::make_shared<derived>(*static_cast<const derived *>(this)));
+  // Single allocation via make_irep: refcount=0 from `new`, then the
+  // container adopts and bumps to 1. No separate control block — the
+  // count lives in the node itself.
+  return make_irep<derived>(*static_cast<const derived *>(this));
 }
 
 template <class derived, class baseclass, typename traits>

@@ -231,93 +231,115 @@ class expr2t;
 class constant_array2t;
 class constant_vector2t;
 
-/** Reference counted container for expr2t based classes.
- *  This class extends  shared_ptr's to contain anything that's a subclass
- *  of expr2t. It provides several ways of accessing the contained pointer;
- *  crucially it ensures that the only way to get a non-const reference or
- *  pointer is via the get() method, which calls the detach() method. COW behaviour.
+/** Reference counted container for irep2 nodes.
  *
- *  This exists to ensure that we honor the model set forth by the old string
- *  based internal representation - specifically, that if you performed a const
- *  operation on an irept (fetching data) then the contained piece of data
- *  could continue to be shared between numerous data structures, for example
- *  a piece of code could exist in a contextt, a namespacet, and a goto_programt
- *  and all would share the same contained data structure, preventing additional
- *  memory consumption.
+ *  Holds a raw `T *` to an irep2-derived node and manages its intrusive
+ *  refcount: construction increments, destruction decrements, the
+ *  pointee is deleted when the count reaches zero. Single allocation
+ *  per node — no separate control block, no `shared_ptr` indirection —
+ *  which is the point of F3.
  *
- *  If anything copied an irept from one of these place it'd also share that
- *  contained data; but if it made a modifying operation (add, set, or just
- *  taking a non-const reference the contained data,) then the detach() method
- *  would be called, which duplicated the contained item and let the current
- *  piece of code modify the duplicate copy, while all the other storage
- *  locations continued to share the original.
+ *  The container also implements the historic copy-on-write contract:
+ *  the only way to obtain a non-const `T *` / `T &` is via the
+ *  non-const `get()` / `operator*` / `operator->`, all of which call
+ *  `detach()` first. If the underlying node is shared (refcount > 1),
+ *  `detach()` allocates a fresh copy via `T::clone()` and rebinds the
+ *  container to that copy; the other holders keep observing the
+ *  original. This preserves the value semantics of the legacy
+ *  string-irep `irept` while letting most subtree copies be cheap.
  *
- *  So yeah, that's what this class attempts to implement, via the medium of
- *  std::shared_ptr. However, to the outside the shared_ptr is not accessible
- *  since that would break the const guarantees for operator* and .get() which
- *  this class provides.
+ *  Threading. See irep2.h's preamble. The refcount is atomic
+ *  (acq/rel on release/destruction, relaxed on construction copy)
+ *  but the container is *not* designed for concurrent mutation: under
+ *  the single-writer contract there is at most one mutator at a time,
+ *  while readers may share the same node.
  */
 template <class T>
-class irep_container : private std::shared_ptr<T>
+class irep_container
 {
 public:
-  constexpr irep_container() noexcept = default;
-  constexpr irep_container(const irep_container &ref) = default;
-  constexpr irep_container(irep_container &&ref) = default;
-
-  irep_container &operator=(irep_container const &ref) = default;
-  irep_container &operator=(irep_container &&ref) = default;
-
-  // Move-construct from any std::shared_ptr of this type. That just moves the
-  // reference over and leaves our caller with an empty shared_ptr. Doesn't
-  // prevent copies from the original 'p' to exist, though.
-  // Obviously this is fairly unwise because any std::shared_ptr
-  // won't be using the detach facility to manipulate things, however it's
-  // necessary for std::make_shared.
-  explicit irep_container(std::shared_ptr<T> &&p)
-    : std::shared_ptr<T>(std::move(p))
+  // Default: empty container, nullptr inside. `noexcept`/`constexpr` to
+  // preserve the storage-class properties of the previous design.
+  constexpr irep_container() noexcept : ptr_(nullptr)
   {
   }
 
-  /* provide own definitions for
-   *   operator*
-   *   operator->
-   *   get()
-   * to account for const-ness and detach if necessary.
-   *
-   * This interface is not 'equal' to std::shared_ptr's in the sense of
-   * 'override' precisely because the const-ness of *this is moved to the
-   * pointee, which std::shared_ptr doesn't do. We can reuse the noexcept
-   * guarantee, though.
-   */
+  // Adopt a freshly-allocated node. The pointee's refcount must be 0
+  // (i.e. just-new'd); we bump it to 1. The factory functions in
+  // irep2_expr.h / irep2_type.h are the only intended callers of this
+  // overload; outside code constructs containers via copy/move.
+  explicit irep_container(T *raw) noexcept : ptr_(raw)
+  {
+    if (ptr_)
+      ptr_->refcount.fetch_add(1, std::memory_order_relaxed);
+  }
 
-  // the const versions just forward
+  irep_container(const irep_container &ref) noexcept : ptr_(ref.ptr_)
+  {
+    if (ptr_)
+      ptr_->refcount.fetch_add(1, std::memory_order_relaxed);
+  }
+
+  irep_container(irep_container &&ref) noexcept : ptr_(ref.ptr_)
+  {
+    ref.ptr_ = nullptr;
+  }
+
+  ~irep_container()
+  {
+    release();
+  }
+
+  irep_container &operator=(const irep_container &ref) noexcept
+  {
+    if (this != &ref)
+    {
+      if (ref.ptr_)
+        ref.ptr_->refcount.fetch_add(1, std::memory_order_relaxed);
+      release();
+      ptr_ = ref.ptr_;
+    }
+    return *this;
+  }
+
+  irep_container &operator=(irep_container &&ref) noexcept
+  {
+    if (this != &ref)
+    {
+      release();
+      ptr_ = ref.ptr_;
+      ref.ptr_ = nullptr;
+    }
+    return *this;
+  }
+
+  // Const accessors: hand out the pointee without detaching, since
+  // they're const operations.
   const T &operator*() const noexcept
   {
-    return *get();
+    return *ptr_;
   }
 
   const T *operator->() const noexcept
   {
-    return get();
+    return ptr_;
   }
 
   const T *get() const noexcept
   {
-    return std::shared_ptr<T>::get();
+    return ptr_;
   }
 
-  // the non-const versions detach
-  T *get() // never throws
+  // Non-const accessors detach: if the pointee is shared we clone
+  // into a fresh refcount-1 object and rebind, then invalidate the
+  // CRC cache on the (now uniquely-owned) copy.
+  T *get()
   {
     detach();
-    T *tmp = std::shared_ptr<T>::get();
-    // Mutation invalidates the cached CRC. memory_order_relaxed is
-    // sufficient: the single-writer contract (see file header) means
-    // there is no concurrent reader observing this store before its
-    // synchronising release on subsequent crc() recomputation.
-    tmp->crc_val.store(0, std::memory_order_relaxed);
-    return tmp;
+    // Single-writer contract: relaxed is enough to invalidate the
+    // cache; the next crc() recomputation will publish via release.
+    ptr_->crc_val.store(0, std::memory_order_relaxed);
+    return ptr_;
   }
 
   T &operator*()
@@ -325,42 +347,46 @@ public:
     return *get();
   }
 
-  T *operator->() // never throws
+  T *operator->()
   {
     return get();
   }
 
+  explicit operator bool() const noexcept
+  {
+    return ptr_ != nullptr;
+  }
+
+  void reset() noexcept
+  {
+    release();
+    ptr_ = nullptr;
+  }
+
   void detach()
   {
-    /* TODO threads: this is unsafe for multi-threaded execution
-     *
-     * From the docs: In multithreaded environment, the value returned by
-     * use_count is approximate (typical implementations use a
-     * memory_order_relaxed load). */
-    if (this->use_count() == 1)
-      return; // No point remunging oneself if we're the only user of the ptr.
-
-    // Assign-operate ourself into containing a fresh copy of the data. This
-    // creates a new reference counted object, and assigns it to ourself,
-    // which causes the existing reference to be decremented.
-    const T *foo = std::shared_ptr<T>::get();
-    *this = foo->clone();
+    if (!ptr_)
+      return;
+    // Acquire so we observe whatever state the owner of the prior
+    // (about-to-be-replaced) reference flushed before storing here.
+    // Almost always 1 — only shared subtrees go down the clone path.
+    if (ptr_->refcount.load(std::memory_order_acquire) == 1)
+      return;
+    // Shared: clone into a fresh refcount-0 node and adopt it.
+    *this = ptr_->clone();
   }
 
-  using std::shared_ptr<T>::operator bool;
-  using std::shared_ptr<T>::reset;
+  friend void swap(irep_container &a, irep_container &b) noexcept
+  {
+    T *tmp = a.ptr_;
+    a.ptr_ = b.ptr_;
+    b.ptr_ = tmp;
+  }
 
-  friend void swap(irep_container &a, irep_container &b)
+  void swap(irep_container &b) noexcept
   {
     using std::swap;
-    swap(
-      static_cast<std::shared_ptr<T> &>(a),
-      static_cast<std::shared_ptr<T> &>(b));
-  }
-
-  void swap(irep_container &b)
-  {
-    std::shared_ptr<T>::swap(b);
+    swap(*this, b);
   }
 
   irep_container simplify() const
@@ -442,25 +468,91 @@ public:
 private:
   static bool same(const irep_container &a, const irep_container &b) noexcept
   {
-    /* Note: Can't reliably test equality on pointers directly, see
-     * <https://eel.is/c++draft/expr.eq#3.1>
-     * Instead we'll use the implementation-defined total order guaranteed by
-     * std::less. */
-    const T *p = a.get(), *q = b.get();
-    if (!std::less{}(p, q) && !std::less{}(q, p))
-      return true; /* target is identical */
-    return false;
+    // Direct pointer equality is fine here because both pointers were
+    // obtained from `new` (or are nullptr), so they are valid objects
+    // of the same type and the comparison is well-defined.
+    return a.ptr_ == b.ptr_;
   }
+
+  // Drop our reference. Release ordering pairs with the acquire in
+  // detach()/destruction on whichever container observes refcount==1
+  // and is about to mutate or delete the pointee; this makes any
+  // prior writes through *this happen-before that observer's access.
+  void release() noexcept
+  {
+    if (!ptr_)
+      return;
+    if (ptr_->refcount.fetch_sub(1, std::memory_order_release) == 1)
+    {
+      // Acquire fence prevents the delete (and any side-effects of
+      // the destructor) from being reordered before the final
+      // fetch_sub, ensuring we see the prior owner's writes.
+      std::atomic_thread_fence(std::memory_order_acquire);
+      delete ptr_;
+    }
+  }
+
+  T *ptr_;
 };
 
 typedef irep_container<type2t> type2tc;
 typedef irep_container<expr2t> expr2tc;
 
+/** Allocate a fresh irep2 node and adopt it into an `irep_container`.
+ *
+ *  The single canonical construction path for the intrusive refcount
+ *  scheme. `T` must derive from an irep2 base (`type2t` / `expr2t`)
+ *  that exposes `base_type` as its method-side base; the returned
+ *  container is `irep_container<T::base_type>` (i.e. `type2tc` or
+ *  `expr2tc`).
+ *
+ *  Equivalent to the historic `make_shared<T>(...)` + cast-to-base
+ *  pattern, but matched to the F3 ownership model: a single
+ *  allocation, no separate control block, exception-safe (if any
+ *  argument constructor throws, the `new` hasn't run yet; if the
+ *  `new` itself throws, no leak; the only ordering between `new`
+ *  succeeding and the container adopting it is straight-line code
+ *  inside this function).
+ *
+ *  Callers should prefer this helper over a raw `new`-into-container
+ *  so the allocation site stays in one place.
+ */
+template <class T, class... Args>
+inline irep_container<typename T::base_type> make_irep(Args &&...args)
+{
+  return irep_container<typename T::base_type>(
+    new T(std::forward<Args>(args)...));
+}
+
 typedef std::pair<std::string, std::string> member_entryt;
 typedef std::list<member_entryt> list_of_memberst;
 
-class irep2t : public std::enable_shared_from_this<irep2t>
+/** Base class for every irep2 node. Carries the intrusive refcount
+ *  used by irep_container; the cell sits inside the node itself rather
+ *  than in a separate shared_ptr control block, which is the whole
+ *  point of F3. Container construction increments; container
+ *  destruction decrements and deletes when the count reaches zero.
+ *  See irep2.h's threading-contract preamble for the ordering rules.
+ */
+class irep2t
 {
+public:
+  irep2t() noexcept : refcount(0)
+  {
+  }
+  // Copy constructor must NOT propagate the refcount: a fresh copy is
+  // a brand new object that no container has yet adopted. The single
+  // copy site that matters is clone(), which always wraps the result
+  // in an irep_container immediately afterwards.
+  irep2t(const irep2t &) noexcept : refcount(0)
+  {
+  }
+  // Refcount is per-object identity; assignment is meaningless on the
+  // base. Subclasses' copy-assignment operators do not call into here.
+  irep2t &operator=(const irep2t &) = delete;
+  virtual ~irep2t() = default;
+
+  mutable std::atomic<unsigned int> refcount;
 };
 
 /** Base class for all types.

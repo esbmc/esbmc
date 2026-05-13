@@ -2960,8 +2960,8 @@ static expr2tc combine_constant_shifts(
   if (!fits_in_width(sum, amt_width, amt_signed))
     return expr2tc();
 
-  return expr2tc(std::make_shared<ShiftT>(
-    type, inner.side_1, from_integer(sum, outer_amt->type)));
+  return make_irep<ShiftT>(
+    type, inner.side_1, from_integer(sum, outer_amt->type));
 }
 
 expr2tc shl2t::do_simplify() const
@@ -3390,7 +3390,7 @@ static expr2tc simplify_relations(
       auto cancel = [&](expr2tc a, expr2tc b) -> expr2tc {
         if (!coerce_to_common_type(a, b))
           return expr2tc();
-        expr2tc rel(std::make_shared<constructor>(a, b));
+        expr2tc rel = make_irep<constructor>(a, b);
         return typecast_check_return(type, rel);
       };
 
@@ -5187,8 +5187,8 @@ static expr2tc simplify_floatbv_2ops(
     // Were we able to simplify the sides?
     if ((side_1 != simplified_side_1) || (side_2 != simplified_side_2))
     {
-      expr2tc new_op(std::make_shared<constructor>(
-        type, simplified_side_1, simplified_side_2, rounding_mode));
+      expr2tc new_op = make_irep<constructor>(
+        type, simplified_side_1, simplified_side_2, rounding_mode);
 
       return typecast_check_return(type, new_op);
     }
