@@ -140,7 +140,15 @@ bool goto_k_inductiont::get_entry_cond_rec(
   {
     auto it = marked_branch.find(tmp_head->location_number);
     if (it != marked_branch.end())
-      return it->second;
+    {
+      // Re-inject the guards the first visit collected here. Storing
+      // only `reaches` lost these guards on every cache hit and silently
+      // weakened the entry-condition assume.
+      guards.insert(
+        it->second.guards_to_merge.begin(),
+        it->second.guards_to_merge.end());
+      return it->second.reaches;
+    }
 
     /* TODO: disable this for now, it will be used for termination evaluation
      * in the future.
@@ -192,26 +200,34 @@ bool goto_k_inductiont::get_entry_cond_rec(
           get_entry_cond_rec(++new_tmp_head, loop_exit, false_branch_guard);
       }
 
-      // If we evaluated both sides of the branch, mark it so we don't
-      // have to do it again.
-      marked_branch[branch_number] = (false_branch ^ true_branch);
+      // Cache: store BOTH the recursion's reach-status at this branch
+      // AND the guards that should be re-injected on a later cache hit.
+      branch_cache_entryt entry;
+      entry.reaches = false_branch && true_branch;
 
-      // If both side reach the end of the loop or if both side don't reach it
+      // If both sides reach the end of the loop or if neither reaches it
       // we can ignore them
       if (!(false_branch ^ true_branch))
+      {
+        marked_branch[branch_number] = std::move(entry);
         return false_branch && true_branch;
+      }
 
       // At least only one of the branches reach the end of the loop, so
-      // collect the guards
+      // collect the guards from the non-reaching side.
       if (!true_branch)
       {
         guards.insert(true_branch_guard.begin(), true_branch_guard.end());
+        entry.guards_to_merge = std::move(true_branch_guard);
+        marked_branch[branch_number] = std::move(entry);
         return false;
       }
 
       if (!false_branch)
       {
         guards.insert(false_branch_guard.begin(), false_branch_guard.end());
+        entry.guards_to_merge = std::move(false_branch_guard);
+        marked_branch[branch_number] = std::move(entry);
         return false;
       }
     }
