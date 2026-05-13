@@ -581,6 +581,9 @@ const struct group_opt_templ all_cmd_options[] = {
      "thread interleaving"},
     {"lock-order-check", NULL, "Enable for lock acquisition ordering check"},
     {"atomicity-check", NULL, "Enable atomicity check at visible assignments"},
+    {"uninitialised-vars-check",
+     NULL,
+     "Enable check for reads of uninitialised local variables (CWE-457)"},
     {"volatile-check", NULL, "Enable check for volatile variable"},
     {"stack-limit",
      boost::program_options::value<int>()->default_value(-1)->value_name(

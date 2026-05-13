@@ -44,6 +44,7 @@ extern "C"
 #include <goto-programs/set_claims.h>
 #include <goto-programs/show_claims.h>
 #include <goto-programs/loop_unroll.h>
+#include <goto-programs/goto_check_uninit_vars.h>
 #include <goto-programs/mark_decl_as_non_det.h>
 #include <goto-programs/assign_params_as_non_det.h>
 #include <goto2c/goto2c.h>
@@ -722,6 +723,13 @@ int esbmc_parseoptionst::doit()
     // Unroll intrinsic support
     goto_preprocess_algorithms.emplace_back(
       std::make_unique<apply_intrinsic_unroller>());
+
+    // Uninitialised-variable check (CWE-457) must run before
+    // mark_decl_as_non_det, which would otherwise overwrite every
+    // uninitialised DECL with a nondet ASSIGN and erase the property.
+    if (cmdline.isset("uninitialised-vars-check"))
+      goto_preprocess_algorithms.emplace_back(
+        std::make_unique<goto_check_uninit_vars>(context));
 
     // Explicitly marking all declared variables as "nondet"
     goto_preprocess_algorithms.emplace_back(
