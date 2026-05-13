@@ -30,6 +30,7 @@ import glob
 import base64
 import shutil
 import subprocess
+import tempfile
 from libs.ast2json import ast2json as ast2json_func
 from preprocessor import Preprocessor
 
