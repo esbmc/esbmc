@@ -918,7 +918,8 @@ void interval_domaint::transform(
   // so the fixpoint at the loop head reflects the *original* program's
   // dataflow. Without this, the havoc would widen every loop-modified var to
   // its full type range and the bounds we'd assume back would be useless.
-  if (skip_inductive_step_instructions && instruction.inductive_step_instruction)
+  if (
+    skip_inductive_step_instructions && instruction.inductive_step_instruction)
     return;
   switch (instruction.type)
   {

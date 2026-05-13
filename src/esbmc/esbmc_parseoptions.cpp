@@ -2276,9 +2276,9 @@ bool esbmc_parseoptionst::process_goto_program(
       // per-instruction bounds being available everywhere, and the
       // post-k-induction pass below adds the at-loop-head bounds that
       // tighten the inductive hypothesis.
-      const auto mode = is_k_induction
-                          ? INTERVAL_INSTRUMENTATION_MODE::GUARD_INSTRUCTIONS_LOCAL
-                          : INTERVAL_INSTRUMENTATION_MODE::LOOP_MODE;
+      const auto mode =
+        is_k_induction ? INTERVAL_INSTRUMENTATION_MODE::GUARD_INSTRUCTIONS_LOCAL
+                       : INTERVAL_INSTRUMENTATION_MODE::LOOP_MODE;
       interval_analysis(goto_functions, ns, options, mode);
     }
 
@@ -2323,7 +2323,8 @@ bool esbmc_parseoptionst::process_goto_program(
     // it; base case and forward condition skip it. This is the place where
     // interval analysis actually strengthens the inductive hypothesis.
     if (
-      (cmdline.isset("interval-analysis") || cmdline.isset("goto-contractor")) &&
+      (cmdline.isset("interval-analysis") ||
+       cmdline.isset("goto-contractor")) &&
       is_k_induction)
     {
       instrument_loop_bounds_after_kind(goto_functions, ns, options);
