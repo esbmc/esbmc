@@ -56,7 +56,7 @@ type2tc tracked_shadow_type(const symbolt &s)
 /// Record describing one shadow variable, looked up at emit time by sid.
 struct shadow_record
 {
-  type2tc type;       // bool, or bool[N]
+  type2tc type; // bool, or bool[N]
   std::string user_name;
 };
 
@@ -64,8 +64,9 @@ struct shadow_record
 /// boolean for scalars, or `constant_array_of(value)` for arrays.
 expr2tc shadow_const(const type2tc &shadow_t, const expr2tc &value)
 {
-  return is_array_type(shadow_t) ? expr2tc(constant_array_of2tc(shadow_t, value))
-                                 : value;
+  return is_array_type(shadow_t)
+           ? expr2tc(constant_array_of2tc(shadow_t, value))
+           : value;
 }
 
 /// Walk an lvalue chain and return its root symbol name, or empty if the
@@ -96,15 +97,14 @@ irep_idt lvalue_root(const expr2tc &e)
 /// Per-instruction collection of reads/writes against tracked shadows.
 struct collected
 {
-  std::set<irep_idt> scalar_reads;   // shadow ids read as whole scalars
-  std::set<irep_idt> whole_flips;    // shadow ids whose whole shadow flips true
+  std::set<irep_idt> scalar_reads; // shadow ids read as whole scalars
+  std::set<irep_idt> whole_flips;  // shadow ids whose whole shadow flips true
   // (shadow id, index expression) pairs read; one ASSERT per entry.
   std::vector<std::pair<irep_idt, expr2tc>> indexed_reads;
 };
 
 /// Look up the shadow id for `name`, or empty if `name` is not tracked.
-irep_idt
-shadow_of(irep_idt name, const std::map<irep_idt, irep_idt> &shadows)
+irep_idt shadow_of(irep_idt name, const std::map<irep_idt, irep_idt> &shadows)
 {
   auto it = shadows.find(name);
   return it == shadows.end() ? irep_idt() : it->second;
@@ -201,8 +201,8 @@ void collect(
 /// empty.
 struct write_target
 {
-  irep_idt root;      // user name, empty if not a direct write to a tracked
-  expr2tc index;      // non-nil iff root names an `a[i]` write
+  irep_idt root; // user name, empty if not a direct write to a tracked
+  expr2tc index; // non-nil iff root names an `a[i]` write
 };
 
 write_target direct_write_target(
@@ -325,8 +325,7 @@ bool goto_check_uninit_vars::runOnFunction(
       t->function = it->function;
     }
 
-    auto emit_assert = [&](const expr2tc &guard, const shadow_record &rec)
-    {
+    auto emit_assert = [&](const expr2tc &guard, const shadow_record &rec) {
       auto t = new_code.add_instruction(ASSERT);
       t->guard = guard;
       t->location = it->location;
@@ -341,7 +340,8 @@ bool goto_check_uninit_vars::runOnFunction(
     for (const auto &[sid, idx] : co.indexed_reads)
     {
       const shadow_record &rec = by_sid.at(sid);
-      emit_assert(index2tc(get_bool_type(), symbol2tc(rec.type, sid), idx), rec);
+      emit_assert(
+        index2tc(get_bool_type(), symbol2tc(rec.type, sid), idx), rec);
     }
 
     while (!new_code.instructions.empty())
