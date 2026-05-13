@@ -22,10 +22,10 @@
 #include <boost/functional/hash_fwd.hpp>
 #include <boost/preprocessor/list/adt.hpp>
 #include <boost/preprocessor/list/for_each.hpp>
-#include <boost/mp11.hpp>
 #include <functional>
 #include <mutex>
 #include <stdexcept>
+#include <tuple>
 #include <util/compiler_defs.h>
 #include <util/crypto_hash.h>
 #include <util/irep_idt.h>
@@ -898,8 +898,8 @@ static inline std::string get_expr_id(const expr2tc &expr)
 /** Template for providing templated methods to irep classes (type2t/expr2t).
  *
  *  What this does: we give irep_methods2 a type trait record that contains
- *  a boost::mp11::mp_list, the elements of which describe each field in the
- *  class we're operating on. For each field we get:
+ *  a std::tuple, the elements of which describe each field in the class
+ *  we're operating on. For each field we get:
  *
  *    - The type of the field
  *    - The class that field is part of
@@ -1005,25 +1005,27 @@ constexpr
   typename field_traits<R, C, v>::membr_ptr field_traits<R, C, v>::value;
 
 /** Trait class for type2t ireps.
- *  This takes a list of field traits and puts it in a vector, with the record
- *  for the type_id field (common to all type2t's) put that the front. */
+ *  This takes a list of field traits and puts it in a tuple, with the record
+ *  for the type_id field (common to all type2t's) put at the front. The
+ *  `fields` tuple drives the per-field fold expressions in irep_methods2;
+ *  it is the single source of truth for which fields participate in
+ *  cmp/lt/crc/hash/operand-iteration. */
 template <typename... Args>
 class type2t_traits
 {
 public:
   typedef field_traits<type2t::type_ids, type2t, &type2t::type_id>
     type_id_field;
-  typedef typename boost::mp11::
-    mp_push_front<boost::mp11::mp_list<Args...>, type_id_field>
-      fields;
+  typedef std::tuple<type_id_field, Args...> fields;
+  static constexpr unsigned int num_fields = sizeof...(Args) + 1;
   typedef type2t base2t;
 };
 
 /** Trait class for expr2t ireps.
- *  This takes a list of field traits and puts it in a vector, with the record
- *  for the expr_id field (common to all expr2t's) put that the front. Records
- *  some additional flags about the usage of the expression -- specifically
- *  what a unary constructor will do (@see something2tc::something2tc) */
+ *  Same idea as type2t_traits but with an expr_id slot and a type slot
+ *  prepended (every expr2t carries both). Records some additional flags
+ *  about the usage of the expression -- specifically what a unary
+ *  constructor will do (@see something2tc::something2tc). */
 template <typename... Args>
 class expr2t_traits
 {
@@ -1031,13 +1033,8 @@ public:
   typedef field_traits<const expr2t::expr_ids, expr2t, &expr2t::expr_id>
     expr_id_field;
   typedef field_traits<type2tc, expr2t, &expr2t::type> type_field;
-  typedef typename boost::mp11::mp_push_front<
-    typename boost::mp11::
-      mp_push_front<boost::mp11::mp_list<Args...>, type_field>,
-    expr_id_field>
-    fields;
-  static constexpr unsigned int num_fields =
-    boost::mp11::mp_size<fields>::value;
+  typedef std::tuple<expr_id_field, type_field, Args...> fields;
+  static constexpr unsigned int num_fields = sizeof...(Args) + 2;
   typedef expr2t base2t;
 };
 
@@ -1051,35 +1048,23 @@ class expr2t_traits_notype
 public:
   typedef field_traits<const expr2t::expr_ids, expr2t, &expr2t::expr_id>
     expr_id_field;
-  typedef typename boost::mp11::
-    mp_push_front<boost::mp11::mp_list<Args...>, expr_id_field>
-      fields;
-  static constexpr unsigned int num_fields =
-    boost::mp11::mp_size<fields>::value;
+  typedef std::tuple<expr_id_field, Args...> fields;
+  static constexpr unsigned int num_fields = sizeof...(Args) + 1;
   typedef expr2t base2t;
 };
 
-// Declaration of irep and expr methods templates.
-template <
-  class derived,
-  class baseclass,
-  typename traits,
-  typename fields = typename traits::fields,
-  typename enable = void>
+// Declaration of irep and expr methods templates. The historic five-parameter
+// signature (with `fields` and `enable` template arguments) supported the
+// recursive irep_methods2 chain, where each level peeled one field off
+// `fields` via mp_pop_front and SFINAE'd a terminating specialisation on
+// `mp_empty<fields>`. The flat design (F1) walks `traits::fields` as a
+// std::tuple in a single class via fold expressions, so those parameters
+// are gone.
+template <class derived, class baseclass, typename traits>
 class irep_methods2;
-template <
-  class derived,
-  class baseclass,
-  typename traits,
-  typename fields = typename traits::fields,
-  typename enable = void>
+template <class derived, class baseclass, typename traits>
 class expr_methods2;
-template <
-  class derived,
-  class baseclass,
-  typename traits,
-  typename fields = typename traits::fields,
-  typename enable = void>
+template <class derived, class baseclass, typename traits>
 class type_methods2;
 
 /** Definition of irep methods template.
@@ -1088,55 +1073,29 @@ class type_methods2;
  *  @param baseclass Class containing fields for methods to be defined over
  *  @param traits Type traits for baseclass
  *
- *  A typical irep inheritance looks like this, descending from the base
- *  irep class to the most derived class:
+ *  A typical irep inheritance looks like this:
  *
- *    b          Base class, such as type2t or expr2t
- *    d          Data class, containing storage fields for ireps
- *    m          Terminal methods class (see below)
- *    M
- *    M            Recursive chain of irep_methods2 classes. Each one
- *    M            implements methods for one field, and calls to a superclass
- *    M            to handle remaining fields
- *    M
- *    t          Top level class such as add2t
+ *    b   Base class, such as type2t or expr2t
+ *    d   Data class, containing storage fields for ireps
+ *    M   irep_methods2 — implements the boilerplate methods (cmp/lt/
+ *        clone/crc/hash/tostring/operand iteration) by walking
+ *        traits::fields with a fold expression
+ *    t   Top level class such as add2t
  *
- *  The effect is thus: one takes a base class containing storage fields,
- *  instantiate irep_methods2 on top of it which unrolls to one template
- *  instance per field (plus a specialized terminal when there are no more
- *  fields). Then, have the top level class inherit from the chain of
- *  irep_methods classes. This avoids the writing of certain boilerplate
- *  methods at the expense of writing type trait information.
- *
- *  Technically one could typedef the top level irep_methods class to be the
- *  top level class itself; however putting a 'cap' on it (as it were) avoids
- *  decades worth of template errors if a programmer uses the irep
- *  incorrectly.
+ *  Each method body is a single fold over the trait list — no inheritance
+ *  recursion, no per-field chain levels, no Boost.MP11. Adding a new node
+ *  needs the data class to declare its fields and a fields tuple in its
+ *  traits; the methods are inherited unchanged.
  */
-template <
-  class derived,
-  class baseclass,
-  typename traits,
-  typename fields,
-  typename enable>
-class irep_methods2 : public irep_methods2<
-                        derived,
-                        baseclass,
-                        traits,
-                        typename boost::mp11::mp_pop_front<fields>>
+template <class derived, class baseclass, typename traits>
+class irep_methods2 : public baseclass
 {
 public:
-  typedef irep_methods2<
-    derived,
-    baseclass,
-    traits,
-    typename boost::mp11::mp_pop_front<fields>>
-    superclass;
   typedef typename baseclass::base_type base2t;
   typedef irep_container<base2t> base_container2tc;
 
   template <typename... Args>
-  irep_methods2(const Args &...args) : superclass(args...)
+  irep_methods2(const Args &...args) : baseclass(args...)
   {
   }
 
@@ -1145,152 +1104,54 @@ public:
   // match a const derived &, and so the compiler won't cast it up to
   // const irep_methods2 & and call the copy constructor. Fix this by
   // defining a copy constructor that exactly matches the (only) use case.
-  irep_methods2(const derived &ref) : superclass(ref)
+  irep_methods2(const derived &ref) : baseclass(ref)
   {
   }
 
-  // Top level / public methods for this irep. These methods are virtual, set
-  // up any relevant computation, and then call the recursive instances below
-  // to perform the actual work over fields.
+  // The trait list is a std::tuple of field_traits<R, C, R C::*> entries.
+  // for_each_field instantiates a default-constructed field_traits per
+  // element (they carry only constexpr state) and lets the caller use
+  // decltype(f) to recover R / C / value. Pure C++17 — no boost::mp11
+  // required for the iteration itself.
+  template <typename F>
+  static void for_each_field(F &&f)
+  {
+    std::apply(
+      [&](auto... entries) { (f(entries), ...); },
+      typename traits::fields{});
+  }
+
+  // Method bodies live in irep2_meta_templates.h, which is included
+  // after irep2_template_utils.h so the per-field-type helpers
+  // (do_type_cmp, do_type_lt, do_type_crc, do_type_hash, do_type2string,
+  // do_get_sub_expr*, call_expr_delegate, call_type_delegate) are
+  // visible at the point of instantiation. Keeping the bodies out of
+  // irep2.h avoids the dependency cycle that would otherwise force
+  // irep2.h to include irep2_template_utils.h before the types those
+  // helpers operate on (sideeffect_data::allockind etc.) are defined.
   base_container2tc clone() const override;
   list_of_memberst tostring(unsigned int indent) const override;
   bool cmp(const base2t &ref) const override;
   int lt(const base2t &ref) const override;
   size_t do_crc() const override;
-  void hash(crypto_hash &hash) const override;
+  void hash(crypto_hash &h) const override;
 
 protected:
-  // Fetch the type information about the field we are concerned with out
-  // of the current type trait we're working on.
-  typedef typename boost::mp11::mp_front<fields>::result_type cur_type;
-  typedef typename boost::mp11::mp_front<fields>::source_class base_class;
-  typedef typename boost::mp11::mp_front<fields> membr_ptr;
+  // Helpers reused by expr_methods2 and type_methods2. Definitions in
+  // irep2_meta_templates.h.
+  const expr2tc *get_sub_expr_impl(size_t desired) const;
+  expr2tc *get_sub_expr_nc_impl(size_t desired);
+  size_t get_num_sub_exprs_impl() const;
 
-  // Recursive instances of boilerplate methods.
-  void tostring_rec(
-    unsigned int idx,
-    list_of_memberst &vec,
-    unsigned int indent) const;
-  bool cmp_rec(const base2t &ref) const;
-  int lt_rec(const base2t &ref) const;
-  void do_crc_rec() const;
-  void hash_rec(crypto_hash &hash) const;
+  template <typename Delegate>
+  void foreach_operand_impl_const_inner(Delegate &f) const;
+  template <typename Delegate>
+  void foreach_operand_impl_inner(Delegate &f);
 
-  // These methods are specific to expressions rather than types, and are
-  // placed here to avoid un-necessary recursion in expr_methods2.
-  const expr2tc *get_sub_expr_rec(size_t cur_count, size_t desired) const;
-  expr2tc *get_sub_expr_nc_rec(size_t cur_count, size_t desired);
-  size_t get_num_sub_exprs_rec() const;
-
-  void foreach_operand_impl_rec(expr2t::op_delegate &f);
-  void foreach_operand_impl_const_rec(expr2t::const_op_delegate &f) const;
-
-  // Similar story, but for type2tc
-  void foreach_subtype_impl_rec(type2t::subtype_delegate &t);
-  void foreach_subtype_impl_const_rec(type2t::const_subtype_delegate &t) const;
-};
-
-// Base instance of irep_methods2. This is a template specialization that
-// matches (via std::enable_if) when the list of fields to operate on is
-// now empty. Finish up the remaining computation, if any.
-template <class derived, class baseclass, typename traits, typename fields>
-class irep_methods2<
-  derived,
-  baseclass,
-  traits,
-  fields,
-  std::enable_if_t<boost::mp11::mp_empty<fields>::value>> : public baseclass
-{
-public:
-  template <typename... Args>
-  irep_methods2(Args... args) : baseclass(args...)
-  {
-  }
-
-  // Copy constructor. See note for non-specialized definition.
-  irep_methods2(const derived &ref) : baseclass(ref)
-  {
-  }
-
-protected:
-  typedef typename baseclass::container_type container2tc;
-  typedef typename baseclass::base_type base2t;
-
-  void tostring_rec(
-    unsigned int idx,
-    list_of_memberst &vec,
-    unsigned int indent) const
-  {
-    (void)idx;
-    (void)vec;
-    (void)indent;
-  }
-
-  bool cmp_rec(const base2t &ref) const
-  {
-    // If it made it this far, we passed
-    (void)ref;
-    return true;
-  }
-
-  int lt_rec(const base2t &ref) const
-  {
-    // If it made it this far, we passed
-    (void)ref;
-    return 0;
-  }
-
-  void do_crc_rec() const
-  {
-  }
-
-  void hash_rec(crypto_hash &hash) const
-  {
-    (void)hash;
-  }
-
-  const expr2tc *get_sub_expr_rec(size_t cur_idx, size_t desired) const
-  {
-    // No result, so desired must exceed the number of idx's
-    assert(cur_idx >= desired);
-    (void)cur_idx;
-    (void)desired;
-    return nullptr;
-  }
-
-  expr2tc *get_sub_expr_nc_rec(size_t cur_idx, size_t desired)
-  {
-    // See above
-    assert(cur_idx >= desired);
-    (void)cur_idx;
-    (void)desired;
-    return nullptr;
-  }
-
-  size_t get_num_sub_exprs_rec() const
-  {
-    return 0;
-  }
-
-  void foreach_operand_impl_rec(expr2t::op_delegate &f)
-  {
-    (void)f;
-  }
-
-  void foreach_operand_impl_const_rec(expr2t::const_op_delegate &f) const
-  {
-    (void)f;
-  }
-
-  void foreach_subtype_impl_rec(type2t::subtype_delegate &t)
-  {
-    (void)t;
-  }
-
-  void foreach_subtype_impl_const_rec(type2t::const_subtype_delegate &t) const
-  {
-    (void)t;
-  }
+  template <typename Delegate>
+  void foreach_subtype_impl_const_inner(Delegate &f) const;
+  template <typename Delegate>
+  void foreach_subtype_impl_inner(Delegate &f);
 };
 
 /** Expression methods template for expr ireps.
@@ -1301,17 +1162,11 @@ protected:
  *  protected; here we provide the head methods publically to allow the
  *  programmer to call in.
  *  */
-template <
-  class derived,
-  class baseclass,
-  typename traits,
-  typename fields,
-  typename enable>
-class expr_methods2
-  : public irep_methods2<derived, baseclass, traits, fields, enable>
+template <class derived, class baseclass, typename traits>
+class expr_methods2 : public irep_methods2<derived, baseclass, traits>
 {
 public:
-  typedef irep_methods2<derived, baseclass, traits, fields, enable> superclass;
+  typedef irep_methods2<derived, baseclass, traits> superclass;
 
   template <typename... Args>
   expr_methods2(const Args &...args) : superclass(args...)
@@ -1323,29 +1178,40 @@ public:
   {
   }
 
-  const expr2tc *get_sub_expr(size_t i) const override;
-  expr2tc *get_sub_expr_nc(size_t i) override;
-  size_t get_num_sub_exprs() const override;
+  const expr2tc *get_sub_expr(size_t i) const override
+  {
+    return this->get_sub_expr_impl(i);
+  }
 
-  void
-  foreach_operand_impl_const(expr2t::const_op_delegate &expr) const override;
-  void foreach_operand_impl(expr2t::op_delegate &expr) override;
+  expr2tc *get_sub_expr_nc(size_t i) override
+  {
+    return this->get_sub_expr_nc_impl(i);
+  }
+
+  size_t get_num_sub_exprs() const override
+  {
+    return this->get_num_sub_exprs_impl();
+  }
+
+  void foreach_operand_impl_const(
+    expr2t::const_op_delegate &f) const override
+  {
+    this->foreach_operand_impl_const_inner(f);
+  }
+
+  void foreach_operand_impl(expr2t::op_delegate &f) override
+  {
+    this->foreach_operand_impl_inner(f);
+  }
 };
 
 /** Type methods template for type ireps.
- *  Like @expr_methods2, but for types. Also; written on the quick.
- *  */
-template <
-  class derived,
-  class baseclass,
-  typename traits,
-  typename fields,
-  typename enable>
-class type_methods2
-  : public irep_methods2<derived, baseclass, traits, fields, enable>
+ *  Like @expr_methods2, but for types. */
+template <class derived, class baseclass, typename traits>
+class type_methods2 : public irep_methods2<derived, baseclass, traits>
 {
 public:
-  typedef irep_methods2<derived, baseclass, traits, fields, enable> superclass;
+  typedef irep_methods2<derived, baseclass, traits> superclass;
 
   template <typename... Args>
   type_methods2(const Args &...args) : superclass(args...)
@@ -1357,9 +1223,16 @@ public:
   {
   }
 
-  void
-  foreach_subtype_impl_const(type2t::const_subtype_delegate &t) const override;
-  void foreach_subtype_impl(type2t::subtype_delegate &t) override;
+  void foreach_subtype_impl_const(
+    type2t::const_subtype_delegate &f) const override
+  {
+    this->foreach_subtype_impl_const_inner(f);
+  }
+
+  void foreach_subtype_impl(type2t::subtype_delegate &f) override
+  {
+    this->foreach_subtype_impl_inner(f);
+  }
 };
 
 } // namespace esbmct
