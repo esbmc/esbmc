@@ -1391,10 +1391,9 @@ expr2tc make_blocking_expr(const std::vector<collected_nondet_value> &nondets)
   for (const auto &n : nondets)
   {
     expr2tc eq;
-    if (
-      is_floatbv_type(n.symbol_expr->type) &&
-      is_constant_floatbv2t(n.value_expr) &&
-      to_constant_floatbv2t(n.value_expr).value.is_NaN())
+    const constant_floatbv2t *value_fbv = try_to_constant_floatbv2t(n.value_expr);
+    if (is_floatbv_type(n.symbol_expr->type) && value_fbv &&
+        value_fbv->value.is_NaN())
     {
       eq = isnan2tc(n.symbol_expr);
     }
