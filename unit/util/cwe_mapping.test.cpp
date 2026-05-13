@@ -119,9 +119,8 @@ TEST_CASE(
       cwe_rule_for("dereference failure: invalidated dynamic object freed")
         .sarif_id) == "invalidated-dynamic-object-freed");
   REQUIRE(
-    std::string(
-      cwe_rule_for("dereference failure: invalidated dynamic object")
-        .sarif_id) == "invalidated-dynamic-object");
+    std::string(cwe_rule_for("dereference failure: invalidated dynamic object")
+                  .sarif_id) == "invalidated-dynamic-object");
 
   // Fallback for unrecognised comments.
   REQUIRE(std::string(cwe_rule_for("").sarif_id) == "esbmc-assertion");

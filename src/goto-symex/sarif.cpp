@@ -123,9 +123,8 @@ void sarif_goto_trace(
       std::string_view name = cwe_name(id);
       if (!name.empty())
         t["shortDescription"]["text"] = std::string(name);
-      t["helpUri"] =
-        "https://cwe.mitre.org/data/definitions/" + std::to_string(id) +
-        ".html";
+      t["helpUri"] = "https://cwe.mitre.org/data/definitions/" +
+                     std::to_string(id) + ".html";
       taxa.push_back(t);
     }
     taxonomy["taxa"] = taxa;
