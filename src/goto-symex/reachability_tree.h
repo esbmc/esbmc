@@ -199,9 +199,12 @@ public:
   bool is_has_complete_formula();
 
   /**
-   *  Duplicate of step_next_state.
-   *  Essentially does the same thing as step_next_state, but is specific to
-   *  the --schedule option. This can probably be removed in the future.
+   *  Advance to the next exploration frame, draining if we're at the top.
+   *  If there's already an exploration frame after the current one (we're
+   *  in the middle of an existing interleaving), step onto it. Otherwise
+   *  we're at the top of the stack: drain fully-explored frames via
+   *  drain_to_unexplored, adding memory-leak checks on the very last
+   *  frame before erasing it. Used by --schedule exploration.
    */
   void go_next_state();
 
@@ -279,6 +282,15 @@ protected:
   const scheduler_framet &get_cur_scheduler_frame() const;
   bool dfs_explore_thread(unsigned int tid);
   void erase_current_frame();
+
+  /** Drain fully-explored frames from the top of exploration_frames
+   *  until step_next_state finds an unexplored switch (or the stack
+   *  empties). If add_leak_checks is true, add memory-leak checks on
+   *  the very last remaining frame before erasing it. On return,
+   *  cur_frame_it points at the parent of the unexplored switch when
+   *  exploration_frames is non-empty; the caller is expected to
+   *  advance cur_frame_it onto the new top. */
+  void drain_to_unexplored(bool add_leak_checks);
 
   /** Stack of exploration frames representing the current interleaving.
    *  Each frame owns one execution state plus the scheduler bookkeeping for

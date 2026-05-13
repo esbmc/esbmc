@@ -275,6 +275,20 @@ void reachability_treet::switch_to_next_execution_state()
   }
 }
 
+void reachability_treet::drain_to_unexplored(bool add_leak_checks)
+{
+  while (exploration_frames.size() > 0 && !step_next_state())
+  {
+    if (add_leak_checks && exploration_frames.size() == 1)
+      cur_frame_it->state->add_memory_leak_checks();
+
+    erase_current_frame();
+  }
+
+  if (exploration_frames.size() > 0)
+    cur_frame_it++;
+}
+
 bool reachability_treet::reset_to_unexplored_state()
 {
   // After executing up to a point where all threads have ended and returning
@@ -286,14 +300,7 @@ bool reachability_treet::reset_to_unexplored_state()
   // all depths from the current execution state are explored, so delete it.
 
   erase_current_frame();
-
-  while (exploration_frames.size() > 0 && !step_next_state())
-  {
-    erase_current_frame();
-  }
-
-  if (exploration_frames.size() > 0)
-    cur_frame_it++;
+  drain_to_unexplored(/*add_leak_checks=*/false);
 
   if (exploration_frames.size() && !smt_during_symex)
   {
@@ -319,23 +326,9 @@ void reachability_treet::go_next_state()
   auto it = cur_frame_it;
   it++;
   if (it != exploration_frames.end())
-  {
     cur_frame_it++;
-  }
   else
-  {
-    while (exploration_frames.size() > 0 && !step_next_state())
-    {
-      // For the last one:
-      if (exploration_frames.size() == 1)
-        cur_frame_it->state->add_memory_leak_checks();
-
-      erase_current_frame();
-    }
-
-    if (exploration_frames.size() > 0)
-      cur_frame_it++;
-  }
+    drain_to_unexplored(/*add_leak_checks=*/true);
 }
 
 void reachability_treet::print_ileave_trace() const
