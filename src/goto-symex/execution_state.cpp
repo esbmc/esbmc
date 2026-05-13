@@ -28,11 +28,10 @@ execution_statet::execution_statet(
   std::shared_ptr<ex_state_level2t> l2init,
   optionst &options)
   : goto_symext(ns, context, goto_functions, std::move(_target), options),
-    owning_rt(art),
     state_level2(std::move(l2init)),
     global_value_set(ns)
 {
-  art1 = owning_rt;
+  art1 = art;
   CS_number = 0;
   node_id = 0;
   tid_is_set = false;
@@ -92,7 +91,6 @@ execution_statet::execution_statet(
 
 execution_statet::execution_statet(const execution_statet &ex)
   : goto_symext(ex),
-    owning_rt(ex.owning_rt),
     state_level2(
       std::dynamic_pointer_cast<ex_state_level2t>(ex.state_level2->clone())),
     global_value_set(ex.global_value_set)
@@ -207,7 +205,7 @@ void execution_statet::symex_step(reachability_treet &art)
     if (instruction.function == "__ESBMC_main")
     {
       end_thread();
-      owning_rt->main_thread_ended = true;
+      art1->main_thread_ended = true;
     }
     else if (
       (instruction.function == "c:@F@main" ||
@@ -356,20 +354,20 @@ void execution_statet::switch_to_thread(unsigned int i)
 
 bool execution_statet::check_if_ileaves_blocked()
 {
-  if (owning_rt->get_CS_bound() != -1 && CS_number >= owning_rt->get_CS_bound())
+  if (art1->get_CS_bound() != -1 && CS_number >= art1->get_CS_bound())
     return true;
 
   if (get_active_atomic_number() > 0)
     return true;
 
-  if (owning_rt->directed_interleavings)
+  if (art1->directed_interleavings)
     // Don't generate interleavings automatically - instead, the user will
     // inserts intrinsics identifying where they want interleavings to occur,
     // and to what thread.
     return true;
 
   if (
-    owning_rt->main_thread_ended &&
+    art1->main_thread_ended &&
     !options.get_bool_option("deadlock-check") &&
     !options.get_bool_option("data-races-check"))
     // Don't generate further interleavings since __ESBMC_main thread has ended.

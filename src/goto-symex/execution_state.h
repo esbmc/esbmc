@@ -501,10 +501,9 @@ public:
   void analyze_args(const expr2tc &expr) override;
 
 public:
-  /** Pointer to reachability_treet that owns this ex_state */
-  reachability_treet *owning_rt;
   /** Stack of thread states. The index into this vector is the thread ID of
-   *  the goto_symex_statet at that location */
+   *  the goto_symex_statet at that location. The reachability_treet that
+   *  owns this state is reachable via the inherited goto_symext::art1. */
   std::vector<goto_symex_statet> threads_state;
   /** Preserved paths. After switching out of a thread, only the paths active
    *  at the time the switch occurred are allowed to live, and are stored
