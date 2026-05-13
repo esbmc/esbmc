@@ -1,4 +1,7 @@
-# CWE Mapping for ESBMC Property Violations
+---
+title: CWE Mapping
+weight: 12
+---
 
 ESBMC annotates every reported property violation with the matching
 Common Weakness Enumeration (CWE) identifiers. The mapping is pinned
