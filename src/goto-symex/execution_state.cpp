@@ -328,8 +328,7 @@ bool execution_statet::check_if_ileaves_blocked()
     return true;
 
   if (
-    art1->main_thread_ended &&
-    !options.get_bool_option("deadlock-check") &&
+    art1->main_thread_ended && !options.get_bool_option("deadlock-check") &&
     !options.get_bool_option("data-races-check"))
     // Don't generate further interleavings since __ESBMC_main thread has ended.
     return true;
