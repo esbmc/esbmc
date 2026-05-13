@@ -2444,108 +2444,36 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-/** IEEE Addition operation. Adds two floatbvs together.
- *  Types of both operands and expr type should match. @extends ieee_arith_2ops */
-class ieee_add2t : public ieee_add_expr_methods
-{
-public:
-  /** Primary constructor.
-   *  @param type Type of this expr.
-   *  @param v1 First operand.
-   *  @param v2 Second operand.
-   *  @param rm rounding mode. */
-  ieee_add2t(
-    const type2tc &type,
-    const expr2tc &v1,
-    const expr2tc &v2,
-    const expr2tc &rm)
-    : ieee_add_expr_methods(type, ieee_add_id, v1, v2, rm)
-  {
-  }
-  ieee_add2t(const ieee_add2t &ref) = default;
-
-  expr2tc do_simplify() const override;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
-/** IEEE subtraction operation. Subtracts second operand from first operand. Must both
- *  be floatbvs types. Types of both operands and expr type should match.
+/** Defines an IEEE two-operand floating-point arithmetic node
+ *  (add/sub/mul/div). Each takes two operands and a rounding mode,
+ *  has matching floatbv operand/result types, routes through its
+ *  generated _expr_methods base for cmp/lt/crc/hash, and provides an
+ *  out-of-line do_simplify override in src/util/expr_simplifier.cpp.
+ *  The concrete class names and the generated is_<name>2t /
+ *  to_<name>2t helpers are preserved verbatim.
  *  @extends ieee_arith_2ops */
-class ieee_sub2t : public ieee_sub_expr_methods
-{
-public:
-  /** Primary constructor.
-   *  @param type Type of this expr.
-   *  @param v1 First operand.
-   *  @param v2 Second operand.
-   *  @param rm rounding mode. */
-  ieee_sub2t(
-    const type2tc &type,
-    const expr2tc &v1,
-    const expr2tc &v2,
-    const expr2tc &rm)
-    : ieee_sub_expr_methods(type, ieee_sub_id, v1, v2, rm)
-  {
+#define ESBMC_DEFINE_IEEE_ARITH_2OP(name)                                      \
+  class name##2t : public name##_expr_methods                                  \
+  {                                                                            \
+  public:                                                                      \
+    name##2t(                                                                  \
+      const type2tc &type,                                                     \
+      const expr2tc &v1,                                                       \
+      const expr2tc &v2,                                                       \
+      const expr2tc &rm)                                                       \
+      : name##_expr_methods(type, name##_id, v1, v2, rm)                       \
+    {                                                                          \
+    }                                                                          \
+    name##2t(const name##2t & ref) = default;                                  \
+    expr2tc do_simplify() const override;                                      \
+    static std::string field_names[esbmct::num_type_fields];                   \
   }
-  ieee_sub2t(const ieee_sub2t &ref) = default;
 
-  expr2tc do_simplify() const override;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
-/** IEEE multiplication operation. Multiplies the two operands. Must both be floatbvs
- *  types. Types of both operands and expr type should match.
- *  @extends ieee_arith_2ops */
-class ieee_mul2t : public ieee_mul_expr_methods
-{
-public:
-  /** Primary constructor.
-   *  @param type Type of this expr.
-   *  @param v1 First operand.
-   *  @param v2 Second operand.
-   *  @param rm rounding mode. */
-  ieee_mul2t(
-    const type2tc &type,
-    const expr2tc &v1,
-    const expr2tc &v2,
-    const expr2tc &rm)
-    : ieee_mul_expr_methods(type, ieee_mul_id, v1, v2, rm)
-  {
-  }
-  ieee_mul2t(const ieee_mul2t &ref) = default;
-
-  expr2tc do_simplify() const override;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
-/** IEEE division operation. Divides first operand by second operand. Must both be
- *  floatbvs types. Types of both operands and expr type should match.
- *  @extends ieee_arith_2ops */
-class ieee_div2t : public ieee_div_expr_methods
-{
-public:
-  /** Primary constructor.
-   *  @param type Type of this expr.
-   *  @param v1 First operand.
-   *  @param v2 Second operand.
-   *  @param rm rounding mode. */
-  ieee_div2t(
-    const type2tc &type,
-    const expr2tc &v1,
-    const expr2tc &v2,
-    const expr2tc &rm)
-    : ieee_div_expr_methods(type, ieee_div_id, v1, v2, rm)
-  {
-  }
-  ieee_div2t(const ieee_div2t &ref) = default;
-
-  expr2tc do_simplify() const override;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
+ESBMC_DEFINE_IEEE_ARITH_2OP(ieee_add);
+ESBMC_DEFINE_IEEE_ARITH_2OP(ieee_sub);
+ESBMC_DEFINE_IEEE_ARITH_2OP(ieee_mul);
+ESBMC_DEFINE_IEEE_ARITH_2OP(ieee_div);
+#undef ESBMC_DEFINE_IEEE_ARITH_2OP
 
 /** IEEE fused multiply-add operation. Computes (x*y) + z as if to infinite
  *  precision and rounded only once to fit the result type. Must be
