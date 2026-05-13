@@ -269,7 +269,8 @@ void c_linkt::duplicate_symbol(symbolt &in_context, symbolt &new_symbol)
                  return as.size() == bs.size() &&
                         std::equal(
                           as.begin(), as.end(), bs.begin(), [](char x, char y) {
-                            return std::toupper(static_cast<unsigned char>(x)) ==
+                            return std::toupper(
+                                     static_cast<unsigned char>(x)) ==
                                    std::toupper(static_cast<unsigned char>(y));
                           });
                })(in_context.module, new_symbol.module))

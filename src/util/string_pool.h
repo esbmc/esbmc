@@ -67,8 +67,7 @@ public:
   const std::string &get_string(size_t no) const
   {
     assert(no < published_size.load(std::memory_order_acquire));
-    chunk_t *chunk =
-      chunks[no >> CHUNK_SHIFT].load(std::memory_order_acquire);
+    chunk_t *chunk = chunks[no >> CHUNK_SHIFT].load(std::memory_order_acquire);
     return chunk->data[no & CHUNK_MASK];
   }
 
