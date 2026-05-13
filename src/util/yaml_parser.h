@@ -10,6 +10,9 @@ class yaml_parser
 public:
   static std::vector<invariant> read_invariants(const std::string &path);
   static std::vector<waypoint> get_waypoints(const std::string &path);
+  /// Returns true and sets @p out to the target waypoint if the witness has
+  /// one; otherwise returns false.  Triggers parsing if not yet cached.
+  static bool get_target_waypoint(const std::string &path, waypoint &out);
 
   // Reads the source file at `source_path` and returns a new source string
   // with witness intrinsic calls inserted before each annotated line.

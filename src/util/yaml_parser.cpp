@@ -78,25 +78,42 @@ invariant::Type yaml_parser::type_from_string(const std::string &s)
   return invariant::unknown;
 }
 
+namespace
+{
+// Pre-intern location fields for O(1) comparison during symex hot path.
+void intern_location(waypoint &wp)
+{
+  if (wp.line != c_nonset)
+    wp.line_id = irep_idt(integer2string(wp.line));
+  wp.function_id = irep_idt(wp.function);
+}
+
+// Shared parse cache: get_waypoints and get_target_waypoint are both called
+// on the same file per run, so parse once and reuse.
+struct
+{
+  std::string path;
+  std::vector<waypoint> waypoints;
+  waypoint target;
+  bool has_target = false;
+} wp_cache;
+} // namespace
+
 std::vector<waypoint> yaml_parser::get_waypoints(const std::string &path)
 {
-  // Cache the parse result: ESBMC calls get_waypoints twice per run (frontend
-  // injection and symex init) on the same file.  The static avoids redundant
-  // file I/O and YAML parsing on the second call.
-  static std::string cached_path;
-  static std::vector<waypoint> cached_result;
-  if (path == cached_path)
-    return cached_result;
+  if (path == wp_cache.path)
+    return wp_cache.waypoints;
 
-  cached_path = path;
-  cached_result.clear();
+  wp_cache.path = path;
+  wp_cache.waypoints.clear();
+  wp_cache.has_target = false;
   try
   {
     YAML::Node root = YAML::LoadFile(path);
     if (!root || !root.IsSequence())
-      return cached_result;
+      return wp_cache.waypoints;
 
-    int seg_idx = 0;
+    size_t seg_idx = 0;
     for (const auto &entry : root)
     {
       const auto &content = entry["content"];
@@ -109,21 +126,25 @@ std::vector<waypoint> yaml_parser::get_waypoints(const std::string &path)
         if (!seg || !seg.IsSequence())
           continue;
 
-        int wp_count = 0;
+        size_t wp_count = 0;
         for (const auto &wp_node : seg)
         {
           const auto &node = wp_node["waypoint"];
           if (!node)
             continue;
           waypoint wp = parse_waypoint(node);
-          if (wp.type == waypoint::unknown || wp.type == waypoint::target)
+          if (wp.type == waypoint::unknown)
             continue;
+          intern_location(wp);
+          if (wp.type == waypoint::target)
+          {
+            wp_cache.target = wp;
+            wp_cache.has_target = true;
+            continue;
+          }
           wp.segment_idx = seg_idx;
           wp.wp_idx_in_seg = wp_count++;
-          if (wp.line != c_nonset)
-            wp.line_id = irep_idt(integer2string(wp.line));
-          wp.function_id = irep_idt(wp.function);
-          cached_result.push_back(std::move(wp));
+          wp_cache.waypoints.push_back(std::move(wp));
         }
         ++seg_idx;
       }
@@ -132,9 +153,18 @@ std::vector<waypoint> yaml_parser::get_waypoints(const std::string &path)
   catch (const YAML::Exception &e)
   {
     log_error("Failed to parse violation witness YAML '{}': {}", path, e.what());
-    cached_path.clear();
+    wp_cache.path.clear();
   }
-  return cached_result;
+  return wp_cache.waypoints;
+}
+
+bool yaml_parser::get_target_waypoint(const std::string &path, waypoint &out)
+{
+  get_waypoints(path);
+  if (!wp_cache.has_target)
+    return false;
+  out = wp_cache.target;
+  return true;
 }
 
 waypoint yaml_parser::parse_waypoint(const YAML::Node &node)
@@ -204,7 +234,7 @@ std::string yaml_parser::build_violation_witness_source(
   by_line.reserve(waypoints.size());
   for (const auto &wp : waypoints)
   {
-    if (wp.type != waypoint::assumption || wp.line < 0)
+    if (wp.type != waypoint::assumption || wp.line == c_nonset)
       continue;
     by_line[static_cast<size_t>(wp.line.to_int64())].push_back(&wp);
   }
