@@ -96,7 +96,7 @@ struct
   waypoint target;
   bool has_target = false;
 } wp_cache;
-}
+} // namespace
 
 std::vector<waypoint> yaml_parser::get_waypoints(const std::string &path)
 {
