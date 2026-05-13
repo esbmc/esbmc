@@ -181,6 +181,19 @@ protected:
   virtual void symex_goto(const expr2tc &old_guard);
 
   /**
+   *  Hook called when a GOTO forks off a sibling merge_statet snapshot.
+   *  Used by execution_statet to record an explicit reference to the sibling
+   *  path on the active transition result, so it can be preserved across
+   *  context switches without re-discovering it by scanning merge_state_map.
+   *  No-op for non-concurrent symex.
+   */
+  virtual void record_branch_sibling(
+    goto_programt::const_targett /*target*/,
+    statet::merge_state_listt::iterator /*sibling*/)
+  {
+  }
+
+  /**
    *  Perform interpretation of RETURN instruction.
    *  @param code return statement.
    */
@@ -267,21 +280,22 @@ protected:
    *  Merge pointer tracking value sets in a phi function.
    *  See merge_gotos - when we're merging states together due to previous
    *  jumps, this function implements the merging of pointer tracking data.
-   *  @param goto_state Previously executed goto state to be merged in.
+   *  @param merge_state Previously recorded merge snapshot to be merged in.
    *  @param dest Thread state for previous jump to be merged into.
    */
-  void merge_value_sets(const statet::goto_statet &goto_state);
+  void merge_value_sets(const statet::merge_statet &merge_state);
 
-  void merge_locality(const statet::goto_statet &goto_state);
+  void merge_locality(const statet::merge_statet &merge_state);
 
   /**
-   *  Join together a previous jump state into thread state.
+   *  Join a previous jump's merge snapshot into the active thread state.
    *  This combines together two thread states by using if-then-elses to decide
    *  the new value of a variable, according to the truth of the guards of the
    *  states being joined.
-   *  @param goto_state The previous jumps state to be merged into the current
+   *  @param merge_state Previous jump snapshot to be merged into the current
+   *  state.
    */
-  void phi_function(const statet::goto_statet &goto_state);
+  void phi_function(const statet::merge_statet &merge_state);
 
   /**
    *  Test whether unwinding bound has been exceeded.

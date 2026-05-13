@@ -197,10 +197,11 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
   cur_state->source.pc = state_pc;
 
   // put into state-queue
-  statet::goto_state_listt &goto_state_list =
-    cur_state->top().goto_state_map[new_state_pc];
+  statet::merge_state_listt &merge_state_list =
+    cur_state->top().merge_state_map[new_state_pc];
 
-  goto_state_list.emplace_back(*cur_state);
+  merge_state_list.emplace_back(*cur_state);
+  record_branch_sibling(new_state_pc, std::prev(merge_state_list.end()));
 
   // adjust guards
   if (new_guard_true)
@@ -209,7 +210,7 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
   }
   else
   {
-    statet::goto_statet &new_state = goto_state_list.back();
+    statet::merge_statet &new_state = merge_state_list.back();
 
     // produce new guard symbol
     expr2tc guard_expr;
@@ -265,7 +266,7 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
 }
 
 static inline guardt merge_state_guards(
-  goto_symext::statet::goto_statet &goto_state,
+  goto_symext::statet::merge_statet &merge_state,
   goto_symex_statet &state)
 {
   // adjust guard, even using guards from unreachable states. This helps to
@@ -277,19 +278,19 @@ static inline guardt merge_state_guards(
   // impossible. Therefore we only integrate it when to do so simplifies the
   // state guard.
 
-  // In CBMC this function can trash either state's guards, since goto_state is
+  // In CBMC this function can trash either state's guards, since merge_state is
   // dying and state's guard will shortly be overwritten. However, we still use
   // either state's guard, so keep them intact.
   if (
-    (!goto_state.guard.is_false() && !state.guard.is_false()) ||
-    state.guard.disjunction_may_simplify(goto_state.guard))
+    (!merge_state.guard.is_false() && !state.guard.is_false()) ||
+    state.guard.disjunction_may_simplify(merge_state.guard))
   {
-    state.guard |= goto_state.guard;
+    state.guard |= merge_state.guard;
     return state.guard;
   }
-  else if (state.guard.is_false() && !goto_state.guard.is_false())
+  else if (state.guard.is_false() && !merge_state.guard.is_false())
   {
-    return goto_state.guard;
+    return merge_state.guard;
   }
   else
   {
@@ -302,46 +303,46 @@ void goto_symext::merge_gotos()
   statet::framet &frame = cur_state->top();
 
   // first, see if this is a target at all
-  statet::goto_state_mapt::iterator state_map_it =
-    frame.goto_state_map.find(cur_state->source.pc);
+  statet::merge_state_mapt::iterator state_map_it =
+    frame.merge_state_map.find(cur_state->source.pc);
 
-  if (state_map_it == frame.goto_state_map.end())
+  if (state_map_it == frame.merge_state_map.end())
     return; // nothing to do
 
   // we need to merge
-  statet::goto_state_listt &state_list = state_map_it->second;
+  statet::merge_state_listt &state_list = state_map_it->second;
 
   for (auto list_it = state_list.rbegin(); list_it != state_list.rend();
        list_it++)
   {
-    statet::goto_statet &goto_state = *list_it;
+    statet::merge_statet &merge_state = *list_it;
 
     // Merge guards. Don't write this to `state` yet because we might move
-    // goto_state over it below.
-    guardt new_guard = merge_state_guards(goto_state, *cur_state);
+    // merge_state over it below.
+    guardt new_guard = merge_state_guards(merge_state, *cur_state);
 
-    if (!goto_state.guard.is_false())
+    if (!merge_state.guard.is_false())
     {
       // do SSA phi functions
-      phi_function(goto_state);
+      phi_function(merge_state);
 
-      merge_locality(goto_state);
+      merge_locality(merge_state);
 
-      merge_value_sets(goto_state);
+      merge_value_sets(merge_state);
 
       // adjust depth
       cur_state->num_instructions =
-        std::min(cur_state->num_instructions, goto_state.num_instructions);
+        std::min(cur_state->num_instructions, merge_state.num_instructions);
     }
 
     cur_state->guard = std::move(new_guard);
   }
 
   // clean up to save some memory
-  frame.goto_state_map.erase(state_map_it);
+  frame.merge_state_map.erase(state_map_it);
 }
 
-void goto_symext::merge_locality(const statet::goto_statet &src)
+void goto_symext::merge_locality(const statet::merge_statet &src)
 {
   if (cur_state->guard.is_false())
   {
@@ -353,7 +354,7 @@ void goto_symext::merge_locality(const statet::goto_statet &src)
     src.local_variables.begin(), src.local_variables.end());
 }
 
-void goto_symext::merge_value_sets(const statet::goto_statet &src)
+void goto_symext::merge_value_sets(const statet::merge_statet &src)
 {
   if (cur_state->guard.is_false())
   {
@@ -364,22 +365,22 @@ void goto_symext::merge_value_sets(const statet::goto_statet &src)
   cur_state->value_set.make_union(src.value_set, true);
 }
 
-void goto_symext::phi_function(const statet::goto_statet &goto_state)
+void goto_symext::phi_function(const statet::merge_statet &merge_state)
 {
-  if (goto_state.guard.is_false() && cur_state->guard.is_false())
+  if (merge_state.guard.is_false() && cur_state->guard.is_false())
     return;
 
   // go over all variables to see what changed
   const auto &variables = cur_state->level2.current_names;
 
-  const auto &goto_variables = goto_state.level2.current_names;
+  const auto &merge_variables = merge_state.level2.current_names;
 
   guardt tmp_guard;
   if (
     !variables.empty() && !cur_state->guard.is_false() &&
-    !goto_state.guard.is_false())
+    !merge_state.guard.is_false())
   {
-    tmp_guard = goto_state.guard;
+    tmp_guard = merge_state.guard;
 
     // this gets the diff between the guards
     tmp_guard -= cur_state->guard;
@@ -388,7 +389,7 @@ void goto_symext::phi_function(const statet::goto_statet &goto_state)
   for (const auto &[variable, _] : variables)
   {
     if (
-      goto_state.level2.current_number(variable) ==
+      merge_state.level2.current_number(variable) ==
       cur_state->level2.current_number(variable))
       continue; // not changed
 
@@ -402,7 +403,7 @@ void goto_symext::phi_function(const statet::goto_statet &goto_state)
 
     // If the variable was deleted in this branch, don't create an assignment
     // for it
-    if (goto_variables.find(variable) == goto_variables.end())
+    if (merge_variables.find(variable) == merge_variables.end())
       continue;
 
     // changed!
@@ -413,23 +414,23 @@ void goto_symext::phi_function(const statet::goto_statet &goto_state)
     expr2tc cur_state_rhs = symbol2tc(type, symbol.id);
     renaming::level2t::rename_to_record(cur_state_rhs, variable);
 
-    expr2tc goto_state_rhs = symbol2tc(type, symbol.id);
-    renaming::level2t::rename_to_record(goto_state_rhs, variable);
+    expr2tc merge_state_rhs = symbol2tc(type, symbol.id);
+    renaming::level2t::rename_to_record(merge_state_rhs, variable);
 
     // Semi-manually rename these symbols: we may be referring to an l1
     // variable not in the current scope, thus we need to directly specify
     // which l1 variable we're dealing with.
-    goto_state.level2.rename(goto_state_rhs);
+    merge_state.level2.rename(merge_state_rhs);
     cur_state->level2.rename(cur_state_rhs);
 
     expr2tc rhs;
     if (cur_state->guard.is_false())
-      rhs = goto_state_rhs;
-    else if (goto_state.guard.is_false())
+      rhs = merge_state_rhs;
+    else if (merge_state.guard.is_false())
       rhs = cur_state_rhs;
     else
     {
-      rhs = if2tc(type, tmp_guard.as_expr(), goto_state_rhs, cur_state_rhs);
+      rhs = if2tc(type, tmp_guard.as_expr(), merge_state_rhs, cur_state_rhs);
       simplify(rhs);
     }
 
