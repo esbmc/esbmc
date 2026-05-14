@@ -9,7 +9,9 @@ import ast
 import copy
 import sys
 
+
 class GeneratorMixin:
+
     def _lower_listcomp(self, node):
         """Lower a list comprehension into prefix statements and result expression.
 
@@ -20,8 +22,7 @@ class GeneratorMixin:
         for generator in node.generators:
             if len(getattr(generator, "ifs", [])) > 1:
                 raise NotImplementedError(
-                    "Only a single if-condition is supported in list comprehensions"
-                )
+                    "Only a single if-condition is supported in list comprehensions")
             if getattr(generator, "is_async", False):
                 raise NotImplementedError("Async list comprehensions are not supported")
 
@@ -39,17 +40,15 @@ class GeneratorMixin:
         ast.fix_missing_locations(init_assign)
 
         # Step 2: build the append expression that pushes each produced element.
-        append_expr = ast.Expr(
-            value=ast.Call(
-                func=ast.Attribute(
-                    value=self.create_name_node(tmp_name, ast.Load(), node),
-                    attr="append",
-                    ctx=ast.Load(),
-                ),
-                args=[self.visit(node.elt)],
-                keywords=[],
-            )
-        )
+        append_expr = ast.Expr(value=ast.Call(
+            func=ast.Attribute(
+                value=self.create_name_node(tmp_name, ast.Load(), node),
+                attr="append",
+                ctx=ast.Load(),
+            ),
+            args=[self.visit(node.elt)],
+            keywords=[],
+        ))
         self.ensure_all_locations(append_expr, node.elt)
 
         # Step 3: build nested for-loops from innermost generator outward.
@@ -84,6 +83,7 @@ class GeneratorMixin:
         self.ensure_all_locations(result_name, node)
 
         return [init_assign] + transformed_for, result_name
+
     def _isolate_genexp_targets(self, genexp_node):
         isolated = copy.deepcopy(genexp_node)
 
@@ -95,27 +95,21 @@ class GeneratorMixin:
             new_name = f"ESBMC_gen_{self.listcomp_counter}_{old_name}"
             self.listcomp_counter += 1
 
-            generator.target = ast.copy_location(
-                ast.Name(id=new_name, ctx=ast.Store()), generator.target
-            )
-            generator.ifs = [
-                self._rename_loads(cond, old_name, new_name) for cond in generator.ifs
-            ]
+            generator.target = ast.copy_location(ast.Name(id=new_name, ctx=ast.Store()),
+                                                 generator.target)
+            generator.ifs = [self._rename_loads(cond, old_name, new_name) for cond in generator.ifs]
 
             shadowed = False
-            for later_generator in isolated.generators[index + 1 :]:
+            for later_generator in isolated.generators[index + 1:]:
                 # Comprehension iterables are evaluated before the later target is bound.
-                later_generator.iter = self._rename_loads(
-                    later_generator.iter, old_name, new_name
-                )
+                later_generator.iter = self._rename_loads(later_generator.iter, old_name, new_name)
 
                 if old_name in self._bound_target_names(later_generator.target):
                     shadowed = True
                     break
 
                 later_generator.ifs = [
-                    self._rename_loads(cond, old_name, new_name)
-                    for cond in later_generator.ifs
+                    self._rename_loads(cond, old_name, new_name) for cond in later_generator.ifs
                 ]
 
             if not shadowed:
@@ -123,20 +117,19 @@ class GeneratorMixin:
 
         ast.fix_missing_locations(isolated)
         return isolated
+
     def _prepare_genexp(self, genexp_node):
         genexp_node = self._isolate_genexp_targets(genexp_node)
 
         for generator in genexp_node.generators:
             if len(getattr(generator, "ifs", [])) > 1:
                 raise NotImplementedError(
-                    "Only a single if-condition is supported in generator expressions"
-                )
+                    "Only a single if-condition is supported in generator expressions")
             if getattr(generator, "is_async", False):
-                raise NotImplementedError(
-                    "Async generator expressions are not supported"
-                )
+                raise NotImplementedError("Async generator expressions are not supported")
 
         return genexp_node
+
     def _build_reduction_guard(self, tmp_name, source_node, negated):
         guard_expr = self.create_name_node(tmp_name, ast.Load(), source_node)
         if negated:
@@ -144,6 +137,7 @@ class GeneratorMixin:
         self.ensure_all_locations(guard_expr, source_node)
         ast.fix_missing_locations(guard_expr)
         return guard_expr
+
     def _build_genexp_for_body(self, generator, loop_body, guard, source_node):
         if not generator.ifs:
             guarded_body = ast.If(test=guard, body=loop_body, orelse=[])
@@ -157,12 +151,10 @@ class GeneratorMixin:
 
         cond = self.visit(generator.ifs[0])
         self.ensure_all_locations(cond, generator.ifs[0])
-        cond_init = self._create_bool_ann_assign(
-            cond_tmp_name, self.create_constant_node(False, source_node), source_node
-        )
-        cond_update = self._create_bool_ann_assign(
-            cond_tmp_name, cond, generator.ifs[0]
-        )
+        cond_init = self._create_bool_ann_assign(cond_tmp_name,
+                                                 self.create_constant_node(False, source_node),
+                                                 source_node)
+        cond_update = self._create_bool_ann_assign(cond_tmp_name, cond, generator.ifs[0])
         eval_cond = ast.If(test=guard, body=[cond_update], orelse=[])
         self.ensure_all_locations(eval_cond, source_node)
         ast.fix_missing_locations(eval_cond)
@@ -174,6 +166,7 @@ class GeneratorMixin:
         self.ensure_all_locations(run_body, source_node)
         ast.fix_missing_locations(run_body)
         return [cond_init, eval_cond, run_body]
+
     def _finalize_lowered_genexp(self, for_stmt, source_node):
         transformed_for = self.visit_For(for_stmt)
         if not isinstance(transformed_for, list):
@@ -184,9 +177,9 @@ class GeneratorMixin:
             ast.fix_missing_locations(stmt)
 
         return transformed_for
-    def _lower_reduction_genexp(
-        self, genexp_node, tmp_name, initial_value, reduction_stmt, negated_guard
-    ):
+
+    def _lower_reduction_genexp(self, genexp_node, tmp_name, initial_value, reduction_stmt,
+                                negated_guard):
         init_assign = ast.Assign(
             targets=[self.create_name_node(tmp_name, ast.Store(), genexp_node)],
             value=self.create_constant_node(initial_value, genexp_node),
@@ -197,9 +190,7 @@ class GeneratorMixin:
         loop_body = [reduction_stmt]
         for generator in reversed(genexp_node.generators):
             guard = self._build_reduction_guard(tmp_name, genexp_node, negated_guard)
-            for_body = self._build_genexp_for_body(
-                generator, loop_body, guard, genexp_node
-            )
+            for_body = self._build_genexp_for_body(generator, loop_body, guard, genexp_node)
             for_stmt = ast.For(
                 target=generator.target,
                 iter=self.visit(generator.iter),
@@ -213,6 +204,7 @@ class GeneratorMixin:
         transformed_for = self._finalize_lowered_genexp(loop_body[0], genexp_node)
         result_name = self.create_name_node(tmp_name, ast.Load(), genexp_node)
         return [init_assign] + transformed_for, result_name
+
     def _lower_any_genexp(self, genexp_node):
         """Lower any(elt for target in iter [if cond]) to prefix stmts + boolean result.
 
@@ -247,6 +239,7 @@ class GeneratorMixin:
         ast.fix_missing_locations(if_true)
 
         return self._lower_reduction_genexp(genexp_node, tmp_name, False, if_true, True)
+
     def _lower_all_genexp(self, genexp_node):
         """Lower all(elt for target in iter [if cond]) to prefix stmts + boolean result.
 
@@ -286,9 +279,8 @@ class GeneratorMixin:
         self.ensure_all_locations(if_falsy, genexp_node)
         ast.fix_missing_locations(if_falsy)
 
-        return self._lower_reduction_genexp(
-            genexp_node, tmp_name, True, if_falsy, False
-        )
+        return self._lower_reduction_genexp(genexp_node, tmp_name, True, if_falsy, False)
+
     def _lower_list_gen_call(self, gen_call_node, parent_node):
         """Lower list(gen_func(args...)) to an inline list construction.
 
@@ -316,9 +308,8 @@ class GeneratorMixin:
         # Generators with return or yield-from cannot be safely inlined at the
         # call site: 'return' would exit the enclosing scope, and 'yield from'
         # is not transformed by _YieldToAppend.
-        if self._body_has_node_shallow(
-            body_stmts, ast.Return
-        ) or self._body_has_node_shallow(body_stmts, ast.YieldFrom):
+        if self._body_has_node_shallow(body_stmts, ast.Return) or self._body_has_node_shallow(
+                body_stmts, ast.YieldFrom):
             return None, gen_call_node
 
         # Emit parameter assignments so inlined body can reference them.
@@ -372,27 +363,25 @@ class GeneratorMixin:
         ast.fix_missing_locations(result_expr)
 
         return stmts, result_expr
+
     def _has_early_return_before_yield(self, body):
         """Return True if body has a Return statement before any Yield (linear top-level scan)."""
         for stmt in body:
             if isinstance(stmt, ast.Return):
                 return True
-            if isinstance(stmt, ast.Expr) and isinstance(
-                stmt.value, (ast.Yield, ast.YieldFrom)
-            ):
+            if isinstance(stmt, ast.Expr) and isinstance(stmt.value, (ast.Yield, ast.YieldFrom)):
                 return False
         return False
+
     @staticmethod
     def _is_recursive_call(func_name, body):
         """Return True if any Call node in body has func.id == func_name."""
         for node in ast.walk(ast.Module(body=body, type_ignores=[])):
-            if (
-                isinstance(node, ast.Call)
-                and isinstance(node.func, ast.Name)
-                and node.func.id == func_name
-            ):
+            if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                    and node.func.id == func_name):
                 return True
         return False
+
     def _transform_recursive_generator(self, node):
         """Transform a recursive generator function to accumulate-and-return.
 
@@ -440,9 +429,7 @@ class GeneratorMixin:
         ast.fix_missing_locations(init)
 
         # Replace all yield statements with append calls
-        new_body = [
-            self._YieldToAppend(result_var, template).visit(s) for s in node.body
-        ]
+        new_body = [self._YieldToAppend(result_var, template).visit(s) for s in node.body]
 
         # Append return statement
         ret = ast.Return(value=ast.Name(id=result_var, ctx=ast.Load()))
@@ -454,6 +441,7 @@ class GeneratorMixin:
         ast.copy_location(node.returns, template)
         ast.fix_missing_locations(node.returns)
         return node
+
     def _inline_generator_for(self, node):
         """
         Inline a generator-based for loop.
@@ -494,9 +482,7 @@ class GeneratorMixin:
                 elif out is not None:
                     result.append(out)
         except NotImplementedError as e:
-            print(
-                f"warning: cannot inline generator '{func_name}': {e}", file=sys.stderr
-            )
+            print(f"warning: cannot inline generator '{func_name}': {e}", file=sys.stderr)
             return None
 
         for stmt in result:
@@ -504,6 +490,7 @@ class GeneratorMixin:
             ast.fix_missing_locations(stmt)
 
         return result
+
     def _inline_generator_call_for(self, node):
         """Inline a for loop over a direct generator function call.
 
@@ -535,9 +522,8 @@ class GeneratorMixin:
         # Generators with early return or yield-from cannot be safely inlined:
         # a bare `return` inlined into the enclosing scope would prematurely
         # exit it instead of just stopping the inner generator's iteration.
-        if self._body_has_node_shallow(
-            body_stmts, ast.Return
-        ) or self._body_has_node_shallow(body_stmts, ast.YieldFrom):
+        if self._body_has_node_shallow(body_stmts, ast.Return) or self._body_has_node_shallow(
+                body_stmts, ast.YieldFrom):
             return None
 
         param_names = self.functionParams.get(func_name, [])
@@ -569,9 +555,7 @@ class GeneratorMixin:
                 elif out is not None:
                     stmts.append(out)
         except NotImplementedError as e:
-            print(
-                f"warning: cannot inline generator '{func_name}': {e}", file=sys.stderr
-            )
+            print(f"warning: cannot inline generator '{func_name}': {e}", file=sys.stderr)
             return None
 
         for stmt in stmts:
@@ -579,10 +563,12 @@ class GeneratorMixin:
             ast.fix_missing_locations(stmt)
 
         return stmts
+
     @staticmethod
     def _has_yield(node):
         """Return True if node contains a Yield or YieldFrom expression."""
         return any(isinstance(n, (ast.Yield, ast.YieldFrom)) for n in ast.walk(node))
+
     @staticmethod
     def _collect_post(stmts, start):
         """Collect stmts[start:] up to (not including) the first yield-containing statement."""
@@ -594,21 +580,19 @@ class GeneratorMixin:
             post.append(stmts[j])
             j += 1
         return post, j
+
     def _find_generator_next_call(self, node):
         """Return (gen_var, func_name) if node contains next(g) for a tracked generator, else None."""
         for child in ast.walk(node):
-            if (
-                isinstance(child, ast.Call)
-                and isinstance(child.func, ast.Name)
-                and child.func.id == "next"
-                and len(child.args) == 1
-                and isinstance(child.args[0], ast.Name)
-            ):
+            if (isinstance(child, ast.Call) and isinstance(child.func, ast.Name)
+                    and child.func.id == "next" and len(child.args) == 1
+                    and isinstance(child.args[0], ast.Name)):
                 gen_var = child.args[0].id
                 func_name = self.generator_vars.get(gen_var)
                 if func_name is not None:
                     return (gen_var, func_name)
         return None
+
     def _collect_yields(self, stmts, in_loop=False):
         """
         Collect yield points from a generator body.
@@ -646,9 +630,7 @@ class GeneratorMixin:
                     # StopIteration when the loop condition becomes false.
                     if isinstance(stmt, ast.While):
                         guard = ast.If(
-                            test=ast.UnaryOp(
-                                op=ast.Not(), operand=copy.deepcopy(stmt.test)
-                            ),
+                            test=ast.UnaryOp(op=ast.Not(), operand=copy.deepcopy(stmt.test)),
                             body=[self._make_stop_iteration_raise(stmt)],
                             orelse=[],
                         )
@@ -669,11 +651,8 @@ class GeneratorMixin:
                 i += 1
             elif isinstance(stmt, ast.If):
                 if_init, if_yields = self._collect_yields(stmt.body, in_loop=in_loop)
-                _, else_yields = (
-                    self._collect_yields(stmt.orelse, in_loop=in_loop)
-                    if stmt.orelse
-                    else ([], [])
-                )
+                _, else_yields = (self._collect_yields(stmt.orelse, in_loop=in_loop)
+                                  if stmt.orelse else ([], []))
                 if if_yields and else_yields:
                     # Both branches yield -> combine into a ternary yield value
                     # and capture post_stmts from the outer scope.
@@ -714,6 +693,7 @@ class GeneratorMixin:
                     current_pre.append(stmt)
                 i += 1
         return outer_init, yields
+
     def _make_stop_iteration_raise(self, template_node):
         """Build `raise StopIteration('StopIteration')` AST node."""
         raise_node = ast.Raise(
@@ -727,6 +707,7 @@ class GeneratorMixin:
         ast.copy_location(raise_node, template_node)
         ast.fix_missing_locations(raise_node)
         return raise_node
+
     def _inline_next_call(self, targets, func_name, gen_var, template_node):
         """
         Inline `x = next(g)` for a normal generator.
@@ -762,9 +743,7 @@ class GeneratorMixin:
 
         result.extend([copy.deepcopy(s) for s in pre_stmts])
         if targets is not None:
-            assign = ast.Assign(
-                targets=targets, value=copy.deepcopy(yield_val), type_comment=None
-            )
+            assign = ast.Assign(targets=targets, value=copy.deepcopy(yield_val), type_comment=None)
             ast.copy_location(assign, template_node)
             ast.fix_missing_locations(assign)
             result.append(assign)
@@ -773,6 +752,7 @@ class GeneratorMixin:
             self.ensure_all_locations(stmt, template_node)
             ast.fix_missing_locations(stmt)
         return result
+
     def _lower_listcomp_in_expr(self, expr):
         """Lower all list comprehensions inside an expression node.
 
@@ -785,14 +765,11 @@ class GeneratorMixin:
         new_expr = lowerer.visit(expr)
         result_type = self._infer_type_from_value(new_expr)
         return lowerer.statements, new_expr, result_type
+
     def _lower_sorted_with_key_call(self, call_node):
         """Lower sorted(iterable, key=lambda x: x[K]) for literal-list iterables."""
-        if not (
-            isinstance(call_node, ast.Call)
-            and isinstance(call_node.func, ast.Name)
-            and call_node.func.id == "sorted"
-            and len(call_node.args) == 1
-        ):
+        if not (isinstance(call_node, ast.Call) and isinstance(call_node.func, ast.Name)
+                and call_node.func.id == "sorted" and len(call_node.args) == 1):
             return None
 
         key_kw = None
@@ -813,14 +790,9 @@ class GeneratorMixin:
 
         param_name = key_lambda.args.args[0].arg
         body = key_lambda.body
-        if not (
-            isinstance(body, ast.Subscript)
-            and isinstance(body.value, ast.Name)
-            and body.value.id == param_name
-            and isinstance(body.slice, ast.Constant)
-            and isinstance(body.slice.value, int)
-            and body.slice.value >= 0
-        ):
+        if not (isinstance(body, ast.Subscript) and isinstance(body.value, ast.Name)
+                and body.value.id == param_name and isinstance(body.slice, ast.Constant)
+                and isinstance(body.slice.value, int) and body.slice.value >= 0):
             return None
 
         key_index = body.slice.value
@@ -852,6 +824,7 @@ class GeneratorMixin:
         self.ensure_all_locations(folded_sorted, call_node)
         ast.fix_missing_locations(folded_sorted)
         return [], folded_sorted
+
     def _lower_assert_eq_literal(self, test_node, source_node):
         # Disabled by default: this optimization introduced broad semantic/type
         # inference drift across regression suites. Keep original assert shape
@@ -859,12 +832,8 @@ class GeneratorMixin:
         if not getattr(self, "_enable_assert_eq_literal_lowering", False):
             return [], test_node
 
-        if not (
-            isinstance(test_node, ast.Compare)
-            and len(test_node.ops) == 1
-            and isinstance(test_node.ops[0], ast.Eq)
-            and len(test_node.comparators) == 1
-        ):
+        if not (isinstance(test_node, ast.Compare) and len(test_node.ops) == 1
+                and isinstance(test_node.ops[0], ast.Eq) and len(test_node.comparators) == 1):
             return [], test_node
 
         left = test_node.left
@@ -892,9 +861,7 @@ class GeneratorMixin:
 
         # String equality lowering through a synthetic temporary has shown
         # semantic drift on dataclass attribute reads; keep native equality.
-        if isinstance(literal_node, ast.Constant) and isinstance(
-            literal_node.value, str
-        ):
+        if isinstance(literal_node, ast.Constant) and isinstance(literal_node.value, str):
             return [], test_node
 
         # Keep non-trivial expressions untouched to avoid semantic/runtime drift
@@ -921,6 +888,7 @@ class GeneratorMixin:
             self.ensure_all_locations(new_test, source_node)
         ast.fix_missing_locations(new_test)
         return [tmp_assign], new_test
+
     def _hoist_generator_inits(self, body, template_node):
         """
         Scan a loop body for direct `var = next(gen_var)` assignments.
