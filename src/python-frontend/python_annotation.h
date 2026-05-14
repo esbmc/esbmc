@@ -4211,9 +4211,7 @@ private:
    *        `__init__` method.
    * @return The assignment's value node, or an empty Json when not found.
    */
-  Json find_self_attr_init_rhs(
-    const std::string &cls,
-    const std::string &attr)
+  Json find_self_attr_init_rhs(const std::string &cls, const std::string &attr)
   {
     Json class_node = json_utils::find_class(ast_["body"], cls);
     if (class_node.empty() || !class_node.contains("body"))
@@ -4285,8 +4283,8 @@ private:
         rhs["value"]["id"].template get<std::string>());
       if (cls.empty())
         return "Any";
-      Json attr_rhs = find_self_attr_init_rhs(
-        cls, rhs["attr"].template get<std::string>());
+      Json attr_rhs =
+        find_self_attr_init_rhs(cls, rhs["attr"].template get<std::string>());
       if (attr_rhs.empty())
         return "Any";
       return infer_unpacked_element_type(attr_rhs, index);
@@ -4300,9 +4298,8 @@ private:
    *        is a tuple/list unpacking `Assign` that binds it (GitHub #4532).
    * @return The synthetic node, or an empty Json on no match.
    */
-  Json match_unpacking_assignment(
-    const Json &elem,
-    const std::string &node_name)
+  Json
+  match_unpacking_assignment(const Json &elem, const std::string &node_name)
   {
     if (
       !elem.contains("_type") || elem["_type"] != "Assign" ||
