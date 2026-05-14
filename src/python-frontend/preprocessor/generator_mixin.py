@@ -501,9 +501,8 @@ class GeneratorMixin:
         if not hasattr(node.target, "id"):
             return None  # Only handle simple name targets
 
-        result = self._apply_yield_replacer(
-            body_stmts, (node.target.id, node.body, node), func_name
-        )
+        result = self._apply_yield_replacer(body_stmts, (node.target.id, node.body, node),
+                                            func_name)
         if result is None:
             return None
 
@@ -557,9 +556,8 @@ class GeneratorMixin:
 
         stmts = self._build_param_assigns(param_names, gen_call.args, node)
 
-        inlined_body = self._apply_yield_replacer(
-            body_stmts, (node.target.id, node.body, node), func_name
-        )
+        inlined_body = self._apply_yield_replacer(body_stmts, (node.target.id, node.body, node),
+                                                  func_name)
         if inlined_body is None:
             return None
         stmts.extend(inlined_body)
@@ -696,9 +694,7 @@ class GeneratorMixin:
                 i += 1
                 continue
             if isinstance(stmt, ast.If):
-                next_i = self._collect_if_yields(
-                    stmts, i, (current_pre, yields), in_loop
-                )
+                next_i = self._collect_if_yields(stmts, i, (current_pre, yields), in_loop)
                 if next_i is not None:
                     current_pre = []
                     found_yield = True
