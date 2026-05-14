@@ -297,12 +297,16 @@ class GeneratorMixin:
             stmts.append(assign)
         return stmts
 
-    def _apply_yield_replacer(self, body_stmts, target_name, body_dest, template_node, func_name):
+    def _apply_yield_replacer(self, body_stmts, replacer_spec, func_name):
         """Inline a generator body, replacing ``yield val`` via ``_YieldReplacer``.
+
+        ``replacer_spec`` is ``(target_name, body_dest, template_node)``.
 
         Returns the transformed statement list, or ``None`` if the body uses a
         construct ``_YieldReplacer`` cannot rewrite.
         """
+
+        target_name, body_dest, template_node = replacer_spec
         inlined = copy.deepcopy(body_stmts)
         replacer = self._YieldReplacer(target_name, body_dest, template_node)
         result = []
@@ -497,7 +501,9 @@ class GeneratorMixin:
         if not hasattr(node.target, "id"):
             return None  # Only handle simple name targets
 
-        result = self._apply_yield_replacer(body_stmts, node.target.id, node.body, node, func_name)
+        result = self._apply_yield_replacer(
+            body_stmts, (node.target.id, node.body, node), func_name
+        )
         if result is None:
             return None
 
@@ -551,8 +557,9 @@ class GeneratorMixin:
 
         stmts = self._build_param_assigns(param_names, gen_call.args, node)
 
-        inlined_body = self._apply_yield_replacer(body_stmts, node.target.id, node.body, node,
-                                                  func_name)
+        inlined_body = self._apply_yield_replacer(
+            body_stmts, (node.target.id, node.body, node), func_name
+        )
         if inlined_body is None:
             return None
         stmts.extend(inlined_body)
@@ -592,7 +599,7 @@ class GeneratorMixin:
                     return (gen_var, func_name)
         return None
 
-    def _collect_loop_yields(self, stmt, yields, in_loop):
+    def _collect_loop_yields(self, stmt, yields):
         """Process a ``While``/``For`` body. Append yields and return ``True`` if any."""
         loop_init, loop_yields = self._collect_yields(stmt.body, in_loop=True)
         if not loop_yields:
@@ -630,8 +637,13 @@ class GeneratorMixin:
         if_yields[0] = (if_init + first_pre, iv, ipo + post, ir)
         yields.extend(if_yields)
 
-    def _collect_if_yields(self, stmts, i, stmt, current_pre, yields, in_loop):
-        """Process an ``If``. Returns the next index if yields were absorbed, else ``None``."""
+    def _collect_if_yields(self, stmts, i, accum, in_loop):
+        """Process an ``If``. Returns the next index if yields were absorbed, else ``None``.
+
+        ``accum`` is ``(current_pre, yields)``.
+        """
+        current_pre, yields = accum
+        stmt = stmts[i]
         if_init, if_yields = self._collect_yields(stmt.body, in_loop=in_loop)
         else_yields = (self._collect_yields(stmt.orelse, in_loop=in_loop)[1] if stmt.orelse else [])
         if not if_yields:
@@ -676,7 +688,7 @@ class GeneratorMixin:
                 i = j
                 continue
             if isinstance(stmt, (ast.While, ast.For)):
-                if self._collect_loop_yields(stmt, yields, in_loop):
+                if self._collect_loop_yields(stmt, yields):
                     current_pre = []
                     found_yield = True
                 else:
@@ -684,7 +696,9 @@ class GeneratorMixin:
                 i += 1
                 continue
             if isinstance(stmt, ast.If):
-                next_i = self._collect_if_yields(stmts, i, stmt, current_pre, yields, in_loop)
+                next_i = self._collect_if_yields(
+                    stmts, i, (current_pre, yields), in_loop
+                )
                 if next_i is not None:
                     current_pre = []
                     found_yield = True
