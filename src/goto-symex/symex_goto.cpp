@@ -107,8 +107,10 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
   // tracking loop counters.
 
   // Violation-witness: steer branch direction if the current waypoint is a
-  // branching at this location.
-  if (validate_witness && cur_state->cur_seg < cur_state->witness_segs.size())
+  // branching at this location.  Skip backward GOTOs (loop back edges).
+  if (
+    validate_witness && forward &&
+    cur_state->cur_seg < cur_state->witness_segs.size())
   {
     const auto &seg = cur_state->witness_segs[cur_state->cur_seg];
     if (cur_state->cur_wp < seg.size())
