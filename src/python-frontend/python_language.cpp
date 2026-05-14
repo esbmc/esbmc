@@ -13,10 +13,26 @@
 
 #include <boost/filesystem.hpp>
 
-// Use boost::process v1 on macOS or when Boost >= 1.87
+// Use boost::process v1 on macOS or when Boost >= 1.87. The umbrella
+// header layout differs between Boost releases:
+//
+//   - Boost <= 1.86: `boost/process.hpp` IS v1 (v2 not yet shipped),
+//                    namespace `boost::process`.
+//   - Boost == 1.87: `boost/process/v1.hpp` umbrella exists; the
+//                    default `boost/process.hpp` switched to v2.
+//                    Use the umbrella, namespace `boost::process::v1`.
+//   - Boost >= 1.88: the `boost/process/v1.hpp` umbrella was removed;
+//                    v1 is still shipped under `boost/process/v1/*.hpp`
+//                    subheaders. Include the ones we use.
+//
 // We use Boost.Process to run the Python interpreter in a separate process.
-#if defined(__APPLE__) || (BOOST_VERSION >= 108700)
+#if defined(__APPLE__) || (BOOST_VERSION == 108700)
 #  include <boost/process/v1.hpp>
+namespace bp = boost::process::v1;
+#elif BOOST_VERSION >= 108800
+#  include <boost/process/v1/child.hpp>
+#  include <boost/process/v1/io.hpp>
+#  include <boost/process/v1/search_path.hpp>
 namespace bp = boost::process::v1;
 #else
 #  include <boost/process.hpp>
