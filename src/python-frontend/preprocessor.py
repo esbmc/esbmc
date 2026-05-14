@@ -427,6 +427,14 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
             elif isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name):
                 self.variable_annotations[stmt.target.id] = stmt.annotation
 
+        # Pre-pass: canonicalise `alias = range` aliases at module scope and
+        # rewrite call sites of trivial `def f(...): return range(...)` wrappers
+        # back to literal `range(...)` calls. After these rewrites,
+        # `for i in alias_or_wrapper(...)` reaches visit_For as a plain range
+        # call and uses the existing range-for transformation.
+        self._rewrite_range_aliases(node)
+        self._inline_range_wrappers(node)
+
         # Transform the module as usual
         node = self.generic_visit(node)
 
@@ -455,6 +463,322 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
             node.body = [helper_fn] + node.body
 
         return node
+
+    @staticmethod
+    def _target_names(target):
+        """Names bound by an assignment target, including tuple/list unpacking."""
+        if isinstance(target, ast.Name):
+            return {target.id}
+        if isinstance(target, ast.Starred):
+            return Preprocessor._target_names(target.value)
+        if isinstance(target, (ast.Tuple, ast.List)):
+            return {
+                n for e in target.elts for n in Preprocessor._target_names(e)
+            }
+        return set()
+
+    @staticmethod
+    def _rebound_module_names(module_node):
+        """Module-top names that may be rebound after their first binding.
+
+        Conservative: a name is considered "rebound" if any of the following
+        hold, in which case the alias/wrapper rewrites must skip it.
+
+        * It is bound more than once directly in ``module_node.body`` (covers
+          re-defined ``def``/``class``, repeated ``=`` assignment, tuple
+          unpacking that includes the name).
+        * It appears as an ``AugAssign`` target at module scope (``X += ...``
+          is itself a rebind even on first occurrence).
+        * It is bound inside a top-level ``If`` / ``For`` / ``While`` / ``Try``
+          / ``With`` block, where its run-time value may diverge from the
+          single canonical binding.
+        * Any nested function declares ``global X``, since the nested scope
+          can rebind it at run time.
+
+        Bindings inside nested ``FunctionDef`` / ``AsyncFunctionDef`` /
+        ``Lambda`` / ``ClassDef`` scopes are NOT counted (they shadow rather
+        than rebind), except via the ``global`` mechanism above.
+        """
+        seen = set()
+        rebound = set()
+        target_names = Preprocessor._target_names
+
+        def _collect_bindings(stmt):
+            if isinstance(stmt, ast.Assign):
+                names = set()
+                for t in stmt.targets:
+                    names |= target_names(t)
+                return names
+            if isinstance(stmt, ast.AnnAssign) and isinstance(
+                    stmt.target, ast.Name):
+                return {stmt.target.id}
+            if isinstance(stmt,
+                          (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                return {stmt.name}
+            if isinstance(stmt, ast.Import):
+                return {a.asname or a.name.split(".")[0] for a in stmt.names}
+            if isinstance(stmt, ast.ImportFrom):
+                return {a.asname or a.name for a in stmt.names}
+            return set()
+
+        for stmt in module_node.body:
+            if isinstance(stmt, ast.AugAssign) and isinstance(
+                    stmt.target, ast.Name):
+                rebound.add(stmt.target.id)
+                seen.add(stmt.target.id)
+                continue
+            for name in _collect_bindings(stmt):
+                if name in seen:
+                    rebound.add(name)
+                seen.add(name)
+
+        # Walk into top-level control-flow blocks (but not into nested scopes)
+        # and treat any binding therein as a potential rebind.
+        def _walk_module_only(root):
+            for child in ast.iter_child_nodes(root):
+                if isinstance(child,
+                              (ast.FunctionDef, ast.AsyncFunctionDef,
+                               ast.Lambda, ast.ClassDef)):
+                    continue
+                yield child
+                yield from _walk_module_only(child)
+
+        for stmt in module_node.body:
+            if not isinstance(stmt,
+                              (ast.If, ast.For, ast.AsyncFor, ast.While,
+                               ast.Try, ast.With, ast.AsyncWith)):
+                continue
+            for inner in _walk_module_only(stmt):
+                if isinstance(inner, ast.Assign):
+                    for t in inner.targets:
+                        rebound |= target_names(t)
+                elif isinstance(inner, (ast.AnnAssign, ast.AugAssign)):
+                    if isinstance(inner.target, ast.Name):
+                        rebound.add(inner.target.id)
+                elif isinstance(inner, ast.NamedExpr) and isinstance(
+                        inner.target, ast.Name):
+                    rebound.add(inner.target.id)
+                elif isinstance(inner, (ast.For, ast.AsyncFor)):
+                    rebound |= target_names(inner.target)
+                elif isinstance(inner, (ast.With, ast.AsyncWith)):
+                    for item in inner.items:
+                        if item.optional_vars:
+                            rebound |= target_names(item.optional_vars)
+
+        # `global X` anywhere in the module marks X as rebindable from
+        # the nested scope.
+        for inner in ast.walk(module_node):
+            if isinstance(inner, ast.Global):
+                rebound.update(inner.names)
+
+        return rebound
+
+    @staticmethod
+    def _scope_locally_binds(scope_node, names):
+        """True iff any of *names* is locally bound inside *scope_node*.
+
+        Inspects parameters, Assign / AnnAssign / AugAssign / NamedExpr
+        targets, ``For`` / ``With`` / comprehension targets, ``import`` aliases,
+        and nested ``def`` / ``class`` names. Does NOT descend into nested
+        ``FunctionDef`` / ``AsyncFunctionDef`` / ``Lambda`` / ``ClassDef``
+        bodies — those are separate scopes.
+        """
+        if not isinstance(scope_node,
+                          (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda,
+                           ast.ClassDef)):
+            return False
+
+        target_names = Preprocessor._target_names
+
+        if isinstance(scope_node,
+                      (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+            a = scope_node.args
+            for p in (*a.args, *a.posonlyargs, *a.kwonlyargs):
+                if p.arg in names:
+                    return True
+            if a.vararg and a.vararg.arg in names:
+                return True
+            if a.kwarg and a.kwarg.arg in names:
+                return True
+
+        body = scope_node.body
+        body = body if isinstance(body, list) else [body]
+        stack = list(body)
+        while stack:
+            n = stack.pop()
+            if isinstance(n,
+                          (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                if n.name in names:
+                    return True
+                continue
+            if isinstance(n, ast.Lambda):
+                continue
+            if isinstance(n, ast.Assign):
+                for t in n.targets:
+                    if target_names(t) & names:
+                        return True
+            elif isinstance(n, (ast.AnnAssign, ast.AugAssign)):
+                if isinstance(n.target, ast.Name) and n.target.id in names:
+                    return True
+            elif isinstance(n, ast.NamedExpr):
+                if isinstance(n.target, ast.Name) and n.target.id in names:
+                    return True
+            elif isinstance(n, (ast.For, ast.AsyncFor)):
+                if target_names(n.target) & names:
+                    return True
+            elif isinstance(n, (ast.With, ast.AsyncWith)):
+                for item in n.items:
+                    if item.optional_vars and target_names(
+                            item.optional_vars) & names:
+                        return True
+            elif isinstance(n, ast.Import):
+                for al in n.names:
+                    if (al.asname or al.name.split(".")[0]) in names:
+                        return True
+            elif isinstance(n, ast.ImportFrom):
+                for al in n.names:
+                    if (al.asname or al.name) in names:
+                        return True
+            elif isinstance(n, (ast.Global, ast.Nonlocal)):
+                if any(name in names for name in n.names):
+                    return True
+            for child in ast.iter_child_nodes(n):
+                stack.append(child)
+        return False
+
+    @classmethod
+    def _iter_module_scope(cls, root, shadow_names):
+        """Yield descendants of *root* whose enclosing scope is the module.
+
+        Stops descending into nested ``FunctionDef`` / ``AsyncFunctionDef`` /
+        ``Lambda`` / ``ClassDef`` nodes whose local scope binds any of
+        *shadow_names* — preventing the alias / wrapper rewrites from
+        replacing references that real Python would resolve to a locally
+        shadowed name.
+        """
+        for child in ast.iter_child_nodes(root):
+            if isinstance(child,
+                          (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda,
+                           ast.ClassDef)):
+                if cls._scope_locally_binds(child, shadow_names):
+                    continue
+            yield child
+            yield from cls._iter_module_scope(child, shadow_names)
+
+    def _rewrite_range_aliases(self, module_node):
+        """Rewrite module-scope ``alias = range`` (and chains) to canonical ``range``.
+
+        Collects every top-level assignment of the form ``X = range`` (and
+        transitively ``Y = X`` where ``X`` is already a known alias), rewrites
+        every ``Call(Name(alias), ...)`` that resolves to the module-scope
+        binding to ``Call(Name("range"), ...)``, and removes the original
+        alias statements so the C++ annotator never sees ``range`` as a bare
+        RHS. Names that are rebound elsewhere are excluded, and rewrites are
+        skipped inside nested scopes that locally shadow the alias.
+        """
+        rebound = self._rebound_module_names(module_node)
+        aliases = set()
+        changed = True
+        while changed:
+            changed = False
+            for stmt in module_node.body:
+                if not (isinstance(stmt, ast.Assign) and len(stmt.targets) == 1
+                        and isinstance(stmt.targets[0], ast.Name)
+                        and isinstance(stmt.value, ast.Name)):
+                    continue
+                lhs = stmt.targets[0].id
+                rhs = stmt.value.id
+                if lhs in aliases or lhs in rebound:
+                    continue
+                if rhs == "range" or rhs in aliases:
+                    aliases.add(lhs)
+                    changed = True
+
+        if not aliases:
+            return
+
+        for n in self._iter_module_scope(module_node, aliases):
+            if (isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+                    and n.func.id in aliases):
+                n.func.id = "range"
+
+        module_node.body = [
+            stmt for stmt in module_node.body
+            if not (isinstance(stmt, ast.Assign) and len(stmt.targets) == 1
+                    and isinstance(stmt.targets[0], ast.Name)
+                    and stmt.targets[0].id in aliases
+                    and isinstance(stmt.value, ast.Name)
+                    and (stmt.value.id == "range" or stmt.value.id in aliases))
+        ]
+
+    def _inline_range_wrappers(self, module_node):
+        """Inline trivial ``def f(p): return range(p_or_const, ...)`` wrappers.
+
+        A wrapper qualifies when it lives at module scope, is not rebound
+        elsewhere, takes only positional parameters with no defaults or
+        ``*args``/``**kwargs``, and its body is exactly one
+        ``return range(...)`` where every argument is either a reference to
+        one of the function's parameters or an integer ``Constant``. Every
+        call ``f(actuals)`` whose arity matches the wrapper's parameter list
+        and that uses only plain positional arguments (no ``*xs``, no
+        keyword args) is rewritten to a fresh ``range(actuals')`` call.
+
+        The wrapper ``def`` is intentionally retained: call sites with
+        mismatched arity, keyword args, or ``*xs`` still need to resolve to
+        it. Nested scopes that locally rebind the wrapper name are skipped
+        so the rewrite respects Python's lexical-scope semantics.
+        """
+        rebound = self._rebound_module_names(module_node)
+        wrappers = {}
+        for stmt in module_node.body:
+            if not (isinstance(stmt, ast.FunctionDef)
+                    and stmt.name not in rebound
+                    and len(stmt.body) == 1
+                    and isinstance(stmt.body[0], ast.Return)):
+                continue
+            call = stmt.body[0].value
+            if not (isinstance(call, ast.Call)
+                    and isinstance(call.func, ast.Name)
+                    and call.func.id == "range"
+                    and not call.keywords):
+                continue
+            args = stmt.args
+            if (args.vararg is not None or args.kwarg is not None
+                    or args.kwonlyargs or args.posonlyargs
+                    or args.defaults or args.kw_defaults):
+                continue
+            params = [a.arg for a in args.args]
+            param_set = set(params)
+            if not all(
+                (isinstance(a, ast.Name) and a.id in param_set)
+                or (isinstance(a, ast.Constant)
+                    and isinstance(a.value, int)
+                    and not isinstance(a.value, bool))
+                for a in call.args):
+                continue
+            wrappers[stmt.name] = (params, call.args)
+
+        if not wrappers:
+            return
+
+        wrapper_names = set(wrappers.keys())
+        for n in self._iter_module_scope(module_node, wrapper_names):
+            if not (isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+                    and n.func.id in wrappers):
+                continue
+            if n.keywords or any(isinstance(a, ast.Starred) for a in n.args):
+                continue
+            params, template = wrappers[n.func.id]
+            if len(n.args) != len(params):
+                continue
+            subst = dict(zip(params, n.args))
+            n.args = [
+                copy.deepcopy(subst[t.id]) if isinstance(t, ast.Name)
+                else copy.deepcopy(t)
+                for t in template
+            ]
+            n.func.id = "range"
+            ast.fix_missing_locations(n)
 
     def ensure_all_locations(self, node, source_node=None, line=1, col=0):
         """Recursively ensure all nodes in an AST tree have location information"""
