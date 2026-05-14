@@ -26,12 +26,10 @@ bool reads_symbol(const expr2tc &expr, const irep_idt &tracked)
   if (is_symbol2t(expr))
     return to_symbol2t(expr).thename == tracked;
   bool found = false;
-  expr->foreach_operand(
-    [&](const expr2tc &e)
-    {
-      if (!found && reads_symbol(e, tracked))
-        found = true;
-    });
+  expr->foreach_operand([&](const expr2tc &e) {
+    if (!found && reads_symbol(e, tracked))
+      found = true;
+  });
   return found;
 }
 

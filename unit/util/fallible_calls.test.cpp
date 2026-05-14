@@ -17,7 +17,8 @@ TEST_CASE("find_fallible matches canonical names", "[util][fallible_calls]")
   REQUIRE(find_fallible("pthread_mutex_lock")->kind == success_kind::zero);
 }
 
-TEST_CASE("find_fallible returns null for non-fallible names",
+TEST_CASE(
+  "find_fallible returns null for non-fallible names",
   "[util][fallible_calls]")
 {
   REQUIRE(find_fallible("") == nullptr);
@@ -38,14 +39,16 @@ TEST_CASE(
   REQUIRE(l->kind == success_kind::zero);
 
   REQUIRE(find_fallible("pthread_mutex_unlock_nocheck") != nullptr);
-  REQUIRE(find_fallible("pthread_mutex_unlock_nocheck")->name ==
-          "pthread_mutex_unlock");
+  REQUIRE(
+    find_fallible("pthread_mutex_unlock_nocheck")->name ==
+    "pthread_mutex_unlock");
 
   // A non-pthread suffix must not match anything.
   REQUIRE(find_fallible("printf_noassert") == nullptr);
 }
 
-TEST_CASE("fallible_calls table is non-empty and free of duplicates",
+TEST_CASE(
+  "fallible_calls table is non-empty and free of duplicates",
   "[util][fallible_calls]")
 {
   const auto &table = fallible_calls();
