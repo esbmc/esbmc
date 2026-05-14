@@ -178,8 +178,10 @@ class GeneratorMixin:
 
         return transformed_for
 
-    def _lower_reduction_genexp(self, genexp_node, tmp_name, initial_value, reduction_stmt,
-                                negated_guard):
+    def _lower_reduction_genexp(self, genexp_node, reduction_stmt, state):
+        # state bundles (tmp_name, initial_value, negated_guard) so the helper
+        # stays under pylint's positional-argument limit.
+        tmp_name, initial_value, negated_guard = state
         init_assign = ast.Assign(
             targets=[self.create_name_node(tmp_name, ast.Store(), genexp_node)],
             value=self.create_constant_node(initial_value, genexp_node),
@@ -238,7 +240,7 @@ class GeneratorMixin:
         self.ensure_all_locations(if_true, genexp_node)
         ast.fix_missing_locations(if_true)
 
-        return self._lower_reduction_genexp(genexp_node, tmp_name, False, if_true, True)
+        return self._lower_reduction_genexp(genexp_node, if_true, (tmp_name, False, True))
 
     def _lower_all_genexp(self, genexp_node):
         """Lower all(elt for target in iter [if cond]) to prefix stmts + boolean result.
@@ -279,7 +281,42 @@ class GeneratorMixin:
         self.ensure_all_locations(if_falsy, genexp_node)
         ast.fix_missing_locations(if_falsy)
 
-        return self._lower_reduction_genexp(genexp_node, tmp_name, True, if_falsy, False)
+        return self._lower_reduction_genexp(genexp_node, if_falsy, (tmp_name, True, False))
+
+    def _build_param_assigns(self, param_names, call_args, parent_node):
+        """Build ``param = arg`` assignments used when inlining generator calls."""
+        stmts = []
+        for param, arg in zip(param_names, call_args):
+            assign = ast.Assign(
+                targets=[ast.Name(id=param, ctx=ast.Store())],
+                value=copy.deepcopy(arg),
+                type_comment=None,
+            )
+            self.ensure_all_locations(assign, parent_node)
+            ast.fix_missing_locations(assign)
+            stmts.append(assign)
+        return stmts
+
+    def _apply_yield_replacer(self, body_stmts, target_name, body_dest, template_node, func_name):
+        """Inline a generator body, replacing ``yield val`` via ``_YieldReplacer``.
+
+        Returns the transformed statement list, or ``None`` if the body uses a
+        construct ``_YieldReplacer`` cannot rewrite.
+        """
+        inlined = copy.deepcopy(body_stmts)
+        replacer = self._YieldReplacer(target_name, body_dest, template_node)
+        result = []
+        try:
+            for stmt in inlined:
+                out = replacer.visit(stmt)
+                if isinstance(out, list):
+                    result.extend(out)
+                elif out is not None:
+                    result.append(out)
+        except NotImplementedError as e:
+            print(f"warning: cannot inline generator '{func_name}': {e}", file=sys.stderr)
+            return None
+        return result
 
     def _lower_list_gen_call(self, gen_call_node, parent_node):
         """Lower list(gen_func(args...)) to an inline list construction.
@@ -314,23 +351,13 @@ class GeneratorMixin:
 
         # Emit parameter assignments so inlined body can reference them.
         param_names = self.functionParams.get(func_name, [])
-        call_args = gen_call_node.args
-        if len(param_names) != len(call_args):
+        if len(param_names) != len(gen_call_node.args):
             return None, gen_call_node
 
         result_var = f"ESBMC_list_gen_{self.listcomp_counter}"
         self.listcomp_counter += 1
 
-        stmts = []
-        for param, arg in zip(param_names, call_args):
-            assign = ast.Assign(
-                targets=[ast.Name(id=param, ctx=ast.Store())],
-                value=copy.deepcopy(arg),
-                type_comment=None,
-            )
-            self.ensure_all_locations(assign, parent_node)
-            ast.fix_missing_locations(assign)
-            stmts.append(assign)
+        stmts = self._build_param_assigns(param_names, gen_call_node.args, parent_node)
 
         # result_var: list = []
         init = ast.AnnAssign(
@@ -469,20 +496,9 @@ class GeneratorMixin:
 
         if not hasattr(node.target, "id"):
             return None  # Only handle simple name targets
-        target_name = node.target.id
 
-        inlined = copy.deepcopy(body_stmts)
-        replacer = self._YieldReplacer(target_name, node.body, node)
-        result = []
-        try:
-            for stmt in inlined:
-                out = replacer.visit(stmt)
-                if isinstance(out, list):
-                    result.extend(out)
-                elif out is not None:
-                    result.append(out)
-        except NotImplementedError as e:
-            print(f"warning: cannot inline generator '{func_name}': {e}", file=sys.stderr)
+        result = self._apply_yield_replacer(body_stmts, node.target.id, node.body, node, func_name)
+        if result is None:
             return None
 
         for stmt in result:
@@ -527,36 +543,19 @@ class GeneratorMixin:
             return None
 
         param_names = self.functionParams.get(func_name, [])
-        call_args = gen_call.args
-        if len(param_names) != len(call_args):
+        if len(param_names) != len(gen_call.args):
             return None
 
         if not hasattr(node.target, "id"):
             return None
 
-        target_name = node.target.id
+        stmts = self._build_param_assigns(param_names, gen_call.args, node)
 
-        stmts = []
-        for param, arg in zip(param_names, call_args):
-            assign = ast.Assign(
-                targets=[ast.Name(id=param, ctx=ast.Store())],
-                value=copy.deepcopy(arg),
-                type_comment=None,
-            )
-            stmts.append(assign)
-
-        inlined = copy.deepcopy(body_stmts)
-        replacer = self._YieldReplacer(target_name, node.body, node)
-        try:
-            for stmt in inlined:
-                out = replacer.visit(stmt)
-                if isinstance(out, list):
-                    stmts.extend(out)
-                elif out is not None:
-                    stmts.append(out)
-        except NotImplementedError as e:
-            print(f"warning: cannot inline generator '{func_name}': {e}", file=sys.stderr)
+        inlined_body = self._apply_yield_replacer(body_stmts, node.target.id, node.body, node,
+                                                  func_name)
+        if inlined_body is None:
             return None
+        stmts.extend(inlined_body)
 
         for stmt in stmts:
             self.ensure_all_locations(stmt, node)
@@ -593,6 +592,58 @@ class GeneratorMixin:
                     return (gen_var, func_name)
         return None
 
+    def _collect_loop_yields(self, stmt, yields, in_loop):
+        """Process a ``While``/``For`` body. Append yields and return ``True`` if any."""
+        loop_init, loop_yields = self._collect_yields(stmt.body, in_loop=True)
+        if not loop_yields:
+            return False
+        # For while loops, prepend a guard so _inline_next_call raises
+        # StopIteration when the loop condition becomes false.
+        if isinstance(stmt, ast.While):
+            guard = ast.If(
+                test=ast.UnaryOp(op=ast.Not(), operand=copy.deepcopy(stmt.test)),
+                body=[self._make_stop_iteration_raise(stmt)],
+                orelse=[],
+            )
+            self.ensure_all_locations(guard, stmt)
+            ast.fix_missing_locations(guard)
+            loop_init = [guard] + loop_init
+        first_pre, iv, ipo, ir = loop_yields[0]
+        loop_yields[0] = (loop_init + first_pre, iv, ipo, ir)
+        yields.extend(loop_yields)
+        return True
+
+    def _make_ternary_yield_value(self, stmt, if_val, else_val):
+        """Combine if/else yield values into a single ternary expression."""
+        ternary_val = ast.IfExp(
+            test=copy.deepcopy(stmt.test),
+            body=copy.deepcopy(if_val),
+            orelse=copy.deepcopy(else_val),
+        )
+        self.ensure_all_locations(ternary_val, stmt)
+        ast.fix_missing_locations(ternary_val)
+        return ternary_val
+
+    def _absorb_if_only_yields(self, if_init, if_yields, post, yields):
+        """Splice if-branch yields into the parent yields list, including outer post."""
+        first_pre, iv, ipo, ir = if_yields[0]
+        if_yields[0] = (if_init + first_pre, iv, ipo + post, ir)
+        yields.extend(if_yields)
+
+    def _collect_if_yields(self, stmts, i, stmt, current_pre, yields, in_loop):
+        """Process an ``If``. Returns the next index if yields were absorbed, else ``None``."""
+        if_init, if_yields = self._collect_yields(stmt.body, in_loop=in_loop)
+        else_yields = (self._collect_yields(stmt.orelse, in_loop=in_loop)[1] if stmt.orelse else [])
+        if not if_yields:
+            return None
+        post, j = self._collect_post(stmts, i + 1)
+        if else_yields:
+            ternary = self._make_ternary_yield_value(stmt, if_yields[0][1], else_yields[0][1])
+            yields.append((current_pre[:], ternary, post, in_loop))
+        else:
+            self._absorb_if_only_yields(if_init, if_yields, post, yields)
+        return j
+
     def _collect_yields(self, stmts, in_loop=False):
         """
         Collect yield points from a generator body.
@@ -623,75 +674,27 @@ class GeneratorMixin:
                 current_pre = []
                 found_yield = True
                 i = j
-            elif isinstance(stmt, (ast.While, ast.For)):
-                loop_init, loop_yields = self._collect_yields(stmt.body, in_loop=True)
-                if loop_yields:
-                    # For while loops, prepend a guard so _inline_next_call raises
-                    # StopIteration when the loop condition becomes false.
-                    if isinstance(stmt, ast.While):
-                        guard = ast.If(
-                            test=ast.UnaryOp(op=ast.Not(), operand=copy.deepcopy(stmt.test)),
-                            body=[self._make_stop_iteration_raise(stmt)],
-                            orelse=[],
-                        )
-                        self.ensure_all_locations(guard, stmt)
-                        ast.fix_missing_locations(guard)
-                        loop_init = [guard] + loop_init
-                    combined = loop_init + loop_yields[0][0]
-                    _, iv, ipo, ir = loop_yields[0]
-                    loop_yields[0] = (combined, iv, ipo, ir)
-                    yields.extend(loop_yields)
+                continue
+            if isinstance(stmt, (ast.While, ast.For)):
+                if self._collect_loop_yields(stmt, yields, in_loop):
                     current_pre = []
                     found_yield = True
                 else:
-                    if not found_yield:
-                        outer_init.append(stmt)
-                    else:
-                        current_pre.append(stmt)
+                    (current_pre if found_yield else outer_init).append(stmt)
                 i += 1
-            elif isinstance(stmt, ast.If):
-                if_init, if_yields = self._collect_yields(stmt.body, in_loop=in_loop)
-                _, else_yields = (self._collect_yields(stmt.orelse, in_loop=in_loop)
-                                  if stmt.orelse else ([], []))
-                if if_yields and else_yields:
-                    # Both branches yield -> combine into a ternary yield value
-                    # and capture post_stmts from the outer scope.
-                    _, if_val, _, _ = if_yields[0]
-                    _, else_val, _, _ = else_yields[0]
-                    ternary_val = ast.IfExp(
-                        test=copy.deepcopy(stmt.test),
-                        body=copy.deepcopy(if_val),
-                        orelse=copy.deepcopy(else_val),
-                    )
-                    self.ensure_all_locations(ternary_val, stmt)
-                    ast.fix_missing_locations(ternary_val)
-                    post, j = self._collect_post(stmts, i + 1)
-                    yields.append((current_pre[:], ternary_val, post, in_loop))
+                continue
+            if isinstance(stmt, ast.If):
+                next_i = self._collect_if_yields(stmts, i, stmt, current_pre, yields, in_loop)
+                if next_i is not None:
                     current_pre = []
                     found_yield = True
-                    i = j
-                elif if_yields:
-                    # Only if-branch yields; also grab outer post_stmts.
-                    combined = if_init + if_yields[0][0]
-                    _, iv, ipo, ir = if_yields[0]
-                    post, j = self._collect_post(stmts, i + 1)
-                    if_yields[0] = (combined, iv, ipo + post, ir)
-                    yields.extend(if_yields)
-                    current_pre = []
-                    found_yield = True
-                    i = j
+                    i = next_i
                 else:
-                    if not found_yield:
-                        outer_init.append(stmt)
-                    else:
-                        current_pre.append(stmt)
+                    (current_pre if found_yield else outer_init).append(stmt)
                     i += 1
-            else:
-                if not found_yield:
-                    outer_init.append(stmt)
-                else:
-                    current_pre.append(stmt)
-                i += 1
+                continue
+            (current_pre if found_yield else outer_init).append(stmt)
+            i += 1
         return outer_init, yields
 
     def _make_stop_iteration_raise(self, template_node):
@@ -708,6 +711,28 @@ class GeneratorMixin:
         ast.fix_missing_locations(raise_node)
         return raise_node
 
+    def _resolve_next_yield(self, gen_var, func_name):
+        """Look up the next yield to inline for ``gen_var``.
+
+        Returns ``(outer_init, entry)`` where ``entry`` is one of:
+          * ``None``       -- generator unknown or yields nothing (cannot inline)
+          * ``"stop"``     -- generator is exhausted; caller should raise StopIteration
+          * tuple          -- ``(pre_stmts, yield_val, post_stmts, is_repeating)``
+        """
+        body_stmts = self.generator_func_defs.get(func_name)
+        if body_stmts is None:
+            return None, None
+        outer_init, yields = self._collect_yields(body_stmts)
+        if not yields:
+            return None, None
+        idx = self.generator_next_index.get(gen_var, 0)
+        if idx >= len(yields):
+            return outer_init, "stop"
+        entry = yields[idx]
+        if not entry[3]:  # not is_repeating
+            self.generator_next_index[gen_var] = idx + 1
+        return outer_init, entry
+
     def _inline_next_call(self, targets, func_name, gen_var, template_node):
         """
         Inline `x = next(g)` for a normal generator.
@@ -719,21 +744,13 @@ class GeneratorMixin:
         Returns list of statements, or None if inlining is not possible.
         """
 
-        body_stmts = self.generator_func_defs.get(func_name)
-        if body_stmts is None:
+        outer_init, entry = self._resolve_next_yield(gen_var, func_name)
+        if entry is None:
             return None
-        outer_init, yields = self._collect_yields(body_stmts)
-        if not yields:
-            return None
-
-        idx = self.generator_next_index.get(gen_var, 0)
-        if idx >= len(yields):
+        if entry == "stop":
             return [self._make_stop_iteration_raise(template_node)]
 
-        pre_stmts, yield_val, post_stmts, is_repeating = yields[idx]
-
-        if not is_repeating:
-            self.generator_next_index[gen_var] = idx + 1
+        pre_stmts, yield_val, post_stmts, _ = entry
 
         result = []
         # Emit init code once per generator variable
