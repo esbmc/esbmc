@@ -8884,6 +8884,16 @@ typet python_converter::infer_return_type_from_body(const nlohmann::json &body)
     {
       const auto &ret_val = stmt["value"];
 
+      // `return self` in a method: surface the class's struct value type so
+      // callers can assign to a `Class`-typed local. Without this, fallback
+      // inference picks up `Class *` from `self` and the call-site assignment
+      // becomes a pointer-to-struct mismatch that trips an assertion in
+      // value_set::make_member on later member access. See GitHub #4514.
+      if (
+        ret_val["_type"] == "Name" && ret_val.contains("id") &&
+        ret_val["id"] == "self" && !current_class_name_.empty())
+        return type_handler_.get_typet(current_class_name_);
+
       // If returning a tuple, infer its type
       if (ret_val["_type"] == "Tuple")
         return tuple_handler_->get_tuple_expr(ret_val).type();
