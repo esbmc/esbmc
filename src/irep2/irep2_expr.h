@@ -409,20 +409,11 @@ public:
   typedef esbmct::expr2t_traits<side_1_field, side_2_field> traits;
 };
 
-class logical_ops : public expr2t
-{
-public:
-  logical_ops(const type2tc &t, expr2t::expr_ids id) : expr2t(t, id)
-  {
-  }
-  logical_ops(const logical_ops &ref) = default;
-};
-
-class bool_1op : public logical_ops
+class bool_1op : public expr2t
 {
 public:
   bool_1op(const type2tc &t, expr2t::expr_ids id, const expr2tc &v)
-    : logical_ops(t, id), value(v)
+    : expr2t(t, id), value(v)
   {
   }
   bool_1op(const bool_1op &ref) = default;
@@ -434,7 +425,7 @@ public:
   typedef esbmct::expr2t_traits_notype<value_field> traits;
 };
 
-class logic_2ops : public logical_ops
+class logic_2ops : public expr2t
 {
 public:
   logic_2ops(
@@ -442,7 +433,7 @@ public:
     expr2t::expr_ids id,
     const expr2tc &s1,
     const expr2tc &s2)
-    : logical_ops(t, id), side_1(s1), side_2(s2)
+    : expr2t(t, id), side_1(s1), side_2(s2)
   {
   }
   logic_2ops(const logic_2ops &ref) = default;
@@ -482,20 +473,11 @@ public:
   typedef esbmct::expr2t_traits<side_1_field, side_2_field> traits;
 };
 
-class arith_ops : public expr2t
+class arith_1op : public expr2t
 {
 public:
-  arith_ops(const type2tc &t, expr2t::expr_ids id) : expr2t(t, id)
-  {
-  }
-  arith_ops(const arith_ops &ref) = default;
-};
-
-class arith_1op : public arith_ops
-{
-public:
-  arith_1op(const type2tc &t, arith_ops::expr_ids id, const expr2tc &v)
-    : arith_ops(t, id), value(v)
+  arith_1op(const type2tc &t, expr2t::expr_ids id, const expr2tc &v)
+    : expr2t(t, id), value(v)
   {
   }
   arith_1op(const arith_1op &ref) = default;
@@ -508,12 +490,12 @@ public:
   typedef esbmct::expr2t_traits<value_field> traits;
 };
 
-class arith_2ops : public arith_ops
+class arith_2ops : public expr2t
 {
 public:
   arith_2ops(
     const type2tc &t,
-    arith_ops::expr_ids id,
+    expr2t::expr_ids id,
     const expr2tc &v1,
     const expr2tc &v2);
 
@@ -530,15 +512,15 @@ public:
   typedef esbmct::expr2t_traits<side_1_field, side_2_field> traits;
 };
 
-class ieee_arith_1op : public arith_ops
+class ieee_arith_1op : public expr2t
 {
 public:
   ieee_arith_1op(
     const type2tc &t,
-    arith_ops::expr_ids id,
+    expr2t::expr_ids id,
     const expr2tc &v,
     const expr2tc &rm)
-    : arith_ops(t, id), rounding_mode(rm), value(v)
+    : expr2t(t, id), rounding_mode(rm), value(v)
   {
   }
   ieee_arith_1op(const ieee_arith_1op &ref) = default;
@@ -555,16 +537,16 @@ public:
   typedef esbmct::expr2t_traits<rounding_mode_field, value_field> traits;
 };
 
-class ieee_arith_2ops : public arith_ops
+class ieee_arith_2ops : public expr2t
 {
 public:
   ieee_arith_2ops(
     const type2tc &t,
-    arith_ops::expr_ids id,
+    expr2t::expr_ids id,
     const expr2tc &v1,
     const expr2tc &v2,
     const expr2tc &rm)
-    : arith_ops(t, id), rounding_mode(rm), side_1(v1), side_2(v2)
+    : expr2t(t, id), rounding_mode(rm), side_1(v1), side_2(v2)
   {
   }
   ieee_arith_2ops(const ieee_arith_2ops &ref) = default;
@@ -587,17 +569,17 @@ public:
     traits;
 };
 
-class ieee_arith_3ops : public arith_ops
+class ieee_arith_3ops : public expr2t
 {
 public:
   ieee_arith_3ops(
     const type2tc &t,
-    arith_ops::expr_ids id,
+    expr2t::expr_ids id,
     const expr2tc &v1,
     const expr2tc &v2,
     const expr2tc &v3,
     const expr2tc &rm)
-    : arith_ops(t, id), rounding_mode(rm), value_1(v1), value_2(v2), value_3(v3)
+    : expr2t(t, id), rounding_mode(rm), value_1(v1), value_2(v2), value_3(v3)
   {
   }
   ieee_arith_3ops(const ieee_arith_3ops &ref) = default;
@@ -686,16 +668,7 @@ public:
   typedef esbmct::expr2t_traits_notype<ptr_obj_field> traits;
 };
 
-class byte_ops : public expr2t
-{
-public:
-  byte_ops(const type2tc &t, expr2t::expr_ids id) : expr2t(t, id)
-  {
-  }
-  byte_ops(const byte_ops &ref) = default;
-};
-
-class byte_extract_data : public byte_ops
+class byte_extract_data : public expr2t
 {
 public:
   byte_extract_data(
@@ -704,7 +677,7 @@ public:
     const expr2tc &s,
     const expr2tc &o,
     bool be)
-    : byte_ops(t, id), source_value(s), source_offset(o), big_endian(be)
+    : expr2t(t, id), source_value(s), source_offset(o), big_endian(be)
   {
   }
   byte_extract_data(const byte_extract_data &ref) = default;
@@ -728,7 +701,7 @@ public:
       traits;
 };
 
-class byte_update_data : public byte_ops
+class byte_update_data : public expr2t
 {
 public:
   byte_update_data(
@@ -738,7 +711,7 @@ public:
     const expr2tc &o,
     const expr2tc &v,
     bool be)
-    : byte_ops(t, id),
+    : expr2t(t, id),
       source_value(s),
       source_offset(o),
       update_value(v),
@@ -773,25 +746,16 @@ public:
     traits;
 };
 
-class datatype_ops : public expr2t
-{
-public:
-  datatype_ops(const type2tc &t, expr2t::expr_ids id) : expr2t(t, id)
-  {
-  }
-  datatype_ops(const datatype_ops &ref) = default;
-};
-
-class with_data : public datatype_ops
+class with_data : public expr2t
 {
 public:
   with_data(
     const type2tc &t,
-    datatype_ops::expr_ids id,
+    expr2t::expr_ids id,
     const expr2tc &sv,
     const expr2tc &uf,
     const expr2tc &uv)
-    : datatype_ops(t, id), source_value(sv), update_field(uf), update_value(uv)
+    : expr2t(t, id), source_value(sv), update_field(uf), update_value(uv)
   {
   }
   with_data(const with_data &ref) = default;
@@ -812,15 +776,15 @@ public:
       traits;
 };
 
-class member_data : public datatype_ops
+class member_data : public expr2t
 {
 public:
   member_data(
     const type2tc &t,
-    datatype_ops::expr_ids id,
+    expr2t::expr_ids id,
     const expr2tc &sv,
     const irep_idt &m)
-    : datatype_ops(t, id), source_value(sv), member(m)
+    : expr2t(t, id), source_value(sv), member(m)
   {
   }
   member_data(const member_data &ref) = default;
@@ -836,14 +800,14 @@ public:
   typedef esbmct::expr2t_traits<source_value_field, member_field> traits;
 };
 
-class member_ref_data : public datatype_ops
+class member_ref_data : public expr2t
 {
 public:
   member_ref_data(
     const type2tc &t,
-    datatype_ops::expr_ids id,
+    expr2t::expr_ids id,
     const irep_idt &m)
-    : datatype_ops(t, id), member(m)
+    : expr2t(t, id), member(m)
   {
   }
   member_ref_data(const member_ref_data &ref) = default;
@@ -857,15 +821,15 @@ public:
   typedef esbmct::expr2t_traits<member_field> traits;
 };
 
-class ptr_mem_data : public datatype_ops
+class ptr_mem_data : public expr2t
 {
 public:
   ptr_mem_data(
     const type2tc &t,
-    datatype_ops::expr_ids id,
+    expr2t::expr_ids id,
     const expr2tc &s,
     const expr2tc &p)
-    : datatype_ops(t, id), source_value(s), member_pointer(p)
+    : expr2t(t, id), source_value(s), member_pointer(p)
   {
   }
   ptr_mem_data(const ptr_mem_data &ref) = default;
@@ -884,15 +848,15 @@ public:
     traits;
 };
 
-class index_data : public datatype_ops
+class index_data : public expr2t
 {
 public:
   index_data(
     const type2tc &t,
-    datatype_ops::expr_ids id,
+    expr2t::expr_ids id,
     const expr2tc &sv,
     const expr2tc &i)
-    : datatype_ops(t, id), source_value(sv), index(i)
+    : expr2t(t, id), source_value(sv), index(i)
   {
   }
   index_data(const index_data &ref) = default;
@@ -911,7 +875,7 @@ public:
 class string_ops : public expr2t
 {
 public:
-  string_ops(const type2tc &t, datatype_ops::expr_ids id, const expr2tc &s)
+  string_ops(const type2tc &t, expr2t::expr_ids id, const expr2tc &s)
     : expr2t(t, id), string(s)
   {
   }
@@ -928,7 +892,7 @@ public:
 class overflow_ops : public expr2t
 {
 public:
-  overflow_ops(const type2tc &t, datatype_ops::expr_ids id, const expr2tc &v)
+  overflow_ops(const type2tc &t, expr2t::expr_ids id, const expr2tc &v)
     : expr2t(t, id), operand(v)
   {
   }
@@ -947,7 +911,7 @@ class overflow_cast_data : public overflow_ops
 public:
   overflow_cast_data(
     const type2tc &t,
-    datatype_ops::expr_ids id,
+    expr2t::expr_ids id,
     const expr2tc &v,
     unsigned int b)
     : overflow_ops(t, id, v), bits(b)

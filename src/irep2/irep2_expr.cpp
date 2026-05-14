@@ -357,10 +357,10 @@ const expr2tc &object_descriptor2t::get_root_object() const
 
 arith_2ops::arith_2ops(
   const type2tc &t,
-  arith_ops::expr_ids id,
+  expr2t::expr_ids id,
   const expr2tc &v1,
   const expr2tc &v2)
-  : arith_ops(t, id), side_1(v1), side_2(v2)
+  : expr2t(t, id), side_1(v1), side_2(v2)
 {
 #ifndef NDEBUG /* only check consistency in non-Release builds */
   bool p1 = is_pointer_type(v1);
