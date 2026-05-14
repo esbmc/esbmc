@@ -216,6 +216,10 @@ def get_referenced_names(node):
 import_aliases = {}
 # Track all imports per module to combine them
 module_imports = {}
+# Per-module export tables collected after Preprocessor runs (#4525). Each
+# entry is (range_aliases, range_wrappers, dunder_all_or_None) and is keyed
+# by qualified module name. The entry script is keyed by ``__main__``.
+module_exports = {}
 
 
 # pylint: disable-next=too-many-locals,too-many-branches
@@ -338,11 +342,17 @@ def filter_imports(tree: ast.AST) -> ast.AST:
     return tree
 
 
-def parse_file(filename: str) -> ast.AST:
-    """Open, parse, and run Preprocessor on a Python source file."""
+def parse_file(filename: str) -> tuple[ast.AST, Preprocessor]:
+    """Open, parse, and run Preprocessor on a Python source file.
+
+    Returns the transformed tree alongside the Preprocessor instance so
+    callers can read its cross-module export tables (#4525).
+    """
     with open(filename, "r", encoding="utf-8") as src:
         tree = ast.parse(src.read())
-    return Preprocessor(filename).visit(tree)
+    preprocessor = Preprocessor(filename)
+    tree = preprocessor.visit(tree)
+    return tree, preprocessor
 
 
 def emit_file_as_json(
@@ -352,7 +362,7 @@ def emit_file_as_json(
     elements_to_import=None,
 ) -> None:
     """Generate AST JSON for a file."""
-    tree = parse_file(filename)
+    tree, _preprocessor = parse_file(filename)
     generate_ast_json(
         tree,
         filename,
@@ -373,6 +383,73 @@ def emit_module_json(
         emit_file_as_json(filename, output_dir, module_qualname, elements_to_import)
 
 
+def _snapshot_exports(preprocessor):
+    """Snapshot a Preprocessor's range-alias / wrapper export tables (#4525)."""
+    return (
+        set(preprocessor.exported_range_aliases),
+        dict(preprocessor.exported_range_wrappers),
+        preprocessor.module_dunder_all,
+    )
+
+
+def _compute_range_seed(module_node):
+    """Build a (alias_seed, wrapper_seed) pair for *module_node* (#4525).
+
+    Walks top-level ``ImportFrom`` statements and projects exported aliases
+    and wrappers from each source module (looked up in ``module_exports``)
+    into the consumer's seed. Honours ``as`` rebinds and ``__all__`` for
+    star imports. Bare ``import X`` (qualified attribute access) is out of
+    scope.
+    """
+    alias_seed = set()
+    wrapper_seed = {}
+    for stmt in module_node.body:
+        if not (isinstance(stmt, ast.ImportFrom) and stmt.module):
+            continue
+        src_exports = module_exports.get(stmt.module)
+        if not src_exports:
+            continue
+        src_aliases, src_wrappers, src_all = src_exports
+        if any(a.name == '*' for a in stmt.names):
+            visible = (set(src_all) if src_all is not None
+                       else {n for n in (set(src_aliases) | set(src_wrappers))
+                             if not n.startswith('_')})
+            alias_seed |= (set(src_aliases) & visible)
+            for w in src_wrappers:
+                if w in visible:
+                    wrapper_seed[w] = src_wrappers[w]
+            continue
+        for a in stmt.names:
+            bind_name = a.asname or a.name
+            if a.name in src_aliases:
+                alias_seed.add(bind_name)
+            if a.name in src_wrappers:
+                wrapper_seed[bind_name] = src_wrappers[a.name]
+    return alias_seed, wrapper_seed
+
+
+def _propagate_range_aliases_across_modules(parsed_trees):
+    """Re-apply alias / wrapper rewrites with cross-module seeds (#4525).
+
+    Iterates to a fixed point so chained re-exports (``lib_b`` re-imports
+    aliases from ``lib_a``, which its own consumers then inherit) converge.
+    """
+    while True:
+        changed = False
+        for module_name, (tree, _filename, preprocessor) in parsed_trees.items():
+            alias_seed, wrapper_seed = _compute_range_seed(tree)
+            before = _snapshot_exports(preprocessor)
+            preprocessor.apply_range_rewrites(tree,
+                                              alias_seed=alias_seed,
+                                              wrapper_seed=wrapper_seed)
+            after = _snapshot_exports(preprocessor)
+            if after != before:
+                module_exports[module_name] = after
+                changed = True
+        if not changed:
+            return
+
+
 def process_collected_imports(output_dir):
     """
     Emit AST JSON for every transitively-imported module.
@@ -388,7 +465,7 @@ def process_collected_imports(output_dir):
     # Phase 1 — discovery: harvest imports from every reachable module until
     # module_imports stops growing. Cache parsed trees so emission in Phase 2
     # does not re-run the (expensive) Preprocessor.
-    parsed_trees = {}  # module_name -> (tree, filename)
+    parsed_trees = {}  # module_name -> (tree, filename, preprocessor)
     visited = set()
 
     while True:
@@ -400,12 +477,16 @@ def process_collected_imports(output_dir):
             filename = resolve_module_file(module_name, output_dir)
             if not filename:
                 continue
-            tree = parse_file(filename)
-            parsed_trees[module_name] = (tree, filename)
+            tree, preprocessor = parse_file(filename)
+            parsed_trees[module_name] = (tree, filename, preprocessor)
+            module_exports[module_name] = _snapshot_exports(preprocessor)
             for subnode in ast.walk(tree):
                 if isinstance(subnode, (ast.Import, ast.ImportFrom)):
                     rewrite_relative_import(subnode, module_name)
                     process_imports(subnode, output_dir)
+
+    # Phase 1b — cross-module range alias / wrapper propagation (#4525).
+    _propagate_range_aliases_across_modules(parsed_trees)
 
     # Phase 2 — emission: module_imports is now stable, so every emitted JSON
     # contains the full set of names any importer ever asked for.
@@ -420,7 +501,7 @@ def process_collected_imports(output_dir):
 
         if module_name not in parsed_trees:
             continue
-        tree, filename = parsed_trees[module_name]
+        tree, filename, _preprocessor = parsed_trees[module_name]
         generate_ast_json(tree,
                           filename,
                           imported_elements,
@@ -651,6 +732,7 @@ def main():
     # Apply AST transformations
     preprocessor = Preprocessor(filename)
     tree = preprocessor.visit(tree)
+    module_exports["__main__"] = _snapshot_exports(preprocessor)
 
     # Tracking of imported modules and aliases
     processed_submodules = set()
@@ -671,6 +753,13 @@ def main():
 
     # Now process all collected imports once
     process_collected_imports(output_dir)
+
+    # Re-apply range-alias / wrapper rewrites on the entry script using the
+    # cross-module export tables built during import processing (#4525).
+    alias_seed, wrapper_seed = _compute_range_seed(tree)
+    preprocessor.apply_range_rewrites(tree,
+                                      alias_seed=alias_seed,
+                                      wrapper_seed=wrapper_seed)
 
     # Generate JSON from AST for the main file.
     generate_ast_json(tree, filename, None, output_dir)

@@ -84,6 +84,12 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         self._assert_eq_counter = 0
         self._known_literal_values = {}
         self._identity_functions = set()
+        # Cross-module range-alias / wrapper propagation (#4525). Populated
+        # by visit_Module so parser.py can project these into consumers'
+        # imported-seed sets.
+        self.exported_range_aliases = set()
+        self.exported_range_wrappers = {}
+        self.module_dunder_all = None
 
     # Names treated as typing-style generic constructors (subscript = type alias).
     _TYPING_GENERIC_NAMES = (
@@ -432,8 +438,10 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         # back to literal `range(...)` calls. After these rewrites,
         # `for i in alias_or_wrapper(...)` reaches visit_For as a plain range
         # call and uses the existing range-for transformation.
-        self._rewrite_range_aliases(node)
-        self._inline_range_wrappers(node)
+        # Capture `__all__` (if statically a list/tuple of string literals) so
+        # cross-module propagation (#4525) can honour it for `from X import *`.
+        self.module_dunder_all = self._capture_dunder_all(node)
+        self.apply_range_rewrites(node)
 
         # Transform the module as usual
         node = self.generic_visit(node)
@@ -665,19 +673,23 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
             yield child
             yield from cls._iter_module_scope(child, shadow_names)
 
-    def _rewrite_range_aliases(self, module_node):
-        """Rewrite module-scope ``alias = range`` (and chains) to canonical ``range``.
+    @staticmethod
+    def collect_range_aliases(module_node, seed=frozenset()):
+        """Collect module-scope canonical-range aliases.
 
-        Collects every top-level assignment of the form ``X = range`` (and
-        transitively ``Y = X`` where ``X`` is already a known alias), rewrites
-        every ``Call(Name(alias), ...)`` that resolves to the module-scope
-        binding to ``Call(Name("range"), ...)``, and removes the original
-        alias statements so the C++ annotator never sees ``range`` as a bare
-        RHS. Names that are rebound elsewhere are excluded, and rewrites are
-        skipped inside nested scopes that locally shadow the alias.
+        Returns a pair ``(local, all)`` where:
+
+        * ``local`` is the set of names bound *in this module* via ``X = range``
+          or ``X = Y`` for a previously known alias ``Y``.
+        * ``all`` is ``local`` unioned with *seed* (intended to be aliases
+          inherited from imported modules), minus any locally rebound names.
+
+        Names rebound elsewhere (per :meth:`_rebound_module_names`) are
+        excluded from both sets.
         """
-        rebound = self._rebound_module_names(module_node)
-        aliases = set()
+        rebound = Preprocessor._rebound_module_names(module_node)
+        all_aliases = set(seed) - rebound
+        local = set()
         changed = True
         while changed:
             changed = False
@@ -688,47 +700,83 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
                     continue
                 lhs = stmt.targets[0].id
                 rhs = stmt.value.id
-                if lhs in aliases or lhs in rebound:
+                if lhs in all_aliases or lhs in rebound:
                     continue
-                if rhs == "range" or rhs in aliases:
-                    aliases.add(lhs)
+                if rhs == "range" or rhs in all_aliases:
+                    all_aliases.add(lhs)
+                    local.add(lhs)
                     changed = True
+        return local, all_aliases
 
-        if not aliases:
+    def apply_range_rewrites(self,
+                             module_node,
+                             alias_seed=frozenset(),
+                             wrapper_seed=None):
+        """Run the range-alias and range-wrapper rewrites on *module_node*.
+
+        Public entry point for both per-module and cross-module (#4525)
+        invocations. *alias_seed* and *wrapper_seed* carry aliases /
+        wrappers inherited from imported modules; pass empty defaults for
+        a single-file pre-pass.
+        """
+        self._rewrite_range_aliases(module_node, seed=alias_seed)
+        self._inline_range_wrappers(module_node, seed=wrapper_seed)
+
+    def _rewrite_range_aliases(self, module_node, seed=frozenset()):
+        """Rewrite module-scope ``alias = range`` (and chains) to canonical ``range``.
+
+        Collects every top-level assignment of the form ``X = range`` (and
+        transitively ``Y = X`` where ``X`` is already a known alias),
+        rewrites every ``Call(Name(alias), ...)`` that resolves to the
+        module-scope binding to ``Call(Name("range"), ...)``, and removes the
+        original alias statements so the C++ annotator never sees ``range``
+        as a bare RHS. Names that are rebound elsewhere are excluded, and
+        rewrites are skipped inside nested scopes that locally shadow the
+        alias.
+
+        *seed* is a set of alias names inherited from imported modules
+        (#4525). They are added to the alias set used to rewrite call sites
+        but never removed from this module's body — they were never declared
+        here to begin with.
+        """
+        local, all_aliases = self.collect_range_aliases(module_node, seed)
+        # Track exports for cross-module propagation (#4525): both
+        # locally-defined aliases and any seeded names that survived
+        # (i.e. aren't shadowed by a local rebind) are part of this
+        # module's export surface, so downstream consumers can pick them
+        # up via plain ``from this_module import name`` re-imports.
+        self.exported_range_aliases |= local
+        self.exported_range_aliases |= (set(seed) & all_aliases)
+
+        if not all_aliases:
             return
 
-        for n in self._iter_module_scope(module_node, aliases):
+        for n in self._iter_module_scope(module_node, all_aliases):
             if (isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
-                    and n.func.id in aliases):
+                    and n.func.id in all_aliases):
                 n.func.id = "range"
+
+        if not local:
+            return
 
         module_node.body = [
             stmt for stmt in module_node.body
             if not (isinstance(stmt, ast.Assign) and len(stmt.targets) == 1
                     and isinstance(stmt.targets[0], ast.Name)
-                    and stmt.targets[0].id in aliases
+                    and stmt.targets[0].id in local
                     and isinstance(stmt.value, ast.Name)
-                    and (stmt.value.id == "range" or stmt.value.id in aliases))
+                    and (stmt.value.id == "range" or stmt.value.id in all_aliases))
         ]
 
-    def _inline_range_wrappers(self, module_node):
-        """Inline trivial ``def f(p): return range(p_or_const, ...)`` wrappers.
+    @staticmethod
+    def collect_range_wrappers(module_node):
+        """Collect trivial ``def f(p): return range(...)`` wrappers at module scope.
 
-        A wrapper qualifies when it lives at module scope, is not rebound
-        elsewhere, takes only positional parameters with no defaults or
-        ``*args``/``**kwargs``, and its body is exactly one
-        ``return range(...)`` where every argument is either a reference to
-        one of the function's parameters or an integer ``Constant``. Every
-        call ``f(actuals)`` whose arity matches the wrapper's parameter list
-        and that uses only plain positional arguments (no ``*xs``, no
-        keyword args) is rewritten to a fresh ``range(actuals')`` call.
-
-        The wrapper ``def`` is intentionally retained: call sites with
-        mismatched arity, keyword args, or ``*xs`` still need to resolve to
-        it. Nested scopes that locally rebind the wrapper name are skipped
-        so the rewrite respects Python's lexical-scope semantics.
+        Returns ``{name: (params, template_args)}`` for every qualifying
+        wrapper defined directly in *module_node*. Wrappers rebound elsewhere
+        are excluded.
         """
-        rebound = self._rebound_module_names(module_node)
+        rebound = Preprocessor._rebound_module_names(module_node)
         wrappers = {}
         for stmt in module_node.body:
             if not (isinstance(stmt, ast.FunctionDef)
@@ -757,11 +805,46 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
                 for a in call.args):
                 continue
             wrappers[stmt.name] = (params, call.args)
+        return wrappers
+
+    def _inline_range_wrappers(self, module_node, seed=None):
+        """Inline trivial ``def f(p): return range(p_or_const, ...)`` wrappers.
+
+        A wrapper qualifies when it lives at module scope, is not rebound
+        elsewhere, takes only positional parameters with no defaults or
+        ``*args``/``**kwargs``, and its body is exactly one
+        ``return range(...)`` where every argument is either a reference to
+        one of the function's parameters or an integer ``Constant``. Every
+        call ``f(actuals)`` whose arity matches the wrapper's parameter list
+        and that uses only plain positional arguments (no ``*xs``, no
+        keyword args) is rewritten to a fresh ``range(actuals')`` call.
+
+        The wrapper ``def`` is intentionally retained: call sites with
+        mismatched arity, keyword args, or ``*xs`` still need to resolve to
+        it. Nested scopes that locally rebind the wrapper name are skipped
+        so the rewrite respects Python's lexical-scope semantics.
+
+        *seed* maps wrapper-name → ``(params, template_args)`` for wrappers
+        inherited from imported modules (#4525). Entries shadowed by a
+        local rebind are dropped, so the importer's lexical scope still wins.
+        """
+        local = self.collect_range_wrappers(module_node)
+        self.exported_range_wrappers.update(local)
+
+        wrappers = dict(seed) if seed else {}
+        rebound = self._rebound_module_names(module_node)
+        for name in list(wrappers):
+            if name in rebound and name not in local:
+                del wrappers[name]
+        # Surviving seeded wrappers (i.e. those not locally shadowed) are
+        # re-exported so chained importers can resolve them too (#4525).
+        self.exported_range_wrappers.update(wrappers)
+        wrappers.update(local)
 
         if not wrappers:
             return
 
-        wrapper_names = set(wrappers.keys())
+        wrapper_names = set(wrappers)
         for n in self._iter_module_scope(module_node, wrapper_names):
             if not (isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
                     and n.func.id in wrappers):
@@ -779,6 +862,31 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
             ]
             n.func.id = "range"
             ast.fix_missing_locations(n)
+
+    @staticmethod
+    def _capture_dunder_all(module_node):
+        """Return the literal list/tuple of names assigned to ``__all__``.
+
+        Returns ``None`` when ``__all__`` is absent, dynamically constructed,
+        or contains anything other than string literals — in which case the
+        importer cannot statically project a star import.
+        """
+        for stmt in module_node.body:
+            if not (isinstance(stmt, ast.Assign) and len(stmt.targets) == 1
+                    and isinstance(stmt.targets[0], ast.Name)
+                    and stmt.targets[0].id == "__all__"):
+                continue
+            value = stmt.value
+            if not isinstance(value, (ast.List, ast.Tuple)):
+                return None
+            names = []
+            for el in value.elts:
+                if isinstance(el, ast.Constant) and isinstance(el.value, str):
+                    names.append(el.value)
+                else:
+                    return None
+            return names
+        return None
 
     def ensure_all_locations(self, node, source_node=None, line=1, col=0):
         """Recursively ensure all nodes in an AST tree have location information"""
