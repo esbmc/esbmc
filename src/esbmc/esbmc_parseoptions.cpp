@@ -451,8 +451,7 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   {
     if (!cmdline.isset("witness"))
     {
-      log_error(
-        "--validate-violation-witness requires --witness <file.yaml>");
+      log_error("--validate-violation-witness requires --witness <file.yaml>");
       abort();
     }
     const std::string witness = cmdline.getval("witness");
