@@ -355,6 +355,23 @@ def parse_file(filename: str) -> tuple[ast.AST, Preprocessor]:
     return tree, preprocessor
 
 
+def parse_file_canonicalised(filename: str) -> tuple[ast.AST, Preprocessor]:
+    """Parse a file and run only the alias-canonicalisation pre-pass.
+
+    Returns the raw tree (with ``apply_range_rewrites`` already applied for
+    in-module aliases) plus the Preprocessor instance so the caller can
+    later (a) feed it cross-module seeds via ``apply_range_rewrites`` and
+    (b) call ``finalize_module`` once propagation has converged. This split
+    is the key to #4533: ``visit_For`` must run after every alias known to
+    the import graph has been rewritten to ``range``.
+    """
+    with open(filename, "r", encoding="utf-8") as src:
+        tree = ast.parse(src.read())
+    preprocessor = Preprocessor(filename)
+    preprocessor.prepare_module(tree)
+    return tree, preprocessor
+
+
 def emit_file_as_json(
     filename: str,
     output_dir: str,
@@ -463,8 +480,10 @@ def process_collected_imports(output_dir):
     JSON the C++ backend reads.
     """
     # Phase 1 — discovery: harvest imports from every reachable module until
-    # module_imports stops growing. Cache parsed trees so emission in Phase 2
-    # does not re-run the (expensive) Preprocessor.
+    # module_imports stops growing. Each module is parsed and only the
+    # alias-canonicalisation pre-pass is run; the full visit (which lowers
+    # for-range to a bounded while via visit_For) is deferred to Phase 1c
+    # so it sees aliases resolved by cross-module propagation (#4533).
     parsed_trees = {}  # module_name -> (tree, filename, preprocessor)
     visited = set()
 
@@ -477,7 +496,7 @@ def process_collected_imports(output_dir):
             filename = resolve_module_file(module_name, output_dir)
             if not filename:
                 continue
-            tree, preprocessor = parse_file(filename)
+            tree, preprocessor = parse_file_canonicalised(filename)
             parsed_trees[module_name] = (tree, filename, preprocessor)
             module_exports[module_name] = _snapshot_exports(preprocessor)
             for subnode in ast.walk(tree):
@@ -487,6 +506,10 @@ def process_collected_imports(output_dir):
 
     # Phase 1b — cross-module range alias / wrapper propagation (#4525).
     _propagate_range_aliases_across_modules(parsed_trees)
+
+    # Phase 1c — finalize each module now that aliases are canonical (#4533).
+    for _module_name, (tree, _filename, preprocessor) in parsed_trees.items():
+        preprocessor.finalize_module(tree)
 
     # Phase 2 — emission: module_imports is now stable, so every emitted JSON
     # contains the full set of names any importer ever asked for.
@@ -725,41 +748,47 @@ def main():
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
-    # Process and convert AST for main file
+    # Process and convert AST for main file. The entry script is canonicalised
+    # before import discovery and finalised only after cross-module alias /
+    # wrapper propagation, so visit_For sees ``range(...)`` everywhere an
+    # alias resolves to it (#4533).
     with open(filename, "r", encoding="utf-8") as source:
         tree = ast.parse(source.read())
 
-    # Apply AST transformations
     preprocessor = Preprocessor(filename)
-    tree = preprocessor.visit(tree)
+    preprocessor.prepare_module(tree)
     module_exports["__main__"] = _snapshot_exports(preprocessor)
 
-    # Tracking of imported modules and aliases
-    processed_submodules = set()
-
+    # Discover imports first (their nodes are not rewritten by visit_*), so
+    # process_collected_imports can build the cross-module export tables that
+    # the deferred seed-aware re-rewrite below depends on (#4533).
     for node in ast.walk(tree):
         if isinstance(node, (ast.Import, ast.ImportFrom)):
-            # Collect import information
             process_imports(node, output_dir)
-        elif isinstance(node, ast.Assign):
-            # Keep assignment-specific annotation behavior.
-            add_type_annotation(node)
-        elif isinstance(node, ast.Constant):
-            # Ensure constants are annotated in all contexts (e.g., call args).
-            annotate_constant_node(node)
-        elif isinstance(node, ast.Attribute):
-            # Detect and process submodule usage
-            detect_and_process_submodules(node, processed_submodules, output_dir)
 
-    # Now process all collected imports once
     process_collected_imports(output_dir)
 
     # Re-apply range-alias / wrapper rewrites on the entry script using the
-    # cross-module export tables built during import processing (#4525).
+    # cross-module export tables built during import processing (#4525), then
+    # run the deferred visitor pass so visit_For lowers for-range with the
+    # bound it now has access to (#4533).
     alias_seed, wrapper_seed = _compute_range_seed(tree)
     preprocessor.apply_range_rewrites(tree,
                                       alias_seed=alias_seed,
                                       wrapper_seed=wrapper_seed)
+    tree = preprocessor.finalize_module(tree)
+
+    # Tag assignments / constants / attribute accesses on the fully-lowered
+    # tree so constants introduced by visit_* (e.g. range-loop helpers,
+    # dataclass synthesis) receive their esbmc_type_annotation.
+    processed_submodules = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            add_type_annotation(node)
+        elif isinstance(node, ast.Constant):
+            annotate_constant_node(node)
+        elif isinstance(node, ast.Attribute):
+            detect_and_process_submodules(node, processed_submodules, output_dir)
 
     # Generate JSON from AST for the main file.
     generate_ast_json(tree, filename, None, output_dir)
