@@ -24,8 +24,10 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
 
   // Position of the format-string argument in `operands`, indexed by
   // printf_kindt: printf takes it as arg 0, fprintf/dprintf/sprintf/
-  // vfprintf as arg 1, snprintf as arg 2.
-  size_t fmt_idx;
+  // vfprintf as arg 1, snprintf as arg 2.  Default-init to silence
+  // GCC's -Wmaybe-uninitialized (it can't see that the switch is total
+  // over the enum class).
+  size_t fmt_idx = 0;
   switch (new_rhs.kind)
   {
   case printf_kindt::PRINTF:
