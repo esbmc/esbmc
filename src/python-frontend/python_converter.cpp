@@ -5062,8 +5062,8 @@ static exprt make_slice_struct_expr(
   const struct_typet &struct_type =
     to_struct_type(ns.follow(conv.get_type_handler().get_slice_type()));
 
-  auto lower_int = [&](const nlohmann::json *node,
-                       const typet &field_type) -> exprt {
+  auto lower_int =
+    [&](const nlohmann::json *node, const typet &field_type) -> exprt {
     if (!node || node->is_null())
       return gen_zero(field_type);
     exprt value = conv.get_expr(*node);
