@@ -200,18 +200,14 @@ void goto_symext::assume(const expr2tc &the_assumption)
   if (is_true(assumption))
     return;
 
-  expr2tc guard_assumption = assumption;
   cur_state->guard.guard_expr(assumption);
 
   // Irritatingly, assumption destroys its expr argument
   expr2tc tmp_guard = cur_state->guard.as_expr();
   target->assumption(tmp_guard, assumption, cur_state->source, first_loop);
 
-  // ASSUME also narrows the current path for subsequent instructions.
-  cur_state->guard.add(guard_assumption);
-
   // If we're assuming false, make the guard for the following statement false
-  if (is_false(the_assumption) || is_assume_false(the_assumption))
+  if (is_false(assumption) || is_assume_false(assumption))
     cur_state->guard.make_false();
 }
 
