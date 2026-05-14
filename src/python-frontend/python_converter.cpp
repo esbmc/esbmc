@@ -4990,7 +4990,20 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         array_is_dict_pointer = true;
       }
     }
-    // Handle tuple subscripting - tuples are structs, not arrays
+    // Handle tuple subscripting - tuples are structs, not arrays.
+    // Unwrap pointer-to-tuple so key[i] reaches the tuple handler when the
+    // tuple arrives by pointer (e.g. a tuple-of-slices coerced to a pointer
+    // parameter for __getitem__, see GitHub #4539).
+    if (array_type.is_pointer())
+    {
+      typet pointed = ns.follow(array_type.subtype());
+      if (pointed.is_struct() && tuple_handler_->is_tuple_type(pointed))
+      {
+        array = dereference_exprt(array, pointed);
+        array.type() = pointed;
+        array_type = pointed;
+      }
+    }
     if (tuple_handler_->is_tuple_type(array_type))
     {
       expr = tuple_handler_->handle_tuple_subscript(array, slice, element);

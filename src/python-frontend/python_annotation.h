@@ -671,6 +671,31 @@ private:
           }
         }
 
+        // For __getitem__/__setitem__ key parameters, infer a
+        // `tuple[slice, slice, ...]` annotation from multi-axis subscript
+        // call sites on instances of the enclosing class (GitHub #4539).
+        // The Subscript syntax t[i:j, k:l] never appears as an explicit
+        // __getitem__ call in the AST, so the standard call-site inference
+        // never sees it. Without this, `key` stays unannotated and `key[0]`
+        // inside __getitem__ falls through to list indexing.
+        if (
+          inferred_type.empty() && !current_class_name_.empty() &&
+          (func_name == "__getitem__" || func_name == "__setitem__") && i == 1)
+        {
+          std::vector<std::string> elem_types =
+            infer_subscript_key_tuple_types(current_class_name_);
+          if (!elem_types.empty())
+          {
+            int lineno = param.value("lineno", 0);
+            int col_offset =
+              param.value("col_offset", 0) +
+              param["arg"].template get<std::string>().size() + 1;
+            param["annotation"] = create_tuple_subscript_annotation(
+              elem_types, lineno, col_offset, lineno);
+            continue;
+          }
+        }
+
         // Apply inference results
         if (has_partial_annotation)
         {
@@ -692,6 +717,132 @@ private:
         }
       }
     }
+  }
+
+  // For a class @p class_name defining __getitem__/__setitem__, return the
+  // synthesised element types ("slice" repeated N times) for a
+  // `tuple[slice, ...]` annotation when a multi-axis subscript usage
+  // `instance[a, b, ...]` exists in the AST whose `instance` is
+  // module-scope-annotated as @p class_name and every tuple element is
+  // slice-producing. Returns empty when no qualifying subscript exists.
+  std::vector<std::string>
+  infer_subscript_key_tuple_types(const std::string &class_name)
+  {
+    // Build a one-shot map from module-scope variable name to its declared
+    // class. Only `AnnAssign(target=Name, annotation=Name)` is consulted —
+    // narrow on purpose: it's the pattern the issue exercises and avoids
+    // brittle cross-scope resolution.
+    std::unordered_map<std::string, std::string> var_to_class;
+    if (ast_.contains("body") && ast_["body"].is_array())
+    {
+      for (const Json &stmt : ast_["body"])
+      {
+        if (
+          !stmt.contains("_type") || stmt["_type"] != "AnnAssign" ||
+          !stmt.contains("target") || stmt["target"]["_type"] != "Name" ||
+          !stmt["target"].contains("id") || !stmt.contains("annotation") ||
+          stmt["annotation"]["_type"] != "Name" ||
+          !stmt["annotation"].contains("id"))
+          continue;
+        var_to_class[stmt["target"]["id"].template get<std::string>()] =
+          stmt["annotation"]["id"].template get<std::string>();
+      }
+    }
+
+    // Unanimous-wins: only commit when every tuple-shaped Subscript on
+    // instances of class_name is all-slices and has the same arity. A
+    // single heterogeneous site (e.g. `t[0, 1]`) abandons the synthesis so
+    // the existing void* default keeps working for that call site.
+    bool any_match = false;
+    bool any_reject = false;
+    size_t arity = 0;
+    visit_class_tuple_subscripts(
+      ast_,
+      class_name,
+      var_to_class,
+      [&](const Json &elts) {
+        if (any_reject)
+          return;
+        if (!all_elements_are_slices(elts))
+        {
+          any_reject = true;
+          return;
+        }
+        if (!any_match)
+        {
+          arity = elts.size();
+          any_match = true;
+        }
+        else if (elts.size() != arity)
+        {
+          any_reject = true;
+        }
+      });
+
+    std::vector<std::string> result;
+    if (any_match && !any_reject)
+      result.assign(arity, "slice");
+    return result;
+  }
+
+  // Walk @p node and invoke @p visit(elts) for every Subscript whose value
+  // is a Name resolving to @p class_name and whose slice is a Tuple. @p
+  // visit receives the tuple's `elts` JSON array.
+  template <typename Visitor>
+  void visit_class_tuple_subscripts(
+    const Json &node,
+    const std::string &class_name,
+    const std::unordered_map<std::string, std::string> &var_to_class,
+    Visitor &&visit)
+  {
+    if (node.is_object())
+    {
+      if (
+        node.contains("_type") && node["_type"] == "Subscript" &&
+        node.contains("value") && node["value"].is_object() &&
+        node["value"].contains("_type") && node["value"]["_type"] == "Name" &&
+        node["value"].contains("id") && node.contains("slice") &&
+        node["slice"].is_object() && node["slice"].contains("_type") &&
+        node["slice"]["_type"] == "Tuple" && node["slice"].contains("elts") &&
+        node["slice"]["elts"].is_array() &&
+        !node["slice"]["elts"].empty())
+      {
+        auto it = var_to_class.find(
+          node["value"]["id"].template get<std::string>());
+        if (it != var_to_class.end() && it->second == class_name)
+          visit(node["slice"]["elts"]);
+      }
+      for (auto it = node.begin(); it != node.end(); ++it)
+        visit_class_tuple_subscripts(
+          it.value(), class_name, var_to_class, visit);
+    }
+    else if (node.is_array())
+    {
+      for (const auto &elem : node)
+        visit_class_tuple_subscripts(elem, class_name, var_to_class, visit);
+    }
+  }
+
+  // Returns true when every element of @p elts is a Slice literal or a
+  // `slice(...)` builtin call — i.e. produces a __ESBMC_PySliceObj at the
+  // call site. Used to guard tuple-of-slices key inference.
+  static bool all_elements_are_slices(const Json &elts)
+  {
+    for (const Json &elt : elts)
+    {
+      if (!elt.contains("_type"))
+        return false;
+      const std::string &t = elt["_type"];
+      if (t == "Slice")
+        continue;
+      if (
+        t == "Call" && elt.contains("func") && elt["func"].is_object() &&
+        elt["func"].contains("_type") && elt["func"]["_type"] == "Name" &&
+        elt["func"].contains("id") && elt["func"]["id"] == "slice")
+        continue;
+      return false;
+    }
+    return true;
   }
 
   // Method to find all function calls to a specific function
