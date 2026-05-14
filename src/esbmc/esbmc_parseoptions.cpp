@@ -423,8 +423,19 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
 
   if (cmdline.isset("validate-correctness-witness"))
   {
+    if (!cmdline.isset("witness"))
+    {
+      log_error(
+        "--validate-correctness-witness requires --witness <file.yaml>");
+      abort();
+    }
     const std::string witness = cmdline.getval("witness");
     const boost::filesystem::path wp(witness);
+    if (!boost::filesystem::exists(wp))
+    {
+      log_error("Witness file '{}' does not exist.", witness);
+      abort();
+    }
     if (wp.extension() != ".yaml" && wp.extension() != ".yml")
     {
       log_error(
@@ -438,8 +449,18 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
 
   if (cmdline.isset("validate-violation-witness"))
   {
+    if (!cmdline.isset("witness"))
+    {
+      log_error("--validate-violation-witness requires --witness <file.yaml>");
+      abort();
+    }
     const std::string witness = cmdline.getval("witness");
     const boost::filesystem::path wp(witness);
+    if (!boost::filesystem::exists(wp))
+    {
+      log_error("Witness file '{}' does not exist.", witness);
+      abort();
+    }
     if (wp.extension() != ".yaml" && wp.extension() != ".yml")
     {
       log_error(
