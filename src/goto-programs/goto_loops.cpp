@@ -176,8 +176,7 @@ bool goto_loopst::compute_function_summary(
       if (!compute_function_summary(callee, in_progress, local))
         complete = false;
     }
-    else if (
-      instr.is_goto() || instr.is_assert() || instr.is_assume())
+    else if (instr.is_goto() || instr.is_assert() || instr.is_assume())
     {
       collect_loop_symbols(instr.guard, local.unmodified);
     }
