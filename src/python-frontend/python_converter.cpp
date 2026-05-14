@@ -3687,7 +3687,30 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
           if (
             param_type.is_pointer() && arg_actual_type.is_struct() &&
             !arg.is_address_of() && !arg_actual_type.is_pointer())
+          {
+            // Rvalue structs (e.g. the constant `__ESBMC_PySliceObj` produced
+            // by `a[i:j]`) cannot be the operand of `address_of` at the SMT
+            // level. Materialise them in a temp symbol first so the address
+            // we hand to the callee points at a real lvalue.
+            if (!arg.is_symbol())
+            {
+              assert(
+                current_block &&
+                "rvalue struct argument requires a statement-level block to "
+                "materialise into");
+              locationt loc = get_location_from_decl(element);
+              symbolt &tmp = create_tmp_symbol(
+                element, "$struct_arg$", arg.type(), gen_zero(arg.type()));
+              code_declt tmp_decl(symbol_expr(tmp));
+              tmp_decl.location() = loc;
+              current_block->copy_to_operands(tmp_decl);
+              code_assignt tmp_assign(symbol_expr(tmp), arg);
+              tmp_assign.location() = loc;
+              current_block->copy_to_operands(tmp_assign);
+              arg = symbol_expr(tmp);
+            }
             arg = gen_address_of(arg);
+          }
 
           // Propagate instance attributes set on this parameter back to the
           // caller's argument. This models Python's pass-by-object-reference:
