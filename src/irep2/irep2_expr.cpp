@@ -401,4 +401,3 @@ void assert_arith_2ops_consistency(
   // TODO: Add consistency checks for vectors
 #endif
 }
-

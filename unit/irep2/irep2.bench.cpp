@@ -54,8 +54,14 @@ TEST_CASE("irep2 microbench: chain construction", "[bench]")
 {
   config.ansi_c.word_size = 32;
 
-  BENCHMARK("build add-chain depth=64") { return build_add_chain(64); };
-  BENCHMARK("build add-chain depth=256") { return build_add_chain(256); };
+  BENCHMARK("build add-chain depth=64")
+  {
+    return build_add_chain(64);
+  };
+  BENCHMARK("build add-chain depth=256")
+  {
+    return build_add_chain(256);
+  };
 }
 
 TEST_CASE("irep2 microbench: simplify operand walk", "[bench]")
@@ -70,8 +76,14 @@ TEST_CASE("irep2 microbench: simplify operand walk", "[bench]")
   expr2tc chain64 = build_add_chain(64);
   expr2tc chain256 = build_add_chain(256);
 
-  BENCHMARK("simplify add-chain depth=64") { return chain64->simplify(); };
-  BENCHMARK("simplify add-chain depth=256") { return chain256->simplify(); };
+  BENCHMARK("simplify add-chain depth=64")
+  {
+    return chain64->simplify();
+  };
+  BENCHMARK("simplify add-chain depth=256")
+  {
+    return chain256->simplify();
+  };
 
   // Repeat-simplify: call simplify() a second time on the result of
   // the first simplification. Anchors what re-simplification costs
@@ -84,8 +96,14 @@ TEST_CASE("irep2 microbench: simplify operand walk", "[bench]")
   if (is_nil_expr(once256))
     once256 = chain256;
 
-  BENCHMARK("re-simplify add-chain depth=64") { return once64->simplify(); };
-  BENCHMARK("re-simplify add-chain depth=256") { return once256->simplify(); };
+  BENCHMARK("re-simplify add-chain depth=64")
+  {
+    return once64->simplify();
+  };
+  BENCHMARK("re-simplify add-chain depth=256")
+  {
+    return once256->simplify();
+  };
 }
 
 TEST_CASE("irep2 microbench: indexed sub-expr access", "[bench]")
@@ -166,7 +184,10 @@ TEST_CASE("irep2 microbench: CRC cache", "[bench]")
     expr2tc fresh = build_add_chain(64);
     return fresh->crc();
   };
-  BENCHMARK("crc warm (cached)") { return chain64->crc(); };
+  BENCHMARK("crc warm (cached)")
+  {
+    return chain64->crc();
+  };
 }
 
 TEST_CASE("irep2 microbench: is_/to_/try_to_ dispatch", "[bench]")
@@ -237,7 +258,10 @@ TEST_CASE("irep2 microbench: irep_idt-bearing CRC", "[bench]")
       struct_type2tc(mtypes, mnames, mnames, "test_struct_for_bench");
     return fresh->crc();
   };
-  BENCHMARK("crc struct type warm") { return struct_ty->crc(); };
+  BENCHMARK("crc struct type warm")
+  {
+    return struct_ty->crc();
+  };
 }
 
 TEST_CASE("irep2 microbench: array/vector type construction", "[bench]")
@@ -261,9 +285,10 @@ TEST_CASE("irep2 microbench: array/vector type construction", "[bench]")
 
   // Non-trivial size: an add tree the constructor will still simplify.
   // Anchors that the fast-path doesn't break the folding contract.
-  expr2tc add_size =
-    add2tc(subtype, constant_int2tc(subtype, BigInt(30)),
-           constant_int2tc(subtype, BigInt(34)));
+  expr2tc add_size = add2tc(
+    subtype,
+    constant_int2tc(subtype, BigInt(30)),
+    constant_int2tc(subtype, BigInt(34)));
 
   BENCHMARK("array_type2t with add() size (folds to constant)")
   {
@@ -292,21 +317,33 @@ TEST_CASE("irep2 microbench: cmp / lt on real nodes", "[bench]")
   type2tc bv32_b = unsignedbv_type2tc(32);
   type2tc bv64 = unsignedbv_type2tc(64);
 
-  BENCHMARK("operator==(bv32, bv32) — equal") { return bv32_a == bv32_b; };
+  BENCHMARK("operator==(bv32, bv32) — equal")
+  {
+    return bv32_a == bv32_b;
+  };
   BENCHMARK("operator==(bv32, bv64) — width differs")
   {
     return bv32_a == bv64;
   };
-  BENCHMARK("operator<(bv32, bv64)") { return bv32_a < bv64; };
+  BENCHMARK("operator<(bv32, bv64)")
+  {
+    return bv32_a < bv64;
+  };
 
   type2tc ptr_a = pointer_type2tc(bv32_a);
   type2tc ptr_b = pointer_type2tc(bv32_a);
-  BENCHMARK("operator==(ptr, ptr) — equal") { return ptr_a == ptr_b; };
+  BENCHMARK("operator==(ptr, ptr) — equal")
+  {
+    return ptr_a == ptr_b;
+  };
 
   expr2tc sym_a = symbol2tc(bv32_a, "some_quite_long_symbol_name");
   expr2tc sym_b = symbol2tc(bv32_a, "some_quite_long_symbol_name");
   expr2tc sym_c = symbol2tc(bv32_a, "different_symbol_name_here");
-  BENCHMARK("operator==(symbol, symbol) — equal") { return sym_a == sym_b; };
+  BENCHMARK("operator==(symbol, symbol) — equal")
+  {
+    return sym_a == sym_b;
+  };
   BENCHMARK("operator==(symbol, symbol) — name differs")
   {
     return sym_a == sym_c;
@@ -316,10 +353,19 @@ TEST_CASE("irep2 microbench: cmp / lt on real nodes", "[bench]")
   std::vector<irep_idt> mnames{"a", "b", "c"};
   type2tc s_a = struct_type2tc(mtypes, mnames, mnames, "S");
   type2tc s_b = struct_type2tc(mtypes, mnames, mnames, "S");
-  BENCHMARK("operator==(struct, struct) — equal") { return s_a == s_b; };
+  BENCHMARK("operator==(struct, struct) — equal")
+  {
+    return s_a == s_b;
+  };
 
   expr2tc add_a = add2tc(bv32_a, gen_const(1), gen_const(2));
   expr2tc add_b = add2tc(bv32_a, gen_const(1), gen_const(2));
-  BENCHMARK("operator==(add, add) — equal") { return add_a == add_b; };
-  BENCHMARK("operator<(add, add)") { return add_a < add_b; };
+  BENCHMARK("operator==(add, add) — equal")
+  {
+    return add_a == add_b;
+  };
+  BENCHMARK("operator<(add, add)")
+  {
+    return add_a < add_b;
+  };
 }

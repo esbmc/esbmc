@@ -602,7 +602,8 @@ expr2tc sym_name_to_symbol(irep_idt init, type2tc type)
         "treating as level0 with base name '{}'",
         init,
         thename);
-      return symbol2tc(type, thename, symbol_renaming_level::level0, 0, 0, 0, 0);
+      return symbol2tc(
+        type, thename, symbol_renaming_level::level0, 0, 0, 0, 0);
     }
 
     std::string atstr = thestr.substr(at_pos + 1, exm_pos - at_pos - 1);
@@ -1809,7 +1810,8 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
       if (expr.base_name().empty())
         assert(!"No base_name for code_printf2t");
-      new_expr_ref = code_printf2tc(args, printf_kind_from_name(expr.base_name()));
+      new_expr_ref =
+        code_printf2tc(args, printf_kind_from_name(expr.base_name()));
       return;
     }
     else if (expr.statement() == "printf2")
@@ -3347,12 +3349,24 @@ exprt migrate_expr_back(const expr2tc &ref)
     const char *bs_name = nullptr;
     switch (ref2.kind)
     {
-    case printf_kindt::PRINTF: bs_name = "printf"; break;
-    case printf_kindt::FPRINTF: bs_name = "fprintf"; break;
-    case printf_kindt::DPRINTF: bs_name = "dprintf"; break;
-    case printf_kindt::SPRINTF: bs_name = "sprintf"; break;
-    case printf_kindt::VFPRINTF: bs_name = "vfprintf"; break;
-    case printf_kindt::SNPRINTF: bs_name = "snprintf"; break;
+    case printf_kindt::PRINTF:
+      bs_name = "printf";
+      break;
+    case printf_kindt::FPRINTF:
+      bs_name = "fprintf";
+      break;
+    case printf_kindt::DPRINTF:
+      bs_name = "dprintf";
+      break;
+    case printf_kindt::SPRINTF:
+      bs_name = "sprintf";
+      break;
+    case printf_kindt::VFPRINTF:
+      bs_name = "vfprintf";
+      break;
+    case printf_kindt::SNPRINTF:
+      bs_name = "snprintf";
+      break;
     }
     codeexpr.base_name(bs_name);
     return codeexpr;

@@ -5751,7 +5751,7 @@ expr2tc byte_update2t::do_simplify() const
 // declaring an out-of-line override but have no per-class simplification
 // rule yet. Each just defers to expr2t's default behaviour.
 #define ESBMC_NIL_SIMPLIFY(name)                                               \
-  expr2tc name##2t::do_simplify() const                                        \
+  expr2tc name##2t ::do_simplify() const                                       \
   {                                                                            \
     return expr2tc();                                                          \
   }

@@ -61,7 +61,7 @@
  *                                   and similar heavy types).
  *
  *  Convenience aliases below suffix `klass` with `_data` automatically. */
-#define ESBMC_DEFINE_DATA_AS(klass, FIELDS)                                     \
+#define ESBMC_DEFINE_DATA_AS(klass, FIELDS)                                    \
   class klass : public expr2t                                                  \
   {                                                                            \
   public:                                                                      \
@@ -76,12 +76,12 @@
     klass(const klass &ref) = default;                                         \
     FIELDS(ESBMC_DATA_DECL, ESBMC_DATA_NONE)                                   \
     FIELDS(ESBMC_DATA_TYPEDEF, ESBMC_DATA_NONE)                                \
-    typedef esbmct::expr2t_traits<FIELDS(                                      \
-      ESBMC_DATA_TRAIT_REF, ESBMC_DATA_COMMA)>                                 \
+    typedef esbmct::expr2t_traits<                                             \
+      FIELDS(ESBMC_DATA_TRAIT_REF, ESBMC_DATA_COMMA)>                          \
       traits;                                                                  \
   }
 
-#define ESBMC_DEFINE_DATA_NOTYPE_AS(klass, FIELDS)                              \
+#define ESBMC_DEFINE_DATA_NOTYPE_AS(klass, FIELDS)                             \
   class klass : public expr2t                                                  \
   {                                                                            \
   public:                                                                      \
@@ -96,12 +96,12 @@
     klass(const klass &ref) = default;                                         \
     FIELDS(ESBMC_DATA_DECL, ESBMC_DATA_NONE)                                   \
     FIELDS(ESBMC_DATA_TYPEDEF, ESBMC_DATA_NONE)                                \
-    typedef esbmct::expr2t_traits_notype<FIELDS(                               \
-      ESBMC_DATA_TRAIT_REF, ESBMC_DATA_COMMA)>                                 \
+    typedef esbmct::expr2t_traits_notype<                                      \
+      FIELDS(ESBMC_DATA_TRAIT_REF, ESBMC_DATA_COMMA)>                          \
       traits;                                                                  \
   }
 
-#define ESBMC_DEFINE_DATA_MOVE_AS(klass, FIELDS)                                \
+#define ESBMC_DEFINE_DATA_MOVE_AS(klass, FIELDS)                               \
   class klass : public expr2t                                                  \
   {                                                                            \
   public:                                                                      \
@@ -116,15 +116,16 @@
     klass(const klass &ref) = default;                                         \
     FIELDS(ESBMC_DATA_DECL, ESBMC_DATA_NONE)                                   \
     FIELDS(ESBMC_DATA_TYPEDEF, ESBMC_DATA_NONE)                                \
-    typedef esbmct::expr2t_traits<FIELDS(                                      \
-      ESBMC_DATA_TRAIT_REF, ESBMC_DATA_COMMA)>                                 \
+    typedef esbmct::expr2t_traits<                                             \
+      FIELDS(ESBMC_DATA_TRAIT_REF, ESBMC_DATA_COMMA)>                          \
       traits;                                                                  \
   }
 
-#define ESBMC_DEFINE_DATA(name, FIELDS) ESBMC_DEFINE_DATA_AS(name##_data, FIELDS)
-#define ESBMC_DEFINE_DATA_NOTYPE(name, FIELDS)                                  \
+#define ESBMC_DEFINE_DATA(name, FIELDS)                                        \
+  ESBMC_DEFINE_DATA_AS(name##_data, FIELDS)
+#define ESBMC_DEFINE_DATA_NOTYPE(name, FIELDS)                                 \
   ESBMC_DEFINE_DATA_NOTYPE_AS(name##_data, FIELDS)
-#define ESBMC_DEFINE_DATA_MOVE(name, FIELDS)                                    \
+#define ESBMC_DEFINE_DATA_MOVE(name, FIELDS)                                   \
   ESBMC_DEFINE_DATA_MOVE_AS(name##_data, FIELDS)
 
 /** Define a data class that extends an existing one (`parent`) and adds
@@ -133,7 +134,7 @@
  *  them).  `OWN_FIELDS` lists this class's own additional fields.  The
  *  parent's trait typedefs are referenced via name##_field (they are
  *  inherited from the parent class scope). */
-#define ESBMC_DEFINE_DATA_EXTENDS(name, parent, PARENT_FIELDS, OWN_FIELDS)      \
+#define ESBMC_DEFINE_DATA_EXTENDS(name, parent, PARENT_FIELDS, OWN_FIELDS)     \
   class name##_data : public parent                                            \
   {                                                                            \
   public:                                                                      \
@@ -147,7 +148,7 @@
         OWN_FIELDS(ESBMC_DATA_INIT, ESBMC_DATA_COMMA)                          \
     {                                                                          \
     }                                                                          \
-    name##_data(const name##_data & ref) = default;                            \
+    name##_data(const name##_data &ref) = default;                             \
     OWN_FIELDS(ESBMC_DATA_DECL, ESBMC_DATA_NONE)                               \
     OWN_FIELDS(ESBMC_DATA_TYPEDEF, ESBMC_DATA_NONE)                            \
     typedef esbmct::expr2t_traits<                                             \
@@ -201,7 +202,8 @@ ESBMC_DEFINE_DATA(constant_bool, ESBMC_FIELDS_constant_bool);
 #define ESBMC_FIELDS_constant_array_of(F, S) F(expr2tc, initializer)
 ESBMC_DEFINE_DATA(constant_array_of, ESBMC_FIELDS_constant_array_of);
 
-#define ESBMC_FIELDS_constant_datatype(F, S) F(std::vector<expr2tc>, datatype_members)
+#define ESBMC_FIELDS_constant_datatype(F, S)                                   \
+  F(std::vector<expr2tc>, datatype_members)
 ESBMC_DEFINE_DATA_MOVE(constant_datatype, ESBMC_FIELDS_constant_datatype);
 
 #define ESBMC_FIELDS_code_block(F, S) F(std::vector<expr2tc>, operands)
@@ -210,13 +212,14 @@ ESBMC_DEFINE_DATA_MOVE(code_block, ESBMC_FIELDS_code_block);
 #define ESBMC_FIELDS_code_expression(F, S) F(expr2tc, operand)
 ESBMC_DEFINE_DATA_NOTYPE(code_expression, ESBMC_FIELDS_code_expression);
 
-#define ESBMC_FIELDS_code_cpp_catch(F, S) F(std::vector<irep_idt>, exception_list)
+#define ESBMC_FIELDS_code_cpp_catch(F, S)                                      \
+  F(std::vector<irep_idt>, exception_list)
 ESBMC_DEFINE_DATA_MOVE(code_cpp_catch, ESBMC_FIELDS_code_cpp_catch);
 
 #define ESBMC_FIELDS_typecast(F, S) F(expr2tc, from) S F(expr2tc, rounding_mode)
 ESBMC_DEFINE_DATA(typecast, ESBMC_FIELDS_typecast);
 
-#define ESBMC_FIELDS_if(F, S) \
+#define ESBMC_FIELDS_if(F, S)                                                  \
   F(expr2tc, cond) S F(expr2tc, true_value) S F(expr2tc, false_value)
 ESBMC_DEFINE_DATA(if, ESBMC_FIELDS_if);
 
@@ -231,7 +234,6 @@ ESBMC_DEFINE_DATA_EXTENDS(
   constant_datatype_data,
   ESBMC_FIELDS_constant_datatype,
   ESBMC_FIELDS_constant_union_own);
-
 
 /** Kind of string literal carried by a `constant_string2t`.  Lives at
  *  namespace scope (rather than inside the data class) so the X-macro
@@ -278,9 +280,11 @@ enum class symbol_renaming_level
 };
 
 #define ESBMC_FIELDS_symbol(F, S)                                              \
-  F(irep_idt, thename) S F(symbol_renaming_level, rlevel) S                    \
-    F(unsigned int, level1_num) S F(unsigned int, level2_num) S                \
-      F(unsigned int, thread_num) S F(unsigned int, node_num)
+  F(irep_idt, thename)                                                         \
+  S F(symbol_renaming_level, rlevel) S F(unsigned int, level1_num) S F(        \
+    unsigned int, level2_num) S                                                \
+  F(unsigned int, thread_num) S                                                \
+  F(unsigned int, node_num)
 ESBMC_DEFINE_DATA(symbol, ESBMC_FIELDS_symbol);
 
 #define ESBMC_FIELDS_value_only(F, S) F(expr2tc, value)
@@ -311,8 +315,8 @@ ESBMC_DEFINE_DATA_AS(ieee_arith_1op, ESBMC_FIELDS_ieee_1);
 ESBMC_DEFINE_DATA_AS(ieee_arith_2ops, ESBMC_FIELDS_ieee_2);
 
 #define ESBMC_FIELDS_ieee_3(F, S)                                              \
-  F(expr2tc, rounding_mode) S F(expr2tc, value_1) S F(expr2tc, value_2) S      \
-    F(expr2tc, value_3)
+  F(expr2tc, rounding_mode)                                                    \
+  S F(expr2tc, value_1) S F(expr2tc, value_2) S F(expr2tc, value_3)
 ESBMC_DEFINE_DATA_AS(ieee_arith_3ops, ESBMC_FIELDS_ieee_3);
 
 #define ESBMC_FIELDS_ptr_obj(F, S) F(expr2tc, ptr_obj)
@@ -327,8 +331,8 @@ ESBMC_DEFINE_DATA_NOTYPE_AS(invalid_pointer_ops, ESBMC_FIELDS_ptr_obj);
 ESBMC_DEFINE_DATA(byte_extract, ESBMC_FIELDS_byte_extract);
 
 #define ESBMC_FIELDS_byte_update(F, S)                                         \
-  F(expr2tc, source_value) S F(expr2tc, source_offset) S                       \
-    F(expr2tc, update_value) S F(bool, big_endian)
+  F(expr2tc, source_value)                                                     \
+  S F(expr2tc, source_offset) S F(expr2tc, update_value) S F(bool, big_endian)
 ESBMC_DEFINE_DATA(byte_update, ESBMC_FIELDS_byte_update);
 
 #define ESBMC_FIELDS_with(F, S)                                                \
@@ -387,11 +391,10 @@ enum class sideeffect_allockind
 };
 
 #define ESBMC_FIELDS_sideeffect(F, S)                                          \
-  F(expr2tc, operand) S F(expr2tc, size) S                                     \
-    F(std::vector<expr2tc>, arguments) S F(type2tc, alloctype) S               \
-      F(sideeffect_allockind, kind)
+  F(expr2tc, operand)                                                          \
+  S F(expr2tc, size) S F(std::vector<expr2tc>, arguments)                      \
+    S F(type2tc, alloctype) S F(sideeffect_allockind, kind)
 ESBMC_DEFINE_DATA_MOVE(sideeffect, ESBMC_FIELDS_sideeffect);
-
 
 /** Which member of the printf family a `code_printf2t` represents.  The
  *  symex side (src/goto-symex/builtin_functions/io.cpp) switches on this

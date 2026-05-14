@@ -735,7 +735,8 @@ void goto_symext::symex_assign_member(
   expr2tc new_rhs = with2tc(
     real_lhs->type,
     real_lhs,
-    constant_string2tc(str_type, component_name, constant_string_kindt::DEFAULT),
+    constant_string2tc(
+      str_type, component_name, constant_string_kindt::DEFAULT),
     rhs);
 
   symex_assign_rec(

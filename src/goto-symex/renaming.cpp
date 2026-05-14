@@ -52,8 +52,9 @@ void renaming::level2t::get_ident_name(expr2tc &sym) const
   current_namest::const_iterator it = current_names.find(name_record(symbol));
 
   symbol2t::renaming_level lev = symbol.rlevel =
-    (symbol.rlevel == symbol_renaming_level::level1) ? symbol_renaming_level::level2
-                                        : symbol_renaming_level::level2_global;
+    (symbol.rlevel == symbol_renaming_level::level1)
+      ? symbol_renaming_level::level2
+      : symbol_renaming_level::level2_global;
 
   if (it == current_names.end())
   {
@@ -91,7 +92,13 @@ void renaming::level1t::rename(expr2tc &expr)
     if (it != current_names.end())
     {
       expr = symbol2tc(
-        sym.type, sym.thename, symbol_renaming_level::level1, it->second, 0, thread_id, 0);
+        sym.type,
+        sym.thename,
+        symbol_renaming_level::level1,
+        it->second,
+        0,
+        thread_id,
+        0);
     }
     else
     {
@@ -122,7 +129,9 @@ void renaming::level2t::rename(expr2tc &expr)
 
     // first see if it's already an l2 name
 
-    if (sym.rlevel == symbol_renaming_level::level2 || sym.rlevel == symbol_renaming_level::level2_global)
+    if (
+      sym.rlevel == symbol_renaming_level::level2 ||
+      sym.rlevel == symbol_renaming_level::level2_global)
       return;
 
     if (sym.thename == "NULL")
@@ -140,7 +149,8 @@ void renaming::level2t::rename(expr2tc &expr)
       // Is this a global symbol? Gets renamed differently.
       symbol2t::renaming_level lev;
       if (
-        sym.rlevel == symbol_renaming_level::level0 || sym.rlevel == symbol_renaming_level::level1_global)
+        sym.rlevel == symbol_renaming_level::level0 ||
+        sym.rlevel == symbol_renaming_level::level1_global)
         lev = symbol_renaming_level::level2_global;
       else
         lev = symbol_renaming_level::level2;
@@ -161,7 +171,8 @@ void renaming::level2t::rename(expr2tc &expr)
     {
       symbol2t::renaming_level lev;
       if (
-        sym.rlevel == symbol_renaming_level::level0 || sym.rlevel == symbol_renaming_level::level1_global)
+        sym.rlevel == symbol_renaming_level::level0 ||
+        sym.rlevel == symbol_renaming_level::level1_global)
         lev = symbol_renaming_level::level2_global;
       else
         lev = symbol_renaming_level::level2;
@@ -189,7 +200,8 @@ void renaming::level2t::coveredinbees(
 #ifndef NDEBUG
   symbol2t &sym = to_symbol2t(lhs_sym);
   assert(
-    sym.rlevel == symbol_renaming_level::level1 || sym.rlevel == symbol_renaming_level::level1_global);
+    sym.rlevel == symbol_renaming_level::level1 ||
+    sym.rlevel == symbol_renaming_level::level1_global);
 #endif
 
   valuet &entry = current_names[name_record(to_symbol2t(lhs_sym))];
@@ -214,10 +226,14 @@ void renaming::renaming_levelt::get_original_name(
   symbol2t &sym = to_symbol2t(expr);
 
   // Rename level2_global down to level1_global, not level1
-  if (lev == symbol_renaming_level::level1 && sym.rlevel == symbol_renaming_level::level2_global)
+  if (
+    lev == symbol_renaming_level::level1 &&
+    sym.rlevel == symbol_renaming_level::level2_global)
     lev = symbol_renaming_level::level1_global;
   // level1 and level1_global are equivalent.
-  else if (lev == symbol_renaming_level::level1 && sym.rlevel == symbol_renaming_level::level1_global)
+  else if (
+    lev == symbol_renaming_level::level1 &&
+    sym.rlevel == symbol_renaming_level::level1_global)
     return;
 
   // Can't rename any lower,
@@ -304,10 +320,11 @@ void renaming::level2t::make_assignment(
   rename(lhs_symbol, entry.count + 1);
 
   symbol2t &symbol = to_symbol2t(lhs_symbol);
-  symbol2t::renaming_level lev = (symbol.rlevel == symbol_renaming_level::level0 ||
-                                  symbol.rlevel == symbol_renaming_level::level1_global)
-                                   ? symbol_renaming_level::level2_global
-                                   : symbol_renaming_level::level2;
+  symbol2t::renaming_level lev =
+    (symbol.rlevel == symbol_renaming_level::level0 ||
+     symbol.rlevel == symbol_renaming_level::level1_global)
+      ? symbol_renaming_level::level2_global
+      : symbol_renaming_level::level2;
   symbol.rlevel = lev;
   // These fields were updated by the rename call,
   symbol.level2_num = entry.count;
