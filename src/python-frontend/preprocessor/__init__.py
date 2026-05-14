@@ -1,8 +1,7 @@
 import ast
 import copy
 
-from preprocessor_dataclass import DataclassMixin
-
+from preprocessor.dataclass_mixin import DataclassMixin
 
 class Preprocessor(DataclassMixin, ast.NodeTransformer):
 
