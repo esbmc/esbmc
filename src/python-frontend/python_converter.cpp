@@ -9576,7 +9576,8 @@ void python_converter::get_attributes_from_self(
         // value when it is a Tuple literal so later `obj.attr` reads carry the
         // struct shape needed for unpacking (GitHub #4515).
         if (stmt.contains("value"))
-          type = infer_tuple_struct_from_value(stmt["value"], param_annotations);
+          type =
+            infer_tuple_struct_from_value(stmt["value"], param_annotations);
         if (type.is_nil() || type.is_empty())
           type = type_handler_.get_typet(annotated_type);
       }
