@@ -687,9 +687,9 @@ private:
           if (!elem_types.empty())
           {
             int lineno = param.value("lineno", 0);
-            int col_offset =
-              param.value("col_offset", 0) +
-              param["arg"].template get<std::string>().size() + 1;
+            int col_offset = param.value("col_offset", 0) +
+                             param["arg"].template get<std::string>().size() +
+                             1;
             param["annotation"] = create_tuple_subscript_annotation(
               elem_types, lineno, col_offset, lineno);
             continue;
@@ -757,10 +757,7 @@ private:
     bool any_reject = false;
     size_t arity = 0;
     visit_class_tuple_subscripts(
-      ast_,
-      class_name,
-      var_to_class,
-      [&](const Json &elts) {
+      ast_, class_name, var_to_class, [&](const Json &elts) {
         if (any_reject)
           return;
         if (!all_elements_are_slices(elts))
@@ -804,11 +801,10 @@ private:
         node["value"].contains("id") && node.contains("slice") &&
         node["slice"].is_object() && node["slice"].contains("_type") &&
         node["slice"]["_type"] == "Tuple" && node["slice"].contains("elts") &&
-        node["slice"]["elts"].is_array() &&
-        !node["slice"]["elts"].empty())
+        node["slice"]["elts"].is_array() && !node["slice"]["elts"].empty())
       {
-        auto it = var_to_class.find(
-          node["value"]["id"].template get<std::string>());
+        auto it =
+          var_to_class.find(node["value"]["id"].template get<std::string>());
         if (it != var_to_class.end() && it->second == class_name)
           visit(node["slice"]["elts"]);
       }
