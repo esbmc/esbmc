@@ -547,6 +547,56 @@ def test_capture_dunder_all_absent_returns_none():
     assert preprocessor_mod.Preprocessor._capture_dunder_all(module) is None
 
 
+def _walk_calls(tree, name):
+    return [n for n in ast.walk(tree)
+            if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+            and n.func.id == name]
+
+
+def test_prepare_then_finalize_lowers_cross_module_alias_to_bounded_range():
+    # Reproduces #4533: when the alias is only visible via a cross-module
+    # seed, prepare_module must canonicalise the call site to range(N)
+    # before finalize_module runs visit_For, otherwise the for-loop drops to
+    # the generic iterator path and the bound is lost (unbounded unwinding).
+    module = ast.parse(
+        """
+from lib import nl_affine_range
+
+count: int = 0
+for i in nl_affine_range(3):
+    count = count + 1
+""")
+
+    pre = preprocessor_mod.Preprocessor("main")
+    pre.prepare_module(module, alias_seed={"nl_affine_range"})
+    pre.finalize_module(module)
+
+    # The call site is now range(...), and the for-range path was taken
+    # (it injects helper functions for bounded iteration).
+    assert _walk_calls(module, "nl_affine_range") == []
+    assert _walk_calls(module, "ESBMC_range_next_") != []
+    assert pre.helper_functions_added is True
+
+
+def test_visit_module_back_compat_runs_prepare_and_finalize():
+    # The legacy single-call entry point must still produce the same
+    # in-file behaviour: range-alias rewrite + bounded for-range lowering.
+    module = ast.parse(
+        """
+nl_affine_range = range
+
+count: int = 0
+for i in nl_affine_range(3):
+    count = count + 1
+""")
+
+    pre = preprocessor_mod.Preprocessor("main")
+    pre.visit(module)
+
+    assert _walk_calls(module, "nl_affine_range") == []
+    assert _walk_calls(module, "ESBMC_range_next_") != []
+
+
 def test_visit_module_records_export_tables():
     # The Preprocessor pre-passes already ran by the time visit_Module
     # finishes, so the exported tables should reflect the in-file aliases.

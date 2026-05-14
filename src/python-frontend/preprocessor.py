@@ -411,18 +411,23 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
 
         return [range_next_func, range_has_next_func, reversed_range_start_func]
 
-    def visit_Module(self, node):
-        """Visit the module and inject helper functions if needed"""
-        # Pre-pass: collect all names used as callees so we can distinguish
-        # bound method assignments (g = obj.method; g()) from plain attribute
-        # reads (res = a.x) which must not be removed.
+    def prepare_module(self, node, alias_seed=frozenset(), wrapper_seed=None):
+        """Run pre-visit analyses and the range-alias / wrapper canonicalisation.
+
+        Collects callee names and global-scope variable annotations, captures
+        ``__all__``, and runs ``apply_range_rewrites`` with the supplied
+        cross-module seeds (empty by default). This must complete on every
+        module *before* any module's ``finalize_module`` runs so that
+        ``visit_For`` sees canonical ``range(...)`` calls produced by
+        cross-module alias propagation (#4533).
+
+        Idempotent: re-running with a fresh seed after the in-module aliases
+        have been canonicalised only adds the new (cross-module) names.
+        """
         for n in ast.walk(node):
             if isinstance(n, ast.Call) and isinstance(n.func, ast.Name):
                 self.called_names.add(n.func.id)
 
-        # Pre-pass: collect global-scope variable annotations so that
-        # unannotated function parameters can be inferred from call-site types
-        # (e.g. `def f(d): for k,v in d.items()` called with a dict literal).
         for stmt in node.body:
             if isinstance(stmt, ast.Assign):
                 for target in stmt.targets:
@@ -433,26 +438,25 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
             elif isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name):
                 self.variable_annotations[stmt.target.id] = stmt.annotation
 
-        # Pre-pass: canonicalise `alias = range` aliases at module scope and
-        # rewrite call sites of trivial `def f(...): return range(...)` wrappers
-        # back to literal `range(...)` calls. After these rewrites,
-        # `for i in alias_or_wrapper(...)` reaches visit_For as a plain range
-        # call and uses the existing range-for transformation.
-        # Capture `__all__` (if statically a list/tuple of string literals) so
-        # cross-module propagation (#4525) can honour it for `from X import *`.
         self.module_dunder_all = self._capture_dunder_all(node)
-        self.apply_range_rewrites(node)
+        self.apply_range_rewrites(node,
+                                  alias_seed=alias_seed,
+                                  wrapper_seed=wrapper_seed)
 
-        # Transform the module as usual
+    def finalize_module(self, node):
+        """Run ``generic_visit`` and inject any helpers requested during it.
+
+        Must be called after ``prepare_module`` has completed for every module
+        in the import graph, so that visit_For sees canonical ``range(...)``
+        calls produced by cross-module propagation (#4533).
+        """
         node = self.generic_visit(node)
 
         if self._needs_dataclass_initvar_import:
             self._ensure_dataclass_initvar_import(node)
 
-        # If we used range loops, inject helper functions at the beginning
         if self.helper_functions_added:
             helper_functions = self._create_helper_functions()
-            # Ensure all helper functions have proper location info
             for func in helper_functions:
                 self.ensure_all_locations(func)
                 ast.fix_missing_locations(func)
@@ -471,6 +475,18 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
             node.body = [helper_fn] + node.body
 
         return node
+
+    def visit_Module(self, node):
+        """Visit the module: prepare, then finalize.
+
+        Back-compat entry point for callers (``emit_file_as_json``, tests,
+        memory models) that don't participate in cross-module range-alias
+        propagation. The parser's main import-aware pipeline calls
+        ``prepare_module`` / ``finalize_module`` directly with the right
+        seeds (#4533).
+        """
+        self.prepare_module(node)
+        return self.finalize_module(node)
 
     @staticmethod
     def _target_names(target):
