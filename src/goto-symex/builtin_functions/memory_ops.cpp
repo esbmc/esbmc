@@ -941,7 +941,7 @@ expr2tc goto_symex_utils::gen_byte_memcpy_byte_update(
     to_array_type(src->type).subtype->get_width() != 8)
     return expr2tc();
 
-  // SMT convertion hates something like "char src[1]" into a "char dst"
+  // SMT conversion hates something like "char src[1]" into a "char dst"
   if (dst->type->get_width() == 8)
   {
     assert(!dst_offset);
