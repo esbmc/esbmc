@@ -4152,8 +4152,189 @@ private:
     ast["end_col_offset"] = max_col_offset;
   }
 
+  /**
+   * @brief Resolve the user-defined class name of variable @p obj from the
+   *        surrounding scope (function parameters, local declarations, or
+   *        globals).
+   * @return The class name, or an empty string when not resolvable.
+   */
+  std::string resolve_object_class_name(const std::string &obj)
+  {
+    auto read_name_id = [](const Json &annotation) -> std::string {
+      if (
+        annotation.is_object() && !annotation.is_null() &&
+        annotation.contains("_type") && annotation["_type"] == "Name" &&
+        annotation.contains("id") && annotation["id"].is_string())
+        return annotation["id"].template get<std::string>();
+      return "";
+    };
+
+    if (
+      current_func != nullptr && (*current_func).contains("args") &&
+      (*current_func)["args"].contains("args"))
+    {
+      Json param = find_annotated_assign(obj, (*current_func)["args"]["args"]);
+      if (param.contains("annotation"))
+      {
+        std::string id = read_name_id(param["annotation"]);
+        if (!id.empty())
+          return id;
+      }
+    }
+
+    Json var = json_utils::find_var_decl(obj, get_current_func_name(), ast_);
+    if (var.empty())
+      return "";
+
+    if (var.contains("annotation"))
+    {
+      std::string id = read_name_id(var["annotation"]);
+      if (!id.empty())
+        return id;
+    }
+
+    if (
+      var.contains("value") && var["value"].is_object() &&
+      var["value"].contains("_type") && var["value"]["_type"] == "Call" &&
+      var["value"].contains("func") && var["value"]["func"].is_object() &&
+      var["value"]["func"].contains("_type") &&
+      var["value"]["func"]["_type"] == "Name" &&
+      var["value"]["func"].contains("id") &&
+      var["value"]["func"]["id"].is_string())
+      return var["value"]["func"]["id"].template get<std::string>();
+
+    return "";
+  }
+
+  /**
+   * @brief Locate the RHS value of `self.@p attr = ...` in @p cls's
+   *        `__init__` method.
+   * @return The assignment's value node, or an empty Json when not found.
+   */
+  Json find_self_attr_init_rhs(const std::string &cls, const std::string &attr)
+  {
+    Json class_node = json_utils::find_class(ast_["body"], cls);
+    if (class_node.empty() || !class_node.contains("body"))
+      return Json();
+
+    for (const Json &member : class_node["body"])
+    {
+      if (member["_type"] != "FunctionDef" || member["name"] != "__init__")
+        continue;
+      for (const Json &stmt : member["body"])
+      {
+        if (!stmt.contains("_type") || !stmt.contains("value"))
+          continue;
+        const Json *target = nullptr;
+        if (stmt["_type"] == "AnnAssign" && stmt.contains("target"))
+          target = &stmt["target"];
+        else if (
+          stmt["_type"] == "Assign" && stmt.contains("targets") &&
+          stmt["targets"].is_array() && !stmt["targets"].empty())
+          target = &stmt["targets"][0];
+        if (
+          target == nullptr || !target->is_object() ||
+          !target->contains("_type") || (*target)["_type"] != "Attribute" ||
+          !target->contains("value") || !(*target)["value"].is_object() ||
+          !(*target)["value"].contains("_type") ||
+          (*target)["value"]["_type"] != "Name" ||
+          !(*target)["value"].contains("id") ||
+          (*target)["value"]["id"] != "self" || !target->contains("attr") ||
+          (*target)["attr"] != attr)
+          continue;
+        return stmt["value"];
+      }
+    }
+    return Json();
+  }
+
+  /**
+   * @brief Infer the type of the element at position @p index in @p rhs, the
+   *        right-hand side of a tuple/list unpacking assignment.
+   *
+   * Handles two RHS shapes: a Tuple/List literal (types element @p index
+   * directly), and an `obj.attr` Attribute access (resolves @p obj to a
+   * class, then recurses into the matching `self.attr = ...` initialiser).
+   *
+   * @return The inferred element type, or "Any" when the RHS shape is not
+   *         recognised.
+   */
+  std::string infer_unpacked_element_type(const Json &rhs, size_t index)
+  {
+    if (!rhs.is_object() || !rhs.contains("_type"))
+      return "Any";
+
+    const std::string &kind = rhs["_type"];
+
+    if (
+      (kind == "Tuple" || kind == "List") && rhs.contains("elts") &&
+      index < rhs["elts"].size())
+    {
+      std::string t = get_argument_type(rhs["elts"][index]);
+      return t.empty() ? "Any" : t;
+    }
+
+    if (
+      kind == "Attribute" && rhs.contains("value") &&
+      rhs["value"].is_object() && rhs["value"]["_type"] == "Name" &&
+      rhs.contains("attr"))
+    {
+      std::string cls = resolve_object_class_name(
+        rhs["value"]["id"].template get<std::string>());
+      if (cls.empty())
+        return "Any";
+      Json attr_rhs =
+        find_self_attr_init_rhs(cls, rhs["attr"].template get<std::string>());
+      if (attr_rhs.empty())
+        return "Any";
+      return infer_unpacked_element_type(attr_rhs, index);
+    }
+
+    return "Any";
+  }
+
+  /**
+   * @brief Synthesise an AnnAssign-shaped Json for @p node_name when @p elem
+   *        is a tuple/list unpacking `Assign` that binds it (GitHub #4532).
+   * @return The synthetic node, or an empty Json on no match.
+   */
+  Json
+  match_unpacking_assignment(const Json &elem, const std::string &node_name)
+  {
+    if (
+      !elem.contains("_type") || elem["_type"] != "Assign" ||
+      !elem.contains("targets") || !elem["targets"].is_array() ||
+      elem["targets"].empty())
+      return Json();
+    const Json &target = elem["targets"][0];
+    if (
+      !target.is_object() || !target.contains("_type") ||
+      (target["_type"] != "Tuple" && target["_type"] != "List") ||
+      !target.contains("elts") || !target["elts"].is_array())
+      return Json();
+
+    const Json &elts = target["elts"];
+    for (size_t i = 0; i < elts.size(); ++i)
+    {
+      if (
+        !elts[i].is_object() || !elts[i].contains("_type") ||
+        elts[i]["_type"] != "Name" || !elts[i].contains("id") ||
+        elts[i]["id"] != node_name)
+        continue;
+      std::string elem_type = elem.contains("value")
+                                ? infer_unpacked_element_type(elem["value"], i)
+                                : "Any";
+      return Json{
+        {"_type", "AnnAssign"},
+        {"target", Json{{"_type", "Name"}, {"id", node_name}}},
+        {"annotation", Json{{"_type", "Name"}, {"id", elem_type}}},
+        {"lineno", elem.value("lineno", 0)}};
+    }
+    return Json();
+  }
+
   const Json
-  find_annotated_assign(const std::string &node_name, const Json &body) const
+  find_annotated_assign(const std::string &node_name, const Json &body)
   {
     for (const Json &elem : body)
     {
@@ -4173,6 +4354,13 @@ private:
       {
         return elem;
       }
+
+      // Tuple/list unpacking assignment (`A, B = rhs`): synthesise an
+      // AnnAssign so callers reading node["annotation"]["id"] resolve the
+      // destructured element's type (GitHub #4532).
+      if (Json synth = match_unpacking_assignment(elem, node_name);
+          !synth.empty())
+        return synth;
 
       // Recursively search inside nested blocks
       if (elem.contains("_type"))
