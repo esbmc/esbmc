@@ -1352,7 +1352,7 @@ expr2tc gen_byte_memcpy_byte_update(
   const size_t src_offset,
   const size_t dst_offset,
   bool is_big_endian);
- /* Returns true iff `name` is the goto-program return-value temp for an
+/* Returns true iff `name` is the goto-program return-value temp for an
  * `alloca` / `__builtin_alloca` call, i.e. exactly matches
  * `<L1-prefix?>return_value$_alloca$<digits>`.  Used to identify which
  * locals symex must free when the calling function returns.
