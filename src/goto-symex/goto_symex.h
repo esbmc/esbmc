@@ -1331,7 +1331,7 @@ expr2tc gen_byte_memcpy(
  * @param num_of_bytes The number of bytes to copy from @p src to @p dst.
  * @param src_offset The byte offset in @p src at which copying starts.
  * @param dst_offset The byte offset in @p dst at which bytes are written.
- * @param is_big_endian Whether byte_update should threat operation as bigendian
+ * @param is_big_endian Whether byte_update should treat operation as big-endian.
  *
  * @returns A new expr2tc representing @p dst after the memcpy, or an empty
  *          expr2tc if the operation cannot be constructed (e.g., @p src is
@@ -1342,7 +1342,8 @@ expr2tc gen_byte_memcpy(
  * // Copy 4 bytes from char src[50] (offset 10) into a struct dst (offset 0)
  * expr2tc src = symbol_expr_of_char_array;
  * expr2tc dst = symbol_expr_of_struct;
- * expr2tc result = gen_byte_memcpy_byte_update(src, dst, 4, 10, 0);
+ * expr2tc result =
+ *   gen_byte_memcpy_byte_update(src, dst, 4, 10, 0, /*is_big_endian=*/false);
  * @endcode
  */
 expr2tc gen_byte_memcpy_byte_update(
