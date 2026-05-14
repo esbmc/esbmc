@@ -29,13 +29,15 @@
 
 std::string type_to_string(const bool &thebool, int);
 
-std::string type_to_string(const sideeffect_data::allockind &data, int);
+std::string type_to_string(const sideeffect_allockind &data, int);
 
 std::string type_to_string(const unsigned int &theval, int);
 
-std::string type_to_string(const constant_string_data::kindt &theval, int);
+std::string type_to_string(const constant_string_kindt &theval, int);
 
-std::string type_to_string(const symbol_data::renaming_level &theval, int);
+std::string type_to_string(const printf_kindt &theval, int);
+
+std::string type_to_string(const symbol_renaming_level &theval, int);
 
 std::string type_to_string(const BigInt &theint, int);
 

@@ -2945,7 +2945,7 @@ static void collect_symbol_names(
   if (is_symbol2t(e))
   {
     const symbol2t &thesym = to_symbol2t(e);
-    assert(thesym.rlevel == 0);
+    assert(thesym.rlevel == symbol_renaming_level::level0);
     std::string sym = thesym.get_symbol_name();
 
     used_syms.insert(sym);

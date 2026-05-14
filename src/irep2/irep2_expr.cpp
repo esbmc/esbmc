@@ -183,30 +183,27 @@ bool constant_bool2t::is_false() const
   return !value;
 }
 
-std::string symbol_data::get_symbol_name() const
+std::string symbol2t::get_symbol_name() const
 {
   switch (rlevel)
   {
-  case level0:
+  case symbol_renaming_level::level0:
     return thename.as_string();
-  case level1:
+  case symbol_renaming_level::level1:
     return thename.as_string() + "?" + i2string(level1_num) + "!" +
            i2string(thread_num);
-  case level2:
+  case symbol_renaming_level::level2:
     return thename.as_string() + "?" + i2string(level1_num) + "!" +
            i2string(thread_num) + "&" + i2string(node_num) + "#" +
            i2string(level2_num);
-  case level1_global:
-    // Just return global name,
+  case symbol_renaming_level::level1_global:
     return thename.as_string();
-  case level2_global:
-    // Global name with l2 details
+  case symbol_renaming_level::level2_global:
     return thename.as_string() + "&" + i2string(node_num) + "#" +
            i2string(level2_num);
-  default:
-    assert(0 && "Unrecognized renaming level enum");
-    abort();
   }
+  assert(0 && "Unrecognized renaming level enum");
+  abort();
 }
 
 namespace
@@ -355,12 +352,29 @@ const expr2tc &object_descriptor2t::get_root_object() const
   } while (1);
 }
 
-arith_2ops::arith_2ops(
-  const type2tc &t,
-  expr2t::expr_ids id,
-  const expr2tc &v1,
-  const expr2tc &v2)
-  : expr2t(t, id), side_1(v1), side_2(v2)
+printf_kindt printf_kind_from_name(const irep_idt &name)
+{
+  if (name == "printf")
+    return printf_kindt::PRINTF;
+  if (name == "fprintf")
+    return printf_kindt::FPRINTF;
+  if (name == "dprintf")
+    return printf_kindt::DPRINTF;
+  if (name == "sprintf")
+    return printf_kindt::SPRINTF;
+  if (name == "vfprintf")
+    return printf_kindt::VFPRINTF;
+  if (name == "snprintf")
+    return printf_kindt::SNPRINTF;
+  assert(0 && "Unrecognized printf-family base_name");
+  abort();
+}
+
+void assert_arith_2ops_consistency(
+  [[maybe_unused]] const type2tc &t,
+  [[maybe_unused]] expr2t::expr_ids id,
+  [[maybe_unused]] const expr2tc &v1,
+  [[maybe_unused]] const expr2tc &v2)
 {
 #ifndef NDEBUG /* only check consistency in non-Release builds */
   bool p1 = is_pointer_type(v1);
@@ -387,3 +401,4 @@ arith_2ops::arith_2ops(
   // TODO: Add consistency checks for vectors
 #endif
 }
+

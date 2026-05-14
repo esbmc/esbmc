@@ -4,17 +4,17 @@ std::string type_to_string(const bool &thebool, int)
   return (thebool) ? "true" : "false";
 }
 
-std::string type_to_string(const sideeffect_data::allockind &data, int)
+std::string type_to_string(const sideeffect_allockind &data, int)
 {
-  return (data == sideeffect_data::allockind::malloc)          ? "malloc"
-         : (data == sideeffect_data::allockind::realloc)       ? "realloc"
-         : (data == sideeffect_data::allockind::alloca)        ? "alloca"
-         : (data == sideeffect_data::allockind::cpp_new)       ? "cpp_new"
-         : (data == sideeffect_data::allockind::cpp_new_arr)   ? "cpp_new_arr"
-         : (data == sideeffect_data::allockind::nondet)        ? "nondet"
-         : (data == sideeffect_data::allockind::va_arg)        ? "va_arg"
-         : (data == sideeffect_data::allockind::function_call) ? "function_call"
-                                                               : "unknown";
+  return (data == sideeffect_allockind::malloc)          ? "malloc"
+         : (data == sideeffect_allockind::realloc)       ? "realloc"
+         : (data == sideeffect_allockind::alloca)        ? "alloca"
+         : (data == sideeffect_allockind::cpp_new)       ? "cpp_new"
+         : (data == sideeffect_allockind::cpp_new_arr)   ? "cpp_new_arr"
+         : (data == sideeffect_allockind::nondet)        ? "nondet"
+         : (data == sideeffect_allockind::va_arg)        ? "va_arg"
+         : (data == sideeffect_allockind::function_call) ? "function_call"
+                                                         : "unknown";
 }
 
 std::string type_to_string(const unsigned int &theval, int)
@@ -24,39 +24,59 @@ std::string type_to_string(const unsigned int &theval, int)
   return std::string(buffer);
 }
 
-std::string type_to_string(const constant_string_data::kindt &theval, int)
+std::string type_to_string(const constant_string_kindt &theval, int)
 {
   switch (theval)
   {
-  case constant_string_data::DEFAULT:
+  case constant_string_kindt::DEFAULT:
     return "default";
-  case constant_string_data::WIDE:
+  case constant_string_kindt::WIDE:
     return "wide";
-  case constant_string_data::UNICODE:
+  case constant_string_kindt::UNICODE:
     return "unicode";
   }
-  assert(0 && "Unrecognized constant_string_data::kindt enum value");
+  assert(0 && "Unrecognized constant_string_kindt enum value");
   abort();
 }
 
-std::string type_to_string(const symbol_data::renaming_level &theval, int)
+std::string type_to_string(const printf_kindt &theval, int)
 {
   switch (theval)
   {
-  case symbol_data::level0:
-    return "Level 0";
-  case symbol_data::level1:
-    return "Level 1";
-  case symbol_data::level2:
-    return "Level 2";
-  case symbol_data::level1_global:
-    return "Level 1 (global)";
-  case symbol_data::level2_global:
-    return "Level 2 (global)";
-  default:
-    assert(0 && "Unrecognized renaming level enum");
-    abort();
+  case printf_kindt::PRINTF:
+    return "printf";
+  case printf_kindt::FPRINTF:
+    return "fprintf";
+  case printf_kindt::DPRINTF:
+    return "dprintf";
+  case printf_kindt::SPRINTF:
+    return "sprintf";
+  case printf_kindt::VFPRINTF:
+    return "vfprintf";
+  case printf_kindt::SNPRINTF:
+    return "snprintf";
   }
+  assert(0 && "Unrecognized printf_kindt enum value");
+  abort();
+}
+
+std::string type_to_string(const symbol_renaming_level &theval, int)
+{
+  switch (theval)
+  {
+  case symbol_renaming_level::level0:
+    return "Level 0";
+  case symbol_renaming_level::level1:
+    return "Level 1";
+  case symbol_renaming_level::level2:
+    return "Level 2";
+  case symbol_renaming_level::level1_global:
+    return "Level 1 (global)";
+  case symbol_renaming_level::level2_global:
+    return "Level 2 (global)";
+  }
+  assert(0 && "Unrecognized renaming level enum");
+  abort();
 }
 
 std::string type_to_string(const BigInt &theint, int)

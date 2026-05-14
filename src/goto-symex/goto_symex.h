@@ -117,7 +117,7 @@ public:
     return symbol2tc(
       get_bool_type(),
       id2string(guard_identifier_s),
-      symbol2t::level1,
+      symbol_renaming_level::level1,
       0,
       0,
       cur_state->top().level1.thread_id,

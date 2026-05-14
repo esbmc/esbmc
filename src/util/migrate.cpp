@@ -548,7 +548,7 @@ expr2tc sym_name_to_symbol(irep_idt init, type2tc type)
     // Fix this by ensuring that /all/ symbols with the same name use the type
     // from the global symbol table.
     type = migrate_type(sym->type);
-    return symbol2tc(type, init, symbol2t::level0, 0, 0, 0, 0);
+    return symbol2tc(type, init, symbol_renaming_level::level0, 0, 0, 0, 0);
   }
   if (
     init.as_string().compare(0, 3, "cs$") == 0 ||
@@ -558,7 +558,7 @@ expr2tc sym_name_to_symbol(irep_idt init, type2tc type)
   {
     // This is part of k-induction, where the type is slowly accumulated over
     // time, and the symbol never makes its way into the symbol table :|
-    return symbol2tc(type, init, symbol2t::level0, 0, 0, 0, 0);
+    return symbol2tc(type, init, symbol_renaming_level::level0, 0, 0, 0, 0);
   }
 
   // Renamed to at least level 1,
@@ -570,21 +570,21 @@ expr2tc sym_name_to_symbol(irep_idt init, type2tc type)
   if (thestr.find("#") == std::string::npos)
   {
     // We're level 1.
-    target_level = symbol2t::level1;
+    target_level = symbol_renaming_level::level1;
     and_pos = thestr.size();
     hash_pos = thestr.size();
   }
   else
   {
     // Level 2
-    target_level = symbol2t::level2;
+    target_level = symbol_renaming_level::level2;
     and_pos = thestr.find("&");
     hash_pos = thestr.find("#");
 
     if (at_pos == std::string::npos)
     {
       // However, it's L2 global.
-      target_level = symbol2t::level2_global;
+      target_level = symbol_renaming_level::level2_global;
       end_of_name_pos = and_pos;
     }
   }
@@ -592,7 +592,7 @@ expr2tc sym_name_to_symbol(irep_idt init, type2tc type)
   // Whatever level we're at, set the base name to be nonrenamed.
   irep_idt thename = irep_idt(thestr.substr(0, end_of_name_pos));
 
-  if (target_level != symbol2t::level2_global)
+  if (target_level != symbol_renaming_level::level2_global)
   {
     // Check that at_pos and exm_pos are valid before using them
     if (at_pos == std::string::npos || exm_pos == std::string::npos)
@@ -602,7 +602,7 @@ expr2tc sym_name_to_symbol(irep_idt init, type2tc type)
         "treating as level0 with base name '{}'",
         init,
         thename);
-      return symbol2tc(type, thename, symbol2t::level0, 0, 0, 0, 0);
+      return symbol2tc(type, thename, symbol_renaming_level::level0, 0, 0, 0, 0);
     }
 
     std::string atstr = thestr.substr(at_pos + 1, exm_pos - at_pos - 1);
@@ -616,7 +616,7 @@ expr2tc sym_name_to_symbol(irep_idt init, type2tc type)
     assert(endexmptr != exmstr.c_str());
   }
 
-  if (target_level == symbol2t::level1)
+  if (target_level == symbol_renaming_level::level1)
   {
     return symbol2tc(type, thename, target_level, level1_num, 0, thread_num, 0);
   }
@@ -822,10 +822,10 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     const irep_idt &kind1 = expr.get("kind");
 
-    auto kind2 = kind1 == string_constantt::k_wide ? constant_string2t::WIDE
+    auto kind2 = kind1 == string_constantt::k_wide ? constant_string_kindt::WIDE
                  : kind1 == string_constantt::k_unicode
-                   ? constant_string2t::UNICODE
-                   : constant_string2t::DEFAULT;
+                   ? constant_string_kindt::UNICODE
+                   : constant_string_kindt::DEFAULT;
 
     new_expr_ref = constant_string2tc(t, thestring, kind2);
     return;
@@ -1444,7 +1444,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
       idx = constant_string2tc(
         array_type2tc(get_uint8_type(), gen_ulong(name.size() + 1), false),
         name,
-        constant_string2t::DEFAULT);
+        constant_string_kindt::DEFAULT);
     }
     else
     {
@@ -1809,7 +1809,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
       if (expr.base_name().empty())
         assert(!"No base_name for code_printf2t");
-      new_expr_ref = code_printf2tc(args, expr.base_name());
+      new_expr_ref = code_printf2tc(args, printf_kind_from_name(expr.base_name()));
       return;
     }
     else if (expr.statement() == "printf2")
@@ -1905,7 +1905,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     if (expr.base_name().empty())
       assert(!"No base_name for code_printf2t");
-    new_expr_ref = code_printf2tc(ops, expr.base_name());
+    new_expr_ref = code_printf2tc(ops, printf_kind_from_name(expr.base_name()));
     return;
   }
 
@@ -2501,13 +2501,13 @@ exprt migrate_expr_back(const expr2tc &ref)
     irep_idt kind;
     switch (ref2.kind)
     {
-    case constant_string2t::DEFAULT:
+    case constant_string_kindt::DEFAULT:
       kind = string_constantt::k_default;
       break;
-    case constant_string2t::WIDE:
+    case constant_string_kindt::WIDE:
       kind = string_constantt::k_wide;
       break;
-    case constant_string2t::UNICODE:
+    case constant_string_kindt::UNICODE:
       kind = string_constantt::k_unicode;
       break;
     }
@@ -3344,7 +3344,17 @@ exprt migrate_expr_back(const expr2tc &ref)
     codeexpr.statement(irep_idt("printf"));
     for (auto const &it : ref2.operands)
       codeexpr.operands().push_back(migrate_expr_back(it));
-    codeexpr.base_name(ref2.bs_name);
+    const char *bs_name = nullptr;
+    switch (ref2.kind)
+    {
+    case printf_kindt::PRINTF: bs_name = "printf"; break;
+    case printf_kindt::FPRINTF: bs_name = "fprintf"; break;
+    case printf_kindt::DPRINTF: bs_name = "dprintf"; break;
+    case printf_kindt::SPRINTF: bs_name = "sprintf"; break;
+    case printf_kindt::VFPRINTF: bs_name = "vfprintf"; break;
+    case printf_kindt::SNPRINTF: bs_name = "snprintf"; break;
+    }
+    codeexpr.base_name(bs_name);
     return codeexpr;
   }
   case expr2t::code_expression_id:
