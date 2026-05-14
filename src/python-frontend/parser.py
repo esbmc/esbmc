@@ -28,25 +28,30 @@ import json
 import os
 import glob
 import base64
+import shutil
+import subprocess
 import tempfile
+from libs.ast2json import ast2json as ast2json_func
 from preprocessor import Preprocessor
 
 
 def run_mypy_strict(filename):
-    """Run mypy in-process when available; skip otherwise."""
-    try:
-        from mypy import api as mypy_api  # pylint: disable=import-outside-toplevel
-    except ImportError:
+    """Run mypy as a subprocess when available; skip otherwise."""
+    mypy_path = shutil.which("mypy")
+    if mypy_path is None:
         return 0, ""
 
     with tempfile.TemporaryDirectory(prefix="esbmc-mypy-cache-") as cache_dir:
-        stdout, stderr, exit_status = mypy_api.run(
-            ["--strict", "--cache-dir", cache_dir, filename]
+        result = subprocess.run(
+            [mypy_path, "--strict", "--cache-dir", cache_dir, filename],
+            capture_output=True,
+            text=True,
+            check=False,
         )
-    output = stdout
-    if stderr:
-        output += stderr
-    return exit_status, output
+    output = result.stdout
+    if result.stderr:
+        output += result.stderr
+    return result.returncode, output
 
 
 def check_usage():
@@ -524,10 +529,9 @@ def generate_ast_json(tree, python_filename, elements_to_import, output_dir, mod
                 filtered_nodes.append(node)
 
     # Convert AST to JSON
-    ast2json_module = import_module_by_name("ast2json", "")
-    if ast2json_module is None:
-        sys.exit(1)
-    ast_json = ast2json_module.ast2json(ast.Module(body=filtered_nodes) if filtered_nodes else tree)
+    ast_json = ast2json_func(
+        ast.Module(body=filtered_nodes, type_ignores=[]) if filtered_nodes else tree
+    )
     ast_json["filename"] = python_filename
     ast_json["ast_output_dir"] = output_dir
 
@@ -613,8 +617,16 @@ def detect_and_process_submodules(node, processed_submodules, output_dir):
     _emit_submodule_asts(module_dir, base_module, output_dir)
 
 
+def check_dependencies():
+    """Warn about missing optional dependencies."""
+    if shutil.which("mypy") is None:
+        print("Warning: mypy not found on PATH; type checking will be skipped.")
+        print("  Install with: pip install mypy  or  pipx install mypy")
+
+
 def main():
     check_usage()
+    check_dependencies()
     filename = sys.argv[1]
     output_dir = sys.argv[2]
 
