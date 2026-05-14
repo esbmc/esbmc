@@ -66,12 +66,12 @@ typedef struct __ESBMC_PyListObj
  */
 typedef struct __ESBMC_PySliceObj
 {
-  long long start;
-  long long stop;
-  long long step;
-  int has_start;
-  int has_stop;
-  int has_step;
+  long long start;    // cppcheck-suppress unusedStructMember
+  long long stop;     // cppcheck-suppress unusedStructMember
+  long long step;     // cppcheck-suppress unusedStructMember
+  int has_start;      // cppcheck-suppress unusedStructMember
+  int has_stop;       // cppcheck-suppress unusedStructMember
+  int has_step;       // cppcheck-suppress unusedStructMember
 } PySliceObject;
 
 #endif /* PYTHON_TYPES_H */
