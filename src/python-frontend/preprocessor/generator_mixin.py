@@ -7,7 +7,7 @@ methods.
 """
 import ast
 import copy
-
+import sys
 
 class GeneratorMixin:
     def _lower_listcomp(self, node):
@@ -468,7 +468,6 @@ class GeneratorMixin:
 
         Returns the list of inlined statements, or None if inlining is not possible.
         """
-        import copy
 
         if not isinstance(node.iter, ast.Name):
             return None
@@ -495,8 +494,6 @@ class GeneratorMixin:
                 elif out is not None:
                     result.append(out)
         except NotImplementedError as e:
-            import sys
-
             print(
                 f"warning: cannot inline generator '{func_name}': {e}", file=sys.stderr
             )
@@ -524,7 +521,6 @@ class GeneratorMixin:
         possible (unknown generator, keyword args, arg count mismatch,
         non-simple loop target, or generator body contains return/yield-from).
         """
-        import copy
 
         gen_call = node.iter
         func_name = gen_call.func.id
@@ -573,8 +569,6 @@ class GeneratorMixin:
                 elif out is not None:
                     stmts.append(out)
         except NotImplementedError as e:
-            import sys
-
             print(
                 f"warning: cannot inline generator '{func_name}': {e}", file=sys.stderr
             )
@@ -595,7 +589,7 @@ class GeneratorMixin:
         post = []
         j = start
         while j < len(stmts):
-            if Preprocessor._has_yield(stmts[j]):
+            if GeneratorMixin._has_yield(stmts[j]):
                 break
             post.append(stmts[j])
             j += 1
@@ -631,7 +625,6 @@ class GeneratorMixin:
                         (e.g. `i += 1` after `yield i`)
             is_repeating: True when the yield is inside a loop
         """
-        import copy
 
         outer_init = []
         yields = []
@@ -744,7 +737,6 @@ class GeneratorMixin:
         Pass targets=None for a standalone next(g) with no assignment target.
         Returns list of statements, or None if inlining is not possible.
         """
-        import copy
 
         body_stmts = self.generator_func_defs.get(func_name)
         if body_stmts is None:
@@ -884,7 +876,7 @@ class GeneratorMixin:
             try:
                 result = ast.literal_eval(left) == ast.literal_eval(right)
                 return [], ast.Constant(value=result)
-            except Exception:
+            except (ValueError, SyntaxError, TypeError):
                 pass
 
         literal_node = None
@@ -910,7 +902,7 @@ class GeneratorMixin:
         if not isinstance(expr_node, ast.Name):
             return [], test_node
 
-        tmp_name = "__esbmc_assert_eq_tmp_{}".format(self._assert_eq_counter)
+        tmp_name = f"__esbmc_assert_eq_tmp_{self._assert_eq_counter}"
         self._assert_eq_counter += 1
         tmp_assign = ast.Assign(
             targets=[ast.Name(id=tmp_name, ctx=ast.Store())],
@@ -937,7 +929,6 @@ class GeneratorMixin:
         before the loop), and mark the generator as initialized so that
         _inline_next_call won't re-emit them inside the loop body.
         """
-        import copy
 
         pre_stmts = []
         for stmt in body:
