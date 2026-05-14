@@ -1,5 +1,12 @@
+/// \file solidity_convert_util.cpp
+/// \brief Utility and helper functions for the Solidity converter.
+///
+/// Provides shared utility methods used across the converter: source location
+/// extraction, AST node search by ID, parent node lookup, contract name
+/// resolution, line number computation from source ranges, JSON AST traversal
+/// helpers, and various name/ID construction routines.
+
 #include <solidity-frontend/solidity_convert.h>
-#include <solidity-frontend/solidity_template.h>
 #include <solidity-frontend/typecast.h>
 #include <util/arith_tools.h>
 #include <util/bitvector.h>
@@ -13,7 +20,6 @@
 #include <optional>
 
 #include <fstream>
-#include <iostream>
 
 void solidity_convertert::get_location_from_node(
   const nlohmann::json &ast_node,
@@ -155,7 +161,7 @@ bool solidity_convertert::get_constant_value(
   std::string &value)
 {
   log_debug("solidity", "get constant var's value");
-  nlohmann::json tmp = find_decl_ref_unique_id(src_ast_json, ref_id);
+  nlohmann::json tmp = find_node_by_id(src_ast_json, ref_id);
   while (!tmp.empty() && tmp.contains("value"))
   {
     auto val_json = tmp["value"];
@@ -163,7 +169,7 @@ bool solidity_convertert::get_constant_value(
     {
       assert(val_json.contains("referencedDeclaration"));
       int new_ref_id = val_json["referencedDeclaration"].get<int>();
-      tmp = find_decl_ref_unique_id(src_ast_json, new_ref_id);
+      tmp = find_node_by_id(src_ast_json, new_ref_id);
     }
     else
     {
@@ -604,40 +610,32 @@ bool solidity_convertert::is_var_getter_matched(
   return false;
 }
 
-void solidity_convertert::get_aux_var(
+void solidity_convertert::get_unique_name(
+  const std::string &name_prefix,
+  const std::string &id_prefix,
   std::string &aux_name,
   std::string &aux_id)
 {
   do
   {
-    aux_name = "_ESBMC_aux" + std::to_string(aux_counter);
-    aux_id = "sol:@" + aux_name;
+    aux_name = name_prefix + std::to_string(aux_counter);
+    aux_id = id_prefix + aux_name;
     ++aux_counter;
   } while (context.find_symbol(aux_id) != nullptr);
 }
 
-void solidity_convertert::get_aux_function(
+void solidity_convertert::get_aux_var(
   std::string &aux_name,
   std::string &aux_id)
 {
-  do
-  {
-    aux_name = "_ESBMC_aux" + std::to_string(aux_counter);
-    aux_id = "sol:@F@" + aux_name;
-    ++aux_counter;
-  } while (context.find_symbol(aux_id) != nullptr);
+  get_unique_name("_ESBMC_aux", "sol:@", aux_name, aux_id);
 }
 
 void solidity_convertert::get_aux_array_name(
   std::string &aux_name,
   std::string &aux_id)
 {
-  do
-  {
-    aux_name = "aux_array" + std::to_string(aux_counter);
-    aux_id = "sol:@" + aux_name;
-    ++aux_counter;
-  } while (context.find_symbol(aux_id) != nullptr);
+  get_unique_name("aux_array", "sol:@", aux_name, aux_id);
 }
 
 void solidity_convertert::get_aux_array(
@@ -656,7 +654,7 @@ void solidity_convertert::get_aux_array(
   // typecast for element
   exprt new_src_expr = src_expr;
   new_src_expr.type().subtype() = sub_t;
-  new_src_expr.type().set("#sol_type", "ARRAY");
+  set_sol_type(new_src_expr.type(), SolidityGrammar::SolType::ARRAY);
   for (exprt &op : new_src_expr.operands())
     solidity_gen_typecast(ns, op, sub_t);
 
@@ -774,7 +772,7 @@ bool solidity_convertert::get_empty_array_ref(
   calc_call.arguments().push_back(size);
   calc_call.arguments().push_back(size_of_expr);
   new_expr = calc_call;
-  new_expr.type().set("#sol_type", "ARRAY_CALLOC");
+  set_sol_type(new_expr.type(), SolidityGrammar::SolType::ARRAY_CALLOC);
 
   return false;
 }
@@ -908,20 +906,18 @@ const nlohmann::json &solidity_convertert::find_parent_contract(
   return empty_json;
 }
 
-// Searches for the target node inside a contract body.
-// Assumes that the caller is already in the base contract node.
-const nlohmann::json &solidity_convertert::find_decl_ref_in_contract(
-  const nlohmann::json &j,
-  int ref_id)
+// Pure DFS: find the first node with matching "id" field in any JSON subtree.
+// This is the low-level building block used by find_decl_ref and external
+// callers that need unscoped lookup (e.g., during inheritance merging).
+const nlohmann::json &
+solidity_convertert::find_node_by_id(const nlohmann::json &subtree, int ref_id)
 {
-  // Check if this node matches the ref_id.
-  // Skip any nested contract definition (should not occur).
-  if (!j.is_structured())
+  if (!subtree.is_structured())
     return empty_json;
 
   using Frame = const nlohmann::json *;
   std::stack<Frame> stack;
-  stack.push(&j);
+  stack.push(&subtree);
 
   while (!stack.empty())
   {
@@ -931,16 +927,12 @@ const nlohmann::json &solidity_convertert::find_decl_ref_in_contract(
     if (node->is_object())
     {
       if (node->contains("id") && (*node)["id"] == ref_id)
-      {
-        log_debug("solidity", "\tfound");
         return *node;
-      }
 
       for (auto it = node->rbegin(); it != node->rend(); ++it)
       {
-        const auto &value = it.value();
-        if (value.is_structured())
-          stack.push(&value);
+        if (it.value().is_structured())
+          stack.push(&it.value());
       }
     }
     else if (node->is_array())
@@ -956,120 +948,79 @@ const nlohmann::json &solidity_convertert::find_decl_ref_in_contract(
   return empty_json;
 }
 
-// Searches for the target node at the global level.
-// When a ContractDefinition is encountered, only the base contract (by name)
-// is considered and, if matched, its body is searched using find_decl_ref_in_contract.
-const nlohmann::json &
-solidity_convertert::find_decl_ref_global(const nlohmann::json &j, int ref_id)
-{
-  if (!j.is_structured())
-    return empty_json;
-
-  using Frame = const nlohmann::json *;
-  std::stack<Frame> stack;
-  stack.push(&j);
-
-  while (!stack.empty())
-  {
-    const nlohmann::json *node = stack.top();
-    stack.pop();
-
-    if (node->is_object())
-    {
-      // Check if the current object is a ContractDefinition.
-      if (
-        node->contains("nodeType") &&
-        (*node)["nodeType"] == "ContractDefinition")
-      {
-        // we will not merge the contract-definition
-        // so we are safe to compare the id here
-        if (node->contains("id") && (*node)["id"] == ref_id)
-          return *node;
-
-        if (
-          node->contains("contractKind") &&
-          (*node)["contractKind"] == "library")
-        {
-          const nlohmann::json &result =
-            find_decl_ref_in_contract(*node, ref_id);
-          if (!result.is_null() && !result.empty())
-            return result;
-        }
-
-        // This is a contract definition; only process if it is the base contract.
-        if (
-          node->contains("name") && !current_baseContractName.empty() &&
-          (*node)["name"] == current_baseContractName)
-        {
-          // Search recursively in the contract body.
-          const nlohmann::json &result =
-            find_decl_ref_in_contract(*node, ref_id);
-          if (!result.is_null() && !result.empty())
-            return result;
-        }
-
-        // For contract definitions that are not the base, do not search inside.
-        continue;
-      }
-      else
-      {
-        // For non-contract nodes at the global scope,
-        // we can safely check if this node itself matches.
-        if (node->contains("id") && (*node)["id"] == ref_id)
-          return *node;
-      }
-
-      // Recurse on all children of this global-level object.
-      for (auto it = node->rbegin(); it != node->rend(); ++it)
-      {
-        const auto &value = it.value();
-        if (value.is_structured())
-          stack.push(&value);
-      }
-    }
-    else if (node->is_array())
-    {
-      for (auto it = node->rbegin(); it != node->rend(); ++it)
-      {
-        if (it->is_structured())
-          stack.push(&(*it));
-      }
-    }
-  }
-
-  return empty_json;
-}
-
-// find json reference via id only
-const nlohmann::json &solidity_convertert::find_decl_ref_unique_id(
-  const nlohmann::json &j,
-  int ref_id)
-{
-  return find_decl_ref_in_contract(j, ref_id);
-}
-
-// find the first (and the only) node with matched ref_id under based contract
-// the searching range includes: global-definition + based-contract-definition
-// e.g.
-// base_contractName = "Base"
-// file:
-//    struct Test{}  <-- not inside any contract. we will search this
-//    contract Base {}  <-- match. we will search it
-//    contract Dereive{} <-- not match, not searching it
-// The reason we specify base_contractName is that, the `id` is not unqiue any more after we merging the inherited nodes.
-// return empty_json if not found
-const nlohmann::json &
-solidity_convertert::find_decl_ref(const nlohmann::json &j, int ref_id)
+// Scoped declaration lookup.
+// After inheritance merging, node IDs are not unique across contracts
+// (inherited nodes are copied into derived contracts). This function
+// restricts the search to the correct scope:
+//   1. current_baseContractName (the contract being processed)
+//   2. Library contracts
+//   3. Global-scope nodes (structs, enums outside any contract)
+// If not found, falls back to overrideMap for virtual/override resolution.
+const nlohmann::json &solidity_convertert::find_decl_ref(int ref_id)
 {
   log_debug(
     "solidity",
     "\tcurrent base contract name {}, ref_id {}",
     current_baseContractName,
     std::to_string(ref_id));
-  const auto &json = find_decl_ref_global(j, ref_id);
-  if (json.empty() && overrideMap[current_baseContractName].count(ref_id) > 0)
-    return find_decl_ref_global(
-      j, overrideMap[current_baseContractName][ref_id]);
-  else
-    return json;
+
+  if (!src_ast_json.contains("nodes"))
+    return empty_json;
+
+  auto search_scoped = [&](int id) -> const nlohmann::json & {
+    for (const auto &node : src_ast_json["nodes"])
+    {
+      if (!node.is_object())
+        continue;
+
+      bool is_contract =
+        node.contains("nodeType") && node["nodeType"] == "ContractDefinition";
+
+      if (is_contract)
+      {
+        // Check if the contract node itself matches
+        if (node.contains("id") && node["id"] == id)
+          return node;
+
+        bool is_library =
+          node.contains("contractKind") && node["contractKind"] == "library";
+        bool is_base = !current_baseContractName.empty() &&
+                       node.contains("name") &&
+                       node["name"] == current_baseContractName;
+
+        // Only search inside matching contract or library
+        if (is_base || is_library)
+        {
+          const auto &result = find_node_by_id(node, id);
+          if (!result.empty())
+            return result;
+        }
+        // Skip other contracts
+      }
+      else
+      {
+        // Global-scope node (struct, enum, etc.) — always search
+        const auto &result = find_node_by_id(node, id);
+        if (!result.empty())
+          return result;
+      }
+    }
+    return empty_json;
+  };
+
+  const auto &result = search_scoped(ref_id);
+  if (!result.empty())
+    return result;
+
+  // Override fallback: if an inherited function was overridden,
+  // redirect to the overriding function's ID
+  auto override_it = overrideMap.find(current_baseContractName);
+  if (override_it != overrideMap.end())
+  {
+    auto id_it = override_it->second.find(ref_id);
+    if (id_it != override_it->second.end())
+      return search_scoped(id_it->second);
+  }
+
+  return empty_json;
 }

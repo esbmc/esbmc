@@ -1,4 +1,4 @@
 CORE
 main.c
---no-slice --memory-leak-check --incremental-bmc
+--no-slice --memory-leak-check --no-unwinding-assertions --unwind 2
 ^VERIFICATION FAILED$

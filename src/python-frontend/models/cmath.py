@@ -1,3 +1,17 @@
+# pylint: disable=invalid-unary-operand-type
+# Pylint infers None for math.acosh / math.asinh because their underlying
+# __ESBMC_* stubs in math.py have abstract `...` bodies. ESBMC intercepts
+# those calls and replaces them with symbolic floats; the unary-minus
+# operations below are sound under verification.
+#
+# pylint: disable=consider-using-max-builtin,consider-using-min-builtin
+# These branch-form bound clamps are NOT rewritten to max()/min(): doing
+# so would chain into builtins.py's own max/min model, widening the
+# trusted base of every cmath function for zero verification benefit.
+#
+# pylint: disable=consider-using-in,chained-comparison
+# Equality / range checks are kept as explicit Compare-And-Compare
+# AST nodes; the converter has direct, audited support for those forms.
 import math
 
 pi: float = math.pi

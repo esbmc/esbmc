@@ -149,7 +149,7 @@ static type2tc migrate_type0(const typet &type)
     }
     else
     {
-      exprt sz = (exprt &)type.find(typet::a_size);
+      exprt sz = static_cast<const exprt &>(type.find(typet::a_size));
       simplify(sz);
       migrate_expr(sz, size);
       size = fixup_containerof_in_sizeof(size);
@@ -168,7 +168,7 @@ static type2tc migrate_type0(const typet &type)
       "Please, refer to: "
       "https://clang.llvm.org/docs/"
       "LanguageExtensions.html#vectors-and-extended-vectors");
-    exprt sz = (exprt &)type.find(typet::a_size);
+    exprt sz = static_cast<const exprt &>(type.find(typet::a_size));
     simplify(sz);
     migrate_expr(sz, size);
     size = fixup_containerof_in_sizeof(size);
@@ -199,7 +199,7 @@ static type2tc migrate_type0(const typet &type)
 
     for (const auto &comp : comps)
     {
-      type2tc ref = migrate_type((const typet &)comp.type());
+      type2tc ref = migrate_type(comp.type());
 
       members.push_back(ref);
       names.push_back(comp.get(typet::a_name));
@@ -225,7 +225,7 @@ static type2tc migrate_type0(const typet &type)
 
     for (const auto &comp : comps)
     {
-      type2tc ref = migrate_type((const typet &)comp.type());
+      type2tc ref = migrate_type(comp.type());
 
       members.push_back(ref);
       names.push_back(comp.get(typet::a_name));
@@ -263,7 +263,7 @@ static type2tc migrate_type0(const typet &type)
 
     for (const auto &comp : comps)
     {
-      type2tc ref = migrate_type((const typet &)comp.type());
+      type2tc ref = migrate_type(comp.type());
 
       members.push_back(ref);
       names.push_back(comp.get(typet::a_name));
@@ -932,6 +932,15 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     return;
   }
 
+  if (expr.id() == exprt::i_cmp_three_way)
+  {
+    expr2tc side1, side2;
+    convert_operand_pair(expr, side1, side2);
+    type2tc t = migrate_type(expr.type());
+    new_expr_ref = cmp_three_way2tc(t, side1, side2);
+    return;
+  }
+
   if (expr.id() == exprt::i_ge)
   {
     expr2tc side1, side2;
@@ -1057,57 +1066,6 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     convert_operand_pair(expr, side1, side2);
 
     new_expr_ref = bitxor2tc(type, side1, side2);
-    return;
-  }
-
-  if (expr.id() == exprt::i_bitnand)
-  {
-    type = migrate_type(expr.type());
-
-    expr2tc side1, side2;
-    if (expr.operands().size() > 2)
-    {
-      splice_expr(expr, new_expr_ref);
-      return;
-    }
-
-    convert_operand_pair(expr, side1, side2);
-
-    new_expr_ref = bitnand2tc(type, side1, side2);
-    return;
-  }
-
-  if (expr.id() == exprt::i_bitnor)
-  {
-    type = migrate_type(expr.type());
-
-    expr2tc side1, side2;
-    if (expr.operands().size() > 2)
-    {
-      splice_expr(expr, new_expr_ref);
-      return;
-    }
-
-    convert_operand_pair(expr, side1, side2);
-
-    new_expr_ref = bitnor2tc(type, side1, side2);
-    return;
-  }
-
-  if (expr.id() == exprt::i_bitnxor)
-  {
-    type = migrate_type(expr.type());
-
-    expr2tc side1, side2;
-    if (expr.operands().size() > 2)
-    {
-      splice_expr(expr, new_expr_ref);
-      return;
-    }
-
-    convert_operand_pair(expr, side1, side2);
-
-    new_expr_ref = bitnxor2tc(type, side1, side2);
     return;
   }
 
@@ -1805,13 +1763,14 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     if (expr.statement() == "cpp_new" || expr.statement() == "cpp_new[]")
       // These hide the size in a real size field,
-      migrate_expr((const exprt &)expr.cmt_size(), thesize);
+      migrate_expr(static_cast<const exprt &>(expr.cmt_size()), thesize);
     else if (
       expr.statement() != "nondet" && expr.statement() != "function_call")
       // For everything other than nondet,
-      migrate_expr((const exprt &)expr.cmt_size(), thesize);
+      migrate_expr(static_cast<const exprt &>(expr.cmt_size()), thesize);
 
-    type2tc cmt_type = migrate_type((const typet &)expr.cmt_type());
+    type2tc cmt_type =
+      migrate_type(static_cast<const typet &>(expr.cmt_type()));
     type2tc plaintype = migrate_type(expr.type());
 
     sideeffect2t::allockind t;
@@ -2478,7 +2437,7 @@ typet migrate_type_back(const type2tc &ref)
     if (ref2.template_args.size() != 0)
     {
       exprt args("template_args");
-      exprt &arglist = (exprt &)args.add("arguments");
+      exprt &arglist = static_cast<exprt &>(args.add("arguments"));
       for (auto const &it : ref2.template_args)
       {
         typet tmp = migrate_type_back(it);
@@ -2491,7 +2450,7 @@ typet migrate_type_back(const type2tc &ref)
     }
 
     typet ret;
-    ret.swap((irept &)thetype);
+    ret.swap(thetype);
     return ret;
   }
   default:
@@ -2711,6 +2670,14 @@ exprt migrate_expr_back(const expr2tc &ref)
       migrate_expr_back(ref2.side_1), migrate_expr_back(ref2.side_2));
     return greaterthanequal;
   }
+  case expr2t::cmp_three_way_id:
+  {
+    const cmp_three_way2t &ref2 = to_cmp_three_way2t(ref);
+    exprt cmp(exprt::i_cmp_three_way, migrate_type_back(ref2.type));
+    cmp.copy_to_operands(
+      migrate_expr_back(ref2.side_1), migrate_expr_back(ref2.side_2));
+    return cmp;
+  }
   case expr2t::not_id:
   {
     const not2t &ref2 = to_not2t(ref);
@@ -2774,33 +2741,6 @@ exprt migrate_expr_back(const expr2tc &ref)
     bitxorval.copy_to_operands(
       migrate_expr_back(ref2.side_1), migrate_expr_back(ref2.side_2));
     return bitxorval;
-  }
-  case expr2t::bitnand_id:
-  {
-    const bitnand2t &ref2 = to_bitnand2t(ref);
-    typet thetype = migrate_type_back(ref->type);
-    exprt bitnandval("bitnand", thetype);
-    bitnandval.copy_to_operands(
-      migrate_expr_back(ref2.side_1), migrate_expr_back(ref2.side_2));
-    return bitnandval;
-  }
-  case expr2t::bitnor_id:
-  {
-    const bitnor2t &ref2 = to_bitnor2t(ref);
-    typet thetype = migrate_type_back(ref->type);
-    exprt bitnorval("bitnor", thetype);
-    bitnorval.copy_to_operands(
-      migrate_expr_back(ref2.side_1), migrate_expr_back(ref2.side_2));
-    return bitnorval;
-  }
-  case expr2t::bitnxor_id:
-  {
-    const bitnxor2t &ref2 = to_bitnxor2t(ref);
-    typet thetype = migrate_type_back(ref->type);
-    exprt bitnxorval("bitnxor", thetype);
-    bitnxorval.copy_to_operands(
-      migrate_expr_back(ref2.side_1), migrate_expr_back(ref2.side_2));
-    return bitnxorval;
   }
   case expr2t::bitnot_id:
   {

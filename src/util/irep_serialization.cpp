@@ -119,7 +119,7 @@ void write_string(std::ostream &out, const std::string &s)
   out.put(0);
 }
 
-dstring irep_serializationt::read_string(std::istream &in)
+irep_idt irep_serializationt::read_string(std::istream &in)
 {
   char c;
   unsigned i = 0;
@@ -139,10 +139,10 @@ dstring irep_serializationt::read_string(std::istream &in)
     read_buffer.resize(read_buffer.size() * 2, 0);
   read_buffer[i] = 0;
 
-  return dstring(&(read_buffer[0]));
+  return irep_idt(&(read_buffer[0]));
 }
 
-void irep_serializationt::write_string_ref(std::ostream &out, const dstring &s)
+void irep_serializationt::write_string_ref(std::ostream &out, const irep_idt &s)
 {
   unsigned id = s.get_no();
   if (id >= ireps_container.string_map.size())
@@ -164,13 +164,13 @@ irep_idt irep_serializationt::read_string_ref(std::istream &in)
 
   if (id >= ireps_container.string_rev_map.size())
     ireps_container.string_rev_map.resize(
-      1 + id * 2, std::pair<bool, dstring>(false, dstring()));
+      1 + id * 2, std::pair<bool, irep_idt>(false, irep_idt()));
   if (ireps_container.string_rev_map[id].first)
   {
     return ireps_container.string_rev_map[id].second;
   }
 
-  dstring s = read_string(in);
-  ireps_container.string_rev_map[id] = std::pair<bool, dstring>(true, s);
+  irep_idt s = read_string(in);
+  ireps_container.string_rev_map[id] = std::pair<bool, irep_idt>(true, s);
   return ireps_container.string_rev_map[id].second;
 }

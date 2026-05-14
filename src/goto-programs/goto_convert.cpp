@@ -482,6 +482,10 @@ bool goto_convertt::rewrite_vla_decl_size(exprt &size, goto_programt &dest)
   if (size.is_constant())
     return false;
 
+  // Infinite size (e.g. Solidity mappings) is not a VLA
+  if (size.id() == "infinity")
+    return false;
+
   // We have to replace the symbol by a temporary, because it might
   // change its value in the future
   // Don't create a symbol for temporary symbols
@@ -1471,7 +1475,11 @@ void goto_convertt::convert_atomic_begin(const codet &code, goto_programt &dest)
     abort();
   }
 
-  copy(code, ATOMIC_BEGIN, dest);
+  // ATOMIC_BEGIN/END are pure type markers; the instruction's code field
+  // is irrelevant. Emit directly to avoid the migrate_expr round-trip that
+  // copy() would do for the empty codet.
+  goto_programt::targett t = dest.add_instruction(ATOMIC_BEGIN);
+  t->location = code.location();
 }
 
 void goto_convertt::convert_atomic_end(const codet &code, goto_programt &dest)
@@ -1482,7 +1490,8 @@ void goto_convertt::convert_atomic_end(const codet &code, goto_programt &dest)
     abort();
   }
 
-  copy(code, ATOMIC_END, dest);
+  goto_programt::targett t = dest.add_instruction(ATOMIC_END);
+  t->location = code.location();
 }
 
 /// if(guard) true_case; else false_case;

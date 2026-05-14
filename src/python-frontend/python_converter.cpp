@@ -1526,6 +1526,15 @@ exprt python_converter::handle_string_type_mismatch(
   if (!((lhs_is_string && !rhs_is_string) || (!lhs_is_string && rhs_is_string)))
     return nil_exprt(); // No mismatch, return nil to indicate no action taken
 
+  // Bail out on void* vs string;
+  // the caller's strcmp path handles it instead of folding to a static False
+  // (the void* may hold a string).
+  auto is_void_ptr = [](const typet &t) {
+    return t.is_pointer() && t.subtype().id() == "empty";
+  };
+  if (is_void_ptr(lhs.type()) || is_void_ptr(rhs.type()))
+    return nil_exprt();
+
   exprt lhs_char_value = python_char_utils::get_char_value_as_int(lhs, false);
   exprt rhs_char_value = python_char_utils::get_char_value_as_int(rhs, false);
 
@@ -1740,6 +1749,13 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     return dict_handler_->compare(lhs, rhs, op);
   }
 
+  // Handle tuple +/* before list operations (tuple structs would otherwise
+  // fall through to the generic struct-arithmetic path and silently produce
+  // a struct of the original size).
+  exprt tuple_result = handle_tuple_operations(op, lhs, rhs, element);
+  if (!tuple_result.is_nil())
+    return tuple_result;
+
   // Handle list operations
   exprt list_result =
     handle_list_operations(op, lhs, rhs, left, right, element);
@@ -1791,6 +1807,50 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     if (element.contains("comparators") && element["comparators"].size() > 1)
       return handle_chained_comparisons_logic(element, string_result);
     return string_result;
+  }
+
+  // void* vs string: emit `strcmp(a, b) op 0`
+  // instead of decaying to pointer equality or returning a static False.
+  // Hits when one side is an unannotated class attribute holding a string.
+  if (op == "Eq" || op == "NotEq")
+  {
+    auto is_void_ptr = [](const typet &t) {
+      return t.is_pointer() && t.subtype().id() == "empty";
+    };
+    auto is_string_like = [](const typet &t) {
+      return (t.is_array() || t.is_pointer()) && t.subtype() == char_type();
+    };
+    const bool lhs_void = is_void_ptr(lhs.type());
+    const bool rhs_void = is_void_ptr(rhs.type());
+    if (
+      (lhs_void && is_string_like(rhs.type())) ||
+      (rhs_void && is_string_like(lhs.type())))
+    {
+      const symbolt *strcmp_symbol = symbol_table_.find_symbol("c:@F@strcmp");
+      if (strcmp_symbol)
+      {
+        // Normalise each side to char*: cast void*, take base address of arrays.
+        const typet char_ptr = pointer_typet(char_type());
+        auto as_char_ptr = [&](const exprt &e) -> exprt {
+          if (is_void_ptr(e.type()))
+            return typecast_exprt(e, char_ptr);
+          if (e.type().is_array())
+            return string_handler_.get_array_base_address(e);
+          return e;
+        };
+
+        side_effect_expr_function_callt strcmp_call;
+        strcmp_call.function() = symbol_expr(*strcmp_symbol);
+        strcmp_call.arguments() = {as_char_ptr(lhs), as_char_ptr(rhs)};
+        strcmp_call.location() = get_location_from_decl(element);
+        strcmp_call.type() = int_type();
+
+        exprt result(map_operator(op, bool_type()), bool_type());
+        result.copy_to_operands(strcmp_call, gen_zero(int_type()));
+        result.location() = get_location_from_decl(element);
+        return result;
+      }
+    }
   }
 
   // Handle type mismatches
@@ -1950,6 +2010,84 @@ exprt python_converter::handle_array_operations(
   if (op == "Add")
     return string_handler_.handle_string_concatenation_with_promotion(
       lhs, rhs, left, right);
+
+  return nil_exprt();
+}
+
+exprt python_converter::handle_tuple_operations(
+  const std::string &op,
+  exprt &lhs,
+  exprt &rhs,
+  const nlohmann::json &element)
+{
+  const bool lhs_is_tuple = tuple_handler_->is_tuple_type(lhs.type());
+  const bool rhs_is_tuple = tuple_handler_->is_tuple_type(rhs.type());
+
+  // Concatenation: (a, b) + (c, d) == (a, b, c, d).
+  if (op == "Add" && lhs_is_tuple && rhs_is_tuple)
+  {
+    const auto &lhs_components = to_struct_type(lhs.type()).components();
+    const auto &rhs_components = to_struct_type(rhs.type()).components();
+
+    std::vector<typet> element_types;
+    element_types.reserve(lhs_components.size() + rhs_components.size());
+    for (const auto &c : lhs_components)
+      element_types.push_back(c.type());
+    for (const auto &c : rhs_components)
+      element_types.push_back(c.type());
+
+    struct_typet new_type =
+      tuple_handler_->create_tuple_struct_type(element_types);
+
+    struct_exprt result(new_type);
+    for (const auto &c : lhs_components)
+      result.copy_to_operands(member_exprt(lhs, c.get_name(), c.type()));
+    for (const auto &c : rhs_components)
+      result.copy_to_operands(member_exprt(rhs, c.get_name(), c.type()));
+
+    if (element.contains("lineno"))
+      result.location() = get_location_from_decl(element);
+    return result;
+  }
+
+  // Repetition: (a, b) * 3 == (a, b, a, b, a, b). Requires a constant
+  // non-negative repeat count, since the result type must be known.
+  if (op == "Mult" && (lhs_is_tuple || rhs_is_tuple))
+  {
+    exprt &tuple = lhs_is_tuple ? lhs : rhs;
+    exprt &count = lhs_is_tuple ? rhs : lhs;
+
+    if (
+      !count.is_constant() ||
+      !(count.type().is_signedbv() || count.type().is_unsignedbv()))
+      return nil_exprt();
+
+    BigInt n_big = binary2integer(
+      to_constant_expr(count).value().c_str(), count.type().is_signedbv());
+    if (n_big < 0)
+      n_big = 0;
+    const size_t n = n_big.to_int64();
+
+    const auto &components = to_struct_type(tuple.type()).components();
+
+    std::vector<typet> element_types;
+    element_types.reserve(components.size() * n);
+    for (size_t i = 0; i < n; ++i)
+      for (const auto &c : components)
+        element_types.push_back(c.type());
+
+    struct_typet new_type =
+      tuple_handler_->create_tuple_struct_type(element_types);
+
+    struct_exprt result(new_type);
+    for (size_t i = 0; i < n; ++i)
+      for (const auto &c : components)
+        result.copy_to_operands(member_exprt(tuple, c.get_name(), c.type()));
+
+    if (element.contains("lineno"))
+      result.location() = get_location_from_decl(element);
+    return result;
+  }
 
   return nil_exprt();
 }
@@ -2547,11 +2685,25 @@ python_converter::find_imported_symbol(const std::string &symbol_id) const
   // When the symbol has a class component (py:main@C@Foo@F@bar),
   // use the class name for matching against import names.
   auto parsed = ::symbol_id::from_string(symbol_id);
-  const std::string &lookup_name =
+  std::string lookup_name =
     !parsed.get_class().empty()
       ? parsed.get_class()
       : (parsed.get_function().empty() ? parsed.get_object()
                                        : parsed.get_function());
+
+  // symbol_id::from_string currently parses class/function components but not
+  // trailing object names (e.g. py:file@replace). Recover that case from raw
+  // text so imported free functions are still resolved.
+  if (lookup_name.empty())
+  {
+    const std::size_t at = symbol_id.rfind('@');
+    if (at != std::string::npos && at + 1 < symbol_id.size())
+    {
+      lookup_name = symbol_id.substr(at + 1);
+      if (lookup_name == "C" || lookup_name == "F")
+        lookup_name.clear();
+    }
+  }
 
   auto find_in_import = [&](const nlohmann::json &obj) -> symbolt * {
     if (
@@ -2593,6 +2745,30 @@ python_converter::find_imported_symbol(const std::string &symbol_id) const
         symbolt *func_symbol =
           symbol_table_.find_symbol(imported_symbol.c_str()))
         return func_symbol;
+
+      // Imported free functions are often looked up as object symbols in the
+      // caller scope (e.g., py:main@replace). Also probe the equivalent
+      // function-id form in the imported module (py:module@F@replace).
+      if (!lookup_name.empty())
+      {
+        ::symbol_id imported_sid = ::symbol_id::from_string(imported_symbol);
+        imported_sid.set_class("");
+        imported_sid.set_object("");
+        imported_sid.set_attribute("");
+        imported_sid.set_function(lookup_name);
+
+        if (
+          symbolt *func_symbol =
+            symbol_table_.find_symbol(imported_sid.to_string().c_str()))
+          return func_symbol;
+
+        imported_sid.set_function("");
+        imported_sid.set_object(lookup_name);
+        if (
+          symbolt *obj_symbol =
+            symbol_table_.find_symbol(imported_sid.to_string().c_str()))
+          return obj_symbol;
+      }
     }
 
     return nullptr;
@@ -2764,14 +2940,28 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     return python_list::build_list_from_range(*this, range_args, element);
   }
 
-  // Handle set(iterable) calls
+  // Handle set(iterable) and frozenset(iterable) calls. frozenset is
+  // modelled as a regular set: the verifier doesn't reason about
+  // immutability, so the only divergence (rejecting mutation methods)
+  // is academic for the safety properties we check.
   if (
-    element["func"]["_type"] == "Name" && element["func"]["id"] == "set" &&
+    element["func"]["_type"] == "Name" &&
+    (element["func"]["id"] == "set" || element["func"]["id"] == "frozenset") &&
     element.contains("args") && element["args"].size() == 1)
   {
     exprt iterable_expr = get_expr(element["args"][0]);
     python_set set_handler(*this, element);
     return set_handler.get_from_iterable(iterable_expr, element);
+  }
+
+  // frozenset() with no args — empty frozenset.
+  if (
+    element["func"]["_type"] == "Name" &&
+    element["func"]["id"] == "frozenset" &&
+    (!element.contains("args") || element["args"].empty()))
+  {
+    python_set set_handler(*this, element);
+    return set_handler.get_empty_set();
   }
 
   // Handle list(...) calls
@@ -3656,7 +3846,7 @@ bool python_converter::is_bytes_literal(const nlohmann::json &element)
     const typet &subtype = current_element_type.subtype();
     if (subtype.id() == "unsignedbv")
     {
-      // Convert dstring width to integer
+      // Convert irep_idt width to integer
       const irep_idt &width_str = subtype.width();
       try
       {
@@ -4180,6 +4370,85 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     }
     else if (element["_type"] == "Attribute")
     {
+      // Resolve `<base>.<attr>` after unwrapping Optional[T] / pointer-to-struct
+      // / complex types. Returns nil if the attribute cannot be resolved.
+      auto resolve_member_on_base =
+        [this](exprt base_expr, const std::string &attr_name) -> exprt {
+        typet base_type = base_expr.type();
+        if (base_type.is_pointer())
+          base_type = base_type.subtype();
+        if (base_type.id() == "symbol")
+          base_type = ns.follow(base_type);
+
+        // Unwrap Optional[T] before attribute access.
+        if (base_type.is_struct())
+        {
+          const struct_typet &opt_st = to_struct_type(base_type);
+          const std::string &tag = opt_st.tag().as_string();
+          if (
+            tag.rfind("tag-Optional_", 0) == 0 &&
+            opt_st.has_component("value") && !opt_st.has_component(attr_name))
+          {
+            const typet &inner_raw = opt_st.get_component("value").type();
+            exprt optional_base = base_expr;
+            if (optional_base.type().is_pointer())
+            {
+              exprt deref("dereference");
+              deref.type() = optional_base.type().subtype();
+              deref.move_to_operands(optional_base);
+              optional_base = std::move(deref);
+            }
+            base_expr = member_exprt(optional_base, "value", inner_raw);
+            base_type = inner_raw;
+            if (base_type.is_pointer())
+              base_type = base_type.subtype();
+            if (base_type.id() == "symbol")
+              base_type = ns.follow(base_type);
+          }
+        }
+
+        // Unwrap pointer-to-struct so the struct component lookup succeeds.
+        if (base_type.is_pointer())
+        {
+          typet pointed_to = base_type.subtype();
+          if (pointed_to.id() == "symbol")
+            pointed_to = ns.follow(pointed_to);
+          if (pointed_to.is_struct())
+            base_type = pointed_to;
+        }
+
+        // Delegate complex attribute access (.real, .imag) to the handler.
+        if (is_complex_type(base_type))
+        {
+          exprt result =
+            complex_handler_.handle_attribute_access(base_expr, attr_name);
+          if (!result.is_nil())
+            return result;
+        }
+
+        if (base_type.is_struct())
+        {
+          const struct_typet &struct_type = to_struct_type(base_type);
+          if (struct_type.has_component(attr_name))
+          {
+            const typet &attr_type =
+              struct_type.get_component(attr_name).type();
+            typet clean_type = clean_attribute_type(attr_type);
+            exprt member_base = base_expr;
+            if (member_base.type().is_pointer())
+            {
+              exprt deref("dereference");
+              deref.type() = member_base.type().subtype();
+              deref.move_to_operands(member_base);
+              member_base = std::move(deref);
+            }
+            return member_exprt(member_base, attr_name, clean_type);
+          }
+        }
+
+        return nil_exprt();
+      };
+
       // Handle nested attribute chain (e.g., self.b.a)
       if (element["value"]["_type"] == "Attribute")
       {
@@ -4241,80 +4510,11 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           }
         }
 
-        // Unwrap Optional[T] before attribute access.
-        // e.g., y.tail.head where tail: Optional[List] → unwrap .value to get List
-        if (base_type.is_struct())
+        exprt resolved = resolve_member_on_base(base_expr, attr_name);
+        if (!resolved.is_nil())
         {
-          const struct_typet &opt_st = to_struct_type(base_type);
-          const std::string &tag = opt_st.tag().as_string();
-          if (
-            tag.rfind("tag-Optional_", 0) == 0 &&
-            opt_st.has_component("value") && !opt_st.has_component(attr_name))
-          {
-            const typet &inner_raw = opt_st.get_component("value").type();
-            exprt optional_base = base_expr;
-            if (optional_base.type().is_pointer())
-            {
-              exprt deref("dereference");
-              deref.type() = optional_base.type().subtype();
-              deref.move_to_operands(optional_base);
-              optional_base = std::move(deref);
-            }
-            base_expr = member_exprt(optional_base, "value", inner_raw);
-            base_type = inner_raw;
-            if (base_type.is_pointer())
-              base_type = base_type.subtype();
-            if (base_type.id() == "symbol")
-              base_type = ns.follow(base_type);
-          }
-        }
-
-        // Unwrap pointer-to-struct for attribute access.
-        // e.g., tail: Optional["List"] is stored as a pointer to tag-List;
-        // update base_type so the struct component lookup below succeeds.
-        // The actual dereference node is inserted by the handler below.
-        if (base_type.is_pointer())
-        {
-          typet pointed_to = base_type.subtype();
-          if (pointed_to.id() == "symbol")
-            pointed_to = ns.follow(pointed_to);
-          if (pointed_to.is_struct())
-            base_type = pointed_to;
-        }
-
-        // Delegate complex attribute access (.real, .imag) to the handler.
-        if (is_complex_type(base_type))
-        {
-          exprt result =
-            complex_handler_.handle_attribute_access(base_expr, attr_name);
-          if (!result.is_nil())
-          {
-            expr = result;
-            break;
-          }
-        }
-
-        if (base_type.is_struct())
-        {
-          const struct_typet &struct_type = to_struct_type(base_type);
-          if (struct_type.has_component(attr_name))
-          {
-            const typet &attr_type =
-              struct_type.get_component(attr_name).type();
-            typet clean_type = clean_attribute_type(attr_type);
-            exprt member_base = base_expr;
-            if (member_base.type().is_pointer())
-            {
-              exprt deref("dereference");
-              deref.type() = member_base.type().subtype();
-              deref.move_to_operands(member_base);
-              member_base = std::move(deref);
-            }
-
-            member_exprt member_expr(member_base, attr_name, clean_type);
-            expr = member_expr;
-            break;
-          }
+          expr = resolved;
+          break;
         }
 
         log_error("Cannot resolve nested attribute: {}", attr_name);
@@ -4323,6 +4523,23 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       else if (element["value"]["_type"] == "Name")
       {
         var_name = element["value"]["id"].get<std::string>();
+      }
+      else if (element["value"]["_type"] == "Subscript")
+      {
+        // Attribute access on a subscript result, e.g. `d[key].attr`.
+        exprt base_expr = get_expr(element["value"]);
+        const std::string &attr_name = element["attr"].get<std::string>();
+
+        exprt resolved = resolve_member_on_base(base_expr, attr_name);
+        if (!resolved.is_nil())
+        {
+          expr = resolved;
+          break;
+        }
+
+        log_error(
+          "Cannot resolve attribute '{}' on subscript result", attr_name);
+        abort();
       }
       else
       {
@@ -4732,6 +4949,19 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     const nlohmann::json &slice = element["slice"];
     typet array_type = ns.follow(array.type());
 
+    // Unwrap pointer-to-dict so d[key] reaches the dict handler when
+    // d is held by pointer (e.g. dict-of-class-value via the symbol table).
+    typet array_type_for_dict = array_type;
+    bool array_is_dict_pointer = false;
+    if (array_type_for_dict.is_pointer())
+    {
+      typet pointed = ns.follow(array_type_for_dict.subtype());
+      if (pointed.is_struct() && dict_handler_->is_dict_type(pointed))
+      {
+        array_type_for_dict = pointed;
+        array_is_dict_pointer = true;
+      }
+    }
     // Handle tuple subscripting - tuples are structs, not arrays
     if (tuple_handler_->is_tuple_type(array_type))
     {
@@ -4740,8 +4970,18 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     }
 
     // Handle dictionary subscript with type inference from annotations
-    if (array_type.is_struct() && dict_handler_->is_dict_type(array_type))
+    if (
+      array_type_for_dict.is_struct() &&
+      dict_handler_->is_dict_type(array_type_for_dict))
     {
+      // Dereference once so the handler operates on the dict struct.
+      if (array_is_dict_pointer)
+      {
+        dereference_exprt deref(array, array_type_for_dict);
+        deref.type() = array_type_for_dict;
+        array = std::move(deref);
+      }
+
       // Try to resolve the expected return type from the dict's type annotation
       typet expected_type =
         dict_handler_->resolve_expected_type_for_dict_subscript(array);
@@ -5194,14 +5434,15 @@ void python_converter::handle_assignment_type_adjustments(
       lhs_symbol->type = rhs.type();
       lhs.type() = rhs.type();
     }
+    // No annotation or preprocessor-inferred Any: propagate rhs type to lhs.
     else if (
-      !has_annotation && !rhs.type().is_empty() && lhs.type() != rhs.type() &&
+      (!has_annotation ||
+       (ast_node.value("_inferred_annotation", false) &&
+        ast_node["annotation"].value("id", std::string()) == "Any")) &&
+      !rhs.type().is_empty() && lhs.type() != rhs.type() &&
       !rhs.type().is_code() &&
       !(rhs.type().is_pointer() && rhs.type().subtype().id() == "empty"))
     {
-      // Default case: allow Python's dynamic typing by updating the variable
-      // type to match the assigned value. Type annotations are enforced via
-      // runtime assertions rather than static typing.
       lhs_symbol->type = rhs.type();
       lhs.type() = rhs.type();
     }
@@ -5698,6 +5939,11 @@ symbolt *python_converter::create_symbol_for_unannotated_assign(
         // popitem() returns (key, value) tuple — infer the full tuple type
         inferred_type =
           dict_handler_->get_popitem_tuple_type(symbol_expr(*obj_sym));
+      }
+      else if (method == "copy")
+      {
+        // copy() returns a new dict, not a single element value.
+        inferred_type = dict_handler_->get_dict_struct_type();
       }
       else
       {
@@ -6649,7 +6895,8 @@ typet python_converter::resolve_variable_type(
   const std::string &var_name,
   const locationt &loc)
 {
-  nlohmann::json decl_node = get_var_node(var_name, *ast_json);
+  std::string function = loc.get_function().as_string();
+  nlohmann::json decl_node = find_var_decl(var_name, function, *ast_json);
 
   if (!decl_node.empty())
   {
@@ -6681,7 +6928,6 @@ typet python_converter::resolve_variable_type(
   }
 
   std::string filename = loc.get_file().as_string();
-  std::string function = loc.get_function().as_string();
   std::string symbol_id = "py:" + filename + "@F@" + function + "@" + var_name;
 
   const symbolt *sym = symbol_table_.find_symbol(symbol_id);
@@ -8637,6 +8883,16 @@ typet python_converter::infer_return_type_from_body(const nlohmann::json &body)
     if (stmt["_type"] == "Return" && !stmt["value"].is_null())
     {
       const auto &ret_val = stmt["value"];
+
+      // `return self` in a method: surface the class's struct value type so
+      // callers can assign to a `Class`-typed local. Without this, fallback
+      // inference picks up `Class *` from `self` and the call-site assignment
+      // becomes a pointer-to-struct mismatch that trips an assertion in
+      // value_set::make_member on later member access. See GitHub #4514.
+      if (
+        ret_val["_type"] == "Name" && ret_val.contains("id") &&
+        ret_val["id"] == "self" && !current_class_name_.empty())
+        return type_handler_.get_typet(current_class_name_);
 
       // If returning a tuple, infer its type
       if (ret_val["_type"] == "Tuple")

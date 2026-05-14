@@ -21,7 +21,7 @@ jobs:
 
   build-windows:
     uses: ./.github/workflows/build-windows.yml
-    name: static llvm-16 DebugOpt
+    name: static llvm-22 DebugOpt
     with:
       operating-system: windows-latest
       build-flags: '-b DebugOpt -e ON'
@@ -57,7 +57,7 @@ jobs:
       shell: bash
       run: |
         mapfile -t files < <(
-          git diff --name-only "origin/${{ github.base_ref }}...HEAD" -- src unit |
+          git diff --name-only --diff-filter=d "origin/${{ github.base_ref }}...HEAD" -- src unit |
           grep -E '\.(h|c|cpp|hpp|hh)$' |
           grep -v '^src/ansi-c/cpp/' |
           grep -v '^src/clang-c-frontend/headers/' |
@@ -78,6 +78,31 @@ jobs:
     - name: Throws error if changes were made
       run: git diff --exit-code --ignore-cr-at-eol
       if: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
+
+
+  # Check CMake files with cmakelint
+  cmake-lint:
+    name: Check CMake style (cmakelint)
+    runs-on: ubuntu-slim
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Install cmakelint
+        run: pip install cmakelint
+      - name: Run cmakelint on tracked CMake files
+        shell: bash
+        run: |
+          mapfile -t files < <(
+            git ls-files '*.cmake' 'CMakeLists.txt' '**/CMakeLists.txt' '**/*.cmake'
+          )
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "No CMake files to lint."
+            exit 0
+          fi
+          cmakelint --config=.cmakelintrc "${files[@]}"
 
 
   # Check project with YAPF
@@ -106,7 +131,7 @@ jobs:
           shell: bash
           run: |
             mapfile -t files < <(
-              git diff --name-only "origin/${{ github.base_ref }}...HEAD" -- src/python-frontend regression/python |
+              git diff --name-only --diff-filter=d "origin/${{ github.base_ref }}...HEAD" -- src/python-frontend regression/python |
               grep -E '\.py$' || true
             )
 

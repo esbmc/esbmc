@@ -107,7 +107,7 @@ bool read_bin_goto_object(
   for (unsigned i = 0; i < count; i++)
   {
     irept t;
-    dstring fname = irepconverter.read_string(in);
+    irep_idt fname = irepconverter.read_string(in);
     gfconverter.convert(in, t);
     auto it = goto_functions.function_map.find(fname);
     if (it == goto_functions.function_map.end())

@@ -1,5 +1,12 @@
+/// \file solidity_convert_mapping.cpp
+/// \brief Mapping type conversion for the Solidity frontend.
+///
+/// Converts Solidity mapping types into ESBMC's representation using
+/// infinite arrays (modeled as arrays with nondet size). Handles nested
+/// mappings, mapping access expressions, and the generation of helper
+/// symbols for mapping state variables.
+
 #include <solidity-frontend/solidity_convert.h>
-#include <solidity-frontend/solidity_template.h>
 #include <solidity-frontend/typecast.h>
 #include <util/arith_tools.h>
 #include <util/bitvector.h>
@@ -9,11 +16,7 @@
 #include <util/mp_arith.h>
 #include <util/std_expr.h>
 #include <util/message.h>
-#include <regex>
-#include <optional>
-
 #include <fstream>
-#include <iostream>
 
 void solidity_convertert::get_mapping_inf_arr_name(
   const std::string &cname,
@@ -42,8 +45,8 @@ bool solidity_convertert::get_mapping_key_value_type(
   const nlohmann::json &map_node,
   typet &key_t,
   typet &value_t,
-  std::string &key_sol_type,
-  std::string &val_sol_type)
+  SolidityGrammar::SolType &key_sol_type,
+  SolidityGrammar::SolType &val_sol_type)
 {
   assert(map_node.contains("typeName"));
   if (get_type_description(
@@ -60,9 +63,9 @@ bool solidity_convertert::get_mapping_key_value_type(
   }
 
   // set type flag
-  key_sol_type = key_t.get("#sol_type").as_string();
-  val_sol_type = value_t.get("#sol_type").as_string();
-  if (val_sol_type.empty())
+  key_sol_type = get_sol_type(key_t);
+  val_sol_type = get_sol_type(value_t);
+  if (val_sol_type == SolidityGrammar::SolType::UNSET)
     return true;
   return false;
 }
@@ -98,8 +101,8 @@ bool solidity_convertert::get_dynamic_pool(
       return true;
   }
 
-  pool =
-    member_exprt(cur_this_expr, "$dynamic_pool", symbol_typet("tag-BytesPool"));
+  pool = member_exprt(
+    cur_this_expr, "$dynamic_pool", symbol_typet(lib_prefix + "BytesPool"));
 
   return false;
 }
@@ -190,10 +193,15 @@ bool solidity_convertert::has_contract_bytes(const nlohmann::json &node)
   {
     if (
       node.contains("typeDescriptions") &&
-      node["typeDescriptions"].contains("typeString") &&
-      node["typeDescriptions"]["typeString"] == "bytes")
+      node["typeDescriptions"].contains("typeString"))
     {
-      return true;
+      const std::string &ts = node["typeDescriptions"]["typeString"];
+      // Match "bytes", "bytes storage pointer", "bytes memory", etc.
+      // Also match "string" variants since string uses BytesDynamic internally.
+      if (
+        ts == "bytes" || ts.substr(0, 6) == "bytes " || ts == "string" ||
+        ts.substr(0, 7) == "string ")
+        return true;
     }
 
     for (const auto &kv : node.items())
@@ -220,8 +228,10 @@ void solidity_convertert::gen_mapping_key_typecast(
   const locationt &location,
   const typet &key_type)
 {
-  std::string key_sol_type = key_type.get("#sol_type").as_string();
-  if (key_sol_type == "STRING" || key_sol_type == "STRING_LITERAL")
+  SolidityGrammar::SolType key_sol_type = get_sol_type(key_type);
+  if (
+    key_sol_type == SolidityGrammar::SolType::STRING ||
+    key_sol_type == SolidityGrammar::SolType::STRING_LITERAL)
   {
     side_effect_expr_function_callt str2uint_call;
     assert(context.find_symbol("c:@F@str2uint") != nullptr);
@@ -278,6 +288,33 @@ void solidity_convertert::gen_mapping_key_typecast(
   solidity_gen_typecast(ns, pos, unsignedbv_typet(256));
 }
 
+void solidity_convertert::xor_fold_key_to_64bit(exprt &key)
+{
+  // Fold a 256-bit mapping key to 64-bit to avoid SMT performance issues
+  // with 256-bit array domains, while preserving collision resistance at 2^-64.
+  //
+  // Routed through a single library call _ESBMC_str_key_fold64 so the side
+  // effect of `key` (e.g. a str2uint or bytes_static_to_mapping_key
+  // function call) is evaluated exactly once. An inline 4-way XOR over `key`
+  // would duplicate the side effect and produce four independent symbolic
+  // results that fail to alias on equal inputs (causing false negatives on
+  // mapping reads that should hit a previously-stored entry).
+
+  const locationt loc = static_cast<const locationt &>(key.find("#location"));
+
+  side_effect_expr_function_callt fold_call;
+  assert(context.find_symbol("c:@F@_ESBMC_str_key_fold64") != nullptr);
+  get_library_function_call_no_args(
+    "_ESBMC_str_key_fold64",
+    "c:@F@_ESBMC_str_key_fold64",
+    unsignedbv_typet(64),
+    loc,
+    fold_call);
+  fold_call.arguments().push_back(key);
+
+  key = fold_call;
+}
+
 /**
   index accesss could either be set or get:
   x[1]      => map_uint_get(&m, 1)
@@ -288,7 +325,7 @@ void solidity_convertert::gen_mapping_key_typecast(
 */
 bool solidity_convertert::get_new_mapping_index_access(
   const typet &value_t,
-  const std::string &val_sol_type,
+  SolidityGrammar::SolType val_sol_type,
   bool is_mapping_set,
   const exprt &array,
   const exprt &pos,
@@ -298,24 +335,27 @@ bool solidity_convertert::get_new_mapping_index_access(
   std::string val_flg;
   typet func_type;
   if (
-    val_sol_type.find("UINT") != std::string::npos ||
-    val_sol_type.find("Bytes") != std::string::npos ||
-    val_sol_type.find("ADDRESS") != std::string::npos || val_sol_type == "ENUM")
+    SolidityGrammar::is_uint_type(val_sol_type) ||
+    SolidityGrammar::is_bytes_type(val_sol_type) ||
+    SolidityGrammar::is_address_type(val_sol_type) ||
+    val_sol_type == SolidityGrammar::SolType::ENUM)
   {
     val_flg = "uint";
     func_type = unsignedbv_typet(256);
   }
-  else if (val_sol_type.find("INT") != std::string::npos)
+  else if (SolidityGrammar::is_int_type(val_sol_type))
   {
     val_flg = "int";
     func_type = signedbv_typet(256);
   }
-  else if (val_sol_type == "BOOL")
+  else if (val_sol_type == SolidityGrammar::SolType::BOOL)
   {
     val_flg = "bool";
     func_type = bool_typet();
   }
-  else if (val_sol_type == "STRING" || val_sol_type == "STRING_LITERAL")
+  else if (
+    val_sol_type == SolidityGrammar::SolType::STRING ||
+    val_sol_type == SolidityGrammar::SolType::STRING_LITERAL)
   {
     val_flg = "string";
     func_type = value_t;
@@ -344,7 +384,7 @@ bool solidity_convertert::get_new_mapping_index_access(
     log_error(
       "cannot find mapping ref {}. Got val_sol_type={}",
       func_name,
-      val_sol_type);
+      SolidityGrammar::sol_type_to_str(val_sol_type));
     return true;
   }
   side_effect_expr_function_callt call;
@@ -430,7 +470,7 @@ bool solidity_convertert::get_new_mapping_index_access(
     exprt map_struct_get;
     std::string struct_contract_name = value_t.identifier().as_string();
     assert(!struct_contract_name.empty());
-    assert(val_sol_type == "STRUCT"); // t_symbol
+    assert(val_sol_type == SolidityGrammar::SolType::STRUCT); // t_symbol
     get_mapping_struct_function(
       value_t, struct_contract_name, call, map_struct_get);
 

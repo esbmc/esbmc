@@ -106,6 +106,35 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
   // by process_instruction (ASSIGN / ASSUME / DEAD), which is sufficient for
   // tracking loop counters.
 
+  // Violation-witness: steer branch direction if the current waypoint is a
+  // branching at this location.
+  if (validate_witness && cur_state->cur_seg < cur_state->witness_segs.size())
+  {
+    const auto &seg = cur_state->witness_segs[cur_state->cur_seg];
+    if (cur_state->cur_wp < seg.size())
+    {
+      const waypoint &wp = seg[cur_state->cur_wp];
+      if (wp.type == waypoint::branching)
+      {
+        const auto &loc = cur_state->source.pc->location;
+        if (
+          !wp.line_id.empty() && wp.line_id == loc.get_line() &&
+          (wp.function_id.empty() || wp.function_id == loc.get_function()))
+        {
+          const bool is_avoid = (wp.action == waypoint::avoid);
+          bool direction_true = (wp.value == "true") ^ is_avoid;
+          bool goto_taken =
+            instruction.flipped_guard ? direction_true : !direction_true;
+          if (goto_taken)
+            new_guard_true = true;
+          else
+            new_guard_false = true;
+          cur_state->advance_witness_position();
+        }
+      }
+    }
+  }
+
   if (new_guard_false)
   {
     // reset unwinding counter
@@ -416,16 +445,16 @@ void goto_symext::phi_function(const statet::goto_statet &goto_state)
     expr2tc goto_state_rhs = symbol2tc(type, symbol.id);
     renaming::level2t::rename_to_record(goto_state_rhs, variable);
 
-    expr2tc rhs;
     // Semi-manually rename these symbols: we may be referring to an l1
     // variable not in the current scope, thus we need to directly specify
     // which l1 variable we're dealing with.
     goto_state.level2.rename(goto_state_rhs);
+    cur_state->level2.rename(cur_state_rhs);
+
+    expr2tc rhs;
     if (cur_state->guard.is_false())
       rhs = goto_state_rhs;
-
-    cur_state->level2.rename(cur_state_rhs);
-    if (goto_state.guard.is_false())
+    else if (goto_state.guard.is_false())
       rhs = cur_state_rhs;
     else
     {

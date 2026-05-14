@@ -1,0 +1,7 @@
+CORE
+main.c
+--all-witnesses --witness-output-graphml violation.graphml --witness-output-yaml violation.yaml
+^VERIFICATION FAILED$
+\[Counterexamples - 2 witnesses\]
+Generating Violation Graphml Witness
+Generating Violation Yaml Witness

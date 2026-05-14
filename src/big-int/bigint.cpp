@@ -533,7 +533,7 @@ char *BigInt::as_string(char *p, unsigned l, onedig_t b) const
     return p + l;
   }
   // Make a temporary copy of the digits.
-  onedig_t *dig = (onedig_t *)alloca(len * sizeof(onedig_t));
+  onedig_t *dig = static_cast<onedig_t *>(alloca(len * sizeof(onedig_t)));
   memcpy(dig, digit, len * sizeof(onedig_t));
   // Divide down by single, generating digits from right to left.
   do
@@ -1005,14 +1005,14 @@ void BigInt::div(BigInt const &x, BigInt const &y, BigInt &q, BigInt &r)
     // digit is initially no less than half base. This is essential
     // for guess_q() to work.
     unsigned al = x.length;
-    onedig_t *a = (onedig_t *)alloca((al + 2) * sizeof(onedig_t));
+    onedig_t *a = static_cast<onedig_t *>(alloca((al + 2) * sizeof(onedig_t)));
     memcpy(a, x.digit, al * sizeof(onedig_t));
 
     unsigned bl = y.length;
-    onedig_t *b = (onedig_t *)alloca(bl * sizeof(onedig_t));
+    onedig_t *b = static_cast<onedig_t *>(alloca(bl * sizeof(onedig_t)));
     memcpy(b, y.digit, bl * sizeof(onedig_t));
 
-    onedig_t scale = onedig_t(base / (1 + b[bl - 1]));
+    onedig_t scale = onedig_t(base / (twodig_t(1) + b[bl - 1]));
     if (scale != 1)
     {
       if ((a[al] = digit_mul(a, al, scale)) != 0)
@@ -1090,14 +1090,14 @@ BigInt &BigInt::operator/=(BigInt const &y)
   {
     // Copy and scale as above in div().
     unsigned al = length;
-    onedig_t *a = (onedig_t *)alloca((al + 2) * sizeof(onedig_t));
+    onedig_t *a = static_cast<onedig_t *>(alloca((al + 2) * sizeof(onedig_t)));
     memcpy(a, digit, al * sizeof(onedig_t));
 
     unsigned bl = y.length;
-    onedig_t *b = (onedig_t *)alloca(bl * sizeof(onedig_t));
+    onedig_t *b = static_cast<onedig_t *>(alloca(bl * sizeof(onedig_t)));
     memcpy(b, y.digit, bl * sizeof(onedig_t));
 
-    onedig_t scale = onedig_t(base / (1 + b[bl - 1]));
+    onedig_t scale = onedig_t(base / (twodig_t(1) + b[bl - 1]));
     if (scale != 1)
     {
       if ((a[al] = digit_mul(a, al, scale)) != 0)
@@ -1163,10 +1163,10 @@ BigInt &BigInt::operator%=(BigInt const &y)
     onedig_t *a = digit;
 
     unsigned bl = y.length;
-    onedig_t *b = (onedig_t *)alloca(bl * sizeof(onedig_t));
+    onedig_t *b = static_cast<onedig_t *>(alloca(bl * sizeof(onedig_t)));
     memcpy(b, y.digit, bl * sizeof(onedig_t));
 
-    onedig_t scale = onedig_t(base / (1 + b[bl - 1]));
+    onedig_t scale = onedig_t(base / (twodig_t(1) + b[bl - 1]));
     if (scale != 1)
     {
       if ((a[al] = digit_mul(a, al, scale)) != 0)

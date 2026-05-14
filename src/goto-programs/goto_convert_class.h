@@ -395,6 +395,20 @@ protected:
     const irep_idt &id,
     std::list<exprt> &dest);
 
+  // Emit the post-noreturn truncation for __assert_fail-family calls
+  // (__assert_fail / __assert_rtn / FreeBSD __assert / _wassert) under
+  // --no-assertions.  Fires only when --memory-leak-check is enabled
+  // (i.e. valid-memsafety / valid-memcleanup): the leak walker is
+  // invoked --- mirroring abort()'s body in
+  // src/c2goto/library/stdlib.c --- and then ASSUME false truncates
+  // the path.  Otherwise the call is a no-op so user assert(cond)
+  // does not silently become assume(cond) under property modes that
+  // intentionally suppress assertions (no-data-race, plain
+  // --no-assertions).  See PR #4442 review for the no-data-race
+  // regression that motivated the gate.
+  void
+  emit_assert_fail_noreturn(const locationt &location, goto_programt &dest);
+
   // some built-in functions
   void do_abort(
     const exprt &lhs,

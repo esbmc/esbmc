@@ -83,6 +83,7 @@ extern "C" {
 )";
   intrinsics.append(clang_c_languaget::internal_additions());
   intrinsics.append(R"(
+void __ESBMC_throw_bad_cast(void);
 #undef _Bool
 #pragma pop_macro("_Bool")
 })");
@@ -90,8 +91,34 @@ extern "C" {
   return intrinsics;
 }
 
+void clang_cpp_languaget::set_language_version()
+{
+  const auto &ls =
+    clang::LangStandard::getLangStandardForKind(AST->getLangOpts().LangStd);
+#if LLVM_VERSION_MAJOR >= 17
+  if (ls.isCPlusPlus26())
+    config.language.cpp_std = cxx_stdt::cpp26;
+  else if (ls.isCPlusPlus23())
+    config.language.cpp_std = cxx_stdt::cpp23;
+#else
+  if (ls.isCPlusPlus2b())
+    config.language.cpp_std = cxx_stdt::cpp23;
+#endif
+  else if (ls.isCPlusPlus20())
+    config.language.cpp_std = cxx_stdt::cpp20;
+  else if (ls.isCPlusPlus17())
+    config.language.cpp_std = cxx_stdt::cpp17;
+  else if (ls.isCPlusPlus14())
+    config.language.cpp_std = cxx_stdt::cpp14;
+  else if (ls.isCPlusPlus11())
+    config.language.cpp_std = cxx_stdt::cpp11;
+  else
+    config.language.cpp_std = cxx_stdt::cpp98;
+}
+
 bool clang_cpp_languaget::typecheck(contextt &context, const std::string &)
 {
+  set_language_version();
   clang_cpp_convertert converter(context, AST, "C++");
   if (converter.convert())
     return true;

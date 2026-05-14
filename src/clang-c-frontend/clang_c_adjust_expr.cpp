@@ -140,15 +140,18 @@ void clang_c_adjust::adjust_expr(exprt &expr)
     const typet &t = ns.follow(expr.type());
     /* can't be an initializer of an incomplete type, it's not allowed by C */
     assert(!t.incomplete());
-    /* adjust_type() above may have added padding members.
-     * Adjust the init expression accordingly. */
     const struct_union_typet::componentst &new_comp =
       to_struct_union_type(t).components();
     exprt::operandst &ops = expr.operands();
+    /* Only insert padding operands if the expression doesn't already have
+     * them.  The Solidity frontend creates struct expressions via
+     * gen_zero(get_complete_type()), which resolves padding before this
+     * pass, whereas the C frontend relies on this pass to add them. */
+    const bool already_padded = (ops.size() == new_comp.size());
     for (size_t i = 0; i < new_comp.size(); i++)
     {
       const struct_union_typet::componentt &c = new_comp[i];
-      if (c.get_is_padding())
+      if (c.get_is_padding() && !already_padded)
       {
         // TODO: should we initialize pads with nondet values?
         ops.insert(ops.begin() + i, gen_zero(c.type()));
@@ -476,6 +479,33 @@ void clang_c_adjust::adjust_index(index_exprt &index)
     index.move_to_operands(addition);
     index.id("dereference");
   }
+  else if (!final_array_type.is_array() && !final_array_type.is_vector())
+  {
+    // The base isn't array, vector, or pointer — typically a struct that
+    // appears in array context because two TUs declared the same external
+    // symbol with conflicting types (e.g. `extern int JJ[]` in one TU,
+    // `struct complete JJ` in another). After AST merging the symbol's
+    // type follows the more-complete declaration but the indexing
+    // reference in the other TU's body is still typed as the array's
+    // element type. Rewrite `base[i]` as `*((T*)&base + i)` where `T` is
+    // the index expression's declared element type so the byte-level
+    // access reaches dereferencet's well-tested path.
+    typet elem_type = index.type();
+    typet ptr_type = pointer_typet(elem_type);
+
+    exprt addr_of("address_of", pointer_typet(array_expr.type()));
+    addr_of.move_to_operands(array_expr);
+
+    exprt cast = addr_of;
+    gen_typecast(ns, cast, ptr_type);
+
+    exprt addition("+", ptr_type);
+    addition.copy_to_operands(cast, index_expr);
+
+    index.operands().clear();
+    index.move_to_operands(addition);
+    index.id("dereference");
+  }
 }
 
 void clang_c_adjust::adjust_expr_rel(exprt &expr)
@@ -614,7 +644,7 @@ void clang_c_adjust::adjust_sizeof(exprt &expr)
   typet type;
   if (expr.operands().size() == 0)
   {
-    type = ((typet &)expr.c_sizeof_type());
+    type = static_cast<const typet &>(expr.c_sizeof_type());
     adjust_type(type);
   }
   else if (expr.operands().size() == 1)

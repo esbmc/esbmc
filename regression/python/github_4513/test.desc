@@ -1,0 +1,4 @@
+CORE
+tensor_add.py
+--incremental-bmc
+^VERIFICATION SUCCESSFUL$

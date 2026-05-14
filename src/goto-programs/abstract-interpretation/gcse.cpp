@@ -327,7 +327,7 @@ void goto_cse::replace_max_sub_expr(
     });
 }
 
-bool goto_cse::runOnFunction(std::pair<const dstring, goto_functiont> &F)
+bool goto_cse::runOnFunction(std::pair<const irep_idt, goto_functiont> &F)
 {
   if (!F.second.body_available)
     return false;

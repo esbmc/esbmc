@@ -205,7 +205,7 @@ unsigned int struct_type2t::get_width() const
   // Iterate over members accumulating width.
   std::vector<type2tc>::const_iterator it;
   unsigned int width = 0;
-  for (it = members.begin(); it != members.end(); it++)
+  for (it = members.begin(); it != members.end(); ++it)
     width += (*it)->get_width();
 
   return width;
@@ -216,7 +216,7 @@ unsigned int union_type2t::get_width() const
   // Iterate over members accumulating width.
   std::vector<type2tc>::const_iterator it;
   unsigned int width = 0;
-  for (it = members.begin(); it != members.end(); it++)
+  for (it = members.begin(); it != members.end(); ++it)
     width = std::max(width, (*it)->get_width());
 
   return width;
@@ -236,7 +236,7 @@ unsigned int complex_type2t::get_width() const
 {
   std::vector<type2tc>::const_iterator it;
   unsigned int width = 0;
-  for (it = members.begin(); it != members.end(); it++)
+  for (it = members.begin(); it != members.end(); ++it)
     width += (*it)->get_width();
 
   return width;
@@ -287,14 +287,10 @@ unsigned int struct_union_data::get_component_number(const irep_idt &comp) const
       name);
     abort();
   }
-  else if (count > 1)
-  {
-    log_error(
-      "Name \"{}\" matches more than one member in struct/union \"{}\"",
-      comp,
-      name);
-    abort();
-  }
 
+  log_error(
+    "Name \"{}\" matches more than one member in struct/union \"{}\"",
+    comp,
+    name);
   abort();
 }

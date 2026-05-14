@@ -28,6 +28,11 @@ next: /docs/setup
   <li>Memory leak.</li>
 </ul>
 
+<p>Each reported violation is annotated with the matching Common Weakness
+Enumeration identifiers (MITRE CWE 4.20). See the
+<a href="/docs/cwe-mapping/">CWE Mapping</a> page for the full table and the
+SARIF output schema.</p>
+
 <p>Concurrent software (using the pthread API) is verified by explicitly exploring interleavings, thus producing one symbolic execution per interleaving. By default, pointer-safety, array-out-of-bounds, division-by-zero, and user-specified assertions  will be checked for; one can also specify options to check multi-threaded programs for:</p>
 
 <ul>
@@ -245,9 +250,9 @@ esbmc file.c --z3
   <li>There is a known issue where a constant-bounded symbol might cause incorrect simplifications.</li>
 </ul>
 
-### Falsification
+## Verification Algorithms
 
-<h3 id="falsification"></h3>
+### Falsification {#falsification}
 
 ```sh
 esbmc file.c --falsification
@@ -259,7 +264,7 @@ esbmc file.c --falsification
 
 <p>The falsification algorithm also offers the option to change the granularity of the increment; the default value is <i>1</i>, but can be increased in order to meet any expected behaviour via --k-step nr. Note that changing the value of the increment can lead to slower verification time and might not present the shortest counterexample possible for a property violation.</p>
 
-<h3 id="incremental-bmc">Incremental BMC</h3>
+### Incremental BMC {#incremental-bmc}
 
 ```sh
 esbmc file.c --incremental-bmc
@@ -272,7 +277,7 @@ assumptions. Normally, this would lead to unsound behaviour, however, the first 
 
 <p>The algorithm also offers the option to change the granularity of the increment; the default value is <i>1</i>, but can be increased in order to meet any expected behaviour via --k-step nr. Note that changing the value of the increment can lead to slower verification time and might not present the shortest counterexample possible for the property violation.</p>
 
-<h3 id="k-induction">k-Induction proof rule</h3>
+### k-Induction proof rule {#k-induction}
 
 ```sh
 esbmc file.c --k-induction
@@ -294,7 +299,7 @@ esbmc file.c --k-induction
 
 <p>The algorithm starts with <i>k = 1</i>. It increases it up to a maximum number of iterations, incrementally analysing the program, until it either finds a bug (i.e., the base case is satisfiable for some <i>k</i>), proves correctness (i.e., the base case is unsatisfiable and either the forward condition or inductive step is unsatisfiable for some <i>k</i>), or exhausts either time or memory constraints.</p>
 
-<h4 id="loop-invariants">Loop Invariant Support</h4>
+## Loop Invariants {#loop-invariants}
 
 ```sh
 esbmc file.c --loop-invariant
@@ -308,14 +313,9 @@ prohibitive or hit iteration limits.
 Loop invariants are specified using the built-in function
 `__ESBMC_loop_invariant(condition)` placed within the loop body.
 
----
-
 ### Verification Modes
 
-As of the latest release, ESBMC provides **two distinct modes** for loop
-invariant verification:
-
----
+ESBMC provides **two distinct modes** for loop invariant verification:
 
 #### `--loop-invariant` — Combined Mode (Default, Recommended)
 
@@ -352,8 +352,6 @@ GOTO loop_head
 | Correct but weak | Passes | Proves property via forward condition |
 | Correct and strong | Passes | Closes at inductive step |
 
----
-
 #### `--loop-invariant-check` — Legacy Mode
 
 The original three-part havoc abstraction is preserved under this flag for
@@ -372,9 +370,8 @@ state without proper constraint propagation.
 > Use `--loop-invariant-check` only when speed is the priority and you
 > understand the false-positive risk.
 
----
-
 ### Example: Basic Loop Invariant Usage
+
 ```c
 int main() {
     int i = 0;
@@ -396,8 +393,6 @@ Verify with:
 esbmc file.c --loop-invariant
 ```
 
----
-
 ### Companion Options
 
 The following options can be combined with the k-induction proof rule to
@@ -409,8 +404,6 @@ produce or strengthen inductive invariants:
   assume statements.
 - `--loop-invariant` — Use user-provided loop invariants with the combined
   k-induction mode (described above).
-
----
 
 ### Known Limitations
 
@@ -429,16 +422,12 @@ incorrect invariant will lead to a failed base-case assertion in
 > `--loop-invariant` combined mode. If you observe such false positives, ensure
 > you are not using `--loop-invariant-check`.
 
----
-
 ### Backward Compatibility
 
 The `--loop-invariant` flag now routes to the new combined mode. The legacy
 behavior is accessible via `--loop-invariant-check`. Programs without loop
 invariant annotations continue to use the standard k-induction unwinding
 approach.
-
----
 
 ### Loop Frame Rule (`--loop-frame-rule`)
 
@@ -483,8 +472,6 @@ nothing.
 > `--loop-frame-rule` requires `--loop-invariant-check`. It does not work with
 > `--loop-invariant` (the combined k-induction mode).
 
----
-
 ### References
 
 [1] Mary Sheeran, Satnam Singh, Gunnar Stålmarck: *Checking Safety Properties
@@ -493,7 +480,7 @@ Using Induction and a SAT-Solver.* FMCAD 2000: 108–125
 [2] Alastair F. Donaldson, Leopold Haller, Daniel Kroening, Philipp Rümmer:
 *Software Verification Using k-Induction.* SAS 2011: 351–368
   
-<h3 id="multiple-files">Verification of modules that rely on larger structures</h3>
+## Verification of modules that rely on larger structures {#multiple-files}
 
 <p>ESBMC can verify code that relies on existing infrastructures and must be compliant with those. Consider the following C program where the verification engineer wants to check whether the assert-statement in line 8 holds.</p> 
 
@@ -582,7 +569,7 @@ SyntaxHighlighter.all()
 16 }
 ```
 
-<h3 id="esbmc-python">Verification of Python Programs</h3>
+## Verification of Python Programs {#esbmc-python}
 
 <p> To enable the verification of Python programs, build ESBMC with the option:
 </br><code>'-DENABLE_PYTHON_FRONTEND=On'</code>.</p>
@@ -695,7 +682,7 @@ $ esbmc <python-file> --function <function-name>
 <p>This command instructs ESBMC to focus only on the specified function, making the verification process more efficient when you are only interested in a particular part of the code.</p>
 
 
-<h3 id="esbmc-solidity">Verification of Solidity Smart Contracts</h3>
+## Verification of Solidity Smart Contracts {#esbmc-solidity}
 
 <p> ESBMC has a frontend to process Solidity source code and hence can verify simple Solidity smart contracts. In order to verify Solidity smart contract, ESBMC should be built with the option <b>'-DENABLE_SOLIDITY_FRONTEND=On'</b>.</p>
 <p> There are three relevant options, which are:</p>
@@ -868,7 +855,7 @@ VERIFICATION FAILED
 <p>We provide a technical report about the verification of Solidity programs <a href="https://arxiv.org/pdf/2111.13117.pdf">here</a>.</p>
 <p>We also provide a Github action for security verification of solidity contracts using ESBMC-solidity <a href="https://github.com/actions-marketplace-validations/alanpjohn_esbmc-solidity-action" target=”_blank”>here</a>.</p>
 
-<h3 id="multiple-property-verification">Multiple Property Verification</h3>
+## Multiple Property Verification {#multiple-property-verification}
 
 ```sh
 esbmc file.c --multi-property
@@ -876,22 +863,74 @@ esbmc file.c --multi-property
 
 <p>
 
-ESBMC can verify the satisfiability of all the claims of a given bound. During this multi-property verification, ESBMC does not terminate when a counterexample is found; instead, it continues to run until all bugs have been discovered. There are three relevant options, which are:</p>
+ESBMC can verify the satisfiability of all the claims of a given bound. During this multi-property verification, ESBMC does not terminate when a counterexample is found; instead, it continues to run until all bugs have been discovered. The relevant options are:</p>
 <ul>
 <li><b>multi-property:</b> verifies the satisfiability of all claims of
 the current bound. This also activates <b>--no-remove-unreachable</b>.</li>
 <li><b>multi-fail-fast n:</b> stops after first <b>n</b> VCC violation found in multi-property mode</li>
 <li><b>keep-verified-claims:</b> do not skip verified claims in multi-property verification. With this option enabled, assertions inside the loop body will be verified repeatedly during the unwinding; while with this option disabled, the claims will only get verified once.</li>
+<li><b>all-witnesses:</b> after a property is found violated, enumerate further input vectors that also violate it (until UNSAT or <b>--max-witnesses</b> is reached). Implies <b>--multi-property</b>. See <a href="#enumerating-all-violating-inputs">Enumerating All Violating Inputs</a> below.</li>
+<li><b>max-witnesses n:</b> cap the number of witnesses reported per property (default: 16; 0 = unlimited). Only meaningful with <b>--all-witnesses</b>.</li>
 </ul>
 <p>An example of multi-property verification can be found in the <b>Code  Coverage Metric</b> section below.</p>
 
-<h3 id="code-coverage-metric">Code Coverage Metric</h3>
+## Enumerating All Violating Inputs {#enumerating-all-violating-inputs}
+
+```sh
+esbmc file.c --all-witnesses
+esbmc file.c --all-witnesses --max-witnesses 4
+```
+
+<p>By default, <b>--multi-property</b> reports a single counterexample per failing property. <b>--all-witnesses</b> instead enumerates <em>distinct concrete input vectors</em> that violate the same property, until the witness set is exhausted (UNSAT) or the cap from <b>--max-witnesses</b> is reached. Useful for fault localisation, test-case mining, and characterising the failing-input sub-domain of a property.</p>
+
+<p>For example, given:</p>
+
+```c
+#include <assert.h>
+int main(void) {
+  int x;                 // nondet
+  if (x > 0) x--; else x++;
+  assert(x != 0);        // violated by x == 1 AND x == -1
+  return 0;
+}
+```
+
+<p><code>esbmc file.c --multi-property</code> reports only one of the violating values; <code>esbmc file.c --all-witnesses</code> reports both:</p>
+
+```
+[Counterexamples – 2 witnesses]
+
+  Witness 1 of 2
+    Inputs : [0] = -1
+  Witness 2 of 2
+    Inputs : [0] = 1
+
+Summary: 2 distinct input tuples violate this property
+         (enumeration stopped: UNSAT after 2 witnesses)
+```
+
+<p>Implementation notes:</p>
+<ul>
+<li>The same SMT instance is re-solved with a blocking clause <code>NOT (sym_1 == val_1 AND ... AND sym_k == val_k)</code> over the nondet input symbols of the previous model. No re-encoding occurs between iterations, so enumerating <em>N</em> witnesses is much cheaper than running ESBMC <em>N</em> times with hand-rolled assumptions.</li>
+<li>Blocking clauses are scoped to a single SMT context frame (<code>push_ctx</code>/<code>pop_ctx</code>) per claim, so the feature is safe under <b>--smt-during-symex</b> (incremental SMT) and does not leak between claims.</li>
+<li>Floating-point nondet inputs receive special handling: when the model picks NaN, the blocking clause excludes the entire NaN equivalence class (one NaN witness, then no more NaN). For any other floatbv value the blocking clause uses bit-pattern equality, so <code>+0</code> and <code>-0</code> are reported as distinct witnesses and finite values are bit-exact. This sidesteps the IEEE-754 <code>fp.eq(NaN, NaN) = false</code> pitfall, which would otherwise turn the blocking clause into a tautology and produce duplicate or non-terminating NaN enumeration.</li>
+<li>Machine-readable artifacts (<b>--cex-output</b>, <b>--generate-testcase</b>, <b>--generate-html-report</b>, <b>--generate-json-report</b>, <b>--witness-output-graphml</b>, <b>--witness-output-yaml</b>) fan out per witness using the existing <code>&lt;ce&gt;-&lt;file&gt;</code> prefix scheme, one file per witness. Per-witness filenames are composed locally with no global option mutation, so the feature is safe under <b>--parallel-solving</b>: concurrent claims write to disjoint files.</li>
+<li>The footer states why enumeration stopped: <em>UNSAT after N</em> (exhaustive), <em>--max-witnesses cap reached</em>, <em>no enumerable nondet inputs</em>, or <em>solver returned error/unknown</em>. Only the first means the witness set is complete.</li>
+<li>Inductive-step SAT means UNKNOWN, not a real counterexample: enumeration is skipped during the inductive step of k-induction.</li>
+</ul>
+
+<p><b>Scaling caveat.</b> The textual report dumps each witness's full goto trace. With slicing on (the default) and small per-witness state counts the output stays readable, but with <b>--no-slice</b> on a deeply unrolled program the report grows quickly &mdash; for example, enumerating 16 witnesses of 200 states each produces ~3 200 state blocks. If you only care about the violating inputs, the per-witness <code>Inputs : ...</code> line is usually all you need; the trace dump is detail-on-demand and the machine-readable per-witness files give the full data without the textual noise. (A future revision may collapse traces 2&hellip;N into diffs against witness 1.)</p>
+
+<p>Formally, this is <em>bounded projected model enumeration</em> for a fixed property: the same blocking-clause loop used in SAT-based all-solutions algorithms, lifted to SMT and projected onto the nondet input symbols. The SAT-level construction is classical &mdash; see Kenneth L. McMillan, <em>Applying SAT Methods in Unbounded Symbolic Model Checking</em>, CAV 2002 (<a href="https://doi.org/10.1007/3-540-45657-0_19">doi:10.1007/3-540-45657-0_19</a>) and Orna Grumberg, Assaf Schuster, Avi Yadgar, <em>Memory Efficient All-Solutions SAT Solver and Its Application for Reachability Analysis</em>, FMCAD 2004 (<a href="https://doi.org/10.1007/978-3-540-30494-4_20">doi:10.1007/978-3-540-30494-4_20</a>). The technique is complementary to dynamic-symbolic-execution test generation (KLEE, DART, SAGE), which varies the path condition to maximise code coverage; <b>--all-witnesses</b> instead fixes the failure path and enumerates input vectors on it.</p>
+
+## Code Coverage Metric {#code-coverage-metric}
 <p>
 ESBMC provides a set of coverage metrics to help you measure how much of the state space you've visited. The supported coverage metrics can be listed as follows:</p>
 <ul>
 <li><b>Assertion Coverage</b> measures how well the assertions within a program are tested.</li>
 <li><b>Condition Coverage</b> measures how well the Boolean expressions in the code have been tested.</li>
 <li><b>Branch Coverage</b> measures how well every possible branch (or path) in a decision point of the code has been executed.</li>
+<li><b>K-Path Coverage</b> measures how well bounded sequences of conditional-branch outcomes have been exercised: at every conditional branch, ESBMC emits one witness per combination of the previous <em>(N&minus;1)</em> branch directions and the current direction, and reports the fraction of those witnesses that the SMT engine can satisfy (PathCrawler-style). Enabled with <b>--k-path-coverage[=N]</b>; see the <a href="/docs/coverage/#k-path-coverage">coverage page</a> for details.</li>
   </ul>
 
   <p>
@@ -1032,7 +1071,37 @@ VERIFICATION FAILED
 Note that the <b>--condition-coverage-claims</b> option provides verbose output of claim information, including its condition and location. If only the coverage number is needed, we recommend using the <b>--condition-coverage</b> option instead.
 </p>
 
-<h3 id="smt-backends">Supported SMT backends</h3>
+<p>For k-path coverage, ESBMC is invoked as follows. Note that <b>--k-path-coverage</b> forces base-case semantics for its multi-property goals and should not be combined with <b>--k-induction</b> — the k-induction forward-condition and inductive-step phases do not soundly evaluate bounded-path witnesses, so use <b>--unwind</b> to bound loops instead:</p>
+
+```sh
+esbmc example.c --k-path-coverage=2 --unwind 4 --no-unwinding-assertions
+```
+
+<p>For the same C program shown above, ESBMC produces the following coverage report. The prefix length <em>N</em>=2 means each goal pins down the previous and current branch directions; the linear-walk over-approximation in Phase 1 lets some infeasible goals enter the denominator, so the reached fraction is a lower bound on the true bounded-path coverage:</p>
+
+```
+[Coverage]
+
+k-Path Witnesses : 14
+Reached : 8
+k-Path Coverage: 57.142857142857146%
+
+VERIFICATION FAILED
+```
+
+<p>
+<ul>
+  <li><b>k-Path Witnesses:</b> the total number of bounded-path goals emitted across all conditional branches in the goto program. For each branch, ESBMC enumerates combinations of the previous <em>(N&minus;1)</em> branch directions and the current direction, so this count grows with prefix length and branch density.</li>
+  <li><b>Reached:</b> the number of bounded paths the SMT engine satisfied. Each reached witness corresponds to a concrete input that drives the program down that bounded path.</li>
+  <li><b>k-Path Coverage:</b> obtained by dividing reached by total. Witnesses are emitted before path-feasibility analysis, so under deeply correlated branches some witnesses may be infeasible and counted in the denominator. See <a href="/docs/coverage/#k-path-coverage">Coverage Analysis</a> for the supporting flags <b>--k-path-witness-depth</b> and <b>--k-path-max-goals</b>, and for the Phase-1 over-approximation caveat.</li>
+</ul>
+</p>
+
+<p>
+Both <b>--branch-coverage</b> and <b>--k-path-coverage</b> can be paired with <b>--generate-ctest-testcase</b> to materialise the reached witnesses as runnable CTest cases driven by concrete <code>__VERIFIER_nondet_*</code> values; see <a href="/docs/c-cpp/ctest-gen/">C/C++ CTest Test Case Generation</a>.
+</p>
+
+## Supported SMT backends {#smt-backends}
 <p>ESBMC integrates a number of SMT solvers directly via their respective
   API, but on Unix can also be instructed to communicate with an external
   SMT solver process by a pipe. The following table lists ESBMC's options
@@ -1075,6 +1144,6 @@ Note that the <b>--condition-coverage-claims</b> option provides verbose output 
 
 <p>Remember to quote the <code>CMD</code> string when executing ESBMC.</p>
 
-<h3 id="esbmc-support">ESBMC Support</h3>
+## ESBMC Support {#esbmc-support}
 
 <p>We are still increasing the robustness of ESBMC and also continuously implementing new features, more optimizations and experiencing new encodings. For any question about ESBMC, please contact us via <code>https://github.com/esbmc/esbmc</code>.</p>

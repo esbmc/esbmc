@@ -2,8 +2,8 @@ add_library(abstract-interpretation ai.cpp ai_domain.cpp interval_domain.cpp int
 target_include_directories(abstract-interpretation
         PUBLIC ${Boost_INCLUDE_DIRS})
 
-if (ENABLE_GOTO_CONTRACTOR)
+if(ENABLE_GOTO_CONTRACTOR)
     target_link_libraries(abstract-interpretation PUBLIC pointeranalysis gotoprograms PRIVATE gotocontractor fmt::fmt)
-else ()
+else()
     target_link_libraries(abstract-interpretation PUBLIC pointeranalysis gotoprograms PRIVATE fmt::fmt)
-endif ()
+endif()

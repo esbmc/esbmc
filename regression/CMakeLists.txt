@@ -56,7 +56,7 @@ function(add_esbmc_regression_test folder modes test)
 endfunction()
 
 function(add_esbmc_regression folder modes)
-    SUBDIRLIST(SUBDIRS ${CMAKE_CURRENT_SOURCE_DIR}/${regression})
+    subdirlist(SUBDIRS ${CMAKE_CURRENT_SOURCE_DIR}/${regression})
     if(${folder} STREQUAL "quixbugs")
         list(REMOVE_ITEM SUBDIRS bucketsort)
     endif()
@@ -198,6 +198,7 @@ if(APPLE)
                     ${REGRESSIONS_CPP11}
                     ${REGRESSIONS_CPP14}
                     ${REGRESSIONS_CPP17}
+                    ${REGRESSIONS_CPP20}
                     extensions
                     ${REGRESSIONS_CHERI}
                     ${REGRESSIONS_PYTHON}

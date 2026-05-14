@@ -555,7 +555,11 @@ inline expr2tc distribute_vector_operation(Func func, expr2tc op1, expr2tc op2)
       auto e1 = is_op1_vec ? op : c;
       auto e2 = is_op1_vec ? c : op;
       auto new_op = func(op->type, e1, e2);
-      datatype_member = new_op->do_simplify();
+      // do_simplify() returns nil when no per-op peephole fires. Don't
+      // store nil into the member slot — keep new_op so the lane
+      // expression survives unsimplified for the SMT layer.
+      auto folded = new_op->do_simplify();
+      datatype_member = is_nil_expr(folded) ? new_op : folded;
     }
     return constant_vector2tc(v->type, std::move(members));
   }
@@ -699,6 +703,28 @@ inline expr2tc distribute_vector_operation(
     to_constant_vector2t(result).datatype_members[i] = to_add;
   }
   return result;
+}
+
+// Build a comparison-category struct value with the discriminant set to v.
+// Used for the C++20 spaceship operator: strong_ordering / weak_ordering /
+// partial_ordering all layout the discriminant as the first field, so
+// writing operand[0] is enough; remaining fields (if any) are zero-filled
+// for layout safety against custom comparison-category types.
+//
+// Returns nil if @p t is not a struct or has no fields.
+inline expr2tc make_cmp_value(const type2tc &t, int v)
+{
+  if (!is_struct_type(t))
+    return expr2tc();
+  const struct_type2t &st = to_struct_type(t);
+  if (st.members.empty())
+    return expr2tc();
+  std::vector<expr2tc> ops;
+  ops.reserve(st.members.size());
+  ops.push_back(constant_int2tc(st.members[0], BigInt(v)));
+  for (size_t i = 1; i < st.members.size(); ++i)
+    ops.push_back(gen_zero(st.members[i]));
+  return constant_struct2tc(t, std::move(ops));
 }
 
 inline void get_symbols(

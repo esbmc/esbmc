@@ -1,0 +1,65 @@
+#ifndef ESBMC_SOURCE_LOCATION
+#define ESBMC_SOURCE_LOCATION
+
+#include "cstdint"
+
+// Minimal C++20 <source_location> operational model: enough for code that
+// captures std::source_location::current() at call sites and reads back
+// line/column/file_name/function_name.  Wider library surface (formatter
+// integration, derived utilities) is out of scope for ESBMC's bundled OMs.
+//
+// Per [support.srcloc] in N4861. The clang built-ins __builtin_LINE() etc.
+// expand at the call site (with default arguments evaluated in the caller),
+// which is exactly the semantics current() requires.
+
+namespace std
+{
+
+struct source_location
+{
+  // current() must capture the caller's location.  Each parameter defaults
+  // to a built-in that is evaluated at the call site (not at the call to
+  // current()) per [support.srcloc.cons]/p1.
+  static constexpr source_location current(
+    const char *file = __builtin_FILE(),
+    const char *function = __builtin_FUNCTION(),
+    uint_least32_t line = __builtin_LINE(),
+    uint_least32_t column = __builtin_COLUMN()) noexcept
+  {
+    source_location sl;
+    sl.file_ = file;
+    sl.function_ = function;
+    sl.line_ = line;
+    sl.column_ = column;
+    return sl;
+  }
+
+  constexpr source_location() noexcept = default;
+
+  constexpr uint_least32_t line() const noexcept
+  {
+    return line_;
+  }
+  constexpr uint_least32_t column() const noexcept
+  {
+    return column_;
+  }
+  constexpr const char *file_name() const noexcept
+  {
+    return file_;
+  }
+  constexpr const char *function_name() const noexcept
+  {
+    return function_;
+  }
+
+private:
+  const char *file_ = "";
+  const char *function_ = "";
+  uint_least32_t line_ = 0;
+  uint_least32_t column_ = 0;
+};
+
+} // namespace std
+
+#endif

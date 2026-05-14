@@ -1,21 +1,21 @@
 #################################
 # Project Information           #
 #################################
-cmake_minimum_required (VERSION 3.18)
+cmake_minimum_required(VERSION 3.18)
 
 # HACK: This msvc policy needs to be set before project()
 # This can be removed when we move to CMake >= 3.15
 cmake_policy(SET CMP0091 NEW)
 
-project (ESBMC)
+project(ESBMC)
 
-set (ESBMC_VERSION_MAJOR 8)
-set (ESBMC_VERSION_MINOR 2)
-set (ESBMC_VERSION_PATCH 0)
-set (ESBMC_VERSION "${ESBMC_VERSION_MAJOR}.${ESBMC_VERSION_MINOR}.${ESBMC_VERSION_PATCH}")
+set(ESBMC_VERSION_MAJOR 8)
+set(ESBMC_VERSION_MINOR 2)
+set(ESBMC_VERSION_PATCH 0)
+set(ESBMC_VERSION "${ESBMC_VERSION_MAJOR}.${ESBMC_VERSION_MINOR}.${ESBMC_VERSION_PATCH}")
 
 # The only default solver available is smtlib
-set (ESBMC_AVAILABLE_SOLVERS "smtlib")
+set(ESBMC_AVAILABLE_SOLVERS "smtlib")
 
 set(MAX_SUPPORTED_LLVM_VERSION_MAJOR 21)
 
@@ -74,14 +74,14 @@ endif()
 # Copied from https://stackoverflow.com/questions/53877344/cannot-configure-cmake-to-look-for-homebrew-installed-version-of-bison
 # On macOS, search Homebrew for keg-only versions of Bison and Flex. Xcode does
 # not provide new enough versions for us to use.
-if (CMAKE_HOST_SYSTEM_NAME MATCHES "Darwin")
+if(CMAKE_HOST_SYSTEM_NAME MATCHES "Darwin")
     execute_process(
         COMMAND brew --prefix bison
         RESULT_VARIABLE BREW_BISON
         OUTPUT_VARIABLE BREW_BISON_PREFIX
         OUTPUT_STRIP_TRAILING_WHITESPACE
     )
-    if (BREW_BISON EQUAL 0 AND EXISTS "${BREW_BISON_PREFIX}")
+    if(BREW_BISON EQUAL 0 AND EXISTS "${BREW_BISON_PREFIX}")
         message(STATUS "Found Bison keg installed by Homebrew at ${BREW_BISON_PREFIX}")
         set(BISON_EXECUTABLE "${BREW_BISON_PREFIX}/bin/bison")
     endif()
@@ -92,7 +92,7 @@ if (CMAKE_HOST_SYSTEM_NAME MATCHES "Darwin")
         OUTPUT_VARIABLE BREW_FLEX_PREFIX
         OUTPUT_STRIP_TRAILING_WHITESPACE
     )
-    if (BREW_FLEX EQUAL 0 AND EXISTS "${BREW_FLEX_PREFIX}")
+    if(BREW_FLEX EQUAL 0 AND EXISTS "${BREW_FLEX_PREFIX}")
         message(STATUS "Found Flex keg installed by Homebrew at ${BREW_FLEX_PREFIX}")
         set(FLEX_EXECUTABLE "${BREW_FLEX_PREFIX}/bin/flex")
     endif()
@@ -103,10 +103,10 @@ endif()
 # This MUST be executed after BuildStatic since it sets Boost Static flags
 # In boost-1.89, system and filesystem has been remove
 # To support the older version, added "optional" here
-find_package(Boost REQUIRED 
+find_package(Boost REQUIRED
   COMPONENTS date_time program_options iostreams
   OPTIONAL_COMPONENTS system filesystem)
-include(FindLocalLLVM)
+include(SetupLocalLLVM)
 
 include(ExternalDependencies)
 
@@ -135,7 +135,7 @@ add_subdirectory(src)
 include(Irep2Optimization)
 
 # Generate ac_config.h. This must be generated after solvers
-configure_file (
+configure_file(
  "${PROJECT_SOURCE_DIR}/scripts/cmake/cmake_config.in"
  "${PROJECT_BINARY_DIR}/src/ac_config.h"
 )
@@ -152,4 +152,4 @@ endif()
 if(ENABLE_REGRESSION)
     add_subdirectory(regression)
 endif()
-include(FindCsmith)
+include(SetupCsmith)

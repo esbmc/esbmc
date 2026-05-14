@@ -8,8 +8,10 @@
 #include <python-frontend/string_handler_utils.h>
 #include <python-frontend/python_exception_handler.h>
 #include <python-frontend/python_list.h>
+#include <python-frontend/python_set.h>
 #include <python-frontend/string_builder.h>
 #include <python-frontend/symbol_id.h>
+#include <python-frontend/tuple_handler.h>
 #include <python-frontend/type_handler.h>
 #include <python-frontend/type_utils.h>
 #include <util/arith_tools.h>
@@ -596,6 +598,23 @@ exprt function_call_expr::handle_isinstance() const
     typet expected_type = type_handler_.get_typet(type_name, 0);
     if (expected_type.is_nil())
       throw std::runtime_error("Could not resolve type: " + type_name);
+
+    // String special case: get_typet("str") returns char[0], which the
+    // generic encoding lowers to gen_zero(char[0]) — an empty array
+    // constant. simplify_python_builtins then has to recover the answer
+    // from value-set state, which is fragile (e.g. depends on operational
+    // model layout). When obj's static type is already a char-array or
+    // char-pointer (a Python str), short-circuit to true here.
+    if (
+      expected_type.is_array() &&
+      to_array_type(expected_type).subtype() == char_type())
+    {
+      const typet &obj_type = obj_expr.type();
+      if (
+        (obj_type.is_array() && obj_type.subtype() == char_type()) ||
+        (obj_type.is_pointer() && obj_type.subtype() == char_type()))
+        return true_exprt();
+    }
 
     exprt t;
 
@@ -2955,6 +2974,85 @@ exprt function_call_expr::handle_list_pop() const
   return list_helper.build_pop_list_call(*list_symbol, index_expr, call_);
 }
 
+bool function_call_expr::is_tuple_method_call() const
+{
+  if (call_["func"]["_type"] != "Attribute")
+    return false;
+
+  const std::string &method_name = function_id_.get_function();
+  if (method_name != "count" && method_name != "index")
+    return false;
+
+  exprt receiver = converter_.get_expr(call_["func"]["value"]);
+  return converter_.get_tuple_handler().is_tuple_type(receiver.type());
+}
+
+exprt function_call_expr::handle_tuple_method() const
+{
+  const std::string &method_name = function_id_.get_function();
+  const auto &args = call_["args"];
+  if (args.size() != 1)
+    throw std::runtime_error(
+      "tuple." + method_name + "() takes exactly one argument");
+
+  exprt receiver = converter_.get_expr(call_["func"]["value"]);
+  const struct_typet &tuple_type = to_struct_type(receiver.type());
+  const auto &components = tuple_type.components();
+
+  exprt elem = converter_.get_expr(args[0]);
+
+  if (method_name == "count")
+  {
+    // sum(t.element_i == elem ? 1 : 0)
+    typet result_type = int_type();
+    exprt total = gen_zero(result_type);
+    for (const auto &comp : components)
+    {
+      exprt member = member_exprt(receiver, comp.get_name(), comp.type());
+      exprt eq = equality_exprt(member, elem);
+      if_exprt sel(eq, gen_one(result_type), gen_zero(result_type));
+      sel.type() = result_type;
+      total = plus_exprt(total, sel);
+      total.type() = result_type;
+    }
+    return total;
+  }
+
+  // method_name == "index"
+  // Return the smallest k for which t.element_k == elem; assert if absent.
+  if (components.empty())
+    throw std::runtime_error("tuple.index() on empty tuple");
+
+  // Build "any matched" guard so we can assert the element is present.
+  typet result_type = int_type();
+  exprt any_match = gen_boolean(false);
+  for (const auto &comp : components)
+  {
+    exprt member = member_exprt(receiver, comp.get_name(), comp.type());
+    exprt eq = equality_exprt(member, elem);
+    any_match = or_exprt(any_match, eq);
+  }
+  code_assertt found_assert(any_match);
+  found_assert.location() = converter_.get_location_from_decl(call_);
+  found_assert.location().comment("ValueError: tuple.index(x): x not in tuple");
+  converter_.add_instruction(found_assert);
+
+  // Build chain right-to-left: result_(n-1) is index n-1, falling back to
+  // earlier matches as we walk backwards. Net effect: leftmost match wins.
+  size_t n = components.size();
+  exprt result = from_integer(BigInt(n - 1), result_type);
+  for (size_t k = n - 1; k-- > 0;)
+  {
+    exprt member =
+      member_exprt(receiver, components[k].get_name(), components[k].type());
+    exprt eq = equality_exprt(member, elem);
+    if_exprt sel(eq, from_integer(BigInt(k), result_type), result);
+    sel.type() = result_type;
+    result = sel;
+  }
+  return result;
+}
+
 bool function_call_expr::is_dict_method_call() const
 {
   if (call_["func"]["_type"] != "Attribute")
@@ -3026,6 +3124,9 @@ exprt function_call_expr::handle_dict_method() const
   if (method_name == "popitem")
     return converter_.get_dict_handler()->handle_dict_popitem(dict_expr, call_);
 
+  if (method_name == "copy")
+    return converter_.get_dict_handler()->handle_dict_copy(dict_expr, call_);
+
   throw std::runtime_error("Unsupported dict method: " + method_name);
 }
 
@@ -3093,6 +3194,29 @@ exprt function_call_expr::handle_list_sort() const
       "sort() positional arguments are not supported; "
       "use sort() with no arguments");
 
+  // sort() supports a `reverse=` keyword. `key=` is not handled yet; reject
+  // explicitly rather than dropping it silently.
+  bool reverse = false;
+  if (call_.contains("keywords"))
+  {
+    for (const auto &kw : call_["keywords"])
+    {
+      const std::string name = kw.value("arg", "");
+      if (name == "reverse")
+      {
+        exprt v = converter_.get_expr(kw["value"]);
+        if (!v.is_constant())
+          throw std::runtime_error(
+            "sort(reverse=...) requires a constant boolean");
+        reverse = v.is_true();
+      }
+      else
+        throw std::runtime_error(
+          "sort() keyword argument '" + name +
+          "' is not supported (only reverse=)");
+    }
+  }
+
   std::string list_display_name;
   const symbolt *list_symbol = get_object_list_symbol(list_display_name);
   materialize_list_symbol(list_symbol);
@@ -3132,7 +3256,29 @@ exprt function_call_expr::handle_list_sort() const
   sort_call.type() = empty_typet();
   sort_call.location() = converter_.get_location_from_decl(call_);
 
-  return sort_call;
+  // For reverse=True, sort ascending then reverse in place via the existing
+  // __ESBMC_list_reverse model. Wrap both calls in a code_blockt.
+  if (!reverse)
+    return sort_call;
+
+  const symbolt *reverse_func =
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_reverse");
+  if (!reverse_func)
+    throw std::runtime_error(
+      "__ESBMC_list_reverse function not found in symbol table");
+
+  code_function_callt reverse_call;
+  reverse_call.function() = symbol_expr(*reverse_func);
+  reverse_call.arguments().push_back(symbol_expr(*list_symbol));
+  reverse_call.type() = empty_typet();
+  reverse_call.location() = converter_.get_location_from_decl(call_);
+
+  python_list::reverse_type_info(list_id);
+
+  code_blockt block;
+  block.copy_to_operands(sort_call);
+  block.copy_to_operands(reverse_call);
+  return block;
 }
 
 exprt function_call_expr::handle_list_reverse() const
@@ -3168,6 +3314,53 @@ exprt function_call_expr::handle_list_reverse() const
   return reverse_call;
 }
 
+bool function_call_expr::is_set_method_call() const
+{
+  if (call_["func"]["_type"] != "Attribute")
+    return false;
+
+  const std::string &method_name = function_id_.get_function();
+  if (
+    method_name != "add" && method_name != "discard" &&
+    method_name != "issubset" && method_name != "update" &&
+    method_name != "symmetric_difference")
+    return false;
+
+  std::string dummy;
+  const symbolt *sym = get_object_list_symbol(dummy);
+  return sym != nullptr && sym->is_set;
+}
+
+exprt function_call_expr::handle_set_method() const
+{
+  const std::string &method_name = function_id_.get_function();
+  const auto &args = call_["args"];
+
+  if (args.size() != 1)
+    throw std::runtime_error(method_name + "() takes exactly one argument");
+
+  std::string set_display_name;
+  const symbolt *set_symbol = get_object_list_symbol(set_display_name);
+  materialize_list_symbol(set_symbol);
+  if (!set_symbol)
+    throw std::runtime_error("Set variable not found: " + set_display_name);
+
+  // add/discard take a single element value.
+  if (method_name == "add" || method_name == "discard")
+  {
+    exprt elem = converter_.get_expr(args[0]);
+    python_list helper(converter_, call_);
+    return helper.build_set_membership_call(
+      *set_symbol, call_, elem, method_name);
+  }
+
+  // issubset / update / symmetric_difference take another set/iterable.
+  exprt other = converter_.get_expr(args[0]);
+  python_set set_helper(converter_, call_);
+  return set_helper.build_set_method_call(
+    *set_symbol, other, call_, method_name);
+}
+
 bool function_call_expr::is_list_method_call() const
 {
   if (call_["func"]["_type"] != "Attribute")
@@ -3190,6 +3383,25 @@ bool function_call_expr::is_list_method_call() const
     // A BinOp receiver (e.g., (s1 - s2).pop()) is always a set/list: dicts
     // do not support arithmetic operators. handle_list_pop() already handles
     // this case, so route it here before the symbol-type check.
+    if (
+      call_["func"].contains("value") &&
+      call_["func"]["value"].contains("_type") &&
+      call_["func"]["value"]["_type"] == "BinOp")
+      return true;
+
+    std::string dummy;
+    const symbolt *sym = get_object_list_symbol(dummy);
+    const typet list_type = type_handler_.get_list_type();
+    return sym != nullptr && sym->type == list_type;
+  }
+
+  // "copy" is shared between list and dict. Treat as list.copy() only when
+  // the receiver resolves to a list symbol; otherwise let dispatch fall
+  // through to handle_dict_method().
+  if (method_name == "copy")
+  {
+    // BinOp receivers (e.g. (s1 - s2).copy()) are list-like, since dicts do
+    // not support arithmetic operators.
     if (
       call_["func"].contains("value") &&
       call_["func"]["value"].contains("_type") &&
@@ -3472,7 +3684,7 @@ bool function_call_expr::is_any_call() const
   return func_name == "any";
 }
 
-exprt function_call_expr::handle_any() const
+exprt function_call_expr::handle_any()
 {
   const auto keywords =
     call_.contains("keywords") ? call_["keywords"] : nlohmann::json::array();
@@ -3488,11 +3700,23 @@ exprt function_call_expr::handle_any() const
     throw std::runtime_error("any() takes at most 1 argument");
 
   const auto &arg = args[0];
+  const std::string &arg_type = arg["_type"];
 
-  if (arg["_type"] != "List")
-    throw std::runtime_error("any() currently only supports list literals");
+  if (arg_type == "List" || arg_type == "Tuple" || arg_type == "Set")
+    return reduce_iterable_literal_truthiness(arg, ReduceOp::Any);
 
-  return reduce_list_literal_truthiness(arg, ReduceOp::Any);
+  exprt arg_expr = converter_.get_expr(arg);
+  if (converter_.get_tuple_handler().is_tuple_type(arg_expr.type()))
+    return reduce_tuple_expr_truthiness(arg_expr, ReduceOp::Any);
+
+  // Set / frozenset variables share the PyListObject* representation, so
+  // forward to the list-backed any() model.
+  if (arg_expr.type() == converter_.get_type_handler().get_list_type())
+    return handle_general_function_call();
+
+  throw std::runtime_error(
+    "any() currently only supports list/tuple/set literals or list, set, or "
+    "tuple variables");
 }
 
 bool function_call_expr::is_all_call() const
@@ -3518,18 +3742,36 @@ exprt function_call_expr::handle_all()
       "all() takes at most 1 argument, got " + std::to_string(args.size()));
 
   const auto &arg = args[0];
+  const std::string &arg_type = arg["_type"];
 
-  if (arg["_type"] != "List")
+  if (arg_type == "List" || arg_type == "Tuple" || arg_type == "Set")
+    return reduce_iterable_literal_truthiness(arg, ReduceOp::All);
+
+  // Non-literal argument: forward to the Python operational model only
+  // when the value is actually a list (pointer to PyListObj). Tuple
+  // values are evaluated by combining the truthiness of each struct
+  // member; anything else gets a clear error rather than being silently
+  // passed to __ESBMC_list_size, which would dereference a non-list
+  // pointer (issue #4295).
+  exprt arg_expr = converter_.get_expr(arg);
+  if (converter_.get_tuple_handler().is_tuple_type(arg_expr.type()))
+    return reduce_tuple_expr_truthiness(arg_expr, ReduceOp::All);
+
+  // Sets share the PyListObject* representation, so the list-backed all()
+  // model handles set variables transparently.
+  if (arg_expr.type() == converter_.get_type_handler().get_list_type())
     return handle_general_function_call();
 
-  return reduce_list_literal_truthiness(arg, ReduceOp::All);
+  throw std::runtime_error(
+    "all() currently only supports list/tuple/set literals, list, set, or "
+    "tuple variables");
 }
 
-exprt function_call_expr::reduce_list_literal_truthiness(
-  const nlohmann::json &list_arg,
+exprt function_call_expr::reduce_iterable_literal_truthiness(
+  const nlohmann::json &iterable_arg,
   ReduceOp op) const
 {
-  const auto &elts = list_arg["elts"];
+  const auto &elts = iterable_arg["elts"];
 
   if (elts.empty())
     return gen_boolean(op == ReduceOp::All);
@@ -3550,6 +3792,37 @@ exprt function_call_expr::reduce_list_literal_truthiness(
       exprt element = converter_.get_expr(elt);
       is_truthy = compute_element_truthiness(element);
     }
+
+    if (first)
+    {
+      result = is_truthy;
+      first = false;
+      continue;
+    }
+
+    result = (op == ReduceOp::Any) ? exprt(or_exprt(result, is_truthy))
+                                   : exprt(and_exprt(result, is_truthy));
+  }
+
+  return result;
+}
+
+exprt function_call_expr::reduce_tuple_expr_truthiness(
+  const exprt &tuple_expr,
+  ReduceOp op) const
+{
+  const struct_typet &tuple_type = to_struct_type(tuple_expr.type());
+  const auto &components = tuple_type.components();
+
+  if (components.empty())
+    return gen_boolean(op == ReduceOp::All);
+
+  exprt result;
+  bool first = true;
+  for (const auto &component : components)
+  {
+    member_exprt member(tuple_expr, component.get_name(), component.type());
+    exprt is_truthy = compute_element_truthiness(member);
 
     if (first)
     {
@@ -3707,6 +3980,18 @@ function_call_expr::get_dispatch_table()
      },
      [this]() { return converter_.get_expr(call_["func"]["value"]); },
      "__iter__ on builtin iterables"},
+
+    // Tuple methods (count, index) — matched before list/dict so a tuple
+    // receiver doesn't fall through to either.
+    {[this]() { return is_tuple_method_call(); },
+     [this]() { return handle_tuple_method(); },
+     "tuple methods"},
+
+    // Set methods (add, discard) — matched before list methods so set
+    // receivers don't fall through to the list handler.
+    {[this]() { return is_set_method_call(); },
+     [this]() { return handle_set_method(); },
+     "set methods"},
 
     // List methods
     {[this]() { return is_list_method_call(); },
@@ -4395,75 +4680,103 @@ exprt function_call_expr::handle_general_function_call()
 
   // Fast-path: sorted() over a concrete int list can be materialized directly
   // in the frontend, avoiding expensive runtime list sorting/equality paths.
+  // Honour reverse=<constant bool>; bail to the model for any other keyword.
   if (func_name == "sorted" && call_["args"].size() == 1)
   {
-    exprt list_arg = converter_.get_expr(call_["args"][0]);
-    if (list_arg.is_symbol())
+    bool fast_path_reverse = false;
+    bool fast_path_ok = true;
+    if (call_.contains("keywords"))
     {
-      const std::string list_id = list_arg.identifier().as_string();
-      const size_t map_size = python_list::get_list_type_map_size(list_id);
-      if (map_size > 0 && map_size <= 32)
+      for (const auto &kw : call_["keywords"])
       {
-        struct sortable_elem
+        if (kw.value("arg", "") != "reverse")
         {
-          BigInt key;
-          size_t pos;
-        };
-
-        std::vector<sortable_elem> elems;
-        elems.reserve(map_size);
-        bool all_constant_ints = true;
-
-        for (size_t i = 0; i < map_size; ++i)
-        {
-          const std::string elem_id =
-            python_list::get_list_element_id(list_id, i);
-          if (elem_id.empty())
-          {
-            all_constant_ints = false;
-            break;
-          }
-
-          const symbolt *elem_sym = converter_.find_symbol(elem_id);
-          if (
-            !elem_sym || !elem_sym->value.is_constant() ||
-            !(elem_sym->type.is_signedbv() || elem_sym->type.is_unsignedbv()))
-          {
-            all_constant_ints = false;
-            break;
-          }
-
-          BigInt key = binary2integer(elem_sym->value.value().c_str(), true);
-          elems.push_back({key, i});
+          fast_path_ok = false;
+          break;
         }
-
-        if (all_constant_ints)
+        exprt v = converter_.get_expr(kw["value"]);
+        if (!v.is_constant())
         {
-          std::stable_sort(
-            elems.begin(),
-            elems.end(),
-            [](const sortable_elem &a, const sortable_elem &b) {
-              if (a.key == b.key)
-                return a.pos < b.pos;
-              return a.key < b.key;
-            });
+          fast_path_ok = false;
+          break;
+        }
+        fast_path_reverse = v.is_true();
+      }
+    }
 
-          nlohmann::json sorted_list;
-          sorted_list["_type"] = "List";
-          sorted_list["elts"] = nlohmann::json::array();
-          converter_.copy_location_fields_from_decl(call_, sorted_list);
-          for (const auto &elem : elems)
+    if (fast_path_ok)
+    {
+      exprt list_arg = converter_.get_expr(call_["args"][0]);
+      if (list_arg.is_symbol())
+      {
+        const std::string list_id = list_arg.identifier().as_string();
+        const size_t map_size = python_list::get_list_type_map_size(list_id);
+        if (map_size > 0 && map_size <= 32)
+        {
+          struct sortable_elem
           {
-            nlohmann::json cst;
-            cst["_type"] = "Constant";
-            cst["value"] = elem.key.to_int64();
-            cst["kind"] = nullptr;
-            converter_.copy_location_fields_from_decl(call_, cst);
-            sorted_list["elts"].push_back(cst);
+            BigInt key;
+            size_t pos;
+          };
+
+          std::vector<sortable_elem> elems;
+          elems.reserve(map_size);
+          bool all_constant_ints = true;
+
+          for (size_t i = 0; i < map_size; ++i)
+          {
+            const std::string elem_id =
+              python_list::get_list_element_id(list_id, i);
+            if (elem_id.empty())
+            {
+              all_constant_ints = false;
+              break;
+            }
+
+            const symbolt *elem_sym = converter_.find_symbol(elem_id);
+            if (
+              !elem_sym || !elem_sym->value.is_constant() ||
+              !(elem_sym->type.is_signedbv() || elem_sym->type.is_unsignedbv()))
+            {
+              all_constant_ints = false;
+              break;
+            }
+
+            BigInt key = binary2integer(elem_sym->value.value().c_str(), true);
+            elems.push_back({key, i});
           }
 
-          python_list sorted_list_expr(converter_, sorted_list);
-          return sorted_list_expr.get();
+          if (all_constant_ints)
+          {
+            std::stable_sort(
+              elems.begin(),
+              elems.end(),
+              [](const sortable_elem &a, const sortable_elem &b) {
+                if (a.key == b.key)
+                  return a.pos < b.pos;
+                return a.key < b.key;
+              });
+
+            if (fast_path_reverse)
+              std::reverse(elems.begin(), elems.end());
+
+            nlohmann::json sorted_list;
+            sorted_list["_type"] = "List";
+            sorted_list["elts"] = nlohmann::json::array();
+            converter_.copy_location_fields_from_decl(call_, sorted_list);
+            for (const auto &elem : elems)
+            {
+              nlohmann::json cst;
+              cst["_type"] = "Constant";
+              cst["value"] = elem.key.to_int64();
+              cst["kind"] = nullptr;
+              converter_.copy_location_fields_from_decl(call_, cst);
+              sorted_list["elts"].push_back(cst);
+            }
+
+            python_list sorted_list_expr(converter_, sorted_list);
+            return sorted_list_expr.get();
+          }
         }
       }
     }
@@ -4488,11 +4801,34 @@ exprt function_call_expr::handle_general_function_call()
     return handle_round(arg);
   }
 
+  // sum() accepts an optional start argument (sum(iterable, start)); accept
+  // both 1- and 2-arg forms so the typed dispatch picks sum / sum_float
+  // consistently. The other builtins below remain 1-arg only.
+  const size_t n_args = call_["args"].size();
+  const bool is_sorted_min_max =
+    func_name == "min" || func_name == "max" || func_name == "sorted";
+
+  // min(iter, default=...) / max(iter, default=...) route to *_default
+  // variants that fall back to the supplied default when iter is empty
+  // instead of raising ValueError.
+  bool has_default_kwarg = false;
+  exprt default_kwarg_value;
+  if ((func_name == "min" || func_name == "max") && call_.contains("keywords"))
+  {
+    for (const auto &kw : call_["keywords"])
+    {
+      if (kw.value("arg", "") == "default")
+      {
+        has_default_kwarg = true;
+        default_kwarg_value = converter_.get_expr(kw["value"]);
+        break;
+      }
+    }
+  }
+
   if (
-    !is_user_imported &&
-    (func_name == "min" || func_name == "max" || func_name == "sorted" ||
-     func_name == "sum") &&
-    call_["args"].size() == 1)
+    !is_user_imported && ((is_sorted_min_max && n_args == 1) ||
+                          (func_name == "sum" && (n_args == 1 || n_args == 2))))
   {
     exprt list_arg = converter_.get_expr(call_["args"][0]);
     typet elem_type;
@@ -4507,7 +4843,7 @@ exprt function_call_expr::handle_general_function_call()
       // when passing the list to max_float/min_float model functions.
       if (
         elem_type.is_floatbv() && (func_name == "min" || func_name == "max") &&
-        python_list::has_mixed_numeric_types(list_id))
+        python_list::has_mixed_numeric_types(list_id) && !has_default_kwarg)
       {
         irep_idt comparison_op =
           (func_name == "max") ? exprt::i_gt : exprt::i_lt;
@@ -4517,6 +4853,8 @@ exprt function_call_expr::handle_general_function_call()
       }
     }
     // Dispatch to typed builtin based on element type
+    if (has_default_kwarg)
+      actual_func_name += "_default";
     if (!elem_type.is_nil())
     {
       if (elem_type.is_floatbv())
@@ -5436,6 +5774,34 @@ exprt function_call_expr::handle_general_function_call()
       call.arguments().push_back(arg);
 
     arg_index++;
+  }
+
+  // Forward keyword arguments to their parameter slots so the callee
+  // receives the supplied value. The validation loop below only fills in
+  // default values for *missing* params, so kwargs would otherwise be
+  // marked "provided" yet never actually passed. Subsumes the
+  // min/max-default specific path: with the *_default models exposing a
+  // named `default` parameter, the generic forwarding lands the value in
+  // the right slot for free.
+  if (call_.contains("keywords") && call_["keywords"].is_array())
+  {
+    for (const auto &kw : call_["keywords"])
+    {
+      if (!kw.contains("arg") || kw["arg"].is_null())
+        continue; // skip **kwargs unpacking
+      const std::string kw_name = kw["arg"].get<std::string>();
+      for (size_t i = 0; i < params.size(); ++i)
+      {
+        if (params[i].get_base_name().as_string() == kw_name)
+        {
+          exprt kw_val = converter_.get_expr(kw["value"]);
+          if (call.arguments().size() <= i)
+            call.arguments().resize(i + 1);
+          call.arguments()[i] = kw_val;
+          break;
+        }
+      }
+    }
   }
 
   // Add default arguments for missing parameters

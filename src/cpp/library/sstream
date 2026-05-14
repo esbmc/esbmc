@@ -144,47 +144,89 @@ public:
     return *this;
   }
 
-  ostream &operator<<(float val)
+  // Default-precision (6 significant digits) %g-like formatting, with trailing
+  // zeros and a trailing '.' stripped to match iostream defaults. Negative
+  // values get a leading '-'; the integer part fits in `int` (sufficient for
+  // the regression tests). Long double maps to double under ESBMC.
+  ostream &operator<<(double val)
   {
-    char temp[NUM_SIZE];
-    char temp2[2];
-    int n = (int)val;
-    itoa(n, temp, DEC);
-    strcat(temp, ".");
-    val = val - (float)n;
-    for (int i = 0; i < NUM_SIZE && val != 0; i++)
+    char buf[NUM_SIZE];
+    if (val < 0)
     {
-      val = val * DEC;
-      n = (int)val;
-      itoa(n, temp2, DEC);
-      strcat(temp, temp2);
+      _string.append("-");
+      val = -val;
     }
-    _string.append(temp);
+    int ipart = (int)val;
+    itoa(ipart, buf, DEC);
+    int len = strlen(buf);
+
+    // Ternary, not `if (prec < 0) prec = 0;`. With `--unwind 10`
+    // (no `--incremental-bmc`) ESBMC's interval domain widens `prec`
+    // through the if-clamp and produces a false positive on a later
+    // `len` invariant; the ternary is opaque to that widening. Verified
+    // against regression/esbmc-cpp/stream/sstream_str_{char,double,float}
+    // (issue #4401).
+    int prec = (len < 6) ? (6 - len) : 0;
+    if (prec > 0)
+    {
+      double fpart = val - (double)ipart;
+      long mult = 1;
+      for (int i = 0; i < prec; i++)
+        mult *= DEC;
+      long fint = (long)(fpart * (double)mult + 0.5);
+
+      // Half-up rounding can produce fint == mult (e.g. fpart = 0.999999,
+      // mult = 1e6). Promote the carry into ipart and re-emit so the
+      // leading digit is not silently dropped from the fractional buffer.
+      if (fint >= mult)
+      {
+        ipart++;
+        itoa(ipart, buf, DEC);
+        len = strlen(buf);
+        fint = 0;
+      }
+
+      char fbuf[NUM_SIZE];
+      int j = prec;
+      fbuf[j] = '\0';
+      while (j > 0)
+      {
+        fbuf[--j] = '0' + (int)(fint % 10);
+        fint /= 10;
+      }
+      int flen = prec;
+      while (flen > 0 && fbuf[flen - 1] == '0')
+        fbuf[--flen] = '\0';
+      if (flen > 0)
+      {
+        buf[len++] = '.';
+        buf[len] = '\0';
+        strcat(buf, fbuf);
+      }
+    }
+    _string.append(buf);
     return *this;
   }
 
-  ostream &operator<<(double val)
+  ostream &operator<<(float val)
   {
-    char temp[NUM_SIZE];
-    char temp2[2];
-    int n = (int)val;
-    itoa(n, temp, DEC);
-    strcat(temp, ".");
-    val = val - (double)n;
-    for (int i = 0; i < NUM_SIZE && val != 0; i++)
-    {
-      val = val * DEC;
-      n = (int)val;
-      itoa(n, temp2, DEC);
-      strcat(temp, temp2);
-    }
-    _string.append(temp);
-    return *this;
+    return *this << (double)val;
+  }
+
+  ostream &operator<<(long double val)
+  {
+    return *this << (double)val;
   }
 
   ostream &operator<<(char val)
   {
     _string.append(&val, 1);
+    return *this;
+  }
+
+  ostream &operator<<(signed char val)
+  {
+    _string.append(reinterpret_cast<const char *>(&val), 1);
     return *this;
   }
 

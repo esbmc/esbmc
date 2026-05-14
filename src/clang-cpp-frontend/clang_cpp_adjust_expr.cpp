@@ -4,6 +4,7 @@
 #include <util/c_types.h>
 #include <util/destructor.h>
 #include <util/expr_util.h>
+#include <util/message.h>
 
 clang_cpp_adjust::clang_cpp_adjust(contextt &_context)
   : clang_c_adjust(_context)
@@ -100,8 +101,11 @@ void clang_cpp_adjust::adjust_side_effect(side_effect_exprt &expr)
   {
     adjust_operands(expr);
 
-    exprt &initializer = (exprt &)expr.find("initializer");
-    adjust_expr(initializer);
+    if (expr.find("initializer").is_not_nil())
+    {
+      exprt &initializer = static_cast<exprt &>(expr.add("initializer"));
+      adjust_expr(initializer);
+    }
   }
   else if (statement == "assign")
   {
@@ -192,7 +196,18 @@ void clang_cpp_adjust::adjust_cpp_member(member_exprt &expr)
    *      * id: <setX_clang_ID>
    */
   const symbolt *comp_symb = ns.lookup(expr.component_name());
-  assert(comp_symb);
+  if (!comp_symb)
+  {
+    log_error(
+      "{}: unresolved C++ member component `{}` at {} (struct-op type "
+      "id `{}`, member type id `{}`)",
+      __func__,
+      expr.component_name(),
+      expr.location().as_string(),
+      expr.struct_op().type().id_string(),
+      expr.type().id_string());
+    abort();
+  }
   // compoment's type shall be the same as member_exprt's type
   // and both are of the type `code`
   assert(comp_symb->type.is_code());
@@ -342,7 +357,8 @@ void clang_cpp_adjust::align_se_function_call_return_type(
 {
   // align the side effect's type at callsite with the
   // function return type. But ignore constructors
-  const typet &return_type = (typet &)f_op.type().return_type();
+  const typet &return_type =
+    static_cast<const typet &>(f_op.type().return_type());
   if (return_type.id() != "constructor" && return_type.is_not_nil())
     expr.type() = return_type;
 }

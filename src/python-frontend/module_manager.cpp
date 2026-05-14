@@ -204,7 +204,10 @@ void module_manager::load_directory(
       auto submodule = create_module(entry.path());
       if (submodule)
       {
-        if (main_module_ == submodule->name())
+        // The entry-script JSON is only at the top level; a submodule whose
+        // basename happens to match (e.g. kernels/<main>.py) is a distinct
+        // module and must be loaded.
+        if (!parent_module && main_module_ == submodule->name())
         {
           continue;
         }

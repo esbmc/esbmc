@@ -7,6 +7,32 @@
 #include <langapi/mode.h>
 #include <util/compiler_defs.h>
 #include <util/cache_defs.h>
+
+/// C standard version, ordered so that comparisons work naturally.
+enum class c_stdt
+{
+  unknown,
+  c89,
+  c99,
+  c11,
+  c17,
+  c23,
+  c26,
+};
+
+/// C++ standard version, ordered so that comparisons work naturally.
+enum class cxx_stdt
+{
+  unknown,
+  cpp98,
+  cpp11,
+  cpp14,
+  cpp17,
+  cpp20,
+  cpp23,
+  cpp26,
+};
+
 class configt
 {
 public:
@@ -51,6 +77,9 @@ public:
   {
     language_idt lid;
     std::string std;
+    // Set by the Clang frontend after typecheck().
+    c_stdt c_std = c_stdt::unknown;
+    cxx_stdt cpp_std = cxx_stdt::unknown;
   } language = {language_idt::NONE, ""};
 
   struct ansi_ct
