@@ -16,7 +16,9 @@
 #include <util/guard.h>
 #include <util/i2string.h>
 #include <irep2/irep2.h>
+#include <memory>
 #include <vector>
+#include <goto-symex/witnesses.h>
 
 class execution_statet; // forward decl
 
@@ -468,6 +470,16 @@ public:
    *  realloc number is. No need for special consideration when merging states
    *  at phi nodes: the renumbering update itself is guarded at the SMT layer.*/
   std::map<expr2tc, unsigned> realloc_map;
+
+  // --- Violation-witness replay state ---
+
+  /// witness_segs[seg][wp]: all actionable waypoints
+  std::vector<std::vector<waypoint>> witness_segs;
+  size_t cur_seg;
+  size_t cur_wp;
+
+  /// Advance the cursor to the next waypoint.
+  void advance_witness_position();
 };
 
 #endif

@@ -1,49 +1,52 @@
-#ifndef DSTRING_H
-#define DSTRING_H
+#ifndef IREP_IDT_H
+#define IREP_IDT_H
 
 #include <algorithm>
-#include <util/string_container.h>
+#include <functional>
+#include <util/string_pool.h>
 #include <util/prefix.h>
 
-class dstring final
+// A 4-byte handle into a global string interning pool. Equality and hashing
+// are O(1) (integer compare); the underlying string is fetched on demand.
+class irep_idt final
 {
 public:
   // this is safe for static objects
 
-  constexpr dstring() : no(0)
+  constexpr irep_idt() : no(0)
   {
   }
 
   // this is safe for static objects
-  constexpr static dstring make_from_table_index(unsigned no)
+  constexpr static irep_idt make_from_table_index(unsigned no)
   {
-    return dstring(no);
+    return irep_idt(no);
   }
 
   // this one is not safe for static objects
-  dstring(const char *s) : no(get_string_container()[s])
+  irep_idt(const char *s) : no(get_string_pool()[s])
   {
   }
 
   // this one is not safe for static objects
-  dstring(const std::string &s) : no(get_string_container()[s])
+  irep_idt(const std::string &s) : no(get_string_pool()[s])
   {
   }
 
-  dstring(const dstring &) = default;
+  irep_idt(const irep_idt &) = default;
 
   // access
   /// source object \p other, this is effectively just a copy constructor.
-  constexpr dstring(dstring &&other) : no(other.no)
+  constexpr irep_idt(irep_idt &&other) : no(other.no)
   {
   }
 
-  friend bool has_prefix(const dstring &s, std::string_view prefix)
+  friend bool has_prefix(const irep_idt &s, std::string_view prefix)
   {
     return has_prefix(std::string_view(s.as_string()), prefix);
   }
 
-  friend bool has_suffix(const dstring &s, std::string_view suffix)
+  friend bool has_suffix(const irep_idt &s, std::string_view suffix)
   {
     return has_suffix(std::string_view(s.as_string()), suffix);
   }
@@ -71,19 +74,19 @@ public:
 
   // ordering -- not the same as lexicographical ordering
 
-  inline bool operator<(const dstring &b) const
+  inline bool operator<(const irep_idt &b) const
   {
     return no < b.no;
   }
 
   // comparison with same type
 
-  inline bool operator==(const dstring &b) const
+  inline bool operator==(const irep_idt &b) const
   {
     return no == b.no;
   } // really fast equality testing
 
-  inline bool operator!=(const dstring &b) const
+  inline bool operator!=(const irep_idt &b) const
   {
     return no != b.no;
   } // really fast equality testing
@@ -124,28 +127,17 @@ public:
     return as_string() >= b;
   }
 
-  int compare(const dstring &b) const
+  int compare(const irep_idt &b) const
   {
     if (no == b.no)
       return 0; // equal
     return as_string().compare(b.as_string());
   }
 
-  int compare_uppercase(const dstring &b) const
-  {
-    if (no == b.no)
-      return 0; // equal
-    return std::equal(
-      as_string().begin(),
-      as_string().end(),
-      b.as_string().begin(),
-      [](char a, char b) { return toupper(a) == toupper(b); });
-  }
-
   // the reference returned is guaranteed to be stable
   const std::string &as_string() const
   {
-    return get_string_container().get_string(no);
+    return get_string_pool().get_string(no);
   }
 
   // modifying
@@ -155,15 +147,15 @@ public:
     no = 0;
   }
 
-  inline void swap(dstring &b)
+  inline void swap(irep_idt &b)
   {
     unsigned t = no;
     no = b.no;
     b.no = t;
   }
 
-  inline dstring &operator=(const dstring &b) = default;
-  inline dstring &operator=(dstring &&other) = default;
+  inline irep_idt &operator=(const irep_idt &b) = default;
+  inline irep_idt &operator=(irep_idt &&other) = default;
 
   // output
 
@@ -183,24 +175,28 @@ public:
   }
 
 private:
-  constexpr explicit dstring(unsigned _no) : no(_no)
+  constexpr explicit irep_idt(unsigned _no) : no(_no)
   {
   }
 
   unsigned no;
 };
 
-struct dstring_hash
+inline std::ostream &operator<<(std::ostream &out, const irep_idt &a)
 {
-  size_t operator()(const dstring &s) const
+  return a.operator<<(out);
+}
+
+namespace std
+{
+template <>
+struct hash<irep_idt>
+{
+  size_t operator()(const irep_idt &s) const
   {
     return s.hash();
   }
 };
-
-inline std::ostream &operator<<(std::ostream &out, const dstring &a)
-{
-  return a.operator<<(out);
-}
+} // namespace std
 
 #endif

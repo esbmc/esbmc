@@ -1232,6 +1232,10 @@ protected:
   /** Flag as to whether we're doing a k-induction inductive step.
    *  Corresponds to the option --inductive-step */
   bool inductive_step;
+  /** Cached from --validate-violation-witness; checked on every branch/intrinsic. */
+  bool validate_witness;
+  /** Pre-interned target waypoint line; empty when no target is present. */
+  irep_idt witness_target_line;
   /** Set of dereference state records; this field is used as a mailbox between
    *  the dereference code and the caller, who will inspect the contents after
    *  a call to dereference (in INTERNAL mode) completes. */

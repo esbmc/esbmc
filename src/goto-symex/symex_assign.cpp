@@ -7,6 +7,7 @@
 #include <util/cprover_prefix.h>
 #include <util/expr_util.h>
 #include <util/i2string.h>
+#include <util/message.h>
 #include <util/usr_utils.h>
 #include <irep2/irep2.h>
 #include <util/migrate.h>
@@ -46,7 +47,8 @@ goto_symext::goto_symext(
     k_induction(options.is_kind()),
     base_case(options.get_bool_option("base-case")),
     forward_condition(options.get_bool_option("forward-condition")),
-    inductive_step(options.get_bool_option("inductive-step"))
+    inductive_step(options.get_bool_option("inductive-step")),
+    validate_witness(options.get_bool_option("validate-violation-witness"))
 {
   const std::string &set = options.get_option("unwindset");
   unsigned int length = set.length();

@@ -9,10 +9,10 @@ to **MITRE CWE 4.20** (published 2024-11-19,
 <https://cwe.mitre.org/data/index.html>) and only retains ids whose
 Vulnerability Mapping Usage is `ALLOWED` or `ALLOWED-WITH-REVIEW`.
 
-ESBMC currently distinguishes **29 unique CWE identifiers** across
-**24 violation kinds**: CWE-120, 121, 125, 129, 131, 190, 191, 193,
-362, 366, 369, 401, 415, 416, 469, 476, 562, 590, 617, 681, 761,
-787, 822, 823, 824, 825, 833, 908, 1335.
+ESBMC currently distinguishes **30 unique CWE identifiers** across
+**25 violation kinds**: CWE-120, 121, 125, 129, 131, 190, 191, 193,
+362, 366, 369, 401, 415, 416, 457, 469, 476, 562, 590, 617, 681,
+761, 787, 822, 823, 824, 825, 833, 908, 1335.
 
 The CWE ids appear in:
 
@@ -55,6 +55,7 @@ first-match-wins substring table ordered longest-substring-first.
 | `atomicity violation`                                          | 362, 366                          |
 | `data race on`                                                 | 362, 366                          |
 | `Deadlocked state`                                             | 833                               |
+| `use of uninitialized variable`                                | 457                               |
 | `unreachable code reached`                                     | 617                               |
 | `recursion unwinding assertion` / `unwinding assertion loop`   | *(none — k-bound exceeded, not a weakness)* |
 

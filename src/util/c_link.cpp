@@ -1,4 +1,6 @@
 #include <util/c_expr2string.h>
+#include <algorithm>
+#include <cctype>
 #include <unordered_set>
 #include <util/base_type.h>
 #include <util/c_link.h>
@@ -262,7 +264,16 @@ void c_linkt::duplicate_symbol(symbolt &in_context, symbolt &new_symbol)
       }
 #ifdef _WIN32
       // Windows is not case-sensitive
-      else if (in_context.module.compare_uppercase(new_symbol.module))
+      else if (([](const irep_idt &a, const irep_idt &b) {
+                 const std::string &as = a.as_string(), &bs = b.as_string();
+                 return as.size() == bs.size() &&
+                        std::equal(
+                          as.begin(), as.end(), bs.begin(), [](char x, char y) {
+                            return std::toupper(
+                                     static_cast<unsigned char>(x)) ==
+                                   std::toupper(static_cast<unsigned char>(y));
+                          });
+               })(in_context.module, new_symbol.module))
       {
         // ignore
       }

@@ -3846,7 +3846,7 @@ bool python_converter::is_bytes_literal(const nlohmann::json &element)
     const typet &subtype = current_element_type.subtype();
     if (subtype.id() == "unsignedbv")
     {
-      // Convert dstring width to integer
+      // Convert irep_idt width to integer
       const irep_idt &width_str = subtype.width();
       try
       {
@@ -8883,6 +8883,16 @@ typet python_converter::infer_return_type_from_body(const nlohmann::json &body)
     if (stmt["_type"] == "Return" && !stmt["value"].is_null())
     {
       const auto &ret_val = stmt["value"];
+
+      // `return self` in a method: surface the class's struct value type so
+      // callers can assign to a `Class`-typed local. Without this, fallback
+      // inference picks up `Class *` from `self` and the call-site assignment
+      // becomes a pointer-to-struct mismatch that trips an assertion in
+      // value_set::make_member on later member access. See GitHub #4514.
+      if (
+        ret_val["_type"] == "Name" && ret_val.contains("id") &&
+        ret_val["id"] == "self" && !current_class_name_.empty())
+        return type_handler_.get_typet(current_class_name_);
 
       // If returning a tuple, infer its type
       if (ret_val["_type"] == "Tuple")

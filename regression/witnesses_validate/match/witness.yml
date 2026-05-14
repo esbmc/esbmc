@@ -1,0 +1,36 @@
+- entry_type: "violation_sequence"
+  metadata:
+    format_version: "2.0"
+    uuid: "4412af70-389a-475e-849c-e57e5b92019e"
+    creation_time: "2023-09-28T14:42:30+02:00"
+    producer:
+      name: "CPAchecker"
+      version: "2.2.1-svn"
+      configuration: "svcomp23"
+    task:
+      input_files:
+      - "main.c"
+      specification: "G ! call(reach_error())"
+      data_model: "ILP32"
+      language: "C"
+  content:
+  - segment:
+    - waypoint:
+        type: "branching"
+        action: "follow"
+        constraint:
+          value: "true"
+        location:
+          file_name: "main.c"
+          line: 17
+          column: 3
+          function: "main"
+  - segment:
+    - waypoint:
+        type: "target"
+        action: "follow"
+        location:
+          file_name: "main.c"
+          line: 23
+          column: 5
+          function: "main"

@@ -96,6 +96,9 @@ const std::vector<entry_t> &rules_table()
        {"atomicity-violation", "Atomicity violation", {362, 366}}},
       {"data race on", {"data-race", "Data race", {362, 366}}},
       {"Deadlocked state", {"deadlock", "Deadlock", {833}}},
+      // Uninitialised local scalar (CWE-457).
+      {"use of uninitialized variable",
+       {"uninitialised-variable", "Use of uninitialized variable", {457}}},
       // Reachability.
       {"unreachable code reached",
        {"reachable-error", "Reachable error/assertion", {617}}},
@@ -135,6 +138,7 @@ const std::map<unsigned, std::string_view> &names_map()
     {401, "Missing Release of Memory after Effective Lifetime"},
     {415, "Double Free"},
     {416, "Use After Free"},
+    {457, "Use of Uninitialized Variable"},
     {469, "Use of Pointer Subtraction to Determine Size"},
     {476, "NULL Pointer Dereference"},
     {562, "Return of Stack Variable Address"},

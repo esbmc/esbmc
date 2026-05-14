@@ -315,8 +315,7 @@ bool clang_c_languaget::parse(const std::string &path)
   const std::string &actual_path =
     nested_transformed ? nested_transformed->path() : path;
 
-  // Inject witness invariants as __ESBMC_loop_invariant / __ESBMC_assume calls
-  // so that Clang parses them naturally.
+  // Inject witness intrinsic calls so that Clang parses them naturally.
   // #line directives after each injection preserve original line numbers.
   std::optional<file_operations::tmp_file> witness_injected;
   if (config.options.get_bool_option("validate-correctness-witness"))
@@ -332,6 +331,15 @@ bool clang_c_languaget::parse(const std::string &path)
       else
         witness_injected = write_witness_tmp(content);
     }
+  }
+  else if (config.options.get_bool_option("validate-violation-witness"))
+  {
+    const std::string witness_path = config.options.get_option("witness");
+    auto waypoints = yaml_parser::get_waypoints(witness_path);
+    std::string content =
+      yaml_parser::build_violation_witness_source(actual_path, path, waypoints);
+    if (!content.empty())
+      witness_injected = write_witness_tmp(content);
   }
   const std::string &compile_path =
     witness_injected ? witness_injected->path() : actual_path;
@@ -567,6 +575,9 @@ _Bool __ESBMC_exists(void*, _Bool);
  * 2. Use the invariants to help the following of the loop continue with a simple assumption
  */
 void __ESBMC_loop_invariant(_Bool);
+
+// Violation-witness: seg_idx/wp_idx uniquely identify the call site; constraint is the assumption.
+void __ESBMC_witness_assume(int, int, _Bool);
 
 /* __ESBMC_loop_assigns: specifies memory locations a loop may modify.
  * Used with --loop-frame-rule for frame condition enforcement.

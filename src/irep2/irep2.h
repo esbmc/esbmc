@@ -15,7 +15,7 @@
 #include <mutex>
 #include <util/compiler_defs.h>
 #include <util/crypto_hash.h>
-#include <util/dstring.h>
+#include <util/irep_idt.h>
 #include <util/irep.h>
 
 // Ahead of time: a list of all expressions and types, in a preprocessing

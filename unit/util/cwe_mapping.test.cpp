@@ -82,6 +82,12 @@ TEST_CASE("cwe_for matches deadlock", "[util][cwe_mapping]")
     cwe_for("Deadlocked state in pthread_join") == std::vector<unsigned>{833});
 }
 
+TEST_CASE("cwe_for matches uninitialised variable", "[util][cwe_mapping]")
+{
+  REQUIRE(
+    cwe_for("use of uninitialized variable: x") == std::vector<unsigned>{457});
+}
+
 TEST_CASE("cwe_for returns empty on unknown comment", "[util][cwe_mapping]")
 {
   REQUIRE(cwe_for("").empty());
@@ -105,6 +111,7 @@ TEST_CASE("cwe_name resolves known ids", "[util][cwe_mapping]")
   REQUIRE(cwe_name(369) == "Divide By Zero");
   REQUIRE(cwe_name(617) == "Reachable Assertion");
   REQUIRE(cwe_name(833) == "Deadlock");
+  REQUIRE(cwe_name(457) == "Use of Uninitialized Variable");
   // Unknown id returns empty view.
   REQUIRE(cwe_name(0).empty());
   REQUIRE(cwe_name(99999).empty());
@@ -167,6 +174,7 @@ TEST_CASE(
         "atomicity violation",
         "data race on x",
         "Deadlocked state in pthread_mutex_lock",
+        "use of uninitialized variable: foo",
         "unreachable code reached",
         ""})
   {
@@ -199,6 +207,7 @@ TEST_CASE(
         "atomicity violation",
         "data race on x",
         "Deadlocked state in pthread_mutex_lock",
+        "use of uninitialized variable: foo",
         "Access to object out of bounds",
         "dereference failure: memset of memory segment of size 4",
         "undefined behavior on shift operation"})

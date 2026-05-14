@@ -4,13 +4,13 @@
 #include <thread>
 #include <vector>
 #include <set>
-#include <util/string_container.h>
+#include <util/string_pool.h>
 #include <mutex>
 
 class StringContainerTest
 {
 protected:
-  string_containert container;
+  string_pool container;
 };
 
 // ============================================================================
@@ -19,7 +19,7 @@ protected:
 
 TEST_CASE("char* pointer: basic insertion and retrieval", "[char_ptr][basic]")
 {
-  string_containert container;
+  string_pool container;
 
   unsigned id1 = container["hello"];
   unsigned id2 = container["world"];
@@ -32,7 +32,7 @@ TEST_CASE("char* pointer: basic insertion and retrieval", "[char_ptr][basic]")
 
 TEST_CASE("char* pointer: empty string gets index 0", "[char_ptr][basic]")
 {
-  string_containert container;
+  string_pool container;
   unsigned empty_id = container[""];
   REQUIRE(empty_id == 0);
   REQUIRE(container.c_str(0) == std::string(""));
@@ -42,7 +42,7 @@ TEST_CASE(
   "char* pointer: duplicate strings return same index",
   "[char_ptr][basic]")
 {
-  string_containert container;
+  string_pool container;
 
   unsigned id1 = container["test"];
   unsigned id2 = container["test"];
@@ -56,7 +56,7 @@ TEST_CASE(
   "char* pointer: different strings get different indices",
   "[char_ptr][basic]")
 {
-  string_containert container;
+  string_pool container;
 
   unsigned id1 = container["apple"];
   unsigned id2 = container["banana"];
@@ -69,7 +69,7 @@ TEST_CASE(
 
 TEST_CASE("char* pointer: string stability", "[char_ptr][stability]")
 {
-  string_containert container;
+  string_pool container;
 
   unsigned id = container["stable"];
   const char *ptr1 = container.c_str(id);
@@ -91,7 +91,7 @@ TEST_CASE("char* pointer: string stability", "[char_ptr][stability]")
 
 TEST_CASE("std::string: basic insertion and retrieval", "[string][basic]")
 {
-  string_containert container;
+  string_pool container;
 
   std::string hello_str = "hello";
   std::string world_str = "world";
@@ -107,7 +107,7 @@ TEST_CASE("std::string: basic insertion and retrieval", "[string][basic]")
 
 TEST_CASE("std::string: duplicate strings return same index", "[string][basic]")
 {
-  string_containert container;
+  string_pool container;
 
   std::string test_str = "test";
   unsigned id1 = container[test_str];
@@ -118,7 +118,7 @@ TEST_CASE("std::string: duplicate strings return same index", "[string][basic]")
 
 TEST_CASE("std::string: temporary string handling", "[string][basic]")
 {
-  string_containert container;
+  string_pool container;
 
   unsigned id = container[std::string("temporary")];
   REQUIRE(container.c_str(id) == std::string("temporary"));
@@ -126,7 +126,7 @@ TEST_CASE("std::string: temporary string handling", "[string][basic]")
 
 TEST_CASE("std::string: get_string returns reference", "[string][basic]")
 {
-  string_containert container;
+  string_pool container;
 
   std::string input = "reference_test";
   unsigned id = container[input];
@@ -142,7 +142,7 @@ TEST_CASE("std::string: get_string returns reference", "[string][basic]")
 
 TEST_CASE("mixed types: char* and std::string", "[mixed][basic]")
 {
-  string_containert container;
+  string_pool container;
 
   const char *c_str = "same";
   std::string cpp_str = "same";
@@ -155,7 +155,7 @@ TEST_CASE("mixed types: char* and std::string", "[mixed][basic]")
 
 TEST_CASE("mixed types: multiple insertions", "[mixed][basic]")
 {
-  string_containert container;
+  string_pool container;
 
   unsigned id1 = container["str1"];
   unsigned id2 = container[std::string("str2")];
@@ -174,7 +174,7 @@ TEST_CASE("mixed types: multiple insertions", "[mixed][basic]")
 
 TEST_CASE("std::string_view: basic insertion", "[string_view][basic]")
 {
-  string_containert container;
+  string_pool container;
 
   std::string_view view1 = "view_test";
   std::string_view view2 = "another_view";
@@ -189,7 +189,7 @@ TEST_CASE("std::string_view: basic insertion", "[string_view][basic]")
 
 TEST_CASE("std::string_view: substring view", "[string_view][basic]")
 {
-  string_containert container;
+  string_pool container;
 
   std::string full = "hello_world";
   std::string_view view(full.data() + 6, 5); // "world"
@@ -200,7 +200,7 @@ TEST_CASE("std::string_view: substring view", "[string_view][basic]")
 
 TEST_CASE("std::string_view: duplicate strings", "[string_view][basic]")
 {
-  string_containert container;
+  string_pool container;
 
   std::string source = "duplicate";
   std::string_view view1(source);
@@ -214,7 +214,7 @@ TEST_CASE("std::string_view: duplicate strings", "[string_view][basic]")
 
 TEST_CASE("mixed types with string_view", "[string_view][mixed]")
 {
-  string_containert container;
+  string_pool container;
 
   const char *c_str = "mixed";
   std::string cpp_str = "mixed";
@@ -234,7 +234,7 @@ TEST_CASE("mixed types with string_view", "[string_view][mixed]")
 
 TEST_CASE("operator[]: char* variant", "[operator]")
 {
-  string_containert container;
+  string_pool container;
 
   unsigned id1 = container["operator_test"];
   unsigned id2 = container["operator_test"];
@@ -244,7 +244,7 @@ TEST_CASE("operator[]: char* variant", "[operator]")
 
 TEST_CASE("operator[]: std::string variant", "[operator]")
 {
-  string_containert container;
+  string_pool container;
 
   std::string key = "operator_test";
   unsigned id1 = container[key];
@@ -259,29 +259,28 @@ TEST_CASE("operator[]: std::string variant", "[operator]")
 
 TEST_CASE("global container: singleton pattern", "[global][static]")
 {
-  string_containert &cont1 = get_string_container();
-  string_containert &cont2 = get_string_container();
+  string_pool &cont1 = get_string_pool();
+  string_pool &cont2 = get_string_pool();
 
   REQUIRE(&cont1 == &cont2); // Same instance
 }
 
 TEST_CASE("global container: persistence across calls", "[global][static]")
 {
-  unsigned id1 = get_string_container()["global_test"];
-  unsigned id2 = get_string_container()["global_test"];
+  unsigned id1 = get_string_pool()["global_test"];
+  unsigned id2 = get_string_pool()["global_test"];
 
   REQUIRE(id1 == id2);
 }
 
 TEST_CASE("global container: multiple insertions", "[global][static]")
 {
-  get_string_container()["global_1"];
-  get_string_container()["global_2"];
-  unsigned id3 = get_string_container()["global_3"];
+  get_string_pool()["global_1"];
+  get_string_pool()["global_2"];
+  unsigned id3 = get_string_pool()["global_3"];
 
   REQUIRE(id3 >= 1);
-  REQUIRE(
-    std::string(get_string_container().c_str(id3)) == std::string("global_3"));
+  REQUIRE(std::string(get_string_pool().c_str(id3)) == std::string("global_3"));
 }
 
 TEST_CASE(
@@ -289,13 +288,13 @@ TEST_CASE(
   "[global][static][thread]")
 {
   std::vector<std::thread> threads;
-  std::set<string_containert *> instances;
+  std::set<string_pool *> instances;
   std::mutex mutex;
 
   for (int i = 0; i < 10; ++i)
   {
     threads.emplace_back([&mutex, &instances]() {
-      auto &inst = get_string_container();
+      auto &inst = get_string_pool();
       {
         std::lock_guard<std::mutex> lock(mutex);
         instances.insert(&inst);
@@ -317,7 +316,7 @@ TEST_CASE(
 
 TEST_CASE("edge case: very long strings", "[edge]")
 {
-  string_containert container;
+  string_pool container;
 
   std::string long_str(10000, 'a');
   unsigned id = container[long_str];
@@ -327,7 +326,7 @@ TEST_CASE("edge case: very long strings", "[edge]")
 
 TEST_CASE("edge case: special characters", "[edge]")
 {
-  string_containert container;
+  string_pool container;
 
   std::string special = "!@#$%^&*()_+-=[]{}|;':\",./<>?";
   unsigned id = container[special];
@@ -337,7 +336,7 @@ TEST_CASE("edge case: special characters", "[edge]")
 
 TEST_CASE("edge case: whitespace strings", "[edge]")
 {
-  string_containert container;
+  string_pool container;
 
   unsigned id1 = container[" "];
   unsigned id2 = container["  "];
@@ -351,7 +350,7 @@ TEST_CASE("edge case: whitespace strings", "[edge]")
 
 TEST_CASE("edge case: unicode characters", "[edge]")
 {
-  string_containert container;
+  string_pool container;
 
   std::string unicode = "こんにちは世界🌍";
   unsigned id = container[unicode];
@@ -361,7 +360,7 @@ TEST_CASE("edge case: unicode characters", "[edge]")
 
 TEST_CASE("edge case: null character handling", "[edge]")
 {
-  string_containert container;
+  string_pool container;
 
   // Note: null-terminated strings will stop at \0
   // This tests the behavior with embedded nulls (if supported)
@@ -377,7 +376,7 @@ TEST_CASE("edge case: null character handling", "[edge]")
 
 TEST_CASE("stress: many unique strings", "[stress]")
 {
-  string_containert container;
+  string_pool container;
 
   const int NUM_STRINGS = 10000;
   std::vector<unsigned> ids;
@@ -401,7 +400,7 @@ TEST_CASE("stress: many unique strings", "[stress]")
 
 TEST_CASE("stress: repeated lookups", "[stress]")
 {
-  string_containert container;
+  string_pool container;
 
   unsigned id = container["repeated"];
 
@@ -421,7 +420,7 @@ TEST_CASE(
   "concurrency: multiple threads inserting different strings",
   "[concurrency][thread]")
 {
-  string_containert container;
+  string_pool container;
   std::vector<std::thread> threads;
   std::vector<unsigned> ids(10);
   std::mutex mutex;
@@ -452,7 +451,7 @@ TEST_CASE(
   "concurrency: multiple threads looking up same string",
   "[concurrency][thread]")
 {
-  string_containert container;
+  string_pool container;
   unsigned master_id = container["shared"];
 
   std::vector<unsigned> retrieved_ids(100);
@@ -486,7 +485,7 @@ TEST_CASE(
   "concurrency: stress test mixed operations",
   "[concurrency][thread][stress]")
 {
-  string_containert container;
+  string_pool container;
   const int NUM_THREADS = 10;
   const int STRINGS_PER_THREAD = 1000;
 
@@ -533,7 +532,7 @@ TEST_CASE(
 
 TEST_CASE("indices: sequential assignment", "[index]")
 {
-  string_containert container;
+  string_pool container;
 
   // Empty string gets 0 automatically
   unsigned id0 = container[""];
@@ -551,7 +550,7 @@ TEST_CASE("indices: sequential assignment", "[index]")
 
 TEST_CASE("indices: non-sequential after duplicates", "[index]")
 {
-  string_containert container;
+  string_pool container;
 
   unsigned id1 = container["str1"];       // Gets index 1
   unsigned id1_again = container["str1"]; // Gets same index
