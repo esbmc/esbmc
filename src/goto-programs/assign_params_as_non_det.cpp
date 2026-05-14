@@ -46,7 +46,7 @@ static void insert_before(
 }
 
 bool assign_params_as_non_det::runOnFunction(
-  std::pair<const dstring, goto_functiont> &F)
+  std::pair<const irep_idt, goto_functiont> &F)
 {
   const symbolt *fn_sym = context.find_symbol(F.first);
   if (fn_sym == nullptr)
