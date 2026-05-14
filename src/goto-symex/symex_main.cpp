@@ -171,6 +171,10 @@ bool goto_symext::is_assume_false(const expr2tc &assumption)
 {
   if (options.get_bool_option("smt-symex-assume"))
   {
+    // Do nothing if the assumption is already true
+    if (is_true(assumption))
+      return false;
+
     runtime_encoded_equationt *rte =
       dynamic_cast<runtime_encoded_equationt *>(target.get());
 
@@ -199,7 +203,10 @@ void goto_symext::assume(const expr2tc &the_assumption)
 
   // Check for assume-false against the renamed+simplified expression
   // BEFORE guard_expr mutates it
-  bool assume_is_false = is_false(assumption) || is_assume_false(assumption);
+  bool assume_is_false = is_assume_false(assumption);
+
+  if (is_true(assumption))
+    return;
 
   cur_state->guard.guard_expr(assumption);
 
@@ -208,8 +215,8 @@ void goto_symext::assume(const expr2tc &the_assumption)
   target->assumption(tmp_guard, assumption, cur_state->source, first_loop);
 
   // If we're assuming false, make the guard for the following statement false
-    if (assume_is_false)
-      cur_state->guard.make_false();
+  if (assume_is_false)
+    cur_state->guard.make_false();
 }
 
 goto_symext::symex_resultt goto_symext::get_symex_result()
