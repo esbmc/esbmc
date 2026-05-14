@@ -573,15 +573,15 @@ void add_cprover_library(contextt &context, const languaget *language)
   // Add two hacks; we might use either pthread_mutex_lock or the checked
   // variant; so if one version is used, pull in the other too.
   std::pair<irep_idt, irep_idt> lockcheck(
-    dstring("pthread_mutex_lock"), dstring("pthread_mutex_lock_check"));
+    irep_idt("pthread_mutex_lock"), irep_idt("pthread_mutex_lock_check"));
   symbol_deps.insert(lockcheck);
 
   std::pair<irep_idt, irep_idt> condcheck(
-    dstring("pthread_cond_wait"), dstring("pthread_cond_wait_check"));
+    irep_idt("pthread_cond_wait"), irep_idt("pthread_cond_wait_check"));
   symbol_deps.insert(condcheck);
 
   std::pair<irep_idt, irep_idt> joincheck(
-    dstring("pthread_join"), dstring("pthread_join_noswitch"));
+    irep_idt("pthread_join"), irep_idt("pthread_join_noswitch"));
   symbol_deps.insert(joincheck);
 
   /* Iterate through the new_ctx symbols, figure out which ones to go into store_ctx

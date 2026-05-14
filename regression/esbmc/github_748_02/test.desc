@@ -1,4 +1,4 @@
 CORE
 test.c
---no-pointer-check --incremental-bmc
+--no-pointer-check --no-unwinding-assertions --unwind 1
 ^VERIFICATION FAILED$

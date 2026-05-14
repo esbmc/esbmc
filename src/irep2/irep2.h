@@ -15,7 +15,7 @@
 #include <mutex>
 #include <util/compiler_defs.h>
 #include <util/crypto_hash.h>
-#include <util/dstring.h>
+#include <util/irep_idt.h>
 #include <util/irep.h>
 
 // Ahead of time: a list of all expressions and types, in a preprocessing
@@ -54,8 +54,6 @@
   BOOST_PP_LIST_CONS(bitand,                                                   \
   BOOST_PP_LIST_CONS(bitor,                                                    \
   BOOST_PP_LIST_CONS(bitxor,                                                   \
-  BOOST_PP_LIST_CONS(bitnand,                                                  \
-  BOOST_PP_LIST_CONS(bitnor,                                                   \
   BOOST_PP_LIST_CONS(bitnot,                                                   \
   BOOST_PP_LIST_CONS(lshr,                                                     \
   BOOST_PP_LIST_CONS(neg,                                                      \
@@ -103,7 +101,6 @@
   BOOST_PP_LIST_CONS(sideeffect,                                               \
   BOOST_PP_LIST_CONS(code_block,                                               \
   BOOST_PP_LIST_CONS(code_assign,                                              \
-  BOOST_PP_LIST_CONS(code_init,                                                \
   BOOST_PP_LIST_CONS(code_decl,                                                \
   BOOST_PP_LIST_CONS(code_dead,                                                \
   BOOST_PP_LIST_CONS(code_printf,                                              \
@@ -136,7 +133,7 @@
   BOOST_PP_LIST_CONS(isinstance,                                               \
   BOOST_PP_LIST_CONS(hasattr,                                                  \
   BOOST_PP_LIST_CONS(isnone,                                                   \
-  BOOST_PP_LIST_NIL))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+  BOOST_PP_LIST_NIL)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
 // clang-format on
 
 // Even crazier forward decls,
@@ -769,6 +766,16 @@ public:
    *          simplified or a simplified expression.
    */
   expr2tc simplify() const;
+
+  /** Simplify with reassociation suppression.
+   *  When @p suppress_reassoc is true, the chain-root reassociation step
+   *  is skipped throughout the subtree (the flag propagates to every
+   *  descendant, including those reached through non-chain ops like
+   *  modulus). Used by simplify_no_reassoc to walk a subtree with
+   *  peepholes only, e.g. on a freshly-rebuilt chain.
+   *  External callers should prefer simplify_no_reassoc in
+   *  @c util/expr_reassociate.h over calling this overload directly. */
+  expr2tc simplify(bool suppress_reassoc) const;
 
   /** expr-specific simplification methods.
    *  By default, an expression can't be simplified, and this method returns

@@ -16,17 +16,18 @@ add_library(crypto_hash crypto_hash.cpp)
 target_include_directories(crypto_hash PUBLIC ${Boost_INCLUDE_DIRS})
 target_link_libraries(crypto_hash PUBLIC ${Boost_LIBRARIES})
 
-add_library(string_container string_container.cpp)
+add_library(string_pool string_pool.cpp)
 
 add_library(usr_utils usr_utils.cpp)
 
 add_library(util_esbmc xml_irep.cpp xml.cpp
         arith_tools.cpp base_type.cpp cmdline.cpp config.cpp config_file.cpp context.cpp
+        cwe_mapping.cpp
         expr_util.cpp i2string.cpp location.cpp
         mp_arith.cpp namespace.cpp parseoptions.cpp rename.cpp
         threeval.cpp typecheck.cpp bitvector.cpp parser.cpp replace_symbol.cpp
-        string_container.cpp options.cpp c_misc.cpp
-        simplify_expr.cpp dstring.cpp expr_simplifier.cpp
+        string_pool.cpp options.cpp c_misc.cpp
+        simplify_expr.cpp expr_simplifier.cpp expr_reassociate.cpp
         simplify_utils.cpp string2array.cpp array2string.cpp time_stopping.cpp symbol.cpp
         symbol_generator.cpp symbolic_types.cpp
         type_eq.cpp guard.cpp array_name.cpp union_find.cpp
@@ -49,6 +50,6 @@ target_include_directories(util_esbmc
         )
 
 target_compile_definitions(util_esbmc PUBLIC BOOST_ALL_NO_LIB YAML_CPP_STATIC_DEFINE)
-target_link_libraries(util_esbmc PUBLIC irep2 fmt::fmt string_container yaml-cpp::yaml-cpp ${Boost_LIBRARIES} PRIVATE langapi)
+target_link_libraries(util_esbmc PUBLIC irep2 fmt::fmt string_pool yaml-cpp::yaml-cpp ${Boost_LIBRARIES} PRIVATE langapi)
 
 target_link_libraries(algorithms PUBLIC gotoprograms)

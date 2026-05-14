@@ -558,9 +558,7 @@ void value_sett::get_value_set_rec(
     return;
   }
 
-  if (
-    is_bitor2t(expr) || is_bitand2t(expr) || is_bitxor2t(expr) ||
-    is_bitnand2t(expr) || is_bitnor2t(expr))
+  if (is_bitor2t(expr) || is_bitand2t(expr) || is_bitxor2t(expr))
   {
     assert(expr->get_num_sub_exprs() == 2);
     get_value_set_rec(*expr->get_sub_expr(0), dest, suffix, original_type);
@@ -1489,11 +1487,6 @@ void value_sett::apply_code(const expr2tc &code)
   else if (is_code_assign2t(code))
   {
     const code_assign2t &ref = to_code_assign2t(code);
-    assign(ref.target, ref.source);
-  }
-  else if (is_code_init2t(code))
-  {
-    const code_init2t &ref = to_code_init2t(code);
     assign(ref.target, ref.source);
   }
   else if (is_code_decl2t(code))

@@ -60,5 +60,5 @@ jobs:
           elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
             ctest -j$(nproc) --output-on-failure --progress -LE python-intensive .
           else
-            ctest -j$(nproc) --output-on-failure --progress .
+            ctest -j10 --output-on-failure --progress .
           fi

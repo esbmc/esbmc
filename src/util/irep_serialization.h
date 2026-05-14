@@ -60,7 +60,7 @@ public:
     typedef std::vector<bool> string_mapt;
     string_mapt string_map;
 
-    typedef std::vector<std::pair<bool, dstring>> string_rev_mapt;
+    typedef std::vector<std::pair<bool, irep_idt>> string_rev_mapt;
     string_rev_mapt string_rev_map;
 
     void clear()
@@ -82,7 +82,7 @@ public:
   void reference_convert(const irept &irep, std::ostream &);
 
   irep_idt read_string_ref(std::istream &);
-  void write_string_ref(std::ostream &, const dstring &);
+  void write_string_ref(std::ostream &, const irep_idt &);
 
   void clear()
   {
@@ -90,7 +90,7 @@ public:
   }
 
   static unsigned read_long(std::istream &);
-  dstring read_string(std::istream &);
+  irep_idt read_string(std::istream &);
 
 private:
   ireps_containert &ireps_container;

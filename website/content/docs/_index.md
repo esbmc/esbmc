@@ -28,6 +28,11 @@ next: /docs/setup
   <li>Memory leak.</li>
 </ul>
 
+<p>Each reported violation is annotated with the matching Common Weakness
+Enumeration identifiers (MITRE CWE 4.20). See the
+<a href="/docs/cwe-mapping/">CWE Mapping</a> page for the full table and the
+SARIF output schema.</p>
+
 <p>Concurrent software (using the pthread API) is verified by explicitly exploring interleavings, thus producing one symbolic execution per interleaving. By default, pointer-safety, array-out-of-bounds, division-by-zero, and user-specified assertions  will be checked for; one can also specify options to check multi-threaded programs for:</p>
 
 <ul>

@@ -1,4 +1,4 @@
 CORE
 main.c
---incremental-bmc
+--unwind 24
 ^VERIFICATION SUCCESSFUL$

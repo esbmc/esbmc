@@ -6,9 +6,9 @@ endif()
 find_package(BISON 2.6.1 REQUIRED)
 find_package(FLEX 2.6.1 REQUIRED)
 
-BISON_TARGET(smtliby smtlib.ypp ${CMAKE_CURRENT_BINARY_DIR}/smtlib.cpp COMPILE_FLAGS "-d -psmtlib")
-FLEX_TARGET(smtlibl smtlib_tok.lpp ${CMAKE_CURRENT_BINARY_DIR}/lexer.cpp COMPILE_FLAGS "--header-file=smtlib_tok.hpp -Psmtlib_tok -osmtlib_tok.cpp ${OS_FLEX_SMTLIB_FLAGS}")
-ADD_FLEX_BISON_DEPENDENCY(smtlibl smtliby)
+bison_target(smtliby smtlib.ypp ${CMAKE_CURRENT_BINARY_DIR}/smtlib.cpp COMPILE_FLAGS "-d -psmtlib")
+flex_target(smtlibl smtlib_tok.lpp ${CMAKE_CURRENT_BINARY_DIR}/lexer.cpp COMPILE_FLAGS "--header-file=smtlib_tok.hpp -Psmtlib_tok -osmtlib_tok.cpp ${OS_FLEX_SMTLIB_FLAGS}")
+add_flex_bison_dependency(smtlibl smtliby)
 
 # For Coverage
 configure_file(smtlib.ypp  ${CMAKE_BINARY_DIR}/smtlib.ypp COPYONLY)

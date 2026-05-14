@@ -125,6 +125,12 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
     check_incremental(new_expr, msg))
     return; // Verification succeeded, no further action needed
 
+  if (
+    validate_witness && !witness_target_line.empty() &&
+    !has_prefix(msg, "unwinding assertion loop") &&
+    cur_state->source.pc->location.get_line() != witness_target_line)
+    new_expr = gen_true_expr();
+
   // add assertion to the target equation
   assertion(new_expr, msg);
 
@@ -1073,6 +1079,32 @@ void goto_symext::run_intrinsic(
   if (symname == "c:@F@__ESBMC_throw_bad_cast")
   {
     symex_throw_bad_cast();
+    return;
+  }
+
+  if (symname == "c:@F@__ESBMC_witness_assume")
+  {
+    if (!validate_witness)
+      return;
+
+    // operands: [seg_idx_const, wp_idx_const, constraint]
+    if (func_call.operands.size() < 3)
+      return;
+    size_t seg_idx = to_constant_int2t(func_call.operands[0]).value.to_uint64();
+    size_t wp_idx = to_constant_int2t(func_call.operands[1]).value.to_uint64();
+
+    if (seg_idx != cur_state->cur_seg || wp_idx != cur_state->cur_wp)
+      return;
+
+    const waypoint &wp = cur_state->witness_segs[seg_idx][wp_idx];
+    expr2tc arg = func_call.operands[2];
+    cur_state->rename(arg);
+
+    if (wp.action == waypoint::avoid)
+      assume(not2tc(arg));
+    else
+      assume(arg);
+    cur_state->advance_witness_position();
     return;
   }
 

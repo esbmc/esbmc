@@ -2,19 +2,13 @@ set(CVC5_MIN_VERSION "1.0.2")
 
 if(DEFINED CVC5_DIR)
     set(ENABLE_CVC5 ON)
-endif()
-
-if(EXISTS $ENV{HOME}/cvc5)
-  set(ENABLE_CVC5 ON)
-else()
-  if(ENABLE_CVC5 AND DOWNLOAD_DEPENDENCIES)
-        download_zip_and_extract(CVC5 ${ESBMC_CVC5_URL})
-        set(CVC5_DIR ${CMAKE_BINARY_DIR}/CVC5/${ESBMC_CVC5_NAME})
-    endif()
+elseif(ENABLE_CVC5 AND DOWNLOAD_DEPENDENCIES)
+    download_zip_and_extract(CVC5 ${ESBMC_CVC5_URL})
+    set(CVC5_DIR ${CMAKE_BINARY_DIR}/CVC5/${ESBMC_CVC5_NAME})
 endif()
 
 if(ENABLE_CVC5)
-    message(STATUS "Looking for CVC5 at: ${CVC5_DIR}") 
+    message(STATUS "Looking for CVC5 at: ${CVC5_DIR}")
     find_package(cvc5 REQUIRED
             HINTS ${CVC5_DIR}/lib/cmake ${CVC5_DIR}/lib64/cmake $ENV{HOME}/cvc5)
     message(STATUS "Found CVC5 at: ${cvc5_DIR}")

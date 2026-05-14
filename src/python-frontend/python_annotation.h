@@ -357,6 +357,10 @@ private:
       {
         var_node =
           find_annotated_assign(var_name, (*parent_func)["args"]["args"]);
+        // Also search keyword-only args
+        if (var_node.empty() && (*parent_func)["args"].contains("kwonlyargs"))
+          var_node = find_annotated_assign(
+            var_name, (*parent_func)["args"]["kwonlyargs"]);
       }
 
       if (!has_annotation(var_node) && (*parent_func).contains("body"))
@@ -1944,6 +1948,9 @@ private:
           json_utils::find_imported_function(ast_, func_name);
         auto module = module_manager_->get_module(import_node["module"]);
 
+        if (!module)
+          throw std::runtime_error("module not found");
+
         // Try to get it as a function first
         try
         {
@@ -2346,11 +2353,21 @@ private:
     {
       rhs_node =
         find_annotated_assign(rhs_var_name, (*current_func)["args"]["args"]);
+      // Also search keyword-only args
+      if (rhs_node.empty() && (*current_func)["args"].contains("kwonlyargs"))
+        rhs_node = find_annotated_assign(
+          rhs_var_name, (*current_func)["args"]["kwonlyargs"]);
     }
 
     // Find RHS variable in the current function args
     if (rhs_node.empty() && body.contains("args"))
+    {
       rhs_node = find_annotated_assign(rhs_var_name, body["args"]["args"]);
+      // Also search keyword-only args
+      if (rhs_node.empty() && body["args"].contains("kwonlyargs"))
+        rhs_node =
+          find_annotated_assign(rhs_var_name, body["args"]["kwonlyargs"]);
+    }
 
     // Find RHS variable node in the global scope
     if (rhs_node.empty())
@@ -2358,6 +2375,20 @@ private:
 
     if (rhs_node.empty())
     {
+      // Defensive fallback: when the RHS names a Python iterable-producing
+      // builtin (e.g. `alias = range`), there is no AST declaration to find.
+      // Return the builtin's mapped type so a bare RHS does not abort type
+      // inference. The four entries below are safe because `builtin_functions`
+      // maps each of them to its own name as the call-result type tag
+      // ("range" -> "range", ...), which is also a workable placeholder for
+      // the callable. Do NOT extend this set without verifying the same
+      // property -- adding e.g. "iter" would return "iterator" as the type
+      // of the callable itself, which is wrong.
+      static const std::unordered_set<std::string> iterable_builtins = {
+        "range", "enumerate", "zip", "reversed"};
+      if (iterable_builtins.count(rhs_var_name))
+        return builtin_functions.at(rhs_var_name);
+
       const auto &lineno = element["lineno"].template get<int>();
 
       std::ostringstream oss;
@@ -3553,9 +3584,13 @@ private:
     for (auto &stmt : while_stmt["body"])
     {
       // Look for pattern: loop_var: Any = iterable[ESBMC_index_N]
+      // A bare annotation like `x: int` has value == null; nlohmann::json's
+      // `contains("value")` returns true for present-but-null members, so an
+      // explicit is_null() guard is required to avoid a type_error on the
+      // subsequent subscript.
       if (
         stmt["_type"] == "AnnAssign" && stmt.contains("value") &&
-        stmt["value"]["_type"] == "Subscript")
+        !stmt["value"].is_null() && stmt["value"]["_type"] == "Subscript")
       {
         if (!stmt["value"]["value"].contains("id"))
           continue;
@@ -4009,13 +4044,7 @@ private:
           elem["targets"][0].contains("_type") &&
           elem["targets"][0]["_type"] == "Name" &&
           elem["targets"][0].contains("id") &&
-          elem["targets"][0]["id"].template get<std::string>() == node_name &&
-          elem.contains("value") && elem["value"].is_object() &&
-          elem["value"].contains("_type") &&
-          // Keep assign-based lookup for simple RHS forms used by frontend
-          // inference (e.g. Name/Attribute/BinOp), but avoid Call-based
-          // expressions that can trigger heavy paths in known buggy cases.
-          elem["value"]["_type"] != "Call") ||
+          elem["targets"][0]["id"].template get<std::string>() == node_name) ||
          (elem["_type"] == "arg" && elem["arg"] == node_name)))
       {
         return elem;

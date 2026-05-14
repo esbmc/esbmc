@@ -1,4 +1,4 @@
 THOROUGH
 main.c
---incremental-bmc --unlimited-k-steps --memory-leak-check --z3 --floatbv
+--memory-leak-check --z3 --floatbv --unwind 64
 ^VERIFICATION SUCCESSFUL$

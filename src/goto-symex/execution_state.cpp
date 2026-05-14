@@ -15,6 +15,7 @@
 #include <util/std_expr.h>
 #include <util/string2array.h>
 #include <vector>
+#include <util/yaml_parser.h>
 
 unsigned int execution_statet::node_count = 0;
 unsigned int execution_statet::dynamic_counter = 0;
@@ -62,6 +63,24 @@ execution_statet::execution_statet(
     (*goto_program).instructions.end(),
     goto_program,
     0);
+
+  if (validate_witness)
+  {
+    const std::string &witness_path = options.get_option("witness");
+    if (!witness_path.empty())
+    {
+      const auto &wps = yaml_parser::get_waypoints(witness_path);
+      if (!wps.empty())
+      {
+        state.witness_segs.resize(wps.back().segment_idx + 1);
+        for (const auto &wp : wps)
+          state.witness_segs[wp.segment_idx].push_back(wp);
+      }
+      waypoint target;
+      if (yaml_parser::get_target_waypoint(witness_path, target))
+        witness_target_line = target.line_id;
+    }
+  }
 
   threads_state.push_back(state);
   preserved_paths.emplace_back();
@@ -156,6 +175,8 @@ execution_statet &execution_statet::operator=(const execution_statet &ex)
   smt_thread_guard = ex.smt_thread_guard;
   stack_limit = ex.stack_limit;
   no_return_value_opt = ex.no_return_value_opt;
+  validate_witness = ex.validate_witness;
+  witness_target_line = ex.witness_target_line;
 
   CS_number = ex.CS_number;
 

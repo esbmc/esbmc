@@ -3457,26 +3457,37 @@ bool clang_c_convertert::get_cast_expr(
     //     byte offset here would corrupt the symbolic model.
     //   - 'Base2 *o = new Derived()' — parent is not MemberExpr at all.
     //     Must remain unadjusted for ESBMC's delete model.
-    // NOTE: 'static_cast<B8*>(ptr)->eval()' is not yet handled correctly
-    // (separate issue tracked by the github_3876_static_cast KNOWNBUG test).
+    //
+    // The check walks through transparent wrapper expressions (casts, parens)
+    // to handle cases like 'static_cast<B8*>(ptr)->eval()'.
     bool is_method_receiver = false;
+    for (const clang::Stmt *node = &cast;;)
     {
-      auto parents = ASTContext->getParents(cast);
-      if (!parents.empty())
+      auto parents = ASTContext->getParents(*node);
+      if (parents.empty())
+        break;
+      const auto &parent = *parents.begin();
+      if (const auto *me = parent.get<clang::MemberExpr>())
       {
-        const clang::MemberExpr *me = parents.begin()->get<clang::MemberExpr>();
-        if (me)
-        {
-          auto grandparents = ASTContext->getParents(*me);
-          if (
-            !grandparents.empty() &&
-            grandparents.begin()->get<clang::CXXMemberCallExpr>())
-            is_method_receiver = true;
-        }
+        auto grandparents = ASTContext->getParents(*me);
+        if (
+          !grandparents.empty() &&
+          grandparents.begin()->get<clang::CXXMemberCallExpr>())
+          is_method_receiver = true;
+        break;
       }
+      const clang::Stmt *ps = parent.get<clang::Stmt>();
+      if (
+        !ps ||
+        !(llvm::isa<clang::CastExpr>(ps) || llvm::isa<clang::ParenExpr>(ps)))
+        break;
+      node = ps;
     }
 
-    bool did_adjust = false;
+    // Preserve original behaviour: CK_DerivedToBase always called gen_typecast;
+    // CK_UncheckedDerivedToBase was a no-op (break) and should only typecast
+    // when we actually applied a byte-offset adjustment below.
+    bool do_typecast = (cast.getCastKind() == clang::CK_DerivedToBase);
     if (
       adjust && total_offset > 0 && is_method_receiver &&
       expr.type().is_pointer())
@@ -3489,13 +3500,10 @@ bool clang_c_convertert::get_cast_expr(
       plus_exprt adjusted(expr, from_integer(total_offset, index_type()));
       adjusted.type() = char_ptr;
       expr = adjusted;
-      did_adjust = true;
+      do_typecast = true;
     }
 
-    // Preserve original behaviour: CK_DerivedToBase always called gen_typecast;
-    // CK_UncheckedDerivedToBase was a no-op (break) and should only typecast
-    // when we actually applied a byte-offset adjustment above.
-    if (cast.getCastKind() == clang::CK_DerivedToBase || did_adjust)
+    if (do_typecast)
       gen_typecast(ns, expr, type);
 
     break;

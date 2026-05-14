@@ -369,45 +369,58 @@ def emit_module_json(
 
 
 def process_collected_imports(output_dir):
-    # Keep processing until no new modules are discovered
-    processed_modules = set()
+    """
+    Emit AST JSON for every transitively-imported module.
+
+    Discovery and emission are split into two phases so that names added to
+    ``module_imports[m]['specific_names']`` by a transitive importer (parsed
+    later in the walk) are seen by the emitter for ``m``. A single-phase loop
+    would emit ``m``'s JSON the first time it appears, before its full
+    specific_names set is known, and later expansions would never be
+    re-emitted — causing transitive symbols to silently disappear from the
+    JSON the C++ backend reads.
+    """
+    # Phase 1 — discovery: harvest imports from every reachable module until
+    # module_imports stops growing. Cache parsed trees so emission in Phase 2
+    # does not re-run the (expensive) Preprocessor.
+    parsed_trees = {}  # module_name -> (tree, filename)
+    visited = set()
 
     while True:
-        # Get modules that haven't been processed yet
-        modules_to_process = set(module_imports.keys()) - processed_modules
-
-        if not modules_to_process:
+        pending = set(module_imports.keys()) - visited
+        if not pending:
             break
-
-        for module_name in modules_to_process:
-            import_info = module_imports[module_name]
-            processed_modules.add(module_name)
-
-            imported_elements = None if import_info['import_all'] \
-                else [ast.alias(name, None) for name in import_info['specific_names']]
-
-            # Attempt to resolve and emit JSON for imported submodules (e.g., "pkg.sub")
-            if import_info['specific_names']:
-                for name in list(import_info['specific_names']):
-                    emit_module_json(f"{module_name}.{name}", output_dir)
-
-            # Emit the module itself
+        for module_name in pending:
+            visited.add(module_name)
             filename = resolve_module_file(module_name, output_dir)
             if not filename:
                 continue
-
-            # Parse once, fix relative imports, collect nested imports
             tree = parse_file(filename)
+            parsed_trees[module_name] = (tree, filename)
             for subnode in ast.walk(tree):
                 if isinstance(subnode, (ast.Import, ast.ImportFrom)):
                     rewrite_relative_import(subnode, module_name)
                     process_imports(subnode, output_dir)
 
-            generate_ast_json(tree,
-                              filename,
-                              imported_elements,
-                              output_dir,
-                              module_qualname=module_name)
+    # Phase 2 — emission: module_imports is now stable, so every emitted JSON
+    # contains the full set of names any importer ever asked for.
+    for module_name, import_info in module_imports.items():
+        imported_elements = None if import_info['import_all'] \
+            else [ast.alias(name, None) for name in import_info['specific_names']]
+
+        # Submodule guess (e.g. "pkg.sub" referenced as "pkg.sub.name")
+        if import_info['specific_names']:
+            for name in list(import_info['specific_names']):
+                emit_module_json(f"{module_name}.{name}", output_dir)
+
+        if module_name not in parsed_trees:
+            continue
+        tree, filename = parsed_trees[module_name]
+        generate_ast_json(tree,
+                          filename,
+                          imported_elements,
+                          output_dir,
+                          module_qualname=module_name)
 
 
 def rewrite_relative_import(node, parent_module: str | None):
@@ -500,9 +513,15 @@ def generate_ast_json(tree, python_filename, elements_to_import, output_dir, mod
                     filtered_nodes.append(node)
 
             # Include annotated assignments (e.g., x: int = 42)
-            if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
                 if node.target.id in explicitly_imported:
                     filtered_nodes.append(node)
+
+            # Preserve Import/ImportFrom nodes: the C++ converter needs them
+            # (with the parser-attached ``full_path``/``module_not_found``
+            # attributes) to resolve calls into transitively-imported modules.
+            elif isinstance(node, (ast.Import, ast.ImportFrom)):
+                filtered_nodes.append(node)
 
     # Convert AST to JSON
     ast2json_module = import_module_by_name("ast2json", "")

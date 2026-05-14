@@ -81,9 +81,9 @@ class CTest3(ParseTest):
 
     def setUp(self):
         self.test_case: TestCase = TestCase(
-            "./esbmc-unix/00_account_02", "00_account_02")
+            "./esbmc-unix/00_account_01", "00_account_01")
         self.test_parsed: TestCase = TestCase(
-            "./esbmc-unix/00_account_02", "00_account_02")
+            "./esbmc-unix/00_account_01", "00_account_01")
 
     def _read_file_checks(self, test_obj: TestCase):
         self.assertEqual(self.test_case.test_mode, "THOROUGH")
@@ -95,8 +95,8 @@ class CTest3(ParseTest):
     def _argument_list_checks(self, test_obj: TestCase):
         argument_list = self.test_case.generate_run_argument_list("__test__")
         expected = ['__test__',
-                    './esbmc-unix/00_account_02/account.c',
-                    '--no-slice', '--context-bound', '1', '--depth', '150', './esbmc-unix/00_account_02/test.c']
+                    './esbmc-unix/00_account_01/account.c',
+                    '--no-slice', '--context-bound', '1', '--depth', '150', './esbmc-unix/00_account_01/test.c']
         self.assertEqual(argument_list, expected, str(argument_list))
 
 
