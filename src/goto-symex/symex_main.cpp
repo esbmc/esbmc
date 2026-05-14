@@ -197,8 +197,9 @@ void goto_symext::assume(const expr2tc &the_assumption)
   cur_state->rename(assumption);
   do_simplify(assumption);
 
-  if (is_true(assumption))
-    return;
+  // Check for assume-false against the renamed+simplified expression
+  // BEFORE guard_expr mutates it
+  bool assume_is_false = is_false(assumption) || is_assume_false(assumption);
 
   cur_state->guard.guard_expr(assumption);
 
@@ -207,8 +208,8 @@ void goto_symext::assume(const expr2tc &the_assumption)
   target->assumption(tmp_guard, assumption, cur_state->source, first_loop);
 
   // If we're assuming false, make the guard for the following statement false
-  if (is_false(assumption) || is_assume_false(assumption))
-    cur_state->guard.make_false();
+    if (assume_is_false)
+      cur_state->guard.make_false();
 }
 
 goto_symext::symex_resultt goto_symext::get_symex_result()
