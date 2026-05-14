@@ -16,6 +16,7 @@
 #include <util/symbol_generator.h>
 #include <map>
 #include <set>
+#include <unordered_map>
 #include <utility>
 
 class codet;
@@ -437,6 +438,26 @@ private:
   typet infer_attr_type_from_usage(
     const std::string &class_name,
     const std::string &attr_name);
+
+  /**
+   * @brief Build a tuple struct type from an AST value node when the annotation
+   *        is bare `tuple`.
+   *
+   * Walks a `Tuple` literal's elements and synthesises a struct_typet whose
+   * components mirror the element types. Constants are typed by their JSON
+   * kind; `Name` elements are resolved through @p param_annotations (used to
+   * recover types of parameters referenced inside `__init__`-style bodies);
+   * everything else falls back to `any_type()`. Returns `empty_typet()` when
+   * the node is not a Tuple literal.
+   *
+   * @param value_node       AST node holding the RHS of `attr: tuple = <rhs>`.
+   * @param param_annotations Parameter-name → annotation AST map for the
+   *                          enclosing function (may be empty).
+   * @return A struct_typet tagged as a tuple, or empty_typet on failure.
+   */
+  typet infer_tuple_struct_from_value(
+    const nlohmann::json &value_node,
+    const std::unordered_map<std::string, nlohmann::json> &param_annotations);
 
   exprt get_return_from_func(const char *func_symbol_id);
 

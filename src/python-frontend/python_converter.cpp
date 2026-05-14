@@ -9217,6 +9217,53 @@ void python_converter::get_function_definition(
   current_func_name_ = caller_func_name;
 }
 
+typet python_converter::infer_tuple_struct_from_value(
+  const nlohmann::json &value_node,
+  const std::unordered_map<std::string, nlohmann::json> &param_annotations)
+{
+  if (!value_node.is_object() || !value_node.contains("_type"))
+    return empty_typet();
+
+  if (value_node["_type"] != "Tuple" || !value_node.contains("elts"))
+    return empty_typet();
+
+  std::vector<typet> elem_types;
+  elem_types.reserve(value_node["elts"].size());
+
+  for (const auto &elt : value_node["elts"])
+  {
+    typet elem_type;
+    const std::string elt_kind = elt.value("_type", "");
+
+    if (elt_kind == "Constant" && elt.contains("value"))
+    {
+      const auto &v = elt["value"];
+      if (v.is_boolean())
+        elem_type = bool_type();
+      else if (v.is_number_integer())
+        elem_type = long_long_int_type();
+      else if (v.is_number_float())
+        elem_type = double_type();
+      else if (v.is_string())
+        elem_type = gen_pointer_type(char_type());
+    }
+    else if (elt_kind == "Name" && elt.contains("id"))
+    {
+      const std::string name = elt["id"].get<std::string>();
+      auto it = param_annotations.find(name);
+      if (it != param_annotations.end())
+        elem_type = get_type_from_annotation(it->second, elt);
+    }
+
+    if (elem_type.is_nil() || elem_type.id().as_string().empty())
+      elem_type = any_type();
+
+    elem_types.push_back(elem_type);
+  }
+
+  return tuple_handler_->create_tuple_struct_type(elem_types);
+}
+
 typet python_converter::infer_attr_type_from_usage(
   const std::string &class_name,
   const std::string &attr_name)
@@ -9522,6 +9569,16 @@ void python_converter::get_attributes_from_self(
         if (unset(resolved))
           resolved = infer_attr_type_from_usage(current_class_name_, attr_name);
         type = unset(resolved) ? any_type() : resolved;
+      }
+      else if (annotated_type == "tuple" || annotated_type == "Tuple")
+      {
+        // Bare `tuple` annotation: recover element types from the assigned
+        // value when it is a Tuple literal so later `obj.attr` reads carry the
+        // struct shape needed for unpacking (GitHub #4515).
+        if (stmt.contains("value"))
+          type = infer_tuple_struct_from_value(stmt["value"], param_annotations);
+        if (type.is_nil() || type.is_empty())
+          type = type_handler_.get_typet(annotated_type);
       }
       else
         type = type_handler_.get_typet(annotated_type);
