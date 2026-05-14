@@ -385,6 +385,26 @@ private:
 
   exprt get_tuple_expr(const nlohmann::json &element);
 
+  /**
+   * @brief Build a Python slice object from a `Slice` AST node.
+   *
+   * Lowers `lower`, `upper` and `step` into integer fields of a
+   * `PySliceObject` struct constant; absent components leave their integer
+   * field zero and clear the corresponding `has_*` flag.
+   */
+  exprt build_slice_object(const nlohmann::json &slice_node);
+
+  /**
+   * @brief Build a Python slice object from a `slice()` builtin call.
+   *
+   * Supports the one-, two- and three-argument forms; missing trailing
+   * arguments and explicit `None` arguments are recorded via the `has_*`
+   * flags. Both lowering paths share the same `PySliceObject` shape.
+   */
+  exprt build_slice_from_args(
+    const nlohmann::json &args,
+    const nlohmann::json &source_node);
+
   std::pair<exprt, exprt>
   resolve_comparison_operands_internal(const exprt &lhs, const exprt &rhs);
 
