@@ -44,11 +44,17 @@ irep_methods2<derived, baseclass, traits>::tostring(unsigned int indent) const
   for_each_field([&](auto field) {
     using F = decltype(field);
     using R = typename F::result_type;
-    // Skip the type2tc slot on expr nodes: pretty-printing handles the
-    // type banner separately and the historic field_names[] tables
-    // don't allocate a slot for it.
+    // The traits tuple prepends the id slot (expr2t::expr_ids on
+    // expr nodes, type2t::type_ids on type nodes) and, on exprs, the
+    // type2tc slot.  Both are handled by the surrounding pretty-print
+    // (the kind name and the type banner) so the historic
+    // field_names[] tables don't reserve a slot for them — skip
+    // without bumping idx so the remaining user fields line up with
+    // field_names[0..].
     if constexpr (
-      std::is_same_v<R, type2tc> && std::is_base_of_v<expr2t, derived>)
+      std::is_same_v<R, const expr2t::expr_ids> ||
+      std::is_same_v<R, type2t::type_ids> ||
+      (std::is_same_v<R, type2tc> && std::is_base_of_v<expr2t, derived>))
     {
       (void)indent;
       return;
