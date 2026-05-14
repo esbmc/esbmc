@@ -441,8 +441,7 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         # Capture `__all__` (if statically a list/tuple of string literals) so
         # cross-module propagation (#4525) can honour it for `from X import *`.
         self.module_dunder_all = self._capture_dunder_all(node)
-        self._rewrite_range_aliases(node)
-        self._inline_range_wrappers(node)
+        self.apply_range_rewrites(node)
 
         # Transform the module as usual
         node = self.generic_visit(node)
@@ -708,6 +707,20 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
                     local.add(lhs)
                     changed = True
         return local, all_aliases
+
+    def apply_range_rewrites(self,
+                             module_node,
+                             alias_seed=frozenset(),
+                             wrapper_seed=None):
+        """Run the range-alias and range-wrapper rewrites on *module_node*.
+
+        Public entry point for both per-module and cross-module (#4525)
+        invocations. *alias_seed* and *wrapper_seed* carry aliases /
+        wrappers inherited from imported modules; pass empty defaults for
+        a single-file pre-pass.
+        """
+        self._rewrite_range_aliases(module_node, seed=alias_seed)
+        self._inline_range_wrappers(module_node, seed=wrapper_seed)
 
     def _rewrite_range_aliases(self, module_node, seed=frozenset()):
         """Rewrite module-scope ``alias = range`` (and chains) to canonical ``range``.

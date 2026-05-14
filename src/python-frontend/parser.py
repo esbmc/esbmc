@@ -439,8 +439,9 @@ def _propagate_range_aliases_across_modules(parsed_trees):
         for module_name, (tree, _filename, preprocessor) in parsed_trees.items():
             alias_seed, wrapper_seed = _compute_range_seed(tree)
             before = _snapshot_exports(preprocessor)
-            preprocessor._rewrite_range_aliases(tree, seed=alias_seed)
-            preprocessor._inline_range_wrappers(tree, seed=wrapper_seed)
+            preprocessor.apply_range_rewrites(tree,
+                                              alias_seed=alias_seed,
+                                              wrapper_seed=wrapper_seed)
             after = _snapshot_exports(preprocessor)
             if after != before:
                 module_exports[module_name] = after
@@ -756,8 +757,9 @@ def main():
     # Re-apply range-alias / wrapper rewrites on the entry script using the
     # cross-module export tables built during import processing (#4525).
     alias_seed, wrapper_seed = _compute_range_seed(tree)
-    preprocessor._rewrite_range_aliases(tree, seed=alias_seed)
-    preprocessor._inline_range_wrappers(tree, seed=wrapper_seed)
+    preprocessor.apply_range_rewrites(tree,
+                                      alias_seed=alias_seed,
+                                      wrapper_seed=wrapper_seed)
 
     # Generate JSON from AST for the main file.
     generate_ast_json(tree, filename, None, output_dir)
