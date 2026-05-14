@@ -189,10 +189,20 @@ public:
   {
     if (this != &ref)
     {
-      if (ref.ptr_)
-        ref.ptr_->refcount.fetch_add(1, std::memory_order_relaxed);
+      // Snapshot ref.ptr_ before calling release().  ref may alias a
+      // member of an object that release() destroys (e.g.
+      // `x = to_array_type(x).subtype` where x holds the only reference
+      // to the array): after release() runs, that storage is gone and
+      // any further access to ref is use-after-free.  Reading the
+      // pointer up-front and then working off the local copy keeps us
+      // correct regardless of whether the compiler caches or reloads
+      // ref.ptr_ (gcc on Linux happens to cache it, AppleClang on macOS
+      // reloads and crashes).
+      T *new_ptr = ref.ptr_;
+      if (new_ptr)
+        new_ptr->refcount.fetch_add(1, std::memory_order_relaxed);
       release();
-      ptr_ = ref.ptr_;
+      ptr_ = new_ptr;
     }
     return *this;
   }
@@ -201,9 +211,13 @@ public:
   {
     if (this != &ref)
     {
-      release();
-      ptr_ = ref.ptr_;
+      // Same use-after-free concern as the copy-assign path: snapshot
+      // and null out ref before release(), so even if release() ends
+      // up destroying the storage backing ref we never re-read it.
+      T *new_ptr = ref.ptr_;
       ref.ptr_ = nullptr;
+      release();
+      ptr_ = new_ptr;
     }
     return *this;
   }
