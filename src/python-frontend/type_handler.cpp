@@ -437,6 +437,17 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   if (ast_type == "bool")
     return bool_type();
 
+  // slice — Python's slice() builtin, modelled as __ESBMC_PySliceObj.
+  // Only resolve to the slice struct if the operational model is loaded;
+  // otherwise fall through so early type-handler queries don't assert.
+  if (ast_type == "slice")
+  {
+    const symbolt *sym =
+      converter_.symbol_table().find_symbol("tag-struct __ESBMC_PySliceObj");
+    if (sym)
+      return symbol_typet(sym->id);
+  }
+
   if (ast_type == "complex")
   {
     const char *complex_type_id = "tag-complex";
