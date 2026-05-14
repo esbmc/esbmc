@@ -288,6 +288,7 @@ static ExpressionType get_expression_type(const nlohmann::json &element)
     {"Lambda", ExpressionType::FUNC_CALL},
     {"JoinedStr", ExpressionType::FSTRING},
     {"Tuple", ExpressionType::TUPLE},
+    {"Slice", ExpressionType::SLICE},
     {"Dict", ExpressionType::LITERAL},
     {"DictComp", ExpressionType::LITERAL}};
 
@@ -2940,6 +2941,10 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     return python_list::build_list_from_range(*this, range_args, element);
   }
 
+  // Handle direct slice(...) calls by materialising a PySliceObject value.
+  if (element["func"]["_type"] == "Name" && element["func"]["id"] == "slice")
+    return build_slice_from_args(element["args"], element);
+
   // Handle set(iterable) and frozenset(iterable) calls. frozenset is
   // modelled as a regular set: the verifier doesn't reason about
   // immutability, so the only divergence (rejecting mutation methods)
@@ -5014,6 +5019,8 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     break;
   case ExpressionType::TUPLE:
     return get_tuple_expr(element);
+  case ExpressionType::SLICE:
+    return build_slice_object(element);
   default:
   {
     std::ostringstream oss;
@@ -5034,6 +5041,113 @@ exprt python_converter::get_expr(const nlohmann::json &element)
 exprt python_converter::get_tuple_expr(const nlohmann::json &element)
 {
   return tuple_handler_->get_tuple_expr(element);
+}
+
+// Shared lowering for Slice AST nodes and slice() builtin calls. Materialises
+// a constant PySliceObject (defined in c2goto/library/python/python_types.h)
+// whose has_* flags distinguish missing/None components from explicit zeros.
+// Components are filled by name so that compiler-inserted alignment padding
+// (which appears as an anonymous trailing member) gets a default zero value.
+static exprt make_slice_struct_expr(
+  python_converter &conv,
+  const nlohmann::json *lower,
+  const nlohmann::json *upper,
+  const nlohmann::json *step,
+  const nlohmann::json &source_node)
+{
+  const namespacet ns(conv.symbol_table());
+  // Use the followed struct_typet (rather than the symbol_typet) so that
+  // downstream call-site coercion sees `arg.type().is_struct()` and converts
+  // the rvalue to an address when the callee parameter is pointer-typed.
+  const struct_typet &struct_type =
+    to_struct_type(ns.follow(conv.get_type_handler().get_slice_type()));
+
+  auto lower_int = [&](const nlohmann::json *node,
+                       const typet &field_type) -> exprt {
+    if (!node || node->is_null())
+      return gen_zero(field_type);
+    exprt value = conv.get_expr(*node);
+    if (value.type() != field_type)
+      value = typecast_exprt(value, field_type);
+    return value;
+  };
+
+  auto present_flag = [](const nlohmann::json *node) {
+    return node && !node->is_null();
+  };
+
+  struct_exprt slice_expr(struct_type);
+  for (const auto &component : struct_type.components())
+  {
+    const std::string name = component.get_name().as_string();
+    if (name == "start")
+      slice_expr.operands().push_back(lower_int(lower, component.type()));
+    else if (name == "stop")
+      slice_expr.operands().push_back(lower_int(upper, component.type()));
+    else if (name == "step")
+      slice_expr.operands().push_back(lower_int(step, component.type()));
+    else if (name == "has_start")
+      slice_expr.operands().push_back(
+        from_integer(present_flag(lower) ? 1 : 0, component.type()));
+    else if (name == "has_stop")
+      slice_expr.operands().push_back(
+        from_integer(present_flag(upper) ? 1 : 0, component.type()));
+    else if (name == "has_step")
+      slice_expr.operands().push_back(
+        from_integer(present_flag(step) ? 1 : 0, component.type()));
+    else
+      slice_expr.operands().push_back(gen_zero(component.type()));
+  }
+
+  if (source_node.contains("lineno"))
+    slice_expr.location() = conv.get_location_from_decl(source_node);
+
+  return slice_expr;
+}
+
+exprt python_converter::build_slice_object(const nlohmann::json &slice_node)
+{
+  assert(slice_node.contains("_type") && slice_node["_type"] == "Slice");
+  const nlohmann::json *lower =
+    slice_node.contains("lower") ? &slice_node["lower"] : nullptr;
+  const nlohmann::json *upper =
+    slice_node.contains("upper") ? &slice_node["upper"] : nullptr;
+  const nlohmann::json *step =
+    slice_node.contains("step") ? &slice_node["step"] : nullptr;
+  return make_slice_struct_expr(*this, lower, upper, step, slice_node);
+}
+
+exprt python_converter::build_slice_from_args(
+  const nlohmann::json &args,
+  const nlohmann::json &source_node)
+{
+  // slice(stop) / slice(start, stop) / slice(start, stop, step). Mirror
+  // CPython: with one argument, the single value is stop; start is None.
+  const nlohmann::json *lower = nullptr;
+  const nlohmann::json *upper = nullptr;
+  const nlohmann::json *step = nullptr;
+  if (args.size() == 1)
+  {
+    upper = &args[0];
+  }
+  else if (args.size() == 2)
+  {
+    lower = &args[0];
+    upper = &args[1];
+  }
+  else if (args.size() == 3)
+  {
+    lower = &args[0];
+    upper = &args[1];
+    step = &args[2];
+  }
+  else
+  {
+    throw std::runtime_error(
+      "TypeError: slice expected 1 to 3 arguments, got " +
+      std::to_string(args.size()));
+  }
+  return make_slice_struct_expr(*this, lower, upper, step, source_node);
 }
 
 void python_converter::copy_instance_attributes(

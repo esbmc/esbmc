@@ -57,4 +57,21 @@ typedef struct __ESBMC_PyListObj
   size_t size;     /**< Number of elements currently in use */
 } PyListObject;
 
+/**
+ * @brief Minimal representation of a Python slice object.
+ *
+ * Mirrors CPython's slice(start, stop, step). Any of the three may be omitted
+ * by the user (e.g. slice(5) or a[i:]), in which case the corresponding
+ * has_* flag is zero and the integer field is unspecified.
+ */
+typedef struct __ESBMC_PySliceObj
+{
+  long long start;
+  long long stop;
+  long long step;
+  int has_start;
+  int has_stop;
+  int has_step;
+} PySliceObject;
+
 #endif /* PYTHON_TYPES_H */

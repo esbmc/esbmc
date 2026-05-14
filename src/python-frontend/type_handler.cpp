@@ -944,6 +944,14 @@ typet type_handler::get_list_element_type() const
   return symbol_typet(type->id);
 }
 
+typet type_handler::get_slice_type() const
+{
+  const symbolt *slice_type_symbol =
+    converter_.symbol_table().find_symbol("tag-struct __ESBMC_PySliceObj");
+  assert(slice_type_symbol);
+  return symbol_typet(slice_type_symbol->id);
+}
+
 /// This method inspects the JSON representation of a Python operand node and attempts to
 /// infer its type based on its AST node type (`_type`). It currently supports variable
 /// names, constants (literals), and list subscripts. This type information is used for
