@@ -423,6 +423,12 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
 
   if (cmdline.isset("validate-correctness-witness"))
   {
+    if (!cmdline.isset("witness"))
+    {
+      log_error(
+        "--validate-correctness-witness requires --witness <file.yaml>");
+      abort();
+    }
     const std::string witness = cmdline.getval("witness");
     const boost::filesystem::path wp(witness);
     if (wp.extension() != ".yaml" && wp.extension() != ".yml")
@@ -438,6 +444,12 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
 
   if (cmdline.isset("validate-violation-witness"))
   {
+    if (!cmdline.isset("witness"))
+    {
+      log_error(
+        "--validate-violation-witness requires --witness <file.yaml>");
+      abort();
+    }
     const std::string witness = cmdline.getval("witness");
     const boost::filesystem::path wp(witness);
     if (wp.extension() != ".yaml" && wp.extension() != ".yml")
