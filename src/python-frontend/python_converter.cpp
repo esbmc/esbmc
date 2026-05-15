@@ -9859,16 +9859,27 @@ void python_converter::get_return_statements(
   bool is_func_call =
     return_value.is_code() && return_value.get("statement") == "function_call";
 
-  if (is_func_call && ast_node["value"]["_type"] == "Call")
+  if (is_func_call)
   {
-    // Extract function name for temporary variable naming
-    std::string func_name;
-    if (ast_node["value"]["func"]["_type"] == "Name")
-      func_name = ast_node["value"]["func"]["id"].get<std::string>();
-    else if (ast_node["value"]["func"]["_type"] == "Attribute")
-      func_name = ast_node["value"]["func"]["attr"].get<std::string>();
-    else
-      func_name = "func"; // fallback
+    // Extract function name for temporary variable naming.
+    // get_expr() also returns a function-call expression when a Subscript
+    // dispatches to a user-defined __getitem__ (see GitHub #4541); in that
+    // case the AST node type is "Subscript" rather than "Call", but the
+    // returned code is still a function_call that needs the same temp-LHS
+    // materialisation, otherwise the call expression ends up embedded
+    // directly in the GOTO RETURN and trips value-set's make_member
+    // assertion at value_set.cpp:1543.
+    const std::string ast_type = ast_node["value"]["_type"].get<std::string>();
+    std::string func_name = "func";
+    if (ast_type == "Call")
+    {
+      if (ast_node["value"]["func"]["_type"] == "Name")
+        func_name = ast_node["value"]["func"]["id"].get<std::string>();
+      else if (ast_node["value"]["func"]["_type"] == "Attribute")
+        func_name = ast_node["value"]["func"]["attr"].get<std::string>();
+    }
+    else if (ast_type == "Subscript")
+      func_name = "__getitem__";
 
     // Determine return type: check if it's empty (forward reference)
     typet return_type = return_value.type();
