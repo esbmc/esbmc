@@ -1625,7 +1625,7 @@ bool interval_domaint::enable_real_intervals = true;
 bool interval_domaint::enable_assume_asserts = true;
 bool interval_domaint::enable_eval_assumptions = true;
 bool interval_domaint::enable_ibex_contractor = false;
-bool interval_domaint::skip_inductive_step_instructions = false;
+thread_local bool interval_domaint::skip_inductive_step_instructions = false;
 
 // Widening options
 unsigned interval_domaint::fixpoint_limit = 5;

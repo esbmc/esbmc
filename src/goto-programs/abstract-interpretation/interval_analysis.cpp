@@ -213,21 +213,23 @@ static goto_programt::targett skip_inductive_preamble(
   return it;
 }
 
-/// RAII guard for the process-wide skip_inductive_step_instructions flag,
-/// so an exception during the recomputed fixpoint or instrumentation can
-/// never leave the flag stuck and silently poison downstream consumers
-/// (goto_contractor, any later interval_analysis call).
+/// RAII guard for the thread_local skip_inductive_step_instructions flag.
+/// Saves the prior value and restores it on scope exit, so an exception
+/// during the recomputed fixpoint or instrumentation cannot leave the flag
+/// stuck and a nested call cannot prematurely clear an outer scope's true.
 namespace
 {
 struct scoped_skip_inductive
 {
+  const bool prev;
   scoped_skip_inductive()
+    : prev(interval_domaint::skip_inductive_step_instructions)
   {
     interval_domaint::skip_inductive_step_instructions = true;
   }
   ~scoped_skip_inductive()
   {
-    interval_domaint::skip_inductive_step_instructions = false;
+    interval_domaint::skip_inductive_step_instructions = prev;
   }
 };
 } // namespace
