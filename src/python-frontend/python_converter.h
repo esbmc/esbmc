@@ -16,6 +16,7 @@
 #include <util/symbol_generator.h>
 #include <map>
 #include <set>
+#include <unordered_map>
 #include <utility>
 
 class codet;
@@ -350,6 +351,16 @@ private:
     const exprt &lhs,
     const exprt &rhs);
 
+  /// Rewrites `sl.start/stop/step is/is not None` to a check of the
+  /// corresponding `has_start/has_stop/has_step` flag on __ESBMC_PySliceObj.
+  /// Returns `nil_exprt()` when the operands are not a slice-member access
+  /// paired with a None literal, so the caller continues with default
+  /// None-comparison handling.
+  exprt try_lower_slice_member_is_none(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs);
+
   symbolt &create_tmp_symbol(
     const nlohmann::json &element,
     const std::string var_name,
@@ -383,6 +394,26 @@ private:
   void handle_float_division(exprt &lhs, exprt &rhs, exprt &bin_expr) const;
 
   exprt get_tuple_expr(const nlohmann::json &element);
+
+  /**
+   * @brief Build a Python slice object from a `Slice` AST node.
+   *
+   * Lowers `lower`, `upper` and `step` into integer fields of a
+   * `PySliceObject` struct constant; absent components leave their integer
+   * field zero and clear the corresponding `has_*` flag.
+   */
+  exprt build_slice_object(const nlohmann::json &slice_node);
+
+  /**
+   * @brief Build a Python slice object from a `slice()` builtin call.
+   *
+   * Supports the one-, two- and three-argument forms; missing trailing
+   * arguments and explicit `None` arguments are recorded via the `has_*`
+   * flags. Both lowering paths share the same `PySliceObject` shape.
+   */
+  exprt build_slice_from_args(
+    const nlohmann::json &args,
+    const nlohmann::json &source_node);
 
   std::pair<exprt, exprt>
   resolve_comparison_operands_internal(const exprt &lhs, const exprt &rhs);
@@ -437,6 +468,26 @@ private:
   typet infer_attr_type_from_usage(
     const std::string &class_name,
     const std::string &attr_name);
+
+  /**
+   * @brief Build a tuple struct type from an AST value node when the annotation
+   *        is bare `tuple`.
+   *
+   * Walks a `Tuple` literal's elements and synthesises a struct_typet whose
+   * components mirror the element types. Constants are typed by their JSON
+   * kind; `Name` elements are resolved through @p param_annotations (used to
+   * recover types of parameters referenced inside `__init__`-style bodies);
+   * everything else falls back to `any_type()`. Returns `empty_typet()` when
+   * the node is not a Tuple literal.
+   *
+   * @param value_node       AST node holding the RHS of `attr: tuple = <rhs>`.
+   * @param param_annotations Parameter-name → annotation AST map for the
+   *                          enclosing function (may be empty).
+   * @return A struct_typet tagged as a tuple, or empty_typet on failure.
+   */
+  typet infer_tuple_struct_from_value(
+    const nlohmann::json &value_node,
+    const std::unordered_map<std::string, nlohmann::json> &param_annotations);
 
   exprt get_return_from_func(const char *func_symbol_id);
 

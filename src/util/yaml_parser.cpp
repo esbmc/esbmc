@@ -15,6 +15,15 @@ std::vector<invariant> yaml_parser::read_invariants(const std::string &path)
 
     for (const auto &entry : root)
     {
+      if (
+        entry["entry_type"] &&
+        entry["entry_type"].as<std::string>() == "violation_sequence")
+      {
+        log_error(
+          "Witness is a violation witness; use --validate-violation-witness "
+          "instead.");
+        abort();
+      }
       const auto &content = entry["content"];
       if (!content || !content.IsSequence())
         continue;
@@ -115,6 +124,15 @@ std::vector<waypoint> yaml_parser::get_waypoints(const std::string &path)
     size_t seg_idx = 0;
     for (const auto &entry : root)
     {
+      if (
+        entry["entry_type"] &&
+        entry["entry_type"].as<std::string>() == "invariant_set")
+      {
+        log_error(
+          "Witness is a correctness witness; use "
+          "--validate-correctness-witness instead.");
+        abort();
+      }
       const auto &content = entry["content"];
       if (!content || !content.IsSequence())
         continue;

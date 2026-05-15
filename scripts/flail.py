@@ -120,14 +120,26 @@ class Flail:
 
     def obtain_var_name(self):
         obj = Path(self.filepath)
-        return self.prefix + (obj.name.replace('.hs', '_buf')
-                                      .replace('.h', '_buf')
-                                      .replace('.c', '_buf')
-                                      .replace('.py', '_buf')
-                                      .replace('.goto', '_buf')
-                                      .replace('.txt', '_buf')
-                                      .replace('buildidobj', 'buildidstring')
-                                      .replace('-', '_'))
+        # For relative paths, use the full path to avoid collisions
+        # (e.g. libs/__init__.py vs libs/ast2json/__init__.py).
+        # For absolute paths, use just the filename (legacy behaviour).
+        if obj.is_absolute():
+            name = obj.name
+        else:
+            name = str(obj).replace(os.sep, '_').replace('/', '_')
+        name = (name.replace('.hs', '_buf')
+                    .replace('.h', '_buf')
+                    .replace('.c', '_buf')
+                    .replace('.py', '_buf')
+                    .replace('.goto', '_buf')
+                    .replace('.txt', '_buf')
+                    .replace('buildidobj', 'buildidstring'))
+        # Replace any remaining characters invalid in C identifiers
+        name = re.sub(r'[^A-Za-z0-9_]', '_', name)
+        # Ensure the name does not start with a digit
+        if name and name[0].isdigit():
+            name = '_' + name
+        return self.prefix + name
 
     def _step_2(self, content: str):
         return Flail.REGEX_REMOVE_ADDR.sub('', content)
@@ -303,4 +315,14 @@ class TestFlail(unittest.TestCase):
     def test_variable_name_4_prefix(self):
         obj = Flail("buildidobj", 'prefix_')
         expected = "prefix_buildidstring"
+        self.assertEqual(obj.obtain_var_name(), expected)
+
+    def test_variable_name_subdir(self):
+        obj = Flail("libs/__init__.py", 'esbmc_')
+        expected = "esbmc_libs___init___buf"
+        self.assertEqual(obj.obtain_var_name(), expected)
+
+    def test_variable_name_nested_subdir(self):
+        obj = Flail("libs/ast2json/__init__.py", 'esbmc_')
+        expected = "esbmc_libs_ast2json___init___buf"
         self.assertEqual(obj.obtain_var_name(), expected)

@@ -283,6 +283,16 @@ public:
     apply_pending_specializations();
   }
 
+  /// Register an additional AST whose multi-axis subscript usages must be
+  /// considered when inferring `__getitem__` / `__setitem__` key tuple
+  /// types. Used when annotating an imported module to make the importing
+  /// module's call sites visible (GitHub #4545). The caller retains
+  /// ownership; @p ast must outlive this annotator.
+  void add_extra_subscript_inference_source(const Json &ast)
+  {
+    extra_subscript_inference_asts_.push_back(&ast);
+  }
+
   void add_type_annotation(const std::string &func_name)
   {
     current_line_ = 0;
@@ -553,6 +563,27 @@ private:
             has_partial_annotation = true;
             needs_inference = true; // Try to refine with element type
           }
+          else if (current_type == "tuple")
+          {
+            // Bare `tuple` annotation: try to specialise to
+            // `tuple[T0, T1, ...]` by inspecting call sites so the unpacker
+            // can recover the struct shape (GitHub #4515).
+            if (!function_calls.empty())
+            {
+              std::vector<std::string> elem_types =
+                infer_tuple_param_types_from_calls(i, function_calls);
+              if (!elem_types.empty())
+              {
+                int lineno = param.value("lineno", 0);
+                int col_offset =
+                  param.value("col_offset", 0) +
+                  param["arg"].template get<std::string>().size() + 1;
+                param["annotation"] = create_tuple_subscript_annotation(
+                  elem_types, lineno, col_offset, lineno);
+              }
+            }
+            continue;
+          }
           else
             continue; // Fully annotated, skip
         }
@@ -650,6 +681,31 @@ private:
           }
         }
 
+        // For __getitem__/__setitem__ key parameters, infer a
+        // `tuple[slice, slice, ...]` annotation from multi-axis subscript
+        // call sites on instances of the enclosing class (GitHub #4539).
+        // The Subscript syntax t[i:j, k:l] never appears as an explicit
+        // __getitem__ call in the AST, so the standard call-site inference
+        // never sees it. Without this, `key` stays unannotated and `key[0]`
+        // inside __getitem__ falls through to list indexing.
+        if (
+          inferred_type.empty() && !current_class_name_.empty() &&
+          (func_name == "__getitem__" || func_name == "__setitem__") && i == 1)
+        {
+          std::vector<std::string> elem_types =
+            infer_subscript_key_tuple_types(current_class_name_);
+          if (!elem_types.empty())
+          {
+            int lineno = param.value("lineno", 0);
+            int col_offset = param.value("col_offset", 0) +
+                             param["arg"].template get<std::string>().size() +
+                             1;
+            param["annotation"] = create_tuple_subscript_annotation(
+              elem_types, lineno, col_offset, lineno);
+            continue;
+          }
+        }
+
         // Apply inference results
         if (has_partial_annotation)
         {
@@ -671,6 +727,189 @@ private:
         }
       }
     }
+  }
+
+  // For a class @p class_name defining __getitem__/__setitem__, return the
+  // synthesised per-element type names for a `tuple[T1, T2, ...]` annotation
+  // when a multi-axis subscript usage `instance[a, b, ...]` exists whose
+  // `instance` is annotated as @p class_name. Slice and scalar elements are
+  // both supported, including all-scalar shapes (GitHub #4542). Both
+  // module-scope `AnnAssign` and function-parameter annotations are
+  // considered as sources for the instance→class mapping. When called on an
+  // imported module, the importing module's AST is also scanned so the
+  // cross-module call site is visible (GitHub #4545). Returns empty when no
+  // qualifying subscript exists, when any element's type cannot be
+  // inferred, or when sites disagree on arity or per-position element
+  // types.
+  std::vector<std::string>
+  infer_subscript_key_tuple_types(const std::string &class_name)
+  {
+    // Unanimous-wins on per-position element types. The first qualifying
+    // site fixes the expected type vector; any later site that disagrees on
+    // arity or on a per-position type abandons synthesis so the existing
+    // void* default keeps working for those call sites.
+    bool any_reject = false;
+    std::vector<std::string> expected;
+    auto reducer = [&](const Json &elts) {
+      if (any_reject)
+        return;
+      std::vector<std::string> types = infer_tuple_element_types(elts);
+      if (types.empty())
+      {
+        any_reject = true;
+        return;
+      }
+      if (expected.empty())
+        expected = std::move(types);
+      else if (expected != types)
+        any_reject = true;
+    };
+
+    auto scan = [&](const Json &ast) {
+      std::unordered_map<std::string, std::string> var_to_class;
+      collect_class_instance_map(ast, var_to_class);
+      visit_class_tuple_subscripts(ast, class_name, var_to_class, reducer);
+    };
+
+    scan(ast_);
+    for (const Json *extra : extra_subscript_inference_asts_)
+      scan(*extra);
+
+    if (any_reject)
+      return {};
+    return expected;
+  }
+
+  // Populate @p out with a name→class-name map for every variable in @p ast
+  // that has a Name-typed annotation. Two sources are consulted:
+  //   * Module-scope `AnnAssign(target=Name, annotation=Name)` — e.g.
+  //     `t: Tile = Tile(...)`.
+  //   * Function-parameter annotations on any FunctionDef / AsyncFunctionDef
+  //     (including methods nested in ClassDef) — e.g.
+  //     `def f(t: Tile): ...`.
+  // Conflicts across sites with the same name resolve last-write-wins. The
+  // visitor filters by class_name at consumption time, so in the common
+  // case — a parameter `t: ThisCls` shadowing a module-scope `t: OtherCls` —
+  // only sites for the winning class match. A rare shadowing pattern (a
+  // module-scope `t: OtherCls` together with a parameter `t: ThisCls` *and*
+  // a module-scope multi-axis subscript `t[a, b]` that legitimately belongs
+  // to OtherCls) could feed the wrong shape into ThisCls's reducer; if the
+  // shapes disagree the unanimous-wins reducer bails out, otherwise an
+  // incorrect annotation is synthesised. Not observed in practice; not
+  // worth the complexity of lexical scoping until it bites.
+  void collect_class_instance_map(
+    const Json &ast,
+    std::unordered_map<std::string, std::string> &out) const
+  {
+    auto record = [&](const Json &target_id, const Json &annotation) {
+      if (
+        !target_id.is_string() || !annotation.is_object() ||
+        !annotation.contains("_type") || annotation["_type"] != "Name" ||
+        !annotation.contains("id") || !annotation["id"].is_string())
+        return;
+      out[target_id.template get<std::string>()] =
+        annotation["id"].template get<std::string>();
+    };
+
+    std::function<void(const Json &)> walk = [&](const Json &node) {
+      if (node.is_object())
+      {
+        if (
+          node.contains("_type") && node["_type"] == "AnnAssign" &&
+          node.contains("target") && node["target"].is_object() &&
+          node["target"].contains("_type") &&
+          node["target"]["_type"] == "Name" && node["target"].contains("id") &&
+          node.contains("annotation"))
+          record(node["target"]["id"], node["annotation"]);
+        else if (
+          node.contains("_type") && node["_type"] == "arg" &&
+          node.contains("arg") && node.contains("annotation"))
+          record(node["arg"], node["annotation"]);
+        for (auto it = node.begin(); it != node.end(); ++it)
+          walk(it.value());
+      }
+      else if (node.is_array())
+      {
+        for (const auto &elem : node)
+          walk(elem);
+      }
+    };
+
+    if (ast.is_object() && ast.contains("body"))
+      walk(ast["body"]);
+  }
+
+  // Walk @p node and invoke @p visit(elts) for every Subscript whose value
+  // is a Name resolving to @p class_name and whose slice is a Tuple. @p
+  // visit receives the tuple's `elts` JSON array.
+  template <typename Visitor>
+  void visit_class_tuple_subscripts(
+    const Json &node,
+    const std::string &class_name,
+    const std::unordered_map<std::string, std::string> &var_to_class,
+    Visitor &&visit)
+  {
+    if (node.is_object())
+    {
+      if (
+        node.contains("_type") && node["_type"] == "Subscript" &&
+        node.contains("value") && node["value"].is_object() &&
+        node["value"].contains("_type") && node["value"]["_type"] == "Name" &&
+        node["value"].contains("id") && node.contains("slice") &&
+        node["slice"].is_object() && node["slice"].contains("_type") &&
+        node["slice"]["_type"] == "Tuple" && node["slice"].contains("elts") &&
+        node["slice"]["elts"].is_array() && !node["slice"]["elts"].empty())
+      {
+        auto it =
+          var_to_class.find(node["value"]["id"].template get<std::string>());
+        if (it != var_to_class.end() && it->second == class_name)
+          visit(node["slice"]["elts"]);
+      }
+      for (auto it = node.begin(); it != node.end(); ++it)
+        visit_class_tuple_subscripts(
+          it.value(), class_name, var_to_class, visit);
+    }
+    else if (node.is_array())
+    {
+      for (const auto &elem : node)
+        visit_class_tuple_subscripts(elem, class_name, var_to_class, visit);
+    }
+  }
+
+  // Resolve each element of @p elts to a Python type name suitable for a
+  // synthesised `tuple[...]` annotation. Slice literals and `slice(...)`
+  // calls map to "slice"; scalars and other expressions are routed through
+  // get_argument_type(). Returns an empty vector when any element resolves
+  // to "" or "Any" — bailing keeps the synthesised callee struct consistent
+  // with whatever the caller actually builds at the subscript site.
+  std::vector<std::string> infer_tuple_element_types(const Json &elts)
+  {
+    std::vector<std::string> types;
+    types.reserve(elts.size());
+    for (const Json &elt : elts)
+    {
+      if (!elt.contains("_type"))
+        return {};
+      const std::string &t = elt["_type"];
+      if (t == "Slice")
+      {
+        types.emplace_back("slice");
+        continue;
+      }
+      if (
+        t == "Call" && elt.contains("func") && elt["func"].is_object() &&
+        elt["func"].contains("_type") && elt["func"]["_type"] == "Name" &&
+        elt["func"].contains("id") && elt["func"]["id"] == "slice")
+      {
+        types.emplace_back("slice");
+        continue;
+      }
+      std::string resolved = get_argument_type(elt);
+      if (resolved.empty() || resolved == "Any")
+        return {};
+      types.push_back(std::move(resolved));
+    }
+    return types;
   }
 
   // Method to find all function calls to a specific function
@@ -731,6 +970,62 @@ private:
     }
 
     return types;
+  }
+
+  // For a parameter annotated bare `tuple`, recover the element types by
+  // intersecting all call sites that pass a Tuple literal at position
+  // @p param_index. Returns empty when arity disagrees, any caller passes a
+  // non-Tuple-literal argument, or no usable call sites exist; element types
+  // that disagree across calls fall back to "Any". Used to specialise bare
+  // `tuple` parameter annotations to `tuple[T0, T1, ...]` so tuple-unpacking
+  // sees the struct shape (GitHub #4515).
+  std::vector<std::string> infer_tuple_param_types_from_calls(
+    size_t param_index,
+    const std::vector<Json> &function_calls)
+  {
+    std::vector<std::string> result;
+    bool initialized = false;
+
+    for (const Json &call : function_calls)
+    {
+      if (!call.contains("args") || param_index >= call["args"].size())
+        continue;
+
+      const Json &arg = call["args"][param_index];
+      if (
+        !arg.contains("_type") || arg["_type"] != "Tuple" ||
+        !arg.contains("elts"))
+        return {};
+
+      std::vector<std::string> shape;
+      shape.reserve(arg["elts"].size());
+      for (const Json &elt : arg["elts"])
+      {
+        std::string t = get_argument_type(elt);
+        // Empty result and bare container kinds without parameters all
+        // resolve to incomplete/empty types downstream. Clamp them to "Any"
+        // so the synthesised struct never carries an empty_typet() component.
+        if (t.empty() || t == "tuple" || t == "list" || t == "dict")
+          t = "Any";
+        shape.push_back(std::move(t));
+      }
+
+      if (!initialized)
+      {
+        result = std::move(shape);
+        initialized = true;
+      }
+      else
+      {
+        if (shape.size() != result.size())
+          return {};
+        for (size_t k = 0; k < result.size(); ++k)
+          if (result[k] != shape[k])
+            result[k] = "Any";
+      }
+    }
+
+    return result;
   }
 
   bool are_all_user_classes(const std::vector<std::string> &types) const
@@ -1054,6 +1349,8 @@ private:
       }
       return "";
     }
+    else if (arg["_type"] == "Slice")
+      return "slice";
     else if (arg["_type"] == "UnaryOp")
     {
       // Handle unary operations like -5, +3, not True
@@ -3877,6 +4174,53 @@ private:
       {"end_col_offset", total_end_col}};
   }
 
+  // Build a `tuple[t0, t1, ...]` Subscript annotation node. Used by the
+  // parameter-inference pass to specialise bare `tuple` annotations once
+  // the element types have been recovered from call sites (GitHub #4515).
+  Json create_tuple_subscript_annotation(
+    const std::vector<std::string> &elem_types,
+    int lineno,
+    int col_offset,
+    int end_lineno)
+  {
+    static const std::string base_type = "tuple";
+    int base_end_col = col_offset + base_type.size();
+    int slice_col = base_end_col + 1;
+
+    Json elts = Json::array();
+    int cur = slice_col;
+    for (const std::string &t : elem_types)
+    {
+      int end_col = cur + t.size();
+      elts.push_back(
+        create_name_annotation(t, lineno, cur, end_lineno, end_col));
+      cur = end_col + 2; // ", "
+    }
+    int slice_end_col = cur - 2;
+    int total_end_col = slice_end_col + 1;
+
+    Json slice = {
+      {"_type", "Tuple"},
+      {"elts", elts},
+      {"ctx", {{"_type", "Load"}}},
+      {"lineno", lineno},
+      {"col_offset", slice_col},
+      {"end_lineno", end_lineno},
+      {"end_col_offset", slice_end_col}};
+
+    return {
+      {"_type", "Subscript"},
+      {"value",
+       create_name_annotation(
+         base_type, lineno, col_offset, end_lineno, base_end_col)},
+      {"slice", slice},
+      {"ctx", {{"_type", "Load"}}},
+      {"lineno", lineno},
+      {"col_offset", col_offset},
+      {"end_lineno", end_lineno},
+      {"end_col_offset", total_end_col}};
+  }
+
   Json create_annotation_from_type(
     const std::string &inferred_type,
     int lineno,
@@ -4028,8 +4372,189 @@ private:
     ast["end_col_offset"] = max_col_offset;
   }
 
+  /**
+   * @brief Resolve the user-defined class name of variable @p obj from the
+   *        surrounding scope (function parameters, local declarations, or
+   *        globals).
+   * @return The class name, or an empty string when not resolvable.
+   */
+  std::string resolve_object_class_name(const std::string &obj)
+  {
+    auto read_name_id = [](const Json &annotation) -> std::string {
+      if (
+        annotation.is_object() && !annotation.is_null() &&
+        annotation.contains("_type") && annotation["_type"] == "Name" &&
+        annotation.contains("id") && annotation["id"].is_string())
+        return annotation["id"].template get<std::string>();
+      return "";
+    };
+
+    if (
+      current_func != nullptr && (*current_func).contains("args") &&
+      (*current_func)["args"].contains("args"))
+    {
+      Json param = find_annotated_assign(obj, (*current_func)["args"]["args"]);
+      if (param.contains("annotation"))
+      {
+        std::string id = read_name_id(param["annotation"]);
+        if (!id.empty())
+          return id;
+      }
+    }
+
+    Json var = json_utils::find_var_decl(obj, get_current_func_name(), ast_);
+    if (var.empty())
+      return "";
+
+    if (var.contains("annotation"))
+    {
+      std::string id = read_name_id(var["annotation"]);
+      if (!id.empty())
+        return id;
+    }
+
+    if (
+      var.contains("value") && var["value"].is_object() &&
+      var["value"].contains("_type") && var["value"]["_type"] == "Call" &&
+      var["value"].contains("func") && var["value"]["func"].is_object() &&
+      var["value"]["func"].contains("_type") &&
+      var["value"]["func"]["_type"] == "Name" &&
+      var["value"]["func"].contains("id") &&
+      var["value"]["func"]["id"].is_string())
+      return var["value"]["func"]["id"].template get<std::string>();
+
+    return "";
+  }
+
+  /**
+   * @brief Locate the RHS value of `self.@p attr = ...` in @p cls's
+   *        `__init__` method.
+   * @return The assignment's value node, or an empty Json when not found.
+   */
+  Json find_self_attr_init_rhs(const std::string &cls, const std::string &attr)
+  {
+    Json class_node = json_utils::find_class(ast_["body"], cls);
+    if (class_node.empty() || !class_node.contains("body"))
+      return Json();
+
+    for (const Json &member : class_node["body"])
+    {
+      if (member["_type"] != "FunctionDef" || member["name"] != "__init__")
+        continue;
+      for (const Json &stmt : member["body"])
+      {
+        if (!stmt.contains("_type") || !stmt.contains("value"))
+          continue;
+        const Json *target = nullptr;
+        if (stmt["_type"] == "AnnAssign" && stmt.contains("target"))
+          target = &stmt["target"];
+        else if (
+          stmt["_type"] == "Assign" && stmt.contains("targets") &&
+          stmt["targets"].is_array() && !stmt["targets"].empty())
+          target = &stmt["targets"][0];
+        if (
+          target == nullptr || !target->is_object() ||
+          !target->contains("_type") || (*target)["_type"] != "Attribute" ||
+          !target->contains("value") || !(*target)["value"].is_object() ||
+          !(*target)["value"].contains("_type") ||
+          (*target)["value"]["_type"] != "Name" ||
+          !(*target)["value"].contains("id") ||
+          (*target)["value"]["id"] != "self" || !target->contains("attr") ||
+          (*target)["attr"] != attr)
+          continue;
+        return stmt["value"];
+      }
+    }
+    return Json();
+  }
+
+  /**
+   * @brief Infer the type of the element at position @p index in @p rhs, the
+   *        right-hand side of a tuple/list unpacking assignment.
+   *
+   * Handles two RHS shapes: a Tuple/List literal (types element @p index
+   * directly), and an `obj.attr` Attribute access (resolves @p obj to a
+   * class, then recurses into the matching `self.attr = ...` initialiser).
+   *
+   * @return The inferred element type, or "Any" when the RHS shape is not
+   *         recognised.
+   */
+  std::string infer_unpacked_element_type(const Json &rhs, size_t index)
+  {
+    if (!rhs.is_object() || !rhs.contains("_type"))
+      return "Any";
+
+    const std::string &kind = rhs["_type"];
+
+    if (
+      (kind == "Tuple" || kind == "List") && rhs.contains("elts") &&
+      index < rhs["elts"].size())
+    {
+      std::string t = get_argument_type(rhs["elts"][index]);
+      return t.empty() ? "Any" : t;
+    }
+
+    if (
+      kind == "Attribute" && rhs.contains("value") &&
+      rhs["value"].is_object() && rhs["value"]["_type"] == "Name" &&
+      rhs.contains("attr"))
+    {
+      std::string cls = resolve_object_class_name(
+        rhs["value"]["id"].template get<std::string>());
+      if (cls.empty())
+        return "Any";
+      Json attr_rhs =
+        find_self_attr_init_rhs(cls, rhs["attr"].template get<std::string>());
+      if (attr_rhs.empty())
+        return "Any";
+      return infer_unpacked_element_type(attr_rhs, index);
+    }
+
+    return "Any";
+  }
+
+  /**
+   * @brief Synthesise an AnnAssign-shaped Json for @p node_name when @p elem
+   *        is a tuple/list unpacking `Assign` that binds it (GitHub #4532).
+   * @return The synthetic node, or an empty Json on no match.
+   */
+  Json
+  match_unpacking_assignment(const Json &elem, const std::string &node_name)
+  {
+    if (
+      !elem.contains("_type") || elem["_type"] != "Assign" ||
+      !elem.contains("targets") || !elem["targets"].is_array() ||
+      elem["targets"].empty())
+      return Json();
+    const Json &target = elem["targets"][0];
+    if (
+      !target.is_object() || !target.contains("_type") ||
+      (target["_type"] != "Tuple" && target["_type"] != "List") ||
+      !target.contains("elts") || !target["elts"].is_array())
+      return Json();
+
+    const Json &elts = target["elts"];
+    for (size_t i = 0; i < elts.size(); ++i)
+    {
+      if (
+        !elts[i].is_object() || !elts[i].contains("_type") ||
+        elts[i]["_type"] != "Name" || !elts[i].contains("id") ||
+        elts[i]["id"] != node_name)
+        continue;
+      std::string elem_type = elem.contains("value")
+                                ? infer_unpacked_element_type(elem["value"], i)
+                                : "Any";
+      return Json{
+        {"_type", "AnnAssign"},
+        {"target", Json{{"_type", "Name"}, {"id", node_name}}},
+        {"annotation", Json{{"_type", "Name"}, {"id", elem_type}}},
+        {"lineno", elem.value("lineno", 0)}};
+    }
+    return Json();
+  }
+
   const Json
-  find_annotated_assign(const std::string &node_name, const Json &body) const
+  find_annotated_assign(const std::string &node_name, const Json &body)
   {
     for (const Json &elem : body)
     {
@@ -4049,6 +4574,13 @@ private:
       {
         return elem;
       }
+
+      // Tuple/list unpacking assignment (`A, B = rhs`): synthesise an
+      // AnnAssign so callers reading node["annotation"]["id"] resolve the
+      // destructured element's type (GitHub #4532).
+      if (Json synth = match_unpacking_assignment(elem, node_name);
+          !synth.empty())
+        return synth;
 
       // Recursively search inside nested blocks
       if (elem.contains("_type"))
@@ -4139,4 +4671,5 @@ private:
     std::vector<std::string> class_types;
   };
   std::vector<pending_specializationt> pending_specializations_;
+  std::vector<const Json *> extra_subscript_inference_asts_;
 };

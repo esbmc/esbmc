@@ -47,7 +47,8 @@ enum class ExpressionType
   LIST,
   UNKNOWN,
   FSTRING,
-  TUPLE
+  TUPLE,
+  SLICE
 };
 
 struct TypeFlags
@@ -70,7 +71,7 @@ public:
       name == "frozenset" || name == "bytes" || name == "set" ||
       name == "bytearray" || name == "range" || name == "complex" ||
       name == "type" || name == "object" || name == "abs" || name == "None" ||
-      name == "divmod");
+      name == "divmod" || name == "slice");
   }
 
   static bool is_consensus_type(const std::string &name)
