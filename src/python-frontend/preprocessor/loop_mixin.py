@@ -262,8 +262,8 @@ class LoopMixin:
             # Handle dict.items() for loops
             self.is_range_loop = False
             return self._transform_items_for(node)
-        list_literal = self.list_literal_values.get(
-            node.iter.id) if isinstance(node.iter, ast.Name) else None
+        list_literal = self.list_literal_values.get(node.iter.id) if isinstance(
+            node.iter, ast.Name) else None
         if (list_literal is not None
                 and self._can_safely_unroll_list_literal_for(node, list_literal)):
             # For direct iteration over a known list literal variable, unroll the loop
@@ -300,8 +300,7 @@ class LoopMixin:
             return self._transform_het_dict_for(node)
         # Unroll d.values() when the dict has heterogeneous value types.
         if (isinstance(node.iter, ast.Call) and isinstance(node.iter.func, ast.Attribute)
-                and node.iter.func.attr == "values"
-                and isinstance(node.iter.func.value, ast.Name)
+                and node.iter.func.attr == "values" and isinstance(node.iter.func.value, ast.Name)
                 and node.iter.func.value.id in self.het_value_dict_literals):
             dict_node = self.het_value_dict_literals[node.iter.func.value.id]
             return self._transform_het_values_for(node, dict_node)
@@ -1235,7 +1234,7 @@ class LoopMixin:
         return self._any_ann(), self._any_ann()
 
     def _create_dict_list_assign(  # pylint: disable=too-many-arguments,too-many-positional-arguments
-        self, node, var_name, dict_node, method, elem_ann):
+            self, node, var_name, dict_node, method, elem_ann):
         """Create: var_name: list[base(elem_ann)] = dict_node.method()
 
         The list annotation uses only the BASE type name (e.g. 'dict' for
@@ -1267,7 +1266,7 @@ class LoopMixin:
         return assign
 
     def _create_var_subscript_assign(  # pylint: disable=too-many-arguments,too-many-positional-arguments
-        self, node, var_name, list_var, index_var, elem_ann):
+            self, node, var_name, list_var, index_var, elem_ann):
         """Create: var_name: elem_ann = list_var[index_var]
 
         Uses the FULL annotation node (e.g. dict[str, int]) so that
