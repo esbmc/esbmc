@@ -21,6 +21,7 @@ _KEY = "__dataclass_key"
 
 
 class DataclassMixin:
+
     def _ensure_dataclass_initvar_import(self, module_node):
         for stmt in module_node.body:
             if isinstance(stmt, ast.ImportFrom) and stmt.module == "dataclasses":
@@ -38,13 +39,9 @@ class DataclassMixin:
         insert_index = 0
         if module_node.body:
             first_stmt = module_node.body[0]
-            if isinstance(first_stmt, ast.Expr) and (
-                (
-                    isinstance(first_stmt.value, ast.Constant)
-                    and isinstance(first_stmt.value.value, str)
-                )
-                or isinstance(first_stmt.value, ast.Str)
-            ):
+            if isinstance(first_stmt, ast.Expr) and ((isinstance(first_stmt.value, ast.Constant)
+                                                      and isinstance(first_stmt.value.value, str))
+                                                     or isinstance(first_stmt.value, ast.Str)):
                 insert_index = 1
 
         while insert_index < len(module_node.body):
@@ -114,9 +111,7 @@ class DataclassMixin:
                 ast.Raise(
                     exc=ast.Call(
                         func=ast.Name(id="TypeError", ctx=ast.Load()),
-                        args=[
-                            ast.Constant(value="replace() got an unexpected field name")
-                        ],
+                        args=[ast.Constant(value="replace() got an unexpected field name")],
                         keywords=[],
                     ),
                     cause=None,
@@ -146,16 +141,14 @@ class DataclassMixin:
                 defaults=[],
             ),
             body=[
-                ast.Return(
-                    value=ast.Call(
-                        func=ast.Name(id="getattr", ctx=ast.Load()),
-                        args=[
-                            ast.Name(id="obj", ctx=ast.Load()),
-                            ast.Name(id="name", ctx=ast.Load()),
-                        ],
-                        keywords=[],
-                    )
-                )
+                ast.Return(value=ast.Call(
+                    func=ast.Name(id="getattr", ctx=ast.Load()),
+                    args=[
+                        ast.Name(id="obj", ctx=ast.Load()),
+                        ast.Name(id="name", ctx=ast.Load()),
+                    ],
+                    keywords=[],
+                ))
             ],
             decorator_list=[],
             returns=None,
@@ -193,11 +186,8 @@ class DataclassMixin:
     def _dataclass_api_kind(self, node):
         if isinstance(node.func, ast.Name):
             return self._dataclass_api_kind_from_name(node.func.id)
-        if (
-            isinstance(node.func, ast.Attribute)
-            and isinstance(node.func.value, ast.Name)
-            and node.func.value.id in self.dataclasses_module_names
-        ):
+        if (isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name)
+                and node.func.value.id in self.dataclasses_module_names):
             return self._DATACLASS_API_ATTR_KINDS.get(node.func.attr)
         return None
 
@@ -239,8 +229,7 @@ class DataclassMixin:
         if class_name not in self._dataclass_class_specs:
             return []
         return [
-            field
-            for field in self._dataclass_class_specs[class_name]["fields"]
+            field for field in self._dataclass_class_specs[class_name]["fields"]
             if field["kind"] == "instance"
         ]
 
@@ -257,9 +246,7 @@ class DataclassMixin:
         ast.fix_missing_locations(call_expr)
         return call_expr
 
-    def _build_static_known_dataclass_expr(
-        self, kind, class_name, instance_expr, source_node
-    ):
+    def _build_static_known_dataclass_expr(self, kind, class_name, instance_expr, source_node):
         if class_name not in self._dataclass_class_specs:
             return None
 
@@ -293,9 +280,8 @@ class DataclassMixin:
                 return None
 
             if field_type in self._dataclass_class_specs:
-                value_expr = self._build_static_known_dataclass_expr(
-                    kind, field_type, field_value, source_node
-                )
+                value_expr = self._build_static_known_dataclass_expr(kind, field_type, field_value,
+                                                                     source_node)
                 if value_expr is None:
                     return None
             else:
@@ -408,9 +394,7 @@ class DataclassMixin:
             is_async=0,
         )
         if kind == "asdict":
-            node = ast.DictComp(
-                key=field_name_attr, value=recursive_value, generators=[gen]
-            )
+            node = ast.DictComp(key=field_name_attr, value=recursive_value, generators=[gen])
         else:
             node = ast.Call(
                 func=ast.Name(id="tuple", ctx=ast.Load()),
@@ -503,29 +487,25 @@ class DataclassMixin:
         return call_expr
 
     def _build_asdict_expr(self, class_name, instance_expr, source_node):
-        static_expr = self._build_static_known_dataclass_expr(
-            "asdict", class_name, instance_expr, source_node
-        )
+        static_expr = self._build_static_known_dataclass_expr("asdict", class_name, instance_expr,
+                                                              source_node)
         if static_expr is not None:
             return static_expr
 
-        dict_expr = self._build_runtime_recursive_dataclass_expr(
-            "asdict", instance_expr, source_node
-        )
+        dict_expr = self._build_runtime_recursive_dataclass_expr("asdict", instance_expr,
+                                                                 source_node)
         self.ensure_all_locations(dict_expr, source_node)
         ast.fix_missing_locations(dict_expr)
         return dict_expr
 
     def _build_astuple_expr(self, class_name, instance_expr, source_node):
-        static_expr = self._build_static_known_dataclass_expr(
-            "astuple", class_name, instance_expr, source_node
-        )
+        static_expr = self._build_static_known_dataclass_expr("astuple", class_name, instance_expr,
+                                                              source_node)
         if static_expr is not None:
             return static_expr
 
-        tuple_expr = self._build_runtime_recursive_dataclass_expr(
-            "astuple", instance_expr, source_node
-        )
+        tuple_expr = self._build_runtime_recursive_dataclass_expr("astuple", instance_expr,
+                                                                  source_node)
         self.ensure_all_locations(tuple_expr, source_node)
         ast.fix_missing_locations(tuple_expr)
         return tuple_expr
@@ -544,9 +524,7 @@ class DataclassMixin:
         if keyword_names and not keyword_names.issubset(allowed_names):
             self._needs_dataclass_replace_error_helper = True
             result = ast.Call(
-                func=ast.Name(
-                    id="__ESBMC_dataclass_replace_invalid_field", ctx=ast.Load()
-                ),
+                func=ast.Name(id="__ESBMC_dataclass_replace_invalid_field", ctx=ast.Load()),
                 args=[],
                 keywords=[],
             )
@@ -566,8 +544,7 @@ class DataclassMixin:
                         value=copy.deepcopy(target),
                         attr=field_name,
                         ctx=ast.Load(),
-                    )
-                )
+                    ))
         result = ast.Call(
             func=ast.Name(id=instance_class, ctx=ast.Load()),
             args=ctor_args,
@@ -585,8 +562,7 @@ class DataclassMixin:
                 func=ast.Name(id="__ESBMC_DataclassField", ctx=ast.Load()),
                 args=[ast.Constant(value=field["name"])],
                 keywords=[],
-            )
-            for field in self._dataclass_field_specs(effective_class)
+            ) for field in self._dataclass_field_specs(effective_class)
         ]
         result = ast.List(elts=field_objs, ctx=ast.Load())
         self.ensure_all_locations(result, node)
@@ -636,16 +612,10 @@ class DataclassMixin:
         instance_class = self._dataclass_instance_type_of_expr(target)
 
         if kind == "is_dataclass":
-            return self._rewrite_is_dataclass_call(
-                node, target, class_name, instance_class
-            )
+            return self._rewrite_is_dataclass_call(node, target, class_name, instance_class)
         if kind == "fields":
-            return self._rewrite_dataclass_fields_kind(
-                node, class_name, instance_class
-            )
-        return self._rewrite_dataclass_instance_kind(
-            kind, node, target, instance_class
-        )
+            return self._rewrite_dataclass_fields_kind(node, class_name, instance_class)
+        return self._rewrite_dataclass_instance_kind(kind, node, target, instance_class)
 
     def is_dataclass(self, class_node):
         """Return True when a class is decorated with @dataclass.
@@ -660,18 +630,11 @@ class DataclassMixin:
             if isinstance(decorator, ast.Call):
                 target = decorator.func
 
-            if (
-                isinstance(target, ast.Name)
-                and target.id in self._dataclass_decorator_names
-            ):
+            if (isinstance(target, ast.Name) and target.id in self._dataclass_decorator_names):
                 return True
 
-            if (
-                isinstance(target, ast.Attribute)
-                and isinstance(target.value, ast.Name)
-                and target.value.id == "dataclasses"
-                and target.attr == "dataclass"
-            ):
+            if (isinstance(target, ast.Attribute) and isinstance(target.value, ast.Name)
+                    and target.value.id == "dataclasses" and target.attr == "dataclass"):
                 return True
 
         return False
@@ -684,24 +647,14 @@ class DataclassMixin:
         return annotation.slice
 
     def _is_dataclass_initvar_base(self, node):
-        return (
-            isinstance(node, ast.Name) and node.id in self._dataclass_initvar_names
-        ) or (
-            isinstance(node, ast.Attribute)
-            and node.attr == "InitVar"
-            and isinstance(node.value, ast.Name)
-            and node.value.id in self.dataclasses_module_names
-        )
+        return (isinstance(node, ast.Name) and node.id in self._dataclass_initvar_names) or (
+            isinstance(node, ast.Attribute) and node.attr == "InitVar"
+            and isinstance(node.value, ast.Name) and node.value.id in self.dataclasses_module_names)
 
     def _is_typing_classvar_base(self, node):
-        return (
-            isinstance(node, ast.Name) and node.id in self._typing_classvar_names
-        ) or (
-            isinstance(node, ast.Attribute)
-            and node.attr == "ClassVar"
-            and isinstance(node.value, ast.Name)
-            and node.value.id in self.typing_module_names
-        )
+        return (isinstance(node, ast.Name) and node.id in self._typing_classvar_names) or (
+            isinstance(node, ast.Attribute) and node.attr == "ClassVar"
+            and isinstance(node.value, ast.Name) and node.value.id in self.typing_module_names)
 
     def _analyze_dataclass_field_annotation(self, annotation):
         """Classify a dataclass annotation as instance field, InitVar or ClassVar."""
@@ -724,12 +677,8 @@ class DataclassMixin:
 
     def _get_post_init_method(self, class_node):
         return next(
-            (
-                member
-                for member in class_node.body
-                if isinstance(member, ast.FunctionDef)
-                and member.name == "__post_init__"
-            ),
+            (member for member in class_node.body
+             if isinstance(member, ast.FunctionDef) and member.name == "__post_init__"),
             None,
         )
 
@@ -761,38 +710,25 @@ class DataclassMixin:
             return
 
         initvar_count = sum(1 for field in fields if field["kind"] == "initvar")
-        total_positional = len(post_init_method.args.posonlyargs) + len(
-            post_init_method.args.args
-        )
+        total_positional = len(post_init_method.args.posonlyargs) + len(post_init_method.args.args)
         if total_positional == 0:
-            raise SyntaxError(
-                f"dataclass {class_node.name!r} has invalid __post_init__ signature: "
-                "missing bound instance parameter"
-            )
+            raise SyntaxError(f"dataclass {class_node.name!r} has invalid __post_init__ signature: "
+                              "missing bound instance parameter")
 
         positional_after_self = total_positional - 1
-        min_positional_after_self = positional_after_self - len(
-            post_init_method.args.defaults
-        )
-        max_positional_after_self = (
-            float("inf")
-            if post_init_method.args.vararg is not None
-            else positional_after_self
-        )
+        min_positional_after_self = positional_after_self - len(post_init_method.args.defaults)
+        max_positional_after_self = (float("inf") if post_init_method.args.vararg is not None else
+                                     positional_after_self)
 
         if any(default is None for default in post_init_method.args.kw_defaults):
             raise SyntaxError(
                 f"dataclass {class_node.name!r} has incompatible __post_init__ signature: "
-                "required keyword-only parameters are not supported"
-            )
+                "required keyword-only parameters are not supported")
 
-        if not (
-            min_positional_after_self <= initvar_count <= max_positional_after_self
-        ):
+        if not (min_positional_after_self <= initvar_count <= max_positional_after_self):
             raise SyntaxError(
                 f"dataclass {class_node.name!r} has incompatible __post_init__ signature: "
-                f"expected {initvar_count} InitVar argument(s)"
-            )
+                f"expected {initvar_count} InitVar argument(s)")
 
     def _dataclass_default_options(self):
         return {
@@ -830,43 +766,21 @@ class DataclassMixin:
 
     def _parse_dataclass_bool_option(self, value, option_name):
         if not isinstance(value, ast.Constant) or not isinstance(value.value, bool):
-            raise SyntaxError(
-                f"dataclass option {option_name!r} must be a boolean literal"
-            )
+            raise SyntaxError(f"dataclass option {option_name!r} must be a boolean literal")
         return value.value
 
     def _parse_dataclass_options(self, class_node):
         options = self._dataclass_default_options()
         decorator = next(
-            (
-                dec
-                for dec in class_node.decorator_list
-                if (
-                    isinstance(dec, ast.Name)
-                    and dec.id in self._dataclass_decorator_names
-                )
-                or (
-                    isinstance(dec, ast.Attribute)
-                    and isinstance(dec.value, ast.Name)
-                    and dec.value.id in self.dataclasses_module_names
-                    and dec.attr == "dataclass"
-                )
-                or (
-                    isinstance(dec, ast.Call)
-                    and (
-                        (
-                            isinstance(dec.func, ast.Name)
-                            and dec.func.id in self._dataclass_decorator_names
-                        )
-                        or (
-                            isinstance(dec.func, ast.Attribute)
-                            and isinstance(dec.func.value, ast.Name)
-                            and dec.func.value.id in self.dataclasses_module_names
-                            and dec.func.attr == "dataclass"
-                        )
-                    )
-                )
-            ),
+            (dec for dec in class_node.decorator_list
+             if (isinstance(dec, ast.Name) and dec.id in self._dataclass_decorator_names) or (
+                 isinstance(dec, ast.Attribute) and isinstance(dec.value, ast.Name)
+                 and dec.value.id in self.dataclasses_module_names and dec.attr == "dataclass") or
+             (isinstance(dec, ast.Call) and (
+                 (isinstance(dec.func, ast.Name) and dec.func.id in self._dataclass_decorator_names)
+                 or (isinstance(dec.func, ast.Attribute) and isinstance(dec.func.value, ast.Name)
+                     and dec.func.value.id in self.dataclasses_module_names
+                     and dec.func.attr == "dataclass")))),
             None,
         )
         if decorator is None:
@@ -874,9 +788,7 @@ class DataclassMixin:
         if not isinstance(decorator, ast.Call):
             return options
         if decorator.args:
-            raise SyntaxError(
-                "dataclass decorator does not accept positional arguments"
-            )
+            raise SyntaxError("dataclass decorator does not accept positional arguments")
         for kw in decorator.keywords:
             if kw.arg is None:
                 raise SyntaxError("dataclass decorator does not support **kwargs")
@@ -887,18 +799,14 @@ class DataclassMixin:
             raise SyntaxError("dataclass option 'order=True' requires 'eq=True'")
         if options["slots"] and self._class_defines_name(class_node, "__slots__"):
             raise SyntaxError(
-                "dataclass option 'slots=True' cannot be used when '__slots__' is already defined"
-            )
+                "dataclass option 'slots=True' cannot be used when '__slots__' is already defined")
         if options["unsafe_hash"] and self._class_defines_name(class_node, "__hash__"):
-            raise SyntaxError(
-                "dataclass option 'unsafe_hash=True' cannot be used when "
-                "'__hash__' is explicitly defined"
-            )
+            raise SyntaxError("dataclass option 'unsafe_hash=True' cannot be used when "
+                              "'__hash__' is explicitly defined")
         return options
 
     _FIELD_ALLOWED_OPTS = frozenset(
-        {"default", "default_factory", "init", "repr", "compare", "hash", "kw_only"}
-    )
+        {"default", "default_factory", "init", "repr", "compare", "hash", "kw_only"})
     _FIELD_BOOL_OPTS = frozenset({"init", "repr", "compare", "kw_only"})
 
     def _is_field_call(self, call_node):
@@ -906,19 +814,14 @@ class DataclassMixin:
         func = call_node.func
         if isinstance(func, ast.Name):
             return func.id in self._dataclass_field_names
-        return (
-            isinstance(func, ast.Attribute)
-            and func.attr == "field"
-            and isinstance(func.value, ast.Name)
-            and func.value.id in self.dataclasses_module_names
-        )
+        return (isinstance(func, ast.Attribute) and func.attr == "field"
+                and isinstance(func.value, ast.Name)
+                and func.value.id in self.dataclasses_module_names)
 
     def _parse_field_hash_value(self, value):
         if isinstance(value, ast.Constant) and value.value in (True, False, None):
             return value.value
-        raise SyntaxError(
-            "dataclass field option 'hash' must be True, False or None"
-        )
+        raise SyntaxError("dataclass field option 'hash' must be True, False or None")
 
     def _apply_field_keyword(self, kw, state):
         """Mutate ``state`` with the value carried by ``kw``.
@@ -931,9 +834,7 @@ class DataclassMixin:
         elif kw.arg == "default_factory":
             state["factory_expr"] = kw.value
         elif kw.arg in self._FIELD_BOOL_OPTS:
-            state["options"][kw.arg] = self._parse_dataclass_bool_option(
-                kw.value, kw.arg
-            )
+            state["options"][kw.arg] = self._parse_dataclass_bool_option(kw.value, kw.arg)
         else:  # kw.arg == "hash"
             state["options"]["hash"] = self._parse_field_hash_value(kw.value)
 
@@ -953,9 +854,7 @@ class DataclassMixin:
           * desugar ``default_factory=`` into a per-instance call so each
             constructed object gets a fresh value.
         """
-        if not isinstance(default_value, ast.Call) or not self._is_field_call(
-            default_value
-        ):
+        if not isinstance(default_value, ast.Call) or not self._is_field_call(default_value):
             return default_value, None, {}
 
         if default_value.args:
@@ -974,9 +873,7 @@ class DataclassMixin:
             self._apply_field_keyword(kw, state)
 
         if state["default_expr"] is not None and state["factory_expr"] is not None:
-            raise SyntaxError(
-                "field(...) cannot specify both default and default_factory"
-            )
+            raise SyntaxError("field(...) cannot specify both default and default_factory")
         # ``field()`` with no default and no factory is a required field.
         return state["default_expr"], state["factory_expr"], state["options"]
 
@@ -992,20 +889,15 @@ class DataclassMixin:
         for base in class_node.bases:
             if isinstance(base, ast.Name) and base.id in self._dataclass_class_specs:
                 inherited_fields.extend(
-                    copy.deepcopy(self._dataclass_class_specs[base.id]["fields"])
-                )
+                    copy.deepcopy(self._dataclass_class_specs[base.id]["fields"]))
         by_name = {f["name"]: idx for idx, f in enumerate(inherited_fields)}
         for stmt in class_node.body:
             if not isinstance(stmt, ast.AnnAssign):
                 continue
             if not isinstance(stmt.target, ast.Name):
                 continue
-            field_kind, annotation = self._analyze_dataclass_field_annotation(
-                stmt.annotation
-            )
-            default_expr, factory_expr, per_field_options = self._parse_field_call(
-                stmt.value
-            )
+            field_kind, annotation = self._analyze_dataclass_field_annotation(stmt.annotation)
+            default_expr, factory_expr, per_field_options = self._parse_field_call(stmt.value)
             per_field_options = dict(per_field_options)
             per_field_options["kind"] = field_kind
             field = self._field_spec(
@@ -1015,8 +907,8 @@ class DataclassMixin:
                 per_field_options,
             )
             if dataclass_options["kw_only"] and field["kind"] in (
-                "instance",
-                "initvar",
+                    "instance",
+                    "initvar",
             ):
                 field["kw_only"] = True
             if field["kind"] in ("classvar", "initvar"):
@@ -1035,12 +927,8 @@ class DataclassMixin:
     @staticmethod
     def _partition_init_fields(fields):
         """Split fields into (param_fields, pos_fields, kwonly_fields, initvar_names)."""
-        param_fields = [
-            field for field in fields if field["kind"] != "classvar" and field["init"]
-        ]
-        initvar_names = [
-            field["name"] for field in fields if field["kind"] == "initvar"
-        ]
+        param_fields = [field for field in fields if field["kind"] != "classvar" and field["init"]]
+        initvar_names = [field["name"] for field in fields if field["kind"] == "initvar"]
         pos_fields = [field for field in param_fields if not field["kw_only"]]
         kwonly_fields = [field for field in param_fields if field["kw_only"]]
         return param_fields, pos_fields, kwonly_fields, initvar_names
@@ -1060,11 +948,9 @@ class DataclassMixin:
             default_expr = field["default_expr"]
             if default_expr is not None:
                 if not isinstance(default_expr, (ast.Constant, ast.Name)):
-                    raise SyntaxError(
-                        "unsupported dataclass default expression: "
-                        "synthesized __init__ defaults must be a Constant "
-                        "or a simple Name"
-                    )
+                    raise SyntaxError("unsupported dataclass default expression: "
+                                      "synthesized __init__ defaults must be a Constant "
+                                      "or a simple Name")
                 defaults.append(copy.deepcopy(default_expr))
             else:
                 defaults.append(ast.Constant(value=None))
@@ -1073,16 +959,13 @@ class DataclassMixin:
     def _build_init_args(self, class_node, fields):
         """Return (args, defaults, kwonlyargs, kw_defaults, initvar_names)."""
         param_fields, pos_fields, kwonly_fields, initvar_names = (
-            self._partition_init_fields(fields)
-        )
+            self._partition_init_fields(fields))
         args = [ast.arg(arg="self", annotation=None)]
         defaults = self._build_init_positional_defaults(pos_fields)
         kwonlyargs = []
         kw_defaults = []
         for field in param_fields:
-            arg = ast.arg(
-                arg=field["name"], annotation=copy.deepcopy(field["annotation"])
-            )
+            arg = ast.arg(arg=field["name"], annotation=copy.deepcopy(field["annotation"]))
             if field["kw_only"]:
                 kwonlyargs.append(arg)
                 if field["default_expr"] is not None:
@@ -1106,17 +989,13 @@ class DataclassMixin:
         if field["factory_expr"] is not None:
             # Factory fields are always assigned via the factory call;
             # they are not exposed as __init__ parameters.
-            return ast.Call(
-                func=copy.deepcopy(field["factory_expr"]), args=[], keywords=[]
-            )
+            return ast.Call(func=copy.deepcopy(field["factory_expr"]), args=[], keywords=[])
         if field["init"]:
             return self.create_name_node(field_name, ast.Load(), class_node)
         rhs = copy.deepcopy(field["default_expr"])
         if rhs is None:
-            raise SyntaxError(
-                f"field(init=False) for instance field {field_name!r} "
-                "requires a default or default_factory"
-            )
+            raise SyntaxError(f"field(init=False) for instance field {field_name!r} "
+                              "requires a default or default_factory")
         return rhs
 
     def _build_init_field_assigns(self, class_node, fields):
@@ -1159,17 +1038,12 @@ class DataclassMixin:
         if post_init_method is not None:
             call = ast.Call(
                 func=ast.Attribute(
-                    value=self.create_name_node(
-                        class_node.name, ast.Load(), class_node
-                    ),
+                    value=self.create_name_node(class_node.name, ast.Load(), class_node),
                     attr="__post_init__",
                     ctx=ast.Load(),
                 ),
-                args=[self.create_name_node("self", ast.Load(), class_node)]
-                + [
-                    self.create_name_node(name, ast.Load(), class_node)
-                    for name in initvar_names
-                ],
+                args=[self.create_name_node("self", ast.Load(), class_node)] +
+                [self.create_name_node(name, ast.Load(), class_node) for name in initvar_names],
                 keywords=[],
             )
         elif self._class_has_post_init_behavior(class_node):
@@ -1180,8 +1054,7 @@ class DataclassMixin:
                     ctx=ast.Load(),
                 ),
                 args=[
-                    self.create_name_node(name, ast.Load(), class_node)
-                    for name in initvar_names
+                    self.create_name_node(name, ast.Load(), class_node) for name in initvar_names
                 ],
                 keywords=[],
             )
@@ -1202,9 +1075,8 @@ class DataclassMixin:
         dataclass preprocessor tests. The assignment remains a direct
         ``self.<field> = <factory>()`` in the body.
         """
-        args, defaults, kwonlyargs, kw_defaults, initvar_names = (
-            self._build_init_args(class_node, fields)
-        )
+        args, defaults, kwonlyargs, kw_defaults, initvar_names = (self._build_init_args(
+            class_node, fields))
         body = self._build_init_field_assigns(class_node, fields)
         post_init_stmt = self._build_post_init_call_stmt(class_node, initvar_names)
         if post_init_stmt is not None:
@@ -1238,9 +1110,7 @@ class DataclassMixin:
                     value=self.create_name_node("self", ast.Load(), class_node),
                     attr=field["name"],
                     ctx=ast.Load(),
-                )
-                for field in fields
-                if field["kind"] == "instance" and predicate(field)
+                ) for field in fields if field["kind"] == "instance" and predicate(field)
             ],
             ctx=ast.Load(),
         )
@@ -1264,18 +1134,13 @@ class DataclassMixin:
                         )
                     ],
                     keywords=[],
-                )
-            )
+                ))
         parts.append(ast.Constant(value=")"))
-        ret = ast.Return(
-            value=ast.Call(
-                func=ast.Attribute(
-                    value=ast.Constant(value=""), attr="join", ctx=ast.Load()
-                ),
-                args=[ast.List(elts=parts, ctx=ast.Load())],
-                keywords=[],
-            )
-        )
+        ret = ast.Return(value=ast.Call(
+            func=ast.Attribute(value=ast.Constant(value=""), attr="join", ctx=ast.Load()),
+            args=[ast.List(elts=parts, ctx=ast.Load())],
+            keywords=[],
+        ))
         fn = ast.FunctionDef(
             name="__repr__",
             args=ast.arguments(
@@ -1304,8 +1169,7 @@ class DataclassMixin:
                     value=self.create_name_node("self", ast.Load(), class_node),
                     attr=f["name"],
                     ctx=ast.Load(),
-                )
-                for f in compare_fields
+                ) for f in compare_fields
             ],
             ctx=ast.Load(),
         )
@@ -1315,8 +1179,7 @@ class DataclassMixin:
                     value=self.create_name_node("other", ast.Load(), class_node),
                     attr=f["name"],
                     ctx=ast.Load(),
-                )
-                for f in compare_fields
+                ) for f in compare_fields
             ],
             ctx=ast.Load(),
         )
@@ -1331,11 +1194,8 @@ class DataclassMixin:
                     keywords=[],
                 ),
                 body=[
-                    ast.Return(
-                        value=ast.Compare(
-                            left=self_tuple, ops=[ast.Eq()], comparators=[other_tuple]
-                        )
-                    )
+                    ast.Return(value=ast.Compare(
+                        left=self_tuple, ops=[ast.Eq()], comparators=[other_tuple]))
                 ],
                 orelse=[ast.Return(value=ast.Constant(value=False))],
             )
@@ -1379,8 +1239,7 @@ class DataclassMixin:
                     value=self.create_name_node("self", ast.Load(), class_node),
                     attr=f["name"],
                     ctx=ast.Load(),
-                )
-                for f in hash_fields
+                ) for f in hash_fields
             ],
             ctx=ast.Load(),
         )
@@ -1396,13 +1255,11 @@ class DataclassMixin:
                 defaults=[],
             ),
             body=[
-                ast.Return(
-                    value=ast.Call(
-                        func=self.create_name_node("hash", ast.Load(), class_node),
-                        args=[tup],
-                        keywords=[],
-                    )
-                )
+                ast.Return(value=ast.Call(
+                    func=self.create_name_node("hash", ast.Load(), class_node),
+                    args=[tup],
+                    keywords=[],
+                ))
             ],
             decorator_list=[],
             returns=None,
@@ -1420,8 +1277,7 @@ class DataclassMixin:
                     value=self.create_name_node("self", ast.Load(), class_node),
                     attr=f["name"],
                     ctx=ast.Load(),
-                )
-                for f in compare_fields
+                ) for f in compare_fields
             ],
             ctx=ast.Load(),
         )
@@ -1431,8 +1287,7 @@ class DataclassMixin:
                     value=self.create_name_node("other", ast.Load(), class_node),
                     attr=f["name"],
                     ctx=ast.Load(),
-                )
-                for f in compare_fields
+                ) for f in compare_fields
             ],
             ctx=ast.Load(),
         )
@@ -1447,11 +1302,8 @@ class DataclassMixin:
                     keywords=[],
                 ),
                 body=[
-                    ast.Return(
-                        value=ast.Compare(
-                            left=self_tuple, ops=[op_cls()], comparators=[other_tuple]
-                        )
-                    )
+                    ast.Return(value=ast.Compare(
+                        left=self_tuple, ops=[op_cls()], comparators=[other_tuple]))
                 ],
                 orelse=[ast.Return(value=ast.Constant(value=False))],
             )
@@ -1503,15 +1355,11 @@ class DataclassMixin:
         for field in fields:
             if field["kind"] == "classvar" or field["kw_only"]:
                 continue
-            has_default = (
-                field["default_expr"] is not None or field["factory_expr"] is not None
-            )
+            has_default = (field["default_expr"] is not None or field["factory_expr"] is not None)
             if seen_default and not has_default:
-                raise SyntaxError(
-                    f"non-default argument {field['name']!r} follows default "
-                    f"argument in dataclass {class_node.name!r} "
-                    f"(line {class_node.lineno})"
-                )
+                raise SyntaxError(f"non-default argument {field['name']!r} follows default "
+                                  f"argument in dataclass {class_node.name!r} "
+                                  f"(line {class_node.lineno})")
             if has_default:
                 seen_default = True
 
@@ -1531,17 +1379,12 @@ class DataclassMixin:
         """Remove ``x: T [= ...]`` declarations now subsumed by ``__init__``."""
         field_names = {
             field["name"]
-            for field in fields
-            if field["kind"] in ("instance", "initvar")
+            for field in fields if field["kind"] in ("instance", "initvar")
         }
         class_node.body = [
-            stmt
-            for stmt in class_node.body
-            if not (
-                isinstance(stmt, ast.AnnAssign)
-                and isinstance(stmt.target, ast.Name)
-                and stmt.target.id in field_names
-            )
+            stmt for stmt in class_node.body
+            if not (isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name)
+                    and stmt.target.id in field_names)
         ]
 
     @staticmethod
@@ -1551,12 +1394,8 @@ class DataclassMixin:
             return 0
         first_stmt = class_node.body[0]
         if isinstance(first_stmt, ast.Expr) and (
-            (
-                isinstance(first_stmt.value, ast.Constant)
-                and isinstance(first_stmt.value.value, str)
-            )
-            or isinstance(first_stmt.value, ast.Str)
-        ):
+            (isinstance(first_stmt.value, ast.Constant) and isinstance(first_stmt.value.value, str))
+                or isinstance(first_stmt.value, ast.Str)):
             return 1
         return 0
 
@@ -1564,36 +1403,20 @@ class DataclassMixin:
     def _class_defines_method(class_node, method_name):
         return any(
             isinstance(member, ast.FunctionDef) and member.name == method_name
-            for member in class_node.body
-        )
+            for member in class_node.body)
 
-    def _inject_dataclass_synth_methods(
-        self, class_node, fields, dataclass_options, insert_index
-    ):
+    def _inject_dataclass_synth_methods(self, class_node, fields, dataclass_options, insert_index):
         """Insert __init__/fields metadata/__repr__/__eq__/order/__hash__."""
         if dataclass_options["init"]:
-            class_node.body.insert(
-                insert_index, self.build_init(class_node, fields)
-            )
-        class_node.body.insert(
-            insert_index + 1, self.build_dataclass_fields_metadata(class_node, fields)
-        )
-        if dataclass_options["repr"] and not self._class_defines_method(
-            class_node, "__repr__"
-        ):
-            class_node.body.insert(
-                insert_index + 2, self.build_dataclass_repr(class_node, fields)
-            )
-        if dataclass_options["eq"] and not self._class_defines_method(
-            class_node, "__eq__"
-        ):
-            class_node.body.insert(
-                insert_index + 2, self.build_dataclass_eq(class_node, fields)
-            )
+            class_node.body.insert(insert_index, self.build_init(class_node, fields))
+        class_node.body.insert(insert_index + 1,
+                               self.build_dataclass_fields_metadata(class_node, fields))
+        if dataclass_options["repr"] and not self._class_defines_method(class_node, "__repr__"):
+            class_node.body.insert(insert_index + 2, self.build_dataclass_repr(class_node, fields))
+        if dataclass_options["eq"] and not self._class_defines_method(class_node, "__eq__"):
+            class_node.body.insert(insert_index + 2, self.build_dataclass_eq(class_node, fields))
         if dataclass_options["order"]:
-            existing = {
-                m.name for m in class_node.body if isinstance(m, ast.FunctionDef)
-            }
+            existing = {m.name for m in class_node.body if isinstance(m, ast.FunctionDef)}
             for method_name, op in (
                 ("__lt__", ast.Lt),
                 ("__le__", ast.LtE),
@@ -1603,19 +1426,12 @@ class DataclassMixin:
                 if method_name not in existing:
                     class_node.body.insert(
                         insert_index + 2,
-                        self.build_dataclass_order(
-                            class_node, fields, method_name, op
-                        ),
+                        self.build_dataclass_order(class_node, fields, method_name, op),
                     )
-        should_generate_hash = dataclass_options["unsafe_hash"] or (
-            dataclass_options["eq"] and dataclass_options["frozen"]
-        )
-        if should_generate_hash and not self._class_defines_method(
-            class_node, "__hash__"
-        ):
-            class_node.body.insert(
-                insert_index + 2, self.build_dataclass_hash(class_node, fields)
-            )
+        should_generate_hash = dataclass_options["unsafe_hash"] or (dataclass_options["eq"]
+                                                                    and dataclass_options["frozen"])
+        if should_generate_hash and not self._class_defines_method(class_node, "__hash__"):
+            class_node.body.insert(insert_index + 2, self.build_dataclass_hash(class_node, fields))
 
     def expand_dataclass(self, class_node):
         """Inject a minimal generated __init__ for dataclass-decorated classes."""
@@ -1628,9 +1444,7 @@ class DataclassMixin:
         if any(field["kind"] == "initvar" for field in fields):
             self._needs_dataclass_initvar_import = True
 
-        active_fields = [
-            field for field in fields if field["kind"] in ("instance", "initvar")
-        ]
+        active_fields = [field for field in fields if field["kind"] in ("instance", "initvar")]
         has_post_init_behavior = self._class_has_post_init_behavior(class_node)
         has_classvars = any(f["kind"] == "classvar" for f in fields)
         if not active_fields and not has_post_init_behavior and not has_classvars:
@@ -1646,9 +1460,7 @@ class DataclassMixin:
         self._strip_field_annassigns(class_node, fields)
 
         insert_index = self._compute_init_insert_index(class_node)
-        self._inject_dataclass_synth_methods(
-            class_node, fields, dataclass_options, insert_index
-        )
+        self._inject_dataclass_synth_methods(class_node, fields, dataclass_options, insert_index)
 
         self._dataclass_class_specs[class_node.name] = {
             "fields": copy.deepcopy(fields),

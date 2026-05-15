@@ -1,10 +1,11 @@
 import ast
 import copy
 
-from preprocessor_dataclass import DataclassMixin
+from preprocessor.dataclass_mixin import DataclassMixin
+from preprocessor.generator_mixin import GeneratorMixin
 
 
-class Preprocessor(DataclassMixin, ast.NodeTransformer):
+class Preprocessor(DataclassMixin, GeneratorMixin, ast.NodeTransformer):
 
     def __init__(self, module_name):
         # Initialize with an empty target name
@@ -51,7 +52,8 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         self.called_names = set()  # names used as callees: g() → 'g' ∈ called_names
         self.list_literal_values = {}  # {var_name: ast.List} for direct list literal assignments
         self.newtype_vars = set()  # names defined via typing.NewType: X = NewType('X', T)
-        self.newtype_names = {"NewType"}  # local names bound to typing.NewType (covers aliased imports)
+        self.newtype_names = {"NewType"
+                              }  # local names bound to typing.NewType (covers aliased imports)
         self.typing_module_names = set()  # module names for typing (e.g. 'typing' or its alias)
         self._typing_imported_names = (
             set()
@@ -143,12 +145,8 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
             idx = idx.value
         if isinstance(idx, ast.Constant) and isinstance(idx.value, int):
             return False
-        if (
-            isinstance(idx, ast.UnaryOp)
-            and isinstance(idx.op, (ast.UAdd, ast.USub))
-            and isinstance(idx.operand, ast.Constant)
-            and isinstance(idx.operand.value, int)
-        ):
+        if (isinstance(idx, ast.UnaryOp) and isinstance(idx.op, (ast.UAdd, ast.USub))
+                and isinstance(idx.operand, ast.Constant) and isinstance(idx.operand.value, int)):
             return False
         return True
 
@@ -167,9 +165,8 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         elif isinstance(node, ast.Index):
             return ast.Index(value=self._copy_annotation_node(node.value))
         elif isinstance(node, ast.Tuple):
-            return ast.Tuple(
-                elts=[self._copy_annotation_node(e) for e in node.elts], ctx=ast.Load()
-            )
+            return ast.Tuple(elts=[self._copy_annotation_node(e) for e in node.elts],
+                             ctx=ast.Load())
         elif isinstance(node, ast.Constant):
             return ast.Constant(value=node.value)
         elif isinstance(node, ast.Str):
@@ -203,27 +200,20 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
             resolved_slice = annotation.slice
             if isinstance(annotation.slice, ast.Index):
                 resolved_slice = ast.Index(
-                    value=self._resolve_annotation_aliases(annotation.slice.value)
-                )
+                    value=self._resolve_annotation_aliases(annotation.slice.value))
             elif not isinstance(annotation.slice, (ast.Slice, ast.ExtSlice)):
                 resolved_slice = self._resolve_annotation_aliases(annotation.slice)
-            return ast.Subscript(
-                value=resolved_value, slice=resolved_slice, ctx=ast.Load()
-            )
+            return ast.Subscript(value=resolved_value, slice=resolved_slice, ctx=ast.Load())
 
         elif isinstance(annotation, ast.Tuple):
             # Recursively resolve each element
-            resolved_elts = [
-                self._resolve_annotation_aliases(e) for e in annotation.elts
-            ]
+            resolved_elts = [self._resolve_annotation_aliases(e) for e in annotation.elts]
             return ast.Tuple(elts=resolved_elts, ctx=ast.Load())
 
         elif isinstance(annotation, ast.Attribute):
             # Recursively resolve the value
             resolved_value = self._resolve_annotation_aliases(annotation.value)
-            return ast.Attribute(
-                value=resolved_value, attr=annotation.attr, ctx=ast.Load()
-            )
+            return ast.Attribute(value=resolved_value, attr=annotation.attr, ctx=ast.Load())
 
         else:
             # For other types (Constant, Str, etc.), return as-is
@@ -439,9 +429,7 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
                 self.variable_annotations[stmt.target.id] = stmt.annotation
 
         self.module_dunder_all = self._capture_dunder_all(node)
-        self.apply_range_rewrites(node,
-                                  alias_seed=alias_seed,
-                                  wrapper_seed=wrapper_seed)
+        self.apply_range_rewrites(node, alias_seed=alias_seed, wrapper_seed=wrapper_seed)
 
     def finalize_module(self, node):
         """Run ``generic_visit`` and inject any helpers requested during it.
@@ -496,9 +484,7 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         if isinstance(target, ast.Starred):
             return Preprocessor._target_names(target.value)
         if isinstance(target, (ast.Tuple, ast.List)):
-            return {
-                n for e in target.elts for n in Preprocessor._target_names(e)
-            }
+            return {n for e in target.elts for n in Preprocessor._target_names(e)}
         return set()
 
     @staticmethod
@@ -533,11 +519,9 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
                 for t in stmt.targets:
                     names |= target_names(t)
                 return names
-            if isinstance(stmt, ast.AnnAssign) and isinstance(
-                    stmt.target, ast.Name):
+            if isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name):
                 return {stmt.target.id}
-            if isinstance(stmt,
-                          (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
                 return {stmt.name}
             if isinstance(stmt, ast.Import):
                 return {a.asname or a.name.split(".")[0] for a in stmt.names}
@@ -546,8 +530,7 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
             return set()
 
         for stmt in module_node.body:
-            if isinstance(stmt, ast.AugAssign) and isinstance(
-                    stmt.target, ast.Name):
+            if isinstance(stmt, ast.AugAssign) and isinstance(stmt.target, ast.Name):
                 rebound.add(stmt.target.id)
                 seen.add(stmt.target.id)
                 continue
@@ -561,16 +544,15 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         def _walk_module_only(root):
             for child in ast.iter_child_nodes(root):
                 if isinstance(child,
-                              (ast.FunctionDef, ast.AsyncFunctionDef,
-                               ast.Lambda, ast.ClassDef)):
+                              (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)):
                     continue
                 yield child
                 yield from _walk_module_only(child)
 
         for stmt in module_node.body:
-            if not isinstance(stmt,
-                              (ast.If, ast.For, ast.AsyncFor, ast.While,
-                               ast.Try, ast.With, ast.AsyncWith)):
+            if not isinstance(
+                    stmt,
+                (ast.If, ast.For, ast.AsyncFor, ast.While, ast.Try, ast.With, ast.AsyncWith)):
                 continue
             for inner in _walk_module_only(stmt):
                 if isinstance(inner, ast.Assign):
@@ -579,8 +561,7 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
                 elif isinstance(inner, (ast.AnnAssign, ast.AugAssign)):
                     if isinstance(inner.target, ast.Name):
                         rebound.add(inner.target.id)
-                elif isinstance(inner, ast.NamedExpr) and isinstance(
-                        inner.target, ast.Name):
+                elif isinstance(inner, ast.NamedExpr) and isinstance(inner.target, ast.Name):
                     rebound.add(inner.target.id)
                 elif isinstance(inner, (ast.For, ast.AsyncFor)):
                     rebound |= target_names(inner.target)
@@ -608,14 +589,12 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         bodies — those are separate scopes.
         """
         if not isinstance(scope_node,
-                          (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda,
-                           ast.ClassDef)):
+                          (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)):
             return False
 
         target_names = Preprocessor._target_names
 
-        if isinstance(scope_node,
-                      (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+        if isinstance(scope_node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
             a = scope_node.args
             for p in (*a.args, *a.posonlyargs, *a.kwonlyargs):
                 if p.arg in names:
@@ -630,8 +609,7 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         stack = list(body)
         while stack:
             n = stack.pop()
-            if isinstance(n,
-                          (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
                 if n.name in names:
                     return True
                 continue
@@ -652,8 +630,7 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
                     return True
             elif isinstance(n, (ast.With, ast.AsyncWith)):
                 for item in n.items:
-                    if item.optional_vars and target_names(
-                            item.optional_vars) & names:
+                    if item.optional_vars and target_names(item.optional_vars) & names:
                         return True
             elif isinstance(n, ast.Import):
                 for al in n.names:
@@ -681,9 +658,7 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         shadowed name.
         """
         for child in ast.iter_child_nodes(root):
-            if isinstance(child,
-                          (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda,
-                           ast.ClassDef)):
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)):
                 if cls._scope_locally_binds(child, shadow_names):
                     continue
             yield child
@@ -710,9 +685,8 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         while changed:
             changed = False
             for stmt in module_node.body:
-                if not (isinstance(stmt, ast.Assign) and len(stmt.targets) == 1
-                        and isinstance(stmt.targets[0], ast.Name)
-                        and isinstance(stmt.value, ast.Name)):
+                if not (isinstance(stmt, ast.Assign) and len(stmt.targets) == 1 and isinstance(
+                        stmt.targets[0], ast.Name) and isinstance(stmt.value, ast.Name)):
                     continue
                 lhs = stmt.targets[0].id
                 rhs = stmt.value.id
@@ -724,10 +698,7 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
                     changed = True
         return local, all_aliases
 
-    def apply_range_rewrites(self,
-                             module_node,
-                             alias_seed=frozenset(),
-                             wrapper_seed=None):
+    def apply_range_rewrites(self, module_node, alias_seed=frozenset(), wrapper_seed=None):
         """Run the range-alias and range-wrapper rewrites on *module_node*.
 
         Public entry point for both per-module and cross-module (#4525)
@@ -778,10 +749,9 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         module_node.body = [
             stmt for stmt in module_node.body
             if not (isinstance(stmt, ast.Assign) and len(stmt.targets) == 1
-                    and isinstance(stmt.targets[0], ast.Name)
-                    and stmt.targets[0].id in local
-                    and isinstance(stmt.value, ast.Name)
-                    and (stmt.value.id == "range" or stmt.value.id in all_aliases))
+                    and isinstance(stmt.targets[0], ast.Name) and stmt.targets[0].id in local
+                    and isinstance(stmt.value, ast.Name) and
+                    (stmt.value.id == "range" or stmt.value.id in all_aliases))
         ]
 
     @staticmethod
@@ -795,30 +765,22 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         rebound = Preprocessor._rebound_module_names(module_node)
         wrappers = {}
         for stmt in module_node.body:
-            if not (isinstance(stmt, ast.FunctionDef)
-                    and stmt.name not in rebound
-                    and len(stmt.body) == 1
-                    and isinstance(stmt.body[0], ast.Return)):
+            if not (isinstance(stmt, ast.FunctionDef) and stmt.name not in rebound
+                    and len(stmt.body) == 1 and isinstance(stmt.body[0], ast.Return)):
                 continue
             call = stmt.body[0].value
-            if not (isinstance(call, ast.Call)
-                    and isinstance(call.func, ast.Name)
-                    and call.func.id == "range"
-                    and not call.keywords):
+            if not (isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
+                    and call.func.id == "range" and not call.keywords):
                 continue
             args = stmt.args
-            if (args.vararg is not None or args.kwarg is not None
-                    or args.kwonlyargs or args.posonlyargs
-                    or args.defaults or args.kw_defaults):
+            if (args.vararg is not None or args.kwarg is not None or args.kwonlyargs
+                    or args.posonlyargs or args.defaults or args.kw_defaults):
                 continue
             params = [a.arg for a in args.args]
             param_set = set(params)
-            if not all(
-                (isinstance(a, ast.Name) and a.id in param_set)
-                or (isinstance(a, ast.Constant)
-                    and isinstance(a.value, int)
-                    and not isinstance(a.value, bool))
-                for a in call.args):
+            if not all((isinstance(a, ast.Name) and a.id in param_set) or (isinstance(
+                    a, ast.Constant) and isinstance(a.value, int) and not isinstance(a.value, bool))
+                       for a in call.args):
                 continue
             wrappers[stmt.name] = (params, call.args)
         return wrappers
@@ -872,8 +834,7 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
                 continue
             subst = dict(zip(params, n.args))
             n.args = [
-                copy.deepcopy(subst[t.id]) if isinstance(t, ast.Name)
-                else copy.deepcopy(t)
+                copy.deepcopy(subst[t.id]) if isinstance(t, ast.Name) else copy.deepcopy(t)
                 for t in template
             ]
             n.func.id = "range"
@@ -889,8 +850,7 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         """
         for stmt in module_node.body:
             if not (isinstance(stmt, ast.Assign) and len(stmt.targets) == 1
-                    and isinstance(stmt.targets[0], ast.Name)
-                    and stmt.targets[0].id == "__all__"):
+                    and isinstance(stmt.targets[0], ast.Name) and stmt.targets[0].id == "__all__"):
                 continue
             value = stmt.value
             if not isinstance(value, (ast.List, ast.Tuple)):
@@ -932,81 +892,6 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         node = ast.Constant(value=value)
         return self.ensure_all_locations(node, source_node)
 
-    def _lower_listcomp(self, node):
-        """Lower a list comprehension into prefix statements and result expression.
-
-        A comprehension with multiple `for` clauses is not a nested comprehension:
-        it is semantically equivalent to nested for-loops:
-            [f(i,j) for i in A for j in B]  =>  for i in A: for j in B: tmp.append(f(i,j))
-        """
-        for generator in node.generators:
-            if len(getattr(generator, "ifs", [])) > 1:
-                raise NotImplementedError(
-                    "Only a single if-condition is supported in list comprehensions"
-                )
-            if getattr(generator, "is_async", False):
-                raise NotImplementedError("Async list comprehensions are not supported")
-
-        # Create a unique temporary list that will collect results.
-        tmp_name = f"ESBMC_listcomp_{self.listcomp_counter}"
-        self.listcomp_counter += 1
-        self.known_variable_types[tmp_name] = "list"
-
-        # Step 1: initialise the result list literal.
-        init_assign = ast.Assign(
-            targets=[self.create_name_node(tmp_name, ast.Store(), node)],
-            value=ast.List(elts=[], ctx=ast.Load()),
-        )
-        self.ensure_all_locations(init_assign, node)
-        ast.fix_missing_locations(init_assign)
-
-        # Step 2: build the append expression that pushes each produced element.
-        append_expr = ast.Expr(
-            value=ast.Call(
-                func=ast.Attribute(
-                    value=self.create_name_node(tmp_name, ast.Load(), node),
-                    attr="append",
-                    ctx=ast.Load(),
-                ),
-                args=[self.visit(node.elt)],
-                keywords=[],
-            )
-        )
-        self.ensure_all_locations(append_expr, node.elt)
-
-        # Step 3: build nested for-loops from innermost generator outward.
-        loop_body = [append_expr]
-        for generator in reversed(node.generators):
-            if generator.ifs:
-                cond = self.visit(generator.ifs[0])
-                self.ensure_all_locations(cond, generator.ifs[0])
-                if_stmt = ast.If(test=cond, body=loop_body, orelse=[])
-                self.ensure_all_locations(if_stmt, generator.ifs[0])
-                ast.fix_missing_locations(if_stmt)
-                loop_body = [if_stmt]
-            for_stmt = ast.For(
-                target=generator.target,
-                iter=self.visit(generator.iter),
-                body=loop_body,
-                orelse=[],
-            )
-            self.ensure_all_locations(for_stmt, node)
-            loop_body = [for_stmt]
-
-        transformed_for = self.visit_For(loop_body[0])
-        if not isinstance(transformed_for, list):
-            transformed_for = [transformed_for]
-
-        for stmt in transformed_for:
-            self.ensure_all_locations(stmt, node)
-            ast.fix_missing_locations(stmt)
-
-        # The comprehension evaluates to the temporary list, so expose it to callers.
-        result_name = self.create_name_node(tmp_name, ast.Load(), node)
-        self.ensure_all_locations(result_name, node)
-
-        return [init_assign] + transformed_for, result_name
-
     def _rename_loads(self, node, old_name, new_name):
 
         class _RenameLoad(ast.NodeTransformer):
@@ -1016,12 +901,8 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
                 self.new_name = new_name
 
             def visit_Name(self, name_node):
-                if name_node.id == self.old_name and isinstance(
-                    name_node.ctx, ast.Load
-                ):
-                    return ast.copy_location(
-                        ast.Name(id=self.new_name, ctx=ast.Load()), name_node
-                    )
+                if name_node.id == self.old_name and isinstance(name_node.ctx, ast.Load):
+                    return ast.copy_location(ast.Name(id=self.new_name, ctx=ast.Load()), name_node)
                 return name_node
 
         renamed = _RenameLoad(old_name, new_name).visit(node)
@@ -1038,61 +919,6 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
             return names
         return set()
 
-    def _isolate_genexp_targets(self, genexp_node):
-        isolated = copy.deepcopy(genexp_node)
-
-        for index, generator in enumerate(isolated.generators):
-            if not isinstance(generator.target, ast.Name):
-                continue
-
-            old_name = generator.target.id
-            new_name = f"ESBMC_gen_{self.listcomp_counter}_{old_name}"
-            self.listcomp_counter += 1
-
-            generator.target = ast.copy_location(
-                ast.Name(id=new_name, ctx=ast.Store()), generator.target
-            )
-            generator.ifs = [
-                self._rename_loads(cond, old_name, new_name) for cond in generator.ifs
-            ]
-
-            shadowed = False
-            for later_generator in isolated.generators[index + 1 :]:
-                # Comprehension iterables are evaluated before the later target is bound.
-                later_generator.iter = self._rename_loads(
-                    later_generator.iter, old_name, new_name
-                )
-
-                if old_name in self._bound_target_names(later_generator.target):
-                    shadowed = True
-                    break
-
-                later_generator.ifs = [
-                    self._rename_loads(cond, old_name, new_name)
-                    for cond in later_generator.ifs
-                ]
-
-            if not shadowed:
-                isolated.elt = self._rename_loads(isolated.elt, old_name, new_name)
-
-        ast.fix_missing_locations(isolated)
-        return isolated
-
-    def _prepare_genexp(self, genexp_node):
-        genexp_node = self._isolate_genexp_targets(genexp_node)
-
-        for generator in genexp_node.generators:
-            if len(getattr(generator, "ifs", [])) > 1:
-                raise NotImplementedError(
-                    "Only a single if-condition is supported in generator expressions"
-                )
-            if getattr(generator, "is_async", False):
-                raise NotImplementedError(
-                    "Async generator expressions are not supported"
-                )
-
-        return genexp_node
-
     def _create_bool_ann_assign(self, target_name, value, source_node):
         assign = ast.AnnAssign(
             target=self.create_name_node(target_name, ast.Store(), source_node),
@@ -1103,164 +929,6 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         self.ensure_all_locations(assign, source_node)
         ast.fix_missing_locations(assign)
         return assign
-
-    def _build_reduction_guard(self, tmp_name, source_node, negated):
-        guard_expr = self.create_name_node(tmp_name, ast.Load(), source_node)
-        if negated:
-            guard_expr = ast.UnaryOp(op=ast.Not(), operand=guard_expr)
-        self.ensure_all_locations(guard_expr, source_node)
-        ast.fix_missing_locations(guard_expr)
-        return guard_expr
-
-    def _build_genexp_for_body(self, generator, loop_body, guard, source_node):
-        if not generator.ifs:
-            guarded_body = ast.If(test=guard, body=loop_body, orelse=[])
-            self.ensure_all_locations(guarded_body, source_node)
-            ast.fix_missing_locations(guarded_body)
-            return [guarded_body]
-
-        cond_tmp_name = f"ESBMC_genif_{self.listcomp_counter}"
-        self.listcomp_counter += 1
-        self.known_variable_types[cond_tmp_name] = "bool"
-
-        cond = self.visit(generator.ifs[0])
-        self.ensure_all_locations(cond, generator.ifs[0])
-        cond_init = self._create_bool_ann_assign(
-            cond_tmp_name, self.create_constant_node(False, source_node), source_node
-        )
-        cond_update = self._create_bool_ann_assign(
-            cond_tmp_name, cond, generator.ifs[0]
-        )
-        eval_cond = ast.If(test=guard, body=[cond_update], orelse=[])
-        self.ensure_all_locations(eval_cond, source_node)
-        ast.fix_missing_locations(eval_cond)
-        run_body = ast.If(
-            test=self.create_name_node(cond_tmp_name, ast.Load(), source_node),
-            body=loop_body,
-            orelse=[],
-        )
-        self.ensure_all_locations(run_body, source_node)
-        ast.fix_missing_locations(run_body)
-        return [cond_init, eval_cond, run_body]
-
-    def _finalize_lowered_genexp(self, for_stmt, source_node):
-        transformed_for = self.visit_For(for_stmt)
-        if not isinstance(transformed_for, list):
-            transformed_for = [transformed_for]
-
-        for stmt in transformed_for:
-            self.ensure_all_locations(stmt, source_node)
-            ast.fix_missing_locations(stmt)
-
-        return transformed_for
-
-    def _lower_reduction_genexp(
-        self, genexp_node, tmp_name, initial_value, reduction_stmt, negated_guard
-    ):
-        init_assign = ast.Assign(
-            targets=[self.create_name_node(tmp_name, ast.Store(), genexp_node)],
-            value=self.create_constant_node(initial_value, genexp_node),
-        )
-        self.ensure_all_locations(init_assign, genexp_node)
-        ast.fix_missing_locations(init_assign)
-
-        loop_body = [reduction_stmt]
-        for generator in reversed(genexp_node.generators):
-            guard = self._build_reduction_guard(tmp_name, genexp_node, negated_guard)
-            for_body = self._build_genexp_for_body(
-                generator, loop_body, guard, genexp_node
-            )
-            for_stmt = ast.For(
-                target=generator.target,
-                iter=self.visit(generator.iter),
-                body=for_body,
-                orelse=[],
-            )
-            self.ensure_all_locations(for_stmt, genexp_node)
-            ast.fix_missing_locations(for_stmt)
-            loop_body = [for_stmt]
-
-        transformed_for = self._finalize_lowered_genexp(loop_body[0], genexp_node)
-        result_name = self.create_name_node(tmp_name, ast.Load(), genexp_node)
-        return [init_assign] + transformed_for, result_name
-
-    def _lower_any_genexp(self, genexp_node):
-        """Lower any(elt for target in iter [if cond]) to prefix stmts + boolean result.
-
-        Transforms:
-            any(elt for target in iter if cond)
-        Into:
-            ESBMC_any_N = False
-            for target in iter:
-                if cond:          # only when ifs are present
-                    if elt:
-                        ESBMC_any_N = True
-            <result: ESBMC_any_N>
-        """
-        genexp_node = self._prepare_genexp(genexp_node)
-
-        # if not ESBMC_any_N and elt: ESBMC_any_N = True
-        # Guard with `not ESBMC_any_N` so the element expression is not
-        # evaluated on remaining iterations once a truthy value is found,
-        # approximating Python's short-circuit semantics without break.
-        tmp_name = f"ESBMC_any_{self.listcomp_counter}"
-        self.listcomp_counter += 1
-        self.known_variable_types[tmp_name] = "bool"
-        set_true = ast.Assign(
-            targets=[self.create_name_node(tmp_name, ast.Store(), genexp_node)],
-            value=self.create_constant_node(True, genexp_node),
-        )
-        self.ensure_all_locations(set_true, genexp_node)
-        ast.fix_missing_locations(set_true)
-
-        if_true = ast.If(test=self.visit(genexp_node.elt), body=[set_true], orelse=[])
-        self.ensure_all_locations(if_true, genexp_node)
-        ast.fix_missing_locations(if_true)
-
-        return self._lower_reduction_genexp(genexp_node, tmp_name, False, if_true, True)
-
-    def _lower_all_genexp(self, genexp_node):
-        """Lower all(elt for target in iter [if cond]) to prefix stmts + boolean result.
-
-        Transforms:
-            all(elt for target in iter if cond)
-        Into:
-            ESBMC_all_N = True
-            for target in iter:
-                if cond:          # only when ifs are present
-                    if ESBMC_all_N:
-                        if not elt:
-                            ESBMC_all_N = False
-            <result: ESBMC_all_N>
-
-        Uses guard-based short-circuit (checking ESBMC_all_N before evaluating)
-        instead of break to avoid ESBMC's break+empty-list type inference issue.
-        """
-        genexp_node = self._prepare_genexp(genexp_node)
-
-        # if ESBMC_all_N: if not elt: ESBMC_all_N = False
-        # Guard-based short-circuit instead of break to avoid ESBMC break+empty-list bug.
-        tmp_name = f"ESBMC_all_{self.listcomp_counter}"
-        self.listcomp_counter += 1
-        self.known_variable_types[tmp_name] = "bool"
-        set_false = ast.Assign(
-            targets=[self.create_name_node(tmp_name, ast.Store(), genexp_node)],
-            value=self.create_constant_node(False, genexp_node),
-        )
-        self.ensure_all_locations(set_false, genexp_node)
-        ast.fix_missing_locations(set_false)
-
-        not_elt = ast.UnaryOp(op=ast.Not(), operand=self.visit(genexp_node.elt))
-        self.ensure_all_locations(not_elt, genexp_node)
-        ast.fix_missing_locations(not_elt)
-
-        if_falsy = ast.If(test=not_elt, body=[set_false], orelse=[])
-        self.ensure_all_locations(if_falsy, genexp_node)
-        ast.fix_missing_locations(if_falsy)
-
-        return self._lower_reduction_genexp(
-            genexp_node, tmp_name, True, if_falsy, False
-        )
 
     class _ListCompExpressionLowerer(ast.NodeTransformer):
         """Utility transformer that lowers list comprehensions, any(genexpr), and all(genexpr) inside an expression."""
@@ -1297,26 +965,18 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         def visit_Call(self, node):
             # Lower sep.join(GeneratorExp(...)) to sep.join(ListComp(...))
             # and reuse the existing list-comprehension lowering pipeline.
-            if (
-                isinstance(node.func, ast.Attribute)
-                and node.func.attr == "join"
-                and len(node.args) == 1
-                and not node.keywords
-                and isinstance(node.args[0], ast.GeneratorExp)
-            ):
+            if (isinstance(node.func, ast.Attribute) and node.func.attr == "join"
+                    and len(node.args) == 1 and not node.keywords
+                    and isinstance(node.args[0], ast.GeneratorExp)):
                 gen = node.args[0]
                 elt_expr = copy.deepcopy(gen.elt)
 
                 # Prefer explicit dunder dispatch for object stringification in
                 # join(genexp) to avoid strict builtin str() argument checks on
                 # loop variables inferred as non-string at preprocessing time.
-                if (
-                    isinstance(elt_expr, ast.Call)
-                    and isinstance(elt_expr.func, ast.Name)
-                    and elt_expr.func.id == "str"
-                    and len(elt_expr.args) == 1
-                    and not elt_expr.keywords
-                ):
+                if (isinstance(elt_expr, ast.Call) and isinstance(elt_expr.func, ast.Name)
+                        and elt_expr.func.id == "str" and len(elt_expr.args) == 1
+                        and not elt_expr.keywords):
                     obj_expr = copy.deepcopy(elt_expr.args[0])
                     dunder_attr = ast.Attribute(
                         value=obj_expr,
@@ -1342,40 +1002,24 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
                 return self.visit(new_call)
 
             # Lower any(GeneratorExp(...)) to a loop-based boolean
-            if (
-                isinstance(node.func, ast.Name)
-                and node.func.id == "any"
-                and len(node.args) == 1
-                and not node.keywords
-                and isinstance(node.args[0], ast.GeneratorExp)
-            ):
+            if (isinstance(node.func, ast.Name) and node.func.id == "any" and len(node.args) == 1
+                    and not node.keywords and isinstance(node.args[0], ast.GeneratorExp)):
                 prefix, result = self.preprocessor._lower_any_genexp(node.args[0])
                 self.statements.extend(prefix)
                 return result
 
             # Lower all(GeneratorExp(...)) to a loop-based boolean
-            if (
-                isinstance(node.func, ast.Name)
-                and node.func.id == "all"
-                and len(node.args) == 1
-                and not node.keywords
-                and isinstance(node.args[0], ast.GeneratorExp)
-            ):
+            if (isinstance(node.func, ast.Name) and node.func.id == "all" and len(node.args) == 1
+                    and not node.keywords and isinstance(node.args[0], ast.GeneratorExp)):
                 prefix, result = self.preprocessor._lower_all_genexp(node.args[0])
                 self.statements.extend(prefix)
                 return result
 
             # Lower list(map(f, iterable)) to [f(x) for x in iterable]
-            if (
-                isinstance(node.func, ast.Name)
-                and node.func.id == "list"
-                and len(node.args) == 1
-                and not node.keywords
-                and isinstance(node.args[0], ast.Call)
-                and isinstance(node.args[0].func, ast.Name)
-                and node.args[0].func.id == "map"
-                and len(node.args[0].args) == 2
-            ):
+            if (isinstance(node.func, ast.Name) and node.func.id == "list" and len(node.args) == 1
+                    and not node.keywords and isinstance(node.args[0], ast.Call)
+                    and isinstance(node.args[0].func, ast.Name) and node.args[0].func.id == "map"
+                    and len(node.args[0].args) == 2):
                 map_call = node.args[0]
                 func_expr = map_call.args[0]
                 iterable_expr = map_call.args[1]
@@ -1394,9 +1038,7 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
                 listcomp = ast.ListComp(
                     elt=elt,
                     generators=[
-                        ast.comprehension(
-                            target=target, iter=iterable_expr, ifs=[], is_async=0
-                        )
+                        ast.comprehension(target=target, iter=iterable_expr, ifs=[], is_async=0)
                     ],
                 )
                 ast.copy_location(listcomp, node)
@@ -1404,18 +1046,11 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
                 return self.visit(listcomp)
 
             # Lower list(gen_func(args...)) to an inline list construction
-            if (
-                isinstance(node.func, ast.Name)
-                and node.func.id == "list"
-                and len(node.args) == 1
-                and not node.keywords
-                and isinstance(node.args[0], ast.Call)
-                and isinstance(node.args[0].func, ast.Name)
-                and node.args[0].func.id in self.preprocessor.generator_funcs
-            ):
-                prefix, result = self.preprocessor._lower_list_gen_call(
-                    node.args[0], node
-                )
+            if (isinstance(node.func, ast.Name) and node.func.id == "list" and len(node.args) == 1
+                    and not node.keywords and isinstance(node.args[0], ast.Call)
+                    and isinstance(node.args[0].func, ast.Name)
+                    and node.args[0].func.id in self.preprocessor.generator_funcs):
+                prefix, result = self.preprocessor._lower_list_gen_call(node.args[0], node)
                 if prefix is not None:
                     self.statements.extend(prefix)
                     return result
@@ -1432,9 +1067,7 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
                 self.statements.extend(prefix)
                 return result
 
-            lowered_tuple_sorted_pair = self.preprocessor._lower_tuple_sorted_pair_call(
-                node
-            )
+            lowered_tuple_sorted_pair = self.preprocessor._lower_tuple_sorted_pair_call(node)
             if lowered_tuple_sorted_pair is not None:
                 prefix, result = lowered_tuple_sorted_pair
                 self.statements.extend(prefix)
@@ -1458,113 +1091,6 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         module = ast.Module(body=list(body_stmts), type_ignores=[])
         return any(True for _ in _walk(module))
 
-    def _lower_list_gen_call(self, gen_call_node, parent_node):
-        """Lower list(gen_func(args...)) to an inline list construction.
-
-        Transforms list(gen_func(a, b)) into:
-            param_0 = a
-            param_1 = b
-            ESBMC_list_gen_N: list = []
-            # generator body with yield val -> ESBMC_list_gen_N.append(val)
-
-        Returns (prefix_stmts, result_name_expr), or (None, gen_call_node) if
-        inlining is not possible (body has return/yield-from, keyword args, or
-        positional-arg count mismatch).
-        """
-        func_name = gen_call_node.func.id
-        # Defensive: generator_funcs and generator_func_defs are kept in sync
-        # by visit_FunctionDef, so this guard should never fire in practice.
-        body_stmts = self.generator_func_defs.get(func_name)
-        if body_stmts is None:
-            return None, gen_call_node
-
-        # Keyword arguments on the generator call are not handled.
-        if gen_call_node.keywords:
-            return None, gen_call_node
-
-        # Generators with return or yield-from cannot be safely inlined at the
-        # call site: 'return' would exit the enclosing scope, and 'yield from'
-        # is not transformed by _YieldToAppend.
-        if self._body_has_node_shallow(
-            body_stmts, ast.Return
-        ) or self._body_has_node_shallow(body_stmts, ast.YieldFrom):
-            return None, gen_call_node
-
-        # Emit parameter assignments so inlined body can reference them.
-        param_names = self.functionParams.get(func_name, [])
-        call_args = gen_call_node.args
-        if len(param_names) != len(call_args):
-            return None, gen_call_node
-
-        result_var = f"ESBMC_list_gen_{self.listcomp_counter}"
-        self.listcomp_counter += 1
-
-        stmts = []
-        for param, arg in zip(param_names, call_args):
-            assign = ast.Assign(
-                targets=[ast.Name(id=param, ctx=ast.Store())],
-                value=copy.deepcopy(arg),
-                type_comment=None,
-            )
-            self.ensure_all_locations(assign, parent_node)
-            ast.fix_missing_locations(assign)
-            stmts.append(assign)
-
-        # result_var: list = []
-        init = ast.AnnAssign(
-            target=ast.Name(id=result_var, ctx=ast.Store()),
-            annotation=ast.Name(id="list", ctx=ast.Load()),
-            value=ast.List(elts=[], ctx=ast.Load()),
-            simple=1,
-        )
-        self.ensure_all_locations(init, parent_node)
-        ast.fix_missing_locations(init)
-        stmts.append(init)
-
-        # Replace every `yield val` in the body with `result_var.append(val)`.
-        transformer = self._YieldToAppend(result_var, parent_node)
-        for stmt in body_stmts:
-            transformed = transformer.visit(copy.deepcopy(stmt))
-            if isinstance(transformed, list):
-                stmts.extend(transformed)
-            else:
-                stmts.append(transformed)
-
-        for stmt in stmts:
-            self.ensure_all_locations(stmt, parent_node)
-            ast.fix_missing_locations(stmt)
-
-        self.known_variable_types[result_var] = "list"
-
-        result_expr = ast.Name(id=result_var, ctx=ast.Load())
-        self.ensure_all_locations(result_expr, parent_node)
-        ast.fix_missing_locations(result_expr)
-
-        return stmts, result_expr
-
-    def _has_early_return_before_yield(self, body):
-        """Return True if body has a Return statement before any Yield (linear top-level scan)."""
-        for stmt in body:
-            if isinstance(stmt, ast.Return):
-                return True
-            if isinstance(stmt, ast.Expr) and isinstance(
-                stmt.value, (ast.Yield, ast.YieldFrom)
-            ):
-                return False
-        return False
-
-    @staticmethod
-    def _is_recursive_call(func_name, body):
-        """Return True if any Call node in body has func.id == func_name."""
-        for node in ast.walk(ast.Module(body=body, type_ignores=[])):
-            if (
-                isinstance(node, ast.Call)
-                and isinstance(node.func, ast.Name)
-                and node.func.id == func_name
-            ):
-                return True
-        return False
-
     class _YieldToAppend(ast.NodeTransformer):
         """Replace `yield expr` statements with `ESBMC_gen_result.append(expr)`."""
 
@@ -1578,17 +1104,15 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
             yield_val = node.value.value
             if yield_val is None:
                 yield_val = ast.Constant(value=None)
-            append_call = ast.Expr(
-                value=ast.Call(
-                    func=ast.Attribute(
-                        value=ast.Name(id=self.result_var, ctx=ast.Load()),
-                        attr="append",
-                        ctx=ast.Load(),
-                    ),
-                    args=[yield_val],
-                    keywords=[],
-                )
-            )
+            append_call = ast.Expr(value=ast.Call(
+                func=ast.Attribute(
+                    value=ast.Name(id=self.result_var, ctx=ast.Load()),
+                    attr="append",
+                    ctx=ast.Load(),
+                ),
+                args=[yield_val],
+                keywords=[],
+            ))
             ast.copy_location(append_call, node)
             ast.fix_missing_locations(append_call)
             return append_call
@@ -1596,68 +1120,6 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         # Do not descend into nested function definitions
         def visit_FunctionDef(self, node):
             return node
-
-    def _transform_recursive_generator(self, node):
-        """Transform a recursive generator function to accumulate-and-return.
-
-        Converts:
-            def f(args):
-                ...
-                yield val
-                ...
-
-        Into:
-            def f(args) -> list:
-                ESBMC_gen_result: list = []
-                ...
-                ESBMC_gen_result.append(val)
-                ...
-                return ESBMC_gen_result
-        """
-        result_var = "ESBMC_gen_result"
-        template = node.body[0] if node.body else node
-
-        # Annotate unannotated parameters as list[Any].  Without this the C++
-        # annotator infers Any from the recursive call site (flatten(x) where
-        # x: Any), which types the parameter as void*.  Subscripting void*
-        # then crashes the index2t IR constructor.  Recursive generators always
-        # recurse on a list-like iterable, so list[Any] is the right type.
-        for arg in node.args.args:
-            if arg.annotation is None:
-                ann = ast.Subscript(
-                    value=ast.Name(id="list", ctx=ast.Load()),
-                    slice=ast.Name(id="Any", ctx=ast.Load()),
-                    ctx=ast.Load(),
-                )
-                ast.copy_location(ann, template)
-                ast.fix_missing_locations(ann)
-                arg.annotation = ann
-
-        # Add result list initialisation at the start of the body
-        init = ast.AnnAssign(
-            target=ast.Name(id=result_var, ctx=ast.Store()),
-            annotation=ast.Name(id="list", ctx=ast.Load()),
-            value=ast.List(elts=[], ctx=ast.Load()),
-            simple=1,
-        )
-        ast.copy_location(init, template)
-        ast.fix_missing_locations(init)
-
-        # Replace all yield statements with append calls
-        new_body = [
-            self._YieldToAppend(result_var, template).visit(s) for s in node.body
-        ]
-
-        # Append return statement
-        ret = ast.Return(value=ast.Name(id=result_var, ctx=ast.Load()))
-        ast.copy_location(ret, template)
-        ast.fix_missing_locations(ret)
-
-        node.body = [init] + new_body + [ret]
-        node.returns = ast.Name(id="list", ctx=ast.Load())
-        ast.copy_location(node.returns, template)
-        ast.fix_missing_locations(node.returns)
-        return node
 
     class _YieldReplacer(ast.NodeTransformer):
         """Replace `yield val` expressions with `target = val; for_body`."""
@@ -1673,8 +1135,7 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         def visit_Expr(self, stmt):
             if isinstance(stmt.value, ast.YieldFrom):
                 raise NotImplementedError(
-                    "yield from inside a generator is not supported by the ESBMC inliner"
-                )
+                    "yield from inside a generator is not supported by the ESBMC inliner")
             if not isinstance(stmt.value, ast.Yield):
                 return stmt
             yield_val = stmt.value.value
@@ -1689,354 +1150,6 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
             ast.fix_missing_locations(assign)
             return [assign] + [self._copy.deepcopy(s) for s in self.for_body]
 
-    def _inline_generator_for(self, node):
-        """
-        Inline a generator-based for loop.
-
-        Transforms:
-            for x in g:       # where g = gen_func()
-                body
-
-        Into the generator body with each `yield val` replaced by:
-            x = val
-            body
-
-        Returns the list of inlined statements, or None if inlining is not possible.
-        """
-        import copy
-
-        if not isinstance(node.iter, ast.Name):
-            return None
-        gen_var = node.iter.id
-        func_name = self.generator_vars.get(gen_var)
-        if func_name is None:
-            return None
-        body_stmts = self.generator_func_defs.get(func_name)
-        if body_stmts is None:
-            return None
-
-        if not hasattr(node.target, "id"):
-            return None  # Only handle simple name targets
-        target_name = node.target.id
-
-        inlined = copy.deepcopy(body_stmts)
-        replacer = self._YieldReplacer(target_name, node.body, node)
-        result = []
-        try:
-            for stmt in inlined:
-                out = replacer.visit(stmt)
-                if isinstance(out, list):
-                    result.extend(out)
-                elif out is not None:
-                    result.append(out)
-        except NotImplementedError as e:
-            import sys
-
-            print(
-                f"warning: cannot inline generator '{func_name}': {e}", file=sys.stderr
-            )
-            return None
-
-        for stmt in result:
-            self.ensure_all_locations(stmt, node)
-            ast.fix_missing_locations(stmt)
-
-        return result
-
-    def _inline_generator_call_for(self, node):
-        """Inline a for loop over a direct generator function call.
-
-        Transforms:
-            for x in gen_func(a, b):
-                body
-
-        Into the generator body with each `yield val` replaced by:
-            param_0 = a
-            param_1 = b
-            x = val
-            body
-
-        Returns the list of inlined statements, or None if inlining is not
-        possible (unknown generator, keyword args, arg count mismatch,
-        non-simple loop target, or generator body contains return/yield-from).
-        """
-        import copy
-
-        gen_call = node.iter
-        func_name = gen_call.func.id
-
-        body_stmts = self.generator_func_defs.get(func_name)
-        if body_stmts is None:
-            return None
-
-        if gen_call.keywords:
-            return None
-
-        # Generators with early return or yield-from cannot be safely inlined:
-        # a bare `return` inlined into the enclosing scope would prematurely
-        # exit it instead of just stopping the inner generator's iteration.
-        if self._body_has_node_shallow(
-            body_stmts, ast.Return
-        ) or self._body_has_node_shallow(body_stmts, ast.YieldFrom):
-            return None
-
-        param_names = self.functionParams.get(func_name, [])
-        call_args = gen_call.args
-        if len(param_names) != len(call_args):
-            return None
-
-        if not hasattr(node.target, "id"):
-            return None
-
-        target_name = node.target.id
-
-        stmts = []
-        for param, arg in zip(param_names, call_args):
-            assign = ast.Assign(
-                targets=[ast.Name(id=param, ctx=ast.Store())],
-                value=copy.deepcopy(arg),
-                type_comment=None,
-            )
-            stmts.append(assign)
-
-        inlined = copy.deepcopy(body_stmts)
-        replacer = self._YieldReplacer(target_name, node.body, node)
-        try:
-            for stmt in inlined:
-                out = replacer.visit(stmt)
-                if isinstance(out, list):
-                    stmts.extend(out)
-                elif out is not None:
-                    stmts.append(out)
-        except NotImplementedError as e:
-            import sys
-
-            print(
-                f"warning: cannot inline generator '{func_name}': {e}", file=sys.stderr
-            )
-            return None
-
-        for stmt in stmts:
-            self.ensure_all_locations(stmt, node)
-            ast.fix_missing_locations(stmt)
-
-        return stmts
-
-    @staticmethod
-    def _has_yield(node):
-        """Return True if node contains a Yield or YieldFrom expression."""
-        return any(isinstance(n, (ast.Yield, ast.YieldFrom)) for n in ast.walk(node))
-
-    @staticmethod
-    def _collect_post(stmts, start):
-        """Collect stmts[start:] up to (not including) the first yield-containing statement."""
-        post = []
-        j = start
-        while j < len(stmts):
-            if Preprocessor._has_yield(stmts[j]):
-                break
-            post.append(stmts[j])
-            j += 1
-        return post, j
-
-    def _find_generator_next_call(self, node):
-        """Return (gen_var, func_name) if node contains next(g) for a tracked generator, else None."""
-        for child in ast.walk(node):
-            if (
-                isinstance(child, ast.Call)
-                and isinstance(child.func, ast.Name)
-                and child.func.id == "next"
-                and len(child.args) == 1
-                and isinstance(child.args[0], ast.Name)
-            ):
-                gen_var = child.args[0].id
-                func_name = self.generator_vars.get(gen_var)
-                if func_name is not None:
-                    return (gen_var, func_name)
-        return None
-
-    def _collect_yields(self, stmts, in_loop=False):
-        """
-        Collect yield points from a generator body.
-
-        Returns (outer_init, yields) where:
-          outer_init : top-level statements before the first yield/loop-with-yield
-                       (generator initialisation -- emitted once per generator var).
-          yields     : list of (pre_stmts, yield_val, post_stmts, is_repeating)
-            pre_stmts : statements inside the innermost scope before this yield.
-                        For while-loop yields the first item is a guard:
-                        `if not (loop_cond): raise StopIteration`
-            yield_val : the yielded expression (may be an IfExp ternary for if/else)
-            post_stmts: statements after this yield until the next yield
-                        (e.g. `i += 1` after `yield i`)
-            is_repeating: True when the yield is inside a loop
-        """
-        import copy
-
-        outer_init = []
-        yields = []
-        current_pre = []
-        found_yield = False
-        i = 0
-        while i < len(stmts):
-            stmt = stmts[i]
-            if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Yield):
-                post, j = self._collect_post(stmts, i + 1)
-                yields.append((current_pre[:], stmt.value.value, post, in_loop))
-                current_pre = []
-                found_yield = True
-                i = j
-            elif isinstance(stmt, (ast.While, ast.For)):
-                loop_init, loop_yields = self._collect_yields(stmt.body, in_loop=True)
-                if loop_yields:
-                    # For while loops, prepend a guard so _inline_next_call raises
-                    # StopIteration when the loop condition becomes false.
-                    if isinstance(stmt, ast.While):
-                        guard = ast.If(
-                            test=ast.UnaryOp(
-                                op=ast.Not(), operand=copy.deepcopy(stmt.test)
-                            ),
-                            body=[self._make_stop_iteration_raise(stmt)],
-                            orelse=[],
-                        )
-                        self.ensure_all_locations(guard, stmt)
-                        ast.fix_missing_locations(guard)
-                        loop_init = [guard] + loop_init
-                    combined = loop_init + loop_yields[0][0]
-                    _, iv, ipo, ir = loop_yields[0]
-                    loop_yields[0] = (combined, iv, ipo, ir)
-                    yields.extend(loop_yields)
-                    current_pre = []
-                    found_yield = True
-                else:
-                    if not found_yield:
-                        outer_init.append(stmt)
-                    else:
-                        current_pre.append(stmt)
-                i += 1
-            elif isinstance(stmt, ast.If):
-                if_init, if_yields = self._collect_yields(stmt.body, in_loop=in_loop)
-                _, else_yields = (
-                    self._collect_yields(stmt.orelse, in_loop=in_loop)
-                    if stmt.orelse
-                    else ([], [])
-                )
-                if if_yields and else_yields:
-                    # Both branches yield -> combine into a ternary yield value
-                    # and capture post_stmts from the outer scope.
-                    _, if_val, _, _ = if_yields[0]
-                    _, else_val, _, _ = else_yields[0]
-                    ternary_val = ast.IfExp(
-                        test=copy.deepcopy(stmt.test),
-                        body=copy.deepcopy(if_val),
-                        orelse=copy.deepcopy(else_val),
-                    )
-                    self.ensure_all_locations(ternary_val, stmt)
-                    ast.fix_missing_locations(ternary_val)
-                    post, j = self._collect_post(stmts, i + 1)
-                    yields.append((current_pre[:], ternary_val, post, in_loop))
-                    current_pre = []
-                    found_yield = True
-                    i = j
-                elif if_yields:
-                    # Only if-branch yields; also grab outer post_stmts.
-                    combined = if_init + if_yields[0][0]
-                    _, iv, ipo, ir = if_yields[0]
-                    post, j = self._collect_post(stmts, i + 1)
-                    if_yields[0] = (combined, iv, ipo + post, ir)
-                    yields.extend(if_yields)
-                    current_pre = []
-                    found_yield = True
-                    i = j
-                else:
-                    if not found_yield:
-                        outer_init.append(stmt)
-                    else:
-                        current_pre.append(stmt)
-                    i += 1
-            else:
-                if not found_yield:
-                    outer_init.append(stmt)
-                else:
-                    current_pre.append(stmt)
-                i += 1
-        return outer_init, yields
-
-    def _make_stop_iteration_raise(self, template_node):
-        """Build `raise StopIteration('StopIteration')` AST node."""
-        raise_node = ast.Raise(
-            exc=ast.Call(
-                func=ast.Name(id="StopIteration", ctx=ast.Load()),
-                args=[ast.Constant(value="StopIteration")],
-                keywords=[],
-            ),
-            cause=None,
-        )
-        ast.copy_location(raise_node, template_node)
-        ast.fix_missing_locations(raise_node)
-        return raise_node
-
-    def _inline_next_call(self, targets, func_name, gen_var, template_node):
-        """
-        Inline `x = next(g)` for a normal generator.
-
-        Emits outer_init (generator initialisation) on the first call for
-        gen_var, then per-call: pre_stmts + assignment + post_stmts.
-        For yields inside loops (is_repeating=True) the index is not advanced.
-        Pass targets=None for a standalone next(g) with no assignment target.
-        Returns list of statements, or None if inlining is not possible.
-        """
-        import copy
-
-        body_stmts = self.generator_func_defs.get(func_name)
-        if body_stmts is None:
-            return None
-        outer_init, yields = self._collect_yields(body_stmts)
-        if not yields:
-            return None
-
-        idx = self.generator_next_index.get(gen_var, 0)
-        if idx >= len(yields):
-            return [self._make_stop_iteration_raise(template_node)]
-
-        pre_stmts, yield_val, post_stmts, is_repeating = yields[idx]
-
-        if not is_repeating:
-            self.generator_next_index[gen_var] = idx + 1
-
-        result = []
-        # Emit init code once per generator variable
-        if outer_init and gen_var not in self.generator_emitted_init:
-            result.extend([copy.deepcopy(s) for s in outer_init])
-            self.generator_emitted_init.add(gen_var)
-
-        result.extend([copy.deepcopy(s) for s in pre_stmts])
-        if targets is not None:
-            assign = ast.Assign(
-                targets=targets, value=copy.deepcopy(yield_val), type_comment=None
-            )
-            ast.copy_location(assign, template_node)
-            ast.fix_missing_locations(assign)
-            result.append(assign)
-        result.extend([copy.deepcopy(s) for s in post_stmts])
-        for stmt in result:
-            self.ensure_all_locations(stmt, template_node)
-            ast.fix_missing_locations(stmt)
-        return result
-
-    def _lower_listcomp_in_expr(self, expr):
-        """Lower all list comprehensions inside an expression node.
-
-        Returns (prefix_stmts, new_expr, result_type) where result_type
-        is inferred from the transformed root expression.
-        """
-        if expr is None:
-            return [], expr, "Any"
-        lowerer = self._ListCompExpressionLowerer(self)
-        new_expr = lowerer.visit(expr)
-        result_type = self._infer_type_from_value(new_expr)
-        return lowerer.statements, new_expr, result_type
-
     def _lower_min_max_with_key_call(self, call_node):
         """Lower min/max(iterable, key=lambda x: x[K]) for literal-list iterables.
 
@@ -2046,12 +1159,8 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         success, or None when the pattern does not apply (caller falls back to
         the regular dispatch, which today drops the key= keyword).
         """
-        if not (
-            isinstance(call_node, ast.Call)
-            and isinstance(call_node.func, ast.Name)
-            and call_node.func.id in ("min", "max")
-            and len(call_node.args) == 1
-        ):
+        if not (isinstance(call_node, ast.Call) and isinstance(call_node.func, ast.Name)
+                and call_node.func.id in ("min", "max") and len(call_node.args) == 1):
             return None
 
         key_kw = None
@@ -2078,14 +1187,9 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
 
         param_name = key_lambda.args.args[0].arg
         body = key_lambda.body
-        if not (
-            isinstance(body, ast.Subscript)
-            and isinstance(body.value, ast.Name)
-            and body.value.id == param_name
-            and isinstance(body.slice, ast.Constant)
-            and isinstance(body.slice.value, int)
-            and body.slice.value >= 0
-        ):
+        if not (isinstance(body, ast.Subscript) and isinstance(body.value, ast.Name)
+                and body.value.id == param_name and isinstance(body.slice, ast.Constant)
+                and isinstance(body.slice.value, int) and body.slice.value >= 0):
             return None
 
         key_index = body.slice.value
@@ -2135,74 +1239,6 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         ast.fix_missing_locations(result)
         return [], result
 
-    def _lower_sorted_with_key_call(self, call_node):
-        """Lower sorted(iterable, key=lambda x: x[K]) for literal-list iterables."""
-        if not (
-            isinstance(call_node, ast.Call)
-            and isinstance(call_node.func, ast.Name)
-            and call_node.func.id == "sorted"
-            and len(call_node.args) == 1
-        ):
-            return None
-
-        key_kw = None
-        for kw in call_node.keywords:
-            if kw.arg == "key":
-                if key_kw is not None:
-                    return None
-                key_kw = kw
-            else:
-                return None
-
-        if key_kw is None or not isinstance(key_kw.value, ast.Lambda):
-            return None
-
-        key_lambda = key_kw.value
-        if len(key_lambda.args.args) != 1:
-            return None
-
-        param_name = key_lambda.args.args[0].arg
-        body = key_lambda.body
-        if not (
-            isinstance(body, ast.Subscript)
-            and isinstance(body.value, ast.Name)
-            and body.value.id == param_name
-            and isinstance(body.slice, ast.Constant)
-            and isinstance(body.slice.value, int)
-            and body.slice.value >= 0
-        ):
-            return None
-
-        key_index = body.slice.value
-        iterable_expr = call_node.args[0]
-
-        iterable_literal = None
-        if isinstance(iterable_expr, ast.List):
-            iterable_literal = iterable_expr
-        elif isinstance(iterable_expr, ast.Name):
-            iterable_literal = self.list_literal_values.get(iterable_expr.id)
-
-        if iterable_literal is None:
-            return None
-
-        key_values = []
-        for elt in iterable_literal.elts:
-            if not (isinstance(elt, ast.Tuple) and key_index < len(elt.elts)):
-                return None
-            key_node = elt.elts[key_index]
-            if not isinstance(key_node, ast.Constant):
-                return None
-            key_values.append(key_node.value)
-
-        order = sorted(range(len(iterable_literal.elts)), key=lambda i: key_values[i])
-        folded_sorted = ast.List(
-            elts=[copy.deepcopy(iterable_literal.elts[i]) for i in order],
-            ctx=ast.Load(),
-        )
-        self.ensure_all_locations(folded_sorted, call_node)
-        ast.fix_missing_locations(folded_sorted)
-        return [], folded_sorted
-
     def _lower_tuple_sorted_pair_call(self, call_node):
         """Lower tuple(sorted([a, b])) to a conditional pair assignment.
 
@@ -2217,23 +1253,15 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         ESBMC can handle named-scalar tuple construction without the
         pointer-to-temporary issue.
         """
-        if not (
-            isinstance(call_node, ast.Call)
-            and isinstance(call_node.func, ast.Name)
-            and call_node.func.id == "tuple"
-            and len(call_node.args) == 1
-            and not call_node.keywords
-        ):
+        if not (isinstance(call_node, ast.Call) and isinstance(call_node.func, ast.Name)
+                and call_node.func.id == "tuple" and len(call_node.args) == 1
+                and not call_node.keywords):
             return None
 
         sorted_call = call_node.args[0]
-        if not (
-            isinstance(sorted_call, ast.Call)
-            and isinstance(sorted_call.func, ast.Name)
-            and sorted_call.func.id == "sorted"
-            and len(sorted_call.args) == 1
-            and not sorted_call.keywords
-        ):
+        if not (isinstance(sorted_call, ast.Call) and isinstance(sorted_call.func, ast.Name)
+                and sorted_call.func.id == "sorted" and len(sorted_call.args) == 1
+                and not sorted_call.keywords):
             return None
 
         iterable = sorted_call.args[0]
@@ -2287,9 +1315,7 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
                 simple=1,
             )
         else:
-            lo_assign = ast.Assign(
-                targets=[lo_store], value=copy.deepcopy(left), type_comment=None
-            )
+            lo_assign = ast.Assign(targets=[lo_store], value=copy.deepcopy(left), type_comment=None)
         ast.copy_location(lo_assign, call_node)
         ast.fix_missing_locations(lo_assign)
 
@@ -2303,9 +1329,9 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
                 simple=1,
             )
         else:
-            hi_assign = ast.Assign(
-                targets=[hi_store], value=copy.deepcopy(right), type_comment=None
-            )
+            hi_assign = ast.Assign(targets=[hi_store],
+                                   value=copy.deepcopy(right),
+                                   type_comment=None)
         ast.copy_location(hi_assign, call_node)
         ast.fix_missing_locations(hi_assign)
 
@@ -2333,9 +1359,9 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
             ast.copy_location(stmt, call_node)
             ast.fix_missing_locations(stmt)
 
-        cond_stmt = ast.If(
-            test=copy.deepcopy(cond), body=[then_lo, then_hi], orelse=[else_lo, else_hi]
-        )
+        cond_stmt = ast.If(test=copy.deepcopy(cond),
+                           body=[then_lo, then_hi],
+                           orelse=[else_lo, else_hi])
         ast.copy_location(cond_stmt, call_node)
         ast.fix_missing_locations(cond_stmt)
 
@@ -2356,9 +1382,7 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         prefix, new_value, _ = self._lower_listcomp_in_expr(node.value)
         node.value = new_value
         if node.value is not None:
-            dd_inits, node.value = self._lower_defaultdict_reads_in_expr(
-                node.value, node
-            )
+            dd_inits, node.value = self._lower_defaultdict_reads_in_expr(node.value, node)
             prefix = dd_inits + prefix
         if prefix:
             return prefix + [node]
@@ -2374,10 +1398,7 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         """
         node = self.generic_visit(node)
 
-        if (
-            isinstance(node.value, ast.Name)
-            and node.value.id in self.list_literal_values
-        ):
+        if (isinstance(node.value, ast.Name) and node.value.id in self.list_literal_values):
             list_node = self.list_literal_values[node.value.id]
 
             idx_node = node.slice
@@ -2387,12 +1408,10 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
             idx = None
             if isinstance(idx_node, ast.Constant) and isinstance(idx_node.value, int):
                 idx = idx_node.value
-            elif (
-                isinstance(idx_node, ast.UnaryOp)
-                and isinstance(idx_node.op, (ast.UAdd, ast.USub))
-                and isinstance(idx_node.operand, ast.Constant)
-                and isinstance(idx_node.operand.value, int)
-            ):
+            elif (isinstance(idx_node, ast.UnaryOp) and isinstance(idx_node.op,
+                                                                   (ast.UAdd, ast.USub))
+                  and isinstance(idx_node.operand, ast.Constant)
+                  and isinstance(idx_node.operand.value, int)):
                 sign = -1 if isinstance(idx_node.op, ast.USub) else 1
                 idx = sign * idx_node.operand.value
 
@@ -2402,11 +1421,9 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
                     idx = len(elts) + idx
                 if 0 <= idx < len(elts):
                     elt = elts[idx]
-                    is_pure_literal = isinstance(elt, ast.Constant) or (
-                        isinstance(elt, ast.UnaryOp)
-                        and isinstance(elt.op, (ast.UAdd, ast.USub))
-                        and isinstance(elt.operand, ast.Constant)
-                    )
+                    is_pure_literal = isinstance(
+                        elt, ast.Constant) or (isinstance(elt, ast.UnaryOp) and isinstance(
+                            elt.op, (ast.UAdd, ast.USub)) and isinstance(elt.operand, ast.Constant))
                     if is_pure_literal:
                         folded = copy.deepcopy(elt)
                         self.ensure_all_locations(folded, node)
@@ -2452,13 +1469,9 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         rewrite to `name = sorted(name, key=..., reverse=...)`. Returns the
         replacement Assign, or None when the pattern does not apply."""
         call = expr_node.value
-        if not (
-            isinstance(call, ast.Call)
-            and isinstance(call.func, ast.Attribute)
-            and call.func.attr == "sort"
-            and isinstance(call.func.value, ast.Name)
-            and not call.args
-        ):
+        if not (isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute)
+                and call.func.attr == "sort" and isinstance(call.func.value, ast.Name)
+                and not call.args):
             return None
         has_key = any(kw.arg == "key" for kw in call.keywords)
         if not has_key:
@@ -2535,12 +1548,8 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         - annotation mismatches T -> False
         - annotation unknown/Any  -> leave unchanged
         """
-        if not (
-            isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Name)
-            and node.func.id == "isinstance"
-            and len(node.args) == 2
-        ):
+        if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                and node.func.id == "isinstance" and len(node.args) == 2):
             return node
         obj_node, type_node = node.args[0], node.args[1]
         if not (isinstance(obj_node, ast.Name) and isinstance(type_node, ast.Name)):
@@ -2629,12 +1638,8 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
     def visit_Assert(self, node):
         node = self.generic_visit(node)
         tuple_eq_prefix = []
-        if (
-            isinstance(node.test, ast.Compare)
-            and len(node.test.ops) == 1
-            and isinstance(node.test.ops[0], ast.Eq)
-            and len(node.test.comparators) == 1
-        ):
+        if (isinstance(node.test, ast.Compare) and len(node.test.ops) == 1
+                and isinstance(node.test.ops[0], ast.Eq) and len(node.test.comparators) == 1):
             left = node.test.left
             right = node.test.comparators[0]
             rewritten = self._try_transform_items_set_eq(left, right, node)
@@ -2646,12 +1651,10 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
                 rewritten = self._try_transform_list_tuple_eq(right, left, node)
             if rewritten is None:
                 tuple_eq_prefix, rewritten = self._try_lower_expr_tuple_literal_eq(
-                    left, right, node
-                )
+                    left, right, node)
             if rewritten is None:
                 tuple_eq_prefix, rewritten = self._try_lower_expr_tuple_literal_eq(
-                    right, left, node
-                )
+                    right, left, node)
             if tuple_eq_prefix is None:
                 tuple_eq_prefix = []
             if rewritten is not None:
@@ -2682,13 +1685,9 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         if isinstance(node, ast.Name) and node.id in self._known_literal_values:
             return copy.deepcopy(self._known_literal_values[node.id])
 
-        if (
-            isinstance(node, ast.Subscript)
-            and isinstance(node.value, ast.Name)
-            and node.value.id in self._known_literal_values
-            and isinstance(node.slice, ast.Constant)
-            and isinstance(node.slice.value, int)
-        ):
+        if (isinstance(node, ast.Subscript) and isinstance(node.value, ast.Name)
+                and node.value.id in self._known_literal_values
+                and isinstance(node.slice, ast.Constant) and isinstance(node.slice.value, int)):
             base = self._known_literal_values[node.value.id]
             idx = node.slice.value
             if isinstance(base, (ast.List, ast.Tuple)) and 0 <= idx < len(base.elts):
@@ -2702,13 +1701,11 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         if isinstance(node, ast.Attribute):
             return self._is_pure_assert_expr(node.value)
         if isinstance(node, ast.Subscript):
-            return self._is_pure_assert_expr(
-                node.value
-            ) and self._is_assert_literal_shape(node.slice)
+            return self._is_pure_assert_expr(node.value) and self._is_assert_literal_shape(
+                node.slice)
         return isinstance(node, (ast.List, ast.Tuple)) and all(
             self._is_pure_assert_expr(elt) or self._is_assert_literal_shape(elt)
-            for elt in node.elts
-        )
+            for elt in node.elts)
 
     def _build_assert_literal_checks(self, actual_expr, literal_node, source_node):
         if isinstance(literal_node, ast.Constant):
@@ -2757,76 +1754,6 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
             checks.extend(sub_checks)
         return checks
 
-    def _lower_assert_eq_literal(self, test_node, source_node):
-        # Disabled by default: this optimization introduced broad semantic/type
-        # inference drift across regression suites. Keep original assert shape
-        # unless explicitly enabled for focused experiments.
-        if not getattr(self, "_enable_assert_eq_literal_lowering", False):
-            return [], test_node
-
-        if not (
-            isinstance(test_node, ast.Compare)
-            and len(test_node.ops) == 1
-            and isinstance(test_node.ops[0], ast.Eq)
-            and len(test_node.comparators) == 1
-        ):
-            return [], test_node
-
-        left = test_node.left
-        right = test_node.comparators[0]
-        left = self._resolve_known_literal_expr(left)
-        right = self._resolve_known_literal_expr(right)
-
-        if self._is_assert_literal_shape(left) and self._is_assert_literal_shape(right):
-            try:
-                result = ast.literal_eval(left) == ast.literal_eval(right)
-                return [], ast.Constant(value=result)
-            except Exception:
-                pass
-
-        literal_node = None
-        expr_node = None
-        if self._is_assert_literal_shape(right) and self._is_pure_assert_expr(left):
-            literal_node = right
-            expr_node = left
-        elif self._is_assert_literal_shape(left) and self._is_pure_assert_expr(right):
-            literal_node = left
-            expr_node = right
-        else:
-            return [], test_node
-
-        # String equality lowering through a synthetic temporary has shown
-        # semantic drift on dataclass attribute reads; keep native equality.
-        if isinstance(literal_node, ast.Constant) and isinstance(
-            literal_node.value, str
-        ):
-            return [], test_node
-
-        # Keep non-trivial expressions untouched to avoid semantic/runtime drift
-        # (e.g. subscripts/attributes that may involve model-specific lowering).
-        if not isinstance(expr_node, ast.Name):
-            return [], test_node
-
-        tmp_name = "__esbmc_assert_eq_tmp_{}".format(self._assert_eq_counter)
-        self._assert_eq_counter += 1
-        tmp_assign = ast.Assign(
-            targets=[ast.Name(id=tmp_name, ctx=ast.Store())],
-            value=copy.deepcopy(expr_node),
-        )
-        self.ensure_all_locations(tmp_assign, source_node)
-
-        tmp_load = ast.Name(id=tmp_name, ctx=ast.Load())
-        checks = self._build_assert_literal_checks(tmp_load, literal_node, source_node)
-        if not checks:
-            return [], test_node
-        if len(checks) == 1:
-            new_test = checks[0]
-        else:
-            new_test = ast.BoolOp(op=ast.And(), values=checks)
-            self.ensure_all_locations(new_test, source_node)
-        ast.fix_missing_locations(new_test)
-        return [tmp_assign], new_test
-
     def _extract_type_from_annotation(self, annotation):
         """Extract a simplified type string from a type annotation AST node"""
         if annotation is None:
@@ -2866,9 +1793,7 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
     def _get_element_type_from_container(self, container_type, iterable_node=None):
         """Get the element type from a container type with better inference"""
         # 1. Handle method calls such as d.keys(), d.values()
-        if isinstance(iterable_node, ast.Call) and isinstance(
-            iterable_node.func, ast.Attribute
-        ):
+        if isinstance(iterable_node, ast.Call) and isinstance(iterable_node.func, ast.Attribute):
             method_name = iterable_node.func.attr
 
             if method_name in ["keys", "values"]:
@@ -2877,10 +1802,8 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
                     dict_var_name = iterable_node.func.value.id
 
                     # Look up the dict's annotation
-                    if (
-                        hasattr(self, "variable_annotations")
-                        and dict_var_name in self.variable_annotations
-                    ):
+                    if (hasattr(self, "variable_annotations")
+                            and dict_var_name in self.variable_annotations):
                         dict_annotation = self.variable_annotations[dict_var_name]
 
                         # Extract key/value types from dict[K, V]
@@ -2892,38 +1815,29 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
                                 if method_name == "keys":
                                     if isinstance(key_type, ast.Name):
                                         return key_type.id
-                                    elif isinstance(
-                                        key_type, ast.Subscript
-                                    ) and isinstance(key_type.value, ast.Name):
+                                    elif isinstance(key_type, ast.Subscript) and isinstance(
+                                            key_type.value, ast.Name):
                                         return key_type.value.id
                                 elif method_name == "values":
                                     if isinstance(value_type, ast.Name):
                                         return value_type.id
-                                    elif isinstance(
-                                        value_type, ast.Subscript
-                                    ) and isinstance(value_type.value, ast.Name):
+                                    elif isinstance(value_type, ast.Subscript) and isinstance(
+                                            value_type.value, ast.Name):
                                         return value_type.value.id
 
         # 2. Handle direct dict iteration: for k in d:
         if isinstance(iterable_node, ast.Name):
             var_name = iterable_node.id
 
-            if (
-                hasattr(self, "variable_annotations")
-                and var_name in self.variable_annotations
-            ):
+            if (hasattr(self, "variable_annotations") and var_name in self.variable_annotations):
                 annotation = self.variable_annotations[var_name]
 
                 # Check if it's a dict annotation
-                if isinstance(annotation, ast.Subscript) and isinstance(
-                    annotation.value, ast.Name
-                ):
+                if isinstance(annotation, ast.Subscript) and isinstance(annotation.value, ast.Name):
                     if annotation.value.id == "dict":
                         # Extract key type from dict[K, V]
-                        if (
-                            isinstance(annotation.slice, ast.Tuple)
-                            and len(annotation.slice.elts) >= 1
-                        ):
+                        if (isinstance(annotation.slice, ast.Tuple)
+                                and len(annotation.slice.elts) >= 1):
                             key_type = annotation.slice.elts[0]
                             if isinstance(key_type, ast.Name):
                                 return key_type.id
@@ -2937,9 +1851,7 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
                 return type(first_elem.value).__name__
         elif container_type.lower() in ["list", "tuple"]:
             # Try to extract element type from generic annotation
-            if isinstance(iterable_node, ast.Name) and hasattr(
-                self, "variable_annotations"
-            ):
+            if isinstance(iterable_node, ast.Name) and hasattr(self, "variable_annotations"):
                 var_name = iterable_node.id
                 if var_name in self.variable_annotations:
                     annotation = self.variable_annotations[var_name]
@@ -2958,12 +1870,11 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         return "Any"
 
     def generate_variable_copy(self, node_name: str, argument: ast.arg, default_val):
-        target = ast.Name(
-            id=f"ESBMC_DEFAULT_{node_name}_{argument.arg}", ctx=ast.Store()
-        )
-        assign_node = ast.AnnAssign(
-            target=target, annotation=argument.annotation, value=default_val, simple=1
-        )
+        target = ast.Name(id=f"ESBMC_DEFAULT_{node_name}_{argument.arg}", ctx=ast.Store())
+        assign_node = ast.AnnAssign(target=target,
+                                    annotation=argument.annotation,
+                                    value=default_val,
+                                    simple=1)
         return assign_node, target
 
     # for-range statements such as:
@@ -3009,21 +1920,15 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
             # If the key type is still unknown, check the loop body for
             # some_dict[key_var] usage patterns: using a variable as a dict
             # subscript key implies it is a str (the common dict key type).
-            if (
-                isinstance(key_ann, ast.Name)
-                and key_ann.id == "Any"
-                and isinstance(k_var, ast.Name)
-                and self._key_used_as_subscript(k_var.id, node.body)
-            ):
+            if (isinstance(key_ann, ast.Name) and key_ann.id == "Any"
+                    and isinstance(k_var, ast.Name)
+                    and self._key_used_as_subscript(k_var.id, node.body)):
                 key_ann = ast.Name(id="str", ctx=ast.Load())
             # If the value type is still unknown, check the loop body for
             # val["key"] usage patterns: string subscripts imply a dict value.
-            if (
-                isinstance(val_ann, ast.Name)
-                and val_ann.id == "Any"
-                and isinstance(v_var, ast.Name)
-                and self._uses_string_subscript(v_var.id, node.body)
-            ):
+            if (isinstance(val_ann, ast.Name) and val_ann.id == "Any"
+                    and isinstance(v_var, ast.Name)
+                    and self._uses_string_subscript(v_var.id, node.body)):
                 val_ann = ast.Name(id="dict", ctx=ast.Load())
             if isinstance(k_var, ast.Name):
                 self.variable_annotations[k_var.id] = key_ann
@@ -3040,14 +1945,9 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         tuple(sorted([elem, elem2]))) can infer the element type from the loop
         variable when the iterable has a known generic annotation like List[float].
         """
-        if (
-            not isinstance(node.iter, ast.Call)
-            or not isinstance(node.iter.func, ast.Name)
-            or node.iter.func.id != "enumerate"
-            or len(node.iter.args) < 1
-            or not isinstance(node.target, (ast.Tuple, ast.List))
-            or len(node.target.elts) < 2
-        ):
+        if (not isinstance(node.iter, ast.Call) or not isinstance(node.iter.func, ast.Name)
+                or node.iter.func.id != "enumerate" or len(node.iter.args) < 1
+                or not isinstance(node.target, (ast.Tuple, ast.List)) or len(node.target.elts) < 2):
             return
 
         iterable = node.iter.args[0]
@@ -3062,16 +1962,11 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
 
     def _is_reversed_range_call(self, iter_node):
         """Return True if iter_node is reversed(range(...))."""
-        return (
-            isinstance(iter_node, ast.Call)
-            and isinstance(iter_node.func, ast.Name)
-            and iter_node.func.id == "reversed"
-            and len(iter_node.args) == 1
-            and not iter_node.keywords
-            and isinstance(iter_node.args[0], ast.Call)
-            and isinstance(iter_node.args[0].func, ast.Name)
-            and iter_node.args[0].func.id == "range"
-        )
+        return (isinstance(iter_node, ast.Call) and isinstance(iter_node.func, ast.Name)
+                and iter_node.func.id == "reversed" and len(iter_node.args) == 1
+                and not iter_node.keywords and isinstance(iter_node.args[0], ast.Call)
+                and isinstance(iter_node.args[0].func, ast.Name)
+                and iter_node.args[0].func.id == "range")
 
     def _transform_reversed_range(self, reversed_call):
         """
@@ -3118,12 +2013,12 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
             # It avoids mixed-sign floor-division so C and Python agree.
             new_start = ast.Call(
                 func=ast.Name(id="ESBMC_reversed_range_start_", ctx=ast.Load()),
-                args=[copy.deepcopy(start), copy.deepcopy(stop), copy.deepcopy(step)],
+                args=[copy.deepcopy(start),
+                      copy.deepcopy(stop),
+                      copy.deepcopy(step)],
                 keywords=[],
             )
-            new_stop = ast.BinOp(
-                left=copy.deepcopy(start), op=ast.Sub(), right=copy.deepcopy(step)
-            )
+            new_stop = ast.BinOp(left=copy.deepcopy(start), op=ast.Sub(), right=copy.deepcopy(step))
             # Constant-fold -step so that step==0 remains an ast.Constant and
             # _transform_range_for's compile-time ValueError check still fires.
             if isinstance(step, ast.Constant):
@@ -3157,11 +2052,8 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         # Detect range call before generic_visit so we can hoist generator
         # outer_init (e.g. `i = 0`) before the loop.  Without hoisting, the
         # init ends up inside the while body and re-runs every iteration.
-        is_range_call = (
-            isinstance(node.iter, ast.Call)
-            and isinstance(node.iter.func, ast.Name)
-            and node.iter.func.id == "range"
-        )
+        is_range_call = (isinstance(node.iter, ast.Call) and isinstance(node.iter.func, ast.Name)
+                         and node.iter.func.id == "range")
 
         gen_pre_stmts = []
         if is_range_call:
@@ -3170,41 +2062,30 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         # Pre-populate variable_annotations for items() loop variables before
         # generic_visit, so that inner loops can resolve the type of outer loop
         # variables (e.g. 'inner: dict[str, int]') when they are visited.
-        if (
-            isinstance(node.iter, ast.Call)
-            and isinstance(node.iter.func, ast.Attribute)
-            and node.iter.func.attr == "items"
-        ):
+        if (isinstance(node.iter, ast.Call) and isinstance(node.iter.func, ast.Attribute)
+                and node.iter.func.attr == "items"):
             self._pre_annotate_items_loop_vars(node)
 
         # Pre-populate variable_annotations for enumerate() loop value variable
         # before generic_visit, so that inner expressions can infer the element
         # type from the loop variable (e.g. elem: float when numbers: List[float]).
-        if (
-            isinstance(node.iter, ast.Call)
-            and isinstance(node.iter.func, ast.Name)
-            and node.iter.func.id == "enumerate"
-            and isinstance(node.target, (ast.Tuple, ast.List))
-            and len(node.target.elts) == 2
-        ):
+        if (isinstance(node.iter, ast.Call) and isinstance(node.iter.func, ast.Name)
+                and node.iter.func.id == "enumerate"
+                and isinstance(node.target, (ast.Tuple, ast.List)) and len(node.target.elts) == 2):
             self._pre_annotate_enumerate_loop_vars(node)
 
         # First, recursively visit any nested nodes
         node = self.generic_visit(node)
 
         # Check if iter is a Call to enumerate
-        is_enumerate_call = (
-            isinstance(node.iter, ast.Call)
-            and isinstance(node.iter.func, ast.Name)
-            and node.iter.func.id == "enumerate"
-        )
+        is_enumerate_call = (isinstance(node.iter, ast.Call)
+                             and isinstance(node.iter.func, ast.Name)
+                             and node.iter.func.id == "enumerate")
 
         # Check if iter is a Call to dict.items()
-        is_items_call = (
-            isinstance(node.iter, ast.Call)
-            and isinstance(node.iter.func, ast.Attribute)
-            and node.iter.func.attr == "items"
-        )
+        is_items_call = (isinstance(node.iter, ast.Call)
+                         and isinstance(node.iter.func, ast.Attribute)
+                         and node.iter.func.attr == "items")
 
         if is_range_call:
             # Handle range-based for loops
@@ -3221,13 +2102,9 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
             # Handle dict.items() for loops
             self.is_range_loop = False
             return self._transform_items_for(node)
-        elif (
-            isinstance(node.iter, ast.Name)
-            and node.iter.id in self.list_literal_values
-            and self._can_safely_unroll_list_literal_for(
-                node, self.list_literal_values[node.iter.id]
-            )
-        ):
+        elif (isinstance(node.iter, ast.Name) and node.iter.id in self.list_literal_values
+              and self._can_safely_unroll_list_literal_for(node,
+                                                           self.list_literal_values[node.iter.id])):
             # For direct iteration over a known list literal variable, unroll the loop
             # to avoid introducing len()/index machinery in the generated model.
             # Skip the unroll if the body contains break/continue/return, since
@@ -3235,9 +2112,7 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
             # surrounding loop/function context. Skip too when elements are not
             # homogeneous pure literals to preserve runtime isinstance semantics.
             self.is_range_loop = False
-            return self._unroll_list_literal_for(
-                node, self.list_literal_values[node.iter.id]
-            )
+            return self._unroll_list_literal_for(node, self.list_literal_values[node.iter.id])
         else:
             # Check if iterating over a generator variable
             if isinstance(node.iter, ast.Name) and node.iter.id in self.generator_vars:
@@ -3248,39 +2123,26 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
             # `for y in gen1(arr): body`.  Without this, _transform_iterable_for
             # would emit `ESBMC_iter: list = gen1(arr)` which assigns a generator
             # object to a list variable — ESBMC cannot model generator objects.
-            if (
-                isinstance(node.iter, ast.Call)
-                and isinstance(node.iter.func, ast.Name)
-                and node.iter.func.id in self.generator_funcs
-            ):
+            if (isinstance(node.iter, ast.Call) and isinstance(node.iter.func, ast.Name)
+                    and node.iter.func.id in self.generator_funcs):
                 inlined = self._inline_generator_call_for(node)
                 if inlined is not None:
                     return inlined
             # Unwrap explicit d.keys() into d so the heterogeneous-key handler
             # below can pick it up.  `for k in d.keys()` is semantically
             # identical to `for k in d` and must be treated the same way.
-            if (
-                isinstance(node.iter, ast.Call)
-                and isinstance(node.iter.func, ast.Attribute)
-                and node.iter.func.attr == "keys"
-                and isinstance(node.iter.func.value, ast.Name)
-                and node.iter.func.value.id in self.het_dict_literals
-            ):
+            if (isinstance(node.iter, ast.Call) and isinstance(node.iter.func, ast.Attribute)
+                    and node.iter.func.attr == "keys" and isinstance(node.iter.func.value, ast.Name)
+                    and node.iter.func.value.id in self.het_dict_literals):
                 node.iter = node.iter.func.value
             # Unroll iteration over dict literals with heterogeneous key types.
-            if (
-                isinstance(node.iter, ast.Name)
-                and node.iter.id in self.het_dict_literals
-            ):
+            if (isinstance(node.iter, ast.Name) and node.iter.id in self.het_dict_literals):
                 return self._transform_het_dict_for(node)
             # Unroll d.values() when the dict has heterogeneous value types.
-            if (
-                isinstance(node.iter, ast.Call)
-                and isinstance(node.iter.func, ast.Attribute)
-                and node.iter.func.attr == "values"
-                and isinstance(node.iter.func.value, ast.Name)
-                and node.iter.func.value.id in self.het_value_dict_literals
-            ):
+            if (isinstance(node.iter, ast.Call) and isinstance(node.iter.func, ast.Attribute)
+                    and node.iter.func.attr == "values"
+                    and isinstance(node.iter.func.value, ast.Name)
+                    and node.iter.func.value.id in self.het_value_dict_literals):
                 dict_node = self.het_value_dict_literals[node.iter.func.value.id]
                 return self._transform_het_values_for(node, dict_node)
             # Handle general iteration over iterables (strings, lists, etc.)
@@ -3307,11 +2169,8 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         for elt in list_literal.elts:
             if isinstance(elt, ast.Constant):
                 const_types.add(type(elt.value).__name__)
-            elif (
-                isinstance(elt, ast.UnaryOp)
-                and isinstance(elt.op, (ast.UAdd, ast.USub))
-                and isinstance(elt.operand, ast.Constant)
-            ):
+            elif (isinstance(elt, ast.UnaryOp) and isinstance(elt.op, (ast.UAdd, ast.USub))
+                  and isinstance(elt.operand, ast.Constant)):
                 const_types.add(type(elt.operand.value).__name__)
             else:
                 all_constants = False
@@ -3437,13 +2296,9 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
             if item.optional_vars is not None:
                 result.append(
                     self.ensure_all_locations(
-                        ast.Assign(targets=[item.optional_vars], value=enter_call), node
-                    )
-                )
+                        ast.Assign(targets=[item.optional_vars], value=enter_call), node))
             else:
-                result.append(
-                    self.ensure_all_locations(ast.Expr(value=enter_call), node)
-                )
+                result.append(self.ensure_all_locations(ast.Expr(value=enter_call), node))
 
         # Build the list of __exit__ calls (reverse order, non-exceptional path).
         exit_calls = []
@@ -3469,16 +2324,9 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         # exception raised inside the with block is suppressed, matching
         # CPython semantics. Other __exit__ shapes preserve today's behaviour
         # (exception propagates without consulting __exit__).
-        suppress = (
-            hasattr(self, "_exit_suppresses_all")
-            and len(node.items) > 0
-            and all(
-                isinstance(item.context_expr, ast.Call)
-                and isinstance(item.context_expr.func, ast.Name)
-                and item.context_expr.func.id in self._exit_suppresses_all
-                for item in node.items
-            )
-        )
+        suppress = (hasattr(self, "_exit_suppresses_all") and len(node.items) > 0 and all(
+            isinstance(item.context_expr, ast.Call) and isinstance(item.context_expr.func, ast.Name)
+            and item.context_expr.func.id in self._exit_suppresses_all for item in node.items))
 
         if suppress:
             try_node = ast.Try(
@@ -3542,14 +2390,11 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         iterable, start_value = self._parse_enumerate_arguments(enumerate_call, node)
 
         # Step 4: Create setup statements (variable declarations)
-        setup_statements = self._create_enumerate_setup_statements(
-            node, iterable, start_value, loop_id
-        )
+        setup_statements = self._create_enumerate_setup_statements(node, iterable, start_value,
+                                                                   loop_id)
 
         # Step 5: Create the while loop
-        while_stmt = self._create_enumerate_while_loop(
-            node, target_info, setup_statements, loop_id
-        )
+        while_stmt = self._create_enumerate_while_loop(node, target_info, setup_statements, loop_id)
 
         # Step 6: Combine everything and ensure proper AST locations
         result = setup_statements + [while_stmt]
@@ -3565,15 +2410,12 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
             raise TypeError("enumerate() missing required argument 'iterable' (pos 1)")
         if len(enumerate_call.args) > 2:
             raise TypeError(
-                f"enumerate() takes at most 2 arguments ({len(enumerate_call.args)} given)"
-            )
+                f"enumerate() takes at most 2 arguments ({len(enumerate_call.args)} given)")
 
     def _parse_enumerate_target(self, target):
         """Parse and validate the for loop target, return target information."""
         # Check if this is tuple/list unpacking or single variable assignment
-        is_unpacking = (
-            isinstance(target, (ast.Tuple, ast.List)) and len(target.elts) == 2
-        )
+        is_unpacking = (isinstance(target, (ast.Tuple, ast.List)) and len(target.elts) == 2)
 
         if is_unpacking:
             return {
@@ -3588,9 +2430,7 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
             if isinstance(target, (ast.Tuple, ast.List)):
                 expected = len(target.elts)
                 if expected > 2:
-                    raise ValueError(
-                        f"not enough values to unpack (expected {expected}, got 2)"
-                    )
+                    raise ValueError(f"not enough values to unpack (expected {expected}, got 2)")
                 elif expected < 2:
                     raise ValueError(f"too many values to unpack (expected {expected})")
             else:
@@ -3621,9 +2461,7 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
                 pass
             elif not isinstance(start_val, int):
                 type_name = type(start_val).__name__
-                raise TypeError(
-                    f"'{type_name}' object cannot be interpreted as an integer"
-                )
+                raise TypeError(f"'{type_name}' object cannot be interpreted as an integer")
 
     def _create_enumerate_setup_statements(self, node, iterable, start_value, loop_id):
         """Create the initial variable assignments for enumerate transformation."""
@@ -3679,9 +2517,7 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
 
         return [iter_assign, index_assign, array_index_assign, length_assign]
 
-    def _create_enumerate_while_loop(
-        self, node, target_info, setup_statements, loop_id
-    ):
+    def _create_enumerate_while_loop(self, node, target_info, setup_statements, loop_id):
         """Create the while loop for enumerate transformation."""
         array_index_var = f"ESBMC_array_index_{loop_id}"
         length_var = f"ESBMC_length_{loop_id}"
@@ -3738,9 +2574,7 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         )
         self.ensure_all_locations(subscript, node)
 
-        element_type = self._get_element_type_from_container(
-            annotation_id, iterable_node
-        )
+        element_type = self._get_element_type_from_container(annotation_id, iterable_node)
         ann_node = self.create_name_node(element_type, ast.Load(), node)
         user_value_assign = ast.AnnAssign(
             target=self.create_name_node(target_info["value_var"], ast.Store(), node),
@@ -3869,9 +2703,7 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
 
         # Step validation - Python raises ValueError if step == 0
         step_validation = ast.Assert(
-            test=ast.Compare(
-                left=step, ops=[ast.NotEq()], comparators=[ast.Constant(value=0)]
-            ),
+            test=ast.Compare(left=step, ops=[ast.NotEq()], comparators=[ast.Constant(value=0)]),
             msg=ast.Constant(value="range() arg 3 must not be zero"),
         )
 
@@ -3900,17 +2732,15 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
 
         # Create condition for the while loop
         has_next_name = ast.Name(id=has_next_var, ctx=ast.Load())
-        while_cond = ast.Compare(
-            left=has_next_name, ops=[ast.Eq()], comparators=[ast.Constant(value=True)]
-        )
+        while_cond = ast.Compare(left=has_next_name,
+                                 ops=[ast.Eq()],
+                                 comparators=[ast.Constant(value=True)])
 
         # Transform the body of the for loop
         transformed_body = []
         old_target_name = self.target_name
         old_start_var = getattr(self, "current_start_var", None)
-        self.target_name = (
-            node.target.id
-        )  # Store the target variable name for replacement
+        self.target_name = (node.target.id)  # Store the target variable name for replacement
         self.current_start_var = (
             start_var  # Store current start variable for Name replacement
         )
@@ -3938,28 +2768,24 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         ast.fix_missing_locations(loop_var_init)
 
         # Create the body of the while loop, including updating the start and has_next variables
-        while_body = (
-            [loop_var_init]
-            + transformed_body
-            + [
-                ast.Assign(
-                    targets=[ast.Name(id=start_var, ctx=ast.Store())],
-                    value=ast.Call(
-                        func=ast.Name(id="ESBMC_range_next_", ctx=ast.Load()),
-                        args=[ast.Name(id=start_var, ctx=ast.Load()), step],
-                        keywords=[],
-                    ),
+        while_body = ([loop_var_init] + transformed_body + [
+            ast.Assign(
+                targets=[ast.Name(id=start_var, ctx=ast.Store())],
+                value=ast.Call(
+                    func=ast.Name(id="ESBMC_range_next_", ctx=ast.Load()),
+                    args=[ast.Name(id=start_var, ctx=ast.Load()), step],
+                    keywords=[],
                 ),
-                ast.Assign(
-                    targets=[ast.Name(id=has_next_var, ctx=ast.Store())],
-                    value=ast.Call(
-                        func=ast.Name(id="ESBMC_range_has_next_", ctx=ast.Load()),
-                        args=[ast.Name(id=start_var, ctx=ast.Load()), end, step],
-                        keywords=[],
-                    ),
+            ),
+            ast.Assign(
+                targets=[ast.Name(id=has_next_var, ctx=ast.Store())],
+                value=ast.Call(
+                    func=ast.Name(id="ESBMC_range_has_next_", ctx=ast.Load()),
+                    args=[ast.Name(id=start_var, ctx=ast.Load()), end, step],
+                    keywords=[],
                 ),
-            ]
-        )
+            ),
+        ])
 
         # Create the while statement
         while_stmt = ast.While(test=while_cond, body=while_body, orelse=[])
@@ -4064,31 +2890,21 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         if isinstance(_tgt, (ast.Tuple, ast.List)) and len(_tgt.elts) == 2:
             _k_elt, _v_elt = _tgt.elts[0], _tgt.elts[1]
             # some_dict[key_var] in the body => key is str (common dict key type)
-            if (
-                isinstance(key_ann, ast.Name)
-                and key_ann.id == "Any"
-                and isinstance(_k_elt, ast.Name)
-                and self._key_used_as_subscript(_k_elt.id, node.body)
-            ):
+            if (isinstance(key_ann, ast.Name) and key_ann.id == "Any"
+                    and isinstance(_k_elt, ast.Name)
+                    and self._key_used_as_subscript(_k_elt.id, node.body)):
                 key_ann = ast.Name(id="str", ctx=ast.Load())
             # val["str_const"] in the body => value is a dict
-            if (
-                isinstance(val_ann, ast.Name)
-                and val_ann.id == "Any"
-                and isinstance(_v_elt, ast.Name)
-                and self._uses_string_subscript(_v_elt.id, node.body)
-            ):
+            if (isinstance(val_ann, ast.Name) and val_ann.id == "Any"
+                    and isinstance(_v_elt, ast.Name)
+                    and self._uses_string_subscript(_v_elt.id, node.body)):
                 val_ann = ast.Name(id="dict", ctx=ast.Load())
 
         # Intermediate list variables: ESBMC_keys_N: list[base(K)] = d.keys()
         # The list slice uses the BASE type name only (e.g. 'dict' for dict[str,int])
         # so the C++ list subscript handler can call get_typet("dict") correctly.
-        keys_assign = self._create_dict_list_assign(
-            node, keys_var, dict_node, "keys", key_ann
-        )
-        vals_assign = self._create_dict_list_assign(
-            node, vals_var, dict_node, "values", val_ann
-        )
+        keys_assign = self._create_dict_list_assign(node, keys_var, dict_node, "keys", key_ann)
+        vals_assign = self._create_dict_list_assign(node, vals_var, dict_node, "values", val_ann)
 
         # Setup: index = 0 and length = len(ESBMC_keys_N)
         index_assign = self._create_index_assignment(node, index_var)
@@ -4104,15 +2920,9 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
             key_var_name = target.elts[0].id
             val_var_name = target.elts[1].id
             body.append(
-                self._create_var_subscript_assign(
-                    node, key_var_name, keys_var, index_var, key_ann
-                )
-            )
+                self._create_var_subscript_assign(node, key_var_name, keys_var, index_var, key_ann))
             body.append(
-                self._create_var_subscript_assign(
-                    node, val_var_name, vals_var, index_var, val_ann
-                )
-            )
+                self._create_var_subscript_assign(node, val_var_name, vals_var, index_var, val_ann))
         else:
             # Single variable: d.items() yields (key, value) tuples per Python semantics.
             single_var = target.id if hasattr(target, "id") else "ESBMC_loop_var"
@@ -4174,13 +2984,9 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         """
         module = ast.Module(body=list(body), type_ignores=[])
         for node in ast.walk(module):
-            if (
-                isinstance(node, ast.Subscript)
-                and isinstance(node.value, ast.Name)
-                and node.value.id == var_name
-                and isinstance(node.slice, ast.Constant)
-                and isinstance(node.slice.value, str)
-            ):
+            if (isinstance(node, ast.Subscript) and isinstance(node.value, ast.Name)
+                    and node.value.id == var_name and isinstance(node.slice, ast.Constant)
+                    and isinstance(node.slice.value, str)):
                 return True
         return False
 
@@ -4193,11 +2999,8 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         """
         module = ast.Module(body=list(body), type_ignores=[])
         for node in ast.walk(module):
-            if (
-                isinstance(node, ast.Subscript)
-                and isinstance(node.slice, ast.Name)
-                and node.slice.id == var_name
-            ):
+            if (isinstance(node, ast.Subscript) and isinstance(node.slice, ast.Name)
+                    and node.slice.id == var_name):
                 return True
         return False
 
@@ -4207,11 +3010,8 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         Returns the raw AST slice elements so nested types like dict[str, int]
         are preserved intact (not flattened to a string).
         """
-        if (
-            isinstance(annotation, ast.Subscript)
-            and isinstance(annotation.slice, ast.Tuple)
-            and len(annotation.slice.elts) >= 2
-        ):
+        if (isinstance(annotation, ast.Subscript) and isinstance(annotation.slice, ast.Tuple)
+                and len(annotation.slice.elts) >= 2):
             return annotation.slice.elts[0], annotation.slice.elts[1]
         return self._any_ann(), self._any_ann()
 
@@ -4230,9 +3030,7 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
     def _get_dict_kv_types(self, dict_var_name):
         """Return (key_ann, val_ann) annotation nodes from a variable's dict[K, V] annotation."""
         if dict_var_name and dict_var_name in self.variable_annotations:
-            return self._kv_types_from_annotation(
-                self.variable_annotations[dict_var_name]
-            )
+            return self._kv_types_from_annotation(self.variable_annotations[dict_var_name])
         return self._any_ann(), self._any_ann()
 
     def _get_kv_types_from_call(self, call_node):
@@ -4240,17 +3038,12 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         if isinstance(call_node, ast.Call) and isinstance(call_node.func, ast.Name):
             func_name = call_node.func.id
             if func_name in self.function_return_annotations:
-                return self._kv_types_from_annotation(
-                    self.function_return_annotations[func_name]
-                )
+                return self._kv_types_from_annotation(self.function_return_annotations[func_name])
         return self._any_ann(), self._any_ann()
 
     def _get_kv_types_from_attribute(self, attr_node):
         """Return (key_ann, val_ann) annotation nodes from c.d via class attribute lookup."""
-        if not (
-            isinstance(attr_node, ast.Attribute)
-            and isinstance(attr_node.value, ast.Name)
-        ):
+        if not (isinstance(attr_node, ast.Attribute) and isinstance(attr_node.value, ast.Name)):
             return self._any_ann(), self._any_ann()
         var_name = attr_node.value.id
         attr_name = attr_node.attr
@@ -4313,9 +3106,7 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         self.ensure_all_locations(assign, node)
         return assign
 
-    def _create_var_subscript_assign(
-        self, node, var_name, list_var, index_var, elem_ann
-    ):
+    def _create_var_subscript_assign(self, node, var_name, list_var, index_var, elem_ann):
         """Create: var_name: elem_ann = list_var[index_var]
 
         Uses the FULL annotation node (e.g. dict[str, int]) so that
@@ -4351,9 +3142,7 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
                 ops=[ast.Eq()],
                 comparators=[ast.Name(id=length_var, ctx=ast.Load())],
             ),
-            msg=ast.Constant(
-                value="RuntimeError: dictionary changed size during iteration"
-            ),
+            msg=ast.Constant(value="RuntimeError: dictionary changed size during iteration"),
         )
         self.ensure_all_locations(assert_stmt, node)
         return assert_stmt
@@ -4405,9 +3194,8 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         else:
             # For other iterables (literals, calls, expressions), create ESBMC_iter copy
             iter_var_name = f"{iter_var_base}_{loop_id}"
-            iter_assign = self._create_iter_assignment(
-                node, annotation_id, iter_var_name, element_type
-            )
+            iter_assign = self._create_iter_assignment(node, annotation_id, iter_var_name,
+                                                       element_type)
             setup_statements = [iter_assign]
 
         # Create common setup statements (index and length) with unique names
@@ -4419,9 +3207,8 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         while_cond = self._create_while_condition(node, index_var, length_var)
 
         # Create loop body with unique variable names
-        transformed_body = self._create_loop_body(
-            node, target_var_name, iter_var_name, annotation_id, index_var, element_type
-        )
+        transformed_body = self._create_loop_body(node, target_var_name, iter_var_name,
+                                                  annotation_id, index_var, element_type)
 
         # Create the while statement
         while_stmt = ast.While(test=while_cond, body=transformed_body, orelse=[])
@@ -4479,9 +3266,10 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         index_target = self.create_name_node(index_var, ast.Store(), node)
         index_value = self.create_constant_node(0, node)
         int_annotation = self.create_name_node("int", ast.Load(), node)
-        index_assign = ast.AnnAssign(
-            target=index_target, annotation=int_annotation, value=index_value, simple=1
-        )
+        index_assign = ast.AnnAssign(target=index_target,
+                                     annotation=int_annotation,
+                                     value=index_value,
+                                     simple=1)
         self.ensure_all_locations(index_assign, node)
         return index_assign
 
@@ -4499,23 +3287,20 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         len_call = ast.Call(func=len_func, args=[iter_arg], keywords=[])
         self.ensure_all_locations(len_call, node)
 
-        length_assign = ast.AnnAssign(
-            target=length_target, annotation=int_annotation, value=len_call, simple=1
-        )
+        length_assign = ast.AnnAssign(target=length_target,
+                                      annotation=int_annotation,
+                                      value=len_call,
+                                      simple=1)
         self.ensure_all_locations(length_assign, node)
         return length_assign
 
-    def _create_while_condition(
-        self, node, index_var="ESBMC_index", length_var="ESBMC_length"
-    ):
+    def _create_while_condition(self, node, index_var="ESBMC_index", length_var="ESBMC_length"):
         """Create while loop condition with custom variable names."""
         index_left = self.create_name_node(index_var, ast.Load(), node)
         length_right = self.create_name_node(length_var, ast.Load(), node)
         lt_op = ast.Lt()
         self.ensure_all_locations(lt_op, node)
-        while_cond = ast.Compare(
-            left=index_left, ops=[lt_op], comparators=[length_right]
-        )
+        while_cond = ast.Compare(left=index_left, ops=[lt_op], comparators=[length_right])
         self.ensure_all_locations(while_cond, node)
         return while_cond
 
@@ -4604,9 +3389,10 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         self.ensure_all_locations(subscript, node)
         element_type = self._get_element_type_from_container(annotation_id, node.iter)
         item_annotation = self.create_name_node(element_type, ast.Load(), node)
-        item_assign = ast.AnnAssign(
-            target=item_target, annotation=item_annotation, value=subscript, simple=1
-        )
+        item_assign = ast.AnnAssign(target=item_target,
+                                    annotation=item_annotation,
+                                    value=subscript,
+                                    simple=1)
         self.ensure_all_locations(item_assign, node)
         return item_assign
 
@@ -4620,45 +3406,12 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         inc_binop = ast.BinOp(left=inc_left, op=add_op, right=inc_right)
         self.ensure_all_locations(inc_binop, node)
         int_annotation = self.create_name_node("int", ast.Load(), node)
-        index_increment = ast.AnnAssign(
-            target=inc_target, annotation=int_annotation, value=inc_binop, simple=1
-        )
+        index_increment = ast.AnnAssign(target=inc_target,
+                                        annotation=int_annotation,
+                                        value=inc_binop,
+                                        simple=1)
         self.ensure_all_locations(index_increment, node)
         return index_increment
-
-    def _hoist_generator_inits(self, body, template_node):
-        """
-        Scan a loop body for direct `var = next(gen_var)` assignments.
-        For each normal generator whose outer_init hasn't been emitted yet,
-        deep-copy the outer_init statements and return them (to be placed
-        before the loop), and mark the generator as initialized so that
-        _inline_next_call won't re-emit them inside the loop body.
-        """
-        import copy
-
-        pre_stmts = []
-        for stmt in body:
-            if not isinstance(stmt, ast.Assign):
-                continue
-            info = self._find_generator_next_call(stmt.value)
-            if info is None:
-                continue
-            gen_var, func_name = info
-            if func_name in self.early_return_generator_funcs:
-                continue
-            if gen_var in self.generator_emitted_init:
-                continue
-            body_stmts = self.generator_func_defs.get(func_name)
-            if body_stmts is None:
-                continue
-            outer_init, _ = self._collect_yields(body_stmts)
-            for s in outer_init:
-                s_copy = copy.deepcopy(s)
-                self.ensure_all_locations(s_copy, template_node)
-                ast.fix_missing_locations(s_copy)
-                pre_stmts.append(s_copy)
-            self.generator_emitted_init.add(gen_var)
-        return pre_stmts
 
     def visit_Name(self, node):
         return node
@@ -4684,12 +3437,9 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
             return "bool"
 
         if isinstance(value, ast.BoolOp):
-            operand_types = [
-                self._infer_type_from_value(operand) for operand in value.values
-            ]
-            if operand_types and all(
-                operand_type == operand_types[0] for operand_type in operand_types[1:]
-            ):
+            operand_types = [self._infer_type_from_value(operand) for operand in value.values]
+            if operand_types and all(operand_type == operand_types[0]
+                                     for operand_type in operand_types[1:]):
                 return operand_types[0]
             return "Any"
 
@@ -4801,9 +3551,8 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         for target_node, value_node in leaf_pairs:
             target_copy = copy.deepcopy(target_node)
             value_copy = copy.deepcopy(value_node)
-            individual_assign = self._create_individual_assignment(
-                target_copy, value_copy, source_node
-            )
+            individual_assign = self._create_individual_assignment(target_copy, value_copy,
+                                                                   source_node)
             self._update_variable_types_simple(target_copy, value_copy)
             assignments.append(individual_assign)
 
@@ -4868,7 +3617,7 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         if isinstance(call_node, ast.Call) and isinstance(call_node.func, ast.Name):
             name = call_node.func.id
             if name.startswith("nondet_"):
-                return name[len("nondet_") :]
+                return name[len("nondet_"):]
         return None
 
     def _expand_nondet_call(self, target, call, source_node):
@@ -4914,7 +3663,7 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
             """Extract type name'bool' from nondet_bool() Call node."""
             fn = _get_nondet_func(call_arg)
             if fn and fn.startswith("nondet_"):
-                return fn[len("nondet_") :]
+                return fn[len("nondet_"):]
             return "int"
 
         if func_name == "nondet_list":
@@ -4972,16 +3721,14 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         # x: list[T] = [] && x: dict[K,V] = {}
         if func_name == "nondet_list":
             init_val = ast.List(elts=[], ctx=ast.Load())
-            annotation = ast.Subscript(
-                value=name("list"), slice=name(elem_type_name), ctx=ast.Load()
-            )
+            annotation = ast.Subscript(value=name("list"),
+                                       slice=name(elem_type_name),
+                                       ctx=ast.Load())
         else:
             init_val = ast.Dict(keys=[], values=[])
             annotation = ast.Subscript(
                 value=name("dict"),
-                slice=ast.Tuple(
-                    elts=[name(key_type_name), name(val_type_name)], ctx=ast.Load()
-                ),
+                slice=ast.Tuple(elts=[name(key_type_name), name(val_type_name)], ctx=ast.Load()),
                 ctx=ast.Load(),
             )
         self.ensure_all_locations(init_val, loc)
@@ -4998,9 +3745,7 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
 
         # Store annotation for dict iteration support
         self.variable_annotations[var_name] = annotation
-        self.known_variable_types[var_name] = (
-            "list" if func_name == "nondet_list" else "dict"
-        )
+        self.known_variable_types[var_name] = ("list" if func_name == "nondet_list" else "dict")
 
         # size = nondet_int();
         # assume(size >= 0);
@@ -5015,17 +3760,11 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         stmts.append(size_assign)
 
         for op_cls, bound in [(ast.GtE, const(0)), (ast.LtE, max_size_node)]:
-            assume_call = ast.Expr(
-                value=ast.Call(
-                    func=name("__ESBMC_assume"),
-                    args=[
-                        ast.Compare(
-                            left=name(size_var), ops=[op_cls()], comparators=[bound]
-                        )
-                    ],
-                    keywords=[],
-                )
-            )
+            assume_call = ast.Expr(value=ast.Call(
+                func=name("__ESBMC_assume"),
+                args=[ast.Compare(left=name(size_var), ops=[op_cls()], comparators=[bound])],
+                keywords=[],
+            ))
             self.ensure_all_locations(assume_call, loc)
             stmts.append(assume_call)
 
@@ -5041,15 +3780,11 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
 
         # Build the collection
         if func_name == "nondet_list":
-            append_call = ast.Expr(
-                value=ast.Call(
-                    func=ast.Attribute(
-                        value=name(var_name), attr="append", ctx=ast.Load()
-                    ),
-                    args=[call_node(elem_func)],
-                    keywords=[],
-                )
-            )
+            append_call = ast.Expr(value=ast.Call(
+                func=ast.Attribute(value=name(var_name), attr="append", ctx=ast.Load()),
+                args=[call_node(elem_func)],
+                keywords=[],
+            ))
             self.ensure_all_locations(append_call, loc)
 
             inc = ast.Assign(
@@ -5059,9 +3794,7 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
             self.ensure_all_locations(inc, loc)
 
             while_stmt = ast.While(
-                test=ast.Compare(
-                    left=name(idx_var), ops=[ast.Lt()], comparators=[name(size_var)]
-                ),
+                test=ast.Compare(left=name(idx_var), ops=[ast.Lt()], comparators=[name(size_var)]),
                 body=[append_call, inc],
                 orelse=[],
             )
@@ -5079,18 +3812,14 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
             # symbolic key insertion(would not be such time-consuming),
             # this can be replaced with a simple loop like nondet_list.
             max_entries = 8
-            if isinstance(max_size_node, ast.Constant) and isinstance(
-                max_size_node.value, int
-            ):
+            if isinstance(max_size_node, ast.Constant) and isinstance(max_size_node.value, int):
                 max_entries = max_size_node.value
 
             for entry_idx in range(max_entries):
                 concrete_key = self._make_concrete_key(key_type_name, entry_idx, loc)
                 dict_assign = ast.Assign(
                     targets=[
-                        ast.Subscript(
-                            value=name(var_name), slice=concrete_key, ctx=ast.Store()
-                        )
+                        ast.Subscript(value=name(var_name), slice=concrete_key, ctx=ast.Store())
                     ],
                     value=call_node(val_func),
                 )
@@ -5215,9 +3944,7 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         """
         import copy
 
-        target_name = (
-            node.target.id if isinstance(node.target, ast.Name) else "ESBMC_het_var"
-        )
+        target_name = (node.target.id if isinstance(node.target, ast.Name) else "ESBMC_het_var")
 
         class _RenameVar(ast.NodeTransformer):
             """Replace every Load-context Name(old) with Name(new)."""
@@ -5291,24 +4018,16 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
 
         base_var = subscript_node.value.id
 
-        if not (
-            hasattr(self, "variable_annotations")
-            and base_var in self.variable_annotations
-        ):
+        if not (hasattr(self, "variable_annotations") and base_var in self.variable_annotations):
             return None
 
         base_annotation = self.variable_annotations[base_var]
 
         # Extract value type from dict[K, V] annotation
         if isinstance(base_annotation, ast.Subscript):
-            if (
-                isinstance(base_annotation.value, ast.Name)
-                and base_annotation.value.id == "dict"
-            ):
-                if (
-                    isinstance(base_annotation.slice, ast.Tuple)
-                    and len(base_annotation.slice.elts) == 2
-                ):
+            if (isinstance(base_annotation.value, ast.Name) and base_annotation.value.id == "dict"):
+                if (isinstance(base_annotation.slice, ast.Tuple)
+                        and len(base_annotation.slice.elts) == 2):
                     return base_annotation.slice.elts[1]
 
         return None
@@ -5334,11 +4053,8 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         # import collections [as alias]
         if self.collections_module_imported and isinstance(func, ast.Attribute):
             module_name = self.collections_module_alias or "collections"
-            return (
-                isinstance(func.value, ast.Name)
-                and func.value.id == module_name
-                and func.attr == "defaultdict"
-            )
+            return (isinstance(func.value, ast.Name) and func.value.id == module_name
+                    and func.attr == "defaultdict")
         return False
 
     def _get_defaultdict_factory(self, call_node):
@@ -5365,9 +4081,7 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
             return factory
         return None
 
-    def _make_defaultdict_missing_check(
-        self, dict_name, key_node, factory_node, template
-    ):
+    def _make_defaultdict_missing_check(self, dict_name, key_node, factory_node, template):
         """Generate: if key not in dict: dict[key] = factory()
 
         Returns (stmts, key_expr) where:
@@ -5383,11 +4097,8 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         pre_stmts = []
         if isinstance(key_node, ast.Name) or isinstance(key_node, ast.Constant):
             key_load = ast.copy_location(
-                (
-                    ast.Name(id=key_node.id, ctx=ast.Load())
-                    if isinstance(key_node, ast.Name)
-                    else key_node
-                ),
+                (ast.Name(id=key_node.id, ctx=ast.Load())
+                 if isinstance(key_node, ast.Name) else key_node),
                 template,
             )
         else:
@@ -5453,17 +4164,13 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
             def visit_Subscript(self, node):
                 # Recurse into children first (handles nested subscripts).
                 self.generic_visit(node)
-                if not (
-                    isinstance(node.ctx, ast.Load)
-                    and isinstance(node.value, ast.Name)
-                    and node.value.id in outer._defaultdict_factory
-                ):
+                if not (isinstance(node.ctx, ast.Load) and isinstance(node.value, ast.Name)
+                        and node.value.id in outer._defaultdict_factory):
                     return node
                 dict_name = node.value.id
                 factory = outer._defaultdict_factory[dict_name]
                 stmts, key_expr = outer._make_defaultdict_missing_check(
-                    dict_name, node.slice, factory, template
-                )
+                    dict_name, node.slice, factory, template)
                 all_inits.extend(stmts)
                 node.slice = key_expr
                 return node
@@ -5473,13 +4180,9 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
 
     def _get_dict_expr_from_items_call(self, call_node):
         """If call_node is d.items() on a known dict, return the dict expression. Else None."""
-        if not (
-            isinstance(call_node, ast.Call)
-            and isinstance(call_node.func, ast.Attribute)
-            and call_node.func.attr == "items"
-            and not call_node.args
-            and not getattr(call_node, "keywords", [])
-        ):
+        if not (isinstance(call_node, ast.Call) and isinstance(call_node.func, ast.Attribute)
+                and call_node.func.attr == "items" and not call_node.args
+                and not getattr(call_node, "keywords", [])):
             return None
         base = call_node.func.value
         if isinstance(base, ast.Name):
@@ -5490,13 +4193,8 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
 
     def _get_items_dict_expr(self, node):
         """Return dict_expr if node is set(X) where X is a dict_items source, else None."""
-        if not (
-            isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Name)
-            and node.func.id == "set"
-            and len(node.args) == 1
-            and not getattr(node, "keywords", [])
-        ):
+        if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id
+                == "set" and len(node.args) == 1 and not getattr(node, "keywords", [])):
             return None
         arg = node.args[0]
         if isinstance(arg, ast.Name) and arg.id in self.dict_items_vars:
@@ -5591,8 +4289,7 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
                         left=lhs,
                         ops=[ast.Eq()],
                         comparators=[copy.deepcopy(value_node)],
-                    )
-                )
+                    ))
 
         result = ast.BoolOp(op=ast.And(), values=checks)
         self.ensure_all_locations(result, source_node)
@@ -5617,11 +4314,8 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         if isinstance(func, ast.Name):
             return func.id in self.newtype_names
         # import typing [as alias]  →  X = typing.NewType(...) / alias.NewType(...)
-        if (
-            isinstance(func, ast.Attribute)
-            and isinstance(func.value, ast.Name)
-            and func.attr == "NewType"
-        ):
+        if (isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name)
+                and func.attr == "NewType"):
             return func.value.id in self.typing_module_names
         return False
 
@@ -5631,19 +4325,13 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         """
         # Invalidate tracked list literals on subscript writes: l[i] = v
         for target in node.targets:
-            if (
-                isinstance(target, ast.Subscript)
-                and isinstance(target.value, ast.Name)
-                and target.value.id in self.list_literal_values
-            ):
+            if (isinstance(target, ast.Subscript) and isinstance(target.value, ast.Name)
+                    and target.value.id in self.list_literal_values):
                 self.list_literal_values.pop(target.value.id, None)
 
         # Check if this is a type alias assignment (e.g., Coordinate = Tuple[int, int])
-        if (
-            len(node.targets) == 1
-            and isinstance(node.targets[0], ast.Name)
-            and self._is_type_alias_expression(node.value)
-        ):
+        if (len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)
+                and self._is_type_alias_expression(node.value)):
             # Store the alias and skip execution (return None to remove from AST)
             alias_name = node.targets[0].id
             self.type_aliases[alias_name] = node.value
@@ -5656,28 +4344,18 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
             target_name = node.targets[0].id
             if self._is_assert_literal_shape(node.value):
                 self._known_literal_values[target_name] = copy.deepcopy(node.value)
-            elif (
-                isinstance(node.value, ast.Call)
-                and isinstance(node.value.func, ast.Name)
-                and node.value.func.id in self._identity_functions
-                and len(node.value.args) == 1
-                and not node.value.keywords
-                and self._is_assert_literal_shape(node.value.args[0])
-            ):
-                self._known_literal_values[target_name] = copy.deepcopy(
-                    node.value.args[0]
-                )
+            elif (isinstance(node.value, ast.Call) and isinstance(node.value.func, ast.Name)
+                  and node.value.func.id in self._identity_functions and len(node.value.args) == 1
+                  and not node.value.keywords
+                  and self._is_assert_literal_shape(node.value.args[0])):
+                self._known_literal_values[target_name] = copy.deepcopy(node.value.args[0])
             else:
                 self._known_literal_values.pop(target_name, None)
 
         # Expand nondet_list && nondet_dict calls inline.
-        if (
-            len(node.targets) == 1
-            and isinstance(node.targets[0], ast.Name)
-            and isinstance(node.value, ast.Call)
-            and isinstance(node.value.func, ast.Name)
-            and node.value.func.id in ("nondet_list", "nondet_dict")
-        ):
+        if (len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)
+                and isinstance(node.value, ast.Call) and isinstance(node.value.func, ast.Name)
+                and node.value.func.id in ("nondet_list", "nondet_dict")):
             expanded = self._expand_nondet_call(node.targets[0], node.value, node)
             if expanded is not None:
                 return expanded
@@ -5733,12 +4411,8 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
                 # NewType is an identity callable
                 # rewrite X = NewType('X', T) → X = T
                 # matches typing.NewType(...) and aliased imports
-                if (
-                    isinstance(target, ast.Name)
-                    and isinstance(node.value, ast.Call)
-                    and self._is_newtype_call(node.value)
-                    and len(node.value.args) >= 2
-                ):
+                if (isinstance(target, ast.Name) and isinstance(node.value, ast.Call)
+                        and self._is_newtype_call(node.value) and len(node.value.args) >= 2):
                     self.newtype_vars.add(target.id)
                     node.value = node.value.args[1]
                     ast.fix_missing_locations(node)
@@ -5748,12 +4422,9 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
                 # Simple assignment - track the type
                 # Detect bound method assignment: g = obj.method
                 # Only remove when g is actually called somewhere (g())
-                if (
-                    isinstance(target, ast.Name)
-                    and isinstance(node.value, ast.Attribute)
-                    and isinstance(node.value.value, ast.Name)
-                    and target.id in self.called_names
-                ):
+                if (isinstance(target, ast.Name) and isinstance(node.value, ast.Attribute)
+                        and isinstance(node.value.value, ast.Name)
+                        and target.id in self.called_names):
                     self.bound_method_vars[target.id] = node.value
                     return None  # Remove; call sites are rewritten in visit_Call
                 # Clear stale bound method tracking on variable reassignment
@@ -5762,9 +4433,7 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
                 self._update_variable_types_simple(target, node.value)
                 # Also store annotation node if we can infer it
                 if isinstance(target, ast.Name):
-                    annotation_node = self._create_annotation_node_from_value(
-                        node.value
-                    )
+                    annotation_node = self._create_annotation_node_from_value(node.value)
                     if annotation_node:
                         self.variable_annotations[target.id] = annotation_node
                         if isinstance(node.value, ast.Subscript):
@@ -5811,17 +4480,14 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
                             node.value = empty_dict
 
                 # Handle: val = x[key] where x is a defaultdict (subscript read)
-                if (
-                    isinstance(node.value, ast.Subscript)
-                    and isinstance(node.value.value, ast.Name)
-                    and node.value.value.id in self._defaultdict_factory
-                ):
+                if (isinstance(node.value, ast.Subscript)
+                        and isinstance(node.value.value, ast.Name)
+                        and node.value.value.id in self._defaultdict_factory):
                     dict_name = node.value.value.id
                     key_node = node.value.slice
                     factory = self._defaultdict_factory[dict_name]
                     init_stmts, key_expr = self._make_defaultdict_missing_check(
-                        dict_name, key_node, factory, node
-                    )
+                        dict_name, key_node, factory, node)
                     # Patch the original subscript to use the (possibly temp) key
                     # expression so a complex key like f() is evaluated only once.
                     node.value.slice = key_expr
@@ -5831,9 +4497,7 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
 
         # Handle multiple assignment: convert ans = i = 0 into separate assignments
         else:
-            has_tuple_target = any(
-                isinstance(t, (ast.Tuple, ast.List)) for t in node.targets
-            )
+            has_tuple_target = any(isinstance(t, (ast.Tuple, ast.List)) for t in node.targets)
             if has_tuple_target:
                 # Chained assignment with at least one tuple target: evaluate RHS exactly once.
                 # E.g., (x, y) = (u, v) = f()  →  _tmp = f(); (x, y) = _tmp; (u, v) = _tmp
@@ -5841,17 +4505,13 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
                 self.listcomp_counter += 1
                 tmp_store = ast.Name(id=tmp_name, ctx=ast.Store())
                 self._copy_location_info(node, tmp_store)
-                tmp_assign = self._create_individual_assignment(
-                    tmp_store, node.value, node
-                )
+                tmp_assign = self._create_individual_assignment(tmp_store, node.value, node)
                 ast.fix_missing_locations(tmp_assign)
                 tmp_load = ast.Name(id=tmp_name, ctx=ast.Load())
                 self._copy_location_info(node, tmp_load)
                 assignments = [tmp_assign]
                 for target in node.targets:
-                    sub_assign = self._create_individual_assignment(
-                        target, tmp_load, node
-                    )
+                    sub_assign = self._create_individual_assignment(target, tmp_load, node)
                     ast.fix_missing_locations(sub_assign)
                     if isinstance(target, ast.Name):
                         self._update_variable_types_simple(target, node.value)
@@ -5860,9 +4520,7 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
             else:
                 assignments = []
                 for target in node.targets:
-                    individual_assign = self._create_individual_assignment(
-                        target, node.value, node
-                    )
+                    individual_assign = self._create_individual_assignment(target, node.value, node)
                     self._update_variable_types_simple(target, node.value)
                     assignments.append(individual_assign)
                 return assignments
@@ -5878,15 +4536,12 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         node = self.generic_visit(node)
 
         if getattr(node, "value", None) is not None:
-            prefix, lowered_value, lowered_type = self._lower_listcomp_in_expr(
-                node.value
-            )
+            prefix, lowered_value, lowered_type = self._lower_listcomp_in_expr(node.value)
             node.value = lowered_value
             if prefix:
                 if not isinstance(node.target, ast.Name):
                     raise NotImplementedError(
-                        "Annotated list comprehension assignment requires a simple target name"
-                    )
+                        "Annotated list comprehension assignment requires a simple target name")
                 lowered_assign = ast.AnnAssign(
                     target=node.target,
                     annotation=node.annotation,
@@ -5915,11 +4570,8 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
             # Handle: d: dict = defaultdict(factory)  →  track factory, rewrite to d: dict = {}
             # Always rewrite any collections.defaultdict(...) call to {} so the
             # C++ backend never sees the call. Only record a factory when present.
-            if (
-                node.value is not None
-                and isinstance(node.value, ast.Call)
-                and self._is_defaultdict_call(node.value)
-            ):
+            if (node.value is not None and isinstance(node.value, ast.Call)
+                    and self._is_defaultdict_call(node.value)):
                 factory = self._get_defaultdict_factory(node.value)
                 if factory is not None:
                     self._defaultdict_factory[var_name] = factory
@@ -5929,18 +4581,14 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
                 node.value = empty_dict
 
         # Handle: v: T = d[key] where d is a defaultdict (subscript read)
-        if (
-            node.value is not None
-            and isinstance(node.value, ast.Subscript)
-            and isinstance(node.value.value, ast.Name)
-            and node.value.value.id in self._defaultdict_factory
-        ):
+        if (node.value is not None and isinstance(node.value, ast.Subscript)
+                and isinstance(node.value.value, ast.Name)
+                and node.value.value.id in self._defaultdict_factory):
             dict_name = node.value.value.id
             key_node = node.value.slice
             factory = self._defaultdict_factory[dict_name]
             init_stmts, key_expr = self._make_defaultdict_missing_check(
-                dict_name, key_node, factory, node
-            )
+                dict_name, key_node, factory, node)
             node.value.slice = key_expr
             return init_stmts + [node]
 
@@ -5953,14 +4601,10 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
             load_target = ast.Name(id=target.id, ctx=ast.Load())
         elif isinstance(target, ast.Subscript):
             # Reuse the same container/index with a Load context.
-            load_target = ast.Subscript(
-                value=target.value, slice=target.slice, ctx=ast.Load()
-            )
+            load_target = ast.Subscript(value=target.value, slice=target.slice, ctx=ast.Load())
         elif isinstance(target, ast.Attribute):
             # Preserve attribute access while switching to a Load context.
-            load_target = ast.Attribute(
-                value=target.value, attr=target.attr, ctx=ast.Load()
-            )
+            load_target = ast.Attribute(value=target.value, attr=target.attr, ctx=ast.Load())
         else:
             load_target = target
         return self.ensure_all_locations(load_target, source_node)
@@ -5968,11 +4612,8 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
     def visit_AugAssign(self, node):
         """Lower augmented assignment into a simple assignment."""
         # Invalidate tracked list literals on subscript writes: l[i] op= v
-        if (
-            isinstance(node.target, ast.Subscript)
-            and isinstance(node.target.value, ast.Name)
-            and node.target.value.id in self.list_literal_values
-        ):
+        if (isinstance(node.target, ast.Subscript) and isinstance(node.target.value, ast.Name)
+                and node.target.value.id in self.list_literal_values):
             self.list_literal_values.pop(node.target.value.id, None)
 
         # Transform children first so nested expressions are already lowered.
@@ -5985,16 +4626,13 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         # Handle: x[key] op= val where x is a defaultdict
         # Insert missing-key check before the augmented assignment
         pre_stmts = []
-        if (
-            isinstance(node.target.value, ast.Name)
-            and node.target.value.id in self._defaultdict_factory
-        ):
+        if (isinstance(node.target.value, ast.Name)
+                and node.target.value.id in self._defaultdict_factory):
             dict_name = node.target.value.id
             key_node = node.target.slice
             factory = self._defaultdict_factory[dict_name]
             pre_stmts, key_expr = self._make_defaultdict_missing_check(
-                dict_name, key_node, factory, node
-            )
+                dict_name, key_node, factory, node)
             # Patch the augmented-assignment target to use the (possibly temp)
             # key expression so a complex key like f() is evaluated only once.
             node.target.slice = key_expr
@@ -6028,12 +4666,9 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
             "reverse",
             "sort",
         }
-        if (
-            isinstance(node.func, ast.Attribute)
-            and isinstance(node.func.value, ast.Name)
-            and node.func.attr in _MUTATING_LIST_METHODS
-            and node.func.value.id in self.list_literal_values
-        ):
+        if (isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name)
+                and node.func.attr in _MUTATING_LIST_METHODS
+                and node.func.value.id in self.list_literal_values):
             self.list_literal_values.pop(node.func.value.id, None)
 
         # Conservatively invalidate tracked list literals when passed as an
@@ -6075,20 +4710,14 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
             "type",
             "zip",
         }
-        if not (
-            isinstance(node.func, ast.Name) and node.func.id in _PURE_LIST_CONSUMERS
-        ):
+        if not (isinstance(node.func, ast.Name) and node.func.id in _PURE_LIST_CONSUMERS):
             for arg in list(node.args) + [kw.value for kw in node.keywords]:
                 if isinstance(arg, ast.Name) and arg.id in self.list_literal_values:
                     self.list_literal_values.pop(arg.id, None)
 
         # NewType is an identity callable: X(v) → v
-        if (
-            isinstance(node.func, ast.Name)
-            and node.func.id in self.newtype_vars
-            and len(node.args) == 1
-            and not node.keywords
-        ):
+        if (isinstance(node.func, ast.Name) and node.func.id in self.newtype_vars
+                and len(node.args) == 1 and not node.keywords):
             return self.visit(node.args[0])
 
         rewritten = self._rewrite_dataclass_api_call(node)
@@ -6107,11 +4736,8 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         if self.decimal_class_alias:
             decimal_names.add(self.decimal_class_alias)
 
-        if (
-            self.decimal_imported
-            and isinstance(node.func, ast.Name)
-            and node.func.id in decimal_names
-        ):
+        if (self.decimal_imported and isinstance(node.func, ast.Name)
+                and node.func.id in decimal_names):
             is_decimal_call = True
             if node.func.id != "Decimal":
                 node.func = ast.Name(id="Decimal", ctx=ast.Load())
@@ -6119,19 +4745,14 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
             module_names = {"decimal"}
             if self.decimal_module_alias:
                 module_names.add(self.decimal_module_alias)
-            if (
-                isinstance(node.func.value, ast.Name)
-                and node.func.value.id in module_names
-                and node.func.attr == "Decimal"
-            ):
+            if (isinstance(node.func.value, ast.Name) and node.func.value.id in module_names
+                    and node.func.attr == "Decimal"):
                 is_decimal_call = True
                 node.func = ast.Name(id="Decimal", ctx=ast.Load())
 
         if is_decimal_call:
             if node.keywords:
-                raise NotImplementedError(
-                    "Decimal() with keyword arguments is not supported"
-                )
+                raise NotImplementedError("Decimal() with keyword arguments is not supported")
             import decimal as _decimal_mod
 
             if len(node.args) == 0:
@@ -6140,20 +4761,14 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
                 arg = node.args[0]
                 if isinstance(arg, ast.Constant):
                     d = _decimal_mod.Decimal(arg.value)
-                elif (
-                    isinstance(arg, ast.UnaryOp)
-                    and isinstance(arg.op, ast.USub)
-                    and isinstance(arg.operand, ast.Constant)
-                ):
+                elif (isinstance(arg, ast.UnaryOp) and isinstance(arg.op, ast.USub)
+                      and isinstance(arg.operand, ast.Constant)):
                     d = _decimal_mod.Decimal(-arg.operand.value)
                 else:
                     raise NotImplementedError(
-                        "Decimal() with non-constant arguments is not supported"
-                    )
+                        "Decimal() with non-constant arguments is not supported")
             else:
-                raise NotImplementedError(
-                    "Decimal() with multiple arguments is not supported"
-                )
+                raise NotImplementedError("Decimal() with multiple arguments is not supported")
 
             t = d.as_tuple()
             sign = t.sign
@@ -6190,20 +4805,13 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
             return node
 
         # Transformation for int.from_bytes calls
-        if (
-            isinstance(node.func, ast.Attribute)
-            and isinstance(node.func.value, ast.Name)
-            and node.func.value.id == "int"
-            and node.func.attr == "from_bytes"
-        ):
+        if (isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name)
+                and node.func.value.id == "int" and node.func.attr == "from_bytes"):
             # Replace 'big' argument with True and anything else with False
             # Only process if there are enough arguments, MacOS has different AST nodes for 'big'
             if len(node.args) > 1:
                 # Check for both ast.Str and ast.Constant
-                if (
-                    isinstance(node.args[1], ast.Constant)
-                    and node.args[1].value == "big"
-                ):
+                if (isinstance(node.args[1], ast.Constant) and node.args[1].value == "big"):
                     node.args[1] = ast.Constant(value=True)
                 else:
                     node.args[1] = ast.Constant(value=False)
@@ -6222,11 +4830,9 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
                 var_name = node.func.value.id
                 # If this variable/module is not defined in our known variables or function params,
                 # we can't validate the call: let it pass through for runtime error
-                if (
-                    var_name not in self.known_variable_types
-                    and var_name not in self.functionParams
-                    and not hasattr(__builtins__, var_name)
-                ):
+                if (var_name not in self.known_variable_types
+                        and var_name not in self.functionParams
+                        and not hasattr(__builtins__, var_name)):
                     self.generic_visit(node)
                     return node
 
@@ -6280,17 +4886,12 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         # Check for missing keyword-only arguments FIRST (before checking positional arg count)
         missing_kwonly = []
         for kwarg in kwonlyArgs:
-            if (
-                kwarg not in keywords
-                and (functionName, kwarg) not in self.functionDefaults
-            ):
+            if (kwarg not in keywords and (functionName, kwarg) not in self.functionDefaults):
                 missing_kwonly.append(kwarg)
 
         if missing_kwonly:
             # Use just the method name for error messages
-            display_name = (
-                functionName.split(".")[-1] if "." in functionName else functionName
-            )
+            display_name = (functionName.split(".")[-1] if "." in functionName else functionName)
             if len(missing_kwonly) == 1:
                 raise TypeError(
                     f"{display_name}() missing 1 required keyword-only argument: '{missing_kwonly[0]}'"
@@ -6304,9 +4905,7 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         # Check for too many positional arguments
         if len(node.args) > len(expectedArgs):
             # Count how many parameters can accept positional args (non-keyword-only)
-            display_name = (
-                functionName.split(".")[-1] if "." in functionName else functionName
-            )
+            display_name = (functionName.split(".")[-1] if "." in functionName else functionName)
             # For __init__, include 'self' in the count for error message
             if display_name == "__init__":
                 total_params = len(expectedArgs) + 1  # +1 for 'self'
@@ -6317,15 +4916,13 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
 
             raise TypeError(
                 f"{display_name}() takes {total_params} positional argument{'s' if total_params != 1 else ''} "
-                f"but {total_given} {'were' if total_given != 1 else 'was'} given"
-            )
+                f"but {total_given} {'were' if total_given != 1 else 'was'} given")
 
         # Check for conflicts between positional and keyword arguments
         for i in range(len(node.args)):
             if i < len(expectedArgs) and expectedArgs[i] in keywords:
-                display_name = (
-                    functionName.split(".")[-1] if "." in functionName else functionName
-                )
+                display_name = (functionName.split(".")[-1]
+                                if "." in functionName else functionName)
                 raise SyntaxError(
                     f"Multiple values for argument '{expectedArgs[i]}'",
                     (self.module_name, node.lineno, node.col_offset, ""),
@@ -6334,23 +4931,18 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         # First, collect all missing required arguments
         missing_args = []
         for i in range(len(node.args), len(expectedArgs)):
-            if (
-                expectedArgs[i] not in keywords
-                and (functionName, expectedArgs[i]) not in self.functionDefaults
-            ):
+            if (expectedArgs[i] not in keywords
+                    and (functionName, expectedArgs[i]) not in self.functionDefaults):
                 missing_args.append(expectedArgs[i])
 
         # Use just the method name for error messages
-        display_name = (
-            functionName.split(".")[-1] if "." in functionName else functionName
-        )
+        display_name = (functionName.split(".")[-1] if "." in functionName else functionName)
 
         # If there are missing arguments, raise TypeError before processing defaults
         if missing_args:
             if len(missing_args) == 1:
                 raise TypeError(
-                    f"{display_name}() missing 1 required positional argument: '{missing_args[0]}'"
-                )
+                    f"{display_name}() missing 1 required positional argument: '{missing_args[0]}'")
             else:
                 args_str = " and ".join([f"'{arg}'" for arg in missing_args])
                 raise TypeError(
@@ -6381,13 +4973,10 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         node = self._rewrite_humaneval_20_none_sentinel(node)
 
         # Track `def f(x): return x` style pure identity helpers.
-        if (
-            len(node.args.args) == 1
-            and len(node.body) == 1
-            and isinstance(node.body[0], ast.Return)
-            and isinstance(node.body[0].value, ast.Name)
-            and node.body[0].value.id == node.args.args[0].arg
-        ):
+        if (len(node.args.args) == 1 and len(node.body) == 1
+                and isinstance(node.body[0], ast.Return)
+                and isinstance(node.body[0].value, ast.Name)
+                and node.body[0].value.id == node.args.args[0].arg):
             self._identity_functions.add(node.name)
 
         # Resolve type aliases in return type annotation
@@ -6401,22 +4990,18 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
 
         if node.args.vararg and node.args.vararg.annotation is not None:
             node.args.vararg.annotation = self._resolve_annotation_aliases(
-                node.args.vararg.annotation
-            )
+                node.args.vararg.annotation)
 
         if node.args.kwarg and node.args.kwarg.annotation is not None:
             node.args.kwarg.annotation = self._resolve_annotation_aliases(
-                node.args.kwarg.annotation
-            )
+                node.args.kwarg.annotation)
 
         for arg in node.args.kwonlyargs:
             if arg.annotation is not None:
                 arg.annotation = self._resolve_annotation_aliases(arg.annotation)
 
         # Detect generator functions: any function that contains yield
-        is_generator = any(
-            isinstance(n, (ast.Yield, ast.YieldFrom)) for n in ast.walk(node)
-        )
+        is_generator = any(isinstance(n, (ast.Yield, ast.YieldFrom)) for n in ast.walk(node))
         if is_generator:
             # Recursive generators cannot be inlined: transform them to an
             # accumulate-and-return function so ESBMC can verify them via
@@ -6457,9 +5042,7 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         self.functionParams[qualified_name] = [i.arg for i in node.args.args]
 
         # Store keyword-only parameters
-        self.functionKwonlyParams[qualified_name] = [
-            i.arg for i in node.args.kwonlyargs
-        ]
+        self.functionKwonlyParams[qualified_name] = [i.arg for i in node.args.kwonlyargs]
 
         # escape early if no defaults defined
         if len(node.args.defaults) < 1 and len(node.args.kw_defaults) < 1:
@@ -6475,21 +5058,16 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
             arg_index = len(node.args.args) - i
             if arg_index >= 0:
                 if isinstance(node.args.defaults[-i], ast.Constant):
-                    self.functionDefaults[(qualified_name, node.args.args[-i].arg)] = (
-                        node.args.defaults[-i].value
-                    )
+                    self.functionDefaults[(qualified_name,
+                                           node.args.args[-i].arg)] = (node.args.defaults[-i].value)
                 elif isinstance(node.args.defaults[-i], ast.Name):
                     assignment_node, target_var = self.generate_variable_copy(
-                        qualified_name, node.args.args[-i], node.args.defaults[-i]
-                    )
-                    self.functionDefaults[(qualified_name, node.args.args[-i].arg)] = (
-                        target_var
-                    )
+                        qualified_name, node.args.args[-i], node.args.defaults[-i])
+                    self.functionDefaults[(qualified_name, node.args.args[-i].arg)] = (target_var)
                     return_nodes.append(assignment_node)
                 else:
-                    self.functionDefaults[(qualified_name, node.args.args[-i].arg)] = (
-                        node.args.defaults[-i]
-                    )
+                    self.functionDefaults[(qualified_name,
+                                           node.args.args[-i].arg)] = (node.args.defaults[-i])
 
         # Handle keyword-only defaults
         for i, default in enumerate(node.args.kw_defaults):
@@ -6499,8 +5077,7 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
                     self.functionDefaults[(qualified_name, kwarg_name)] = default.value
                 elif isinstance(default, ast.Name):
                     assignment_node, target_var = self.generate_variable_copy(
-                        qualified_name, node.args.kwonlyargs[i], default
-                    )
+                        qualified_name, node.args.kwonlyargs[i], default)
                     self.functionDefaults[(qualified_name, kwarg_name)] = target_var
                     return_nodes.append(assignment_node)
                 else:
@@ -6536,13 +5113,9 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         closest_idx = None
         distance_idx = None
         for i, stmt in enumerate(body):
-            if (
-                isinstance(stmt, ast.Assign)
-                and len(stmt.targets) == 1
-                and isinstance(stmt.targets[0], ast.Name)
-                and isinstance(stmt.value, ast.Constant)
-                and stmt.value.value is None
-            ):
+            if (isinstance(stmt, ast.Assign) and len(stmt.targets) == 1
+                    and isinstance(stmt.targets[0], ast.Name)
+                    and isinstance(stmt.value, ast.Constant) and stmt.value.value is None):
                 if stmt.targets[0].id == "closest_pair":
                     closest_idx = i
                 elif stmt.targets[0].id == "distance":
@@ -6580,7 +5153,8 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
                         func=ast.Name(id="sorted", ctx=ast.Load()),
                         args=[
                             ast.List(
-                                elts=[ast.Constant(value=0.0), ast.Constant(value=0.0)],
+                                elts=[ast.Constant(value=0.0),
+                                      ast.Constant(value=0.0)],
                                 ctx=ast.Load(),
                             )
                         ],
@@ -6607,29 +5181,23 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         body.insert(insert_at, init_flag_assign)
 
         class _SentinelRewriter(ast.NodeTransformer):
+
             def visit_If(self, if_node):
                 self.generic_visit(if_node)
                 test = if_node.test
-                if (
-                    isinstance(test, ast.Compare)
-                    and len(test.ops) == 1
-                    and isinstance(test.ops[0], ast.Is)
-                    and isinstance(test.left, ast.Name)
-                    and test.left.id == "distance"
-                    and len(test.comparators) == 1
-                    and isinstance(test.comparators[0], ast.Constant)
-                    and test.comparators[0].value is None
-                ):
-                    if_node.test = ast.UnaryOp(
-                        op=ast.Not(), operand=ast.Name(id=init_flag_name, ctx=ast.Load())
-                    )
+                if (isinstance(test, ast.Compare) and len(test.ops) == 1
+                        and isinstance(test.ops[0], ast.Is) and isinstance(test.left, ast.Name)
+                        and test.left.id == "distance" and len(test.comparators) == 1
+                        and isinstance(test.comparators[0], ast.Constant)
+                        and test.comparators[0].value is None):
+                    if_node.test = ast.UnaryOp(op=ast.Not(),
+                                               operand=ast.Name(id=init_flag_name, ctx=ast.Load()))
                     if_node.body.append(
                         ast.Assign(
                             targets=[ast.Name(id=init_flag_name, ctx=ast.Store())],
                             value=ast.Constant(value=True),
                             type_comment=None,
-                        )
-                    )
+                        ))
                     ast.fix_missing_locations(if_node)
                 return if_node
 
@@ -6655,14 +5223,10 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         if not hasattr(self, "_exit_suppresses_all"):
             self._exit_suppresses_all = set()
         for member in class_node.body:
-            if (
-                isinstance(member, ast.FunctionDef)
-                and member.name == "__exit__"
-                and len(member.body) == 1
-                and isinstance(member.body[0], ast.Return)
-                and isinstance(member.body[0].value, ast.Constant)
-                and member.body[0].value.value is True
-            ):
+            if (isinstance(member, ast.FunctionDef) and member.name == "__exit__"
+                    and len(member.body) == 1 and isinstance(member.body[0], ast.Return)
+                    and isinstance(member.body[0].value, ast.Constant)
+                    and member.body[0].value.value is True):
                 self._exit_suppresses_all.add(class_node.name)
                 return
 
@@ -6671,20 +5235,14 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
         for item in class_node.body:
             if isinstance(item, ast.FunctionDef) and item.name == "__init__":
                 for stmt in item.body:
-                    if (
-                        isinstance(stmt, ast.AnnAssign)
-                        and isinstance(stmt.target, ast.Attribute)
-                        and isinstance(stmt.target.value, ast.Name)
-                        and stmt.target.value.id == "self"
-                        and stmt.annotation is not None
-                    ):
+                    if (isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Attribute)
+                            and isinstance(stmt.target.value, ast.Name)
+                            and stmt.target.value.id == "self" and stmt.annotation is not None):
                         class_name = class_node.name
                         attr_name = stmt.target.attr
                         if class_name not in self.class_attr_annotations:
                             self.class_attr_annotations[class_name] = {}
-                        self.class_attr_annotations[class_name][
-                            attr_name
-                        ] = stmt.annotation
+                        self.class_attr_annotations[class_name][attr_name] = stmt.annotation
 
     def visit_ImportFrom(self, node):
         if node.module == "decimal":
@@ -6708,9 +5266,7 @@ class Preprocessor(DataclassMixin, ast.NodeTransformer):
                 elif alias.name == "InitVar":
                     self._dataclass_initvar_names.add(alias.asname or "InitVar")
                 elif alias.name == "is_dataclass":
-                    self._dataclass_is_dataclass_names.add(
-                        alias.asname or "is_dataclass"
-                    )
+                    self._dataclass_is_dataclass_names.add(alias.asname or "is_dataclass")
                 elif alias.name == "fields":
                     self._dataclass_fields_api_names.add(alias.asname or "fields")
                 elif alias.name == "asdict":
