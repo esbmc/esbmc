@@ -350,6 +350,13 @@ bool parse_init(
   while (it != begin)
   {
     --it;
+    // A goto-target instruction between begin and loop_head means
+    // another CFG predecessor can reach loop_head without flowing
+    // through our textually-nearest init ASSIGN. Committing to the
+    // init we'd find here would silently drop the other path's value.
+    // Bail to keep the rewrite sound.
+    if (it->is_target())
+      return false;
     if (it->is_location() || it->is_skip() || it->is_decl() || it->type == DEAD)
       continue;
     if (!it->is_assign())
