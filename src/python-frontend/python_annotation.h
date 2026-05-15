@@ -720,11 +720,13 @@ private:
   }
 
   // For a class @p class_name defining __getitem__/__setitem__, return the
-  // synthesised element types ("slice" repeated N times) for a
-  // `tuple[slice, ...]` annotation when a multi-axis subscript usage
-  // `instance[a, b, ...]` exists in the AST whose `instance` is
-  // module-scope-annotated as @p class_name and every tuple element is
-  // slice-producing. Returns empty when no qualifying subscript exists.
+  // synthesised per-element type names for a `tuple[T1, T2, ...]` annotation
+  // when a multi-axis subscript usage `instance[a, b, ...]` exists in the AST
+  // whose `instance` is module-scope-annotated as @p class_name. Slice and
+  // scalar elements are both supported, including all-scalar shapes
+  // (GitHub #4542). Returns empty when no qualifying subscript exists, when
+  // any element's type cannot be inferred, or when sites disagree on arity
+  // or per-position element types.
   std::vector<std::string>
   infer_subscript_key_tuple_types(const std::string &class_name)
   {
@@ -749,37 +751,31 @@ private:
       }
     }
 
-    // Unanimous-wins: only commit when every tuple-shaped Subscript on
-    // instances of class_name is all-slices and has the same arity. A
-    // single heterogeneous site (e.g. `t[0, 1]`) abandons the synthesis so
-    // the existing void* default keeps working for that call site.
-    bool any_match = false;
+    // Unanimous-wins on per-position element types. The first qualifying
+    // site fixes the expected type vector; any later site that disagrees on
+    // arity or on a per-position type abandons synthesis so the existing
+    // void* default keeps working for those call sites.
     bool any_reject = false;
-    size_t arity = 0;
+    std::vector<std::string> expected;
     visit_class_tuple_subscripts(
       ast_, class_name, var_to_class, [&](const Json &elts) {
         if (any_reject)
           return;
-        if (!all_elements_are_slices(elts))
+        std::vector<std::string> types = infer_tuple_element_types(elts);
+        if (types.empty())
         {
           any_reject = true;
           return;
         }
-        if (!any_match)
-        {
-          arity = elts.size();
-          any_match = true;
-        }
-        else if (elts.size() != arity)
-        {
+        if (expected.empty())
+          expected = std::move(types);
+        else if (expected != types)
           any_reject = true;
-        }
       });
 
-    std::vector<std::string> result;
-    if (any_match && !any_reject)
-      result.assign(arity, "slice");
-    return result;
+    if (any_reject)
+      return {};
+    return expected;
   }
 
   // Walk @p node and invoke @p visit(elts) for every Subscript whose value
@@ -819,26 +815,40 @@ private:
     }
   }
 
-  // Returns true when every element of @p elts is a Slice literal or a
-  // `slice(...)` builtin call — i.e. produces a __ESBMC_PySliceObj at the
-  // call site. Used to guard tuple-of-slices key inference.
-  static bool all_elements_are_slices(const Json &elts)
+  // Resolve each element of @p elts to a Python type name suitable for a
+  // synthesised `tuple[...]` annotation. Slice literals and `slice(...)`
+  // calls map to "slice"; scalars and other expressions are routed through
+  // get_argument_type(). Returns an empty vector when any element resolves
+  // to "" or "Any" — bailing keeps the synthesised callee struct consistent
+  // with whatever the caller actually builds at the subscript site.
+  std::vector<std::string> infer_tuple_element_types(const Json &elts)
   {
+    std::vector<std::string> types;
+    types.reserve(elts.size());
     for (const Json &elt : elts)
     {
       if (!elt.contains("_type"))
-        return false;
+        return {};
       const std::string &t = elt["_type"];
       if (t == "Slice")
+      {
+        types.emplace_back("slice");
         continue;
+      }
       if (
         t == "Call" && elt.contains("func") && elt["func"].is_object() &&
         elt["func"].contains("_type") && elt["func"]["_type"] == "Name" &&
         elt["func"].contains("id") && elt["func"]["id"] == "slice")
+      {
+        types.emplace_back("slice");
         continue;
-      return false;
+      }
+      std::string resolved = get_argument_type(elt);
+      if (resolved.empty() || resolved == "Any")
+        return {};
+      types.push_back(std::move(resolved));
     }
-    return true;
+    return types;
   }
 
   // Method to find all function calls to a specific function
@@ -1278,6 +1288,8 @@ private:
       }
       return "";
     }
+    else if (arg["_type"] == "Slice")
+      return "slice";
     else if (arg["_type"] == "UnaryOp")
     {
       // Handle unary operations like -5, +3, not True
