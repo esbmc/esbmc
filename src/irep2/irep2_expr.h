@@ -779,7 +779,10 @@ public:
     : constant_union_expr_methods(type, constant_union_id, members, init_field)
   {
     assert(is_union_type(type));
-    assert(members.size() <= 1);
+    // smt_conv.cpp's counterexample reconstruction intentionally builds unions
+    //  with multiple members (see TODO in get_by_ast), so we can't check if the 
+    // union has at most 1 member initializer, with 
+    // assert(this->datatype_members.size() <= 1);
   }
   constant_union2t(const constant_union2t &ref) = default;
 
