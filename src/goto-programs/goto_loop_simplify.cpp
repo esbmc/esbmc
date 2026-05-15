@@ -631,20 +631,21 @@ bool simplify_function_once(goto_functiont &fn)
     if (!body_is_safe(body_first, loop_exit, loop_head, modified))
       continue;
 
-    // Path 1: every modified var dies immediately after the loop.
-    // Loop has no observable effect — erase it entirely.
-    if (modified_vars_die_immediately(
-          after_loop, body.instructions.end(), modified))
+    // Path 1: empty-body top-test loop whose modified set is empty
+    // (vacuously dying) — rewrite the head to assume(exit_guard) and
+    // SKIP the rest. Sound because an empty body cannot change the
+    // exit guard's truth value, so the value at exit equals the value
+    // at entry. Non-empty bodies (even if their modified vars die)
+    // are NOT erased here: the loop's termination and post-state are
+    // both observable, and a syntactic "vars die" check proves
+    // neither. Counter patterns get the precise rewrite via Path 2.
+    if (
+      modified.empty() && !is_dowhile &&
+      modified_vars_die_immediately(
+        after_loop, body.instructions.end(), modified))
     {
-      if (modified.empty() && !is_dowhile)
-      {
-        loop_head->make_assumption(exit_guard);
-        erase_loop(std::next(loop_head), loop_exit);
-      }
-      else
-      {
-        erase_loop(loop_head, loop_exit);
-      }
+      loop_head->make_assumption(exit_guard);
+      erase_loop(std::next(loop_head), loop_exit);
       changed = true;
       continue;
     }
