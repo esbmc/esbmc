@@ -1,5 +1,6 @@
 import cmath
 import math
 
-r, p = cmath.polar(complex(-3.0, -4.0))
-assert True
+r, p = cmath.polar(complex(float('nan'), 1.0))
+assert r != r
+assert p != p

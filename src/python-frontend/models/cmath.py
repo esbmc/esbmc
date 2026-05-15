@@ -29,8 +29,6 @@ _LN10: float = 2.302585092994046
 
 
 def phase(z: complex) -> float:
-    if z.real == 0.0 and z.imag == 0.0:
-        return 0.0
     return math.atan2(z.imag, z.real)
 
 
