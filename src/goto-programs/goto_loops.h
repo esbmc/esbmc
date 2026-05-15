@@ -54,9 +54,7 @@ protected:
     function_summaryt &out);
 
   /// Collect the leaf symbols of `expr` into `out`, applying check_var_name.
-  void collect_loop_symbols(
-    const expr2tc &expr,
-    loopst::loop_varst &out) const;
+  void collect_loop_symbols(const expr2tc &expr, loopst::loop_varst &out) const;
 
   void add_modified_var(loopst &loop, const expr2tc &expr);
   void add_unmodified_var(loopst &loop, const expr2tc &expr);

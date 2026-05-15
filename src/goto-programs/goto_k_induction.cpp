@@ -123,8 +123,7 @@ bool goto_k_inductiont::get_entry_cond_rec(
       // only `reaches` lost these guards on every cache hit and silently
       // weakened the entry-condition assume.
       guards.insert(
-        it->second.guards_to_merge.begin(),
-        it->second.guards_to_merge.end());
+        it->second.guards_to_merge.begin(), it->second.guards_to_merge.end());
       return it->second.reaches;
     }
 
