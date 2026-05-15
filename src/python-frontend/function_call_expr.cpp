@@ -5609,7 +5609,15 @@ exprt function_call_expr::handle_general_function_call()
   size_t arg_index = 0;
   for (const auto &arg_node : call_["args"])
   {
+    // An argument expression does not bind to the outer assignment's LHS.
+    // Clearing `current_lhs` while evaluating each argument prevents inner
+    // constructor calls (e.g. `f(A())`) from using an unrelated LHS as their
+    // `self` storage; they will allocate a `$ctor_self$` temp instead
+    // (GitHub #4552).
+    exprt *saved_lhs = converter_.current_lhs;
+    converter_.current_lhs = nullptr;
     exprt arg = converter_.get_expr(arg_node);
+    converter_.current_lhs = saved_lhs;
 
     // A function name passed as an argument decays to a function pointer,
     // mirroring C's implicit function-to-pointer conversion.
