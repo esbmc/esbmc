@@ -591,8 +591,7 @@ TEST_CASE(
 
   SECTION("decodes array chars wrapped by constant-guard if expressions")
   {
-    const typet arr_t =
-      array_typet(char_type(), from_integer(3, size_type()));
+    const typet arr_t = array_typet(char_type(), from_integer(3, size_type()));
     exprt value("array", arr_t);
     value.copy_to_operands(
       if_exprt(true_exprt(), make_char('4'), make_char('8')),
@@ -611,11 +610,11 @@ TEST_CASE(
 
   SECTION("returns nullopt for unresolved symbolic branch with different chars")
   {
-    const typet arr_t =
-      array_typet(char_type(), from_integer(2, size_type()));
+    const typet arr_t = array_typet(char_type(), from_integer(2, size_type()));
     exprt value("array", arr_t);
     value.copy_to_operands(
-      if_exprt(symbol_exprt("cond", bool_typet()), make_char('4'), make_char('7')),
+      if_exprt(
+        symbol_exprt("cond", bool_typet()), make_char('4'), make_char('7')),
       make_char('\0'));
 
     symbolt sym;
