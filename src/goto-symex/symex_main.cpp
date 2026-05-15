@@ -195,6 +195,32 @@ bool goto_symext::is_assume_false(const expr2tc &assumption)
   return is_false(assumption);
 }
 
+void goto_symext::propagate_assume_equality(const expr2tc &the_assumption)
+{
+  expr2tc c = the_assumption;
+  while (is_typecast2t(c))
+    c = to_typecast2t(c).from;
+
+  if (!is_equality2t(c))
+    return;
+
+  const equality2t &eq = to_equality2t(c);
+  expr2tc lhs = eq.side_1;
+  expr2tc rhs = eq.side_2;
+
+  // IEEE-754 +0.0 and -0.0 compare equal but have distinct bit
+  // patterns; propagating either would mask signbit-sensitive bugs.
+  auto is_fp_zero = [](const expr2tc &e)
+  {
+    return is_constant_floatbv2t(e) && to_constant_floatbv2t(e).value.is_zero();
+  };
+
+  if (is_symbol2t(lhs) && is_constant_expr(rhs) && !is_fp_zero(rhs))
+    cur_state->assignment(lhs, rhs);
+  else if (is_symbol2t(rhs) && is_constant_expr(lhs) && !is_fp_zero(lhs))
+    cur_state->assignment(rhs, lhs);
+}
+
 void goto_symext::assume(const expr2tc &the_assumption)
 {
   expr2tc assumption = the_assumption;
@@ -508,33 +534,7 @@ void goto_symext::symex_assume()
   replace_dynamic_allocation(cond);
 
   assume(cond);
-  expr2tc c = cond;
-  // Recursively remove typecast
-  while (is_typecast2t(c))
-    c = to_typecast2t(c).from;
-
-  // Hack for assume, which allows us to take advantage
-  // of constant propagation in some cases
-  if (is_equality2t(c))
-  {
-    // In the IEEE-754 floating-point number semantics,
-    // there can be situations where the numerical comparison is equal,
-    // but the internal bit patterns are different: +0.0 and -0.0
-
-    // We don't perform constant propagation on it.
-    expr2tc lhs = to_equality2t(c).side_1;
-    expr2tc rhs = to_equality2t(c).side_2;
-    if (
-      is_symbol2t(lhs) && is_constant_expr(rhs) &&
-      !(is_constant_floatbv2t(rhs) &&
-        to_constant_floatbv2t(rhs).value.is_zero()))
-      cur_state->assignment(lhs, rhs);
-    else if (
-      is_symbol2t(rhs) && is_constant_expr(lhs) &&
-      !(is_constant_floatbv2t(lhs) &&
-        to_constant_floatbv2t(lhs).value.is_zero()))
-      cur_state->assignment(rhs, lhs);
-  }
+  propagate_assume_equality(cond);
 }
 
 void goto_symext::symex_assert()
