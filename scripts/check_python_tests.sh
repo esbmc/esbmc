@@ -66,6 +66,8 @@ ignored_dirs=(
   "github_3563_3"
   "github_3769"
   "github_4149"
+  "github_4548_floordiv_call_arg"
+  "github_4548_floordiv_negative"
   "global"
   "infer-func-no-return_fail"
   "integer_squareroot_fail"
