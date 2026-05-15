@@ -1,4 +1,5 @@
 import ast
+# pylint: disable=too-many-boolean-expressions
 
 
 class FunctionSentinelMixin:
@@ -81,7 +82,7 @@ class FunctionSentinelMixin:
 
         class _SentinelRewriter(ast.NodeTransformer):
 
-            def visit_If(self, if_node):
+            def visit_If(self, if_node):  # pylint: disable=too-many-boolean-expressions
                 self.generic_visit(if_node)
                 test = if_node.test
                 if (isinstance(test, ast.Compare) and len(test.ops) == 1

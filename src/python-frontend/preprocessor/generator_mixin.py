@@ -7,6 +7,7 @@ methods.
 """
 import ast
 import copy
+# pylint: disable=too-many-locals,too-many-branches,too-many-statements
 import sys
 
 
@@ -793,7 +794,7 @@ class GeneratorMixin:
         result_type = self._infer_type_from_value(new_expr)
         return lowerer.statements, new_expr, result_type
 
-    def _lower_sorted_with_key_call(self, call_node):
+    def _lower_sorted_with_key_call(self, call_node):  # pylint: disable=too-many-branches
         """Lower sorted(iterable, key=lambda x: x[K]) for literal-list iterables."""
         if not (isinstance(call_node, ast.Call) and isinstance(call_node.func, ast.Name)
                 and call_node.func.id == "sorted" and len(call_node.args) == 1):
@@ -852,7 +853,8 @@ class GeneratorMixin:
         ast.fix_missing_locations(folded_sorted)
         return [], folded_sorted
 
-    def _lower_min_max_with_key_call(self, call_node):  # pylint: disable=too-many-return-statements
+    def _lower_min_max_with_key_call(
+            self, call_node):  # pylint: disable=too-many-return-statements,too-many-locals,too-many-branches
         """Lower min/max(iterable, key=lambda x: x[K]) for literal-list iterables.
 
         Mirrors _lower_sorted_with_key_call: handles only the narrow pattern of
@@ -941,7 +943,8 @@ class GeneratorMixin:
         ast.fix_missing_locations(result)
         return [], result
 
-    def _lower_tuple_sorted_pair_call(self, call_node):  # pylint: disable=too-many-statements
+    def _lower_tuple_sorted_pair_call(
+            self, call_node):  # pylint: disable=too-many-statements,too-many-locals,too-many-branches
         """Lower tuple(sorted([a, b])) to a conditional pair assignment.
 
         Instead of ``(a, b) if a <= b else (b, a)`` (which ESBMC encodes as a

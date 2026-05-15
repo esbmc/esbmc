@@ -1,5 +1,6 @@
 import ast
 import copy
+# pylint: disable=too-many-branches,too-many-boolean-expressions
 
 
 class ModuleRewriteMixin:
@@ -21,7 +22,7 @@ class ModuleRewriteMixin:
         return set()
 
     @staticmethod
-    def _rebound_module_names(module_node):
+    def _rebound_module_names(module_node):  # pylint: disable=too-many-branches
         """Module-top names that may be rebound after their first binding."""
         seen = set()
         rebound = set()
@@ -62,9 +63,9 @@ class ModuleRewriteMixin:
                 yield from _walk_module_only(child)
 
         for stmt in module_node.body:
-            if not isinstance(
-                    stmt,
-                (ast.If, ast.For, ast.AsyncFor, ast.While, ast.Try, ast.With, ast.AsyncWith)):
+            flow_nodes = (ast.If, ast.For, ast.AsyncFor, ast.While, ast.Try, ast.With,
+                          ast.AsyncWith)
+            if not isinstance(stmt, flow_nodes):
                 continue
             for inner in _walk_module_only(stmt):
                 if isinstance(inner, ast.Assign):
@@ -89,7 +90,7 @@ class ModuleRewriteMixin:
         return rebound
 
     @staticmethod
-    def _scope_locally_binds(scope_node, names):
+    def _scope_locally_binds(scope_node, names):  # pylint: disable=too-many-branches
         """True iff any of *names* is locally bound inside *scope_node*."""
         if not isinstance(scope_node,
                           (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)):
@@ -214,7 +215,8 @@ class ModuleRewriteMixin:
         ]
 
     @staticmethod
-    def collect_range_wrappers(module_node):
+    def collect_range_wrappers(
+            module_node):  # pylint: disable=too-many-boolean-expressions
         """Collect trivial def f(p): return range(...) wrappers at module scope."""
         rebound = ModuleRewriteMixin._rebound_module_names(module_node)
         wrappers = {}
@@ -227,8 +229,15 @@ class ModuleRewriteMixin:
                     and call.func.id == "range" and not call.keywords):
                 continue
             args = stmt.args
-            if (args.vararg is not None or args.kwarg is not None or args.kwonlyargs
-                    or args.posonlyargs or args.defaults or args.kw_defaults):
+            has_non_simple_args = (
+                args.vararg is not None
+                or args.kwarg is not None
+                or args.kwonlyargs
+                or args.posonlyargs
+                or args.defaults
+                or args.kw_defaults
+            )
+            if has_non_simple_args:
                 continue
             params = [a.arg for a in args.args]
             param_set = set(params)

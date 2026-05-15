@@ -1,5 +1,8 @@
 import ast
 import copy
+# pylint: disable=too-many-locals,too-many-branches,too-many-statements,too-many-return-statements
+# pylint: disable=too-many-nested-blocks,too-many-boolean-expressions,no-else-return,no-else-raise
+# pylint: disable=import-outside-toplevel
 
 
 class CoreVisitorsMixin:
@@ -55,10 +58,9 @@ class CoreVisitorsMixin:
                 ast.copy_location(raise_node, node)
                 ast.fix_missing_locations(raise_node)
                 return raise_node
-            else:
-                stmts = self._inline_next_call(node.targets, func_name, gen_var, node)
-                if stmts is not None:
-                    return stmts
+            stmts = self._inline_next_call(node.targets, func_name, gen_var, node)
+            if stmts is not None:
+                return stmts
 
         prefix, lowered_value, lowered_type = self._lower_listcomp_in_expr(node.value)
         node.value = lowered_value
@@ -171,7 +173,8 @@ class CoreVisitorsMixin:
                     assignments.append(individual_assign)
                 return assignments
 
-    def visit_Call(self, node):
+    def visit_Call(
+            self, node):  # pylint: disable=too-many-locals,too-many-branches,too-many-statements,import-outside-toplevel,no-else-raise
         _MUTATING_LIST_METHODS = {
             "append",
             "clear",
@@ -422,7 +425,8 @@ class CoreVisitorsMixin:
         self.generic_visit(node)
         return node
 
-    def visit_FunctionDef(self, node):
+    def visit_FunctionDef(
+            self, node):  # pylint: disable=too-many-branches,too-many-statements
         node = self._rewrite_humaneval_20_none_sentinel(node)
 
         if (len(node.args.args) == 1 and len(node.body) == 1

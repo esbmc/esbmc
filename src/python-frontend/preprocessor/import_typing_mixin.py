@@ -1,4 +1,5 @@
 import ast
+# pylint: disable=too-many-branches
 
 
 class ImportTypingMixin:
@@ -61,7 +62,7 @@ class ImportTypingMixin:
         if isinstance(node, ast.Constant):
             return ast.Constant(value=node.value)
         if isinstance(node, ast.Str):
-            return ast.Str(s=node.s)
+            return ast.Constant(value=node.s)
         if isinstance(node, ast.Attribute):
             return ast.Attribute(
                 value=self._copy_annotation_node(node.value),
@@ -101,58 +102,70 @@ class ImportTypingMixin:
 
         return annotation
 
+    def _handle_decimal_importfrom(self, alias):
+        if alias.name in ("Decimal", "*"):
+            self.decimal_imported = True
+            if alias.asname:
+                self.decimal_class_alias = alias.asname
+
+    def _handle_collections_importfrom(self, alias):
+        if alias.name in ("defaultdict", "*"):
+            self.defaultdict_imported = True
+            if alias.asname:
+                self.defaultdict_alias = alias.asname
+
+    def _handle_dataclasses_importfrom(self, alias):
+        if alias.name == "dataclass":
+            self._dataclass_decorator_names.add(alias.asname or "dataclass")
+        elif alias.name == "field":
+            self._dataclass_field_names.add(alias.asname or "field")
+        elif alias.name == "InitVar":
+            self._dataclass_initvar_names.add(alias.asname or "InitVar")
+        elif alias.name == "is_dataclass":
+            self._dataclass_is_dataclass_names.add(alias.asname or "is_dataclass")
+        elif alias.name == "fields":
+            self._dataclass_fields_api_names.add(alias.asname or "fields")
+        elif alias.name == "asdict":
+            self._dataclass_asdict_names.add(alias.asname or "asdict")
+        elif alias.name == "astuple":
+            self._dataclass_astuple_names.add(alias.asname or "astuple")
+        elif alias.name == "replace":
+            self._dataclass_replace_names.add(alias.asname or "replace")
+        elif alias.name == "*":
+            self._dataclass_decorator_names.add("dataclass")
+            self._dataclass_field_names.add("field")
+            self._dataclass_initvar_names.add("InitVar")
+            self._dataclass_is_dataclass_names.add("is_dataclass")
+            self._dataclass_fields_api_names.add("fields")
+            self._dataclass_asdict_names.add("asdict")
+            self._dataclass_astuple_names.add("astuple")
+            self._dataclass_replace_names.add("replace")
+
+    def _handle_typing_importfrom(self, alias):
+        if alias.name == "NewType":
+            self.newtype_names.add(alias.asname or "NewType")
+        elif alias.name == "*":
+            self.newtype_names.add("NewType")
+            self._typing_imported_names.update(self._TYPING_GENERIC_NAMES)
+            self._typing_classvar_names.add("ClassVar")
+        if alias.name in self._TYPING_GENERIC_NAMES:
+            self._typing_imported_names.add(alias.asname or alias.name)
+        if alias.name == "ClassVar":
+            self._typing_classvar_names.add(alias.asname or alias.name)
+
     def visit_ImportFrom(self, node):
         if node.module == "decimal":
             for alias in node.names:
-                if alias.name == "Decimal" or alias.name == "*":
-                    self.decimal_imported = True
-                    if alias.asname:
-                        self.decimal_class_alias = alias.asname
-        if node.module == "collections":
+                self._handle_decimal_importfrom(alias)
+        elif node.module == "collections":
             for alias in node.names:
-                if alias.name == "defaultdict" or alias.name == "*":
-                    self.defaultdict_imported = True
-                    if alias.asname:
-                        self.defaultdict_alias = alias.asname
-        if node.module == "dataclasses":
+                self._handle_collections_importfrom(alias)
+        elif node.module == "dataclasses":
             for alias in node.names:
-                if alias.name == "dataclass":
-                    self._dataclass_decorator_names.add(alias.asname or "dataclass")
-                elif alias.name == "field":
-                    self._dataclass_field_names.add(alias.asname or "field")
-                elif alias.name == "InitVar":
-                    self._dataclass_initvar_names.add(alias.asname or "InitVar")
-                elif alias.name == "is_dataclass":
-                    self._dataclass_is_dataclass_names.add(alias.asname or "is_dataclass")
-                elif alias.name == "fields":
-                    self._dataclass_fields_api_names.add(alias.asname or "fields")
-                elif alias.name == "asdict":
-                    self._dataclass_asdict_names.add(alias.asname or "asdict")
-                elif alias.name == "astuple":
-                    self._dataclass_astuple_names.add(alias.asname or "astuple")
-                elif alias.name == "replace":
-                    self._dataclass_replace_names.add(alias.asname or "replace")
-                elif alias.name == "*":
-                    self._dataclass_decorator_names.add("dataclass")
-                    self._dataclass_field_names.add("field")
-                    self._dataclass_initvar_names.add("InitVar")
-                    self._dataclass_is_dataclass_names.add("is_dataclass")
-                    self._dataclass_fields_api_names.add("fields")
-                    self._dataclass_asdict_names.add("asdict")
-                    self._dataclass_astuple_names.add("astuple")
-                    self._dataclass_replace_names.add("replace")
-        if node.module == "typing":
+                self._handle_dataclasses_importfrom(alias)
+        elif node.module == "typing":
             for alias in node.names:
-                if alias.name == "NewType":
-                    self.newtype_names.add(alias.asname or "NewType")
-                elif alias.name == "*":
-                    self.newtype_names.add("NewType")
-                    self._typing_imported_names.update(self._TYPING_GENERIC_NAMES)
-                    self._typing_classvar_names.add("ClassVar")
-                if alias.name in self._TYPING_GENERIC_NAMES:
-                    self._typing_imported_names.add(alias.asname or alias.name)
-                if alias.name == "ClassVar":
-                    self._typing_classvar_names.add(alias.asname or alias.name)
+                self._handle_typing_importfrom(alias)
         self.generic_visit(node)
         return node
 

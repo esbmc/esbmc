@@ -79,11 +79,11 @@ class HelperFunctionsMixin:
         def _name(n):
             return ast.Name(id=n, ctx=ast.Load())
 
-        def _binop(l, op, r):
-            return ast.BinOp(left=l, op=op, right=r)
+        def _binop(left_expr, op, right_expr):
+            return ast.BinOp(left=left_expr, op=op, right=right_expr)
 
-        def _cmp(l, op, r):
-            return ast.Compare(left=l, ops=[op], comparators=[r])
+        def _cmp(left_expr, op, right_expr):
+            return ast.Compare(left=left_expr, ops=[op], comparators=[right_expr])
 
         def _last_element_block(n_expr):
             n_assign = ast.AnnAssign(

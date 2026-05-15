@@ -1,4 +1,5 @@
 import ast
+# pylint: disable=too-many-nested-blocks,too-many-branches
 
 
 class TypeInferenceMixin:
@@ -31,7 +32,8 @@ class TypeInferenceMixin:
             return "list"
         return "list"
 
-    def _get_element_type_from_container(self, container_type, iterable_node=None):
+    def _get_element_type_from_container(
+            self, container_type, iterable_node=None):  # pylint: disable=too-many-branches,too-many-nested-blocks
         if isinstance(iterable_node, ast.Call) and isinstance(iterable_node.func, ast.Attribute):
             method_name = iterable_node.func.attr
 
