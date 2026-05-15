@@ -13,6 +13,7 @@
 add_library(pythonfrontend STATIC
             python_language.cpp
             python_converter.cpp
+            converter/converter_util.cpp
             python_class.cpp
             python_class_builder.cpp
             python_consteval.cpp

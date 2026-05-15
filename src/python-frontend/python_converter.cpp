@@ -234,34 +234,6 @@ static struct_typet::componentt build_component(
   return component;
 }
 
-codet python_converter::convert_expression_to_code(exprt &expr)
-{
-  if (expr.is_code())
-    return static_cast<codet &>(expr);
-
-  codet code("expression");
-  code.location() = expr.location();
-  code.move_to_operands(expr);
-  return code;
-}
-
-symbolt python_converter::create_symbol(
-  const std::string &module,
-  const std::string &name,
-  const std::string &id,
-  const locationt &location,
-  const typet &type) const
-{
-  symbolt symbol;
-  symbol.mode = "Python";
-  symbol.module = module;
-  symbol.location = location;
-  symbol.type = type;
-  symbol.name = name;
-  symbol.id = id;
-  return symbol;
-}
-
 static ExpressionType get_expression_type(const nlohmann::json &element)
 {
   // Return UNKNOWN if the expected "_type" field is missing
@@ -599,17 +571,6 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
         "adjust_statement_types: Failed to parse type widths: {}", e.what());
     }
   }
-}
-
-symbol_id python_converter::create_symbol_id(const std::string &filename) const
-{
-  return symbol_id(filename, current_class_name_, current_func_name_);
-}
-
-symbol_id python_converter::create_symbol_id() const
-{
-  return symbol_id(
-    current_python_file, current_class_name_, current_func_name_);
 }
 
 inline bool is_ieee_op(const exprt &expr)
@@ -2603,40 +2564,6 @@ exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
   unary_expr.operands().push_back(unary_sub);
 
   return unary_expr;
-}
-
-locationt
-python_converter::get_location_from_decl(const nlohmann::json &ast_node) const
-{
-  locationt location;
-  if (ast_node.contains("lineno"))
-    location.set_line(ast_node["lineno"].get<int>());
-
-  if (ast_node.contains("col_offset"))
-    location.set_column(ast_node["col_offset"].get<int>());
-
-  location.set_file(current_python_file.c_str());
-  location.set_function(current_func_name_);
-  return location;
-}
-
-void python_converter::copy_location_fields_from_decl(
-  const nlohmann::json &from,
-  nlohmann::json &to) const
-{
-  const locationt loc = get_location_from_decl(from);
-  const std::string line = id2string(loc.get_line());
-  if (!line.empty())
-    to["lineno"] = std::stoi(line);
-
-  const std::string column = id2string(loc.get_column());
-  if (!column.empty())
-    to["col_offset"] = std::stoi(column);
-
-  if (from.contains("end_lineno"))
-    to["end_lineno"] = from["end_lineno"];
-  if (from.contains("end_col_offset"))
-    to["end_col_offset"] = from["end_col_offset"];
 }
 
 symbolt *python_converter::find_function_in_base_classes(
@@ -10379,54 +10306,6 @@ const python_typechecking &python_converter::get_typechecker() const
   return *typechecker_;
 }
 
-bool python_converter::type_assertions_enabled() const
-{
-  return config.options.get_bool_option("is-instance-check");
-}
-
-bool python_converter::is_coverage_mode() const
-{
-  return config.options.get_bool_option("condition-coverage") ||
-         config.options.get_bool_option("condition-coverage-claims") ||
-         config.options.get_bool_option("condition-coverage-rm") ||
-         config.options.get_bool_option("condition-coverage-claims-rm") ||
-         config.options.get_bool_option("branch-coverage") ||
-         config.options.get_bool_option("branch-coverage-claims") ||
-         config.options.get_bool_option("branch-function-coverage") ||
-         config.options.get_bool_option("branch-function-coverage-claims");
-}
-
-bool python_converter::is_pytest_generation_mode() const
-{
-  return config.options.get_bool_option("generate-pytest-testcase");
-}
-
-bool python_converter::is_model_file(const nlohmann::json &node) const
-{
-  const std::string file = get_location_from_decl(node).file().as_string();
-  if (file.find("/models/") != std::string::npos)
-    return true;
-
-  if (file.find('/') == std::string::npos)
-  {
-    if (file.size() >= 3 && file.compare(file.size() - 3, 3, ".py") == 0)
-      return true;
-    return false;
-  }
-
-  const std::string suffix = "/models/" + file;
-  for (const auto &entry : imported_modules)
-  {
-    const std::string &path = entry.second;
-    if (
-      path.size() >= suffix.size() &&
-      path.compare(path.size() - suffix.size(), suffix.size(), suffix) == 0)
-      return true;
-  }
-
-  return false;
-}
-
 string_builder &python_converter::get_string_builder()
 {
   if (!string_builder_)
@@ -10435,31 +10314,6 @@ string_builder &python_converter::get_string_builder()
     string_handler_.set_string_builder(string_builder_);
   }
   return *string_builder_;
-}
-
-void python_converter::append_models_from_directory(
-  std::list<std::string> &file_list,
-  const std::string &dir_path)
-{
-  fs::path directory(dir_path);
-
-  // Checks if the directory exists
-  if (!fs::exists(directory) || !fs::is_directory(directory))
-    return;
-
-  // Iterates over the files in the directory
-  for (fs::directory_iterator it(directory), end_it; it != end_it; ++it)
-  {
-    if (fs::is_regular_file(*it) && it->path().extension() == ".json")
-    {
-      std::string file_name =
-        directory.filename().string() + "/" +
-        it->path().stem().string(); // File name without the extension
-      file_list.push_back(file_name);
-
-      imported_modules[it->path().stem().string()] = it->path().string();
-    }
-  }
 }
 
 static void add_global_static_variable(
