@@ -1022,10 +1022,17 @@ static exprt make_slice_struct_expr(
   const struct_typet &struct_type =
     to_struct_type(ns.follow(conv.get_type_handler().get_slice_type()));
 
+  // Unspecified bounds (`:`) are modelled as nondeterministic values rather
+  // than literal zeros so that user code reading `sl.start` / `sl.stop` /
+  // `sl.step` cannot mistake a bare slice for an explicit `0:0`. The
+  // companion `has_start` / `has_stop` / `has_step` flags remain the
+  // authoritative "was a bound supplied?" signal; `sl.start is None` is
+  // lowered to a check of those flags in converter_compare.cpp
+  // (try_lower_slice_member_is_none). See github #4543.
   auto lower_int =
     [&](const nlohmann::json *node, const typet &field_type) -> exprt {
     if (!node || node->is_null())
-      return gen_zero(field_type);
+      return side_effect_expr_nondett(field_type);
     exprt value = conv.get_expr(*node);
     if (value.type() != field_type)
       value = typecast_exprt(value, field_type);

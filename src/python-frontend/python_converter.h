@@ -351,6 +351,16 @@ private:
     const exprt &lhs,
     const exprt &rhs);
 
+  /// Rewrites `sl.start/stop/step is/is not None` to a check of the
+  /// corresponding `has_start/has_stop/has_step` flag on __ESBMC_PySliceObj.
+  /// Returns `nil_exprt()` when the operands are not a slice-member access
+  /// paired with a None literal, so the caller continues with default
+  /// None-comparison handling.
+  exprt try_lower_slice_member_is_none(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs);
+
   symbolt &create_tmp_symbol(
     const nlohmann::json &element,
     const std::string var_name,

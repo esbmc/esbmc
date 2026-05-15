@@ -366,6 +366,58 @@ exprt python_converter::handle_string_comparison(
   return nil_exprt(); // continue with lhs OP rhs
 }
 
+exprt python_converter::try_lower_slice_member_is_none(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs)
+{
+  if (op != "Is" && op != "IsNot" && op != "Eq" && op != "NotEq")
+    return nil_exprt();
+
+  // One operand must be the None literal; the other must be a member access
+  // on a __ESBMC_PySliceObj struct.
+  const exprt *member_side = nullptr;
+  if (lhs.type() == none_type() && rhs.id() == "member")
+    member_side = &rhs;
+  else if (rhs.type() == none_type() && lhs.id() == "member")
+    member_side = &lhs;
+  else
+    return nil_exprt();
+
+  const namespacet ns(symbol_table_);
+  const typet base_type = ns.follow(member_side->op0().type());
+  if (!base_type.is_struct())
+    return nil_exprt();
+  if (base_type != ns.follow(type_handler_.get_slice_type()))
+    return nil_exprt();
+
+  const irep_idt component = member_side->component_name();
+  irep_idt flag_name;
+  if (component == "start")
+    flag_name = "has_start";
+  else if (component == "stop")
+    flag_name = "has_stop";
+  else if (component == "step")
+    flag_name = "has_step";
+  else
+    return nil_exprt();
+
+  const struct_typet &slice_struct = to_struct_type(base_type);
+  const typet flag_type = slice_struct.get_component(flag_name).type();
+
+  member_exprt flag_access(
+    member_side->op0(), flag_name.as_string(), flag_type);
+  // "is None" / "== None" → flag is zero (bound was absent).
+  // "is not None" / "!= None" → flag is non-zero (bound was supplied).
+  const bool is_eq = (op == "Eq" || op == "Is");
+  equality_exprt eq(flag_access, gen_zero(flag_type));
+  if (is_eq)
+    return eq;
+  exprt neg("not", bool_type());
+  neg.copy_to_operands(eq);
+  return neg;
+}
+
 exprt python_converter::handle_none_comparison(
   const std::string &op,
   const exprt &lhs,
@@ -378,6 +430,16 @@ exprt python_converter::handle_none_comparison(
   // Only handle actual None comparisons
   if (!lhs_is_none && !rhs_is_none)
     return exprt();
+
+  // Bare slice components (`sl.start`, `sl.stop`, `sl.step`) hold
+  // nondeterministic values when the user did not supply a bound. The
+  // authoritative "was the bound supplied?" signal lives in the companion
+  // `has_start` / `has_stop` / `has_step` flags of __ESBMC_PySliceObj.
+  // Lower `sl.<field> is None` to `sl.has_<field> == 0` so that user code can
+  // distinguish a bare `:` from an explicit `0:0` (github #4543).
+  if (exprt rewrite = try_lower_slice_member_is_none(op, lhs, rhs);
+      !rewrite.is_nil())
+    return rewrite;
 
   // If one side is None and the other is a different type (e.g., int, str)
   // Handle type mismatch comparison
