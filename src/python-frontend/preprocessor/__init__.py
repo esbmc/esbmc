@@ -2975,8 +2975,8 @@ class Preprocessor(DataclassMixin, GeneratorMixin, LoopMixin, ast.NodeTransforme
             node = stack.pop()
             if isinstance(node, skip):
                 continue
-            if isinstance(node, ast.Return) and node.value is not None and not (
-                    isinstance(node.value, ast.Constant) and node.value.value is None):
+            if isinstance(node, ast.Return) and node.value is not None and not (isinstance(
+                    node.value, ast.Constant) and node.value.value is None):
                 return True
             stack.extend(ast.iter_child_nodes(node))
         return False
