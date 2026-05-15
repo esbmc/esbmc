@@ -34,6 +34,31 @@ void collect_symbol_names(const expr2tc &expr, name_set &out)
 /// The back-edge may be unconditional (for/while shape) or conditional
 /// (do-while shape). We don't care which here — shape discrimination is
 /// the caller's job.
+/// Verify @p loop_head has exactly one incoming GOTO — the back-edge
+/// at @p body_last. Any other GOTO targeting loop_head means an
+/// external label-jump can land on the rewritten head (Path 1's
+/// assume or Path 2's ASSIGN i=post) with a different pre-state and
+/// silently see the synthesized value. The check scans the function's
+/// instructions linearly, which is acceptable here because the pass
+/// runs once over each function.
+bool loop_head_has_only_backedge_predecessor(
+  const goto_programt &body,
+  inst_iter loop_head,
+  inst_iter body_last)
+{
+  for (const auto &ins : body.instructions)
+  {
+    if (!ins.is_goto())
+      continue;
+    for (const auto &t : ins.targets)
+    {
+      if (t == loop_head && &ins != &*body_last)
+        return false;
+    }
+  }
+  return true;
+}
+
 bool body_is_safe(
   inst_iter body_first,
   inst_iter body_last,
@@ -645,6 +670,14 @@ bool simplify_function_once(goto_functiont &fn)
       // hide loops whose presence matters for the termination reduction.
       continue;
     }
+
+    // Refuse if loop_head has any incoming GOTO other than the
+    // back-edge. An external `goto L; … L: while(...)` would land on
+    // the synthesized head (Path 1's assume or Path 2's ASSIGN), see
+    // its effect, and bypass the pre-loop init that was supposed to
+    // determine the rewritten value.
+    if (!loop_head_has_only_backedge_predecessor(body, loop_head, loop_exit))
+      continue;
 
     name_set modified;
     if (!body_is_safe(body_first, loop_exit, loop_head, modified))
