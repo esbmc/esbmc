@@ -49,6 +49,14 @@ bool body_is_safe(
 
   for (inst_iter it = body_first; it != body_last; ++it)
   {
+    // A target instruction inside the body means an external GOTO can
+    // jump directly into the body, bypassing whatever we synthesize at
+    // loop_head (assume(exit_guard) for Path 1, or ASSIGN i=post for
+    // Path 2). Refuse: the rewrite would let the external edge fall
+    // through past the SKIPs without seeing the head's effect.
+    if (it->is_target())
+      return false;
+
     if (it->is_location() || it->is_skip() || it->is_decl())
       continue;
 
