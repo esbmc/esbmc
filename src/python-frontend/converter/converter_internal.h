@@ -1,14 +1,74 @@
 #pragma once
 
 #include <python-frontend/json_utils.h>
+#include <util/message.h>
 #include <util/std_types.h>
 
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
+#include <cctype>
 #include <string>
+#include <unordered_map>
 
 namespace python_frontend
 {
+
+// Operator name (Python AST id, e.g. "Add", "Lt") -> ESBMC operator id.
+inline const std::unordered_map<std::string, std::string> &operator_map()
+{
+  static const std::unordered_map<std::string, std::string> m = {
+    {"add", "+"},         {"sub", "-"},         {"subtract", "-"},
+    {"mult", "*"},        {"multiply", "*"},    {"dot", "*"},
+    {"div", "/"},         {"divide", "/"},      {"mod", "mod"},
+    {"bitor", "bitor"},   {"floordiv", "/"},    {"bitand", "bitand"},
+    {"bitxor", "bitxor"}, {"invert", "bitnot"}, {"lshift", "shl"},
+    {"rshift", "ashr"},   {"usub", "unary-"},   {"eq", "="},
+    {"lt", "<"},          {"lte", "<="},        {"noteq", "notequal"},
+    {"gt", ">"},          {"gte", ">="},        {"and", "and"},
+    {"or", "or"},         {"not", "not"},       {"uadd", "unary+"},
+    {"is", "="},          {"isnot", "not"},     {"in", "="}};
+  return m;
+}
+
+// Map a Python operator name to its ESBMC representation. Uses IEEE-specific
+// operators when the type is floating-point.
+inline std::string map_operator(const std::string &op, const typet &type)
+{
+  // Convert the operator to lowercase to allow case-insensitive comparison.
+  std::string lower_op = op;
+  std::transform(
+    lower_op.begin(), lower_op.end(), lower_op.begin(), [](unsigned char c) {
+      return std::tolower(c);
+    });
+
+  // If the type is floating-point, use IEEE-specific operators.
+  if (type.is_floatbv())
+  {
+    static const std::unordered_map<std::string, std::string> float_ops = {
+      {"add", "ieee_add"},
+      {"sub", "ieee_sub"},
+      {"subtract", "ieee_sub"},
+      {"mult", "ieee_mul"},
+      {"dot", "ieee_mul"},
+      {"multiply", "ieee_mul"},
+      {"div", "ieee_div"},
+      {"divide", "ieee_div"}};
+
+    auto float_it = float_ops.find(lower_op);
+    if (float_it != float_ops.end())
+      return float_it->second;
+  }
+
+  // Look up the operator in the general operator map (for non-floating-point types).
+  const auto &m = operator_map();
+  auto it = m.find(lower_op);
+  if (it != m.end())
+    return it->second;
+
+  log_warning("Unknown operator: {}", op);
+  return {};
+}
 
 // Build a struct member component tagged for its owning class.
 inline struct_typet::componentt build_component(
