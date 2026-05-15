@@ -236,12 +236,12 @@ bool python_converter::import_module_into_block(
   if (imported_modules.find(module_name) != imported_modules.end())
     return true;
 
-  std::ifstream imported_file = locator.open_module_file(module_name);
-  if (!imported_file.is_open())
+  // pre_collect_module_asts populates the pool before any import runs.
+  // A miss here means the same module_locator could not open the file.
+  auto pooled = module_ast_pool_.find(module_name);
+  if (pooled == module_ast_pool_.end())
     return false;
-
-  nlohmann::json nested_module_json;
-  imported_file >> nested_module_json;
+  nlohmann::json &nested_module_json = pooled->second;
 
   current_python_file = nested_module_json["filename"].get<std::string>();
   imported_modules.emplace(module_name, current_python_file);
@@ -253,11 +253,16 @@ bool python_converter::import_module_into_block(
   create_builtin_symbols();
   python_annotation<nlohmann::json> imported_annotator(
     nested_module_json, const_cast<global_scope &>(global_scope_));
-  // Expose the importing module's AST so that multi-axis subscript usages
-  // on imported-class instances (e.g. `t[i:j, k:l]` where `Tile` comes from
-  // this imported module) are visible when inferring tuple-key annotations
-  // for __getitem__/__setitem__ (GitHub #4545).
+  // Expose every other reachable module's AST as an extra subscript
+  // inference source so that multi-axis subscript usages on instances of
+  // this module's classes (e.g. `t[i:j, k:l]` where `Tile` is defined
+  // here) are visible no matter which module they appear in. The
+  // entry-point AST closes the 2-file form (GitHub #4545); intermediate
+  // modules close the 3+-file transitive form (GitHub #4554).
   imported_annotator.add_extra_subscript_inference_source(*ast_json);
+  for (auto &entry : module_ast_pool_)
+    if (&entry.second != &nested_module_json)
+      imported_annotator.add_extra_subscript_inference_source(entry.second);
   imported_annotator.add_type_annotation();
 
   exprt imported_code = with_ast(&nested_module_json, [&]() {
@@ -285,6 +290,52 @@ void python_converter::process_module_imports(
       import_module_into_block(elem, locator, block);
       current_python_file = saved_file;
     }
+  }
+}
+
+void python_converter::pre_collect_module_asts(
+  const nlohmann::json &module_ast,
+  module_locator &locator)
+{
+  auto try_collect = [&](const nlohmann::json &node) {
+    if (node["_type"] != "ImportFrom" && node["_type"] != "Import")
+      return;
+    if (node.value("module_not_found", false))
+      return;
+    const std::string module_name = (node["_type"] == "ImportFrom")
+                                      ? node["module"]
+                                      : node["names"][0]["name"];
+    if (module_ast_pool_.count(module_name))
+      return;
+    std::ifstream f = locator.open_module_file(module_name);
+    if (!f.is_open())
+      return;
+    nlohmann::json parsed;
+    try
+    {
+      f >> parsed;
+    }
+    catch (const nlohmann::json::exception &)
+    {
+      // Treat a malformed AST as an unresolvable import; the subsequent
+      // import_module_into_block lookup will return false the same way.
+      return;
+    }
+    auto [it, _] = module_ast_pool_.emplace(module_name, std::move(parsed));
+    pre_collect_module_asts(it->second, locator);
+  };
+
+  if (!module_ast.contains("body") || !module_ast["body"].is_array())
+    return;
+
+  for (const auto &elem : module_ast["body"])
+  {
+    try_collect(elem);
+    if (
+      elem["_type"] == "FunctionDef" && elem.contains("body") &&
+      elem["body"].is_array())
+      for (const auto &stmt : elem["body"])
+        try_collect(stmt);
   }
 }
 
@@ -464,6 +515,10 @@ void python_converter::convert()
   {
     // Convert imported modules
     module_locator locator((*ast_json)["ast_output_dir"].get<std::string>());
+
+    // Pre-walk the import graph so each annotator can see subscript usages
+    // from any other module (GitHub #4554).
+    pre_collect_module_asts(*ast_json, locator);
 
     // Accumulate all imports
     code_blockt all_imports_block;
