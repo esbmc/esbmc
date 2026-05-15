@@ -371,7 +371,10 @@ exprt python_converter::try_lower_slice_member_is_none(
   const exprt &lhs,
   const exprt &rhs)
 {
-  if (op != "Is" && op != "IsNot" && op != "Eq" && op != "NotEq")
+  // Restrict to identity comparisons. Value comparisons (`sl.start == None`)
+  // fall through to the existing int-vs-None handling, which preserves
+  // Python value-equality semantics if the field ever holds a real integer.
+  if (op != "Is" && op != "IsNot")
     return nil_exprt();
 
   // One operand must be the None literal; the other must be a member access
@@ -391,31 +394,20 @@ exprt python_converter::try_lower_slice_member_is_none(
   if (base_type != ns.follow(type_handler_.get_slice_type()))
     return nil_exprt();
 
-  const irep_idt component = member_side->component_name();
-  irep_idt flag_name;
-  if (component == "start")
-    flag_name = "has_start";
-  else if (component == "stop")
-    flag_name = "has_stop";
-  else if (component == "step")
-    flag_name = "has_step";
-  else
-    return nil_exprt();
-
   const struct_typet &slice_struct = to_struct_type(base_type);
+  const std::string flag_name =
+    "has_" + member_side->component_name().as_string();
+  if (!slice_struct.has_component(flag_name))
+    return nil_exprt();
   const typet flag_type = slice_struct.get_component(flag_name).type();
 
-  member_exprt flag_access(
-    member_side->op0(), flag_name.as_string(), flag_type);
-  // "is None" / "== None" → flag is zero (bound was absent).
-  // "is not None" / "!= None" → flag is non-zero (bound was supplied).
-  const bool is_eq = (op == "Eq" || op == "Is");
+  member_exprt flag_access(member_side->op0(), flag_name, flag_type);
+  // `sl.start is None` ⇔ flag is zero (bound was absent).
+  // `sl.start is not None` ⇔ flag is non-zero (bound was supplied).
   equality_exprt eq(flag_access, gen_zero(flag_type));
-  if (is_eq)
+  if (op == "Is")
     return eq;
-  exprt neg("not", bool_type());
-  neg.copy_to_operands(eq);
-  return neg;
+  return not_exprt(eq);
 }
 
 exprt python_converter::handle_none_comparison(
