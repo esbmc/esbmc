@@ -87,10 +87,8 @@ def _abs_complex(z: complex) -> float:
 
 
 def polar(z: complex) -> tuple[float, float]:
-    if z.real == 0.0 and z.imag == 0.0:
-        return (0.0, 0.0)
-    if z.imag == 0.0 and z.real > 0.0:
-        return (z.real, 0.0)
+    # Match CPython behavior for signed zeros and NaN by delegating angle
+    # selection to atan2 unconditionally.
     return (_abs_complex(z), phase(z))
 
 
