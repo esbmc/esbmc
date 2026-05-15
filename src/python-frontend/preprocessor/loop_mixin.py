@@ -94,9 +94,7 @@ class LoopMixin:
         tuple(sorted([elem, elem2]))) can infer the element type from the loop
         variable when the iterable has a known generic annotation like List[float].
         """
-        if (not isinstance(node.iter, ast.Call) or not isinstance(node.iter.func, ast.Name)
-                or node.iter.func.id != "enumerate" or len(node.iter.args) < 1
-                or not isinstance(node.target, (ast.Tuple, ast.List)) or len(node.target.elts) < 2):
+        if not self._is_enumerate_preannotation_candidate(node):
             return
 
         iterable = node.iter.args[0]
@@ -108,6 +106,19 @@ class LoopMixin:
                 ann_node = ast.Name(id=element_type, ctx=ast.Load())
                 self.variable_annotations[value_elt.id] = ann_node
                 self.known_variable_types[value_elt.id] = element_type
+
+    @staticmethod
+    def _is_enumerate_preannotation_candidate(node):
+        """Return True when node matches `for i, v in enumerate(iterable, ...)`."""
+        if not isinstance(node.iter, ast.Call):
+            return False
+        if not isinstance(node.iter.func, ast.Name) or node.iter.func.id != "enumerate":
+            return False
+        if len(node.iter.args) < 1:
+            return False
+        if not isinstance(node.target, (ast.Tuple, ast.List)):
+            return False
+        return len(node.target.elts) >= 2
 
     def _is_reversed_range_call(self, iter_node):
         """Return True if iter_node is reversed(range(...))."""
@@ -188,7 +199,7 @@ class LoopMixin:
         ast.fix_missing_locations(new_range)
         return new_range
 
-    def visit_For(self, node):
+    def visit_For(self, node):  # pylint: disable=too-many-branches
         """
         Transform for loops into while loops.
         Handles range() calls, enumerate() calls, dict.items(), and general iterables.
@@ -243,17 +254,18 @@ class LoopMixin:
             result = self._transform_range_for(node)
             self.is_range_loop = False
             return gen_pre_stmts + result
-        elif is_enumerate_call:
+        if is_enumerate_call:
             # Handle enumerate-based for loops
             self.is_range_loop = False
             return self._transform_enumerate_for(node)
-        elif is_items_call:
+        if is_items_call:
             # Handle dict.items() for loops
             self.is_range_loop = False
             return self._transform_items_for(node)
-        elif (isinstance(node.iter, ast.Name) and node.iter.id in self.list_literal_values
-              and self._can_safely_unroll_list_literal_for(node,
-                                                           self.list_literal_values[node.iter.id])):
+        list_literal = self.list_literal_values.get(
+            node.iter.id) if isinstance(node.iter, ast.Name) else None
+        if (list_literal is not None
+                and self._can_safely_unroll_list_literal_for(node, list_literal)):
             # For direct iteration over a known list literal variable, unroll the loop
             # to avoid introducing len()/index machinery in the generated model.
             # Skip the unroll if the body contains break/continue/return, since
@@ -261,42 +273,41 @@ class LoopMixin:
             # surrounding loop/function context. Skip too when elements are not
             # homogeneous pure literals to preserve runtime isinstance semantics.
             self.is_range_loop = False
-            return self._unroll_list_literal_for(node, self.list_literal_values[node.iter.id])
-        else:
-            # Check if iterating over a generator variable
-            if isinstance(node.iter, ast.Name) and node.iter.id in self.generator_vars:
-                inlined = self._inline_generator_for(node)
-                if inlined is not None:
-                    return inlined
-            # Check if iterating directly over a generator function call, e.g.
-            # `for y in gen1(arr): body`.  Without this, _transform_iterable_for
-            # would emit `ESBMC_iter: list = gen1(arr)` which assigns a generator
-            # object to a list variable — ESBMC cannot model generator objects.
-            if (isinstance(node.iter, ast.Call) and isinstance(node.iter.func, ast.Name)
-                    and node.iter.func.id in self.generator_funcs):
-                inlined = self._inline_generator_call_for(node)
-                if inlined is not None:
-                    return inlined
-            # Unwrap explicit d.keys() into d so the heterogeneous-key handler
-            # below can pick it up.  `for k in d.keys()` is semantically
-            # identical to `for k in d` and must be treated the same way.
-            if (isinstance(node.iter, ast.Call) and isinstance(node.iter.func, ast.Attribute)
-                    and node.iter.func.attr == "keys" and isinstance(node.iter.func.value, ast.Name)
-                    and node.iter.func.value.id in self.het_dict_literals):
-                node.iter = node.iter.func.value
-            # Unroll iteration over dict literals with heterogeneous key types.
-            if (isinstance(node.iter, ast.Name) and node.iter.id in self.het_dict_literals):
-                return self._transform_het_dict_for(node)
-            # Unroll d.values() when the dict has heterogeneous value types.
-            if (isinstance(node.iter, ast.Call) and isinstance(node.iter.func, ast.Attribute)
-                    and node.iter.func.attr == "values"
-                    and isinstance(node.iter.func.value, ast.Name)
-                    and node.iter.func.value.id in self.het_value_dict_literals):
-                dict_node = self.het_value_dict_literals[node.iter.func.value.id]
-                return self._transform_het_values_for(node, dict_node)
-            # Handle general iteration over iterables (strings, lists, etc.)
-            self.is_range_loop = False
-            return self._transform_iterable_for(node)
+            return self._unroll_list_literal_for(node, list_literal)
+        # Check if iterating over a generator variable
+        if isinstance(node.iter, ast.Name) and node.iter.id in self.generator_vars:
+            inlined = self._inline_generator_for(node)
+            if inlined is not None:
+                return inlined
+        # Check if iterating directly over a generator function call, e.g.
+        # `for y in gen1(arr): body`.  Without this, _transform_iterable_for
+        # would emit `ESBMC_iter: list = gen1(arr)` which assigns a generator
+        # object to a list variable — ESBMC cannot model generator objects.
+        if (isinstance(node.iter, ast.Call) and isinstance(node.iter.func, ast.Name)
+                and node.iter.func.id in self.generator_funcs):
+            inlined = self._inline_generator_call_for(node)
+            if inlined is not None:
+                return inlined
+        # Unwrap explicit d.keys() into d so the heterogeneous-key handler
+        # below can pick it up.  `for k in d.keys()` is semantically
+        # identical to `for k in d` and must be treated the same way.
+        if (isinstance(node.iter, ast.Call) and isinstance(node.iter.func, ast.Attribute)
+                and node.iter.func.attr == "keys" and isinstance(node.iter.func.value, ast.Name)
+                and node.iter.func.value.id in self.het_dict_literals):
+            node.iter = node.iter.func.value
+        # Unroll iteration over dict literals with heterogeneous key types.
+        if isinstance(node.iter, ast.Name) and node.iter.id in self.het_dict_literals:
+            return self._transform_het_dict_for(node)
+        # Unroll d.values() when the dict has heterogeneous value types.
+        if (isinstance(node.iter, ast.Call) and isinstance(node.iter.func, ast.Attribute)
+                and node.iter.func.attr == "values"
+                and isinstance(node.iter.func.value, ast.Name)
+                and node.iter.func.value.id in self.het_value_dict_literals):
+            dict_node = self.het_value_dict_literals[node.iter.func.value.id]
+            return self._transform_het_values_for(node, dict_node)
+        # Handle general iteration over iterables (strings, lists, etc.)
+        self.is_range_loop = False
+        return self._transform_iterable_for(node)
 
     def _can_safely_unroll_list_literal_for(self, node, list_literal):
         """Decide whether a `for` over a tracked list literal is safe to unroll.
@@ -394,7 +405,7 @@ class LoopMixin:
             ast.fix_missing_locations(stmt)
         return unrolled
 
-    def visit_With(self, node):
+    def visit_With(self, node):  # pylint: disable=too-many-locals
         """Desugar 'with EXPR as VAR: BODY' into __enter__/__exit__ calls.
 
         Transforms each context manager item into:
@@ -499,7 +510,7 @@ class LoopMixin:
 
         return result
 
-    visit_AsyncWith = visit_With
+    visit_AsyncWith = visit_With  # noqa: N815
 
     def _transform_enumerate_for(self, node):
         """
@@ -813,7 +824,7 @@ class LoopMixin:
                 transformed_body.append(transformed_statement)
         return transformed_body
 
-    def _transform_range_for(self, node):
+    def _transform_range_for(self, node):  # pylint: disable=too-many-locals
         """Transform range-based for loops to while loops"""
         # Add validation for range arguments
         if len(node.iter.args) == 0:
@@ -941,7 +952,7 @@ class LoopMixin:
         # Return the transformed statements
         return [step_validation, start_assign, has_next_assign, while_stmt]
 
-    def _transform_items_for(self, node):
+    def _transform_items_for(self, node):  # pylint: disable=too-many-locals,too-many-statements
         """
         Transform dict.items() for loops to while loops.
 
@@ -1223,7 +1234,8 @@ class LoopMixin:
             return self._kv_types_from_annotation(val_ann)
         return self._any_ann(), self._any_ann()
 
-    def _create_dict_list_assign(self, node, var_name, dict_node, method, elem_ann):
+    def _create_dict_list_assign(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+        self, node, var_name, dict_node, method, elem_ann):
         """Create: var_name: list[base(elem_ann)] = dict_node.method()
 
         The list annotation uses only the BASE type name (e.g. 'dict' for
@@ -1254,7 +1266,8 @@ class LoopMixin:
         self.ensure_all_locations(assign, node)
         return assign
 
-    def _create_var_subscript_assign(self, node, var_name, list_var, index_var, elem_ann):
+    def _create_var_subscript_assign(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+        self, node, var_name, list_var, index_var, elem_ann):
         """Create: var_name: elem_ann = list_var[index_var]
 
         Uses the FULL annotation node (e.g. dict[str, int]) so that
@@ -1295,7 +1308,7 @@ class LoopMixin:
         self.ensure_all_locations(assert_stmt, node)
         return assert_stmt
 
-    def _transform_iterable_for(self, node):
+    def _transform_iterable_for(self, node):  # pylint: disable=too-many-locals
         """
         Transform general iterable for loops to while loops with unique variable names.
         """
@@ -1449,7 +1462,7 @@ class LoopMixin:
         self.ensure_all_locations(while_cond, node)
         return while_cond
 
-    def _create_loop_body(
+    def _create_loop_body(  # pylint: disable=too-many-arguments,too-many-positional-arguments
         self,
         node,
         target_var_name,
@@ -1683,11 +1696,11 @@ class LoopMixin:
         """Create an annotation AST node from a value node for storage"""
         if isinstance(value, ast.List):
             return self._create_list_annotation(value)
-        elif isinstance(value, ast.Dict):
+        if isinstance(value, ast.Dict):
             return self._create_dict_annotation(value)
-        elif isinstance(value, ast.Subscript):
+        if isinstance(value, ast.Subscript):
             return self._create_subscript_annotation(value)
-        elif isinstance(value, ast.Call):
+        if isinstance(value, ast.Call):
             return self._create_annotation_from_call(value)
         return None
 
@@ -1741,7 +1754,7 @@ class LoopMixin:
                 return name[len("nondet_"):]
         return None
 
-    def _expand_nondet_call(self, target, call, source_node):
+    def _expand_nondet_call(self, target, call, source_node):  # pylint: disable=too-many-locals,too-many-branches,too-many-statements
         """Expand nondet_list && nondet_dict call into an inline loop
         to replace the effect in nondet.py
         e.g.:
@@ -2115,7 +2128,7 @@ class LoopMixin:
         if isinstance(key_node, ast.Constant):
             if isinstance(key_node.value, str):
                 return "str"
-            elif isinstance(key_node.value, int):
+            if isinstance(key_node.value, int):
                 return "int"
         return "Any"
 
@@ -2123,9 +2136,9 @@ class LoopMixin:
         """Infer value annotation from dict literal's first value"""
         if isinstance(value_node, ast.List):
             return self._create_list_annotation(value_node)
-        elif isinstance(value_node, ast.Dict):
+        if isinstance(value_node, ast.Dict):
             return self._create_annotation_node_from_value(value_node)
-        elif isinstance(value_node, ast.Constant):
+        if isinstance(value_node, ast.Constant):
             const_type = type(value_node.value).__name__
             return ast.Name(id=const_type, ctx=ast.Load())
         return None
@@ -2275,8 +2288,9 @@ class LoopMixin:
         appear inside arbitrary expressions (assert, return, function args, etc.)
         rather than only as the direct RHS of an assignment.
         """
-        outer = self
         all_inits = []
+        defaultdict_factory = self._defaultdict_factory
+        make_missing_check = self._make_defaultdict_missing_check
 
         class _Lowerer(ast.NodeTransformer):
 
@@ -2284,12 +2298,11 @@ class LoopMixin:
                 # Recurse into children first (handles nested subscripts).
                 self.generic_visit(node)
                 if not (isinstance(node.ctx, ast.Load) and isinstance(node.value, ast.Name)
-                        and node.value.id in outer._defaultdict_factory):
+                        and node.value.id in defaultdict_factory):
                     return node
                 dict_name = node.value.id
-                factory = outer._defaultdict_factory[dict_name]
-                stmts, key_expr = outer._make_defaultdict_missing_check(
-                    dict_name, node.slice, factory, template)
+                factory = defaultdict_factory[dict_name]
+                stmts, key_expr = make_missing_check(dict_name, node.slice, factory, template)
                 all_inits.extend(stmts)
                 node.slice = key_expr
                 return node
