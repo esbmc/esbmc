@@ -97,9 +97,10 @@ execution_statet::execution_statet(const execution_statet &ex)
 {
   // The base slice is already copied by goto_symext(ex) in the
   // initialiser list; state_level2 / global_value_set are cloned there
-  // too. operator= populates execution_statet's own fields without
-  // touching the base or the cloned level2 pointer.
-  *this = ex;
+  // too. copy_derived_from populates execution_statet's own fields
+  // without touching the base, state_level2, threads_state, or
+  // global_value_set.
+  copy_derived_from(ex);
 
   // Regenerate threads state using the cloned level2/value_set so each
   // goto_symex_statet refers to the new instance, not the source's.
@@ -111,15 +112,13 @@ execution_statet::execution_statet(const execution_statet &ex)
   cur_state = &threads_state[active_thread];
 }
 
-execution_statet &execution_statet::operator=(const execution_statet &ex)
+void execution_statet::copy_derived_from(const execution_statet &ex)
 {
-  // Derived-only: the goto_symext base is copied exactly once by the
-  // copy ctor's initialiser list. Re-copying it here (as `= default`
-  // would) doubles base work on every DFS clone.
-  //
-  // Note: state_level2 is intentionally not assigned. The copy ctor
-  // clones it in its initialiser list; assigning the source pointer
-  // here would alias ex's level2 into us and undo that clone.
+  // Only execution_statet's own scheduling fields are touched here. The
+  // goto_symext base, state_level2, threads_state, and global_value_set
+  // are deliberately omitted: the copy constructor handles them via its
+  // initialiser list (base + state_level2 clone + global_value_set) and
+  // body (threads_state rebuilt against the cloned level2).
 
   preserved_paths = ex.preserved_paths;
   atomic_numbers = ex.atomic_numbers;
@@ -130,7 +129,6 @@ execution_statet &execution_statet::operator=(const execution_statet &ex)
   guard_execution = ex.guard_execution;
   nondet_count = ex.nondet_count;
   node_id = ex.node_id;
-  global_value_set = ex.global_value_set;
   interleaving_unviable = ex.interleaving_unviable;
 
   monitor_tid = ex.monitor_tid;
@@ -151,8 +149,6 @@ execution_statet &execution_statet::operator=(const execution_statet &ex)
   cswitch_forced = ex.cswitch_forced;
 
   state_level2->owner = this;
-
-  return *this;
 }
 
 void execution_statet::symex_step(reachability_treet &art)

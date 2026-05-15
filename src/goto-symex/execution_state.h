@@ -114,13 +114,12 @@ public:
    *  Does what you might expect, but also updates any ex_state_level2t objects
    *  in the new execution_statet to point at the right object. */
   execution_statet(const execution_statet &ex);
-  /** Derived-only assignment. The base goto_symext slice is *not* copied
-   *  here; the copy constructor's initialiser list invokes the base copy
-   *  constructor exactly once, and this assignment is then used to copy
-   *  execution_statet's own fields. Using `= default` would re-copy the
-   *  base via goto_symext::operator=, doubling base work on every DFS
-   *  clone (a hot-path regression). */
-  execution_statet &operator=(const execution_statet &ex);
+  /** Public assignment is deleted: a standalone `a = b` would not be
+   *  correct here (it would leave the base goto_symext slice, threads_state,
+   *  cur_state, and state_level2 as `a`'s old objects). Cloning happens
+   *  via the copy constructor, which uses copy_derived_from internally to
+   *  populate execution_statet's own fields without re-copying the base. */
+  execution_statet &operator=(const execution_statet &ex) = delete;
 
   /**
    *  Default destructor.
@@ -618,6 +617,14 @@ protected:
   /** Are we evaluating the thread guard in the SMT solver during context
    *  switching? */
   bool smt_thread_guard;
+
+  /** Copy execution_statet's own scheduling fields from `ex`. The base
+   *  goto_symext slice is left untouched (the copy constructor's
+   *  initialiser list handles it once). state_level2 and threads_state
+   *  are also left untouched: state_level2 is cloned in the initialiser
+   *  list, and threads_state is rebuilt by the copy constructor body
+   *  against that clone. */
+  void copy_derived_from(const execution_statet &ex);
 
   // Static stuff:
 
