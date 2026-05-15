@@ -9869,8 +9869,7 @@ void python_converter::get_return_statements(
     // materialisation, otherwise the call expression ends up embedded
     // directly in the GOTO RETURN and trips value-set's make_member
     // assertion at value_set.cpp:1543.
-    const std::string ast_type =
-      ast_node["value"]["_type"].get<std::string>();
+    const std::string ast_type = ast_node["value"]["_type"].get<std::string>();
     std::string func_name = "func";
     if (ast_type == "Call")
     {
