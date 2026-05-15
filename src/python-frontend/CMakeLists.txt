@@ -18,6 +18,7 @@ add_library(pythonfrontend STATIC
             converter/converter_compare.cpp
             converter/converter_dunder.cpp
             converter/converter_funcall.cpp
+            converter/converter_stmt.cpp
             converter/converter_symbols.cpp
             converter/converter_types.cpp
             converter/converter_unop.cpp

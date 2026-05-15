@@ -1,6 +1,7 @@
 #pragma once
 
 #include <python-frontend/json_utils.h>
+#include <python-frontend/type_utils.h>
 #include <util/message.h>
 #include <util/std_types.h>
 
@@ -13,6 +14,39 @@
 
 namespace python_frontend
 {
+
+// Python AST statement-id (e.g. "If", "Return") -> internal StatementType.
+inline StatementType get_statement_type(const nlohmann::json &element)
+{
+  static const std::unordered_map<std::string, StatementType> statement_map = {
+    {"AnnAssign", StatementType::VARIABLE_ASSIGN},
+    {"Assign", StatementType::VARIABLE_ASSIGN},
+    {"FunctionDef", StatementType::FUNC_DEFINITION},
+    {"If", StatementType::IF_STATEMENT},
+    {"AugAssign", StatementType::COMPOUND_ASSIGN},
+    {"While", StatementType::WHILE_STATEMENT},
+    {"For", StatementType::FOR_STATEMENT},
+    {"Expr", StatementType::EXPR},
+    {"Return", StatementType::RETURN},
+    {"Assert", StatementType::ASSERT},
+    {"ClassDef", StatementType::CLASS_DEFINITION},
+    {"Pass", StatementType::PASS},
+    {"Break", StatementType::BREAK},
+    {"Continue", StatementType::CONTINUE},
+    {"ImportFrom", StatementType::IMPORT},
+    {"Import", StatementType::IMPORT},
+    {"Raise", StatementType::RAISE},
+    {"Global", StatementType::GLOBAL},
+    {"Try", StatementType::TRY},
+    {"ExceptHandler", StatementType::EXCEPTHANDLER},
+    {"Delete", StatementType::DELETE_STATEMENT}};
+
+  if (!element.contains("_type"))
+    return StatementType::UNKNOWN;
+
+  auto it = statement_map.find(element["_type"]);
+  return (it != statement_map.end()) ? it->second : StatementType::UNKNOWN;
+}
 
 // Operator name (Python AST id, e.g. "Add", "Lt") -> ESBMC operator id.
 inline const std::unordered_map<std::string, std::string> &operator_map()
