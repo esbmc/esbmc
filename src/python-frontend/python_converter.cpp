@@ -253,6 +253,11 @@ bool python_converter::import_module_into_block(
   create_builtin_symbols();
   python_annotation<nlohmann::json> imported_annotator(
     nested_module_json, const_cast<global_scope &>(global_scope_));
+  // Expose the importing module's AST so that multi-axis subscript usages
+  // on imported-class instances (e.g. `t[i:j, k:l]` where `Tile` comes from
+  // this imported module) are visible when inferring tuple-key annotations
+  // for __getitem__/__setitem__ (GitHub #4545).
+  imported_annotator.add_extra_subscript_inference_source(*ast_json);
   imported_annotator.add_type_annotation();
 
   exprt imported_code = with_ast(&nested_module_json, [&]() {
