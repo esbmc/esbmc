@@ -125,8 +125,6 @@ const nlohmann::json &get_return_statement(const nlohmann::json &function)
     " has no return statement");
 }
 
-
-
 bool python_converter::function_has_missing_return_paths(
   const nlohmann::json &function_node)
 {

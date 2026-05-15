@@ -23,7 +23,8 @@
 exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
 {
   std::string op(element["op"]["_type"].get<std::string>());
-  exprt logical_expr(python_frontend::map_operator(op, bool_type()), bool_type());
+  exprt logical_expr(
+    python_frontend::map_operator(op, bool_type()), bool_type());
   bool contains_non_boolean = false;
   auto get_truthy_condition = [&](const exprt &value_expr) -> exprt {
     typet list_type = type_handler_.get_list_type();
@@ -201,7 +202,8 @@ exprt python_converter::handle_chained_comparisons_logic(
   for (size_t i = 0; i + 1 < element["comparators"].size(); ++i)
   {
     std::string op(element["ops"][i + 1]["_type"].get<std::string>());
-    exprt logical_expr(python_frontend::map_operator(op, bool_type()), bool_type());
+    exprt logical_expr(
+      python_frontend::map_operator(op, bool_type()), bool_type());
     exprt op1 = get_expr(element["comparators"][i]);
     exprt op2 = get_expr(element["comparators"][i + 1]);
 
@@ -527,7 +529,8 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
         strcmp_call.location() = get_location_from_decl(element);
         strcmp_call.type() = int_type();
 
-        exprt result(python_frontend::map_operator(op, bool_type()), bool_type());
+        exprt result(
+          python_frontend::map_operator(op, bool_type()), bool_type());
         result.copy_to_operands(strcmp_call, gen_zero(int_type()));
         result.location() = get_location_from_decl(element);
         return result;
@@ -902,7 +905,8 @@ exprt python_converter::handle_relational_type_mismatches(
 
   if ((lhs_is_float && rhs_is_str) || (lhs_is_str && rhs_is_float))
   {
-    exprt binary_expr(python_frontend::map_operator(op, bool_type()), bool_type());
+    exprt binary_expr(
+      python_frontend::map_operator(op, bool_type()), bool_type());
 
     locationt loc = get_location_from_decl(element);
     if (loc.is_nil() || loc.get_line().empty())

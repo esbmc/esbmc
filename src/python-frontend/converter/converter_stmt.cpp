@@ -463,7 +463,6 @@ void python_converter::handle_assignment_type_adjustments(
   }
 }
 
-
 void python_converter::handle_array_unpacking(
   const nlohmann::json &ast_node,
   const nlohmann::json &target,
@@ -2363,7 +2362,9 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
   else if (test_type == "BoolOp" && !model_mode)
   {
     exprt boolop_expr(
-      python_frontend::map_operator(ast_node["test"]["op"]["_type"], bool_type()), bool_type());
+      python_frontend::map_operator(
+        ast_node["test"]["op"]["_type"], bool_type()),
+      bool_type());
     for (const auto &operand : ast_node["test"]["values"])
       boolop_expr.copy_to_operands(
         to_bool_condition(get_expr(operand), operand));
@@ -3265,4 +3266,3 @@ void python_converter::get_delete_statement(
     }
   }
 }
-

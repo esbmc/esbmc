@@ -14,7 +14,6 @@
 
 namespace python_frontend
 {
-
 // Python AST statement-id (e.g. "If", "Return") -> internal StatementType.
 inline StatementType get_statement_type(const nlohmann::json &element)
 {
@@ -124,9 +123,8 @@ inline struct_typet::componentt build_component(
 }
 
 // Returns true if the named class inherits from Python's Enum.
-inline bool is_enum_class(
-  const std::string &class_name,
-  const nlohmann::json &ast_json)
+inline bool
+is_enum_class(const std::string &class_name, const nlohmann::json &ast_json)
 {
   const nlohmann::json class_node =
     json_utils::find_class(ast_json["body"], class_name);

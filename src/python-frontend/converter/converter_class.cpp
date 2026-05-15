@@ -511,8 +511,8 @@ void python_converter::get_attributes_from_self(
 
       if (!clazz.has_component(attr_name))
       {
-        struct_typet::componentt comp =
-          python_frontend::build_component(current_class_name_, attr_name, type);
+        struct_typet::componentt comp = python_frontend::build_component(
+          current_class_name_, attr_name, type);
         clazz.components().push_back(comp);
       }
     }
@@ -532,8 +532,8 @@ void python_converter::get_attributes_from_self(
       const std::string &attr_name = stmt["targets"][0]["attr"];
       if (!clazz.has_component(attr_name))
       {
-        struct_typet::componentt comp =
-          python_frontend::build_component(current_class_name_, attr_name, type);
+        struct_typet::componentt comp = python_frontend::build_component(
+          current_class_name_, attr_name, type);
         clazz.components().push_back(comp);
       }
     }

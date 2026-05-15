@@ -50,16 +50,11 @@
 using namespace json_utils;
 namespace fs = boost::filesystem;
 
-
 std::string
 python_converter::get_op(const std::string &op, const typet &type) const
 {
   return python_frontend::map_operator(op, type);
 }
-
-
-
-
 
 python_converter::python_converter(
   contextt &_context,
@@ -659,4 +654,3 @@ void python_converter::convert()
       "The main function is already defined in another module");
   }
 }
-

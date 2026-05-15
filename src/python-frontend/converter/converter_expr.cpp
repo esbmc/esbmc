@@ -66,12 +66,6 @@ static ExpressionType get_expression_type(const nlohmann::json &element)
   return ExpressionType::UNKNOWN;
 }
 
-
-
-
-
-
-
 exprt python_converter::make_char_array_expr(
   const std::vector<unsigned char> &string_literal,
   const typet &t)
@@ -229,8 +223,6 @@ bool python_converter::is_bytes_literal(const nlohmann::json &element)
 
   return false;
 }
-
-
 
 exprt python_converter::get_lambda_expr(const nlohmann::json &element)
 {
