@@ -283,6 +283,16 @@ public:
     apply_pending_specializations();
   }
 
+  /// Register an additional AST whose multi-axis subscript usages must be
+  /// considered when inferring `__getitem__` / `__setitem__` key tuple
+  /// types. Used when annotating an imported module to make the importing
+  /// module's call sites visible (GitHub #4545). The caller retains
+  /// ownership; @p ast must outlive this annotator.
+  void add_extra_subscript_inference_source(const Json &ast)
+  {
+    extra_subscript_inference_asts_.push_back(&ast);
+  }
+
   void add_type_annotation(const std::string &func_name)
   {
     current_line_ = 0;
@@ -721,62 +731,114 @@ private:
 
   // For a class @p class_name defining __getitem__/__setitem__, return the
   // synthesised per-element type names for a `tuple[T1, T2, ...]` annotation
-  // when a multi-axis subscript usage `instance[a, b, ...]` exists in the AST
-  // whose `instance` is module-scope-annotated as @p class_name. Slice and
-  // scalar elements are both supported, including all-scalar shapes
-  // (GitHub #4542). Returns empty when no qualifying subscript exists, when
-  // any element's type cannot be inferred, or when sites disagree on arity
-  // or per-position element types.
+  // when a multi-axis subscript usage `instance[a, b, ...]` exists whose
+  // `instance` is annotated as @p class_name. Slice and scalar elements are
+  // both supported, including all-scalar shapes (GitHub #4542). Both
+  // module-scope `AnnAssign` and function-parameter annotations are
+  // considered as sources for the instance→class mapping. When called on an
+  // imported module, the importing module's AST is also scanned so the
+  // cross-module call site is visible (GitHub #4545). Returns empty when no
+  // qualifying subscript exists, when any element's type cannot be
+  // inferred, or when sites disagree on arity or per-position element
+  // types.
   std::vector<std::string>
   infer_subscript_key_tuple_types(const std::string &class_name)
   {
-    // Build a one-shot map from module-scope variable name to its declared
-    // class. Only `AnnAssign(target=Name, annotation=Name)` is consulted —
-    // narrow on purpose: it's the pattern the issue exercises and avoids
-    // brittle cross-scope resolution.
-    std::unordered_map<std::string, std::string> var_to_class;
-    if (ast_.contains("body") && ast_["body"].is_array())
-    {
-      for (const Json &stmt : ast_["body"])
-      {
-        if (
-          !stmt.contains("_type") || stmt["_type"] != "AnnAssign" ||
-          !stmt.contains("target") || stmt["target"]["_type"] != "Name" ||
-          !stmt["target"].contains("id") || !stmt.contains("annotation") ||
-          stmt["annotation"]["_type"] != "Name" ||
-          !stmt["annotation"].contains("id"))
-          continue;
-        var_to_class[stmt["target"]["id"].template get<std::string>()] =
-          stmt["annotation"]["id"].template get<std::string>();
-      }
-    }
-
     // Unanimous-wins on per-position element types. The first qualifying
     // site fixes the expected type vector; any later site that disagrees on
     // arity or on a per-position type abandons synthesis so the existing
     // void* default keeps working for those call sites.
     bool any_reject = false;
     std::vector<std::string> expected;
-    visit_class_tuple_subscripts(
-      ast_, class_name, var_to_class, [&](const Json &elts) {
-        if (any_reject)
-          return;
-        std::vector<std::string> types = infer_tuple_element_types(elts);
-        if (types.empty())
-        {
-          any_reject = true;
-          return;
-        }
-        if (expected.empty())
-          expected = std::move(types);
-        else if (expected != types)
-          any_reject = true;
-      });
+    auto reducer = [&](const Json &elts) {
+      if (any_reject)
+        return;
+      std::vector<std::string> types = infer_tuple_element_types(elts);
+      if (types.empty())
+      {
+        any_reject = true;
+        return;
+      }
+      if (expected.empty())
+        expected = std::move(types);
+      else if (expected != types)
+        any_reject = true;
+    };
+
+    auto scan = [&](const Json &ast) {
+      std::unordered_map<std::string, std::string> var_to_class;
+      collect_class_instance_map(ast, var_to_class);
+      visit_class_tuple_subscripts(ast, class_name, var_to_class, reducer);
+    };
+
+    scan(ast_);
+    for (const Json *extra : extra_subscript_inference_asts_)
+      scan(*extra);
 
     if (any_reject)
       return {};
     return expected;
   }
+
+  // Populate @p out with a name→class-name map for every variable in @p ast
+  // that has a Name-typed annotation. Two sources are consulted:
+  //   * Module-scope `AnnAssign(target=Name, annotation=Name)` — e.g.
+  //     `t: Tile = Tile(...)`.
+  //   * Function-parameter annotations on any FunctionDef / AsyncFunctionDef
+  //     (including methods nested in ClassDef) — e.g.
+  //     `def f(t: Tile): ...`.
+  // Conflicts across sites with the same name resolve last-write-wins. The
+  // visitor filters by class_name at consumption time, so in the common
+  // case — a parameter `t: ThisCls` shadowing a module-scope `t: OtherCls` —
+  // only sites for the winning class match. A rare shadowing pattern (a
+  // module-scope `t: OtherCls` together with a parameter `t: ThisCls` *and*
+  // a module-scope multi-axis subscript `t[a, b]` that legitimately belongs
+  // to OtherCls) could feed the wrong shape into ThisCls's reducer; if the
+  // shapes disagree the unanimous-wins reducer bails out, otherwise an
+  // incorrect annotation is synthesised. Not observed in practice; not
+  // worth the complexity of lexical scoping until it bites.
+  void collect_class_instance_map(
+    const Json &ast,
+    std::unordered_map<std::string, std::string> &out) const
+  {
+    auto record = [&](const Json &target_id, const Json &annotation) {
+      if (
+        !target_id.is_string() || !annotation.is_object() ||
+        !annotation.contains("_type") || annotation["_type"] != "Name" ||
+        !annotation.contains("id") || !annotation["id"].is_string())
+        return;
+      out[target_id.template get<std::string>()] =
+        annotation["id"].template get<std::string>();
+    };
+
+    std::function<void(const Json &)> walk = [&](const Json &node) {
+      if (node.is_object())
+      {
+        if (
+          node.contains("_type") && node["_type"] == "AnnAssign" &&
+          node.contains("target") && node["target"].is_object() &&
+          node["target"].contains("_type") &&
+          node["target"]["_type"] == "Name" && node["target"].contains("id") &&
+          node.contains("annotation"))
+          record(node["target"]["id"], node["annotation"]);
+        else if (
+          node.contains("_type") && node["_type"] == "arg" &&
+          node.contains("arg") && node.contains("annotation"))
+          record(node["arg"], node["annotation"]);
+        for (auto it = node.begin(); it != node.end(); ++it)
+          walk(it.value());
+      }
+      else if (node.is_array())
+      {
+        for (const auto &elem : node)
+          walk(elem);
+      }
+    };
+
+    if (ast.is_object() && ast.contains("body"))
+      walk(ast["body"]);
+  }
+
 
   // Walk @p node and invoke @p visit(elts) for every Subscript whose value
   // is a Name resolving to @p class_name and whose slice is a Tuple. @p
@@ -4610,4 +4672,5 @@ private:
     std::vector<std::string> class_types;
   };
   std::vector<pending_specializationt> pending_specializations_;
+  std::vector<const Json *> extra_subscript_inference_asts_;
 };
