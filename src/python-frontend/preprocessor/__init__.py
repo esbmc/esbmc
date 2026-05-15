@@ -2931,24 +2931,55 @@ class Preprocessor(DataclassMixin, GeneratorMixin, LoopMixin, ast.NodeTransforme
 
         node = self.expand_dataclass(node)
         self._collect_class_attr_annotations(node)
-        self._record_exit_suppresses_all(node)
+        self._record_class_with_exit(node)
         self.generic_visit(node)
 
         self.current_class_name = old_class_name
         return node
 
-    def _record_exit_suppresses_all(self, class_node):
-        """Cache classes whose __exit__ unconditionally returns True so
-        visit_With can suppress exceptions from the body."""
-        if not hasattr(self, "_exit_suppresses_all"):
-            self._exit_suppresses_all = set()
-        for member in class_node.body:
-            if (isinstance(member, ast.FunctionDef) and member.name == "__exit__"
-                    and len(member.body) == 1 and isinstance(member.body[0], ast.Return)
-                    and isinstance(member.body[0].value, ast.Constant)
-                    and member.body[0].value.value is True):
-                self._exit_suppresses_all.add(class_node.name)
-                return
+    def _record_class_with_exit(self, class_node):
+        """Cache classes whose __exit__ can potentially suppress.
+
+        visit_With lowers a `with` over such a class to a try/except wrapper
+        that calls __exit__ in the handler and re-raises iff the result is
+        falsy, matching CPython's dynamic suppression semantics.
+
+        A class qualifies if it (or any of its bases) defines __exit__ with at
+        least one Return whose value is neither omitted nor literal None — i.e.
+        a return that could plausibly be truthy.  Bodies that only ``pass``,
+        ``return`` or ``return None`` always evaluate falsy and need no
+        dispatch; the default propagation is already correct for them.
+        """
+        if not hasattr(self, "_classes_with_exit"):
+            self._classes_with_exit = set()
+        defines_truthy_exit = any(
+            isinstance(member, ast.FunctionDef) and member.name == "__exit__"
+            and self._function_may_return_truthy(member) for member in class_node.body)
+        inherits_truthy_exit = any(
+            isinstance(base, ast.Name) and base.id in self._classes_with_exit
+            for base in class_node.bases)
+        if defines_truthy_exit or inherits_truthy_exit:
+            self._classes_with_exit.add(class_node.name)
+
+    @staticmethod
+    def _function_may_return_truthy(func_node):
+        """True if func has any Return (in its own scope) with a non-None value.
+
+        Returns nested inside an inner FunctionDef / AsyncFunctionDef / Lambda /
+        ClassDef belong to a different scope and must not influence the outer
+        function's verdict.
+        """
+        stack = list(func_node.body)
+        skip = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)
+        while stack:
+            node = stack.pop()
+            if isinstance(node, skip):
+                continue
+            if isinstance(node, ast.Return) and node.value is not None and not (
+                    isinstance(node.value, ast.Constant) and node.value.value is None):
+                return True
+            stack.extend(ast.iter_child_nodes(node))
+        return False
 
     def _collect_class_attr_annotations(self, class_node):
         """Scan __init__ for self.attr: T = ... and cache attribute annotations."""
