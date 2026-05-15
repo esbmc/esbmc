@@ -10,8 +10,6 @@
 #include <python-frontend/tuple_handler.h>
 #include <python-frontend/type_handler.h>
 #include <python-frontend/type_utils.h>
-
-using namespace json_utils;
 #include <util/arith_tools.h>
 #include <util/c_typecast.h>
 #include <util/c_types.h>
@@ -20,6 +18,8 @@ using namespace json_utils;
 #include <util/python_types.h>
 #include <util/std_code.h>
 #include <util/string_constant.h>
+
+using namespace json_utils;
 
 // Resolve symbol values to constants
 exprt python_converter::get_resolved_value(const exprt &expr)
