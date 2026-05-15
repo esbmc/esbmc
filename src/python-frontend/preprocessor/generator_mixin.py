@@ -1351,3 +1351,121 @@ class GeneratorMixin:
                 pre_stmts.append(s_copy)
             self.generator_emitted_init.add(gen_var)
         return pre_stmts
+
+    def _get_dict_expr_from_items_call(self, call_node):
+        """If call_node is d.items() on a known dict, return the dict expression. Else None."""
+        if not (isinstance(call_node, ast.Call) and isinstance(call_node.func, ast.Attribute)
+                and call_node.func.attr == "items" and not call_node.args
+                and not getattr(call_node, "keywords", [])):
+            return None
+        base = call_node.func.value
+        if isinstance(base, ast.Name):
+            known_type = self.known_variable_types.get(base.id)
+            if known_type is not None and known_type != "dict":
+                return None
+        return base
+
+    def _get_items_dict_expr(self, node):
+        """Return dict_expr if node is set(X) where X is a dict_items source, else None."""
+        if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id
+                == "set" and len(node.args) == 1 and not getattr(node, "keywords", [])):
+            return None
+        arg = node.args[0]
+        if isinstance(arg, ast.Name) and arg.id in self.dict_items_vars:
+            return self.dict_items_vars[arg.id]
+        return self._get_dict_expr_from_items_call(arg)
+
+    def _try_transform_items_set_eq(self, set_side, literal_side, source_node):
+        """Transform set(d.items()) == {(k,v),...} into dict membership checks.
+
+        Rewrites to: set(d.keys()) == {k,...} and d[k1] == v1 and d[k2] == v2 ...
+        This avoids tuple struct comparison and uses only proven-working primitives.
+        Returns the new AST node, or None if the pattern doesn't match.
+        """
+        dict_expr = self._get_items_dict_expr(set_side)
+        if dict_expr is None:
+            return None
+        if not isinstance(literal_side, ast.Set) or not literal_side.elts:
+            return None
+        pairs = []
+        for elt in literal_side.elts:
+            if not (isinstance(elt, ast.Tuple) and len(elt.elts) == 2):
+                return None
+            pairs.append((elt.elts[0], elt.elts[1]))
+
+        # Avoid set-equality backend path: prove same keys via size + membership.
+        len_eq = ast.Compare(
+            left=ast.Call(
+                func=ast.Name(id="len", ctx=ast.Load()),
+                args=[copy.deepcopy(dict_expr)],
+                keywords=[],
+            ),
+            ops=[ast.Eq()],
+            comparators=[ast.Constant(value=len(pairs))],
+        )
+
+        # Build: (k in d) and d[k] == v for each pair.
+        value_checks = [len_eq]
+        for k, v in pairs:
+            key_in_dict = ast.Compare(
+                left=copy.deepcopy(k),
+                ops=[ast.In()],
+                comparators=[copy.deepcopy(dict_expr)],
+            )
+            subscript = ast.Subscript(value=dict_expr, slice=k, ctx=ast.Load())
+            val_eq = ast.Compare(left=subscript, ops=[ast.Eq()], comparators=[v])
+            value_checks.append(key_in_dict)
+            value_checks.append(val_eq)
+
+        result = ast.BoolOp(op=ast.And(), values=value_checks)
+        self.ensure_all_locations(result, source_node)
+        ast.fix_missing_locations(result)
+        return result
+
+    def _try_transform_list_tuple_eq(self, left_side, literal_side, source_node):
+        """Transform x == [(a,b), ...] into len/index comparisons for x."""
+        if not isinstance(left_side, ast.Name):
+            return None
+        if not isinstance(literal_side, ast.List):
+            return None
+
+        tuple_rows = []
+        for elt in literal_side.elts:
+            if not isinstance(elt, ast.Tuple):
+                return None
+            tuple_rows.append(elt)
+
+        checks = [
+            ast.Compare(
+                left=ast.Call(
+                    func=ast.Name(id="len", ctx=ast.Load()),
+                    args=[ast.Name(id=left_side.id, ctx=ast.Load())],
+                    keywords=[],
+                ),
+                ops=[ast.Eq()],
+                comparators=[ast.Constant(value=len(tuple_rows))],
+            )
+        ]
+
+        for row_idx, tuple_node in enumerate(tuple_rows):
+            for col_idx, value_node in enumerate(tuple_node.elts):
+                lhs = ast.Subscript(
+                    value=ast.Subscript(
+                        value=ast.Name(id=left_side.id, ctx=ast.Load()),
+                        slice=ast.Constant(value=row_idx),
+                        ctx=ast.Load(),
+                    ),
+                    slice=ast.Constant(value=col_idx),
+                    ctx=ast.Load(),
+                )
+                checks.append(
+                    ast.Compare(
+                        left=lhs,
+                        ops=[ast.Eq()],
+                        comparators=[copy.deepcopy(value_node)],
+                    ))
+
+        result = ast.BoolOp(op=ast.And(), values=checks)
+        self.ensure_all_locations(result, source_node)
+        ast.fix_missing_locations(result)
+        return result
