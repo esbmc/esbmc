@@ -839,7 +839,6 @@ private:
       walk(ast["body"]);
   }
 
-
   // Walk @p node and invoke @p visit(elts) for every Subscript whose value
   // is a Name resolving to @p class_name and whose slice is a Tuple. @p
   // visit receives the tuple's `elts` JSON array.
