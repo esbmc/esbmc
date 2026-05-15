@@ -54,7 +54,11 @@ bool body_is_safe(
     // loop_head (assume(exit_guard) for Path 1, or ASSIGN i=post for
     // Path 2). Refuse: the rewrite would let the external edge fall
     // through past the SKIPs without seeing the head's effect.
-    if (it->is_target())
+    //
+    // The loop_head itself is always a target (the back-edge points to
+    // it) and is also body_first for do-while loops — don't reject on
+    // that. For top-test loops it's not in the iteration range anyway.
+    if (it != loop_head && it->is_target())
       return false;
 
     if (it->is_location() || it->is_skip() || it->is_decl())
