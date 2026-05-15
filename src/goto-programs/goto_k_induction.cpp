@@ -72,6 +72,13 @@ void goto_k_inductiont::convert_finite_loop(loopst &loop)
   goto_programt::targett loop_head = loop.get_original_loop_head();
   goto_programt::targett loop_exit = loop.get_original_loop_exit();
 
+  // The branch cache is loop-scoped: a cached `reaches` value is computed
+  // against this loop's `loop_exit`, and the cached guards were collected
+  // along this loop's recursive walk. Nested loops share the goto_k_inductiont
+  // instance (one per function), so without clearing here the outer loop's
+  // entries would be reused by the inner loop with a different `loop_exit`.
+  marked_branch.clear();
+
   guardst guards;
   get_entry_cond_rec(loop_head, loop_exit, guards);
 
