@@ -95,13 +95,11 @@ execution_statet::execution_statet(const execution_statet &ex)
       std::dynamic_pointer_cast<ex_state_level2t>(ex.state_level2->clone())),
     global_value_set(ex.global_value_set)
 {
-  // The defaulted operator= would member-wise copy state_level2, which
-  // would alias ex.state_level2 into us and undo the clone the
-  // initialiser list just performed. Stash and restore around *this=ex.
-  auto cloned_level2 = state_level2;
+  // The base slice is already copied by goto_symext(ex) in the
+  // initialiser list; state_level2 / global_value_set are cloned there
+  // too. operator= populates execution_statet's own fields without
+  // touching the base or the cloned level2 pointer.
   *this = ex;
-  state_level2 = std::move(cloned_level2);
-  state_level2->owner = this;
 
   // Regenerate threads state using the cloned level2/value_set so each
   // goto_symex_statet refers to the new instance, not the source's.
@@ -111,6 +109,50 @@ execution_statet::execution_statet(const execution_statet &ex)
 
   // Reassign which state is currently being worked on.
   cur_state = &threads_state[active_thread];
+}
+
+execution_statet &execution_statet::operator=(const execution_statet &ex)
+{
+  // Derived-only: the goto_symext base is copied exactly once by the
+  // copy ctor's initialiser list. Re-copying it here (as `= default`
+  // would) doubles base work on every DFS clone.
+  //
+  // Note: state_level2 is intentionally not assigned. The copy ctor
+  // clones it in its initialiser list; assigning the source pointer
+  // here would alias ex's level2 into us and undo that clone.
+
+  preserved_paths = ex.preserved_paths;
+  atomic_numbers = ex.atomic_numbers;
+  thread_start_data = ex.thread_start_data;
+  last_active_thread = ex.last_active_thread;
+  last_transition = ex.last_transition;
+  active_thread = ex.active_thread;
+  guard_execution = ex.guard_execution;
+  nondet_count = ex.nondet_count;
+  node_id = ex.node_id;
+  global_value_set = ex.global_value_set;
+  interleaving_unviable = ex.interleaving_unviable;
+
+  monitor_tid = ex.monitor_tid;
+  tid_is_set = ex.tid_is_set;
+  monitor_from_tid = ex.monitor_from_tid;
+  mon_from_tid = ex.mon_from_tid;
+  thread_cswitch_threshold = ex.thread_cswitch_threshold;
+  symex_trace = ex.symex_trace;
+  smt_during_symex = ex.smt_during_symex;
+  smt_thread_guard = ex.smt_thread_guard;
+
+  CS_number = ex.CS_number;
+
+  thread_last_reads = ex.thread_last_reads;
+  thread_last_writes = ex.thread_last_writes;
+  dependency_chain = ex.dependency_chain;
+  mpor_says_no = ex.mpor_says_no;
+  cswitch_forced = ex.cswitch_forced;
+
+  state_level2->owner = this;
+
+  return *this;
 }
 
 void execution_statet::symex_step(reachability_treet &art)

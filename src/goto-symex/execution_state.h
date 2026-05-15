@@ -114,11 +114,13 @@ public:
    *  Does what you might expect, but also updates any ex_state_level2t objects
    *  in the new execution_statet to point at the right object. */
   execution_statet(const execution_statet &ex);
-  /** Defaulted op=. Not used by the copy constructor (which would lose
-   *  the state_level2 clone invariant); kept defaulted so any future
-   *  direct assignment is a compiler-generated member-wise copy that
-   *  automatically picks up new fields. */
-  execution_statet &operator=(const execution_statet &ex) = default;
+  /** Derived-only assignment. The base goto_symext slice is *not* copied
+   *  here; the copy constructor's initialiser list invokes the base copy
+   *  constructor exactly once, and this assignment is then used to copy
+   *  execution_statet's own fields. Using `= default` would re-copy the
+   *  base via goto_symext::operator=, doubling base work on every DFS
+   *  clone (a hot-path regression). */
+  execution_statet &operator=(const execution_statet &ex);
 
   /**
    *  Default destructor.
