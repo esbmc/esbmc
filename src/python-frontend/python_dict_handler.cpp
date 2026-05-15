@@ -2786,21 +2786,21 @@ exprt python_dict_handler::handle_dict_constructor(
   if (args.size() != 1)
     return nil_exprt();
 
-  // Unwrap a single set/list/tuple/frozenset wrapper around the iterable.
-  // dict(set([(k,v),...])) and dict(list([])) are common patterns.
+  // Peel any nesting of set/list/tuple/frozenset wrappers around the
+  // iterable. dict(set([(k,v),...])) and dict(list([])) are common, and
+  // dict(list(set(...))) appears occasionally — stop at the first inner
+  // value that is not a recognised wrapper Call.
   const nlohmann::json *arg = &args[0];
-  if (
-    arg->value("_type", "") == "Call" && arg->contains("func") &&
-    (*arg)["func"].value("_type", "") == "Name")
+  while (arg->value("_type", "") == "Call" && arg->contains("func") &&
+         (*arg)["func"].value("_type", "") == "Name")
   {
     const std::string id = (*arg)["func"].value("id", "");
     if (
-      (id == "set" || id == "list" || id == "tuple" || id == "frozenset") &&
-      arg->contains("args") && (*arg)["args"].is_array() &&
-      (*arg)["args"].size() == 1)
-    {
-      arg = &(*arg)["args"][0];
-    }
+      (id != "set" && id != "list" && id != "tuple" && id != "frozenset") ||
+      !arg->contains("args") || !(*arg)["args"].is_array() ||
+      (*arg)["args"].size() != 1)
+      break;
+    arg = &(*arg)["args"][0];
   }
 
   const std::string &arg_type = arg->value("_type", "");

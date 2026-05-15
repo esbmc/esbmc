@@ -507,8 +507,8 @@ public:
    *
    * Returns nil_exprt for unsupported forms. The caller falls back to
    * generic call dispatch, which may produce broken GOTO for iterables
-   * this handler does not recognise — extend the matcher above rather
-   * than relying on the fallback for new forms.
+   * this handler does not recognise — extend the matcher in the .cpp
+   * implementation rather than relying on the fallback for new forms.
    *
    * @param call_node The function call AST node (Call(Name("dict"), [arg])).
    * @return Expression for the resulting dict symbol, or nil_exprt.

@@ -2020,6 +2020,12 @@ class Preprocessor(DataclassMixin, GeneratorMixin, LoopMixin, ast.NodeTransforme
             if not (isinstance(elt, ast.Tuple) and len(elt.elts) == 2):
                 return None
             pairs.append((elt.elts[0], elt.elts[1]))
+        # Pair keys must be statically distinct Constants. Dict keys are
+        # distinct, and set literals dedupe by value at runtime; without
+        # this guard, e.g. {(1,'a'),(1,'a')} (CPython len 1) would rewrite
+        # to len(d)==2, turning a True assertion on {1:'a'} into False.
+        if not self._all_constants_distinct([k for k, _ in pairs]):
+            return None
 
         # Avoid set-equality backend path: prove same keys via size + membership.
         len_eq = ast.Compare(
@@ -2058,6 +2064,11 @@ class Preprocessor(DataclassMixin, GeneratorMixin, LoopMixin, ast.NodeTransforme
         semantics. Soundness guards (each bails when violated):
         - wrapper-vs-literal type: set ↔ ast.Set; list/sorted ↔ ast.List
           (CPython makes ``list == set`` always False otherwise).
+        - literal keys must be statically distinct Constants. Dict keys are
+          distinct, so any literal with duplicate keys mismatches CPython
+          semantics: for set wrapper, ``{1,1}`` dedupes to ``{1}`` (length
+          mismatch); for list/sorted, ``[1,1]`` never equals any view of a
+          real dict. Bailing here is sound.
         - sorted wrapper: literal must be statically sorted ascending
           (otherwise CPython is always False but the rewrite would say True).
         - list wrapper: literal must have at most one element
@@ -2073,6 +2084,8 @@ class Preprocessor(DataclassMixin, GeneratorMixin, LoopMixin, ast.NodeTransforme
             if not isinstance(literal_side, ast.List):
                 return None
         keys = list(literal_side.elts)
+        if keys and not self._all_constants_distinct(keys):
+            return None
         if wrapper == "sorted" and not self._is_sorted_const_list(keys):
             return None
         if wrapper == "list" and len(keys) > 1:
@@ -2169,6 +2182,11 @@ class Preprocessor(DataclassMixin, GeneratorMixin, LoopMixin, ast.NodeTransforme
 
         Rewrites to ``len(d) == N and k_i in d and d[k_i] == v_i`` per pair.
         Soundness guards:
+        - pair keys must be statically distinct Constants. Dict keys are
+          distinct, so any literal pair list with duplicate keys never
+          equals a real dict's items view; without this guard, e.g.
+          ``[(1,'a'),(1,'a')]`` would rewrite to a satisfiable formula
+          (``{1:'a', 2:anything}``) — unsound.
         - sorted wrapper: literal must be statically sorted by first tuple
           element (CPython sorts tuples by key first; an unsorted literal
           would compare False but the rewrite would say True).
@@ -2186,6 +2204,8 @@ class Preprocessor(DataclassMixin, GeneratorMixin, LoopMixin, ast.NodeTransforme
             if not (isinstance(elt, ast.Tuple) and len(elt.elts) == 2):
                 return None
             pairs.append((elt.elts[0], elt.elts[1]))
+        if pairs and not self._all_constants_distinct([k for k, _ in pairs]):
+            return None
         if wrapper == "sorted" and not self._is_sorted_const_list(
                 literal_side.elts, by="first"):
             return None
