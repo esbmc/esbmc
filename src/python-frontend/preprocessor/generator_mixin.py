@@ -852,9 +852,7 @@ class GeneratorMixin:
         ast.fix_missing_locations(folded_sorted)
         return [], folded_sorted
 
-    def _lower_min_max_with_key_call(
-        self, call_node
-    ):  # pylint: disable=too-many-return-statements
+    def _lower_min_max_with_key_call(self, call_node):  # pylint: disable=too-many-return-statements
         """Lower min/max(iterable, key=lambda x: x[K]) for literal-list iterables.
 
         Mirrors _lower_sorted_with_key_call: handles only the narrow pattern of
@@ -863,12 +861,8 @@ class GeneratorMixin:
         success, or None when the pattern does not apply (caller falls back to
         the regular dispatch, which today drops the key= keyword).
         """
-        if not (
-            isinstance(call_node, ast.Call)
-            and isinstance(call_node.func, ast.Name)
-            and call_node.func.id in ("min", "max")
-            and len(call_node.args) == 1
-        ):
+        if not (isinstance(call_node, ast.Call) and isinstance(call_node.func, ast.Name)
+                and call_node.func.id in ("min", "max") and len(call_node.args) == 1):
             return None
 
         key_kw = None
@@ -895,14 +889,9 @@ class GeneratorMixin:
 
         param_name = key_lambda.args.args[0].arg
         body = key_lambda.body
-        if not (
-            isinstance(body, ast.Subscript)
-            and isinstance(body.value, ast.Name)
-            and body.value.id == param_name
-            and isinstance(body.slice, ast.Constant)
-            and isinstance(body.slice.value, int)
-            and body.slice.value >= 0
-        ):
+        if not (isinstance(body, ast.Subscript) and isinstance(body.value, ast.Name)
+                and body.value.id == param_name and isinstance(body.slice, ast.Constant)
+                and isinstance(body.slice.value, int) and body.slice.value >= 0):
             return None
 
         key_index = body.slice.value
@@ -952,9 +941,7 @@ class GeneratorMixin:
         ast.fix_missing_locations(result)
         return [], result
 
-    def _lower_tuple_sorted_pair_call(
-        self, call_node
-    ):  # pylint: disable=too-many-statements
+    def _lower_tuple_sorted_pair_call(self, call_node):  # pylint: disable=too-many-statements
         """Lower tuple(sorted([a, b])) to a conditional pair assignment.
 
         Instead of ``(a, b) if a <= b else (b, a)`` (which ESBMC encodes as a
@@ -968,23 +955,15 @@ class GeneratorMixin:
         ESBMC can handle named-scalar tuple construction without the
         pointer-to-temporary issue.
         """
-        if not (
-            isinstance(call_node, ast.Call)
-            and isinstance(call_node.func, ast.Name)
-            and call_node.func.id == "tuple"
-            and len(call_node.args) == 1
-            and not call_node.keywords
-        ):
+        if not (isinstance(call_node, ast.Call) and isinstance(call_node.func, ast.Name)
+                and call_node.func.id == "tuple" and len(call_node.args) == 1
+                and not call_node.keywords):
             return None
 
         sorted_call = call_node.args[0]
-        if not (
-            isinstance(sorted_call, ast.Call)
-            and isinstance(sorted_call.func, ast.Name)
-            and sorted_call.func.id == "sorted"
-            and len(sorted_call.args) == 1
-            and not sorted_call.keywords
-        ):
+        if not (isinstance(sorted_call, ast.Call) and isinstance(sorted_call.func, ast.Name)
+                and sorted_call.func.id == "sorted" and len(sorted_call.args) == 1
+                and not sorted_call.keywords):
             return None
 
         iterable = sorted_call.args[0]
@@ -1038,9 +1017,7 @@ class GeneratorMixin:
                 simple=1,
             )
         else:
-            lo_assign = ast.Assign(
-                targets=[lo_store], value=copy.deepcopy(left), type_comment=None
-            )
+            lo_assign = ast.Assign(targets=[lo_store], value=copy.deepcopy(left), type_comment=None)
         ast.copy_location(lo_assign, call_node)
         ast.fix_missing_locations(lo_assign)
 
@@ -1054,9 +1031,9 @@ class GeneratorMixin:
                 simple=1,
             )
         else:
-            hi_assign = ast.Assign(
-                targets=[hi_store], value=copy.deepcopy(right), type_comment=None
-            )
+            hi_assign = ast.Assign(targets=[hi_store],
+                                   value=copy.deepcopy(right),
+                                   type_comment=None)
         ast.copy_location(hi_assign, call_node)
         ast.fix_missing_locations(hi_assign)
 
@@ -1084,9 +1061,9 @@ class GeneratorMixin:
             ast.copy_location(stmt, call_node)
             ast.fix_missing_locations(stmt)
 
-        cond_stmt = ast.If(
-            test=copy.deepcopy(cond), body=[then_lo, then_hi], orelse=[else_lo, else_hi]
-        )
+        cond_stmt = ast.If(test=copy.deepcopy(cond),
+                           body=[then_lo, then_hi],
+                           orelse=[else_lo, else_hi])
         ast.copy_location(cond_stmt, call_node)
         ast.fix_missing_locations(cond_stmt)
 
@@ -1107,13 +1084,9 @@ class GeneratorMixin:
         rewrite to `name = sorted(name, key=..., reverse=...)`. Returns the
         replacement Assign, or None when the pattern does not apply."""
         call = expr_node.value
-        if not (
-            isinstance(call, ast.Call)
-            and isinstance(call.func, ast.Attribute)
-            and call.func.attr == "sort"
-            and isinstance(call.func.value, ast.Name)
-            and not call.args
-        ):
+        if not (isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute)
+                and call.func.attr == "sort" and isinstance(call.func.value, ast.Name)
+                and not call.args):
             return None
         has_key = any(kw.arg == "key" for kw in call.keywords)
         if not has_key:
@@ -1196,6 +1169,155 @@ class GeneratorMixin:
             self.ensure_all_locations(new_test, source_node)
         ast.fix_missing_locations(new_test)
         return [tmp_assign], new_test
+
+    def _try_lower_expr_tuple_literal_eq(self, expr_side, tuple_side, source_node):
+        """Lower ``expr == (c0, c1, ...)`` where *expr* is not a bare Name.
+
+        Instead of a struct-to-struct equality (which requires identical Z3
+        sorts and fails when the function-return struct type differs from the
+        literal tuple struct type), we **unpack** the tuple and compare each
+        element individually:
+
+            _u0, _u1, ... = expr
+            assert _u0 == c0 and _u1 == c1 and ...
+
+        Tuple unpacking is implemented in ESBMC via struct member access
+        (``element_0``, ``element_1``, ...), so each unpacked variable carries
+        the correct element type (e.g. ``double_floatbv``).  Element-wise scalar
+        comparisons then avoid the struct-sort mismatch entirely.
+
+        Returns ``(prefix_stmts, new_test)`` when the pattern matches, or
+        ``(None, None)`` when it does not.  Only applies when *tuple_side* is a
+        tuple literal whose elements are all ``_is_assert_literal_shape`` values
+        and *expr_side* is not already a ``Name``.
+        """
+        if isinstance(expr_side, ast.Name):
+            return None, None
+        if not isinstance(tuple_side, ast.Tuple) or not tuple_side.elts:
+            return None, None
+        if not all(self._is_assert_literal_shape(e) for e in tuple_side.elts):
+            return None, None
+
+        n = len(tuple_side.elts)
+        counter = self.listcomp_counter
+        self.listcomp_counter += 1
+
+        # Generate unique names for the unpacked elements.
+        unpack_names = [f"ESBMC_assert_unpack_{counter}_{i}" for i in range(n)]
+
+        # Build: ESBMC_assert_unpack_N_0, ESBMC_assert_unpack_N_1, ... = expr
+        unpack_targets = [ast.Name(id=name, ctx=ast.Store()) for name in unpack_names]
+        unpack_target_tuple = ast.Tuple(elts=unpack_targets, ctx=ast.Store())
+        ast.copy_location(unpack_target_tuple, source_node)
+
+        unpack_assign = ast.Assign(
+            targets=[unpack_target_tuple],
+            value=copy.deepcopy(expr_side),
+            type_comment=None,
+        )
+        ast.copy_location(unpack_assign, source_node)
+        ast.fix_missing_locations(unpack_assign)
+
+        # Build element-wise comparisons: _u0 == c0 and _u1 == c1 ...
+        comparisons = []
+        for i, elt in enumerate(tuple_side.elts):
+            cmp = ast.Compare(
+                left=ast.Name(id=unpack_names[i], ctx=ast.Load()),
+                ops=[ast.Eq()],
+                comparators=[copy.deepcopy(elt)],
+            )
+            ast.copy_location(cmp, source_node)
+            ast.fix_missing_locations(cmp)
+            comparisons.append(cmp)
+
+        if len(comparisons) == 1:
+            new_test = comparisons[0]
+        else:
+            new_test = ast.BoolOp(op=ast.And(), values=comparisons)
+            ast.copy_location(new_test, source_node)
+            ast.fix_missing_locations(new_test)
+
+        return [unpack_assign], new_test
+
+    def _is_assert_literal_shape(self, node):
+        if isinstance(node, ast.Constant):
+            return isinstance(node.value, (str, int, float, bool, type(None)))
+        if isinstance(node, (ast.List, ast.Tuple)):
+            return all(self._is_assert_literal_shape(elt) for elt in node.elts)
+        return False
+
+    def _resolve_known_literal_expr(self, node):
+        if isinstance(node, ast.Name) and node.id in self._known_literal_values:
+            return copy.deepcopy(self._known_literal_values[node.id])
+
+        if (isinstance(node, ast.Subscript) and isinstance(node.value, ast.Name)
+                and node.value.id in self._known_literal_values
+                and isinstance(node.slice, ast.Constant) and isinstance(node.slice.value, int)):
+            base = self._known_literal_values[node.value.id]
+            idx = node.slice.value
+            if isinstance(base, (ast.List, ast.Tuple)) and 0 <= idx < len(base.elts):
+                return copy.deepcopy(base.elts[idx])
+
+        return node
+
+    def _is_pure_assert_expr(self, node):
+        if isinstance(node, ast.Name):
+            return True
+        if isinstance(node, ast.Attribute):
+            return self._is_pure_assert_expr(node.value)
+        if isinstance(node, ast.Subscript):
+            return self._is_pure_assert_expr(node.value) and self._is_assert_literal_shape(
+                node.slice)
+        return isinstance(node, (ast.List, ast.Tuple)) and all(
+            self._is_pure_assert_expr(elt) or self._is_assert_literal_shape(elt)
+            for elt in node.elts)
+
+    def _build_assert_literal_checks(self, actual_expr, literal_node, source_node):
+        if isinstance(literal_node, ast.Constant):
+            if isinstance(literal_node.value, str):
+                cmp_node = ast.Compare(
+                    left=copy.deepcopy(actual_expr),
+                    ops=[ast.Eq()],
+                    comparators=[copy.deepcopy(literal_node)],
+                )
+                self.ensure_all_locations(cmp_node, source_node)
+                return [cmp_node]
+            cmp_node = ast.Compare(
+                left=copy.deepcopy(actual_expr),
+                ops=[ast.Eq()],
+                comparators=[copy.deepcopy(literal_node)],
+            )
+            self.ensure_all_locations(cmp_node, source_node)
+            return [cmp_node]
+
+        if not isinstance(literal_node, (ast.List, ast.Tuple)):
+            return None
+
+        checks = [
+            ast.Compare(
+                left=ast.Call(
+                    func=self.create_name_node("len", ast.Load(), source_node),
+                    args=[copy.deepcopy(actual_expr)],
+                    keywords=[],
+                ),
+                ops=[ast.Eq()],
+                comparators=[ast.Constant(value=len(literal_node.elts))],
+            )
+        ]
+        self.ensure_all_locations(checks[0], source_node)
+
+        for idx, elt in enumerate(literal_node.elts):
+            sub = ast.Subscript(
+                value=copy.deepcopy(actual_expr),
+                slice=ast.Constant(value=idx),
+                ctx=ast.Load(),
+            )
+            self.ensure_all_locations(sub, source_node)
+            sub_checks = self._build_assert_literal_checks(sub, elt, source_node)
+            if sub_checks is None:
+                return None
+            checks.extend(sub_checks)
+        return checks
 
     def _hoist_generator_inits(self, body, template_node):
         """
