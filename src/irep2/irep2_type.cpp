@@ -113,7 +113,12 @@ unsigned int bool_type2t::get_width() const
   return 8;
 }
 
-unsigned int bv_data::get_width() const
+unsigned int unsignedbv_type2t::get_width() const
+{
+  return width;
+}
+
+unsigned int signedbv_type2t::get_width() const
 {
   return width;
 }
@@ -216,7 +221,7 @@ unsigned int complex_type2t::get_width() const
   return width;
 }
 
-unsigned int code_data::get_width() const
+unsigned int code_type2t::get_width() const
 {
   throw symbolic_type_excp();
 }

@@ -17,18 +17,6 @@ class bv_type2t;
 
 // We also require in advance, the actual classes that store type data.
 
-class symbol_type_data : public type2t
-{
-public:
-  symbol_type_data(type2t::type_ids id, const irep_idt sym_name)
-    : type2t(id), symbol_name(sym_name)
-  {
-  }
-  symbol_type_data(const symbol_type_data &ref) = default;
-
-  irep_idt symbol_name;
-};
-
 class struct_union_data : public type2t
 {
 public:
@@ -68,47 +56,6 @@ public:
   bool packed;
 };
 
-class bv_data : public type2t
-{
-public:
-  bv_data(type2t::type_ids id, unsigned int w) : type2t(id), width(w)
-  {
-    // assert(w != 0 && "Must have nonzero width for integer type");
-    // XXX -- zero sized bitfields are permissible. Oh my.
-  }
-  bv_data(const bv_data &ref) = default;
-
-  unsigned int get_width() const;
-
-  unsigned int width;
-};
-
-class code_data : public type2t
-{
-public:
-  code_data(
-    type2t::type_ids id,
-    std::vector<type2tc> args,
-    const type2tc &ret,
-    std::vector<irep_idt> names,
-    bool e)
-    : type2t(id),
-      arguments(std::move(args)),
-      ret_type(ret),
-      argument_names(std::move(names)),
-      ellipsis(e)
-  {
-  }
-  code_data(const code_data &ref) = default;
-
-  unsigned int get_width() const;
-
-  std::vector<type2tc> arguments;
-  type2tc ret_type;
-  std::vector<irep_idt> argument_names;
-  bool ellipsis;
-};
-
 class array_data : public type2t
 {
 public:
@@ -121,61 +68,6 @@ public:
   type2tc subtype;
   expr2tc array_size;
   bool size_is_infinite;
-};
-
-class pointer_data : public type2t
-{
-public:
-  pointer_data(type2t::type_ids id, const type2tc &st, const bool &p)
-    : type2t(id), subtype(st), carry_provenance(p)
-  {
-  }
-  pointer_data(const pointer_data &ref) = default;
-
-  type2tc subtype;
-  bool carry_provenance;
-};
-
-class fixedbv_data : public type2t
-{
-public:
-  fixedbv_data(type2t::type_ids id, unsigned int w, unsigned int ib)
-    : type2t(id), width(w), integer_bits(ib)
-  {
-  }
-  fixedbv_data(const fixedbv_data &ref) = default;
-
-  unsigned int width;
-  unsigned int integer_bits;
-};
-
-class floatbv_data : public type2t
-{
-public:
-  floatbv_data(type2t::type_ids id, unsigned int f, unsigned int e)
-    : type2t(id), fraction(f), exponent(e)
-  {
-  }
-  floatbv_data(const floatbv_data &ref) = default;
-
-  unsigned int fraction;
-  unsigned int exponent;
-};
-
-class cpp_name_data : public type2t
-{
-public:
-  cpp_name_data(
-    type2t::type_ids id,
-    const irep_idt &n,
-    std::vector<type2tc> templ_args)
-    : type2t(id), name(n), template_args(std::move(templ_args))
-  {
-  }
-  cpp_name_data(const cpp_name_data &ref) = default;
-
-  irep_idt name;
-  std::vector<type2tc> template_args;
 };
 
 // Then give them a typedef name
@@ -241,21 +133,22 @@ public:
 /** Symbolic type.
  *  Temporary, prior to linking up types after parsing, or when a struct/array
  *  contains a recursive pointer to its own type.
- *  @extends symbol_type_data
  */
-class symbol_type2t : public symbol_type_data
+class symbol_type2t : public type2t
 {
 public:
   /** Primary constructor. @param sym_name Name of symbolic type. */
   symbol_type2t(const irep_idt &sym_name)
-    : symbol_type_data(symbol_id, sym_name)
+    : type2t(symbol_id), symbol_name(sym_name)
   {
   }
   symbol_type2t(const symbol_type2t &ref) = default;
   unsigned int get_width() const;
 
+  irep_idt symbol_name;
+
   static constexpr auto fields =
-    std::make_tuple(&symbol_type_data::symbol_name);
+    std::make_tuple(&symbol_type2t::symbol_name);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -344,59 +237,75 @@ public:
 /** Unsigned integer type.
  *  Represents any form of unsigned integer; the size of this integer is
  *  recorded in the width field.
- *  @extends bv_data
  */
-class unsignedbv_type2t : public bv_data
+class unsignedbv_type2t : public type2t
 {
 public:
   /** Primary constructor. @param width Width of represented integer */
-  unsignedbv_type2t(unsigned int width) : bv_data(unsignedbv_id, width)
+  unsignedbv_type2t(unsigned int w) : type2t(unsignedbv_id), width(w)
   {
+    // assert(w != 0 && "Must have nonzero width for integer type");
+    // XXX -- zero sized bitfields are permissible. Oh my.
   }
   unsignedbv_type2t(const unsignedbv_type2t &ref) = default;
+  unsigned int get_width() const;
 
-  static constexpr auto fields = std::make_tuple(&bv_data::width);
+  unsigned int width;
+
+  static constexpr auto fields = std::make_tuple(&unsignedbv_type2t::width);
   static std::string field_names[esbmct::num_type_fields];
 };
 
 /** Signed integer type.
  *  Represents any form of signed integer; the size of this integer is
  *  recorded in the width field.
- *  @extends bv_data
  */
-class signedbv_type2t : public bv_data
+class signedbv_type2t : public type2t
 {
 public:
   /** Primary constructor. @param width Width of represented integer */
-  signedbv_type2t(signed int width) : bv_data(signedbv_id, width)
+  signedbv_type2t(signed int w) : type2t(signedbv_id), width(w)
   {
   }
   signedbv_type2t(const signedbv_type2t &ref) = default;
+  unsigned int get_width() const;
 
-  static constexpr auto fields = std::make_tuple(&bv_data::width);
+  unsigned int width;
+
+  static constexpr auto fields = std::make_tuple(&signedbv_type2t::width);
   static std::string field_names[esbmct::num_type_fields];
 };
 
-/** Type of functions. @extends code_data */
-class code_type2t : public code_data
+/** Type of functions. */
+class code_type2t : public type2t
 {
 public:
   code_type2t(
     const std::vector<type2tc> &args,
-    const type2tc &ret_type,
+    const type2tc &ret,
     const std::vector<irep_idt> &names,
     bool e)
-    : code_data(code_id, args, ret_type, names, e)
+    : type2t(code_id),
+      arguments(args),
+      ret_type(ret),
+      argument_names(names),
+      ellipsis(e)
   {
     assert(args.size() == names.size());
   }
   code_type2t(const code_type2t &ref) = default;
+  unsigned int get_width() const;
+
+  std::vector<type2tc> arguments;
+  type2tc ret_type;
+  std::vector<irep_idt> argument_names;
+  bool ellipsis;
 
   static constexpr auto fields = std::make_tuple(
-    &code_data::arguments,
-    &code_data::ret_type,
-    &code_data::argument_names,
-    &code_data::ellipsis);
+    &code_type2t::arguments,
+    &code_type2t::ret_type,
+    &code_type2t::argument_names,
+    &code_type2t::ellipsis);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -530,22 +439,24 @@ public:
 
 /** Pointer type.
  *  Simply has a subtype, of what it points to. No other attributes.
- *  @extends pointer_data
  */
-class pointer_type2t : public pointer_data
+class pointer_type2t : public type2t
 {
 public:
   /** Primary constructor. @param subtype Subtype of this pointer */
-  pointer_type2t(const type2tc &subtype, const bool &p = false)
-    : pointer_data(pointer_id, subtype, p)
+  pointer_type2t(const type2tc &st, const bool &p = false)
+    : type2t(pointer_id), subtype(st), carry_provenance(p)
   {
   }
   pointer_type2t(const pointer_type2t &ref) = default;
   unsigned int get_width() const;
 
+  type2tc subtype;
+  bool carry_provenance;
+
   static constexpr auto fields = std::make_tuple(
-    &pointer_data::subtype,
-    &pointer_data::carry_provenance);
+    &pointer_type2t::subtype,
+    &pointer_type2t::carry_provenance);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -553,25 +464,27 @@ public:
  *  Contains a spec for a fixed bitwidth number -- this is the equivalent of a
  *  fixedbv_spect in the old irep situation. Stores how bits are distributed
  *  over integer bits and fraction bits.
- *  @extend fixedbv_data
  */
-class fixedbv_type2t : public fixedbv_data
+class fixedbv_type2t : public type2t
 {
 public:
   /** Primary constructor.
    *  @param width Total number of bits in this type of fixedbv
    *  @param integer Number of integer bits in this type of fixedbv
    */
-  fixedbv_type2t(unsigned int width, unsigned int integer)
-    : fixedbv_data(fixedbv_id, width, integer)
+  fixedbv_type2t(unsigned int w, unsigned int ib)
+    : type2t(fixedbv_id), width(w), integer_bits(ib)
   {
   }
   fixedbv_type2t(const fixedbv_type2t &ref) = default;
   unsigned int get_width() const;
 
+  unsigned int width;
+  unsigned int integer_bits;
+
   static constexpr auto fields = std::make_tuple(
-    &fixedbv_data::width,
-    &fixedbv_data::integer_bits);
+    &fixedbv_type2t::width,
+    &fixedbv_type2t::integer_bits);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -579,25 +492,27 @@ public:
  *  Contains a spec for a floating point number -- this is the equivalent of a
  *  ieee_float_spect in the old irep situation. Stores how bits are distributed
  *  over fraction bits and exponent bits.
- *  @extend floatbv_data
  */
-class floatbv_type2t : public floatbv_data
+class floatbv_type2t : public type2t
 {
 public:
   /** Primary constructor.
    *  @param fraction Number of fraction bits in this type of floatbv
    *  @param exponent Number of exponent bits in this type of floatbv
    */
-  floatbv_type2t(unsigned int fraction, unsigned int exponent)
-    : floatbv_data(floatbv_id, fraction, exponent)
+  floatbv_type2t(unsigned int f, unsigned int e)
+    : type2t(floatbv_id), fraction(f), exponent(e)
   {
   }
   floatbv_type2t(const floatbv_type2t &ref) = default;
   unsigned int get_width() const;
 
+  unsigned int fraction;
+  unsigned int exponent;
+
   static constexpr auto fields = std::make_tuple(
-    &floatbv_data::fraction,
-    &floatbv_data::exponent);
+    &floatbv_type2t::fraction,
+    &floatbv_type2t::exponent);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -638,9 +553,8 @@ public:
 /** C++ Name type.
  *  Contains a type name, but also a vector of template parameters.
  *  Something in the C++ frontend uses this; it's precise purpose is unclear.
- *  @extends cpp_name_data
  */
-class cpp_name_type2t : public cpp_name_data
+class cpp_name_type2t : public type2t
 {
 public:
   /** Primary constructor.
@@ -648,16 +562,19 @@ public:
    *  @param ta Vector of template arguments (types).
    */
   cpp_name_type2t(const irep_idt &n, const std::vector<type2tc> &ta)
-    : cpp_name_data(cpp_name_id, n, ta)
+    : type2t(cpp_name_id), name(n), template_args(ta)
   {
   }
   cpp_name_type2t(const cpp_name_type2t &ref) = default;
 
   unsigned int get_width() const;
 
+  irep_idt name;
+  std::vector<type2tc> template_args;
+
   static constexpr auto fields = std::make_tuple(
-    &cpp_name_data::name,
-    &cpp_name_data::template_args);
+    &cpp_name_type2t::name,
+    &cpp_name_type2t::template_args);
   static std::string field_names[esbmct::num_type_fields];
 };
 
