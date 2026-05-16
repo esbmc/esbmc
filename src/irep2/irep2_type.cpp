@@ -1,5 +1,4 @@
 #include <memory>
-#include <boost/functional/hash.hpp>
 #include <util/fixedbv.h>
 #include <util/i2string.h>
 #include <util/ieee_float.h>
@@ -13,27 +12,19 @@
 
 /*************************** Base type2t definitions **************************/
 
+// Pretty names indexed by type2t::type_ids. Driven by type_kinds.inc;
+// adding a new type kind there automatically populates this table.
+// The static_assert guards against the array drifting out of sync
+// with the enum (which is also generated from the same .inc).
 static const char *type_names[] = {
-  "bool",
-  "empty",
-  "symbol",
-  "struct",
-  "union",
-  "code",
-  "array",
-  "vector",
-  "pointer",
-  "unsignedbv",
-  "signedbv",
-  "fixedbv",
-  "floatbv",
-  "complex",
-  "cpp_name"};
-// If this fires, you've added/removed a type id, and need to update the list
-// above (which is ordered according to the enum list)
+#define IREP2_TYPE(kind, pretty) pretty,
+#include <irep2/type_kinds.inc>
+#undef IREP2_TYPE
+};
 static_assert(
   sizeof(type_names) == (type2t::end_type_id * sizeof(char *)),
-  "Missing type name");
+  "type_names[] disagrees with type2t::type_ids — somebody edited "
+  "the manifest without going through type_kinds.inc");
 
 template <>
 class base_to_names<type2t>
@@ -47,15 +38,30 @@ std::string get_type_id(const type2t &type)
   return std::string(type_names[type.type_id]);
 }
 
+void irep2_bad_type_cast(unsigned actual, unsigned expected, const char *target)
+{
+  const char *actual_name =
+    (actual < type2t::end_type_id) ? type_names[actual] : "<out-of-range>";
+  const char *expected_name =
+    (expected < type2t::end_type_id) ? type_names[expected] : "<out-of-range>";
+  throw irep2_cast_error(fmt::format(
+    "irep2: to_{}_type() called on type whose type_id is {} (target {})",
+    expected_name,
+    actual_name,
+    target));
+}
+
 type2t::type2t(type_ids id) : type_id(id), crc_val(0)
 {
 }
 
-type2t::type2t(const type2t &ref) : type_id(ref.type_id)
-// NOTE: crc_mutex not mentioned here so fresh mutex is created.
+type2t::type2t(const type2t &ref) : irep2t(), type_id(ref.type_id)
 {
-  std::lock_guard lock(ref.crc_mutex);
-  crc_val = ref.crc_val;
+  // Snapshot the cached CRC under the single-writer contract; see
+  // irep2.h header note. The fresh atomic starts with whatever value
+  // ref had at this moment, or 0 if ref had not been crc-ed yet.
+  crc_val.store(
+    ref.crc_val.load(std::memory_order_relaxed), std::memory_order_relaxed);
 }
 
 bool type2t::operator==(const type2t &ref) const
@@ -122,8 +128,10 @@ size_t type2t::crc() const
 
 size_t type2t::do_crc() const
 {
-  boost::hash_combine(this->crc_val, (uint8_t)type_id);
-  return this->crc_val;
+  size_t v = this->crc_val.load(std::memory_order_relaxed);
+  esbmct::hash_combine(v, (uint8_t)type_id);
+  this->crc_val.store(v, std::memory_order_release);
+  return v;
 }
 
 void type2t::hash(crypto_hash &hash) const
@@ -263,7 +271,8 @@ const irep_idt &struct_union_data::get_structure_name() const
   return name;
 }
 
-unsigned int struct_union_data::get_component_number(const irep_idt &comp) const
+std::optional<unsigned int>
+struct_union_data::get_component_number(const irep_idt &comp) const
 {
   unsigned int i = 0, count = 0, pos = 0;
   for (auto const &it : member_names)
@@ -278,19 +287,5 @@ unsigned int struct_union_data::get_component_number(const irep_idt &comp) const
 
   if (count == 1)
     return pos;
-
-  if (!count)
-  {
-    log_error(
-      "Looking up index of nonexistant member \"{}\" in struct/union \"{}\"",
-      comp,
-      name);
-    abort();
-  }
-
-  log_error(
-    "Name \"{}\" matches more than one member in struct/union \"{}\"",
-    comp,
-    name);
-  abort();
+  return std::nullopt;
 }

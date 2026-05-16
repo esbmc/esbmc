@@ -115,7 +115,7 @@ public:
 
   void get_original_name(expr2tc &expr) const override
   {
-    renaming_levelt::get_original_name(expr, symbol2t::level0);
+    renaming_levelt::get_original_name(expr, symbol_renaming_level::level0);
   }
 
   unsigned int current_number(const irep_idt &name) const;
@@ -243,7 +243,7 @@ public:
 
   void get_original_name(expr2tc &expr) const override
   {
-    renaming_levelt::get_original_name(expr, symbol2t::level1);
+    renaming_levelt::get_original_name(expr, symbol_renaming_level::level1);
   }
 
   struct valuet

@@ -413,7 +413,18 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
    * definition.
    * Do this by erasing and re-inserting because the order of definitions in the
    * context matters. This type should be defined after any of the types that it
-   * is composed of. */
+   * is composed of.
+   *
+   * Refresh `sym` here: get_struct_union_class_fields() above can recurse
+   * through field types into other records; any of those recursions may
+   * call erase_symbol() on the symbol table, and although unordered_map
+   * doesn't invalidate references on rehash, it *does* invalidate the
+   * specific element that was erased.  In the cross-record recursion case
+   * the same record can be processed twice, and the second pass's erase
+   * makes the outer `sym` dangling.  A fresh find_symbol() by id avoids
+   * the use-after-free. */
+  sym = context.find_symbol(id);
+  assert(sym && "symbol disappeared from context during field conversion");
   symbolt symbol = *sym;
   context.erase_symbol(symbol.id);
   symbol.type = t;

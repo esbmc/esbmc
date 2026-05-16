@@ -548,7 +548,7 @@ expr2tc sym_name_to_symbol(irep_idt init, type2tc type)
     // Fix this by ensuring that /all/ symbols with the same name use the type
     // from the global symbol table.
     type = migrate_type(sym->type);
-    return symbol2tc(type, init, symbol2t::level0, 0, 0, 0, 0);
+    return symbol2tc(type, init, symbol_renaming_level::level0, 0, 0, 0, 0);
   }
   if (
     init.as_string().compare(0, 3, "cs$") == 0 ||
@@ -558,7 +558,7 @@ expr2tc sym_name_to_symbol(irep_idt init, type2tc type)
   {
     // This is part of k-induction, where the type is slowly accumulated over
     // time, and the symbol never makes its way into the symbol table :|
-    return symbol2tc(type, init, symbol2t::level0, 0, 0, 0, 0);
+    return symbol2tc(type, init, symbol_renaming_level::level0, 0, 0, 0, 0);
   }
 
   // Renamed to at least level 1,
@@ -570,21 +570,21 @@ expr2tc sym_name_to_symbol(irep_idt init, type2tc type)
   if (thestr.find("#") == std::string::npos)
   {
     // We're level 1.
-    target_level = symbol2t::level1;
+    target_level = symbol_renaming_level::level1;
     and_pos = thestr.size();
     hash_pos = thestr.size();
   }
   else
   {
     // Level 2
-    target_level = symbol2t::level2;
+    target_level = symbol_renaming_level::level2;
     and_pos = thestr.find("&");
     hash_pos = thestr.find("#");
 
     if (at_pos == std::string::npos)
     {
       // However, it's L2 global.
-      target_level = symbol2t::level2_global;
+      target_level = symbol_renaming_level::level2_global;
       end_of_name_pos = and_pos;
     }
   }
@@ -592,7 +592,7 @@ expr2tc sym_name_to_symbol(irep_idt init, type2tc type)
   // Whatever level we're at, set the base name to be nonrenamed.
   irep_idt thename = irep_idt(thestr.substr(0, end_of_name_pos));
 
-  if (target_level != symbol2t::level2_global)
+  if (target_level != symbol_renaming_level::level2_global)
   {
     // Check that at_pos and exm_pos are valid before using them
     if (at_pos == std::string::npos || exm_pos == std::string::npos)
@@ -602,7 +602,8 @@ expr2tc sym_name_to_symbol(irep_idt init, type2tc type)
         "treating as level0 with base name '{}'",
         init,
         thename);
-      return symbol2tc(type, thename, symbol2t::level0, 0, 0, 0, 0);
+      return symbol2tc(
+        type, thename, symbol_renaming_level::level0, 0, 0, 0, 0);
     }
 
     std::string atstr = thestr.substr(at_pos + 1, exm_pos - at_pos - 1);
@@ -616,7 +617,7 @@ expr2tc sym_name_to_symbol(irep_idt init, type2tc type)
     assert(endexmptr != exmstr.c_str());
   }
 
-  if (target_level == symbol2t::level1)
+  if (target_level == symbol_renaming_level::level1)
   {
     return symbol2tc(type, thename, target_level, level1_num, 0, thread_num, 0);
   }
@@ -822,10 +823,10 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     const irep_idt &kind1 = expr.get("kind");
 
-    auto kind2 = kind1 == string_constantt::k_wide ? constant_string2t::WIDE
+    auto kind2 = kind1 == string_constantt::k_wide ? constant_string_kindt::WIDE
                  : kind1 == string_constantt::k_unicode
-                   ? constant_string2t::UNICODE
-                   : constant_string2t::DEFAULT;
+                   ? constant_string_kindt::UNICODE
+                   : constant_string_kindt::DEFAULT;
 
     new_expr_ref = constant_string2tc(t, thestring, kind2);
     return;
@@ -1444,7 +1445,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
       idx = constant_string2tc(
         array_type2tc(get_uint8_type(), gen_ulong(name.size() + 1), false),
         name,
-        constant_string2t::DEFAULT);
+        constant_string_kindt::DEFAULT);
     }
     else
     {
@@ -1775,22 +1776,22 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     sideeffect2t::allockind t;
     if (expr.statement() == "malloc")
-      t = sideeffect2t::malloc;
+      t = sideeffect2t::allockind::malloc;
     else if (expr.statement() == "realloc")
-      t = sideeffect2t::realloc;
+      t = sideeffect2t::allockind::realloc;
     else if (expr.statement() == "alloca")
-      t = sideeffect2t::alloca;
+      t = sideeffect2t::allockind::alloca;
     else if (expr.statement() == "cpp_new")
-      t = sideeffect2t::cpp_new;
+      t = sideeffect2t::allockind::cpp_new;
     else if (expr.statement() == "cpp_new[]")
-      t = sideeffect2t::cpp_new_arr;
+      t = sideeffect2t::allockind::cpp_new_arr;
     else if (expr.statement() == "nondet")
-      t = sideeffect2t::nondet;
+      t = sideeffect2t::allockind::nondet;
     else if (expr.statement() == "va_arg")
-      t = sideeffect2t::va_arg;
+      t = sideeffect2t::allockind::va_arg;
     else if (expr.statement() == "function_call")
     {
-      t = sideeffect2t::function_call;
+      t = sideeffect2t::allockind::function_call;
       const exprt &arguments = expr.op1();
       forall_operands (it, arguments)
       {
@@ -1809,14 +1810,13 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
       if (expr.base_name().empty())
         assert(!"No base_name for code_printf2t");
-      std::string bs_name = expr.base_name().as_string();
-
-      new_expr_ref = code_printf2tc(args, bs_name);
+      new_expr_ref =
+        code_printf2tc(args, printf_kind_from_name(expr.base_name()));
       return;
     }
     else if (expr.statement() == "printf2")
     {
-      t = sideeffect2t::printf2;
+      t = sideeffect2t::allockind::printf2;
       for (auto const &it : expr.operands())
       {
         expr2tc tmp_op;
@@ -1826,34 +1826,34 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     }
     else if (expr.statement() == "preincrement")
     {
-      t = sideeffect2t::preincrement;
+      t = sideeffect2t::allockind::preincrement;
       migrate_expr(expr.op0(), new_expr_ref);
     }
     else if (expr.statement() == "postincrement")
     {
-      t = sideeffect2t::postincrement;
+      t = sideeffect2t::allockind::postincrement;
       migrate_expr(expr.op0(), new_expr_ref);
     }
     else if (expr.statement() == "predecrement")
     {
-      t = sideeffect2t::predecrement;
+      t = sideeffect2t::allockind::predecrement;
       migrate_expr(expr.op0(), new_expr_ref);
     }
     else if (expr.statement() == "postdecrement")
     {
-      t = sideeffect2t::predecrement;
+      t = sideeffect2t::allockind::predecrement;
       migrate_expr(expr.op0(), new_expr_ref);
     }
     else if (expr.statement() == "old_snapshot")
     {
       // __ESBMC_old() in function contracts
-      t = sideeffect2t::old_snapshot;
+      t = sideeffect2t::allockind::old_snapshot;
       migrate_expr(expr.op0(), new_expr_ref);
     }
     else if (expr.statement() == "assigns_target")
     {
       // __ESBMC_assigns() in function contracts
-      t = sideeffect2t::assigns_target;
+      t = sideeffect2t::allockind::assigns_target;
       migrate_expr(expr.op0(), new_expr_ref);
     }
     else
@@ -1907,9 +1907,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     if (expr.base_name().empty())
       assert(!"No base_name for code_printf2t");
-    std::string bs_name = expr.base_name().as_string();
-
-    new_expr_ref = code_printf2tc(ops, bs_name);
+    new_expr_ref = code_printf2tc(ops, printf_kind_from_name(expr.base_name()));
     return;
   }
 
@@ -2505,13 +2503,13 @@ exprt migrate_expr_back(const expr2tc &ref)
     irep_idt kind;
     switch (ref2.kind)
     {
-    case constant_string2t::DEFAULT:
+    case constant_string_kindt::DEFAULT:
       kind = string_constantt::k_default;
       break;
-    case constant_string2t::WIDE:
+    case constant_string_kindt::WIDE:
       kind = string_constantt::k_wide;
       break;
-    case constant_string2t::UNICODE:
+    case constant_string_kindt::UNICODE:
       kind = string_constantt::k_unicode;
       break;
     }
@@ -3236,7 +3234,7 @@ exprt migrate_expr_back(const expr2tc &ref)
     if (!is_nil_expr(ref2.size))
       size = migrate_expr_back(ref2.size);
 
-    if (ref2.kind == sideeffect2t::function_call)
+    if (ref2.kind == sideeffect2t::allockind::function_call)
     {
       // "Operand" is 1st op,
       exprt operand = migrate_expr_back(ref2.operand);
@@ -3246,7 +3244,7 @@ exprt migrate_expr_back(const expr2tc &ref)
         args.copy_to_operands(migrate_expr_back(argument));
       theexpr.copy_to_operands(operand, args);
     }
-    else if (ref2.kind == sideeffect2t::nondet)
+    else if (ref2.kind == sideeffect2t::allockind::nondet)
     {
       ; // Do nothing
     }
@@ -3261,46 +3259,46 @@ exprt migrate_expr_back(const expr2tc &ref)
 
     switch (ref2.kind)
     {
-    case sideeffect2t::malloc:
+    case sideeffect2t::allockind::malloc:
       theexpr.statement("malloc");
       break;
-    case sideeffect2t::realloc:
+    case sideeffect2t::allockind::realloc:
       theexpr.statement("realloc");
       break;
-    case sideeffect2t::alloca:
+    case sideeffect2t::allockind::alloca:
       theexpr.statement("alloca");
       break;
-    case sideeffect2t::cpp_new:
+    case sideeffect2t::allockind::cpp_new:
       theexpr.statement("cpp_new");
       break;
-    case sideeffect2t::cpp_new_arr:
+    case sideeffect2t::allockind::cpp_new_arr:
       theexpr.statement("cpp_new[]");
       break;
-    case sideeffect2t::nondet:
+    case sideeffect2t::allockind::nondet:
       theexpr.statement("nondet");
       break;
-    case sideeffect2t::va_arg:
+    case sideeffect2t::allockind::va_arg:
       theexpr.statement("va_arg");
       break;
-    case sideeffect2t::function_call:
+    case sideeffect2t::allockind::function_call:
       theexpr.statement("function_call");
       break;
-    case sideeffect2t::preincrement:
+    case sideeffect2t::allockind::preincrement:
       theexpr.statement("preincrement");
       break;
-    case sideeffect2t::postincrement:
+    case sideeffect2t::allockind::postincrement:
       theexpr.statement("postincrement");
       break;
-    case sideeffect2t::predecrement:
+    case sideeffect2t::allockind::predecrement:
       theexpr.statement("predecrement");
       break;
-    case sideeffect2t::postdecrement:
+    case sideeffect2t::allockind::postdecrement:
       theexpr.statement("postdecrement");
       break;
-    case sideeffect2t::old_snapshot:
+    case sideeffect2t::allockind::old_snapshot:
       theexpr.statement("old_snapshot");
       break;
-    case sideeffect2t::assigns_target:
+    case sideeffect2t::allockind::assigns_target:
       theexpr.statement("assigns_target");
       break;
     default:
@@ -3348,7 +3346,29 @@ exprt migrate_expr_back(const expr2tc &ref)
     codeexpr.statement(irep_idt("printf"));
     for (auto const &it : ref2.operands)
       codeexpr.operands().push_back(migrate_expr_back(it));
-    codeexpr.base_name(ref2.bs_name);
+    const char *bs_name = nullptr;
+    switch (ref2.kind)
+    {
+    case printf_kindt::PRINTF:
+      bs_name = "printf";
+      break;
+    case printf_kindt::FPRINTF:
+      bs_name = "fprintf";
+      break;
+    case printf_kindt::DPRINTF:
+      bs_name = "dprintf";
+      break;
+    case printf_kindt::SPRINTF:
+      bs_name = "sprintf";
+      break;
+    case printf_kindt::VFPRINTF:
+      bs_name = "vfprintf";
+      break;
+    case printf_kindt::SNPRINTF:
+      bs_name = "snprintf";
+      break;
+    }
+    codeexpr.base_name(bs_name);
     return codeexpr;
   }
   case expr2t::code_expression_id:

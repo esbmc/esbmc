@@ -308,7 +308,7 @@ bool goto_symext::symex_throw_bad_cast()
       expr2tc(),
       std::vector<expr2tc>(),
       type2tc(),
-      sideeffect2t::nondet);
+      sideeffect2t::allockind::nondet);
     replace_nondet(nondet_op);
 
     bad_cast_throw.make_throw();

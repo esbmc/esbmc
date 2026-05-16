@@ -193,7 +193,7 @@ std::string code_decl2t::field_names[esbmct::num_type_fields] =
 std::string code_dead2t::field_names[esbmct::num_type_fields] =
   {"value", "", "", "", ""};
 std::string code_printf2t::field_names[esbmct::num_type_fields] =
-  {"operands", "", "", "", ""};
+  {"operands", "kind", "", "", ""};
 std::string code_expression2t::field_names[esbmct::num_type_fields] =
   {"operand", "", "", "", ""};
 std::string code_return2t::field_names[esbmct::num_type_fields] =

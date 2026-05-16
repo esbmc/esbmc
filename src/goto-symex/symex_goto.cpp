@@ -78,10 +78,10 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
       new_guard_true = true;
   }
 
+  const not2t *old_not = try_to_not2t(old_guard);
   if (
     options.get_option("witness-output-yaml") != "" && forward &&
-    !is_constant(old_guard) &&
-    !(is_not2t(old_guard) && is_constant(to_not2t(old_guard).value)))
+    !is_constant(old_guard) && !(old_not && is_constant(old_not->value)))
   {
     // Normalize the branching condition so that cond=true always means
     // "the branch body was reached". For standard GOTOs (IF !cond GOTO skip)
@@ -245,9 +245,8 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
     // produce new guard symbol
     expr2tc guard_expr;
 
-    if (
-      is_symbol2t(new_guard) ||
-      (is_not2t(new_guard) && is_symbol2t(to_not2t(new_guard).value)))
+    const not2t *new_not = try_to_not2t(new_guard);
+    if (is_symbol2t(new_guard) || (new_not && is_symbol2t(new_not->value)))
     {
       guard_expr = new_guard;
     }
