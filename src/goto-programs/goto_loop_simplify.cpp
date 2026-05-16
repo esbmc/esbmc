@@ -640,34 +640,32 @@ bool simplify_function_once(goto_functiont &fn)
       is_dowhile = true;
     }
 
-    // Under --termination: if the exit guard simplifies to constant
-    // false, the loop's only exit edge is never taken — `while(1) { }`,
-    // `for(;;) { }`. Rewrite the loop head to `assume(false)` so the
-    // path is killed (correct model of a non-terminating execution: no
-    // post-loop state is ever reached). The termination reduction then
-    // sees the assert(false) marker as unreachable, IS reports UNSAT,
-    // and we conclude non-termination.
-    //
-    // Gated to --termination only: under default BMC the unwinding
-    // assertion is the user-visible signal of non-termination, and
-    // collapsing the loop to assume(false) would silently suppress it.
-    // (See body_is_safe-independent check above — we DO want this to
-    // fire even when the body is non-trivial, as long as the exit guard
-    // is constant false, because under --termination "no exit edge"
-    // dominates "body has side effects".)
+    // Under --termination: only the empty-body `while (1) {}` /
+    // `for (;;) {}` shape is sound to collapse — the body cannot
+    // contain a break/return/goto-out or a reachable assert, so the
+    // rewrite to assume(false) faithfully models the unreachable
+    // post-loop state. body_is_safe rejects anything beyond
+    // LOCATION/SKIP/DECL/DEAD and non-pointer ASSIGNs; we additionally
+    // require modified.empty() so even the trivial ASSIGNs are absent.
+    // The previous "fire on any constant-false guard" version produced
+    // ~880 incorrect-true verdicts on SV-COMP's Termination-* tracks
+    // by collapsing loops whose bodies had reachable internal exits.
     if (config.options.get_bool_option("termination"))
     {
       expr2tc exit_guard_simp = exit_guard;
       simplify(exit_guard_simp);
       if (is_false(exit_guard_simp))
       {
-        loop_head->make_assumption(gen_false_expr());
-        erase_loop(std::next(loop_head), loop_exit);
-        changed = true;
+        name_set modified;
+        if (
+          body_is_safe(body_first, loop_exit, loop_head, modified) &&
+          modified.empty())
+        {
+          loop_head->make_assumption(gen_false_expr());
+          erase_loop(std::next(loop_head), loop_exit);
+          changed = true;
+        }
       }
-      // Under --termination, ONLY the assume(false) rewrite is sound:
-      // Path 1 erasure and Path 2 step recognition would also silently
-      // hide loops whose presence matters for the termination reduction.
       continue;
     }
 
