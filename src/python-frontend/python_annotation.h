@@ -6,23 +6,30 @@
 #include <python-frontend/module.h>
 #include <python-frontend/type_utils.h>
 #include <python-frontend/python_annotation/annotation_intrinsics.h>
+#include <python-frontend/python_annotation/annotation_utils.h>
 #include <util/message.h>
 
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
 
-enum class InferResult
-{
-  OK,
-  UNKNOWN,
-};
-
-// `builtin_functions` was moved to python_annotation/annotation_intrinsics.{h,cpp}.
-// The unqualified name remains available inside this header as a function call
-// so existing call sites stay byte-identical apart from the trailing parens
+// `InferResult`, `builtin_functions` and the pure-helper utilities
+// (`has_annotation`, `has_return_none`, `get_type_from_json`,
+// `get_base_var_name`, `invert_substrings`,
+// `infer_type_from_default_arg_shape`) were moved to the
+// `python_annotation_intrinsics` and `python_annotation_utils`
+// modules. The using declarations below preserve the unqualified
+// names so existing call sites inside this header remain byte-
+// identical except, for `builtin_functions`, the trailing parens
 // (`builtin_functions.find(...)` -> `builtin_functions().find(...)`).
 using python_annotation_intrinsics::builtin_functions;
+using python_annotation_utils::get_base_var_name;
+using python_annotation_utils::get_type_from_json;
+using python_annotation_utils::has_annotation;
+using python_annotation_utils::has_return_none;
+using python_annotation_utils::infer_type_from_default_arg_shape;
+using python_annotation_utils::InferResult;
+using python_annotation_utils::invert_substrings;
 
 template <class Json>
 class python_annotation
@@ -236,42 +243,7 @@ public:
     }
   }
 
-  // Infer the builtin type of a dict.{get, setdefault, pop} default arg.
-  // Returns "" when there is no default, "Any" for non-literal defaults.
-  static std::string infer_type_from_default_arg_shape(const Json &args_node)
-  {
-    if (!args_node.is_array() || args_node.size() < 2)
-      return std::string();
-    const Json &def = args_node[1];
-    const std::string def_type = def.value("_type", std::string());
-    if (def_type == "List")
-      return "list";
-    if (def_type == "Dict")
-      return "dict";
-    if (def_type == "Set")
-      return "set";
-    if (def_type == "Tuple")
-      return "tuple";
-    // Scalar literal: narrow to the concrete builtin type (int/float/str/
-    // bool/None) so the caller does not have to fall back to Any.
-    if (def_type == "Constant" && def.contains("value"))
-    {
-      const std::string t = get_type_from_json(def["value"]);
-      if (t == "null")
-        return "None";
-      if (t == "bool" || t == "int" || t == "float" || t == "str")
-        return t;
-    }
-    return "Any";
-  }
-
 private:
-  bool has_annotation(const Json &node)
-  {
-    return !node.empty() && node.contains("annotation") &&
-           !node["annotation"].is_null();
-  }
-
   Json find_var_node_for_inference(const std::string &var_name)
   {
     Json var_node =
@@ -381,34 +353,6 @@ private:
     }
 
     return ""; // Couldn't infer
-  }
-
-  // Check if the function body contains any explicit 'return None' statement
-  bool has_return_none(const Json &body)
-  {
-    for (const Json &stmt : body)
-    {
-      if (stmt["_type"] == "Return")
-      {
-        if (stmt["value"].is_null())
-          return true; // bare 'return'
-        if (
-          stmt["value"]["_type"] == "Constant" &&
-          stmt["value"]["value"].is_null())
-          return true; // 'return None'
-      }
-      if (stmt.contains("body") && stmt["body"].is_array())
-      {
-        if (has_return_none(stmt["body"]))
-          return true;
-      }
-      if (stmt.contains("orelse") && stmt["orelse"].is_array())
-      {
-        if (has_return_none(stmt["orelse"]))
-          return true;
-      }
-    }
-    return false;
   }
 
   // Method to infer and annotate unannotated function parameters
@@ -2404,27 +2348,6 @@ private:
     return node["annotation"]["id"];
   }
 
-  static std::string get_type_from_json(const Json &value)
-  {
-    if (value.is_null())
-      return "null";
-    if (value.is_boolean())
-      return "bool";
-    if (value.is_number_unsigned())
-      return "int";
-    if (value.is_number_integer())
-      return "int";
-    if (value.is_number_float())
-      return "float";
-    if (value.is_string())
-      return "str";
-    if (value.is_array())
-      return "array";
-    if (value.is_object())
-      return "object";
-    return "unknown";
-  }
-
   std::string get_list_subtype(const Json &list)
   {
     std::string list_subtype;
@@ -2447,21 +2370,6 @@ private:
         throw std::runtime_error("Multiple typed lists are not supported\n");
 
     return list_subtype;
-  }
-
-  std::string get_base_var_name(const Json &node) const
-  {
-    if (node["_type"] == "Name")
-      return node["id"];
-    else if (node["_type"] == "Subscript")
-      return get_base_var_name(node["value"]);
-    else if (node["_type"] == "Attribute")
-    {
-      // Handle attribute access such as obj.attr[0]
-      std::string base = get_base_var_name(node["value"]);
-      return base + "." + node["attr"].template get<std::string>();
-    }
-    return "";
   }
 
   bool extract_type_info(
@@ -2991,31 +2899,6 @@ private:
     }
 
     return "";
-  }
-
-  std::string invert_substrings(const std::string &input)
-  {
-    std::vector<std::string> substrings;
-    std::string token;
-    std::istringstream stream(input);
-
-    // Split the string using "." as the delimiter
-    while (std::getline(stream, token, '.'))
-      substrings.push_back(token);
-
-    // Reverse the order of the substrings
-    std::reverse(substrings.begin(), substrings.end());
-
-    // Rebuild the string with "." between the reversed substrings
-    std::string result;
-    for (size_t i = 0; i < substrings.size(); ++i)
-    {
-      if (i != 0)
-        result += "."; // Add the dot separator
-      result += substrings[i];
-    }
-
-    return result;
   }
 
   std::string get_object_name(const Json &call, const std::string &prefix)
