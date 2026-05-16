@@ -11,10 +11,6 @@ weight: 4
 - List comprehensions and generator expressions are supported. Set comprehensions are not supported (`Unsupported expression SetComp`). Dictionary comprehensions are accepted by the parser but produce a dictionary whose subsequent key lookups raise `KeyError`.
 - Iteration over dictionaries via `d.keys()`, `d.values()`, and `d.items()` is supported inside `for` loops (see [Supported Features — Dictionaries](./supported-features#dictionaries)).
 
-## Context Managers
-
-- `__enter__` is invoked before the body and `__exit__` after. Exceptions raised inside the `with` block propagate, but `__exit__`'s return value is ignored: returning `True` does not suppress the exception.
-
 ## Lists
 
 - `list.sort()` does not support the `key` or `reverse` keyword arguments.
