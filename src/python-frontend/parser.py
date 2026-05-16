@@ -71,6 +71,7 @@ def is_imported_model(module_name):
         "dataclasses",
         "typing",
         "time",
+        "threading",
     ]
     return module_name in models
 
@@ -78,6 +79,79 @@ def is_imported_model(module_name):
 def is_unsupported_module(module_name):
     unsuported_modules = ["blah"]
     return module_name in unsuported_modules
+
+
+# Names from the ``threading`` module that ESBMC currently models. Anything
+# else (Thread, RLock, Semaphore, Condition, Event, Barrier, Timer, ...) is
+# rejected at parse time by ``reject_unsupported_threading_usage`` so we
+# never emit a half-modelled concurrency construct that could yield a
+# silently wrong verification verdict.
+SUPPORTED_THREADING_SYMBOLS = frozenset({"Lock"})
+
+
+def reject_unsupported_threading_usage(tree: ast.AST, source_filename: str) -> None:
+    """Refuse to compile programs using unsupported ``threading`` names.
+
+    Walks the AST for usages of names from the ``threading`` module that
+    ESBMC does not yet model and exits with a clear error rather than
+    silently emitting a weaker abstraction. The supported set is
+    ``SUPPORTED_THREADING_SYMBOLS``. Detects three import shapes:
+
+      ``import threading``         → ``threading.<X>`` attribute access
+      ``import threading as t``    → ``t.<X>`` attribute access
+      ``from threading import X``  → bare ``X`` reference
+
+    ``from threading import *`` is refused outright because static name
+    resolution would require importing the real ``threading`` module.
+    """
+    def fail(line, message: str) -> None:
+        print(f"ERROR: {source_filename}:{line}: {message}")
+        sys.exit(4)
+
+    unsupported_message = (
+        "is not yet supported by ESBMC. Only threading.Lock is "
+        "currently modelled; Thread/RLock/Semaphore/Condition/Event/"
+        "Barrier/Timer are tracked as follow-ups to the initial "
+        "threading support."
+    )
+
+    module_aliases: set[str] = set()
+    name_aliases: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name == "threading":
+                    module_aliases.add(alias.asname or alias.name)
+        elif isinstance(node, ast.ImportFrom) and node.module == "threading":
+            for alias in node.names:
+                if alias.name == "*":
+                    fail(
+                        node.lineno,
+                        "'from threading import *' is not supported; "
+                        "import names explicitly so ESBMC can verify "
+                        "each one is modelled.",
+                    )
+                name_aliases[alias.asname or alias.name] = alias.name
+
+    for node in ast.walk(tree):
+        offending: str | None = None
+        if (
+            isinstance(node, ast.Attribute)
+            and isinstance(node.value, ast.Name)
+            and node.value.id in module_aliases
+            and node.attr not in SUPPORTED_THREADING_SYMBOLS
+        ):
+            offending = node.attr
+        elif isinstance(node, ast.Name) and node.id in name_aliases:
+            original = name_aliases[node.id]
+            if original not in SUPPORTED_THREADING_SYMBOLS:
+                offending = original
+
+        if offending is not None:
+            fail(
+                getattr(node, "lineno", "?"),
+                f"threading.{offending} {unsupported_message}",
+            )
 
 
 def is_testing_framework(module_name):
@@ -789,6 +863,8 @@ def main():
             annotate_constant_node(node)
         elif isinstance(node, ast.Attribute):
             detect_and_process_submodules(node, processed_submodules, output_dir)
+
+    reject_unsupported_threading_usage(tree, filename)
 
     # Generate JSON from AST for the main file.
     generate_ast_json(tree, filename, None, output_dir)

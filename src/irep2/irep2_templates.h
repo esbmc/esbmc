@@ -1,6 +1,5 @@
 #pragma once
 #include <memory>
-#include <boost/functional/hash.hpp>
 #include <util/fixedbv.h>
 #include <util/i2string.h>
 #include <util/ieee_float.h>
@@ -10,9 +9,6 @@
 #include <irep2/irep2_template_utils.h>
 #include <util/migrate.h>
 #include <util/std_types.h>
-
-template <typename T>
-class register_irep_methods;
 
 template <typename T>
 void do_type2string(

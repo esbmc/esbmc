@@ -7,9 +7,12 @@
 #include <python-frontend/type_utils.h>
 #include <util/message.h>
 
+#include <map>
+#include <set>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 
 enum class InferResult
 {
@@ -258,12 +261,156 @@ public:
     }
   }
 
+  /// Infer unannotated parameter types of top-level functions from the
+  /// argument types at every plain `f(arg1, arg2)` call site (i.e.
+  /// `Call.func._type == "Name"`). Method calls on instances and class
+  /// constructors are out of scope — they are handled by
+  /// `preprocess_method_calls` and `preprocess_constructor_calls`.
+  ///
+  /// Conflict policy: a parameter is annotated only when every call site
+  /// that yields a non-empty inferred type agrees on the same type. Calls
+  /// passing different concrete classes (e.g. polymorphic dispatch over a
+  /// shared base) leave the parameter unannotated, preserving the
+  /// pre-existing behaviour where the symex layer handles the dispatch.
+  /// Explicit annotations are always preserved.
+  ///
+  /// Scope tracking: when descending into a `FunctionDef`, the current
+  /// function name context is updated so `get_argument_type` can resolve
+  /// `Name` arguments by looking them up in the enclosing function's
+  /// scope (parameters, local assignments). Without this, calls nested
+  /// inside `def main(): ... f(local_var)` would fail to type-infer
+  /// `local_var`, since `find_var_decl` searches by function name.
+  void preprocess_function_calls(Json &root)
+  {
+    // First pass: gather inferred argument types for every top-level
+    // function call. Recurse into FunctionDef bodies so scope-dependent
+    // type inference resolves correctly. Self-recursive calls are
+    // skipped so the function's own internal use of its parameter does
+    // not poison the inference.
+    std::set<std::string> top_level_funcs;
+    for (const Json &top_node : ast_["body"])
+    {
+      if (
+        top_node["_type"] == "FunctionDef" && top_node.contains("name") &&
+        top_node["name"].is_string())
+        top_level_funcs.insert(top_node["name"].template get<std::string>());
+    }
+
+    std::map<std::pair<std::string, size_t>, std::set<std::string>> param_types;
+    collect_function_call_arg_types(root, param_types, top_level_funcs);
+
+    // Second pass: for each top-level FunctionDef, if all observed call
+    // sites agreed on a single type for a parameter, write the annotation.
+    for (Json &top_node : ast_["body"])
+    {
+      if (
+        top_node["_type"] != "FunctionDef" || !top_node.contains("args") ||
+        !top_node["args"].contains("args"))
+        continue;
+
+      const std::string fname = top_node["name"].template get<std::string>();
+      Json &params = top_node["args"]["args"];
+      for (size_t i = 0; i < params.size(); ++i)
+      {
+        Json &param = params[i];
+        if (param.contains("annotation") && !param["annotation"].is_null())
+          continue;
+        auto it = param_types.find({fname, i});
+        if (it == param_types.end() || it->second.size() != 1)
+          continue;
+        add_parameter_annotation(param, *it->second.begin());
+      }
+    }
+  }
+
+  void collect_function_call_arg_types(
+    Json &node,
+    std::map<std::pair<std::string, size_t>, std::set<std::string>>
+      &param_types,
+    const std::set<std::string> &top_level_funcs)
+  {
+    if (node.is_object())
+    {
+      if (
+        node.contains("_type") && node["_type"] == "Call" &&
+        node.contains("func") && node["func"].is_object() &&
+        node["func"].contains("_type") && node["func"]["_type"] == "Name" &&
+        node["func"].contains("id") && node["func"]["id"].is_string())
+      {
+        const std::string func_name =
+          node["func"]["id"].template get<std::string>();
+        // Only record calls targeting a top-level FunctionDef (the only
+        // shape this pass annotates). Filtering up front also keeps
+        // nested-def shadows from polluting the per-name type set. Skip
+        // self-recursive calls so the function's own internal use of its
+        // parameter does not poison inference.
+        if (
+          top_level_funcs.count(func_name) != 0 &&
+          func_name != current_func_name_context_)
+        {
+          const Json &call_args =
+            node.contains("args") ? node["args"] : Json::array();
+          for (size_t i = 0; i < call_args.size(); ++i)
+          {
+            std::string arg_type = get_argument_type(call_args[i]);
+            // Skip ambiguous / under-specified types: NoneType is `bool*`
+            // in the operational model (issue #3796) and Any leaves the
+            // type uninformative; both would lock in a misleading
+            // annotation for callers that pass a real value.
+            if (arg_type.empty() || arg_type == "NoneType" || arg_type == "Any")
+              continue;
+            param_types[{func_name, i}].insert(arg_type);
+          }
+        }
+      }
+
+      const bool is_function_def =
+        node.contains("_type") && node["_type"] == "FunctionDef" &&
+        node.contains("name") && node["name"].is_string();
+      std::string saved_ctx = current_func_name_context_;
+      Json *saved_current = current_func;
+      Json *saved_parent = parent_func;
+      if (is_function_def)
+      {
+        // Set up parent/current scope so get_argument_type's nested-scope
+        // fallback (parent_func body lookup) can resolve closure variables
+        // captured by nested function bodies.
+        current_func_name_context_ = node["name"].template get<std::string>();
+        parent_func = saved_current;
+        current_func = &node;
+      }
+
+      for (auto &kv : node.items())
+        collect_function_call_arg_types(
+          kv.value(), param_types, top_level_funcs);
+
+      if (is_function_def)
+      {
+        current_func_name_context_ = saved_ctx;
+        current_func = saved_current;
+        parent_func = saved_parent;
+      }
+    }
+    else if (node.is_array())
+    {
+      for (auto &element : node)
+        collect_function_call_arg_types(element, param_types, top_level_funcs);
+    }
+  }
+
   void add_type_annotation()
   {
     // First pass: preprocess all constructor calls to infer parameter types
     preprocess_constructor_calls(ast_);
     // Also preprocess method calls on temporary instances: A().method(args)
     preprocess_method_calls(ast_);
+    // Preprocess top-level function calls f(arg) so unannotated parameters of
+    // top-level functions inherit a type from their callers. Runs after the
+    // constructor pass so `f(SharedResource())` resolves through the
+    // inferred return type. Without this, attribute-chain lookups on
+    // unannotated parameters (e.g. `resource.mutex.acquire()`) fail with a
+    // cryptic "Variable mutex not found" — GitHub #4570.
+    preprocess_function_calls(ast_);
 
     // Second pass: add type annotations to global scope variables
     annotate_global_scope();
@@ -750,10 +897,11 @@ private:
     // void* default keeps working for those call sites.
     bool any_reject = false;
     std::vector<std::string> expected;
-    auto reducer = [&](const Json &elts) {
+    auto reducer = [&](const Json &elts, const Json *enclosing_func) {
       if (any_reject)
         return;
-      std::vector<std::string> types = infer_tuple_element_types(elts);
+      std::vector<std::string> types =
+        infer_tuple_element_types(elts, enclosing_func);
       if (types.empty())
       {
         any_reject = true;
@@ -839,18 +987,31 @@ private:
       walk(ast["body"]);
   }
 
-  // Walk @p node and invoke @p visit(elts) for every Subscript whose value
-  // is a Name resolving to @p class_name and whose slice is a Tuple. @p
-  // visit receives the tuple's `elts` JSON array.
+  // Walk @p node and invoke @p visit(elts, enclosing_func) for every
+  // Subscript whose value is a Name resolving to @p class_name and whose
+  // slice is a Tuple. @p visit receives the tuple's `elts` JSON array along
+  // with a pointer to the enclosing FunctionDef/AsyncFunctionDef (or nullptr
+  // at module scope). The enclosing function lets the reducer resolve
+  // `Name` elts against arguments and local annotations of the AST being
+  // scanned — essential when scanning a foreign module's AST whose locals
+  // are not visible to this annotator's own `ast_`-scoped lookup (GitHub
+  // #4558).
   template <typename Visitor>
   void visit_class_tuple_subscripts(
     const Json &node,
     const std::string &class_name,
     const std::unordered_map<std::string, std::string> &var_to_class,
-    Visitor &&visit)
+    Visitor &&visit,
+    const Json *enclosing_func = nullptr)
   {
     if (node.is_object())
     {
+      const Json *next_enclosing = enclosing_func;
+      if (
+        node.contains("_type") &&
+        (node["_type"] == "FunctionDef" || node["_type"] == "AsyncFunctionDef"))
+        next_enclosing = &node;
+
       if (
         node.contains("_type") && node["_type"] == "Subscript" &&
         node.contains("value") && node["value"].is_object() &&
@@ -863,26 +1024,142 @@ private:
         auto it =
           var_to_class.find(node["value"]["id"].template get<std::string>());
         if (it != var_to_class.end() && it->second == class_name)
-          visit(node["slice"]["elts"]);
+          visit(node["slice"]["elts"], next_enclosing);
       }
       for (auto it = node.begin(); it != node.end(); ++it)
         visit_class_tuple_subscripts(
-          it.value(), class_name, var_to_class, visit);
+          it.value(), class_name, var_to_class, visit, next_enclosing);
     }
     else if (node.is_array())
     {
       for (const auto &elem : node)
-        visit_class_tuple_subscripts(elem, class_name, var_to_class, visit);
+        visit_class_tuple_subscripts(
+          elem, class_name, var_to_class, visit, enclosing_func);
     }
+  }
+
+  // Resolve a `Name` elt against @p enclosing_func's parameters and local
+  // annotated assigns. Returns the annotation type name on success, or "" if
+  // the name is not declared in that scope. Used as a foreign-scope fallback
+  // when @p elts come from an AST other than `ast_` — `get_argument_type`'s
+  // own `find_var_node_for_inference` only searches `ast_` (GitHub #4558).
+  std::string resolve_name_in_enclosing_func(
+    const std::string &name,
+    const Json &enclosing_func)
+  {
+    auto lookup = [&](const Json &scope) -> std::string {
+      Json node = find_annotated_assign(name, scope);
+      if (has_annotation(node))
+        return json_utils::get_annotation_type_name(node["annotation"]);
+      return "";
+    };
+
+    if (enclosing_func.contains("args"))
+    {
+      const Json &arg_spec = enclosing_func["args"];
+      for (const char *key : {"args", "kwonlyargs"})
+        if (arg_spec.contains(key))
+          if (std::string t = lookup(arg_spec[key]); !t.empty())
+            return t;
+    }
+    if (enclosing_func.contains("body"))
+      return lookup(enclosing_func["body"]);
+    return "";
+  }
+
+  /// @brief Resolve @p func_name through any `from X import *` in @c ast_.
+  ///
+  /// Iterates wildcard ImportFrom nodes at module scope and probes each
+  /// module's exported functions via @c module_manager_. Returns the
+  /// function's declared return type if found; "" otherwise. A NoneType /
+  /// missing return type falls back to @p func_name so callers treat it as
+  /// a class-constructor-style call, matching the named-import branch's
+  /// heuristic. Introduced for GitHub #4564.
+  std::string resolve_wildcard_import_func(const std::string &func_name)
+  {
+    if (!module_manager_ || !ast_.contains("body"))
+      return "";
+    for (const auto &node : ast_["body"])
+    {
+      if (
+        !node.contains("_type") || node["_type"] != "ImportFrom" ||
+        !node.contains("names") || !node.contains("module"))
+        continue;
+      bool is_star = false;
+      for (const auto &name : node["names"])
+        if (name.contains("name") && name["name"] == "*")
+        {
+          is_star = true;
+          break;
+        }
+      if (!is_star)
+        continue;
+      auto module = module_manager_->get_module(node["module"]);
+      if (!module)
+        continue;
+      auto func_info = module->get_function(func_name);
+      if (func_info.name_.empty())
+        continue;
+      if (
+        func_info.return_type_.empty() || func_info.return_type_ == "NoneType")
+        return func_name;
+      return func_info.return_type_;
+    }
+    return "";
+  }
+
+  /// @brief Resolve a tuple-key elt against @p enclosing_func's scope.
+  ///
+  /// Generalises @ref resolve_name_in_enclosing_func to expressions whose
+  /// operands are names declared outside this annotator's @c ast_ —
+  /// constants, unary ops, and binary arithmetic. Numeric promotion follows
+  /// Python semantics (any @c float operand → @c float; @c int + @c int →
+  /// @c int). Returns "" when any operand is not resolvable in the foreign
+  /// scope, signalling the caller to fall through to @c ast_-based
+  /// inference. Introduced for GitHub #4564.
+  std::string
+  resolve_expr_in_enclosing_func(const Json &elt, const Json &enclosing_func)
+  {
+    if (!elt.contains("_type"))
+      return "";
+    const std::string &t = elt["_type"];
+    if (t == "Constant")
+      return get_type_from_constant(elt);
+    if (t == "Name" && elt.contains("id"))
+      return resolve_name_in_enclosing_func(elt["id"], enclosing_func);
+    if (t == "UnaryOp" && elt.contains("operand"))
+      return resolve_expr_in_enclosing_func(elt["operand"], enclosing_func);
+    if (t == "BinOp" && elt.contains("left") && elt.contains("right"))
+    {
+      std::string l =
+        resolve_expr_in_enclosing_func(elt["left"], enclosing_func);
+      std::string r =
+        resolve_expr_in_enclosing_func(elt["right"], enclosing_func);
+      if (l.empty() || r.empty())
+        return "";
+      if (l == "float" || r == "float")
+        return "float";
+      if (l == "int" && r == "int")
+        return "int";
+      return "";
+    }
+    return "";
   }
 
   // Resolve each element of @p elts to a Python type name suitable for a
   // synthesised `tuple[...]` annotation. Slice literals and `slice(...)`
   // calls map to "slice"; scalars and other expressions are routed through
-  // get_argument_type(). Returns an empty vector when any element resolves
+  // get_argument_type(). Non-slice elts are first looked up in @p
+  // enclosing_func (when non-null) via @ref resolve_expr_in_enclosing_func
+  // so foreign-AST scans can resolve variables defined outside this
+  // annotator's `ast_` — including compound arithmetic expressions like
+  // `bm * k` whose operand names are foreign-scope parameters
+  // (GitHub #4558, #4564). Returns an empty vector when any element resolves
   // to "" or "Any" — bailing keeps the synthesised callee struct consistent
   // with whatever the caller actually builds at the subscript site.
-  std::vector<std::string> infer_tuple_element_types(const Json &elts)
+  std::vector<std::string> infer_tuple_element_types(
+    const Json &elts,
+    const Json *enclosing_func = nullptr)
   {
     std::vector<std::string> types;
     types.reserve(elts.size());
@@ -904,7 +1181,11 @@ private:
         types.emplace_back("slice");
         continue;
       }
-      std::string resolved = get_argument_type(elt);
+      std::string resolved;
+      if (enclosing_func != nullptr)
+        resolved = resolve_expr_in_enclosing_func(elt, *enclosing_func);
+      if (resolved.empty())
+        resolved = get_argument_type(elt);
       if (resolved.empty() || resolved == "Any")
         return {};
       types.push_back(std::move(resolved));
@@ -2277,6 +2558,16 @@ private:
     }
     catch (std::runtime_error &)
     {
+    }
+
+    // Probe wildcard imports (`from X import *`) for @p func_name when the
+    // named-import lookup above missed. find_imported_function only matches
+    // explicit aliases, so star-imported functions stay invisible to the
+    // annotator's type inference without this fallback (GitHub #4564).
+    if (std::string t = resolve_wildcard_import_func(func_name); !t.empty())
+    {
+      functions_in_analysis_.erase(func_name);
+      return t;
     }
 
     // Check if the function is a built-in function

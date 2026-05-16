@@ -7,7 +7,9 @@
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/type_utils.h>
 #include <util/arith_tools.h>
+#include <util/c_types.h>
 #include <util/message.h>
+#include <util/std_expr.h>
 
 #include <boost/algorithm/string/predicate.hpp>
 #include <optional>
@@ -48,6 +50,8 @@ const std::string kVerifierAssume = "__VERIFIER_assume";
 const std::string kLoopInvariant = "__loop_invariant";
 const std::string kEsbmcLoopInvariant = "__ESBMC_loop_invariant";
 const std::string kEsbmcCover = "__ESBMC_cover";
+const std::string kEsbmcAtomicBegin = "__ESBMC_atomic_begin";
+const std::string kEsbmcAtomicEnd = "__ESBMC_atomic_end";
 
 function_call_builder::function_call_builder(
   python_converter &converter,
@@ -496,7 +500,21 @@ symbol_id function_call_builder::build_function_id() const
       symbolt *var_symbol = converter_.find_symbol(var_sid.to_string());
 
       if (!var_symbol)
-        throw std::runtime_error("Variable " + obj_name + " not found");
+      {
+        // Reaching here means the attribute-chain resolver above could not
+        // determine a struct type for the receiver (most commonly because a
+        // function parameter is unannotated and python_annotation could not
+        // infer it from any call site), and `obj_name` ended up as the
+        // trailing attribute name rather than a real variable. Surface a
+        // diagnostic that names the unresolved member call and points at
+        // the likely missing annotation, instead of the cryptic
+        // "Variable <attr> not found" the call previously emitted.
+        throw std::runtime_error(
+          "Could not resolve type of receiver in member call '." + obj_name +
+          "." + func_name +
+          "()'. Add a type annotation to the function parameter or local "
+          "variable so the attribute chain can be typed.");
+      }
 
       // Extract class name from the type, following symbol references
       typet var_type = var_symbol->type.is_pointer()
@@ -714,6 +732,51 @@ exprt function_call_builder::build() const
     cover_code.location() = loc;
 
     return cover_code;
+  }
+
+  // __ESBMC_atomic_begin / __ESBMC_atomic_end: thin wrappers around the C
+  // intrinsics with the same names. Emitting a call to a symbol whose
+  // base name matches is enough; goto-symex lowers it to the atomic-section
+  // builtins in src/goto-programs/builtin_functions.cpp.
+  {
+    const std::string &func_name = function_id.get_function();
+    const bool is_atomic_begin = func_name == kEsbmcAtomicBegin;
+    const bool is_atomic_end = func_name == kEsbmcAtomicEnd;
+    if (is_atomic_begin || is_atomic_end)
+    {
+      if (!call_["args"].empty())
+        throw std::runtime_error(func_name + " takes no arguments");
+
+      code_typet atomic_type;
+      atomic_type.return_type() = empty_typet();
+
+      auto &symbol_table = converter_.symbol_table();
+      locationt location = converter_.get_location_from_decl(call_);
+
+      auto declare_zero_arg_void = [&](const std::string &name) {
+        const std::string id = "c:@F@" + name;
+        if (symbol_table.find_symbol(id.c_str()) != nullptr)
+          return;
+        symbolt symbol = converter_.create_symbol(
+          converter_.python_file(), name, id, location, atomic_type);
+        converter_.add_symbol(symbol);
+      };
+
+      declare_zero_arg_void(func_name);
+      // do_atomic_begin emits a call to __ESBMC_yield to force a context
+      // switch before entering the atomic section, dereferencing the symbol
+      // unconditionally; the Python frontend does not pull in the C
+      // intrinsics header, so register the yield symbol here too. Only
+      // atomic_begin needs it; atomic_end does not call yield.
+      if (is_atomic_begin)
+        declare_zero_arg_void("__ESBMC_yield");
+
+      code_function_callt atomic_call;
+      atomic_call.function() = symbol_exprt("c:@F@" + func_name, atomic_type);
+      atomic_call.type() = empty_typet();
+      atomic_call.location() = location;
+      return atomic_call;
+    }
   }
 
   // Add len function to symbol table
