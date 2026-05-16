@@ -56,10 +56,7 @@ expr2t::expr2t(const expr2t &ref)
 
 bool expr2t::operator==(const expr2t &ref) const
 {
-  if (!expr2t::cmp(ref))
-    return false;
-
-  return cmp(ref);
+  return cmp_v2(ref);
 }
 
 bool expr2t::operator!=(const expr2t &ref) const
@@ -69,22 +66,12 @@ bool expr2t::operator!=(const expr2t &ref) const
 
 bool expr2t::operator<(const expr2t &ref) const
 {
-  int tmp = expr2t::lt(ref);
-  if (tmp < 0)
-    return true;
-  else if (tmp > 0)
-    return false;
-  else
-    return (lt(ref) < 0);
+  return lt_v2(ref) < 0;
 }
 
 int expr2t::ltchecked(const expr2t &ref) const
 {
-  int tmp = expr2t::lt(ref);
-  if (tmp != 0)
-    return tmp;
-
-  return lt(ref);
+  return lt_v2(ref);
 }
 
 bool expr2t::cmp(const expr2t &ref) const
@@ -110,26 +97,17 @@ int expr2t::lt(const expr2t &ref) const
 
 size_t expr2t::crc() const
 {
-  return do_crc();
+  return do_crc_v2();
 }
 
 size_t expr2t::do_crc() const
 {
-  // The atomic crc_val is the cache cell; hash_combine wants a plain
-  // size_t reference. Work on a local, then publish.
-  size_t v = this->crc_val.load(std::memory_order_relaxed);
-  esbmct::hash_combine(v, type->do_crc());
-  esbmct::hash_combine(v, (uint8_t)expr_id);
-  this->crc_val.store(v, std::memory_order_release);
-  return v;
+  return do_crc_v2();
 }
 
 void expr2t::hash(crypto_hash &hash) const
 {
-  static_assert(expr2t::end_expr_id < 256, "Expr id overflow");
-  uint8_t eid = expr_id;
-  hash.ingest(&eid, sizeof(eid));
-  type->hash(hash);
+  hash_v2(hash);
 }
 
 std::string get_expr_id(const expr2t &expr)
@@ -139,11 +117,12 @@ std::string get_expr_id(const expr2t &expr)
 
 std::string expr2t::pretty(unsigned int indent) const
 {
-  std::string ret =
-    pretty_print_func<const expr2t &>(indent, expr_names[expr_id], *this);
-  // Dump the type on the end.
-  ret += std::string("\n") + indent_str_irep2(indent) +
-         "* type : " + type->pretty(indent + 2);
+  list_of_memberst memb = tostring_v2(indent + 2);
+  std::string indentstr = indent_str_irep2(indent);
+  std::string ret = expr_names[expr_id];
+  for (auto const &m : memb)
+    ret += "\n" + indentstr + "* " + m.first + " : " + m.second;
+  ret += "\n" + indentstr + "* type : " + type->pretty(indent + 2);
   return ret;
 }
 

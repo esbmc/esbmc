@@ -1013,17 +1013,15 @@ public:
   template <typename T>
   void foreach_operand(T &&t) const
   {
-    // function_ref borrows the caller's callable directly; no
-    // type-erasure allocation.
     const_op_delegate wrapped(t);
-    foreach_operand_impl_const(wrapped);
+    foreach_operand_impl_const_v2(wrapped);
   }
 
   template <typename T>
   void Foreach_operand(T &&t)
   {
     op_delegate wrapped(t);
-    foreach_operand_impl(wrapped);
+    foreach_operand_impl_v2(wrapped);
   }
 
   // Non-virtual switch-based dispatchers (issue #4560 scaffolding).
