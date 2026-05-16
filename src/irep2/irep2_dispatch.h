@@ -108,6 +108,9 @@ void generic_hash(const K &a, crypto_hash &h)
 // --------------------------------------------------------------------------
 // generic_tostring: build the pretty-print member list from K::fields.
 // K::field_names[i] names the i-th user field (0-based).
+// Skips any type2tc slot in K::fields when K is an expr kind, mirroring the
+// irep_methods2::tostring logic that skips expr2t::type from the trait list
+// (the type is shown via the pretty-print banner, not as a named field).
 // --------------------------------------------------------------------------
 template <class K>
 list_of_memberst generic_tostring(const K &a, unsigned int indent)
@@ -116,7 +119,14 @@ list_of_memberst generic_tostring(const K &a, unsigned int indent)
   unsigned int idx = 0;
   std::apply(
     [&](auto... mp) {
-      (..., (do_type2string(a.*mp, idx++, K::field_names, vec, indent)));
+      (..., ([&]() {
+        using FieldT = std::remove_cvref_t<decltype(a.*mp)>;
+        if constexpr (
+          std::is_same_v<FieldT, type2tc> && std::is_base_of_v<expr2t, K>)
+          (void)indent; // skip — shown by the type banner
+        else
+          do_type2string(a.*mp, idx++, K::field_names, vec, indent);
+      }()));
     },
     K::fields);
   return vec;
