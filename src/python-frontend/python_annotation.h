@@ -301,12 +301,10 @@ public:
       if (
         top_node["_type"] == "FunctionDef" && top_node.contains("name") &&
         top_node["name"].is_string())
-        top_level_funcs.insert(
-          top_node["name"].template get<std::string>());
+        top_level_funcs.insert(top_node["name"].template get<std::string>());
     }
 
-    std::map<std::pair<std::string, size_t>, std::set<std::string>>
-      param_types;
+    std::map<std::pair<std::string, size_t>, std::set<std::string>> param_types;
     collect_function_call_arg_types(root, param_types, top_level_funcs);
 
     // Second pass: for each top-level FunctionDef, if all observed call
@@ -367,18 +365,16 @@ public:
             // in the operational model (issue #3796) and Any leaves the
             // type uninformative; both would lock in a misleading
             // annotation for callers that pass a real value.
-            if (arg_type.empty() || arg_type == "NoneType" ||
-                arg_type == "Any")
+            if (arg_type.empty() || arg_type == "NoneType" || arg_type == "Any")
               continue;
             param_types[{func_name, i}].insert(arg_type);
           }
         }
       }
 
-      const bool is_function_def = node.contains("_type") &&
-                                   node["_type"] == "FunctionDef" &&
-                                   node.contains("name") &&
-                                   node["name"].is_string();
+      const bool is_function_def =
+        node.contains("_type") && node["_type"] == "FunctionDef" &&
+        node.contains("name") && node["name"].is_string();
       std::string saved_ctx = current_func_name_context_;
       Json *saved_current = current_func;
       Json *saved_parent = parent_func;
@@ -406,8 +402,7 @@ public:
     else if (node.is_array())
     {
       for (auto &element : node)
-        collect_function_call_arg_types(
-          element, param_types, top_level_funcs);
+        collect_function_call_arg_types(element, param_types, top_level_funcs);
     }
   }
 
