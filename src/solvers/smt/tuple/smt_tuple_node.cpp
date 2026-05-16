@@ -140,21 +140,21 @@ expr2tc smt_tuple_node_flattener::tuple_get_rec(tuple_node_smt_astt tuple)
 {
   // XXX - what's the correct type to return here.
   std::vector<expr2tc> outmem;
-  const struct_union_data &strct =
-    ctx->get_type_def(tuple->sort->get_tuple_type());
+  const std::vector<type2tc> &members =
+    struct_union_members(tuple->sort->get_tuple_type());
 
   // If this tuple was free and never read, don't attempt to extract data from
   // it. There isn't any.
   if (tuple->elements.size() == 0)
   {
-    for (unsigned int i = 0; i < strct.members.size(); i++)
+    for (unsigned int i = 0; i < members.size(); i++)
       outmem.emplace_back();
     return constant_struct2tc(tuple->sort->get_tuple_type(), std::move(outmem));
   }
 
   // Run through all fields and despatch to 'get' again.
   unsigned int i = 0;
-  for (auto const &it : strct.members)
+  for (auto const &it : members)
   {
     expr2tc res;
     if (is_tuple_ast_type(it))

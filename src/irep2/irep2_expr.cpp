@@ -273,13 +273,14 @@ void with2t::assert_consistency() const
   }
   else
   {
-    const struct_union_data *d =
-      dynamic_cast<const struct_union_data *>(source_value->type.get());
-    assert(d);
+    assert(is_structure_type(source_value->type));
     assert(update_field->expr_id == constant_string_id);
-    auto c = d->get_component_number(to_constant_string2t(update_field).value);
+    auto c = struct_union_get_component_number(
+      source_value->type,
+      to_constant_string2t(update_field).value);
     assert(c.has_value());
-    assert_type_compat_for_with(update_value->type, d->members[*c]);
+    assert_type_compat_for_with(
+      update_value->type, struct_union_members(source_value->type)[*c]);
   }
   assert(type == source_value->type);
 }

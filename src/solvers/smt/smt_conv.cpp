@@ -44,16 +44,19 @@ unsigned int
 smt_convt::get_member_name_field(const type2tc &t, const irep_idt &name) const
 {
   unsigned int idx = 0;
-  const struct_union_data &data_ref = get_type_def(t);
+  // Pointer types lower to the synthetic pointer_struct tuple in SMT;
+  // for them the named lookup uses pointer_struct's member_names.
+  const std::vector<irep_idt> &names =
+    struct_union_member_names(is_pointer_type(t) ? pointer_struct : t);
 
-  for (auto const &it : data_ref.member_names)
+  for (const irep_idt &it : names)
   {
     if (it == name)
       break;
     idx++;
   }
   assert(
-    idx != data_ref.member_names.size() &&
+    idx != names.size() &&
     "Member name of with expr not found in struct type");
 
   return idx;
@@ -1447,7 +1450,8 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     if (!cu.init_field.empty())
     {
       const union_type2t &ut = to_union_type(expr->type);
-      unsigned c = ut.get_component_number(cu.init_field).value();
+      unsigned c =
+        struct_union_get_component_number(expr->type, cu.init_field).value();
       /* Can only initialize unions by expressions of same type as init_field */
       assert(src_expr->type->type_id == ut.members[c]->type_id);
     }
@@ -2099,12 +2103,14 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       smt_astt srcval = convert_ast(with.source_value);
 
 #ifndef NDEBUG
-      const struct_union_data &data = get_type_def(with.type);
-      assert(idx < data.members.size() && "Out of bounds with expression");
+      // Pointer with's lower into pointer_struct tuple updates.
+      const std::vector<type2tc> &members = struct_union_members(
+        is_pointer_type(with.type) ? pointer_struct : with.type);
+      assert(idx < members.size() && "Out of bounds with expression");
       // Base type eq examines pointer types to closely
       assert(
-        (base_type_eq(data.members[idx], with.update_value->type, ns) ||
-         (is_pointer_type(data.members[idx]) &&
+        (base_type_eq(members[idx], with.update_value->type, ns) ||
+         (is_pointer_type(members[idx]) &&
           is_pointer_type(with.update_value))) &&
         "Assigned tuple member has type mismatch");
 #endif
@@ -2117,7 +2123,8 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       const union_type2t &tu = to_union_type(expr->type);
       assert(is_constant_string2t(with.update_field));
       unsigned c =
-        tu.get_component_number(to_constant_string2t(with.update_field).value)
+        struct_union_get_component_number(
+          expr->type, to_constant_string2t(with.update_field).value)
           .value();
       uint64_t mem_bits = type_byte_size_bits(tu.members[c]).to_uint64();
       expr2tc upd = bitcast2tc(
@@ -4599,13 +4606,6 @@ expr2tc smt_convt::get_array(const expr2tc &expr)
 {
   smt_astt array = convert_ast(expr);
   return get_array(expr->type, array);
-}
-
-const struct_union_data &smt_convt::get_type_def(const type2tc &type) const
-{
-  return (is_pointer_type(type))
-           ? to_struct_type(pointer_struct)
-           : dynamic_cast<const struct_union_data &>(*type.get());
 }
 
 smt_astt smt_convt::array_create(const expr2tc &expr)

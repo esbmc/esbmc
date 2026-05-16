@@ -1505,10 +1505,9 @@ public:
       source->type->type_id == type2t::struct_id ||
       source->type->type_id == type2t::union_id ||
       source->type->type_id == type2t::complex_id);
-    auto *data = dynamic_cast<const struct_union_data *>(source->type.get());
-    assert(data);
     /* member must exist exactly once in the parent struct/union */
-    assert(data->get_component_number(memb).has_value());
+    assert(
+      struct_union_get_component_number(source->type, memb).has_value());
 #endif
   }
   member2t(const member2t &ref) = default;

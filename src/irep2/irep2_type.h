@@ -15,47 +15,6 @@
 // it isn't itself a kind in the manifest so forward-declare it here.
 class bv_type2t;
 
-// We also require in advance, the actual classes that store type data.
-
-class struct_union_data : public type2t
-{
-public:
-  struct_union_data(
-    type2t::type_ids id,
-    std::vector<type2tc> membs,
-    std::vector<irep_idt> names,
-    std::vector<irep_idt> pretty_names,
-    const irep_idt &n,
-    bool _packed)
-    : type2t(id),
-      members(std::move(membs)),
-      member_names(std::move(names)),
-      member_pretty_names(std::move(pretty_names)),
-      name(n),
-      packed(_packed)
-  {
-  }
-  struct_union_data(const struct_union_data &ref) = default;
-
-  /** Fetch index number of member. Looks up the position of @p name in
-   *  member_names. Returns std::nullopt when there is no match or more
-   *  than one match (the latter is malformed IR); callers that treat
-   *  either case as a logic bug should `.value()` the result and let
-   *  std::bad_optional_access surface, or assert before unwrapping.
-   *  @param name Name of member of this struct/union to look up.
-   *  @return Index into members/member_names vectors, or nullopt. */
-  std::optional<unsigned int> get_component_number(const irep_idt &name) const;
-
-  const std::vector<type2tc> &get_structure_members() const;
-  const std::vector<irep_idt> &get_structure_member_names() const;
-
-  std::vector<type2tc> members;
-  std::vector<irep_idt> member_names;
-  std::vector<irep_idt> member_pretty_names;
-  irep_idt name;
-  bool packed;
-};
-
 // Then give them a typedef name
 
 #define irep_typedefs(basename)                                                \
@@ -142,9 +101,8 @@ public:
  *  Represents both C structs and the data in C++ classes. Contains a vector
  *  of types recording what type each member is, a vector of names recording
  *  what the member names are, and a name for the struct.
- *  @extends struct_union_data
  */
-class struct_type2t : public struct_union_data
+class struct_type2t : public type2t
 {
 public:
   /** Primary constructor.
@@ -153,29 +111,34 @@ public:
    *  @param name Name of this struct.
    */
   struct_type2t(
-    const std::vector<type2tc> &members,
+    const std::vector<type2tc> &_members,
     const std::vector<irep_idt> &memb_names,
     const std::vector<irep_idt> &memb_pretty_names,
-    const irep_idt &name,
-    bool packed = false)
-    : struct_union_data(
-        struct_id,
-        members,
-        memb_names,
-        memb_pretty_names,
-        name,
-        packed)
+    const irep_idt &_name,
+    bool _packed = false)
+    : type2t(struct_id),
+      members(_members),
+      member_names(memb_names),
+      member_pretty_names(memb_pretty_names),
+      name(_name),
+      packed(_packed)
   {
   }
   struct_type2t(const struct_type2t &ref) = default;
   unsigned int get_width() const;
 
+  std::vector<type2tc> members;
+  std::vector<irep_idt> member_names;
+  std::vector<irep_idt> member_pretty_names;
+  irep_idt name;
+  bool packed;
+
   static constexpr auto fields = std::make_tuple(
-    &struct_union_data::members,
-    &struct_union_data::member_names,
-    &struct_union_data::member_pretty_names,
-    &struct_union_data::name,
-    &struct_union_data::packed);
+    &struct_type2t::members,
+    &struct_type2t::member_names,
+    &struct_type2t::member_pretty_names,
+    &struct_type2t::name,
+    &struct_type2t::packed);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -183,9 +146,8 @@ public:
  *  Represents a union type - in a similar vein to struct_type2t, this contains
  *  a vector of types and vector of names, each element of which corresponds to
  *  a member in the union. There's also a name for the union.
- *  @extends struct_union_data
  */
-class union_type2t : public struct_union_data
+class union_type2t : public type2t
 {
 public:
   /** Primary constructor.
@@ -194,29 +156,34 @@ public:
    *  @param name Name of this union
    */
   union_type2t(
-    const std::vector<type2tc> &members,
+    const std::vector<type2tc> &_members,
     const std::vector<irep_idt> &memb_names,
     const std::vector<irep_idt> &memb_pretty_names,
-    const irep_idt &name,
-    bool packed = false)
-    : struct_union_data(
-        union_id,
-        members,
-        memb_names,
-        memb_pretty_names,
-        name,
-        packed)
+    const irep_idt &_name,
+    bool _packed = false)
+    : type2t(union_id),
+      members(_members),
+      member_names(memb_names),
+      member_pretty_names(memb_pretty_names),
+      name(_name),
+      packed(_packed)
   {
   }
   union_type2t(const union_type2t &ref) = default;
   unsigned int get_width() const;
 
+  std::vector<type2tc> members;
+  std::vector<irep_idt> member_names;
+  std::vector<irep_idt> member_pretty_names;
+  irep_idt name;
+  bool packed;
+
   static constexpr auto fields = std::make_tuple(
-    &struct_union_data::members,
-    &struct_union_data::member_names,
-    &struct_union_data::member_pretty_names,
-    &struct_union_data::name,
-    &struct_union_data::packed);
+    &union_type2t::members,
+    &union_type2t::member_names,
+    &union_type2t::member_pretty_names,
+    &union_type2t::name,
+    &union_type2t::packed);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -516,35 +483,41 @@ public:
 
 /** Complex number type.
  *  Represents C's _Complex type, carrying the base element type.
- *  @extend complex_data
- */
-class complex_type2t : public struct_union_data
+ *
+ *  TODO (Phase D): semantically just a pair of identical scalars; the
+ *  struct-shaped layout is a legacy hack the SMT tuple lowering relies on. */
+class complex_type2t : public type2t
 {
 public:
   complex_type2t(
-    const std::vector<type2tc> &members,
+    const std::vector<type2tc> &_members,
     const std::vector<irep_idt> &memb_names,
     const std::vector<irep_idt> &memb_pretty_names,
-    const irep_idt &name,
-    bool packed = false)
-    : struct_union_data(
-        complex_id,
-        members,
-        memb_names,
-        memb_pretty_names,
-        name,
-        packed)
+    const irep_idt &_name,
+    bool _packed = false)
+    : type2t(complex_id),
+      members(_members),
+      member_names(memb_names),
+      member_pretty_names(memb_pretty_names),
+      name(_name),
+      packed(_packed)
   {
   }
   complex_type2t(const complex_type2t &ref) = default;
   unsigned int get_width() const;
 
+  std::vector<type2tc> members;
+  std::vector<irep_idt> member_names;
+  std::vector<irep_idt> member_pretty_names;
+  irep_idt name;
+  bool packed;
+
   static constexpr auto fields = std::make_tuple(
-    &struct_union_data::members,
-    &struct_union_data::member_names,
-    &struct_union_data::member_pretty_names,
-    &struct_union_data::name,
-    &struct_union_data::packed);
+    &complex_type2t::members,
+    &complex_type2t::member_names,
+    &complex_type2t::member_pretty_names,
+    &complex_type2t::name,
+    &complex_type2t::packed);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -611,5 +584,94 @@ public:
 #include <irep2/type_kinds.inc>
 #undef IREP2_TYPE
 #undef type_macros
+
+// struct_type2t, union_type2t, and complex_type2t carry the same set of
+// fields (members / member_names / member_pretty_names / name / packed)
+// but no longer share a base class. Callers that need to read these
+// without knowing the concrete kind use the helpers below; each switches
+// on type_id and returns a reference into the right concrete type's
+// storage. Mirrors the expr-side family accessors (arith_side1, etc.).
+// For mutation, callers dispatch on type_id and access the concrete
+// type's field directly.
+inline const std::vector<type2tc> &struct_union_members(const type2tc &t)
+{
+  switch (t->type_id)
+  {
+  case type2t::struct_id:
+    return to_struct_type(t).members;
+  case type2t::union_id:
+    return to_union_type(t).members;
+  case type2t::complex_id:
+    return to_complex_type(t).members;
+  default:
+    irep2_bad_family_cast(t->type_id, "struct_union_members");
+  }
+}
+
+inline const std::vector<irep_idt> &struct_union_member_names(const type2tc &t)
+{
+  switch (t->type_id)
+  {
+  case type2t::struct_id:
+    return to_struct_type(t).member_names;
+  case type2t::union_id:
+    return to_union_type(t).member_names;
+  case type2t::complex_id:
+    return to_complex_type(t).member_names;
+  default:
+    irep2_bad_family_cast(t->type_id, "struct_union_member_names");
+  }
+}
+
+inline const std::vector<irep_idt> &
+struct_union_member_pretty_names(const type2tc &t)
+{
+  switch (t->type_id)
+  {
+  case type2t::struct_id:
+    return to_struct_type(t).member_pretty_names;
+  case type2t::union_id:
+    return to_union_type(t).member_pretty_names;
+  case type2t::complex_id:
+    return to_complex_type(t).member_pretty_names;
+  default:
+    irep2_bad_family_cast(t->type_id, "struct_union_member_pretty_names");
+  }
+}
+
+inline const irep_idt &struct_union_name(const type2tc &t)
+{
+  switch (t->type_id)
+  {
+  case type2t::struct_id:
+    return to_struct_type(t).name;
+  case type2t::union_id:
+    return to_union_type(t).name;
+  case type2t::complex_id:
+    return to_complex_type(t).name;
+  default:
+    irep2_bad_family_cast(t->type_id, "struct_union_name");
+  }
+}
+
+inline bool struct_union_packed(const type2tc &t)
+{
+  switch (t->type_id)
+  {
+  case type2t::struct_id:
+    return to_struct_type(t).packed;
+  case type2t::union_id:
+    return to_union_type(t).packed;
+  case type2t::complex_id:
+    return to_complex_type(t).packed;
+  default:
+    irep2_bad_family_cast(t->type_id, "struct_union_packed");
+  }
+}
+
+/** Index of @p comp in struct/union/complex member_names, or nullopt if
+ *  it is missing or duplicated (the latter is malformed IR). */
+std::optional<unsigned int>
+struct_union_get_component_number(const type2tc &t, const irep_idt &comp);
 
 #endif /* IREP2_TYPE_H_ */

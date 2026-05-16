@@ -1100,9 +1100,8 @@ expr2tc with2t::do_simplify() const
   {
     const constant_struct2t &c_struct = to_constant_struct2t(source_value);
     const constant_string2t &memb = to_constant_string2t(update_field);
-    unsigned no = static_cast<const struct_union_data &>(*type.get())
-                    .get_component_number(memb.value)
-                    .value();
+    unsigned no =
+      struct_union_get_component_number(type, memb.value).value();
     assert(no < c_struct.datatype_members.size());
 
     if (c_struct.datatype_members[no] == update_value)
@@ -1118,9 +1117,8 @@ expr2tc with2t::do_simplify() const
     const constant_union2t &c_union = to_constant_union2t(source_value);
     const union_type2t &thetype = to_union_type(c_union.type);
     const constant_string2t &memb = to_constant_string2t(update_field);
-    unsigned no = static_cast<const struct_union_data &>(*c_union.type.get())
-                    .get_component_number(memb.value)
-                    .value();
+    unsigned no =
+      struct_union_get_component_number(c_union.type, memb.value).value();
     assert(no < thetype.member_names.size());
 
     // If the update value type matches the current lump of data's type, we can
@@ -1204,9 +1202,7 @@ expr2tc member2t::do_simplify() const
   if (is_constant_struct2t(source_value) || is_constant_union2t(source_value))
   {
     unsigned no =
-      static_cast<const struct_union_data &>(*source_value->type.get())
-        .get_component_number(member)
-        .value();
+      struct_union_get_component_number(source_value->type, member).value();
 
     // Clone constant struct, update its field according to this "with".
     expr2tc s;
@@ -1449,11 +1445,9 @@ expr2tc pointer_offset2t::do_simplify() const
 
       if (is_struct_type(member.source_value->type))
       {
-        const struct_union_data &struct_data =
-          static_cast<const struct_union_data &>(
-            *member.source_value->type.get());
-        unsigned member_no =
-          struct_data.get_component_number(member.member).value();
+        unsigned member_no = struct_union_get_component_number(
+                               member.source_value->type, member.member)
+                               .value();
         if (member_no == 0)
           return base_offset;
       }

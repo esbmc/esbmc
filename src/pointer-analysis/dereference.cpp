@@ -338,9 +338,8 @@ static bool is_aligned_member(const expr2tc &expr)
     return false;
 
   const expr2tc &structure = to_member2t(expr).source_value;
-  auto *ty = static_cast<const struct_union_data *>(structure->type.get());
 
-  if (ty->packed)
+  if (struct_union_packed(structure->type))
   {
     /* Very (too?) conservative approach: all members of packed structures are to
      * be accessed in a known-unaligned way. Note, that's not true for GCC/Clang:
@@ -406,11 +405,10 @@ expr2tc dereferencet::dereference_expr_nonscalar(
       !options.get_bool_option("no-align-check") && !mode.unaligned &&
       !is_aligned_member(expr))
     {
-      auto *t = static_cast<const struct_union_data *>(structure->type.get());
       log_warning(
         "not checking alignment for access to packed {} {}",
         get_type_id(*structure->type),
-        t->name.as_string());
+        struct_union_name(structure->type).as_string());
       mode.unaligned = true;
     }
     return dereference_expr_nonscalar(structure, guard, mode, base);
@@ -1752,11 +1750,13 @@ void dereferencet::construct_struct_ref_from_const_offset(
     // (but compatible check already gets that;), arrays of structs; and other
     // crazy inside structs.
 
-    auto *data = static_cast<const struct_union_data *>(value->type.get());
+    const std::vector<type2tc> &members = struct_union_members(value->type);
+    const std::vector<irep_idt> &member_names =
+      struct_union_member_names(value->type);
     unsigned int i = 0;
-    for (auto const &it : data->members)
+    for (auto const &it : members)
     {
-      BigInt offs = member_offset_bits(value->type, data->member_names[i]);
+      BigInt offs = member_offset_bits(value->type, member_names[i]);
       BigInt size = type_byte_size_bits(it);
 
       // Zero-sized members span an empty range, so the normal range check
@@ -1776,7 +1776,7 @@ void dereferencet::construct_struct_ref_from_const_offset(
 
           // Both the member and the target are zero-sized. Access this member
           // only if its type matches; otherwise try the next member.
-          expr2tc member = member2tc(it, value, data->member_names[i]);
+          expr2tc member = member2tc(it, value, member_names[i]);
           if (!dereference_type_compare(member, type))
             goto cont;
           value = member;
@@ -1786,7 +1786,7 @@ void dereferencet::construct_struct_ref_from_const_offset(
         // Non-zero-sized substruct: recurse to continue the search.
         BigInt new_offs = intref.value - offs;
         expr2tc offs_expr = gen_ulong(new_offs);
-        value = member2tc(it, value, data->member_names[i]);
+        value = member2tc(it, value, member_names[i]);
         build_reference_rec(value, offs_expr, type, guard, mode);
         return;
       }

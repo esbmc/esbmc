@@ -399,22 +399,12 @@ std::string complex_type2t::field_names[esbmct::num_type_fields] =
 std::string cpp_name_type2t::field_names[esbmct::num_type_fields] =
   {"name", "template args", "", "", ""};
 
-const std::vector<type2tc> &struct_union_data::get_structure_members() const
-{
-  return members;
-}
-
-const std::vector<irep_idt> &
-struct_union_data::get_structure_member_names() const
-{
-  return member_names;
-}
-
 std::optional<unsigned int>
-struct_union_data::get_component_number(const irep_idt &comp) const
+struct_union_get_component_number(const type2tc &t, const irep_idt &comp)
 {
+  const std::vector<irep_idt> &names = struct_union_member_names(t);
   unsigned int i = 0, count = 0, pos = 0;
-  for (auto const &it : member_names)
+  for (const irep_idt &it : names)
   {
     if (it == comp)
     {

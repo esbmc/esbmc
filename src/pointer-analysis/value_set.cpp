@@ -268,9 +268,8 @@ void value_sett::get_value_set_rec(
       /* We have a member of a union. The value-set of it is the same as the
        * union of the value-sets of each member. */
       assert(is_union_type(memb.source_value->type));
-      auto *u =
-        static_cast<const struct_union_data *>(memb.source_value->type.get());
-      for (const irep_idt &name : u->member_names)
+      for (const irep_idt &name :
+           struct_union_member_names(memb.source_value->type))
         get_value_set_rec(
           memb.source_value,
           dest,
@@ -1117,9 +1116,9 @@ void value_sett::assign(
       // sort-of-valid for the right hand side to be a superclass of the subclass,
       // in which case there are some fields not common between them, so we
       // iterate over the superclasses members.
-      auto *rhs_data = static_cast<const struct_union_data *>(rhs->type.get());
-      const std::vector<type2tc> &members = rhs_data->members;
-      const std::vector<irep_idt> &member_names = rhs_data->member_names;
+      const std::vector<type2tc> &members = struct_union_members(rhs->type);
+      const std::vector<irep_idt> &member_names =
+        struct_union_member_names(rhs->type);
 
       for (size_t i = 0; i < members.size(); i++)
       {
@@ -1542,12 +1541,12 @@ value_sett::make_member(const expr2tc &src, const irep_idt &component_name)
   const type2tc &type = src->type;
   assert(is_struct_type(type) || is_union_type(type));
 
-  auto *data = static_cast<const struct_union_data *>(type.get());
-  const std::vector<type2tc> &members = data->members;
+  const std::vector<type2tc> &members = struct_union_members(type);
 
   if (is_constant_struct2t(src))
   {
-    unsigned no = data->get_component_number(component_name).value();
+    unsigned no =
+      struct_union_get_component_number(type, component_name).value();
     return to_constant_struct2t(src).datatype_members[no];
   }
   if (is_constant_union2t(src))
@@ -1580,7 +1579,8 @@ value_sett::make_member(const expr2tc &src, const irep_idt &component_name)
   }
 
   // give up
-  unsigned no = data->get_component_number(component_name).value();
+  unsigned no =
+    struct_union_get_component_number(type, component_name).value();
   const type2tc &subtype = members[no];
   expr2tc memb = member2tc(subtype, src, component_name);
   return memb;

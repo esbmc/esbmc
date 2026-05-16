@@ -1285,10 +1285,10 @@ void goto_symext::add_memory_leak_checks()
               for (expr2tc &p : sub_exprs)
               {
                 assert(is_structure_type(p));
-                const struct_union_data &u =
-                  static_cast<const struct_union_data &>(*p->type);
-                unsigned n = u.get_component_number(c.member_name).value();
-                p = member2tc(u.members[n], p, c.member_name);
+                unsigned n =
+                  struct_union_get_component_number(p->type, c.member_name)
+                    .value();
+                p = member2tc(struct_union_members(p->type)[n], p, c.member_name);
               }
               continue;
             }
