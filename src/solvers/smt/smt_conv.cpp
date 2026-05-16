@@ -1364,22 +1364,24 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
         distribute_vector_operation(expr->expr_id, to_bitnot2t(expr).value));
     }
 
-    const ieee_arith_2ops *ops = dynamic_cast<const ieee_arith_2ops *>(&*expr);
-    if (ops)
+    if (is_ieee_arith2_expr(expr))
     {
       return convert_ast(distribute_vector_operation(
-        ops->expr_id, ops->side_1, ops->side_2, ops->rounding_mode));
+        expr->expr_id,
+        ieee2_side1(expr),
+        ieee2_side2(expr),
+        ieee2_rounding_mode(expr)));
     }
-    if (is_arith_expr(expr))
+    if (is_arith_expr(expr) && !is_neg2t(expr) && !is_abs2t(expr))
     {
-      const arith_2ops &arith = dynamic_cast<const arith_2ops &>(*expr);
-      return convert_ast(
-        distribute_vector_operation(arith.expr_id, arith.side_1, arith.side_2));
+      return convert_ast(distribute_vector_operation(
+        expr->expr_id, arith_side1(expr), arith_side2(expr)));
     }
-    const bit_2ops *bit = dynamic_cast<const bit_2ops *>(&*expr);
-    if (bit)
-      return convert_ast(
-        distribute_vector_operation(bit->expr_id, bit->side_1, bit->side_2));
+    if (is_bit2_expr(expr))
+    {
+      return convert_ast(distribute_vector_operation(
+        expr->expr_id, bit2_side1(expr), bit2_side2(expr)));
+    }
   }
 
   std::vector<smt_astt> args;
@@ -4594,8 +4596,9 @@ smt_astt smt_convt::array_create(const expr2tc &expr)
   const array_data &data = static_cast<const array_data &>(*expr->type);
   expr2tc size = data.array_size;
   bool is_infinite = data.size_is_infinite;
-  const auto &members =
-    static_cast<const constant_datatype_data &>(*expr).datatype_members;
+  const auto &members = is_constant_array2t(expr)
+    ? to_constant_array2t(expr).datatype_members
+    : to_constant_vector2t(expr).datatype_members;
 
   // Handle constant array expressions: these don't have tuple type and so
   // don't need funky handling, but we need to create a fresh new symbol and

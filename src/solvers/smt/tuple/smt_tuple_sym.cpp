@@ -170,8 +170,9 @@ smt_astt smt_tuple_sym_flattener::tuple_array_of(
   // An array of tuples without tuple support: decompose into array_of's each
   // subtype.
   const struct_union_data &subtype = ctx->get_type_def(init_val->type);
-  const constant_datatype_data &data =
-    static_cast<const constant_datatype_data &>(*init_val.get());
+  const auto &data_members = is_constant_struct2t(init_val)
+    ? to_constant_struct2t(init_val).datatype_members
+    : to_constant_union2t(init_val).datatype_members;
 
   expr2tc arrsize = constant_int2tc(index_type2(), BigInt(array_size));
   type2tc arrtype = array_type2tc(init_val->type, arrsize, false);
@@ -181,10 +182,10 @@ smt_astt smt_tuple_sym_flattener::tuple_array_of(
   smt_sortt sort = ctx->convert_sort(arrtype);
   smt_astt newsym = new array_sym_smt_ast(ctx, sort, name);
 
-  assert(subtype.members.size() == data.datatype_members.size());
+  assert(subtype.members.size() == data_members.size());
   for (unsigned long i = 0; i < subtype.members.size(); i++)
   {
-    const expr2tc &val = data.datatype_members[i];
+    const expr2tc &val = data_members[i];
     type2tc subarr_type = array_type2tc(val->type, arrsize, false);
     expr2tc sub_array_of = constant_array_of2tc(subarr_type, val);
 

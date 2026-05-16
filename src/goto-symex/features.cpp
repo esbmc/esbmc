@@ -40,12 +40,9 @@ void ssa_features::check(const expr2tc &e)
   case expr2t::modulus_id:
   {
     // TODO: We should deal with some non-linearity here e.g.: division-by-zero
-    const auto &arith_op = dynamic_cast<const arith_2ops &>(*e);
-    const expr2tc side_1 = arith_op.side_1;
-    const expr2tc side_2 = arith_op.side_2;
     if (
-      !is_entirely_constant(arith_op.side_1) &&
-      !is_entirely_constant(arith_op.side_2))
+      !is_entirely_constant(arith_side1(e)) &&
+      !is_entirely_constant(arith_side2(e)))
       features.insert(SSA_FEATURES::NON_LINEAR);
 
     break;
@@ -59,10 +56,9 @@ void ssa_features::check(const expr2tc &e)
   case expr2t::bitxor_id:
   {
     features.insert(SSA_FEATURES::BITWISE_OPERATIONS);
-    const auto &bit_op = dynamic_cast<const bit_2ops &>(*e);
     if (
-      !is_entirely_constant(bit_op.side_1) &&
-      !is_entirely_constant(bit_op.side_2))
+      !is_entirely_constant(bit2_side1(e)) &&
+      !is_entirely_constant(bit2_side2(e)))
       features.insert(SSA_FEATURES::NON_LINEAR);
     break;
   }

@@ -692,7 +692,7 @@ void goto_symext::track_new_pointer(
 
 void goto_symext::symex_free(const expr2tc &expr)
 {
-  const auto &code = static_cast<const code_expression_data &>(*expr);
+  const auto &code = to_code_expression2t(expr);
 
   // Trigger 'free'-mode dereference of this pointer. Should generate various
   // dereference failure callbacks.

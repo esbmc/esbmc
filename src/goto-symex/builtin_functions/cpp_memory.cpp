@@ -74,7 +74,7 @@ void goto_symext::symex_cpp_new(
 
 void goto_symext::symex_cpp_delete(const expr2tc &expr)
 {
-  const auto &code = static_cast<const code_expression_data &>(*expr);
+  const auto &code = to_code_expression2t(expr);
 
   expr2tc tmp = code.operand;
 

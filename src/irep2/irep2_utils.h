@@ -192,6 +192,193 @@ inline bool is_comp_expr(const expr2tc &expr)
          expr->expr_id == expr2t::notequal_id;
 }
 
+// IEEE floating-point 2-operand ops (ieee_add / ieee_sub / ieee_mul / ieee_div).
+inline bool is_ieee_arith2_expr(const expr2tc &e)
+{
+  return e->expr_id == expr2t::ieee_add_id ||
+         e->expr_id == expr2t::ieee_sub_id ||
+         e->expr_id == expr2t::ieee_mul_id ||
+         e->expr_id == expr2t::ieee_div_id;
+}
+
+// Bitwise/shift 2-operand ops (bitand/bitor/bitxor/shl/ashr/lshr).
+inline bool is_bit2_expr(const expr2tc &e)
+{
+  return e->expr_id == expr2t::bitand_id ||
+         e->expr_id == expr2t::bitor_id ||
+         e->expr_id == expr2t::bitxor_id ||
+         e->expr_id == expr2t::shl_id ||
+         e->expr_id == expr2t::ashr_id ||
+         e->expr_id == expr2t::lshr_id;
+}
+
+// Access side_1 / side_2 from any logic 2-op (and/or/xor/implies).
+// Precondition: expr_id is one of and/or/xor/implies.
+inline const expr2tc &logic2_side1(const expr2tc &e)
+{
+  switch(e->expr_id)
+  {
+  case expr2t::and_id:     return to_and2t(e).side_1;
+  case expr2t::or_id:      return to_or2t(e).side_1;
+  case expr2t::xor_id:     return to_xor2t(e).side_1;
+  case expr2t::implies_id: return to_implies2t(e).side_1;
+  default:                 abort();
+  }
+}
+
+inline const expr2tc &logic2_side2(const expr2tc &e)
+{
+  switch(e->expr_id)
+  {
+  case expr2t::and_id:     return to_and2t(e).side_2;
+  case expr2t::or_id:      return to_or2t(e).side_2;
+  case expr2t::xor_id:     return to_xor2t(e).side_2;
+  case expr2t::implies_id: return to_implies2t(e).side_2;
+  default:                 abort();
+  }
+}
+
+// Access side_1 / side_2 from any arith 2-op (is_arith_expr, exc. neg/abs).
+// Precondition: expr_id is one of add/sub/mul/div/modulus.
+inline const expr2tc &arith_side1(const expr2tc &e)
+{
+  switch(e->expr_id)
+  {
+  case expr2t::add_id:      return to_add2t(e).side_1;
+  case expr2t::sub_id:      return to_sub2t(e).side_1;
+  case expr2t::mul_id:      return to_mul2t(e).side_1;
+  case expr2t::div_id:      return to_div2t(e).side_1;
+  case expr2t::modulus_id:  return to_modulus2t(e).side_1;
+  default:                  abort();
+  }
+}
+
+inline const expr2tc &arith_side2(const expr2tc &e)
+{
+  switch(e->expr_id)
+  {
+  case expr2t::add_id:      return to_add2t(e).side_2;
+  case expr2t::sub_id:      return to_sub2t(e).side_2;
+  case expr2t::mul_id:      return to_mul2t(e).side_2;
+  case expr2t::div_id:      return to_div2t(e).side_2;
+  case expr2t::modulus_id:  return to_modulus2t(e).side_2;
+  default:                  abort();
+  }
+}
+
+// Access fields from any ieee 2-op. Precondition: is_ieee_arith2_expr(e).
+inline const expr2tc &ieee2_side1(const expr2tc &e)
+{
+  switch(e->expr_id)
+  {
+  case expr2t::ieee_add_id: return to_ieee_add2t(e).side_1;
+  case expr2t::ieee_sub_id: return to_ieee_sub2t(e).side_1;
+  case expr2t::ieee_mul_id: return to_ieee_mul2t(e).side_1;
+  case expr2t::ieee_div_id: return to_ieee_div2t(e).side_1;
+  default:                  abort();
+  }
+}
+
+inline const expr2tc &ieee2_side2(const expr2tc &e)
+{
+  switch(e->expr_id)
+  {
+  case expr2t::ieee_add_id: return to_ieee_add2t(e).side_2;
+  case expr2t::ieee_sub_id: return to_ieee_sub2t(e).side_2;
+  case expr2t::ieee_mul_id: return to_ieee_mul2t(e).side_2;
+  case expr2t::ieee_div_id: return to_ieee_div2t(e).side_2;
+  default:                  abort();
+  }
+}
+
+inline const expr2tc &ieee2_rounding_mode(const expr2tc &e)
+{
+  switch(e->expr_id)
+  {
+  case expr2t::ieee_add_id: return to_ieee_add2t(e).rounding_mode;
+  case expr2t::ieee_sub_id: return to_ieee_sub2t(e).rounding_mode;
+  case expr2t::ieee_mul_id: return to_ieee_mul2t(e).rounding_mode;
+  case expr2t::ieee_div_id: return to_ieee_div2t(e).rounding_mode;
+  default:                  abort();
+  }
+}
+
+// Access side_1 / side_2 from any bitwise 2-op. Precondition: is_bit2_expr(e).
+inline const expr2tc &bit2_side1(const expr2tc &e)
+{
+  switch(e->expr_id)
+  {
+  case expr2t::bitand_id: return to_bitand2t(e).side_1;
+  case expr2t::bitor_id:  return to_bitor2t(e).side_1;
+  case expr2t::bitxor_id: return to_bitxor2t(e).side_1;
+  case expr2t::shl_id:    return to_shl2t(e).side_1;
+  case expr2t::ashr_id:   return to_ashr2t(e).side_1;
+  case expr2t::lshr_id:   return to_lshr2t(e).side_1;
+  default:                abort();
+  }
+}
+
+inline const expr2tc &bit2_side2(const expr2tc &e)
+{
+  switch(e->expr_id)
+  {
+  case expr2t::bitand_id: return to_bitand2t(e).side_2;
+  case expr2t::bitor_id:  return to_bitor2t(e).side_2;
+  case expr2t::bitxor_id: return to_bitxor2t(e).side_2;
+  case expr2t::shl_id:    return to_shl2t(e).side_2;
+  case expr2t::ashr_id:   return to_ashr2t(e).side_2;
+  case expr2t::lshr_id:   return to_lshr2t(e).side_2;
+  default:                abort();
+  }
+}
+
+// Return side_1 / side_2 of any comparison expression.
+// Precondition: is_comp_expr(e).
+inline const expr2tc &comp_side1(const expr2tc &e)
+{
+  switch(e->expr_id)
+  {
+  case expr2t::equality_id:         return to_equality2t(e).side_1;
+  case expr2t::notequal_id:         return to_notequal2t(e).side_1;
+  case expr2t::lessthan_id:         return to_lessthan2t(e).side_1;
+  case expr2t::greaterthan_id:      return to_greaterthan2t(e).side_1;
+  case expr2t::lessthanequal_id:    return to_lessthanequal2t(e).side_1;
+  case expr2t::greaterthanequal_id: return to_greaterthanequal2t(e).side_1;
+  default:                          abort();
+  }
+}
+
+inline const expr2tc &comp_side2(const expr2tc &e)
+{
+  switch(e->expr_id)
+  {
+  case expr2t::equality_id:         return to_equality2t(e).side_2;
+  case expr2t::notequal_id:         return to_notequal2t(e).side_2;
+  case expr2t::lessthan_id:         return to_lessthan2t(e).side_2;
+  case expr2t::greaterthan_id:      return to_greaterthan2t(e).side_2;
+  case expr2t::lessthanequal_id:    return to_lessthanequal2t(e).side_2;
+  case expr2t::greaterthanequal_id: return to_greaterthanequal2t(e).side_2;
+  default:                          abort();
+  }
+}
+
+// Build a new comparison of the same kind as `templ` but with new sides.
+// Precondition: is_comp_expr(templ).
+inline expr2tc
+make_comp_expr(const expr2tc &templ, const expr2tc &s1, const expr2tc &s2)
+{
+  switch(templ->expr_id)
+  {
+  case expr2t::equality_id:         return equality2tc(s1, s2);
+  case expr2t::notequal_id:         return notequal2tc(s1, s2);
+  case expr2t::lessthan_id:         return lessthan2tc(s1, s2);
+  case expr2t::greaterthan_id:      return greaterthan2tc(s1, s2);
+  case expr2t::lessthanequal_id:    return lessthanequal2tc(s1, s2);
+  case expr2t::greaterthanequal_id: return greaterthanequal2tc(s1, s2);
+  default:                          abort();
+  }
+}
+
 /** Test if expr is true. First checks whether the expr is a constant bool, and
  *  then whether it's true-valued. If these are both true, return true,
  *  otherwise return false.

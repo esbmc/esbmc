@@ -22,223 +22,6 @@
 #include <irep2/expr_kinds.inc>
 #undef IREP2_EXPR
 
-// Data definitions.
-
-// X-macro field-list expanders.  The user passes a field-list macro
-// that takes a per-field action `F` and a separator `S` and emits
-//   F(type1, name1) S F(type2, name2) S ...
-// We expand it several times inside ESBMC_DEFINE_DATA to generate
-// declarations, ctor params, ctor init list, traits typedefs, and the
-// trait-list passed to expr2t_traits.  Since the typedef action is
-// inside the class body, &klass::n resolves through the implicit
-// class context and we don't need to pass the class name through.
-#define ESBMC_DATA_DECL(t, n) t n;
-#define ESBMC_DATA_PARAM(t, n) const t &n##_arg
-#define ESBMC_DATA_PARAM_MOVE(t, n) t n##_arg
-#define ESBMC_DATA_INIT(t, n) n(n##_arg)
-#define ESBMC_DATA_INIT_MOVE(t, n) n(std::move(n##_arg))
-#define ESBMC_DATA_TRAIT_REF(t, n) n##_field
-#define ESBMC_DATA_COMMA ,
-#define ESBMC_DATA_NONE
-
-#define ESBMC_DATA_TYPEDEF(t, n)                                               \
-  typedef esbmct::field_traits<t, self_t, &self_t::n> n##_field;
-
-/** Define a data class with the given full class name `klass`. Fields are
- *  passed via an X-macro `(F, S)`-style list of `(type, name)` pairs.
- *  Result type comes from the explicit `type2tc` ctor argument; the
- *  generated class extends expr2t directly.
- *
- *  Three flavours:
- *    - ESBMC_DEFINE_DATA_AS:        ctor takes fields by const ref,
- *                                   result type explicit, uses
- *                                   `expr2t_traits`.
- *    - ESBMC_DEFINE_DATA_NOTYPE_AS: ctor takes fields by const ref,
- *                                   result type implicit, uses
- *                                   `expr2t_traits_notype`.
- *    - ESBMC_DEFINE_DATA_MOVE_AS:   ctor takes fields by value and
- *                                   moves them (use for std::vector
- *                                   and similar heavy types).
- *
- *  Convenience aliases below suffix `klass` with `_data` automatically. */
-#define ESBMC_DEFINE_DATA_AS(klass, FIELDS)                                    \
-  class klass : public expr2t                                                  \
-  {                                                                            \
-  public:                                                                      \
-    using self_t = klass;                                                      \
-    klass(                                                                     \
-      const type2tc &t,                                                        \
-      expr2t::expr_ids id,                                                     \
-      FIELDS(ESBMC_DATA_PARAM, ESBMC_DATA_COMMA))                              \
-      : expr2t(t, id), FIELDS(ESBMC_DATA_INIT, ESBMC_DATA_COMMA)               \
-    {                                                                          \
-    }                                                                          \
-    klass(const klass &ref) = default;                                         \
-    FIELDS(ESBMC_DATA_DECL, ESBMC_DATA_NONE)                                   \
-    FIELDS(ESBMC_DATA_TYPEDEF, ESBMC_DATA_NONE)                                \
-    typedef esbmct::expr2t_traits<                                             \
-      FIELDS(ESBMC_DATA_TRAIT_REF, ESBMC_DATA_COMMA)>                          \
-      traits;                                                                  \
-  }
-
-#define ESBMC_DEFINE_DATA_NOTYPE_AS(klass, FIELDS)                             \
-  class klass : public expr2t                                                  \
-  {                                                                            \
-  public:                                                                      \
-    using self_t = klass;                                                      \
-    klass(                                                                     \
-      const type2tc &t,                                                        \
-      expr2t::expr_ids id,                                                     \
-      FIELDS(ESBMC_DATA_PARAM, ESBMC_DATA_COMMA))                              \
-      : expr2t(t, id), FIELDS(ESBMC_DATA_INIT, ESBMC_DATA_COMMA)               \
-    {                                                                          \
-    }                                                                          \
-    klass(const klass &ref) = default;                                         \
-    FIELDS(ESBMC_DATA_DECL, ESBMC_DATA_NONE)                                   \
-    FIELDS(ESBMC_DATA_TYPEDEF, ESBMC_DATA_NONE)                                \
-    typedef esbmct::expr2t_traits_notype<                                      \
-      FIELDS(ESBMC_DATA_TRAIT_REF, ESBMC_DATA_COMMA)>                          \
-      traits;                                                                  \
-  }
-
-#define ESBMC_DEFINE_DATA_MOVE_AS(klass, FIELDS)                               \
-  class klass : public expr2t                                                  \
-  {                                                                            \
-  public:                                                                      \
-    using self_t = klass;                                                      \
-    klass(                                                                     \
-      const type2tc &t,                                                        \
-      expr2t::expr_ids id,                                                     \
-      FIELDS(ESBMC_DATA_PARAM_MOVE, ESBMC_DATA_COMMA))                         \
-      : expr2t(t, id), FIELDS(ESBMC_DATA_INIT_MOVE, ESBMC_DATA_COMMA)          \
-    {                                                                          \
-    }                                                                          \
-    klass(const klass &ref) = default;                                         \
-    FIELDS(ESBMC_DATA_DECL, ESBMC_DATA_NONE)                                   \
-    FIELDS(ESBMC_DATA_TYPEDEF, ESBMC_DATA_NONE)                                \
-    typedef esbmct::expr2t_traits<                                             \
-      FIELDS(ESBMC_DATA_TRAIT_REF, ESBMC_DATA_COMMA)>                          \
-      traits;                                                                  \
-  }
-
-#define ESBMC_DEFINE_DATA(name, FIELDS)                                        \
-  ESBMC_DEFINE_DATA_AS(name##_data, FIELDS)
-#define ESBMC_DEFINE_DATA_NOTYPE(name, FIELDS)                                 \
-  ESBMC_DEFINE_DATA_NOTYPE_AS(name##_data, FIELDS)
-#define ESBMC_DEFINE_DATA_MOVE(name, FIELDS)                                   \
-  ESBMC_DEFINE_DATA_MOVE_AS(name##_data, FIELDS)
-
-/** Define a data class that extends an existing one (`parent`) and adds
- *  more fields. `PARENT_FIELDS` is the parent's X-macro list (re-passed
- *  so the ctor can take the parent's args by value/move and forward
- *  them).  `OWN_FIELDS` lists this class's own additional fields.  The
- *  parent's trait typedefs are referenced via name##_field (they are
- *  inherited from the parent class scope). */
-#define ESBMC_DEFINE_DATA_EXTENDS(name, parent, PARENT_FIELDS, OWN_FIELDS)     \
-  class name##_data : public parent                                            \
-  {                                                                            \
-  public:                                                                      \
-    using self_t = name##_data;                                                \
-    name##_data(                                                               \
-      const type2tc &t,                                                        \
-      expr2t::expr_ids id,                                                     \
-      PARENT_FIELDS(ESBMC_DATA_PARAM_MOVE, ESBMC_DATA_COMMA),                  \
-      OWN_FIELDS(ESBMC_DATA_PARAM, ESBMC_DATA_COMMA))                          \
-      : parent(t, id, PARENT_FIELDS(ESBMC_DATA_FWD, ESBMC_DATA_COMMA)),        \
-        OWN_FIELDS(ESBMC_DATA_INIT, ESBMC_DATA_COMMA)                          \
-    {                                                                          \
-    }                                                                          \
-    name##_data(const name##_data &ref) = default;                             \
-    OWN_FIELDS(ESBMC_DATA_DECL, ESBMC_DATA_NONE)                               \
-    OWN_FIELDS(ESBMC_DATA_TYPEDEF, ESBMC_DATA_NONE)                            \
-    typedef esbmct::expr2t_traits<                                             \
-      PARENT_FIELDS(ESBMC_DATA_TRAIT_REF, ESBMC_DATA_COMMA),                   \
-      OWN_FIELDS(ESBMC_DATA_TRAIT_REF, ESBMC_DATA_COMMA)>                      \
-      traits;                                                                  \
-  }
-
-// Forward the parent's argument as-is (already a movable rvalue).
-#define ESBMC_DATA_FWD(t, n) std::move(n##_arg)
-
-#define ESBMC_FIELDS_constant_int(F, S) F(BigInt, value)
-ESBMC_DEFINE_DATA(constant_int, ESBMC_FIELDS_constant_int);
-
-#define ESBMC_FIELDS_constant_fixedbv(F, S) F(fixedbvt, value)
-ESBMC_DEFINE_DATA(constant_fixedbv, ESBMC_FIELDS_constant_fixedbv);
-
-#define ESBMC_FIELDS_constant_floatbv(F, S) F(ieee_floatt, value)
-ESBMC_DEFINE_DATA(constant_floatbv, ESBMC_FIELDS_constant_floatbv);
-
-#define ESBMC_FIELDS_dereference(F, S) F(expr2tc, value)
-ESBMC_DEFINE_DATA(dereference, ESBMC_FIELDS_dereference);
-
-#define ESBMC_FIELDS_bitcast(F, S) F(expr2tc, from)
-ESBMC_DEFINE_DATA(bitcast, ESBMC_FIELDS_bitcast);
-
-#define ESBMC_FIELDS_member_ref(F, S) F(irep_idt, member)
-ESBMC_DEFINE_DATA(member_ref, ESBMC_FIELDS_member_ref);
-
-#define ESBMC_FIELDS_code_decl(F, S) F(irep_idt, value)
-ESBMC_DEFINE_DATA(code_decl, ESBMC_FIELDS_code_decl);
-
-#define ESBMC_FIELDS_code_goto(F, S) F(irep_idt, target)
-ESBMC_DEFINE_DATA(code_goto, ESBMC_FIELDS_code_goto);
-
-#define ESBMC_FIELDS_code_asm(F, S) F(irep_idt, value)
-ESBMC_DEFINE_DATA(code_asm, ESBMC_FIELDS_code_asm);
-
-#define ESBMC_FIELDS_same_object(F, S) F(expr2tc, side_1) S F(expr2tc, side_2)
-ESBMC_DEFINE_DATA(same_object, ESBMC_FIELDS_same_object);
-
-#define ESBMC_FIELDS_code_assign(F, S) F(expr2tc, target) S F(expr2tc, source)
-ESBMC_DEFINE_DATA(code_assign, ESBMC_FIELDS_code_assign);
-
-#define ESBMC_FIELDS_code_comma(F, S) F(expr2tc, side_1) S F(expr2tc, side_2)
-ESBMC_DEFINE_DATA(code_comma, ESBMC_FIELDS_code_comma);
-
-#define ESBMC_FIELDS_constant_bool(F, S) F(bool, value)
-ESBMC_DEFINE_DATA(constant_bool, ESBMC_FIELDS_constant_bool);
-
-#define ESBMC_FIELDS_constant_array_of(F, S) F(expr2tc, initializer)
-ESBMC_DEFINE_DATA(constant_array_of, ESBMC_FIELDS_constant_array_of);
-
-#define ESBMC_FIELDS_constant_datatype(F, S)                                   \
-  F(std::vector<expr2tc>, datatype_members)
-ESBMC_DEFINE_DATA_MOVE(constant_datatype, ESBMC_FIELDS_constant_datatype);
-
-#define ESBMC_FIELDS_code_block(F, S) F(std::vector<expr2tc>, operands)
-ESBMC_DEFINE_DATA_MOVE(code_block, ESBMC_FIELDS_code_block);
-
-#define ESBMC_FIELDS_code_expression(F, S) F(expr2tc, operand)
-ESBMC_DEFINE_DATA_NOTYPE(code_expression, ESBMC_FIELDS_code_expression);
-
-#define ESBMC_FIELDS_code_cpp_catch(F, S)                                      \
-  F(std::vector<irep_idt>, exception_list)
-ESBMC_DEFINE_DATA_MOVE(code_cpp_catch, ESBMC_FIELDS_code_cpp_catch);
-
-#define ESBMC_FIELDS_typecast(F, S) F(expr2tc, from) S F(expr2tc, rounding_mode)
-ESBMC_DEFINE_DATA(typecast, ESBMC_FIELDS_typecast);
-
-#define ESBMC_FIELDS_if(F, S)                                                  \
-  F(expr2tc, cond) S F(expr2tc, true_value)                                    \
-  S F(expr2tc, false_value)
-ESBMC_DEFINE_DATA(if, ESBMC_FIELDS_if);
-
-#define ESBMC_FIELDS_relation(F, S) F(expr2tc, side_1) S F(expr2tc, side_2)
-ESBMC_DEFINE_DATA(relation, ESBMC_FIELDS_relation);
-
-/** Like `constant_datatype_data` but tags the active union variant
- *  (`init_field`). Inherits `datatype_members` from its parent. */
-#define ESBMC_FIELDS_constant_union_own(F, S) F(irep_idt, init_field)
-ESBMC_DEFINE_DATA_EXTENDS(
-  constant_union,
-  constant_datatype_data,
-  ESBMC_FIELDS_constant_datatype,
-  ESBMC_FIELDS_constant_union_own);
-
-/** Kind of string literal carried by a `constant_string2t`.  Lives at
- *  namespace scope (rather than inside the data class) so the X-macro
- *  fold can mention it as a plain type name. */
 enum class constant_string_kindt
 {
   DEFAULT, /* "" */
@@ -246,12 +29,7 @@ enum class constant_string_kindt
   UNICODE, /* u8"", u"" and U"" */
 };
 
-#define ESBMC_FIELDS_constant_string(F, S)                                     \
-  F(irep_idt, value) S F(constant_string_kindt, kind)
-ESBMC_DEFINE_DATA(constant_string, ESBMC_FIELDS_constant_string);
-
-/** Symex renaming level.  Lives at namespace scope (rather than inside
- *  symbol_data) so the X-macro fold can name it as a plain type.
+/** Symex renaming level for symbol2t.
  *
  * Symbolic execution rewrites a symbol into successively more specific
  * variants as it threads constraints through the SSA program:
@@ -280,107 +58,15 @@ enum class symbol_renaming_level
   level2_global,
 };
 
-#define ESBMC_FIELDS_symbol(F, S)                                              \
-  F(irep_idt, thename)                                                         \
-  S F(symbol_renaming_level, rlevel)                                           \
-  S F(unsigned int, level1_num)                                                \
-  S F(unsigned int, level2_num)                                                \
-  S F(unsigned int, thread_num)                                                \
-  S F(unsigned int, node_num)
-ESBMC_DEFINE_DATA(symbol, ESBMC_FIELDS_symbol);
-
-#define ESBMC_FIELDS_value_only(F, S) F(expr2tc, value)
-ESBMC_DEFINE_DATA_NOTYPE_AS(bool_1op, ESBMC_FIELDS_value_only);
-ESBMC_DEFINE_DATA_AS(arith_1op, ESBMC_FIELDS_value_only);
-
-#define ESBMC_FIELDS_two_sides(F, S) F(expr2tc, side_1) S F(expr2tc, side_2)
-ESBMC_DEFINE_DATA_AS(logic_2ops, ESBMC_FIELDS_two_sides);
-ESBMC_DEFINE_DATA_AS(bit_2ops, ESBMC_FIELDS_two_sides);
-
-ESBMC_DEFINE_DATA_AS(arith_2ops, ESBMC_FIELDS_two_sides);
-
 /** Debug-only consistency check for arith_2ops operands and result type.
- *  Validates that pointer-difference, bv-vs-bv arithmetic and pointer-bv
- *  arithmetic have matching shapes. Called from the concrete arith
- *  classes (add2t/sub2t/...) under NDEBUG; a no-op in Release. */
+ *  Called from add2t/sub2t/mul2t/div2t/modulus2t constructors; no-op in Release. */
 void assert_arith_2ops_consistency(
   const type2tc &t,
   expr2t::expr_ids id,
   const expr2tc &v1,
   const expr2tc &v2);
 
-#define ESBMC_FIELDS_ieee_1(F, S) F(expr2tc, rounding_mode) S F(expr2tc, value)
-ESBMC_DEFINE_DATA_AS(ieee_arith_1op, ESBMC_FIELDS_ieee_1);
-
-#define ESBMC_FIELDS_ieee_2(F, S)                                              \
-  F(expr2tc, rounding_mode) S F(expr2tc, side_1)                               \
-  S F(expr2tc, side_2)
-ESBMC_DEFINE_DATA_AS(ieee_arith_2ops, ESBMC_FIELDS_ieee_2);
-
-#define ESBMC_FIELDS_ieee_3(F, S)                                              \
-  F(expr2tc, rounding_mode)                                                    \
-  S F(expr2tc, value_1)                                                        \
-  S F(expr2tc, value_2)                                                        \
-  S F(expr2tc, value_3)
-ESBMC_DEFINE_DATA_AS(ieee_arith_3ops, ESBMC_FIELDS_ieee_3);
-
-#define ESBMC_FIELDS_ptr_obj(F, S) F(expr2tc, ptr_obj)
-ESBMC_DEFINE_DATA_AS(pointer_ops, ESBMC_FIELDS_ptr_obj);
-
-// Special class for invalid_pointer2t, which needs always-construct
-// forcing.  Storage matches pointer_ops but the traits are notype.
-ESBMC_DEFINE_DATA_NOTYPE_AS(invalid_pointer_ops, ESBMC_FIELDS_ptr_obj);
-
-#define ESBMC_FIELDS_byte_extract(F, S)                                        \
-  F(expr2tc, source_value) S F(expr2tc, source_offset)                         \
-  S F(bool, big_endian)
-ESBMC_DEFINE_DATA(byte_extract, ESBMC_FIELDS_byte_extract);
-
-#define ESBMC_FIELDS_byte_update(F, S)                                         \
-  F(expr2tc, source_value)                                                     \
-  S F(expr2tc, source_offset)                                                  \
-  S F(expr2tc, update_value)                                                   \
-  S F(bool, big_endian)
-ESBMC_DEFINE_DATA(byte_update, ESBMC_FIELDS_byte_update);
-
-#define ESBMC_FIELDS_with(F, S)                                                \
-  F(expr2tc, source_value) S F(expr2tc, update_field)                          \
-  S F(expr2tc, update_value)
-ESBMC_DEFINE_DATA(with, ESBMC_FIELDS_with);
-
-#define ESBMC_FIELDS_member(F, S) F(expr2tc, source_value) S F(irep_idt, member)
-ESBMC_DEFINE_DATA(member, ESBMC_FIELDS_member);
-
-#define ESBMC_FIELDS_ptr_mem(F, S)                                             \
-  F(expr2tc, source_value) S F(expr2tc, member_pointer)
-ESBMC_DEFINE_DATA(ptr_mem, ESBMC_FIELDS_ptr_mem);
-
-#define ESBMC_FIELDS_index(F, S) F(expr2tc, source_value) S F(expr2tc, index)
-ESBMC_DEFINE_DATA(index, ESBMC_FIELDS_index);
-
-#define ESBMC_FIELDS_string_ops(F, S) F(expr2tc, string)
-ESBMC_DEFINE_DATA_AS(string_ops, ESBMC_FIELDS_string_ops);
-
-#define ESBMC_FIELDS_overflow_ops(F, S) F(expr2tc, operand)
-ESBMC_DEFINE_DATA_AS(overflow_ops, ESBMC_FIELDS_overflow_ops);
-
-// overflow_cast_data extends overflow_ops with a `bits` field.
-#define ESBMC_FIELDS_overflow_cast_own(F, S) F(unsigned int, bits)
-ESBMC_DEFINE_DATA_EXTENDS(
-  overflow_cast,
-  overflow_ops,
-  ESBMC_FIELDS_overflow_ops,
-  ESBMC_FIELDS_overflow_cast_own);
-
-#define ESBMC_FIELDS_dynamic_object(F, S)                                      \
-  F(expr2tc, instance) S F(bool, invalid)                                      \
-  S F(bool, unknown)
-ESBMC_DEFINE_DATA(dynamic_object, ESBMC_FIELDS_dynamic_object);
-
-ESBMC_DEFINE_DATA_NOTYPE_AS(object_ops, ESBMC_FIELDS_value_only);
-
-/** Enumeration identifying each particular kind of side effect. Lifted to
- *  namespace scope so the X-macro fold can name it as a plain type. */
+/** Enumeration identifying each particular kind of side effect. */
 enum class sideeffect_allockind
 {
   malloc,
@@ -400,17 +86,7 @@ enum class sideeffect_allockind
   assigns_target // For __ESBMC_assigns() in function contracts
 };
 
-#define ESBMC_FIELDS_sideeffect(F, S)                                          \
-  F(expr2tc, operand)                                                          \
-  S F(expr2tc, size)                                                           \
-  S F(std::vector<expr2tc>, arguments)                                         \
-  S F(type2tc, alloctype)                                                      \
-  S F(sideeffect_allockind, kind)
-ESBMC_DEFINE_DATA_MOVE(sideeffect, ESBMC_FIELDS_sideeffect);
-
-/** Which member of the printf family a `code_printf2t` represents.  The
- *  symex side (src/goto-symex/builtin_functions/io.cpp) switches on this
- *  to pick the correct argument layout. */
+/** Which member of the printf family a `code_printf2t` represents. */
 enum class printf_kindt
 {
   PRINTF,
@@ -425,173 +101,123 @@ enum class printf_kindt
  *  "snprintf") onto a printf_kindt.  Aborts on an unknown name. */
 printf_kindt printf_kind_from_name(const irep_idt &name);
 
-#define ESBMC_FIELDS_code_printf(F, S)                                         \
-  F(std::vector<expr2tc>, operands) S F(printf_kindt, kind)
-ESBMC_DEFINE_DATA_MOVE(code_printf, ESBMC_FIELDS_code_printf);
 
-#define ESBMC_FIELDS_object_desc(F, S)                                         \
-  F(expr2tc, object) S F(expr2tc, offset)                                      \
-  S F(unsigned int, alignment)
-ESBMC_DEFINE_DATA(object_desc, ESBMC_FIELDS_object_desc);
-
-#define ESBMC_FIELDS_code_funccall(F, S)                                       \
-  F(expr2tc, ret) S F(expr2tc, function)                                       \
-  S F(std::vector<expr2tc>, operands)
-ESBMC_DEFINE_DATA_MOVE(code_funccall, ESBMC_FIELDS_code_funccall);
-
-#define ESBMC_FIELDS_code_cpp_throw(F, S)                                      \
-  F(expr2tc, operand) S F(std::vector<irep_idt>, exception_list)
-ESBMC_DEFINE_DATA_MOVE(code_cpp_throw, ESBMC_FIELDS_code_cpp_throw);
-
-#define ESBMC_FIELDS_code_cpp_throw_decl(F, S)                                 \
-  F(std::vector<irep_idt>, exception_list)
-ESBMC_DEFINE_DATA_MOVE(code_cpp_throw_decl, ESBMC_FIELDS_code_cpp_throw_decl);
-
-#define ESBMC_FIELDS_extract(F, S)                                             \
-  F(expr2tc, from) S F(unsigned int, upper)                                    \
-  S F(unsigned int, lower)
-ESBMC_DEFINE_DATA(extract, ESBMC_FIELDS_extract);
-
-// Give everything a typedef name. Use this to construct both the templated
-// expression methods, but also the container class which needs the template
-// parameters too.
-// Given how otherwise this means typing a large amount of template arguments
-// again and again, this gets macro'd.
-
-// For kinds that still use the 4-layer template hierarchy.
-#define irep_typedefs(basename, superclass)                                    \
-  template <typename... Args>                                                  \
-  inline expr2tc basename##2tc(Args && ...args)                                \
-  {                                                                            \
-    return make_irep<basename##2t>(std::forward<Args>(args)...);               \
-  }                                                                            \
-  typedef esbmct::expr_methods2<basename##2t, superclass, superclass::traits>  \
-    basename##_expr_methods;                                                   \
-  extern template class esbmct::                                               \
-    expr_methods2<basename##2t, superclass, superclass::traits>;               \
-  extern template class esbmct::                                               \
-    irep_methods2<basename##2t, superclass, superclass::traits>;
-
-// For kinds that inherit from expr2t directly (flattened).
-#define irep_typedefs_flat(basename)                                           \
+#define irep_typedefs(basename)                                                \
   template <typename... Args>                                                  \
   inline expr2tc basename##2tc(Args && ...args)                                \
   {                                                                            \
     return make_irep<basename##2t>(std::forward<Args>(args)...);               \
   }
 
-// This can't be replaced by iterating over all expr ids in preprocessing
-// magic because the mapping between top level expr class and it's data holding
-// object isn't regular: the data class depends on /what/ the expression /is/.
-irep_typedefs_flat(constant_int);
-irep_typedefs_flat(constant_fixedbv);
-irep_typedefs_flat(constant_floatbv);
-irep_typedefs_flat(constant_struct);
-irep_typedefs_flat(constant_union);
-irep_typedefs_flat(constant_array);
-irep_typedefs_flat(constant_vector);
-irep_typedefs_flat(constant_bool);
-irep_typedefs_flat(constant_array_of);
-irep_typedefs_flat(constant_string);
-irep_typedefs_flat(symbol);
-irep_typedefs_flat(nearbyint);
-irep_typedefs_flat(typecast);
-irep_typedefs_flat(bitcast);
-irep_typedefs_flat(if);
-irep_typedefs_flat(equality);
-irep_typedefs_flat(notequal);
-irep_typedefs_flat(lessthan);
-irep_typedefs_flat(greaterthan);
-irep_typedefs_flat(lessthanequal);
-irep_typedefs_flat(greaterthanequal);
-irep_typedefs_flat(cmp_three_way);
-irep_typedefs_flat(not);
-irep_typedefs_flat(and);
-irep_typedefs_flat(or);
-irep_typedefs_flat(xor);
-irep_typedefs_flat(implies);
-irep_typedefs_flat(bitand);
-irep_typedefs_flat(bitor);
-irep_typedefs_flat(bitxor);
-irep_typedefs_flat(lshr);
-irep_typedefs_flat(bitnot);
-irep_typedefs_flat(neg);
-irep_typedefs_flat(abs);
-irep_typedefs_flat(add);
-irep_typedefs_flat(sub);
-irep_typedefs_flat(mul);
-irep_typedefs_flat(div);
-irep_typedefs_flat(ieee_add);
-irep_typedefs_flat(ieee_sub);
-irep_typedefs_flat(ieee_mul);
-irep_typedefs_flat(ieee_div);
-irep_typedefs_flat(ieee_fma);
-irep_typedefs_flat(ieee_sqrt);
-irep_typedefs_flat(modulus);
-irep_typedefs_flat(shl);
-irep_typedefs_flat(ashr);
-irep_typedefs_flat(same_object);
-irep_typedefs_flat(pointer_offset);
-irep_typedefs_flat(pointer_object);
-irep_typedefs_flat(pointer_capability);
-irep_typedefs_flat(address_of);
-irep_typedefs_flat(byte_extract);
-irep_typedefs_flat(byte_update);
-irep_typedefs_flat(with);
-irep_typedefs_flat(member);
-irep_typedefs_flat(member_ref);
-irep_typedefs_flat(ptr_mem);
-irep_typedefs_flat(index);
-irep_typedefs_flat(isnan);
-irep_typedefs_flat(overflow);
-irep_typedefs_flat(overflow_cast);
-irep_typedefs_flat(overflow_neg);
-irep_typedefs_flat(unknown);
-irep_typedefs_flat(invalid);
-irep_typedefs_flat(null_object);
-irep_typedefs_flat(dynamic_object);
-irep_typedefs_flat(dereference);
-irep_typedefs_flat(valid_object);
-irep_typedefs_flat(races_check);
-irep_typedefs_flat(deallocated_obj);
-irep_typedefs_flat(dynamic_size);
-irep_typedefs_flat(sideeffect);
-irep_typedefs_flat(code_block);
-irep_typedefs_flat(code_assign);
-irep_typedefs_flat(code_decl);
-irep_typedefs_flat(code_dead);
-irep_typedefs_flat(code_printf);
-irep_typedefs_flat(code_expression);
-irep_typedefs_flat(code_return);
-irep_typedefs_flat(code_skip);
-irep_typedefs_flat(code_free);
-irep_typedefs_flat(code_goto);
-irep_typedefs_flat(object_descriptor);
-irep_typedefs_flat(code_function_call);
-irep_typedefs_flat(code_comma);
-irep_typedefs_flat(invalid_pointer);
-irep_typedefs_flat(code_asm);
-irep_typedefs_flat(code_cpp_del_array);
-irep_typedefs_flat(code_cpp_delete);
-irep_typedefs_flat(code_cpp_catch);
-irep_typedefs_flat(code_cpp_throw);
-irep_typedefs_flat(code_cpp_throw_decl);
-irep_typedefs_flat(code_cpp_throw_decl_end);
-irep_typedefs_flat(isinf);
-irep_typedefs_flat(isnormal);
-irep_typedefs_flat(isfinite);
-irep_typedefs_flat(signbit);
-irep_typedefs_flat(popcount);
-irep_typedefs_flat(bswap);
-irep_typedefs_flat(concat);
-irep_typedefs_flat(extract);
-irep_typedefs_flat(capability_base);
-irep_typedefs_flat(capability_top);
-irep_typedefs_flat(forall);
-irep_typedefs_flat(exists);
-irep_typedefs_flat(isinstance);
-irep_typedefs_flat(hasattr);
-irep_typedefs_flat(isnone);
+irep_typedefs(constant_int);
+irep_typedefs(constant_fixedbv);
+irep_typedefs(constant_floatbv);
+irep_typedefs(constant_struct);
+irep_typedefs(constant_union);
+irep_typedefs(constant_array);
+irep_typedefs(constant_vector);
+irep_typedefs(constant_bool);
+irep_typedefs(constant_array_of);
+irep_typedefs(constant_string);
+irep_typedefs(symbol);
+irep_typedefs(nearbyint);
+irep_typedefs(typecast);
+irep_typedefs(bitcast);
+irep_typedefs(if);
+irep_typedefs(equality);
+irep_typedefs(notequal);
+irep_typedefs(lessthan);
+irep_typedefs(greaterthan);
+irep_typedefs(lessthanequal);
+irep_typedefs(greaterthanequal);
+irep_typedefs(cmp_three_way);
+irep_typedefs(not);
+irep_typedefs(and);
+irep_typedefs(or);
+irep_typedefs(xor);
+irep_typedefs(implies);
+irep_typedefs(bitand);
+irep_typedefs(bitor);
+irep_typedefs(bitxor);
+irep_typedefs(lshr);
+irep_typedefs(bitnot);
+irep_typedefs(neg);
+irep_typedefs(abs);
+irep_typedefs(add);
+irep_typedefs(sub);
+irep_typedefs(mul);
+irep_typedefs(div);
+irep_typedefs(ieee_add);
+irep_typedefs(ieee_sub);
+irep_typedefs(ieee_mul);
+irep_typedefs(ieee_div);
+irep_typedefs(ieee_fma);
+irep_typedefs(ieee_sqrt);
+irep_typedefs(modulus);
+irep_typedefs(shl);
+irep_typedefs(ashr);
+irep_typedefs(same_object);
+irep_typedefs(pointer_offset);
+irep_typedefs(pointer_object);
+irep_typedefs(pointer_capability);
+irep_typedefs(address_of);
+irep_typedefs(byte_extract);
+irep_typedefs(byte_update);
+irep_typedefs(with);
+irep_typedefs(member);
+irep_typedefs(member_ref);
+irep_typedefs(ptr_mem);
+irep_typedefs(index);
+irep_typedefs(isnan);
+irep_typedefs(overflow);
+irep_typedefs(overflow_cast);
+irep_typedefs(overflow_neg);
+irep_typedefs(unknown);
+irep_typedefs(invalid);
+irep_typedefs(null_object);
+irep_typedefs(dynamic_object);
+irep_typedefs(dereference);
+irep_typedefs(valid_object);
+irep_typedefs(races_check);
+irep_typedefs(deallocated_obj);
+irep_typedefs(dynamic_size);
+irep_typedefs(sideeffect);
+irep_typedefs(code_block);
+irep_typedefs(code_assign);
+irep_typedefs(code_decl);
+irep_typedefs(code_dead);
+irep_typedefs(code_printf);
+irep_typedefs(code_expression);
+irep_typedefs(code_return);
+irep_typedefs(code_skip);
+irep_typedefs(code_free);
+irep_typedefs(code_goto);
+irep_typedefs(object_descriptor);
+irep_typedefs(code_function_call);
+irep_typedefs(code_comma);
+irep_typedefs(invalid_pointer);
+irep_typedefs(code_asm);
+irep_typedefs(code_cpp_del_array);
+irep_typedefs(code_cpp_delete);
+irep_typedefs(code_cpp_catch);
+irep_typedefs(code_cpp_throw);
+irep_typedefs(code_cpp_throw_decl);
+irep_typedefs(code_cpp_throw_decl_end);
+irep_typedefs(isinf);
+irep_typedefs(isnormal);
+irep_typedefs(isfinite);
+irep_typedefs(signbit);
+irep_typedefs(popcount);
+irep_typedefs(bswap);
+irep_typedefs(concat);
+irep_typedefs(extract);
+irep_typedefs(capability_base);
+irep_typedefs(capability_top);
+irep_typedefs(forall);
+irep_typedefs(exists);
+irep_typedefs(isinstance);
+irep_typedefs(hasattr);
+irep_typedefs(isnone);
 
 class exists2t : public expr2t
 {

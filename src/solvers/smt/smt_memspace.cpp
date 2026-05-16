@@ -38,7 +38,7 @@ smt_astt smt_convt::convert_ptr_cmp(
   // it's obviously broken).
   assert(is_pointer_type(side1));
   assert(is_pointer_type(side2));
-  assert(dynamic_cast<const relation_data *>(templ_expr.get()));
+  assert(is_comp_expr(templ_expr));
 
   /* Compare just the offsets. This is compatible with both C and CHERI-C,
    * because we already asserted that they point to the same object (unless
@@ -51,19 +51,18 @@ smt_astt smt_convt::convert_ptr_cmp(
    * which case offsets could flip sign. */
   type2tc type = get_uint_type(config.ansi_c.address_width);
   type2tc stype = get_int_type(config.ansi_c.address_width);
-  expr2tc op = templ_expr;
-  relation_data &rel = static_cast<relation_data &>(*op);
-  rel.side_1 = typecast2tc(type, pointer_offset2tc(stype, side1));
-  rel.side_2 = typecast2tc(type, pointer_offset2tc(stype, side2));
+  expr2tc op = make_comp_expr(
+    templ_expr,
+    typecast2tc(type, pointer_offset2tc(stype, side1)),
+    typecast2tc(type, pointer_offset2tc(stype, side2)));
   return convert_ast(op);
 }
 
 smt_astt
 smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
 {
-  const arith_2ops &expr_ref = static_cast<const arith_2ops &>(*expr);
-  const expr2tc &side1 = expr_ref.side_1;
-  const expr2tc &side2 = expr_ref.side_2;
+  const expr2tc &side1 = arith_side1(expr);
+  const expr2tc &side2 = arith_side2(expr);
 
   // So eight cases; one for each combination of two operands and the return
   // type, being pointer or nonpointer. So with P=pointer, N= notpointer,
