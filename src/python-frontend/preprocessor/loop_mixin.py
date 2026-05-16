@@ -459,42 +459,58 @@ class LoopMixin:
             else:
                 result.append(self.ensure_all_locations(ast.Expr(value=enter_call), node))
 
-        # Build the list of __exit__ calls (reverse order, non-exceptional path).
-        exit_calls = []
-        for i in range(len(node.items) - 1, -1, -1):
+        # Build __exit__ calls in reverse order.  The helper is factored out so
+        # the same call shape can be re-instantiated for both the success path
+        # (statement) and the exception handler (operand of `not`); AST nodes
+        # must not be shared across locations because each carries its own
+        # location/parent metadata.
+        def make_exit_call(i):
             mgr_name = f"__esbmc_mgr_{exit_start + i}"
-            exit_call = ast.Call(
+            return ast.Call(
                 func=ast.Attribute(
                     value=ast.Name(id=mgr_name, ctx=ast.Load()),
                     attr="__exit__",
                     ctx=ast.Load(),
                 ),
-                args=[
-                    ast.Constant(value=0),
-                    ast.Constant(value=0),
-                    ast.Constant(value=0),
-                ],
+                args=[ast.Constant(value=0)] * 3,
                 keywords=[],
             )
-            exit_calls.append(self.ensure_all_locations(ast.Expr(value=exit_call), node))
 
-        # If every context manager's __exit__ statically returns True, wrap the
-        # body and exit calls in a try/except BaseException: pass so any
-        # exception raised inside the with block is suppressed, matching
-        # CPython semantics. Other __exit__ shapes preserve today's behaviour
-        # (exception propagates without consulting __exit__).
-        suppress = (hasattr(self, "_exit_suppresses_all") and len(node.items) > 0 and all(
+        exit_calls = [
+            self.ensure_all_locations(ast.Expr(value=make_exit_call(i)), node)
+            for i in range(len(node.items) - 1, -1, -1)
+        ]
+
+        # When every manager's class defines (or inherits) __exit__, lower to
+        # CPython's dynamic-suppression form:
+        #   try:
+        #       BODY
+        #       <success-path exit calls>
+        #   except BaseException:
+        #       if not mgr.__exit__(0, 0, 0): raise
+        #       ...                          # one guard per manager, reverse order
+        # __exit__'s return value is consulted at runtime: truthy suppresses,
+        # falsy re-raises via bare `raise`.  Managers without a tracked class
+        # (e.g. `open(...)`) fall back to today's unwrapped lowering.
+        wrap = (hasattr(self, "_classes_with_exit") and len(node.items) > 0 and all(
             isinstance(item.context_expr, ast.Call) and isinstance(item.context_expr.func, ast.Name)
-            and item.context_expr.func.id in self._exit_suppresses_all for item in node.items))
+            and item.context_expr.func.id in self._classes_with_exit for item in node.items))
 
-        if suppress:
+        if wrap:
+            handler_body = [
+                ast.If(
+                    test=ast.UnaryOp(op=ast.Not(), operand=make_exit_call(i)),
+                    body=[ast.Raise(exc=None, cause=None)],
+                    orelse=[],
+                ) for i in range(len(node.items) - 1, -1, -1)
+            ]
             try_node = ast.Try(
                 body=list(node.body) + exit_calls,
                 handlers=[
                     ast.ExceptHandler(
                         type=ast.Name(id="BaseException", ctx=ast.Load()),
                         name=None,
-                        body=[ast.Pass()],
+                        body=handler_body,
                     )
                 ],
                 orelse=[],

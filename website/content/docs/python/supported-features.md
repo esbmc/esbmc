@@ -18,6 +18,7 @@ This page is a reference of all Python language constructs, data structures, and
   - `with EXPR: BODY` — context manager used without variable binding
   - `with A as a, B as b: BODY` — multiple context managers in one statement; expanded left-to-right, `__exit__` called in reverse order
   - `async with` is handled identically to `with`
+  - Exception suppression: when the body raises, `__exit__(type, value, traceback)` is called and the exception is re-raised iff the return value is falsy, matching CPython semantics. This covers static `return True`, conditional returns (`return self.flag`, `return et is ValueError`), implicit-`None` bodies (propagate by default), and single-level base-class inheritance of `__exit__`.
 
 ## Functions and Methods
 
@@ -156,7 +157,7 @@ Byte sequences and integer class methods:
 ## Error Handling
 
 - **`try`/`except`** blocks with multiple handlers and `except ExceptionType as var` binding
-- **`raise`** statements with exception instantiation and custom messages
+- **`raise`** statements with exception instantiation and custom messages; bare `raise` re-raises the active exception inside an `except` handler
 - **`assert`** statements for property verification
 - **`__ESBMC_assume`** for constraining non-deterministic inputs
 - **`ImportError` guards**: Imports inside `try/except ImportError` are handled statically
