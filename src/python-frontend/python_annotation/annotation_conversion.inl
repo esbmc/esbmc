@@ -501,3 +501,728 @@ std::string python_annotation<Json>::infer_unpacked_element_type(
 
   return "Any";
 }
+
+// ---------- dispatchers ----------
+
+template <class Json>
+std::string python_annotation<Json>::get_argument_type(const Json &arg)
+{
+  if (arg["_type"] == "Constant")
+    return get_type_from_constant(arg);
+  else if (arg["_type"] == "Subscript")
+  {
+    // Handle subscripts like tokens[0] and slices like tokens[:1].
+    const auto &val = arg["value"];
+    if (val["_type"] == "Name")
+    {
+      std::string var_name = val["id"].template get<std::string>();
+      Json var_node = find_var_node_for_inference(var_name);
+
+      if (has_annotation(var_node))
+      {
+        const auto &annot = var_node["annotation"];
+        // list[T] -> return T
+        if (
+          annot.contains("_type") && annot["_type"] == "Subscript" &&
+          annot.contains("value") && annot["value"].contains("id") &&
+          annot["value"]["id"] == "list")
+        {
+          if (
+            arg.contains("slice") && arg["slice"].contains("_type") &&
+            arg["slice"]["_type"] == "Slice")
+          {
+            if (
+              annot.contains("slice") && annot["slice"].contains("id") &&
+              annot["slice"]["id"].is_string())
+              return "list[" +
+                     annot["slice"]["id"].template get<std::string>() + "]";
+            return "list";
+          }
+
+          if (annot.contains("slice"))
+          {
+            const auto &slice = annot["slice"];
+            if (slice.contains("id"))
+              return slice["id"];
+            else if (
+              slice.contains("_type") && slice["_type"] == "Name" &&
+              slice.contains("id"))
+              return slice["id"];
+          }
+          return "Any";
+        }
+        // Simple name annotation (e.g., list without subtype)
+        if (annot.contains("id") && annot["id"] == "list")
+          return "Any";
+      }
+    }
+    return "";
+  }
+  else if (arg["_type"] == "Slice")
+    return "slice";
+  else if (arg["_type"] == "UnaryOp")
+  {
+    // Handle unary operations like -5, +3, not True
+    if (arg.contains("operand"))
+      return get_argument_type(arg["operand"]);
+  }
+  else if (arg["_type"] == "Name")
+  {
+    const std::string &var_name = arg["id"];
+
+    // Try to find the type of the variable in current scope
+    Json var_node = find_var_node_for_inference(var_name);
+
+    // Extract type from the found variable node
+    if (has_annotation(var_node))
+    {
+      // Handle arg nodes (function parameters)
+      if (var_node["_type"] == "arg")
+      {
+        return json_utils::get_annotation_type_name(var_node["annotation"]);
+      }
+      // Handle generic type annotations like list[int] (Subscript nodes)
+      else if (
+        var_node["annotation"].contains("_type") &&
+        var_node["annotation"]["_type"] == "Subscript" &&
+        var_node["annotation"].contains("value") &&
+        var_node["annotation"]["value"].contains("id"))
+      {
+        return json_utils::get_annotation_type_name(var_node["annotation"]);
+      }
+      // Handle simple type annotations like int, str (Name nodes)
+      else if (var_node["annotation"].contains("id"))
+      {
+        std::string base_type =
+          var_node["annotation"]["id"].template get<std::string>();
+        // If annotation is just "list"/"dict"/"set" without element type, try to infer from value
+        if (
+          (base_type == "list" || base_type == "dict" ||
+           base_type == "set") &&
+          var_node.contains("value") && !var_node["value"].is_null())
+        {
+          if (base_type == "list" && var_node["value"]["_type"] == "List")
+          {
+            std::string full_type =
+              get_list_type_from_literal(var_node["value"]);
+            if (!full_type.empty())
+              return full_type;
+          }
+        }
+        return base_type;
+      }
+    }
+
+    if (
+      !var_node.empty() && var_node.contains("value") &&
+      !var_node["value"].is_null())
+    {
+      std::string inferred_type = get_argument_type(var_node["value"]);
+      if (!inferred_type.empty())
+        return inferred_type;
+    }
+  }
+  else if (arg["_type"] == "BinOp")
+  {
+    // For binary operations, try to infer from operands
+    Json dummy_stmt = {{"value", arg}};
+    return get_type_from_binary_expr(dummy_stmt, ast_);
+  }
+  else if (arg["_type"] == "List")
+  {
+    // Handle list literals like [-5, 1, 3, 5, 7, 10]
+    return get_list_type_from_literal(arg);
+  }
+  else if (arg["_type"] == "Dict")
+    return "dict";
+  else if (arg["_type"] == "Set")
+    return "set";
+  else if (arg["_type"] == "Tuple")
+    return "tuple";
+  else if (arg["_type"] == "BoolOp")
+  {
+    if (arg.contains("values") && arg["values"].is_array())
+    {
+      for (const auto &val : arg["values"])
+      {
+        if (
+          val.contains("_type") && val["_type"] == "Call" &&
+          val.contains("func") && val["func"].contains("_type") &&
+          val["func"]["_type"] == "Name" && val["func"].contains("id"))
+        {
+          auto it = builtin_functions().find(val["func"]["id"]);
+          if (it != builtin_functions().end())
+            return it->second;
+        }
+      }
+    }
+    return "bool";
+  }
+  else if (arg["_type"] == "Call")
+  {
+    // Handle function calls like abs(a - b), len(list), etc.
+    if (arg["func"]["_type"] == "Name")
+    {
+      const std::string &func_name = arg["func"]["id"];
+
+      // Class constructor call: A() produces an instance of A
+      // Resolve possible import aliases before checking if this is a class
+      const std::string class_name =
+        json_utils::get_object_alias(ast_, func_name);
+      if (json_utils::is_class(class_name, ast_))
+        return class_name;
+
+      // Check built-in functions first
+      auto it = builtin_functions().find(func_name);
+      if (it != builtin_functions().end())
+        return it->second;
+
+      // For user-defined functions, try to get return type
+      try
+      {
+        return get_function_return_type(func_name, ast_);
+      }
+      catch (std::runtime_error &)
+      {
+        // Function not found, return empty
+        return "";
+      }
+    }
+  }
+
+  return ""; // Cannot determine type
+}
+
+// Method to get the full type of a list literal
+template <class Json>
+std::string
+python_annotation<Json>::get_list_type_from_literal(const Json &list_arg)
+{
+  if (!list_arg.contains("elts") || list_arg["elts"].empty())
+  {
+    log_warning(
+      "Empty or malformed list literal detected. Using 'list[int]' as "
+      "default ({}:{})",
+      python_filename_,
+      current_line_);
+    return "list"; // Default fallback
+  }
+
+  // Get the type of the first element
+  std::string element_type = get_argument_type(list_arg["elts"][0]);
+
+  if (element_type.empty())
+  {
+    log_warning(
+      "Could not determine list element type. Using 'list[int]' as fallback "
+      "({}:{})",
+      python_filename_,
+      current_line_);
+    return "list[int]"; // Fallback for numeric contexts
+  }
+
+  // Check if all elements have the same type
+  for (size_t i = 1; i < list_arg["elts"].size(); ++i)
+  {
+    std::string current_type = get_argument_type(list_arg["elts"][i]);
+    if (current_type != element_type && !current_type.empty())
+    {
+      log_warning(
+        "Mixed types detected in list literal: {} vs {}. Using 'list[int]' "
+        "as fallback ({}:{})",
+        element_type,
+        current_type,
+        python_filename_,
+        current_line_);
+      return "list[int]"; // Fallback for mixed numeric types
+    }
+  }
+
+  // Return the full generic type notation
+  return "list[" + element_type + "]";
+}
+
+template <class Json>
+std::string python_annotation<Json>::get_type_from_binary_expr(
+  const Json &stmt,
+  const Json &body)
+{
+  std::string type("");
+
+  const Json &lhs =
+    stmt.contains("value") ? stmt["value"]["left"] : stmt["left"];
+
+  if (lhs["_type"] == "BinOp")
+    type = get_type_from_binary_expr(lhs, body);
+  else if (lhs["_type"] == "List")
+    type = "list";
+  // Floor division (//) operations always result in an integer value
+  else if (
+    stmt.contains("value") && stmt["value"]["op"]["_type"] == "FloorDiv")
+    type = "int";
+  else
+  {
+    // If the LHS of the binary operation is a variable, its type is retrieved
+    if (lhs["_type"] == "Name")
+    {
+      // Retrieve the type from the variable declaration within the current function body
+      Json left_op = find_annotated_assign(lhs["id"], body["body"]);
+
+      // If not found in the function body, try to retrieve it from the function arguments
+      if (left_op.empty() && body.contains("args"))
+        left_op = find_annotated_assign(lhs["id"], body["args"]["args"]);
+
+      // Check current function scope for function parameters
+      if (
+        left_op.empty() && current_func != nullptr &&
+        (*current_func).contains("args"))
+      {
+        left_op =
+          find_annotated_assign(lhs["id"], (*current_func)["args"]["args"]);
+      }
+
+      if (
+        !left_op.empty() && left_op.contains("annotation") &&
+        left_op["annotation"].contains("id") &&
+        left_op["annotation"]["id"].is_string())
+      {
+        type = left_op["annotation"]["id"];
+      }
+      // As a fallback, check global scope for prior annotation
+      if (type.empty())
+      {
+        Json global_op = find_annotated_assign(lhs["id"], ast_["body"]);
+        if (
+          !global_op.empty() && global_op.contains("annotation") &&
+          global_op["annotation"].contains("id") &&
+          global_op["annotation"]["id"].is_string())
+        {
+          type = global_op["annotation"]["id"];
+        }
+      }
+    }
+    else if (lhs["_type"] == "UnaryOp")
+    {
+      const auto &operand = lhs["operand"];
+      if (operand["_type"] == "Constant")
+        type = get_type_from_constant(operand);
+    }
+    else if (lhs["_type"] == "Subscript")
+    {
+      // Handle subscript operations like dp[i-1], prices[i], etc.
+      const std::string &var_name = lhs["value"]["id"];
+      Json var_node =
+        json_utils::find_var_decl(var_name, get_current_func_name(), ast_);
+
+      if (!var_node.empty() && var_node.contains("annotation"))
+      {
+        std::string var_type;
+
+        // Handle generic type annotations like list[int] (Subscript nodes)
+        if (
+          var_node["annotation"].contains("_type") &&
+          var_node["annotation"]["_type"] == "Subscript" &&
+          var_node["annotation"].contains("value") &&
+          var_node["annotation"]["value"].contains("id"))
+        {
+          var_type = var_node["annotation"]["value"]["id"];
+
+          // For list[T], return T directly from slice
+          if (
+            var_type == "list" && var_node["annotation"].contains("slice") &&
+            var_node["annotation"]["slice"].contains("id"))
+          {
+            type = var_node["annotation"]["slice"]["id"];
+          }
+        }
+        // Handle simple type annotations like int, str (Name nodes)
+        else if (
+          var_node["annotation"].contains("id") &&
+          var_node["annotation"]["id"].is_string())
+        {
+          var_type = var_node["annotation"]["id"];
+
+          // For list[T], return T. For other types, return the type itself
+          if (var_type == "list")
+          {
+            // Try to get subtype from list initialization
+            if (var_node.contains("value") && !var_node["value"].is_null())
+            {
+              std::string subtype = get_list_subtype(var_node["value"]);
+              type = subtype.empty() ? "Any" : subtype;
+            }
+            else
+              type = "Any"; // Unknown list element type
+          }
+          else
+          {
+            type = var_type;
+          }
+        }
+      }
+    }
+    else if (lhs["_type"] == "Call" && lhs["func"]["_type"] == "Name")
+    {
+      // Handle function calls in binary expressions like float("1.1") + float("2.2")
+      const std::string &func_name = lhs["func"]["id"];
+
+      if (type_utils::is_builtin_type(func_name))
+        type = func_name; // float() returns float, int() returns int, etc.
+      else
+        type = get_function_return_type(
+          func_name, body); // For user-defined functions
+    }
+    else if (lhs["_type"] == "Constant")
+      type = get_type_from_constant(lhs);
+    else if (lhs["_type"] == "Call" && lhs["func"]["_type"] == "Attribute")
+      type = get_type_from_method(lhs);
+    else if (lhs["_type"] == "Attribute")
+    {
+      // Construct full attribute name (e.g., "string.digits")
+      if (lhs["value"]["_type"] == "Name" && lhs["value"].contains("id"))
+      {
+        std::string full_name =
+          lhs["value"]["id"].template get<std::string>() + "." +
+          lhs["attr"].template get<std::string>();
+        auto it = builtin_functions().find(full_name);
+        if (it != builtin_functions().end())
+          type = it->second;
+      }
+    }
+  }
+
+  // If still unknown, try RHS or fallback to Any for arithmetic ops
+  if (type.empty())
+  {
+    const Json &rhs =
+      stmt.contains("value") ? stmt["value"]["right"] : stmt["right"];
+
+    if (rhs["_type"] == "Constant")
+      type = get_type_from_constant(rhs);
+    else if (rhs["_type"] == "Name")
+    {
+      Json right_op = find_annotated_assign(
+        rhs["id"], body.contains("body") ? body["body"] : ast_["body"]);
+      if (
+        right_op.contains("annotation") &&
+        right_op["annotation"].contains("id") &&
+        right_op["annotation"]["id"].is_string())
+        type = right_op["annotation"]["id"];
+    }
+
+    if (
+      type.empty() && stmt.contains("value") &&
+      stmt["value"].contains("op") && stmt["value"]["op"].contains("_type"))
+    {
+      type = "Any";
+    }
+  }
+
+  return type;
+}
+
+template <class Json>
+std::string
+python_annotation<Json>::infer_lambda_return_type(const Json &lambda_elem) const
+{
+  const Json &lambda_body = lambda_elem["value"]["body"];
+  if (lambda_body["_type"] == "BinOp")
+    return "float"; // Match converter's default of double_type()
+  else if (lambda_body["_type"] == "Compare")
+    return "bool";
+  else
+    return "Any"; // Default for other lambda expressions
+}
+
+template <class Json>
+std::string python_annotation<Json>::get_function_return_type(
+  const std::string &func_name,
+  const Json &ast)
+{
+  // Guard against infinite recursion
+  if (functions_in_analysis_.count(func_name) > 0)
+  {
+    // Function is calling itself: try to infer from non-recursive return statements
+    for (const Json &elem : ast["body"])
+    {
+      if (elem["_type"] == "FunctionDef" && elem["name"] == func_name)
+      {
+        // When override flag is set, always infer instead of using annotation
+        bool should_override =
+          config.options.get_bool_option("override-return-annotation");
+
+        // Check if function has explicit return type annotation
+        if (
+          !should_override && elem.contains("returns") &&
+          !elem["returns"].is_null() && elem["returns"].contains("id"))
+        {
+          functions_in_analysis_.erase(func_name);
+          return elem["returns"]["id"];
+        }
+
+        // Try to infer from return statements (excluding recursive calls)
+        std::string inferred =
+          infer_from_return_statements(elem["body"], func_name);
+        if (!inferred.empty())
+        {
+          functions_in_analysis_.erase(func_name);
+          return inferred;
+        }
+
+        // No annotation and can't infer: return empty to avoid crash
+        functions_in_analysis_.erase(func_name);
+        return "";
+      }
+    }
+    functions_in_analysis_.erase(func_name);
+    return "";
+  }
+
+  // Add function to set before analysis
+  functions_in_analysis_.insert(func_name);
+
+  // Get type from nondet_<type> functions
+  if (func_name.find("nondet_") == 0)
+  {
+    size_t last_underscore_pos = func_name.find_last_of('_');
+    if (last_underscore_pos != std::string::npos)
+    {
+      functions_in_analysis_.erase(func_name);
+      return func_name.substr(last_underscore_pos + 1);
+    }
+  }
+
+  // Check override flag
+  bool should_override =
+    config.options.get_bool_option("override-return-annotation");
+
+  // Search for function (including nested functions) using recursive helper
+  Json func_elem = find_function_recursive(func_name, ast_["body"]);
+
+  // Also check current function scope for local nested functions
+  if (func_elem.empty() && current_func != nullptr)
+  {
+    func_elem = find_function_recursive(func_name, (*current_func)["body"]);
+  }
+
+  // Process the found function (if any)
+  if (!func_elem.empty())
+  {
+    // If override is set, skip annotation and go straight to inference
+    if (!should_override)
+    {
+      // Check if function has a return type annotation first (before inferring)
+      if (func_elem.contains("returns") && !func_elem["returns"].is_null())
+      {
+        const auto &returns = func_elem["returns"];
+
+        // Handle different return type annotation structures
+        if (returns.contains("_type"))
+        {
+          const std::string &return_type = returns["_type"];
+
+          // Handle Subscript type (e.g., List[int], Dict[str, int])
+          if (return_type == "Subscript")
+          {
+            functions_in_analysis_.erase(func_name);
+            if (returns.contains("value") && returns["value"].contains("id"))
+              return returns["value"]["id"];
+            else
+              return "Any"; // Default for complex subscript types
+          }
+          // Handle Constant type (e.g., None)
+          else if (return_type == "Constant")
+          {
+            functions_in_analysis_.erase(func_name);
+            if (returns.contains("value") && returns["value"].is_null())
+              return "NoneType";
+            else if (
+              returns.contains("value") && returns["value"].is_string())
+            {
+              // Forward reference annotation: -> "float", -> "MyClass", etc.
+              // Validate that the string looks like a Python identifier (or
+              // dotted name) before returning it, to guard against arbitrary
+              // string constants used as non-type annotations.
+              std::string type_name =
+                returns["value"].template get<std::string>();
+              bool valid = !type_name.empty() &&
+                           (std::isalpha((unsigned char)type_name[0]) ||
+                            type_name[0] == '_');
+              for (size_t i = 1; valid && i < type_name.size(); ++i)
+                valid = std::isalnum((unsigned char)type_name[i]) ||
+                        type_name[i] == '_' || type_name[i] == '.';
+              if (valid)
+                return type_name;
+              // Not a valid identifier — treat as opaque
+              return "Any";
+            }
+            else if (returns.contains("value"))
+              return "Any"; // Other constant types
+          }
+          // Handle other annotation types
+          else
+          {
+            // Try to extract id if it exists
+            if (returns.contains("id"))
+            {
+              // If the body also has `return None` paths, the function
+              // actually returns Optional[T] regardless of the annotation.
+              // Return "" so the converter handles this as Optional.
+              if (has_return_none(func_elem["body"]))
+              {
+                functions_in_analysis_.erase(func_name);
+                return "";
+              }
+              functions_in_analysis_.erase(func_name);
+              return returns["id"];
+            }
+          }
+        }
+        // Handle case where returns exists but doesn't have expected structure
+        else
+        {
+          log_warning(
+            "Unrecognized return type annotation for function "
+            "{}",
+            func_name);
+          functions_in_analysis_.erase(func_name);
+          return "Any"; // Safe default
+        }
+      }
+    }
+
+    // Try to infer return type from actual return statements
+    // Use recursive inference to find return types in all blocks
+    std::string inferred_type =
+      infer_from_return_statements(func_elem["body"], func_name);
+
+    if (!inferred_type.empty() && inferred_type != "NoneType")
+    {
+      // Found a non-None return type; check for mixed value+None returns
+      if (has_return_none(func_elem["body"]))
+      {
+        // Mixed returns: leave unannotated so converter handles via Optional
+        functions_in_analysis_.erase(func_name);
+        return "";
+      }
+      functions_in_analysis_.erase(func_name);
+      return inferred_type;
+    }
+
+    // Check top-level returns as fallback
+    auto return_node = json_utils::find_return_node(func_elem["body"]);
+    if (!return_node.empty())
+    {
+      std::string fallback_type;
+      try
+      {
+        infer_type(return_node, func_elem, fallback_type);
+      }
+      catch (std::runtime_error &)
+      {
+        // Return value type could not be inferred (e.g. call through a
+        // function-pointer parameter); leave fallback_type empty.
+      }
+      functions_in_analysis_.erase(func_name);
+      return fallback_type;
+    }
+
+    // If function has no explicit return statements, assume void/None
+    functions_in_analysis_.erase(func_name);
+    return "NoneType";
+  }
+
+  // Check for lambda assignments when regular function not found
+  Json lambda_elem = find_lambda_in_body(func_name, ast["body"]);
+
+  // Also check current function scope if not found globally
+  if (lambda_elem.empty() && current_func != nullptr)
+    lambda_elem = find_lambda_in_body(func_name, (*current_func)["body"]);
+
+  if (!lambda_elem.empty())
+  {
+    functions_in_analysis_.erase(func_name);
+    return infer_lambda_return_type(lambda_elem);
+  }
+
+  // Get type from imported functions
+  try
+  {
+    if (module_manager_)
+    {
+      const auto &import_node =
+        json_utils::find_imported_function(ast_, func_name);
+      auto module = module_manager_->get_module(import_node["module"]);
+
+      if (!module)
+        throw std::runtime_error("module not found");
+
+      // Try to get it as a function first
+      try
+      {
+        auto func_info = module->get_function(func_name);
+
+        // If return_type is empty or "NoneType", check if it's actually a class
+        if (
+          func_info.return_type_.empty() ||
+          func_info.return_type_ == "NoneType")
+        {
+          // It might be a class constructor (__init__ returns None)
+          // Return the class name as the type
+          functions_in_analysis_.erase(func_name);
+          return func_name;
+        }
+
+        functions_in_analysis_.erase(func_name);
+        return func_info.return_type_;
+      }
+      catch (std::runtime_error &)
+      {
+        // If get_function fails, it might be a class
+        functions_in_analysis_.erase(func_name);
+        return func_name;
+      }
+    }
+  }
+  catch (std::runtime_error &)
+  {
+  }
+
+  // Probe wildcard imports (`from X import *`) for @p func_name when the
+  // named-import lookup above missed. find_imported_function only matches
+  // explicit aliases, so star-imported functions stay invisible to the
+  // annotator's type inference without this fallback (GitHub #4564).
+  if (std::string t = resolve_wildcard_import_func(func_name); !t.empty())
+  {
+    functions_in_analysis_.erase(func_name);
+    return t;
+  }
+
+  // Check if the function is a built-in function
+  auto it = builtin_functions().find(func_name);
+  if (it != builtin_functions().end())
+  {
+    functions_in_analysis_.erase(func_name);
+    return it->second;
+  }
+
+  // Check if the name is a class constructor
+  // (e.g., A() returns an A instance)
+  {
+    const std::string resolved =
+      json_utils::get_object_alias(ast_, func_name);
+    if (json_utils::is_class(resolved, ast_))
+    {
+      functions_in_analysis_.erase(func_name);
+      return resolved;
+    }
+  }
+
+  functions_in_analysis_.erase(func_name);
+
+  std::ostringstream oss;
+  oss << "Function \"" << func_name << "\" not found (" << python_filename_
+      << " line " << current_line_ << ")";
+
+  throw std::runtime_error(oss.str());
+}
