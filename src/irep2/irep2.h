@@ -655,20 +655,21 @@ public:
    */
   int ltchecked(const type2t &ref) const;
 
-  /** Virtual method to compare two types.
-   *  To be overridden by an extending type; assumes that itself and the
-   *  parameter are of the same extended type. Call via cmpchecked.
+  /** Structural comparison. Caller-side contract: @p ref's `type_id`
+   *  must already match this one's (the kind dispatch happens by
+   *  switch on type_id internally). Use cmpchecked when that hasn't
+   *  been verified upstream.
    *  @see cmpchecked
-   *  @param ref Reference to (same class of) type to compare against
+   *  @param ref Reference to (same kind of) type to compare against
    *  @return True if types match, false otherwise
    */
   bool cmp(const type2t &ref) const;
 
-  /** Virtual method to compare two types.
-   *  To be overridden by an extending type; assumes that itself and the
-   *  parameter are of the same extended type. Call via cmpchecked.
-   *  @see cmpchecked
-   *  @param ref Reference to (same class of) type to compare against
+  /** Trinary structural ordering. Switch-dispatches on type_id then
+   *  walks the kind's fields, mirroring `cmp` but returning -1/0/+1.
+   *  Use ltchecked when @p ref's kind hasn't been verified upstream.
+   *  @see ltchecked
+   *  @param ref Reference to (same kind of) type to measure against
    *  @return 0 if types are the same, 1 if this > ref, -1 if ref > this.
    */
   int lt(const type2t &ref) const;
@@ -839,22 +840,19 @@ public:
    */
   size_t crc() const;
 
-  /** Perform comparison operation between this and another expr.
-   *  Overridden by subclasses of expr2t to compare different members of this
-   *  and the passed in object. Assumes that the passed in object is the same
-   *  class type as this; Should be called via operator==, which will do that
-   *  check automagically.
+  /** Structural comparison. The expr_id check is done by the switch
+   *  dispatcher inside, so callers don't have to gate the call on kind.
+   *  Should normally be reached via operator==.
    *  @see type2t::cmp
    *  @param ref Expr object to compare this against
    *  @return True if objects are the same; false otherwise.
    */
   bool cmp(const expr2t &ref) const;
 
-  /** Compare two expr objects.
-   *  Overridden by subclasses - takes two expr objects (this and ref) of the
-   *  same type, and compares them, in the same manner as memcmp. The assumption
-   *  that the objects are of the same type means lt should be called via
-   *  ltchecked to check for different expr types.
+  /** Trinary structural ordering. Mirrors `cmp` but returns -1/0/+1.
+   *  Like `cmp`, the expr_id check is internal to the switch
+   *  dispatcher; callers don't need to gate on kind. Normally reached
+   *  via operator< or ltchecked.
    *  @see type2t::lt
    *  @param ref Expr object to compare this against
    *  @return 0 If exprs are the same, 1 if this > ref, -1 if ref > this.

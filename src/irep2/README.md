@@ -54,7 +54,7 @@ conversions live in `util/migrate.{h,cpp}`.
 |------|----------|
 | `irep2.h` | Base classes `irep2t`, `type2t`, `expr2t`; the `irep_container` smart pointer (alias `expr2tc` / `type2tc`); the `make_irep` factory; `function_ref`; `hash_combine`; checked-cast helpers; the switch-on-id dispatchers for `cmp`/`lt`/`clone`/etc. |
 | `expr_kinds.inc` / `type_kinds.inc` | Manifest of node kinds in declaration order. Single source of truth. |
-| `irep2_type.h` / `irep2_type.cpp` | Concrete type classes (`bool_type2t`, `signedbv_type2t`, `array_type2t`, `pointer_type2t`, `struct_type2t`, ...) and the few shared data bases (`struct_union_data`, `bv_data`, `array_data`, ...) that hold fields shared by 2+ kinds. |
+| `irep2_type.h` / `irep2_type.cpp` | Concrete type classes (`bool_type2t`, `signedbv_type2t`, `array_type2t`, `pointer_type2t`, `struct_type2t`, ...). Each kind inherits directly from `type2t` and owns its fields. Free family helpers in the same header (`struct_union_members`, `array_or_vector_subtype`, ...) provide uniform field access when the caller doesn't care which specific kind it is. |
 | `irep2_expr.h` / `irep2_expr.cpp` | Concrete expression classes (`constant_int2t`, `symbol2t`, `add2t`, `if2t`, `code_assign2t`, ...). Each kind inherits directly from `expr2t`. |
 | `irep2_utils.h` | Inline predicates and helpers (`is_bv_type`, `is_number_type`, `is_scalar_type`, family accessors like `arith_side1/2`, `comp_side1/2`, simplification helpers). |
 | `irep2_dispatch.h` | Generic `generic_*<K>` helpers that walk a kind's `K::fields` tuple via `std::apply` to implement cmp/lt/crc/hash/tostring/clone/get_sub_expr/foreach_operand uniformly. Switch dispatchers on `expr2t`/`type2t` route to these. |
@@ -167,7 +167,7 @@ Defined by `ESBMC_LIST_OF_TYPES` in `irep2.h`; declared in `irep2_type.h`.
 | `empty` | "Void" — used for void pointers, void function returns, statements. |
 | `symbol` | Placeholder/symbolic type used while linking, or for recursive references inside structs/arrays. |
 | `struct` | C `struct` and C++ class data. Carries member types, names, pretty names, struct name, and `packed` flag. |
-| `union` | C `union`. Same shape as `struct` (shares `struct_union_data`). |
+| `union` | C `union`. Same field shape as `struct` (members, names, packed, ...). |
 | `code` | Function type: argument types, argument names, return type, ellipsis flag. |
 | `array` | Fixed, infinite, or dynamically-sized array. Holds `subtype`, `array_size`, and `size_is_infinite`. |
 | `vector` | SIMD-style fixed-size vector. Same backing data as `array` but distinct semantics. |
@@ -176,7 +176,7 @@ Defined by `ESBMC_LIST_OF_TYPES` in `irep2.h`; declared in `irep2_type.h`.
 | `signedbv` | Signed bitvector of given `width`. |
 | `fixedbv` | Fixed-point bitvector — total width split into integer and fraction bits. |
 | `floatbv` | IEEE-754 floating-point — fraction-bit and exponent-bit counts. |
-| `complex` | C `_Complex` — pair of identical scalar components (shares `struct_union_data`). |
+| `complex` | C `_Complex` — pair of identical scalar components. Currently stored with the same `members`/`member_names`/... shape as `struct`/`union` so the SMT tuple lowering can treat it uniformly; a follow-up will redesign it as a primitive `subtype` field. |
 | `cpp_name` | C++ qualified name with template arguments; used transiently by the C++ frontend. |
 
 ## Reference: expressions
