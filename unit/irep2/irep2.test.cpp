@@ -326,13 +326,19 @@ SCENARIO(
   // Stamp is compiled out; there is nothing to observe. Pass through.
   SUCCEED("writer-thread stamp is disabled in release builds");
 #else
+  // Inspecting the stamp through `e->writer_thread` on a non-const
+  // expr2tc would itself call the non-const operator->(), which goes
+  // through get() and stamps the slot — defeating the test. Bind a
+  // const reference and read through that to use the const operator->
+  // (a pure pointer load, no stamping).
   GIVEN("A freshly constructed expr2tc")
   {
     expr2tc e = gen_ulong(42);
+    const expr2tc &ce = e;
     THEN("the writer stamp is initially clear")
     {
       REQUIRE(
-        e->writer_thread.load(std::memory_order_relaxed) == std::uintptr_t{0});
+        ce->writer_thread.load(std::memory_order_relaxed) == std::uintptr_t{0});
     }
 
     WHEN("we obtain a mutable reference")
@@ -343,7 +349,7 @@ SCENARIO(
       THEN("the stamp matches the current thread's tag")
       {
         std::uintptr_t tag = irep2t::current_thread_tag();
-        REQUIRE(e->writer_thread.load(std::memory_order_relaxed) == tag);
+        REQUIRE(ce->writer_thread.load(std::memory_order_relaxed) == tag);
       }
 
       AND_WHEN("we mutate the same expr again from the same thread")
@@ -354,7 +360,7 @@ SCENARIO(
         THEN("the stamp is still ours")
         {
           REQUIRE(
-            e->writer_thread.load(std::memory_order_relaxed) ==
+            ce->writer_thread.load(std::memory_order_relaxed) ==
             irep2t::current_thread_tag());
         }
       }
@@ -364,15 +370,16 @@ SCENARIO(
   GIVEN("Two containers sharing one node, then dropping back to one")
   {
     expr2tc a = gen_ulong(7);
+    const expr2tc &ca = a;
     (void)a.get(); // stamp the node as written by us
     REQUIRE(
-      a->writer_thread.load(std::memory_order_relaxed) ==
+      ca->writer_thread.load(std::memory_order_relaxed) ==
       irep2t::current_thread_tag());
 
     {
       expr2tc b = a; // refcount 2; stamp is still 'us'
       REQUIRE(
-        a->writer_thread.load(std::memory_order_relaxed) ==
+        ca->writer_thread.load(std::memory_order_relaxed) ==
         irep2t::current_thread_tag());
       // b goes out of scope here; release() observes refcount transition
       // from 2 → 1 and clears the stamp so the remaining owner gets a
@@ -381,7 +388,7 @@ SCENARIO(
     THEN("the stamp is cleared once refcount returns to 1")
     {
       REQUIRE(
-        a->writer_thread.load(std::memory_order_relaxed) == std::uintptr_t{0});
+        ca->writer_thread.load(std::memory_order_relaxed) == std::uintptr_t{0});
     }
   }
 #endif // NDEBUG
