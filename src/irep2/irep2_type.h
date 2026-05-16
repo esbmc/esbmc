@@ -485,39 +485,24 @@ public:
  *  Represents C's _Complex type, carrying the base element type.
  *
  *  TODO (Phase D): semantically just a pair of identical scalars; the
- *  struct-shaped layout is a legacy hack the SMT tuple lowering relies on. */
+ *  C's `_Complex T` is a pair (real, imag) of two values of the same
+ *  scalar type T. complex_type2t therefore carries only the element
+ *  type; the SMT tuple lowering synthesises the 2-element view at the
+ *  boundary via complex_member_types / complex_member_names. */
 class complex_type2t : public type2t
 {
 public:
-  complex_type2t(
-    const std::vector<type2tc> &_members,
-    const std::vector<irep_idt> &memb_names,
-    const std::vector<irep_idt> &memb_pretty_names,
-    const irep_idt &_name,
-    bool _packed = false)
-    : type2t(complex_id),
-      members(_members),
-      member_names(memb_names),
-      member_pretty_names(memb_pretty_names),
-      name(_name),
-      packed(_packed)
+  complex_type2t(const type2tc &st)
+    : type2t(complex_id), subtype(st)
   {
   }
   complex_type2t(const complex_type2t &ref) = default;
   unsigned int get_width() const;
 
-  std::vector<type2tc> members;
-  std::vector<irep_idt> member_names;
-  std::vector<irep_idt> member_pretty_names;
-  irep_idt name;
-  bool packed;
+  type2tc subtype;
 
-  static constexpr auto fields = std::make_tuple(
-    &complex_type2t::members,
-    &complex_type2t::member_names,
-    &complex_type2t::member_pretty_names,
-    &complex_type2t::name,
-    &complex_type2t::packed);
+  static constexpr auto fields =
+    std::make_tuple(&complex_type2t::subtype);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -585,92 +570,30 @@ public:
 #undef IREP2_TYPE
 #undef type_macros
 
-// struct_type2t, union_type2t, and complex_type2t carry the same set of
-// fields (members / member_names / member_pretty_names / name / packed)
-// but no longer share a base class. Callers that need to read these
-// without knowing the concrete kind use the helpers below; each switches
-// on type_id and returns a reference into the right concrete type's
-// storage. Mirrors the expr-side family accessors (arith_side1, etc.).
-// For mutation, callers dispatch on type_id and access the concrete
-// type's field directly.
-inline const std::vector<type2tc> &struct_union_members(const type2tc &t)
-{
-  switch (t->type_id)
-  {
-  case type2t::struct_id:
-    return to_struct_type(t).members;
-  case type2t::union_id:
-    return to_union_type(t).members;
-  case type2t::complex_id:
-    return to_complex_type(t).members;
-  default:
-    irep2_bad_family_cast(t->type_id, "struct_union_members");
-  }
-}
+// struct_type2t and union_type2t each own a 5-field block
+// (members / member_names / member_pretty_names / name / packed);
+// complex_type2t stores only its element type but the SMT tuple
+// lowering treats it as a (real, imag) 2-tuple of that type. The
+// helpers below give callers a uniform "tuple view" of all three
+// without forcing them to dispatch by hand: for struct/union they
+// copy the kind's stored vectors, for complex they synthesise the
+// 2-element view from the subtype. Return-by-value lets the helper
+// be uniform; callers bind to `const auto &x = ...` and rely on
+// temporary lifetime extension.
+//
+// Mirrors the expr-side family accessors (arith_side1, etc.) — small
+// per-call copies in exchange for a single point of truth per field.
+// Direct mutation goes via the concrete kind (e.g.
+// `to_struct_type(t).members`); these read-only views are not the
+// right tool for that.
+std::vector<type2tc> struct_union_members(const type2tc &t);
+std::vector<irep_idt> struct_union_member_names(const type2tc &t);
+std::vector<irep_idt> struct_union_member_pretty_names(const type2tc &t);
+irep_idt struct_union_name(const type2tc &t);
+bool struct_union_packed(const type2tc &t);
 
-inline const std::vector<irep_idt> &struct_union_member_names(const type2tc &t)
-{
-  switch (t->type_id)
-  {
-  case type2t::struct_id:
-    return to_struct_type(t).member_names;
-  case type2t::union_id:
-    return to_union_type(t).member_names;
-  case type2t::complex_id:
-    return to_complex_type(t).member_names;
-  default:
-    irep2_bad_family_cast(t->type_id, "struct_union_member_names");
-  }
-}
-
-inline const std::vector<irep_idt> &
-struct_union_member_pretty_names(const type2tc &t)
-{
-  switch (t->type_id)
-  {
-  case type2t::struct_id:
-    return to_struct_type(t).member_pretty_names;
-  case type2t::union_id:
-    return to_union_type(t).member_pretty_names;
-  case type2t::complex_id:
-    return to_complex_type(t).member_pretty_names;
-  default:
-    irep2_bad_family_cast(t->type_id, "struct_union_member_pretty_names");
-  }
-}
-
-inline const irep_idt &struct_union_name(const type2tc &t)
-{
-  switch (t->type_id)
-  {
-  case type2t::struct_id:
-    return to_struct_type(t).name;
-  case type2t::union_id:
-    return to_union_type(t).name;
-  case type2t::complex_id:
-    return to_complex_type(t).name;
-  default:
-    irep2_bad_family_cast(t->type_id, "struct_union_name");
-  }
-}
-
-inline bool struct_union_packed(const type2tc &t)
-{
-  switch (t->type_id)
-  {
-  case type2t::struct_id:
-    return to_struct_type(t).packed;
-  case type2t::union_id:
-    return to_union_type(t).packed;
-  case type2t::complex_id:
-    return to_complex_type(t).packed;
-  default:
-    irep2_bad_family_cast(t->type_id, "struct_union_packed");
-  }
-}
-
-/** Index of @p comp in struct/union/complex member_names, or nullopt if
- *  it is missing or duplicated (the latter is malformed IR). */
+/** Index of @p comp in struct/union/complex member_names, or nullopt
+ *  if it is missing or duplicated (the latter is malformed IR). */
 std::optional<unsigned int>
 struct_union_get_component_number(const type2tc &t, const irep_idt &comp);
 

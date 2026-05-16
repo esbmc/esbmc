@@ -22,26 +22,20 @@ void base_type(type2tc &type, const namespacet &ns)
   }
   else if (is_structure_type(type))
   {
-    // Non-const mutation: dispatch to the concrete kind so we can walk
-    // its `members` vector by non-const reference.
+    // is_structure_type covers struct and union only; dispatch to the
+    // concrete kind so we can walk its `members` vector by non-const
+    // reference.
     type2t *p = type.get();
-    std::vector<type2tc> *members = nullptr;
-    switch (p->type_id)
-    {
-    case type2t::struct_id:
-      members = &static_cast<struct_type2t *>(p)->members;
-      break;
-    case type2t::union_id:
-      members = &static_cast<union_type2t *>(p)->members;
-      break;
-    case type2t::complex_id:
-      members = &static_cast<complex_type2t *>(p)->members;
-      break;
-    default:
-      __builtin_unreachable();
-    }
+    std::vector<type2tc> *members =
+      (p->type_id == type2t::struct_id)
+        ? &static_cast<struct_type2t *>(p)->members
+        : &static_cast<union_type2t *>(p)->members;
     for (type2tc &it : *members)
       base_type(it, ns);
+  }
+  else if (is_complex_type(type))
+  {
+    base_type(to_complex_type(type).subtype, ns);
   }
 }
 
