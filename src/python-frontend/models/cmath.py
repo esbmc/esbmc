@@ -85,9 +85,30 @@ def _abs_complex(z: complex) -> float:
 
 
 def polar(z: complex) -> tuple[float, float]:
-    # Match CPython behavior for signed zeros and NaN by delegating angle
-    # selection to atan2 unconditionally.
-    return (_abs_complex(z), phase(z))
+    # Keep the computation local to avoid nested helper calls in tuple-return
+    # expressions, which can generate unstable FP VCCs in the current backend.
+    mag2 = z.real * z.real + z.imag * z.imag
+    if mag2 <= 0.0:
+        r = 0.0
+    else:
+        r = math.sqrt(mag2)
+    # Preserve CPython signed-zero phase behavior explicitly.
+    if z.real == 0.0 and z.imag == 0.0:
+        real_sign = math.copysign(1.0, z.real)
+        imag_sign = math.copysign(1.0, z.imag)
+        if real_sign < 0.0:
+            if imag_sign < 0.0:
+                p = -pi
+            else:
+                p = pi
+        else:
+            if imag_sign < 0.0:
+                p = -0.0
+            else:
+                p = 0.0
+    else:
+        p = math.atan2(z.imag, z.real)
+    return (r, p)
 
 
 def rect(r: float, phi: float) -> complex:

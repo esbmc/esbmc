@@ -2196,6 +2196,22 @@ exprt function_call_expr::handle_complex() const
   if (is_cpp_throw_expr(imag_arg))
     return imag_arg;
 
+  const bool real_is_complex = is_complex_type(real_arg.type());
+  const bool imag_is_complex = is_complex_type(imag_arg.type());
+
+  // Fast path for complex(real, imag) where both are plain real numerics.
+  // Building x + y*1j through complex arithmetic can lose the sign bit of
+  // signed zero in the imaginary part; preserve it by constructing the
+  // complex value directly.
+  if (!real_is_complex && !imag_is_complex)
+  {
+    if (real_arg.type() != double_type())
+      real_arg = typecast_exprt(real_arg, double_type());
+    if (imag_arg.type() != double_type())
+      imag_arg = typecast_exprt(imag_arg, double_type());
+    return make_complex(real_arg, imag_arg);
+  }
+
   // Python semantics: complex(x, y) == x + y * 1j, including complex args.
   real_arg = promote_to_complex(real_arg);
   imag_arg = promote_to_complex(imag_arg);
