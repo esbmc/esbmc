@@ -254,244 +254,7 @@ private:
   infer_from_return_statements(const Json &body, const std::string &func_name);
 
   // Method to infer and annotate unannotated function parameters
-  void infer_parameter_types(Json &function_element)
-  {
-    const std::string &func_name = function_element["name"];
-
-    // Check if function has a meaningful body
-    bool has_meaningful_body = false;
-    if (function_element.contains("body") && !function_element["body"].empty())
-    {
-      for (const auto &stmt : function_element["body"])
-      {
-        if (stmt.contains("_type") && stmt["_type"] != "Pass")
-        {
-          has_meaningful_body = true;
-          break;
-        }
-      }
-    }
-
-    // Determine where to search for function calls:
-    // - For nested functions: search in parent function's body
-    // - For top-level functions: search in global AST body
-    const Json &search_context =
-      (parent_func != nullptr)
-        ? (*parent_func)["body"] // Search in parent function's body
-        : ast_["body"];          // Search in global body
-
-    // Find all calls to this function in the AST
-    std::vector<Json> function_calls =
-      find_function_calls(func_name, search_context);
-
-    // Determine the call-site context for resolving argument names.
-    // For top-level functions, use global scope (empty context).
-    // For nested functions, use the parent function context.
-    std::string call_site_context;
-    if (parent_func != nullptr)
-    {
-      std::string cur = current_func_name_context_;
-      size_t pos = cur.rfind("@F@");
-      if (pos != std::string::npos)
-        call_site_context = cur.substr(0, pos);
-      else if (parent_func->contains("name"))
-        call_site_context = (*parent_func)["name"].template get<std::string>();
-    }
-
-    // For each parameter, try to infer its type from the function calls
-    if (
-      function_element.contains("args") &&
-      function_element["args"].contains("args"))
-    {
-      Json &params = function_element["args"]["args"];
-
-      for (size_t i = 0; i < params.size(); ++i)
-      {
-        Json &param = params[i];
-
-        // Check if parameter needs type inference or refinement
-        bool needs_inference = false;
-        bool has_partial_annotation = false;
-        std::string current_type;
-
-        if (param.contains("annotation") && !param["annotation"].is_null())
-        {
-          // Extract current annotation
-          if (param["annotation"].contains("id"))
-            current_type = param["annotation"]["id"];
-          // Check if it's a generic container without element type
-          if (
-            current_type == "list" || current_type == "dict" ||
-            current_type == "set")
-          {
-            has_partial_annotation = true;
-            needs_inference = true; // Try to refine with element type
-          }
-          else if (current_type == "tuple")
-          {
-            // Bare `tuple` annotation: try to specialise to
-            // `tuple[T0, T1, ...]` by inspecting call sites so the unpacker
-            // can recover the struct shape (GitHub #4515).
-            if (!function_calls.empty())
-            {
-              std::vector<std::string> elem_types =
-                infer_tuple_param_types_from_calls(i, function_calls);
-              if (!elem_types.empty())
-              {
-                int lineno = param.value("lineno", 0);
-                int col_offset =
-                  param.value("col_offset", 0) +
-                  param["arg"].template get<std::string>().size() + 1;
-                param["annotation"] = create_tuple_subscript_annotation(
-                  elem_types, lineno, col_offset, lineno);
-              }
-            }
-            continue;
-          }
-          else
-            continue; // Fully annotated, skip
-        }
-        else
-          needs_inference = true; // No annotation at all
-
-        std::string inferred_type;
-
-        // Try to infer type from function calls if available
-        if (needs_inference && !function_calls.empty())
-        {
-          std::vector<std::string> call_types =
-            collect_parameter_types_from_calls(i, function_calls);
-
-          if (
-            parent_func == nullptr && call_types.size() > 1 &&
-            are_all_user_classes(call_types))
-          {
-            bool already_pending = false;
-            for (const auto &spec : pending_specializations_)
-            {
-              if (spec.function_name == func_name && spec.param_index == i)
-              {
-                already_pending = true;
-                break;
-              }
-            }
-
-            if (!already_pending)
-            {
-              pending_specializations_.push_back(
-                {func_name, i, std::move(call_types)});
-            }
-
-            continue;
-          }
-
-          std::string saved_ctx = current_func_name_context_;
-          current_func_name_context_ = call_site_context;
-          inferred_type = infer_parameter_type_from_calls(i, function_calls);
-          current_func_name_context_ = saved_ctx;
-        }
-
-        // If still no type, try to infer from the parameter's default value.
-        // This handles cases like def h(op=g) where g is a function alias.
-        if (inferred_type.empty() && !has_partial_annotation)
-        {
-          const auto &args_node = function_element["args"];
-          if (args_node.contains("defaults"))
-          {
-            const auto &defaults = args_node["defaults"];
-            size_t defaults_start = params.size() - defaults.size();
-            if (i >= defaults_start)
-            {
-              const Json &def_node = defaults[i - defaults_start];
-              if (
-                def_node.contains("_type") && def_node["_type"] == "Name" &&
-                def_node.contains("id"))
-              {
-                const std::string &def_name =
-                  def_node["id"].template get<std::string>();
-                // Use non-throwing (const) overload to avoid crashing when
-                // def_name is a variable (not a FunctionDef).
-                const nlohmann::json &const_body =
-                  static_cast<const nlohmann::json &>(ast_["body"]);
-                // Direct function reference (op=f)?
-                if (!json_utils::find_function(const_body, def_name).empty())
-                  inferred_type = "Any";
-                // Function alias (op=g where g=f)?
-                else
-                {
-                  for (const auto &stmt : ast_["body"])
-                  {
-                    if (
-                      stmt.contains("_type") && stmt["_type"] == "Assign" &&
-                      stmt.contains("targets") && !stmt["targets"].empty() &&
-                      stmt["targets"][0].contains("id") &&
-                      stmt["targets"][0]["id"] == def_name &&
-                      stmt.contains("value") &&
-                      stmt["value"].contains("_type") &&
-                      stmt["value"]["_type"] == "Name" &&
-                      stmt["value"].contains("id") &&
-                      !json_utils::find_function(
-                         const_body,
-                         stmt["value"]["id"].template get<std::string>())
-                         .empty())
-                    {
-                      inferred_type = "Any";
-                      break;
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-
-        // For __getitem__/__setitem__ key parameters, infer a
-        // `tuple[slice, slice, ...]` annotation from multi-axis subscript
-        // call sites on instances of the enclosing class (GitHub #4539).
-        // The Subscript syntax t[i:j, k:l] never appears as an explicit
-        // __getitem__ call in the AST, so the standard call-site inference
-        // never sees it. Without this, `key` stays unannotated and `key[0]`
-        // inside __getitem__ falls through to list indexing.
-        if (
-          inferred_type.empty() && !current_class_name_.empty() &&
-          (func_name == "__getitem__" || func_name == "__setitem__") && i == 1)
-        {
-          std::vector<std::string> elem_types =
-            infer_subscript_key_tuple_types(current_class_name_);
-          if (!elem_types.empty())
-          {
-            int lineno = param.value("lineno", 0);
-            int col_offset = param.value("col_offset", 0) +
-                             param["arg"].template get<std::string>().size() +
-                             1;
-            param["annotation"] = create_tuple_subscript_annotation(
-              elem_types, lineno, col_offset, lineno);
-            continue;
-          }
-        }
-
-        // Apply inference results
-        if (has_partial_annotation)
-        {
-          // Refine partial annotation with inferred element type
-          if (!inferred_type.empty() && inferred_type != current_type)
-            add_parameter_annotation(param, inferred_type);
-        }
-        else
-        {
-          // Handle completely unannotated parameters
-          if (inferred_type.empty() && !has_meaningful_body)
-            inferred_type = "Any"; // Default fallback for stub functions
-
-          if (!inferred_type.empty())
-          {
-            // Add annotation to parameter
-            add_parameter_annotation(param, inferred_type);
-          }
-        }
-      }
-    }
-  }
+  void infer_parameter_types(Json &function_element);
 
   // For a class @p class_name defining __getitem__/__setitem__, return the
   // synthesised per-element type names for a `tuple[T1, T2, ...]` annotation
@@ -594,63 +357,17 @@ private:
 
   // Method to find all function calls to a specific function
   std::vector<Json>
-  find_function_calls(const std::string &func_name, const Json &body)
-  {
-    std::vector<Json> calls;
-    find_function_calls_recursive(func_name, body, calls);
-    return calls;
-  }
+  find_function_calls(const std::string &func_name, const Json &body);
 
   // Recursive helper to find function calls
   void find_function_calls_recursive(
     const std::string &func_name,
     const Json &node,
-    std::vector<Json> &calls)
-  {
-    if (node.is_object())
-    {
-      // Check if this is a function call to our target function
-      if (
-        node.contains("_type") && node["_type"] == "Call" &&
-        node.contains("func") && node["func"]["_type"] == "Name" &&
-        node["func"]["id"] == func_name)
-      {
-        calls.push_back(node);
-      }
-
-      // Recursively search all fields
-      for (auto it = node.begin(); it != node.end(); ++it)
-        find_function_calls_recursive(func_name, it.value(), calls);
-    }
-    else if (node.is_array())
-    {
-      for (const auto &element : node)
-        find_function_calls_recursive(func_name, element, calls);
-    }
-  }
+    std::vector<Json> &calls);
 
   std::vector<std::string> collect_parameter_types_from_calls(
     size_t param_index,
-    const std::vector<Json> &function_calls)
-  {
-    std::vector<std::string> types;
-    std::unordered_set<std::string> seen;
-
-    for (const Json &call : function_calls)
-    {
-      if (!call.contains("args") || param_index >= call["args"].size())
-        continue;
-
-      std::string arg_type = get_argument_type(call["args"][param_index]);
-      if (arg_type.empty())
-        continue;
-
-      if (seen.insert(arg_type).second)
-        types.push_back(arg_type);
-    }
-
-    return types;
-  }
+    const std::vector<Json> &function_calls);
 
   // For a parameter annotated bare `tuple`, recover the element types by
   // intersecting all call sites that pass a Tuple literal at position
@@ -661,52 +378,7 @@ private:
   // sees the struct shape (GitHub #4515).
   std::vector<std::string> infer_tuple_param_types_from_calls(
     size_t param_index,
-    const std::vector<Json> &function_calls)
-  {
-    std::vector<std::string> result;
-    bool initialized = false;
-
-    for (const Json &call : function_calls)
-    {
-      if (!call.contains("args") || param_index >= call["args"].size())
-        continue;
-
-      const Json &arg = call["args"][param_index];
-      if (
-        !arg.contains("_type") || arg["_type"] != "Tuple" ||
-        !arg.contains("elts"))
-        return {};
-
-      std::vector<std::string> shape;
-      shape.reserve(arg["elts"].size());
-      for (const Json &elt : arg["elts"])
-      {
-        std::string t = get_argument_type(elt);
-        // Empty result and bare container kinds without parameters all
-        // resolve to incomplete/empty types downstream. Clamp them to "Any"
-        // so the synthesised struct never carries an empty_typet() component.
-        if (t.empty() || t == "tuple" || t == "list" || t == "dict")
-          t = "Any";
-        shape.push_back(std::move(t));
-      }
-
-      if (!initialized)
-      {
-        result = std::move(shape);
-        initialized = true;
-      }
-      else
-      {
-        if (shape.size() != result.size())
-          return {};
-        for (size_t k = 0; k < result.size(); ++k)
-          if (result[k] != shape[k])
-            result[k] = "Any";
-      }
-    }
-
-    return result;
-  }
+    const std::vector<Json> &function_calls);
 
   // Declarations only — definitions live in
   // python_annotation/annotation_symbolic.inl, included after the class.
@@ -739,35 +411,7 @@ private:
   // Method to infer parameter type from function calls
   std::string infer_parameter_type_from_calls(
     size_t param_index,
-    const std::vector<Json> &function_calls)
-  {
-    std::string inferred_type;
-
-    for (const Json &call : function_calls)
-    {
-      if (call.contains("args") && param_index < call["args"].size())
-      {
-        const Json &arg = call["args"][param_index];
-        std::string arg_type = get_argument_type(arg);
-
-        if (!arg_type.empty())
-        {
-          if (inferred_type.empty())
-            inferred_type = arg_type;
-          else if (inferred_type != arg_type)
-          {
-            std::string common = find_common_ancestor(inferred_type, arg_type);
-            if (!common.empty())
-              inferred_type = common;
-            else
-              return "Any";
-          }
-        }
-      }
-    }
-
-    return inferred_type;
-  }
+    const std::vector<Json> &function_calls);
 
   // Method to get the type of an argument in a function call
   std::string get_argument_type(const Json &arg);
