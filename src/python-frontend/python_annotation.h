@@ -103,15 +103,7 @@ static const std::map<std::string, std::string> builtin_functions = {
   {"string.octdigits", "str"},
 
   // Import functions
-  {"__import__", "module"},
-
-  // Threading intrinsics (registered at conversion time in
-  // function_call_builder.cpp; the annotation pass only needs to know
-  // their return types for inference). Inserted by
-  // parser.py:desugar_threading_thread when lowering
-  // ``threading.Thread`` / ``.start()`` / ``.join()``.
-  {"__ESBMC_spawn_thread", "int"},
-  {"__ESBMC_terminate_thread", "NoneType"}};
+  {"__import__", "module"}};
 
 template <class Json>
 class python_annotation
@@ -382,7 +374,7 @@ public:
       {
         // Set up parent/current scope so get_argument_type's nested-scope
         // fallback (parent_func body lookup) can resolve closure variables
-        // captured by trampolines (e.g. threading.Thread-desugared bodies).
+        // captured by nested function bodies.
         current_func_name_context_ = node["name"].template get<std::string>();
         parent_func = saved_current;
         current_func = &node;
