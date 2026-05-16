@@ -621,6 +621,8 @@ public:
   /** Accessor for fetching machine-word integer of this constant */
   long as_long() const;
 
+  static constexpr auto fields =
+    std::make_tuple(&expr2t::type, &constant_int2t::value);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -645,6 +647,8 @@ public:
   }
   constant_fixedbv2t(const constant_fixedbv2t &ref) = default;
 
+  static constexpr auto fields =
+    std::make_tuple(&expr2t::type, &constant_fixedbv2t::value);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -668,6 +672,8 @@ public:
   }
   constant_floatbv2t(const constant_floatbv2t &ref) = default;
 
+  static constexpr auto fields =
+    std::make_tuple(&expr2t::type, &constant_floatbv2t::value);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -690,6 +696,8 @@ public:
   /** Return whether contained boolean is false. */
   bool is_false() const;
 
+  static constexpr auto fields =
+    std::make_tuple(&expr2t::type, &constant_bool2t::value);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -718,6 +726,9 @@ public:
   {
   }
   constant_string2t(const constant_string2t &ref) = default;
+
+  static constexpr auto fields =
+    std::make_tuple(&expr2t::type, &constant_string2t::value, &constant_string2t::kind);
 
   /** Convert string to a constant length array of characters */
   expr2tc to_array() const;
@@ -759,6 +770,8 @@ public:
 
   expr2tc do_simplify() const override;
 
+  static constexpr auto fields =
+    std::make_tuple(&expr2t::type, &constant_struct2t::datatype_members);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -790,6 +803,10 @@ public:
   }
   constant_union2t(const constant_union2t &ref) = default;
 
+  static constexpr auto fields = std::make_tuple(
+    &expr2t::type,
+    &constant_union2t::datatype_members,
+    &constant_union2t::init_field);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -815,6 +832,8 @@ public:
 
   expr2tc do_simplify() const override;
 
+  static constexpr auto fields =
+    std::make_tuple(&expr2t::type, &constant_array2t::datatype_members);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -837,6 +856,8 @@ public:
   }
   constant_vector2t(const constant_vector2t &ref) = default;
 
+  static constexpr auto fields =
+    std::make_tuple(&expr2t::type, &constant_vector2t::datatype_members);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -858,6 +879,8 @@ public:
   }
   constant_array_of2t(const constant_array_of2t &ref) = default;
 
+  static constexpr auto fields =
+    std::make_tuple(&expr2t::type, &constant_array_of2t::initializer);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -895,6 +918,14 @@ public:
 
   std::string get_symbol_name() const;
 
+  static constexpr auto fields = std::make_tuple(
+    &expr2t::type,
+    &symbol2t::thename,
+    &symbol2t::rlevel,
+    &symbol2t::level1_num,
+    &symbol2t::level2_num,
+    &symbol2t::thread_num,
+    &symbol2t::node_num);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -937,6 +968,8 @@ public:
 
   expr2tc do_simplify() const override;
 
+  static constexpr auto fields =
+    std::make_tuple(&expr2t::type, &nearbyint2t::from, &nearbyint2t::rounding_mode);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -978,6 +1011,8 @@ public:
   typecast2t(const typecast2t &ref) = default;
   expr2tc do_simplify() const override;
 
+  static constexpr auto fields =
+    std::make_tuple(&expr2t::type, &typecast2t::from, &typecast2t::rounding_mode);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -1018,6 +1053,8 @@ public:
 
   expr2tc do_simplify() const override;
 
+  static constexpr auto fields =
+    std::make_tuple(&expr2t::type, &bitcast2t::from);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -1048,6 +1085,8 @@ public:
 
   expr2tc do_simplify() const override;
 
+  static constexpr auto fields =
+    std::make_tuple(&expr2t::type, &if2t::cond, &if2t::true_value, &if2t::false_value);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -1399,6 +1438,8 @@ public:
 
   expr2tc do_simplify() const override;
 
+  static constexpr auto fields =
+    std::make_tuple(&expr2t::type, &cmp_three_way2t::side_1, &cmp_three_way2t::side_2);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -1616,6 +1657,11 @@ public:
 
   expr2tc do_simplify() const override;
 
+  static constexpr auto fields = std::make_tuple(
+    &expr2t::type,
+    &byte_extract2t::source_value,
+    &byte_extract2t::source_offset,
+    &byte_extract2t::big_endian);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -1650,6 +1696,12 @@ public:
 
   expr2tc do_simplify() const override;
 
+  static constexpr auto fields = std::make_tuple(
+    &expr2t::type,
+    &byte_update2t::source_value,
+    &byte_update2t::source_offset,
+    &byte_update2t::update_value,
+    &byte_update2t::big_endian);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -1682,6 +1734,11 @@ public:
 
   expr2tc do_simplify() const override;
 
+  static constexpr auto fields = std::make_tuple(
+    &expr2t::type,
+    &with2t::source_value,
+    &with2t::update_field,
+    &with2t::update_value);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -1712,6 +1769,8 @@ public:
 
   expr2tc do_simplify() const override;
 
+  static constexpr auto fields =
+    std::make_tuple(&expr2t::type, &member2t::source_value, &member2t::member);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -1729,6 +1788,8 @@ public:
   }
   member_ref2t(const member_ref2t &ref) = default;
 
+  static constexpr auto fields =
+    std::make_tuple(&expr2t::type, &member_ref2t::member);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -1746,6 +1807,8 @@ public:
   }
   ptr_mem2t(const ptr_mem2t &ref) = default;
 
+  static constexpr auto fields =
+    std::make_tuple(&expr2t::type, &ptr_mem2t::source_value, &ptr_mem2t::member_pointer);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -1774,6 +1837,8 @@ public:
 
   expr2tc do_simplify() const override;
 
+  static constexpr auto fields =
+    std::make_tuple(&expr2t::type, &index2t::source_value, &index2t::index);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -1824,6 +1889,8 @@ public:
 
   expr2tc do_simplify() const override;
 
+  static constexpr auto fields =
+    std::make_tuple(&expr2t::type, &overflow_cast2t::operand, &overflow_cast2t::bits);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -1860,6 +1927,11 @@ public:
   }
   dynamic_object2t(const dynamic_object2t &ref) = default;
 
+  static constexpr auto fields = std::make_tuple(
+    &expr2t::type,
+    &dynamic_object2t::instance,
+    &dynamic_object2t::invalid,
+    &dynamic_object2t::unknown);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -1880,6 +1952,8 @@ public:
   }
   dereference2t(const dereference2t &ref) = default;
 
+  static constexpr auto fields =
+    std::make_tuple(&expr2t::type, &dereference2t::value);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -1919,6 +1993,13 @@ public:
   }
   sideeffect2t(const sideeffect2t &ref) = default;
 
+  static constexpr auto fields = std::make_tuple(
+    &expr2t::type,
+    &sideeffect2t::operand,
+    &sideeffect2t::size,
+    &sideeffect2t::arguments,
+    &sideeffect2t::alloctype,
+    &sideeffect2t::kind);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -1931,6 +2012,8 @@ public:
   }
   code_block2t(const code_block2t &ref) = default;
 
+  static constexpr auto fields =
+    std::make_tuple(&expr2t::type, &code_block2t::operands);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -1943,6 +2026,8 @@ public:
   }
   code_assign2t(const code_assign2t &ref) = default;
 
+  static constexpr auto fields =
+    std::make_tuple(&expr2t::type, &code_assign2t::target, &code_assign2t::source);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -1955,6 +2040,8 @@ public:
   }
   code_printf2t(const code_printf2t &ref) = default;
 
+  static constexpr auto fields =
+    std::make_tuple(&expr2t::type, &code_printf2t::operands, &code_printf2t::kind);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -1979,6 +2066,8 @@ public:
   }
   code_goto2t(const code_goto2t &ref) = default;
 
+  static constexpr auto fields =
+    std::make_tuple(&expr2t::type, &code_goto2t::target);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -2002,6 +2091,11 @@ public:
 
   const expr2tc &get_root_object() const;
 
+  static constexpr auto fields = std::make_tuple(
+    &expr2t::type,
+    &object_descriptor2t::object,
+    &object_descriptor2t::offset,
+    &object_descriptor2t::alignment);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -2022,6 +2116,11 @@ public:
   }
   code_function_call2t(const code_function_call2t &ref) = default;
 
+  static constexpr auto fields = std::make_tuple(
+    &expr2t::type,
+    &code_function_call2t::ret,
+    &code_function_call2t::function,
+    &code_function_call2t::operands);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -2034,6 +2133,8 @@ public:
   }
   code_comma2t(const code_comma2t &ref) = default;
 
+  static constexpr auto fields =
+    std::make_tuple(&expr2t::type, &code_comma2t::side_1, &code_comma2t::side_2);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -2060,6 +2161,8 @@ public:
   }
   code_asm2t(const code_asm2t &ref) = default;
 
+  static constexpr auto fields =
+    std::make_tuple(&expr2t::type, &code_asm2t::value);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -2072,6 +2175,8 @@ public:
   }
   code_cpp_catch2t(const code_cpp_catch2t &ref) = default;
 
+  static constexpr auto fields =
+    std::make_tuple(&expr2t::type, &code_cpp_catch2t::exception_list);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -2084,6 +2189,10 @@ public:
   }
   code_cpp_throw2t(const code_cpp_throw2t &ref) = default;
 
+  static constexpr auto fields = std::make_tuple(
+    &expr2t::type,
+    &code_cpp_throw2t::operand,
+    &code_cpp_throw2t::exception_list);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -2121,6 +2230,8 @@ public:
 
   expr2tc do_simplify() const override;
 
+  static constexpr auto fields =
+    std::make_tuple(&expr2t::type, &extract2t::from, &extract2t::upper, &extract2t::lower);
   static std::string field_names[esbmct::num_type_fields];
 };
 
