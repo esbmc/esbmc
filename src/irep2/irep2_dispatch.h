@@ -149,22 +149,6 @@ const expr2tc *generic_get_sub_expr(const K &a, size_t idx)
 }
 
 // --------------------------------------------------------------------------
-// generic_get_sub_expr_nc: non-const version.
-// --------------------------------------------------------------------------
-template <class K>
-expr2tc *generic_get_sub_expr_nc(K &a, size_t idx)
-{
-  expr2tc *result = nullptr;
-  size_t cur = 0;
-  std::apply(
-    [&](auto... mp) {
-      (void)(... || do_get_sub_expr_nc(a.*mp, idx, cur, result));
-    },
-    K::fields);
-  return result;
-}
-
-// --------------------------------------------------------------------------
 // generic_get_num_sub_exprs: count all expr2tc children in K::fields.
 // --------------------------------------------------------------------------
 template <class K>

@@ -62,7 +62,7 @@ void test_constructed_equally(const expr2tc e1, const expr2tc e2)
   // "The == operator should return true"
   REQUIRE(e1 == e2);
   // "Their crc should be the same"
-  REQUIRE(e1->do_crc() == e2->do_crc());
+  REQUIRE(e1->crc() == e2->crc());
   // Their hash should be the same"
   e1->hash(c_hash);
   e2->hash(c_hash2);
@@ -81,7 +81,7 @@ void test_constructed_differently(const expr2tc e1, const expr2tc e2)
   // "The == operator should return false"
   REQUIRE(e1 != e2);
   // "Their crc should not be the same"
-  REQUIRE(e1->do_crc() != e2->do_crc());
+  REQUIRE(e1->crc() != e2->crc());
   // "Their hash should not be the same"
 
   e1->hash(c_hash);
@@ -444,12 +444,9 @@ SCENARIO("COW detach leaves the other handle unchanged", "[core][irep2]")
   }
 }
 
-// Verify that the step-2 flat-layout migration of not2t (issue #4560) is
-// correct: has_fields_v<not2t> must be true, and every _v2 dispatcher must
-// agree with the corresponding virtual method on the same operand.
-SCENARIO(
-  "not2t _v2 dispatchers agree with virtual methods (issue #4560)",
-  "[core][irep2]")
+// Sanity-check the flat-layout switch dispatchers on a representative
+// expr kind (not2t).
+SCENARIO("not2t flat-layout dispatchers (issue #4560)", "[core][irep2]")
 {
   GIVEN("A not2t wrapping a constant_int expression")
   {
@@ -463,70 +460,47 @@ SCENARIO(
       REQUIRE(esbmct::has_fields_v<not2t>);
     }
 
-    THEN("cmp_v2 matches virtual cmp")
+    THEN("cmp returns true for structurally-equal operands")
     {
-      REQUIRE(e_not->cmp_v2(*e_not2) == e_not->cmp(*e_not2));
-      REQUIRE(e_not->cmp_v2(*e_not) == e_not->cmp(*e_not));
+      REQUIRE(e_not->cmp(*e_not2));
+      REQUIRE(e_not->cmp(*e_not));
     }
 
-    THEN("lt_v2 matches virtual lt (same operand → 0)")
+    THEN("lt is 0 for equal operands")
     {
-      REQUIRE(e_not->lt_v2(*e_not) == 0);
-      int virt_lt = e_not->lt(*e_not);
-      REQUIRE(e_not->lt_v2(*e_not) == virt_lt);
+      REQUIRE(e_not->lt(*e_not) == 0);
     }
 
-    THEN("do_crc_v2 matches virtual do_crc")
+    THEN("crc agrees between equal nodes")
     {
-      REQUIRE(e_not->do_crc_v2() == e_not->do_crc());
-      REQUIRE(e_not->do_crc_v2() == e_not2->do_crc_v2());
+      REQUIRE(e_not->crc() == e_not2->crc());
     }
 
-    THEN("hash_v2 produces same digest as virtual hash")
+    THEN("get_num_sub_exprs returns 1")
     {
-      crypto_hash h1, h2;
-      e_not->hash_v2(h1);
-      e_not->hash(h2);
-      h1.fin();
-      h2.fin();
-      REQUIRE(h1.to_size_t() == h2.to_size_t());
+      REQUIRE(e_not->get_num_sub_exprs() == 1u);
     }
 
-    THEN("tostring_v2 matches virtual tostring")
+    THEN("get_sub_expr(0) is the wrapped operand")
     {
-      auto v1 = e_not->tostring_v2(0);
-      auto v2 = e_not->tostring(0);
-      REQUIRE(v1 == v2);
-    }
-
-    THEN("get_num_sub_exprs_v2 matches virtual get_num_sub_exprs")
-    {
-      REQUIRE(e_not->get_num_sub_exprs_v2() == e_not->get_num_sub_exprs());
-      REQUIRE(e_not->get_num_sub_exprs_v2() == 1u);
-    }
-
-    THEN("get_sub_expr_v2(0) is non-null and equals the wrapped operand")
-    {
-      const expr2tc *p = e_not->get_sub_expr_v2(0);
-      const expr2tc *p_virt = e_not->get_sub_expr(0);
+      const expr2tc *p = e_not->get_sub_expr(0);
       REQUIRE(p != nullptr);
-      REQUIRE(p_virt != nullptr);
-      REQUIRE(*p == *p_virt);
+      REQUIRE(*p == inner);
     }
 
-    THEN("get_sub_expr_v2 out-of-range returns nullptr")
+    THEN("get_sub_expr out-of-range returns nullptr")
     {
-      REQUIRE(e_not->get_sub_expr_v2(1) == nullptr);
+      REQUIRE(e_not->get_sub_expr(1) == nullptr);
     }
 
-    THEN("clone_v2 produces a structurally equal independent copy")
+    THEN("clone produces a structurally equal independent copy")
     {
-      expr2tc cloned = e_not->clone_v2();
-      REQUIRE(cloned.get() != e_not.get()); // distinct underlying object
-      REQUIRE(*cloned == *e_not);           // same structural value
+      expr2tc cloned = e_not->clone();
+      REQUIRE(cloned.get() != e_not.get());
+      REQUIRE(*cloned == *e_not);
     }
 
-    THEN("foreach_operand (public) visits exactly the one operand")
+    THEN("foreach_operand visits exactly the one operand")
     {
       std::vector<expr2tc> visited;
       e_not->foreach_operand([&](const expr2tc &sub) { visited.push_back(sub); });
@@ -541,24 +515,23 @@ SCENARIO(
     expr2tc a = not2tc(constant_int2tc(word, BigInt(1)));
     expr2tc b = not2tc(constant_int2tc(word, BigInt(2)));
 
-    THEN("cmp_v2 returns false")
+    THEN("cmp returns false")
     {
-      REQUIRE(!a->cmp_v2(*b));
+      REQUIRE(!a->cmp(*b));
     }
 
-    THEN("lt_v2 is antisymmetric")
+    THEN("lt is antisymmetric")
     {
-      int fwd = a->lt_v2(*b);
-      int rev = b->lt_v2(*a);
+      int fwd = a->lt(*b);
+      int rev = b->lt(*a);
       REQUIRE(fwd != 0);
       REQUIRE(rev != 0);
-      // signs must be opposite
       REQUIRE((fwd < 0) != (rev < 0));
     }
 
-    THEN("do_crc_v2 differs")
+    THEN("crc differs")
     {
-      REQUIRE(a->do_crc_v2() != b->do_crc_v2());
+      REQUIRE(a->crc() != b->crc());
     }
   }
 }

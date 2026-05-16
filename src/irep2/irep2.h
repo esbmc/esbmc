@@ -311,12 +311,12 @@ public:
   {
     const T *foo = get();
     // Acquire ordering on the load so a non-zero cached value also
-    // synchronises with the writer that produced it (do_crc()'s release
+    // synchronises with the writer that produced it (crc()'s release
     // store), and we observe whatever node state went into computing it.
     if (size_t cached = foo->crc_val.load(std::memory_order_acquire);
         cached != 0)
       return cached;
-    return foo->do_crc();
+    return foo->crc();
   }
 
   /* Provide comparison operators here as inline friends so they don't pollute
@@ -583,8 +583,8 @@ protected:
   /** Copy constructor */
   type2t(const type2t &ref);
 
-  virtual void foreach_subtype_impl_const(const_subtype_delegate &t) const;
-  virtual void foreach_subtype_impl(subtype_delegate &t);
+  void foreach_subtype_impl_const(const_subtype_delegate &t) const;
+  void foreach_subtype_impl(subtype_delegate &t);
 
 public:
   // Provide base / container types for some templates stuck on top:
@@ -607,7 +607,7 @@ public:
    *  @throws array_type2t::dyn_sized_array_excp
    *  @return Size of types byte representation, in bits
    */
-  virtual unsigned int get_width() const = 0;
+  unsigned int get_width() const;
 
   bool operator==(const type2t &ref) const;
   bool operator!=(const type2t &ref) const;
@@ -663,7 +663,7 @@ public:
    *  @param ref Reference to (same class of) type to compare against
    *  @return True if types match, false otherwise
    */
-  virtual bool cmp(const type2t &ref) const;
+  bool cmp(const type2t &ref) const;
 
   /** Virtual method to compare two types.
    *  To be overridden by an extending type; assumes that itself and the
@@ -672,7 +672,7 @@ public:
    *  @param ref Reference to (same class of) type to compare against
    *  @return 0 if types are the same, 1 if this > ref, -1 if ref > this.
    */
-  virtual int lt(const type2t &ref) const;
+  int lt(const type2t &ref) const;
 
   /** Extract a list of members from type as strings.
    *  Produces a list of pairs, mapping a member name to a string value. Used
@@ -681,32 +681,22 @@ public:
    *  @param indent Number of spaces to indent output strings with, if multiline
    *  @return list of name:value pairs.
    */
-  virtual list_of_memberst tostring(unsigned int indent) const;
-
-  /** Perform crc operation accumulating into parameter.
-   *  Performs the operation of the crc method, but overridden to be specific to
-   *  a particular type. Accumulates data into the hash object parameter.
-   *  @see cmp
-   *  @param seed Hash to accumulate hash data into.
-   *  @return Hash value
-   */
-  virtual size_t do_crc() const;
+  list_of_memberst tostring(unsigned int indent) const;
 
   /** Perform hash operation accumulating into parameter.
    *  Feeds data as appropriate to the type of the expression into the
-   *  parameter, to be hashed. Like crc and do_crc, but for some other kind
-   *  of hash scenario.
+   *  parameter, to be hashed. Like crc, but for some other kind of hash
+   *  scenario.
    *  @see cmp
    *  @see crc
-   *  @see do_crc
    *  @param hash Object to accumulate hash data into.
    */
-  virtual void hash(crypto_hash &hash) const;
+  void hash(crypto_hash &hash) const;
 
   /** Clone method. Self explanatory.
    *  @return New container, containing a duplicate of this object.
    */
-  virtual type2tc clone() const;
+  type2tc clone() const;
 
   // Please see the equivalent methods in expr2t for documentation
   template <typename T>
@@ -724,8 +714,7 @@ public:
   }
 
   /** Instance of type_ids recording this types type. */
-  // XXX XXX XXX this should be const
-  type_ids type_id;
+  const type_ids type_id;
 
   // CRC cache: 0 means "not yet computed". Atomic so concurrent readers
   // see either the prior value or the fresh one — never a torn read.
@@ -793,12 +782,8 @@ protected:
   /** Copy constructor */
   expr2t(const expr2t &ref);
 
-  virtual void foreach_operand_impl_const(const_op_delegate &expr) const;
-  virtual void foreach_operand_impl(op_delegate &expr);
-
-  // Non-virtual switch-based dispatchers (issue #4560 scaffolding).
-  void foreach_operand_impl_const_v2(const_op_delegate &expr) const;
-  void foreach_operand_impl_v2(op_delegate &expr);
+  void foreach_operand_impl_const(const_op_delegate &expr) const;
+  void foreach_operand_impl(op_delegate &expr);
 
 public:
   // Provide base / container types for some templates stuck on top:
@@ -808,7 +793,7 @@ public:
   virtual ~expr2t() = default;
 
   /** Clone method. Self explanatory. */
-  virtual expr2tc clone() const;
+  expr2tc clone() const;
 
   /* These are all self explanatory */
   bool operator==(const expr2t &ref) const;
@@ -857,7 +842,7 @@ public:
    *  @param ref Expr object to compare this against
    *  @return True if objects are the same; false otherwise.
    */
-  virtual bool cmp(const expr2t &ref) const;
+  bool cmp(const expr2t &ref) const;
 
   /** Compare two expr objects.
    *  Overridden by subclasses - takes two expr objects (this and ref) of the
@@ -868,7 +853,7 @@ public:
    *  @param ref Expr object to compare this against
    *  @return 0 If exprs are the same, 1 if this > ref, -1 if ref > this.
    */
-  virtual int lt(const expr2t &ref) const;
+  int lt(const expr2t &ref) const;
 
   /** Convert fields of subclasses to a string representation.
    *  Used internally by the pretty method - creates a list of pairs
@@ -878,42 +863,27 @@ public:
    *  @param indent Number of spaces to indent multiline output by
    *  @return list of string pairs, of form fieldname:value
    */
-  virtual list_of_memberst tostring(unsigned int indent) const;
-
-  /** Perform digest/hash function on expr object.
-   *  Takes all fields in this exprs and adds them to the passed in hash object
-   *  to compute an expression-hash. Overridden by subclasses.
-   *  @param seed Hash to accumulate expression data into.
-   *  @return Hash value
-   */
-  virtual size_t do_crc() const;
+  list_of_memberst tostring(unsigned int indent) const;
 
   /** Perform hash operation accumulating into parameter.
    *  Feeds data as appropriate to the type of the expression into the
-   *  parameter, to be hashed. Like crc and do_crc, but for some other kind
-   *  of hash scenario.
+   *  parameter, to be hashed. Like crc, but for some other kind of hash
+   *  scenario.
    *  @see cmp
    *  @see crc
-   *  @see do_crc
    *  @param hash Object to accumulate hash data into.
    */
-  virtual void hash(crypto_hash &hash) const;
+  void hash(crypto_hash &hash) const;
 
   /** Fetch a sub-operand.
    *  These can come out of any field that is an expr2tc, or contains them.
    *  No particular numbering order is promised.
    */
-  virtual const expr2tc *get_sub_expr(size_t idx) const;
-
-  /** Fetch a sub-operand. Non-const version.
-   *  These can come out of any field that is an expr2tc, or contains them.
-   *  No particular numbering order is promised.
-   */
-  virtual expr2tc *get_sub_expr_nc(size_t idx);
+  const expr2tc *get_sub_expr(size_t idx) const;
 
   /** Count the number of sub-exprs there are.
    */
-  virtual size_t get_num_sub_exprs() const;
+  size_t get_num_sub_exprs() const;
 
   /** Simplify an expression.
    *  Similar to simplification in the string-based irep, this generates an
@@ -987,34 +957,23 @@ public:
   void foreach_operand(T &&t) const
   {
     const_op_delegate wrapped(t);
-    foreach_operand_impl_const_v2(wrapped);
+    foreach_operand_impl_const(wrapped);
   }
 
   template <typename T>
   void Foreach_operand(T &&t)
   {
     op_delegate wrapped(t);
-    foreach_operand_impl_v2(wrapped);
+    foreach_operand_impl(wrapped);
   }
-
-  // Non-virtual switch-based dispatchers (issue #4560 scaffolding).
-  // These coexist with the virtual methods and will replace them once all
-  // kinds are migrated to the flat struct layout.
-  bool cmp_v2(const expr2t &ref) const;
-  int lt_v2(const expr2t &ref) const;
-  expr2tc clone_v2() const;
-  size_t do_crc_v2() const;
-  void hash_v2(crypto_hash &hash) const;
-  list_of_memberst tostring_v2(unsigned int indent) const;
-  const expr2tc *get_sub_expr_v2(size_t idx) const;
-  expr2tc *get_sub_expr_nc_v2(size_t idx);
-  size_t get_num_sub_exprs_v2() const;
-  [[nodiscard]] expr2tc do_simplify_v2() const;
 
   /** Instance of expr_ids recording tihs exprs type. */
   const expr_ids expr_id;
 
   /** Type of this expr. All exprs have a type. */
+  // TODO: should be const — currently mutated in smt_memspace.cpp and
+  // smt_conv.cpp via Foreach_subtype, both of which want a "construct
+  // a new expression with this type" idiom instead.
   type2tc type;
 
   // CRC cache; see commentary on type2t::crc_val.

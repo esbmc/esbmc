@@ -27,13 +27,6 @@ static_assert(
   "type_names[] disagrees with type2t::type_ids — somebody edited "
   "the manifest without going through type_kinds.inc");
 
-template <>
-class base_to_names<type2t>
-{
-public:
-  static constexpr const char **names = type_names;
-};
-
 std::string get_type_id(const type2t &type)
 {
   return std::string(type_names[type.type_id]);
@@ -113,10 +106,6 @@ void type2t::dump() const
   log_status("{}", pretty(0));
 }
 
-size_t type2t::crc() const
-{
-  return do_crc();
-}
 
 unsigned int bool_type2t::get_width() const
 {
@@ -285,7 +274,7 @@ type2tc type2t::clone() const
   __builtin_unreachable();
 }
 
-size_t type2t::do_crc() const
+size_t type2t::crc() const
 {
   switch (type_id)
   {
@@ -352,6 +341,19 @@ void type2t::foreach_subtype_impl(subtype_delegate &f)
     esbmct::generic_foreach_subtype(                                           \
       static_cast<kind##_type2t &>(*this), f);                                 \
     return;
+#include <irep2/type_kinds.inc>
+#undef IREP2_TYPE
+  }
+  __builtin_unreachable();
+}
+
+unsigned int type2t::get_width() const
+{
+  switch (type_id)
+  {
+#define IREP2_TYPE(kind, _)                                                    \
+  case kind##_id:                                                              \
+    return static_cast<const kind##_type2t &>(*this).get_width();
 #include <irep2/type_kinds.inc>
 #undef IREP2_TYPE
   }

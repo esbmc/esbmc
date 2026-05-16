@@ -79,7 +79,7 @@ public:
   }
   bv_data(const bv_data &ref) = default;
 
-  unsigned int get_width() const override;
+  unsigned int get_width() const;
 
   unsigned int width;
 };
@@ -102,7 +102,7 @@ public:
   }
   code_data(const code_data &ref) = default;
 
-  unsigned int get_width() const override;
+  unsigned int get_width() const;
 
   std::vector<type2tc> arguments;
   type2tc ret_type;
@@ -216,7 +216,7 @@ public:
   {
   }
   bool_type2t(const bool_type2t &ref) = default;
-  unsigned int get_width() const override;
+  unsigned int get_width() const;
 
   static constexpr auto fields = std::make_tuple();
   static std::string field_names[esbmct::num_type_fields];
@@ -233,7 +233,7 @@ public:
   {
   }
   empty_type2t(const empty_type2t &ref) = default;
-  unsigned int get_width() const override;
+  unsigned int get_width() const;
 
   static constexpr auto fields = std::make_tuple();
   static std::string field_names[esbmct::num_type_fields];
@@ -253,7 +253,7 @@ public:
   {
   }
   symbol_type2t(const symbol_type2t &ref) = default;
-  unsigned int get_width() const override;
+  unsigned int get_width() const;
 
   static constexpr auto fields =
     std::make_tuple(&symbol_type_data::symbol_name);
@@ -290,7 +290,7 @@ public:
   {
   }
   struct_type2t(const struct_type2t &ref) = default;
-  unsigned int get_width() const override;
+  unsigned int get_width() const;
 
   static constexpr auto fields = std::make_tuple(
     &struct_union_data::members,
@@ -331,7 +331,7 @@ public:
   {
   }
   union_type2t(const union_type2t &ref) = default;
-  unsigned int get_width() const override;
+  unsigned int get_width() const;
 
   static constexpr auto fields = std::make_tuple(
     &struct_union_data::members,
@@ -444,7 +444,7 @@ public:
 
   virtual ~array_type2t() = default;
 
-  unsigned int get_width() const override;
+  unsigned int get_width() const;
 
   /** Common base for the two array-sizing exceptions thrown by
    *  array_type2t::get_width (and friends). Lets callers `catch (const
@@ -521,7 +521,7 @@ public:
     }
   }
   vector_type2t(const vector_type2t &ref) = default;
-  unsigned int get_width() const override;
+  unsigned int get_width() const;
   static constexpr auto fields = std::make_tuple(
     &array_data::subtype,
     &array_data::array_size,
@@ -542,7 +542,7 @@ public:
   {
   }
   pointer_type2t(const pointer_type2t &ref) = default;
-  unsigned int get_width() const override;
+  unsigned int get_width() const;
 
   static constexpr auto fields = std::make_tuple(
     &pointer_data::subtype,
@@ -568,7 +568,7 @@ public:
   {
   }
   fixedbv_type2t(const fixedbv_type2t &ref) = default;
-  unsigned int get_width() const override;
+  unsigned int get_width() const;
 
   static constexpr auto fields = std::make_tuple(
     &fixedbv_data::width,
@@ -594,7 +594,7 @@ public:
   {
   }
   floatbv_type2t(const floatbv_type2t &ref) = default;
-  unsigned int get_width() const override;
+  unsigned int get_width() const;
 
   static constexpr auto fields = std::make_tuple(
     &floatbv_data::fraction,
@@ -625,7 +625,7 @@ public:
   {
   }
   complex_type2t(const complex_type2t &ref) = default;
-  unsigned int get_width() const override;
+  unsigned int get_width() const;
 
   static constexpr auto fields = std::make_tuple(
     &struct_union_data::members,
@@ -654,7 +654,7 @@ public:
   }
   cpp_name_type2t(const cpp_name_type2t &ref) = default;
 
-  unsigned int get_width() const override;
+  unsigned int get_width() const;
 
   static constexpr auto fields = std::make_tuple(
     &cpp_name_data::name,

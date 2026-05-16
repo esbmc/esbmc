@@ -71,45 +71,6 @@ bool do_get_sub_expr<std::vector<expr2tc>>(
   }
 }
 
-// Non-const versions of the above.
-template <>
-bool do_get_sub_expr_nc<expr2tc>(
-  expr2tc &item,
-  size_t idx,
-  size_t &it,
-  expr2tc *&ptr)
-{
-  if (idx == it)
-  {
-    ptr = &item;
-    return true;
-  }
-  else
-  {
-    it++;
-    return false;
-  }
-}
-
-template <>
-bool do_get_sub_expr_nc<std::vector<expr2tc>>(
-  std::vector<expr2tc> &item,
-  size_t idx,
-  size_t &it,
-  expr2tc *&ptr)
-{
-  if (idx < it + item.size())
-  {
-    ptr = &item[idx - it];
-    return true;
-  }
-  else
-  {
-    it += item.size();
-    return false;
-  }
-}
-
 template <>
 size_t do_count_sub_exprs<const expr2tc>(const expr2tc &)
 {

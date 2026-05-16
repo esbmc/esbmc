@@ -363,7 +363,7 @@ size_t do_type_crc(const std::vector<expr2tc> &theval)
 {
   size_t crc = 0;
   for (auto const &it : theval)
-    esbmct::hash_combine(crc, it->do_crc());
+    esbmct::hash_combine(crc, it->crc());
 
   return crc;
 }
@@ -378,7 +378,7 @@ size_t do_type_crc(const std::vector<type2tc> &theval)
 {
   size_t crc = 0;
   for (auto const &it : theval)
-    esbmct::hash_combine(crc, it->do_crc());
+    esbmct::hash_combine(crc, it->crc());
 
   return crc;
 }
@@ -414,7 +414,7 @@ void do_type_hash(const std::vector<irep_idt> &theval, crypto_hash &hash)
 size_t do_type_crc(const expr2tc &theval)
 {
   if (theval.get() != nullptr)
-    return theval->do_crc();
+    return theval->crc();
   return std::hash<uint8_t>{}(0);
 }
 
@@ -427,7 +427,7 @@ void do_type_hash(const expr2tc &theval, crypto_hash &hash)
 size_t do_type_crc(const type2tc &theval)
 {
   if (theval.get() != nullptr)
-    return theval->do_crc();
+    return theval->crc();
   return std::hash<uint8_t>{}(0);
 }
 

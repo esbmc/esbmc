@@ -66,7 +66,7 @@ expr2t::expr2t(const expr2t &ref)
 
 bool expr2t::operator==(const expr2t &ref) const
 {
-  return cmp_v2(ref);
+  return cmp(ref);
 }
 
 bool expr2t::operator!=(const expr2t &ref) const
@@ -76,83 +76,12 @@ bool expr2t::operator!=(const expr2t &ref) const
 
 bool expr2t::operator<(const expr2t &ref) const
 {
-  return lt_v2(ref) < 0;
+  return lt(ref) < 0;
 }
 
 int expr2t::ltchecked(const expr2t &ref) const
 {
-  return lt_v2(ref);
-}
-
-bool expr2t::cmp(const expr2t &ref) const
-{
-  if (expr_id != ref.expr_id)
-    return false;
-
-  if (type != ref.type)
-    return false;
-
-  return true;
-}
-
-int expr2t::lt(const expr2t &ref) const
-{
-  if (expr_id < ref.expr_id)
-    return -1;
-  if (expr_id > ref.expr_id)
-    return 1;
-
-  return type->ltchecked(*ref.type.get());
-}
-
-size_t expr2t::crc() const
-{
-  return do_crc_v2();
-}
-
-size_t expr2t::do_crc() const
-{
-  return do_crc_v2();
-}
-
-void expr2t::hash(crypto_hash &hash) const
-{
-  hash_v2(hash);
-}
-
-expr2tc expr2t::clone() const
-{
-  return clone_v2();
-}
-
-list_of_memberst expr2t::tostring(unsigned int indent) const
-{
-  return tostring_v2(indent);
-}
-
-const expr2tc *expr2t::get_sub_expr(size_t idx) const
-{
-  return get_sub_expr_v2(idx);
-}
-
-expr2tc *expr2t::get_sub_expr_nc(size_t idx)
-{
-  return get_sub_expr_nc_v2(idx);
-}
-
-size_t expr2t::get_num_sub_exprs() const
-{
-  return get_num_sub_exprs_v2();
-}
-
-void expr2t::foreach_operand_impl_const(const_op_delegate &f) const
-{
-  foreach_operand_impl_const_v2(f);
-}
-
-void expr2t::foreach_operand_impl(op_delegate &f)
-{
-  foreach_operand_impl_v2(f);
+  return lt(ref);
 }
 
 std::string get_expr_id(const expr2t &expr)
@@ -162,7 +91,7 @@ std::string get_expr_id(const expr2t &expr)
 
 std::string expr2t::pretty(unsigned int indent) const
 {
-  list_of_memberst memb = tostring_v2(indent + 2);
+  list_of_memberst memb = tostring(indent + 2);
   std::string indentstr = indent_str_irep2(indent);
   std::string ret = expr_names[expr_id];
   for (auto const &m : memb)
@@ -175,13 +104,6 @@ void expr2t::dump() const
 {
   log_status("{}", pretty(0));
 }
-
-template <>
-class base_to_names<expr2t>
-{
-public:
-  static constexpr const char **names = expr_names;
-};
 
 /**************************** Expression constructors *************************/
 
@@ -402,14 +324,14 @@ printf_kindt printf_kind_from_name(const irep_idt &name)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wswitch"
 
-bool expr2t::cmp_v2(const expr2t &o) const
+bool expr2t::cmp(const expr2t &o) const
 {
   if (expr_id != o.expr_id)
     return false;
   switch (expr_id)
   {
 #define IREP2_EXPR(kind, _)                                                    \
-  case kind##_id:                                                               \
+  case kind##_id:                                                              \
     return esbmct::generic_cmp(static_cast<const kind##2t &>(*this), o);
 #include <irep2/expr_kinds.inc>
 #undef IREP2_EXPR
@@ -417,14 +339,14 @@ bool expr2t::cmp_v2(const expr2t &o) const
   __builtin_unreachable();
 }
 
-int expr2t::lt_v2(const expr2t &o) const
+int expr2t::lt(const expr2t &o) const
 {
   if (expr_id != o.expr_id)
     return expr_id < o.expr_id ? -1 : 1;
   switch (expr_id)
   {
 #define IREP2_EXPR(kind, _)                                                    \
-  case kind##_id:                                                               \
+  case kind##_id:                                                              \
     return esbmct::generic_lt(static_cast<const kind##2t &>(*this), o);
 #include <irep2/expr_kinds.inc>
 #undef IREP2_EXPR
@@ -432,12 +354,12 @@ int expr2t::lt_v2(const expr2t &o) const
   __builtin_unreachable();
 }
 
-expr2tc expr2t::clone_v2() const
+expr2tc expr2t::clone() const
 {
   switch (expr_id)
   {
 #define IREP2_EXPR(kind, _)                                                    \
-  case kind##_id:                                                               \
+  case kind##_id:                                                              \
     return esbmct::generic_clone(static_cast<const kind##2t &>(*this));
 #include <irep2/expr_kinds.inc>
 #undef IREP2_EXPR
@@ -445,12 +367,12 @@ expr2tc expr2t::clone_v2() const
   __builtin_unreachable();
 }
 
-size_t expr2t::do_crc_v2() const
+size_t expr2t::crc() const
 {
   switch (expr_id)
   {
 #define IREP2_EXPR(kind, _)                                                    \
-  case kind##_id:                                                               \
+  case kind##_id:                                                              \
     return esbmct::generic_do_crc(static_cast<const kind##2t &>(*this));
 #include <irep2/expr_kinds.inc>
 #undef IREP2_EXPR
@@ -458,12 +380,12 @@ size_t expr2t::do_crc_v2() const
   __builtin_unreachable();
 }
 
-void expr2t::hash_v2(crypto_hash &h) const
+void expr2t::hash(crypto_hash &h) const
 {
   switch (expr_id)
   {
 #define IREP2_EXPR(kind, _)                                                    \
-  case kind##_id:                                                               \
+  case kind##_id:                                                              \
     return esbmct::generic_hash(static_cast<const kind##2t &>(*this), h);
 #include <irep2/expr_kinds.inc>
 #undef IREP2_EXPR
@@ -471,12 +393,12 @@ void expr2t::hash_v2(crypto_hash &h) const
   __builtin_unreachable();
 }
 
-list_of_memberst expr2t::tostring_v2(unsigned int indent) const
+list_of_memberst expr2t::tostring(unsigned int indent) const
 {
   switch (expr_id)
   {
 #define IREP2_EXPR(kind, _)                                                    \
-  case kind##_id:                                                               \
+  case kind##_id:                                                              \
     return esbmct::generic_tostring(                                           \
       static_cast<const kind##2t &>(*this), indent);
 #include <irep2/expr_kinds.inc>
@@ -485,12 +407,12 @@ list_of_memberst expr2t::tostring_v2(unsigned int indent) const
   __builtin_unreachable();
 }
 
-const expr2tc *expr2t::get_sub_expr_v2(size_t idx) const
+const expr2tc *expr2t::get_sub_expr(size_t idx) const
 {
   switch (expr_id)
   {
 #define IREP2_EXPR(kind, _)                                                    \
-  case kind##_id:                                                               \
+  case kind##_id:                                                              \
     return esbmct::generic_get_sub_expr(                                       \
       static_cast<const kind##2t &>(*this), idx);
 #include <irep2/expr_kinds.inc>
@@ -499,25 +421,12 @@ const expr2tc *expr2t::get_sub_expr_v2(size_t idx) const
   __builtin_unreachable();
 }
 
-expr2tc *expr2t::get_sub_expr_nc_v2(size_t idx)
+size_t expr2t::get_num_sub_exprs() const
 {
   switch (expr_id)
   {
 #define IREP2_EXPR(kind, _)                                                    \
-  case kind##_id:                                                               \
-    return esbmct::generic_get_sub_expr_nc(static_cast<kind##2t &>(*this), idx);
-#include <irep2/expr_kinds.inc>
-#undef IREP2_EXPR
-  }
-  __builtin_unreachable();
-}
-
-size_t expr2t::get_num_sub_exprs_v2() const
-{
-  switch (expr_id)
-  {
-#define IREP2_EXPR(kind, _)                                                    \
-  case kind##_id:                                                               \
+  case kind##_id:                                                              \
     return esbmct::generic_get_num_sub_exprs(                                  \
       static_cast<const kind##2t &>(*this));
 #include <irep2/expr_kinds.inc>
@@ -526,25 +435,12 @@ size_t expr2t::get_num_sub_exprs_v2() const
   __builtin_unreachable();
 }
 
-expr2tc expr2t::do_simplify_v2() const
+void expr2t::foreach_operand_impl_const(const_op_delegate &f) const
 {
   switch (expr_id)
   {
 #define IREP2_EXPR(kind, _)                                                    \
-  case kind##_id:                                                               \
-    return static_cast<const kind##2t &>(*this).do_simplify();
-#include <irep2/expr_kinds.inc>
-#undef IREP2_EXPR
-  }
-  __builtin_unreachable();
-}
-
-void expr2t::foreach_operand_impl_const_v2(const_op_delegate &f) const
-{
-  switch (expr_id)
-  {
-#define IREP2_EXPR(kind, _)                                                    \
-  case kind##_id:                                                               \
+  case kind##_id:                                                              \
     return esbmct::generic_foreach_operand_impl_const(                         \
       static_cast<const kind##2t &>(*this), f);
 #include <irep2/expr_kinds.inc>
@@ -553,12 +449,12 @@ void expr2t::foreach_operand_impl_const_v2(const_op_delegate &f) const
   __builtin_unreachable();
 }
 
-void expr2t::foreach_operand_impl_v2(op_delegate &f)
+void expr2t::foreach_operand_impl(op_delegate &f)
 {
   switch (expr_id)
   {
 #define IREP2_EXPR(kind, _)                                                    \
-  case kind##_id:                                                               \
+  case kind##_id:                                                              \
     return esbmct::generic_foreach_operand_impl(                               \
       static_cast<kind##2t &>(*this), f);
 #include <irep2/expr_kinds.inc>

@@ -58,27 +58,6 @@ bool do_get_sub_expr<std::vector<expr2tc>>(
   const expr2tc *&ptr);
 
 template <class T>
-bool do_get_sub_expr_nc(T &, size_t, size_t &, expr2tc *&)
-{
-  return false;
-}
-
-// Non-const versions of the above.
-template <>
-bool do_get_sub_expr_nc<expr2tc>(
-  expr2tc &item,
-  size_t idx,
-  size_t &it,
-  expr2tc *&ptr);
-
-template <>
-bool do_get_sub_expr_nc<std::vector<expr2tc>>(
-  std::vector<expr2tc> &item,
-  size_t idx,
-  size_t &it,
-  expr2tc *&ptr);
-
-template <class T>
 size_t do_count_sub_exprs(T &)
 {
   return 0;

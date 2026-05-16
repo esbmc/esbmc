@@ -9,10 +9,6 @@
 
 std::string indent_str_irep2(unsigned int indent);
 
-// Map a base type to it's list of names
-template <typename T>
-class base_to_names;
-
 template <class T>
 std::string pretty_print_func(unsigned int indent, std::string ident, T obj)
 {
