@@ -1559,7 +1559,12 @@ void python_converter::get_var_assign(
       }
     }
 
-    if (!lhs_symbol && !is_global)
+    // The is_global branch above only locates pre-registered module-level
+    // symbols; it does not synthesise one. If we still have no symbol here,
+    // create_lhs_expression would dereference a null symbolt* in symbol_expr
+    // and crash. For a verifier, refusing with a diagnostic is the only safe
+    // behaviour — silently fabricating a symbol could change the verdict.
+    if (!lhs_symbol)
       throw std::runtime_error("Type undefined for \"" + name + "\"");
 
     lhs = create_lhs_expression(target, lhs_symbol, location_begin);
