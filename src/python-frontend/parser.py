@@ -23,6 +23,7 @@ if not PY3:
     sys.exit(1)
 
 import ast
+import copy
 import importlib.util
 import json
 import os
@@ -82,11 +83,17 @@ def is_unsupported_module(module_name):
 
 
 # Names from the ``threading`` module that ESBMC currently models. Anything
-# else (Thread, RLock, Semaphore, Condition, Event, Barrier, Timer, ...) is
+# else (RLock, Semaphore, Condition, Event, Barrier, Timer, ...) is
 # rejected at parse time by ``reject_unsupported_threading_usage`` so we
 # never emit a half-modelled concurrency construct that could yield a
 # silently wrong verification verdict.
-SUPPORTED_THREADING_SYMBOLS = frozenset({"Lock"})
+SUPPORTED_THREADING_SYMBOLS = frozenset({"Lock", "Thread"})
+
+# Thread keyword arguments outside MVP scope. The current Thread model
+# only supports `target=` and `args=`; the rest are refused at parse time
+# with a clear message rather than being silently dropped, which would
+# produce a misleading verification verdict.
+UNSUPPORTED_THREAD_KWARGS = frozenset({"daemon", "name", "kwargs", "group"})
 
 
 def reject_unsupported_threading_usage(tree: ast.AST, source_filename: str) -> None:
@@ -152,6 +159,685 @@ def reject_unsupported_threading_usage(tree: ast.AST, source_filename: str) -> N
                 getattr(node, "lineno", "?"),
                 f"threading.{offending} {unsupported_message}",
             )
+
+
+def _collect_thread_aliases(tree: ast.AST) -> tuple[set[str], set[str]]:
+    """Return (module_aliases, thread_aliases) for the ``threading`` module.
+
+    ``module_aliases`` are the names bound by ``import threading [as X]``.
+    ``thread_aliases`` are the names bound by
+    ``from threading import Thread [as X]`` — these refer to ``Thread``
+    directly without a module qualifier.
+    """
+    module_aliases: set[str] = set()
+    thread_aliases: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name == "threading":
+                    module_aliases.add(alias.asname or alias.name)
+        elif isinstance(node, ast.ImportFrom) and node.module == "threading":
+            for alias in node.names:
+                if alias.name == "Thread":
+                    thread_aliases.add(alias.asname or alias.name)
+    return module_aliases, thread_aliases
+
+
+def _is_thread_constructor(
+    call_node: ast.Call, module_aliases: set[str], thread_aliases: set[str]
+) -> bool:
+    """Return True iff ``call_node`` constructs a ``threading.Thread``."""
+    func = call_node.func
+    if isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name):
+        return func.value.id in module_aliases and func.attr == "Thread"
+    if isinstance(func, ast.Name):
+        return func.id in thread_aliases
+    return False
+
+
+def _expr_is_thread_constructor(
+    expr: ast.expr, module_aliases: set[str], thread_aliases: set[str]
+) -> bool:
+    """Convenience wrapper that narrows ``expr`` to ``ast.Call`` first."""
+    if not isinstance(expr, ast.Call):
+        return False
+    return _is_thread_constructor(expr, module_aliases, thread_aliases)
+
+
+def _target_name_chain(node: ast.AST) -> str | None:
+    """Return dotted form of a ``Name``/``Attribute`` chain or None.
+
+    Examples:
+      ``Name('f')``                       → ``"f"``
+      ``Attribute(Name('m'), 'f')``       → ``"m.f"``
+      ``Attribute(Attribute(Name('a'), 'b'), 'c')`` → ``"a.b.c"``
+      Lambdas / calls / arbitrary exprs   → None
+    """
+    parts: list[str] = []
+    while isinstance(node, ast.Attribute):
+        parts.append(node.attr)
+        node = node.value
+    if not isinstance(node, ast.Name):
+        return None
+    parts.append(node.id)
+    return ".".join(reversed(parts))
+
+
+# pylint: disable-next=too-many-locals,too-many-branches,too-many-statements
+def validate_threading_thread_usage(tree: ast.AST, source_filename: str) -> None:
+    """Refuse ``threading.Thread`` patterns outside the MVP-supported set.
+
+    The MVP supports a deliberately narrow subset so ESBMC never silently
+    weakens the concurrency model:
+
+      * Subclassing ``threading.Thread`` is rejected.
+      * Only ``target=`` and ``args=`` keyword arguments are accepted;
+        ``daemon=``, ``name=``, ``kwargs=``, ``group=`` are refused.
+      * ``target=`` must be a ``Name`` or attribute chain ending in a
+        ``Name`` — lambdas, ``Call`` expressions, and runtime-variable
+        callables are refused.
+      * ``args=`` must be a tuple literal — list / set / runtime variables
+        are refused.
+      * ``Thread(...)`` may not appear inside a loop body; the desugarer
+        synthesises module-level state per construction site, which would
+        be overwritten across loop iterations.
+    """
+    def fail(line: int, message: str) -> None:
+        print(f"ERROR: {source_filename}:{line}: {message}")
+        sys.exit(4)
+
+    module_aliases, thread_aliases = _collect_thread_aliases(tree)
+    if not module_aliases and not thread_aliases:
+        return
+
+    def base_is_thread(base: ast.expr) -> bool:
+        if isinstance(base, ast.Attribute) and isinstance(base.value, ast.Name):
+            return base.value.id in module_aliases and base.attr == "Thread"
+        if isinstance(base, ast.Name):
+            return base.id in thread_aliases
+        return False
+
+    # Reject subclassing: any ClassDef whose base resolves to threading.Thread.
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ClassDef):
+            continue
+        for base in node.bases:
+            if base_is_thread(base):
+                fail(
+                    node.lineno,
+                    "Subclassing threading.Thread is not supported by ESBMC. "
+                    "Use `Thread(target=..., args=...)` directly.",
+                )
+
+    # Reject Thread() construction inside loop bodies. Walk every For/While
+    # body and flag any Thread call nested in it.
+    for parent in ast.walk(tree):
+        if not isinstance(parent, (ast.For, ast.AsyncFor, ast.While)):
+            continue
+        for child in ast.walk(ast.Module(body=parent.body, type_ignores=[])):
+            if isinstance(child, ast.Call) and _is_thread_constructor(
+                child, module_aliases, thread_aliases
+            ):
+                fail(
+                    child.lineno,
+                    "threading.Thread construction inside a loop is not yet "
+                    "supported. Construct each Thread at a distinct top-level "
+                    "or function-scope site.",
+                )
+
+    # Reject Thread() with unsupported kwargs / shapes.
+    for call_node in ast.walk(tree):
+        if not isinstance(call_node, ast.Call):
+            continue
+        if not _is_thread_constructor(call_node, module_aliases, thread_aliases):
+            continue
+
+        target_value: ast.expr | None = None
+        args_value: ast.expr | None = None
+        for kw in call_node.keywords:
+            if kw.arg is None:
+                fail(
+                    call_node.lineno,
+                    "threading.Thread(**kwargs) is not supported; use the "
+                    "`target=...` and `args=...` keyword arguments directly.",
+                )
+            if kw.arg in UNSUPPORTED_THREAD_KWARGS:
+                fail(
+                    call_node.lineno,
+                    f"threading.Thread keyword argument `{kw.arg}=` is not "
+                    "supported by ESBMC. Only target and args are modelled.",
+                )
+            if kw.arg == "target":
+                target_value = kw.value
+            elif kw.arg == "args":
+                args_value = kw.value
+
+        # Refuse positional arguments — `Thread(group, target, name, args)` is
+        # the real Python signature; ESBMC only accepts the keyword form so
+        # the parser doesn't have to track group/name slots.
+        if call_node.args:
+            fail(
+                call_node.lineno,
+                "threading.Thread requires `target=` and (optionally) `args=` "
+                "as keyword arguments; positional arguments are not supported.",
+            )
+
+        if target_value is None:
+            fail(
+                call_node.lineno,
+                "threading.Thread requires `target=<function>`; constructions "
+                "without an explicit target are not supported.",
+            )
+            return  # unreachable; fail() exits — narrows target_value for pyright
+
+        if _target_name_chain(target_value) is None:
+            fail(
+                call_node.lineno,
+                "threading.Thread `target=` must be a function name (or "
+                "attribute chain). Lambdas and runtime-variable callables "
+                "are not supported in the MVP.",
+            )
+
+        if args_value is not None and not isinstance(args_value, ast.Tuple):
+            fail(
+                call_node.lineno,
+                "threading.Thread `args=` must be a tuple literal "
+                "(e.g. `args=(resource,)`). Lists, sets, and runtime "
+                "variables are not supported in the MVP.",
+            )
+
+
+def _find_thread_var_assigns(
+    func_body: list[ast.stmt],
+    module_aliases: set[str],
+    thread_aliases: set[str],
+) -> dict[str, ast.Call]:
+    """Return ``{var_name: construction_call}`` for ``var = Thread(...)``.
+
+    Only handles single-target ``Assign`` and ``AnnAssign`` to a plain
+    ``Name`` at the function-body top level. Anything more elaborate (tuple
+    targets, attribute targets, nested constructions) is left for the
+    desugarer to refuse.
+    """
+    assigns: dict[str, ast.Call] = {}
+    for stmt in func_body:
+        if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1 and isinstance(
+            stmt.targets[0], ast.Name
+        ):
+            if _expr_is_thread_constructor(
+                stmt.value, module_aliases, thread_aliases
+            ):
+                # _expr_is_thread_constructor confirmed Call narrowing.
+                assert isinstance(stmt.value, ast.Call)
+                assigns[stmt.targets[0].id] = stmt.value
+        elif (
+            isinstance(stmt, ast.AnnAssign)
+            and isinstance(stmt.target, ast.Name)
+            and stmt.value is not None
+            and _expr_is_thread_constructor(
+                stmt.value, module_aliases, thread_aliases
+            )
+        ):
+            assert isinstance(stmt.value, ast.Call)
+            assigns[stmt.target.id] = stmt.value
+    return assigns
+
+
+def _count_name_assignments_in_body(body: list[ast.stmt], name: str) -> int:
+    """Count direct assignments to ``name`` in ``body`` only.
+
+    Walks only the statements directly in ``body`` — does NOT descend into
+    nested ``FunctionDef`` / ``Lambda`` / class bodies. The Thread
+    single-def check is per-scope, so an inner function shadowing the
+    outer ``t`` must not be counted against the outer site (and vice
+    versa).
+    """
+    count = 0
+    for stmt in body:
+        if isinstance(stmt, ast.Assign):
+            for target in stmt.targets:
+                if isinstance(target, ast.Name) and target.id == name:
+                    count += 1
+        elif isinstance(stmt, ast.AnnAssign):
+            if isinstance(stmt.target, ast.Name) and stmt.target.id == name:
+                count += 1
+        elif isinstance(stmt, ast.AugAssign):
+            if isinstance(stmt.target, ast.Name) and stmt.target.id == name:
+                count += 1
+    return count
+
+
+class _ThreadDesugarer(ast.NodeTransformer):
+    """Rewrite ``threading.Thread`` usage into spawn-thread intrinsics.
+
+    For each ``t = threading.Thread(target=f, args=(a, b, c))`` site
+    (index ``N``) the desugarer emits, in place of the construction
+    statement::
+
+        __pythread_ended_<N> = 0
+        def __pythread_trampoline_<N>() -> None:
+            f(<a>, <b>, <c>)              # deep-copied arg expressions
+            __ESBMC_atomic_begin()
+            __pythread_ended_<N> = 1
+            __ESBMC_atomic_end()
+            __ESBMC_terminate_thread()
+        t = threading.Thread()            # bare instance, holds _tid
+
+    ``t.start()`` becomes
+    ``t._tid = __ESBMC_spawn_thread(__pythread_trampoline_<N>)`` and
+    ``t.join()`` becomes ``__ESBMC_assume(__pythread_ended_<N> == 1)``.
+
+    The trampoline reads each arg by re-using the construction-site
+    expression directly (e.g. ``f(resource)`` literally rather than
+    through a per-site copy), so threads sharing an instance all see the
+    same memory in the GOTO program — required for race / lock-contention
+    exploration. The desugarer therefore refuses Thread variables that
+    are reassigned within a scope (the lexical binding from var name to
+    trampoline name must be unique).
+    """
+
+    def __init__(
+        self,
+        source_filename: str,
+        module_aliases: set[str],
+        thread_aliases: set[str],
+    ) -> None:
+        self._source_filename = source_filename
+        self._module_aliases = module_aliases
+        self._thread_aliases = thread_aliases
+        self._site_counter = 0
+        self._current_thread_vars: dict[str, int] = {}
+
+    def _fail(self, line: int | str, message: str) -> None:
+        print(f"ERROR: {self._source_filename}:{line}: {message}")
+        sys.exit(4)
+
+    def _next_site_id(self) -> int:
+        site = self._site_counter
+        self._site_counter += 1
+        return site
+
+    def _make_trampoline(
+        self, site_id: int, target_chain: str, args: list[ast.expr]
+    ) -> ast.FunctionDef:
+        """Return the synthesised per-site trampoline ``FunctionDef``.
+
+        The body is::
+
+            f(<arg expr 0>, ..., <arg expr n>)
+            __ESBMC_atomic_begin()
+            __pythread_ended_<N> = 1
+            __ESBMC_atomic_end()
+            __ESBMC_terminate_thread()
+
+        Each ``<arg expr>`` is a deep copy of the construction-site arg
+        expression. The trampoline therefore reads each arg directly from
+        the variable the user named at the construction site (e.g.
+        ``resource``) instead of through a per-site global copy — so
+        multiple threads constructed with the same shared instance all
+        operate on the SAME memory in the GOTO program, which is what
+        the data-race / lock-contention exploration relies on.
+
+        Caveat: the construction-site variables must therefore still be
+        in scope at the trampoline's definition site. The
+        ``_make_construction_block`` caller satisfies this by emitting
+        the trampoline INTO the construction block — adjacent to the
+        original assignment — so the args are reached via the same scope
+        chain the user wrote.
+
+        The atomic block + ended flag lets ``join`` wait on the flag with
+        ``__ESBMC_assume``. ``__ESBMC_terminate_thread`` is required so
+        symex doesn't fall off the end of the trampoline frame (the
+        spawn-thread machinery leaves the trampoline's call stack empty).
+        """
+        target_parts = target_chain.split(".")
+        target_expr: ast.expr = ast.Name(id=target_parts[0], ctx=ast.Load())
+        for part in target_parts[1:]:
+            target_expr = ast.Attribute(value=target_expr, attr=part, ctx=ast.Load())
+
+        # Deep-copy each arg AST so further mutation by NodeTransformer
+        # doesn't change the trampoline's view of the construction-site
+        # expression.
+        arg_exprs: list[ast.expr] = [copy.deepcopy(a) for a in args]
+        # Force Load context on every Name inside the copied arg subtree
+        # (the original may have been Store-positioned, but the
+        # trampoline reads them).
+        for arg in arg_exprs:
+            for node in ast.walk(arg):
+                if isinstance(node, (ast.Name, ast.Attribute, ast.Subscript)):
+                    node.ctx = ast.Load()
+
+        trampoline_body: list[ast.stmt] = [
+            ast.Expr(
+                value=ast.Call(
+                    func=target_expr,
+                    args=arg_exprs,
+                    keywords=[],
+                )
+            ),
+            ast.Expr(
+                value=ast.Call(
+                    func=ast.Name(id="__ESBMC_atomic_begin", ctx=ast.Load()),
+                    args=[],
+                    keywords=[],
+                )
+            ),
+            ast.Assign(
+                targets=[
+                    ast.Name(
+                        id=f"__pythread_ended_{site_id}", ctx=ast.Store()
+                    )
+                ],
+                value=ast.Constant(value=1),
+            ),
+            ast.Expr(
+                value=ast.Call(
+                    func=ast.Name(id="__ESBMC_atomic_end", ctx=ast.Load()),
+                    args=[],
+                    keywords=[],
+                )
+            ),
+            ast.Expr(
+                value=ast.Call(
+                    func=ast.Name(
+                        id="__ESBMC_terminate_thread", ctx=ast.Load()
+                    ),
+                    args=[],
+                    keywords=[],
+                )
+            ),
+        ]
+
+        trampoline = ast.FunctionDef(
+            name=f"__pythread_trampoline_{site_id}",
+            args=ast.arguments(
+                posonlyargs=[],
+                args=[],
+                vararg=None,
+                kwonlyargs=[],
+                kw_defaults=[],
+                kwarg=None,
+                defaults=[],
+            ),
+            body=trampoline_body,
+            decorator_list=[],
+            returns=ast.Constant(value=None),
+        )
+        ast.fix_missing_locations(trampoline)
+        return trampoline
+
+    def _make_construction_block(
+        self,
+        var_name: str,
+        site_id: int,
+        target_chain: str,
+        args: list[ast.expr],
+    ) -> list[ast.stmt]:
+        """Return the statements that replace ``var = Thread(target=, args=)``.
+
+        Layout:
+
+            __pythread_ended_<N> = 0
+            def __pythread_trampoline_<N>(): ...    # reads args by name
+            var = Thread()                          # bare instance, _tid=0
+
+        The trampoline references the construction-site arg variables by
+        name (rather than copying them through globals), so multiple
+        threads constructed with the same shared instance see the same
+        memory through the same scope chain — required for race / lock
+        exploration to work.
+        """
+        stmts: list[ast.stmt] = [
+            ast.Assign(
+                targets=[
+                    ast.Name(
+                        id=f"__pythread_ended_{site_id}", ctx=ast.Store()
+                    )
+                ],
+                value=ast.Constant(value=0),
+            ),
+            self._make_trampoline(site_id, target_chain, args),
+        ]
+        # Bare Thread() construction so the user's variable still holds a
+        # Thread instance (with a `_tid` field) the start/join rewrites can
+        # read.
+        thread_ctor: ast.expr
+        if self._module_aliases:
+            mod_alias = next(iter(self._module_aliases))
+            thread_ctor = ast.Call(
+                func=ast.Attribute(
+                    value=ast.Name(id=mod_alias, ctx=ast.Load()),
+                    attr="Thread",
+                    ctx=ast.Load(),
+                ),
+                args=[],
+                keywords=[],
+            )
+        else:
+            thread_alias = next(iter(self._thread_aliases))
+            thread_ctor = ast.Call(
+                func=ast.Name(id=thread_alias, ctx=ast.Load()),
+                args=[],
+                keywords=[],
+            )
+        stmts.append(
+            ast.Assign(
+                targets=[ast.Name(id=var_name, ctx=ast.Store())],
+                value=thread_ctor,
+            )
+        )
+        for s in stmts:
+            ast.fix_missing_locations(s)
+        return stmts
+
+    def _make_start_call(self, var_name: str, site_id: int) -> ast.AST:
+        """Return AST for ``var._tid = __ESBMC_spawn_thread(trampoline_N)``."""
+        node = ast.Assign(
+            targets=[
+                ast.Attribute(
+                    value=ast.Name(id=var_name, ctx=ast.Load()),
+                    attr="_tid",
+                    ctx=ast.Store(),
+                )
+            ],
+            value=ast.Call(
+                func=ast.Name(id="__ESBMC_spawn_thread", ctx=ast.Load()),
+                args=[
+                    ast.Name(
+                        id=f"__pythread_trampoline_{site_id}",
+                        ctx=ast.Load(),
+                    )
+                ],
+                keywords=[],
+            ),
+        )
+        ast.fix_missing_locations(node)
+        return node
+
+    def _make_join_block(self, site_id: int) -> list[ast.AST]:
+        """Return the AST that replaces ``t.join()``.
+
+        Emits a single ``__ESBMC_assume(__pythread_ended_<N> == 1)``. The
+        assume is not wrapped in an atomic block: blocking context
+        switches around it would prevent the scheduler from giving the
+        spawned trampoline a chance to flip the flag in the first place.
+        """
+        node = ast.Expr(
+            value=ast.Call(
+                func=ast.Name(id="__ESBMC_assume", ctx=ast.Load()),
+                args=[
+                    ast.Compare(
+                        left=ast.Name(
+                            id=f"__pythread_ended_{site_id}",
+                            ctx=ast.Load(),
+                        ),
+                        ops=[ast.Eq()],
+                        comparators=[ast.Constant(value=1)],
+                    )
+                ],
+                keywords=[],
+            )
+        )
+        ast.fix_missing_locations(node)
+        return [node]
+
+    def _rewrite_body(
+        self,
+        body: list[ast.stmt],
+        scope_label: str,
+        scope_lineno: int,
+    ) -> list[ast.stmt]:
+        """Rewrite a function or module body: in-place desugar Thread uses."""
+        thread_vars = _find_thread_var_assigns(
+            body, self._module_aliases, self._thread_aliases
+        )
+
+        # Single-def check inside this scope. Only direct-body assignments
+        # count — nested function bodies are independent scopes.
+        for var_name in thread_vars:
+            if _count_name_assignments_in_body(body, var_name) > 1:
+                self._fail(
+                    scope_lineno,
+                    f"threading.Thread variable `{var_name}` is reassigned in "
+                    f"{scope_label}. The Thread model requires a "
+                    "single-definition binding so the spawn site can resolve "
+                    "the target statically.",
+                )
+
+        previous = self._current_thread_vars
+        self._current_thread_vars = dict(previous)
+        try:
+            new_body: list[ast.stmt] = []
+            for stmt in body:
+                lhs_name = self._thread_assign_target(stmt, thread_vars)
+                if lhs_name is not None:
+                    call_node = thread_vars[lhs_name]
+                    target_value, args_values = self._extract_call_kwargs(call_node)
+                    target_chain = _target_name_chain(target_value)
+                    assert target_chain is not None  # validated earlier
+                    site_id = self._next_site_id()
+                    self._current_thread_vars[lhs_name] = site_id
+                    new_body.extend(
+                        self._make_construction_block(
+                            lhs_name, site_id, target_chain, args_values
+                        )
+                    )
+                    continue
+                visited = self.visit(stmt)
+                # visit_Expr may splice a join() call into multiple stmts.
+                if isinstance(visited, list):
+                    new_body.extend(visited)
+                elif visited is not None:
+                    new_body.append(visited)
+            return new_body
+        finally:
+            self._current_thread_vars = previous
+
+    # pylint: disable-next=invalid-name
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> ast.AST:
+        """Rewrite Thread usage within a function body."""
+        node.body = self._rewrite_body(
+            node.body, f"function `{node.name}`", node.lineno
+        )
+        return node
+
+    # pylint: disable-next=invalid-name
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> ast.AST:
+        """Rewrite Thread usage within an async function body."""
+        node.body = self._rewrite_body(
+            node.body, f"async function `{node.name}`", node.lineno
+        )
+        return node
+
+    def rewrite_module(self, module: ast.Module) -> None:
+        """Rewrite Thread usage at module top level and recurse into defs."""
+        module.body = self._rewrite_body(module.body, "module top level", 1)
+
+    @staticmethod
+    def _thread_assign_target(
+        stmt: ast.AST, thread_vars: dict[str, ast.Call]
+    ) -> str | None:
+        """Return the LHS name iff ``stmt`` is a Thread construction we own."""
+        if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1 and isinstance(
+            stmt.targets[0], ast.Name
+        ):
+            name = stmt.targets[0].id
+            if name in thread_vars and stmt.value is thread_vars[name]:
+                return name
+        elif (
+            isinstance(stmt, ast.AnnAssign)
+            and isinstance(stmt.target, ast.Name)
+            and stmt.value is not None
+        ):
+            name = stmt.target.id
+            if name in thread_vars and stmt.value is thread_vars[name]:
+                return name
+        return None
+
+    @staticmethod
+    def _extract_call_kwargs(
+        call_node: ast.Call,
+    ) -> tuple[ast.expr, list[ast.expr]]:
+        """Pull ``target=`` and ``args=`` from a validated Thread call."""
+        target_value: ast.expr | None = None
+        args_values: list[ast.expr] = []
+        for kw in call_node.keywords:
+            if kw.arg == "target":
+                target_value = kw.value
+            elif kw.arg == "args" and isinstance(kw.value, ast.Tuple):
+                args_values = list(kw.value.elts)
+        assert target_value is not None  # validated earlier
+        return target_value, args_values
+
+    def _thread_method_site(
+        self, node: ast.AST
+    ) -> tuple[str, int] | None:
+        """If ``node`` is ``t.start()``/``t.join()`` on a tracked Thread var,
+        return ``(method_name, site_id)``; otherwise ``None``."""
+        if not isinstance(node, ast.Call):
+            return None
+        func = node.func
+        if not isinstance(func, ast.Attribute):
+            return None
+        if not isinstance(func.value, ast.Name):
+            return None
+        var_name = func.value.id
+        if var_name not in self._current_thread_vars:
+            return None
+        if func.attr not in ("start", "join"):
+            return None
+        return func.attr, self._current_thread_vars[var_name]
+
+    # pylint: disable-next=invalid-name
+    def visit_Expr(self, node: ast.Expr) -> ast.AST | list[ast.AST]:
+        """Replace ``t.start()`` / ``t.join()`` statement-level calls.
+
+        ``start`` lowers to a single ``t._tid = __ESBMC_spawn_thread(...)``
+        assignment; ``join`` lowers to a 3-statement atomic-assume block,
+        which is returned as a list so :class:`ast.NodeTransformer` splices
+        it into the parent body in place of the original ``Expr``.
+        """
+        match = self._thread_method_site(node.value)
+        if match is None:
+            self.generic_visit(node)
+            return node
+        method, site_id = match
+        assert isinstance(node.value, ast.Call)
+        var_name = node.value.func.value.id  # type: ignore[union-attr]
+        if method == "start":
+            return self._make_start_call(var_name, site_id)
+        return self._make_join_block(site_id)
+
+
+
+def desugar_threading_thread(tree: ast.Module, source_filename: str) -> None:
+    """Apply :class:`_ThreadDesugarer` to ``tree`` in-place."""
+    module_aliases, thread_aliases = _collect_thread_aliases(tree)
+    if not module_aliases and not thread_aliases:
+        return
+    desugarer = _ThreadDesugarer(source_filename, module_aliases, thread_aliases)
+    desugarer.rewrite_module(tree)
+    ast.fix_missing_locations(tree)
 
 
 def is_testing_framework(module_name):
@@ -865,6 +1551,8 @@ def main():
             detect_and_process_submodules(node, processed_submodules, output_dir)
 
     reject_unsupported_threading_usage(tree, filename)
+    validate_threading_thread_usage(tree, filename)
+    desugar_threading_thread(tree, filename)
 
     # Generate JSON from AST for the main file.
     generate_ast_json(tree, filename, None, output_dir)

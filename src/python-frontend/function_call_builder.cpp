@@ -7,7 +7,9 @@
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/type_utils.h>
 #include <util/arith_tools.h>
+#include <util/c_types.h>
 #include <util/message.h>
+#include <util/std_expr.h>
 
 #include <boost/algorithm/string/predicate.hpp>
 #include <optional>
@@ -50,6 +52,8 @@ const std::string kEsbmcLoopInvariant = "__ESBMC_loop_invariant";
 const std::string kEsbmcCover = "__ESBMC_cover";
 const std::string kEsbmcAtomicBegin = "__ESBMC_atomic_begin";
 const std::string kEsbmcAtomicEnd = "__ESBMC_atomic_end";
+const std::string kEsbmcSpawnThread = "__ESBMC_spawn_thread";
+const std::string kEsbmcTerminateThread = "__ESBMC_terminate_thread";
 
 function_call_builder::function_call_builder(
   python_converter &converter,
@@ -760,6 +764,75 @@ exprt function_call_builder::build() const
       atomic_call.type() = empty_typet();
       atomic_call.location() = location;
       return atomic_call;
+    }
+  }
+
+  // Threading intrinsics: ``__ESBMC_spawn_thread`` and
+  // ``__ESBMC_terminate_thread``. The Python frontend's threading
+  // desugaring (parser.py:desugar_threading_thread) lowers
+  // ``threading.Thread`` / ``.start()`` / ``.join()`` into calls to these
+  // symbols. Forward-declare them in the symbol table on first use and
+  // emit the call expression. ``__ESBMC_spawn_thread`` is a goto-symex
+  // intrinsic (intrinsic_spawn_thread in threads.cpp) that reads the
+  // trampoline's symbol name out of a bare ``address_of`` — so we never
+  // typecast that argument, even though the formal is declared
+  // ``void *`` for symbol-table well-formedness.
+  {
+    const std::string &func_name = function_id.get_function();
+    const bool is_spawn = func_name == kEsbmcSpawnThread;
+    const bool is_terminate = func_name == kEsbmcTerminateThread;
+    if (is_spawn || is_terminate)
+    {
+      auto &symbol_table = converter_.symbol_table();
+      locationt location = converter_.get_location_from_decl(call_);
+      const std::string id = "c:@F@" + func_name;
+
+      if (symbol_table.find_symbol(id.c_str()) == nullptr)
+      {
+        code_typet code_type;
+        if (is_spawn)
+        {
+          code_type.return_type() = uint_type();
+          code_typet::argumentt arg;
+          arg.type() = pointer_typet(empty_typet());
+          code_type.arguments().push_back(arg);
+        }
+        else
+        {
+          code_type.return_type() = empty_typet();
+        }
+        symbolt symbol = converter_.create_symbol(
+          converter_.python_file(), func_name, id, location, code_type);
+        converter_.add_symbol(symbol);
+      }
+
+      const symbolt *func_symbol = symbol_table.find_symbol(id.c_str());
+      assert(func_symbol);
+      const code_typet &code_type = to_code_type(func_symbol->type);
+
+      code_function_callt call_expr;
+      call_expr.function() = symbol_exprt(id, code_type);
+      call_expr.location() = location;
+      call_expr.type() = code_type.return_type();
+
+      if (is_spawn)
+      {
+        if (call_["args"].size() != 1)
+          throw std::runtime_error(
+            "__ESBMC_spawn_thread takes exactly one argument");
+        exprt arg_expr = converter_.get_expr(call_["args"][0]);
+        // Strip incidental wrappers the Python frontend may have applied
+        // when resolving a free Name to a function symbol; the intrinsic
+        // asserts ``is_address_of2t`` post-simplify and reads the symbol
+        // name out of it.
+        while (arg_expr.id() == "typecast" && !arg_expr.operands().empty())
+          arg_expr = arg_expr.operands()[0];
+        if (arg_expr.type().is_code() && arg_expr.is_symbol())
+          arg_expr = address_of_exprt(arg_expr);
+        call_expr.arguments().push_back(arg_expr);
+      }
+
+      return call_expr;
     }
   }
 
