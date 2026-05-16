@@ -6,3 +6,5 @@ def worker() -> None:
 
 
 x = t.Thread(target=worker)
+x.start()
+x.join()

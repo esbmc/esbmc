@@ -100,7 +100,15 @@ static const std::map<std::string, std::string> builtin_functions = {
   {"string.octdigits", "str"},
 
   // Import functions
-  {"__import__", "module"}};
+  {"__import__", "module"},
+
+  // Threading intrinsics (registered at conversion time in
+  // function_call_builder.cpp; the annotation pass only needs to know
+  // their return types for inference). Inserted by
+  // parser.py:desugar_threading_thread when lowering
+  // ``threading.Thread`` / ``.start()`` / ``.join()``.
+  {"__ESBMC_spawn_thread", "int"},
+  {"__ESBMC_terminate_thread", "NoneType"}};
 
 template <class Json>
 class python_annotation
