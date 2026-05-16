@@ -4614,9 +4614,8 @@ smt_astt smt_convt::array_create(const expr2tc &expr)
     return convert_array_of_prep(expr);
   // Check size
   assert(is_constant_array2t(expr) || is_constant_vector2t(expr));
-  const array_data &data = static_cast<const array_data &>(*expr->type);
-  expr2tc size = data.array_size;
-  bool is_infinite = data.size_is_infinite;
+  expr2tc size = array_or_vector_size(expr->type);
+  bool is_infinite = array_or_vector_size_is_infinite(expr->type);
   const auto &members = is_constant_array2t(expr)
     ? to_constant_array2t(expr).datatype_members
     : to_constant_vector2t(expr).datatype_members;

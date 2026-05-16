@@ -90,6 +90,37 @@ inline bool is_multi_dimensional_array(const expr2tc &e)
   return is_multi_dimensional_array(e->type);
 }
 
+// array_type2t and vector_type2t carry the same set of element-shape
+// fields (subtype, array_size, size_is_infinite). Callers that have a
+// type which they know is one of those two but don't care which use
+// these helpers to skip the per-kind switch.
+inline const type2tc &array_or_vector_subtype(const type2tc &t)
+{
+  if (is_array_type(t))
+    return to_array_type(t).subtype;
+  if (is_vector_type(t))
+    return to_vector_type(t).subtype;
+  irep2_bad_family_cast(t->type_id, "array_or_vector_subtype");
+}
+
+inline const expr2tc &array_or_vector_size(const type2tc &t)
+{
+  if (is_array_type(t))
+    return to_array_type(t).array_size;
+  if (is_vector_type(t))
+    return to_vector_type(t).array_size;
+  irep2_bad_family_cast(t->type_id, "array_or_vector_size");
+}
+
+inline bool array_or_vector_size_is_infinite(const type2tc &t)
+{
+  if (is_array_type(t))
+    return to_array_type(t).size_is_infinite;
+  if (is_vector_type(t))
+    return to_vector_type(t).size_is_infinite;
+  irep2_bad_family_cast(t->type_id, "array_or_vector_size_is_infinite");
+}
+
 inline bool is_byte_type(const type2tc &t)
 {
   return is_bv_type(t) && t->get_width() == 8;

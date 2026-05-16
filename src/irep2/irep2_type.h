@@ -56,20 +56,6 @@ public:
   bool packed;
 };
 
-class array_data : public type2t
-{
-public:
-  array_data(type2t::type_ids id, const type2tc &st, const expr2tc &sz, bool i)
-    : type2t(id), subtype(st), array_size(sz), size_is_infinite(i)
-  {
-  }
-  array_data(const array_data &ref) = default;
-
-  type2tc subtype;
-  expr2tc array_size;
-  bool size_is_infinite;
-};
-
 // Then give them a typedef name
 
 #define irep_typedefs(basename)                                                \
@@ -316,9 +302,8 @@ public:
  *
  *  If size_is_infinite is true, array_size will be null. If array_size is
  *  not a constant number, then it's a dynamically sized array.
- *  @extends array_data
  */
-class array_type2t : public array_data
+class array_type2t : public type2t
 {
 public:
   /** Primary constructor.
@@ -327,7 +312,10 @@ public:
    *  @param inf Whether or not this array is infinitely sized
    */
   array_type2t(const type2tc &_subtype, const expr2tc &size, bool inf)
-    : array_data(array_id, _subtype, size, inf)
+    : type2t(array_id),
+      subtype(_subtype),
+      array_size(size),
+      size_is_infinite(inf)
   {
     // Constant-fold the size expression so identical array types compare
     // equal regardless of how their size was constructed. Skip the work
@@ -398,17 +386,19 @@ public:
     expr2tc size;
   };
 
+  type2tc subtype;
+  expr2tc array_size;
+  bool size_is_infinite;
+
   static constexpr auto fields = std::make_tuple(
-    &array_data::subtype,
-    &array_data::array_size,
-    &array_data::size_is_infinite);
+    &array_type2t::subtype,
+    &array_type2t::array_size,
+    &array_type2t::size_is_infinite);
   static std::string field_names[esbmct::num_type_fields];
 };
 
-/** Vector type.
- *  @extends array_data
- */
-class vector_type2t : public array_data
+/** Vector type. */
+class vector_type2t : public type2t
 {
 public:
   /** Primary constructor.
@@ -417,7 +407,10 @@ public:
    *  @param inf Whether or not this array is infinitely sized
    */
   vector_type2t(const type2tc &_subtype, const expr2tc &size)
-    : array_data(vector_id, _subtype, size, false)
+    : type2t(vector_id),
+      subtype(_subtype),
+      array_size(size),
+      size_is_infinite(false)
   {
     // Mirror array_type2t: skip simplify() when the size is already a
     // literal. See note in array_type2t for the normalisation rationale.
@@ -430,10 +423,15 @@ public:
   }
   vector_type2t(const vector_type2t &ref) = default;
   unsigned int get_width() const;
+
+  type2tc subtype;
+  expr2tc array_size;
+  bool size_is_infinite;
+
   static constexpr auto fields = std::make_tuple(
-    &array_data::subtype,
-    &array_data::array_size,
-    &array_data::size_is_infinite);
+    &vector_type2t::subtype,
+    &vector_type2t::array_size,
+    &vector_type2t::size_is_infinite);
   static std::string field_names[esbmct::num_type_fields];
 };
 
