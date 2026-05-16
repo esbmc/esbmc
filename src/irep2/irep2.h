@@ -144,21 +144,33 @@ class expr2t;
 template <class T>
 class irep_container
 {
+private:
+  // Private tag gate for the raw-pointer adopt constructor. Only
+  // `make_irep` and other befriended factories can construct one,
+  // which means user code cannot do `expr2tc(new foo2t(...))` — the
+  // canonical idiom is the per-kind `foo2tc(...)` factory (itself a
+  // thin wrapper over make_irep). The tag carries no state.
+  struct make_tag
+  {
+    explicit make_tag() = default;
+  };
+
+  // Adopt a freshly-allocated node. The pointee's refcount must be 0
+  // (i.e. just-new'd); we bump it to 1.
+  irep_container(T *raw, make_tag) noexcept : ptr_(raw)
+  {
+    if (ptr_)
+      ptr_->refcount.fetch_add(1, std::memory_order_relaxed);
+  }
+
+  template <class U, class... Args>
+  friend irep_container<typename U::base_type> make_irep(Args &&...args);
+
 public:
   // Default: empty container, nullptr inside. `noexcept`/`constexpr` to
   // preserve the storage-class properties of the previous design.
   constexpr irep_container() noexcept : ptr_(nullptr)
   {
-  }
-
-  // Adopt a freshly-allocated node. The pointee's refcount must be 0
-  // (i.e. just-new'd); we bump it to 1. The factory functions in
-  // irep2_expr.h / irep2_type.h are the only intended callers of this
-  // overload; outside code constructs containers via copy/move.
-  explicit irep_container(T *raw) noexcept : ptr_(raw)
-  {
-    if (ptr_)
-      ptr_->refcount.fetch_add(1, std::memory_order_relaxed);
   }
 
   irep_container(const irep_container &ref) noexcept : ptr_(ref.ptr_)
@@ -440,8 +452,9 @@ typedef irep_container<expr2t> expr2tc;
 template <class T, class... Args>
 inline irep_container<typename T::base_type> make_irep(Args &&...args)
 {
-  return irep_container<typename T::base_type>(
-    new T(std::forward<Args>(args)...));
+  using container_t = irep_container<typename T::base_type>;
+  return container_t(
+    new T(std::forward<Args>(args)...), typename container_t::make_tag{});
 }
 
 typedef std::pair<std::string, std::string> member_entryt;
