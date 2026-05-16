@@ -1358,17 +1358,17 @@ public:
 
   const expr2tc *get_sub_expr(size_t i) const override
   {
-    return this->get_sub_expr_impl(i);
+    return this->get_sub_expr_v2(i);
   }
 
   expr2tc *get_sub_expr_nc(size_t i) override
   {
-    return this->get_sub_expr_nc_impl(i);
+    return this->get_sub_expr_nc_v2(i);
   }
 
   size_t get_num_sub_exprs() const override
   {
-    return this->get_num_sub_exprs_impl();
+    return this->get_num_sub_exprs_v2();
   }
 
   void foreach_operand_impl_const(expr2t::const_op_delegate &f) const override

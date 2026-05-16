@@ -28,10 +28,10 @@ template <class derived, class baseclass, typename traits>
 auto irep_methods2<derived, baseclass, traits>::clone() const
   -> base_container2tc
 {
-  // Single allocation via make_irep: refcount=0 from `new`, then the
-  // container adopts and bumps to 1. No separate control block — the
-  // count lives in the node itself.
-  return make_irep<derived>(*static_cast<const derived *>(this));
+  if constexpr (std::is_same_v<base2t, expr2t>)
+    return static_cast<const baseclass *>(this)->clone_v2();
+  else
+    return make_irep<derived>(*static_cast<const derived *>(this));
 }
 
 template <class derived, class baseclass, typename traits>
