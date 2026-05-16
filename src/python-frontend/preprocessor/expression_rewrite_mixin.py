@@ -35,8 +35,7 @@ class ExpressionRewriteMixin:
             ast.fix_missing_locations(set_call)
             return set_call
 
-        def visit_Call(
-                self, node):  # pylint: disable=protected-access,too-many-locals,too-many-boolean-expressions,too-many-statements
+        def visit_Call(self, node):  # pylint: disable=protected-access,too-many-locals,too-many-boolean-expressions,too-many-statements
             if (isinstance(node.func, ast.Attribute) and node.func.attr == "join"
                     and len(node.args) == 1 and not node.keywords
                     and isinstance(node.args[0], ast.GeneratorExp)):
@@ -82,16 +81,11 @@ class ExpressionRewriteMixin:
                 self.statements.extend(prefix)
                 return result
 
-            is_list_map_call = (
-                isinstance(node.func, ast.Name)
-                and node.func.id == "list"
-                and len(node.args) == 1
-                and not node.keywords
-                and isinstance(node.args[0], ast.Call)
-                and isinstance(node.args[0].func, ast.Name)
-                and node.args[0].func.id == "map"
-                and len(node.args[0].args) == 2
-            )
+            is_list_map_call = (isinstance(node.func, ast.Name) and node.func.id == "list"
+                                and len(node.args) == 1 and not node.keywords
+                                and isinstance(node.args[0], ast.Call)
+                                and isinstance(node.args[0].func, ast.Name)
+                                and node.args[0].func.id == "map" and len(node.args[0].args) == 2)
             if is_list_map_call:
                 map_call = node.args[0]
                 func_expr = map_call.args[0]

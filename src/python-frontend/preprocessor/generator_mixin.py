@@ -30,7 +30,10 @@ class GeneratorMixin:
                         attr="append",
                         ctx=ast.Load(),
                     ),
-                    args=[node.value.value if node.value.value is not None else ast.Constant(value=None)],
+                    args=[
+                        node.value.value if node.value.value is not None else ast.Constant(
+                            value=None)
+                    ],
                     keywords=[],
                 ))
                 ast.copy_location(append_expr, node)
@@ -52,7 +55,8 @@ class GeneratorMixin:
             if isinstance(node.value, ast.Yield):
                 assign = ast.Assign(
                     targets=[ast.Name(id=self.target_name, ctx=ast.Store())],
-                    value=node.value.value if node.value.value is not None else ast.Constant(value=None),
+                    value=node.value.value if node.value.value is not None else ast.Constant(
+                        value=None),
                 )
                 ast.copy_location(assign, node)
                 ast.fix_missing_locations(assign)
@@ -86,9 +90,8 @@ class GeneratorMixin:
     def _select_min_max_index(key_values, is_min):
         best_idx = 0
         for i in range(1, len(key_values)):
-            if (is_min and key_values[i] < key_values[best_idx]) or (not is_min
-                                                                      and key_values[i] >
-                                                                      key_values[best_idx]):
+            if (is_min and key_values[i] < key_values[best_idx]) or (not is_min and key_values[i]
+                                                                     > key_values[best_idx]):
                 best_idx = i
         return best_idx
 
@@ -932,8 +935,7 @@ class GeneratorMixin:
         ast.fix_missing_locations(folded_sorted)
         return [], folded_sorted
 
-    def _lower_min_max_with_key_call(
-            self, call_node):  # pylint: disable=too-many-return-statements,too-many-locals,too-many-branches
+    def _lower_min_max_with_key_call(self, call_node):  # pylint: disable=too-many-return-statements,too-many-locals,too-many-branches
         """Lower min/max(iterable, key=lambda x: x[K]) for literal-list iterables.
 
         Mirrors _lower_sorted_with_key_call: handles only the narrow pattern of
@@ -1002,8 +1004,7 @@ class GeneratorMixin:
         ast.fix_missing_locations(result)
         return [], result
 
-    def _lower_tuple_sorted_pair_call(
-            self, call_node):  # pylint: disable=too-many-statements,too-many-locals,too-many-branches
+    def _lower_tuple_sorted_pair_call(self, call_node):  # pylint: disable=too-many-statements,too-many-locals,too-many-branches
         """Lower tuple(sorted([a, b])) to a conditional pair assignment.
 
         Instead of ``(a, b) if a <= b else (b, a)`` (which ESBMC encodes as a

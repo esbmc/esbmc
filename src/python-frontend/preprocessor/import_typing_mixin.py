@@ -86,8 +86,8 @@ class ImportTypingMixin:
             resolved_value = self._resolve_annotation_aliases(annotation.value)
             resolved_slice = annotation.slice
             if isinstance(annotation.slice, ast.Index):
-                resolved_slice = ast.Index(value=self._resolve_annotation_aliases(
-                    annotation.slice.value))
+                resolved_slice = ast.Index(
+                    value=self._resolve_annotation_aliases(annotation.slice.value))
             elif not isinstance(annotation.slice, (ast.Slice, ast.ExtSlice)):
                 resolved_slice = self._resolve_annotation_aliases(annotation.slice)
             return ast.Subscript(value=resolved_value, slice=resolved_slice, ctx=ast.Load())

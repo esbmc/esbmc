@@ -5,7 +5,8 @@ import ast
 class TypeInferenceMixin:
 
     def _extract_dict_method_element_type(self, iterable_node):
-        if not (isinstance(iterable_node, ast.Call) and isinstance(iterable_node.func, ast.Attribute)):
+        if not (isinstance(iterable_node, ast.Call)
+                and isinstance(iterable_node.func, ast.Attribute)):
             return None
         method_name = iterable_node.func.attr
         if method_name not in ("keys", "values"):
@@ -13,12 +14,12 @@ class TypeInferenceMixin:
         if not isinstance(iterable_node.func.value, ast.Name):
             return None
         dict_var_name = iterable_node.func.value.id
-        if not (hasattr(self, "variable_annotations") and dict_var_name in self.variable_annotations):
+        if not (hasattr(self, "variable_annotations")
+                and dict_var_name in self.variable_annotations):
             return None
         dict_annotation = self.variable_annotations[dict_var_name]
-        if not (isinstance(dict_annotation, ast.Subscript)
-                and isinstance(dict_annotation.slice, ast.Tuple)
-                and len(dict_annotation.slice.elts) >= 2):
+        if not (isinstance(dict_annotation, ast.Subscript) and isinstance(
+                dict_annotation.slice, ast.Tuple) and len(dict_annotation.slice.elts) >= 2):
             return None
         key_type, value_type = dict_annotation.slice.elts[0], dict_annotation.slice.elts[1]
         candidate = key_type if method_name == "keys" else value_type
@@ -53,8 +54,8 @@ class TypeInferenceMixin:
         element_annotation = annotation.slice
         if isinstance(element_annotation, ast.Name):
             return element_annotation.id
-        if isinstance(element_annotation, ast.Subscript) and isinstance(element_annotation.value,
-                                                                          ast.Name):
+        if isinstance(element_annotation, ast.Subscript) and isinstance(
+                element_annotation.value, ast.Name):
             return element_annotation.value.id
         return None
 
@@ -86,8 +87,7 @@ class TypeInferenceMixin:
             return "list"
         return "list"
 
-    def _get_element_type_from_container(
-            self, container_type, iterable_node=None):  # pylint: disable=too-many-branches,too-many-nested-blocks
+    def _get_element_type_from_container(self, container_type, iterable_node=None):  # pylint: disable=too-many-branches,too-many-nested-blocks
         dict_method_type = self._extract_dict_method_element_type(iterable_node)
         if dict_method_type is not None:
             return dict_method_type
@@ -103,7 +103,8 @@ class TypeInferenceMixin:
             if isinstance(first_elem, ast.Constant):
                 return type(first_elem.value).__name__
         if container_type.lower() in ["list", "tuple"]:
-            annotation_element_type = self._extract_list_tuple_annotation_element_type(iterable_node)
+            annotation_element_type = self._extract_list_tuple_annotation_element_type(
+                iterable_node)
             if annotation_element_type is not None:
                 return annotation_element_type
             return "Any"

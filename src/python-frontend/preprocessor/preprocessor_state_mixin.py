@@ -1,5 +1,6 @@
 """State initialization for composed preprocessor mixins."""
 
+
 class PreprocessorStateMixin:
 
     def _init_preprocessor_state(self, module_name):  # pylint: disable=too-many-statements

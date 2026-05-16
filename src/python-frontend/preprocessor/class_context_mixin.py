@@ -23,14 +23,10 @@ class ClassContextMixin:
         if not hasattr(self, "_exit_suppresses_all"):
             self._exit_suppresses_all = set()
         for member in class_node.body:
-            is_exit_true = (
-                isinstance(member, ast.FunctionDef)
-                and member.name == "__exit__"
-                and len(member.body) == 1
-                and isinstance(member.body[0], ast.Return)
-                and isinstance(member.body[0].value, ast.Constant)
-                and member.body[0].value.value is True
-            )
+            is_exit_true = (isinstance(member, ast.FunctionDef) and member.name == "__exit__"
+                            and len(member.body) == 1 and isinstance(member.body[0], ast.Return)
+                            and isinstance(member.body[0].value, ast.Constant)
+                            and member.body[0].value.value is True)
             if is_exit_true:
                 self._exit_suppresses_all.add(class_node.name)
                 return

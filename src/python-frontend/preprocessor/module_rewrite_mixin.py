@@ -215,8 +215,7 @@ class ModuleRewriteMixin:
         ]
 
     @staticmethod
-    def collect_range_wrappers(
-            module_node):  # pylint: disable=too-many-boolean-expressions
+    def collect_range_wrappers(module_node):  # pylint: disable=too-many-boolean-expressions
         """Collect trivial def f(p): return range(...) wrappers at module scope."""
         rebound = ModuleRewriteMixin._rebound_module_names(module_node)
         wrappers = {}
@@ -229,14 +228,9 @@ class ModuleRewriteMixin:
                     and call.func.id == "range" and not call.keywords):
                 continue
             args = stmt.args
-            has_non_simple_args = (
-                args.vararg is not None
-                or args.kwarg is not None
-                or args.kwonlyargs
-                or args.posonlyargs
-                or args.defaults
-                or args.kw_defaults
-            )
+            has_non_simple_args = (args.vararg is not None or args.kwarg is not None
+                                   or args.kwonlyargs or args.posonlyargs or args.defaults
+                                   or args.kw_defaults)
             if has_non_simple_args:
                 continue
             params = [a.arg for a in args.args]

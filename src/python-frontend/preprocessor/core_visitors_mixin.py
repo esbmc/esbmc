@@ -73,8 +73,7 @@ class CoreVisitorsMixin:
             return
         if (isinstance(node.value, ast.Call) and isinstance(node.value.func, ast.Name)
                 and node.value.func.id in self._identity_functions and len(node.value.args) == 1
-                and not node.value.keywords
-                and self._is_assert_literal_shape(node.value.args[0])):
+                and not node.value.keywords and self._is_assert_literal_shape(node.value.args[0])):
             self._known_literal_values[target_name] = copy.deepcopy(node.value.args[0])
             return
         self._known_literal_values.pop(target_name, None)
@@ -157,8 +156,8 @@ class CoreVisitorsMixin:
             dict_name = node.value.value.id
             key_node = node.value.slice
             factory = self._defaultdict_factory[dict_name]
-            init_stmts, key_expr = self._make_defaultdict_missing_check(dict_name, key_node,
-                                                                         factory, node)
+            init_stmts, key_expr = self._make_defaultdict_missing_check(
+                dict_name, key_node, factory, node)
             node.value.slice = key_expr
             return init_stmts + [node]
         return node
@@ -265,7 +264,8 @@ class CoreVisitorsMixin:
             method_name = node.func.attr
             if isinstance(node.func.value, ast.Name):
                 var_name = node.func.value.id
-                if (var_name not in self.known_variable_types and var_name not in self.functionParams
+                if (var_name not in self.known_variable_types
+                        and var_name not in self.functionParams
                         and not hasattr(__builtins__, var_name)):
                     return "__unknown__", [], []
             qualified_name = None
@@ -472,9 +472,11 @@ class CoreVisitorsMixin:
             if arg.annotation is not None:
                 arg.annotation = self._resolve_annotation_aliases(arg.annotation)
         if node.args.vararg and node.args.vararg.annotation is not None:
-            node.args.vararg.annotation = self._resolve_annotation_aliases(node.args.vararg.annotation)
+            node.args.vararg.annotation = self._resolve_annotation_aliases(
+                node.args.vararg.annotation)
         if node.args.kwarg and node.args.kwarg.annotation is not None:
-            node.args.kwarg.annotation = self._resolve_annotation_aliases(node.args.kwarg.annotation)
+            node.args.kwarg.annotation = self._resolve_annotation_aliases(
+                node.args.kwarg.annotation)
         for arg in node.args.kwonlyargs:
             if arg.annotation is not None:
                 arg.annotation = self._resolve_annotation_aliases(arg.annotation)
@@ -569,8 +571,7 @@ class CoreVisitorsMixin:
             return self._handle_single_target_assign(node)
         return self._handle_multi_target_assign(node)
 
-    def visit_Call(
-            self, node):  # pylint: disable=too-many-locals,too-many-branches,too-many-statements,import-outside-toplevel,no-else-raise
+    def visit_Call(self, node):  # pylint: disable=too-many-locals,too-many-branches,too-many-statements,import-outside-toplevel,no-else-raise
         self._invalidate_list_literals_for_call(node)
         rewritten_newtype = self._maybe_rewrite_newtype_call(node)
         if rewritten_newtype is not None:
@@ -597,8 +598,7 @@ class CoreVisitorsMixin:
         self.generic_visit(node)
         return node
 
-    def visit_FunctionDef(
-            self, node):  # pylint: disable=too-many-branches,too-many-statements
+    def visit_FunctionDef(self, node):  # pylint: disable=too-many-branches,too-many-statements
         node = self._rewrite_humaneval_20_none_sentinel(node)
 
         if (len(node.args.args) == 1 and len(node.body) == 1
