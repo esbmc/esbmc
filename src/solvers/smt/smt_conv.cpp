@@ -4216,11 +4216,7 @@ expr2tc smt_convt::get(const expr2tc &expr)
     {
       type2tc new_type = array_type2tc(
         new_subtype, new_outer_size, outer.size_is_infinite);
-      // clone() returns a refcount=1 node we exclusively own, so writing
-      // its type field doesn't disturb any other holder.
-      expr2tc fresh = res->clone();
-      fresh->type = new_type;
-      res = fresh;
+      res = res->with_type(new_type);
     }
   }
 

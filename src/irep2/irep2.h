@@ -794,6 +794,13 @@ public:
   /** Clone method. Self explanatory. */
   expr2tc clone() const;
 
+  /** Build a fresh expression of the same kind and field values as this
+   *  one, but with a different type. Drives base_type's functional
+   *  symbol-type resolution and other "rewrite the type, keep the
+   *  shape" callers — assumes every kind's primary constructor takes
+   *  (type, fields...) matching its K::fields tuple in order. */
+  expr2tc with_type(const type2tc &new_type) const;
+
   /* These are all self explanatory */
   bool operator==(const expr2t &ref) const;
   bool operator<(const expr2t &ref) const;
@@ -970,12 +977,7 @@ public:
   const expr_ids expr_id;
 
   /** Type of this expr. All exprs have a type. */
-  // TODO: const. base_type.cpp resolves symbol-types in place and several
-  // kinds have a fields-tuple order that doesn't match the ctor signature
-  // (e.g. ieee_sqrt2t), so a generic fields-driven `with_type` silently
-  // swaps args. Needs a per-kind with_type (likely macro-generated) or a
-  // mass field/ctor-order audit before this can flip to const.
-  type2tc type;
+  const type2tc type;
 
   // CRC cache; see commentary on type2t::crc_val.
   mutable std::atomic<size_t> crc_val;

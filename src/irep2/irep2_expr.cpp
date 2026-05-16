@@ -368,6 +368,67 @@ expr2tc expr2t::clone() const
   __builtin_unreachable();
 }
 
+namespace
+{
+// Build a fresh K with @p new_type as its type. If K's primary constructor
+// accepts a type as its first argument we substitute @p new_type for it
+// and forward the remaining fields. Some kinds (constant_bool, the
+// relation ops, etc.) derive their type from the value and don't have a
+// (type, ...) ctor; for them `with_type` has no semantic meaning and we
+// fall back to a plain copy. The SFINAE check makes the choice per kind.
+template <class K>
+expr2tc rebuild_with_type(const K &k, const type2tc &new_type)
+{
+  return std::apply(
+    [&](auto first_mp, auto... rest) {
+      using first_t = std::remove_cvref_t<decltype(first_mp)>;
+      if constexpr (std::is_same_v<first_t, type2tc expr2t::*>)
+      {
+        // First field is &expr2t::type — substitute and skip it.
+        if constexpr (std::is_constructible_v<
+                        K,
+                        const type2tc &,
+                        decltype(k.*rest)...>)
+          return make_irep<K>(new_type, k.*rest...);
+        else
+        {
+          (void)new_type;
+          return make_irep<K>(k);
+        }
+      }
+      else
+      {
+        // First field is not type — prepend new_type.
+        if constexpr (std::is_constructible_v<
+                        K,
+                        const type2tc &,
+                        decltype(k.*first_mp),
+                        decltype(k.*rest)...>)
+          return make_irep<K>(new_type, k.*first_mp, k.*rest...);
+        else
+        {
+          (void)new_type;
+          return make_irep<K>(k);
+        }
+      }
+    },
+    K::fields);
+}
+} // namespace
+
+expr2tc expr2t::with_type(const type2tc &new_type) const
+{
+  switch (expr_id)
+  {
+#define IREP2_EXPR(kind, _)                                                    \
+  case kind##_id:                                                              \
+    return rebuild_with_type(static_cast<const kind##2t &>(*this), new_type);
+#include <irep2/expr_kinds.inc>
+#undef IREP2_EXPR
+  }
+  __builtin_unreachable();
+}
+
 size_t expr2t::crc() const
 {
   switch (expr_id)

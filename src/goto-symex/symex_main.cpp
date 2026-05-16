@@ -1255,7 +1255,7 @@ void goto_symext::add_memory_leak_checks()
             i,
             e.identifier,
             e.suffix);
-          sym_expr2->type = migrate_type(sym->type);
+          sym_expr2 = sym_expr2->with_type(migrate_type(sym->type));
 
           /* Rename so that it reflects the current state. */
           assert(cur_state->call_stack.size() >= 1);

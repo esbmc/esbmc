@@ -323,14 +323,16 @@ void goto_symex_statet::rename_type(expr2tc &expr)
   if (is_nil_expr(expr))
     return;
 
-  type2tc &type = expr->type;
-  if (is_array_type(type))
+  // expr->type is const; rename symbolic array sizes on a CoW-detached copy
+  // and, if it changed, rebuild the expression with the renamed type.
+  if (is_array_type(expr->type))
   {
-    expr2tc &arr_size = to_array_type(type).array_size;
+    type2tc renamed = expr->type;
+    expr2tc &arr_size = to_array_type(renamed).array_size;
     if (!is_nil_expr(arr_size) && is_symbol2t(arr_size))
       rename(arr_size);
 
-    type->Foreach_subtype([this](type2tc &t) {
+    renamed->Foreach_subtype([this](type2tc &t) {
       if (!is_array_type(t))
         return;
 
@@ -338,6 +340,9 @@ void goto_symex_statet::rename_type(expr2tc &expr)
       if (!is_nil_expr(arr_size) && is_symbol2t(arr_size))
         rename(arr_size);
     });
+
+    if (renamed != expr->type)
+      expr = expr->with_type(renamed);
   }
 
   /* All subexpressions' types should also be renamed, this is in line with

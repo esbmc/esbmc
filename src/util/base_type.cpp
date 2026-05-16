@@ -98,7 +98,13 @@ void base_type(expr2tc &expr, const namespacet &ns)
   if (is_nil_expr(expr))
     return;
 
-  base_type(expr->type, ns);
+  // Resolve symbol-types in a local copy (CoW detaches automatically) and,
+  // if the result differs, rebuild the expression with the resolved type
+  // via expr2t::with_type. Keeps expr2t::type immutable.
+  type2tc resolved = expr->type;
+  base_type(resolved, ns);
+  if (resolved != expr->type)
+    expr = expr->with_type(resolved);
 
   expr->Foreach_operand([&ns](expr2tc &e) { base_type(e, ns); });
 }
