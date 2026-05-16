@@ -971,9 +971,11 @@ public:
   const expr_ids expr_id;
 
   /** Type of this expr. All exprs have a type. */
-  // TODO: should be const — currently mutated in smt_memspace.cpp and
-  // smt_conv.cpp via Foreach_subtype, both of which want a "construct
-  // a new expression with this type" idiom instead.
+  // TODO: const. base_type.cpp resolves symbol-types in place and several
+  // kinds have a fields-tuple order that doesn't match the ctor signature
+  // (e.g. ieee_sqrt2t), so a generic fields-driven `with_type` silently
+  // swaps args. Needs a per-kind with_type (likely macro-generated) or a
+  // mass field/ctor-order audit before this can flip to const.
   type2tc type;
 
   // CRC cache; see commentary on type2t::crc_val.

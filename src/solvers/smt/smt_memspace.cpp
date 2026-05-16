@@ -547,8 +547,7 @@ smt_astt smt_convt::convert_addr_of(const expr2tc &expr)
   {
     // Take the address of whatever's being cast. Either way, they all end up
     // being of a pointer_tuple type, so this should be fine.
-    expr2tc tmp = address_of2tc(type2tc(), to_typecast2t(obj.ptr_obj).from);
-    tmp->type = obj.type;
+    expr2tc tmp = address_of2tc(obj.type, to_typecast2t(obj.ptr_obj).from);
     return convert_ast(tmp);
   }
 

@@ -4182,18 +4182,39 @@ expr2tc smt_convt::get(const expr2tc &expr)
 
   if (is_array_type(expr->type))
   {
-    expr2tc &arr_size = to_array_type(res->type).array_size;
-    if (!is_nil_expr(arr_size) && is_symbol2t(arr_size))
-      arr_size = get(arr_size);
+    // Resolve symbolic array_size fields to the concrete values the solver
+    // assigned them. Functional rewrite: build a new array_type if any size
+    // changed, then rebuild res with that type. Mirrors the original two-level
+    // walk (outer array + its immediate subtype if also array); preserves the
+    // historic behaviour of not recursing further.
+    auto resolve_size = [this](expr2tc s) {
+      if (!is_nil_expr(s) && is_symbol2t(s))
+        return get(s);
+      return s;
+    };
 
-    res->type->Foreach_subtype([this](type2tc &t) {
-      if (!is_array_type(t))
-        return;
-
-      expr2tc &arr_size = to_array_type(t).array_size;
-      if (!is_nil_expr(arr_size) && is_symbol2t(arr_size))
-        arr_size = get(arr_size);
-    });
+    const array_type2t &outer = to_array_type(res->type);
+    expr2tc new_outer_size = resolve_size(outer.array_size);
+    type2tc new_subtype = outer.subtype;
+    if (is_array_type(new_subtype))
+    {
+      const array_type2t &inner = to_array_type(new_subtype);
+      expr2tc new_inner_size = resolve_size(inner.array_size);
+      if (new_inner_size != inner.array_size)
+        new_subtype = array_type2tc(
+          inner.subtype, new_inner_size, inner.size_is_infinite);
+    }
+    if (
+      new_outer_size != outer.array_size || new_subtype != outer.subtype)
+    {
+      type2tc new_type = array_type2tc(
+        new_subtype, new_outer_size, outer.size_is_infinite);
+      // clone() returns a refcount=1 node we exclusively own, so writing
+      // its type field doesn't disturb any other holder.
+      expr2tc fresh = res->clone();
+      fresh->type = new_type;
+      res = fresh;
+    }
   }
 
   // Recurse on operands
