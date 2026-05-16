@@ -5,6 +5,7 @@
 #include <irep2/irep2_type.h>
 #include <irep2/irep2_expr.h>
 #include <irep2/irep2_utils.h>
+#include <irep2/irep2_dispatch.h>
 #include <util/message/format.h>
 #include <util/migrate.h>
 #include <util/std_types.h>
@@ -387,7 +388,10 @@ bool expr2t::cmp_v2(const expr2t &o) const
   {
 #define IREP2_EXPR(kind, _)                                                    \
   case kind##_id:                                                               \
-    return static_cast<const kind##2t &>(*this).cmp(o);
+    if constexpr (esbmct::has_fields_v<kind##2t>)                              \
+      return esbmct::generic_cmp(static_cast<const kind##2t &>(*this), o);    \
+    else                                                                        \
+      return static_cast<const kind##2t &>(*this).cmp(o);
 #include <irep2/expr_kinds.inc>
 #undef IREP2_EXPR
   }
@@ -402,7 +406,10 @@ int expr2t::lt_v2(const expr2t &o) const
   {
 #define IREP2_EXPR(kind, _)                                                    \
   case kind##_id:                                                               \
-    return static_cast<const kind##2t &>(*this).lt(o);
+    if constexpr (esbmct::has_fields_v<kind##2t>)                              \
+      return esbmct::generic_lt(static_cast<const kind##2t &>(*this), o);     \
+    else                                                                        \
+      return static_cast<const kind##2t &>(*this).lt(o);
 #include <irep2/expr_kinds.inc>
 #undef IREP2_EXPR
   }
@@ -415,7 +422,10 @@ expr2tc expr2t::clone_v2() const
   {
 #define IREP2_EXPR(kind, _)                                                    \
   case kind##_id:                                                               \
-    return static_cast<const kind##2t &>(*this).clone();
+    if constexpr (esbmct::has_fields_v<kind##2t>)                              \
+      return esbmct::generic_clone(static_cast<const kind##2t &>(*this));     \
+    else                                                                        \
+      return static_cast<const kind##2t &>(*this).clone();
 #include <irep2/expr_kinds.inc>
 #undef IREP2_EXPR
   }
@@ -428,7 +438,10 @@ size_t expr2t::do_crc_v2() const
   {
 #define IREP2_EXPR(kind, _)                                                    \
   case kind##_id:                                                               \
-    return static_cast<const kind##2t &>(*this).do_crc();
+    if constexpr (esbmct::has_fields_v<kind##2t>)                              \
+      return esbmct::generic_do_crc(static_cast<const kind##2t &>(*this));    \
+    else                                                                        \
+      return static_cast<const kind##2t &>(*this).do_crc();
 #include <irep2/expr_kinds.inc>
 #undef IREP2_EXPR
   }
@@ -441,7 +454,10 @@ void expr2t::hash_v2(crypto_hash &h) const
   {
 #define IREP2_EXPR(kind, _)                                                    \
   case kind##_id:                                                               \
-    return static_cast<const kind##2t &>(*this).hash(h);
+    if constexpr (esbmct::has_fields_v<kind##2t>)                              \
+      return esbmct::generic_hash(static_cast<const kind##2t &>(*this), h);   \
+    else                                                                        \
+      return static_cast<const kind##2t &>(*this).hash(h);
 #include <irep2/expr_kinds.inc>
 #undef IREP2_EXPR
   }
@@ -454,7 +470,11 @@ list_of_memberst expr2t::tostring_v2(unsigned int indent) const
   {
 #define IREP2_EXPR(kind, _)                                                    \
   case kind##_id:                                                               \
-    return static_cast<const kind##2t &>(*this).tostring(indent);
+    if constexpr (esbmct::has_fields_v<kind##2t>)                              \
+      return esbmct::generic_tostring(                                         \
+        static_cast<const kind##2t &>(*this), indent);                        \
+    else                                                                        \
+      return static_cast<const kind##2t &>(*this).tostring(indent);
 #include <irep2/expr_kinds.inc>
 #undef IREP2_EXPR
   }
@@ -467,7 +487,11 @@ const expr2tc *expr2t::get_sub_expr_v2(size_t idx) const
   {
 #define IREP2_EXPR(kind, _)                                                    \
   case kind##_id:                                                               \
-    return static_cast<const kind##2t &>(*this).get_sub_expr(idx);
+    if constexpr (esbmct::has_fields_v<kind##2t>)                              \
+      return esbmct::generic_get_sub_expr(                                     \
+        static_cast<const kind##2t &>(*this), idx);                           \
+    else                                                                        \
+      return static_cast<const kind##2t &>(*this).get_sub_expr(idx);
 #include <irep2/expr_kinds.inc>
 #undef IREP2_EXPR
   }
@@ -480,7 +504,11 @@ expr2tc *expr2t::get_sub_expr_nc_v2(size_t idx)
   {
 #define IREP2_EXPR(kind, _)                                                    \
   case kind##_id:                                                               \
-    return static_cast<kind##2t &>(*this).get_sub_expr_nc(idx);
+    if constexpr (esbmct::has_fields_v<kind##2t>)                              \
+      return esbmct::generic_get_sub_expr_nc(                                  \
+        static_cast<kind##2t &>(*this), idx);                                  \
+    else                                                                        \
+      return static_cast<kind##2t &>(*this).get_sub_expr_nc(idx);
 #include <irep2/expr_kinds.inc>
 #undef IREP2_EXPR
   }
@@ -493,7 +521,11 @@ size_t expr2t::get_num_sub_exprs_v2() const
   {
 #define IREP2_EXPR(kind, _)                                                    \
   case kind##_id:                                                               \
-    return static_cast<const kind##2t &>(*this).get_num_sub_exprs();
+    if constexpr (esbmct::has_fields_v<kind##2t>)                              \
+      return esbmct::generic_get_num_sub_exprs(                                \
+        static_cast<const kind##2t &>(*this));                                 \
+    else                                                                        \
+      return static_cast<const kind##2t &>(*this).get_num_sub_exprs();
 #include <irep2/expr_kinds.inc>
 #undef IREP2_EXPR
   }
@@ -519,7 +551,12 @@ void expr2t::foreach_operand_impl_const_v2(const_op_delegate &f) const
   {
 #define IREP2_EXPR(kind, _)                                                    \
   case kind##_id:                                                               \
-    return static_cast<const kind##2t &>(*this).foreach_operand_impl_const(f);
+    if constexpr (esbmct::has_fields_v<kind##2t>)                              \
+      return esbmct::generic_foreach_operand_impl_const(                       \
+        static_cast<const kind##2t &>(*this), f);                             \
+    else                                                                        \
+      return static_cast<const kind##2t &>(*this).foreach_operand_impl_const( \
+        f);
 #include <irep2/expr_kinds.inc>
 #undef IREP2_EXPR
   }
@@ -532,7 +569,11 @@ void expr2t::foreach_operand_impl_v2(op_delegate &f)
   {
 #define IREP2_EXPR(kind, _)                                                    \
   case kind##_id:                                                               \
-    return static_cast<kind##2t &>(*this).foreach_operand_impl(f);
+    if constexpr (esbmct::has_fields_v<kind##2t>)                              \
+      return esbmct::generic_foreach_operand_impl(                             \
+        static_cast<kind##2t &>(*this), f);                                   \
+    else                                                                        \
+      return static_cast<kind##2t &>(*this).foreach_operand_impl(f);
 #include <irep2/expr_kinds.inc>
 #undef IREP2_EXPR
   }

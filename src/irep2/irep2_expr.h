@@ -1395,6 +1395,9 @@ public:
 
   expr2tc do_simplify() const override;
 
+  // Flat-layout migration marker (issue #4560): user fields only, no
+  // expr_id/type slots (this is a notype kind — type is always bool).
+  static constexpr auto fields = std::make_tuple(&not2t::value);
   static std::string field_names[esbmct::num_type_fields];
 };
 
