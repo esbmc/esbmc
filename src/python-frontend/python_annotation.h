@@ -862,8 +862,7 @@ private:
       const Json *next_enclosing = enclosing_func;
       if (
         node.contains("_type") &&
-        (node["_type"] == "FunctionDef" ||
-         node["_type"] == "AsyncFunctionDef"))
+        (node["_type"] == "FunctionDef" || node["_type"] == "AsyncFunctionDef"))
         next_enclosing = &node;
 
       if (
