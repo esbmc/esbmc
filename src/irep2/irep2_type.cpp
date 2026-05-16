@@ -5,6 +5,7 @@
 #include <irep2/irep2_type.h>
 #include <irep2/irep2_expr.h>
 #include <irep2/irep2_utils.h>
+#include <irep2/irep2_dispatch.h>
 #include <util/message.h>
 #include <util/message/format.h>
 #include <util/migrate.h>
@@ -102,15 +103,6 @@ bool type2t::cmpchecked(const type2t &ref) const
   return false;
 }
 
-int type2t::lt(const type2t &ref) const
-{
-  if (type_id < ref.type_id)
-    return -1;
-  if (type_id > ref.type_id)
-    return 1;
-  return 0;
-}
-
 std::string type2t::pretty(unsigned int indent) const
 {
   return pretty_print_func<const type2t &>(indent, type_names[type_id], *this);
@@ -124,21 +116,6 @@ void type2t::dump() const
 size_t type2t::crc() const
 {
   return do_crc();
-}
-
-size_t type2t::do_crc() const
-{
-  size_t v = this->crc_val.load(std::memory_order_relaxed);
-  esbmct::hash_combine(v, (uint8_t)type_id);
-  this->crc_val.store(v, std::memory_order_release);
-  return v;
-}
-
-void type2t::hash(crypto_hash &hash) const
-{
-  static_assert(type2t::end_type_id < 256, "Type id overflow");
-  uint8_t tid = type_id;
-  hash.ingest(&tid, sizeof(tid));
 }
 
 unsigned int bool_type2t::get_width() const
@@ -262,122 +239,119 @@ unsigned int code_data::get_width() const
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wswitch"
 
-bool type2t::cmp_v2(const type2t &o) const
+bool type2t::cmp(const type2t &o) const
 {
   if (type_id != o.type_id)
     return false;
   switch (type_id)
   {
 #define IREP2_TYPE(kind, _)                                                    \
-  case kind##_id:                                                               \
-    return static_cast<const kind##_type2t &>(*this).cmp(o);
+  case kind##_id:                                                              \
+    return esbmct::generic_cmp_type(                                           \
+      static_cast<const kind##_type2t &>(*this), o);
 #include <irep2/type_kinds.inc>
 #undef IREP2_TYPE
   }
   __builtin_unreachable();
 }
 
-int type2t::lt_v2(const type2t &o) const
+int type2t::lt(const type2t &o) const
 {
   if (type_id != o.type_id)
     return type_id < o.type_id ? -1 : 1;
   switch (type_id)
   {
 #define IREP2_TYPE(kind, _)                                                    \
-  case kind##_id:                                                               \
-    return static_cast<const kind##_type2t &>(*this).lt(o);
+  case kind##_id:                                                              \
+    return esbmct::generic_lt_type(                                            \
+      static_cast<const kind##_type2t &>(*this), o);
 #include <irep2/type_kinds.inc>
 #undef IREP2_TYPE
   }
   __builtin_unreachable();
 }
 
-type2tc type2t::clone_v2() const
+type2tc type2t::clone() const
 {
   switch (type_id)
   {
 #define IREP2_TYPE(kind, _)                                                    \
-  case kind##_id:                                                               \
-    return static_cast<const kind##_type2t &>(*this).clone();
+  case kind##_id:                                                              \
+    return esbmct::generic_clone_type(                                         \
+      static_cast<const kind##_type2t &>(*this));
 #include <irep2/type_kinds.inc>
 #undef IREP2_TYPE
   }
   __builtin_unreachable();
 }
 
-size_t type2t::do_crc_v2() const
+size_t type2t::do_crc() const
 {
   switch (type_id)
   {
 #define IREP2_TYPE(kind, _)                                                    \
-  case kind##_id:                                                               \
-    return static_cast<const kind##_type2t &>(*this).do_crc();
+  case kind##_id:                                                              \
+    return esbmct::generic_do_crc_type(                                        \
+      static_cast<const kind##_type2t &>(*this));
 #include <irep2/type_kinds.inc>
 #undef IREP2_TYPE
   }
   __builtin_unreachable();
 }
 
-void type2t::hash_v2(crypto_hash &h) const
+void type2t::hash(crypto_hash &h) const
 {
   switch (type_id)
   {
 #define IREP2_TYPE(kind, _)                                                    \
-  case kind##_id:                                                               \
-    return static_cast<const kind##_type2t &>(*this).hash(h);
+  case kind##_id:                                                              \
+    esbmct::generic_hash_type(                                                 \
+      static_cast<const kind##_type2t &>(*this), h);                           \
+    return;
 #include <irep2/type_kinds.inc>
 #undef IREP2_TYPE
   }
   __builtin_unreachable();
 }
 
-list_of_memberst type2t::tostring_v2(unsigned int indent) const
+list_of_memberst type2t::tostring(unsigned int indent) const
 {
   switch (type_id)
   {
 #define IREP2_TYPE(kind, _)                                                    \
-  case kind##_id:                                                               \
-    return static_cast<const kind##_type2t &>(*this).tostring(indent);
+  case kind##_id:                                                              \
+    return esbmct::generic_tostring_type(                                      \
+      static_cast<const kind##_type2t &>(*this), indent);
 #include <irep2/type_kinds.inc>
 #undef IREP2_TYPE
   }
   __builtin_unreachable();
 }
 
-unsigned int type2t::get_width_v2() const
+void type2t::foreach_subtype_impl_const(const_subtype_delegate &f) const
 {
   switch (type_id)
   {
 #define IREP2_TYPE(kind, _)                                                    \
-  case kind##_id:                                                               \
-    return static_cast<const kind##_type2t &>(*this).get_width();
+  case kind##_id:                                                              \
+    esbmct::generic_foreach_subtype_const(                                     \
+      static_cast<const kind##_type2t &>(*this), f);                           \
+    return;
 #include <irep2/type_kinds.inc>
 #undef IREP2_TYPE
   }
   __builtin_unreachable();
 }
 
-void type2t::foreach_subtype_impl_const_v2(const_subtype_delegate &f) const
+void type2t::foreach_subtype_impl(subtype_delegate &f)
 {
   switch (type_id)
   {
 #define IREP2_TYPE(kind, _)                                                    \
-  case kind##_id:                                                               \
-    return static_cast<const kind##_type2t &>(*this)                           \
-      .foreach_subtype_impl_const(f);
-#include <irep2/type_kinds.inc>
-#undef IREP2_TYPE
-  }
-  __builtin_unreachable();
-}
-
-void type2t::foreach_subtype_impl_v2(subtype_delegate &f)
-{
-  switch (type_id)
-  {
-#define IREP2_TYPE(kind, _)                                                    \
-  case kind##_id:                                                               \
-    return static_cast<kind##_type2t &>(*this).foreach_subtype_impl(f);
+  case kind##_id:                                                              \
+    esbmct::generic_foreach_subtype(                                           \
+      static_cast<kind##_type2t &>(*this), f);                                 \
+    return;
 #include <irep2/type_kinds.inc>
 #undef IREP2_TYPE
   }
@@ -385,6 +359,39 @@ void type2t::foreach_subtype_impl_v2(subtype_delegate &f)
 }
 
 #pragma GCC diagnostic pop
+
+// Field-name tables consumed by generic_tostring_type. Indexed by the
+// order in each type kind's `fields` tuple.
+std::string bool_type2t::field_names[esbmct::num_type_fields] =
+  {"", "", "", "", ""};
+std::string empty_type2t::field_names[esbmct::num_type_fields] =
+  {"", "", "", "", ""};
+std::string symbol_type2t::field_names[esbmct::num_type_fields] =
+  {"symbol_name", "", "", "", ""};
+std::string struct_type2t::field_names[esbmct::num_type_fields] =
+  {"members", "member_names", "member_pretty_names", "typename", "packed", ""};
+std::string union_type2t::field_names[esbmct::num_type_fields] =
+  {"members", "member_names", "member_pretty_names", "typename", "packed", ""};
+std::string unsignedbv_type2t::field_names[esbmct::num_type_fields] =
+  {"width", "", "", "", ""};
+std::string signedbv_type2t::field_names[esbmct::num_type_fields] =
+  {"width", "", "", "", ""};
+std::string code_type2t::field_names[esbmct::num_type_fields] =
+  {"arguments", "ret_type", "argument_names", "ellipsis", ""};
+std::string array_type2t::field_names[esbmct::num_type_fields] =
+  {"subtype", "array_size", "size_is_infinite", "", ""};
+std::string vector_type2t::field_names[esbmct::num_type_fields] =
+  {"subtype", "array_size", "size_is_infinite", "", ""};
+std::string pointer_type2t::field_names[esbmct::num_type_fields] =
+  {"subtype", "provenance", "", "", ""};
+std::string fixedbv_type2t::field_names[esbmct::num_type_fields] =
+  {"width", "integer_bits", "", "", ""};
+std::string floatbv_type2t::field_names[esbmct::num_type_fields] =
+  {"fraction", "exponent", "", "", ""};
+std::string complex_type2t::field_names[esbmct::num_type_fields] =
+  {"members", "member_names", "member_pretty_names", "typename", "packed", ""};
+std::string cpp_name_type2t::field_names[esbmct::num_type_fields] =
+  {"name", "template args", "", "", ""};
 
 const std::vector<type2tc> &struct_union_data::get_structure_members() const
 {

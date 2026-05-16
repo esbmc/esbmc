@@ -50,11 +50,8 @@
 // predicate generators, the pretty name tables) #include the matching
 // .inc with a redefining IREP2_EXPR / IREP2_TYPE macro.
 
-// Even crazier forward decls,
 namespace esbmct
 {
-template <typename... Args>
-class type2t_traits;
 
 /** Type-erased callable reference: non-owning, two pointers wide, no
  *  heap allocation. Replaces the historic `std::function` delegates
@@ -122,8 +119,6 @@ inline void hash_combine(std::size_t &seed, const T &v)
 
 class type2t;
 class expr2t;
-class constant_array2t;
-class constant_vector2t;
 
 /** Reference counted container for irep2 nodes.
  *
@@ -558,9 +553,6 @@ public:
     end_type_id
   };
 
-  /* Define default traits */
-  typedef typename esbmct::type2t_traits<> traits;
-
   /** Symbolic type exception class.
    *  To be thrown when attempting to fetch the width of a symbolic type, such
    *  as empty or code. Caller will have to worry about what to do about that.
@@ -591,12 +583,8 @@ protected:
   /** Copy constructor */
   type2t(const type2t &ref);
 
-  virtual void foreach_subtype_impl_const(const_subtype_delegate &t) const = 0;
-  virtual void foreach_subtype_impl(subtype_delegate &t) = 0;
-
-  // Non-virtual switch-based dispatchers (issue #4560 scaffolding).
-  void foreach_subtype_impl_const_v2(const_subtype_delegate &t) const;
-  void foreach_subtype_impl_v2(subtype_delegate &t);
+  virtual void foreach_subtype_impl_const(const_subtype_delegate &t) const;
+  virtual void foreach_subtype_impl(subtype_delegate &t);
 
 public:
   // Provide base / container types for some templates stuck on top:
@@ -675,7 +663,7 @@ public:
    *  @param ref Reference to (same class of) type to compare against
    *  @return True if types match, false otherwise
    */
-  virtual bool cmp(const type2t &ref) const = 0;
+  virtual bool cmp(const type2t &ref) const;
 
   /** Virtual method to compare two types.
    *  To be overridden by an extending type; assumes that itself and the
@@ -693,7 +681,7 @@ public:
    *  @param indent Number of spaces to indent output strings with, if multiline
    *  @return list of name:value pairs.
    */
-  virtual list_of_memberst tostring(unsigned int indent) const = 0;
+  virtual list_of_memberst tostring(unsigned int indent) const;
 
   /** Perform crc operation accumulating into parameter.
    *  Performs the operation of the crc method, but overridden to be specific to
@@ -718,7 +706,7 @@ public:
   /** Clone method. Self explanatory.
    *  @return New container, containing a duplicate of this object.
    */
-  virtual type2tc clone() const = 0;
+  virtual type2tc clone() const;
 
   // Please see the equivalent methods in expr2t for documentation
   template <typename T>
@@ -734,17 +722,6 @@ public:
     subtype_delegate wrapped(t);
     foreach_subtype_impl(wrapped);
   }
-
-  // Non-virtual switch-based dispatchers (issue #4560 scaffolding).
-  // These coexist with the virtual methods and will replace them once all
-  // kinds are migrated to the flat struct layout.
-  bool cmp_v2(const type2t &ref) const;
-  int lt_v2(const type2t &ref) const;
-  type2tc clone_v2() const;
-  size_t do_crc_v2() const;
-  void hash_v2(crypto_hash &hash) const;
-  list_of_memberst tostring_v2(unsigned int indent) const;
-  unsigned int get_width_v2() const;
 
   /** Instance of type_ids recording this types type. */
   // XXX XXX XXX this should be const
@@ -1186,136 +1163,6 @@ public:
 template <typename R, typename C, R C::*v>
 constexpr
   typename field_traits<R, C, v>::membr_ptr field_traits<R, C, v>::value;
-
-/** Trait class for type2t ireps.
- *  This takes a list of field traits and puts it in a tuple, with the record
- *  for the type_id field (common to all type2t's) put at the front. The
- *  `fields` tuple drives the per-field fold expressions in irep_methods2;
- *  it is the single source of truth for which fields participate in
- *  cmp/lt/crc/hash/operand-iteration. */
-template <typename... Args>
-class type2t_traits
-{
-public:
-  typedef field_traits<type2t::type_ids, type2t, &type2t::type_id>
-    type_id_field;
-  typedef std::tuple<type_id_field, Args...> fields;
-  typedef type2t base2t;
-};
-
-// Declaration of irep and type methods templates. The class walks
-// `traits::fields` (a std::tuple of field_traits entries) via fold
-// expressions in a single non-recursive class.
-template <class derived, class baseclass, typename traits>
-class irep_methods2;
-template <class derived, class baseclass, typename traits>
-class type_methods2;
-
-/** Definition of irep methods template.
- *
- *  @param derived The inheritor class, like add2t
- *  @param baseclass Class containing fields for methods to be defined over
- *  @param traits Type traits for baseclass
- *
- *  A typical irep inheritance looks like this:
- *
- *    b   Base class, such as type2t or expr2t
- *    d   Data class, containing storage fields for ireps
- *    M   irep_methods2 — implements the boilerplate methods (cmp/lt/
- *        clone/crc/hash/tostring/operand iteration) by walking
- *        traits::fields with a fold expression
- *    t   Top level class such as add2t
- *
- *  Each method body is a single fold over the trait list — no inheritance
- *  recursion, no per-field chain levels, no Boost.MP11. Adding a new node
- *  needs the data class to declare its fields and a fields tuple in its
- *  traits; the methods are inherited unchanged.
- */
-template <class derived, class baseclass, typename traits>
-class irep_methods2 : public baseclass
-{
-public:
-  typedef typename baseclass::base_type base2t;
-  typedef irep_container<base2t> base_container2tc;
-
-  template <typename... Args>
-  irep_methods2(const Args &...args) : baseclass(args...)
-  {
-  }
-
-  // Copy constructor. Construct from derived ref rather than just
-  // irep_methods2, because the template above will be able to directly
-  // match a const derived &, and so the compiler won't cast it up to
-  // const irep_methods2 & and call the copy constructor. Fix this by
-  // defining a copy constructor that exactly matches the (only) use case.
-  irep_methods2(const derived &ref) : baseclass(ref)
-  {
-  }
-
-  // The trait list is a std::tuple of field_traits<R, C, R C::*> entries.
-  // for_each_field instantiates a default-constructed field_traits per
-  // element (they carry only constexpr state) and lets the caller use
-  // decltype(f) to recover R / C / value.
-  template <typename F>
-  static void for_each_field(F &&f)
-  {
-    std::apply(
-      [&](auto... entries) { (f(entries), ...); }, typename traits::fields{});
-  }
-
-  // Method bodies live in irep2_meta_templates.h, which is included
-  // after irep2_template_utils.h so the per-field-type helpers
-  // (do_type_cmp, do_type_lt, do_type_crc, do_type_hash, do_type2string,
-  // do_get_sub_expr*, call_expr_delegate, call_type_delegate) are
-  // visible at the point of instantiation. Keeping the bodies out of
-  // irep2.h avoids the dependency cycle that would otherwise force
-  // irep2.h to include irep2_template_utils.h before the types those
-  // helpers operate on (sideeffect_data::allockind etc.) are defined.
-  base_container2tc clone() const override;
-  list_of_memberst tostring(unsigned int indent) const override;
-  bool cmp(const base2t &ref) const override;
-  int lt(const base2t &ref) const override;
-  size_t do_crc() const override;
-  void hash(crypto_hash &h) const override;
-
-protected:
-  // Used by type_methods2 for subtype iteration. Definitions in
-  // irep2_meta_templates.h.
-  template <typename Delegate>
-  void foreach_subtype_impl_const_inner(Delegate &f) const;
-  template <typename Delegate>
-  void foreach_subtype_impl_inner(Delegate &f);
-};
-
-/** Type methods template for type ireps.
- *  Like @expr_methods2, but for types. */
-template <class derived, class baseclass, typename traits>
-class type_methods2 : public irep_methods2<derived, baseclass, traits>
-{
-public:
-  typedef irep_methods2<derived, baseclass, traits> superclass;
-
-  template <typename... Args>
-  type_methods2(const Args &...args) : superclass(args...)
-  {
-  }
-
-  // See notes on irep_methods2 copy constructor
-  type_methods2(const derived &ref) : superclass(ref)
-  {
-  }
-
-  void
-  foreach_subtype_impl_const(type2t::const_subtype_delegate &f) const override
-  {
-    this->foreach_subtype_impl_const_inner(f);
-  }
-
-  void foreach_subtype_impl(type2t::subtype_delegate &f) override
-  {
-    this->foreach_subtype_impl_inner(f);
-  }
-};
 
 } // namespace esbmct
 

@@ -199,4 +199,94 @@ void generic_foreach_operand_impl(K &a, expr2t::op_delegate &f)
     [&](auto... mp) { (call_expr_delegate(a.*mp, f), ...); }, K::fields);
 }
 
+// --------------------------------------------------------------------------
+// Type-side generic helpers. Identical shape to the expr-side ones above
+// but typed against type2t and folding type_id (instead of expr_id) into
+// crc/hash. Type kinds' `fields` tuples list only user-visible fields —
+// type_id is mixed in here at the head of crc/hash and is short-circuited
+// by the outer switch boundary for cmp/lt.
+// --------------------------------------------------------------------------
+
+template <class K>
+bool generic_cmp_type(const K &a, const type2t &o)
+{
+  const K &b = static_cast<const K &>(o);
+  bool eq = true;
+  std::apply(
+    [&](auto... mp) { ((eq = eq && do_type_cmp(a.*mp, b.*mp)), ...); },
+    K::fields);
+  return eq;
+}
+
+template <class K>
+int generic_lt_type(const K &a, const type2t &o)
+{
+  const K &b = static_cast<const K &>(o);
+  int r = 0;
+  std::apply(
+    [&](auto... mp) {
+      ((r == 0 ? (void)(r = do_type_lt(a.*mp, b.*mp)) : (void)0), ...);
+    },
+    K::fields);
+  return r;
+}
+
+template <class K>
+type2tc generic_clone_type(const K &a)
+{
+  return make_irep<K>(a);
+}
+
+template <class K>
+size_t generic_do_crc_type(const K &a)
+{
+  if (size_t cached = a.crc_val.load(std::memory_order_acquire); cached != 0)
+    return cached;
+  size_t v = 0;
+  hash_combine(v, do_type_crc(a.type_id));
+  std::apply(
+    [&](auto... mp) { (hash_combine(v, do_type_crc(a.*mp)), ...); },
+    K::fields);
+  a.crc_val.store(v, std::memory_order_release);
+  return v;
+}
+
+template <class K>
+void generic_hash_type(const K &a, crypto_hash &h)
+{
+  do_type_hash(a.type_id, h);
+  std::apply([&](auto... mp) { (do_type_hash(a.*mp, h), ...); }, K::fields);
+}
+
+template <class K>
+list_of_memberst generic_tostring_type(const K &a, unsigned int indent)
+{
+  list_of_memberst vec;
+  unsigned int idx = 0;
+  std::apply(
+    [&](auto... mp) {
+      (..., ([&]() {
+        do_type2string(a.*mp, idx++, K::field_names, vec, indent);
+      }()));
+    },
+    K::fields);
+  return vec;
+}
+
+template <class K>
+void generic_foreach_subtype_const(
+  const K &a,
+  type2t::const_subtype_delegate &f)
+{
+  std::apply(
+    [&](auto... mp) { (call_type_delegate(a.*mp, f), ...); }, K::fields);
+}
+
+template <class K>
+void generic_foreach_subtype(K &a, type2t::subtype_delegate &f)
+{
+  std::apply(
+    [&](auto... mp) { (call_type_delegate(a.*mp, f), ...); }, K::fields);
+}
+
 } // namespace esbmct

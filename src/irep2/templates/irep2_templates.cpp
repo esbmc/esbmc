@@ -5,39 +5,6 @@ std::string indent_str_irep2(unsigned int indent)
   return std::string(indent, ' ');
 }
 
-std::string bool_type2t::field_names[esbmct::num_type_fields] =
-  {"", "", "", "", ""};
-std::string empty_type2t::field_names[esbmct::num_type_fields] =
-  {"", "", "", "", ""};
-std::string symbol_type2t::field_names[esbmct::num_type_fields] =
-  {"symbol_name", "", "", "", ""};
-std::string struct_type2t::field_names[esbmct::num_type_fields] =
-  {"members", "member_names", "member_pretty_names", "typename", "packed", ""};
-std::string union_type2t::field_names[esbmct::num_type_fields] =
-  {"members", "member_names", "member_pretty_names", "typename", "packed", ""};
-std::string unsignedbv_type2t::field_names[esbmct::num_type_fields] =
-  {"width", "", "", "", ""};
-std::string signedbv_type2t::field_names[esbmct::num_type_fields] =
-  {"width", "", "", "", ""};
-std::string code_type2t::field_names[esbmct::num_type_fields] =
-  {"arguments", "ret_type", "argument_names", "ellipsis", ""};
-std::string array_type2t::field_names[esbmct::num_type_fields] =
-  {"subtype", "array_size", "size_is_infinite", "", ""};
-std::string vector_type2t::field_names[esbmct::num_type_fields] =
-  {"subtype", "array_size", "size_is_infinite", "", ""};
-std::string pointer_type2t::field_names[esbmct::num_type_fields] =
-  {"subtype", "provenance", "", "", ""};
-std::string fixedbv_type2t::field_names[esbmct::num_type_fields] =
-  {"width", "integer_bits", "", "", ""};
-std::string floatbv_type2t::field_names[esbmct::num_type_fields] =
-  {"fraction", "exponent", "", "", ""};
-std::string complex_type2t::field_names[esbmct::num_type_fields] =
-  {"members", "member_names", "member_pretty_names", "typename", "packed", ""};
-std::string cpp_name_type2t::field_names[esbmct::num_type_fields] =
-  {"name", "template args", "", "", ""};
-
-// Exprs
-
 std::string constant_int2t::field_names[esbmct::num_type_fields] =
   {"value", "", "", "", ""};
 std::string constant_fixedbv2t::field_names[esbmct::num_type_fields] =

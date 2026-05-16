@@ -1,5 +1,4 @@
-add_library(irep2 templates/irep2_templates_type.cpp
-  templates/irep2_templates.cpp
+add_library(irep2 templates/irep2_templates.cpp
   templates/irep2_template_utils.cpp
   irep2_type.cpp
   irep2_expr.cpp
