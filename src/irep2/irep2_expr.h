@@ -1107,6 +1107,8 @@ public:
     }                                                                          \
     name##2t(const name##2t & ref) = default;                                  \
     expr2tc do_simplify() const override;                                      \
+    static constexpr auto fields =                                             \
+      std::make_tuple(&expr2t::type, &name##2t::side_1, &name##2t::side_2);   \
     static std::string field_names[esbmct::num_type_fields];                   \
   }
 
@@ -1365,6 +1367,7 @@ ESBMC_DEFINE_TYPE_ONLY(null_object);
     }                                                                          \
     name##2t(const name##2t & ref) = default;                                  \
     expr2tc do_simplify() const override;                                      \
+    static constexpr auto fields = std::make_tuple(&name##2t::operand);        \
     static std::string field_names[esbmct::num_type_fields];                   \
   }
 
@@ -1387,6 +1390,8 @@ ESBMC_DEFINE_CODE_EXPRESSION_1OP(code_cpp_delete);
     }                                                                          \
     name##2t(const name##2t & ref) = default;                                  \
     expr2tc do_simplify() const override;                                      \
+    static constexpr auto fields =                                             \
+      std::make_tuple(&expr2t::type, &name##2t::value);                        \
     static std::string field_names[esbmct::num_type_fields];                   \
   }
 
@@ -1407,6 +1412,8 @@ ESBMC_DEFINE_CODE_DECL(code_dead);
     }                                                                          \
     name##2t(const name##2t & ref) = default;                                  \
     expr2tc do_simplify() const override;                                      \
+    static constexpr auto fields =                                             \
+      std::make_tuple(&expr2t::type, &name##2t::exception_list);               \
     static std::string field_names[esbmct::num_type_fields];                   \
   }
 
