@@ -508,7 +508,7 @@ std::string constant_floatbv2t::field_names[esbmct::num_type_fields] =
 std::string constant_struct2t::field_names[esbmct::num_type_fields] =
   {"members", "", "", "", ""};
 std::string constant_union2t::field_names[esbmct::num_type_fields] =
-  {"members", "init_field", "", "", ""};
+  {"init_field", "members", "", "", ""};
 std::string constant_bool2t::field_names[esbmct::num_type_fields] =
   {"value", "", "", "", ""};
 std::string constant_array2t::field_names[esbmct::num_type_fields] =
@@ -584,9 +584,9 @@ std::string ieee_mul2t::field_names[esbmct::num_type_fields] =
 std::string ieee_div2t::field_names[esbmct::num_type_fields] =
   {"rounding_mode", "side_1", "side_2", "", "", ""};
 std::string ieee_fma2t::field_names[esbmct::num_type_fields] =
-  {"rounding_mode", "value_1", "value_2", "value_3", "", ""};
+  {"value_1", "value_2", "value_3", "rounding_mode", "", ""};
 std::string ieee_sqrt2t::field_names[esbmct::num_type_fields] =
-  {"rounding_mode", "value", "", "", ""};
+  {"value", "rounding_mode", "", "", ""};
 std::string modulus2t::field_names[esbmct::num_type_fields] =
   {"side_1", "side_2", "", "", ""};
 std::string shl2t::field_names[esbmct::num_type_fields] =

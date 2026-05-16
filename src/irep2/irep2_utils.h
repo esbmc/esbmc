@@ -44,11 +44,6 @@ inline bool is_fractional_type(const type2tc &t)
   return t->type_id == type2t::fixedbv_id || t->type_id == type2t::floatbv_id;
 }
 
-inline bool is_fractional_type(const expr2tc &e)
-{
-  return is_bv_type(e->type);
-}
-
 /** Test whether @p e is a relational comparison: ==, !=, <, >, <=, >=. */
 inline bool is_comparison_expr(const expr2tc &e)
 {

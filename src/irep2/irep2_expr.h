@@ -472,8 +472,8 @@ public:
 
   static constexpr auto fields = std::make_tuple(
     &expr2t::type,
-    &constant_union2t::datatype_members,
-    &constant_union2t::init_field);
+    &constant_union2t::init_field,
+    &constant_union2t::datatype_members);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -1261,10 +1261,10 @@ public:
 
   static constexpr auto fields = std::make_tuple(
     &expr2t::type,
-    &ieee_fma2t::rounding_mode,
     &ieee_fma2t::value_1,
     &ieee_fma2t::value_2,
-    &ieee_fma2t::value_3);
+    &ieee_fma2t::value_3,
+    &ieee_fma2t::rounding_mode);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -1291,8 +1291,8 @@ public:
 
   static constexpr auto fields = std::make_tuple(
     &expr2t::type,
-    &ieee_sqrt2t::rounding_mode,
-    &ieee_sqrt2t::value);
+    &ieee_sqrt2t::value,
+    &ieee_sqrt2t::rounding_mode);
   static std::string field_names[esbmct::num_type_fields];
 };
 
