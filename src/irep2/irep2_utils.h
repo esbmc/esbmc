@@ -222,7 +222,7 @@ inline const expr2tc &logic2_side1(const expr2tc &e)
   case expr2t::or_id:      return to_or2t(e).side_1;
   case expr2t::xor_id:     return to_xor2t(e).side_1;
   case expr2t::implies_id: return to_implies2t(e).side_1;
-  default:                 abort();
+  default:                 irep2_bad_family_cast(e->expr_id, "logic2_side1");
   }
 }
 
@@ -234,7 +234,7 @@ inline const expr2tc &logic2_side2(const expr2tc &e)
   case expr2t::or_id:      return to_or2t(e).side_2;
   case expr2t::xor_id:     return to_xor2t(e).side_2;
   case expr2t::implies_id: return to_implies2t(e).side_2;
-  default:                 abort();
+  default:                 irep2_bad_family_cast(e->expr_id, "logic2_side2");
   }
 }
 
@@ -249,7 +249,7 @@ inline const expr2tc &arith_side1(const expr2tc &e)
   case expr2t::mul_id:      return to_mul2t(e).side_1;
   case expr2t::div_id:      return to_div2t(e).side_1;
   case expr2t::modulus_id:  return to_modulus2t(e).side_1;
-  default:                  abort();
+  default:                  irep2_bad_family_cast(e->expr_id, "arith_side1");
   }
 }
 
@@ -262,7 +262,7 @@ inline const expr2tc &arith_side2(const expr2tc &e)
   case expr2t::mul_id:      return to_mul2t(e).side_2;
   case expr2t::div_id:      return to_div2t(e).side_2;
   case expr2t::modulus_id:  return to_modulus2t(e).side_2;
-  default:                  abort();
+  default:                  irep2_bad_family_cast(e->expr_id, "arith_side2");
   }
 }
 
@@ -275,7 +275,7 @@ inline const expr2tc &ieee2_side1(const expr2tc &e)
   case expr2t::ieee_sub_id: return to_ieee_sub2t(e).side_1;
   case expr2t::ieee_mul_id: return to_ieee_mul2t(e).side_1;
   case expr2t::ieee_div_id: return to_ieee_div2t(e).side_1;
-  default:                  abort();
+  default:                  irep2_bad_family_cast(e->expr_id, "ieee2_side1");
   }
 }
 
@@ -287,7 +287,7 @@ inline const expr2tc &ieee2_side2(const expr2tc &e)
   case expr2t::ieee_sub_id: return to_ieee_sub2t(e).side_2;
   case expr2t::ieee_mul_id: return to_ieee_mul2t(e).side_2;
   case expr2t::ieee_div_id: return to_ieee_div2t(e).side_2;
-  default:                  abort();
+  default:                  irep2_bad_family_cast(e->expr_id, "ieee2_side2");
   }
 }
 
@@ -299,7 +299,7 @@ inline const expr2tc &ieee2_rounding_mode(const expr2tc &e)
   case expr2t::ieee_sub_id: return to_ieee_sub2t(e).rounding_mode;
   case expr2t::ieee_mul_id: return to_ieee_mul2t(e).rounding_mode;
   case expr2t::ieee_div_id: return to_ieee_div2t(e).rounding_mode;
-  default:                  abort();
+  default: irep2_bad_family_cast(e->expr_id, "ieee2_rounding_mode");
   }
 }
 
@@ -314,7 +314,7 @@ inline const expr2tc &bit2_side1(const expr2tc &e)
   case expr2t::shl_id:    return to_shl2t(e).side_1;
   case expr2t::ashr_id:   return to_ashr2t(e).side_1;
   case expr2t::lshr_id:   return to_lshr2t(e).side_1;
-  default:                abort();
+  default:                irep2_bad_family_cast(e->expr_id, "bit2_side1");
   }
 }
 
@@ -328,7 +328,7 @@ inline const expr2tc &bit2_side2(const expr2tc &e)
   case expr2t::shl_id:    return to_shl2t(e).side_2;
   case expr2t::ashr_id:   return to_ashr2t(e).side_2;
   case expr2t::lshr_id:   return to_lshr2t(e).side_2;
-  default:                abort();
+  default:                irep2_bad_family_cast(e->expr_id, "bit2_side2");
   }
 }
 
@@ -344,7 +344,7 @@ inline const expr2tc &comp_side1(const expr2tc &e)
   case expr2t::greaterthan_id:      return to_greaterthan2t(e).side_1;
   case expr2t::lessthanequal_id:    return to_lessthanequal2t(e).side_1;
   case expr2t::greaterthanequal_id: return to_greaterthanequal2t(e).side_1;
-  default:                          abort();
+  default:                          irep2_bad_family_cast(e->expr_id, "comp_side1");
   }
 }
 
@@ -358,7 +358,7 @@ inline const expr2tc &comp_side2(const expr2tc &e)
   case expr2t::greaterthan_id:      return to_greaterthan2t(e).side_2;
   case expr2t::lessthanequal_id:    return to_lessthanequal2t(e).side_2;
   case expr2t::greaterthanequal_id: return to_greaterthanequal2t(e).side_2;
-  default:                          abort();
+  default:                          irep2_bad_family_cast(e->expr_id, "comp_side2");
   }
 }
 
@@ -375,7 +375,7 @@ make_comp_expr(const expr2tc &templ, const expr2tc &s1, const expr2tc &s2)
   case expr2t::greaterthan_id:      return greaterthan2tc(s1, s2);
   case expr2t::lessthanequal_id:    return lessthanequal2tc(s1, s2);
   case expr2t::greaterthanequal_id: return greaterthanequal2tc(s1, s2);
-  default:                          abort();
+  default: irep2_bad_family_cast(templ->expr_id, "make_comp_expr");
   }
 }
 

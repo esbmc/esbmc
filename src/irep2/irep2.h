@@ -54,8 +54,6 @@
 namespace esbmct
 {
 template <typename... Args>
-class expr2t_traits;
-template <typename... Args>
 class type2t_traits;
 
 /** Type-erased callable reference: non-owning, two pointers wide, no
@@ -829,8 +827,6 @@ public:
   // Provide base / container types for some templates stuck on top:
   typedef expr2tc container_type;
   typedef expr2t base_type;
-  // Also provide base traits
-  typedef esbmct::expr2t_traits<> traits;
 
   virtual ~expr2t() = default;
 
@@ -1207,43 +1203,11 @@ public:
   typedef type2t base2t;
 };
 
-/** Trait class for expr2t ireps.
- *  Same idea as type2t_traits but with an expr_id slot and a type slot
- *  prepended (every expr2t carries both). Records some additional flags
- *  about the usage of the expression -- specifically what a unary
- *  constructor will do (@see something2tc::something2tc). */
-template <typename... Args>
-class expr2t_traits
-{
-public:
-  typedef field_traits<const expr2t::expr_ids, expr2t, &expr2t::expr_id>
-    expr_id_field;
-  typedef field_traits<type2tc, expr2t, &expr2t::type> type_field;
-  typedef std::tuple<expr_id_field, type_field, Args...> fields;
-  typedef expr2t base2t;
-};
-
-// "Specialization" for expr kinds where the type is derived, like boolean
-// typed exprs. Should actually become a more structured expr2t_traits
-// that can be specialized in this way, at a later date. Might want to
-// move the presumed type down to the _data class at that time too.
-template <typename... Args>
-class expr2t_traits_notype
-{
-public:
-  typedef field_traits<const expr2t::expr_ids, expr2t, &expr2t::expr_id>
-    expr_id_field;
-  typedef std::tuple<expr_id_field, Args...> fields;
-  typedef expr2t base2t;
-};
-
-// Declaration of irep and expr methods templates. The class walks
+// Declaration of irep and type methods templates. The class walks
 // `traits::fields` (a std::tuple of field_traits entries) via fold
 // expressions in a single non-recursive class.
 template <class derived, class baseclass, typename traits>
 class irep_methods2;
-template <class derived, class baseclass, typename traits>
-class expr_methods2;
 template <class derived, class baseclass, typename traits>
 class type_methods2;
 
@@ -1323,56 +1287,6 @@ protected:
   void foreach_subtype_impl_inner(Delegate &f);
 };
 
-/** Expression methods template for expr ireps.
- *  This class works on the same principle as @irep_methods2 but provides
- *  head methods for get_sub_expr and so forth, which are
- *  specific to expression ireps. The actual implementation of these methods
- *  are provided in irep_methods to avoid un-necessary recursion but are
- *  protected; here we provide the head methods publically to allow the
- *  programmer to call in.
- *  */
-template <class derived, class baseclass, typename traits>
-class expr_methods2 : public irep_methods2<derived, baseclass, traits>
-{
-public:
-  typedef irep_methods2<derived, baseclass, traits> superclass;
-
-  template <typename... Args>
-  expr_methods2(const Args &...args) : superclass(args...)
-  {
-  }
-
-  // See notes on irep_methods2 copy constructor
-  expr_methods2(const derived &ref) : superclass(ref)
-  {
-  }
-
-  const expr2tc *get_sub_expr(size_t i) const override
-  {
-    return this->get_sub_expr_v2(i);
-  }
-
-  expr2tc *get_sub_expr_nc(size_t i) override
-  {
-    return this->get_sub_expr_nc_v2(i);
-  }
-
-  size_t get_num_sub_exprs() const override
-  {
-    return this->get_num_sub_exprs_v2();
-  }
-
-  void foreach_operand_impl_const(expr2t::const_op_delegate &f) const override
-  {
-    this->foreach_operand_impl_const_v2(f);
-  }
-
-  void foreach_operand_impl(expr2t::op_delegate &f) override
-  {
-    this->foreach_operand_impl_v2(f);
-  }
-};
-
 /** Type methods template for type ireps.
  *  Like @expr_methods2, but for types. */
 template <class derived, class baseclass, typename traits>
@@ -1446,6 +1360,7 @@ public:
 irep2_bad_type_cast(unsigned actual, unsigned expected, const char *target);
 [[noreturn]] void
 irep2_bad_expr_cast(unsigned actual, unsigned expected, const char *target);
+[[noreturn]] void irep2_bad_family_cast(unsigned actual, const char *accessor);
 
 // Checked downcast for type2t / expr2t hierarchies. The is_*_type / is_*2t
 // predicates already do a single enum compare; these helpers do the same
