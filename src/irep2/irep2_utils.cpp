@@ -1,17 +1,6 @@
 #include <irep2/irep2_utils.h>
 #include <util/c_types.h>
 
-bool contains_symbol_expr(const expr2tc &e)
-{
-  if (is_symbol2t(e))
-    return true;
-
-  bool r = false;
-  e->foreach_operand(
-    [&r](const expr2tc &f) { r = r || contains_symbol_expr(f); });
-  return r;
-}
-
 void make_not(expr2tc &expr)
 {
   if (is_true(expr))

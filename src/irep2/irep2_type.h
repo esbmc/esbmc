@@ -60,7 +60,6 @@ public:
 
   const std::vector<type2tc> &get_structure_members() const;
   const std::vector<irep_idt> &get_structure_member_names() const;
-  const irep_idt &get_structure_name() const;
 
   std::vector<type2tc> members;
   std::vector<irep_idt> member_names;

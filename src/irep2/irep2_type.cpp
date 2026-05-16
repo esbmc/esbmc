@@ -406,11 +406,6 @@ struct_union_data::get_structure_member_names() const
   return member_names;
 }
 
-const irep_idt &struct_union_data::get_structure_name() const
-{
-  return name;
-}
-
 std::optional<unsigned int>
 struct_union_data::get_component_number(const irep_idt &comp) const
 {

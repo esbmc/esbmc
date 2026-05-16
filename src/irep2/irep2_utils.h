@@ -90,22 +90,6 @@ inline bool is_multi_dimensional_array(const expr2tc &e)
   return is_multi_dimensional_array(e->type);
 }
 
-/** True if @p e or any of its operands is a `symbol2t`. Recursive
- *  walk over the whole subtree. Useful for "is this size/index/array
- *  a constant expression" pre-checks (e.g. `is_sym_sized_array_type`).
- */
-bool contains_symbol_expr(const expr2tc &e);
-
-inline bool is_sym_sized_array_type(const type2tc &t)
-{
-  if (!is_array_type(t))
-    return false;
-  const array_type2t &a = to_array_type(t);
-  if (!a.array_size)
-    return false;
-  return contains_symbol_expr(a.array_size);
-}
-
 inline bool is_byte_type(const type2tc &t)
 {
   return is_bv_type(t) && t->get_width() == 8;
@@ -114,16 +98,6 @@ inline bool is_byte_type(const type2tc &t)
 inline bool is_byte_type(const expr2tc &e)
 {
   return is_byte_type(e->type);
-}
-
-inline bool is_byte_array(const type2tc &t)
-{
-  return is_array_type(t) && is_byte_type(to_array_type(t).subtype);
-}
-
-inline bool is_byte_array(const expr2tc &e)
-{
-  return is_byte_array(e->type);
 }
 
 inline bool is_constant_number(const expr2tc &t)
