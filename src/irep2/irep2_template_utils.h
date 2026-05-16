@@ -115,9 +115,6 @@ inline void do_type_hash(const T &theval, crypto_hash &hash)
 /* Explicit overloads: load-bearing specialisations for the field
  * types whose semantics differ from the primary templates above. */
 
-bool do_type_cmp(const type2t::type_ids &, const type2t::type_ids &);
-bool do_type_cmp(const expr2t::expr_ids &, const expr2t::expr_ids &);
-
 int do_type_lt(const BigInt &side1, const BigInt &side2);
 int do_type_lt(
   const std::vector<expr2tc> &side1,
@@ -127,8 +124,6 @@ int do_type_lt(
   const std::vector<type2tc> &side2);
 int do_type_lt(const expr2tc &side1, const expr2tc &side2);
 int do_type_lt(const type2tc &side1, const type2tc &side2);
-int do_type_lt(const type2t::type_ids &, const type2t::type_ids &);
-int do_type_lt(const expr2t::expr_ids &, const expr2t::expr_ids &);
 
 size_t do_type_crc(const BigInt &theint);
 size_t do_type_crc(const fixedbvt &theval);

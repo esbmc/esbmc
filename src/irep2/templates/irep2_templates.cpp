@@ -12,28 +12,6 @@ static_assert(type2t::end_type_id <= 256, "Type id overflow");
 static_assert(expr2t::end_expr_id <= 256, "Expr id overflow");
 
 template <>
-void do_type2string<type2t::type_ids>(
-  const type2t::type_ids &,
-  unsigned int,
-  std::string (&)[esbmct::num_type_fields],
-  list_of_memberst &,
-  unsigned int)
-{
-  // Do nothing; this is a dummy member.
-}
-
-template <>
-void do_type2string<const expr2t::expr_ids>(
-  const expr2t::expr_ids &,
-  unsigned int,
-  std::string (&)[esbmct::num_type_fields],
-  list_of_memberst &,
-  unsigned int)
-{
-  // Do nothing; this is a dummy member.
-}
-
-template <>
 bool do_get_sub_expr<expr2tc>(
   const expr2tc &item,
   size_t idx,

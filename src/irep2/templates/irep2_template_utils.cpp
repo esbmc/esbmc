@@ -178,21 +178,7 @@ std::string type_to_string(const irep_idt &theval, int)
 // BigInt, fixedbvt, ieee_floatt, std::vector<expr2tc|type2tc|irep_idt>,
 // expr2tc, type2tc, irep_idt) are covered by the primary template
 // `template <class T> bool do_type_cmp(const T &, const T &)` in
-// irep2_template_utils.h, which forwards to `operator==`. The two
-// overloads below are dummies: the recursive walk only reaches a
-// type_ids / expr_ids field when the parent base class has already
-// short-circuited equality on the id, so the answer is invariantly
-// true and we save an enum compare per call.
-
-bool do_type_cmp(const type2t::type_ids &, const type2t::type_ids &)
-{
-  return true;
-}
-
-bool do_type_cmp(const expr2t::expr_ids &, const expr2t::expr_ids &)
-{
-  return true;
-}
+// irep2_template_utils.h, which forwards to `operator==`.
 
 // Trivial do_type_lt overloads (bool, unsigned int, the small enums,
 // fixedbvt, ieee_floatt, irep_idt, std::vector<irep_idt>) are covered
@@ -272,15 +258,6 @@ int do_type_lt(const type2tc &side1, const type2tc &side2)
     return side1->ltchecked(*side2.get());
 }
 
-int do_type_lt(const type2t::type_ids &, const type2t::type_ids &)
-{
-  return 0; // Dummy field comparison
-}
-
-int do_type_lt(const expr2t::expr_ids &, const expr2t::expr_ids &)
-{
-  return 0; // Dummy field comparison
-}
 
 // Trivial do_type_crc / do_type_hash overloads for bool, unsigned int
 // and the small enums (sideeffect_data::allockind,

@@ -11,9 +11,6 @@
 #define IREP2_TYPE(kind, pretty) class kind##_type2t;
 #include <irep2/type_kinds.inc>
 #undef IREP2_TYPE
-// bv_type2t is a shared base of unsignedbv_type2t and signedbv_type2t;
-// it isn't itself a kind in the manifest so forward-declare it here.
-class bv_type2t;
 
 // Then give them a typedef name
 

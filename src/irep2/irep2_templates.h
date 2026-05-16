@@ -21,22 +21,6 @@ void do_type2string(
   vec.push_back(member_entryt(names[idx], type_to_string(thething, indent)));
 }
 
-template <>
-void do_type2string<type2t::type_ids>(
-  const type2t::type_ids &,
-  unsigned int,
-  std::string (&)[esbmct::num_type_fields],
-  list_of_memberst &,
-  unsigned int);
-
-template <>
-void do_type2string<const expr2t::expr_ids>(
-  const expr2t::expr_ids &,
-  unsigned int,
-  std::string (&)[esbmct::num_type_fields],
-  list_of_memberst &,
-  unsigned int);
-
 template <class T>
 bool do_get_sub_expr(const T &, size_t, size_t &, const expr2tc *&)
 {

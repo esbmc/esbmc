@@ -809,10 +809,10 @@ ESBMC_DEFINE_RELATION2T(lessthanequal);
 ESBMC_DEFINE_RELATION2T(greaterthanequal);
 #undef ESBMC_DEFINE_RELATION2T
 
-/* The macros below fold sets of `*2t` classes that share both a base
- * data class AND a constructor shape. Grouping is strict on those two
- * properties so any constructor-time invariant we add later applies
- * uniformly to every class in a macro's family. */
+/* The macros below fold sets of `*2t` classes that share a constructor
+ * shape and behaviour. Each generated class still inherits directly
+ * from expr2t and owns its own fields; the macro just spares the
+ * repetition of writing six near-identical class bodies. */
 
 /** Arithmetic two-operand node (`add`/`sub`/`mul`/`div`/`modulus`). */
 #define ESBMC_DEFINE_ARITH_2OP(name)                                           \
