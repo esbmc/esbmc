@@ -1315,17 +1315,8 @@ public:
   void hash(crypto_hash &h) const override;
 
 protected:
-  // Helpers reused by expr_methods2 and type_methods2. Definitions in
+  // Used by type_methods2 for subtype iteration. Definitions in
   // irep2_meta_templates.h.
-  const expr2tc *get_sub_expr_impl(size_t desired) const;
-  expr2tc *get_sub_expr_nc_impl(size_t desired);
-  size_t get_num_sub_exprs_impl() const;
-
-  template <typename Delegate>
-  void foreach_operand_impl_const_inner(Delegate &f) const;
-  template <typename Delegate>
-  void foreach_operand_impl_inner(Delegate &f);
-
   template <typename Delegate>
   void foreach_subtype_impl_const_inner(Delegate &f) const;
   template <typename Delegate>
@@ -1373,12 +1364,12 @@ public:
 
   void foreach_operand_impl_const(expr2t::const_op_delegate &f) const override
   {
-    this->foreach_operand_impl_const_inner(f);
+    this->foreach_operand_impl_const_v2(f);
   }
 
   void foreach_operand_impl(expr2t::op_delegate &f) override
   {
-    this->foreach_operand_impl_inner(f);
+    this->foreach_operand_impl_v2(f);
   }
 };
 
