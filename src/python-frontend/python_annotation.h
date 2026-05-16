@@ -920,15 +920,96 @@ private:
     return "";
   }
 
+  /// @brief Resolve @p func_name through any `from X import *` in @c ast_.
+  ///
+  /// Iterates wildcard ImportFrom nodes at module scope and probes each
+  /// module's exported functions via @c module_manager_. Returns the
+  /// function's declared return type if found; "" otherwise. A NoneType /
+  /// missing return type falls back to @p func_name so callers treat it as
+  /// a class-constructor-style call, matching the named-import branch's
+  /// heuristic. Introduced for GitHub #4564.
+  std::string resolve_wildcard_import_func(const std::string &func_name)
+  {
+    if (!module_manager_ || !ast_.contains("body"))
+      return "";
+    for (const auto &node : ast_["body"])
+    {
+      if (
+        !node.contains("_type") || node["_type"] != "ImportFrom" ||
+        !node.contains("names") || !node.contains("module"))
+        continue;
+      bool is_star = false;
+      for (const auto &name : node["names"])
+        if (name.contains("name") && name["name"] == "*")
+        {
+          is_star = true;
+          break;
+        }
+      if (!is_star)
+        continue;
+      auto module = module_manager_->get_module(node["module"]);
+      if (!module)
+        continue;
+      auto func_info = module->get_function(func_name);
+      if (func_info.name_.empty())
+        continue;
+      if (
+        func_info.return_type_.empty() || func_info.return_type_ == "NoneType")
+        return func_name;
+      return func_info.return_type_;
+    }
+    return "";
+  }
+
+  /// @brief Resolve a tuple-key elt against @p enclosing_func's scope.
+  ///
+  /// Generalises @ref resolve_name_in_enclosing_func to expressions whose
+  /// operands are names declared outside this annotator's @c ast_ —
+  /// constants, unary ops, and binary arithmetic. Numeric promotion follows
+  /// Python semantics (any @c float operand → @c float; @c int + @c int →
+  /// @c int). Returns "" when any operand is not resolvable in the foreign
+  /// scope, signalling the caller to fall through to @c ast_-based
+  /// inference. Introduced for GitHub #4564.
+  std::string
+  resolve_expr_in_enclosing_func(const Json &elt, const Json &enclosing_func)
+  {
+    if (!elt.contains("_type"))
+      return "";
+    const std::string &t = elt["_type"];
+    if (t == "Constant")
+      return get_type_from_constant(elt);
+    if (t == "Name" && elt.contains("id"))
+      return resolve_name_in_enclosing_func(elt["id"], enclosing_func);
+    if (t == "UnaryOp" && elt.contains("operand"))
+      return resolve_expr_in_enclosing_func(elt["operand"], enclosing_func);
+    if (t == "BinOp" && elt.contains("left") && elt.contains("right"))
+    {
+      std::string l =
+        resolve_expr_in_enclosing_func(elt["left"], enclosing_func);
+      std::string r =
+        resolve_expr_in_enclosing_func(elt["right"], enclosing_func);
+      if (l.empty() || r.empty())
+        return "";
+      if (l == "float" || r == "float")
+        return "float";
+      if (l == "int" && r == "int")
+        return "int";
+      return "";
+    }
+    return "";
+  }
+
   // Resolve each element of @p elts to a Python type name suitable for a
   // synthesised `tuple[...]` annotation. Slice literals and `slice(...)`
   // calls map to "slice"; scalars and other expressions are routed through
-  // get_argument_type(). `Name` elts are first looked up in @p
-  // enclosing_func (when non-null) so foreign-AST scans can resolve
-  // variables defined outside this annotator's `ast_` (GitHub #4558).
-  // Returns an empty vector when any element resolves to "" or "Any" —
-  // bailing keeps the synthesised callee struct consistent with whatever
-  // the caller actually builds at the subscript site.
+  // get_argument_type(). Non-slice elts are first looked up in @p
+  // enclosing_func (when non-null) via @ref resolve_expr_in_enclosing_func
+  // so foreign-AST scans can resolve variables defined outside this
+  // annotator's `ast_` — including compound arithmetic expressions like
+  // `bm * k` whose operand names are foreign-scope parameters
+  // (GitHub #4558, #4564). Returns an empty vector when any element resolves
+  // to "" or "Any" — bailing keeps the synthesised callee struct consistent
+  // with whatever the caller actually builds at the subscript site.
   std::vector<std::string> infer_tuple_element_types(
     const Json &elts,
     const Json *enclosing_func = nullptr)
@@ -954,8 +1035,8 @@ private:
         continue;
       }
       std::string resolved;
-      if (t == "Name" && enclosing_func != nullptr && elt.contains("id"))
-        resolved = resolve_name_in_enclosing_func(elt["id"], *enclosing_func);
+      if (enclosing_func != nullptr)
+        resolved = resolve_expr_in_enclosing_func(elt, *enclosing_func);
       if (resolved.empty())
         resolved = get_argument_type(elt);
       if (resolved.empty() || resolved == "Any")
@@ -2330,6 +2411,16 @@ private:
     }
     catch (std::runtime_error &)
     {
+    }
+
+    // Probe wildcard imports (`from X import *`) for @p func_name when the
+    // named-import lookup above missed. find_imported_function only matches
+    // explicit aliases, so star-imported functions stay invisible to the
+    // annotator's type inference without this fallback (GitHub #4564).
+    if (std::string t = resolve_wildcard_import_func(func_name); !t.empty())
+    {
+      functions_in_analysis_.erase(func_name);
+      return t;
     }
 
     // Check if the function is a built-in function
