@@ -42,6 +42,8 @@ class Preprocessor(
     NodeTransformer,
 ):
     """Facade class composing all preprocessor mixins."""
+    _YieldToAppend = GeneratorMixin._YieldToAppend
+    _YieldReplacer = GeneratorMixin._YieldReplacer
 
     def __init__(self, module_name: str):
         super().__init__()

@@ -4,6 +4,60 @@ import ast
 
 class TypeInferenceMixin:
 
+    def _extract_dict_method_element_type(self, iterable_node):
+        if not (isinstance(iterable_node, ast.Call) and isinstance(iterable_node.func, ast.Attribute)):
+            return None
+        method_name = iterable_node.func.attr
+        if method_name not in ("keys", "values"):
+            return None
+        if not isinstance(iterable_node.func.value, ast.Name):
+            return None
+        dict_var_name = iterable_node.func.value.id
+        if not (hasattr(self, "variable_annotations") and dict_var_name in self.variable_annotations):
+            return None
+        dict_annotation = self.variable_annotations[dict_var_name]
+        if not (isinstance(dict_annotation, ast.Subscript)
+                and isinstance(dict_annotation.slice, ast.Tuple)
+                and len(dict_annotation.slice.elts) >= 2):
+            return None
+        key_type, value_type = dict_annotation.slice.elts[0], dict_annotation.slice.elts[1]
+        candidate = key_type if method_name == "keys" else value_type
+        if isinstance(candidate, ast.Name):
+            return candidate.id
+        if isinstance(candidate, ast.Subscript) and isinstance(candidate.value, ast.Name):
+            return candidate.value.id
+        return None
+
+    def _extract_dict_name_element_type(self, iterable_node):
+        if not isinstance(iterable_node, ast.Name):
+            return None
+        var_name = iterable_node.id
+        if not (hasattr(self, "variable_annotations") and var_name in self.variable_annotations):
+            return None
+        annotation = self.variable_annotations[var_name]
+        if not (isinstance(annotation, ast.Subscript) and isinstance(annotation.value, ast.Name)
+                and annotation.value.id == "dict" and isinstance(annotation.slice, ast.Tuple)
+                and len(annotation.slice.elts) >= 1):
+            return None
+        key_type = annotation.slice.elts[0]
+        if isinstance(key_type, ast.Name):
+            return key_type.id
+        return None
+
+    def _extract_list_tuple_annotation_element_type(self, iterable_node):
+        if not (isinstance(iterable_node, ast.Name) and hasattr(self, "variable_annotations")):
+            return None
+        annotation = self.variable_annotations.get(iterable_node.id)
+        if not isinstance(annotation, ast.Subscript):
+            return None
+        element_annotation = annotation.slice
+        if isinstance(element_annotation, ast.Name):
+            return element_annotation.id
+        if isinstance(element_annotation, ast.Subscript) and isinstance(element_annotation.value,
+                                                                          ast.Name):
+            return element_annotation.value.id
+        return None
+
     def _extract_type_from_annotation(self, annotation):
         if annotation is None:
             return "Any"
@@ -34,45 +88,13 @@ class TypeInferenceMixin:
 
     def _get_element_type_from_container(
             self, container_type, iterable_node=None):  # pylint: disable=too-many-branches,too-many-nested-blocks
-        if isinstance(iterable_node, ast.Call) and isinstance(iterable_node.func, ast.Attribute):
-            method_name = iterable_node.func.attr
+        dict_method_type = self._extract_dict_method_element_type(iterable_node)
+        if dict_method_type is not None:
+            return dict_method_type
 
-            if method_name in ["keys", "values"]:
-                if isinstance(iterable_node.func.value, ast.Name):
-                    dict_var_name = iterable_node.func.value.id
-                    if (hasattr(self, "variable_annotations")
-                            and dict_var_name in self.variable_annotations):
-                        dict_annotation = self.variable_annotations[dict_var_name]
-                        if isinstance(dict_annotation, ast.Subscript):
-                            if isinstance(dict_annotation.slice, ast.Tuple):
-                                key_type = dict_annotation.slice.elts[0]
-                                value_type = dict_annotation.slice.elts[1]
-
-                                if method_name == "keys":
-                                    if isinstance(key_type, ast.Name):
-                                        return key_type.id
-                                    if isinstance(key_type, ast.Subscript) and isinstance(
-                                            key_type.value, ast.Name):
-                                        return key_type.value.id
-                                elif method_name == "values":
-                                    if isinstance(value_type, ast.Name):
-                                        return value_type.id
-                                    if isinstance(value_type, ast.Subscript) and isinstance(
-                                            value_type.value, ast.Name):
-                                        return value_type.value.id
-
-        if isinstance(iterable_node, ast.Name):
-            var_name = iterable_node.id
-
-            if (hasattr(self, "variable_annotations") and var_name in self.variable_annotations):
-                annotation = self.variable_annotations[var_name]
-                if isinstance(annotation, ast.Subscript) and isinstance(annotation.value, ast.Name):
-                    if annotation.value.id == "dict":
-                        if (isinstance(annotation.slice, ast.Tuple)
-                                and len(annotation.slice.elts) >= 1):
-                            key_type = annotation.slice.elts[0]
-                            if isinstance(key_type, ast.Name):
-                                return key_type.id
+        dict_name_type = self._extract_dict_name_element_type(iterable_node)
+        if dict_name_type is not None:
+            return dict_name_type
 
         if container_type == "str":
             return "str"
@@ -81,16 +103,8 @@ class TypeInferenceMixin:
             if isinstance(first_elem, ast.Constant):
                 return type(first_elem.value).__name__
         if container_type.lower() in ["list", "tuple"]:
-            if isinstance(iterable_node, ast.Name) and hasattr(self, "variable_annotations"):
-                var_name = iterable_node.id
-                if var_name in self.variable_annotations:
-                    annotation = self.variable_annotations[var_name]
-                    if isinstance(annotation, ast.Subscript):
-                        element_annotation = annotation.slice
-                        if isinstance(element_annotation, ast.Name):
-                            return element_annotation.id
-                        if isinstance(element_annotation, ast.Subscript):
-                            if isinstance(element_annotation.value, ast.Name):
-                                return element_annotation.value.id
+            annotation_element_type = self._extract_list_tuple_annotation_element_type(iterable_node)
+            if annotation_element_type is not None:
+                return annotation_element_type
             return "Any"
         return "Any"

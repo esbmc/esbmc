@@ -13,6 +13,85 @@ import sys
 
 class GeneratorMixin:
 
+    class _YieldToAppend(ast.NodeTransformer):
+
+        def __init__(self, result_var, source_node):
+            self.result_var = result_var
+            self.source_node = source_node
+
+        def visit_YieldFrom(self, node):
+            raise NotImplementedError("yield from is not supported for generator inlining")
+
+        def visit_Expr(self, node):
+            if isinstance(node.value, ast.Yield):
+                append_expr = ast.Expr(value=ast.Call(
+                    func=ast.Attribute(
+                        value=ast.Name(id=self.result_var, ctx=ast.Load()),
+                        attr="append",
+                        ctx=ast.Load(),
+                    ),
+                    args=[node.value.value if node.value.value is not None else ast.Constant(value=None)],
+                    keywords=[],
+                ))
+                ast.copy_location(append_expr, node)
+                ast.fix_missing_locations(append_expr)
+                return append_expr
+            return self.generic_visit(node)
+
+    class _YieldReplacer(ast.NodeTransformer):
+
+        def __init__(self, target_name, body_dest, source_node):
+            self.target_name = target_name
+            self.body_dest = body_dest
+            self.source_node = source_node
+
+        def visit_YieldFrom(self, node):
+            raise NotImplementedError("yield from is not supported for generator inlining")
+
+        def visit_Expr(self, node):
+            if isinstance(node.value, ast.Yield):
+                assign = ast.Assign(
+                    targets=[ast.Name(id=self.target_name, ctx=ast.Store())],
+                    value=node.value.value if node.value.value is not None else ast.Constant(value=None),
+                )
+                ast.copy_location(assign, node)
+                ast.fix_missing_locations(assign)
+                body_copy = [copy.deepcopy(stmt) for stmt in self.body_dest]
+                for stmt in body_copy:
+                    ast.copy_location(stmt, self.source_node)
+                    ast.fix_missing_locations(stmt)
+                return [assign] + body_copy
+            return self.generic_visit(node)
+
+    @staticmethod
+    def _extract_min_max_key_index(key_lambda):
+        if len(key_lambda.args.args) != 1:
+            return None
+        param_name = key_lambda.args.args[0].arg
+        body = key_lambda.body
+        if not (isinstance(body, ast.Subscript) and isinstance(body.value, ast.Name)
+                and body.value.id == param_name and isinstance(body.slice, ast.Constant)
+                and isinstance(body.slice.value, int) and body.slice.value >= 0):
+            return None
+        return body.slice.value
+
+    def _resolve_list_literal_iterable(self, iterable_expr):
+        if isinstance(iterable_expr, ast.List):
+            return iterable_expr
+        if isinstance(iterable_expr, ast.Name):
+            return self.list_literal_values.get(iterable_expr.id)
+        return None
+
+    @staticmethod
+    def _select_min_max_index(key_values, is_min):
+        best_idx = 0
+        for i in range(1, len(key_values)):
+            if (is_min and key_values[i] < key_values[best_idx]) or (not is_min
+                                                                      and key_values[i] >
+                                                                      key_values[best_idx]):
+                best_idx = i
+        return best_idx
+
     def _lower_listcomp(self, node):
         """Lower a list comprehension into prefix statements and result expression.
 
@@ -886,24 +965,11 @@ class GeneratorMixin:
             return None
 
         key_lambda = key_kw.value
-        if len(key_lambda.args.args) != 1:
+        key_index = self._extract_min_max_key_index(key_lambda)
+        if key_index is None:
             return None
-
-        param_name = key_lambda.args.args[0].arg
-        body = key_lambda.body
-        if not (isinstance(body, ast.Subscript) and isinstance(body.value, ast.Name)
-                and body.value.id == param_name and isinstance(body.slice, ast.Constant)
-                and isinstance(body.slice.value, int) and body.slice.value >= 0):
-            return None
-
-        key_index = body.slice.value
         iterable_expr = call_node.args[0]
-
-        iterable_literal = None
-        if isinstance(iterable_expr, ast.List):
-            iterable_literal = iterable_expr
-        elif isinstance(iterable_expr, ast.Name):
-            iterable_literal = self.list_literal_values.get(iterable_expr.id)
+        iterable_literal = self._resolve_list_literal_iterable(iterable_expr)
 
         if iterable_literal is None:
             return None
@@ -925,14 +991,7 @@ class GeneratorMixin:
         is_min = call_node.func.id == "min"
         # Pick the index whose key is the minimum / maximum, breaking ties
         # toward the first occurrence (matches CPython semantics).
-        best_idx = 0
-        for i in range(1, len(key_values)):
-            if is_min:
-                if key_values[i] < key_values[best_idx]:
-                    best_idx = i
-            else:
-                if key_values[i] > key_values[best_idx]:
-                    best_idx = i
+        best_idx = self._select_min_max_index(key_values, is_min)
 
         # Suppress the unused default_kw warning while keeping the variable
         # available for future extension (e.g. empty iterable + default=).

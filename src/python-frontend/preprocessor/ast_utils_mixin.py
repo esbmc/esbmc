@@ -3,6 +3,10 @@ import ast
 
 class AstUtilsMixin:
 
+    @staticmethod
+    def _sanitize_identifier_fragment(fragment):
+        return "".join(ch if ch.isalnum() or ch == "_" else "_" for ch in fragment)
+
     def ensure_all_locations(self, node, source_node=None, line=1, col=0):
         """Recursively ensure all nodes in an AST tree have location information."""
         if source_node:
@@ -66,6 +70,24 @@ class AstUtilsMixin:
         self.ensure_all_locations(assign, source_node)
         ast.fix_missing_locations(assign)
         return assign
+
+    def generate_variable_copy(self, qualified_name, arg_node, default_name_node):
+        """
+        Materialize a Name default value into a stable temporary variable.
+        """
+        func_part = self._sanitize_identifier_fragment(qualified_name)
+        arg_part = self._sanitize_identifier_fragment(arg_node.arg)
+        target_var = f"ESBMC_default_{func_part}_{arg_part}"
+
+        assignment_node = ast.Assign(
+            targets=[self.create_name_node(target_var, ast.Store(), default_name_node)],
+            value=ast.Name(id=default_name_node.id, ctx=ast.Load()),
+        )
+        self.ensure_all_locations(assignment_node, default_name_node)
+        ast.fix_missing_locations(assignment_node)
+        target_ref = self.create_name_node(target_var, ast.Load(), default_name_node)
+        ast.fix_missing_locations(target_ref)
+        return assignment_node, target_ref
 
     @staticmethod
     def _body_has_node_shallow(body_stmts, node_type):
