@@ -1,4 +1,0 @@
-CORE
-main.py
---incremental-bmc
-^ERROR:.*Thread construction inside a loop is not yet supported

@@ -1,4 +1,0 @@
-CORE
-main.py
---incremental-bmc
-^ERROR:.*`target=` must be a function name
