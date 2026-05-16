@@ -750,10 +750,11 @@ private:
     // void* default keeps working for those call sites.
     bool any_reject = false;
     std::vector<std::string> expected;
-    auto reducer = [&](const Json &elts) {
+    auto reducer = [&](const Json &elts, const Json *enclosing_func) {
       if (any_reject)
         return;
-      std::vector<std::string> types = infer_tuple_element_types(elts);
+      std::vector<std::string> types =
+        infer_tuple_element_types(elts, enclosing_func);
       if (types.empty())
       {
         any_reject = true;
@@ -839,18 +840,32 @@ private:
       walk(ast["body"]);
   }
 
-  // Walk @p node and invoke @p visit(elts) for every Subscript whose value
-  // is a Name resolving to @p class_name and whose slice is a Tuple. @p
-  // visit receives the tuple's `elts` JSON array.
+  // Walk @p node and invoke @p visit(elts, enclosing_func) for every
+  // Subscript whose value is a Name resolving to @p class_name and whose
+  // slice is a Tuple. @p visit receives the tuple's `elts` JSON array along
+  // with a pointer to the enclosing FunctionDef/AsyncFunctionDef (or nullptr
+  // at module scope). The enclosing function lets the reducer resolve
+  // `Name` elts against arguments and local annotations of the AST being
+  // scanned — essential when scanning a foreign module's AST whose locals
+  // are not visible to this annotator's own `ast_`-scoped lookup (GitHub
+  // #4558).
   template <typename Visitor>
   void visit_class_tuple_subscripts(
     const Json &node,
     const std::string &class_name,
     const std::unordered_map<std::string, std::string> &var_to_class,
-    Visitor &&visit)
+    Visitor &&visit,
+    const Json *enclosing_func = nullptr)
   {
     if (node.is_object())
     {
+      const Json *next_enclosing = enclosing_func;
+      if (
+        node.contains("_type") &&
+        (node["_type"] == "FunctionDef" ||
+         node["_type"] == "AsyncFunctionDef"))
+        next_enclosing = &node;
+
       if (
         node.contains("_type") && node["_type"] == "Subscript" &&
         node.contains("value") && node["value"].is_object() &&
@@ -863,26 +878,61 @@ private:
         auto it =
           var_to_class.find(node["value"]["id"].template get<std::string>());
         if (it != var_to_class.end() && it->second == class_name)
-          visit(node["slice"]["elts"]);
+          visit(node["slice"]["elts"], next_enclosing);
       }
       for (auto it = node.begin(); it != node.end(); ++it)
         visit_class_tuple_subscripts(
-          it.value(), class_name, var_to_class, visit);
+          it.value(), class_name, var_to_class, visit, next_enclosing);
     }
     else if (node.is_array())
     {
       for (const auto &elem : node)
-        visit_class_tuple_subscripts(elem, class_name, var_to_class, visit);
+        visit_class_tuple_subscripts(
+          elem, class_name, var_to_class, visit, enclosing_func);
     }
+  }
+
+  // Resolve a `Name` elt against @p enclosing_func's parameters and local
+  // annotated assigns. Returns the annotation type name on success, or "" if
+  // the name is not declared in that scope. Used as a foreign-scope fallback
+  // when @p elts come from an AST other than `ast_` — `get_argument_type`'s
+  // own `find_var_node_for_inference` only searches `ast_` (GitHub #4558).
+  std::string resolve_name_in_enclosing_func(
+    const std::string &name,
+    const Json &enclosing_func)
+  {
+    auto lookup = [&](const Json &scope) -> std::string {
+      Json node = find_annotated_assign(name, scope);
+      if (has_annotation(node))
+        return json_utils::get_annotation_type_name(node["annotation"]);
+      return "";
+    };
+
+    if (enclosing_func.contains("args"))
+    {
+      const Json &arg_spec = enclosing_func["args"];
+      for (const char *key : {"args", "kwonlyargs"})
+        if (arg_spec.contains(key))
+          if (std::string t = lookup(arg_spec[key]); !t.empty())
+            return t;
+    }
+    if (enclosing_func.contains("body"))
+      return lookup(enclosing_func["body"]);
+    return "";
   }
 
   // Resolve each element of @p elts to a Python type name suitable for a
   // synthesised `tuple[...]` annotation. Slice literals and `slice(...)`
   // calls map to "slice"; scalars and other expressions are routed through
-  // get_argument_type(). Returns an empty vector when any element resolves
-  // to "" or "Any" — bailing keeps the synthesised callee struct consistent
-  // with whatever the caller actually builds at the subscript site.
-  std::vector<std::string> infer_tuple_element_types(const Json &elts)
+  // get_argument_type(). `Name` elts are first looked up in @p
+  // enclosing_func (when non-null) so foreign-AST scans can resolve
+  // variables defined outside this annotator's `ast_` (GitHub #4558).
+  // Returns an empty vector when any element resolves to "" or "Any" —
+  // bailing keeps the synthesised callee struct consistent with whatever
+  // the caller actually builds at the subscript site.
+  std::vector<std::string> infer_tuple_element_types(
+    const Json &elts,
+    const Json *enclosing_func = nullptr)
   {
     std::vector<std::string> types;
     types.reserve(elts.size());
@@ -904,7 +954,11 @@ private:
         types.emplace_back("slice");
         continue;
       }
-      std::string resolved = get_argument_type(elt);
+      std::string resolved;
+      if (t == "Name" && enclosing_func != nullptr && elt.contains("id"))
+        resolved = resolve_name_in_enclosing_func(elt["id"], *enclosing_func);
+      if (resolved.empty())
+        resolved = get_argument_type(elt);
       if (resolved.empty() || resolved == "Any")
         return {};
       types.push_back(std::move(resolved));
