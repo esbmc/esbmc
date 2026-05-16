@@ -596,6 +596,10 @@ protected:
   virtual void foreach_subtype_impl_const(const_subtype_delegate &t) const = 0;
   virtual void foreach_subtype_impl(subtype_delegate &t) = 0;
 
+  // Non-virtual switch-based dispatchers (issue #4560 scaffolding).
+  void foreach_subtype_impl_const_v2(const_subtype_delegate &t) const;
+  void foreach_subtype_impl_v2(subtype_delegate &t);
+
 public:
   // Provide base / container types for some templates stuck on top:
   typedef type2tc container_type;
@@ -733,6 +737,17 @@ public:
     foreach_subtype_impl(wrapped);
   }
 
+  // Non-virtual switch-based dispatchers (issue #4560 scaffolding).
+  // These coexist with the virtual methods and will replace them once all
+  // kinds are migrated to the flat struct layout.
+  bool cmp_v2(const type2t &ref) const;
+  int lt_v2(const type2t &ref) const;
+  type2tc clone_v2() const;
+  size_t do_crc_v2() const;
+  void hash_v2(crypto_hash &hash) const;
+  list_of_memberst tostring_v2(unsigned int indent) const;
+  unsigned int get_width_v2() const;
+
   /** Instance of type_ids recording this types type. */
   // XXX XXX XXX this should be const
   type_ids type_id;
@@ -805,6 +820,10 @@ protected:
 
   virtual void foreach_operand_impl_const(const_op_delegate &expr) const = 0;
   virtual void foreach_operand_impl(op_delegate &expr) = 0;
+
+  // Non-virtual switch-based dispatchers (issue #4560 scaffolding).
+  void foreach_operand_impl_const_v2(const_op_delegate &expr) const;
+  void foreach_operand_impl_v2(op_delegate &expr);
 
 public:
   // Provide base / container types for some templates stuck on top:
@@ -1006,6 +1025,20 @@ public:
     op_delegate wrapped(t);
     foreach_operand_impl(wrapped);
   }
+
+  // Non-virtual switch-based dispatchers (issue #4560 scaffolding).
+  // These coexist with the virtual methods and will replace them once all
+  // kinds are migrated to the flat struct layout.
+  bool cmp_v2(const expr2t &ref) const;
+  int lt_v2(const expr2t &ref) const;
+  expr2tc clone_v2() const;
+  size_t do_crc_v2() const;
+  void hash_v2(crypto_hash &hash) const;
+  list_of_memberst tostring_v2(unsigned int indent) const;
+  const expr2tc *get_sub_expr_v2(size_t idx) const;
+  expr2tc *get_sub_expr_nc_v2(size_t idx);
+  size_t get_num_sub_exprs_v2() const;
+  [[nodiscard]] expr2tc do_simplify_v2() const;
 
   /** Instance of expr_ids recording tihs exprs type. */
   const expr_ids expr_id;

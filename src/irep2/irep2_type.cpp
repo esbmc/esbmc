@@ -255,6 +255,137 @@ unsigned int code_data::get_width() const
   throw symbolic_type_excp();
 }
 
+/********************** Switch-based v2 dispatchers ***************************/
+// Step 1 of issue #4560: each case delegates to the existing virtual method.
+// `end_type_id` is a sentinel never used as a live id; suppress the Wswitch
+// noise it generates while keeping per-kind exhaustiveness via the X-macro.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wswitch"
+
+bool type2t::cmp_v2(const type2t &o) const
+{
+  if (type_id != o.type_id)
+    return false;
+  switch (type_id)
+  {
+#define IREP2_TYPE(kind, _)                                                    \
+  case kind##_id:                                                               \
+    return static_cast<const kind##_type2t &>(*this).cmp(o);
+#include <irep2/type_kinds.inc>
+#undef IREP2_TYPE
+  }
+  __builtin_unreachable();
+}
+
+int type2t::lt_v2(const type2t &o) const
+{
+  if (type_id != o.type_id)
+    return type_id < o.type_id ? -1 : 1;
+  switch (type_id)
+  {
+#define IREP2_TYPE(kind, _)                                                    \
+  case kind##_id:                                                               \
+    return static_cast<const kind##_type2t &>(*this).lt(o);
+#include <irep2/type_kinds.inc>
+#undef IREP2_TYPE
+  }
+  __builtin_unreachable();
+}
+
+type2tc type2t::clone_v2() const
+{
+  switch (type_id)
+  {
+#define IREP2_TYPE(kind, _)                                                    \
+  case kind##_id:                                                               \
+    return static_cast<const kind##_type2t &>(*this).clone();
+#include <irep2/type_kinds.inc>
+#undef IREP2_TYPE
+  }
+  __builtin_unreachable();
+}
+
+size_t type2t::do_crc_v2() const
+{
+  switch (type_id)
+  {
+#define IREP2_TYPE(kind, _)                                                    \
+  case kind##_id:                                                               \
+    return static_cast<const kind##_type2t &>(*this).do_crc();
+#include <irep2/type_kinds.inc>
+#undef IREP2_TYPE
+  }
+  __builtin_unreachable();
+}
+
+void type2t::hash_v2(crypto_hash &h) const
+{
+  switch (type_id)
+  {
+#define IREP2_TYPE(kind, _)                                                    \
+  case kind##_id:                                                               \
+    return static_cast<const kind##_type2t &>(*this).hash(h);
+#include <irep2/type_kinds.inc>
+#undef IREP2_TYPE
+  }
+  __builtin_unreachable();
+}
+
+list_of_memberst type2t::tostring_v2(unsigned int indent) const
+{
+  switch (type_id)
+  {
+#define IREP2_TYPE(kind, _)                                                    \
+  case kind##_id:                                                               \
+    return static_cast<const kind##_type2t &>(*this).tostring(indent);
+#include <irep2/type_kinds.inc>
+#undef IREP2_TYPE
+  }
+  __builtin_unreachable();
+}
+
+unsigned int type2t::get_width_v2() const
+{
+  switch (type_id)
+  {
+#define IREP2_TYPE(kind, _)                                                    \
+  case kind##_id:                                                               \
+    return static_cast<const kind##_type2t &>(*this).get_width();
+#include <irep2/type_kinds.inc>
+#undef IREP2_TYPE
+  }
+  __builtin_unreachable();
+}
+
+void type2t::foreach_subtype_impl_const_v2(const_subtype_delegate &f) const
+{
+  switch (type_id)
+  {
+#define IREP2_TYPE(kind, _)                                                    \
+  case kind##_id:                                                               \
+    return static_cast<const kind##_type2t &>(*this)                           \
+      .foreach_subtype_impl_const(f);
+#include <irep2/type_kinds.inc>
+#undef IREP2_TYPE
+  }
+  __builtin_unreachable();
+}
+
+void type2t::foreach_subtype_impl_v2(subtype_delegate &f)
+{
+  switch (type_id)
+  {
+#define IREP2_TYPE(kind, _)                                                    \
+  case kind##_id:                                                               \
+    return static_cast<kind##_type2t &>(*this).foreach_subtype_impl(f);
+#include <irep2/type_kinds.inc>
+#undef IREP2_TYPE
+  }
+  __builtin_unreachable();
+}
+
+#pragma GCC diagnostic pop
+
 const std::vector<type2tc> &struct_union_data::get_structure_members() const
 {
   return members;

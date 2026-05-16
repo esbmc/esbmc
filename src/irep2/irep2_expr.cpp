@@ -370,6 +370,177 @@ printf_kindt printf_kind_from_name(const irep_idt &name)
   abort();
 }
 
+/********************** Switch-based v2 dispatchers ***************************/
+// Step 1 of issue #4560: each case delegates to the existing virtual method.
+// `end_expr_id` is a sentinel never used as a live id; suppress the Wswitch
+// noise it generates while keeping per-kind exhaustiveness via the X-macro.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wswitch"
+// As each kind is migrated to the flat struct layout, its case will be updated
+// to call the corresponding generic_<op> free function directly.
+
+bool expr2t::cmp_v2(const expr2t &o) const
+{
+  if (expr_id != o.expr_id)
+    return false;
+  switch (expr_id)
+  {
+#define IREP2_EXPR(kind, _)                                                    \
+  case kind##_id:                                                               \
+    return static_cast<const kind##2t &>(*this).cmp(o);
+#include <irep2/expr_kinds.inc>
+#undef IREP2_EXPR
+  }
+  __builtin_unreachable();
+}
+
+int expr2t::lt_v2(const expr2t &o) const
+{
+  if (expr_id != o.expr_id)
+    return expr_id < o.expr_id ? -1 : 1;
+  switch (expr_id)
+  {
+#define IREP2_EXPR(kind, _)                                                    \
+  case kind##_id:                                                               \
+    return static_cast<const kind##2t &>(*this).lt(o);
+#include <irep2/expr_kinds.inc>
+#undef IREP2_EXPR
+  }
+  __builtin_unreachable();
+}
+
+expr2tc expr2t::clone_v2() const
+{
+  switch (expr_id)
+  {
+#define IREP2_EXPR(kind, _)                                                    \
+  case kind##_id:                                                               \
+    return static_cast<const kind##2t &>(*this).clone();
+#include <irep2/expr_kinds.inc>
+#undef IREP2_EXPR
+  }
+  __builtin_unreachable();
+}
+
+size_t expr2t::do_crc_v2() const
+{
+  switch (expr_id)
+  {
+#define IREP2_EXPR(kind, _)                                                    \
+  case kind##_id:                                                               \
+    return static_cast<const kind##2t &>(*this).do_crc();
+#include <irep2/expr_kinds.inc>
+#undef IREP2_EXPR
+  }
+  __builtin_unreachable();
+}
+
+void expr2t::hash_v2(crypto_hash &h) const
+{
+  switch (expr_id)
+  {
+#define IREP2_EXPR(kind, _)                                                    \
+  case kind##_id:                                                               \
+    return static_cast<const kind##2t &>(*this).hash(h);
+#include <irep2/expr_kinds.inc>
+#undef IREP2_EXPR
+  }
+  __builtin_unreachable();
+}
+
+list_of_memberst expr2t::tostring_v2(unsigned int indent) const
+{
+  switch (expr_id)
+  {
+#define IREP2_EXPR(kind, _)                                                    \
+  case kind##_id:                                                               \
+    return static_cast<const kind##2t &>(*this).tostring(indent);
+#include <irep2/expr_kinds.inc>
+#undef IREP2_EXPR
+  }
+  __builtin_unreachable();
+}
+
+const expr2tc *expr2t::get_sub_expr_v2(size_t idx) const
+{
+  switch (expr_id)
+  {
+#define IREP2_EXPR(kind, _)                                                    \
+  case kind##_id:                                                               \
+    return static_cast<const kind##2t &>(*this).get_sub_expr(idx);
+#include <irep2/expr_kinds.inc>
+#undef IREP2_EXPR
+  }
+  __builtin_unreachable();
+}
+
+expr2tc *expr2t::get_sub_expr_nc_v2(size_t idx)
+{
+  switch (expr_id)
+  {
+#define IREP2_EXPR(kind, _)                                                    \
+  case kind##_id:                                                               \
+    return static_cast<kind##2t &>(*this).get_sub_expr_nc(idx);
+#include <irep2/expr_kinds.inc>
+#undef IREP2_EXPR
+  }
+  __builtin_unreachable();
+}
+
+size_t expr2t::get_num_sub_exprs_v2() const
+{
+  switch (expr_id)
+  {
+#define IREP2_EXPR(kind, _)                                                    \
+  case kind##_id:                                                               \
+    return static_cast<const kind##2t &>(*this).get_num_sub_exprs();
+#include <irep2/expr_kinds.inc>
+#undef IREP2_EXPR
+  }
+  __builtin_unreachable();
+}
+
+expr2tc expr2t::do_simplify_v2() const
+{
+  switch (expr_id)
+  {
+#define IREP2_EXPR(kind, _)                                                    \
+  case kind##_id:                                                               \
+    return static_cast<const kind##2t &>(*this).do_simplify();
+#include <irep2/expr_kinds.inc>
+#undef IREP2_EXPR
+  }
+  __builtin_unreachable();
+}
+
+void expr2t::foreach_operand_impl_const_v2(const_op_delegate &f) const
+{
+  switch (expr_id)
+  {
+#define IREP2_EXPR(kind, _)                                                    \
+  case kind##_id:                                                               \
+    return static_cast<const kind##2t &>(*this).foreach_operand_impl_const(f);
+#include <irep2/expr_kinds.inc>
+#undef IREP2_EXPR
+  }
+  __builtin_unreachable();
+}
+
+void expr2t::foreach_operand_impl_v2(op_delegate &f)
+{
+  switch (expr_id)
+  {
+#define IREP2_EXPR(kind, _)                                                    \
+  case kind##_id:                                                               \
+    return static_cast<kind##2t &>(*this).foreach_operand_impl(f);
+#include <irep2/expr_kinds.inc>
+#undef IREP2_EXPR
+  }
+  __builtin_unreachable();
+}
+
+#pragma GCC diagnostic pop
+
 void assert_arith_2ops_consistency(
   [[maybe_unused]] const type2tc &t,
   [[maybe_unused]] expr2t::expr_ids id,
