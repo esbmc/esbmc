@@ -221,8 +221,7 @@ unsigned int code_data::get_width() const
   throw symbolic_type_excp();
 }
 
-/********************** Switch-based v2 dispatchers ***************************/
-// Step 1 of issue #4560: each case delegates to the existing virtual method.
+/*********************** Switch-on-type_id dispatchers ************************/
 // `end_type_id` is a sentinel never used as a live id; suppress the Wswitch
 // noise it generates while keeping per-kind exhaustiveness via the X-macro.
 #pragma GCC diagnostic push

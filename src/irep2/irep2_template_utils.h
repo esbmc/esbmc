@@ -12,8 +12,9 @@
 #include <util/std_types.h>
 
 /* The functions below form a small, fixed catalogue of operations the
- * irep_methods2 fold expressions invoke on every field of every node:
- * pretty-printing, comparison, ordering, CRC, and SHA-1 ingestion.
+ * generic switch dispatchers in irep2_dispatch.h invoke on every field
+ * of every node: pretty-printing, comparison, ordering, CRC, and SHA-1
+ * ingestion.
  *
  * Most field types (bool, unsigned int, the small enums, BigInt,
  * fixedbvt, ieee_floatt, irep_idt) share an entirely mechanical

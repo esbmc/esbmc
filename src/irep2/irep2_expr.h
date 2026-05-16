@@ -253,7 +253,6 @@ public:
  *  Records a constant integer of an arbitary precision, signed or unsigned.
  *  Simplification operations will cause the integer to be clipped to whatever
  *  bit size is in expr type.
- *  @extends constant_int_data
  */
 class constant_int2t : public expr2t
 {
@@ -283,7 +282,6 @@ public:
 /** Constant fixedbv class. Records a fixed-width number in what I assume
  *  to be mantissa/exponent form, but which is described throughout CBMC code
  *  as fraction/integer parts. Stored in a fixedbvt.
- *  @extends constant_fixedbv_data
  */
 class constant_fixedbv2t : public expr2t
 {
@@ -307,7 +305,6 @@ public:
 
 /** Constant floatbv class. Records a floating-point number,
  *  Stored in a ieee_floatt.
- *  @extends constant_floatbv_data
  */
 class constant_floatbv2t : public expr2t
 {
@@ -331,7 +328,6 @@ public:
 
 /** Constant boolean value.
  *  Contains a constant bool; rather self explanatory.
- *  @extends constant_bool_data
  */
 class constant_bool2t : public expr2t
 {
@@ -357,7 +353,6 @@ public:
 
 /** Constant class for string constants.
  *  Contains an irep_idt representing the constant string.
- *  @extends constant_string_data
  */
 class constant_string2t : public expr2t
 {
@@ -412,7 +407,6 @@ public:
  *  Contains a vector of expressions containing each member of the struct
  *  we're dealing with, corresponding to the types and field names in the
  *  struct_type2t type.
- *  @extends constant_datatype_data
  */
 class constant_struct2t : public expr2t
 {
@@ -481,7 +475,6 @@ public:
  *  Contains a vector of array elements, pretty self explanatory. Only valid if
  *  its type has a constant sized array, can't have constant arrays of dynamic
  *  or infinitely sized arrays.
- *  @extends constant_datatype_data
  */
 class constant_array2t : public expr2t
 {
@@ -510,7 +503,6 @@ public:
  *  Contains a vector of array elements, pretty self explanatory. Only valid if
  *  its type has a constant sized array, can't have constant arrays of dynamic
  *  or infinitely sized arrays.
- *  @extends constant_datatype_data
  */
 class constant_vector2t : public expr2t
 {
@@ -535,7 +527,6 @@ public:
 /** Constant array of one particular value.
  *  Expression with array type, possibly dynamic or infinitely sized, with
  *  all elements initialized to a single value.
- *  @extends constant_array_of_data
  */
 class constant_array_of2t : public expr2t
 {
@@ -559,7 +550,6 @@ public:
 
 /** Symbol type.
  *  Contains the name of some variable. Various levels of renaming.
- *  @extends symbol_data
  */
 class symbol2t : public expr2t
 {
@@ -618,7 +608,6 @@ public:
 /** Nearbyint expression.
  *  Represents a rounding operation on a floatbv, we extend typecast as
  *  it already have a field for the rounding mode
- *  @extends typecast_data
  */
 class nearbyint2t : public expr2t
 {
@@ -665,7 +654,6 @@ public:
 /** Typecast expression.
  *  Represents cast from contained expression 'from' to the type of this
  *  typecast.
- *  @extends typecast_data
  */
 class typecast2t : public expr2t
 {
@@ -719,7 +707,6 @@ public:
  *
  *  Bitcasts are only allowed between types of equal width.
  *
- *  @extends bitcast_data
  */
 class bitcast2t : public expr2t
 {
@@ -754,7 +741,6 @@ public:
 
 /** If-then-else expression.
  *  Represents a ternary operation, (cond) ? truevalue : falsevalue.
- *  @extends if_data
  */
 class if2t : public expr2t
 {
@@ -796,11 +782,9 @@ public:
 
 /** Defines one of the six binary boolean relation nodes. Each takes two
  *  operands of any matching scalar/pointer type, has boolean result type,
- *  routes through its generated _expr_methods base for cmp/lt/crc/hash,
  *  and provides an out-of-line do_simplify override in
  *  src/util/expr_simplifier.cpp. The concrete class names and the
- *  generated is_<name>2t / to_<name>2t helpers are preserved verbatim.
- *  @extends relation_data */
+ *  generated is_<name>2t / to_<name>2t helpers are preserved verbatim. */
 #define ESBMC_DEFINE_RELATION2T(name)                                          \
   class name##2t : public expr2t                                               \
   {                                                                            \
@@ -1144,7 +1128,7 @@ ESBMC_DEFINE_CODE_CPP_THROW_DECL(code_cpp_throw_decl_end);
  * is performed at the SMT layer rather than the AST level so the
  * semantic node survives through symex / value_set / interval analysis,
  * and operands are captured once.  Per [expr.spaceship] in N4861.
- * @extends relation_data */
+ **/
 class cmp_three_way2t : public expr2t
 {
 public:
@@ -1189,12 +1173,10 @@ public:
 
 /** Defines an IEEE two-operand floating-point arithmetic node
  *  (add/sub/mul/div). Each takes two operands and a rounding mode,
- *  has matching floatbv operand/result types, routes through its
- *  generated _expr_methods base for cmp/lt/crc/hash, and provides an
+ *  has matching floatbv operand/result types, and provides an
  *  out-of-line do_simplify override in src/util/expr_simplifier.cpp.
  *  The concrete class names and the generated is_<name>2t /
- *  to_<name>2t helpers are preserved verbatim.
- *  @extends ieee_arith_2ops */
+ *  to_<name>2t helpers are preserved verbatim. */
 #define ESBMC_DEFINE_IEEE_ARITH_2OP(name)                                      \
   class name##2t : public expr2t                                               \
   {                                                                            \
@@ -1298,7 +1280,7 @@ public:
 
 /** Same-object operation. Checks whether two operands with pointer type have the
  *  same pointer object or not. Always has boolean result.
- *  @extends same_object_data */
+ * */
 class same_object2t : public expr2t
 {
 public:
@@ -1379,7 +1361,7 @@ public:
 /** Extract byte from data. From a particular data structure, extracts a single
  *  byte from its byte representation, at a particular offset into the data
  *  structure. Must only evaluate to byte types.
- *  @extends byte_extract_data */
+ * */
 class byte_extract2t : public expr2t
 {
 public:
@@ -1419,7 +1401,7 @@ public:
 /** Update byte. Takes a data object and updates the value of a particular
  *  byte in its byte representation, at a particular offset into the data object.
  *  Output of expression is a new copy of the source object, with the updated
- *  value. @extends byte_update_data */
+ *  value. */
 class byte_update2t : public expr2t
 {
 public:
@@ -1462,7 +1444,7 @@ public:
 /** With operation. Updates either an array or a struct/union with a new element
  *  or member. Expression value is the array or struct/union with the updated
  *  value. Ideally in the future this will become two operations, one for arrays
- *  and one for structs/unions. @extends with_data */
+ *  and one for structs/unions. */
 class with2t : public expr2t
 {
   void assert_consistency() const;
@@ -1504,7 +1486,7 @@ public:
 };
 
 /** Member operation. Extracts a particular member out of a struct or union.
- *  @extends member_data */
+ * */
 class member2t : public expr2t
 {
 public:
@@ -1539,7 +1521,7 @@ public:
 };
 
 /** Member reference
- *  @extends member_ref_data */
+ * */
 class member_ref2t : public expr2t
 {
 public:
@@ -1560,7 +1542,7 @@ public:
 };
 
 /** Member pointer
- *  @extends ptr_mem_data */
+ * */
 class ptr_mem2t : public expr2t
 {
 public:
@@ -1584,7 +1566,7 @@ public:
 };
 
 /** Array index operation. Extracts an element from an array at a particular
- *  index. @extends index_data */
+ *  index. */
 class index2t : public expr2t
 {
 public:
@@ -1646,7 +1628,7 @@ public:
 
 /** Test if a cast overflows. Check to see whether casting the operand to a
  *  particular bitsize will cause an integer overflow. If it does, this expr
- *  evaluates to true. @extends overflow_cast_data */
+ *  evaluates to true. */
 class overflow_cast2t : public expr2t
 {
 public:
@@ -1692,7 +1674,7 @@ public:
 };
 
 /** Record a dynamicly allocated object. Exclusively for use in pointer analysis.
- *  @extends dynamic_object_data */
+ * */
 class dynamic_object2t : public expr2t
 {
 public:
@@ -1725,7 +1707,7 @@ public:
  *  set of cases that take the value set of what this pointer might point at,
  *  examines the pointer's pointer object, and constructs a huge if-then-else
  *  case to evaluate to the appropriate data object for this pointer.
- *  @extends dereference_data */
+ * */
 class dereference2t : public expr2t
 {
 public:
@@ -1755,7 +1737,7 @@ public:
  *  under certain circumstances irep2 needs to represent such function calls,
  *  so this facility is preserved in irep2.
  *
- *  @extends sideeffect_data */
+ * */
 class sideeffect2t : public expr2t
 {
 public:

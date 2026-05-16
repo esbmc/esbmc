@@ -1,20 +1,16 @@
 #pragma once
-// Generic switch-dispatch helpers for the irep2 hierarchy flattening
-// (issue #4560).
+// Generic switch-dispatch helpers for irep2's flat node layout.
 //
-// Include AFTER irep2_expr.h; do NOT pull this into irep2.h or irep2_expr.h —
-// it depends on the full definitions of all concrete kinds.
+// Include AFTER irep2_expr.h: this depends on the full definitions of every
+// concrete kind. Do NOT pull this into irep2.h or irep2_expr.h.
 //
-// Each kind that has been migrated to the flat struct layout exposes a
-// `static constexpr auto fields` tuple of member pointers covering its
-// user-visible fields. The `has_fields_v<K>` trait detects that declaration
-// and the `generic_*` functions provide the corresponding operation bodies.
-// The v2 switch dispatchers in irep2_expr.cpp use
-//   if constexpr (esbmct::has_fields_v<kind##2t>)
-//     return esbmct::generic_*(static_cast<const kind##2t &>(*this), ...);
-//   else
-//     return static_cast<const kind##2t &>(*this).op(...);  // virtual path
-// so unmigrated kinds still go through the existing virtual methods.
+// Each concrete kind exposes a `static constexpr auto fields` tuple of
+// member pointers covering its user-visible fields, plus a static
+// `field_names` array naming them in tuple order. The generic_*<K>
+// helpers below walk that tuple via std::apply to implement cmp/lt/crc/
+// hash/tostring/clone/get_sub_expr/foreach_operand uniformly. The
+// switch-on-id dispatchers on expr2t / type2t pick the right helper per
+// kind from the X-macro manifests (`expr_kinds.inc`, `type_kinds.inc`).
 
 #include <tuple>
 #include <type_traits>
@@ -107,10 +103,9 @@ void generic_hash(const K &a, crypto_hash &h)
 
 // --------------------------------------------------------------------------
 // generic_tostring: build the pretty-print member list from K::fields.
-// K::field_names[i] names the i-th user field (0-based).
-// Skips any type2tc slot in K::fields when K is an expr kind, mirroring the
-// irep_methods2::tostring logic that skips expr2t::type from the trait list
-// (the type is shown via the pretty-print banner, not as a named field).
+// K::field_names[i] names the i-th user field (0-based). When K is an expr
+// kind, any type2tc slot in K::fields is skipped — the type is shown by
+// the pretty-print banner above the member list, not as a named field.
 // --------------------------------------------------------------------------
 template <class K>
 list_of_memberst generic_tostring(const K &a, unsigned int indent)
