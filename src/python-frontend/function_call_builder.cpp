@@ -502,7 +502,21 @@ symbol_id function_call_builder::build_function_id() const
       symbolt *var_symbol = converter_.find_symbol(var_sid.to_string());
 
       if (!var_symbol)
-        throw std::runtime_error("Variable " + obj_name + " not found");
+      {
+        // Reaching here means the attribute-chain resolver above could not
+        // determine a struct type for the receiver (most commonly because a
+        // function parameter is unannotated and python_annotation could not
+        // infer it from any call site), and `obj_name` ended up as the
+        // trailing attribute name rather than a real variable. Surface a
+        // diagnostic that names the unresolved member call and points at
+        // the likely missing annotation, instead of the cryptic
+        // "Variable <attr> not found" the call previously emitted.
+        throw std::runtime_error(
+          "Could not resolve type of receiver in member call '." + obj_name +
+          "." + func_name +
+          "()'. Add a type annotation to the function parameter or local "
+          "variable so the attribute chain can be typed.");
+      }
 
       // Extract class name from the type, following symbol references
       typet var_type = var_symbol->type.is_pointer()
