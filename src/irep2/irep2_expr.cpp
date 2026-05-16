@@ -110,6 +110,41 @@ void expr2t::hash(crypto_hash &hash) const
   hash_v2(hash);
 }
 
+expr2tc expr2t::clone() const
+{
+  return clone_v2();
+}
+
+list_of_memberst expr2t::tostring(unsigned int indent) const
+{
+  return tostring_v2(indent);
+}
+
+const expr2tc *expr2t::get_sub_expr(size_t idx) const
+{
+  return get_sub_expr_v2(idx);
+}
+
+expr2tc *expr2t::get_sub_expr_nc(size_t idx)
+{
+  return get_sub_expr_nc_v2(idx);
+}
+
+size_t expr2t::get_num_sub_exprs() const
+{
+  return get_num_sub_exprs_v2();
+}
+
+void expr2t::foreach_operand_impl_const(const_op_delegate &f) const
+{
+  foreach_operand_impl_const_v2(f);
+}
+
+void expr2t::foreach_operand_impl(op_delegate &f)
+{
+  foreach_operand_impl_v2(f);
+}
+
 std::string get_expr_id(const expr2t &expr)
 {
   return std::string(expr_names[expr.expr_id]);

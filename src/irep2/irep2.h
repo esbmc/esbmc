@@ -818,8 +818,8 @@ protected:
   /** Copy constructor */
   expr2t(const expr2t &ref);
 
-  virtual void foreach_operand_impl_const(const_op_delegate &expr) const = 0;
-  virtual void foreach_operand_impl(op_delegate &expr) = 0;
+  virtual void foreach_operand_impl_const(const_op_delegate &expr) const;
+  virtual void foreach_operand_impl(op_delegate &expr);
 
   // Non-virtual switch-based dispatchers (issue #4560 scaffolding).
   void foreach_operand_impl_const_v2(const_op_delegate &expr) const;
@@ -835,7 +835,7 @@ public:
   virtual ~expr2t() = default;
 
   /** Clone method. Self explanatory. */
-  virtual expr2tc clone() const = 0;
+  virtual expr2tc clone() const;
 
   /* These are all self explanatory */
   bool operator==(const expr2t &ref) const;
@@ -905,7 +905,7 @@ public:
    *  @param indent Number of spaces to indent multiline output by
    *  @return list of string pairs, of form fieldname:value
    */
-  virtual list_of_memberst tostring(unsigned int indent) const = 0;
+  virtual list_of_memberst tostring(unsigned int indent) const;
 
   /** Perform digest/hash function on expr object.
    *  Takes all fields in this exprs and adds them to the passed in hash object
@@ -930,17 +930,17 @@ public:
    *  These can come out of any field that is an expr2tc, or contains them.
    *  No particular numbering order is promised.
    */
-  virtual const expr2tc *get_sub_expr(size_t idx) const = 0;
+  virtual const expr2tc *get_sub_expr(size_t idx) const;
 
   /** Fetch a sub-operand. Non-const version.
    *  These can come out of any field that is an expr2tc, or contains them.
    *  No particular numbering order is promised.
    */
-  virtual expr2tc *get_sub_expr_nc(size_t idx) = 0;
+  virtual expr2tc *get_sub_expr_nc(size_t idx);
 
   /** Count the number of sub-exprs there are.
    */
-  virtual size_t get_num_sub_exprs() const = 0;
+  virtual size_t get_num_sub_exprs() const;
 
   /** Simplify an expression.
    *  Similar to simplification in the string-based irep, this generates an

@@ -443,6 +443,7 @@ ESBMC_DEFINE_DATA(extract, ESBMC_FIELDS_extract);
 // Given how otherwise this means typing a large amount of template arguments
 // again and again, this gets macro'd.
 
+// For kinds that still use the 4-layer template hierarchy.
 #define irep_typedefs(basename, superclass)                                    \
   template <typename... Args>                                                  \
   inline expr2tc basename##2tc(Args && ...args)                                \
@@ -455,6 +456,14 @@ ESBMC_DEFINE_DATA(extract, ESBMC_FIELDS_extract);
     expr_methods2<basename##2t, superclass, superclass::traits>;               \
   extern template class esbmct::                                               \
     irep_methods2<basename##2t, superclass, superclass::traits>;
+
+// For kinds that inherit from expr2t directly (flattened).
+#define irep_typedefs_flat(basename)                                           \
+  template <typename... Args>                                                  \
+  inline expr2tc basename##2tc(Args && ...args)                                \
+  {                                                                            \
+    return make_irep<basename##2t>(std::forward<Args>(args)...);               \
+  }
 
 // This can't be replaced by iterating over all expr ids in preprocessing
 // magic because the mapping between top level expr class and it's data holding
@@ -474,42 +483,42 @@ irep_typedefs(nearbyint, typecast_data);
 irep_typedefs(typecast, typecast_data);
 irep_typedefs(bitcast, bitcast_data);
 irep_typedefs(if, if_data);
-irep_typedefs(equality, relation_data);
-irep_typedefs(notequal, relation_data);
-irep_typedefs(lessthan, relation_data);
-irep_typedefs(greaterthan, relation_data);
-irep_typedefs(lessthanequal, relation_data);
-irep_typedefs(greaterthanequal, relation_data);
+irep_typedefs_flat(equality);
+irep_typedefs_flat(notequal);
+irep_typedefs_flat(lessthan);
+irep_typedefs_flat(greaterthan);
+irep_typedefs_flat(lessthanequal);
+irep_typedefs_flat(greaterthanequal);
 irep_typedefs(cmp_three_way, relation_data);
 irep_typedefs(not, bool_1op);
-irep_typedefs(and, logic_2ops);
-irep_typedefs(or, logic_2ops);
-irep_typedefs(xor, logic_2ops);
-irep_typedefs(implies, logic_2ops);
-irep_typedefs(bitand, bit_2ops);
-irep_typedefs(bitor, bit_2ops);
-irep_typedefs(bitxor, bit_2ops);
-irep_typedefs(lshr, bit_2ops);
-irep_typedefs(bitnot, arith_1op);
-irep_typedefs(neg, arith_1op);
-irep_typedefs(abs, arith_1op);
-irep_typedefs(add, arith_2ops);
-irep_typedefs(sub, arith_2ops);
-irep_typedefs(mul, arith_2ops);
-irep_typedefs(div, arith_2ops);
-irep_typedefs(ieee_add, ieee_arith_2ops);
-irep_typedefs(ieee_sub, ieee_arith_2ops);
-irep_typedefs(ieee_mul, ieee_arith_2ops);
-irep_typedefs(ieee_div, ieee_arith_2ops);
+irep_typedefs_flat(and);
+irep_typedefs_flat(or);
+irep_typedefs_flat(xor);
+irep_typedefs_flat(implies);
+irep_typedefs_flat(bitand);
+irep_typedefs_flat(bitor);
+irep_typedefs_flat(bitxor);
+irep_typedefs_flat(lshr);
+irep_typedefs_flat(bitnot);
+irep_typedefs_flat(neg);
+irep_typedefs_flat(abs);
+irep_typedefs_flat(add);
+irep_typedefs_flat(sub);
+irep_typedefs_flat(mul);
+irep_typedefs_flat(div);
+irep_typedefs_flat(ieee_add);
+irep_typedefs_flat(ieee_sub);
+irep_typedefs_flat(ieee_mul);
+irep_typedefs_flat(ieee_div);
 irep_typedefs(ieee_fma, ieee_arith_3ops);
 irep_typedefs(ieee_sqrt, ieee_arith_1op);
-irep_typedefs(modulus, arith_2ops);
-irep_typedefs(shl, bit_2ops);
-irep_typedefs(ashr, bit_2ops);
+irep_typedefs_flat(modulus);
+irep_typedefs_flat(shl);
+irep_typedefs_flat(ashr);
 irep_typedefs(same_object, same_object_data);
 irep_typedefs(pointer_offset, pointer_ops);
-irep_typedefs(pointer_object, pointer_ops);
-irep_typedefs(pointer_capability, pointer_ops);
+irep_typedefs_flat(pointer_object);
+irep_typedefs_flat(pointer_capability);
 irep_typedefs(address_of, pointer_ops);
 irep_typedefs(byte_extract, byte_extract_data);
 irep_typedefs(byte_update, byte_update_data);
@@ -518,62 +527,63 @@ irep_typedefs(member, member_data);
 irep_typedefs(member_ref, member_ref_data);
 irep_typedefs(ptr_mem, ptr_mem_data);
 irep_typedefs(index, index_data);
-irep_typedefs(isnan, bool_1op);
+irep_typedefs_flat(isnan);
 irep_typedefs(overflow, overflow_ops);
 irep_typedefs(overflow_cast, overflow_cast_data);
 irep_typedefs(overflow_neg, overflow_ops);
-irep_typedefs(unknown, expr2t);
-irep_typedefs(invalid, expr2t);
-irep_typedefs(null_object, expr2t);
+irep_typedefs_flat(unknown);
+irep_typedefs_flat(invalid);
+irep_typedefs_flat(null_object);
 irep_typedefs(dynamic_object, dynamic_object_data);
 irep_typedefs(dereference, dereference_data);
-irep_typedefs(valid_object, object_ops);
-irep_typedefs(races_check, object_ops);
-irep_typedefs(deallocated_obj, object_ops);
-irep_typedefs(dynamic_size, object_ops);
+irep_typedefs_flat(valid_object);
+irep_typedefs_flat(races_check);
+irep_typedefs_flat(deallocated_obj);
+irep_typedefs_flat(dynamic_size);
 irep_typedefs(sideeffect, sideeffect_data);
 irep_typedefs(code_block, code_block_data);
 irep_typedefs(code_assign, code_assign_data);
-irep_typedefs(code_decl, code_decl_data);
-irep_typedefs(code_dead, code_decl_data);
+irep_typedefs_flat(code_decl);
+irep_typedefs_flat(code_dead);
 irep_typedefs(code_printf, code_printf_data);
-irep_typedefs(code_expression, code_expression_data);
-irep_typedefs(code_return, code_expression_data);
+irep_typedefs_flat(code_expression);
+irep_typedefs_flat(code_return);
 irep_typedefs(code_skip, expr2t);
-irep_typedefs(code_free, code_expression_data);
+irep_typedefs_flat(code_free);
 irep_typedefs(code_goto, code_goto_data);
 irep_typedefs(object_descriptor, object_desc_data);
 irep_typedefs(code_function_call, code_funccall_data);
 irep_typedefs(code_comma, code_comma_data);
 irep_typedefs(invalid_pointer, invalid_pointer_ops);
 irep_typedefs(code_asm, code_asm_data);
-irep_typedefs(code_cpp_del_array, code_expression_data);
-irep_typedefs(code_cpp_delete, code_expression_data);
+irep_typedefs_flat(code_cpp_del_array);
+irep_typedefs_flat(code_cpp_delete);
 irep_typedefs(code_cpp_catch, code_cpp_catch_data);
 irep_typedefs(code_cpp_throw, code_cpp_throw_data);
-irep_typedefs(code_cpp_throw_decl, code_cpp_throw_decl_data);
-irep_typedefs(code_cpp_throw_decl_end, code_cpp_throw_decl_data);
-irep_typedefs(isinf, bool_1op);
-irep_typedefs(isnormal, bool_1op);
-irep_typedefs(isfinite, bool_1op);
-irep_typedefs(signbit, overflow_ops);
-irep_typedefs(popcount, overflow_ops);
-irep_typedefs(bswap, arith_1op);
+irep_typedefs_flat(code_cpp_throw_decl);
+irep_typedefs_flat(code_cpp_throw_decl_end);
+irep_typedefs_flat(isinf);
+irep_typedefs_flat(isnormal);
+irep_typedefs_flat(isfinite);
+irep_typedefs_flat(signbit);
+irep_typedefs_flat(popcount);
+irep_typedefs_flat(bswap);
 irep_typedefs(concat, bit_2ops);
 irep_typedefs(extract, extract_data);
-irep_typedefs(capability_base, object_ops);
-irep_typedefs(capability_top, object_ops);
-irep_typedefs(forall, logic_2ops);
-irep_typedefs(exists, logic_2ops);
-irep_typedefs(isinstance, logic_2ops);
-irep_typedefs(hasattr, logic_2ops);
-irep_typedefs(isnone, logic_2ops);
+irep_typedefs_flat(capability_base);
+irep_typedefs_flat(capability_top);
+irep_typedefs_flat(forall);
+irep_typedefs_flat(exists);
+irep_typedefs_flat(isinstance);
+irep_typedefs_flat(hasattr);
+irep_typedefs_flat(isnone);
 
-class exists2t : public exists_expr_methods
+class exists2t : public expr2t
 {
 public:
+  expr2tc side_1, side_2;
   exists2t(const type2tc &type, const expr2tc &sym, const expr2tc &predicate)
-    : exists_expr_methods(type, exists_id, sym, predicate)
+    : expr2t(type, exists_id), side_1(sym), side_2(predicate)
   {
   }
   exists2t(const exists2t &ref) = default;
@@ -583,11 +593,12 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class forall2t : public forall_expr_methods
+class forall2t : public expr2t
 {
 public:
+  expr2tc side_1, side_2;
   forall2t(const type2tc &type, const expr2tc &sym, const expr2tc &predicate)
-    : forall_expr_methods(type, forall_id, sym, predicate)
+    : expr2t(type, forall_id), side_1(sym), side_2(predicate)
   {
   }
   forall2t(const forall2t &ref) = default;
@@ -1098,11 +1109,12 @@ public:
  *  generated is_<name>2t / to_<name>2t helpers are preserved verbatim.
  *  @extends relation_data */
 #define ESBMC_DEFINE_RELATION2T(name)                                          \
-  class name##2t : public name##_expr_methods                                  \
+  class name##2t : public expr2t                                               \
   {                                                                            \
   public:                                                                      \
+    expr2tc side_1, side_2;                                                    \
     name##2t(const expr2tc &v1, const expr2tc &v2)                             \
-      : name##_expr_methods(get_bool_type(), name##_id, v1, v2)                \
+      : expr2t(get_bool_type(), name##_id), side_1(v1), side_2(v2)             \
     {                                                                          \
     }                                                                          \
     name##2t(const name##2t & ref) = default;                                  \
@@ -1125,14 +1137,14 @@ ESBMC_DEFINE_RELATION2T(greaterthanequal);
  * properties so any constructor-time invariant we add later applies
  * uniformly to every class in a macro's family. */
 
-/** Arithmetic two-operand node (`add`/`sub`/`mul`/`div`/`modulus`).
- *  @extends arith_2ops */
+/** Arithmetic two-operand node (`add`/`sub`/`mul`/`div`/`modulus`). */
 #define ESBMC_DEFINE_ARITH_2OP(name)                                           \
-  class name##2t : public name##_expr_methods                                  \
+  class name##2t : public expr2t                                               \
   {                                                                            \
   public:                                                                      \
+    expr2tc side_1, side_2;                                                    \
     name##2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2)        \
-      : name##_expr_methods(type, name##_id, v1, v2)                           \
+      : expr2t(type, name##_id), side_1(v1), side_2(v2)                        \
     {                                                                          \
       assert_arith_2ops_consistency(type, name##_id, v1, v2);                  \
     }                                                                          \
@@ -1151,13 +1163,14 @@ ESBMC_DEFINE_ARITH_2OP(modulus);
 #undef ESBMC_DEFINE_ARITH_2OP
 
 /** Bitwise / shift two-operand node (`bitand`/`bitor`/`bitxor`/
- *  `shl`/`ashr`/`lshr`). @extends bit_2ops */
+ *  `shl`/`ashr`/`lshr`). */
 #define ESBMC_DEFINE_BIT_2OP(name)                                             \
-  class name##2t : public name##_expr_methods                                  \
+  class name##2t : public expr2t                                               \
   {                                                                            \
   public:                                                                      \
+    expr2tc side_1, side_2;                                                    \
     name##2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2)        \
-      : name##_expr_methods(type, name##_id, v1, v2)                           \
+      : expr2t(type, name##_id), side_1(v1), side_2(v2)                        \
     {                                                                          \
     }                                                                          \
     name##2t(const name##2t & ref) = default;                                  \
@@ -1175,14 +1188,14 @@ ESBMC_DEFINE_BIT_2OP(shl);
 ESBMC_DEFINE_BIT_2OP(ashr);
 #undef ESBMC_DEFINE_BIT_2OP
 
-/** Arithmetic one-operand node (`neg`/`abs`/`bswap`/`bitnot`).
- *  @extends arith_1op */
+/** Arithmetic one-operand node (`neg`/`abs`/`bswap`/`bitnot`). */
 #define ESBMC_DEFINE_ARITH_1OP(name)                                           \
-  class name##2t : public name##_expr_methods                                  \
+  class name##2t : public expr2t                                               \
   {                                                                            \
   public:                                                                      \
+    expr2tc value;                                                             \
     name##2t(const type2tc &type, const expr2tc &v)                            \
-      : name##_expr_methods(type, name##_id, v)                                \
+      : expr2t(type, name##_id), value(v)                                      \
     {                                                                          \
     }                                                                          \
     name##2t(const name##2t & ref) = default;                                  \
@@ -1198,14 +1211,14 @@ ESBMC_DEFINE_ARITH_1OP(bitnot);
 ESBMC_DEFINE_ARITH_1OP(bswap);
 #undef ESBMC_DEFINE_ARITH_1OP
 
-/** Pointer one-operand node (`pointer_object`/`pointer_capability`).
- *  @extends pointer_ops */
+/** Pointer one-operand node (`pointer_object`/`pointer_capability`). */
 #define ESBMC_DEFINE_POINTER_1OP(name)                                         \
-  class name##2t : public name##_expr_methods                                  \
+  class name##2t : public expr2t                                               \
   {                                                                            \
   public:                                                                      \
+    expr2tc ptr_obj;                                                           \
     name##2t(const type2tc &type, const expr2tc &v)                            \
-      : name##_expr_methods(type, name##_id, v)                                \
+      : expr2t(type, name##_id), ptr_obj(v)                                    \
     {                                                                          \
     }                                                                          \
     name##2t(const name##2t & ref) = default;                                  \
@@ -1221,13 +1234,14 @@ ESBMC_DEFINE_POINTER_1OP(pointer_capability);
 
 /** Logical two-operand boolean-result node. Used for `and`/`or`/`xor`/
  *  `implies` and the Python runtime predicates `isinstance`/`hasattr`/
- *  `isnone`. Implicit `get_bool_type()` result. @extends logic_2ops */
+ *  `isnone`. Implicit `get_bool_type()` result. */
 #define ESBMC_DEFINE_LOGIC_2OP(name)                                           \
-  class name##2t : public name##_expr_methods                                  \
+  class name##2t : public expr2t                                               \
   {                                                                            \
   public:                                                                      \
+    expr2tc side_1, side_2;                                                    \
     name##2t(const expr2tc &s1, const expr2tc &s2)                             \
-      : name##_expr_methods(get_bool_type(), name##_id, s1, s2)                \
+      : expr2t(get_bool_type(), name##_id), side_1(s1), side_2(s2)             \
     {                                                                          \
     }                                                                          \
     name##2t(const name##2t & ref) = default;                                  \
@@ -1247,14 +1261,14 @@ ESBMC_DEFINE_LOGIC_2OP(isnone);
 #undef ESBMC_DEFINE_LOGIC_2OP
 
 /** FP classification single-operand predicate (`isnan`/`isinf`/
- *  `isnormal`/`isfinite`). Implicit `get_bool_type()` result.
- *  @extends bool_1op */
+ *  `isnormal`/`isfinite`). Implicit `get_bool_type()` result. */
 #define ESBMC_DEFINE_FP_PREDICATE_1OP(name)                                    \
-  class name##2t : public name##_expr_methods                                  \
+  class name##2t : public expr2t                                               \
   {                                                                            \
   public:                                                                      \
+    expr2tc value;                                                             \
     name##2t(const expr2tc &operand)                                           \
-      : name##_expr_methods(get_bool_type(), name##_id, operand)               \
+      : expr2t(get_bool_type(), name##_id), value(operand)                     \
     {                                                                          \
     }                                                                          \
     name##2t(const name##2t & ref) = default;                                  \
@@ -1270,14 +1284,14 @@ ESBMC_DEFINE_FP_PREDICATE_1OP(isfinite);
 #undef ESBMC_DEFINE_FP_PREDICATE_1OP
 
 /** Pointer-object boolean predicate (`valid_object`/`races_check`/
- *  `deallocated_obj`). Implicit `get_bool_type()` result.
- *  @extends object_ops */
+ *  `deallocated_obj`). Implicit `get_bool_type()` result. */
 #define ESBMC_DEFINE_OBJECT_PREDICATE_1OP(name)                                \
-  class name##2t : public name##_expr_methods                                  \
+  class name##2t : public expr2t                                               \
   {                                                                            \
   public:                                                                      \
+    expr2tc value;                                                             \
     name##2t(const expr2tc &operand)                                           \
-      : name##_expr_methods(get_bool_type(), name##_id, operand)               \
+      : expr2t(get_bool_type(), name##_id), value(operand)                     \
     {                                                                          \
     }                                                                          \
     name##2t(const name##2t & ref) = default;                                  \
@@ -1292,13 +1306,14 @@ ESBMC_DEFINE_OBJECT_PREDICATE_1OP(deallocated_obj);
 #undef ESBMC_DEFINE_OBJECT_PREDICATE_1OP
 
 /** Pointer-object size-returning op (`capability_base`/`capability_top`/
- *  `dynamic_size`). Implicit `size_type2()` result. @extends object_ops */
+ *  `dynamic_size`). Implicit `size_type2()` result. */
 #define ESBMC_DEFINE_OBJECT_SIZE_1OP(name)                                     \
-  class name##2t : public name##_expr_methods                                  \
+  class name##2t : public expr2t                                               \
   {                                                                            \
   public:                                                                      \
+    expr2tc value;                                                             \
     name##2t(const expr2tc &operand)                                           \
-      : name##_expr_methods(size_type2(), name##_id, operand)                  \
+      : expr2t(size_type2(), name##_id), value(operand)                        \
     {                                                                          \
     }                                                                          \
     name##2t(const name##2t & ref) = default;                                  \
@@ -1313,13 +1328,14 @@ ESBMC_DEFINE_OBJECT_SIZE_1OP(capability_top);
 #undef ESBMC_DEFINE_OBJECT_SIZE_1OP
 
 /** Single-operand overflow-family op returning int32 (`signbit`/
- *  `popcount`). @extends overflow_ops */
+ *  `popcount`). */
 #define ESBMC_DEFINE_OVERFLOW_INT32_1OP(name)                                  \
-  class name##2t : public name##_expr_methods                                  \
+  class name##2t : public expr2t                                               \
   {                                                                            \
   public:                                                                      \
-    name##2t(const expr2tc &operand)                                           \
-      : name##_expr_methods(get_int32_type(), name##_id, operand)              \
+    expr2tc operand;                                                           \
+    name##2t(const expr2tc &op)                                                \
+      : expr2t(get_int32_type(), name##_id), operand(op)                       \
     {                                                                          \
     }                                                                          \
     name##2t(const name##2t & ref) = default;                                  \
@@ -1333,14 +1349,13 @@ ESBMC_DEFINE_OVERFLOW_INT32_1OP(signbit);
 ESBMC_DEFINE_OVERFLOW_INT32_1OP(popcount);
 #undef ESBMC_DEFINE_OVERFLOW_INT32_1OP
 
-/** Marker node holding only a `type` (no operands), derived from
- *  expr2t directly. Used for `unknown`/`invalid`/`null_object`.
- *  @extends expr2t */
+/** Marker node holding only a `type` (no operands). Used for
+ *  `unknown`/`invalid`/`null_object`. */
 #define ESBMC_DEFINE_TYPE_ONLY(name)                                           \
-  class name##2t : public name##_expr_methods                                  \
+  class name##2t : public expr2t                                               \
   {                                                                            \
   public:                                                                      \
-    name##2t(const type2tc &type) : name##_expr_methods(type, name##_id)       \
+    name##2t(const type2tc &type) : expr2t(type, name##_id)                    \
     {                                                                          \
     }                                                                          \
     name##2t(const name##2t & ref) = default;                                  \
@@ -1356,13 +1371,14 @@ ESBMC_DEFINE_TYPE_ONLY(null_object);
 
 /** `code_*` statement with empty type and a single `expr2tc` operand
  *  (`code_expression`/`code_return`/`code_free`/`code_cpp_del_array`/
- *  `code_cpp_delete`). @extends code_expression_data */
+ *  `code_cpp_delete`). */
 #define ESBMC_DEFINE_CODE_EXPRESSION_1OP(name)                                 \
-  class name##2t : public name##_expr_methods                                  \
+  class name##2t : public expr2t                                               \
   {                                                                            \
   public:                                                                      \
-    name##2t(const expr2tc &operand)                                           \
-      : name##_expr_methods(get_empty_type(), name##_id, operand)              \
+    expr2tc operand;                                                           \
+    name##2t(const expr2tc &op)                                                \
+      : expr2t(get_empty_type(), name##_id), operand(op)                       \
     {                                                                          \
     }                                                                          \
     name##2t(const name##2t & ref) = default;                                  \
@@ -1379,13 +1395,14 @@ ESBMC_DEFINE_CODE_EXPRESSION_1OP(code_cpp_delete);
 #undef ESBMC_DEFINE_CODE_EXPRESSION_1OP
 
 /** `code_*` declaration carrying `(type, irep_idt name)`. Used for
- *  `code_decl`/`code_dead`. @extends code_decl_data */
+ *  `code_decl`/`code_dead`. */
 #define ESBMC_DEFINE_CODE_DECL(name)                                           \
-  class name##2t : public name##_expr_methods                                  \
+  class name##2t : public expr2t                                               \
   {                                                                            \
   public:                                                                      \
+    irep_idt value;                                                            \
     name##2t(const type2tc &type, const irep_idt &n)                           \
-      : name##_expr_methods(type, name##_id, n)                                \
+      : expr2t(type, name##_id), value(n)                                      \
     {                                                                          \
     }                                                                          \
     name##2t(const name##2t & ref) = default;                                  \
@@ -1401,13 +1418,14 @@ ESBMC_DEFINE_CODE_DECL(code_dead);
 
 /** `code_*` C++ throw-decl carrying a single `std::vector<irep_idt>`
  *  of exception names. Used for `code_cpp_throw_decl`/
- *  `code_cpp_throw_decl_end`. @extends code_cpp_throw_decl_data */
+ *  `code_cpp_throw_decl_end`. */
 #define ESBMC_DEFINE_CODE_CPP_THROW_DECL(name)                                 \
-  class name##2t : public name##_expr_methods                                  \
+  class name##2t : public expr2t                                               \
   {                                                                            \
   public:                                                                      \
+    std::vector<irep_idt> exception_list;                                      \
     name##2t(const std::vector<irep_idt> &names)                               \
-      : name##_expr_methods(get_empty_type(), name##_id, names)                \
+      : expr2t(get_empty_type(), name##_id), exception_list(names)             \
     {                                                                          \
     }                                                                          \
     name##2t(const name##2t & ref) = default;                                  \
@@ -1478,15 +1496,16 @@ public:
  *  to_<name>2t helpers are preserved verbatim.
  *  @extends ieee_arith_2ops */
 #define ESBMC_DEFINE_IEEE_ARITH_2OP(name)                                      \
-  class name##2t : public name##_expr_methods                                  \
+  class name##2t : public expr2t                                               \
   {                                                                            \
   public:                                                                      \
+    expr2tc rounding_mode, side_1, side_2;                                     \
     name##2t(                                                                  \
       const type2tc &type,                                                     \
       const expr2tc &v1,                                                       \
       const expr2tc &v2,                                                       \
       const expr2tc &rm)                                                       \
-      : name##_expr_methods(type, name##_id, rm, v1, v2)                       \
+      : expr2t(type, name##_id), rounding_mode(rm), side_1(v1), side_2(v2)    \
     {                                                                          \
     }                                                                          \
     name##2t(const name##2t & ref) = default;                                  \
