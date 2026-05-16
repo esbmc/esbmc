@@ -5,6 +5,7 @@
 #include <python-frontend/module_manager.h>
 #include <python-frontend/module.h>
 #include <python-frontend/type_utils.h>
+#include <python-frontend/python_annotation/annotation_intrinsics.h>
 #include <util/message.h>
 
 #include <string>
@@ -17,90 +18,11 @@ enum class InferResult
   UNKNOWN,
 };
 
-// Handle Python built-in functions
-static const std::map<std::string, std::string> builtin_functions = {
-  // Type conversion functions
-  {"int", "int"},
-  {"float", "float"},
-  {"str", "str"},
-  {"bool", "bool"},
-  {"list", "list"},
-  {"dict", "dict"},
-  {"set", "set"},
-  {"tuple", "tuple"},
-
-  // Numeric functions
-  {"abs", "int"},   // Can return int or float, but int is common case
-  {"round", "int"}, // Can return int or float
-  {"min", "Any"},   // Type depends on input
-  {"max", "Any"},   // Type depends on input
-  {"sum", "Any"},   // Type depends on input
-  {"pow", "int"},   // Can return int or float
-
-  // Sequence functions
-  {"len", "int"},
-  {"range", "range"},
-  {"enumerate", "enumerate"},
-  {"zip", "zip"},
-  {"reversed", "reversed"},
-  {"sorted", "list"},
-
-  // I/O functions
-  {"print", "NoneType"},
-  {"input", "str"},
-  {"open", "file"},
-
-  // Utility functions
-  {"isinstance", "bool"},
-  {"issubclass", "bool"},
-  {"hasattr", "bool"},
-  {"getattr", "Any"},
-  {"setattr", "NoneType"},
-  {"delattr", "NoneType"},
-  {"callable", "bool"},
-  {"id", "int"},
-  {"hash", "int"},
-  {"repr", "str"},
-  {"ascii", "str"},
-  {"ord", "int"},
-  {"chr", "str"},
-  {"bin", "str"},
-  {"oct", "str"},
-  {"hex", "str"},
-  {"format", "str"},
-
-  // Iteration functions
-  {"iter", "iterator"},
-  {"next", "Any"},
-  {"all", "bool"},
-  {"any", "bool"},
-  {"filter", "filter"},
-  {"map", "map"},
-
-  // Variable functions
-  {"vars", "dict"},
-  {"dir", "list"},
-  {"globals", "dict"},
-  {"locals", "dict"},
-
-  // Execution functions
-  {"eval", "Any"},
-  {"exec", "NoneType"},
-  {"compile", "code"},
-
-  // String module constants
-  {"string.digits", "str"},
-  {"string.ascii_lowercase", "str"},
-  {"string.ascii_uppercase", "str"},
-  {"string.ascii_letters", "str"},
-  {"string.punctuation", "str"},
-  {"string.whitespace", "str"},
-  {"string.printable", "str"},
-  {"string.hexdigits", "str"},
-  {"string.octdigits", "str"},
-
-  // Import functions
-  {"__import__", "module"}};
+// `builtin_functions` was moved to python_annotation/annotation_intrinsics.{h,cpp}.
+// The unqualified name remains available inside this header as a function call
+// so existing call sites stay byte-identical apart from the trailing parens
+// (`builtin_functions.find(...)` -> `builtin_functions().find(...)`).
+using python_annotation_intrinsics::builtin_functions;
 
 template <class Json>
 class python_annotation
@@ -1575,8 +1497,8 @@ private:
             val.contains("func") && val["func"].contains("_type") &&
             val["func"]["_type"] == "Name" && val["func"].contains("id"))
           {
-            auto it = builtin_functions.find(val["func"]["id"]);
-            if (it != builtin_functions.end())
+            auto it = builtin_functions().find(val["func"]["id"]);
+            if (it != builtin_functions().end())
               return it->second;
           }
         }
@@ -1598,8 +1520,8 @@ private:
           return class_name;
 
         // Check built-in functions first
-        auto it = builtin_functions.find(func_name);
-        if (it != builtin_functions.end())
+        auto it = builtin_functions().find(func_name);
+        if (it != builtin_functions().end())
           return it->second;
 
         // For user-defined functions, try to get return type
@@ -2058,8 +1980,8 @@ private:
           std::string full_name =
             lhs["value"]["id"].template get<std::string>() + "." +
             lhs["attr"].template get<std::string>();
-          auto it = builtin_functions.find(full_name);
-          if (it != builtin_functions.end())
+          auto it = builtin_functions().find(full_name);
+          if (it != builtin_functions().end())
             type = it->second;
         }
       }
@@ -2424,8 +2346,8 @@ private:
     }
 
     // Check if the function is a built-in function
-    auto it = builtin_functions.find(func_name);
-    if (it != builtin_functions.end())
+    auto it = builtin_functions().find(func_name);
+    if (it != builtin_functions().end())
     {
       functions_in_analysis_.erase(func_name);
       return it->second;
@@ -2828,7 +2750,7 @@ private:
       static const std::unordered_set<std::string> iterable_builtins = {
         "range", "enumerate", "zip", "reversed"};
       if (iterable_builtins.count(rhs_var_name))
-        return builtin_functions.at(rhs_var_name);
+        return builtin_functions().at(rhs_var_name);
 
       const auto &lineno = element["lineno"].template get<int>();
 
