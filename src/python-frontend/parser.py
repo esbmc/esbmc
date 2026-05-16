@@ -32,8 +32,23 @@ import base64
 import shutil
 import subprocess
 import tempfile
+from typing import NamedTuple
 from libs.ast2json import ast2json as ast2json_func
 from preprocessor import Preprocessor
+
+
+class _ThreadSite(NamedTuple):
+    """Per-call-site information captured from a ``Thread(...)`` construction.
+
+    Bundled so ``_make_construction_block`` / ``_make_trampoline`` can pass
+    one parameter instead of four when synthesising the trampoline + bare
+    ``Thread()`` for a single site.
+    """
+
+    site_id: int
+    target_chain: str
+    args: list[ast.expr]
+    original_func: ast.expr
 
 
 def run_mypy_strict(filename):
@@ -195,15 +210,6 @@ def _is_thread_constructor(
     return False
 
 
-def _expr_is_thread_constructor(
-    expr: ast.expr, module_aliases: set[str], thread_aliases: set[str]
-) -> bool:
-    """Convenience wrapper that narrows ``expr`` to ``ast.Call`` first."""
-    if not isinstance(expr, ast.Call):
-        return False
-    return _is_thread_constructor(expr, module_aliases, thread_aliases)
-
-
 def _target_name_chain(node: ast.AST) -> str | None:
     """Return dotted form of a ``Name``/``Attribute`` chain or None.
 
@@ -361,25 +367,24 @@ def _find_thread_var_assigns(
     """
     assigns: dict[str, ast.Call] = {}
     for stmt in func_body:
+        target_name: str | None = None
+        value: ast.expr | None = None
         if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1 and isinstance(
             stmt.targets[0], ast.Name
         ):
-            if _expr_is_thread_constructor(
-                stmt.value, module_aliases, thread_aliases
-            ):
-                # _expr_is_thread_constructor confirmed Call narrowing.
-                assert isinstance(stmt.value, ast.Call)
-                assigns[stmt.targets[0].id] = stmt.value
-        elif (
-            isinstance(stmt, ast.AnnAssign)
-            and isinstance(stmt.target, ast.Name)
-            and stmt.value is not None
-            and _expr_is_thread_constructor(
-                stmt.value, module_aliases, thread_aliases
-            )
+            target_name = stmt.targets[0].id
+            value = stmt.value
+        elif isinstance(stmt, ast.AnnAssign) and isinstance(
+            stmt.target, ast.Name
         ):
-            assert isinstance(stmt.value, ast.Call)
-            assigns[stmt.target.id] = stmt.value
+            target_name = stmt.target.id
+            value = stmt.value
+        if (
+            target_name is not None
+            and isinstance(value, ast.Call)
+            and _is_thread_constructor(value, module_aliases, thread_aliases)
+        ):
+            assigns[target_name] = value
     return assigns
 
 
@@ -457,9 +462,7 @@ class _ThreadDesugarer(ast.NodeTransformer):
         self._site_counter += 1
         return site
 
-    def _make_trampoline(
-        self, site_id: int, target_chain: str, args: list[ast.expr]
-    ) -> ast.FunctionDef:
+    def _make_trampoline(self, site: _ThreadSite) -> ast.FunctionDef:
         """Return the synthesised per-site trampoline ``FunctionDef``.
 
         The body is::
@@ -490,23 +493,23 @@ class _ThreadDesugarer(ast.NodeTransformer):
         symex doesn't fall off the end of the trampoline frame (the
         spawn-thread machinery leaves the trampoline's call stack empty).
         """
-        target_parts = target_chain.split(".")
+        target_parts = site.target_chain.split(".")
         target_expr: ast.expr = ast.Name(id=target_parts[0], ctx=ast.Load())
         for part in target_parts[1:]:
             target_expr = ast.Attribute(value=target_expr, attr=part, ctx=ast.Load())
 
         # Deep-copy each arg AST so further mutation by NodeTransformer
         # doesn't change the trampoline's view of the construction-site
-        # expression.
-        arg_exprs: list[ast.expr] = [copy.deepcopy(a) for a in args]
-        # Force Load context on every Name inside the copied arg subtree
-        # (the original may have been Store-positioned, but the
-        # trampoline reads them).
+        # expression. Force Load context on every Name inside the copied
+        # arg subtree (the original may have been Store-positioned, but
+        # the trampoline reads them).
+        arg_exprs: list[ast.expr] = [copy.deepcopy(a) for a in site.args]
         for arg in arg_exprs:
             for node in ast.walk(arg):
                 if isinstance(node, (ast.Name, ast.Attribute, ast.Subscript)):
                     node.ctx = ast.Load()
 
+        ended_name = f"__pythread_ended_{site.site_id}"
         # ``global`` declaration so the trampoline's assignment to the
         # ended flag flips the OUTER variable (the one ``join`` waits on)
         # rather than creating a function-local shadow that never escapes
@@ -514,7 +517,7 @@ class _ThreadDesugarer(ast.NodeTransformer):
         # unsatisfiable, the post-join path is unreachable, and every
         # downstream assertion verifies vacuously.
         trampoline_body: list[ast.stmt] = [
-            ast.Global(names=[f"__pythread_ended_{site_id}"]),
+            ast.Global(names=[ended_name]),
             ast.Expr(
                 value=ast.Call(
                     func=target_expr,
@@ -530,11 +533,7 @@ class _ThreadDesugarer(ast.NodeTransformer):
                 )
             ),
             ast.Assign(
-                targets=[
-                    ast.Name(
-                        id=f"__pythread_ended_{site_id}", ctx=ast.Store()
-                    )
-                ],
+                targets=[ast.Name(id=ended_name, ctx=ast.Store())],
                 value=ast.Constant(value=1),
             ),
             ast.Expr(
@@ -556,7 +555,7 @@ class _ThreadDesugarer(ast.NodeTransformer):
         ]
 
         trampoline = ast.FunctionDef(
-            name=f"__pythread_trampoline_{site_id}",
+            name=f"__pythread_trampoline_{site.site_id}",
             args=ast.arguments(
                 posonlyargs=[],
                 args=[],
@@ -574,12 +573,7 @@ class _ThreadDesugarer(ast.NodeTransformer):
         return trampoline
 
     def _make_construction_block(
-        self,
-        var_name: str,
-        site_id: int,
-        target_chain: str,
-        args: list[ast.expr],
-        original_func: ast.expr,
+        self, var_name: str, site: _ThreadSite
     ) -> list[ast.stmt]:
         """Return the statements that replace ``var = Thread(target=, args=)``.
 
@@ -593,35 +587,30 @@ class _ThreadDesugarer(ast.NodeTransformer):
         name (rather than copying them through globals), so multiple
         threads constructed with the same shared instance see the same
         memory through the same scope chain — required for race / lock
-        exploration to work.
+        exploration to work. The bare ``Thread()`` reuses the exact
+        ``func`` AST from the original construction site so the
+        constructor reference is guaranteed in scope.
         """
         stmts: list[ast.stmt] = [
             ast.Assign(
                 targets=[
                     ast.Name(
-                        id=f"__pythread_ended_{site_id}", ctx=ast.Store()
+                        id=f"__pythread_ended_{site.site_id}",
+                        ctx=ast.Store(),
                     )
                 ],
                 value=ast.Constant(value=0),
             ),
-            self._make_trampoline(site_id, target_chain, args),
-        ]
-        # Bare Thread() construction reusing the exact ``func`` AST from
-        # the original construction site. This keeps the alias form the
-        # user wrote (``threading.Thread`` / ``t.Thread`` / bare
-        # ``Thread``) so the constructor reference is guaranteed to be in
-        # scope at the rewrite point — picking an arbitrary alias from a
-        # global set risked emitting a name not visible at this site.
-        stmts.append(
+            self._make_trampoline(site),
             ast.Assign(
                 targets=[ast.Name(id=var_name, ctx=ast.Store())],
                 value=ast.Call(
-                    func=copy.deepcopy(original_func),
+                    func=copy.deepcopy(site.original_func),
                     args=[],
                     keywords=[],
                 ),
-            )
-        )
+            ),
+        ]
         for s in stmts:
             ast.fix_missing_locations(s)
         return stmts
@@ -707,20 +696,10 @@ class _ThreadDesugarer(ast.NodeTransformer):
             for stmt in body:
                 lhs_name = self._thread_assign_target(stmt, thread_vars)
                 if lhs_name is not None:
-                    call_node = thread_vars[lhs_name]
-                    target_value, args_values = self._extract_call_kwargs(call_node)
-                    target_chain = _target_name_chain(target_value)
-                    assert target_chain is not None  # validated earlier
-                    site_id = self._next_site_id()
-                    self._current_thread_vars[lhs_name] = site_id
+                    site = self._site_from_call(thread_vars[lhs_name])
+                    self._current_thread_vars[lhs_name] = site.site_id
                     new_body.extend(
-                        self._make_construction_block(
-                            lhs_name,
-                            site_id,
-                            target_chain,
-                            args_values,
-                            call_node.func,
-                        )
+                        self._make_construction_block(lhs_name, site)
                     )
                     continue
                 visited = self.visit(stmt)
@@ -732,6 +711,28 @@ class _ThreadDesugarer(ast.NodeTransformer):
             return new_body
         finally:
             self._current_thread_vars = previous
+
+    def _site_from_call(self, call_node: ast.Call) -> _ThreadSite:
+        """Turn a validated ``Thread(target=, args=)`` call into a site record.
+
+        The validator has already proven ``target=`` resolves to a name
+        chain and ``args=`` is a tuple literal (see
+        :func:`validate_threading_thread_usage`); a ``RuntimeError`` here
+        would indicate that pre-pass was skipped.
+        """
+        target_value, args_values = self._extract_call_kwargs(call_node)
+        target_chain = _target_name_chain(target_value)
+        if target_chain is None:
+            raise RuntimeError(
+                "threading.Thread `target=` did not resolve to a name chain; "
+                "validate_threading_thread_usage should have caught this."
+            )
+        return _ThreadSite(
+            site_id=self._next_site_id(),
+            target_chain=target_chain,
+            args=args_values,
+            original_func=call_node.func,
+        )
 
     # pylint: disable-next=invalid-name
     def visit_FunctionDef(self, node: ast.FunctionDef) -> ast.AST:
@@ -778,7 +779,12 @@ class _ThreadDesugarer(ast.NodeTransformer):
     def _extract_call_kwargs(
         call_node: ast.Call,
     ) -> tuple[ast.expr, list[ast.expr]]:
-        """Pull ``target=`` and ``args=`` from a validated Thread call."""
+        """Pull ``target=`` and ``args=`` from a validated Thread call.
+
+        Raises ``RuntimeError`` if ``target=`` is missing; the validator
+        in :func:`validate_threading_thread_usage` rejects that shape
+        earlier so this only fires if the validator was skipped.
+        """
         target_value: ast.expr | None = None
         args_values: list[ast.expr] = []
         for kw in call_node.keywords:
@@ -786,14 +792,18 @@ class _ThreadDesugarer(ast.NodeTransformer):
                 target_value = kw.value
             elif kw.arg == "args" and isinstance(kw.value, ast.Tuple):
                 args_values = list(kw.value.elts)
-        assert target_value is not None  # validated earlier
+        if target_value is None:
+            raise RuntimeError(
+                "threading.Thread call has no `target=`; "
+                "validate_threading_thread_usage should have caught this."
+            )
         return target_value, args_values
 
     def _thread_method_site(
         self, node: ast.AST
-    ) -> tuple[str, int] | None:
+    ) -> tuple[str, str, int] | None:
         """If ``node`` is ``t.start()``/``t.join()`` on a tracked Thread var,
-        return ``(method_name, site_id)``; otherwise ``None``.
+        return ``(var_name, method_name, site_id)``; otherwise ``None``.
 
         Fails loudly if ``start`` / ``join`` are called with any positional
         or keyword arguments — neither method takes any in the MVP, and
@@ -819,7 +829,7 @@ class _ThreadDesugarer(ast.NodeTransformer):
                 "called with no arguments in the MVP "
                 "(no `join(timeout=...)`, no positional forwarding).",
             )
-        return func.attr, self._current_thread_vars[var_name]
+        return var_name, func.attr, self._current_thread_vars[var_name]
 
     # pylint: disable-next=invalid-name
     def visit_Expr(self, node: ast.Expr) -> ast.AST | list[ast.AST]:
@@ -835,9 +845,7 @@ class _ThreadDesugarer(ast.NodeTransformer):
         if match is None:
             self.generic_visit(node)
             return node
-        method, site_id = match
-        assert isinstance(node.value, ast.Call)
-        var_name = node.value.func.value.id  # type: ignore[union-attr]
+        var_name, method, site_id = match
         if method == "start":
             return self._make_start_call(var_name, site_id)
         return self._make_join_block(site_id)
