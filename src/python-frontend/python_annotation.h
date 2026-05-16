@@ -934,8 +934,9 @@ private:
       return "";
     for (const auto &node : ast_["body"])
     {
-      if (!node.contains("_type") || node["_type"] != "ImportFrom" ||
-          !node.contains("names") || !node.contains("module"))
+      if (
+        !node.contains("_type") || node["_type"] != "ImportFrom" ||
+        !node.contains("names") || !node.contains("module"))
         continue;
       bool is_star = false;
       for (const auto &name : node["names"])
@@ -969,9 +970,8 @@ private:
   /// @c int). Returns "" when any operand is not resolvable in the foreign
   /// scope, signalling the caller to fall through to @c ast_-based
   /// inference. Introduced for GitHub #4564.
-  std::string resolve_expr_in_enclosing_func(
-    const Json &elt,
-    const Json &enclosing_func)
+  std::string
+  resolve_expr_in_enclosing_func(const Json &elt, const Json &enclosing_func)
   {
     if (!elt.contains("_type"))
       return "";
@@ -984,7 +984,8 @@ private:
       return resolve_expr_in_enclosing_func(elt["operand"], enclosing_func);
     if (t == "BinOp" && elt.contains("left") && elt.contains("right"))
     {
-      std::string l = resolve_expr_in_enclosing_func(elt["left"], enclosing_func);
+      std::string l =
+        resolve_expr_in_enclosing_func(elt["left"], enclosing_func);
       std::string r =
         resolve_expr_in_enclosing_func(elt["right"], enclosing_func);
       if (l.empty() || r.empty())
