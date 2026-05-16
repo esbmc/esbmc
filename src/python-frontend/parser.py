@@ -507,7 +507,14 @@ class _ThreadDesugarer(ast.NodeTransformer):
                 if isinstance(node, (ast.Name, ast.Attribute, ast.Subscript)):
                     node.ctx = ast.Load()
 
+        # ``global`` declaration so the trampoline's assignment to the
+        # ended flag flips the OUTER variable (the one ``join`` waits on)
+        # rather than creating a function-local shadow that never escapes
+        # the trampoline frame. Without this the join's assume is
+        # unsatisfiable, the post-join path is unreachable, and every
+        # downstream assertion verifies vacuously.
         trampoline_body: list[ast.stmt] = [
+            ast.Global(names=[f"__pythread_ended_{site_id}"]),
             ast.Expr(
                 value=ast.Call(
                     func=target_expr,
@@ -572,6 +579,7 @@ class _ThreadDesugarer(ast.NodeTransformer):
         site_id: int,
         target_chain: str,
         args: list[ast.expr],
+        original_func: ast.expr,
     ) -> list[ast.stmt]:
         """Return the statements that replace ``var = Thread(target=, args=)``.
 
@@ -598,32 +606,20 @@ class _ThreadDesugarer(ast.NodeTransformer):
             ),
             self._make_trampoline(site_id, target_chain, args),
         ]
-        # Bare Thread() construction so the user's variable still holds a
-        # Thread instance (with a `_tid` field) the start/join rewrites can
-        # read.
-        thread_ctor: ast.expr
-        if self._module_aliases:
-            mod_alias = next(iter(self._module_aliases))
-            thread_ctor = ast.Call(
-                func=ast.Attribute(
-                    value=ast.Name(id=mod_alias, ctx=ast.Load()),
-                    attr="Thread",
-                    ctx=ast.Load(),
-                ),
-                args=[],
-                keywords=[],
-            )
-        else:
-            thread_alias = next(iter(self._thread_aliases))
-            thread_ctor = ast.Call(
-                func=ast.Name(id=thread_alias, ctx=ast.Load()),
-                args=[],
-                keywords=[],
-            )
+        # Bare Thread() construction reusing the exact ``func`` AST from
+        # the original construction site. This keeps the alias form the
+        # user wrote (``threading.Thread`` / ``t.Thread`` / bare
+        # ``Thread``) so the constructor reference is guaranteed to be in
+        # scope at the rewrite point — picking an arbitrary alias from a
+        # global set risked emitting a name not visible at this site.
         stmts.append(
             ast.Assign(
                 targets=[ast.Name(id=var_name, ctx=ast.Store())],
-                value=thread_ctor,
+                value=ast.Call(
+                    func=copy.deepcopy(original_func),
+                    args=[],
+                    keywords=[],
+                ),
             )
         )
         for s in stmts:
@@ -719,7 +715,11 @@ class _ThreadDesugarer(ast.NodeTransformer):
                     self._current_thread_vars[lhs_name] = site_id
                     new_body.extend(
                         self._make_construction_block(
-                            lhs_name, site_id, target_chain, args_values
+                            lhs_name,
+                            site_id,
+                            target_chain,
+                            args_values,
+                            call_node.func,
                         )
                     )
                     continue
@@ -793,7 +793,12 @@ class _ThreadDesugarer(ast.NodeTransformer):
         self, node: ast.AST
     ) -> tuple[str, int] | None:
         """If ``node`` is ``t.start()``/``t.join()`` on a tracked Thread var,
-        return ``(method_name, site_id)``; otherwise ``None``."""
+        return ``(method_name, site_id)``; otherwise ``None``.
+
+        Fails loudly if ``start`` / ``join`` are called with any positional
+        or keyword arguments — neither method takes any in the MVP, and
+        silently dropping ``join(timeout=...)`` would weaken the model.
+        """
         if not isinstance(node, ast.Call):
             return None
         func = node.func
@@ -806,6 +811,14 @@ class _ThreadDesugarer(ast.NodeTransformer):
             return None
         if func.attr not in ("start", "join"):
             return None
+        if node.args or node.keywords:
+            self._fail(
+                node.lineno,
+                f"`{var_name}.{func.attr}(...)` is not supported with "
+                "arguments. Thread.start() and Thread.join() must be "
+                "called with no arguments in the MVP "
+                "(no `join(timeout=...)`, no positional forwarding).",
+            )
         return func.attr, self._current_thread_vars[var_name]
 
     # pylint: disable-next=invalid-name
@@ -813,9 +826,10 @@ class _ThreadDesugarer(ast.NodeTransformer):
         """Replace ``t.start()`` / ``t.join()`` statement-level calls.
 
         ``start`` lowers to a single ``t._tid = __ESBMC_spawn_thread(...)``
-        assignment; ``join`` lowers to a 3-statement atomic-assume block,
-        which is returned as a list so :class:`ast.NodeTransformer` splices
-        it into the parent body in place of the original ``Expr``.
+        assignment; ``join`` lowers to a single
+        ``__ESBMC_assume(__pythread_ended_<N> == 1)`` statement (returned
+        as a one-element list so :class:`ast.NodeTransformer` splices it
+        into the parent body in place of the original ``Expr``).
         """
         match = self._thread_method_site(node.value)
         if match is None:
@@ -830,6 +844,71 @@ class _ThreadDesugarer(ast.NodeTransformer):
 
 
 
+def _assert_no_residual_thread_usage(
+    tree: ast.Module,
+    source_filename: str,
+    module_aliases: set[str],
+    thread_aliases: set[str],
+) -> None:
+    """Fail if any Thread construction / start / join survived desugaring.
+
+    The desugarer only rewrites Thread bindings at the top level of a
+    function or module body — bindings inside ``if`` / ``try`` / ``with``
+    nested statement lists slip through. Catching those here keeps the
+    desugarer scope narrow while preserving the "fail loudly, never
+    silently weaken" invariant from #4565.
+    """
+    def fail(line: int, message: str) -> None:
+        print(f"ERROR: {source_filename}:{line}: {message}")
+        sys.exit(4)
+
+    thread_var_names = {
+        name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef)
+        for name in _find_thread_var_assigns(
+            node.body, module_aliases, thread_aliases
+        )
+    }
+    thread_var_names |= set(
+        _find_thread_var_assigns(tree.body, module_aliases, thread_aliases)
+    )
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        if _is_thread_constructor(node, module_aliases, thread_aliases):
+            # The desugarer emits bare ``Thread()`` calls (no args, no
+            # keywords) as part of the construction block — those are
+            # expected. Reject everything else: a residual Thread call
+            # with ``target=`` / ``args=`` means the desugarer never saw
+            # the binding, so the trampoline-and-spawn lowering won't
+            # happen and the model would silently weaken.
+            if node.args or node.keywords:
+                fail(
+                    node.lineno,
+                    "threading.Thread construction must be a top-level "
+                    "statement of a function or module body (single "
+                    "`t = Thread(...)` assignment). Constructions inside "
+                    "`if` / `try` / `with` / expression context are not "
+                    "yet supported.",
+                )
+        if not isinstance(node.func, ast.Attribute):
+            continue
+        if not isinstance(node.func.value, ast.Name):
+            continue
+        if node.func.attr not in ("start", "join"):
+            continue
+        if node.func.value.id in thread_var_names:
+            fail(
+                node.lineno,
+                f"`{node.func.value.id}.{node.func.attr}()` must be a "
+                "top-level statement of the function/module that constructs "
+                "the Thread. Method calls inside `if` / `try` / `with` / "
+                "expression context are not yet supported.",
+            )
+
+
 def desugar_threading_thread(tree: ast.Module, source_filename: str) -> None:
     """Apply :class:`_ThreadDesugarer` to ``tree`` in-place."""
     module_aliases, thread_aliases = _collect_thread_aliases(tree)
@@ -838,6 +917,9 @@ def desugar_threading_thread(tree: ast.Module, source_filename: str) -> None:
     desugarer = _ThreadDesugarer(source_filename, module_aliases, thread_aliases)
     desugarer.rewrite_module(tree)
     ast.fix_missing_locations(tree)
+    _assert_no_residual_thread_usage(
+        tree, source_filename, module_aliases, thread_aliases
+    )
 
 
 def is_testing_framework(module_name):

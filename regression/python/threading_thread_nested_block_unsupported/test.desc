@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR:.*Thread construction must be a top-level statement
