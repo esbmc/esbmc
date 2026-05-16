@@ -506,44 +506,7 @@ private:
   // inferred, or when sites disagree on arity or per-position element
   // types.
   std::vector<std::string>
-  infer_subscript_key_tuple_types(const std::string &class_name)
-  {
-    // Unanimous-wins on per-position element types. The first qualifying
-    // site fixes the expected type vector; any later site that disagrees on
-    // arity or on a per-position type abandons synthesis so the existing
-    // void* default keeps working for those call sites.
-    bool any_reject = false;
-    std::vector<std::string> expected;
-    auto reducer = [&](const Json &elts, const Json *enclosing_func) {
-      if (any_reject)
-        return;
-      std::vector<std::string> types =
-        infer_tuple_element_types(elts, enclosing_func);
-      if (types.empty())
-      {
-        any_reject = true;
-        return;
-      }
-      if (expected.empty())
-        expected = std::move(types);
-      else if (expected != types)
-        any_reject = true;
-    };
-
-    auto scan = [&](const Json &ast) {
-      std::unordered_map<std::string, std::string> var_to_class;
-      collect_class_instance_map(ast, var_to_class);
-      visit_class_tuple_subscripts(ast, class_name, var_to_class, reducer);
-    };
-
-    scan(ast_);
-    for (const Json *extra : extra_subscript_inference_asts_)
-      scan(*extra);
-
-    if (any_reject)
-      return {};
-    return expected;
-  }
+  infer_subscript_key_tuple_types(const std::string &class_name);
 
   // Populate @p out with a name→class-name map for every variable in @p ast
   // that has a Name-typed annotation. Two sources are consulted:
@@ -564,45 +527,7 @@ private:
   // worth the complexity of lexical scoping until it bites.
   void collect_class_instance_map(
     const Json &ast,
-    std::unordered_map<std::string, std::string> &out) const
-  {
-    auto record = [&](const Json &target_id, const Json &annotation) {
-      if (
-        !target_id.is_string() || !annotation.is_object() ||
-        !annotation.contains("_type") || annotation["_type"] != "Name" ||
-        !annotation.contains("id") || !annotation["id"].is_string())
-        return;
-      out[target_id.template get<std::string>()] =
-        annotation["id"].template get<std::string>();
-    };
-
-    std::function<void(const Json &)> walk = [&](const Json &node) {
-      if (node.is_object())
-      {
-        if (
-          node.contains("_type") && node["_type"] == "AnnAssign" &&
-          node.contains("target") && node["target"].is_object() &&
-          node["target"].contains("_type") &&
-          node["target"]["_type"] == "Name" && node["target"].contains("id") &&
-          node.contains("annotation"))
-          record(node["target"]["id"], node["annotation"]);
-        else if (
-          node.contains("_type") && node["_type"] == "arg" &&
-          node.contains("arg") && node.contains("annotation"))
-          record(node["arg"], node["annotation"]);
-        for (auto it = node.begin(); it != node.end(); ++it)
-          walk(it.value());
-      }
-      else if (node.is_array())
-      {
-        for (const auto &elem : node)
-          walk(elem);
-      }
-    };
-
-    if (ast.is_object() && ast.contains("body"))
-      walk(ast["body"]);
-  }
+    std::unordered_map<std::string, std::string> &out) const;
 
   // Walk @p node and invoke @p visit(elts, enclosing_func) for every
   // Subscript whose value is a Name resolving to @p class_name and whose
@@ -619,41 +544,7 @@ private:
     const std::string &class_name,
     const std::unordered_map<std::string, std::string> &var_to_class,
     Visitor &&visit,
-    const Json *enclosing_func = nullptr)
-  {
-    if (node.is_object())
-    {
-      const Json *next_enclosing = enclosing_func;
-      if (
-        node.contains("_type") &&
-        (node["_type"] == "FunctionDef" || node["_type"] == "AsyncFunctionDef"))
-        next_enclosing = &node;
-
-      if (
-        node.contains("_type") && node["_type"] == "Subscript" &&
-        node.contains("value") && node["value"].is_object() &&
-        node["value"].contains("_type") && node["value"]["_type"] == "Name" &&
-        node["value"].contains("id") && node.contains("slice") &&
-        node["slice"].is_object() && node["slice"].contains("_type") &&
-        node["slice"]["_type"] == "Tuple" && node["slice"].contains("elts") &&
-        node["slice"]["elts"].is_array() && !node["slice"]["elts"].empty())
-      {
-        auto it =
-          var_to_class.find(node["value"]["id"].template get<std::string>());
-        if (it != var_to_class.end() && it->second == class_name)
-          visit(node["slice"]["elts"], next_enclosing);
-      }
-      for (auto it = node.begin(); it != node.end(); ++it)
-        visit_class_tuple_subscripts(
-          it.value(), class_name, var_to_class, visit, next_enclosing);
-    }
-    else if (node.is_array())
-    {
-      for (const auto &elem : node)
-        visit_class_tuple_subscripts(
-          elem, class_name, var_to_class, visit, enclosing_func);
-    }
-  }
+    const Json *enclosing_func = nullptr);
 
   // Resolve a `Name` elt against @p enclosing_func's parameters and local
   // annotated assigns. Returns the annotation type name on success, or "" if
@@ -662,27 +553,7 @@ private:
   // own `find_var_node_for_inference` only searches `ast_` (GitHub #4558).
   std::string resolve_name_in_enclosing_func(
     const std::string &name,
-    const Json &enclosing_func)
-  {
-    auto lookup = [&](const Json &scope) -> std::string {
-      Json node = find_annotated_assign(name, scope);
-      if (has_annotation(node))
-        return json_utils::get_annotation_type_name(node["annotation"]);
-      return "";
-    };
-
-    if (enclosing_func.contains("args"))
-    {
-      const Json &arg_spec = enclosing_func["args"];
-      for (const char *key : {"args", "kwonlyargs"})
-        if (arg_spec.contains(key))
-          if (std::string t = lookup(arg_spec[key]); !t.empty())
-            return t;
-    }
-    if (enclosing_func.contains("body"))
-      return lookup(enclosing_func["body"]);
-    return "";
-  }
+    const Json &enclosing_func);
 
   /// @brief Resolve @p func_name through any `from X import *` in @c ast_.
   ///
@@ -692,38 +563,7 @@ private:
   /// missing return type falls back to @p func_name so callers treat it as
   /// a class-constructor-style call, matching the named-import branch's
   /// heuristic. Introduced for GitHub #4564.
-  std::string resolve_wildcard_import_func(const std::string &func_name)
-  {
-    if (!module_manager_ || !ast_.contains("body"))
-      return "";
-    for (const auto &node : ast_["body"])
-    {
-      if (
-        !node.contains("_type") || node["_type"] != "ImportFrom" ||
-        !node.contains("names") || !node.contains("module"))
-        continue;
-      bool is_star = false;
-      for (const auto &name : node["names"])
-        if (name.contains("name") && name["name"] == "*")
-        {
-          is_star = true;
-          break;
-        }
-      if (!is_star)
-        continue;
-      auto module = module_manager_->get_module(node["module"]);
-      if (!module)
-        continue;
-      auto func_info = module->get_function(func_name);
-      if (func_info.name_.empty())
-        continue;
-      if (
-        func_info.return_type_.empty() || func_info.return_type_ == "NoneType")
-        return func_name;
-      return func_info.return_type_;
-    }
-    return "";
-  }
+  std::string resolve_wildcard_import_func(const std::string &func_name);
 
   /// @brief Resolve a tuple-key elt against @p enclosing_func's scope.
   ///
@@ -735,33 +575,7 @@ private:
   /// scope, signalling the caller to fall through to @c ast_-based
   /// inference. Introduced for GitHub #4564.
   std::string
-  resolve_expr_in_enclosing_func(const Json &elt, const Json &enclosing_func)
-  {
-    if (!elt.contains("_type"))
-      return "";
-    const std::string &t = elt["_type"];
-    if (t == "Constant")
-      return get_type_from_constant(elt);
-    if (t == "Name" && elt.contains("id"))
-      return resolve_name_in_enclosing_func(elt["id"], enclosing_func);
-    if (t == "UnaryOp" && elt.contains("operand"))
-      return resolve_expr_in_enclosing_func(elt["operand"], enclosing_func);
-    if (t == "BinOp" && elt.contains("left") && elt.contains("right"))
-    {
-      std::string l =
-        resolve_expr_in_enclosing_func(elt["left"], enclosing_func);
-      std::string r =
-        resolve_expr_in_enclosing_func(elt["right"], enclosing_func);
-      if (l.empty() || r.empty())
-        return "";
-      if (l == "float" || r == "float")
-        return "float";
-      if (l == "int" && r == "int")
-        return "int";
-      return "";
-    }
-    return "";
-  }
+  resolve_expr_in_enclosing_func(const Json &elt, const Json &enclosing_func);
 
   // Resolve each element of @p elts to a Python type name suitable for a
   // synthesised `tuple[...]` annotation. Slice literals and `slice(...)`
@@ -776,39 +590,7 @@ private:
   // with whatever the caller actually builds at the subscript site.
   std::vector<std::string> infer_tuple_element_types(
     const Json &elts,
-    const Json *enclosing_func = nullptr)
-  {
-    std::vector<std::string> types;
-    types.reserve(elts.size());
-    for (const Json &elt : elts)
-    {
-      if (!elt.contains("_type"))
-        return {};
-      const std::string &t = elt["_type"];
-      if (t == "Slice")
-      {
-        types.emplace_back("slice");
-        continue;
-      }
-      if (
-        t == "Call" && elt.contains("func") && elt["func"].is_object() &&
-        elt["func"].contains("_type") && elt["func"]["_type"] == "Name" &&
-        elt["func"].contains("id") && elt["func"]["id"] == "slice")
-      {
-        types.emplace_back("slice");
-        continue;
-      }
-      std::string resolved;
-      if (enclosing_func != nullptr)
-        resolved = resolve_expr_in_enclosing_func(elt, *enclosing_func);
-      if (resolved.empty())
-        resolved = get_argument_type(elt);
-      if (resolved.empty() || resolved == "Any")
-        return {};
-      types.push_back(std::move(resolved));
-    }
-    return types;
-  }
+    const Json *enclosing_func = nullptr);
 
   // Method to find all function calls to a specific function
   std::vector<Json>
