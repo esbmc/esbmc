@@ -39,6 +39,7 @@ add_library(pythonfrontend STATIC
             module_manager.cpp
             module_locator.cpp
             python_annotation/annotation_intrinsics.cpp
+            python_annotation/annotation_parser.cpp
             python_annotation/annotation_utils.cpp
             symbol_id.cpp
             type_handler.cpp

@@ -6,6 +6,7 @@
 #include <python-frontend/module.h>
 #include <python-frontend/type_utils.h>
 #include <python-frontend/python_annotation/annotation_intrinsics.h>
+#include <python-frontend/python_annotation/annotation_parser.h>
 #include <python-frontend/python_annotation/annotation_utils.h>
 #include <util/message.h>
 
@@ -23,6 +24,8 @@
 // identical except, for `builtin_functions`, the trailing parens
 // (`builtin_functions.find(...)` -> `builtin_functions().find(...)`).
 using python_annotation_intrinsics::builtin_functions;
+using python_annotation_parser::find_function_recursive;
+using python_annotation_parser::find_lambda_in_body;
 using python_annotation_utils::get_base_var_name;
 using python_annotation_utils::get_type_from_json;
 using python_annotation_utils::has_annotation;
@@ -1961,22 +1964,6 @@ private:
     return type;
   }
 
-  Json find_lambda_in_body(const std::string &func_name, const Json &body) const
-  {
-    for (const Json &elem : body)
-    {
-      if (
-        elem["_type"] == "Assign" && !elem["targets"].empty() &&
-        elem["targets"][0].contains("id") &&
-        elem["targets"][0]["id"] == func_name && elem.contains("value") &&
-        elem["value"]["_type"] == "Lambda")
-      {
-        return elem;
-      }
-    }
-    return Json();
-  }
-
   std::string infer_lambda_return_type(const Json &lambda_elem) const
   {
     const Json &lambda_body = lambda_elem["value"]["body"];
@@ -1986,45 +1973,6 @@ private:
       return "bool";
     else
       return "Any"; // Default for other lambda expressions
-  }
-
-  // Helper method to recursively search for a function in the AST
-  Json
-  find_function_recursive(const std::string &func_name, const Json &body) const
-  {
-    for (const Json &elem : body)
-    {
-      // Found the function at this level
-      if (elem["_type"] == "FunctionDef" && elem["name"] == func_name)
-      {
-        return elem;
-      }
-
-      // Recursively search in nested function bodies
-      if (elem["_type"] == "FunctionDef" && elem.contains("body"))
-      {
-        Json nested = find_function_recursive(func_name, elem["body"]);
-        if (!nested.empty())
-          return nested;
-      }
-
-      // Also search in control flow blocks
-      if (elem.contains("body") && elem["body"].is_array())
-      {
-        Json nested = find_function_recursive(func_name, elem["body"]);
-        if (!nested.empty())
-          return nested;
-      }
-
-      if (elem.contains("orelse") && elem["orelse"].is_array())
-      {
-        Json nested = find_function_recursive(func_name, elem["orelse"]);
-        if (!nested.empty())
-          return nested;
-      }
-    }
-
-    return Json(); // Not found
   }
 
   std::string
@@ -4376,48 +4324,6 @@ private:
   }
 
   /**
-   * @brief Locate the RHS value of `self.@p attr = ...` in @p cls's
-   *        `__init__` method.
-   * @return The assignment's value node, or an empty Json when not found.
-   */
-  Json find_self_attr_init_rhs(const std::string &cls, const std::string &attr)
-  {
-    Json class_node = json_utils::find_class(ast_["body"], cls);
-    if (class_node.empty() || !class_node.contains("body"))
-      return Json();
-
-    for (const Json &member : class_node["body"])
-    {
-      if (member["_type"] != "FunctionDef" || member["name"] != "__init__")
-        continue;
-      for (const Json &stmt : member["body"])
-      {
-        if (!stmt.contains("_type") || !stmt.contains("value"))
-          continue;
-        const Json *target = nullptr;
-        if (stmt["_type"] == "AnnAssign" && stmt.contains("target"))
-          target = &stmt["target"];
-        else if (
-          stmt["_type"] == "Assign" && stmt.contains("targets") &&
-          stmt["targets"].is_array() && !stmt["targets"].empty())
-          target = &stmt["targets"][0];
-        if (
-          target == nullptr || !target->is_object() ||
-          !target->contains("_type") || (*target)["_type"] != "Attribute" ||
-          !target->contains("value") || !(*target)["value"].is_object() ||
-          !(*target)["value"].contains("_type") ||
-          (*target)["value"]["_type"] != "Name" ||
-          !(*target)["value"].contains("id") ||
-          (*target)["value"]["id"] != "self" || !target->contains("attr") ||
-          (*target)["attr"] != attr)
-          continue;
-        return stmt["value"];
-      }
-    }
-    return Json();
-  }
-
-  /**
    * @brief Infer the type of the element at position @p index in @p rhs, the
    *        right-hand side of a tuple/list unpacking assignment.
    *
@@ -4452,8 +4358,8 @@ private:
         rhs["value"]["id"].template get<std::string>());
       if (cls.empty())
         return "Any";
-      Json attr_rhs =
-        find_self_attr_init_rhs(cls, rhs["attr"].template get<std::string>());
+      Json attr_rhs = python_annotation_parser::find_self_attr_init_rhs(
+        cls, rhs["attr"].template get<std::string>(), ast_["body"]);
       if (attr_rhs.empty())
         return "Any";
       return infer_unpacked_element_type(attr_rhs, index);
