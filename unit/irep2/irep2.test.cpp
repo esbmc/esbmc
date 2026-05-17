@@ -455,11 +455,6 @@ SCENARIO("not2t flat-layout dispatchers (issue #4560)", "[core][irep2]")
     expr2tc e_not = not2tc(inner);
     expr2tc e_not2 = not2tc(inner); // independent copy with same value
 
-    THEN("has_fields_v<not2t> is true")
-    {
-      REQUIRE(esbmct::has_fields_v<not2t>);
-    }
-
     THEN("cmp returns true for structurally-equal operands")
     {
       REQUIRE(e_not->cmp(*e_not2));

@@ -21,15 +21,6 @@ namespace esbmct
 {
 
 // --------------------------------------------------------------------------
-// has_fields_v<K>: true once K::fields has been declared.
-// --------------------------------------------------------------------------
-template <class K, class = void>
-inline constexpr bool has_fields_v = false;
-
-template <class K>
-inline constexpr bool has_fields_v<K, std::void_t<decltype(K::fields)>> = true;
-
-// --------------------------------------------------------------------------
 // generic_cmp: structural equality over K::fields.
 // Precondition: a.expr_id == o.expr_id (checked at the switch boundary).
 // --------------------------------------------------------------------------
