@@ -2,6 +2,8 @@
 
 #include <python-frontend/json_utils.h>
 
+#include <cassert>
+
 namespace python_annotation_parser
 {
 
@@ -68,6 +70,9 @@ nlohmann::json find_self_attr_init_rhs(
   const std::string &attr,
   const nlohmann::json &ast_body)
 {
+  // @p ast_body is the top-level AST `body` array (i.e. ast_["body"]).
+  // `json_utils::find_class` iterates it expecting class-shaped nodes.
+  assert(ast_body.is_array());
   nlohmann::json class_node = json_utils::find_class(ast_body, cls);
   if (class_node.empty() || !class_node.contains("body"))
     return nlohmann::json();

@@ -29,7 +29,9 @@ nlohmann::json find_function_recursive(
 // Inside class @p cls (looked up in @p ast_body), find the
 // `__init__` method and return the right-hand side of the first
 // `self.@p attr = ...` assignment. Returns an empty Json when no
-// such assignment exists.
+// such assignment exists. @p ast_body must be the top-level AST
+// `body` array (i.e. `ast["body"]`) — `json_utils::find_class`
+// iterates it expecting class-shaped nodes.
 nlohmann::json find_self_attr_init_rhs(
   const std::string &cls,
   const std::string &attr,
