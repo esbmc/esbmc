@@ -282,6 +282,18 @@ class ExpressionRewriteMixin:
             if rewritten is None:
                 rewritten = self._try_transform_items_set_eq(right, left, node)
             if rewritten is None:
+                rewritten = self._try_transform_items_list_eq(left, right, node)
+            if rewritten is None:
+                rewritten = self._try_transform_items_list_eq(right, left, node)
+            if rewritten is None:
+                rewritten = self._try_transform_keys_view_eq(left, right, node)
+            if rewritten is None:
+                rewritten = self._try_transform_keys_view_eq(right, left, node)
+            if rewritten is None:
+                rewritten = self._try_transform_values_view_eq(left, right, node)
+            if rewritten is None:
+                rewritten = self._try_transform_values_view_eq(right, left, node)
+            if rewritten is None:
                 rewritten = self._try_transform_list_tuple_eq(left, right, node)
             if rewritten is None:
                 rewritten = self._try_transform_list_tuple_eq(right, left, node)
