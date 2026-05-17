@@ -506,3 +506,217 @@ void function_call_expr::handle_int_to_float(nlohmann::json &arg) const
   int value = arg["value"].get<int>();
   arg["value"] = static_cast<double>(value);
 }
+
+exprt function_call_expr::handle_base_conversion(
+  nlohmann::json &arg,
+  const std::string &func_name,
+  const std::string &prefix,
+  std::ios_base &(*base_formatter)(std::ios_base &)) const
+{
+  long long int_value = 0;
+  bool is_negative = false;
+
+  // Extract integer value from argument
+  if (arg.contains("_type") && arg["_type"] == "UnaryOp")
+  {
+    const auto &op = arg["op"];
+    const auto &operand = arg["operand"];
+
+    if (
+      op["_type"] == "USub" && operand.contains("value") &&
+      operand["value"].is_number_integer())
+    {
+      int_value = operand["value"].get<long long>();
+
+      // Treat -0 as 0 (consistent with Python behavior)
+      if (int_value != 0)
+        is_negative = true;
+    }
+    else
+    {
+      return converter_.get_exception_handler().gen_exception_raise(
+        "TypeError", "Unsupported UnaryOp in " + func_name + "()");
+    }
+  }
+  else if (arg.contains("value") && arg["value"].is_number_integer())
+  {
+    int_value = arg["value"].get<long long>();
+    if (int_value < 0)
+      is_negative = true;
+  }
+  else
+  {
+    return converter_.get_exception_handler().gen_exception_raise(
+      "TypeError", func_name + "() argument must be an integer");
+  }
+
+  // Convert to string with appropriate base and prefix
+  std::ostringstream oss;
+  oss << (is_negative ? "-" + prefix : prefix) << base_formatter;
+
+  // For hex, also apply nouppercase
+  if (func_name == "hex")
+    oss << std::nouppercase;
+
+  oss << std::llabs(int_value);
+  const std::string result_str = oss.str();
+
+  // Create string type and return character array expression
+  typet t = type_handler_.get_typet("str", result_str.size() + 1);
+  std::vector<uint8_t> string_literal(result_str.begin(), result_str.end());
+  return converter_.make_char_array_expr(string_literal, t);
+}
+
+exprt function_call_expr::handle_hex(nlohmann::json &arg) const
+{
+  return handle_base_conversion(arg, "hex", "0x", std::hex);
+}
+
+exprt function_call_expr::handle_oct(nlohmann::json &arg) const
+{
+  return handle_base_conversion(arg, "oct", "0o", std::oct);
+}
+
+/// Extracts the character string represented by a symbol's constant value.
+std::optional<std::string>
+function_call_expr::extract_string_from_symbol(const symbolt *sym) const
+{
+  const exprt &val = sym->value;
+  std::string result;
+
+  if (val.id() == "if" && val.operands().size() == 3)
+  {
+    const exprt &cond = val.operands()[0];
+
+    symbolt true_sym;
+    true_sym.value = val.operands()[1];
+    true_sym.type = true_sym.value.type();
+    auto true_text = extract_string_from_symbol(&true_sym);
+
+    symbolt false_sym;
+    false_sym.value = val.operands()[2];
+    false_sym.type = false_sym.value.type();
+    auto false_text = extract_string_from_symbol(&false_sym);
+
+    if (cond.is_true())
+      return true_text;
+    if (cond.is_false())
+      return false_text;
+
+    if (true_text && false_text && *true_text == *false_text)
+      return true_text;
+    return std::nullopt;
+  }
+
+  std::function<std::optional<char>(const exprt &)> decode_char =
+    [&](const exprt &expr) -> std::optional<char> {
+    try
+    {
+      if (expr.id() == "typecast" && !expr.operands().empty())
+        return decode_char(expr.operands().front());
+
+      if (expr.id() == "if" && expr.operands().size() == 3)
+      {
+        const exprt &cond = expr.operands()[0];
+        const exprt &true_case = expr.operands()[1];
+        const exprt &false_case = expr.operands()[2];
+
+        if (cond.is_true())
+          return decode_char(true_case);
+        if (cond.is_false())
+          return decode_char(false_case);
+
+        auto true_char = decode_char(true_case);
+        auto false_char = decode_char(false_case);
+        if (true_char && false_char && *true_char == *false_char)
+          return true_char;
+        return std::nullopt;
+      }
+
+      if (!expr.is_constant())
+        return std::nullopt;
+
+      const auto &const_expr = to_constant_expr(expr);
+      std::string binary_str = id2string(const_expr.get_value());
+      unsigned c = std::stoul(binary_str, nullptr, 2);
+      return static_cast<char>(c);
+    }
+    catch (const std::exception &e)
+    {
+      log_error("Failed to decode character: {}", e.what());
+      return std::nullopt;
+    }
+  };
+
+  if (val.type().is_array() && val.has_operands())
+  {
+    for (const auto &ch : val.operands())
+    {
+      auto decoded = decode_char(ch);
+      if (!decoded)
+        return std::nullopt;
+      if (*decoded == '\0')
+        break;
+      result += *decoded;
+    }
+  }
+  else if (val.is_constant() && val.type().is_signedbv())
+  {
+    auto decoded = decode_char(val);
+    if (!decoded)
+      return std::nullopt;
+    result += *decoded;
+  }
+  else
+  {
+    log_error("Unhandled symbol format in string extraction.");
+    return std::nullopt;
+  }
+
+  return result;
+}
+
+exprt function_call_expr::handle_str_symbol_to_float(const symbolt *sym) const
+{
+  auto value_opt = extract_string_from_symbol(sym);
+  if (!value_opt)
+    return from_double(0.0, type_handler_.get_typet("float", 0));
+
+  {
+    char *end = nullptr;
+    double dval = std::strtod(value_opt->c_str(), &end);
+    if (!end || end != value_opt->c_str() + value_opt->size())
+    {
+      log_error(
+        "Failed float conversion from string \"{}\": invalid argument",
+        *value_opt);
+      return from_double(0.0, type_handler_.get_typet("float", 0));
+    }
+    return from_double(dval, type_handler_.get_typet("float", 0));
+  }
+}
+
+exprt function_call_expr::handle_str_symbol_to_int(const symbolt *sym) const
+{
+  auto value_opt = extract_string_from_symbol(sym);
+  if (!value_opt)
+    return from_integer(0, type_handler_.get_typet("int", 0));
+
+  const std::string &value = *value_opt;
+  if (value.empty() || !std::all_of(value.begin(), value.end(), ::isdigit))
+  {
+    log_error("Invalid string for integer conversion: \"{}\"", value);
+    return from_integer(0, type_handler_.get_typet("int", 0));
+  }
+
+  try
+  {
+    int int_val = std::stoi(value);
+    return from_integer(int_val, type_handler_.get_typet("int", 0));
+  }
+  catch (const std::exception &e)
+  {
+    log_error("Failed int conversion from string \"{}\": {}", value, e.what());
+    return from_integer(0, type_handler_.get_typet("int", 0));
+  }
+}
