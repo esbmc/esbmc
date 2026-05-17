@@ -149,7 +149,25 @@ class CoreVisitorsMixin:
         self._update_variable_types_simple(target, node.value)
 
         if isinstance(target, ast.Name):
+            # _update_name_target_assignment_metadata replaces a
+            # defaultdict(...) call with an empty Dict literal, so the
+            # call shape must be sampled before that mutation.
+            was_defaultdict_call = (isinstance(node.value, ast.Call)
+                                    and self._is_defaultdict_call(node.value))
             self._update_name_target_assignment_metadata(target.id, node)
+            if was_defaultdict_call:
+                annotation = self._build_defaultdict_value_annotation(target.id, node)
+                if annotation is not None:
+                    ann_assign = ast.AnnAssign(
+                        target=ast.Name(id=target.id, ctx=ast.Store()),
+                        annotation=annotation,
+                        value=node.value,
+                        simple=1,
+                    )
+                    self._copy_location_info(node, ann_assign)
+                    ast.fix_missing_locations(ann_assign)
+                    self.variable_annotations[target.id] = annotation
+                    return ann_assign
 
         if (isinstance(node.value, ast.Subscript) and isinstance(node.value.value, ast.Name)
                 and node.value.value.id in self._defaultdict_factory):
@@ -204,6 +222,37 @@ class CoreVisitorsMixin:
             ast.copy_location(empty_dict, node.value)
             ast.fix_missing_locations(empty_dict)
             node.value = empty_dict
+
+    def _build_defaultdict_value_annotation(self, target_id, template):
+        """Build ``dict[Any, <factory>[Any]]`` annotation for ``d = defaultdict(<factory>)``.
+
+        Returns ``None`` when no factory was recorded, or when the factory is
+        not a plain ``Name`` referring to a known container builtin
+        (``list``/``dict``/``set``). The annotation lets the dict handler
+        resolve ``d[k]`` to the factory's container type, which in turn
+        lets list-method calls like ``d[k].append(v)`` find the underlying
+        list via the dict-subscript path.
+        """
+        factory = self._defaultdict_factory.get(target_id)
+        if not isinstance(factory, ast.Name) or factory.id not in ("list", "dict", "set"):
+            return None
+        any_key = ast.Name(id="Any", ctx=ast.Load())
+        any_elem = ast.Name(id="Any", ctx=ast.Load())
+        factory_value = ast.Subscript(
+            value=ast.Name(id=factory.id, ctx=ast.Load()),
+            slice=any_elem,
+            ctx=ast.Load(),
+        )
+        slice_tuple = ast.Tuple(elts=[any_key, factory_value], ctx=ast.Load())
+        annotation = ast.Subscript(
+            value=ast.Name(id="dict", ctx=ast.Load()),
+            slice=slice_tuple,
+            ctx=ast.Load(),
+        )
+        for node in (any_key, any_elem, factory_value, slice_tuple, annotation):
+            ast.copy_location(node, template)
+        ast.fix_missing_locations(annotation)
+        return annotation
 
     def _handle_multi_target_assign(self, node):
         has_tuple_target = any(isinstance(t, (ast.Tuple, ast.List)) for t in node.targets)

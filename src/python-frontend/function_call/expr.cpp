@@ -1545,44 +1545,76 @@ function_call_expr::get_object_list_symbol(std::string &display_name) const
     const typet list_type = converter_.get_type_handler().get_list_type();
     const std::string &base_id = base_sym->id.as_string();
 
-    // Constant index: resolve directly from list_type_map.
-    if (
-      slice_node["_type"] == "Constant" &&
-      slice_node["value"].is_number_integer())
+    // Nested list (list-of-list) path: only meaningful when the base is itself
+    // a list, since list_type_map keys list-of-list types.  For non-list bases
+    // (e.g. dicts whose value is a list) we fall through to the get_expr
+    // dispatch below, which can also resolve dict-subscript receivers.
+    if (base_sym->type == list_type)
     {
-      const size_t index = slice_node["value"].get<size_t>();
-
-      if (python_list::get_list_element_type(base_id, index) != list_type)
-        return nullptr;
-
-      const std::string inner_id =
-        python_list::get_list_element_id(base_id, index);
-      if (inner_id.empty())
-        return nullptr;
-
-      display_name = base_name + "[" + std::to_string(index) + "]";
-      return converter_.find_symbol(inner_id);
-    }
-
-    // Non-constant index (e.g. nested[i].append(v)): delegate to the existing
-    // subscript handler.  For comprehension-generated nested lists the handler
-    // hits the list_type_map early-return path and yields the template inner
-    // list symbol (the element produced inside the loop body) without emitting
-    // any runtime instructions.
-    const exprt subscript_expr = converter_.get_expr(func_value);
-    if (subscript_expr.is_symbol())
-    {
-      const symbolt *sym =
-        converter_.find_symbol(subscript_expr.identifier().as_string());
-      if (sym && sym->type == list_type)
+      // Constant index: resolve directly from list_type_map.
+      if (
+        slice_node["_type"] == "Constant" &&
+        slice_node["value"].is_number_integer())
       {
-        const std::string idx_str = slice_node.contains("id")
-                                      ? slice_node["id"].get<std::string>()
-                                      : "(expr)";
-        display_name = base_name + "[" + idx_str + "]";
-        return sym;
+        const size_t index = slice_node["value"].get<size_t>();
+
+        if (python_list::get_list_element_type(base_id, index) != list_type)
+          return nullptr;
+
+        const std::string inner_id =
+          python_list::get_list_element_id(base_id, index);
+        if (inner_id.empty())
+          return nullptr;
+
+        display_name = base_name + "[" + std::to_string(index) + "]";
+        return converter_.find_symbol(inner_id);
       }
+
+      // Non-constant index (e.g. nested[i].append(v)): delegate to the existing
+      // subscript handler.  For comprehension-generated nested lists the handler
+      // hits the list_type_map early-return path and yields the template inner
+      // list symbol (the element produced inside the loop body) without emitting
+      // any runtime instructions.
+      const exprt subscript_expr = converter_.get_expr(func_value);
+      if (subscript_expr.is_symbol())
+      {
+        const symbolt *sym =
+          converter_.find_symbol(subscript_expr.identifier().as_string());
+        if (sym && sym->type == list_type)
+        {
+          const std::string idx_str = slice_node.contains("id")
+                                        ? slice_node["id"].get<std::string>()
+                                        : "(expr)";
+          display_name = base_name + "[" + idx_str + "]";
+          return sym;
+        }
+      }
+      return nullptr;
     }
+
+    // Dict subscript whose value is a list (e.g. d[k].append(v) where
+    // d is a dict[K, list[V]] or a defaultdict(list)).  The dict-subscript
+    // expression returns the stored PyListObject pointer; wrap it in a
+    // temp symbol so list method handlers can treat it as a named list.
+    // List mutations through the temp alias the dict slot because lists in
+    // the Python model are reference-typed (PyListObject *).  Mirrors the
+    // $attr_list$ / $call_list$ pattern below.
+    const exprt subscript_expr = converter_.get_expr(func_value);
+    if (subscript_expr.type() == list_type)
+    {
+      symbolt &tmp = converter_.create_tmp_symbol(
+        call_, "$dict_list$", list_type, subscript_expr);
+      std::string idx_str = "(expr)";
+      if (slice_node.contains("id"))
+        idx_str = slice_node["id"].get<std::string>();
+      else if (
+        slice_node["_type"] == "Constant" &&
+        slice_node["value"].is_number_integer())
+        idx_str = std::to_string(slice_node["value"].get<size_t>());
+      display_name = base_name + "[" + idx_str + "]";
+      return &tmp;
+    }
+
     return nullptr;
   }
 
@@ -1671,13 +1703,14 @@ void function_call_expr::materialize_list_symbol(const symbolt *sym) const
     return;
   // Only emit a declaration for temp symbols produced by
   // get_object_list_symbol() from non-named receivers.  These are identified
-  // by the prefixes "$attr_list$" and "$call_list$".  Regular list symbols
-  // have a nil value and are declared elsewhere; this guard prevents
-  // re-declaring them.
+  // by the prefixes "$attr_list$", "$call_list$", and "$dict_list$".
+  // Regular list symbols have a nil value and are declared elsewhere; this
+  // guard prevents re-declaring them.
   const std::string &name = sym->name.as_string();
   if (
     name.find("$attr_list$") == std::string::npos &&
-    name.find("$call_list$") == std::string::npos)
+    name.find("$call_list$") == std::string::npos &&
+    name.find("$dict_list$") == std::string::npos)
     return;
   code_declt decl(symbol_expr(*sym));
   decl.copy_to_operands(sym->value);
