@@ -48,6 +48,7 @@ add_library(pythonfrontend STATIC
             complex_handler_utils.cpp
             function_call/builtins.cpp
             function_call/expr.cpp
+            function_call/str_conv.cpp
             numpy_call_expr.cpp
             function_call/builder.cpp
             string_builder.cpp
