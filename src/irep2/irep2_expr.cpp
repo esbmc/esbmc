@@ -372,46 +372,36 @@ expr2tc expr2t::clone() const
 
 namespace
 {
-// Build a fresh K with @p new_type as its type. If K's primary constructor
-// accepts a type as its first argument we substitute @p new_type for it
-// and forward the remaining fields. Some kinds (constant_bool, the
-// relation ops, etc.) derive their type from the value and don't have a
-// (type, ...) ctor; for them `with_type` has no semantic meaning and we
-// fall back to a plain copy. The SFINAE check makes the choice per kind.
+// Build a fresh K with @p new_type as its type. Kinds for which
+// `with_type` is meaningful list `&expr2t::type` as the first element of
+// their K::fields tuple AND accept `(const type2tc &, fields...)` at
+// their primary constructor. (The type member is `const type2tc`, so
+// the member pointer is `const type2tc expr2t::*` — match both
+// qualifications.) Kinds that derive their type from operands rather
+// than carrying one (constant_bool, the relation ops, etc.) don't
+// support type substitution; calling `with_type` on them is a
+// programmer error and aborts.
 template <class K>
 expr2tc rebuild_with_type(const K &k, const type2tc &new_type)
 {
   return std::apply(
-    [&](auto first_mp, auto... rest) {
+    [&](auto first_mp, auto... rest) -> expr2tc {
       using first_t = std::remove_cvref_t<decltype(first_mp)>;
-      if constexpr (std::is_same_v<first_t, type2tc expr2t::*>)
-      {
-        // First field is &expr2t::type — substitute and skip it.
-        if constexpr (std::is_constructible_v<
-                        K,
-                        const type2tc &,
-                        decltype(k.*rest)...>)
-          return make_irep<K>(new_type, k.*rest...);
-        else
-        {
-          (void)new_type;
-          return make_irep<K>(k);
-        }
-      }
+      if constexpr (
+        (std::is_same_v<first_t, type2tc expr2t::*> ||
+         std::is_same_v<first_t, const type2tc expr2t::*>) &&
+        std::is_constructible_v<
+          K,
+          const type2tc &,
+          decltype(k.*rest)...>)
+        return make_irep<K>(new_type, k.*rest...);
       else
       {
-        // First field is not type — prepend new_type.
-        if constexpr (std::is_constructible_v<
-                        K,
-                        const type2tc &,
-                        decltype(k.*first_mp),
-                        decltype(k.*rest)...>)
-          return make_irep<K>(new_type, k.*first_mp, k.*rest...);
-        else
-        {
-          (void)new_type;
-          return make_irep<K>(k);
-        }
+        (void)new_type;
+        log_error(
+          "with_type called on kind {} which has no substitutable type",
+          get_expr_id(k));
+        abort();
       }
     },
     K::fields);
