@@ -24,6 +24,11 @@ static_assert(
   "expr_names[] disagrees with expr2t::expr_ids — somebody edited "
   "the manifest without going through expr_kinds.inc");
 
+// For CRCing to actually be accurate, expr ids mustn't overflow out of a
+// byte. If this happens then a) there are too many exprs, and b) the
+// expr crcing code has to change.
+static_assert(expr2t::end_expr_id <= 256, "Expr id overflow");
+
 void irep2_bad_expr_cast(unsigned actual, unsigned expected, const char *target)
 {
   const char *actual_name =

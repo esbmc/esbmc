@@ -27,6 +27,11 @@ static_assert(
   "type_names[] disagrees with type2t::type_ids — somebody edited "
   "the manifest without going through type_kinds.inc");
 
+// For CRCing to actually be accurate, type ids mustn't overflow out of a
+// byte. If this happens then a) there are too many types, and b) the
+// type crcing code has to change.
+static_assert(type2t::end_type_id <= 256, "Type id overflow");
+
 std::string get_type_id(const type2t &type)
 {
   return std::string(type_names[type.type_id]);
