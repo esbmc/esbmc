@@ -43,6 +43,7 @@ add_library(pythonfrontend STATIC
             cmath_lowering_policy.cpp
             complex_handler.cpp
             complex_handler_utils.cpp
+            function_call/builtins.cpp
             function_call/expr.cpp
             numpy_call_expr.cpp
             function_call/builder.cpp
