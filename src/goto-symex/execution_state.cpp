@@ -399,7 +399,7 @@ expr2tc execution_statet::get_guard_identifier()
   return symbol2tc(
     get_bool_type(),
     guard_execution,
-    symbol2t::level1,
+    symbol_renaming_level::level1,
     CS_number,
     0,
     node_id,

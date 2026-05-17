@@ -980,7 +980,7 @@ smt_sortt z3_convt::mk_struct_sort(const type2tc &type)
     return mk_array_sort(d, subtypesort);
   }
 
-  const struct_type2t &strct = to_struct_type(type);
+  const struct_union_data &strct = get_type_def(type);
   const std::size_t num_members = strct.members.size();
 
   z3::array<Z3_symbol> member_names(num_members);

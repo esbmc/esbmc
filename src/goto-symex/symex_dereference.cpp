@@ -138,9 +138,9 @@ bool symex_dereference_statet::is_live_variable(const expr2tc &symbol)
   // NB, symbols shouldn't hit this point with no renaming (i.e. level0),
   // this should eventually be asserted.
   if (
-    to_symbol2t(sym).rlevel == symbol2t::level0 ||
-    to_symbol2t(sym).rlevel == symbol2t::level1_global ||
-    to_symbol2t(sym).rlevel == symbol2t::level2_global)
+    to_symbol2t(sym).rlevel == symbol_renaming_level::level0 ||
+    to_symbol2t(sym).rlevel == symbol_renaming_level::level1_global ||
+    to_symbol2t(sym).rlevel == symbol_renaming_level::level2_global)
     return true;
 
   goto_symex.replace_dynamic_allocation(sym);

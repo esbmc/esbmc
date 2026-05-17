@@ -10,9 +10,12 @@
 #include <python-frontend/python_annotation/annotation_utils.h>
 #include <util/message.h>
 
+#include <map>
+#include <set>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 
 // `InferResult`, `builtin_functions` and the pure-helper utilities
 // (`has_annotation`, `has_return_none`, `get_type_from_json`,
@@ -62,6 +65,12 @@ public:
   // Entry points exercised by callers outside python_annotation.h.
   void preprocess_constructor_calls(const Json &node);
   void preprocess_method_calls(const Json &node);
+  void preprocess_function_calls(Json &root);
+  void collect_function_call_arg_types(
+    Json &node,
+    std::map<std::pair<std::string, size_t>, std::set<std::string>>
+      &param_types,
+    const std::set<std::string> &top_level_funcs);
   void add_type_annotation();
   void add_type_annotation(const std::string &func_name);
 
