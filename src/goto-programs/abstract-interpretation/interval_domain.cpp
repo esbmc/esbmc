@@ -376,8 +376,8 @@ T interval_domaint::get_interval(const expr2tc &e) const
   case expr2t::xor_id:
   case expr2t::implies_id:
   {
-    tvt lhs = eval_boolean_expression(logic2_side1(e), *this);
-    tvt rhs = eval_boolean_expression(logic2_side2(e), *this);
+    tvt lhs = eval_boolean_expression(*e->get_sub_expr(0), *this);
+    tvt rhs = eval_boolean_expression(*e->get_sub_expr(1), *this);
 
     if (is_and2t(e))
     {
@@ -500,8 +500,8 @@ T interval_domaint::get_interval(const expr2tc &e) const
   case expr2t::modulus_id:
     if (enable_interval_arithmetic)
     {
-      const T lhs = get_interval<T>(arith_side1(e));
-      const T rhs = get_interval<T>(arith_side2(e));
+      const T lhs = get_interval<T>(*e->get_sub_expr(0));
+      const T rhs = get_interval<T>(*e->get_sub_expr(1));
       if (is_add2t(e))
         result = lhs + rhs;
 
@@ -527,10 +527,12 @@ T interval_domaint::get_interval(const expr2tc &e) const
   case expr2t::bitxor_id:
     if (enable_interval_bitwise_arithmetic)
     {
-      auto lhs = get_interval<T>(bit2_side1(e));
-      auto rhs = get_interval<T>(bit2_side2(e));
-      lhs.type = bit2_side1(e)->type;
-      rhs.type = bit2_side2(e)->type;
+      const expr2tc &s1 = *e->get_sub_expr(0);
+      const expr2tc &s2 = *e->get_sub_expr(1);
+      auto lhs = get_interval<T>(s1);
+      auto rhs = get_interval<T>(s2);
+      lhs.type = s1->type;
+      rhs.type = s2->type;
       if (is_shl2t(e))
         result = T::left_shift(lhs, rhs);
 

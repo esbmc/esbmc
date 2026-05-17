@@ -120,9 +120,9 @@ void goto_contractort::parse_intervals(expr2tc expr)
     return;
 
   //side1 1 is a symbol or typecast to symbol
-  auto side1 = comp_side1(expr);
+  auto side1 = *expr->get_sub_expr(0);
   //side 2 is always a number.
-  auto side2 = comp_side2(expr);
+  auto side2 = *expr->get_sub_expr(1);
 
   auto obj = get_base_object(side1);
   if (!is_symbol2t(obj))
@@ -685,8 +685,8 @@ expr_to_ibex_parser::create_constraint_from_expr2t(const expr2tc &expr)
 
   const expr2tc &base_obj = get_base_object(expr);
   ibex::Function *f, *g;
-  f = create_function_from_expr2t(comp_side1(base_obj));
-  g = create_function_from_expr2t(comp_side2(base_obj));
+  f = create_function_from_expr2t(*base_obj->get_sub_expr(0));
+  g = create_function_from_expr2t(*base_obj->get_sub_expr(1));
   if (f == nullptr || g == nullptr)
     return nullptr;
 
@@ -734,8 +734,8 @@ expr_to_ibex_parser::create_constraint_from_expr2t_not(const expr2tc &expr)
 
   const expr2tc &base_obj2 = get_base_object(expr);
   ibex::Function *f, *g;
-  f = create_function_from_expr2t(comp_side1(base_obj2));
-  g = create_function_from_expr2t(comp_side2(base_obj2));
+  f = create_function_from_expr2t(*base_obj2->get_sub_expr(0));
+  g = create_function_from_expr2t(*base_obj2->get_sub_expr(1));
   if (f == nullptr || g == nullptr)
     return nullptr;
   switch (get_base_object(expr)->expr_id)
@@ -800,8 +800,8 @@ ibex::Function *expr_to_ibex_parser::create_function_from_expr2t(expr2tc expr)
     if (!is_arith_expr(expr))
       return nullptr;
     const expr2tc &arith_base = get_base_object(expr);
-    g = create_function_from_expr2t(arith_side1(arith_base));
-    h = create_function_from_expr2t(arith_side2(arith_base));
+    g = create_function_from_expr2t(*arith_base->get_sub_expr(0));
+    h = create_function_from_expr2t(*arith_base->get_sub_expr(1));
     if (g == nullptr || h == nullptr)
       return nullptr;
 

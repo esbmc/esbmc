@@ -1371,19 +1371,19 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     {
       return convert_ast(distribute_vector_operation(
         expr->expr_id,
-        ieee2_side1(expr),
-        ieee2_side2(expr),
-        ieee2_rounding_mode(expr)));
+        *expr->get_sub_expr(1),  // side_1
+        *expr->get_sub_expr(2),  // side_2
+        *expr->get_sub_expr(0))); // rounding_mode
     }
     if (is_arith_expr(expr) && !is_neg2t(expr) && !is_abs2t(expr))
     {
       return convert_ast(distribute_vector_operation(
-        expr->expr_id, arith_side1(expr), arith_side2(expr)));
+        expr->expr_id, *expr->get_sub_expr(0), *expr->get_sub_expr(1)));
     }
     if (is_bit2_expr(expr))
     {
       return convert_ast(distribute_vector_operation(
-        expr->expr_id, bit2_side1(expr), bit2_side2(expr)));
+        expr->expr_id, *expr->get_sub_expr(0), *expr->get_sub_expr(1)));
     }
   }
 

@@ -578,9 +578,8 @@ public:
 // be uniform; callers bind to `const auto &x = ...` and rely on
 // temporary lifetime extension.
 //
-// Mirrors the expr-side family accessors (arith_side1, etc.) — small
-// per-call copies in exchange for a single point of truth per field.
-// Direct mutation goes via the concrete kind (e.g.
+// Small per-call copies in exchange for a single point of truth per
+// field. Direct mutation goes via the concrete kind (e.g.
 // `to_struct_type(t).members`); these read-only views are not the
 // right tool for that.
 std::vector<type2tc> struct_union_members(const type2tc &t);

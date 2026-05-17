@@ -41,8 +41,8 @@ void ssa_features::check(const expr2tc &e)
   {
     // TODO: We should deal with some non-linearity here e.g.: division-by-zero
     if (
-      !is_entirely_constant(arith_side1(e)) &&
-      !is_entirely_constant(arith_side2(e)))
+      !is_entirely_constant(*e->get_sub_expr(0)) &&
+      !is_entirely_constant(*e->get_sub_expr(1)))
       features.insert(SSA_FEATURES::NON_LINEAR);
 
     break;
@@ -57,8 +57,8 @@ void ssa_features::check(const expr2tc &e)
   {
     features.insert(SSA_FEATURES::BITWISE_OPERATIONS);
     if (
-      !is_entirely_constant(bit2_side1(e)) &&
-      !is_entirely_constant(bit2_side2(e)))
+      !is_entirely_constant(*e->get_sub_expr(0)) &&
+      !is_entirely_constant(*e->get_sub_expr(1)))
       features.insert(SSA_FEATURES::NON_LINEAR);
     break;
   }

@@ -61,8 +61,8 @@ smt_astt smt_convt::convert_ptr_cmp(
 smt_astt
 smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
 {
-  const expr2tc &side1 = arith_side1(expr);
-  const expr2tc &side2 = arith_side2(expr);
+  const expr2tc &side1 = *expr->get_sub_expr(0);
+  const expr2tc &side2 = *expr->get_sub_expr(1);
 
   // So eight cases; one for each combination of two operands and the return
   // type, being pointer or nonpointer. So with P=pointer, N= notpointer,
