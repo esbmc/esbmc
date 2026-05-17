@@ -380,7 +380,6 @@ exprt function_call_expr::handle_ord(nlohmann::json &arg) const
   return expr;
 }
 
-
 exprt function_call_expr::handle_int_to_str(nlohmann::json &arg) const
 {
   std::string str_val = std::to_string(arg["value"].get<int>());

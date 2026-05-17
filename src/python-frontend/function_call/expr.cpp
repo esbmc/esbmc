@@ -122,7 +122,6 @@ static std::string get_classname_from_symbol_id(const std::string &symbol_id)
   return class_name;
 }
 
-
 void function_call_expr::get_function_type()
 {
   if (type_handler_.is_constructor_call(call_))
@@ -222,9 +221,6 @@ bool function_call_expr::is_input_call() const
   return func_name == "input";
 }
 
-
-
-
 static std::string format_double_for_complex(double d)
 {
   // Use snprintf instead of std::to_string to avoid locale dependence
@@ -238,7 +234,6 @@ static std::string format_double_for_complex(double d)
     s.pop_back();
   return s;
 }
-
 
 // Try to extract constant real and imaginary parts from a JSON node
 // that represents a complex value. Returns true and sets real_val/imag_val
@@ -364,16 +359,6 @@ size_t function_call_expr::handle_str(nlohmann::json &arg) const
 
   return arg["value"].get<std::string>().size();
 }
-
-
-
-
-
-
-
-
-
-
 
 const symbolt *
 function_call_expr::lookup_python_symbol(const std::string &var_name) const
