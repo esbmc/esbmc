@@ -56,10 +56,9 @@ conversions live in `util/migrate.{h,cpp}`.
 | `expr_kinds.inc` / `type_kinds.inc` | Manifest of node kinds in declaration order. Single source of truth. |
 | `irep2_type.h` / `irep2_type.cpp` | Concrete type classes (`bool_type2t`, `signedbv_type2t`, `array_type2t`, `pointer_type2t`, `struct_type2t`, ...). Each kind inherits directly from `type2t` and owns its fields. Free family helpers in the same header (`struct_union_members`, `array_or_vector_subtype`, ...) provide uniform field access when the caller doesn't care which specific kind it is. |
 | `irep2_expr.h` / `irep2_expr.cpp` | Concrete expression classes (`constant_int2t`, `symbol2t`, `add2t`, `if2t`, `code_assign2t`, ...). Each kind inherits directly from `expr2t`. |
-| `irep2_utils.h` | Inline predicates and helpers (`is_bv_type`, `is_number_type`, `is_scalar_type`, family accessors like `arith_side1/2`, `comp_side1/2`, simplification helpers). |
-| `irep2_dispatch.h` | Generic `generic_*<K>` helpers that walk a kind's `K::fields` tuple via `std::apply` to implement cmp/lt/crc/hash/tostring/clone/get_sub_expr/foreach_operand uniformly. Switch dispatchers on `expr2t`/`type2t` route to these. |
-| `irep2_templates.h` / `templates/irep2_templates.cpp` | Per-field-type helpers (`do_type2string`, `do_get_sub_expr`, `do_count_sub_exprs`, `call_*_delegate`) used by the generic dispatchers, plus the kind `field_names` tables. |
-| `irep2_template_utils.h` / `templates/irep2_template_utils.cpp` | Per-field-type overloads of `do_type_cmp`, `do_type_lt`, `do_type_crc`, `do_type_hash`, `type_to_string`. |
+| `irep2_utils.h` | Inline predicates and helpers (`is_bv_type`, `is_number_type`, `is_scalar_type`, simplification helpers). |
+| `irep2_dispatch.h` | Generic `generic_*<K>` helpers that walk a kind's `K::fields` tuple via `std::apply` to implement cmp/lt/crc/hash/tostring/clone/get_sub_expr/foreach_operand uniformly, plus the per-field-type overloads they invoke (`do_type_cmp`, `do_type_lt`, `do_type_crc`, `do_type_hash`, `type_to_string`, `do_get_sub_expr`, `call_*_delegate`). Switch dispatchers on `expr2t`/`type2t` route to these. |
+| `irep2_utils.cpp` | Definitions for the predicates and dispatch-catalogue overloads declared in `irep2_utils.h` and `irep2_dispatch.h`. |
 | `CMakeLists.txt` | Builds the `irep2` static library; depends on `bigint`, `fmt`, and privately `crypto_hash`. No Boost. |
 
 ## Anatomy of a node

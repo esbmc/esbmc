@@ -51,10 +51,19 @@ smt_astt smt_convt::convert_ptr_cmp(
    * which case offsets could flip sign. */
   type2tc type = get_uint_type(config.ansi_c.address_width);
   type2tc stype = get_int_type(config.ansi_c.address_width);
-  expr2tc op = make_comp_expr(
-    templ_expr,
-    typecast2tc(type, pointer_offset2tc(stype, side1)),
-    typecast2tc(type, pointer_offset2tc(stype, side2)));
+  expr2tc s1 = typecast2tc(type, pointer_offset2tc(stype, side1));
+  expr2tc s2 = typecast2tc(type, pointer_offset2tc(stype, side2));
+  expr2tc op;
+  switch (templ_expr->expr_id)
+  {
+  case expr2t::equality_id:         op = equality2tc(s1, s2); break;
+  case expr2t::notequal_id:         op = notequal2tc(s1, s2); break;
+  case expr2t::lessthan_id:         op = lessthan2tc(s1, s2); break;
+  case expr2t::greaterthan_id:      op = greaterthan2tc(s1, s2); break;
+  case expr2t::lessthanequal_id:    op = lessthanequal2tc(s1, s2); break;
+  case expr2t::greaterthanequal_id: op = greaterthanequal2tc(s1, s2); break;
+  default: __builtin_unreachable();
+  }
   return convert_ast(op);
 }
 

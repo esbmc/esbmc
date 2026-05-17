@@ -436,7 +436,6 @@ public:
  *  to the members described in the type. However, it seems the values pumped
  *  at us by CBMC only ever have one member (at position 0) representing the
  *  most recent value written to the union.
- *  @extend constant_union_data
  */
 class constant_union2t : public expr2t
 {
@@ -783,8 +782,7 @@ public:
 /** Defines one of the six binary boolean relation nodes. Each takes two
  *  operands of any matching scalar/pointer type, has boolean result type,
  *  and provides an out-of-line do_simplify override in
- *  src/util/expr_simplifier.cpp. The concrete class names and the
- *  generated is_<name>2t / to_<name>2t helpers are preserved verbatim. */
+ *  src/util/expr_simplifier.cpp. */
 #define ESBMC_DEFINE_RELATION2T(name)                                          \
   class name##2t : public expr2t                                               \
   {                                                                            \
@@ -1150,8 +1148,7 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-/** Not operation. Inverts boolean operand. Always has boolean type.
- *  @extends bool_1op */
+/** Not operation. Inverts boolean operand. Always has boolean type. */
 class not2t : public expr2t
 {
 public:
@@ -1165,8 +1162,6 @@ public:
 
   expr2tc do_simplify() const override;
 
-  // Flat-layout migration marker (issue #4560): user fields only, no
-  // expr_id/type slots (this is a notype kind — type is always bool).
   static constexpr auto fields = std::make_tuple(&not2t::value);
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1174,9 +1169,7 @@ public:
 /** Defines an IEEE two-operand floating-point arithmetic node
  *  (add/sub/mul/div). Each takes two operands and a rounding mode,
  *  has matching floatbv operand/result types, and provides an
- *  out-of-line do_simplify override in src/util/expr_simplifier.cpp.
- *  The concrete class names and the generated is_<name>2t /
- *  to_<name>2t helpers are preserved verbatim. */
+ *  out-of-line do_simplify override in src/util/expr_simplifier.cpp. */
 #define ESBMC_DEFINE_IEEE_ARITH_2OP(name)                                      \
   class name##2t : public expr2t                                               \
   {                                                                            \
@@ -1208,8 +1201,7 @@ ESBMC_DEFINE_IEEE_ARITH_2OP(ieee_div);
 
 /** IEEE fused multiply-add operation. Computes (x*y) + z as if to infinite
  *  precision and rounded only once to fit the result type. Must be
- *  floatbvs types. Types of the 3 operands and expr type should match.
- *  @extends ieee_arith_2ops */
+ *  floatbvs types. Types of the 3 operands and expr type should match. */
 class ieee_fma2t : public expr2t
 {
 public:
@@ -1251,8 +1243,7 @@ public:
 };
 
 /** IEEE sqrt operation. Square root of the first operand. Must be a
- *  floatbv.
- *  @extends ieee_arith_2ops */
+ *  floatbv. */
 class ieee_sqrt2t : public expr2t
 {
 public:
@@ -1305,7 +1296,7 @@ public:
 
 /** Extract pointer offset. From an expression of pointer type, produce the
  *  number of bytes difference between where this pointer points to and the start
- *  of the object it points at. @extends pointer_ops */
+ *  of the object it points at. */
 class pointer_offset2t : public expr2t
 {
 public:
@@ -1331,8 +1322,7 @@ public:
 
 /** Address of operation. Takes some object as an argument - ideally a symbol
  *  renamed to level 1, unfortunately some string constants reach here. Produces
- *  pointer typed expression.
- *  @extends pointer_ops */
+ *  pointer typed expression. */
 class address_of2t : public expr2t
 {
 public:
@@ -1580,13 +1570,6 @@ public:
     : expr2t(type, index_id), source_value(source), index(idx)
   {
     assert(is_array_type(source) || is_vector_type(source));
-#if 0
-    assert(
-      is_array_type(source)
-        ? type == to_array_type(source->type).subtype
-        : ((is_unsignedbv_type(type) || is_signedbv_type(type)) &&
-           type->get_width() == config.ansi_c.char_width));
-#endif
   }
   index2t(const index2t &ref) = default;
 
@@ -1602,8 +1585,7 @@ public:
  *  operation doesn't fit in the bitwidth of the operands, this expr evaluates
  *  to true. XXXjmorse - in the future we should ensure the type of the
  *  operand is the expected type result of the operation. That way we can tell
- *  whether to do a signed or unsigned over/underflow test.
- *  @extends overflow_ops */
+ *  whether to do a signed or unsigned over/underflow test. */
 class overflow2t : public expr2t
 {
 public:
@@ -1654,7 +1636,7 @@ public:
 
 /** Test for negation overflows. Check whether or not negating an operand would
  *  lead to an integer overflow - for example, there's no representation of
- *  -INT_MIN. Evaluates to true if overflow would occur. @extends overflow_ops */
+ *  -INT_MIN. Evaluates to true if overflow would occur. */
 class overflow_neg2t : public expr2t
 {
 public:
@@ -2007,7 +1989,7 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-/** @extends bit_2ops */
+/** Bit concatenation of two operands. */
 class concat2t : public expr2t
 {
 public:

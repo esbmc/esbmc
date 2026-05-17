@@ -188,43 +188,6 @@ inline bool is_comp_expr(const expr2tc &expr)
          expr->expr_id == expr2t::notequal_id;
 }
 
-// IEEE floating-point 2-operand ops (ieee_add / ieee_sub / ieee_mul / ieee_div).
-inline bool is_ieee_arith2_expr(const expr2tc &e)
-{
-  return e->expr_id == expr2t::ieee_add_id ||
-         e->expr_id == expr2t::ieee_sub_id ||
-         e->expr_id == expr2t::ieee_mul_id ||
-         e->expr_id == expr2t::ieee_div_id;
-}
-
-// Bitwise/shift 2-operand ops (bitand/bitor/bitxor/shl/ashr/lshr).
-inline bool is_bit2_expr(const expr2tc &e)
-{
-  return e->expr_id == expr2t::bitand_id ||
-         e->expr_id == expr2t::bitor_id ||
-         e->expr_id == expr2t::bitxor_id ||
-         e->expr_id == expr2t::shl_id ||
-         e->expr_id == expr2t::ashr_id ||
-         e->expr_id == expr2t::lshr_id;
-}
-
-// Build a new comparison of the same kind as `templ` but with new sides.
-// Precondition: is_comp_expr(templ).
-inline expr2tc
-make_comp_expr(const expr2tc &templ, const expr2tc &s1, const expr2tc &s2)
-{
-  switch(templ->expr_id)
-  {
-  case expr2t::equality_id:         return equality2tc(s1, s2);
-  case expr2t::notequal_id:         return notequal2tc(s1, s2);
-  case expr2t::lessthan_id:         return lessthan2tc(s1, s2);
-  case expr2t::greaterthan_id:      return greaterthan2tc(s1, s2);
-  case expr2t::lessthanequal_id:    return lessthanequal2tc(s1, s2);
-  case expr2t::greaterthanequal_id: return greaterthanequal2tc(s1, s2);
-  default: irep2_bad_family_cast(templ->expr_id, "make_comp_expr");
-  }
-}
-
 /** Test if expr is true. First checks whether the expr is a constant bool, and
  *  then whether it's true-valued. If these are both true, return true,
  *  otherwise return false.
@@ -310,11 +273,6 @@ inline expr2tc gen_slong(signed long val)
 inline const type2tc &get_array_subtype(const type2tc &type)
 {
   return to_array_type(type).subtype;
-}
-
-inline const type2tc &get_vector_subtype(const type2tc &type)
-{
-  return to_vector_type(type).subtype;
 }
 
 inline const type2tc &get_base_array_subtype(const type2tc &type)

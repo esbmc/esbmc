@@ -3,7 +3,6 @@
 #include <limits>
 #include <irep2/irep2.h>
 #include <irep2/irep2_dispatch.h>
-#include <irep2/irep2_template_utils.h>
 #include <irep2/irep2_utils.h>
 #include <util/crypto_hash.h>
 

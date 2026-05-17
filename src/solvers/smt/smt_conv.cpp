@@ -1367,23 +1367,31 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
         distribute_vector_operation(expr->expr_id, to_bitnot2t(expr).value));
     }
 
-    if (is_ieee_arith2_expr(expr))
+    switch (expr->expr_id)
     {
+    case expr2t::ieee_add_id:
+    case expr2t::ieee_sub_id:
+    case expr2t::ieee_mul_id:
+    case expr2t::ieee_div_id:
       return convert_ast(distribute_vector_operation(
         expr->expr_id,
         *expr->get_sub_expr(1),  // side_1
         *expr->get_sub_expr(2),  // side_2
         *expr->get_sub_expr(0))); // rounding_mode
-    }
-    if (is_arith_expr(expr) && !is_neg2t(expr) && !is_abs2t(expr))
-    {
+    case expr2t::add_id:
+    case expr2t::sub_id:
+    case expr2t::mul_id:
+    case expr2t::div_id:
+    case expr2t::modulus_id:
+    case expr2t::bitand_id:
+    case expr2t::bitor_id:
+    case expr2t::bitxor_id:
+    case expr2t::shl_id:
+    case expr2t::ashr_id:
+    case expr2t::lshr_id:
       return convert_ast(distribute_vector_operation(
         expr->expr_id, *expr->get_sub_expr(0), *expr->get_sub_expr(1)));
-    }
-    if (is_bit2_expr(expr))
-    {
-      return convert_ast(distribute_vector_operation(
-        expr->expr_id, *expr->get_sub_expr(0), *expr->get_sub_expr(1)));
+    default: break;
     }
   }
 
@@ -3814,8 +3822,8 @@ smt_astt smt_convt::convert_array_index(const expr2tc &expr)
   a = a->select(this, newidx);
 
   const type2tc &arrsubtype = is_vector_type(index.source_value->type)
-                                ? get_vector_subtype(index.source_value->type)
-                                : get_array_subtype(index.source_value->type);
+                                ? to_vector_type(index.source_value->type).subtype
+                                : to_array_type(index.source_value->type).subtype;
   if (is_bool_type(arrsubtype) && !array_api->supports_bools_in_arrays)
     return make_bit_bool(a);
 

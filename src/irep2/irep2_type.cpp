@@ -434,23 +434,6 @@ std::vector<irep_idt> struct_union_member_names(const type2tc &t)
   }
 }
 
-std::vector<irep_idt> struct_union_member_pretty_names(const type2tc &t)
-{
-  static const irep_idt real_id("real"), imag_id("imag");
-  switch (t->type_id)
-  {
-  case type2t::struct_id:
-    return to_struct_type(t).member_pretty_names;
-  case type2t::union_id:
-    return to_union_type(t).member_pretty_names;
-  case type2t::complex_id:
-    return {real_id, imag_id};
-  default:
-    irep2_bad_family_cast(
-      t->type_id, "struct_union_member_pretty_names");
-  }
-}
-
 irep_idt struct_union_name(const type2tc &t)
 {
   static const irep_idt complex_id("complex");

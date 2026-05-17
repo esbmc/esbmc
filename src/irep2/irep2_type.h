@@ -40,7 +40,6 @@ irep_typedefs(vector);
 
 /** Boolean type.
  *  Identifies a boolean type. Contains no additional data.
- *  @extends type2t
  */
 class bool_type2t : public type2t
 {
@@ -57,7 +56,6 @@ public:
 
 /** Empty type.
  *  For void pointers and the like, with no type. No extra data.
- *  @extends type2t
  */
 class empty_type2t : public type2t
 {
@@ -584,7 +582,6 @@ public:
 // right tool for that.
 std::vector<type2tc> struct_union_members(const type2tc &t);
 std::vector<irep_idt> struct_union_member_names(const type2tc &t);
-std::vector<irep_idt> struct_union_member_pretty_names(const type2tc &t);
 irep_idt struct_union_name(const type2tc &t);
 bool struct_union_packed(const type2tc &t);
 

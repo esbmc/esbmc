@@ -625,10 +625,7 @@ public:
   bool operator!=(const type2t &ref) const;
   bool operator<(const type2t &ref) const;
 
-  /** Produce a string representation of type.
-   *  Takes body of the current type and produces a human readable
-   *  representation. Similar to the string-irept's pretty method, although a
-   *  different format.
+  /** Produce a human-readable string representation of type.
    *  @param indent Number of spaces to indent lines by in the output
    *  @return String obj containing representation of this object
    */
@@ -739,9 +736,6 @@ public:
 };
 
 /** Fetch identifying name for a type.
- *  I.E., this is the class of the type, what you'd get if you called type.id()
- *  with the old stringy irep. Ideally this should be a class method, but as it
- *  was added as a hack I haven't got round to it yet.
  *  @param type Type to fetch identifier for
  *  @return String containing name of type class.
  */
@@ -777,11 +771,6 @@ public:
     end_expr_id
   };
 
-  /** Type for list of constant expr operands */
-  typedef std::list<const expr2tc *> expr_operands;
-  /** Type for list of non-constant expr operands */
-  typedef std::list<expr2tc *> Expr_operands;
-
   // Non-owning callable references; see commentary on type2t's variants.
   typedef esbmct::function_ref<void(const expr2tc &)> const_op_delegate;
   typedef esbmct::function_ref<void(expr2tc &)> op_delegate;
@@ -805,17 +794,14 @@ public:
 
   virtual ~expr2t() = default;
 
-  /** Clone method. Self explanatory. */
   expr2tc clone() const;
 
   /** Build a fresh expression of the same kind and field values as this
-   *  one, but with a different type. Drives base_type's functional
-   *  symbol-type resolution and other "rewrite the type, keep the
-   *  shape" callers — assumes every kind's primary constructor takes
-   *  (type, fields...) matching its K::fields tuple in order. */
+   *  one, but with a different type. Assumes every kind's primary
+   *  constructor takes (type, fields...) matching its K::fields tuple
+   *  in order. */
   expr2tc with_type(const type2tc &new_type) const;
 
-  /* These are all self explanatory */
   bool operator==(const expr2t &ref) const;
   bool operator<(const expr2t &ref) const;
   bool operator!=(const expr2t &ref) const;
@@ -1011,9 +997,6 @@ inline std::size_t hash_value(const expr2tc &expr)
 }
 
 /** Fetch string identifier for an expression.
- *  Returns the class name of the expr passed in - this is equivalent to the
- *  result of expr.id() in old stringy irep. Should ideally be a method of
- *  expr2t, but haven't got around to moving it yet.
  *  @param expr Expression to operate upon
  *  @return String containing class name of expression.
  */
@@ -1064,27 +1047,6 @@ namespace esbmct
  *  I've yet to find a way of making this play nice with the new variardic
  *  way of defining ireps. */
 const unsigned int num_type_fields = 6;
-
-/** Record for properties of an irep field.
- *  This type records, for any particular field:
- *    * It's type
- *    * The class that it's a member of
- *    * A class pointer to this field
- *  The aim being that we have enough information about the field to
- *  manipulate it without any further traits. */
-template <typename R, typename C, R C::*v>
-class field_traits
-{
-public:
-  typedef R result_type;
-  typedef C source_class;
-  typedef R C::*membr_ptr;
-  static constexpr membr_ptr value = v;
-};
-
-template <typename R, typename C, R C::*v>
-constexpr
-  typename field_traits<R, C, v>::membr_ptr field_traits<R, C, v>::value;
 
 } // namespace esbmct
 

@@ -1,6 +1,5 @@
 #include <irep2/irep2_utils.h>
-#include <irep2/irep2_templates.h>
-#include <irep2/irep2_template_utils.h>
+#include <irep2/irep2_dispatch.h>
 #include <util/c_types.h>
 
 void make_not(expr2tc &expr)
@@ -306,22 +305,11 @@ void get_symbols(
     [&symbols](const expr2tc &e) -> void { get_symbols(e, symbols); });
 }
 
-// ===========================================================================
-// irep2 dispatch field-overload catalogue.
-//
-// The generic switch dispatchers in irep2_dispatch.h walk K::fields via
-// std::apply and invoke a small fixed catalogue of operations on every field:
-// pretty-printing, comparison, ordering, CRC, SHA-1 ingestion, sub-expression
-// counting/iteration, and delegate calling.  Primary templates in
-// irep2_template_utils.h / irep2_templates.h cover trivially-typed fields
-// (bool, unsigned int, enums, BigInt, fixedbvt, ieee_floatt, irep_idt) by
-// forwarding to operator==/operator</std::hash<T>/raw POD ingestion.  Load-
-// bearing specialisations (BigInt's sign-aware CRC, the std::vector<...>
-// overloads, null-safe expr2tc/type2tc dispatch, irep_idt's interned-index
-// hashing, the dummy *_ids stubs preserving the parent-class id-mix
-// invariant, and the expr/type sub-expr-iteration / delegate-calling
-// specialisations) live below.
-// ===========================================================================
+// Field-overload catalogue for the generic switch dispatchers in
+// irep2_dispatch.h: pretty-printing, cmp/lt, CRC, SHA-1 ingestion,
+// sub-expression iteration, and delegate calling, specialised for each
+// field type that needs non-default behaviour. Primary templates live in
+// irep2_template_utils.h / irep2_templates.h.
 
 std::string indent_str_irep2(unsigned int indent)
 {
@@ -628,26 +616,12 @@ std::string type_to_string(const irep_idt &theval, int)
   return theval.as_string();
 }
 
-// ---------------------------------------------------------------------------
-// do_type_lt overloads
-// ---------------------------------------------------------------------------
-// Trivial do_type_cmp overloads (bool, unsigned int, the small enums,
-// BigInt, fixedbvt, ieee_floatt, std::vector<expr2tc|type2tc|irep_idt>,
-// expr2tc, type2tc, irep_idt) are covered by the primary template
-// `template <class T> bool do_type_cmp(const T &, const T &)` in
-// irep2_template_utils.h, which forwards to `operator==`.
-//
-// Trivial do_type_lt overloads (bool, unsigned int, the small enums,
-// fixedbvt, ieee_floatt, irep_idt, std::vector<irep_idt>) are covered
-// by the primary template `template <class T> int do_type_lt(const T &,
-// const T &)` in irep2_template_utils.h, which returns the trinary
-// (-1/0/1) of operator<. The non-trivial cases below need their own
-// dispatch.
+// do_type_lt overloads. Trivial cases (bool, unsigned int, enums,
+// fixedbvt, ieee_floatt, irep_idt, std::vector<irep_idt>) use the
+// primary template in irep2_template_utils.h.
 
 int do_type_lt(const BigInt &side1, const BigInt &side2)
 {
-  // BigInt has a native compare() that already returns the trinary,
-  // saving one operator< call vs the primary template.
   return side1.compare(side2);
 }
 
@@ -717,21 +691,13 @@ int do_type_lt(const type2tc &side1, const type2tc &side2)
 
 // ---------------------------------------------------------------------------
 // do_type_crc / do_type_hash overloads
-// ---------------------------------------------------------------------------
-// Trivial do_type_crc / do_type_hash overloads for bool, unsigned int
-// and the small enums (sideeffect_data::allockind,
-// constant_string_data::kindt, symbol_data::renaming_level) are
-// covered by the primary templates in irep2_template_utils.h:
-// std::hash<T> (or std::hash<underlying_type_t<T>> for enums) for crc
-// and raw POD ingestion for hash. The two *_ids dummies and the rest
-// of the catalogue (BigInt, fixedbvt, ieee_floatt, expr2tc, type2tc,
-// irep_idt, vectors) keep their explicit bodies below.
+// do_type_crc / do_type_hash overloads. Trivial cases (bool, unsigned
+// int, small enums) use the primary templates in irep2_template_utils.h.
 
-// BigInt::dump writes only the magnitude (most-significant-byte first, left-
-// padded with zeros) and reports false when the supplied buffer is too small.
-// Try a stack buffer for the common case; on overflow, double a heap buffer
-// until the dump succeeds. The sign byte is fed first so +x and -x do not
-// collide.
+// BigInt::dump writes only the magnitude (most-significant-byte first,
+// left-padded with zeros) and reports false on buffer-too-small. Try a
+// stack buffer; on overflow, double a heap buffer until it succeeds.
+// The sign byte is fed first so +x and -x do not collide.
 namespace
 {
 template <typename Sink>

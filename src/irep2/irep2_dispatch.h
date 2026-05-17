@@ -1,21 +1,232 @@
 #pragma once
-// Generic switch-dispatch helpers for irep2's flat node layout.
+// Generic switch-dispatch helpers for irep2's flat node layout, plus
+// the per-field operations they invoke.
 //
-// Include AFTER irep2_expr.h: this depends on the full definitions of every
-// concrete kind. Do NOT pull this into irep2.h or irep2_expr.h.
+// Include AFTER irep2_expr.h: this depends on the full definitions of
+// every concrete kind. Do NOT pull this into irep2.h or irep2_expr.h.
 //
 // Each concrete kind exposes a `static constexpr auto fields` tuple of
 // member pointers covering its user-visible fields, plus a static
 // `field_names` array naming them in tuple order. The generic_*<K>
 // helpers below walk that tuple via std::apply to implement cmp/lt/crc/
 // hash/tostring/clone/get_sub_expr/foreach_operand uniformly. The
-// switch-on-id dispatchers on expr2t / type2t pick the right helper per
-// kind from the X-macro manifests (`expr_kinds.inc`, `type_kinds.inc`).
+// switch-on-id dispatchers on expr2t / type2t pick the right helper
+// per kind from the X-macro manifests (`expr_kinds.inc`,
+// `type_kinds.inc`).
 
 #include <tuple>
 #include <type_traits>
-#include <irep2/irep2_template_utils.h>
-#include <irep2/irep2_templates.h>
+#include <util/crypto_hash.h>
+#include <util/fixedbv.h>
+#include <util/i2string.h>
+#include <util/ieee_float.h>
+#include <util/migrate.h>
+#include <util/std_types.h>
+#include <irep2/irep2_type.h>
+#include <irep2/irep2_expr.h>
+#include <irep2/irep2_utils.h>
+
+// ============================================================================
+// Per-field operations the generic dispatchers invoke on every K::fields
+// entry: pretty-printing, structural cmp/lt, CRC, SHA-1 ingestion, and
+// sub-expression / delegate iteration. Primary templates cover trivially-
+// comparable / hashable field types; explicit overloads handle BigInt
+// sign-aware hashing, std::vector<...>, null-safe expr2tc/type2tc dispatch,
+// irep_idt's interned-index hashing, and the *_ids dummies that mix the
+// kind id into the CRC.
+// ============================================================================
+
+std::string type_to_string(const bool &thebool, int);
+std::string type_to_string(const sideeffect_allockind &data, int);
+std::string type_to_string(const unsigned int &theval, int);
+std::string type_to_string(const constant_string_kindt &theval, int);
+std::string type_to_string(const printf_kindt &theval, int);
+std::string type_to_string(const symbol_renaming_level &theval, int);
+std::string type_to_string(const BigInt &theint, int);
+std::string type_to_string(const fixedbvt &theval, int);
+std::string type_to_string(const ieee_floatt &theval, int);
+std::string type_to_string(const std::vector<expr2tc> &theval, int indent);
+std::string type_to_string(const std::vector<type2tc> &theval, int indent);
+std::string type_to_string(const std::vector<irep_idt> &theval, int indent);
+std::string type_to_string(const expr2tc &theval, int indent);
+std::string type_to_string(const type2tc &theval, int indent);
+std::string type_to_string(const irep_idt &theval, int);
+
+// Structural equality on operator==.
+template <class T>
+inline bool do_type_cmp(const T &side1, const T &side2)
+{
+  return side1 == side2;
+}
+
+// Trinary -1/0/1 ordering on operator<.
+template <class T>
+inline int do_type_lt(const T &side1, const T &side2)
+{
+  if (side1 < side2)
+    return -1;
+  if (side2 < side1)
+    return 1;
+  return 0;
+}
+
+// std::hash<T> for the non-enum case. For enums, hash through uint8_t
+// so the value matches the byte the CRC mix actually folds into the
+// state — on-disk caches and state hashes depend on this width.
+template <class T>
+inline size_t do_type_crc(const T &theval)
+{
+  if constexpr (std::is_enum_v<T>)
+    return std::hash<uint8_t>{}(static_cast<uint8_t>(theval));
+  else
+    return std::hash<T>{}(theval);
+}
+
+// Raw POD bytes into the SHA-1 stream.
+template <class T>
+inline void do_type_hash(const T &theval, crypto_hash &hash)
+{
+  hash.ingest((void *)&theval, sizeof(theval));
+}
+
+// Explicit overloads for the field types whose semantics differ.
+
+int do_type_lt(const BigInt &side1, const BigInt &side2);
+int do_type_lt(
+  const std::vector<expr2tc> &side1,
+  const std::vector<expr2tc> &side2);
+int do_type_lt(
+  const std::vector<type2tc> &side1,
+  const std::vector<type2tc> &side2);
+int do_type_lt(const expr2tc &side1, const expr2tc &side2);
+int do_type_lt(const type2tc &side1, const type2tc &side2);
+
+size_t do_type_crc(const BigInt &theint);
+size_t do_type_crc(const fixedbvt &theval);
+size_t do_type_crc(const ieee_floatt &theval);
+size_t do_type_crc(const std::vector<expr2tc> &theval);
+size_t do_type_crc(const std::vector<type2tc> &theval);
+size_t do_type_crc(const std::vector<irep_idt> &theval);
+size_t do_type_crc(const expr2tc &theval);
+size_t do_type_crc(const type2tc &theval);
+size_t do_type_crc(const irep_idt &theval);
+size_t do_type_crc(const type2t::type_ids &i);
+size_t do_type_crc(const expr2t::expr_ids &i);
+
+void do_type_hash(const BigInt &theint, crypto_hash &hash);
+void do_type_hash(const fixedbvt &theval, crypto_hash &hash);
+void do_type_hash(const ieee_floatt &theval, crypto_hash &hash);
+void do_type_hash(const std::vector<expr2tc> &theval, crypto_hash &hash);
+void do_type_hash(const std::vector<type2tc> &theval, crypto_hash &hash);
+void do_type_hash(const std::vector<irep_idt> &theval, crypto_hash &hash);
+void do_type_hash(const expr2tc &theval, crypto_hash &hash);
+void do_type_hash(const type2tc &theval, crypto_hash &hash);
+void do_type_hash(const irep_idt &theval, crypto_hash &hash);
+void do_type_hash(const type2t::type_ids &, crypto_hash &);
+void do_type_hash(const expr2t::expr_ids &, crypto_hash &);
+
+template <typename T>
+void do_type2string(
+  const T &thething,
+  unsigned int idx,
+  std::string (&names)[esbmct::num_type_fields],
+  list_of_memberst &vec,
+  unsigned int indent)
+{
+  vec.push_back(member_entryt(names[idx], type_to_string(thething, indent)));
+}
+
+template <class T>
+bool do_get_sub_expr(const T &, size_t, size_t &, const expr2tc *&)
+{
+  return false;
+}
+
+template <>
+bool do_get_sub_expr<expr2tc>(
+  const expr2tc &item,
+  size_t idx,
+  size_t &it,
+  const expr2tc *&ptr);
+
+template <>
+bool do_get_sub_expr<std::vector<expr2tc>>(
+  const std::vector<expr2tc> &item,
+  size_t idx,
+  size_t &it,
+  const expr2tc *&ptr);
+
+template <class T>
+size_t do_count_sub_exprs(T &)
+{
+  return 0;
+}
+
+template <>
+size_t do_count_sub_exprs<const expr2tc>(const expr2tc &);
+
+template <>
+size_t do_count_sub_exprs<const std::vector<expr2tc>>(
+  const std::vector<expr2tc> &item);
+
+// Local template for implementing delegate calling, with type dependency.
+// Can't easily extend to cover types because field type is _already_ abstracted
+template <typename T, typename U>
+void call_expr_delegate(T &, U &)
+{
+}
+
+template <>
+void call_expr_delegate<const expr2tc, expr2t::const_op_delegate>(
+  const expr2tc &ref,
+  expr2t::const_op_delegate &f);
+
+template <>
+void call_expr_delegate<expr2tc, expr2t::op_delegate>(
+  expr2tc &ref,
+  expr2t::op_delegate &f);
+
+template <>
+void call_expr_delegate<const std::vector<expr2tc>, expr2t::const_op_delegate>(
+  const std::vector<expr2tc> &ref,
+  expr2t::const_op_delegate &f);
+
+template <>
+void call_expr_delegate<std::vector<expr2tc>, expr2t::op_delegate>(
+  std::vector<expr2tc> &ref,
+  expr2t::op_delegate &f);
+
+// Repeat of call_expr_delegate, but for types
+template <typename T, typename U>
+void call_type_delegate(T &, U &)
+{
+}
+
+template <>
+void call_type_delegate<const type2tc, type2t::const_subtype_delegate>(
+  const type2tc &ref,
+  type2t::const_subtype_delegate &f);
+
+template <>
+void call_type_delegate<type2tc, type2t::subtype_delegate>(
+  type2tc &ref,
+  type2t::subtype_delegate &f);
+
+template <>
+void call_type_delegate<
+  const std::vector<type2tc>,
+  type2t::const_subtype_delegate>(
+  const std::vector<type2tc> &ref,
+  type2t::const_subtype_delegate &f);
+
+template <>
+void call_type_delegate<std::vector<type2tc>, type2t::subtype_delegate>(
+  std::vector<type2tc> &ref,
+  type2t::subtype_delegate &f);
+
+// ============================================================================
+// generic_*<K>: switch-dispatch helpers that walk K::fields.
+// ============================================================================
 
 namespace esbmct
 {
@@ -62,10 +273,9 @@ expr2tc generic_clone(const K &a)
 }
 
 // --------------------------------------------------------------------------
-// generic_do_crc: mix expr_id then each field in K::fields.
-// For notype kinds (e.g. not2t) K::fields has no type slot, mirroring
-// expr2t_traits_notype.  For kinds with dynamic type, K::fields must list
-// &expr2t::type first so the CRC includes it.
+// generic_do_crc: mix expr_id then each field in K::fields. Notype kinds
+// (e.g. not2t) have no type slot in K::fields; kinds with dynamic type
+// list &expr2t::type first so the CRC includes it.
 // --------------------------------------------------------------------------
 template <class K>
 size_t generic_do_crc(const K &a)
