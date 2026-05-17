@@ -420,7 +420,13 @@ public:
   constant_struct2t(const type2tc &type, const std::vector<expr2tc> &members)
     : expr2t(type, constant_struct_id), datatype_members(members)
   {
-    assert(type->type_id == type2t::struct_id);
+    // complex_type2t is a primitive subtype but lowers to a 2-element
+    // struct view at the SMT boundary (see struct_union_members), and
+    // the clang frontend builds complex literals as struct-id exprt
+    // with a complex type — accept that shape here.
+    assert(
+      type->type_id == type2t::struct_id ||
+      type->type_id == type2t::complex_id);
   }
   constant_struct2t(const constant_struct2t &ref) = default;
 
