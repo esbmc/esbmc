@@ -35,6 +35,20 @@ symbolt python_converter::create_symbol(
   return symbol;
 }
 
+void python_converter::ensure_void_void_intrinsic(
+  const std::string &name,
+  const locationt &location)
+{
+  const std::string symbol_id = "c:@F@" + name;
+  if (symbol_table_.find_symbol(symbol_id) != nullptr)
+    return;
+  code_typet fn_type;
+  fn_type.return_type() = empty_typet();
+  symbolt symbol =
+    create_symbol(python_file(), name, symbol_id, location, fn_type);
+  add_symbol(symbol);
+}
+
 symbol_id python_converter::create_symbol_id(const std::string &filename) const
 {
   return symbol_id(filename, current_class_name_, current_func_name_);

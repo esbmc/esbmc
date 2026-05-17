@@ -1,4 +1,4 @@
 CORE
 main.py
 --incremental-bmc
-^ERROR:.*threading\.Thread is not yet supported by ESBMC
+^ERROR:.*`from threading import Thread` is not supported
