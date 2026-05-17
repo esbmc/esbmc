@@ -3251,12 +3251,12 @@ expr2tc typecast2t::do_simplify() const
 
     if (
       is_array_type(ptr_to.subtype) &&
-      is_symbol_type(get_array_subtype(ptr_to.subtype)))
+      is_symbol_type(to_array_type(ptr_to.subtype).subtype))
       return expr2tc(); // Not worth thinking about
 
     if (
       is_array_type(ptr_from.subtype) &&
-      is_symbol_type(get_array_subtype(ptr_from.subtype)))
+      is_symbol_type(to_array_type(ptr_from.subtype).subtype))
       return expr2tc(); // Not worth thinking about
 
     try

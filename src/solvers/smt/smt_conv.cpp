@@ -1496,7 +1496,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
 
     expr2tc flat_expr = expr;
     if (
-      is_array_type(get_array_subtype(expr->type)) && is_constant_array2t(expr))
+      is_array_type(to_array_type(expr->type).subtype) && is_constant_array2t(expr))
       flat_expr = flatten_array_body(expr);
 
     if (is_struct_type(arr.subtype) || is_pointer_type(arr.subtype))

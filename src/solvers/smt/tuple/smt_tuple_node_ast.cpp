@@ -45,7 +45,7 @@ void tuple_node_smt_ast::make_free(smt_convt *ctx)
     else if (is_array_type(it))
     {
       elements[i] = ctx->mk_fresh(
-        newsort, fieldname, ctx->convert_sort(get_array_subtype(it)));
+        newsort, fieldname, ctx->convert_sort(to_array_type(it).subtype));
     }
     else
     {

@@ -88,7 +88,7 @@ smt_astt smt_tuple_node_flattener::tuple_array_create(
   // index. Ignore infinite arrays, they're "not for you".
   // XXX - probably more efficient to update each member array, but not now.
   smt_sortt sort = ctx->convert_sort(array_type);
-  smt_sortt subtype = ctx->convert_sort(get_array_subtype(array_type));
+  smt_sortt subtype = ctx->convert_sort(to_array_type(array_type).subtype);
 
   // Optimize the creation of a const array.
   if (const_array)

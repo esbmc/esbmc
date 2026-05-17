@@ -253,11 +253,6 @@ inline expr2tc gen_slong(signed long val)
   return constant_int2tc(get_int_type(config.ansi_c.word_size), BigInt(val));
 }
 
-inline const type2tc &get_array_subtype(const type2tc &type)
-{
-  return to_array_type(type).subtype;
-}
-
 inline const type2tc &get_base_array_subtype(const type2tc &type)
 {
   const auto &subtype = to_array_type(type).subtype;
