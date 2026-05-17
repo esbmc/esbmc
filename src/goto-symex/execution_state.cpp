@@ -919,9 +919,21 @@ void execution_statet::get_expr_globals(
 
     // Rename to level1 to avoid shared varible mismatch in mpor.
     cur_state->top().level1.rename(p);
+    // Python module-level globals carry static_lifetime=false (their
+    // symbol.value field doubles as a const-prop snapshot in the Python
+    // frontend), but the frontend marks them with file_local=false to
+    // signal "shared module state". Recognise them here so symex inserts
+    // interleaving points at their reads/writes, matching the
+    // race-eligible bypass added to rw_set.cpp.
+    //
+    // Necessary but not sufficient on its own: the scheduler-side DFS /
+    // MPOR limiters tracked in #4584 also need to be loosened before
+    // assertion-based race tests like increment_race flip to FAILED.
+    const bool python_global =
+      symbol->mode == "Python" && !symbol->file_local;
     if (
       symbol->static_lifetime || symbol->type.is_dynamic_set() ||
-      point_to_global)
+      point_to_global || python_global)
     {
       std::list<unsigned int> threadId_list;
       auto it_find = art1->vars_map.find(p);
