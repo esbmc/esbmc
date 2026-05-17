@@ -1285,7 +1285,12 @@ void python_converter::preregister_global_variables(
     symbolt symbol =
       create_symbol(module_name, var_name, sid.to_string(), location, var_type);
     symbol.lvalue = true;
-    symbol.file_local = true;
+    // Module-level Python globals are not file-local: they are visible
+    // across the entire program. rw_set.cpp uses (mode == "Python" &&
+    // !file_local) to recognise them as race-eligible shared state,
+    // since the Python frontend leaves static_lifetime=false to avoid
+    // the C-side static-init pass picking up its const-prop snapshot.
+    symbol.file_local = false;
     symbol.is_extern = false;
 
     symbol_table_.move_symbol_to_context(symbol);
@@ -1444,7 +1449,10 @@ void python_converter::get_var_assign(
         location_begin,
         current_element_type);
       symbol.lvalue = true;
-      symbol.file_local = true;
+      // Module-level Python globals are not file-local (see
+      // preregister_global_variables). Function-local annotated assigns
+      // stay file-local.
+      symbol.file_local = !current_func_name_.empty();
       symbol.is_extern = false;
 
       symbol_created = (lhs_symbol == nullptr);
@@ -1549,7 +1557,9 @@ void python_converter::get_var_assign(
           location_begin,
           current_element_type);
         symbol.lvalue = true;
-        symbol.file_local = true;
+        // Inferred-annotation Assign: module-scope symbols are not
+        // file-local (so rw_set recognises them); function-locals are.
+        symbol.file_local = !current_func_name_.empty();
         symbol.is_extern = false;
         lhs_symbol = symbol_table_.move_symbol_to_context(symbol);
       }

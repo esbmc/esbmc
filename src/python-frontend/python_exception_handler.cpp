@@ -228,7 +228,11 @@ void python_exception_handler::get_except_handler_statement(
     symbol.name = name;
     symbol.lvalue = true;
     symbol.is_extern = false;
-    symbol.file_local = false;
+    // Exception-bind variables (`except E as v:`) are function-local in
+    // Python semantics; keeping file_local=true matches the convention
+    // used by other Python frontend temp symbols and prevents rw_set's
+    // race-eligible-Python-symbol filter from picking them up.
+    symbol.file_local = true;
     exception_symbol = converter_.symbol_table().move_symbol_to_context(symbol);
   }
 
