@@ -1,0 +1,5 @@
+CORE
+main.py
+--incremental-bmc --data-races-check
+^VERIFICATION FAILED$
+^.*data race.*$
