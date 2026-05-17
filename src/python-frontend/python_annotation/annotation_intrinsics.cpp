@@ -72,6 +72,16 @@ const std::map<std::string, std::string> &builtin_functions()
     {"globals", "dict"},
     {"locals", "dict"},
 
+    // Python threading.Thread lowering (see parser.py
+    // lower_threading_thread_usage and src/c2goto/library/pthread_lib.c).
+    // Annotated here so the call's return type is known during inference
+    // even though the C definitions are linked in by c2goto, not declared
+    // in any Python model.
+    {"__ESBMC_spawn_thread", "int"},
+    {"__pyt_init_tid", "NoneType"},
+    {"__pyt_join", "NoneType"},
+    {"__pyt_terminate", "NoneType"},
+
     // Execution functions
     {"eval", "Any"},
     {"exec", "NoneType"},

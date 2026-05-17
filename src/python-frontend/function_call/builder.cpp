@@ -52,6 +52,10 @@ const std::string kEsbmcLoopInvariant = "__ESBMC_loop_invariant";
 const std::string kEsbmcCover = "__ESBMC_cover";
 const std::string kEsbmcAtomicBegin = "__ESBMC_atomic_begin";
 const std::string kEsbmcAtomicEnd = "__ESBMC_atomic_end";
+const std::string kEsbmcSpawnThread = "__ESBMC_spawn_thread";
+const std::string kPytInitTid = "__pyt_init_tid";
+const std::string kPytJoin = "__pyt_join";
+const std::string kPytTerminate = "__pyt_terminate";
 
 function_call_builder::function_call_builder(
   python_converter &converter,
@@ -750,32 +754,115 @@ exprt function_call_builder::build() const
       code_typet atomic_type;
       atomic_type.return_type() = empty_typet();
 
-      auto &symbol_table = converter_.symbol_table();
       locationt location = converter_.get_location_from_decl(call_);
-
-      auto declare_zero_arg_void = [&](const std::string &name) {
-        const std::string id = "c:@F@" + name;
-        if (symbol_table.find_symbol(id.c_str()) != nullptr)
-          return;
-        symbolt symbol = converter_.create_symbol(
-          converter_.python_file(), name, id, location, atomic_type);
-        converter_.add_symbol(symbol);
-      };
-
-      declare_zero_arg_void(func_name);
+      converter_.ensure_void_void_intrinsic(func_name, location);
       // do_atomic_begin emits a call to __ESBMC_yield to force a context
       // switch before entering the atomic section, dereferencing the symbol
       // unconditionally; the Python frontend does not pull in the C
       // intrinsics header, so register the yield symbol here too. Only
       // atomic_begin needs it; atomic_end does not call yield.
       if (is_atomic_begin)
-        declare_zero_arg_void("__ESBMC_yield");
+        converter_.ensure_void_void_intrinsic("__ESBMC_yield", location);
 
       code_function_callt atomic_call;
       atomic_call.function() = symbol_exprt("c:@F@" + func_name, atomic_type);
       atomic_call.type() = empty_typet();
       atomic_call.location() = location;
       return atomic_call;
+    }
+  }
+
+  // __ESBMC_spawn_thread: the symex-level thread-spawn intrinsic used
+  // by the Python frontend's threading.Thread lowering (see parser.py
+  // lower_threading_thread_usage). Symex's intrinsic_spawn_thread
+  // (builtin_functions/threads.cpp) requires its operand to be a
+  // literal address_of(symbol_expr(trampoline_function)); the Python
+  // converter receives a bare Name → symbol_exprt and wraps it here.
+  {
+    const std::string &func_name = function_id.get_function();
+    if (func_name == kEsbmcSpawnThread)
+    {
+      auto &symbol_table = converter_.symbol_table();
+      locationt location = converter_.get_location_from_decl(call_);
+
+      code_typet trampoline_type;
+      trampoline_type.return_type() = empty_typet();
+      typet param_type = pointer_typet(trampoline_type);
+
+      code_typet fn_type;
+      fn_type.return_type() = uint_type();
+      fn_type.arguments().push_back(code_typet::argumentt(param_type));
+
+      const std::string symbol_id = "c:@F@" + func_name;
+      if (symbol_table.find_symbol(symbol_id.c_str()) == nullptr)
+      {
+        symbolt symbol = converter_.create_symbol(
+          converter_.python_file(), func_name, symbol_id, location, fn_type);
+        converter_.add_symbol(symbol);
+      }
+
+      if (call_["args"].size() != 1)
+        throw std::runtime_error(func_name + " takes exactly one argument");
+      exprt arg = converter_.get_expr(call_["args"][0]);
+      if (arg.type().is_code())
+        arg = address_of_exprt(arg);
+      if (arg.type() != param_type)
+        arg = typecast_exprt(arg, param_type);
+
+      code_function_callt call;
+      call.function() = symbol_exprt(symbol_id, fn_type);
+      call.type() = fn_type.return_type();
+      call.location() = location;
+      call.arguments().push_back(arg);
+      return call;
+    }
+  }
+
+  // __pyt_init_tid / __pyt_join / __pyt_terminate: the C-side bookkeeping
+  // helpers for the Python threading.Thread lowering (defined in
+  // pthread_lib.c, pulled into the GOTO program via the python_c_models
+  // whitelist in cprover_library.cpp). Register the matching C-style
+  // symbol id so the call resolves to the linked body rather than a
+  // freshly-created Python-frontend symbol with no implementation.
+  {
+    const std::string &func_name = function_id.get_function();
+    const bool is_init_tid = func_name == kPytInitTid;
+    const bool is_join = func_name == kPytJoin;
+    const bool is_terminate = func_name == kPytTerminate;
+    if (is_init_tid || is_join || is_terminate)
+    {
+      auto &symbol_table = converter_.symbol_table();
+      locationt location = converter_.get_location_from_decl(call_);
+
+      code_typet fn_type;
+      fn_type.return_type() = empty_typet();
+      if (!is_terminate)
+        fn_type.arguments().push_back(code_typet::argumentt(uint_type()));
+
+      const std::string symbol_id = "c:@F@" + func_name;
+      if (symbol_table.find_symbol(symbol_id.c_str()) == nullptr)
+      {
+        symbolt symbol = converter_.create_symbol(
+          converter_.python_file(), func_name, symbol_id, location, fn_type);
+        converter_.add_symbol(symbol);
+      }
+
+      code_function_callt call;
+      call.function() = symbol_exprt(symbol_id, fn_type);
+      call.type() = empty_typet();
+      call.location() = location;
+
+      if (!is_terminate)
+      {
+        if (call_["args"].size() != 1)
+          throw std::runtime_error(func_name + " takes exactly one argument");
+        exprt arg = converter_.get_expr(call_["args"][0]);
+        if (arg.type() != uint_type())
+          arg = typecast_exprt(arg, uint_type());
+        call.arguments().push_back(arg);
+      }
+
+      return call;
     }
   }
 
