@@ -64,10 +64,20 @@ class Thread:
 
     def start(self) -> None:
         """Reached only when the AST rewrite failed to lower a Thread."""
-        assert False, ("threading.Thread.start() reached without AST lowering "
-                       "(dynamic Thread lookup?)")
+        # ESBMC intrinsic, not a runtime Python assert; the Python
+        # frontend lowers __ESBMC_assert(False, ...) to a verification
+        # claim that fires if symex reaches this body. Using the
+        # intrinsic directly avoids `python -O` stripping the check.
+        __ESBMC_assert(
+            False,
+            "threading.Thread.start() reached without AST lowering "
+            "(dynamic Thread lookup?)",
+        )
 
     def join(self) -> None:
         """Reached only when the AST rewrite failed to lower a Thread."""
-        assert False, ("threading.Thread.join() reached without AST lowering "
-                       "(dynamic Thread lookup?)")
+        __ESBMC_assert(
+            False,
+            "threading.Thread.join() reached without AST lowering "
+            "(dynamic Thread lookup?)",
+        )
