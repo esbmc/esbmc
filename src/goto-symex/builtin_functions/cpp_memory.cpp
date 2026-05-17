@@ -74,9 +74,10 @@ void goto_symext::symex_cpp_new(
 
 void goto_symext::symex_cpp_delete(const expr2tc &expr)
 {
-  const auto &code = to_code_expression2t(expr);
-
-  expr2tc tmp = code.operand;
+  // expr is code_cpp_delete or code_cpp_del_array; both have exactly
+  // one sub-expression — the pointer being deleted.
+  assert(is_code_cpp_delete2t(expr) || is_code_cpp_del_array2t(expr));
+  expr2tc tmp = *expr->get_sub_expr(0);
 
   internal_deref_items.clear();
   expr2tc deref = dereference2tc(get_empty_type(), tmp);

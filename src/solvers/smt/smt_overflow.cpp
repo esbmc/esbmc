@@ -3,8 +3,8 @@
 smt_astt smt_convt::overflow_arith(const expr2tc &expr)
 {
   const overflow2t &overflow = to_overflow2t(expr);
-  const expr2tc &side1 = arith_side1(overflow.operand);
-  const expr2tc &side2 = arith_side2(overflow.operand);
+  const expr2tc &side1 = *overflow.operand->get_sub_expr(0);
+  const expr2tc &side2 = *overflow.operand->get_sub_expr(1);
 
   expr2tc zero = gen_zero(side1->type);
 

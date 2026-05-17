@@ -705,8 +705,8 @@ expr2tc bitwuzla_convt::get_array_elem(
 smt_astt bitwuzla_convt::overflow_arith(const expr2tc &expr)
 {
   const overflow2t &overflow = to_overflow2t(expr);
-  const expr2tc &op1 = arith_side1(overflow.operand);
-  const expr2tc &op2 = arith_side2(overflow.operand);
+  const expr2tc &op1 = *overflow.operand->get_sub_expr(0);
+  const expr2tc &op2 = *overflow.operand->get_sub_expr(1);
 
   const bitw_smt_ast *side1 =
     to_solver_smt_ast<bitw_smt_ast>(convert_ast(op1));

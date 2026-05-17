@@ -278,7 +278,9 @@ void with2t::assert_consistency() const
   }
   else
   {
-    assert(is_structure_type(source_value->type));
+    assert(
+      is_structure_type(source_value->type) ||
+      is_complex_type(source_value->type));
     assert(update_field->expr_id == constant_string_id);
     auto c = struct_union_get_component_number(
       source_value->type,

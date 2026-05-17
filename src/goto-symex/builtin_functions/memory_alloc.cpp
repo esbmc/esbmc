@@ -692,18 +692,24 @@ void goto_symext::track_new_pointer(
 
 void goto_symext::symex_free(const expr2tc &expr)
 {
-  const auto &code = to_code_expression2t(expr);
+  // expr is any 1-op code kind: code_free (from symex_other) or
+  // code_cpp_delete / code_cpp_del_array (delegated via symex_cpp_delete).
+  // All have exactly one sub-expression — the pointer being freed.
+  assert(
+    is_code_free2t(expr) || is_code_cpp_delete2t(expr) ||
+    is_code_cpp_del_array2t(expr));
+  const expr2tc &operand = *expr->get_sub_expr(0);
 
   // Trigger 'free'-mode dereference of this pointer. Should generate various
   // dereference failure callbacks.
-  expr2tc tmp = code.operand;
+  expr2tc tmp = operand;
   dereference(tmp, dereferencet::FREE);
 
   // Don't rely on the output of dereference in free mode; instead fetch all
   // the internal dereference state for pointed at objects, and creates claims
   // that if pointed at, their offset is zero.
   internal_deref_items.clear();
-  tmp = code.operand;
+  tmp = operand;
 
   // Create temporary, dummy, dereference
   tmp = dereference2tc(get_uint8_type(), tmp);
@@ -763,7 +769,7 @@ void goto_symext::symex_free(const expr2tc &expr)
 
   // Clear the alloc bit.
   type2tc sym_type = array_type2tc(get_bool_type(), expr2tc(), true);
-  expr2tc ptr_obj = pointer_object2tc(pointer_type2(), code.operand);
+  expr2tc ptr_obj = pointer_object2tc(pointer_type2(), operand);
   dereference(ptr_obj, dereferencet::READ);
 
   expr2tc valid_sym = symbol2tc(sym_type, valid_ptr_arr_name);
