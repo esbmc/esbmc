@@ -5,9 +5,9 @@
 // System includes before custom ones with ESBMC macros
 #include <nlohmann/json.hpp>
 
-#include <python-frontend/function_call_expr.h>
+#include <python-frontend/function_call/expr.h>
 #include <python-frontend/python_converter.h>
-#include <python-frontend/function_call_cache.h>
+#include <python-frontend/function_call/cache.h>
 #include <python-frontend/global_scope.h>
 #include <python-frontend/symbol_id.h>
 #include <util/config.h>
