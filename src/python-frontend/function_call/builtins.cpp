@@ -111,10 +111,7 @@ bool is_empty_literal(const nlohmann::json &node)
 }
 } // namespace
 
-exprt function_call_expr::combine_truthiness(
-  exprt acc,
-  exprt next,
-  ReduceOp op)
+exprt function_call_expr::combine_truthiness(exprt acc, exprt next, ReduceOp op)
 {
   return (op == ReduceOp::Any)
            ? exprt(or_exprt(std::move(acc), std::move(next)))
@@ -273,8 +270,7 @@ exprt function_call_expr::handle_isinstance() const
       // Check if this constant value is a type name
       if (type_utils::is_type_identifier(value_str))
       {
-        auto extract_type_name = [](const nlohmann::json &node) -> std::string
-        {
+        auto extract_type_name = [](const nlohmann::json &node) -> std::string {
           const std::string node_type = node["_type"];
           if (node_type == "Name")
             return node["id"];
@@ -290,8 +286,7 @@ exprt function_call_expr::handle_isinstance() const
   }
 
   // Extract type name from various AST node formats
-  auto extract_type_name = [](const nlohmann::json &node) -> std::string
-  {
+  auto extract_type_name = [](const nlohmann::json &node) -> std::string {
     const std::string node_type = node["_type"];
 
     if (node_type == "Name")
@@ -352,8 +347,7 @@ exprt function_call_expr::handle_isinstance() const
   };
 
   // Build isinstance check for a given type name
-  auto build_isinstance = [&](const std::string &type_name) -> exprt
-  {
+  auto build_isinstance = [&](const std::string &type_name) -> exprt {
     // Special case: Check if object is None (null pointer)
     if (type_name == "NoneType")
     {
@@ -727,24 +721,23 @@ exprt function_call_expr::handle_complex() const
   const nlohmann::json &keywords =
     call_.contains("keywords") ? call_["keywords"] : nlohmann::json::array();
 
-  auto raise_type_error = [this](const std::string &msg) -> exprt
-  {
+  auto raise_type_error = [this](const std::string &msg) -> exprt {
     return converter_.get_exception_handler().gen_exception_raise(
       "TypeError", msg);
   };
-  auto raise_value_error = [this](const std::string &msg) -> exprt
-  {
+  auto raise_value_error = [this](const std::string &msg) -> exprt {
     return converter_.get_exception_handler().gen_exception_raise(
       "ValueError", msg);
   };
   auto zero = []() -> exprt { return from_double(0.0, double_type()); };
-  auto normalize_numeric_expr_for_complex = [this](exprt value) -> exprt
-  { return converter_.get_complex_handler().normalize_numeric_expr(value); };
-  auto is_cpp_throw = [](const exprt &e) -> bool
-  { return e.statement() == "cpp-throw"; };
+  auto normalize_numeric_expr_for_complex = [this](exprt value) -> exprt {
+    return converter_.get_complex_handler().normalize_numeric_expr(value);
+  };
+  auto is_cpp_throw = [](const exprt &e) -> bool {
+    return e.statement() == "cpp-throw";
+  };
   auto extract_constant_string =
-    [&](const nlohmann::json &arg, std::string &out) -> bool
-  {
+    [&](const nlohmann::json &arg, std::string &out) -> bool {
     if (!arg.contains("value"))
       return false;
     if (!arg["value"].is_string())
@@ -752,8 +745,7 @@ exprt function_call_expr::handle_complex() const
     out = arg["value"].get<std::string>();
     return true;
   };
-  auto is_bytes_literal = [](const nlohmann::json &arg) -> bool
-  {
+  auto is_bytes_literal = [](const nlohmann::json &arg) -> bool {
     if (arg.contains("encoded_bytes"))
       return true;
     if (
@@ -768,23 +760,20 @@ exprt function_call_expr::handle_complex() const
       return true;
     return false;
   };
-  auto is_bytearray_call = [](const nlohmann::json &arg) -> bool
-  {
+  auto is_bytearray_call = [](const nlohmann::json &arg) -> bool {
     return (
       arg.contains("_type") && arg["_type"] == "Call" && arg.contains("func") &&
       arg["func"].contains("_type") && arg["func"]["_type"] == "Name" &&
       arg["func"].contains("id") && arg["func"]["id"] == "bytearray");
   };
-  auto byteslike_name = [&](const nlohmann::json &arg) -> std::string
-  {
+  auto byteslike_name = [&](const nlohmann::json &arg) -> std::string {
     if (is_bytes_literal(arg))
       return "bytes";
     if (is_bytearray_call(arg))
       return "bytearray";
     return "";
   };
-  auto is_bytes_annotated_name = [&](const nlohmann::json &arg) -> bool
-  {
+  auto is_bytes_annotated_name = [&](const nlohmann::json &arg) -> bool {
     if (!(arg.contains("_type") && arg["_type"] == "Name" &&
           arg.contains("id")))
       return false;
@@ -801,14 +790,12 @@ exprt function_call_expr::handle_complex() const
     return annotation.contains("id") && annotation["id"] == "bytes";
   };
   auto try_dispatch_numeric_dunder =
-    [&](const std::string &op, exprt &operand) -> exprt
-  {
+    [&](const std::string &op, exprt &operand) -> exprt {
     return converter_.dispatch_unary_dunder_operator(
       op, operand, converter_.get_location_from_decl(call_));
   };
   auto try_convert_via_numeric_dunders =
-    [&](exprt &value, bool require_complex_result) -> std::optional<exprt>
-  {
+    [&](exprt &value, bool require_complex_result) -> std::optional<exprt> {
     exprt complex_result = try_dispatch_numeric_dunder("complex", value);
     if (!complex_result.is_nil())
     {
@@ -854,8 +841,7 @@ exprt function_call_expr::handle_complex() const
 
     return std::nullopt;
   };
-  auto is_unsigned_byte_array = [](const typet &type) -> bool
-  {
+  auto is_unsigned_byte_array = [](const typet &type) -> bool {
     if (!type.is_array())
       return false;
     const typet &subtype = type.subtype();
@@ -1004,8 +990,7 @@ exprt function_call_expr::handle_complex() const
 
             auto parse_complex_text =
               [&](const std::optional<std::string> &text)
-              -> std::optional<std::pair<double, double>>
-            {
+              -> std::optional<std::pair<double, double>> {
               if (!text)
                 return std::nullopt;
               double real = 0.0, imag = 0.0;
@@ -1366,8 +1351,7 @@ exprt function_call_expr::handle_any_all(ReduceOp op, const char *name)
 
   if (args.size() > 1)
     throw std::runtime_error(
-      prefix + " takes at most 1 argument, got " +
-      std::to_string(args.size()));
+      prefix + " takes at most 1 argument, got " + std::to_string(args.size()));
 
   const auto &arg = args[0];
   const std::string &arg_type = arg["_type"];
