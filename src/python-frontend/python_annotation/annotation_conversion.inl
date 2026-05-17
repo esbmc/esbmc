@@ -53,6 +53,11 @@ std::string python_annotation<Json>::get_type_from_lhs(
   if (node.empty() && current_func != nullptr)
     node = find_annotated_assign(id, (*current_func)["body"]);
 
+  // Closure capture: fall back to the enclosing function before the
+  // global scope. See find_var_node_for_inference for an analogous pattern.
+  if (node.empty() && parent_func != nullptr)
+    node = find_annotated_assign(id, (*parent_func)["body"]);
+
   // Fall back to variables in the global scope
   if (node.empty())
     node = find_annotated_assign(id, ast_["body"]);
@@ -1341,6 +1346,26 @@ std::string python_annotation<Json>::get_type_from_rhs_variable(
     if (rhs_node.empty() && body["args"].contains("kwonlyargs"))
       rhs_node =
         find_annotated_assign(rhs_var_name, body["args"]["kwonlyargs"]);
+  }
+
+  // Closure capture: fall back to the enclosing function before the
+  // global scope. Matches the args-then-body order used in
+  // find_var_node_for_inference.
+  if (rhs_node.empty() && parent_func != nullptr)
+  {
+    if (
+      (*parent_func).contains("args") &&
+      (*parent_func)["args"].contains("args"))
+    {
+      rhs_node =
+        find_annotated_assign(rhs_var_name, (*parent_func)["args"]["args"]);
+      if (rhs_node.empty() && (*parent_func)["args"].contains("kwonlyargs"))
+        rhs_node = find_annotated_assign(
+          rhs_var_name, (*parent_func)["args"]["kwonlyargs"]);
+    }
+
+    if (rhs_node.empty())
+      rhs_node = find_annotated_assign(rhs_var_name, (*parent_func)["body"]);
   }
 
   // Find RHS variable node in the global scope
