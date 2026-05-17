@@ -6,4 +6,4 @@ class Worker(threading.Thread):
         super().__init__()
 
 
-w = Worker()
+w: Worker = Worker()

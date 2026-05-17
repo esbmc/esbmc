@@ -101,6 +101,12 @@ SUPPORTED_THREADING_SYMBOLS = frozenset({"Lock", "Thread"})
 # reads).
 UNSUPPORTED_THREAD_KWARGS = frozenset({"daemon", "name", "kwargs", "group"})
 
+# Methods on ``threading.Thread`` whose semantics the MVP lowering owns
+# (calls are rewritten to pthread intrinsics). A user subclass that
+# redefines ``start`` or ``join`` would have its override silently
+# bypassed at spawn/join — refuse at parse time.
+THREAD_OVERRIDE_REJECTED_METHODS = frozenset({"start", "join"})
+
 
 def reject_unsupported_threading_usage(tree: ast.AST, source_filename: str) -> None:
     """Refuse to compile programs using unsupported ``threading`` names.
@@ -207,6 +213,134 @@ def _is_thread_constructor(
     if isinstance(func, ast.Name):
         return func.id in thread_aliases
     return False
+
+
+def _base_is_thread(
+    base: ast.expr,
+    module_aliases: set[str],
+    thread_aliases: set[str],
+) -> bool:
+    """Return ``True`` iff ``base`` resolves to ``threading.Thread``.
+
+    Recognises both ``threading.Thread`` (qualified through an
+    ``import threading [as X]`` alias) and the bare name when it
+    came in via ``from threading import Thread [as X]``.
+    """
+    if isinstance(base, ast.Attribute) and isinstance(base.value, ast.Name):
+        return base.value.id in module_aliases and base.attr == "Thread"
+    if isinstance(base, ast.Name):
+        return base.id in thread_aliases
+    return False
+
+
+def _collect_thread_subclass_defs(
+    tree: ast.AST,
+    module_aliases: set[str],
+    thread_aliases: set[str],
+) -> dict[str, ast.ClassDef]:
+    """Return ``{class_name: ClassDef}`` for module-top direct subclasses.
+
+    Only direct subclasses (``class X(threading.Thread)``) at module
+    scope are picked up. Transitive subclasses (``class B(A)`` where
+    ``A`` is itself a Thread subclass) and nested subclass defs are out
+    of MVP scope; the validator's C1 rule rejects nested defs and
+    transitive subclassing fails the constructor-recognition check at
+    the call site.
+    """
+    if not isinstance(tree, ast.Module):
+        return {}
+    out: dict[str, ast.ClassDef] = {}
+    for node in tree.body:
+        if not isinstance(node, ast.ClassDef):
+            continue
+        if any(
+            _base_is_thread(b, module_aliases, thread_aliases) for b in node.bases
+        ):
+            out[node.name] = node
+    return out
+
+
+def _is_subclass_constructor(
+    call_node: ast.Call,
+    subclass_names: set[str],
+) -> bool:
+    """Return ``True`` iff ``call_node`` constructs a tracked Thread subclass."""
+    func = call_node.func
+    return isinstance(func, ast.Name) and func.id in subclass_names
+
+
+def _extract_name_binding(
+    stmt: ast.stmt,
+) -> tuple[str | None, ast.expr | None]:
+    """Return ``(target_name, value)`` for ``Name = value`` / ``Name: T = value``.
+
+    Returns ``(None, None)`` for tuple-targets, attribute-targets, augmented
+    assigns, and any other statement shape. Used wherever we need to ask
+    "is this a simple single-name binding, and what does it assign?"
+    """
+    if (
+        isinstance(stmt, ast.Assign)
+        and len(stmt.targets) == 1
+        and isinstance(stmt.targets[0], ast.Name)
+    ):
+        return stmt.targets[0].id, stmt.value
+    if isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name):
+        return stmt.target.id, stmt.value
+    return None, None
+
+
+def _call_class_name(call_node: ast.Call) -> str:
+    """Return the class name from a ``Name(...)`` call for error messages."""
+    func = call_node.func
+    if isinstance(func, ast.Name):
+        return func.id
+    return "<expr>"
+
+
+def _is_super_call_expr(node: ast.AST) -> bool:
+    """Return ``True`` iff ``node`` is a call whose function is ``super().X``.
+
+    Matches the AST shape ``Call(func=Attribute(value=Call(func=Name('super'))))``
+    for any attribute. Used to enumerate every super-method call inside
+    a subclass body so the validator can refuse the ones we cannot
+    soundly strip.
+    """
+    if not isinstance(node, ast.Call):
+        return False
+    func = node.func
+    if not isinstance(func, ast.Attribute):
+        return False
+    inner = func.value
+    return (
+        isinstance(inner, ast.Call)
+        and isinstance(inner.func, ast.Name)
+        and inner.func.id == "super"
+    )
+
+
+def _is_super_init_call_stmt(stmt: ast.stmt) -> bool:
+    """Return ``True`` iff ``stmt`` is ``super().__init__()`` at statement level.
+
+    Strict: zero positional args, zero keywords, both for the
+    ``super(...)`` call (must be bare ``super()``) and the
+    ``.__init__(...)`` call. Anything richer falls through to the
+    validator, which refuses non-trivial super calls.
+    """
+    if not isinstance(stmt, ast.Expr):
+        return False
+    call = stmt.value
+    if not isinstance(call, ast.Call) or call.args or call.keywords:
+        return False
+    if not isinstance(call.func, ast.Attribute) or call.func.attr != "__init__":
+        return False
+    inner = call.func.value
+    return (
+        isinstance(inner, ast.Call)
+        and isinstance(inner.func, ast.Name)
+        and inner.func.id == "super"
+        and not inner.args
+        and not inner.keywords
+    )
 
 
 def _target_name_chain(node: ast.AST) -> str | None:
@@ -407,7 +541,15 @@ def validate_threading_thread_usage(tree: ast.Module, source_filename: str) -> N
       * tuple-target assigns (``a, b = Thread(...), Thread(...)``) and
         walrus-bound Threads are not counted by the reassignment check;
       * rebinds via ``def``/``class``/``import``/``for``-target/
-        ``with``-target are not counted by the reassignment check.
+        ``with``-target are not counted by the reassignment check;
+      * Thread-subclass name collision with a function-local class of
+        the same name — the C2 walk matches subclass constructors by
+        bare ``func.id``, so a function-local ``class Worker:`` that
+        shadows the module-top ``class Worker(threading.Thread)`` has
+        its ``Worker(...)`` calls wrongly refused. This is a false
+        positive (valid code rejected), not a false verdict; the user
+        can rename the local class. Resolving it would require a
+        name-resolution pass.
     """
     module_aliases, thread_aliases = _collect_thread_aliases(tree)
     if not module_aliases and not thread_aliases:
@@ -435,21 +577,148 @@ def validate_threading_thread_usage(tree: ast.Module, source_filename: str) -> N
                         )
 
     def base_is_thread(base: ast.expr) -> bool:
-        if isinstance(base, ast.Attribute) and isinstance(base.value, ast.Name):
-            return base.value.id in module_aliases and base.attr == "Thread"
-        if isinstance(base, ast.Name):
-            return base.id in thread_aliases
-        return False
+        return _base_is_thread(base, module_aliases, thread_aliases)
 
-    # Reject subclassing threading.Thread.
+    # MVP subclass support. Collect direct-subclass class defs at module
+    # scope; validate each shape (C3-C7); refuse nested subclass defs
+    # (C1) so they cannot slip past the module-top collector and reach
+    # the converter unstripped.
+    subclass_defs = _collect_thread_subclass_defs(
+        tree, module_aliases, thread_aliases
+    )
+    module_top_class_ids = {
+        id(node) for node in (tree.body if isinstance(tree, ast.Module) else [])
+        if isinstance(node, ast.ClassDef)
+    }
     for node in ast.walk(tree):
-        if isinstance(node, ast.ClassDef) and any(
-            base_is_thread(base) for base in node.bases
-        ):
+        if not isinstance(node, ast.ClassDef):
+            continue
+        if not any(base_is_thread(b) for b in node.bases):
+            continue
+        if id(node) not in module_top_class_ids:
             fail(
                 node.lineno,
-                "Subclassing threading.Thread is not supported by ESBMC. "
-                "Use `Thread(target=..., args=...)` directly.",
+                f"`class {node.name}(threading.Thread)` must be defined at "
+                "module scope. Nested subclasses are not supported.",
+            )
+
+    for cls_name, cls in subclass_defs.items():
+        # C7: no multiple inheritance. We strip the Thread base in
+        # lowering, but the remaining base(s) would form an MRO the
+        # frontend cannot resolve relative to the un-stripped source.
+        non_thread_bases = [b for b in cls.bases if not base_is_thread(b)]
+        if non_thread_bases:
+            fail(
+                cls.lineno,
+                f"Multiple inheritance is not supported for Thread "
+                f"subclass `{cls_name}`. Only "
+                f"`class {cls_name}(threading.Thread)` is accepted.",
+            )
+
+        # C3: must define run.
+        if not any(
+            isinstance(m, ast.FunctionDef) and m.name == "run" for m in cls.body
+        ):
+            fail(
+                cls.lineno,
+                f"Thread subclass `{cls_name}` must define a `run` method.",
+            )
+
+        # C4: cannot override start or join. The lowering replaces
+        # calls to these; a user override would be silently bypassed.
+        for m in cls.body:
+            if (
+                isinstance(m, ast.FunctionDef)
+                and m.name in THREAD_OVERRIDE_REJECTED_METHODS
+            ):
+                fail(
+                    m.lineno,
+                    f"Thread subclass `{cls_name}` overrides `{m.name}`. "
+                    "The lowering replaces calls to `start`/`join`; "
+                    "overrides would be silently bypassed. Not supported.",
+                )
+
+        # C5: super calls inside the subclass body limited to bare
+        # ``super().__init__()`` at statement level inside ``__init__``.
+        # The lowering strips that one shape; anything richer must be
+        # refused so we never silently drop user code.
+        for m in cls.body:
+            if not isinstance(m, ast.FunctionDef):
+                continue
+            for inner in ast.walk(m):
+                if not _is_super_call_expr(inner):
+                    continue
+                if m.name == "__init__":
+                    # Allow only when the call appears as a bare
+                    # ``Expr(super().__init__())`` statement in the
+                    # immediate __init__ body — i.e. not nested in an
+                    # if/while/with/assignment expression where the
+                    # strip pass cannot replace it with Pass.
+                    matched = any(
+                        _is_super_init_call_stmt(stmt) and stmt.value is inner
+                        for stmt in m.body
+                    )
+                    if matched:
+                        continue
+                fail(
+                    getattr(inner, "lineno", m.lineno),
+                    f"Only bare `super().__init__()` at statement level "
+                    f"inside `__init__` is supported in Thread subclass "
+                    f"`{cls_name}`. Other `super()` usages are not modelled.",
+                )
+
+    # Single pass over module top to discharge C2 (module-scope binding)
+    # and C6 (single-definition + no rebinding to a non-subclass value).
+    # We collect the call ids of subclass constructors found in a valid
+    # module-top binding, then refuse any other subclass constructor
+    # call. Var-name tracking gives C6's two failure modes inline.
+    subclass_names: set[str] = set(subclass_defs)
+    module_top_subclass_binding_call_ids: set[int] = set()
+    subclass_var_names: set[str] = set()
+    if subclass_names and isinstance(tree, ast.Module):
+        for stmt in tree.body:
+            target_name, value = _extract_name_binding(stmt)
+            if target_name is None:
+                continue
+            is_subclass_ctor = (
+                isinstance(value, ast.Call)
+                and _is_subclass_constructor(value, subclass_names)
+            )
+            if is_subclass_ctor:
+                if target_name in subclass_var_names:
+                    fail(
+                        stmt.lineno,
+                        f"Thread subclass variable `{target_name}` is "
+                        "reassigned at module scope. The single-definition "
+                        "rule keeps the spawn-site trampoline's read of "
+                        f"`{target_name}` unambiguous.",
+                    )
+                subclass_var_names.add(target_name)
+                module_top_subclass_binding_call_ids.add(id(value))
+            elif target_name in subclass_var_names:
+                fail(
+                    stmt.lineno,
+                    f"Thread subclass variable `{target_name}` is rebound "
+                    "to a non-subclass value after construction. The "
+                    "spawned trampoline would observe the rebound value "
+                    "rather than the subclass instance.",
+                )
+
+    # C2: every subclass constructor in the tree must be one of the
+    # bindings we just registered.
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        if not _is_subclass_constructor(node, subclass_names):
+            continue
+        if id(node) not in module_top_subclass_binding_call_ids:
+            fail(
+                node.lineno,
+                f"Thread subclass `{_call_class_name(node)}` must be "
+                "constructed at module scope via a simple `<name> = "
+                f"{_call_class_name(node)}(...)` binding. Function-scope "
+                "bindings, temporaries, and nested expressions are not "
+                "supported in the MVP.",
             )
 
     # Reject Thread construction at class-body scope. The site collector
@@ -461,17 +730,7 @@ def validate_threading_thread_usage(tree: ast.Module, source_filename: str) -> N
         if not isinstance(node, ast.ClassDef):
             continue
         for stmt in node.body:
-            value: ast.expr | None = None
-            if (
-                isinstance(stmt, ast.Assign)
-                and len(stmt.targets) == 1
-                and isinstance(stmt.targets[0], ast.Name)
-            ):
-                value = stmt.value
-            elif isinstance(stmt, ast.AnnAssign) and isinstance(
-                stmt.target, ast.Name
-            ):
-                value = stmt.value
+            _, value = _extract_name_binding(stmt)
             if isinstance(value, ast.Call) and _is_thread_constructor(
                 value, module_aliases, thread_aliases
             ):
@@ -559,18 +818,7 @@ def validate_threading_thread_usage(tree: ast.Module, source_filename: str) -> N
     for body in _scope_bodies(tree):
         counts = _scope_name_assign_counts(body)
         for stmt in _collect_scope_statements(body):
-            target_name: str | None = None
-            value: ast.expr | None = None
-            if (
-                isinstance(stmt, ast.Assign)
-                and len(stmt.targets) == 1
-                and isinstance(stmt.targets[0], ast.Name)
-            ):
-                target_name = stmt.targets[0].id
-                value = stmt.value
-            elif isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name):
-                target_name = stmt.target.id
-                value = stmt.value
+            target_name, value = _extract_name_binding(stmt)
             if (
                 target_name is not None
                 and isinstance(value, ast.Call)
@@ -613,8 +861,9 @@ def _collect_thread_var_sites(
     tree: ast.Module,
     module_aliases: set[str],
     thread_aliases: set[str],
-) -> dict[int, dict[str, tuple[int, ast.Call]]]:
-    """Return ``{id(scope_body): {var_name: (site_id, construction_call)}}``.
+    starting_id: int = 0,
+) -> tuple[dict[int, dict[str, tuple[int, ast.Call]]], int]:
+    """Return ``({id(scope_body): {var_name: (site_id, construction_call)}}, next_id)``.
 
     Each scope (module top, each function body) gets its own inner map
     because the validator's single-definition check is per-scope: the
@@ -624,26 +873,16 @@ def _collect_thread_var_sites(
     scope's trampoline). Site ids are assigned in deterministic source
     order so the generated globals / trampolines stay stable across
     parser runs.
+
+    ``starting_id`` lets the caller chain this collector with the
+    subclass-site collector under one continuous id space.
     """
     sites: dict[int, dict[str, tuple[int, ast.Call]]] = {}
-    next_id = 0
+    next_id = starting_id
     for body in _scope_bodies(tree):
         scope_sites: dict[str, tuple[int, ast.Call]] = {}
         for stmt in _collect_scope_statements(body):
-            target_name: str | None = None
-            value: ast.expr | None = None
-            if (
-                isinstance(stmt, ast.Assign)
-                and len(stmt.targets) == 1
-                and isinstance(stmt.targets[0], ast.Name)
-            ):
-                target_name = stmt.targets[0].id
-                value = stmt.value
-            elif isinstance(stmt, ast.AnnAssign) and isinstance(
-                stmt.target, ast.Name
-            ):
-                target_name = stmt.target.id
-                value = stmt.value
+            target_name, value = _extract_name_binding(stmt)
             if (
                 target_name is not None
                 and target_name not in scope_sites
@@ -654,7 +893,38 @@ def _collect_thread_var_sites(
                 next_id += 1
         if scope_sites:
             sites[id(body)] = scope_sites
-    return sites
+    return sites, next_id
+
+
+def _collect_subclass_sites(
+    tree: ast.Module,
+    subclass_names: set[str],
+    starting_id: int,
+) -> tuple[dict[str, tuple[int, ast.Call]], int]:
+    """Return ``({var_name: (site_id, call_node)}, next_id)`` for module-top subclass bindings.
+
+    Validator C2 guarantees subclass instance bindings are module-scope
+    only, so we walk ``tree.body`` (not the per-scope helper) and the
+    returned map is flat — every entry is a module-global var name
+    visible to every other scope. Site ids continue from
+    ``starting_id`` so target= and subclass sites share one id space
+    and the generated trampoline / tid names never collide.
+    """
+    out: dict[str, tuple[int, ast.Call]] = {}
+    next_id = starting_id
+    if not subclass_names or not isinstance(tree, ast.Module):
+        return out, next_id
+    for stmt in tree.body:
+        target_name, value = _extract_name_binding(stmt)
+        if (
+            target_name is not None
+            and target_name not in out
+            and isinstance(value, ast.Call)
+            and _is_subclass_constructor(value, subclass_names)
+        ):
+            out[target_name] = (next_id, value)
+            next_id += 1
+    return out, next_id
 
 
 def _thread_call_keywords(call_node: ast.Call) -> tuple[ast.expr, list[ast.expr]]:
@@ -757,6 +1027,102 @@ def _build_trampoline(site_id: int, target_expr: ast.expr, n_args: int) -> ast.F
         returns=ast.Constant(value=None),
     )
     return fn
+
+
+def _build_subclass_trampoline(site_id: int, var_name: str) -> ast.FunctionDef:
+    """Synthesise the trampoline for a Thread subclass instance bound to ``var_name``.
+
+    Body is::
+
+        global <var_name>
+        <var_name>.run()
+        __pyt_terminate()
+
+    The ``global`` lets the trampoline read the user's module-level
+    instance binding (validator C2 guarantees module scope). The
+    trampoline must be inserted *after* the user's ``<var_name> = X(...)``
+    statement so the Python frontend resolves the type of ``<var_name>``
+    by the time it sees the trampoline body.
+    """
+    body: list[ast.stmt] = [
+        ast.Global(names=[var_name]),
+        ast.Expr(
+            value=ast.Call(
+                func=ast.Attribute(
+                    value=ast.Name(id=var_name, ctx=ast.Load()),
+                    attr="run",
+                    ctx=ast.Load(),
+                ),
+                args=[],
+                keywords=[],
+            )
+        ),
+        ast.Expr(
+            value=ast.Call(
+                func=ast.Name(id="__pyt_terminate", ctx=ast.Load()),
+                args=[],
+                keywords=[],
+            )
+        ),
+    ]
+    return ast.FunctionDef(
+        name=f"__pythread_trampoline_{site_id}",
+        args=ast.arguments(
+            posonlyargs=[],
+            args=[],
+            vararg=None,
+            kwonlyargs=[],
+            kw_defaults=[],
+            kwarg=None,
+            defaults=[],
+        ),
+        body=body,
+        decorator_list=[],
+        returns=ast.Constant(value=None),
+    )
+
+
+def _build_tid_declaration(site_id: int) -> ast.Assign:
+    """Return ``__pythread_tid_<N> = 0`` as a module-top assignment."""
+    return ast.Assign(
+        targets=[ast.Name(id=f"__pythread_tid_{site_id}", ctx=ast.Store())],
+        value=ast.Constant(value=0),
+    )
+
+
+def _strip_thread_inheritance(
+    class_node: ast.ClassDef,
+    module_aliases: set[str],
+    thread_aliases: set[str],
+) -> None:
+    """Remove ``threading.Thread`` from ``class_node.bases`` and neuter ``super().__init__()``.
+
+    Two in-place transforms required to make the user's subclass
+    survive the Python frontend's class converter:
+
+      * Strip every base that resolves to ``threading.Thread``. The
+        converter cannot resolve the operational-model ``Thread``
+        skeleton as a base (probe: ``nlohmann::json`` key-not-found
+        assertion). After stripping, ``class X(threading.Thread)``
+        becomes ``class X:`` (implicit ``object`` base).
+      * Replace any bare ``super().__init__()`` statement inside
+        ``__init__`` with ``Pass``. The converter cannot resolve
+        ``super().__init__()`` on an implicit ``object`` base either
+        (probe: ``_init_undefined`` / ``migrate expr failed``). The
+        validator (C5) refuses every other ``super(...)`` shape, so
+        we only need to neutralise the bare-init shape here.
+    """
+    class_node.bases = [
+        b for b in class_node.bases
+        if not _base_is_thread(b, module_aliases, thread_aliases)
+    ]
+    for stmt in class_node.body:
+        if not (isinstance(stmt, ast.FunctionDef) and stmt.name == "__init__"):
+            continue
+        stmt.body = [
+            ast.Pass() if _is_super_init_call_stmt(inner) else inner
+            for inner in stmt.body
+        ]
 
 
 def _build_arg_declaration(site_id: int, arg_index: int) -> ast.Assign:
@@ -950,10 +1316,26 @@ def lower_threading_thread_usage(
     if not module_aliases and not thread_aliases:
         return
 
-    sites_by_scope = _collect_thread_var_sites(
+    # Stage 1: strip ``threading.Thread`` base and ``super().__init__()``
+    # from every direct subclass at module scope. Must happen before
+    # site collection so the per-site post-processing sees the rewritten
+    # class def.
+    subclass_defs = _collect_thread_subclass_defs(
         tree, module_aliases, thread_aliases
     )
-    if not sites_by_scope:
+    for cls in subclass_defs.values():
+        _strip_thread_inheritance(cls, module_aliases, thread_aliases)
+
+    # Stage 2: collect both site shapes under one continuous site-id
+    # space so the generated trampoline / tid names never collide.
+    sites_by_scope, next_id = _collect_thread_var_sites(
+        tree, module_aliases, thread_aliases
+    )
+    subclass_sites, next_id = _collect_subclass_sites(
+        tree, set(subclass_defs), next_id
+    )
+
+    if not sites_by_scope and not subclass_sites:
         return
 
     # Build the prelude: arg globals (zero-initialised so the Python
@@ -966,14 +1348,7 @@ def lower_threading_thread_usage(
             target_expr, args_values = _thread_call_keywords(call_node)
             for i in range(len(args_values)):
                 prelude.append(_build_arg_declaration(site_id, i))
-            prelude.append(
-                ast.Assign(
-                    targets=[
-                        ast.Name(id=f"__pythread_tid_{site_id}", ctx=ast.Store())
-                    ],
-                    value=ast.Constant(value=0),
-                )
-            )
+            prelude.append(_build_tid_declaration(site_id))
             prelude.append(
                 _build_trampoline(site_id, target_expr, len(args_values))
             )
@@ -1055,23 +1430,73 @@ def lower_threading_thread_usage(
         insert_at = earliest_user_with_thread
     else:
         insert_at = max(insert_at, latest_target_def_idx + 1)
-    tree.body[insert_at:insert_at] = prelude
+    if prelude:
+        tree.body[insert_at:insert_at] = prelude
 
-    # Rewrite Thread() constructions and start()/join() calls in place,
-    # routing each rewrite through the (scope, var_name) site map so
-    # the same variable name in two distinct function scopes resolves
-    # to its own site id.
+    # Subclass per-binding injection: insert ``__pythread_tid_<N> = 0``
+    # and ``def __pythread_trampoline_<N>():`` immediately after each
+    # construction statement at module top. The trampoline reads the
+    # user's instance binding, so it must appear *after* the binding
+    # statement in source order. Process in reverse index order so
+    # earlier insertions do not shift later ones.
+    subclass_insertions: list[tuple[int, list[ast.stmt]]] = []
+    for var_name, (site_id, call_node) in subclass_sites.items():
+        binding_idx = _find_binding_stmt_index(tree, call_node)
+        if binding_idx is None:
+            # Validator C2 guarantees module-top binding; reaching this
+            # means a validator gap. Fail loudly.
+            raise RuntimeError(
+                f"subclass binding `{var_name}` reached lowering without "
+                f"a module-top binding statement; validator gap"
+            )
+        subclass_insertions.append(
+            (
+                binding_idx,
+                [
+                    _build_tid_declaration(site_id),
+                    _build_subclass_trampoline(site_id, var_name),
+                ],
+            )
+        )
+    for binding_idx, stmts in sorted(subclass_insertions, reverse=True):
+        tree.body[binding_idx + 1:binding_idx + 1] = stmts
+
+    # Rewrite Thread() constructions and start()/join() calls in place.
+    # Subclass var names are module-global (validator C2), so they are
+    # visible from every scope — merge them into every scope's site map.
+    # Use setdefault so a local ``target=`` binding (with the same
+    # name as a module-top subclass binding) wins for its own scope:
+    # without this precedence rule the subclass entry would silently
+    # steal the function-scope start()/join() routing, redirecting them
+    # to the subclass trampoline and producing false VERIFICATION
+    # SUCCESSFUL on programs whose real spawn point is the local Thread.
     for body in _scope_bodies(tree):
-        scope_sites = sites_by_scope.get(id(body), {})
+        scope_sites = dict(sites_by_scope.get(id(body), {}))
+        for var_name, site_info in subclass_sites.items():
+            scope_sites.setdefault(var_name, site_info)
         if scope_sites:
-            _rewrite_body_in_place(body, scope_sites)
+            _rewrite_body_in_place(
+                body, scope_sites, module_aliases, thread_aliases
+            )
 
     ast.fix_missing_locations(tree)
+
+
+def _find_binding_stmt_index(
+    tree: ast.Module, call_node: ast.Call
+) -> int | None:
+    """Return the module-top index of the Assign/AnnAssign whose value is ``call_node``."""
+    for idx, stmt in enumerate(tree.body):
+        if isinstance(stmt, (ast.Assign, ast.AnnAssign)) and stmt.value is call_node:
+            return idx
+    return None
 
 
 def _rewrite_body_in_place(
     body: list[ast.stmt],
     scope_sites: dict[str, tuple[int, ast.Call]],
+    module_aliases: set[str],
+    thread_aliases: set[str],
 ) -> None:
     """Walk ``body`` recursively, rewriting this scope's Thread sites.
 
@@ -1081,64 +1506,70 @@ def _rewrite_body_in_place(
     ids. Descends into control-flow constructs (``If``/``For``/``While``
     /``With``/``Try``) but not into nested defs (those are independent
     scopes already enrolled in the outer site map).
+
+    ``module_aliases`` / ``thread_aliases`` are forwarded so the
+    construction-rewrite predicate in :func:`_try_rewrite_statement`
+    can require a real ``threading.Thread`` call rather than misfiring
+    on a subclass constructor whose own ``__init__`` happens to take a
+    ``target=`` keyword argument.
     """
     i = 0
     while i < len(body):
         stmt = body[i]
-        rewritten = _try_rewrite_statement(stmt, scope_sites)
+        rewritten = _try_rewrite_statement(
+            stmt, scope_sites, module_aliases, thread_aliases
+        )
         if rewritten is not None:
             body[i:i + 1] = rewritten
             i += len(rewritten)
             continue
 
         if isinstance(stmt, (ast.For, ast.AsyncFor, ast.While)):
-            _rewrite_body_in_place(stmt.body, scope_sites)
-            _rewrite_body_in_place(stmt.orelse, scope_sites)
+            _rewrite_body_in_place(stmt.body, scope_sites, module_aliases, thread_aliases)
+            _rewrite_body_in_place(stmt.orelse, scope_sites, module_aliases, thread_aliases)
         elif isinstance(stmt, ast.If):
-            _rewrite_body_in_place(stmt.body, scope_sites)
-            _rewrite_body_in_place(stmt.orelse, scope_sites)
+            _rewrite_body_in_place(stmt.body, scope_sites, module_aliases, thread_aliases)
+            _rewrite_body_in_place(stmt.orelse, scope_sites, module_aliases, thread_aliases)
         elif isinstance(stmt, (ast.With, ast.AsyncWith)):
-            _rewrite_body_in_place(stmt.body, scope_sites)
+            _rewrite_body_in_place(stmt.body, scope_sites, module_aliases, thread_aliases)
         elif isinstance(stmt, ast.Try):
-            _rewrite_body_in_place(stmt.body, scope_sites)
+            _rewrite_body_in_place(stmt.body, scope_sites, module_aliases, thread_aliases)
             for handler in stmt.handlers:
-                _rewrite_body_in_place(handler.body, scope_sites)
-            _rewrite_body_in_place(stmt.orelse, scope_sites)
-            _rewrite_body_in_place(stmt.finalbody, scope_sites)
+                _rewrite_body_in_place(handler.body, scope_sites, module_aliases, thread_aliases)
+            _rewrite_body_in_place(stmt.orelse, scope_sites, module_aliases, thread_aliases)
+            _rewrite_body_in_place(stmt.finalbody, scope_sites, module_aliases, thread_aliases)
         elif isinstance(stmt, ast.Match):
             for case in stmt.cases:
-                _rewrite_body_in_place(case.body, scope_sites)
+                _rewrite_body_in_place(case.body, scope_sites, module_aliases, thread_aliases)
         i += 1
 
 
 def _try_rewrite_statement(
     stmt: ast.stmt,
     scope_sites: dict[str, tuple[int, ast.Call]],
+    module_aliases: set[str],
+    thread_aliases: set[str],
 ) -> list[ast.stmt] | None:
     """Rewrite a single Thread construction / start / join statement.
 
     Returns ``None`` if ``stmt`` is unrelated to threading; otherwise
     returns the replacement statement list. ``scope_sites`` is the
     per-scope ``{var_name: (site_id, call_node)}`` map.
+
+    The construction-rewrite arm requires the call to be a real
+    ``threading.Thread`` constructor (via :func:`_is_thread_constructor`)
+    — *not* merely "has a ``target=`` keyword". A user subclass whose
+    ``__init__`` accepts a parameter named ``target`` would otherwise
+    have its keyword silently dropped by :func:`_build_bare_thread_call`,
+    a soundness defect.
     """
-    # Construction: t = Thread(...) or t: T = Thread(...)
-    target_name: str | None = None
-    value: ast.expr | None = None
-    if (
-        isinstance(stmt, ast.Assign)
-        and len(stmt.targets) == 1
-        and isinstance(stmt.targets[0], ast.Name)
-    ):
-        target_name = stmt.targets[0].id
-        value = stmt.value
-    elif isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name):
-        target_name = stmt.target.id
-        value = stmt.value
+    target_name, value = _extract_name_binding(stmt)
     if (
         target_name is not None
         and target_name in scope_sites
         and isinstance(value, ast.Call)
         and not value.args
+        and _is_thread_constructor(value, module_aliases, thread_aliases)
         and any(kw.arg == "target" for kw in value.keywords)
     ):
         return _rewrite_construction_stmt(stmt, value, scope_sites[target_name][0])
