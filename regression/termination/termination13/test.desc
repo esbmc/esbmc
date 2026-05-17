@@ -1,0 +1,4 @@
+KNOWNBUG
+main.c
+--termination --unwind 3
+^VERIFICATION FAILED$
