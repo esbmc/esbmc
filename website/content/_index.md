@@ -133,10 +133,12 @@ ESBMC (release 7.x) and contrasts it with mainline CBMC.
   without manual stubbing.
 
 **Recent competition results and industrial use.**
-* ESBMC has placed in the top three of multiple
-  [SV-COMP](/sv-comp) categories — including *ConcurrencySafety*,
-  *Falsification* and *SoftwareSystems* — across recent editions, and has
-  been a consistent gold/silver medallist in [Test-COMP](/test-comp).
+* In [SV-COMP](/sv-comp) 2025 ESBMC-kind placed **2nd in ReachSafety**
+  and **3rd in MemSafety**, and in SV-COMP 2026 it placed **2nd in
+  ReachSafety**. In [Test-COMP](/test-comp), ESBMC (via the FuSeBMC
+  test-generator) has won **1st Overall in 2023, 2024, 2025 and 2026**,
+  with 1st place in *Cover-Error* every year and 1st (or 2nd in 2025) in
+  *Cover-Branches*.
 * Industrial deployments include the verification of Arm's
   **Realm Management Monitor** in the Confidential Computing Architecture
   (SAS 2024), Ethereum smart-contract auditing (ICSE 2022), Arduino-based
