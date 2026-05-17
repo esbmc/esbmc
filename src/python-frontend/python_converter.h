@@ -514,6 +514,17 @@ private:
     module_locator &locator,
     code_blockt &accumulated_code);
 
+  /// Walk the import graph rooted at @p module_ast (without annotating or
+  /// generating code) and parse each reachable module's JSON AST into
+  /// @ref module_ast_pool_. Mirrors @ref process_module_imports's reach:
+  /// top-level imports plus imports directly inside top-level
+  /// FunctionDef bodies. Idempotent on names already pooled. Used so that
+  /// annotators for any one module can see subscript usages from any
+  /// other module in the graph (GitHub #4554).
+  void pre_collect_module_asts(
+    const nlohmann::json &module_ast,
+    module_locator &locator);
+
   symbolt *find_function_in_base_classes(
     const std::string &class_name,
     const std::string &symbol_id,
@@ -998,6 +1009,14 @@ private:
   std::map<std::string, std::set<std::string>> instance_attr_map;
   /// Map imported modules to their corresponding paths
   std::unordered_map<std::string, std::string> imported_modules;
+
+  /// Pool of every reachable imported module's parsed JSON AST, keyed by
+  /// module name. Populated by @ref pre_collect_module_asts before any
+  /// annotation runs so that @ref import_module_into_block can expose the
+  /// full pool to each module's annotator as extra subscript inference
+  /// sources (GitHub #4554). Owns the JSONs to keep their addresses stable
+  /// across annotator calls.
+  std::map<std::string, nlohmann::json> module_ast_pool_;
   /// Maps any symbol currently known to refer to an input() string
   /// (e.g. $input_str$N or a variable aliasing it) to its $input_len$N symbol ID
   std::unordered_map<std::string, std::string> input_str_to_len_sym_;

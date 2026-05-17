@@ -71,6 +71,7 @@ def is_imported_model(module_name):
         "dataclasses",
         "typing",
         "time",
+        "threading",
     ]
     return module_name in models
 
@@ -78,6 +79,471 @@ def is_imported_model(module_name):
 def is_unsupported_module(module_name):
     unsuported_modules = ["blah"]
     return module_name in unsuported_modules
+
+
+# Names from the ``threading`` module that the generic threading reject
+# pass tolerates. ``Lock`` is fully modelled today; ``Thread`` is handled
+# by :func:`validate_threading_thread_usage` (which enforces the MVP
+# structural constraints and refuses anything otherwise valid until the
+# converter-side lowering lands — tracked in #4568). Anything else
+# (RLock, Semaphore, Condition, Event, Barrier, Timer, ...) is rejected
+# at parse time by :func:`reject_unsupported_threading_usage` so we
+# never emit a half-modelled concurrency construct that could yield a
+# silently wrong verification verdict.
+SUPPORTED_THREADING_SYMBOLS = frozenset({"Lock", "Thread"})
+
+# Thread keyword arguments outside MVP scope. Only ``target=`` and
+# ``args=`` are accepted; the rest are refused at parse time so the
+# converter cannot silently drop semantics that would change the
+# verification verdict (e.g. dropping ``daemon=`` would change shutdown
+# behaviour; dropping ``kwargs=`` would lose actual data the thread
+# reads).
+UNSUPPORTED_THREAD_KWARGS = frozenset({"daemon", "name", "kwargs", "group"})
+
+
+def reject_unsupported_threading_usage(tree: ast.AST, source_filename: str) -> None:
+    """Refuse to compile programs using unsupported ``threading`` names.
+
+    Walks the AST for usages of names from the ``threading`` module that
+    ESBMC does not yet model and exits with a clear error rather than
+    silently emitting a weaker abstraction. The supported set is
+    ``SUPPORTED_THREADING_SYMBOLS``. Detects three import shapes:
+
+      ``import threading``         → ``threading.<X>`` attribute access
+      ``import threading as t``    → ``t.<X>`` attribute access
+      ``from threading import X``  → bare ``X`` reference
+
+    ``from threading import *`` is refused outright because static name
+    resolution would require importing the real ``threading`` module.
+    """
+    def fail(line, message: str) -> None:
+        print(f"ERROR: {source_filename}:{line}: {message}")
+        sys.exit(4)
+
+    unsupported_message = (
+        "is not yet supported by ESBMC. Only threading.Lock is "
+        "currently modelled; Thread/RLock/Semaphore/Condition/Event/"
+        "Barrier/Timer are tracked as follow-ups to the initial "
+        "threading support."
+    )
+
+    module_aliases: set[str] = set()
+    name_aliases: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name == "threading":
+                    module_aliases.add(alias.asname or alias.name)
+        elif isinstance(node, ast.ImportFrom) and node.module == "threading":
+            for alias in node.names:
+                if alias.name == "*":
+                    fail(
+                        node.lineno,
+                        "'from threading import *' is not supported; "
+                        "import names explicitly so ESBMC can verify "
+                        "each one is modelled.",
+                    )
+                name_aliases[alias.asname or alias.name] = alias.name
+
+    for node in ast.walk(tree):
+        offending: str | None = None
+        if (
+            isinstance(node, ast.Attribute)
+            and isinstance(node.value, ast.Name)
+            and node.value.id in module_aliases
+            and node.attr not in SUPPORTED_THREADING_SYMBOLS
+        ):
+            offending = node.attr
+        elif isinstance(node, ast.Name) and node.id in name_aliases:
+            original = name_aliases[node.id]
+            if original not in SUPPORTED_THREADING_SYMBOLS:
+                offending = original
+
+        if offending is not None:
+            fail(
+                getattr(node, "lineno", "?"),
+                f"threading.{offending} {unsupported_message}",
+            )
+
+
+def _collect_thread_aliases(tree: ast.AST) -> tuple[set[str], set[str]]:
+    """Return ``(module_aliases, thread_aliases)`` for the ``threading`` module.
+
+    ``module_aliases`` are the names bound by ``import threading [as X]``;
+    ``thread_aliases`` are the names bound by
+    ``from threading import Thread [as X]``. The two sets disambiguate
+    qualified (``X.Thread``) from bare (``X``) references at every Thread
+    construction site.
+    """
+    module_aliases: set[str] = set()
+    thread_aliases: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name == "threading":
+                    module_aliases.add(alias.asname or alias.name)
+        elif isinstance(node, ast.ImportFrom) and node.module == "threading":
+            for alias in node.names:
+                if alias.name == "Thread":
+                    thread_aliases.add(alias.asname or alias.name)
+    return module_aliases, thread_aliases
+
+
+def _is_thread_constructor(
+    call_node: ast.Call,
+    module_aliases: set[str],
+    thread_aliases: set[str],
+) -> bool:
+    """Return ``True`` iff ``call_node`` constructs ``threading.Thread``.
+
+    Recognises both ``threading.Thread(...)`` (qualified through an
+    ``import threading [as X]`` alias) and ``Thread(...)`` (bare, through
+    a ``from threading import Thread [as X]`` alias).
+    """
+    func = call_node.func
+    if isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name):
+        return func.value.id in module_aliases and func.attr == "Thread"
+    if isinstance(func, ast.Name):
+        return func.id in thread_aliases
+    return False
+
+
+def _target_name_chain(node: ast.AST) -> str | None:
+    """Return the dotted form of a ``Name``/``Attribute`` chain, else ``None``.
+
+    Used to enforce the MVP rule that ``Thread(target=...)`` resolves to
+    a statically-known function. ``Name('f')`` returns ``"f"``;
+    ``Attribute(Name('m'), 'f')`` returns ``"m.f"``; anything else
+    (lambdas, calls, subscripts, arbitrary expressions) returns ``None``.
+    """
+    parts: list[str] = []
+    while isinstance(node, ast.Attribute):
+        parts.append(node.attr)
+        node = node.value
+    if not isinstance(node, ast.Name):
+        return None
+    parts.append(node.id)
+    return ".".join(reversed(parts))
+
+
+def _scope_bodies(tree: ast.Module) -> list[list[ast.stmt]]:
+    """Return the statement list of every Python scope in ``tree``.
+
+    A "scope" is a region with its own local-name binding rules: the
+    module top level and the body of every (sync or async) function
+    definition. Class bodies and lambdas are intentionally excluded:
+    Thread variables cannot meaningfully live in either under the MVP.
+    """
+    bodies: list[list[ast.stmt]] = [tree.body]
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            bodies.append(node.body)
+    return bodies
+
+
+def _collect_scope_statements(body: list[ast.stmt]) -> list[ast.stmt]:
+    """Yield every statement in a scope, descending control-flow constructs.
+
+    Descends into ``If``/``For``/``While``/``With``/``Try`` and their
+    ``orelse``/``finalbody``/handler bodies (those share the enclosing
+    scope's name bindings) but stops at nested ``FunctionDef`` /
+    ``AsyncFunctionDef`` / ``ClassDef`` — those introduce new scopes that
+    the caller already handles via :func:`_scope_bodies`.
+    """
+    out: list[ast.stmt] = []
+    for stmt in body:
+        out.append(stmt)
+        if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            continue
+        if isinstance(stmt, (ast.For, ast.AsyncFor, ast.While)):
+            out.extend(_collect_scope_statements(stmt.body))
+            out.extend(_collect_scope_statements(stmt.orelse))
+        elif isinstance(stmt, ast.If):
+            out.extend(_collect_scope_statements(stmt.body))
+            out.extend(_collect_scope_statements(stmt.orelse))
+        elif isinstance(stmt, (ast.With, ast.AsyncWith)):
+            out.extend(_collect_scope_statements(stmt.body))
+        elif isinstance(stmt, ast.Try):
+            out.extend(_collect_scope_statements(stmt.body))
+            for handler in stmt.handlers:
+                out.extend(_collect_scope_statements(handler.body))
+            out.extend(_collect_scope_statements(stmt.orelse))
+            out.extend(_collect_scope_statements(stmt.finalbody))
+    return out
+
+
+def _parent_map(tree: ast.AST) -> dict[int, ast.AST]:
+    """Build a child-to-parent map for ``tree`` keyed by ``id(node)``.
+
+    ``ast`` does not expose parent pointers; the validator needs them to
+    answer "is this Thread construction lexically inside a loop body
+    within its own scope" without walking the whole tree per call site.
+    """
+    parents: dict[int, ast.AST] = {}
+    for parent in ast.walk(tree):
+        for child in ast.iter_child_nodes(parent):
+            parents[id(child)] = parent
+    return parents
+
+
+def _inside_loop_within_scope(node: ast.AST, parents: dict[int, ast.AST]) -> bool:
+    """Return ``True`` iff ``node`` is inside a loop body in its own scope.
+
+    Walks the ``parents`` chain rooted at ``node`` and stops at a scope
+    boundary (``FunctionDef``/``AsyncFunctionDef``/``Lambda``/``ClassDef``
+    /``Module``). Loop ancestors are ``For``/``AsyncFor``/``While`` plus
+    the comprehension forms (``ListComp``/``SetComp``/``DictComp``/
+    ``GeneratorExp``) — each re-evaluates the node per iteration, which
+    the per-site converter state cannot represent.
+    """
+    cursor = parents.get(id(node))
+    while cursor is not None:
+        if isinstance(
+            cursor,
+            (
+                ast.FunctionDef,
+                ast.AsyncFunctionDef,
+                ast.Lambda,
+                ast.ClassDef,
+                ast.Module,
+            ),
+        ):
+            return False
+        if isinstance(
+            cursor,
+            (
+                ast.For,
+                ast.AsyncFor,
+                ast.While,
+                ast.ListComp,
+                ast.SetComp,
+                ast.DictComp,
+                ast.GeneratorExp,
+            ),
+        ):
+            return True
+        cursor = parents.get(id(cursor))
+    return False
+
+
+def _scope_name_assign_counts(body: list[ast.stmt]) -> dict[str, int]:
+    """Count direct Name-target value bindings per name within a single scope.
+
+    Counts every ``Assign``, ``AnnAssign`` *with* a value, and ``AugAssign``
+    whose target is a plain ``Name``, descending into control-flow bodies
+    but not into nested defs. ``AnnAssign`` without a value (e.g.
+    ``t: Thread``) is intentionally skipped: Python evaluates the
+    annotation but does not bind a value, so it is not a definition.
+
+    The result drives the single-definition check that lets the converter
+    bind each Thread variable to a unique site id without runtime
+    resolution. Rebinds via ``def t(...)``, ``class t``, ``import t``,
+    ``for t in ...``, ``with ... as t``, and walrus expressions are not
+    counted — those are acceptable MVP gaps documented in
+    :func:`validate_threading_thread_usage`.
+    """
+    counts: dict[str, int] = {}
+    for stmt in _collect_scope_statements(body):
+        targets: list[ast.expr] = []
+        if isinstance(stmt, ast.Assign):
+            targets = list(stmt.targets)
+        elif isinstance(stmt, ast.AnnAssign) and stmt.value is not None:
+            targets = [stmt.target]
+        elif isinstance(stmt, ast.AugAssign):
+            targets = [stmt.target]
+        for target in targets:
+            if isinstance(target, ast.Name):
+                counts[target.id] = counts.get(target.id, 0) + 1
+    return counts
+
+
+# pylint: disable-next=too-many-locals,too-many-branches,too-many-statements
+def validate_threading_thread_usage(tree: ast.Module, source_filename: str) -> None:
+    """Refuse ``threading.Thread`` usage outside the MVP-supported shape.
+
+    ESBMC's Thread lowering (tracked in #4568) is intentionally narrow so
+    no concurrency model can be silently weakened. This pass refuses,
+    with a precise error message and a non-zero exit, every construct
+    outside that shape:
+
+      * subclassing ``threading.Thread``;
+      * positional arguments to ``Thread()`` (real signature is
+        ``Thread(group, target, name, args, ...)`` and ESBMC only
+        accepts the keyword form);
+      * ``**kwargs`` splats and ``daemon=``/``name=``/``kwargs=``/
+        ``group=`` keyword arguments;
+      * ``Thread()`` constructions with no ``target=`` keyword;
+      * ``target=`` values that are not a ``Name`` or dotted attribute
+        chain (lambdas, calls, runtime variables);
+      * ``args=`` values that are not a tuple literal (lists, sets,
+        runtime variables);
+      * ``Thread()`` constructions lexically inside a loop body within
+        their own scope (per-site converter state would be aliased);
+      * reassignment of a name that already binds a ``Thread`` instance
+        within the same scope (breaks the single-site binding the
+        ``.start()`` / ``.join()`` lowering relies on).
+
+    A structurally-valid ``Thread()`` is still rejected for now because
+    the converter-side wiring is not yet implemented; the message
+    contains the substring "threading.Thread is not yet supported by
+    ESBMC" so callers can match on it as the pending-feature marker
+    until step 2 lands.
+
+    Known gaps (acceptable for the MVP — covered by the model-pending
+    fallback today, to be tightened when step 2 introduces real
+    converter behaviour):
+
+      * a ``target=`` bound to a runtime variable holding a callable is
+        syntactically a ``Name`` and passes ``_target_name_chain`` —
+        AST-only validation cannot distinguish a function name from a
+        variable-bound callable without a name-resolution pass;
+      * tuple-target assigns (``a, b = Thread(...), Thread(...)``) and
+        walrus-bound Threads are not counted by the reassignment check;
+      * rebinds via ``def``/``class``/``import``/``for``-target/
+        ``with``-target are not counted by the reassignment check.
+    """
+    module_aliases, thread_aliases = _collect_thread_aliases(tree)
+    if not module_aliases and not thread_aliases:
+        return
+
+    def fail(line: int, message: str) -> None:
+        print(f"ERROR: {source_filename}:{line}: {message}")
+        sys.exit(4)
+
+    def base_is_thread(base: ast.expr) -> bool:
+        if isinstance(base, ast.Attribute) and isinstance(base.value, ast.Name):
+            return base.value.id in module_aliases and base.attr == "Thread"
+        if isinstance(base, ast.Name):
+            return base.id in thread_aliases
+        return False
+
+    # Reject subclassing threading.Thread.
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ClassDef) and any(
+            base_is_thread(base) for base in node.bases
+        ):
+            fail(
+                node.lineno,
+                "Subclassing threading.Thread is not supported by ESBMC. "
+                "Use `Thread(target=..., args=...)` directly.",
+            )
+
+    parents = _parent_map(tree)
+
+    # Reject Thread() construction inside loop bodies in the same scope.
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and _is_thread_constructor(
+            node, module_aliases, thread_aliases
+        ) and _inside_loop_within_scope(node, parents):
+            fail(
+                node.lineno,
+                "threading.Thread construction inside a loop is not yet "
+                "supported. Construct each Thread at a distinct top-level "
+                "or function-scope site.",
+            )
+
+    # Per-construction-site structural checks.
+    for call_node in ast.walk(tree):
+        if not isinstance(call_node, ast.Call):
+            continue
+        if not _is_thread_constructor(call_node, module_aliases, thread_aliases):
+            continue
+
+        if call_node.args:
+            fail(
+                call_node.lineno,
+                "threading.Thread requires `target=` and (optionally) "
+                "`args=` as keyword arguments; positional arguments are "
+                "not supported.",
+            )
+
+        target_value: ast.expr | None = None
+        args_value: ast.expr | None = None
+        for kw in call_node.keywords:
+            if kw.arg is None:
+                fail(
+                    call_node.lineno,
+                    "threading.Thread(**kwargs) is not supported; use the "
+                    "`target=...` and `args=...` keyword arguments directly.",
+                )
+            if kw.arg in UNSUPPORTED_THREAD_KWARGS:
+                fail(
+                    call_node.lineno,
+                    f"threading.Thread keyword argument `{kw.arg}=` is not "
+                    "supported by ESBMC. Only target and args are modelled.",
+                )
+            if kw.arg == "target":
+                target_value = kw.value
+            elif kw.arg == "args":
+                args_value = kw.value
+
+        if target_value is None:
+            fail(
+                call_node.lineno,
+                "threading.Thread requires `target=<function>`; "
+                "constructions without an explicit target are not supported.",
+            )
+            return  # unreachable: fail() exits; narrows target_value for type-checkers.
+
+        if _target_name_chain(target_value) is None:
+            fail(
+                call_node.lineno,
+                "threading.Thread `target=` must be a function name (or "
+                "attribute chain). Lambdas and runtime-variable callables "
+                "are not supported in the MVP.",
+            )
+
+        if args_value is not None and not isinstance(args_value, ast.Tuple):
+            fail(
+                call_node.lineno,
+                "threading.Thread `args=` must be a tuple literal "
+                "(e.g. `args=(resource,)`). Lists, sets, and runtime "
+                "variables are not supported in the MVP.",
+            )
+
+    # Per-scope single-definition check.
+    for body in _scope_bodies(tree):
+        counts = _scope_name_assign_counts(body)
+        for stmt in _collect_scope_statements(body):
+            target_name: str | None = None
+            value: ast.expr | None = None
+            if (
+                isinstance(stmt, ast.Assign)
+                and len(stmt.targets) == 1
+                and isinstance(stmt.targets[0], ast.Name)
+            ):
+                target_name = stmt.targets[0].id
+                value = stmt.value
+            elif isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name):
+                target_name = stmt.target.id
+                value = stmt.value
+            if (
+                target_name is not None
+                and isinstance(value, ast.Call)
+                and _is_thread_constructor(value, module_aliases, thread_aliases)
+                and counts.get(target_name, 0) > 1
+            ):
+                fail(
+                    stmt.lineno,
+                    f"threading.Thread variable `{target_name}` is "
+                    "reassigned in the same scope. The Thread model "
+                    "requires a single-definition binding so the spawn "
+                    "site can resolve the target statically.",
+                )
+
+    # Final fallback: refuse any otherwise-valid construction until the
+    # converter-side wiring (pthread_create / pthread_join lowering) lands.
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and _is_thread_constructor(
+            node, module_aliases, thread_aliases
+        ):
+            fail(
+                node.lineno,
+                "threading.Thread is not yet supported by ESBMC. The "
+                "structural pattern is accepted but the converter-side "
+                "lowering to pthread_create / pthread_join is pending "
+                "(#4568).",
+            )
 
 
 def is_testing_framework(module_name):
@@ -789,6 +1255,9 @@ def main():
             annotate_constant_node(node)
         elif isinstance(node, ast.Attribute):
             detect_and_process_submodules(node, processed_submodules, output_dir)
+
+    reject_unsupported_threading_usage(tree, filename)
+    validate_threading_thread_usage(tree, filename)
 
     # Generate JSON from AST for the main file.
     generate_ast_json(tree, filename, None, output_dir)

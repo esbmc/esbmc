@@ -1296,7 +1296,7 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
         expr2tc(),
         std::vector<expr2tc>(),
         type2tc(),
-        sideeffect2t::nondet);
+        sideeffect2t::allockind::nondet);
       exprt new_expr = migrate_expr_back(nondet);
       expr.swap(new_expr);
     }

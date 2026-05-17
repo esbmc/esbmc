@@ -1418,7 +1418,8 @@ void bmct::bidirectional_search(
         continue;
 
       expr2tc new_lhs = ssait.original_lhs;
-      renaming::renaming_levelt::get_original_name(new_lhs, symbol2t::level0);
+      renaming::renaming_levelt::get_original_name(
+        new_lhs, symbol_renaming_level::level0);
 
       if (all_loop_vars.find(new_lhs) == all_loop_vars.end())
         continue;

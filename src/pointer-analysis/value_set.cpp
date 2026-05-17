@@ -402,9 +402,9 @@ void value_sett::get_value_set_rec(
     const sideeffect2t &side = to_sideeffect2t(expr);
     switch (side.kind)
     {
-    case sideeffect2t::alloca:
-    case sideeffect2t::realloc:
-    case sideeffect2t::malloc:
+    case sideeffect2t::allockind::alloca:
+    case sideeffect2t::allockind::realloc:
+    case sideeffect2t::allockind::malloc:
     {
       assert(suffix == "");
       const type2tc &dynamic_type = side.alloctype;
@@ -416,8 +416,8 @@ void value_sett::get_value_set_rec(
       return;
     }
 
-    case sideeffect2t::cpp_new:
-    case sideeffect2t::cpp_new_arr:
+    case sideeffect2t::allockind::cpp_new:
+    case sideeffect2t::allockind::cpp_new_arr:
     {
       assert(suffix == "");
       assert(is_pointer_type(side.type));
@@ -432,7 +432,7 @@ void value_sett::get_value_set_rec(
       return;
     }
 
-    case sideeffect2t::nondet:
+    case sideeffect2t::allockind::nondet:
       // Introduction of nondeterminism does not introduce new pointer vars
       return;
 
@@ -1091,8 +1091,8 @@ void value_sett::assign(
 
     // Build a sym specific to this type. Give l1 number to guard against
     // recursively entering this code path
-    expr2tc xchg_sym =
-      symbol2tc(lhs->type, xchg_name, symbol2t::level1, xchg_num++, 0, 0, 0);
+    expr2tc xchg_sym = symbol2tc(
+      lhs->type, xchg_name, symbol_renaming_level::level1, xchg_num++, 0, 0, 0);
 
     assign(xchg_sym, ifref.true_value, false);
     assign(xchg_sym, ifref.false_value, true);
@@ -1547,7 +1547,7 @@ value_sett::make_member(const expr2tc &src, const irep_idt &component_name)
 
   if (is_constant_struct2t(src))
   {
-    unsigned no = data->get_component_number(component_name);
+    unsigned no = data->get_component_number(component_name).value();
     return to_constant_struct2t(src).datatype_members[no];
   }
   if (is_constant_union2t(src))
@@ -1580,7 +1580,7 @@ value_sett::make_member(const expr2tc &src, const irep_idt &component_name)
   }
 
   // give up
-  unsigned no = data->get_component_number(component_name);
+  unsigned no = data->get_component_number(component_name).value();
   const type2tc &subtype = members[no];
   expr2tc memb = member2tc(subtype, src, component_name);
   return memb;

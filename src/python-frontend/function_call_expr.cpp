@@ -1371,9 +1371,58 @@ function_call_expr::extract_string_from_symbol(const symbolt *sym) const
   const exprt &val = sym->value;
   std::string result;
 
-  auto decode_char = [](const exprt &expr) -> std::optional<char> {
+  if (val.id() == "if" && val.operands().size() == 3)
+  {
+    const exprt &cond = val.operands()[0];
+
+    symbolt true_sym;
+    true_sym.value = val.operands()[1];
+    true_sym.type = true_sym.value.type();
+    auto true_text = extract_string_from_symbol(&true_sym);
+
+    symbolt false_sym;
+    false_sym.value = val.operands()[2];
+    false_sym.type = false_sym.value.type();
+    auto false_text = extract_string_from_symbol(&false_sym);
+
+    if (cond.is_true())
+      return true_text;
+    if (cond.is_false())
+      return false_text;
+
+    if (true_text && false_text && *true_text == *false_text)
+      return true_text;
+    return std::nullopt;
+  }
+
+  std::function<std::optional<char>(const exprt &)> decode_char =
+    [&](const exprt &expr) -> std::optional<char> {
     try
     {
+      if (expr.id() == "typecast" && !expr.operands().empty())
+        return decode_char(expr.operands().front());
+
+      if (expr.id() == "if" && expr.operands().size() == 3)
+      {
+        const exprt &cond = expr.operands()[0];
+        const exprt &true_case = expr.operands()[1];
+        const exprt &false_case = expr.operands()[2];
+
+        if (cond.is_true())
+          return decode_char(true_case);
+        if (cond.is_false())
+          return decode_char(false_case);
+
+        auto true_char = decode_char(true_case);
+        auto false_char = decode_char(false_case);
+        if (true_char && false_char && *true_char == *false_char)
+          return true_char;
+        return std::nullopt;
+      }
+
+      if (!expr.is_constant())
+        return std::nullopt;
+
       const auto &const_expr = to_constant_expr(expr);
       std::string binary_str = id2string(const_expr.get_value());
       unsigned c = std::stoul(binary_str, nullptr, 2);
@@ -1390,12 +1439,11 @@ function_call_expr::extract_string_from_symbol(const symbolt *sym) const
   {
     for (const auto &ch : val.operands())
     {
-      if (ch == gen_zero(ch.type()))
-        break;
-
       auto decoded = decode_char(ch);
       if (!decoded)
         return std::nullopt;
+      if (*decoded == '\0')
+        break;
       result += *decoded;
     }
   }
@@ -1978,6 +2026,74 @@ exprt function_call_expr::handle_complex() const
               from_double(real, double_type()),
               from_double(imag, double_type()));
           }
+
+          // Handle runtime conditionals that select between two string literals:
+          // if cond then "a" else "b" -> if cond then complex(a) else complex(b).
+          const exprt &sym_val = sym->value;
+          if (sym_val.id() == "if" && sym_val.operands().size() == 3)
+          {
+            const exprt &cond = sym_val.operands()[0];
+
+            symbolt true_sym;
+            true_sym.value = sym_val.operands()[1];
+            true_sym.type = true_sym.value.type();
+            auto true_text = extract_string_from_symbol(&true_sym);
+
+            symbolt false_sym;
+            false_sym.value = sym_val.operands()[2];
+            false_sym.type = false_sym.value.type();
+            auto false_text = extract_string_from_symbol(&false_sym);
+
+            auto parse_complex_text =
+              [&](const std::optional<std::string> &text)
+              -> std::optional<std::pair<double, double>> {
+              if (!text)
+                return std::nullopt;
+              double real = 0.0, imag = 0.0;
+              if (!complex_utils::parse_complex_string(*text, real, imag))
+                return std::nullopt;
+              return std::make_pair(real, imag);
+            };
+
+            auto true_complex = parse_complex_text(true_text);
+            auto false_complex = parse_complex_text(false_text);
+
+            if (cond.is_true())
+            {
+              if (!true_complex)
+                return raise_value_error("complex() arg is a malformed string");
+              return make_complex(
+                from_double(true_complex->first, double_type()),
+                from_double(true_complex->second, double_type()));
+            }
+
+            if (cond.is_false())
+            {
+              if (!false_complex)
+                return raise_value_error("complex() arg is a malformed string");
+              return make_complex(
+                from_double(false_complex->first, double_type()),
+                from_double(false_complex->second, double_type()));
+            }
+
+            if (true_complex && false_complex)
+            {
+              exprt real_part = if_exprt(
+                cond,
+                from_double(true_complex->first, double_type()),
+                from_double(false_complex->first, double_type()));
+              exprt imag_part = if_exprt(
+                cond,
+                from_double(true_complex->second, double_type()),
+                from_double(false_complex->second, double_type()));
+              return make_complex(real_part, imag_part);
+            }
+
+            if (!true_complex && !false_complex)
+            {
+              return raise_value_error("complex() arg is a malformed string");
+            }
+          }
         }
       }
     }
@@ -2079,6 +2195,22 @@ exprt function_call_expr::handle_complex() const
   imag_arg = normalize_numeric_expr_for_complex(imag_arg);
   if (is_cpp_throw_expr(imag_arg))
     return imag_arg;
+
+  const bool real_is_complex = is_complex_type(real_arg.type());
+  const bool imag_is_complex = is_complex_type(imag_arg.type());
+
+  // Fast path for complex(real, imag) where both are plain real numerics.
+  // Building x + y*1j through complex arithmetic can lose the sign bit of
+  // signed zero in the imaginary part; preserve it by constructing the
+  // complex value directly.
+  if (!real_is_complex && !imag_is_complex)
+  {
+    if (real_arg.type() != double_type())
+      real_arg = typecast_exprt(real_arg, double_type());
+    if (imag_arg.type() != double_type())
+      imag_arg = typecast_exprt(imag_arg, double_type());
+    return make_complex(real_arg, imag_arg);
+  }
 
   // Python semantics: complex(x, y) == x + y * 1j, including complex args.
   real_arg = promote_to_complex(real_arg);
@@ -5493,7 +5625,15 @@ exprt function_call_expr::handle_general_function_call()
   size_t arg_index = 0;
   for (const auto &arg_node : call_["args"])
   {
+    // An argument expression does not bind to the outer assignment's LHS.
+    // Clearing `current_lhs` while evaluating each argument prevents inner
+    // constructor calls (e.g. `f(A())`) from using an unrelated LHS as their
+    // `self` storage; they will allocate a `$ctor_self$` temp instead
+    // (GitHub #4552).
+    exprt *saved_lhs = converter_.current_lhs;
+    converter_.current_lhs = nullptr;
     exprt arg = converter_.get_expr(arg_node);
+    converter_.current_lhs = saved_lhs;
 
     // A function name passed as an argument decays to a function pointer,
     // mirroring C's implicit function-to-pointer conversion.

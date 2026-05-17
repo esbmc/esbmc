@@ -1,68 +1,90 @@
 # IRep2 — ESBMC's Internal Representation
 
-`irep2` is ESBMC's typed, reference-counted, copy-on-write internal
-representation for **expressions** (`expr2t`) and **types** (`type2t`). It is
-the data structure every frontend lowers to, every transformation rewrites,
-and every backend (symex, SMT, goto2c) consumes. It replaces the older
-"stringy" `irept` for the verification pipeline; conversions live in
-`util/migrate.{h,cpp}`.
+`irep2` is ESBMC's typed, intrusively reference-counted, copy-on-write
+internal representation for **expressions** (`expr2t`) and **types**
+(`type2t`). It is the data structure every frontend lowers to, every
+transformation rewrites, and every backend (symex, SMT, goto2c) consumes.
+It replaces the older "stringy" `irept` for the verification pipeline;
+conversions live in `util/migrate.{h,cpp}`.
 
 ## Design at a glance
 
-- **Typed class hierarchy.** Each kind of expression or type is its own C++
-  class (e.g. `add2t`, `symbol2t`, `signedbv_type2t`). A `type_ids` /
+- **Typed class hierarchy.** Each kind of expression or type is its own
+  C++ class (e.g. `add2t`, `symbol2t`, `signedbv_type2t`). A `type_ids` /
   `expr_ids` enum on the base class lets code dispatch without RTTI.
-- **`expr2tc` / `type2tc` containers.** Thin wrappers around
-  `std::shared_ptr` providing **copy-on-write**: the const accessors share
-  the pointee, and the non-const `get()`/`operator->` automatically `detach()`
-  into a fresh copy when the refcount is > 1. This keeps `expr2tc` cheap to
-  copy and pass by value while preserving value semantics on mutation.
-- **Hash-consing friendly.** Each node caches its CRC (`crc_val`, guarded by
-  `crc_mutex`); the cache is invalidated on detach. `operator==` first checks
-  pointer identity, then falls back to structural comparison.
-- **Generated boilerplate.** The full list of IR nodes lives in two Boost
-  preprocessor lists at the top of `irep2.h`:
-  - `ESBMC_LIST_OF_EXPRS` — every expression kind (`add`, `if`, `symbol`,
+- **`expr2tc` / `type2tc` containers.** Hand-rolled smart pointers built
+  on an intrusive atomic refcount sitting on `irep2t` itself: one
+  allocation per node, no separate control block. They implement
+  **copy-on-write** — the const accessors share the pointee, the
+  non-const `get()` / `operator->` / `operator*` call `detach()` first,
+  which clones into a fresh refcount-1 object when the count is > 1.
+  This keeps containers cheap to copy and pass by value while preserving
+  value semantics on mutation.
+- **Construction.** Use `make_irep<T>(args...)` (or any of the generated
+  `<name>2tc(args...)` factories that wrap it). The factory `new`s the
+  node and hands it to a freshly-constructed container that adopts and
+  increments the refcount.
+- **Hash-consing friendly.** Each node caches its CRC in a
+  `std::atomic<size_t>` (`irep2t::crc_val`); `0` means "not yet
+  computed". Readers do an acquire load and skip the recompute on a hit;
+  producers compute on a local and release-store. Mutation invalidates
+  the cache via a relaxed store. `operator==` checks pointer identity
+  first, then falls back to structural comparison.
+- **Threading contract.** Single-writer / thread-confined. The refcount
+  is atomic so containers may be dropped from any thread, but the
+  pointee may have at most one mutator at a time. In debug builds the
+  base class carries a writer-thread stamp that the container updates
+  on every mutable access; a mismatch fires an assertion.
+- **Generated boilerplate.** The full list of IR nodes lives in two
+  per-family manifest files:
+  - `expr_kinds.inc` — every expression kind (`add`, `if`, `symbol`,
     `code_assign`, ...).
-  - `ESBMC_LIST_OF_TYPES` — every type kind (`bool`, `signedbv`, `pointer`,
+  - `type_kinds.inc` — every type kind (`bool`, `signedbv`, `pointer`,
     `struct`, ...).
-  These lists drive forward declarations, the `expr_ids` / `type_ids` enums,
-  `is_foo2t()` / `to_foo2t()` accessors, and template instantiations.
+
+  Each entry is `IREP2_EXPR(kind, "pretty_name")` /
+  `IREP2_TYPE(kind, "pretty_name")`. Consumers (the `expr_ids` /
+  `type_ids` enums, the per-kind forward declarations, the
+  `is_*` / `to_*` / `try_to_*` predicate generators, the pretty-name
+  tables) `#include` the matching `.inc` with a redefining macro.
 
 ## File layout
 
 | File | Contents |
 |------|----------|
-| `irep2.h` | Base classes `irep2t`, `type2t`, `expr2t`; the `irep_container` smart pointer (alias `expr2tc` / `type2tc`); master node-kind lists. |
+| `irep2.h` | Base classes `irep2t`, `type2t`, `expr2t`; the `irep_container` smart pointer (alias `expr2tc` / `type2tc`); the `make_irep` factory; `function_ref`; `hash_combine`; checked-cast helpers; flat `irep_methods2` template. |
+| `expr_kinds.inc` / `type_kinds.inc` | Manifest of node kinds in declaration order. Single source of truth. |
 | `irep2_type.h` / `irep2_type.cpp` | Concrete type classes (`bool_type2t`, `signedbv_type2t`, `array_type2t`, `pointer_type2t`, `struct_type2t`, ...). |
 | `irep2_expr.h` / `irep2_expr.cpp` | Concrete expression classes (`constant_int2t`, `symbol2t`, `add2t`, `if2t`, `code_assign2t`, ...) and their *data* base classes (`constant_int_data`, `arith_2ops`, ...). |
 | `irep2_utils.h` | Inline predicates and helpers (`is_bv_type`, `is_number_type`, `is_scalar_type`, `is_multi_dimensional_array`, simplification helpers). |
-| `irep2_templates.h` | CRTP-style scaffolding (`register_irep_methods`, `do_type2string`, `do_get_sub_expr`) that materialises `pretty`, `cmp`, `lt`, `do_crc`, `hash`, `clone`, and operand iteration for each node. |
-| `irep2_templates_expr.h`, `irep2_templates_types.h`, `irep2_template_utils.h`, `irep2_meta_templates.h` | Per-field trait machinery (`field_traits`, `expr2t_traits`, `type2t_traits`) and the metaprogramming that walks them. |
+| `irep2_templates.h` | Per-field-type helpers (`do_type2string`, `do_get_sub_expr`, `do_count_sub_exprs`, `call_*_delegate`) used by the method generators. |
+| `irep2_template_utils.h` / `templates/irep2_template_utils.cpp` | Per-field-type overloads of `do_type_cmp`, `do_type_lt`, `do_type_crc`, `do_type_hash`, `type_to_string`. |
+| `irep2_meta_templates.h` | Out-of-line definitions of `irep_methods2`'s templated methods, which walk `traits::fields` (a `std::tuple` of field traits) via C++17 fold expressions. |
+| `irep2_instantiate.h` | `ESBMC_INSTANTIATE_TYPE` / `ESBMC_INSTANTIATE_EXPR` macros used by the per-node `templates/*.cpp` to force out-of-line emission of the methods. |
 | `templates/*.cpp` | Out-of-line explicit instantiations of the per-node template methods (split into several TUs to keep compile times manageable). |
-| `CMakeLists.txt` | Builds the `irep2` static library (depends on `bigint`, Boost, `fmt`, and privately `crypto_hash`). |
+| `CMakeLists.txt` | Builds the `irep2` static library; depends on `bigint`, `fmt`, and privately `crypto_hash`. No Boost. |
 
 ## Anatomy of a node
 
 A concrete node is composed by inheritance from three layers:
 
-1. A **data class** holds the fields and exposes them as `field_traits` so the
-   metaprogramming can enumerate them — e.g. `constant_int_data` holds a
-   `BigInt value` field.
-2. An **`esbmct::expr2t_traits<...>`** typedef lists those fields. The
-   templates in `irep2_templates*.h` consume this trait list to generate
-   `clone`, `cmp`, `lt`, `do_crc`, `hash`, `tostring`, `foreach_operand`,
-   `get_sub_expr`, etc.
-3. The user-facing class (e.g. `constant_int2t`) inherits from the data class
-   and registers itself via `irep_methods2`, picking up all the generated
-   members.
+1. A **data class** holds the fields and exposes them as `field_traits`
+   so the method-generator templates can enumerate them — e.g.
+   `constant_int_data` holds a `BigInt value` field.
+2. An **`esbmct::expr2t_traits<...>`** (or `type2t_traits<...>`)
+   instance lists those fields as a `std::tuple`. The flat
+   `irep_methods2` class in `irep2.h` consumes that tuple via fold
+   expressions to generate `clone`, `cmp`, `lt`, `do_crc`, `hash`,
+   `tostring`, `foreach_operand`, `get_sub_expr`, etc.
+3. The user-facing class (e.g. `constant_int2t`) inherits from the
+   data class and `irep_methods2` (transitively), picking up all the
+   generated members.
 
-Net effect: adding a new node is mostly a matter of (a) appending its name to
-the master list in `irep2.h`, (b) declaring a data class with `field_traits`,
-and (c) declaring the user-facing class. Comparison, hashing, pretty-printing
-and operand iteration are generated for you.
+Net effect: adding a new node is a single-line manifest entry plus
+the data and concrete class definitions. Comparison, hashing,
+pretty-printing and operand iteration are generated for you.
 
-## Working with `irep2tc` containers
+## Working with containers
 
 ```cpp
 expr2tc lhs = symbol2tc(int_type, "x");
@@ -81,28 +103,36 @@ to_add2t(sum).side_1 = constant_int2tc(int_type, BigInt(2));
 
 Notes:
 
-- `is_*2t` / `to_*2t` are generated from `ESBMC_LIST_OF_EXPRS` /
-  `ESBMC_LIST_OF_TYPES`; never `dynamic_cast` directly.
-- Treat `expr2tc` like a value: pass by const-ref where possible, copy where
-  you need a private mutation point. The container will detach as needed.
+- `is_*2t` / `to_*2t` / `try_to_*2t` are generated from
+  `expr_kinds.inc` / `type_kinds.inc`; never `dynamic_cast` directly.
+  `to_*2t` throws `irep2_cast_error` (a `std::logic_error` subclass) on
+  a mismatched kind; `try_to_*2t` returns `nullptr` instead.
+- Treat `expr2tc` like a value: pass by const-ref where possible, copy
+  where you need a private mutation point. The container will detach as
+  needed.
 - Calling `crc()` is safe to memoise on; mutation invalidates the cache.
-- `simplify()` on a container delegates to the node's `do_simplify`. A nil
-  return means "no further simplification."
+- `simplify()` on a container delegates to the node's `do_simplify`. A
+  nil return means "no further simplification."
 
 ## Adding a new node — checklist
 
-1. Append the node name to `ESBMC_LIST_OF_EXPRS` (or `ESBMC_LIST_OF_TYPES`)
-   in `irep2.h`.
-2. Define a *data* class in `irep2_expr.h` / `irep2_type.h` listing each
-   field with `esbmct::field_traits<...>` and aggregating them into a
-   `traits` typedef.
-3. Define the user-facing `foo2t` class (typically empty — it just inherits
-   the data class and registers methods).
-4. Add explicit template instantiations to the matching file under
+1. Append a row to `expr_kinds.inc` (or `type_kinds.inc`):
+   `IREP2_EXPR(my_kind, "my_kind")` / `IREP2_TYPE(my_kind, "my_kind")`.
+   The pretty-name string is what `pretty()` and diagnostic messages
+   print; it usually matches the identifier verbatim but may diverge
+   (`null_object` prints as `NULL-object`).
+2. Define a *data* class in `irep2_expr.h` / `irep2_type.h` listing
+   each field with `esbmct::field_traits<...>` and aggregating them
+   into a `traits` typedef.
+3. Define the user-facing `<kind>2t` class (typically empty — it just
+   inherits the data class and registers methods via the matching
+   `_methods` typedef).
+4. Add an explicit instantiation to the matching file under
    `templates/` so the generated methods get emitted out-of-line.
-5. If the node has semantics worth modelling, teach `do_simplify` and the
-   relevant lowering passes (symex, SMT conversion in `src/solvers/`,
-   `goto2c`) about it.
+5. If the node has semantics worth modelling, teach `do_simplify`
+   (defined out-of-line in `src/util/expr_simplifier.cpp` for
+   non-trivial nodes) and the relevant lowering passes (symex, SMT
+   conversion in `src/solvers/`, `goto2c`) about it.
 
 ## Related code
 

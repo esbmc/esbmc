@@ -297,10 +297,10 @@ void goto_symex_statet::assignment(expr2tc &lhs, const expr2tc &rhs)
   // identifier should be l0 or l1, make sure it's l1
 
   assert(
-    lhs_sym.rlevel != symbol2t::level2 &&
-    lhs_sym.rlevel != symbol2t::level2_global);
+    lhs_sym.rlevel != symbol_renaming_level::level2 &&
+    lhs_sym.rlevel != symbol_renaming_level::level2_global);
 
-  if (lhs_sym.rlevel == symbol2t::level0)
+  if (lhs_sym.rlevel == symbol_renaming_level::level0)
     top().level1.get_ident_name(lhs);
 
   expr2tc l1_lhs = lhs;

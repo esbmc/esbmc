@@ -80,6 +80,22 @@ void python_exception_handler::get_raise_statement(
   const nlohmann::json &element,
   codet &block)
 {
+  locationt location = converter_.get_location_from_decl(element);
+
+  // Bare 'raise' (Raise.exc is null) re-raises the active exception.
+  // Lower it to a cpp-throw with no operand and an empty exception_list;
+  // goto_symext::handle_rethrow replays last_throw at symex time.
+  if (element["exc"].is_null())
+  {
+    side_effect_exprt side("cpp-throw", empty_typet());
+    side.location() = location;
+
+    codet code_expr("expression");
+    code_expr.operands().push_back(side);
+    block.move_to_operands(code_expr);
+    return;
+  }
+
   std::string exc_name;
 
   // Try to extract the exception name from different AST shapes
@@ -92,7 +108,6 @@ void python_exception_handler::get_raise_statement(
   else
     exc_name = ""; // fallback
 
-  locationt location = converter_.get_location_from_decl(element);
   typet type = type_handler_.get_typet(exc_name);
 
   // AssertionError is special-cased to a clean assert(false)
