@@ -3,21 +3,14 @@
 #include <python-frontend/python_exception_handler.h>
 #include <python-frontend/string_builder.h>
 #include <python-frontend/string_handler.h>
-#include <python-frontend/symbol_id.h>
 #include <python-frontend/type_handler.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
-#include <util/expr_util.h>
-#include <util/ieee_float.h>
 #include <util/message.h>
-#include <util/python_types.h>
 #include <util/std_expr.h>
-#include <util/string_constant.h>
 
 #include <algorithm>
 #include <cctype>
-#include <cmath>
-#include <cstdio>
 #include <cstdlib>
 #include <functional>
 #include <optional>

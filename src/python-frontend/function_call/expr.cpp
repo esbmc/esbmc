@@ -23,7 +23,6 @@
 #include <util/string_constant.h>
 
 #include <algorithm>
-#include <cmath>
 #include <cctype>
 #include <optional>
 #include <regex>
