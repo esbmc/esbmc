@@ -26,6 +26,7 @@ ignored_dirs=(
   "cover4"
   "cover5"
   "concurrency_fail"
+  "threading_thread_skip_join_fail"
   "convert-byte-update2"
   "constants"
   "decimal"
