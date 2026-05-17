@@ -587,22 +587,26 @@ def validate_threading_thread_usage(tree: ast.Module, source_filename: str) -> N
 
 
 
-def _is_thread_method_call(
+def _thread_method_receiver(
     node: ast.AST,
     thread_var_names: set[str],
     method: str,
-) -> bool:
-    """Return ``True`` iff ``node`` is ``var.<method>()`` on a tracked Thread.
+) -> str | None:
+    """Return the receiver var name iff ``node`` is ``var.<method>()`` on a tracked Thread.
 
     Recognises ``Name(var).method()`` shape only; attribute-chain
-    receivers (``obj.t.start()``) are out of MVP scope.
+    receivers (``obj.t.start()``) are out of MVP scope. Returning the
+    name directly (rather than a bool) lets the caller skip a separate
+    type-narrowing pass on ``call.func``.
     """
     if not isinstance(node, ast.Call):
-        return False
+        return None
     func = node.func
     if not isinstance(func, ast.Attribute) or func.attr != method:
-        return False
-    return isinstance(func.value, ast.Name) and func.value.id in thread_var_names
+        return None
+    if isinstance(func.value, ast.Name) and func.value.id in thread_var_names:
+        return func.value.id
+    return None
 
 
 def _collect_thread_var_sites(
@@ -667,15 +671,23 @@ def _thread_call_keywords(call_node: ast.Call) -> tuple[ast.expr, list[ast.expr]
         # than ``target=`` and ``args=`` (daemon/name/kwargs/**splat are
         # rejected upstream). If a fresh validator gap ever lets one
         # through, fail loudly here rather than silently dropping it.
-        assert kw.arg in ("target", "args"), (
-            f"unexpected Thread() kwarg {kw.arg!r} reached lowering; "
-            "validator gap"
-        )
+        # Use ``raise`` rather than ``assert`` so the check survives
+        # ``python -O``.
+        if kw.arg not in ("target", "args"):
+            raise RuntimeError(
+                f"unexpected Thread() kwarg {kw.arg!r} reached lowering; "
+                "validator gap"
+            )
         if kw.arg == "target":
             target_value = kw.value
         elif kw.arg == "args" and isinstance(kw.value, ast.Tuple):
             args_values = list(kw.value.elts)
-    assert target_value is not None  # validator guarantees this
+    if target_value is None:
+        # validator guarantees ``target=`` is present
+        raise RuntimeError(
+            "Thread() construction reached lowering without target= kwarg; "
+            "validator gap"
+        )
     return target_value, args_values
 
 
@@ -886,8 +898,7 @@ def _rewrite_construction_stmt(
     bare = _build_bare_thread_call(call_node)
     if isinstance(stmt, ast.Assign):
         out.append(ast.Assign(targets=stmt.targets, value=bare))
-    else:
-        assert isinstance(stmt, ast.AnnAssign)
+    elif isinstance(stmt, ast.AnnAssign):
         out.append(
             ast.AnnAssign(
                 target=stmt.target,
@@ -895,6 +906,12 @@ def _rewrite_construction_stmt(
                 value=bare,
                 simple=stmt.simple,
             )
+        )
+    else:
+        # _try_rewrite_statement only dispatches Assign/AnnAssign here.
+        raise RuntimeError(
+            f"_rewrite_construction_stmt received unexpected stmt type "
+            f"{type(stmt).__name__}"
         )
     return out
 
@@ -1130,14 +1147,12 @@ def _try_rewrite_statement(
     if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call):
         call = stmt.value
         thread_var_names = set(scope_sites)
-        if _is_thread_method_call(call, thread_var_names, "start"):
-            assert isinstance(call.func, ast.Attribute)
-            assert isinstance(call.func.value, ast.Name)
-            return _build_start_statements(scope_sites[call.func.value.id][0])
-        if _is_thread_method_call(call, thread_var_names, "join"):
-            assert isinstance(call.func, ast.Attribute)
-            assert isinstance(call.func.value, ast.Name)
-            return [_build_join_call(scope_sites[call.func.value.id][0])]
+        receiver = _thread_method_receiver(call, thread_var_names, "start")
+        if receiver is not None:
+            return _build_start_statements(scope_sites[receiver][0])
+        receiver = _thread_method_receiver(call, thread_var_names, "join")
+        if receiver is not None:
+            return [_build_join_call(scope_sites[receiver][0])]
     return None
 
 
