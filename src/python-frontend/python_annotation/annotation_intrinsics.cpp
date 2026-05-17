@@ -2,7 +2,6 @@
 
 namespace python_annotation_intrinsics
 {
-
 const std::map<std::string, std::string> &builtin_functions()
 {
   // The entries below are a verbatim transcription of the original

@@ -10,13 +10,11 @@
 // not depend on `python_annotation` class state.
 namespace python_annotation_parser
 {
-
 // Find a top-level `Assign` whose target id is @p func_name and whose
 // value is a `Lambda`. Returns the surrounding `Assign` node, or an
 // empty Json when not found. Search is one level deep over @p body.
-nlohmann::json find_lambda_in_body(
-  const std::string &func_name,
-  const nlohmann::json &body);
+nlohmann::json
+find_lambda_in_body(const std::string &func_name, const nlohmann::json &body);
 
 // Recursively walk @p body looking for a `FunctionDef` with the name
 // @p func_name. Descends into nested function bodies and the `body`

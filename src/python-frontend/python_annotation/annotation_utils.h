@@ -12,7 +12,6 @@
 // `nlohmann::json`.
 namespace python_annotation_utils
 {
-
 // Outcome of type inference. Used by callers of the type-inference
 // dispatcher to distinguish a successfully resolved type from an
 // unknown one.
@@ -52,7 +51,6 @@ std::string invert_substrings(const std::string &input);
 // "dict", "set", "tuple", "int", "float", "str", "bool", "None")
 // or "Any" if the shape is unrecognised. Returns an empty string
 // when `args_node` is not an array of at least two entries.
-std::string
-infer_type_from_default_arg_shape(const nlohmann::json &args_node);
+std::string infer_type_from_default_arg_shape(const nlohmann::json &args_node);
 
 } // namespace python_annotation_utils

@@ -6,10 +6,8 @@
 
 namespace python_annotation_parser
 {
-
-nlohmann::json find_lambda_in_body(
-  const std::string &func_name,
-  const nlohmann::json &body)
+nlohmann::json
+find_lambda_in_body(const std::string &func_name, const nlohmann::json &body)
 {
   for (const nlohmann::json &elem : body)
   {

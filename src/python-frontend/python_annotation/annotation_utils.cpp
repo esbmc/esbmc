@@ -6,7 +6,6 @@
 
 namespace python_annotation_utils
 {
-
 std::string get_type_from_json(const nlohmann::json &value)
 {
   if (value.is_null())
@@ -101,8 +100,7 @@ std::string invert_substrings(const std::string &input)
   return result;
 }
 
-std::string
-infer_type_from_default_arg_shape(const nlohmann::json &args_node)
+std::string infer_type_from_default_arg_shape(const nlohmann::json &args_node)
 {
   if (!args_node.is_array() || args_node.size() < 2)
     return std::string();

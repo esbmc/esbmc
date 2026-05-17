@@ -5,7 +5,6 @@
 
 namespace python_annotation_intrinsics
 {
-
 // Mapping from a Python built-in / std-library identifier to the
 // type-annotation string that the Python frontend's annotation pass
 // substitutes for it during inference.
