@@ -2,9 +2,9 @@
 #include <python-frontend/complex_handler.h>
 #include <python-frontend/converter/converter_internal.h>
 #include <python-frontend/convert_float_literal.h>
-#include <python-frontend/function_call_builder.h>
+#include <python-frontend/function_call/builder.h>
 #include <python-frontend/python_consteval.h>
-#include <python-frontend/function_call_expr.h>
+#include <python-frontend/function_call/expr.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/module_locator.h>
 #include <python-frontend/python_annotation.h>

@@ -222,7 +222,7 @@ int do_type_lt(
     tmp = it->ltchecked(**it2);
     if (tmp != 0)
       return tmp;
-    it2++;
+    ++it2;
   }
   return 0;
 }
@@ -243,7 +243,7 @@ int do_type_lt(
     tmp = it->ltchecked(**it2);
     if (tmp != 0)
       return tmp;
-    it2++;
+    ++it2;
   }
   return 0;
 }

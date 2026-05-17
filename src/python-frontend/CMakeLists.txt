@@ -38,14 +38,18 @@ add_library(pythonfrontend STATIC
             pythonastgen.c
             module_manager.cpp
             module_locator.cpp
+            python_annotation/annotation_intrinsics.cpp
+            python_annotation/annotation_parser.cpp
+            python_annotation/annotation_utils.cpp
             symbol_id.cpp
             type_handler.cpp
             cmath_lowering_policy.cpp
             complex_handler.cpp
             complex_handler_utils.cpp
-            function_call_expr.cpp
+            function_call/builtins.cpp
+            function_call/expr.cpp
             numpy_call_expr.cpp
-            function_call_builder.cpp
+            function_call/builder.cpp
             string_builder.cpp
             string_handler.cpp
             string_handler_utils.cpp

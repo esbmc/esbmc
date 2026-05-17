@@ -1,6 +1,6 @@
 #include <python-frontend/converter/converter_internal.h>
 #include <python-frontend/convert_float_literal.h>
-#include <python-frontend/function_call_expr.h>
+#include <python-frontend/function_call/expr.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/python_consteval.h>
 #include <python-frontend/python_converter.h>
@@ -945,8 +945,9 @@ symbolt *python_converter::create_symbol_for_unannotated_assign(
           // Untyped dict (e.g. `a = {}`): infer the return type from the default arg.
           // Any concrete literal (list, dict, int, float, str, bool, None)
           // is more precise than the `long_int` fallback applied just below.
-          const std::string shape = python_annotation<nlohmann::json>::
-            infer_type_from_default_arg_shape(ast_node["value"]["args"]);
+          const std::string shape =
+            python_annotation_utils::infer_type_from_default_arg_shape(
+              ast_node["value"]["args"]);
           if (shape == "list")
             inferred_type = type_handler_.get_list_type();
           else if (shape == "dict")
