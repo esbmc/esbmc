@@ -64,14 +64,10 @@ class Thread:
 
     def start(self) -> None:
         """Reached only when the AST rewrite failed to lower a Thread."""
-        assert False, (
-            "threading.Thread.start() reached without AST lowering "
-            "(dynamic Thread lookup?)"
-        )
+        assert False, ("threading.Thread.start() reached without AST lowering "
+                       "(dynamic Thread lookup?)")
 
     def join(self) -> None:
         """Reached only when the AST rewrite failed to lower a Thread."""
-        assert False, (
-            "threading.Thread.join() reached without AST lowering "
-            "(dynamic Thread lookup?)"
-        )
+        assert False, ("threading.Thread.join() reached without AST lowering "
+                       "(dynamic Thread lookup?)")
