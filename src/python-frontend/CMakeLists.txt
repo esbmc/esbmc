@@ -38,6 +38,9 @@ add_library(pythonfrontend STATIC
             pythonastgen.c
             module_manager.cpp
             module_locator.cpp
+            python_annotation/annotation_intrinsics.cpp
+            python_annotation/annotation_parser.cpp
+            python_annotation/annotation_utils.cpp
             symbol_id.cpp
             type_handler.cpp
             cmath_lowering_policy.cpp
