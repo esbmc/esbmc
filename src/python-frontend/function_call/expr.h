@@ -348,6 +348,13 @@ private:
   exprt
   reduce_tuple_expr_truthiness(const exprt &tuple_expr, ReduceOp op) const;
 
+  // Combine two boolean truthiness expressions according to the reduction
+  // operator: any() folds with logical OR, all() with logical AND.
+  static exprt combine_truthiness(exprt acc, exprt next, ReduceOp op);
+
+  // Shared implementation for handle_any/handle_all.
+  exprt handle_any_all(ReduceOp op, const char *name);
+
   /**
    * Convert an integer to a string representation in a specific base
    * Implements common logic for Python's hex(), oct(), and similar functions
@@ -401,3 +408,7 @@ protected:
 /// Convert a code_function_callt to a side_effect_expr_function_callt so it
 /// can be used as a value expression (e.g., as an operand of if_exprt).
 exprt to_value_expr(const exprt &arg, const namespacet &ns);
+
+/// True when the expression is a synthesized C++ throw used by the Python
+/// frontend to propagate exceptions through value positions.
+bool is_cpp_throw_expr(const exprt &e);
