@@ -169,8 +169,8 @@ template <>
 size_t do_count_sub_exprs<const std::vector<expr2tc>>(
   const std::vector<expr2tc> &item);
 
-// Local template for implementing delegate calling, with type dependency.
-// Can't easily extend to cover types because field type is _already_ abstracted
+// Field-dispatch for expr2t::foreach_operand. Primary template is a no-op;
+// the specialisations below match expr2tc and std::vector<expr2tc> fields.
 template <typename T, typename U>
 void call_expr_delegate(T &, U &)
 {
@@ -196,7 +196,7 @@ void call_expr_delegate<std::vector<expr2tc>, expr2t::op_delegate>(
   std::vector<expr2tc> &ref,
   expr2t::op_delegate &f);
 
-// Repeat of call_expr_delegate, but for types
+// Same shape as call_expr_delegate, but for type2t::foreach_subtype.
 template <typename T, typename U>
 void call_type_delegate(T &, U &)
 {
@@ -261,15 +261,6 @@ int generic_lt(const K &a, const expr2t &o)
     },
     K::fields);
   return r;
-}
-
-// --------------------------------------------------------------------------
-// generic_clone: copy via make_irep<K>.
-// --------------------------------------------------------------------------
-template <class K>
-expr2tc generic_clone(const K &a)
-{
-  return make_irep<K>(a);
 }
 
 // --------------------------------------------------------------------------
@@ -409,12 +400,6 @@ int generic_lt_type(const K &a, const type2t &o)
     },
     K::fields);
   return r;
-}
-
-template <class K>
-type2tc generic_clone_type(const K &a)
-{
-  return make_irep<K>(a);
 }
 
 template <class K>

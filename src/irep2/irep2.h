@@ -647,39 +647,16 @@ public:
    */
   size_t crc() const;
 
-  /** Perform checked invocation of cmp method.
-   *  Takes reference to another type - if they have the same type id, invoke
-   *  the cmp function and return its result. Otherwise, return false. Using
-   *  this method ensures thatthe implementer of cmp knows the reference it
-   *  operates on is on the same type as itself.
-   *  @param ref Reference to type to compare this object against
-   *  @return True if types are the same, false otherwise.
-   */
-  bool cmpchecked(const type2t &ref) const;
-
-  /** Perform checked invocation of lt method.
-   *  Identical to cmpchecked, except with the lt method.
-   *  @see cmpchecked
-   *  @param ref Reference to type to measure this against.
-   *  @return 0 if types are the same, 1 if this > ref, -1 if ref > this.
-   */
-  int ltchecked(const type2t &ref) const;
-
-  /** Structural comparison. Caller-side contract: @p ref's `type_id`
-   *  must already match this one's (the kind dispatch happens by
-   *  switch on type_id internally). Use cmpchecked when that hasn't
-   *  been verified upstream.
-   *  @see cmpchecked
-   *  @param ref Reference to (same kind of) type to compare against
+  /** Structural comparison. Switch-dispatches on type_id and walks the
+   *  kind's K::fields; returns false immediately when the type_ids differ.
+   *  @param ref Reference to type to compare against
    *  @return True if types match, false otherwise
    */
   bool cmp(const type2t &ref) const;
 
-  /** Trinary structural ordering. Switch-dispatches on type_id then
-   *  walks the kind's fields, mirroring `cmp` but returning -1/0/+1.
-   *  Use ltchecked when @p ref's kind hasn't been verified upstream.
-   *  @see ltchecked
-   *  @param ref Reference to (same kind of) type to measure against
+  /** Trinary structural ordering. Mirrors `cmp` but returns -1/0/+1;
+   *  mismatched type_ids are ordered by the id itself.
+   *  @param ref Reference to type to measure against
    *  @return 0 if types are the same, 1 if this > ref, -1 if ref > this.
    */
   int lt(const type2t &ref) const;
@@ -806,20 +783,9 @@ public:
   bool operator<(const expr2t &ref) const;
   bool operator!=(const expr2t &ref) const;
 
-  /** Perform type-checked call to lt method.
-   *  Checks that this object and the one we're comparing against have the same
-   *  expr class, so that the lt method can assume it's working on objects of
-   *  the same type.
-   *  @see type2t::ltchecked
-   *  @param ref Expression object we're comparing this object against.
-   *  @return 0 If exprs are the same, 1 if this > ref, -1 if ref > this.
-   */
-  int ltchecked(const expr2t &ref) const;
-
   /** Produce textual representation of this expr.
-   *  Like the stringy-irep's pretty method, this takes the current object and
-   *  produces a textual representation that can be read by a human to
-   *  understand what's going on.
+   *  Takes the current object and produces a textual representation that
+   *  can be read by a human to understand what's going on.
    *  @param indent Number of spaces to indent the output string lines by
    *  @return String object containing textual expr representation.
    */
@@ -848,11 +814,8 @@ public:
    */
   bool cmp(const expr2t &ref) const;
 
-  /** Trinary structural ordering. Mirrors `cmp` but returns -1/0/+1.
-   *  Like `cmp`, the expr_id check is internal to the switch
-   *  dispatcher; callers don't need to gate on kind. Normally reached
-   *  via operator< or ltchecked.
-   *  @see type2t::lt
+  /** Trinary structural ordering. Mirrors `cmp` but returns -1/0/+1;
+   *  mismatched expr_ids are ordered by the id itself.
    *  @param ref Expr object to compare this against
    *  @return 0 If exprs are the same, 1 if this > ref, -1 if ref > this.
    */
@@ -938,20 +901,16 @@ public:
 
   /** Indirect, abstract operand iteration.
    *
-   *  Provide a lambda-based accessor equivalent to the forall_operands2 macro
-   *  where anonymous code (actually a delegate?) gets run over each operand
-   *  expression. Because the full type of the expression isn't known by the
-   *  caller, and each delegate is it's own type, we need to wrap it in a
-   *  std::function before funneling it through a virtual function.
+   *  Lambda-based accessor: the delegate is called on every expr2tc field
+   *  in this expression, in K::fields order. For a vector<expr2tc> field,
+   *  the delegate is called once per element. Delegates are wrapped in a
+   *  non-owning `function_ref` so any callable (lambda, free function,
+   *  member-pointer-with-bound-instance) flows through without dynamic
+   *  allocation.
    *
-   *  For the purpose of this method, an operand is another instance of an
-   *  expr2tc. This means the delegate will be called on any expr2tc field of
-   *  the expression, in the order they appear in the traits. For a vector of
-   *  expressions, the delegate will be called for each element, in order.
-   *
-   *  The uncapitalized version is const; the capitalized version is non-const
-   *  (and so one needs to .get() a mutable expr2t pointer when calling). When
-   *  modifying operands, preserving type correctness is imperative.
+   *  The lowercase version is const; the capitalised version is non-const
+   *  (and so one needs to .get() a mutable expr2t pointer when calling).
+   *  When modifying operands, preserving type correctness is imperative.
    *
    *  @param t A delegate to be called for each expression operand; must have
    *           a type of void f(const expr2tc &)

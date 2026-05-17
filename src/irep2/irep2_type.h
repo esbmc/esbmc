@@ -476,14 +476,10 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-/** Complex number type.
- *  Represents C's _Complex type, carrying the base element type.
- *
- *  TODO (Phase D): semantically just a pair of identical scalars; the
- *  C's `_Complex T` is a pair (real, imag) of two values of the same
- *  scalar type T. complex_type2t therefore carries only the element
- *  type; the SMT tuple lowering synthesises the 2-element view at the
- *  boundary via complex_member_types / complex_member_names. */
+/** Complex number type. C's `_Complex T` is a pair (real, imag) of two
+ *  values of the same scalar type T, so the kind carries only the
+ *  element type. The SMT tuple lowering synthesises the 2-element view
+ *  at the boundary via struct_union_members / struct_union_member_names. */
 class complex_type2t : public type2t
 {
 public:

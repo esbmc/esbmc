@@ -65,45 +65,27 @@ type2t::type2t(const type2t &ref) : irep2t(), type_id(ref.type_id)
 
 bool type2t::operator==(const type2t &ref) const
 {
-  return cmpchecked(ref);
+  return cmp(ref);
 }
 
 bool type2t::operator!=(const type2t &ref) const
 {
-  return !cmpchecked(ref);
+  return !cmp(ref);
 }
 
 bool type2t::operator<(const type2t &ref) const
 {
-  int tmp = type2t::lt(ref);
-  if (tmp < 0)
-    return true;
-  else if (tmp > 0)
-    return false;
-  else
-    return (lt(ref) < 0);
-}
-
-int type2t::ltchecked(const type2t &ref) const
-{
-  int tmp = type2t::lt(ref);
-  if (tmp != 0)
-    return tmp;
-
-  return lt(ref);
-}
-
-bool type2t::cmpchecked(const type2t &ref) const
-{
-  if (type_id == ref.type_id)
-    return cmp(ref);
-
-  return false;
+  return lt(ref) < 0;
 }
 
 std::string type2t::pretty(unsigned int indent) const
 {
-  return pretty_print_func<const type2t &>(indent, type_names[type_id], *this);
+  list_of_memberst memb = tostring(indent + 2);
+  std::string indentstr = indent_str_irep2(indent);
+  std::string ret = type_names[type_id];
+  for (auto const &m : memb)
+    ret += "\n" + indentstr + "* " + m.first + " : " + m.second;
+  return ret;
 }
 
 void type2t::dump() const
@@ -271,7 +253,7 @@ type2tc type2t::clone() const
   {
 #define IREP2_TYPE(kind, _)                                                    \
   case kind##_id:                                                              \
-    return esbmct::generic_clone_type(                                         \
+    return make_irep<kind##_type2t>(                                           \
       static_cast<const kind##_type2t &>(*this));
 #include <irep2/type_kinds.inc>
 #undef IREP2_TYPE

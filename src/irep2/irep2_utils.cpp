@@ -309,7 +309,7 @@ void get_symbols(
 // irep2_dispatch.h: pretty-printing, cmp/lt, CRC, SHA-1 ingestion,
 // sub-expression iteration, and delegate calling, specialised for each
 // field type that needs non-default behaviour. Primary templates live in
-// irep2_template_utils.h / irep2_templates.h.
+// irep2_dispatch.h alongside the dispatchers themselves.
 
 std::string indent_str_irep2(unsigned int indent)
 {
@@ -618,7 +618,7 @@ std::string type_to_string(const irep_idt &theval, int)
 
 // do_type_lt overloads. Trivial cases (bool, unsigned int, enums,
 // fixedbvt, ieee_floatt, irep_idt, std::vector<irep_idt>) use the
-// primary template in irep2_template_utils.h.
+// primary template in irep2_dispatch.h.
 
 int do_type_lt(const BigInt &side1, const BigInt &side2)
 {
@@ -636,7 +636,7 @@ int do_type_lt(
   std::vector<expr2tc>::const_iterator it2 = side2.begin();
   for (auto const &it : side1)
   {
-    tmp = it->ltchecked(**it2);
+    tmp = it->lt(**it2);
     if (tmp != 0)
       return tmp;
     it2++;
@@ -657,7 +657,7 @@ int do_type_lt(
   std::vector<type2tc>::const_iterator it2 = side2.begin();
   for (auto const &it : side1)
   {
-    tmp = it->ltchecked(**it2);
+    tmp = it->lt(**it2);
     if (tmp != 0)
       return tmp;
     it2++;
@@ -674,7 +674,7 @@ int do_type_lt(const expr2tc &side1, const expr2tc &side2)
   else if (side2.get() == nullptr)
     return 1;
   else
-    return side1->ltchecked(*side2.get());
+    return side1->lt(*side2.get());
 }
 
 int do_type_lt(const type2tc &side1, const type2tc &side2)
@@ -686,13 +686,11 @@ int do_type_lt(const type2tc &side1, const type2tc &side2)
   else if (side2.get() == nullptr)
     return 1;
   else
-    return side1->ltchecked(*side2.get());
+    return side1->lt(*side2.get());
 }
 
-// ---------------------------------------------------------------------------
-// do_type_crc / do_type_hash overloads
 // do_type_crc / do_type_hash overloads. Trivial cases (bool, unsigned
-// int, small enums) use the primary templates in irep2_template_utils.h.
+// int, small enums) use the primary templates in irep2_dispatch.h.
 
 // BigInt::dump writes only the magnitude (most-significant-byte first,
 // left-padded with zeros) and reports false on buffer-too-small. Try a

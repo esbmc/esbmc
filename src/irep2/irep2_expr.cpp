@@ -84,11 +84,6 @@ bool expr2t::operator<(const expr2t &ref) const
   return lt(ref) < 0;
 }
 
-int expr2t::ltchecked(const expr2t &ref) const
-{
-  return lt(ref);
-}
-
 std::string get_expr_id(const expr2t &expr)
 {
   return std::string(expr_names[expr.expr_id]);
@@ -368,7 +363,7 @@ expr2tc expr2t::clone() const
   {
 #define IREP2_EXPR(kind, _)                                                    \
   case kind##_id:                                                              \
-    return esbmct::generic_clone(static_cast<const kind##2t &>(*this));
+    return make_irep<kind##2t>(static_cast<const kind##2t &>(*this));
 #include <irep2/expr_kinds.inc>
 #undef IREP2_EXPR
   }
@@ -543,10 +538,6 @@ void assert_arith_2ops_consistency(
 #ifndef NDEBUG /* only check consistency in non-Release builds */
   bool p1 = is_pointer_type(v1);
   bool p2 = is_pointer_type(v2);
-  auto is_bv_type = [](const type2tc &t) {
-    return t->type_id == type2t::unsignedbv_id ||
-           t->type_id == type2t::signedbv_id;
-  };
   if (p1 && p2)
   {
     assert(id == expr2t::sub_id);

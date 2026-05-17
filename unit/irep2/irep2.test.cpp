@@ -156,10 +156,10 @@ SCENARIO(
       REQUIRE(small_lt_big != big_lt_small);
     }
 
-    THEN("ltchecked is antisymmetric and non-zero")
+    THEN("lt is antisymmetric and non-zero")
     {
-      int forward = small->ltchecked(*big);
-      int reverse = big->ltchecked(*small);
+      int forward = small->lt(*big);
+      int reverse = big->lt(*small);
       REQUIRE(forward != 0);
       REQUIRE(reverse != 0);
       REQUIRE(forward == -reverse);
