@@ -207,7 +207,7 @@ public:
    *  @param guard A guard for the assignment, true by default
    *  @param type Assignment type, visible by default
    */
-  void symex_assign(const expr2tc &code, const bool hidden, const guardt &guard)
+  void symex_assign(const expr2tc &code, const bool hidden, const guard2tc &guard)
     override;
 
   /**
@@ -549,7 +549,7 @@ public:
   /** State guard prior to a GOTO instruction causing a cswitch. Any thread
    *  interleaved after a GOTO will be composed with this guard, rather than
    *  the guard from any of the branches of the GOTO itself. */
-  guardt pre_goto_guard;
+  guard2tc pre_goto_guard;
   /** TID of monitor thread, for monitor intrinsics. */
   unsigned int monitor_tid;
   /** Whether monitor_tid is set. */

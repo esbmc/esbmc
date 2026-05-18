@@ -3,7 +3,7 @@
 
 #include <pointer-analysis/value_sets.h>
 #include <util/expr_util.h>
-#include <util/guard.h>
+#include <irep2/irep2_guard.h>
 #include <util/namespace.h>
 #include <util/std_code.h>
 
@@ -61,11 +61,11 @@ public:
 
   void read_rec(const exprt &expr)
   {
-    read_write_rec(expr, true, false, "", guardt(), nil_exprt());
+    read_write_rec(expr, true, false, "", guard2tc(), nil_exprt());
   }
 
   void
-  read_rec(const exprt &expr, const guardt &guard, const exprt &original_expr)
+  read_rec(const exprt &expr, const guard2tc &guard, const exprt &original_expr)
   {
     read_write_rec(expr, true, false, "", guard, original_expr);
   }
@@ -81,7 +81,7 @@ protected:
     bool r,
     bool w,
     const std::string &suffix,
-    const guardt &guard,
+    const guard2tc &guard,
     const exprt &original_expr,
     bool dereferenced = false);
 };

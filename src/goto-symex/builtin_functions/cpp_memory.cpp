@@ -12,7 +12,7 @@
 void goto_symext::symex_cpp_new(
   const expr2tc &lhs,
   const sideeffect2t &code,
-  const guardt &guard)
+  const guard2tc &guard)
 {
   expr2tc size = code.size;
 
@@ -67,7 +67,7 @@ void goto_symext::symex_cpp_new(
   expr2tc ptr_obj = pointer_object2tc(pointer_type2(), ptr_rhs);
   track_new_pointer(ptr_obj, newtype, guard, size);
 
-  guardt g(cur_state->guard);
+  guard2tc g(cur_state->guard);
   g.append(guard);
   dynamic_memory.emplace_back(rhs_copy, g, false, symbol.name.as_string());
 }

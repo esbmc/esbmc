@@ -3,7 +3,7 @@
 
 #include <goto-programs/goto_program.h>
 #include <util/expr.h>
-#include <util/guard.h>
+#include <irep2/irep2_guard.h>
 #include <irep2/irep2.h>
 #include <util/symbol.h>
 #include <vector>

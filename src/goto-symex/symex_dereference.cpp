@@ -8,14 +8,14 @@
 void symex_dereference_statet::dereference_failure(
   const std::string &property [[maybe_unused]],
   const std::string &msg,
-  const guardt &guard)
+  const guard2tc &guard)
 {
   expr2tc g = guard.as_expr();
   goto_symex.replace_dynamic_allocation(g);
   goto_symex.claim(not2tc(g), "dereference failure: " + msg);
 }
 
-void symex_dereference_statet::dereference_assume(const guardt &guard)
+void symex_dereference_statet::dereference_assume(const guard2tc &guard)
 {
   expr2tc g = guard.as_expr();
   goto_symex.replace_dynamic_allocation(g);
@@ -183,7 +183,7 @@ void goto_symext::dereference(expr2tc &expr, dereferencet::modet mode)
   assert(!cur_state->call_stack.empty());
   cur_state->top().level1.rename(expr);
 
-  guardt guard;
+  guard2tc guard;
   if (is_free(mode))
   {
     expr2tc tmp = expr;

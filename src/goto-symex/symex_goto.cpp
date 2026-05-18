@@ -294,7 +294,7 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
   }
 }
 
-static inline guardt merge_state_guards(
+static inline guard2tc merge_state_guards(
   goto_symext::statet::goto_statet &goto_state,
   goto_symex_statet &state)
 {
@@ -348,7 +348,7 @@ void goto_symext::merge_gotos()
 
     // Merge guards. Don't write this to `state` yet because we might move
     // goto_state over it below.
-    guardt new_guard = merge_state_guards(goto_state, *cur_state);
+    guard2tc new_guard = merge_state_guards(goto_state, *cur_state);
 
     if (!goto_state.guard.is_false())
     {
@@ -404,7 +404,7 @@ void goto_symext::phi_function(const statet::goto_statet &goto_state)
 
   const auto &goto_variables = goto_state.level2.current_names;
 
-  guardt tmp_guard;
+  guard2tc tmp_guard;
   if (
     !variables.empty() && !cur_state->guard.is_false() &&
     !goto_state.guard.is_false())

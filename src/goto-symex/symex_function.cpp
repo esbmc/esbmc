@@ -403,14 +403,14 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
   cur_state->source.prog = &goto_function.body;
 }
 
-static std::list<std::pair<guardt, expr2tc>>
+static std::list<std::pair<guard2tc, expr2tc>>
 get_function_list(const expr2tc &expr)
 {
-  std::list<std::pair<guardt, expr2tc>> l;
+  std::list<std::pair<guard2tc, expr2tc>> l;
 
   if (is_if2t(expr))
   {
-    std::list<std::pair<guardt, expr2tc>> l1, l2;
+    std::list<std::pair<guard2tc, expr2tc>> l1, l2;
     const if2t &ifexpr = to_if2t(expr);
     expr2tc guardexpr = ifexpr.cond;
     expr2tc notguardexpr = not2tc(guardexpr);
@@ -430,7 +430,7 @@ get_function_list(const expr2tc &expr)
 
   if (is_symbol2t(expr))
   {
-    guardt guard;
+    guard2tc guard;
     guard.make_true();
     l.emplace_back(guard, expr);
     return l;
@@ -485,12 +485,12 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
     return;
   }
 
-  std::list<std::pair<guardt, expr2tc>> l = get_function_list(func_ptr);
+  std::list<std::pair<guard2tc, expr2tc>> l = get_function_list(func_ptr);
 
   /* Internal check that all symbols are actually of 'code' type (modulo the
    * guard) */
   auto maybe_called_symbol_is_code [[maybe_unused]] = [this](const auto &elem) {
-    const guardt &guard = elem.first;
+    const guard2tc &guard = elem.first;
     const symbol2t &sym = to_symbol2t(elem.second);
     if (!guard.is_false() && !is_code_type(sym.type))
     {
