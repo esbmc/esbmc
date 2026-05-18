@@ -248,11 +248,6 @@ inline expr2tc gen_ulong(unsigned long val)
   return gen_ulong(BigInt(val));
 }
 
-inline expr2tc gen_slong(signed long val)
-{
-  return constant_int2tc(get_int_type(config.ansi_c.word_size), BigInt(val));
-}
-
 inline const type2tc &get_base_array_subtype(const type2tc &type)
 {
   const auto &subtype = to_array_type(type).subtype;
@@ -394,16 +389,6 @@ inline expr2tc distribute_vector_operation(Func func, expr2tc op1, expr2tc op2)
   }
 }
 
-/**
-   * @brief Distribute a function between one or two operands,
-   * at least one of those must be a vector
-   *
-   * @param id the id for the operation
-   * @param op1 the first operand
-   * @param op2 the second operand
-   * @param rm rounding mode (for ieee)
-   * @return expr2tc with the resulting vector
-   */
 /** Element-wise vector operation by `expr_id` dispatch.
  *  At least one of @p op1 / @p op2 must be a vector. For each lane,
  *  builds the corresponding scalar IR node (neg / add / sub / mul /

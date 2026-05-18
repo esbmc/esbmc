@@ -421,9 +421,8 @@ public:
 };
 
 /** Fixed bitvector type.
- *  Contains a spec for a fixed bitwidth number -- this is the equivalent of a
- *  fixedbv_spect in the old irep situation. Stores how bits are distributed
- *  over integer bits and fraction bits.
+ *  Spec for a fixed bitwidth number — stores how the bits are distributed
+ *  between integer bits and fraction bits.
  */
 class fixedbv_type2t : public type2t
 {
@@ -449,9 +448,8 @@ public:
 };
 
 /** Floating-point bitvector type.
- *  Contains a spec for a floating point number -- this is the equivalent of a
- *  ieee_float_spect in the old irep situation. Stores how bits are distributed
- *  over fraction bits and exponent bits.
+ *  Spec for a floating point number — stores how the bits are distributed
+ *  between fraction bits and exponent bits.
  */
 class floatbv_type2t : public type2t
 {

@@ -1465,7 +1465,7 @@ public:
       update_field(field),
       update_value(value)
   {
-#ifndef NDEBUG /* only check consistency in non-Release builds */
+#ifndef NDEBUG
     assert_consistency();
 #endif
   }

@@ -852,11 +852,7 @@ public:
   size_t get_num_sub_exprs() const;
 
   /** Simplify an expression.
-   *  Similar to simplification in the string-based irep, this generates an
-   *  expression with any calculations or operations that can be simplified,
-   *  simplified. In contrast to the old form though, this creates a new expr
-   *  if something gets simplified, just to make it clear exactly what's
-   *  going on.
+   *  Returns a new expression when a calculation or operation can be folded.
    *  @return Either a nil expr (null pointer contents) if nothing could be
    *          simplified or a simplified expression.
    */
