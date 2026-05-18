@@ -1191,6 +1191,8 @@ void bmct::report_coverage_verbose(
       if (options.get_bool_option("k-path-coverage-claims"))
         log_status("\n  {} : SATISFIED", prettify_solidity_expr(claim_sig));
 
+      // spanning >= 1 here: verbose only fires after a reached claim,
+      // which implies total_kpath >= 1 (Marré-Bertolino).
       log_result(
         "Current k-Path Coverage: {}%\n",
         tracked_instance * 100.0 / goto_coveraget::total_kpath_spanning);
