@@ -56,6 +56,7 @@ const std::string kEsbmcSpawnThread = "__ESBMC_spawn_thread";
 const std::string kPytInitTid = "__pyt_init_tid";
 const std::string kPytJoin = "__pyt_join";
 const std::string kPytTerminate = "__pyt_terminate";
+const std::string kPyLockBlockAndCheck = "__ESBMC_pylock_block_and_check";
 
 function_call_builder::function_call_builder(
   python_converter &converter,
@@ -830,9 +831,9 @@ exprt function_call_builder::build() const
     }
   }
 
-  // __pyt_init_tid / __pyt_join / __pyt_terminate: the C-side bookkeeping
-  // helpers for the Python threading.Thread lowering (defined in
-  // pthread_lib.c, pulled into the GOTO program via the python_c_models
+  // __pyt_init_tid / __pyt_join / __pyt_terminate / __ESBMC_pylock_block_and_check:
+  // C-side bookkeeping helpers for the Python threading lowering (defined
+  // in pthread_lib.c, pulled into the GOTO program via the python_c_models
   // whitelist in cprover_library.cpp). Register the matching C-style
   // symbol id so the call resolves to the linked body rather than a
   // freshly-created Python-frontend symbol with no implementation.
@@ -841,14 +842,17 @@ exprt function_call_builder::build() const
     const bool is_init_tid = func_name == kPytInitTid;
     const bool is_join = func_name == kPytJoin;
     const bool is_terminate = func_name == kPytTerminate;
-    if (is_init_tid || is_join || is_terminate)
+    const bool is_lock_block = func_name == kPyLockBlockAndCheck;
+    if (is_init_tid || is_join || is_terminate || is_lock_block)
     {
       auto &symbol_table = converter_.symbol_table();
       locationt location = converter_.get_location_from_decl(call_);
 
+      const bool takes_uint_arg = is_init_tid || is_join;
+
       code_typet fn_type;
       fn_type.return_type() = empty_typet();
-      if (!is_terminate)
+      if (takes_uint_arg)
         fn_type.arguments().push_back(code_typet::argumentt(uint_type()));
 
       const std::string symbol_id = "c:@F@" + func_name;
@@ -864,7 +868,7 @@ exprt function_call_builder::build() const
       call.type() = empty_typet();
       call.location() = location;
 
-      if (!is_terminate)
+      if (takes_uint_arg)
       {
         if (call_["args"].size() != 1)
           throw std::runtime_error(func_name + " takes exactly one argument");
@@ -872,6 +876,10 @@ exprt function_call_builder::build() const
         if (arg.type() != uint_type())
           arg = typecast_exprt(arg, uint_type());
         call.arguments().push_back(arg);
+      }
+      else if (!call_["args"].empty())
+      {
+        throw std::runtime_error(func_name + " takes no arguments");
       }
 
       return call;

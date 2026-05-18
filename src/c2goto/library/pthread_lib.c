@@ -1023,3 +1023,30 @@ __ESBMC_HIDE:;
   // Block this thread until the target has ended.
   __ESBMC_assume(ended);
 }
+
+/* threading.Lock deadlock-aware bookkeeping.
+ *
+ * Called from ``Lock.acquire`` in the deadlock-aware variant of the
+ * Python operational model (``models/threading_deadlock.py``) on the
+ * branch where the lock is already held by another thread. Mirrors the
+ * else-branch of ``pthread_mutex_lock_check``: bump the global blocked
+ * counter and assert that not every running thread is now blocked. The
+ * Python caller wraps this call in its own ``__ESBMC_atomic_begin`` /
+ * ``__ESBMC_atomic_end`` pair, so the bump-and-assert is atomic with
+ * the lock-field read that decided to block.
+ *
+ * The counter bump persists on a path that the caller then kills with
+ * ``__ESBMC_assume(unlocked)``; symex's interleaving search observes
+ * the bumped value on alternative schedules where two or more threads
+ * have all reached this point, which is where the global deadlock
+ * predicate (``blocked_threads_count == num_threads_running``) becomes
+ * true.
+ */
+void __ESBMC_pylock_block_and_check(void)
+{
+__ESBMC_HIDE:;
+  __ESBMC_blocked_threads_count++;
+  __ESBMC_assert(
+    __ESBMC_blocked_threads_count != __ESBMC_num_threads_running,
+    "Deadlocked state in threading.Lock.acquire");
+}

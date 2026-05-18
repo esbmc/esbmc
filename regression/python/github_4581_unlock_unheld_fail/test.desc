@@ -1,0 +1,5 @@
+CORE
+main.py
+--incremental-bmc --deadlock-check
+^VERIFICATION FAILED$
+^.*must hold lock upon unlock.*$

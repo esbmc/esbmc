@@ -265,7 +265,11 @@ const static std::vector<std::string> python_c_models = {
   // num_threads_running counts the main thread (deadlock-detector
   // invariant in __pyt_join / pthread_join_switch).
   "__ESBMC_pthread_start_main_hook",
-  "__ESBMC_pthread_end_main_hook"};
+  "__ESBMC_pthread_end_main_hook",
+  // threading.Lock deadlock-aware acquire bookkeeping. Called from the
+  // ``--deadlock-check`` variant of the Python ``Lock`` model
+  // (models/threading_deadlock.py). Mirrors pthread_mutex_lock_check.
+  "__ESBMC_pylock_block_and_check"};
 
 // Solidity operational model functions
 const static std::vector<std::string> solidity_c_models = {
