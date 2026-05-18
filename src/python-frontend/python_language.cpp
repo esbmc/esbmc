@@ -92,6 +92,13 @@ bool python_languaget::parse(const std::string &path)
   // Execute Python script to generate JSON file from AST
   std::vector<std::string> args = {parser_path.string(), path, ast_output_dir};
 
+  // Propagate ``--deadlock-check`` to the parser so it loads the
+  // deadlock-aware threading model (models/threading_deadlock.py). The
+  // C frontend handles the analogous swap via preprocessor #defines
+  // (clang-c-frontend/c_preprocess.cpp).
+  if (config.options.get_bool_option("deadlock-check"))
+    args.push_back("--deadlock-check");
+
   // Get Python interpreter path informed by the user
   std::string python_exec = config.options.get_option("python");
   auto python_exec_path = bp::search_path(python_exec);

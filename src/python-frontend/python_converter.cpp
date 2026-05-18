@@ -730,6 +730,12 @@ void python_converter::convert()
   // function_call_builder does for atomic_begin in user code.
   ensure_void_void_intrinsic("__ESBMC_yield", hook_location);
 
+  // The threading.Lock deadlock-aware acquire (models/threading_deadlock.py,
+  // loaded when ``--deadlock-check`` is set) calls this intrinsic on the
+  // blocked branch. Register unconditionally: under the assume-only Lock
+  // variant the symbol is unreferenced and contributes no GOTO code.
+  ensure_void_void_intrinsic("__ESBMC_pylock_block_and_check", hook_location);
+
   main_body.copy_to_operands(make_hook_call("__ESBMC_pthread_start_main_hook"));
 
   // 4. Call python_user_main

@@ -81,6 +81,7 @@ const std::map<std::string, std::string> &builtin_functions()
     {"__pyt_init_tid", "NoneType"},
     {"__pyt_join", "NoneType"},
     {"__pyt_terminate", "NoneType"},
+    {"__ESBMC_pylock_block_and_check", "NoneType"},
 
     // Execution functions
     {"eval", "Any"},

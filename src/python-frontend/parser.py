@@ -56,8 +56,14 @@ def run_mypy_strict(filename):
 
 
 def check_usage():
-    if len(sys.argv) != 3:
-        print("Usage: python astgen.py <file path> <output directory>")
+    if len(sys.argv) < 3 or len(sys.argv) > 4:
+        print(
+            "Usage: python astgen.py <file path> <output directory> "
+            "[--deadlock-check]"
+        )
+        sys.exit(2)
+    if len(sys.argv) == 4 and sys.argv[3] != "--deadlock-check":
+        print(f"Unknown flag: {sys.argv[3]}")
         sys.exit(2)
 
 
@@ -2269,11 +2275,31 @@ def check_dependencies():
         print("  Install with: pip install mypy  or  pipx install mypy")
 
 
+def select_threading_model(output_dir: str, deadlock_check: bool) -> None:
+    """Swap ``models/threading.py`` for the deadlock-aware variant.
+
+    Mirrors the C preprocessor swap of ``pthread_mutex_lock`` to
+    ``pthread_mutex_lock_check`` (``clang-c-frontend/c_preprocess.cpp``).
+    When ``deadlock_check`` is true, overwrite ``threading.py`` with
+    the contents of ``threading_deadlock.py``. The variant file stays
+    on disk; the model-JSON loop in ``main`` skips it explicitly by
+    name so it does not emit a stray ``Lock``/``Thread`` module.
+    """
+    if not deadlock_check:
+        return
+    models_dir = os.path.join(output_dir, "models")
+    src = os.path.join(models_dir, "threading_deadlock.py")
+    dst = os.path.join(models_dir, "threading.py")
+    if os.path.exists(src):
+        shutil.copyfile(src, dst)
+
+
 def main():
     check_usage()
     check_dependencies()
     filename = sys.argv[1]
     output_dir = sys.argv[2]
+    deadlock_check = len(sys.argv) == 4 and sys.argv[3] == "--deadlock-check"
 
     # Type checking input program with mypy.
     returncode, mypy_output = run_mypy_strict(filename)
@@ -2288,6 +2314,8 @@ def main():
 
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
+
+    select_threading_model(output_dir, deadlock_check)
 
     # Process and convert AST for main file. The entry script is canonicalised
     # before import discovery and finalised only after cross-module alias /
@@ -2345,6 +2373,12 @@ def main():
     for python_file in glob.glob(os.path.join(models_dir, "*.py")):
         filename = os.path.basename(python_file)
         module_name = filename[:-3]
+
+        # Variant of threading.py; select_threading_model copies it into
+        # place under --deadlock-check, so skip it as a separate module
+        # to avoid emitting a duplicate Lock/Thread JSON.
+        if module_name == "threading_deadlock":
+            continue
 
         if is_imported_model(module_name) and module_name != "typing":
             continue
