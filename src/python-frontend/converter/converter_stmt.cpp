@@ -1,6 +1,6 @@
 #include <python-frontend/converter/converter_internal.h>
 #include <python-frontend/convert_float_literal.h>
-#include <python-frontend/function_call_expr.h>
+#include <python-frontend/function_call/expr.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/python_consteval.h>
 #include <python-frontend/python_converter.h>
@@ -945,8 +945,9 @@ symbolt *python_converter::create_symbol_for_unannotated_assign(
           // Untyped dict (e.g. `a = {}`): infer the return type from the default arg.
           // Any concrete literal (list, dict, int, float, str, bool, None)
           // is more precise than the `long_int` fallback applied just below.
-          const std::string shape = python_annotation<nlohmann::json>::
-            infer_type_from_default_arg_shape(ast_node["value"]["args"]);
+          const std::string shape =
+            python_annotation_utils::infer_type_from_default_arg_shape(
+              ast_node["value"]["args"]);
           if (shape == "list")
             inferred_type = type_handler_.get_list_type();
           else if (shape == "dict")
@@ -1284,7 +1285,12 @@ void python_converter::preregister_global_variables(
     symbolt symbol =
       create_symbol(module_name, var_name, sid.to_string(), location, var_type);
     symbol.lvalue = true;
-    symbol.file_local = true;
+    // Module-level Python globals are not file-local: they are visible
+    // across the entire program. rw_set.cpp uses (mode == "Python" &&
+    // !file_local) to recognise them as race-eligible shared state,
+    // since the Python frontend leaves static_lifetime=false to avoid
+    // the C-side static-init pass picking up its const-prop snapshot.
+    symbol.file_local = false;
     symbol.is_extern = false;
 
     symbol_table_.move_symbol_to_context(symbol);
@@ -1443,7 +1449,10 @@ void python_converter::get_var_assign(
         location_begin,
         current_element_type);
       symbol.lvalue = true;
-      symbol.file_local = true;
+      // Module-level Python globals are not file-local (see
+      // preregister_global_variables). Function-local annotated assigns
+      // stay file-local.
+      symbol.file_local = !current_func_name_.empty();
       symbol.is_extern = false;
 
       symbol_created = (lhs_symbol == nullptr);
@@ -1548,7 +1557,9 @@ void python_converter::get_var_assign(
           location_begin,
           current_element_type);
         symbol.lvalue = true;
-        symbol.file_local = true;
+        // Inferred-annotation Assign: module-scope symbols are not
+        // file-local (so rw_set recognises them); function-locals are.
+        symbol.file_local = !current_func_name_.empty();
         symbol.is_extern = false;
         lhs_symbol = symbol_table_.move_symbol_to_context(symbol);
       }

@@ -2,9 +2,9 @@
 #include <python-frontend/complex_handler.h>
 #include <python-frontend/converter/converter_internal.h>
 #include <python-frontend/convert_float_literal.h>
-#include <python-frontend/function_call_builder.h>
+#include <python-frontend/function_call/builder.h>
 #include <python-frontend/python_consteval.h>
-#include <python-frontend/function_call_expr.h>
+#include <python-frontend/function_call/expr.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/module_locator.h>
 #include <python-frontend/python_annotation.h>
@@ -695,7 +695,50 @@ void python_converter::convert()
     }
   }
 
-  // 3. Call python_user_main
+  // 3. Bracket the user-code call with the pthread main-thread hooks
+  // (parallel to the C frontend in clang_c_main.cpp). Without these
+  // __ESBMC_num_threads_running stays at zero on the main thread,
+  // which fires the deadlock detector inside pthread_join_switch /
+  // __pyt_join as soon as any spawned thread is joined.
+  //
+  // The hook bodies are linked in from pthread_lib.c via the
+  // python_c_models whitelist (cprover_library.cpp), but the Python
+  // symbol table does not learn about them until they are referenced;
+  // register the symbols here so the GOTO converter can resolve the
+  // call targets. Unconditional registration is safe: the hooks have
+  // empty side effects on sequential programs (they only bump
+  // __ESBMC_num_threads_running), and matches the C frontend, which
+  // also brackets every program regardless of whether it spawns
+  // threads.
+  code_typet hook_type;
+  hook_type.return_type() = empty_typet();
+  locationt hook_location = get_location_from_decl(*ast_json);
+  auto make_hook_call = [&](const std::string &name) {
+    ensure_void_void_intrinsic(name, hook_location);
+    code_function_callt call;
+    call.function() = symbol_exprt("c:@F@" + name, hook_type);
+    call.location() = hook_location;
+    return call;
+  };
+
+  // __ESBMC_yield is dereferenced unconditionally by goto_convert's
+  // do_atomic_begin (builtin_functions.cpp). The __pyt_init_tid /
+  // __pyt_terminate / __pyt_join bodies that the cprover_library pulls
+  // in all contain __ESBMC_atomic_begin() calls, so goto_convert will
+  // need the yield symbol regardless of whether user code spawns a
+  // thread. Register it once here, mirroring the lazy registration
+  // function_call_builder does for atomic_begin in user code.
+  ensure_void_void_intrinsic("__ESBMC_yield", hook_location);
+
+  // The threading.Lock deadlock-aware acquire (models/threading_deadlock.py,
+  // loaded when ``--deadlock-check`` is set) calls this intrinsic on the
+  // blocked branch. Register unconditionally: under the assume-only Lock
+  // variant the symbol is unreferenced and contributes no GOTO code.
+  ensure_void_void_intrinsic("__ESBMC_pylock_block_and_check", hook_location);
+
+  main_body.copy_to_operands(make_hook_call("__ESBMC_pthread_start_main_hook"));
+
+  // 4. Call python_user_main
   const symbolt *user_main_sym = symbol_table_.find_symbol("python_user_main");
   if (!user_main_sym)
   {
@@ -705,6 +748,8 @@ void python_converter::convert()
   code_function_callt user_main_call;
   user_main_call.function() = symbol_expr(*user_main_sym);
   main_body.copy_to_operands(user_main_call);
+
+  main_body.copy_to_operands(make_hook_call("__ESBMC_pthread_end_main_hook"));
 
   main_symbol.value.swap(main_body);
 

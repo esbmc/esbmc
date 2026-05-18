@@ -168,6 +168,54 @@ Byte sequences and integer class methods:
 
 Exception instances expose a message attribute and support `__str__()`.
 
+## Concurrency (`threading` module)
+
+ESBMC-Python lowers `threading` primitives onto ESBMC's existing pthread operational model in `src/c2goto/library/pthread_lib.c`, so symex's interleaving exploration, deadlock detection, and data-race detection apply.
+
+### `threading.Lock`
+
+`Lock.acquire()` and `Lock.release()` mirror `pthread_mutex_lock_noassert` via `__ESBMC_atomic_begin / __ESBMC_assume / __ESBMC_atomic_end`. Supported usage:
+
+- `lock = threading.Lock()` at module scope or as a class instance attribute
+- `lock.acquire()` / `lock.release()`
+- Multiple `Lock` instances co-existing on the same object (e.g. paired `mutex` and `lock` fields)
+- `from threading import Lock` aliasing
+
+### `threading.Thread`
+
+For each `Thread(target=f, args=(...))` construction site, the frontend synthesises a per-call-site trampoline `__pythread_trampoline_<N>` plus three helpers in `pthread_lib.c` (`__pyt_init_tid`, `__pyt_terminate`, `__pyt_join`) that mirror `pthread_create` / `pthread_join` bookkeeping. The resulting GOTO program is a direct call (not a function pointer), so symex preserves precision.
+
+Supported `Thread` shapes:
+
+- `target=f` — `f` must be a function statically resolvable at the construction site (a `Name` or attribute chain). Lambdas, runtime-callable values, and `Thread`-subclassing's `run` override are out of scope.
+- `args=(...)` — must be a tuple literal whose elements are expressions evaluable at the construction site. Passing simple values (ints, floats, bools, strings) works end-to-end.
+- `t.start()` and `t.join()` — lower to `pthread_create` and `pthread_join` semantics; `join` establishes happens-before.
+- Multiple construction sites per program, with independent trampolines.
+
+### Data-race detection
+
+Python module-level globals (declared with `x: T = …` or `x = …` at module scope) are flagged in the symbol table so they are visible to ESBMC's race-assertion pass. Two threads writing to the same global without synchronisation are detected under `--data-races-check`:
+
+```python
+import threading
+
+shared: int = 0
+
+def writer_a() -> None:
+    global shared
+    shared = 1
+
+def writer_b() -> None:
+    global shared
+    shared = 2
+
+t1 = threading.Thread(target=writer_a)
+t2 = threading.Thread(target=writer_b)
+t1.start(); t2.start(); t1.join(); t2.join()
+```
+
+`esbmc race.py --incremental-bmc --data-races-check` reports `W/W data race on py:race.py@shared` and `VERIFICATION FAILED`.
+
 ## Cover Properties and Reachability
 
 `__ESBMC_cover(cond)` checks whether a condition is satisfiable at a given program point (inverted assertion semantics: a counterexample means the condition *is* reachable).

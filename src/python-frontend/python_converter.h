@@ -2,7 +2,7 @@
 
 #include <nlohmann/json.hpp>
 #include <python-frontend/complex_handler.h>
-#include <python-frontend/function_call_cache.h>
+#include <python-frontend/function_call/cache.h>
 #include <python-frontend/global_scope.h>
 #include <python-frontend/python_dict_handler.h>
 #include <python-frontend/python_math.h>
@@ -214,6 +214,16 @@ public:
     const std::string &id,
     const locationt &location,
     const typet &type) const;
+
+  // Register a ``void name(void)`` C intrinsic in the Python symbol
+  // table if not already present. Used for ESBMC built-ins whose bodies
+  // live in the C library (cprover_library) but whose call sites are
+  // synthesised by the Python frontend (atomic_begin/end, yield, the
+  // pthread main hooks, __pyt_*); the C-style ``c:@F@<name>`` id is
+  // needed so c2goto's linker resolves the call to the library body.
+  void ensure_void_void_intrinsic(
+    const std::string &name,
+    const locationt &location);
 
   exprt make_char_array_expr(
     const std::vector<unsigned char> &string_literal,

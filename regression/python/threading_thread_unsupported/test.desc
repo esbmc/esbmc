@@ -1,4 +1,0 @@
-CORE
-main.py
---incremental-bmc
-^ERROR:.*threading\.Thread is not yet supported by ESBMC

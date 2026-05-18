@@ -171,6 +171,10 @@ bool goto_symext::is_assume_false(const expr2tc &assumption)
 {
   if (options.get_bool_option("smt-symex-assume"))
   {
+    // Do nothing if the assumption is already true
+    if (is_true(assumption))
+      return false;
+
     runtime_encoded_equationt *rte =
       dynamic_cast<runtime_encoded_equationt *>(target.get());
 
@@ -197,6 +201,10 @@ void goto_symext::assume(const expr2tc &the_assumption)
   cur_state->rename(assumption);
   do_simplify(assumption);
 
+  // Check for assume-false against the renamed+simplified expression
+  // BEFORE guard_expr mutates it
+  bool assume_is_false = is_assume_false(assumption);
+
   if (is_true(assumption))
     return;
 
@@ -207,7 +215,7 @@ void goto_symext::assume(const expr2tc &the_assumption)
   target->assumption(tmp_guard, assumption, cur_state->source, first_loop);
 
   // If we're assuming false, make the guard for the following statement false
-  if (is_false(the_assumption) || is_assume_false(the_assumption))
+  if (assume_is_false)
     cur_state->guard.make_false();
 }
 
@@ -1014,7 +1022,8 @@ void goto_symext::run_intrinsic(
   if (
     has_prefix(symname, "c:@F@__ESBMC_pthread_start_main_hook") ||
     has_prefix(symname, "c:@F@__ESBMC_pthread_end_main_hook") ||
-    has_prefix(symname, "c:@F@__ESBMC_atexit_handler"))
+    has_prefix(symname, "c:@F@__ESBMC_atexit_handler") ||
+    has_prefix(symname, "c:@F@__ESBMC_pylock_block_and_check"))
   {
     bump_call(func_call, symname);
     return;
