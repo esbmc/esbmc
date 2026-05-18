@@ -534,13 +534,7 @@ expr2tc sym_name_to_symbol(const irep_idt &init, const type2tc &type)
     // Fix this by ensuring that /all/ symbols with the same name use the type
     // from the global symbol table.
     return symbol2tc(
-      migrate_type(sym->type),
-      init,
-      symbol_renaming_level::level0,
-      0,
-      0,
-      0,
-      0);
+      migrate_type(sym->type), init, symbol_renaming_level::level0, 0, 0, 0, 0);
   }
   if (
     init.as_string().compare(0, 3, "cs$") == 0 ||

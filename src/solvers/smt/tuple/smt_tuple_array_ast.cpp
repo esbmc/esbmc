@@ -53,9 +53,8 @@ smt_astt array_sym_smt_ast::eq(smt_convt *ctx, smt_astt other) const
   tuple_sym_smt_astt tb = to_tuple_sym_ast(other);
   assert(is_array_type(sort->get_tuple_type()));
   const array_type2t &arrtype = to_array_type(sort->get_tuple_type());
-  const type2tc &eltype = is_pointer_type(arrtype.subtype)
-                            ? ctx->pointer_struct
-                            : arrtype.subtype;
+  const type2tc &eltype =
+    is_pointer_type(arrtype.subtype) ? ctx->pointer_struct : arrtype.subtype;
   const std::vector<type2tc> &members = struct_union_members(eltype);
 
   smt_convt::ast_vec eqs;
@@ -160,15 +159,12 @@ smt_astt array_sym_smt_ast::project(smt_convt *ctx, unsigned int idx) const
   // array type.
 
   const array_type2t &arr = to_array_type(sort->get_tuple_type());
-  const type2tc &eltype = is_pointer_type(arr.subtype)
-                            ? ctx->pointer_struct
-                            : arr.subtype;
+  const type2tc &eltype =
+    is_pointer_type(arr.subtype) ? ctx->pointer_struct : arr.subtype;
   const std::vector<type2tc> &members = struct_union_members(eltype);
-  const std::vector<irep_idt> &member_names =
-    struct_union_member_names(eltype);
+  const std::vector<irep_idt> &member_names = struct_union_member_names(eltype);
 
-  assert(
-    idx < members.size() && "Out-of-bounds tuple-array element accessed");
+  assert(idx < members.size() && "Out-of-bounds tuple-array element accessed");
   const std::string &fieldname = member_names[idx].as_string();
   std::string sym_name = name + fieldname;
 
@@ -197,9 +193,8 @@ void array_sym_smt_ast::assign(smt_convt *ctx, smt_astt sym) const
   array_sym_smt_astt dst = to_array_sym_ast(sym);
 
   const array_type2t &arrtype = to_array_type(sort->get_tuple_type());
-  const type2tc &eltype = is_pointer_type(arrtype.subtype)
-                            ? ctx->pointer_struct
-                            : arrtype.subtype;
+  const type2tc &eltype =
+    is_pointer_type(arrtype.subtype) ? ctx->pointer_struct : arrtype.subtype;
   const std::vector<type2tc> &members = struct_union_members(eltype);
 
   unsigned int i = 0;

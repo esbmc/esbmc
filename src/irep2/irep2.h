@@ -51,7 +51,6 @@
 
 namespace esbmct
 {
-
 /** Type-erased callable reference: non-owning, two pointers wide, no
  *  heap allocation. Replaces the historic `std::function` delegates
  *  used by foreach_operand / foreach_subtype. The contract is a
@@ -1091,7 +1090,8 @@ template <class K>
 constexpr bool fields_cover_class()
 {
   using fields_t = std::remove_cv_t<decltype(K::fields)>;
-  constexpr std::size_t derived_storage = sizeof(K) - sizeof(typename K::base_type);
+  constexpr std::size_t derived_storage =
+    sizeof(K) - sizeof(typename K::base_type);
   constexpr std::size_t covered = sum_derived_field_sizes<K>(
     std::make_index_sequence<std::tuple_size_v<fields_t>>{});
   return derived_storage - covered < alignof(K);

@@ -497,7 +497,8 @@ SCENARIO("not2t flat-layout dispatchers (issue #4560)", "[core][irep2]")
     THEN("foreach_operand visits exactly the one operand")
     {
       std::vector<expr2tc> visited;
-      e_not->foreach_operand([&](const expr2tc &sub) { visited.push_back(sub); });
+      e_not->foreach_operand(
+        [&](const expr2tc &sub) { visited.push_back(sub); });
       REQUIRE(visited.size() == 1u);
       REQUIRE(visited[0] == inner);
     }

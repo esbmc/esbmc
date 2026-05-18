@@ -1297,7 +1297,8 @@ void goto_symext::add_memory_leak_checks()
                 unsigned n =
                   struct_union_get_component_number(p->type, c.member_name)
                     .value();
-                p = member2tc(struct_union_members(p->type)[n], p, c.member_name);
+                p =
+                  member2tc(struct_union_members(p->type)[n], p, c.member_name);
               }
               continue;
             }

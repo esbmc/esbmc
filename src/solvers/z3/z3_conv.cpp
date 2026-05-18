@@ -990,14 +990,12 @@ smt_sortt z3_convt::mk_struct_sort(const type2tc &type)
   z3::array<Z3_sort> member_sorts(num_members);
   for (std::size_t i = 0; i < num_members; ++i)
   {
-    member_names[i] =
-      z3_ctx.str_symbol(mnames[i].as_string().c_str());
-    member_sorts[i] =
-      to_solver_smt_sort<z3::sort>(convert_sort(members[i]))->s;
+    member_names[i] = z3_ctx.str_symbol(mnames[i].as_string().c_str());
+    member_sorts[i] = to_solver_smt_sort<z3::sort>(convert_sort(members[i]))->s;
   }
 
-  z3::symbol tuple_name = z3_ctx.str_symbol(
-    std::string("struct_type_" + name.as_string()).c_str());
+  z3::symbol tuple_name =
+    z3_ctx.str_symbol(std::string("struct_type_" + name.as_string()).c_str());
 
   Z3_func_decl mk_tuple_decl;
   z3::array<Z3_func_decl> proj_decls(num_members);
@@ -1172,8 +1170,7 @@ expr2tc z3_convt::tuple_get(const type2tc &type, smt_astt sym)
       mk_tuple_select(to_solver_smt_ast<z3_smt_ast>(sym)->a, 1),
       convert_sort(members[1]));
 
-    unsigned int num =
-      get_bv(object, is_signedbv_type(members[0])).to_uint64();
+    unsigned int num = get_bv(object, is_signedbv_type(members[0])).to_uint64();
     unsigned int offs =
       get_bv(offset, is_signedbv_type(members[1])).to_uint64();
     pointer_logict::pointert p(num, BigInt(offs));
@@ -1198,8 +1195,7 @@ expr2tc z3_convt::tuple_get(const type2tc &type, smt_astt sym)
 
 expr2tc z3_convt::tuple_get(const expr2tc &expr)
 {
-  const type2tc &t =
-    is_pointer_type(expr->type) ? pointer_struct : expr->type;
+  const type2tc &t = is_pointer_type(expr->type) ? pointer_struct : expr->type;
   const std::vector<type2tc> &members = struct_union_members(t);
   const std::vector<irep_idt> &mnames = struct_union_member_names(t);
 
@@ -1218,8 +1214,7 @@ expr2tc z3_convt::tuple_get(const expr2tc &expr)
       mk_tuple_select(to_solver_smt_ast<z3_smt_ast>(sym)->a, 1),
       convert_sort(members[1]));
 
-    unsigned int num =
-      get_bv(object, is_signedbv_type(members[0])).to_uint64();
+    unsigned int num = get_bv(object, is_signedbv_type(members[0])).to_uint64();
     unsigned int offs =
       get_bv(offset, is_signedbv_type(members[1])).to_uint64();
     pointer_logict::pointert p(num, BigInt(offs));

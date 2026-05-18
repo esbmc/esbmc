@@ -1101,8 +1101,7 @@ expr2tc with2t::do_simplify() const
   {
     const constant_struct2t &c_struct = to_constant_struct2t(source_value);
     const constant_string2t &memb = to_constant_string2t(update_field);
-    unsigned no =
-      struct_union_get_component_number(type, memb.value).value();
+    unsigned no = struct_union_get_component_number(type, memb.value).value();
     assert(no < c_struct.datatype_members.size());
 
     if (c_struct.datatype_members[no] == update_value)

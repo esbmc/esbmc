@@ -906,8 +906,8 @@ smt_astt yices_convt::tuple_create(const expr2tc &structdef)
     terms.push_back(yast->a);
   }
 
-  term_t thetuple = yices_tuple(
-    struct_union_members(strct.type).size(), terms.data());
+  term_t thetuple =
+    yices_tuple(struct_union_members(strct.type).size(), terms.data());
   return new_ast(thetuple, convert_sort(strct.type));
 }
 
@@ -1017,8 +1017,7 @@ expr2tc yices_convt::tuple_get(const type2tc &type, smt_astt sym)
     smt_astt offset =
       new_ast(yices_select(2, to_solver_smt_ast<yices_smt_ast>(sym)->a), s2);
 
-    unsigned int num =
-      get_bv(object, is_signedbv_type(members[0])).to_uint64();
+    unsigned int num = get_bv(object, is_signedbv_type(members[0])).to_uint64();
     unsigned int offs =
       get_bv(offset, is_signedbv_type(members[1])).to_uint64();
     pointer_logict::pointert p(num, BigInt(offs));
@@ -1043,8 +1042,7 @@ expr2tc yices_convt::tuple_get(const type2tc &type, smt_astt sym)
 
 expr2tc yices_convt::tuple_get(const expr2tc &expr)
 {
-  const type2tc &t =
-    is_pointer_type(expr->type) ? pointer_struct : expr->type;
+  const type2tc &t = is_pointer_type(expr->type) ? pointer_struct : expr->type;
   const std::vector<type2tc> &members = struct_union_members(t);
 
   if (is_pointer_type(expr->type))
@@ -1062,8 +1060,7 @@ expr2tc yices_convt::tuple_get(const expr2tc &expr)
     smt_astt offset =
       new_ast(yices_select(2, to_solver_smt_ast<yices_smt_ast>(sym)->a), s2);
 
-    unsigned int num =
-      get_bv(object, is_signedbv_type(members[0])).to_uint64();
+    unsigned int num = get_bv(object, is_signedbv_type(members[0])).to_uint64();
     unsigned int offs =
       get_bv(offset, is_signedbv_type(members[1])).to_uint64();
     pointer_logict::pointert p(num, BigInt(offs));

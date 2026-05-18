@@ -56,8 +56,7 @@ smt_convt::get_member_name_field(const type2tc &t, const irep_idt &name) const
     idx++;
   }
   assert(
-    idx != names.size() &&
-    "Member name of with expr not found in struct type");
+    idx != names.size() && "Member name of with expr not found in struct type");
 
   return idx;
 }
@@ -1375,8 +1374,8 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     case expr2t::ieee_div_id:
       return convert_ast(distribute_vector_operation(
         expr->expr_id,
-        *expr->get_sub_expr(1),  // side_1
-        *expr->get_sub_expr(2),  // side_2
+        *expr->get_sub_expr(1),   // side_1
+        *expr->get_sub_expr(2),   // side_2
         *expr->get_sub_expr(0))); // rounding_mode
     case expr2t::add_id:
     case expr2t::sub_id:
@@ -1391,7 +1390,8 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     case expr2t::lshr_id:
       return convert_ast(distribute_vector_operation(
         expr->expr_id, *expr->get_sub_expr(0), *expr->get_sub_expr(1)));
-    default: break;
+    default:
+      break;
     }
   }
 
@@ -1496,7 +1496,8 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
 
     expr2tc flat_expr = expr;
     if (
-      is_array_type(to_array_type(expr->type).subtype) && is_constant_array2t(expr))
+      is_array_type(to_array_type(expr->type).subtype) &&
+      is_constant_array2t(expr))
       flat_expr = flatten_array_body(expr);
 
     if (is_struct_type(arr.subtype) || is_pointer_type(arr.subtype))
@@ -2130,10 +2131,9 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       uint64_t bits = type_byte_size_bits(expr->type).to_uint64();
       const union_type2t &tu = to_union_type(expr->type);
       assert(is_constant_string2t(with.update_field));
-      unsigned c =
-        struct_union_get_component_number(
-          expr->type, to_constant_string2t(with.update_field).value)
-          .value();
+      unsigned c = struct_union_get_component_number(
+                     expr->type, to_constant_string2t(with.update_field).value)
+                     .value();
       uint64_t mem_bits = type_byte_size_bits(tu.members[c]).to_uint64();
       expr2tc upd = bitcast2tc(
         get_uint_type(mem_bits), typecast2tc(tu.members[c], with.update_value));
@@ -3821,9 +3821,10 @@ smt_astt smt_convt::convert_array_index(const expr2tc &expr)
   smt_astt a = convert_ast(src_value);
   a = a->select(this, newidx);
 
-  const type2tc &arrsubtype = is_vector_type(index.source_value->type)
-                                ? to_vector_type(index.source_value->type).subtype
-                                : to_array_type(index.source_value->type).subtype;
+  const type2tc &arrsubtype =
+    is_vector_type(index.source_value->type)
+      ? to_vector_type(index.source_value->type).subtype
+      : to_array_type(index.source_value->type).subtype;
   if (is_bool_type(arrsubtype) && !array_api->supports_bools_in_arrays)
     return make_bit_bool(a);
 
@@ -4216,14 +4217,13 @@ expr2tc smt_convt::get(const expr2tc &expr)
       const array_type2t &inner = to_array_type(new_subtype);
       expr2tc new_inner_size = resolve_size(inner.array_size);
       if (new_inner_size != inner.array_size)
-        new_subtype = array_type2tc(
-          inner.subtype, new_inner_size, inner.size_is_infinite);
+        new_subtype =
+          array_type2tc(inner.subtype, new_inner_size, inner.size_is_infinite);
     }
-    if (
-      new_outer_size != outer.array_size || new_subtype != outer.subtype)
+    if (new_outer_size != outer.array_size || new_subtype != outer.subtype)
     {
-      type2tc new_type = array_type2tc(
-        new_subtype, new_outer_size, outer.size_is_infinite);
+      type2tc new_type =
+        array_type2tc(new_subtype, new_outer_size, outer.size_is_infinite);
       res = res->with_type(new_type);
     }
   }
@@ -4621,8 +4621,8 @@ smt_astt smt_convt::array_create(const expr2tc &expr)
   expr2tc size = array_or_vector_size(expr->type);
   bool is_infinite = array_or_vector_size_is_infinite(expr->type);
   const auto &members = is_constant_array2t(expr)
-    ? to_constant_array2t(expr).datatype_members
-    : to_constant_vector2t(expr).datatype_members;
+                          ? to_constant_array2t(expr).datatype_members
+                          : to_constant_vector2t(expr).datatype_members;
 
   // Handle constant array expressions: these don't have tuple type and so
   // don't need funky handling, but we need to create a fresh new symbol and

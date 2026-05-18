@@ -56,13 +56,26 @@ smt_astt smt_convt::convert_ptr_cmp(
   expr2tc op;
   switch (templ_expr->expr_id)
   {
-  case expr2t::equality_id:         op = equality2tc(s1, s2); break;
-  case expr2t::notequal_id:         op = notequal2tc(s1, s2); break;
-  case expr2t::lessthan_id:         op = lessthan2tc(s1, s2); break;
-  case expr2t::greaterthan_id:      op = greaterthan2tc(s1, s2); break;
-  case expr2t::lessthanequal_id:    op = lessthanequal2tc(s1, s2); break;
-  case expr2t::greaterthanequal_id: op = greaterthanequal2tc(s1, s2); break;
-  default: __builtin_unreachable();
+  case expr2t::equality_id:
+    op = equality2tc(s1, s2);
+    break;
+  case expr2t::notequal_id:
+    op = notequal2tc(s1, s2);
+    break;
+  case expr2t::lessthan_id:
+    op = lessthan2tc(s1, s2);
+    break;
+  case expr2t::greaterthan_id:
+    op = greaterthan2tc(s1, s2);
+    break;
+  case expr2t::lessthanequal_id:
+    op = lessthanequal2tc(s1, s2);
+    break;
+  case expr2t::greaterthanequal_id:
+    op = greaterthanequal2tc(s1, s2);
+    break;
+  default:
+    __builtin_unreachable();
   }
   return convert_ast(op);
 }

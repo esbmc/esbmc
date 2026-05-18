@@ -1579,8 +1579,7 @@ value_sett::make_member(const expr2tc &src, const irep_idt &component_name)
   }
 
   // give up
-  unsigned no =
-    struct_union_get_component_number(type, component_name).value();
+  unsigned no = struct_union_get_component_number(type, component_name).value();
   const type2tc &subtype = members[no];
   expr2tc memb = member2tc(subtype, src, component_name);
   return memb;

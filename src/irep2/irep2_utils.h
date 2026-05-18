@@ -320,10 +320,8 @@ expr2tc gen_one(const type2tc &type);
    * @return expr2tc with the resulting vector
    */
 template <typename Func>
-inline expr2tc distribute_vector_operation(
-  Func func,
-  const expr2tc &op1,
-  const expr2tc &op2)
+inline expr2tc
+distribute_vector_operation(Func func, const expr2tc &op1, const expr2tc &op2)
 {
   assert(is_constant_vector2t(op1) || is_constant_vector2t(op2));
   /*

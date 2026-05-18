@@ -93,7 +93,6 @@ void type2t::dump() const
   log_status("{}", pretty(0));
 }
 
-
 unsigned int bool_type2t::get_width() const
 {
   // For the purpose of the byte representing memory model
@@ -257,8 +256,7 @@ type2tc type2t::clone() const
   {
 #define IREP2_TYPE(kind, _)                                                    \
   case kind##_id:                                                              \
-    return make_irep<kind##_type2t>(                                           \
-      static_cast<const kind##_type2t &>(*this));
+    return make_irep<kind##_type2t>(static_cast<const kind##_type2t &>(*this));
 #include <irep2/type_kinds.inc>
 #undef IREP2_TYPE
   case end_type_id:
@@ -289,8 +287,7 @@ void type2t::hash(crypto_hash &h) const
   {
 #define IREP2_TYPE(kind, _)                                                    \
   case kind##_id:                                                              \
-    esbmct::generic_hash_type(                                                 \
-      static_cast<const kind##_type2t &>(*this), h);                           \
+    esbmct::generic_hash_type(static_cast<const kind##_type2t &>(*this), h);   \
     return;
 #include <irep2/type_kinds.inc>
 #undef IREP2_TYPE
@@ -339,8 +336,7 @@ void type2t::foreach_subtype_impl(subtype_delegate &f)
   {
 #define IREP2_TYPE(kind, _)                                                    \
   case kind##_id:                                                              \
-    esbmct::generic_foreach_subtype(                                           \
-      static_cast<kind##_type2t &>(*this), f);                                 \
+    esbmct::generic_foreach_subtype(static_cast<kind##_type2t &>(*this), f);   \
     return;
 #include <irep2/type_kinds.inc>
 #undef IREP2_TYPE

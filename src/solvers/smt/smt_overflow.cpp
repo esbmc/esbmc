@@ -9,8 +9,7 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
   expr2tc zero = gen_zero(side1->type);
 
   // Guess whether we're performing a signed or unsigned comparison.
-  bool is_signed =
-    (is_signedbv_type(side1) || is_signedbv_type(side2));
+  bool is_signed = (is_signedbv_type(side1) || is_signedbv_type(side2));
 
   switch (overflow.operand->expr_id)
   {
@@ -102,17 +101,16 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
       expr2tc zero = constant_int2tc(side1->type, 0);
 
       // Compute the subtraction result
-      expr2tc sub_result =
-        sub2tc(side1->type, side1, side2);
+      expr2tc sub_result = sub2tc(side1->type, side1, side2);
 
       // Overflow condition: (a > 0 && b < 0 && result < 0) || (a < 0 && b > 0 && result > 0)
-      expr2tc a_pos = greaterthan2tc(side1, zero); // a > 0
-      expr2tc b_neg = lessthan2tc(side2, zero);    // b < 0
+      expr2tc a_pos = greaterthan2tc(side1, zero);        // a > 0
+      expr2tc b_neg = lessthan2tc(side2, zero);           // b < 0
       expr2tc result_neg = lessthan2tc(sub_result, zero); // result < 0
       expr2tc pos_minus_neg_overflow = and2tc(a_pos, and2tc(b_neg, result_neg));
 
-      expr2tc a_neg = lessthan2tc(side1, zero);       // a < 0
-      expr2tc b_pos = greaterthan2tc(side2, zero);    // b > 0
+      expr2tc a_neg = lessthan2tc(side1, zero);              // a < 0
+      expr2tc b_pos = greaterthan2tc(side2, zero);           // b > 0
       expr2tc result_pos = greaterthan2tc(sub_result, zero); // result > 0
       expr2tc neg_minus_pos_overflow = and2tc(a_neg, and2tc(b_pos, result_pos));
 
@@ -199,7 +197,7 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
 
     if (!int_encoding)
       arg1_ext = is_signedbv_type(side1) ? mk_sign_ext(arg1_ext, sz)
-                                                : mk_zero_ext(arg1_ext, sz);
+                                         : mk_zero_ext(arg1_ext, sz);
 
     expr2tc op2 = side2;
     if (is_shl2t(overflow.operand))

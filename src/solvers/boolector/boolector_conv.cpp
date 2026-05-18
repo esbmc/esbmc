@@ -679,10 +679,8 @@ smt_astt boolector_convt::overflow_arith(const expr2tc &expr)
   const expr2tc &op1 = *overflow.operand->get_sub_expr(0);
   const expr2tc &op2 = *overflow.operand->get_sub_expr(1);
 
-  const btor_smt_ast *side1 =
-    to_solver_smt_ast<btor_smt_ast>(convert_ast(op1));
-  const btor_smt_ast *side2 =
-    to_solver_smt_ast<btor_smt_ast>(convert_ast(op2));
+  const btor_smt_ast *side1 = to_solver_smt_ast<btor_smt_ast>(convert_ast(op1));
+  const btor_smt_ast *side2 = to_solver_smt_ast<btor_smt_ast>(convert_ast(op2));
 
   // Guess whether we're performing a signed or unsigned comparison.
   bool is_signed = (is_signedbv_type(op1) || is_signedbv_type(op2));

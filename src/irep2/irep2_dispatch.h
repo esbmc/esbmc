@@ -230,7 +230,6 @@ void call_type_delegate<std::vector<type2tc>, type2t::subtype_delegate>(
 
 namespace esbmct
 {
-
 // --------------------------------------------------------------------------
 // generic_cmp: structural equality over K::fields.
 // Precondition: a.expr_id == o.expr_id (checked at the switch boundary).
@@ -282,8 +281,7 @@ size_t generic_do_crc(const K &a)
   size_t v = 0;
   hash_combine(v, do_type_crc(a.expr_id));
   std::apply(
-    [&](auto... mp) { (hash_combine(v, do_type_crc(a.*mp)), ...); },
-    K::fields);
+    [&](auto... mp) { (hash_combine(v, do_type_crc(a.*mp)), ...); }, K::fields);
   a.crc_val.store(v, std::memory_order_release);
   return v;
 }
@@ -295,8 +293,7 @@ template <class K>
 void generic_hash(const K &a, crypto_hash &h)
 {
   do_type_hash(a.expr_id, h);
-  std::apply(
-    [&](auto... mp) { (do_type_hash(a.*mp, h), ...); }, K::fields);
+  std::apply([&](auto... mp) { (do_type_hash(a.*mp, h), ...); }, K::fields);
 }
 
 // --------------------------------------------------------------------------
@@ -313,13 +310,13 @@ list_of_memberst generic_tostring(const K &a, unsigned int indent)
   std::apply(
     [&](auto... mp) {
       (..., ([&]() {
-        using FieldT = std::remove_cvref_t<decltype(a.*mp)>;
-        if constexpr (
-          std::is_same_v<FieldT, type2tc> && std::is_base_of_v<expr2t, K>)
-          (void)indent; // skip — shown by the type banner
-        else
-          do_type2string(a.*mp, idx++, K::field_names, vec, indent);
-      }()));
+         using FieldT = std::remove_cvref_t<decltype(a.*mp)>;
+         if constexpr (
+           std::is_same_v<FieldT, type2tc> && std::is_base_of_v<expr2t, K>)
+           (void)indent; // skip — shown by the type banner
+         else
+           do_type2string(a.*mp, idx++, K::field_names, vec, indent);
+       }()));
     },
     K::fields);
   return vec;
@@ -419,8 +416,7 @@ size_t generic_do_crc_type(const K &a)
   size_t v = 0;
   hash_combine(v, do_type_crc(a.type_id));
   std::apply(
-    [&](auto... mp) { (hash_combine(v, do_type_crc(a.*mp)), ...); },
-    K::fields);
+    [&](auto... mp) { (hash_combine(v, do_type_crc(a.*mp)), ...); }, K::fields);
   a.crc_val.store(v, std::memory_order_release);
   return v;
 }
@@ -440,8 +436,8 @@ list_of_memberst generic_tostring_type(const K &a, unsigned int indent)
   std::apply(
     [&](auto... mp) {
       (..., ([&]() {
-        do_type2string(a.*mp, idx++, K::field_names, vec, indent);
-      }()));
+         do_type2string(a.*mp, idx++, K::field_names, vec, indent);
+       }()));
     },
     K::fields);
   return vec;

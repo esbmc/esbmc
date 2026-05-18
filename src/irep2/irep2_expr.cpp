@@ -46,10 +46,10 @@ void irep2_bad_family_cast(unsigned actual, const char *accessor)
 {
   const char *actual_name =
     (actual < expr2t::end_expr_id) ? expr_names[actual] : "<out-of-range>";
-  throw irep2_cast_error(
-    fmt::format("irep2: {}() called on incompatible expr (expr_id = {})",
-                accessor,
-                actual_name));
+  throw irep2_cast_error(fmt::format(
+    "irep2: {}() called on incompatible expr (expr_id = {})",
+    accessor,
+    actual_name));
 }
 
 /*************************** Base expr2t definitions **************************/
@@ -278,8 +278,7 @@ void with2t::assert_consistency() const
       is_complex_type(source_value->type));
     assert(update_field->expr_id == constant_string_id);
     auto c = struct_union_get_component_number(
-      source_value->type,
-      to_constant_string2t(update_field).value);
+      source_value->type, to_constant_string2t(update_field).value);
     assert(c.has_value());
     assert_type_compat_for_with(
       update_value->type, struct_union_members(source_value->type)[*c]);
@@ -396,8 +395,7 @@ namespace
 // inside `rebuild_with_type_impl`; the trait pushes the failure to a
 // readable "kind unsupported" path instead.
 template <class K, std::size_t... Is>
-constexpr bool
-ctor_takes_type_first(std::index_sequence<Is...>)
+constexpr bool ctor_takes_type_first(std::index_sequence<Is...>)
 {
   using fields_t = std::remove_cv_t<decltype(K::fields)>;
   return std::is_constructible_v<

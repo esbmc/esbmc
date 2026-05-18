@@ -175,8 +175,8 @@ smt_astt smt_tuple_sym_flattener::tuple_array_of(
     is_pointer_type(init_val->type) ? ctx->pointer_struct : init_val->type;
   const std::vector<type2tc> &subtype_members = struct_union_members(thetype);
   const auto &data_members = is_constant_struct2t(init_val)
-    ? to_constant_struct2t(init_val).datatype_members
-    : to_constant_union2t(init_val).datatype_members;
+                               ? to_constant_struct2t(init_val).datatype_members
+                               : to_constant_union2t(init_val).datatype_members;
 
   expr2tc arrsize = constant_int2tc(index_type2(), BigInt(array_size));
   type2tc arrtype = array_type2tc(init_val->type, arrsize, false);

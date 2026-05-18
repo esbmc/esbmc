@@ -87,8 +87,7 @@ public:
 
   irep_idt symbol_name;
 
-  static constexpr auto fields =
-    std::make_tuple(&symbol_type2t::symbol_name);
+  static constexpr auto fields = std::make_tuple(&symbol_type2t::symbol_name);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -441,9 +440,8 @@ public:
   unsigned int width;
   unsigned int integer_bits;
 
-  static constexpr auto fields = std::make_tuple(
-    &fixedbv_type2t::width,
-    &fixedbv_type2t::integer_bits);
+  static constexpr auto fields =
+    std::make_tuple(&fixedbv_type2t::width, &fixedbv_type2t::integer_bits);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -468,9 +466,8 @@ public:
   unsigned int fraction;
   unsigned int exponent;
 
-  static constexpr auto fields = std::make_tuple(
-    &floatbv_type2t::fraction,
-    &floatbv_type2t::exponent);
+  static constexpr auto fields =
+    std::make_tuple(&floatbv_type2t::fraction, &floatbv_type2t::exponent);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -481,8 +478,7 @@ public:
 class complex_type2t : public type2t
 {
 public:
-  complex_type2t(const type2tc &st)
-    : type2t(complex_id), subtype(st)
+  complex_type2t(const type2tc &st) : type2t(complex_id), subtype(st)
   {
   }
   complex_type2t(const complex_type2t &ref) = default;
@@ -490,8 +486,7 @@ public:
 
   type2tc subtype;
 
-  static constexpr auto fields =
-    std::make_tuple(&complex_type2t::subtype);
+  static constexpr auto fields = std::make_tuple(&complex_type2t::subtype);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -517,9 +512,8 @@ public:
   irep_idt name;
   std::vector<type2tc> template_args;
 
-  static constexpr auto fields = std::make_tuple(
-    &cpp_name_type2t::name,
-    &cpp_name_type2t::template_args);
+  static constexpr auto fields =
+    std::make_tuple(&cpp_name_type2t::name, &cpp_name_type2t::template_args);
   static std::string field_names[esbmct::num_type_fields];
 };
 
