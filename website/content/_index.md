@@ -177,7 +177,15 @@ the verification design space. The main differences are:
   (pointer safety, overflow, bounds, leaks, data races) are checked
   automatically; user-defined assertions need only `assert` or
   `__ESBMC_assert`. Loop invariants are optional and can be synthesised
-  by the [interval domain](/docs/) or by LLM assistance.
+  by the [interval domain](/docs/) or by LLM assistance. When
+  annotations *are* supplied — `__ESBMC_requires` / `__ESBMC_ensures`
+  for pre/post-conditions, `__ESBMC_assigns` for frame conditions,
+  `__ESBMC_loop_invariant` for loop invariants, and
+  `__ESBMC_contract` for bulk contract enforcement — ESBMC uses them
+  to both verify the implementation against its contract and to replace
+  call sites with the contract abstraction, enabling the same style of
+  compositional, contract-driven verification as SPARK (see
+  [Function Contracts](/docs/function-contracts/)).
 * SPARK proofs depend on the programmer authoring `Pre`, `Post`,
   `Contract_Cases`, `Loop_Invariant`, `Loop_Variant`, `Global` and
   `Depends` aspects. Without these contracts, GNATprove can only prove
