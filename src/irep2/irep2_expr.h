@@ -22,222 +22,6 @@
 #include <irep2/expr_kinds.inc>
 #undef IREP2_EXPR
 
-// Data definitions.
-
-// X-macro field-list expanders.  The user passes a field-list macro
-// that takes a per-field action `F` and a separator `S` and emits
-//   F(type1, name1) S F(type2, name2) S ...
-// We expand it several times inside ESBMC_DEFINE_DATA to generate
-// declarations, ctor params, ctor init list, traits typedefs, and the
-// trait-list passed to expr2t_traits.  Since the typedef action is
-// inside the class body, &klass::n resolves through the implicit
-// class context and we don't need to pass the class name through.
-#define ESBMC_DATA_DECL(t, n) t n;
-#define ESBMC_DATA_PARAM(t, n) const t &n##_arg
-#define ESBMC_DATA_PARAM_MOVE(t, n) t n##_arg
-#define ESBMC_DATA_INIT(t, n) n(n##_arg)
-#define ESBMC_DATA_INIT_MOVE(t, n) n(std::move(n##_arg))
-#define ESBMC_DATA_TRAIT_REF(t, n) n##_field
-#define ESBMC_DATA_COMMA ,
-#define ESBMC_DATA_NONE
-
-#define ESBMC_DATA_TYPEDEF(t, n)                                               \
-  typedef esbmct::field_traits<t, self_t, &self_t::n> n##_field;
-
-/** Define a data class with the given full class name `klass`. Fields are
- *  passed via an X-macro `(F, S)`-style list of `(type, name)` pairs.
- *  Result type comes from the explicit `type2tc` ctor argument; the
- *  generated class extends expr2t directly.
- *
- *  Three flavours:
- *    - ESBMC_DEFINE_DATA_AS:        ctor takes fields by const ref,
- *                                   result type explicit, uses
- *                                   `expr2t_traits`.
- *    - ESBMC_DEFINE_DATA_NOTYPE_AS: ctor takes fields by const ref,
- *                                   result type implicit, uses
- *                                   `expr2t_traits_notype`.
- *    - ESBMC_DEFINE_DATA_MOVE_AS:   ctor takes fields by value and
- *                                   moves them (use for std::vector
- *                                   and similar heavy types).
- *
- *  Convenience aliases below suffix `klass` with `_data` automatically. */
-#define ESBMC_DEFINE_DATA_AS(klass, FIELDS)                                    \
-  class klass : public expr2t                                                  \
-  {                                                                            \
-  public:                                                                      \
-    using self_t = klass;                                                      \
-    klass(                                                                     \
-      const type2tc &t,                                                        \
-      expr2t::expr_ids id,                                                     \
-      FIELDS(ESBMC_DATA_PARAM, ESBMC_DATA_COMMA))                              \
-      : expr2t(t, id), FIELDS(ESBMC_DATA_INIT, ESBMC_DATA_COMMA)               \
-    {                                                                          \
-    }                                                                          \
-    klass(const klass &ref) = default;                                         \
-    FIELDS(ESBMC_DATA_DECL, ESBMC_DATA_NONE)                                   \
-    FIELDS(ESBMC_DATA_TYPEDEF, ESBMC_DATA_NONE)                                \
-    typedef esbmct::expr2t_traits<                                             \
-      FIELDS(ESBMC_DATA_TRAIT_REF, ESBMC_DATA_COMMA)>                          \
-      traits;                                                                  \
-  }
-
-#define ESBMC_DEFINE_DATA_NOTYPE_AS(klass, FIELDS)                             \
-  class klass : public expr2t                                                  \
-  {                                                                            \
-  public:                                                                      \
-    using self_t = klass;                                                      \
-    klass(                                                                     \
-      const type2tc &t,                                                        \
-      expr2t::expr_ids id,                                                     \
-      FIELDS(ESBMC_DATA_PARAM, ESBMC_DATA_COMMA))                              \
-      : expr2t(t, id), FIELDS(ESBMC_DATA_INIT, ESBMC_DATA_COMMA)               \
-    {                                                                          \
-    }                                                                          \
-    klass(const klass &ref) = default;                                         \
-    FIELDS(ESBMC_DATA_DECL, ESBMC_DATA_NONE)                                   \
-    FIELDS(ESBMC_DATA_TYPEDEF, ESBMC_DATA_NONE)                                \
-    typedef esbmct::expr2t_traits_notype<                                      \
-      FIELDS(ESBMC_DATA_TRAIT_REF, ESBMC_DATA_COMMA)>                          \
-      traits;                                                                  \
-  }
-
-#define ESBMC_DEFINE_DATA_MOVE_AS(klass, FIELDS)                               \
-  class klass : public expr2t                                                  \
-  {                                                                            \
-  public:                                                                      \
-    using self_t = klass;                                                      \
-    klass(                                                                     \
-      const type2tc &t,                                                        \
-      expr2t::expr_ids id,                                                     \
-      FIELDS(ESBMC_DATA_PARAM_MOVE, ESBMC_DATA_COMMA))                         \
-      : expr2t(t, id), FIELDS(ESBMC_DATA_INIT_MOVE, ESBMC_DATA_COMMA)          \
-    {                                                                          \
-    }                                                                          \
-    klass(const klass &ref) = default;                                         \
-    FIELDS(ESBMC_DATA_DECL, ESBMC_DATA_NONE)                                   \
-    FIELDS(ESBMC_DATA_TYPEDEF, ESBMC_DATA_NONE)                                \
-    typedef esbmct::expr2t_traits<                                             \
-      FIELDS(ESBMC_DATA_TRAIT_REF, ESBMC_DATA_COMMA)>                          \
-      traits;                                                                  \
-  }
-
-#define ESBMC_DEFINE_DATA(name, FIELDS)                                        \
-  ESBMC_DEFINE_DATA_AS(name##_data, FIELDS)
-#define ESBMC_DEFINE_DATA_NOTYPE(name, FIELDS)                                 \
-  ESBMC_DEFINE_DATA_NOTYPE_AS(name##_data, FIELDS)
-#define ESBMC_DEFINE_DATA_MOVE(name, FIELDS)                                   \
-  ESBMC_DEFINE_DATA_MOVE_AS(name##_data, FIELDS)
-
-/** Define a data class that extends an existing one (`parent`) and adds
- *  more fields. `PARENT_FIELDS` is the parent's X-macro list (re-passed
- *  so the ctor can take the parent's args by value/move and forward
- *  them).  `OWN_FIELDS` lists this class's own additional fields.  The
- *  parent's trait typedefs are referenced via name##_field (they are
- *  inherited from the parent class scope). */
-#define ESBMC_DEFINE_DATA_EXTENDS(name, parent, PARENT_FIELDS, OWN_FIELDS)     \
-  class name##_data : public parent                                            \
-  {                                                                            \
-  public:                                                                      \
-    using self_t = name##_data;                                                \
-    name##_data(                                                               \
-      const type2tc &t,                                                        \
-      expr2t::expr_ids id,                                                     \
-      PARENT_FIELDS(ESBMC_DATA_PARAM_MOVE, ESBMC_DATA_COMMA),                  \
-      OWN_FIELDS(ESBMC_DATA_PARAM, ESBMC_DATA_COMMA))                          \
-      : parent(t, id, PARENT_FIELDS(ESBMC_DATA_FWD, ESBMC_DATA_COMMA)),        \
-        OWN_FIELDS(ESBMC_DATA_INIT, ESBMC_DATA_COMMA)                          \
-    {                                                                          \
-    }                                                                          \
-    name##_data(const name##_data &ref) = default;                             \
-    OWN_FIELDS(ESBMC_DATA_DECL, ESBMC_DATA_NONE)                               \
-    OWN_FIELDS(ESBMC_DATA_TYPEDEF, ESBMC_DATA_NONE)                            \
-    typedef esbmct::expr2t_traits<                                             \
-      PARENT_FIELDS(ESBMC_DATA_TRAIT_REF, ESBMC_DATA_COMMA),                   \
-      OWN_FIELDS(ESBMC_DATA_TRAIT_REF, ESBMC_DATA_COMMA)>                      \
-      traits;                                                                  \
-  }
-
-// Forward the parent's argument as-is (already a movable rvalue).
-#define ESBMC_DATA_FWD(t, n) std::move(n##_arg)
-
-#define ESBMC_FIELDS_constant_int(F, S) F(BigInt, value)
-ESBMC_DEFINE_DATA(constant_int, ESBMC_FIELDS_constant_int);
-
-#define ESBMC_FIELDS_constant_fixedbv(F, S) F(fixedbvt, value)
-ESBMC_DEFINE_DATA(constant_fixedbv, ESBMC_FIELDS_constant_fixedbv);
-
-#define ESBMC_FIELDS_constant_floatbv(F, S) F(ieee_floatt, value)
-ESBMC_DEFINE_DATA(constant_floatbv, ESBMC_FIELDS_constant_floatbv);
-
-#define ESBMC_FIELDS_dereference(F, S) F(expr2tc, value)
-ESBMC_DEFINE_DATA(dereference, ESBMC_FIELDS_dereference);
-
-#define ESBMC_FIELDS_bitcast(F, S) F(expr2tc, from)
-ESBMC_DEFINE_DATA(bitcast, ESBMC_FIELDS_bitcast);
-
-#define ESBMC_FIELDS_member_ref(F, S) F(irep_idt, member)
-ESBMC_DEFINE_DATA(member_ref, ESBMC_FIELDS_member_ref);
-
-#define ESBMC_FIELDS_code_decl(F, S) F(irep_idt, value)
-ESBMC_DEFINE_DATA(code_decl, ESBMC_FIELDS_code_decl);
-
-#define ESBMC_FIELDS_code_goto(F, S) F(irep_idt, target)
-ESBMC_DEFINE_DATA(code_goto, ESBMC_FIELDS_code_goto);
-
-#define ESBMC_FIELDS_code_asm(F, S) F(irep_idt, value)
-ESBMC_DEFINE_DATA(code_asm, ESBMC_FIELDS_code_asm);
-
-#define ESBMC_FIELDS_same_object(F, S) F(expr2tc, side_1) S F(expr2tc, side_2)
-ESBMC_DEFINE_DATA(same_object, ESBMC_FIELDS_same_object);
-
-#define ESBMC_FIELDS_code_assign(F, S) F(expr2tc, target) S F(expr2tc, source)
-ESBMC_DEFINE_DATA(code_assign, ESBMC_FIELDS_code_assign);
-
-#define ESBMC_FIELDS_code_comma(F, S) F(expr2tc, side_1) S F(expr2tc, side_2)
-ESBMC_DEFINE_DATA(code_comma, ESBMC_FIELDS_code_comma);
-
-#define ESBMC_FIELDS_constant_bool(F, S) F(bool, value)
-ESBMC_DEFINE_DATA(constant_bool, ESBMC_FIELDS_constant_bool);
-
-#define ESBMC_FIELDS_constant_array_of(F, S) F(expr2tc, initializer)
-ESBMC_DEFINE_DATA(constant_array_of, ESBMC_FIELDS_constant_array_of);
-
-#define ESBMC_FIELDS_constant_datatype(F, S)                                   \
-  F(std::vector<expr2tc>, datatype_members)
-ESBMC_DEFINE_DATA_MOVE(constant_datatype, ESBMC_FIELDS_constant_datatype);
-
-#define ESBMC_FIELDS_code_block(F, S) F(std::vector<expr2tc>, operands)
-ESBMC_DEFINE_DATA_MOVE(code_block, ESBMC_FIELDS_code_block);
-
-#define ESBMC_FIELDS_code_expression(F, S) F(expr2tc, operand)
-ESBMC_DEFINE_DATA_NOTYPE(code_expression, ESBMC_FIELDS_code_expression);
-
-#define ESBMC_FIELDS_code_cpp_catch(F, S)                                      \
-  F(std::vector<irep_idt>, exception_list)
-ESBMC_DEFINE_DATA_MOVE(code_cpp_catch, ESBMC_FIELDS_code_cpp_catch);
-
-#define ESBMC_FIELDS_typecast(F, S) F(expr2tc, from) S F(expr2tc, rounding_mode)
-ESBMC_DEFINE_DATA(typecast, ESBMC_FIELDS_typecast);
-
-#define ESBMC_FIELDS_if(F, S)                                                  \
-  F(expr2tc, cond) S F(expr2tc, true_value) S F(expr2tc, false_value)
-ESBMC_DEFINE_DATA(if, ESBMC_FIELDS_if);
-
-#define ESBMC_FIELDS_relation(F, S) F(expr2tc, side_1) S F(expr2tc, side_2)
-ESBMC_DEFINE_DATA(relation, ESBMC_FIELDS_relation);
-
-/** Like `constant_datatype_data` but tags the active union variant
- *  (`init_field`). Inherits `datatype_members` from its parent. */
-#define ESBMC_FIELDS_constant_union_own(F, S) F(irep_idt, init_field)
-ESBMC_DEFINE_DATA_EXTENDS(
-  constant_union,
-  constant_datatype_data,
-  ESBMC_FIELDS_constant_datatype,
-  ESBMC_FIELDS_constant_union_own);
-
-/** Kind of string literal carried by a `constant_string2t`.  Lives at
- *  namespace scope (rather than inside the data class) so the X-macro
- *  fold can mention it as a plain type name. */
 enum class constant_string_kindt
 {
   DEFAULT, /* "" */
@@ -245,12 +29,7 @@ enum class constant_string_kindt
   UNICODE, /* u8"", u"" and U"" */
 };
 
-#define ESBMC_FIELDS_constant_string(F, S)                                     \
-  F(irep_idt, value) S F(constant_string_kindt, kind)
-ESBMC_DEFINE_DATA(constant_string, ESBMC_FIELDS_constant_string);
-
-/** Symex renaming level.  Lives at namespace scope (rather than inside
- *  symbol_data) so the X-macro fold can name it as a plain type.
+/** Symex renaming level for symbol2t.
  *
  * Symbolic execution rewrites a symbol into successively more specific
  * variants as it threads constraints through the SSA program:
@@ -279,98 +58,15 @@ enum class symbol_renaming_level
   level2_global,
 };
 
-#define ESBMC_FIELDS_symbol(F, S)                                              \
-  F(irep_idt, thename)                                                         \
-  S F(symbol_renaming_level, rlevel) S F(unsigned int, level1_num) S F(        \
-    unsigned int, level2_num) S                                                \
-  F(unsigned int, thread_num) S                                                \
-  F(unsigned int, node_num)
-ESBMC_DEFINE_DATA(symbol, ESBMC_FIELDS_symbol);
-
-#define ESBMC_FIELDS_value_only(F, S) F(expr2tc, value)
-ESBMC_DEFINE_DATA_NOTYPE_AS(bool_1op, ESBMC_FIELDS_value_only);
-ESBMC_DEFINE_DATA_AS(arith_1op, ESBMC_FIELDS_value_only);
-
-#define ESBMC_FIELDS_two_sides(F, S) F(expr2tc, side_1) S F(expr2tc, side_2)
-ESBMC_DEFINE_DATA_AS(logic_2ops, ESBMC_FIELDS_two_sides);
-ESBMC_DEFINE_DATA_AS(bit_2ops, ESBMC_FIELDS_two_sides);
-
-ESBMC_DEFINE_DATA_AS(arith_2ops, ESBMC_FIELDS_two_sides);
-
 /** Debug-only consistency check for arith_2ops operands and result type.
- *  Validates that pointer-difference, bv-vs-bv arithmetic and pointer-bv
- *  arithmetic have matching shapes. Called from the concrete arith
- *  classes (add2t/sub2t/...) under NDEBUG; a no-op in Release. */
+ *  Called from add2t/sub2t/mul2t/div2t/modulus2t constructors; no-op in Release. */
 void assert_arith_2ops_consistency(
   const type2tc &t,
   expr2t::expr_ids id,
   const expr2tc &v1,
   const expr2tc &v2);
 
-#define ESBMC_FIELDS_ieee_1(F, S) F(expr2tc, rounding_mode) S F(expr2tc, value)
-ESBMC_DEFINE_DATA_AS(ieee_arith_1op, ESBMC_FIELDS_ieee_1);
-
-#define ESBMC_FIELDS_ieee_2(F, S)                                              \
-  F(expr2tc, rounding_mode) S F(expr2tc, side_1) S F(expr2tc, side_2)
-ESBMC_DEFINE_DATA_AS(ieee_arith_2ops, ESBMC_FIELDS_ieee_2);
-
-#define ESBMC_FIELDS_ieee_3(F, S)                                              \
-  F(expr2tc, rounding_mode)                                                    \
-  S F(expr2tc, value_1) S F(expr2tc, value_2) S F(expr2tc, value_3)
-ESBMC_DEFINE_DATA_AS(ieee_arith_3ops, ESBMC_FIELDS_ieee_3);
-
-#define ESBMC_FIELDS_ptr_obj(F, S) F(expr2tc, ptr_obj)
-ESBMC_DEFINE_DATA_AS(pointer_ops, ESBMC_FIELDS_ptr_obj);
-
-// Special class for invalid_pointer2t, which needs always-construct
-// forcing.  Storage matches pointer_ops but the traits are notype.
-ESBMC_DEFINE_DATA_NOTYPE_AS(invalid_pointer_ops, ESBMC_FIELDS_ptr_obj);
-
-#define ESBMC_FIELDS_byte_extract(F, S)                                        \
-  F(expr2tc, source_value) S F(expr2tc, source_offset) S F(bool, big_endian)
-ESBMC_DEFINE_DATA(byte_extract, ESBMC_FIELDS_byte_extract);
-
-#define ESBMC_FIELDS_byte_update(F, S)                                         \
-  F(expr2tc, source_value)                                                     \
-  S F(expr2tc, source_offset) S F(expr2tc, update_value) S F(bool, big_endian)
-ESBMC_DEFINE_DATA(byte_update, ESBMC_FIELDS_byte_update);
-
-#define ESBMC_FIELDS_with(F, S)                                                \
-  F(expr2tc, source_value) S F(expr2tc, update_field) S F(expr2tc, update_value)
-ESBMC_DEFINE_DATA(with, ESBMC_FIELDS_with);
-
-#define ESBMC_FIELDS_member(F, S) F(expr2tc, source_value) S F(irep_idt, member)
-ESBMC_DEFINE_DATA(member, ESBMC_FIELDS_member);
-
-#define ESBMC_FIELDS_ptr_mem(F, S)                                             \
-  F(expr2tc, source_value) S F(expr2tc, member_pointer)
-ESBMC_DEFINE_DATA(ptr_mem, ESBMC_FIELDS_ptr_mem);
-
-#define ESBMC_FIELDS_index(F, S) F(expr2tc, source_value) S F(expr2tc, index)
-ESBMC_DEFINE_DATA(index, ESBMC_FIELDS_index);
-
-#define ESBMC_FIELDS_string_ops(F, S) F(expr2tc, string)
-ESBMC_DEFINE_DATA_AS(string_ops, ESBMC_FIELDS_string_ops);
-
-#define ESBMC_FIELDS_overflow_ops(F, S) F(expr2tc, operand)
-ESBMC_DEFINE_DATA_AS(overflow_ops, ESBMC_FIELDS_overflow_ops);
-
-// overflow_cast_data extends overflow_ops with a `bits` field.
-#define ESBMC_FIELDS_overflow_cast_own(F, S) F(unsigned int, bits)
-ESBMC_DEFINE_DATA_EXTENDS(
-  overflow_cast,
-  overflow_ops,
-  ESBMC_FIELDS_overflow_ops,
-  ESBMC_FIELDS_overflow_cast_own);
-
-#define ESBMC_FIELDS_dynamic_object(F, S)                                      \
-  F(expr2tc, instance) S F(bool, invalid) S F(bool, unknown)
-ESBMC_DEFINE_DATA(dynamic_object, ESBMC_FIELDS_dynamic_object);
-
-ESBMC_DEFINE_DATA_NOTYPE_AS(object_ops, ESBMC_FIELDS_value_only);
-
-/** Enumeration identifying each particular kind of side effect. Lifted to
- *  namespace scope so the X-macro fold can name it as a plain type. */
+/** Enumeration identifying each particular kind of side effect. */
 enum class sideeffect_allockind
 {
   malloc,
@@ -390,15 +86,7 @@ enum class sideeffect_allockind
   assigns_target // For __ESBMC_assigns() in function contracts
 };
 
-#define ESBMC_FIELDS_sideeffect(F, S)                                          \
-  F(expr2tc, operand)                                                          \
-  S F(expr2tc, size) S F(std::vector<expr2tc>, arguments)                      \
-    S F(type2tc, alloctype) S F(sideeffect_allockind, kind)
-ESBMC_DEFINE_DATA_MOVE(sideeffect, ESBMC_FIELDS_sideeffect);
-
-/** Which member of the printf family a `code_printf2t` represents.  The
- *  symex side (src/goto-symex/builtin_functions/io.cpp) switches on this
- *  to pick the correct argument layout. */
+/** Which member of the printf family a `code_printf2t` represents. */
 enum class printf_kindt
 {
   PRINTF,
@@ -413,183 +101,150 @@ enum class printf_kindt
  *  "snprintf") onto a printf_kindt.  Aborts on an unknown name. */
 printf_kindt printf_kind_from_name(const irep_idt &name);
 
-#define ESBMC_FIELDS_code_printf(F, S)                                         \
-  F(std::vector<expr2tc>, operands) S F(printf_kindt, kind)
-ESBMC_DEFINE_DATA_MOVE(code_printf, ESBMC_FIELDS_code_printf);
-
-#define ESBMC_FIELDS_object_desc(F, S)                                         \
-  F(expr2tc, object) S F(expr2tc, offset) S F(unsigned int, alignment)
-ESBMC_DEFINE_DATA(object_desc, ESBMC_FIELDS_object_desc);
-
-#define ESBMC_FIELDS_code_funccall(F, S)                                       \
-  F(expr2tc, ret) S F(expr2tc, function) S F(std::vector<expr2tc>, operands)
-ESBMC_DEFINE_DATA_MOVE(code_funccall, ESBMC_FIELDS_code_funccall);
-
-#define ESBMC_FIELDS_code_cpp_throw(F, S)                                      \
-  F(expr2tc, operand) S F(std::vector<irep_idt>, exception_list)
-ESBMC_DEFINE_DATA_MOVE(code_cpp_throw, ESBMC_FIELDS_code_cpp_throw);
-
-#define ESBMC_FIELDS_code_cpp_throw_decl(F, S)                                 \
-  F(std::vector<irep_idt>, exception_list)
-ESBMC_DEFINE_DATA_MOVE(code_cpp_throw_decl, ESBMC_FIELDS_code_cpp_throw_decl);
-
-#define ESBMC_FIELDS_extract(F, S)                                             \
-  F(expr2tc, from) S F(unsigned int, upper) S F(unsigned int, lower)
-ESBMC_DEFINE_DATA(extract, ESBMC_FIELDS_extract);
-
-// Give everything a typedef name. Use this to construct both the templated
-// expression methods, but also the container class which needs the template
-// parameters too.
-// Given how otherwise this means typing a large amount of template arguments
-// again and again, this gets macro'd.
-
-#define irep_typedefs(basename, superclass)                                    \
+#define irep_typedefs(basename)                                                \
   template <typename... Args>                                                  \
   inline expr2tc basename##2tc(Args && ...args)                                \
   {                                                                            \
     return make_irep<basename##2t>(std::forward<Args>(args)...);               \
-  }                                                                            \
-  typedef esbmct::expr_methods2<basename##2t, superclass, superclass::traits>  \
-    basename##_expr_methods;                                                   \
-  extern template class esbmct::                                               \
-    expr_methods2<basename##2t, superclass, superclass::traits>;               \
-  extern template class esbmct::                                               \
-    irep_methods2<basename##2t, superclass, superclass::traits>;
+  }
 
-// This can't be replaced by iterating over all expr ids in preprocessing
-// magic because the mapping between top level expr class and it's data holding
-// object isn't regular: the data class depends on /what/ the expression /is/.
-irep_typedefs(constant_int, constant_int_data);
-irep_typedefs(constant_fixedbv, constant_fixedbv_data);
-irep_typedefs(constant_floatbv, constant_floatbv_data);
-irep_typedefs(constant_struct, constant_datatype_data);
-irep_typedefs(constant_union, constant_union_data);
-irep_typedefs(constant_array, constant_datatype_data);
-irep_typedefs(constant_vector, constant_datatype_data);
-irep_typedefs(constant_bool, constant_bool_data);
-irep_typedefs(constant_array_of, constant_array_of_data);
-irep_typedefs(constant_string, constant_string_data);
-irep_typedefs(symbol, symbol_data);
-irep_typedefs(nearbyint, typecast_data);
-irep_typedefs(typecast, typecast_data);
-irep_typedefs(bitcast, bitcast_data);
-irep_typedefs(if, if_data);
-irep_typedefs(equality, relation_data);
-irep_typedefs(notequal, relation_data);
-irep_typedefs(lessthan, relation_data);
-irep_typedefs(greaterthan, relation_data);
-irep_typedefs(lessthanequal, relation_data);
-irep_typedefs(greaterthanequal, relation_data);
-irep_typedefs(cmp_three_way, relation_data);
-irep_typedefs(not, bool_1op);
-irep_typedefs(and, logic_2ops);
-irep_typedefs(or, logic_2ops);
-irep_typedefs(xor, logic_2ops);
-irep_typedefs(implies, logic_2ops);
-irep_typedefs(bitand, bit_2ops);
-irep_typedefs(bitor, bit_2ops);
-irep_typedefs(bitxor, bit_2ops);
-irep_typedefs(lshr, bit_2ops);
-irep_typedefs(bitnot, arith_1op);
-irep_typedefs(neg, arith_1op);
-irep_typedefs(abs, arith_1op);
-irep_typedefs(add, arith_2ops);
-irep_typedefs(sub, arith_2ops);
-irep_typedefs(mul, arith_2ops);
-irep_typedefs(div, arith_2ops);
-irep_typedefs(ieee_add, ieee_arith_2ops);
-irep_typedefs(ieee_sub, ieee_arith_2ops);
-irep_typedefs(ieee_mul, ieee_arith_2ops);
-irep_typedefs(ieee_div, ieee_arith_2ops);
-irep_typedefs(ieee_fma, ieee_arith_3ops);
-irep_typedefs(ieee_sqrt, ieee_arith_1op);
-irep_typedefs(modulus, arith_2ops);
-irep_typedefs(shl, bit_2ops);
-irep_typedefs(ashr, bit_2ops);
-irep_typedefs(same_object, same_object_data);
-irep_typedefs(pointer_offset, pointer_ops);
-irep_typedefs(pointer_object, pointer_ops);
-irep_typedefs(pointer_capability, pointer_ops);
-irep_typedefs(address_of, pointer_ops);
-irep_typedefs(byte_extract, byte_extract_data);
-irep_typedefs(byte_update, byte_update_data);
-irep_typedefs(with, with_data);
-irep_typedefs(member, member_data);
-irep_typedefs(member_ref, member_ref_data);
-irep_typedefs(ptr_mem, ptr_mem_data);
-irep_typedefs(index, index_data);
-irep_typedefs(isnan, bool_1op);
-irep_typedefs(overflow, overflow_ops);
-irep_typedefs(overflow_cast, overflow_cast_data);
-irep_typedefs(overflow_neg, overflow_ops);
-irep_typedefs(unknown, expr2t);
-irep_typedefs(invalid, expr2t);
-irep_typedefs(null_object, expr2t);
-irep_typedefs(dynamic_object, dynamic_object_data);
-irep_typedefs(dereference, dereference_data);
-irep_typedefs(valid_object, object_ops);
-irep_typedefs(races_check, object_ops);
-irep_typedefs(deallocated_obj, object_ops);
-irep_typedefs(dynamic_size, object_ops);
-irep_typedefs(sideeffect, sideeffect_data);
-irep_typedefs(code_block, code_block_data);
-irep_typedefs(code_assign, code_assign_data);
-irep_typedefs(code_decl, code_decl_data);
-irep_typedefs(code_dead, code_decl_data);
-irep_typedefs(code_printf, code_printf_data);
-irep_typedefs(code_expression, code_expression_data);
-irep_typedefs(code_return, code_expression_data);
-irep_typedefs(code_skip, expr2t);
-irep_typedefs(code_free, code_expression_data);
-irep_typedefs(code_goto, code_goto_data);
-irep_typedefs(object_descriptor, object_desc_data);
-irep_typedefs(code_function_call, code_funccall_data);
-irep_typedefs(code_comma, code_comma_data);
-irep_typedefs(invalid_pointer, invalid_pointer_ops);
-irep_typedefs(code_asm, code_asm_data);
-irep_typedefs(code_cpp_del_array, code_expression_data);
-irep_typedefs(code_cpp_delete, code_expression_data);
-irep_typedefs(code_cpp_catch, code_cpp_catch_data);
-irep_typedefs(code_cpp_throw, code_cpp_throw_data);
-irep_typedefs(code_cpp_throw_decl, code_cpp_throw_decl_data);
-irep_typedefs(code_cpp_throw_decl_end, code_cpp_throw_decl_data);
-irep_typedefs(isinf, bool_1op);
-irep_typedefs(isnormal, bool_1op);
-irep_typedefs(isfinite, bool_1op);
-irep_typedefs(signbit, overflow_ops);
-irep_typedefs(popcount, overflow_ops);
-irep_typedefs(bswap, arith_1op);
-irep_typedefs(concat, bit_2ops);
-irep_typedefs(extract, extract_data);
-irep_typedefs(capability_base, object_ops);
-irep_typedefs(capability_top, object_ops);
-irep_typedefs(forall, logic_2ops);
-irep_typedefs(exists, logic_2ops);
-irep_typedefs(isinstance, logic_2ops);
-irep_typedefs(hasattr, logic_2ops);
-irep_typedefs(isnone, logic_2ops);
+irep_typedefs(constant_int);
+irep_typedefs(constant_fixedbv);
+irep_typedefs(constant_floatbv);
+irep_typedefs(constant_struct);
+irep_typedefs(constant_union);
+irep_typedefs(constant_array);
+irep_typedefs(constant_vector);
+irep_typedefs(constant_bool);
+irep_typedefs(constant_array_of);
+irep_typedefs(constant_string);
+irep_typedefs(symbol);
+irep_typedefs(nearbyint);
+irep_typedefs(typecast);
+irep_typedefs(bitcast);
+irep_typedefs(if);
+irep_typedefs(equality);
+irep_typedefs(notequal);
+irep_typedefs(lessthan);
+irep_typedefs(greaterthan);
+irep_typedefs(lessthanequal);
+irep_typedefs(greaterthanequal);
+irep_typedefs(cmp_three_way);
+irep_typedefs(not );
+irep_typedefs(and);
+irep_typedefs(or);
+irep_typedefs(xor);
+irep_typedefs(implies);
+irep_typedefs(bitand);
+irep_typedefs(bitor);
+irep_typedefs(bitxor);
+irep_typedefs(lshr);
+irep_typedefs(bitnot);
+irep_typedefs(neg);
+irep_typedefs(abs);
+irep_typedefs(add);
+irep_typedefs(sub);
+irep_typedefs(mul);
+irep_typedefs(div);
+irep_typedefs(ieee_add);
+irep_typedefs(ieee_sub);
+irep_typedefs(ieee_mul);
+irep_typedefs(ieee_div);
+irep_typedefs(ieee_fma);
+irep_typedefs(ieee_sqrt);
+irep_typedefs(modulus);
+irep_typedefs(shl);
+irep_typedefs(ashr);
+irep_typedefs(same_object);
+irep_typedefs(pointer_offset);
+irep_typedefs(pointer_object);
+irep_typedefs(pointer_capability);
+irep_typedefs(address_of);
+irep_typedefs(byte_extract);
+irep_typedefs(byte_update);
+irep_typedefs(with);
+irep_typedefs(member);
+irep_typedefs(member_ref);
+irep_typedefs(ptr_mem);
+irep_typedefs(index);
+irep_typedefs(isnan);
+irep_typedefs(overflow);
+irep_typedefs(overflow_cast);
+irep_typedefs(overflow_neg);
+irep_typedefs(unknown);
+irep_typedefs(invalid);
+irep_typedefs(null_object);
+irep_typedefs(dynamic_object);
+irep_typedefs(dereference);
+irep_typedefs(valid_object);
+irep_typedefs(races_check);
+irep_typedefs(deallocated_obj);
+irep_typedefs(dynamic_size);
+irep_typedefs(sideeffect);
+irep_typedefs(code_block);
+irep_typedefs(code_assign);
+irep_typedefs(code_decl);
+irep_typedefs(code_dead);
+irep_typedefs(code_printf);
+irep_typedefs(code_expression);
+irep_typedefs(code_return);
+irep_typedefs(code_skip);
+irep_typedefs(code_free);
+irep_typedefs(code_goto);
+irep_typedefs(object_descriptor);
+irep_typedefs(code_function_call);
+irep_typedefs(code_comma);
+irep_typedefs(invalid_pointer);
+irep_typedefs(code_asm);
+irep_typedefs(code_cpp_del_array);
+irep_typedefs(code_cpp_delete);
+irep_typedefs(code_cpp_catch);
+irep_typedefs(code_cpp_throw);
+irep_typedefs(code_cpp_throw_decl);
+irep_typedefs(code_cpp_throw_decl_end);
+irep_typedefs(isinf);
+irep_typedefs(isnormal);
+irep_typedefs(isfinite);
+irep_typedefs(signbit);
+irep_typedefs(popcount);
+irep_typedefs(bswap);
+irep_typedefs(concat);
+irep_typedefs(extract);
+irep_typedefs(capability_base);
+irep_typedefs(capability_top);
+irep_typedefs(forall);
+irep_typedefs(exists);
+irep_typedefs(isinstance);
+irep_typedefs(hasattr);
+irep_typedefs(isnone);
 
-class exists2t : public exists_expr_methods
+class exists2t : public expr2t
 {
 public:
+  expr2tc side_1, side_2;
   exists2t(const type2tc &type, const expr2tc &sym, const expr2tc &predicate)
-    : exists_expr_methods(type, exists_id, sym, predicate)
+    : expr2t(type, exists_id), side_1(sym), side_2(predicate)
   {
   }
   exists2t(const exists2t &ref) = default;
 
+  static constexpr auto fields =
+    std::make_tuple(&expr2t::type, &exists2t::side_1, &exists2t::side_2);
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class forall2t : public forall_expr_methods
+class forall2t : public expr2t
 {
 public:
+  expr2tc side_1, side_2;
   forall2t(const type2tc &type, const expr2tc &sym, const expr2tc &predicate)
-    : forall_expr_methods(type, forall_id, sym, predicate)
+    : expr2t(type, forall_id), side_1(sym), side_2(predicate)
   {
   }
   forall2t(const forall2t &ref) = default;
 
+  static constexpr auto fields =
+    std::make_tuple(&expr2t::type, &forall2t::side_1, &forall2t::side_2);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -597,17 +252,18 @@ public:
  *  Records a constant integer of an arbitary precision, signed or unsigned.
  *  Simplification operations will cause the integer to be clipped to whatever
  *  bit size is in expr type.
- *  @extends constant_int_data
  */
-class constant_int2t : public constant_int_expr_methods
+class constant_int2t : public expr2t
 {
 public:
+  BigInt value;
+
   /** Primary constructor.
    *  @param type Type of this integer.
    *  @param input BigInt object containing the integer we're dealing with
    */
   constant_int2t(const type2tc &type, const BigInt &input)
-    : constant_int_expr_methods(type, constant_int_id, input)
+    : expr2t(type, constant_int_id), value(input)
   {
   }
   constant_int2t(const constant_int2t &ref) = default;
@@ -617,66 +273,69 @@ public:
   /** Accessor for fetching machine-word integer of this constant */
   long as_long() const;
 
+  static constexpr auto fields =
+    std::make_tuple(&expr2t::type, &constant_int2t::value);
   static std::string field_names[esbmct::num_type_fields];
 };
 
 /** Constant fixedbv class. Records a fixed-width number in what I assume
  *  to be mantissa/exponent form, but which is described throughout CBMC code
  *  as fraction/integer parts. Stored in a fixedbvt.
- *  @extends constant_fixedbv_data
  */
-class constant_fixedbv2t : public constant_fixedbv_expr_methods
+class constant_fixedbv2t : public expr2t
 {
 public:
+  fixedbvt value;
+
   /** Primary constructor.
    *  @param type Type of this expression.
    *  @param value fixedbvt object containing number we'll be operating on
    */
   constant_fixedbv2t(const fixedbvt &value)
-    : constant_fixedbv_expr_methods(
-        value.spec.get_type(),
-        constant_fixedbv_id,
-        value)
+    : expr2t(value.spec.get_type(), constant_fixedbv_id), value(value)
   {
   }
   constant_fixedbv2t(const constant_fixedbv2t &ref) = default;
 
+  static constexpr auto fields =
+    std::make_tuple(&expr2t::type, &constant_fixedbv2t::value);
   static std::string field_names[esbmct::num_type_fields];
 };
 
 /** Constant floatbv class. Records a floating-point number,
  *  Stored in a ieee_floatt.
- *  @extends constant_floatbv_data
  */
-class constant_floatbv2t : public constant_floatbv_expr_methods
+class constant_floatbv2t : public expr2t
 {
 public:
+  ieee_floatt value;
+
   /** Primary constructor.
    *  @param type Type of this expression.
    *  @param value ieee_floatt object containing number we'll be operating on
    */
   constant_floatbv2t(const ieee_floatt &value)
-    : constant_floatbv_expr_methods(
-        value.spec.get_type(),
-        constant_floatbv_id,
-        value)
+    : expr2t(value.spec.get_type(), constant_floatbv_id), value(value)
   {
   }
   constant_floatbv2t(const constant_floatbv2t &ref) = default;
 
+  static constexpr auto fields =
+    std::make_tuple(&expr2t::type, &constant_floatbv2t::value);
   static std::string field_names[esbmct::num_type_fields];
 };
 
 /** Constant boolean value.
  *  Contains a constant bool; rather self explanatory.
- *  @extends constant_bool_data
  */
-class constant_bool2t : public constant_bool_expr_methods
+class constant_bool2t : public expr2t
 {
 public:
+  bool value;
+
   /** Primary constructor. @param value True or false */
   constant_bool2t(bool value)
-    : constant_bool_expr_methods(get_bool_type(), constant_bool_id, value)
+    : expr2t(get_bool_type(), constant_bool_id), value(value)
   {
   }
   constant_bool2t(const constant_bool2t &ref) = default;
@@ -686,17 +345,21 @@ public:
   /** Return whether contained boolean is false. */
   bool is_false() const;
 
+  static constexpr auto fields =
+    std::make_tuple(&expr2t::type, &constant_bool2t::value);
   static std::string field_names[esbmct::num_type_fields];
 };
 
 /** Constant class for string constants.
  *  Contains an irep_idt representing the constant string.
- *  @extends constant_string_data
  */
-class constant_string2t : public constant_string_expr_methods
+class constant_string2t : public expr2t
 {
 public:
   using kindt = constant_string_kindt;
+
+  irep_idt value;
+  constant_string_kindt kind;
 
   /** Primary constructor.
    *  @param type Type of this string; presumably an array_type2t.
@@ -710,10 +373,15 @@ public:
     const type2tc &type,
     const irep_idt &stringref,
     constant_string_kindt kind)
-    : constant_string_expr_methods(type, constant_string_id, stringref, kind)
+    : expr2t(type, constant_string_id), value(stringref), kind(kind)
   {
   }
   constant_string2t(const constant_string2t &ref) = default;
+
+  static constexpr auto fields = std::make_tuple(
+    &expr2t::type,
+    &constant_string2t::value,
+    &constant_string2t::kind);
 
   /** Convert string to a constant length array of characters */
   expr2tc to_array() const;
@@ -738,23 +406,33 @@ public:
  *  Contains a vector of expressions containing each member of the struct
  *  we're dealing with, corresponding to the types and field names in the
  *  struct_type2t type.
- *  @extends constant_datatype_data
  */
-class constant_struct2t : public constant_struct_expr_methods
+class constant_struct2t : public expr2t
 {
 public:
+  std::vector<expr2tc> datatype_members;
+
   /** Primary constructor.
    *  @param type Type of this structure, presumably a struct_type2t
    *  @param membrs Vector of member values that make up this struct.
    */
   constant_struct2t(const type2tc &type, const std::vector<expr2tc> &members)
-    : constant_struct_expr_methods(type, constant_struct_id, members)
+    : expr2t(type, constant_struct_id), datatype_members(members)
   {
+    // complex_type2t is a primitive subtype but lowers to a 2-element
+    // struct view at the SMT boundary (see struct_union_members), and
+    // the clang frontend builds complex literals as struct-id exprt
+    // with a complex type — accept that shape here.
+    assert(
+      type->type_id == type2t::struct_id ||
+      type->type_id == type2t::complex_id);
   }
   constant_struct2t(const constant_struct2t &ref) = default;
 
   expr2tc do_simplify() const override;
 
+  static constexpr auto fields =
+    std::make_tuple(&expr2t::type, &constant_struct2t::datatype_members);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -763,20 +441,24 @@ public:
  *  to the members described in the type. However, it seems the values pumped
  *  at us by CBMC only ever have one member (at position 0) representing the
  *  most recent value written to the union.
- *  @extend constant_union_data
  */
-class constant_union2t : public constant_union_expr_methods
+class constant_union2t : public expr2t
 {
 public:
+  std::vector<expr2tc> datatype_members;
+  irep_idt init_field;
+
   /** Primary constructor.
    *  @param type Type of this structure, presumably a union_type2t
    *  @param members Vector of member values that make up this union.
    */
   constant_union2t(
     const type2tc &type,
-    irep_idt init_field,
+    irep_idt if_,
     const std::vector<expr2tc> &members)
-    : constant_union_expr_methods(type, constant_union_id, members, init_field)
+    : expr2t(type, constant_union_id),
+      datatype_members(members),
+      init_field(std::move(if_))
   {
     assert(is_union_type(type));
     // smt_conv.cpp's counterexample reconstruction intentionally builds unions
@@ -786,6 +468,10 @@ public:
   }
   constant_union2t(const constant_union2t &ref) = default;
 
+  static constexpr auto fields = std::make_tuple(
+    &expr2t::type,
+    &constant_union2t::init_field,
+    &constant_union2t::datatype_members);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -793,17 +479,18 @@ public:
  *  Contains a vector of array elements, pretty self explanatory. Only valid if
  *  its type has a constant sized array, can't have constant arrays of dynamic
  *  or infinitely sized arrays.
- *  @extends constant_datatype_data
  */
-class constant_array2t : public constant_array_expr_methods
+class constant_array2t : public expr2t
 {
 public:
+  std::vector<expr2tc> datatype_members;
+
   /** Primary constructor.
    *  @param type Type of this array, must be a constant sized array
    *  @param membrs Vector of elements in this array
    */
   constant_array2t(const type2tc &type, const std::vector<expr2tc> &members)
-    : constant_array_expr_methods(type, constant_array_id, members)
+    : expr2t(type, constant_array_id), datatype_members(members)
   {
     assert(type->type_id == type2t::array_id);
   }
@@ -811,6 +498,8 @@ public:
 
   expr2tc do_simplify() const override;
 
+  static constexpr auto fields =
+    std::make_tuple(&expr2t::type, &constant_array2t::datatype_members);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -818,53 +507,65 @@ public:
  *  Contains a vector of array elements, pretty self explanatory. Only valid if
  *  its type has a constant sized array, can't have constant arrays of dynamic
  *  or infinitely sized arrays.
- *  @extends constant_datatype_data
  */
-class constant_vector2t : public constant_vector_expr_methods
+class constant_vector2t : public expr2t
 {
 public:
+  std::vector<expr2tc> datatype_members;
+
   /** Primary constructor.
    *  @param type Type of this array, must be a constant sized array
    *  @param membrs Vector of elements in this array
    */
   constant_vector2t(const type2tc &type, const std::vector<expr2tc> &members)
-    : constant_vector_expr_methods(type, constant_vector_id, members)
+    : expr2t(type, constant_vector_id), datatype_members(members)
   {
   }
   constant_vector2t(const constant_vector2t &ref) = default;
 
+  static constexpr auto fields =
+    std::make_tuple(&expr2t::type, &constant_vector2t::datatype_members);
   static std::string field_names[esbmct::num_type_fields];
 };
 
 /** Constant array of one particular value.
  *  Expression with array type, possibly dynamic or infinitely sized, with
  *  all elements initialized to a single value.
- *  @extends constant_array_of_data
  */
-class constant_array_of2t : public constant_array_of_expr_methods
+class constant_array_of2t : public expr2t
 {
 public:
+  expr2tc initializer;
+
   /** Primary constructor.
    *  @param type Type of this expression, must be an array.
    *  @param init Initializer for each element in this array
    */
   constant_array_of2t(const type2tc &type, const expr2tc &init)
-    : constant_array_of_expr_methods(type, constant_array_of_id, init)
+    : expr2t(type, constant_array_of_id), initializer(init)
   {
   }
   constant_array_of2t(const constant_array_of2t &ref) = default;
 
+  static constexpr auto fields =
+    std::make_tuple(&expr2t::type, &constant_array_of2t::initializer);
   static std::string field_names[esbmct::num_type_fields];
 };
 
 /** Symbol type.
  *  Contains the name of some variable. Various levels of renaming.
- *  @extends symbol_data
  */
-class symbol2t : public symbol_expr_methods
+class symbol2t : public expr2t
 {
 public:
   using renaming_level = symbol_renaming_level;
+
+  irep_idt thename;
+  symbol_renaming_level rlevel;
+  unsigned int level1_num;
+  unsigned int level2_num;
+  unsigned int thread_num;
+  unsigned int node_num;
 
   /** Primary constructor
    *  @param type Type that this symbol has
@@ -878,7 +579,13 @@ public:
     unsigned int l2 = 0,
     unsigned int trd = 0,
     unsigned int node = 0)
-    : symbol_expr_methods(type, symbol_id, init, lev, l1, l2, trd, node)
+    : expr2t(type, symbol_id),
+      thename(init),
+      rlevel(lev),
+      level1_num(l1),
+      level2_num(l2),
+      thread_num(trd),
+      node_num(node)
   {
     /* At some point in the past, symbols named "NULL" and "0" were equivalent.
      * The symbol called "0" should no longer be created for uniformity reasons.
@@ -891,17 +598,27 @@ public:
 
   std::string get_symbol_name() const;
 
+  static constexpr auto fields = std::make_tuple(
+    &expr2t::type,
+    &symbol2t::thename,
+    &symbol2t::rlevel,
+    &symbol2t::level1_num,
+    &symbol2t::level2_num,
+    &symbol2t::thread_num,
+    &symbol2t::node_num);
   static std::string field_names[esbmct::num_type_fields];
 };
 
 /** Nearbyint expression.
  *  Represents a rounding operation on a floatbv, we extend typecast as
  *  it already have a field for the rounding mode
- *  @extends typecast_data
  */
-class nearbyint2t : public nearbyint_expr_methods
+class nearbyint2t : public expr2t
 {
 public:
+  expr2tc from;
+  expr2tc rounding_mode;
+
   /** Primary constructor.
    *  @param type Type to round to
    *  @param from Expression to round from.
@@ -909,9 +626,9 @@ public:
    */
   nearbyint2t(
     const type2tc &type,
-    const expr2tc &from,
-    const expr2tc &rounding_mode)
-    : nearbyint_expr_methods(type, nearbyint_id, from, rounding_mode)
+    const expr2tc &from_,
+    const expr2tc &rounding_mode_)
+    : expr2t(type, nearbyint_id), from(from_), rounding_mode(rounding_mode_)
   {
   }
 
@@ -920,12 +637,10 @@ public:
    *  @param type Type to round to
    *  @param from Expression to round from.
    */
-  nearbyint2t(const type2tc &type, const expr2tc &from)
-    : nearbyint_expr_methods(
-        type,
-        nearbyint_id,
-        from,
-        symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode"))
+  nearbyint2t(const type2tc &type, const expr2tc &from_)
+    : expr2t(type, nearbyint_id),
+      from(from_),
+      rounding_mode(symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode"))
   {
   }
 
@@ -933,17 +648,23 @@ public:
 
   expr2tc do_simplify() const override;
 
+  static constexpr auto fields = std::make_tuple(
+    &expr2t::type,
+    &nearbyint2t::from,
+    &nearbyint2t::rounding_mode);
   static std::string field_names[esbmct::num_type_fields];
 };
 
 /** Typecast expression.
  *  Represents cast from contained expression 'from' to the type of this
  *  typecast.
- *  @extends typecast_data
  */
-class typecast2t : public typecast_expr_methods
+class typecast2t : public expr2t
 {
 public:
+  expr2tc from;
+  expr2tc rounding_mode;
+
   /** Primary constructor.
    *  @param type Type to typecast to
    *  @param from Expression to cast from.
@@ -951,9 +672,9 @@ public:
    */
   typecast2t(
     const type2tc &type,
-    const expr2tc &from,
-    const expr2tc &rounding_mode)
-    : typecast_expr_methods(type, typecast_id, from, rounding_mode)
+    const expr2tc &from_,
+    const expr2tc &rounding_mode_)
+    : expr2t(type, typecast_id), from(from_), rounding_mode(rounding_mode_)
   {
   }
 
@@ -962,18 +683,20 @@ public:
    *  @param type Type to typecast to
    *  @param from Expression to cast from.
    */
-  typecast2t(const type2tc &type, const expr2tc &from)
-    : typecast_expr_methods(
-        type,
-        typecast_id,
-        from,
-        symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode"))
+  typecast2t(const type2tc &type, const expr2tc &from_)
+    : expr2t(type, typecast_id),
+      from(from_),
+      rounding_mode(symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode"))
   {
   }
 
   typecast2t(const typecast2t &ref) = default;
   expr2tc do_simplify() const override;
 
+  static constexpr auto fields = std::make_tuple(
+    &expr2t::type,
+    &typecast2t::from,
+    &typecast2t::rounding_mode);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -988,21 +711,22 @@ public:
  *
  *  Bitcasts are only allowed between types of equal width.
  *
- *  @extends bitcast_data
  */
-class bitcast2t : public bitcast_expr_methods
+class bitcast2t : public expr2t
 {
 public:
+  expr2tc from;
+
   /** Primary constructor.
    *  @param type Type to bitcast to
    *  @param from Expression to cast from.
    */
-  bitcast2t(const type2tc &type, const expr2tc &from)
-    : bitcast_expr_methods(type, bitcast_id, from)
+  bitcast2t(const type2tc &type, const expr2tc &from_)
+    : expr2t(type, bitcast_id), from(from_)
   {
     try
     {
-      assert(type->get_width() == from->type->get_width());
+      assert(type->get_width() == from_->type->get_width());
     }
     catch (const type2t::symbolic_type_excp &)
     {
@@ -1014,16 +738,21 @@ public:
 
   expr2tc do_simplify() const override;
 
+  static constexpr auto fields =
+    std::make_tuple(&expr2t::type, &bitcast2t::from);
   static std::string field_names[esbmct::num_type_fields];
 };
 
 /** If-then-else expression.
  *  Represents a ternary operation, (cond) ? truevalue : falsevalue.
- *  @extends if_data
  */
-class if2t : public if_expr_methods
+class if2t : public expr2t
 {
 public:
+  expr2tc cond;
+  expr2tc true_value;
+  expr2tc false_value;
+
   /** Primary constructor
    *  @param type Type this expression evaluates to.
    *  @param cond Condition to evaulate which side of ternary operator is used.
@@ -1032,10 +761,13 @@ public:
    */
   if2t(
     const type2tc &type,
-    const expr2tc &cond,
+    const expr2tc &cond_,
     const expr2tc &trueval,
     const expr2tc &falseval)
-    : if_expr_methods(type, if_id, cond, trueval, falseval)
+    : expr2t(type, if_id),
+      cond(cond_),
+      true_value(trueval),
+      false_value(falseval)
   {
     assert(type->type_id == trueval->type->type_id);
     assert(type->type_id == falseval->type->type_id);
@@ -1044,26 +776,31 @@ public:
 
   expr2tc do_simplify() const override;
 
+  static constexpr auto fields = std::make_tuple(
+    &expr2t::type,
+    &if2t::cond,
+    &if2t::true_value,
+    &if2t::false_value);
   static std::string field_names[esbmct::num_type_fields];
 };
 
 /** Defines one of the six binary boolean relation nodes. Each takes two
  *  operands of any matching scalar/pointer type, has boolean result type,
- *  routes through its generated _expr_methods base for cmp/lt/crc/hash,
  *  and provides an out-of-line do_simplify override in
- *  src/util/expr_simplifier.cpp. The concrete class names and the
- *  generated is_<name>2t / to_<name>2t helpers are preserved verbatim.
- *  @extends relation_data */
+ *  src/util/expr_simplifier.cpp. */
 #define ESBMC_DEFINE_RELATION2T(name)                                          \
-  class name##2t : public name##_expr_methods                                  \
+  class name##2t : public expr2t                                               \
   {                                                                            \
   public:                                                                      \
+    expr2tc side_1, side_2;                                                    \
     name##2t(const expr2tc &v1, const expr2tc &v2)                             \
-      : name##_expr_methods(get_bool_type(), name##_id, v1, v2)                \
+      : expr2t(get_bool_type(), name##_id), side_1(v1), side_2(v2)             \
     {                                                                          \
     }                                                                          \
     name##2t(const name##2t & ref) = default;                                  \
     expr2tc do_simplify() const override;                                      \
+    static constexpr auto fields =                                             \
+      std::make_tuple(&expr2t::type, &name##2t ::side_1, &name##2t ::side_2);  \
     static std::string field_names[esbmct::num_type_fields];                   \
   }
 
@@ -1075,24 +812,26 @@ ESBMC_DEFINE_RELATION2T(lessthanequal);
 ESBMC_DEFINE_RELATION2T(greaterthanequal);
 #undef ESBMC_DEFINE_RELATION2T
 
-/* The macros below fold sets of `*2t` classes that share both a base
- * data class AND a constructor shape. Grouping is strict on those two
- * properties so any constructor-time invariant we add later applies
- * uniformly to every class in a macro's family. */
+/* The macros below fold sets of `*2t` classes that share a constructor
+ * shape and behaviour. Each generated class still inherits directly
+ * from expr2t and owns its own fields; the macro just spares the
+ * repetition of writing six near-identical class bodies. */
 
-/** Arithmetic two-operand node (`add`/`sub`/`mul`/`div`/`modulus`).
- *  @extends arith_2ops */
+/** Arithmetic two-operand node (`add`/`sub`/`mul`/`div`/`modulus`). */
 #define ESBMC_DEFINE_ARITH_2OP(name)                                           \
-  class name##2t : public name##_expr_methods                                  \
+  class name##2t : public expr2t                                               \
   {                                                                            \
   public:                                                                      \
+    expr2tc side_1, side_2;                                                    \
     name##2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2)        \
-      : name##_expr_methods(type, name##_id, v1, v2)                           \
+      : expr2t(type, name##_id), side_1(v1), side_2(v2)                        \
     {                                                                          \
       assert_arith_2ops_consistency(type, name##_id, v1, v2);                  \
     }                                                                          \
     name##2t(const name##2t & ref) = default;                                  \
     expr2tc do_simplify() const override;                                      \
+    static constexpr auto fields =                                             \
+      std::make_tuple(&expr2t::type, &name##2t ::side_1, &name##2t ::side_2);  \
     static std::string field_names[esbmct::num_type_fields];                   \
   }
 
@@ -1104,17 +843,20 @@ ESBMC_DEFINE_ARITH_2OP(modulus);
 #undef ESBMC_DEFINE_ARITH_2OP
 
 /** Bitwise / shift two-operand node (`bitand`/`bitor`/`bitxor`/
- *  `shl`/`ashr`/`lshr`). @extends bit_2ops */
+ *  `shl`/`ashr`/`lshr`). */
 #define ESBMC_DEFINE_BIT_2OP(name)                                             \
-  class name##2t : public name##_expr_methods                                  \
+  class name##2t : public expr2t                                               \
   {                                                                            \
   public:                                                                      \
+    expr2tc side_1, side_2;                                                    \
     name##2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2)        \
-      : name##_expr_methods(type, name##_id, v1, v2)                           \
+      : expr2t(type, name##_id), side_1(v1), side_2(v2)                        \
     {                                                                          \
     }                                                                          \
     name##2t(const name##2t & ref) = default;                                  \
     expr2tc do_simplify() const override;                                      \
+    static constexpr auto fields =                                             \
+      std::make_tuple(&expr2t::type, &name##2t ::side_1, &name##2t ::side_2);  \
     static std::string field_names[esbmct::num_type_fields];                   \
   }
 
@@ -1126,18 +868,20 @@ ESBMC_DEFINE_BIT_2OP(shl);
 ESBMC_DEFINE_BIT_2OP(ashr);
 #undef ESBMC_DEFINE_BIT_2OP
 
-/** Arithmetic one-operand node (`neg`/`abs`/`bswap`/`bitnot`).
- *  @extends arith_1op */
+/** Arithmetic one-operand node (`neg`/`abs`/`bswap`/`bitnot`). */
 #define ESBMC_DEFINE_ARITH_1OP(name)                                           \
-  class name##2t : public name##_expr_methods                                  \
+  class name##2t : public expr2t                                               \
   {                                                                            \
   public:                                                                      \
+    expr2tc value;                                                             \
     name##2t(const type2tc &type, const expr2tc &v)                            \
-      : name##_expr_methods(type, name##_id, v)                                \
+      : expr2t(type, name##_id), value(v)                                      \
     {                                                                          \
     }                                                                          \
     name##2t(const name##2t & ref) = default;                                  \
     expr2tc do_simplify() const override;                                      \
+    static constexpr auto fields =                                             \
+      std::make_tuple(&expr2t::type, &name##2t ::value);                       \
     static std::string field_names[esbmct::num_type_fields];                   \
   }
 
@@ -1147,18 +891,20 @@ ESBMC_DEFINE_ARITH_1OP(bitnot);
 ESBMC_DEFINE_ARITH_1OP(bswap);
 #undef ESBMC_DEFINE_ARITH_1OP
 
-/** Pointer one-operand node (`pointer_object`/`pointer_capability`).
- *  @extends pointer_ops */
+/** Pointer one-operand node (`pointer_object`/`pointer_capability`). */
 #define ESBMC_DEFINE_POINTER_1OP(name)                                         \
-  class name##2t : public name##_expr_methods                                  \
+  class name##2t : public expr2t                                               \
   {                                                                            \
   public:                                                                      \
+    expr2tc ptr_obj;                                                           \
     name##2t(const type2tc &type, const expr2tc &v)                            \
-      : name##_expr_methods(type, name##_id, v)                                \
+      : expr2t(type, name##_id), ptr_obj(v)                                    \
     {                                                                          \
     }                                                                          \
     name##2t(const name##2t & ref) = default;                                  \
     expr2tc do_simplify() const override;                                      \
+    static constexpr auto fields =                                             \
+      std::make_tuple(&expr2t::type, &name##2t ::ptr_obj);                     \
     static std::string field_names[esbmct::num_type_fields];                   \
   }
 
@@ -1168,17 +914,20 @@ ESBMC_DEFINE_POINTER_1OP(pointer_capability);
 
 /** Logical two-operand boolean-result node. Used for `and`/`or`/`xor`/
  *  `implies` and the Python runtime predicates `isinstance`/`hasattr`/
- *  `isnone`. Implicit `get_bool_type()` result. @extends logic_2ops */
+ *  `isnone`. Implicit `get_bool_type()` result. */
 #define ESBMC_DEFINE_LOGIC_2OP(name)                                           \
-  class name##2t : public name##_expr_methods                                  \
+  class name##2t : public expr2t                                               \
   {                                                                            \
   public:                                                                      \
+    expr2tc side_1, side_2;                                                    \
     name##2t(const expr2tc &s1, const expr2tc &s2)                             \
-      : name##_expr_methods(get_bool_type(), name##_id, s1, s2)                \
+      : expr2t(get_bool_type(), name##_id), side_1(s1), side_2(s2)             \
     {                                                                          \
     }                                                                          \
     name##2t(const name##2t & ref) = default;                                  \
     expr2tc do_simplify() const override;                                      \
+    static constexpr auto fields =                                             \
+      std::make_tuple(&expr2t::type, &name##2t ::side_1, &name##2t ::side_2);  \
     static std::string field_names[esbmct::num_type_fields];                   \
   }
 
@@ -1192,18 +941,19 @@ ESBMC_DEFINE_LOGIC_2OP(isnone);
 #undef ESBMC_DEFINE_LOGIC_2OP
 
 /** FP classification single-operand predicate (`isnan`/`isinf`/
- *  `isnormal`/`isfinite`). Implicit `get_bool_type()` result.
- *  @extends bool_1op */
+ *  `isnormal`/`isfinite`). Implicit `get_bool_type()` result. */
 #define ESBMC_DEFINE_FP_PREDICATE_1OP(name)                                    \
-  class name##2t : public name##_expr_methods                                  \
+  class name##2t : public expr2t                                               \
   {                                                                            \
   public:                                                                      \
+    expr2tc value;                                                             \
     name##2t(const expr2tc &operand)                                           \
-      : name##_expr_methods(get_bool_type(), name##_id, operand)               \
+      : expr2t(get_bool_type(), name##_id), value(operand)                     \
     {                                                                          \
     }                                                                          \
     name##2t(const name##2t & ref) = default;                                  \
     expr2tc do_simplify() const override;                                      \
+    static constexpr auto fields = std::make_tuple(&name##2t ::value);         \
     static std::string field_names[esbmct::num_type_fields];                   \
   }
 
@@ -1214,18 +964,19 @@ ESBMC_DEFINE_FP_PREDICATE_1OP(isfinite);
 #undef ESBMC_DEFINE_FP_PREDICATE_1OP
 
 /** Pointer-object boolean predicate (`valid_object`/`races_check`/
- *  `deallocated_obj`). Implicit `get_bool_type()` result.
- *  @extends object_ops */
+ *  `deallocated_obj`). Implicit `get_bool_type()` result. */
 #define ESBMC_DEFINE_OBJECT_PREDICATE_1OP(name)                                \
-  class name##2t : public name##_expr_methods                                  \
+  class name##2t : public expr2t                                               \
   {                                                                            \
   public:                                                                      \
+    expr2tc value;                                                             \
     name##2t(const expr2tc &operand)                                           \
-      : name##_expr_methods(get_bool_type(), name##_id, operand)               \
+      : expr2t(get_bool_type(), name##_id), value(operand)                     \
     {                                                                          \
     }                                                                          \
     name##2t(const name##2t & ref) = default;                                  \
     expr2tc do_simplify() const override;                                      \
+    static constexpr auto fields = std::make_tuple(&name##2t ::value);         \
     static std::string field_names[esbmct::num_type_fields];                   \
   }
 
@@ -1235,17 +986,19 @@ ESBMC_DEFINE_OBJECT_PREDICATE_1OP(deallocated_obj);
 #undef ESBMC_DEFINE_OBJECT_PREDICATE_1OP
 
 /** Pointer-object size-returning op (`capability_base`/`capability_top`/
- *  `dynamic_size`). Implicit `size_type2()` result. @extends object_ops */
+ *  `dynamic_size`). Implicit `size_type2()` result. */
 #define ESBMC_DEFINE_OBJECT_SIZE_1OP(name)                                     \
-  class name##2t : public name##_expr_methods                                  \
+  class name##2t : public expr2t                                               \
   {                                                                            \
   public:                                                                      \
+    expr2tc value;                                                             \
     name##2t(const expr2tc &operand)                                           \
-      : name##_expr_methods(size_type2(), name##_id, operand)                  \
+      : expr2t(size_type2(), name##_id), value(operand)                        \
     {                                                                          \
     }                                                                          \
     name##2t(const name##2t & ref) = default;                                  \
     expr2tc do_simplify() const override;                                      \
+    static constexpr auto fields = std::make_tuple(&name##2t ::value);         \
     static std::string field_names[esbmct::num_type_fields];                   \
   }
 
@@ -1255,17 +1008,20 @@ ESBMC_DEFINE_OBJECT_SIZE_1OP(capability_top);
 #undef ESBMC_DEFINE_OBJECT_SIZE_1OP
 
 /** Single-operand overflow-family op returning int32 (`signbit`/
- *  `popcount`). @extends overflow_ops */
+ *  `popcount`). */
 #define ESBMC_DEFINE_OVERFLOW_INT32_1OP(name)                                  \
-  class name##2t : public name##_expr_methods                                  \
+  class name##2t : public expr2t                                               \
   {                                                                            \
   public:                                                                      \
-    name##2t(const expr2tc &operand)                                           \
-      : name##_expr_methods(get_int32_type(), name##_id, operand)              \
+    expr2tc operand;                                                           \
+    name##2t(const expr2tc &op)                                                \
+      : expr2t(get_int32_type(), name##_id), operand(op)                       \
     {                                                                          \
     }                                                                          \
     name##2t(const name##2t & ref) = default;                                  \
     expr2tc do_simplify() const override;                                      \
+    static constexpr auto fields =                                             \
+      std::make_tuple(&expr2t::type, &name##2t ::operand);                     \
     static std::string field_names[esbmct::num_type_fields];                   \
   }
 
@@ -1273,18 +1029,18 @@ ESBMC_DEFINE_OVERFLOW_INT32_1OP(signbit);
 ESBMC_DEFINE_OVERFLOW_INT32_1OP(popcount);
 #undef ESBMC_DEFINE_OVERFLOW_INT32_1OP
 
-/** Marker node holding only a `type` (no operands), derived from
- *  expr2t directly. Used for `unknown`/`invalid`/`null_object`.
- *  @extends expr2t */
+/** Marker node holding only a `type` (no operands). Used for
+ *  `unknown`/`invalid`/`null_object`. */
 #define ESBMC_DEFINE_TYPE_ONLY(name)                                           \
-  class name##2t : public name##_expr_methods                                  \
+  class name##2t : public expr2t                                               \
   {                                                                            \
   public:                                                                      \
-    name##2t(const type2tc &type) : name##_expr_methods(type, name##_id)       \
+    name##2t(const type2tc &type) : expr2t(type, name##_id)                    \
     {                                                                          \
     }                                                                          \
     name##2t(const name##2t & ref) = default;                                  \
     expr2tc do_simplify() const override;                                      \
+    static constexpr auto fields = std::make_tuple(&expr2t::type);             \
     static std::string field_names[esbmct::num_type_fields];                   \
   }
 
@@ -1295,17 +1051,19 @@ ESBMC_DEFINE_TYPE_ONLY(null_object);
 
 /** `code_*` statement with empty type and a single `expr2tc` operand
  *  (`code_expression`/`code_return`/`code_free`/`code_cpp_del_array`/
- *  `code_cpp_delete`). @extends code_expression_data */
+ *  `code_cpp_delete`). */
 #define ESBMC_DEFINE_CODE_EXPRESSION_1OP(name)                                 \
-  class name##2t : public name##_expr_methods                                  \
+  class name##2t : public expr2t                                               \
   {                                                                            \
   public:                                                                      \
-    name##2t(const expr2tc &operand)                                           \
-      : name##_expr_methods(get_empty_type(), name##_id, operand)              \
+    expr2tc operand;                                                           \
+    name##2t(const expr2tc &op)                                                \
+      : expr2t(get_empty_type(), name##_id), operand(op)                       \
     {                                                                          \
     }                                                                          \
     name##2t(const name##2t & ref) = default;                                  \
     expr2tc do_simplify() const override;                                      \
+    static constexpr auto fields = std::make_tuple(&name##2t ::operand);       \
     static std::string field_names[esbmct::num_type_fields];                   \
   }
 
@@ -1317,17 +1075,20 @@ ESBMC_DEFINE_CODE_EXPRESSION_1OP(code_cpp_delete);
 #undef ESBMC_DEFINE_CODE_EXPRESSION_1OP
 
 /** `code_*` declaration carrying `(type, irep_idt name)`. Used for
- *  `code_decl`/`code_dead`. @extends code_decl_data */
+ *  `code_decl`/`code_dead`. */
 #define ESBMC_DEFINE_CODE_DECL(name)                                           \
-  class name##2t : public name##_expr_methods                                  \
+  class name##2t : public expr2t                                               \
   {                                                                            \
   public:                                                                      \
+    irep_idt value;                                                            \
     name##2t(const type2tc &type, const irep_idt &n)                           \
-      : name##_expr_methods(type, name##_id, n)                                \
+      : expr2t(type, name##_id), value(n)                                      \
     {                                                                          \
     }                                                                          \
     name##2t(const name##2t & ref) = default;                                  \
     expr2tc do_simplify() const override;                                      \
+    static constexpr auto fields =                                             \
+      std::make_tuple(&expr2t::type, &name##2t ::value);                       \
     static std::string field_names[esbmct::num_type_fields];                   \
   }
 
@@ -1337,17 +1098,20 @@ ESBMC_DEFINE_CODE_DECL(code_dead);
 
 /** `code_*` C++ throw-decl carrying a single `std::vector<irep_idt>`
  *  of exception names. Used for `code_cpp_throw_decl`/
- *  `code_cpp_throw_decl_end`. @extends code_cpp_throw_decl_data */
+ *  `code_cpp_throw_decl_end`. */
 #define ESBMC_DEFINE_CODE_CPP_THROW_DECL(name)                                 \
-  class name##2t : public name##_expr_methods                                  \
+  class name##2t : public expr2t                                               \
   {                                                                            \
   public:                                                                      \
+    std::vector<irep_idt> exception_list;                                      \
     name##2t(const std::vector<irep_idt> &names)                               \
-      : name##_expr_methods(get_empty_type(), name##_id, names)                \
+      : expr2t(get_empty_type(), name##_id), exception_list(names)             \
     {                                                                          \
     }                                                                          \
     name##2t(const name##2t & ref) = default;                                  \
     expr2tc do_simplify() const override;                                      \
+    static constexpr auto fields =                                             \
+      std::make_tuple(&expr2t::type, &name##2t ::exception_list);              \
     static std::string field_names[esbmct::num_type_fields];                   \
   }
 
@@ -1367,59 +1131,70 @@ ESBMC_DEFINE_CODE_CPP_THROW_DECL(code_cpp_throw_decl_end);
  * is performed at the SMT layer rather than the AST level so the
  * semantic node survives through symex / value_set / interval analysis,
  * and operands are captured once.  Per [expr.spaceship] in N4861.
- * @extends relation_data */
-class cmp_three_way2t : public cmp_three_way_expr_methods
+ **/
+class cmp_three_way2t : public expr2t
 {
 public:
+  expr2tc side_1;
+  expr2tc side_2;
+
   cmp_three_way2t(const type2tc &t, const expr2tc &v1, const expr2tc &v2)
-    : cmp_three_way_expr_methods(t, cmp_three_way_id, v1, v2)
+    : expr2t(t, cmp_three_way_id), side_1(v1), side_2(v2)
   {
   }
   cmp_three_way2t(const cmp_three_way2t &ref) = default;
 
   expr2tc do_simplify() const override;
 
+  static constexpr auto fields = std::make_tuple(
+    &expr2t::type,
+    &cmp_three_way2t::side_1,
+    &cmp_three_way2t::side_2);
   static std::string field_names[esbmct::num_type_fields];
 };
 
-/** Not operation. Inverts boolean operand. Always has boolean type.
- *  @extends bool_1op */
-class not2t : public not_expr_methods
+/** Not operation. Inverts boolean operand. Always has boolean type. */
+class not2t : public expr2t
 {
 public:
+  expr2tc value;
+
   /** Primary constructor. @param val Boolean typed operand to invert. */
-  not2t(const expr2tc &val) : not_expr_methods(get_bool_type(), not_id, val)
+  not2t(const expr2tc &val) : expr2t(get_bool_type(), not_id), value(val)
   {
   }
   not2t(const not2t &ref) = default;
 
   expr2tc do_simplify() const override;
 
+  static constexpr auto fields = std::make_tuple(&not2t::value);
   static std::string field_names[esbmct::num_type_fields];
 };
 
 /** Defines an IEEE two-operand floating-point arithmetic node
  *  (add/sub/mul/div). Each takes two operands and a rounding mode,
- *  has matching floatbv operand/result types, routes through its
- *  generated _expr_methods base for cmp/lt/crc/hash, and provides an
- *  out-of-line do_simplify override in src/util/expr_simplifier.cpp.
- *  The concrete class names and the generated is_<name>2t /
- *  to_<name>2t helpers are preserved verbatim.
- *  @extends ieee_arith_2ops */
+ *  has matching floatbv operand/result types, and provides an
+ *  out-of-line do_simplify override in src/util/expr_simplifier.cpp. */
 #define ESBMC_DEFINE_IEEE_ARITH_2OP(name)                                      \
-  class name##2t : public name##_expr_methods                                  \
+  class name##2t : public expr2t                                               \
   {                                                                            \
   public:                                                                      \
+    expr2tc rounding_mode, side_1, side_2;                                     \
     name##2t(                                                                  \
       const type2tc &type,                                                     \
       const expr2tc &v1,                                                       \
       const expr2tc &v2,                                                       \
       const expr2tc &rm)                                                       \
-      : name##_expr_methods(type, name##_id, rm, v1, v2)                       \
+      : expr2t(type, name##_id), rounding_mode(rm), side_1(v1), side_2(v2)     \
     {                                                                          \
     }                                                                          \
     name##2t(const name##2t & ref) = default;                                  \
     expr2tc do_simplify() const override;                                      \
+    static constexpr auto fields = std::make_tuple(                            \
+      &expr2t::type,                                                           \
+      &name##2t ::rounding_mode,                                               \
+      &name##2t ::side_1,                                                      \
+      &name##2t ::side_2);                                                     \
     static std::string field_names[esbmct::num_type_fields];                   \
   }
 
@@ -1431,11 +1206,15 @@ ESBMC_DEFINE_IEEE_ARITH_2OP(ieee_div);
 
 /** IEEE fused multiply-add operation. Computes (x*y) + z as if to infinite
  *  precision and rounded only once to fit the result type. Must be
- *  floatbvs types. Types of the 3 operands and expr type should match.
- *  @extends ieee_arith_2ops */
-class ieee_fma2t : public ieee_fma_expr_methods
+ *  floatbvs types. Types of the 3 operands and expr type should match. */
+class ieee_fma2t : public expr2t
 {
 public:
+  expr2tc rounding_mode;
+  expr2tc value_1;
+  expr2tc value_2;
+  expr2tc value_3;
+
   /** Primary constructor.
    *  @param type Type of this expr.
    *  @param v1 First operand.
@@ -1448,66 +1227,91 @@ public:
     const expr2tc &v2,
     const expr2tc &v3,
     const expr2tc &rm)
-    : ieee_fma_expr_methods(type, ieee_fma_id, rm, v1, v2, v3)
+    : expr2t(type, ieee_fma_id),
+      rounding_mode(rm),
+      value_1(v1),
+      value_2(v2),
+      value_3(v3)
   {
   }
   ieee_fma2t(const ieee_fma2t &ref) = default;
 
   expr2tc do_simplify() const override;
 
+  static constexpr auto fields = std::make_tuple(
+    &expr2t::type,
+    &ieee_fma2t::value_1,
+    &ieee_fma2t::value_2,
+    &ieee_fma2t::value_3,
+    &ieee_fma2t::rounding_mode);
   static std::string field_names[esbmct::num_type_fields];
 };
 
 /** IEEE sqrt operation. Square root of the first operand. Must be a
- *  floatbv.
- *  @extends ieee_arith_2ops */
-class ieee_sqrt2t : public ieee_sqrt_expr_methods
+ *  floatbv. */
+class ieee_sqrt2t : public expr2t
 {
 public:
+  expr2tc rounding_mode;
+  expr2tc value;
+
   /** Primary constructor.
    *  @param type Type of this expr.
    *  @param v1 Operand to take the square root of.
    *  @param rm Rounding mode. */
   ieee_sqrt2t(const type2tc &type, const expr2tc &v1, const expr2tc &rm)
-    : ieee_sqrt_expr_methods(type, ieee_sqrt_id, rm, v1)
+    : expr2t(type, ieee_sqrt_id), rounding_mode(rm), value(v1)
   {
   }
   ieee_sqrt2t(const ieee_sqrt2t &ref) = default;
 
   expr2tc do_simplify() const override;
 
+  static constexpr auto fields = std::make_tuple(
+    &expr2t::type,
+    &ieee_sqrt2t::value,
+    &ieee_sqrt2t::rounding_mode);
   static std::string field_names[esbmct::num_type_fields];
 };
 
 /** Same-object operation. Checks whether two operands with pointer type have the
  *  same pointer object or not. Always has boolean result.
- *  @extends same_object_data */
-class same_object2t : public same_object_expr_methods
+ * */
+class same_object2t : public expr2t
 {
 public:
+  expr2tc side_1;
+  expr2tc side_2;
+
   /** Primary constructor. @param v1 First object. @param v2 Second object. */
   same_object2t(const expr2tc &v1, const expr2tc &v2)
-    : same_object_expr_methods(get_bool_type(), same_object_id, v1, v2)
+    : expr2t(get_bool_type(), same_object_id), side_1(v1), side_2(v2)
   {
   }
   same_object2t(const same_object2t &ref) = default;
 
   expr2tc do_simplify() const override;
 
+  static constexpr auto fields = std::make_tuple(
+    &expr2t::type,
+    &same_object2t::side_1,
+    &same_object2t::side_2);
   static std::string field_names[esbmct::num_type_fields];
 };
 
 /** Extract pointer offset. From an expression of pointer type, produce the
  *  number of bytes difference between where this pointer points to and the start
- *  of the object it points at. @extends pointer_ops */
-class pointer_offset2t : public pointer_offset_expr_methods
+ *  of the object it points at. */
+class pointer_offset2t : public expr2t
 {
 public:
+  expr2tc ptr_obj;
+
   /** Primary constructor.
    *  @param type Model basic integer type.
    *  @param ptrobj Pointer object to get offset from. */
   pointer_offset2t(const type2tc &type, const expr2tc &ptrobj)
-    : pointer_offset_expr_methods(type, pointer_offset_id, ptrobj)
+    : expr2t(type, pointer_offset_id), ptr_obj(ptrobj)
   {
     assert(type->type_id == type2t::signedbv_id);
     assert(type->get_width() == config.ansi_c.address_width);
@@ -1516,23 +1320,26 @@ public:
 
   expr2tc do_simplify() const override;
 
+  static constexpr auto fields =
+    std::make_tuple(&expr2t::type, &pointer_offset2t::ptr_obj);
   static std::string field_names[esbmct::num_type_fields];
 };
 
 /** Address of operation. Takes some object as an argument - ideally a symbol
  *  renamed to level 1, unfortunately some string constants reach here. Produces
- *  pointer typed expression.
- *  @extends pointer_ops */
-class address_of2t : public address_of_expr_methods
+ *  pointer typed expression. */
+class address_of2t : public expr2t
 {
 public:
+  expr2tc ptr_obj;
+
   /** Primary constructor.
    *  @param subtype Subtype of pointer to generate. Crucially, the type of the
    *         expr is a pointer to this subtype. This is slightly unintuitive,
    *         might be changed in the future.
    *  @param ptrobj Item to take pointer to. */
   address_of2t(const type2tc &subtype, const expr2tc &ptrobj)
-    : address_of_expr_methods(pointer_type2tc(subtype), address_of_id, ptrobj)
+    : expr2t(pointer_type2tc(subtype), address_of_id), ptr_obj(ptrobj)
   {
     assert(ptrobj->expr_id != expr2t::constant_int_id);
     assert(ptrobj->expr_id != expr2t::address_of_id);
@@ -1541,16 +1348,22 @@ public:
 
   expr2tc do_simplify() const override;
 
+  static constexpr auto fields =
+    std::make_tuple(&expr2t::type, &address_of2t::ptr_obj);
   static std::string field_names[esbmct::num_type_fields];
 };
 
 /** Extract byte from data. From a particular data structure, extracts a single
  *  byte from its byte representation, at a particular offset into the data
  *  structure. Must only evaluate to byte types.
- *  @extends byte_extract_data */
-class byte_extract2t : public byte_extract_expr_methods
+ * */
+class byte_extract2t : public expr2t
 {
 public:
+  expr2tc source_value;
+  expr2tc source_offset;
+  bool big_endian;
+
   /** Primary constructor.
    *  @param type Type of this expression. May only ever be an 8 bit integer
    *  @param is_big_endian Whether or not to use big endian byte representation
@@ -1562,28 +1375,36 @@ public:
     const expr2tc &source,
     const expr2tc &offset,
     bool is_big_endian)
-    : byte_extract_expr_methods(
-        type,
-        byte_extract_id,
-        source,
-        offset,
-        is_big_endian)
+    : expr2t(type, byte_extract_id),
+      source_value(source),
+      source_offset(offset),
+      big_endian(is_big_endian)
   {
   }
   byte_extract2t(const byte_extract2t &ref) = default;
 
   expr2tc do_simplify() const override;
 
+  static constexpr auto fields = std::make_tuple(
+    &expr2t::type,
+    &byte_extract2t::source_value,
+    &byte_extract2t::source_offset,
+    &byte_extract2t::big_endian);
   static std::string field_names[esbmct::num_type_fields];
 };
 
 /** Update byte. Takes a data object and updates the value of a particular
  *  byte in its byte representation, at a particular offset into the data object.
  *  Output of expression is a new copy of the source object, with the updated
- *  value. @extends byte_update_data */
-class byte_update2t : public byte_update_expr_methods
+ *  value. */
+class byte_update2t : public expr2t
 {
 public:
+  expr2tc source_value;
+  expr2tc source_offset;
+  expr2tc update_value;
+  bool big_endian;
+
   /** Primary constructor
    *  @param type Type of resulting, updated, data object.
    *  @param is_big_endian Whether to use big endian byte representation.
@@ -1595,31 +1416,39 @@ public:
     const expr2tc &offset,
     const expr2tc &updateval,
     bool is_big_endian)
-    : byte_update_expr_methods(
-        type,
-        byte_update_id,
-        source,
-        offset,
-        updateval,
-        is_big_endian)
+    : expr2t(type, byte_update_id),
+      source_value(source),
+      source_offset(offset),
+      update_value(updateval),
+      big_endian(is_big_endian)
   {
   }
   byte_update2t(const byte_update2t &ref) = default;
 
   expr2tc do_simplify() const override;
 
+  static constexpr auto fields = std::make_tuple(
+    &expr2t::type,
+    &byte_update2t::source_value,
+    &byte_update2t::source_offset,
+    &byte_update2t::update_value,
+    &byte_update2t::big_endian);
   static std::string field_names[esbmct::num_type_fields];
 };
 
 /** With operation. Updates either an array or a struct/union with a new element
  *  or member. Expression value is the array or struct/union with the updated
  *  value. Ideally in the future this will become two operations, one for arrays
- *  and one for structs/unions. @extends with_data */
-class with2t : public with_expr_methods
+ *  and one for structs/unions. */
+class with2t : public expr2t
 {
   void assert_consistency() const;
 
 public:
+  expr2tc source_value;
+  expr2tc update_field;
+  expr2tc update_value;
+
   /** Primary constructor.
    *  @param type Type of this expression; Same as source.
    *  @param source Data object to update.
@@ -1630,9 +1459,12 @@ public:
     const expr2tc &source,
     const expr2tc &field,
     const expr2tc &value)
-    : with_expr_methods(type, with_id, source, field, value)
+    : expr2t(type, with_id),
+      source_value(source),
+      update_field(field),
+      update_value(value)
   {
-#ifndef NDEBUG /* only check consistency in non-Release builds */
+#ifndef NDEBUG
     assert_consistency();
 #endif
   }
@@ -1640,98 +1472,115 @@ public:
 
   expr2tc do_simplify() const override;
 
+  static constexpr auto fields = std::make_tuple(
+    &expr2t::type,
+    &with2t::source_value,
+    &with2t::update_field,
+    &with2t::update_value);
   static std::string field_names[esbmct::num_type_fields];
 };
 
 /** Member operation. Extracts a particular member out of a struct or union.
- *  @extends member_data */
-class member2t : public member_expr_methods
+ * */
+class member2t : public expr2t
 {
 public:
+  expr2tc source_value;
+  irep_idt member;
+
   /** Primary constructor.
    *  @param type Type of extracted member.
    *  @param source Data structure to extract from.
    *  @param memb Name of member to extract.  */
   member2t(const type2tc &type, const expr2tc &source, const irep_idt &memb)
-    : member_expr_methods(type, member_id, source, memb)
+    : expr2t(type, member_id), source_value(source), member(memb)
   {
 #ifndef NDEBUG /* only check consistency in non-Release builds */
     assert(
       source->type->type_id == type2t::struct_id ||
       source->type->type_id == type2t::union_id ||
       source->type->type_id == type2t::complex_id);
-    auto *data = dynamic_cast<const struct_union_data *>(source->type.get());
-    assert(data);
     /* member must exist exactly once in the parent struct/union */
-    assert(data->get_component_number(memb).has_value());
+    assert(struct_union_get_component_number(source->type, memb).has_value());
 #endif
   }
   member2t(const member2t &ref) = default;
 
   expr2tc do_simplify() const override;
 
+  static constexpr auto fields =
+    std::make_tuple(&expr2t::type, &member2t::source_value, &member2t::member);
   static std::string field_names[esbmct::num_type_fields];
 };
 
 /** Member reference
- *  @extends member_ref_data */
-class member_ref2t : public member_ref_expr_methods
+ * */
+class member_ref2t : public expr2t
 {
 public:
+  irep_idt member;
+
   /** Primary constructor.
    *  @param type Type of extracted member.
    *  @param memb Name of member to extract.  */
   member_ref2t(const type2tc &type, const irep_idt &memb)
-    : member_ref_expr_methods(type, member_ref_id, memb)
+    : expr2t(type, member_ref_id), member(memb)
   {
   }
   member_ref2t(const member_ref2t &ref) = default;
 
+  static constexpr auto fields =
+    std::make_tuple(&expr2t::type, &member_ref2t::member);
   static std::string field_names[esbmct::num_type_fields];
 };
 
 /** Member pointer
- *  @extends ptr_mem_data */
-class ptr_mem2t : public ptr_mem_expr_methods
+ * */
+class ptr_mem2t : public expr2t
 {
 public:
+  expr2tc source_value;
+  expr2tc member_pointer;
+
   /** Primary constructor.
    *  @param source Data structure to extract from.
    *  @param pointer Pointer to member.  */
   ptr_mem2t(const type2tc &type, const expr2tc &source, const expr2tc &pointer)
-    : ptr_mem_expr_methods(type, ptr_mem_id, source, pointer)
+    : expr2t(type, ptr_mem_id), source_value(source), member_pointer(pointer)
   {
   }
   ptr_mem2t(const ptr_mem2t &ref) = default;
 
+  static constexpr auto fields = std::make_tuple(
+    &expr2t::type,
+    &ptr_mem2t::source_value,
+    &ptr_mem2t::member_pointer);
   static std::string field_names[esbmct::num_type_fields];
 };
 
 /** Array index operation. Extracts an element from an array at a particular
- *  index. @extends index_data */
-class index2t : public index_expr_methods
+ *  index. */
+class index2t : public expr2t
 {
 public:
+  expr2tc source_value;
+  expr2tc index;
+
   /** Primary constructor.
    *  @param type Type of element extracted.
    *  @param source Array to extract data from.
    *  @param index Element in source to extract from. */
-  index2t(const type2tc &type, const expr2tc &source, const expr2tc &index)
-    : index_expr_methods(type, index_id, source, index)
+  index2t(const type2tc &type, const expr2tc &source, const expr2tc &idx)
+    : expr2t(type, index_id), source_value(source), index(idx)
   {
     assert(is_array_type(source) || is_vector_type(source));
-#if 0
-    assert(
-      is_array_type(source)
-        ? type == to_array_type(source->type).subtype
-        : ((is_unsignedbv_type(type) || is_signedbv_type(type)) &&
-           type->get_width() == config.ansi_c.char_width));
-#endif
   }
   index2t(const index2t &ref) = default;
 
   expr2tc do_simplify() const override;
 
+  static constexpr auto fields =
+    std::make_tuple(&expr2t::type, &index2t::source_value, &index2t::index);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -1740,80 +1589,102 @@ public:
  *  operation doesn't fit in the bitwidth of the operands, this expr evaluates
  *  to true. XXXjmorse - in the future we should ensure the type of the
  *  operand is the expected type result of the operation. That way we can tell
- *  whether to do a signed or unsigned over/underflow test.
- *  @extends overflow_ops */
-class overflow2t : public overflow_expr_methods
+ *  whether to do a signed or unsigned over/underflow test. */
+class overflow2t : public expr2t
 {
 public:
+  expr2tc operand;
+
   /** Primary constructor.
    *  @param operand Operation to test overflow on; either an add, subtract, or
    *         multiply. */
-  overflow2t(const expr2tc &operand)
-    : overflow_expr_methods(get_bool_type(), overflow_id, operand)
+  overflow2t(const expr2tc &operand_)
+    : expr2t(get_bool_type(), overflow_id), operand(operand_)
   {
   }
   overflow2t(const overflow2t &ref) = default;
 
   expr2tc do_simplify() const override;
 
+  static constexpr auto fields =
+    std::make_tuple(&expr2t::type, &overflow2t::operand);
   static std::string field_names[esbmct::num_type_fields];
 };
 
 /** Test if a cast overflows. Check to see whether casting the operand to a
  *  particular bitsize will cause an integer overflow. If it does, this expr
- *  evaluates to true. @extends overflow_cast_data */
-class overflow_cast2t : public overflow_cast_expr_methods
+ *  evaluates to true. */
+class overflow_cast2t : public expr2t
 {
 public:
+  expr2tc operand;
+  unsigned int bits;
+
   /** Primary constructor.
    *  @param operand Value to test cast out on. Should have integer type.
    *  @param bits Number of integer bits to cast operand to.  */
-  overflow_cast2t(const expr2tc &operand, unsigned int bits)
-    : overflow_cast_expr_methods(
-        get_bool_type(),
-        overflow_cast_id,
-        operand,
-        bits)
+  overflow_cast2t(const expr2tc &operand_, unsigned int bits_)
+    : expr2t(get_bool_type(), overflow_cast_id), operand(operand_), bits(bits_)
   {
   }
   overflow_cast2t(const overflow_cast2t &ref) = default;
 
   expr2tc do_simplify() const override;
 
+  static constexpr auto fields = std::make_tuple(
+    &expr2t::type,
+    &overflow_cast2t::operand,
+    &overflow_cast2t::bits);
   static std::string field_names[esbmct::num_type_fields];
 };
 
 /** Test for negation overflows. Check whether or not negating an operand would
  *  lead to an integer overflow - for example, there's no representation of
- *  -INT_MIN. Evaluates to true if overflow would occur. @extends overflow_ops */
-class overflow_neg2t : public overflow_neg_expr_methods
+ *  -INT_MIN. Evaluates to true if overflow would occur. */
+class overflow_neg2t : public expr2t
 {
 public:
+  expr2tc operand;
+
   /** Primary constructor. @param operand Integer to test negation of. */
-  overflow_neg2t(const expr2tc &operand)
-    : overflow_neg_expr_methods(get_bool_type(), overflow_neg_id, operand)
+  overflow_neg2t(const expr2tc &operand_)
+    : expr2t(get_bool_type(), overflow_neg_id), operand(operand_)
   {
   }
   overflow_neg2t(const overflow_neg2t &ref) = default;
 
+  static constexpr auto fields =
+    std::make_tuple(&expr2t::type, &overflow_neg2t::operand);
   static std::string field_names[esbmct::num_type_fields];
 };
 
 /** Record a dynamicly allocated object. Exclusively for use in pointer analysis.
- *  @extends dynamic_object_data */
-class dynamic_object2t : public dynamic_object_expr_methods
+ * */
+class dynamic_object2t : public expr2t
 {
 public:
+  expr2tc instance;
+  bool invalid;
+  bool unknown;
+
   dynamic_object2t(
     const type2tc &type,
     const expr2tc &inst,
     bool inv,
     bool uknown)
-    : dynamic_object_expr_methods(type, dynamic_object_id, inst, inv, uknown)
+    : expr2t(type, dynamic_object_id),
+      instance(inst),
+      invalid(inv),
+      unknown(uknown)
   {
   }
   dynamic_object2t(const dynamic_object2t &ref) = default;
 
+  static constexpr auto fields = std::make_tuple(
+    &expr2t::type,
+    &dynamic_object2t::instance,
+    &dynamic_object2t::invalid,
+    &dynamic_object2t::unknown);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -1821,19 +1692,23 @@ public:
  *  set of cases that take the value set of what this pointer might point at,
  *  examines the pointer's pointer object, and constructs a huge if-then-else
  *  case to evaluate to the appropriate data object for this pointer.
- *  @extends dereference_data */
-class dereference2t : public dereference_expr_methods
+ * */
+class dereference2t : public expr2t
 {
 public:
+  expr2tc value;
+
   /** Primary constructor.
    *  @param type Type of dereferenced data.
    *  @param operand Pointer to dereference. */
   dereference2t(const type2tc &type, const expr2tc &operand)
-    : dereference_expr_methods(type, dereference_id, operand)
+    : expr2t(type, dereference_id), value(operand)
   {
   }
   dereference2t(const dereference2t &ref) = default;
 
+  static constexpr auto fields =
+    std::make_tuple(&expr2t::type, &dereference2t::value);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -1847,11 +1722,17 @@ public:
  *  under certain circumstances irep2 needs to represent such function calls,
  *  so this facility is preserved in irep2.
  *
- *  @extends sideeffect_data */
-class sideeffect2t : public sideeffect_expr_methods
+ * */
+class sideeffect2t : public expr2t
 {
 public:
   using allockind = sideeffect_allockind;
+
+  expr2tc operand;
+  expr2tc size;
+  std::vector<expr2tc> arguments;
+  type2tc alloctype;
+  sideeffect_allockind kind;
 
   /** Primary constructor.
    *  @param t Type this side-effect evaluates to.
@@ -1866,184 +1747,261 @@ public:
     const std::vector<expr2tc> &a,
     const type2tc &alloct,
     sideeffect_allockind k)
-    : sideeffect_expr_methods(t, sideeffect_id, oper, sz, a, alloct, k)
+    : expr2t(t, sideeffect_id),
+      operand(oper),
+      size(sz),
+      arguments(a),
+      alloctype(alloct),
+      kind(k)
   {
     if (k == sideeffect_allockind::alloca)
       assert(oper->type == sz->type);
   }
   sideeffect2t(const sideeffect2t &ref) = default;
 
+  static constexpr auto fields = std::make_tuple(
+    &expr2t::type,
+    &sideeffect2t::operand,
+    &sideeffect2t::size,
+    &sideeffect2t::arguments,
+    &sideeffect2t::alloctype,
+    &sideeffect2t::kind);
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class code_block2t : public code_block_expr_methods
+class code_block2t : public expr2t
 {
 public:
-  code_block2t(const std::vector<expr2tc> &operands)
-    : code_block_expr_methods(get_empty_type(), code_block_id, operands)
+  std::vector<expr2tc> operands;
+
+  code_block2t(const std::vector<expr2tc> &ops)
+    : expr2t(get_empty_type(), code_block_id), operands(ops)
   {
   }
   code_block2t(const code_block2t &ref) = default;
 
+  static constexpr auto fields =
+    std::make_tuple(&expr2t::type, &code_block2t::operands);
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class code_assign2t : public code_assign_expr_methods
+class code_assign2t : public expr2t
 {
 public:
-  code_assign2t(const expr2tc &target, const expr2tc &source)
-    : code_assign_expr_methods(get_empty_type(), code_assign_id, target, source)
+  expr2tc target;
+  expr2tc source;
+
+  code_assign2t(const expr2tc &tgt, const expr2tc &src)
+    : expr2t(get_empty_type(), code_assign_id), target(tgt), source(src)
   {
   }
   code_assign2t(const code_assign2t &ref) = default;
 
+  static constexpr auto fields = std::make_tuple(
+    &expr2t::type,
+    &code_assign2t::target,
+    &code_assign2t::source);
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class code_printf2t : public code_printf_expr_methods
+class code_printf2t : public expr2t
 {
 public:
+  std::vector<expr2tc> operands;
+  printf_kindt kind;
+
   code_printf2t(const std::vector<expr2tc> &opers, printf_kindt k)
-    : code_printf_expr_methods(get_empty_type(), code_printf_id, opers, k)
+    : expr2t(get_empty_type(), code_printf_id), operands(opers), kind(k)
   {
   }
   code_printf2t(const code_printf2t &ref) = default;
 
+  static constexpr auto fields = std::make_tuple(
+    &expr2t::type,
+    &code_printf2t::operands,
+    &code_printf2t::kind);
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class code_skip2t : public code_skip_expr_methods
+class code_skip2t : public expr2t
 {
 public:
-  code_skip2t(const type2tc &type) : code_skip_expr_methods(type, code_skip_id)
+  code_skip2t(const type2tc &type) : expr2t(type, code_skip_id)
   {
   }
   code_skip2t(const code_skip2t &ref) = default;
 
+  static constexpr auto fields = std::make_tuple(&expr2t::type);
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class code_goto2t : public code_goto_expr_methods
+class code_goto2t : public expr2t
 {
 public:
+  irep_idt target;
+
   code_goto2t(const irep_idt &targ)
-    : code_goto_expr_methods(get_empty_type(), code_goto_id, targ)
+    : expr2t(get_empty_type(), code_goto_id), target(targ)
   {
   }
   code_goto2t(const code_goto2t &ref) = default;
 
+  static constexpr auto fields =
+    std::make_tuple(&expr2t::type, &code_goto2t::target);
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class object_descriptor2t : public object_descriptor_expr_methods
+class object_descriptor2t : public expr2t
 {
 public:
+  expr2tc object;
+  expr2tc offset;
+  unsigned int alignment;
+
   object_descriptor2t(
     const type2tc &t,
     const expr2tc &root,
     const expr2tc &offs,
-    unsigned int alignment)
-    : object_descriptor_expr_methods(
-        t,
-        object_descriptor_id,
-        root,
-        offs,
-        alignment)
+    unsigned int align)
+    : expr2t(t, object_descriptor_id),
+      object(root),
+      offset(offs),
+      alignment(align)
   {
   }
   object_descriptor2t(const object_descriptor2t &ref) = default;
 
   const expr2tc &get_root_object() const;
 
+  static constexpr auto fields = std::make_tuple(
+    &expr2t::type,
+    &object_descriptor2t::object,
+    &object_descriptor2t::offset,
+    &object_descriptor2t::alignment);
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class code_function_call2t : public code_function_call_expr_methods
+class code_function_call2t : public expr2t
 {
 public:
+  expr2tc ret;
+  expr2tc function;
+  std::vector<expr2tc> operands;
+
   code_function_call2t(
     const expr2tc &r,
     const expr2tc &func,
     const std::vector<expr2tc> &args)
-    : code_function_call_expr_methods(
-        get_empty_type(),
-        code_function_call_id,
-        r,
-        func,
-        args)
+    : expr2t(get_empty_type(), code_function_call_id),
+      ret(r),
+      function(func),
+      operands(args)
   {
   }
   code_function_call2t(const code_function_call2t &ref) = default;
 
+  static constexpr auto fields = std::make_tuple(
+    &expr2t::type,
+    &code_function_call2t::ret,
+    &code_function_call2t::function,
+    &code_function_call2t::operands);
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class code_comma2t : public code_comma_expr_methods
+class code_comma2t : public expr2t
 {
 public:
+  expr2tc side_1;
+  expr2tc side_2;
+
   code_comma2t(const type2tc &t, const expr2tc &s1, const expr2tc &s2)
-    : code_comma_expr_methods(t, code_comma_id, s1, s2)
+    : expr2t(t, code_comma_id), side_1(s1), side_2(s2)
   {
   }
   code_comma2t(const code_comma2t &ref) = default;
 
+  static constexpr auto fields = std::make_tuple(
+    &expr2t::type,
+    &code_comma2t::side_1,
+    &code_comma2t::side_2);
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class invalid_pointer2t : public invalid_pointer_expr_methods
+class invalid_pointer2t : public expr2t
 {
 public:
+  expr2tc ptr_obj;
+
   invalid_pointer2t(const expr2tc &obj)
-    : invalid_pointer_expr_methods(get_bool_type(), invalid_pointer_id, obj)
+    : expr2t(get_bool_type(), invalid_pointer_id), ptr_obj(obj)
   {
   }
   invalid_pointer2t(const invalid_pointer2t &ref) = default;
 
+  static constexpr auto fields = std::make_tuple(&invalid_pointer2t::ptr_obj);
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class code_asm2t : public code_asm_expr_methods
+class code_asm2t : public expr2t
 {
 public:
+  irep_idt value;
+
   code_asm2t(const type2tc &type, const irep_idt &stringref)
-    : code_asm_expr_methods(type, code_asm_id, stringref)
+    : expr2t(type, code_asm_id), value(stringref)
   {
   }
   code_asm2t(const code_asm2t &ref) = default;
 
+  static constexpr auto fields =
+    std::make_tuple(&expr2t::type, &code_asm2t::value);
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class code_cpp_catch2t : public code_cpp_catch_expr_methods
+class code_cpp_catch2t : public expr2t
 {
 public:
+  std::vector<irep_idt> exception_list;
+
   code_cpp_catch2t(const std::vector<irep_idt> &el)
-    : code_cpp_catch_expr_methods(get_empty_type(), code_cpp_catch_id, el)
+    : expr2t(get_empty_type(), code_cpp_catch_id), exception_list(el)
   {
   }
   code_cpp_catch2t(const code_cpp_catch2t &ref) = default;
 
+  static constexpr auto fields =
+    std::make_tuple(&expr2t::type, &code_cpp_catch2t::exception_list);
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class code_cpp_throw2t : public code_cpp_throw_expr_methods
+class code_cpp_throw2t : public expr2t
 {
 public:
+  expr2tc operand;
+  std::vector<irep_idt> exception_list;
+
   code_cpp_throw2t(const expr2tc &o, const std::vector<irep_idt> &l)
-    : code_cpp_throw_expr_methods(get_empty_type(), code_cpp_throw_id, o, l)
+    : expr2t(get_empty_type(), code_cpp_throw_id), operand(o), exception_list(l)
   {
   }
   code_cpp_throw2t(const code_cpp_throw2t &ref) = default;
 
+  static constexpr auto fields = std::make_tuple(
+    &expr2t::type,
+    &code_cpp_throw2t::operand,
+    &code_cpp_throw2t::exception_list);
   static std::string field_names[esbmct::num_type_fields];
 };
 
-/** @extends bit_2ops */
-class concat2t : public concat_expr_methods
+/** Bit concatenation of two operands. */
+class concat2t : public expr2t
 {
 public:
+  expr2tc side_1;
+  expr2tc side_2;
+
   concat2t(const type2tc &type, const expr2tc &forward, const expr2tc &aft)
-    : concat_expr_methods(type, concat_id, forward, aft)
+    : expr2t(type, concat_id), side_1(forward), side_2(aft)
   {
     assert(is_unsignedbv_type(forward));
     assert(is_unsignedbv_type(aft));
@@ -2052,24 +2010,35 @@ public:
 
   expr2tc do_simplify() const override;
 
+  static constexpr auto fields =
+    std::make_tuple(&expr2t::type, &concat2t::side_1, &concat2t::side_2);
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class extract2t : public extract_expr_methods
+class extract2t : public expr2t
 {
 public:
+  expr2tc from;
+  unsigned int upper;
+  unsigned int lower;
+
   extract2t(
     const type2tc &type,
-    const expr2tc &from,
-    unsigned int upper,
-    unsigned int lower)
-    : extract_expr_methods(type, extract_id, from, upper, lower)
+    const expr2tc &from_,
+    unsigned int upper_,
+    unsigned int lower_)
+    : expr2t(type, extract_id), from(from_), upper(upper_), lower(lower_)
   {
   }
   extract2t(const extract2t &ref) = default;
 
   expr2tc do_simplify() const override;
 
+  static constexpr auto fields = std::make_tuple(
+    &expr2t::type,
+    &extract2t::from,
+    &extract2t::upper,
+    &extract2t::lower);
   static std::string field_names[esbmct::num_type_fields];
 };
 

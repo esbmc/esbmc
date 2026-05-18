@@ -300,15 +300,17 @@ TEST_CASE("irep2 microbench: cmp / lt on real nodes", "[bench]")
 {
   config.ansi_c.word_size = 32;
 
-  // operator== and operator< dispatch through the irep_methods2 fold,
-  // which calls do_type_cmp / do_type_lt for each field. The benches
-  // below stress those field-type dispatches across the catalogue:
+  // operator== and operator< dispatch through type2t / expr2t's
+  // non-virtual switch-on-id, which routes to esbmct::generic_cmp_type
+  // / generic_lt_type (and the expr-side counterparts) that walk each
+  // kind's K::fields tuple. The benches below stress those per-field
+  // dispatches across the catalogue:
   //
-  //  * bv_type2t       — unsigned int + type_ids
-  //  * pointer_type2t  — type2tc + bool + type_ids
-  //  * symbol2t        — irep_idt + enum (renaming_level) + several uint
-  //  * struct_type2t   — std::vector<type2tc> + std::vector<irep_idt>
-  //  * add2t           — expr2tc x2 + type2tc
+  //  * unsignedbv_type2t — unsigned int
+  //  * pointer_type2t    — type2tc + bool
+  //  * symbol2t          — irep_idt + enum (renaming_level) + several uint
+  //  * struct_type2t     — std::vector<type2tc> + std::vector<irep_idt>
+  //  * add2t             — type2tc + expr2tc x2
   //
   // Identical (structurally-equal) pairs to exercise the equality-true
   // path; distinct pairs to exercise the early-exit-on-mismatch path.

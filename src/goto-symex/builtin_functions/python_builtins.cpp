@@ -151,8 +151,7 @@ void goto_symext::simplify_python_builtins(expr2tc &expr)
 
     if (is_struct_type(obj_type))
     {
-      const struct_type2t &st = to_struct_type(obj_type);
-      const auto &members = st.get_structure_member_names();
+      const auto &members = struct_union_member_names(obj_type);
       const bool has_member =
         std::any_of(members.begin(), members.end(), [&](const irep_idt &memb) {
           return memb.as_string() == attr_name;

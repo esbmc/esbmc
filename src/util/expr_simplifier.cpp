@@ -324,7 +324,7 @@ struct Addtor
     // Is a vector operation ? Apply the op
     if (is_constant_vector2t(op1) || is_constant_vector2t(op2))
     {
-      auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
+      auto op = [](const type2tc &t, const expr2tc &e1, const expr2tc &e2) {
         return add2tc(t, e1, e2);
       };
       return distribute_vector_operation(op, op1, op2);
@@ -525,7 +525,7 @@ struct Subtor
     // Is a vector operation ? Apply the op
     if (is_constant_vector2t(op1) || is_constant_vector2t(op2))
     {
-      auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
+      auto op = [](const type2tc &t, const expr2tc &e1, const expr2tc &e2) {
         return sub2tc(t, e1, e2);
       };
       return distribute_vector_operation(op, op1, op2);
@@ -702,7 +702,8 @@ expr2tc sub2t::do_simplify() const
     // integer offsets, and the surviving sub's result type is the parent
     // sub's type (ptrdiff for pointer-pointer subtraction, otherwise the
     // arith type) — coerce the operands so the rebuilt sub2tc is valid.
-    auto cancel_sub = [&](expr2tc a, expr2tc b) -> expr2tc {
+    auto cancel_sub = [&](const expr2tc &a_in, const expr2tc &b_in) -> expr2tc {
+      expr2tc a = a_in, b = b_in;
       if (!coerce_to_common_type(a, b))
         return expr2tc();
       // The arith_2ops invariant requires the operand widths match the
@@ -761,7 +762,7 @@ struct Multor
     // Is a vector operation ? Apply the op
     if (is_constant_vector2t(op1) || is_constant_vector2t(op2))
     {
-      auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
+      auto op = [](const type2tc &t, const expr2tc &e1, const expr2tc &e2) {
         return mul2tc(t, e1, e2);
       };
       return distribute_vector_operation(op, op1, op2);
@@ -873,7 +874,7 @@ struct DivModtor
     // Is a vector operation ? Apply the op
     if (is_constant_vector2t(op1) || is_constant_vector2t(op2))
     {
-      auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
+      auto op = [](const type2tc &t, const expr2tc &e1, const expr2tc &e2) {
         if constexpr (Div)
           return div2tc(t, e1, e2);
         else
@@ -1100,9 +1101,7 @@ expr2tc with2t::do_simplify() const
   {
     const constant_struct2t &c_struct = to_constant_struct2t(source_value);
     const constant_string2t &memb = to_constant_string2t(update_field);
-    unsigned no = static_cast<const struct_union_data &>(*type.get())
-                    .get_component_number(memb.value)
-                    .value();
+    unsigned no = struct_union_get_component_number(type, memb.value).value();
     assert(no < c_struct.datatype_members.size());
 
     if (c_struct.datatype_members[no] == update_value)
@@ -1118,9 +1117,8 @@ expr2tc with2t::do_simplify() const
     const constant_union2t &c_union = to_constant_union2t(source_value);
     const union_type2t &thetype = to_union_type(c_union.type);
     const constant_string2t &memb = to_constant_string2t(update_field);
-    unsigned no = static_cast<const struct_union_data &>(*c_union.type.get())
-                    .get_component_number(memb.value)
-                    .value();
+    unsigned no =
+      struct_union_get_component_number(c_union.type, memb.value).value();
     assert(no < thetype.member_names.size());
 
     // If the update value type matches the current lump of data's type, we can
@@ -1204,9 +1202,7 @@ expr2tc member2t::do_simplify() const
   if (is_constant_struct2t(source_value) || is_constant_union2t(source_value))
   {
     unsigned no =
-      static_cast<const struct_union_data &>(*source_value->type.get())
-        .get_component_number(member)
-        .value();
+      struct_union_get_component_number(source_value->type, member).value();
 
     // Clone constant struct, update its field according to this "with".
     expr2tc s;
@@ -1449,11 +1445,9 @@ expr2tc pointer_offset2t::do_simplify() const
 
       if (is_struct_type(member.source_value->type))
       {
-        const struct_union_data &struct_data =
-          static_cast<const struct_union_data &>(
-            *member.source_value->type.get());
-        unsigned member_no =
-          struct_data.get_component_number(member.member).value();
+        unsigned member_no = struct_union_get_component_number(
+                               member.source_value->type, member.member)
+                               .value();
         if (member_no == 0)
           return base_offset;
       }
@@ -2518,7 +2512,7 @@ expr2tc bitand2t::do_simplify() const
   // Is a vector operation ? Apply the op
   if (is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
   {
-    auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
+    auto op = [](const type2tc &t, const expr2tc &e1, const expr2tc &e2) {
       return bitand2tc(t, e1, e2);
     };
     return distribute_vector_operation(op, side_1, side_2);
@@ -2798,7 +2792,7 @@ expr2tc bitor2t::do_simplify() const
   // Is a vector operation ? Apply the op
   if (is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
   {
-    auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
+    auto op = [](const type2tc &t, const expr2tc &e1, const expr2tc &e2) {
       return bitor2tc(t, e1, e2);
     };
     return distribute_vector_operation(op, side_1, side_2);
@@ -2873,7 +2867,7 @@ expr2tc bitxor2t::do_simplify() const
   // Is a vector operation ? Apply the op
   if (is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
   {
-    auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
+    auto op = [](const type2tc &t, const expr2tc &e1, const expr2tc &e2) {
       return bitxor2tc(t, e1, e2);
     };
     return distribute_vector_operation(op, side_1, side_2);
@@ -2996,7 +2990,7 @@ expr2tc shl2t::do_simplify() const
 
   if (is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
   {
-    auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
+    auto op = [](const type2tc &t, const expr2tc &e1, const expr2tc &e2) {
       return shl2tc(t, e1, e2);
     };
     return distribute_vector_operation(op, side_1, side_2);
@@ -3019,7 +3013,7 @@ expr2tc lshr2t::do_simplify() const
 
   if (is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
   {
-    auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
+    auto op = [](const type2tc &t, const expr2tc &e1, const expr2tc &e2) {
       return lshr2tc(t, e1, e2);
     };
     return distribute_vector_operation(op, side_1, side_2);
@@ -3055,7 +3049,7 @@ expr2tc ashr2t::do_simplify() const
   // Is a vector operation ? Apply the op
   if (is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
   {
-    auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
+    auto op = [](const type2tc &t, const expr2tc &e1, const expr2tc &e2) {
       return ashr2tc(t, e1, e2);
     };
     return distribute_vector_operation(op, side_1, side_2);
@@ -3257,12 +3251,12 @@ expr2tc typecast2t::do_simplify() const
 
     if (
       is_array_type(ptr_to.subtype) &&
-      is_symbol_type(get_array_subtype(ptr_to.subtype)))
+      is_symbol_type(to_array_type(ptr_to.subtype).subtype))
       return expr2tc(); // Not worth thinking about
 
     if (
       is_array_type(ptr_from.subtype) &&
-      is_symbol_type(get_array_subtype(ptr_from.subtype)))
+      is_symbol_type(to_array_type(ptr_from.subtype).subtype))
       return expr2tc(); // Not worth thinking about
 
     try
@@ -3399,7 +3393,8 @@ static expr2tc simplify_relations(
       // two surviving offsets. Coerce both to a common type so the rebuilt
       // node is well-formed even when the offsets carry different concrete
       // bv widths — `arr + (int)c` vs `arr + (long)c` from a p++ chain.
-      auto cancel = [&](expr2tc a, expr2tc b) -> expr2tc {
+      auto cancel = [&](const expr2tc &a_in, const expr2tc &b_in) -> expr2tc {
+        expr2tc a = a_in, b = b_in;
         if (!coerce_to_common_type(a, b))
           return expr2tc();
         expr2tc rel = make_irep<constructor>(a, b);
@@ -3726,7 +3721,8 @@ expr2tc equality2t::do_simplify() const
   // operands have differing concrete types (pointer-arith chains often mix
   // `(int)c` with `(long)e`), coerce both to a common type so the rebuilt
   // equality is well-formed.
-  auto cancel_eq = [](expr2tc a, expr2tc b) -> expr2tc {
+  auto cancel_eq = [](const expr2tc &a_in, const expr2tc &b_in) -> expr2tc {
+    expr2tc a = a_in, b = b_in;
     if (!coerce_to_common_type(a, b))
       return expr2tc();
     return equality2tc(a, b);
@@ -3909,7 +3905,8 @@ expr2tc notequal2t::do_simplify() const
 
   // d + c != d + e -> c != e (cancel common addend). Coerce surviving
   // operands to a common type when their concrete types differ.
-  auto cancel_neq = [](expr2tc a, expr2tc b) -> expr2tc {
+  auto cancel_neq = [](const expr2tc &a_in, const expr2tc &b_in) -> expr2tc {
+    expr2tc a = a_in, b = b_in;
     if (!coerce_to_common_type(a, b))
       return expr2tc();
     return notequal2tc(a, b);
@@ -5268,7 +5265,7 @@ struct IEEE_addtor
     // Is a vector operation ? Apply the op
     if (is_constant_vector2t(op1) || is_constant_vector2t(op2))
     {
-      auto op = [rm](type2tc t, expr2tc e1, expr2tc e2) {
+      auto op = [&rm](const type2tc &t, const expr2tc &e1, const expr2tc &e2) {
         return ieee_add2tc(t, e1, e2, rm);
       };
       return distribute_vector_operation(op, op1, op2);
@@ -5314,7 +5311,7 @@ struct IEEE_subtor
     // Is a vector operation ? Apply the op
     if (is_constant_vector2t(op1) || is_constant_vector2t(op2))
     {
-      auto op = [rm](type2tc t, expr2tc e1, expr2tc e2) {
+      auto op = [&rm](const type2tc &t, const expr2tc &e1, const expr2tc &e2) {
         return ieee_sub2tc(t, e1, e2, rm);
       };
       return distribute_vector_operation(op, op1, op2);
@@ -5359,7 +5356,7 @@ struct IEEE_multor
     // Is a vector operation ? Apply the op
     if (is_constant_vector2t(op1) || is_constant_vector2t(op2))
     {
-      auto op = [rm](type2tc t, expr2tc e1, expr2tc e2) {
+      auto op = [&rm](const type2tc &t, const expr2tc &e1, const expr2tc &e2) {
         return ieee_mul2tc(t, e1, e2, rm);
       };
       return distribute_vector_operation(op, op1, op2);
@@ -5421,7 +5418,7 @@ struct IEEE_divtor
   {
     if (is_constant_vector2t(op1) || is_constant_vector2t(op2))
     {
-      auto op = [rm](type2tc t, expr2tc e1, expr2tc e2) {
+      auto op = [&rm](const type2tc &t, const expr2tc &e1, const expr2tc &e2) {
         return ieee_div2tc(t, e1, e2, rm);
       };
       return distribute_vector_operation(op, op1, op2);

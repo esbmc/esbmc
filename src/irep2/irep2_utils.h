@@ -9,27 +9,6 @@
 
 std::string indent_str_irep2(unsigned int indent);
 
-// Map a base type to it's list of names
-template <typename T>
-class base_to_names;
-
-template <class T>
-std::string pretty_print_func(unsigned int indent, std::string ident, T obj)
-{
-  list_of_memberst memb = obj.tostring(indent + 2);
-
-  std::string indentstr = indent_str_irep2(indent);
-  std::string exprstr = std::move(ident);
-
-  for (list_of_memberst::const_iterator it = memb.begin(); it != memb.end();
-       it++)
-  {
-    exprstr += "\n" + indentstr + "* " + it->first + " : " + it->second;
-  }
-
-  return exprstr;
-}
-
 /** Test whether type is an integer. */
 inline bool is_bv_type(const type2tc &t)
 {
@@ -46,11 +25,6 @@ inline bool is_bv_type(const expr2tc &e)
 inline bool is_fractional_type(const type2tc &t)
 {
   return t->type_id == type2t::fixedbv_id || t->type_id == type2t::floatbv_id;
-}
-
-inline bool is_fractional_type(const expr2tc &e)
-{
-  return is_bv_type(e->type);
 }
 
 /** Test whether @p e is a relational comparison: ==, !=, <, >, <=, >=. */
@@ -99,20 +73,35 @@ inline bool is_multi_dimensional_array(const expr2tc &e)
   return is_multi_dimensional_array(e->type);
 }
 
-/** True if @p e or any of its operands is a `symbol2t`. Recursive
- *  walk over the whole subtree. Useful for "is this size/index/array
- *  a constant expression" pre-checks (e.g. `is_sym_sized_array_type`).
- */
-bool contains_symbol_expr(const expr2tc &e);
-
-inline bool is_sym_sized_array_type(const type2tc &t)
+// array_type2t and vector_type2t carry the same set of element-shape
+// fields (subtype, array_size, size_is_infinite). Callers that have a
+// type which they know is one of those two but don't care which use
+// these helpers to skip the per-kind switch.
+inline const type2tc &array_or_vector_subtype(const type2tc &t)
 {
-  if (!is_array_type(t))
-    return false;
-  const array_type2t &a = to_array_type(t);
-  if (!a.array_size)
-    return false;
-  return contains_symbol_expr(a.array_size);
+  if (is_array_type(t))
+    return to_array_type(t).subtype;
+  if (is_vector_type(t))
+    return to_vector_type(t).subtype;
+  irep2_bad_family_cast(t->type_id, "array_or_vector_subtype");
+}
+
+inline const expr2tc &array_or_vector_size(const type2tc &t)
+{
+  if (is_array_type(t))
+    return to_array_type(t).array_size;
+  if (is_vector_type(t))
+    return to_vector_type(t).array_size;
+  irep2_bad_family_cast(t->type_id, "array_or_vector_size");
+}
+
+inline bool array_or_vector_size_is_infinite(const type2tc &t)
+{
+  if (is_array_type(t))
+    return to_array_type(t).size_is_infinite;
+  if (is_vector_type(t))
+    return to_vector_type(t).size_is_infinite;
+  irep2_bad_family_cast(t->type_id, "array_or_vector_size_is_infinite");
 }
 
 inline bool is_byte_type(const type2tc &t)
@@ -123,16 +112,6 @@ inline bool is_byte_type(const type2tc &t)
 inline bool is_byte_type(const expr2tc &e)
 {
   return is_byte_type(e->type);
-}
-
-inline bool is_byte_array(const type2tc &t)
-{
-  return is_array_type(t) && is_byte_type(to_array_type(t).subtype);
-}
-
-inline bool is_byte_array(const expr2tc &e)
-{
-  return is_byte_array(e->type);
 }
 
 inline bool is_constant_number(const expr2tc &t)
@@ -269,21 +248,6 @@ inline expr2tc gen_ulong(unsigned long val)
   return gen_ulong(BigInt(val));
 }
 
-inline expr2tc gen_slong(signed long val)
-{
-  return constant_int2tc(get_int_type(config.ansi_c.word_size), BigInt(val));
-}
-
-inline const type2tc &get_array_subtype(const type2tc &type)
-{
-  return to_array_type(type).subtype;
-}
-
-inline const type2tc &get_vector_subtype(const type2tc &type)
-{
-  return to_vector_type(type).subtype;
-}
-
 inline const type2tc &get_base_array_subtype(const type2tc &type)
 {
   const auto &subtype = to_array_type(type).subtype;
@@ -356,7 +320,8 @@ expr2tc gen_one(const type2tc &type);
    * @return expr2tc with the resulting vector
    */
 template <typename Func>
-inline expr2tc distribute_vector_operation(Func func, expr2tc op1, expr2tc op2)
+inline expr2tc
+distribute_vector_operation(Func func, const expr2tc &op1, const expr2tc &op2)
 {
   assert(is_constant_vector2t(op1) || is_constant_vector2t(op2));
   /*
@@ -425,16 +390,6 @@ inline expr2tc distribute_vector_operation(Func func, expr2tc op1, expr2tc op2)
   }
 }
 
-/**
-   * @brief Distribute a function between one or two operands,
-   * at least one of those must be a vector
-   *
-   * @param id the id for the operation
-   * @param op1 the first operand
-   * @param op2 the second operand
-   * @param rm rounding mode (for ieee)
-   * @return expr2tc with the resulting vector
-   */
 /** Element-wise vector operation by `expr_id` dispatch.
  *  At least one of @p op1 / @p op2 must be a vector. For each lane,
  *  builds the corresponding scalar IR node (neg / add / sub / mul /
@@ -446,9 +401,9 @@ inline expr2tc distribute_vector_operation(Func func, expr2tc op1, expr2tc op2)
  *  / migration sites that already have the expr_id at hand. */
 expr2tc distribute_vector_operation(
   expr2t::expr_ids id,
-  expr2tc op1,
-  expr2tc op2 = expr2tc(),
-  expr2tc rm = expr2tc());
+  const expr2tc &op1,
+  const expr2tc &op2 = expr2tc(),
+  const expr2tc &rm = expr2tc());
 
 // Build a comparison-category struct value with the discriminant set to v.
 // Used for the C++20 spaceship operator: strong_ordering / weak_ordering /

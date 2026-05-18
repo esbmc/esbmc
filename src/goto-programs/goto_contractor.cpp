@@ -1,5 +1,6 @@
 #include <goto-programs/goto_contractor.h>
 #include <goto-programs/abstract-interpretation/interval_domain.h>
+#include <irep2/irep2_utils.h>
 
 void goto_contractor(
   goto_functionst &goto_functions,
@@ -102,11 +103,11 @@ void goto_contractort::get_intervals(
   goto_functions.update();
 }
 
-void goto_contractort::parse_intervals(expr2tc expr)
+void goto_contractort::parse_intervals(const expr2tc &orig_expr)
 {
   double value;
 
-  expr = get_base_object(expr);
+  expr2tc expr = get_base_object(orig_expr);
 
   if (is_and2t(expr))
   {
@@ -118,12 +119,10 @@ void goto_contractort::parse_intervals(expr2tc expr)
   if (!is_comp_expr(expr))
     return;
 
-  const relation_data &rel = dynamic_cast<const relation_data &>(*expr);
-
   //side1 1 is a symbol or typecast to symbol
-  auto side1 = rel.side_1;
+  auto side1 = *expr->get_sub_expr(0);
   //side 2 is always a number.
-  auto side2 = rel.side_2;
+  auto side2 = *expr->get_sub_expr(1);
 
   auto obj = get_base_object(side1);
   if (!is_symbol2t(obj))
@@ -684,10 +683,10 @@ expr_to_ibex_parser::create_constraint_from_expr2t(const expr2tc &expr)
     return c;
   }
 
-  auto rel = &dynamic_cast<const relation_data &>(*get_base_object(expr));
+  const expr2tc &base_obj = get_base_object(expr);
   ibex::Function *f, *g;
-  f = create_function_from_expr2t(rel->side_1);
-  g = create_function_from_expr2t(rel->side_2);
+  f = create_function_from_expr2t(*base_obj->get_sub_expr(0));
+  g = create_function_from_expr2t(*base_obj->get_sub_expr(1));
   if (f == nullptr || g == nullptr)
     return nullptr;
 
@@ -733,11 +732,10 @@ expr_to_ibex_parser::create_constraint_from_expr2t_not(const expr2tc &expr)
     return c;
   }
 
-  auto rel = &dynamic_cast<const relation_data &>(*get_base_object(expr));
-
+  const expr2tc &base_obj2 = get_base_object(expr);
   ibex::Function *f, *g;
-  f = create_function_from_expr2t(rel->side_1);
-  g = create_function_from_expr2t(rel->side_2);
+  f = create_function_from_expr2t(*base_obj2->get_sub_expr(0));
+  g = create_function_from_expr2t(*base_obj2->get_sub_expr(1));
   if (f == nullptr || g == nullptr)
     return nullptr;
   switch (get_base_object(expr)->expr_id)
@@ -782,7 +780,8 @@ bool expr_to_ibex_parser::is_unsupported_operator_in_constraint_not(
          is_equality2t(e) || is_modulus2t(e) || is_or2t(e) || is_and2t(e);
 }
 
-ibex::Function *expr_to_ibex_parser::create_function_from_expr2t(expr2tc expr)
+ibex::Function *
+expr_to_ibex_parser::create_function_from_expr2t(const expr2tc &expr)
 {
   ibex::Function *f = nullptr;
   ibex::Function *g, *h;
@@ -801,13 +800,13 @@ ibex::Function *expr_to_ibex_parser::create_function_from_expr2t(expr2tc expr)
   {
     if (!is_arith_expr(expr))
       return nullptr;
-    auto arith_op = &dynamic_cast<const arith_2ops &>(*get_base_object(expr));
-    g = create_function_from_expr2t(arith_op->side_1);
-    h = create_function_from_expr2t(arith_op->side_2);
+    const expr2tc &arith_base = get_base_object(expr);
+    g = create_function_from_expr2t(*arith_base->get_sub_expr(0));
+    h = create_function_from_expr2t(*arith_base->get_sub_expr(1));
     if (g == nullptr || h == nullptr)
       return nullptr;
 
-    switch (arith_op->expr_id)
+    switch (arith_base->expr_id)
     {
     case expr2t::expr_ids::add_id:
       f = new ibex::Function(*vars, (*g)(*vars) + (*h)(*vars));
@@ -875,7 +874,7 @@ ibex::Function *expr_to_ibex_parser::create_function_from_expr2t(expr2tc expr)
   return f;
 }
 
-int expr_to_ibex_parser::create_variable_from_expr2t(expr2tc expr)
+int expr_to_ibex_parser::create_variable_from_expr2t(const expr2tc &expr)
 {
   if (is_symbol2t(expr))
   {

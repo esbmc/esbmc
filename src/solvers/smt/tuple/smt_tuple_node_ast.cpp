@@ -18,15 +18,18 @@ void tuple_node_smt_ast::make_free(smt_convt *ctx)
   if (elements.size() != 0)
     return;
 
-  const struct_union_data &strct = ctx->get_type_def(sort->get_tuple_type());
+  const std::vector<type2tc> &members =
+    struct_union_members(sort->get_tuple_type());
+  const std::vector<irep_idt> &member_names =
+    struct_union_member_names(sort->get_tuple_type());
 
-  elements.resize(strct.members.size());
+  elements.resize(members.size());
 
   unsigned int i = 0;
-  for (auto const &it : strct.members)
+  for (auto const &it : members)
   {
     smt_sortt newsort = ctx->convert_sort(it);
-    std::string fieldname = name + "." + strct.member_names[i].as_string();
+    std::string fieldname = name + "." + member_names[i].as_string();
 
     if (is_tuple_ast_type(it))
     {
@@ -42,7 +45,7 @@ void tuple_node_smt_ast::make_free(smt_convt *ctx)
     else if (is_array_type(it))
     {
       elements[i] = ctx->mk_fresh(
-        newsort, fieldname, ctx->convert_sort(get_array_subtype(it)));
+        newsort, fieldname, ctx->convert_sort(to_array_type(it).subtype));
     }
     else
     {
@@ -71,11 +74,12 @@ tuple_node_smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
   const_cast<tuple_node_smt_ast *>(true_val)->make_free(ctx);
   const_cast<tuple_node_smt_ast *>(false_val)->make_free(ctx);
 
-  const struct_union_data &data = ctx->get_type_def(sort->get_tuple_type());
-  result_sym->elements.resize(data.members.size());
+  const std::vector<type2tc> &members =
+    struct_union_members(sort->get_tuple_type());
+  result_sym->elements.resize(members.size());
 
   // Iterate through each field and encode an ite.
-  for (unsigned int i = 0; i < data.members.size(); i++)
+  for (unsigned int i = 0; i < members.size(); i++)
   {
     smt_astt truepart = true_val->project(ctx, i);
     smt_astt falsepart = false_val->project(ctx, i);
@@ -113,15 +117,16 @@ smt_astt tuple_node_smt_ast::eq(smt_convt *ctx, smt_astt other) const
   tuple_node_smt_astt ta = this;
   tuple_node_smt_astt tb = to_tuple_node_ast(other);
 
-  const struct_union_data &data = ctx->get_type_def(sort->get_tuple_type());
+  const std::vector<type2tc> &members =
+    struct_union_members(sort->get_tuple_type());
 
   smt_convt::ast_vec eqs;
-  eqs.reserve(data.members.size());
+  eqs.reserve(members.size());
 
   assert(sort->get_tuple_type() == other->sort->get_tuple_type());
 
   // Iterate through each field and encode an equality.
-  for (unsigned int i = 0; i < data.members.size(); i++)
+  for (unsigned int i = 0; i < members.size(); i++)
   {
     smt_astt side1 = ta->project(ctx, i);
     smt_astt side2 = tb->project(ctx, i);
@@ -136,7 +141,7 @@ smt_astt tuple_node_smt_ast::update(
   smt_convt *ctx,
   smt_astt value,
   unsigned int idx,
-  expr2tc idx_expr [[maybe_unused]] /*ndebug*/) const
+  const expr2tc &idx_expr [[maybe_unused]] /*ndebug*/) const
 {
   smt_convt::ast_vec eqs;
   assert(
@@ -174,8 +179,9 @@ smt_astt tuple_node_smt_ast::project(smt_convt *ctx, unsigned int idx) const
   const_cast<tuple_node_smt_ast *>(this)->make_free(ctx);
 
 #ifndef NDEBUG
-  const struct_union_data &data = ctx->get_type_def(sort->get_tuple_type());
-  assert(idx < data.members.size() && "Out-of-bounds tuple element accessed");
+  assert(
+    idx < struct_union_members(sort->get_tuple_type()).size() &&
+    "Out-of-bounds tuple element accessed");
 #endif
   return elements[idx];
 }
