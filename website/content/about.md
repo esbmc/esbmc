@@ -28,15 +28,32 @@ grants [EP/T026995/1](https://enncore.github.io),
 Innovation for the Digital Security by Design (DSbD) Programme.
 
 <style>
-img {
+.sponsor-badge {
+    display: inline-block;
+    margin: 0.5rem 1rem 0.5rem 0;
+    vertical-align: middle;
+}
+.sponsor-badge img {
+    max-width: 200px;
+    height: auto;
+}
+.sponsor-icon img {
     max-width: 50px;
     height: auto;
 }
 </style>
 
+<span class="sponsor-icon">
+
 ![Zulip Logo](./images/sponsors/zulip-icon-circle.svg "The S3 team and by
 extension ESBMC, is sponsored by Zulip. Zulip is an organized team chat app
 designed for efficient communication.")
+
+</span>
+
+<a class="sponsor-badge" href="https://cyber-reasoning.co.uk" target="_blank" rel="noopener noreferrer" title="ESBMC is sponsored by Cyber Reasoning">
+  <img src="./images/sponsors/cyber-reasoning.svg" alt="Sponsored by Cyber Reasoning" />
+</a>
 
 ## Main Authors and Developers
 

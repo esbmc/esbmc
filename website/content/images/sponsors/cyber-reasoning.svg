@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="52" role="img" aria-label="Sponsored by Cyber Reasoning">
+  <title>Sponsored by Cyber Reasoning</title>
+  <rect width="200" height="52" rx="8" fill="#0c1a2e"/>
+  <text x="100" y="19" text-anchor="middle"
+        font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif"
+        font-size="10" letter-spacing="1" fill="#7db3e0">SPONSORED BY</text>
+  <text x="100" y="38" text-anchor="middle"
+        font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif"
+        font-size="15" font-weight="700" fill="#e8f0fe">Cyber Reasoning</text>
+</svg>

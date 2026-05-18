@@ -122,6 +122,12 @@ ESBMC has been used in a broad range of cutting-edge applications across multipl
 * **[Getting Rid of Store-Buffers in TSO Analysis](https://link.springer.com/chapter/10.1007%2F978-3-642-22110-1_9)**
 >ESBMC is used to verify _sequential consistency_ concurrent C programs.
 
+## Sponsors
+
+<a href="https://cyber-reasoning.co.uk" target="_blank" rel="noopener noreferrer" title="ESBMC is sponsored by Cyber Reasoning">
+  <img src="./images/sponsors/cyber-reasoning.svg" alt="Sponsored by Cyber Reasoning" style="max-width:200px;height:auto;" />
+</a>
+
 ## Cite
 
 If you cite ESBMC >= version 7.4, please use the [competition paper](https://arxiv.org/pdf/2312.14746.pdf) at TACAS 2024 (BibTex) as listed below:
