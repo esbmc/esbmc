@@ -68,7 +68,7 @@ bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
       !options.get_bool_option("ltl"))
       // Store the set between runs
       algorithms.emplace_back(
-        std::make_unique<assertion_cache>(config.ssa_caching_db));
+        std::make_unique<assertion_cache>(get_ssa_caching_db()));
 
     if (opts.get_bool_option("no-slice"))
       algorithms.emplace_back(std::make_unique<simple_slice>());
@@ -1289,7 +1289,7 @@ smt_convt::resultt bmct::run(std::shared_ptr<symex_target_equationt> &eq)
     // Clear the cache between thread interleavings to prevent
     // incorrect caching of assertions with different thread contexts
     if (!options.get_bool_option("no-cache-asserts"))
-      config.ssa_caching_db.clear();
+      get_ssa_caching_db().clear();
 
     fine_timet bmc_start = current_time();
     res = run_thread(eq);

@@ -11,7 +11,9 @@
 
 // Don't ask
 class namespacet;
-extern const namespacet *migrate_namespace_lookup;
+// thread_local so parallel symex threads can each set their own
+// namespace pointer without racing.
+extern thread_local const namespacet *migrate_namespace_lookup;
 
 type2tc migrate_type(const typet &type);
 void migrate_expr(const exprt &expr, expr2tc &new_expr);
