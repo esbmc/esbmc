@@ -111,6 +111,7 @@ ignored_dirs=(
   "random6_fail"
   "range19-fail"
   "ternary_symbolic"
+  "threading_thread_increment_race_fail"
   "threading_thread_race_fail"
   "try-fail"
   "verifier-assume"

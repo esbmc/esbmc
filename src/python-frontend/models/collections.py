@@ -88,3 +88,31 @@ class Counter:
     def __bool__(self) -> bool:
         """Return True iff at least one key has been recorded."""
         return self.count != 0
+
+    def most_common(self, n: int = 1) -> list[int]:
+        """Return a one-element list ``[max_count]`` (or ``[]`` if empty).
+
+        Approximation: CPython's ``Counter.most_common`` returns up to
+        ``n`` ``(key, count)`` pairs in descending count order. ESBMC's
+        Counter model carries ``tuple[int, int]`` keys, and the Python
+        frontend does not yet lower lists whose elements are tuples (or
+        nested tuples) when they are returned from a method, so the full
+        CPython shape is not yet expressible. The model collapses to
+        just the maximum count, returned as a single-element list, so
+        callers writing ``c.most_common(1)[0]`` get the max count (an
+        ``int``) rather than CPython's ``(key, count)`` tuple. Programs
+        that need keys, ties, or the full ordering must scan ``data``
+        directly. ``n == 0`` returns ``[]``; any ``n >= 1`` returns the
+        single-element list, regardless of ``n``.
+        """
+        if self.count == 0 or n == 0:
+            return []
+        vals: list[int] = self.data.values()
+        size: int = len(vals)
+        best: int = vals[0]
+        i: int = 1
+        while i < size:
+            if vals[i] > best:
+                best = vals[i]
+            i = i + 1
+        return [best]

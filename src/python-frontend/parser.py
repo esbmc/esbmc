@@ -1125,27 +1125,59 @@ def _strip_thread_inheritance(
         ]
 
 
-def _build_arg_declaration(site_id: int, arg_index: int) -> ast.Assign:
-    """Return ``__pythread_arg_<N>_<i> = 0`` as a module-top assignment.
+def _build_arg_declaration(
+    site_id: int,
+    arg_index: int,
+    arg_value: ast.expr,
+) -> ast.stmt:
+    """Return a module-top declaration for ``__pythread_arg_<N>_<i>``.
 
-    A plain ``Assign`` is required (rather than ``AnnAssign``-without-
-    value) so the ESBMC Python frontend creates a *module-level*
+    A plain ``Assign`` or an ``AnnAssign`` with a non-null ``value`` is
+    required so the ESBMC Python frontend creates a *module-level*
     binding: an annotation-only declaration silently degrades to a
     function-local at the first construction-site write, and the
     spawned trampoline would then read an uninitialised global rather
     than the user-supplied argument.
 
-    The integer default is acceptable for ``args=`` tuples whose
-    elements are integers; class-instance arguments will hit a type
-    mismatch at the construction-site rebind — an MVP limitation
-    documented in the validator's docstring and tracked in #4568 as a
-    follow-up.
+    The declared shape is chosen by ``arg_value`` (the construction-
+    site expression, treated read-only):
+
+      * Numeric / string constants — emit ``= <zero-of-that-kind>`` so
+        the symbol's inferred type matches the construction-site rebind
+        and the trampoline call site type-checks against the target's
+        parameter.
+      * Anything else (Name references, attribute chains, calls,
+        list/dict/set literals, ``None``) — emit ``: object = None``.
+        ``object`` lowers to ``any_type()`` (``void *``) in the Python
+        frontend, so a class-instance arg carrying a struct pointer is
+        forwarded to the trampoline call site without the
+        int-degradation that ``= 0`` would force.
     """
-    return ast.Assign(
-        targets=[
-            ast.Name(id=f"__pythread_arg_{site_id}_{arg_index}", ctx=ast.Store())
-        ],
-        value=ast.Constant(value=0),
+    target = ast.Name(
+        id=f"__pythread_arg_{site_id}_{arg_index}", ctx=ast.Store()
+    )
+
+    if isinstance(arg_value, ast.Constant):
+        v = arg_value.value
+        # bool must be checked before int: isinstance(True, int) is True.
+        if isinstance(v, bool):
+            return ast.Assign(targets=[target], value=ast.Constant(value=False))
+        if isinstance(v, int):
+            return ast.Assign(targets=[target], value=ast.Constant(value=0))
+        if isinstance(v, float):
+            return ast.Assign(targets=[target], value=ast.Constant(value=0.0))
+        if isinstance(v, str):
+            return ast.Assign(targets=[target], value=ast.Constant(value=""))
+        if isinstance(v, bytes):
+            return ast.Assign(targets=[target], value=ast.Constant(value=b""))
+        # ``None`` and other constant kinds (Ellipsis, complex) fall
+        # through to the object-typed declaration below.
+
+    return ast.AnnAssign(
+        target=target,
+        annotation=ast.Name(id="object", ctx=ast.Load()),
+        value=ast.Constant(value=None),
+        simple=1,
     )
 
 
@@ -1346,8 +1378,10 @@ def lower_threading_thread_usage(
     for scope_sites in sites_by_scope.values():
         for _, (site_id, call_node) in scope_sites.items():
             target_expr, args_values = _thread_call_keywords(call_node)
-            for i in range(len(args_values)):
-                prelude.append(_build_arg_declaration(site_id, i))
+            for i, arg_value in enumerate(args_values):
+                prelude.append(
+                    _build_arg_declaration(site_id, i, arg_value)
+                )
             prelude.append(_build_tid_declaration(site_id))
             prelude.append(
                 _build_trampoline(site_id, target_expr, len(args_values))

@@ -67,13 +67,159 @@ ESBMC has been used in a broad range of cutting-edge applications across multipl
 
 ## CBMC Differences
 
-* CBMC focuses on SAT-based encodings of unrolled programs, while ESBMC targets SMT-based encodings.
-* CBMC's concurrency support is an entirely symbolic encoding of a concurrent program in one SAT formula, while ESBMC explores each interleaving individually using context-bounded verification.
-* CBMC uses a modified C parser written by James Roskind and a C++ parser based on OpenC++, while ESBMC relies on the Clang front-end.
-* ESBMC implements the Solidity and Python grammar production rules as its Solidity/Python frontend, while CBMC does not handle Solidity and Python programs.
-* ESBMC verifies Kotlin programs with a model of the standard Kotlin libraries and checks a set of safety properties, while CBMC cannot handle Kotlin programs.
-* CBMC implements k-induction, requiring three different calls: to generate the CFG, to annotate the program, and to verify it, whereas ESBMC handles the whole process in a single call. Additionally, CBMC does not have a forward condition to check if all states were reached and relies on a limited loop unwinding.
-* ESBMC adds some additional types to the program's internal representation.
+ESBMC and [CBMC](https://www.cprover.org/cbmc/) share a common ancestry but
+have diverged substantially. The list below reflects the current state of
+ESBMC (release 7.x) and contrasts it with mainline CBMC.
+
+**Frontends and language support.**
+* ESBMC uses the Clang/LLVM front-end for C (up to C23), C++ (up to C++20),
+  CUDA and CHERI-C, inheriting Clang's diagnostics, attribute handling and
+  template instantiation. CBMC still relies on its own in-tree C and C++
+  parsers, which lag behind Clang on modern language features (e.g. C++17/20
+  templates, structured bindings, `if constexpr`).
+* ESBMC ships dedicated frontends for **Python 3.10+** (the first
+  BMC-based Python-code verifier), **Solidity** (smart contracts) and
+  **Kotlin/Java** (via the Soot/Jimple IR), with ongoing work on a
+  **Rust** frontend. CBMC supports only C/C++ in the main tool; Java is
+  handled by the separate JBMC project and Rust by Kani.
+
+**Verification backend.**
+* ESBMC encodes programs directly into SMT and supports multiple solver
+  backends — Z3, Bitwuzla (default), Boolector, CVC4/CVC5, Yices, MathSAT
+  and any SMT-LIB v2 solver — exploiting native theories for arrays,
+  bit-vectors, floating-point and quantifiers. CBMC focuses on SAT-based
+  encodings of fully unrolled programs (its built-in solver is based on
+  MiniSat), with external SMT solvers used in a more limited role.
+* ESBMC integrates an interval-arithmetic abstract domain that can prune
+  loop unwindings (`--interval-symex-guard`) and discharge assertions
+  proved true by the abstract semantics (`--interval-symex-assert`),
+  reducing the size of the SMT formula handed to the solver.
+
+**Proof techniques.**
+* ESBMC implements incremental BMC, *k*-induction and bidirectional
+  *k*-induction in a single invocation, combining base-case, forward-condition
+  and inductive-step checks in one run. CBMC's *k*-induction workflow
+  historically requires three separate passes (CFG construction, program
+  annotation, verification) and lacks the forward condition needed to prove
+  that all reachable states have been covered, relying on bounded unwinding
+  instead.
+* ESBMC supports function contracts (`__ESBMC_assume`, `__ESBMC_assert`,
+  pre/post-conditions) and LLM-assisted invariant generation for loops that
+  cannot be unrolled within a budget.
+
+**Concurrency verification.**
+* ESBMC explores thread interleavings explicitly under context-bounded
+  verification, with both **lazy** and **schedule-recording** exploration
+  strategies and a partial-order reduction (POR) pass that prunes
+  independent interleavings. This typically scales better than CBMC's
+  single-formula encoding of the whole concurrent program on programs with
+  many interleaving points.
+* ESBMC ships models for POSIX threads, C11 atomics and a subset of
+  `std::thread` / `std::atomic`, and can verify safety, deadlock and
+  data-race properties.
+
+**Memory safety and floating-point.**
+* A byte-precise memory model with object-level pointer analysis lets
+  ESBMC check pointer-safety, array bounds, use-after-free, double-free
+  and memory leaks across heap and stack. Full IEEE-754 semantics are
+  available across all SMT backends that expose the FP theory.
+
+**Operational models and library support.**
+* ESBMC builds a sizable operational model (compiled to GOTO via
+  `c2goto`) for the C standard library, large parts of the C++ STL
+  (containers, iterators, algorithms, strings), Python built-ins (lists,
+  dicts, strings, `enum`) and the Kotlin/Java standard library. This
+  enables verification of real-world code that uses these libraries
+  without manual stubbing.
+
+**Recent competition results and industrial use.**
+* In [SV-COMP](/sv-comp) 2025 ESBMC-kind placed **2nd in ReachSafety**
+  and **3rd in MemSafety**, and in SV-COMP 2026 it placed **2nd in
+  ReachSafety**. In [Test-COMP](/test-comp), ESBMC (via the FuSeBMC
+  test-generator) has won **1st Overall in 2023, 2024, 2025 and 2026**,
+  with 1st place in *Cover-Error* every year and 1st (or 2nd in 2025) in
+  *Cover-Branches*.
+* Industrial deployments include the verification of Arm's
+  **Realm Management Monitor** in the Confidential Computing Architecture
+  (SAS 2024), Ethereum smart-contract auditing (ICSE 2022), Arduino-based
+  embedded firmware (SBESC 2023), the Ethereum Consensus Specification
+  (ISSTA 2024) and the **ESBMC-AI** pipeline that pairs LLMs with the
+  model checker for repair and invariant synthesis.
+
+## SPARK Ada Differences
+
+ESBMC is sometimes compared with [SPARK](https://www.adacore.com/about-spark)
+(GNATprove and the SPARK Ada subset), which targets a different region of
+the verification design space. The main differences are:
+
+**Verification methodology.**
+* ESBMC is a *bounded model checker*: it symbolically executes a finite
+  prefix of the program, encodes the resulting verification conditions as
+  SMT, and is *complete for bug-finding* within the bound. Soundness for
+  unbounded programs is achieved via *k*-induction with a forward
+  condition.
+* SPARK is a *deductive verifier*: GNATprove translates Ada units to
+  Why3, derives Hoare-style verification conditions from user-supplied
+  contracts, and discharges them with SMT solvers (Alt-Ergo, CVC5, Z3) or,
+  for hard goals, interactive provers (Coq/Isabelle). It proves
+  *unbounded* functional correctness rather than searching for
+  counterexamples.
+
+**Supported languages.**
+* ESBMC: C (C23), C++ (C++20), CUDA, CHERI-C, Python, Solidity, Kotlin,
+  Java, Rust.
+* SPARK: a strict subset of Ada 2012/2022 that forbids exceptions,
+  controlled types, side-effects in functions and unrestricted aliasing,
+  with optional escape hatches via `SPARK_Mode => Off`.
+
+**Annotation requirements.**
+* ESBMC verifies code essentially *as-is*: built-in safety properties
+  (pointer safety, overflow, bounds, leaks, data races) are checked
+  automatically; user-defined assertions need only `assert` or
+  `__ESBMC_assert`. Loop invariants are optional and can be synthesised
+  by the [interval domain](/docs/) or by LLM assistance.
+* SPARK proofs depend on the programmer authoring `Pre`, `Post`,
+  `Contract_Cases`, `Loop_Invariant`, `Loop_Variant`, `Global` and
+  `Depends` aspects. Without these contracts, GNATprove can only prove
+  Ada's built-in run-time checks (the "Bronze" level).
+
+**Automation level.**
+* ESBMC is push-button: one invocation produces `VERIFICATION SUCCESSFUL`,
+  `VERIFICATION FAILED` (with a concrete counterexample trace) or a
+  budget-exhausted result.
+* SPARK is mostly automatic through the *Silver* (absence of run-time
+  errors) and *Gold* (key integrity properties) levels, given suitable
+  contracts. Reaching the *Platinum* level — full functional correctness
+  — typically requires iterative contract refinement and occasionally
+  manual proof via Coq/Isabelle through Why3.
+
+**Memory and concurrency verification.**
+* ESBMC handles arbitrary heap-allocated data structures, pointer
+  arithmetic and aliasing through its byte-level memory model, and
+  verifies multi-threaded code (POSIX threads, C11 atomics, `std::thread`)
+  with context-bounded interleaving exploration and POR.
+* SPARK relies on a static *ownership and borrowing* discipline (Ada
+  2022) to rule out aliasing rather than reason about it, and restricts
+  concurrency to the Ravenscar/Jorvik profiles (statically scheduled
+  tasks, no dynamic allocation of tasks, bounded protected objects). This
+  makes proofs tractable but excludes idiomatic concurrent C/C++
+  patterns.
+
+**Target domains and typical use cases.**
+* ESBMC: research, operating-system and firmware verification (e.g.
+  Arm RMM/CCA), smart-contract auditing, embedded/IoT and Arduino,
+  safety-critical C/C++ in industry, ML/AI safety, and education.
+* SPARK: avionics (DO-178C up to Level A), defence, rail signalling
+  (EN 50128 SIL 4), space and security-evaluated software (Common
+  Criteria) — domains where Ada is mandated and full functional proof of
+  contracts is required by certification.
+
+**Strengths and limitations.**
+
+| Aspect | ESBMC | SPARK Ada |
+|---|---|---|
+| Strengths | Push-button, multi-language, finds real counterexamples, handles full C/C++ memory models and concurrency | Strong functional-correctness guarantees, mature tooling for certification, sound by construction |
+| Limitations | Bounded by default; full proofs require *k*-induction convergence; counterexamples may be spurious if models are abstracted | Restricted language subset; effort-intensive contract authoring; weak support for dynamic aliasing and unstructured concurrency |
 
 
 ### Recent Applications (2022-2024)
@@ -81,13 +227,13 @@ ESBMC has been used in a broad range of cutting-edge applications across multipl
 * **[ESBMC-Python: A Bounded Model Checker for Python Programs](https://dl.acm.org/doi/10.1145/3650212.3685304)** (ISSTA 2024)
 >The first BMC-based Python code verifier, successfully detecting bugs in the Ethereum Consensus Specification and other Python applications.
 
-* **[Verifying Components of Arm® Confidential Computing Architecture](https://link.springer.com/chapter/10.1007/978-3-031-74776-2_18)** (SAS 2024)
+* **[Verifying Components of Arm® Confidential Computing Architecture with ESBMC](https://link.springer.com/chapter/10.1007/978-3-031-74776-2_18)** (SAS 2024)
 >ESBMC is used to verify the Realm Management Monitor (RMM) firmware in Arm's Confidential Computing Architecture, detecting 23 new vulnerabilities that other tools missed.
 
 * **[LLM-Generated Invariants for Bounded Model Checking Without Loop Unrolling](https://doi.org/10.1145/3691620.3695512)** (ASE 2024)
 >Integration of large language models with ESBMC to automatically generate loop invariants, eliminating the need for manual loop unrolling.
 
-* **[ESBMC-Solidity: Verifying Blockchain Smart Contracts](https://dl.acm.org/doi/10.1145/3510454.3516855)** (ICSE 2022)
+* **[ESBMC-Solidity: An SMT-Based Model Checker for Solidity Smart Contracts](https://dl.acm.org/doi/10.1145/3510454.3516855)** (ICSE Companion 2022)
 >ESBMC is used to verify Solidity smart contracts on Ethereum blockchain, detecting vulnerabilities in financial applications handling millions of dollars.
 
 * **[ESBMC-CHERI: Hardware-Assisted Memory Safety Verification](https://dl.acm.org/doi/10.1145/3533767.3543289)** (ISSTA 2022)
@@ -96,7 +242,7 @@ ESBMC has been used in a broad range of cutting-edge applications across multipl
 * **[ESBMC-Jimple: Verifying Kotlin Programs](https://doi.org/10.1145/3533767.3543294)** (ISSTA 2022)
 >ESBMC is extended to verify Android/Kotlin applications through the Jimple intermediate representation.
 
-* **[Arduino Integration for Embedded Systems](https://doi.org/10.1109/SBESC60926.2023.10324055)** (SBESC 2023)
+* **[Arduino Integration for Embedded Systems](https://doi.org/10.1109/SBESC60926.2023.10324098)** (SBESC 2023)
 >ESBMC verification for Arduino-based embedded systems, enhancing integrity and reliability in IoT devices.
 
 ### Earlier Applications
