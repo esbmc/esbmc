@@ -47,6 +47,7 @@ const std::string kGetObjectSize = "__ESBMC_get_object_size";
 const std::string kStrlen = "strlen";
 const std::string kEsbmcAssume = "__ESBMC_assume";
 const std::string kVerifierAssume = "__VERIFIER_assume";
+const std::string kEsbmcAssert = "__ESBMC_assert";
 const std::string kLoopInvariant = "__loop_invariant";
 const std::string kEsbmcLoopInvariant = "__ESBMC_loop_invariant";
 const std::string kEsbmcCover = "__ESBMC_cover";
@@ -86,6 +87,11 @@ bool function_call_builder::is_assume_call(const symbol_id &function_id) const
 {
   const std::string &func_name = function_id.get_function();
   return (func_name == kEsbmcAssume || func_name == kVerifierAssume);
+}
+
+bool function_call_builder::is_assert_call(const symbol_id &function_id) const
+{
+  return function_id.get_function() == kEsbmcAssert;
 }
 
 bool function_call_builder::is_len_call(const symbol_id &function_id) const
@@ -483,11 +489,9 @@ symbol_id function_call_builder::build_function_id() const
     class_name = obj_name;
     function_id = symbol_id(python_file, class_name, func_name);
   }
-  else if (is_assume_call(function_id))
-  {
-    function_id.clear();
-  }
-  else if (is_cover_call(function_id))
+  else if (
+    is_assume_call(function_id) || is_assert_call(function_id) ||
+    is_cover_call(function_id))
   {
     function_id.clear();
   }
@@ -727,6 +731,40 @@ exprt function_call_builder::build() const
     assume_code.location() = converter_.get_location_from_decl(call_);
 
     return assume_code;
+  }
+
+  // __ESBMC_assert(cond[, msg]) — same message lowering as native
+  // `assert cond, msg` in converter_stmt.cpp.
+  if (is_assert_call(function_id))
+  {
+    const auto &args = call_["args"];
+    if (args.empty() || args.size() > 2)
+      throw std::runtime_error(
+        "__ESBMC_assert takes one or two arguments (cond[, msg])");
+
+    exprt condition = converter_.get_expr(args[0]);
+    if (!condition.type().is_bool())
+      condition = typecast_exprt(condition, bool_type());
+
+    code_assertt assert_code(condition);
+    assert_code.location() = converter_.get_location_from_decl(call_);
+
+    if (args.size() == 2)
+    {
+      const auto &msg_node = args[1];
+      std::string msg;
+      if (
+        msg_node["_type"] == "Constant" && msg_node.contains("value") &&
+        msg_node["value"].is_string())
+        msg = msg_node["value"].get<std::string>();
+      else if (msg_node["_type"] == "JoinedStr")
+        msg = "<formatted string message>";
+
+      if (!msg.empty())
+        assert_code.location().comment(msg);
+    }
+
+    return assert_code;
   }
 
   // cover calls convert to code_assert statement
