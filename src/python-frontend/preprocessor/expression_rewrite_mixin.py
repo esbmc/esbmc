@@ -271,42 +271,38 @@ class ExpressionRewriteMixin:
             return ast.Constant(value=True)
         return ast.Constant(value=False)
 
+    # Symmetric equality-shape rewrites attempted on `assert L == R`. Each
+    # returns the rewritten test or None; the cascade stops at the first hit.
+    _SYMMETRIC_EQ_TRANSFORMS = (
+        "_try_transform_items_set_eq",
+        "_try_transform_items_list_eq",
+        "_try_transform_keys_view_eq",
+        "_try_transform_values_view_eq",
+        "_try_transform_list_tuple_eq",
+    )
+
+    def _apply_assert_eq_rewrites(self, node):
+        if not (isinstance(node.test, ast.Compare) and len(node.test.ops) == 1
+                and isinstance(node.test.ops[0], ast.Eq) and len(node.test.comparators) == 1):
+            return [], None
+        left, right = node.test.left, node.test.comparators[0]
+        for name in self._SYMMETRIC_EQ_TRANSFORMS:
+            fn = getattr(self, name)
+            for lhs, rhs in ((left, right), (right, left)):
+                rewritten = fn(lhs, rhs, node)
+                if rewritten is not None:
+                    return [], rewritten
+        for lhs, rhs in ((left, right), (right, left)):
+            prefix, rewritten = self._try_lower_expr_tuple_literal_eq(lhs, rhs, node)
+            if rewritten is not None:
+                return prefix or [], rewritten
+        return [], None
+
     def visit_Assert(self, node):
         node = self.generic_visit(node)
-        tuple_eq_prefix = []
-        if (isinstance(node.test, ast.Compare) and len(node.test.ops) == 1
-                and isinstance(node.test.ops[0], ast.Eq) and len(node.test.comparators) == 1):
-            left = node.test.left
-            right = node.test.comparators[0]
-            rewritten = self._try_transform_items_set_eq(left, right, node)
-            if rewritten is None:
-                rewritten = self._try_transform_items_set_eq(right, left, node)
-            if rewritten is None:
-                rewritten = self._try_transform_items_list_eq(left, right, node)
-            if rewritten is None:
-                rewritten = self._try_transform_items_list_eq(right, left, node)
-            if rewritten is None:
-                rewritten = self._try_transform_keys_view_eq(left, right, node)
-            if rewritten is None:
-                rewritten = self._try_transform_keys_view_eq(right, left, node)
-            if rewritten is None:
-                rewritten = self._try_transform_values_view_eq(left, right, node)
-            if rewritten is None:
-                rewritten = self._try_transform_values_view_eq(right, left, node)
-            if rewritten is None:
-                rewritten = self._try_transform_list_tuple_eq(left, right, node)
-            if rewritten is None:
-                rewritten = self._try_transform_list_tuple_eq(right, left, node)
-            if rewritten is None:
-                tuple_eq_prefix, rewritten = self._try_lower_expr_tuple_literal_eq(
-                    left, right, node)
-            if rewritten is None:
-                tuple_eq_prefix, rewritten = self._try_lower_expr_tuple_literal_eq(
-                    right, left, node)
-            if tuple_eq_prefix is None:
-                tuple_eq_prefix = []
-            if rewritten is not None:
-                node.test = rewritten
+        tuple_eq_prefix, rewritten = self._apply_assert_eq_rewrites(node)
+        if rewritten is not None:
+            node.test = rewritten
         eq_prefix, maybe_eq_test = self._lower_assert_eq_literal(node.test, node)
         node.test = maybe_eq_test
         node.test = self._simplify_isinstance(node.test)
