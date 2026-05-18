@@ -133,10 +133,10 @@ ESBMC (release 7.x) and contrasts it with mainline CBMC.
   without manual stubbing.
 
 **Recent competition results and industrial use.**
-* In [SV-COMP](/sv-comp) 2025 ESBMC-kind placed **2nd in ReachSafety**
-  and **3rd in MemSafety**, and in SV-COMP 2026 it placed **2nd in
+* In [SV-COMP](/sv-comp) 2025 ESBMC-kind placed **2nd in ReachSafety**,
+  and, in SV-COMP 2026, it placed **2nd in
   ReachSafety**. In [Test-COMP](/test-comp), ESBMC (via the FuSeBMC
-  test-generator) has won **1st Overall in 2023, 2024, 2025 and 2026**,
+  test-generator) has won **1st Overall in 2023, 2024, 2025, and 2026**,
   with 1st place in *Cover-Error* every year and 1st (or 2nd in 2025) in
   *Cover-Branches*.
 * Industrial deployments include the verification of Arm's
@@ -177,7 +177,15 @@ the verification design space. The main differences are:
   (pointer safety, overflow, bounds, leaks, data races) are checked
   automatically; user-defined assertions need only `assert` or
   `__ESBMC_assert`. Loop invariants are optional and can be synthesised
-  by the [interval domain](/docs/) or by LLM assistance.
+  by the [interval domain](/docs/) or by LLM assistance. When
+  annotations *are* supplied — `__ESBMC_requires` / `__ESBMC_ensures`
+  for pre/post-conditions, `__ESBMC_assigns` for frame conditions,
+  `__ESBMC_loop_invariant` for loop invariants, and
+  `__ESBMC_contract` for bulk contract enforcement — ESBMC uses them
+  to both verify the implementation against its contract and to replace
+  call sites with the contract abstraction, enabling the same style of
+  compositional, contract-driven verification as SPARK (see
+  [Function Contracts](/docs/function-contracts/)).
 * SPARK proofs depend on the programmer authoring `Pre`, `Post`,
   `Contract_Cases`, `Loop_Invariant`, `Loop_Variant`, `Global` and
   `Depends` aspects. Without these contracts, GNATprove can only prove
@@ -273,6 +281,12 @@ the verification design space. The main differences are:
 
 * **[Getting Rid of Store-Buffers in TSO Analysis](https://link.springer.com/chapter/10.1007%2F978-3-642-22110-1_9)**
 >ESBMC is used to verify _sequential consistency_ concurrent C programs.
+
+## Sponsors
+
+<a href="https://cyber-reasoning.co.uk" target="_blank" rel="noopener noreferrer" title="ESBMC is sponsored by Cyber Reasoning">
+  <img src="./images/sponsors/cyber-reasoning.svg" alt="Sponsored by Cyber Reasoning" style="max-width:200px;height:auto;" />
+</a>
 
 ## Cite
 
