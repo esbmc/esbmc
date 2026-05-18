@@ -38,7 +38,13 @@ img {
 extension ESBMC, is sponsored by Zulip. Zulip is an organized team chat app
 designed for efficient communication.")
 
-## Main Authors and Developers
+
+
+## Open-Source and Support
+
+ESBMC is an open-source software. Most of ESBMC code is written by volunteers, with sposored development given by [Cyber Reasoning Limited](https://cyber-reasoning.co.uk).
+
+### Main Authors and Developers
 
 - [Lucas Cordeiro](https://ssvlab.github.io/lucasccordeiro/) (since 2008)
 - [Bernd Fischer](http://www.cs.sun.ac.za/~bfischer/) (since 2008)
@@ -49,7 +55,7 @@ designed for efficient communication.")
 - [Denis Nicole](http://www.hpcc.ecs.soton.ac.uk/~dan/) (since 2011)
 - [Rafael Menezes](https://github.com/rafaelsamenezes) (since 2019)
 
-## Former Members
+### Former Members
 
 - [Hussama Ismail](http://hussama.io/) (2013-2017)
 - [Mauro L. de Freitas](https://www.linkedin.com/in/mauro-l-de-freitas/)
@@ -58,7 +64,7 @@ designed for efficient communication.")
 - [Hendrio M. Marques](https://www.linkedin.com/in/hendrio-medeiros-marques-711568a0/)
   (2012-2013)
 
-### Website
+#### Website
 
 - Website made by Yiannis Charalambous
 - Website is using the [Hextra](https://imfing.github.io/hextra) Hugo template.
