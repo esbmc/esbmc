@@ -323,6 +323,14 @@ void goto_symex_statet::rename_type(expr2tc &expr)
   if (is_nil_expr(expr))
     return;
 
+  /* Rename the types of sub-expressions FIRST. Kinds like with2t carry an
+   * invariant that their own `type` equals `source_value->type`; if we
+   * rebuilt the parent's type before recursing, the new parent would
+   * point at a still-un-renamed source_value and the consistency check
+   * would (rightly) fire. Recurse first so source_value's type is
+   * already in its renamed form by the time we rebuild the parent. */
+  expr->Foreach_operand([this](expr2tc &expr) { rename_type(expr); });
+
   // expr->type is const; rename symbolic array sizes on a CoW-detached copy
   // and, if it changed, rebuild the expression with the renamed type.
   if (is_array_type(expr->type))
@@ -344,10 +352,6 @@ void goto_symex_statet::rename_type(expr2tc &expr)
     if (renamed != expr->type)
       expr = expr->with_type(renamed);
   }
-
-  /* All subexpressions' types should also be renamed, this is in line with
-   * how goto_convert_functionst::rename_types() is defined */
-  expr->Foreach_operand([this](expr2tc &expr) { rename_type(expr); });
 }
 
 void goto_symex_statet::rename(expr2tc &expr)
