@@ -2279,9 +2279,19 @@ class LoopMixin:
             ctx=ast.Store(),
         )
         ast.copy_location(subscript, template)
-        factory_call = ast.Call(func=factory_node, args=[], keywords=[])
-        ast.copy_location(factory_call, template)
-        assign = ast.Assign(targets=[subscript], value=factory_call, type_comment=None)
+        # Prefer empty container literals over Call() for built-in container
+        # factories: dict storage of an empty list literal binds a concrete
+        # PyListObject whose mutations are visible at d[k]. A bare `list()`
+        # call returns a value that the empty-dict storage cannot accept
+        # without an explicit dict-of-list annotation already present.
+        if isinstance(factory_node, ast.Name) and factory_node.id == "list":
+            factory_value = ast.List(elts=[], ctx=ast.Load())
+        elif isinstance(factory_node, ast.Name) and factory_node.id == "dict":
+            factory_value = ast.Dict(keys=[], values=[])
+        else:
+            factory_value = ast.Call(func=factory_node, args=[], keywords=[])
+        ast.copy_location(factory_value, template)
+        assign = ast.Assign(targets=[subscript], value=factory_value, type_comment=None)
         ast.copy_location(assign, template)
         ast.fix_missing_locations(assign)
 
