@@ -322,10 +322,10 @@ printf_kindt printf_kind_from_name(const irep_idt &name)
 
 /********************** Switch-based v2 dispatchers ***************************/
 // All 111 expr kinds now expose `fields`; every case uses the generic path.
-// `end_expr_id` is a sentinel never assigned to a live node; suppress the
-// -Wswitch noise while keeping per-kind exhaustiveness via the X-macro.
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wswitch"
+// `end_expr_id` is a sentinel never assigned to a live node; including it as
+// a switch case (with -Wswitch enabled) makes the compiler enforce per-kind
+// exhaustiveness via the X-macro — adding a new kind without wiring it into
+// expr_kinds.inc fails to compile here.
 
 bool expr2t::cmp(const expr2t &o) const
 {
@@ -338,6 +338,8 @@ bool expr2t::cmp(const expr2t &o) const
     return esbmct::generic_cmp(static_cast<const kind##2t &>(*this), o);
 #include <irep2/expr_kinds.inc>
 #undef IREP2_EXPR
+  case end_expr_id:
+    break;
   }
   __builtin_unreachable();
 }
@@ -353,6 +355,8 @@ int expr2t::lt(const expr2t &o) const
     return esbmct::generic_lt(static_cast<const kind##2t &>(*this), o);
 #include <irep2/expr_kinds.inc>
 #undef IREP2_EXPR
+  case end_expr_id:
+    break;
   }
   __builtin_unreachable();
 }
@@ -366,57 +370,120 @@ expr2tc expr2t::clone() const
     return make_irep<kind##2t>(static_cast<const kind##2t &>(*this));
 #include <irep2/expr_kinds.inc>
 #undef IREP2_EXPR
+  case end_expr_id:
+    break;
   }
   __builtin_unreachable();
 }
 
 namespace
 {
-// Build a fresh K with @p new_type as its type. Kinds for which
-// `with_type` is meaningful list `&expr2t::type` as the first element of
-// their K::fields tuple AND accept `(const type2tc &, fields...)` at
-// their primary constructor. (The type member is `const type2tc`, so
-// the member pointer is `const type2tc expr2t::*` — match both
-// qualifications.) Kinds that derive their type from operands rather
-// than carrying one (constant_bool, the relation ops, etc.) don't
-// support type substitution; calling `with_type` on them is a
-// programmer error and aborts.
+// Compile-time trait: K supports type substitution iff
+//   * K::fields is non-empty AND
+//   * the first member pointer is a `(const) type2tc expr2t::*` (i.e. it
+//     refers to expr2t::type) AND
+//   * K is constructible from `(const type2tc &, rest...)` where rest...
+//     is the value types of the remaining fields.
+//
+// The first-field check rules out kinds that derive their type from
+// operands and list a different first field (constant_bool, relation
+// ops, ...). The constructor check rules out kinds whose `fields` tuple
+// starts with `&expr2t::type` for cmp/crc/hash purposes but whose
+// constructor synthesises the type from operands and rejects a leading
+// `type2tc` (e.g. and/or/xor/implies/isinstance/hasattr/isnone,
+// signbit/popcount, code_cpp_throw_decl[_end]). Treating those as
+// supported would silently fail to instantiate at the make_irep call
+// inside `rebuild_with_type_impl`; the trait pushes the failure to a
+// readable "kind unsupported" path instead.
+template <class K, std::size_t... Is>
+constexpr bool
+ctor_takes_type_first(std::index_sequence<Is...>)
+{
+  using fields_t = std::remove_cv_t<decltype(K::fields)>;
+  return std::is_constructible_v<
+    K,
+    const type2tc &,
+    const typename esbmct::member_traits<std::remove_cvref_t<
+      std::tuple_element_t<Is + 1, fields_t>>>::member_t &...>;
+}
+
+template <class K>
+constexpr bool supports_with_type_v = []() {
+  using fields_t = std::remove_cv_t<decltype(K::fields)>;
+  if constexpr (std::tuple_size_v<fields_t> == 0)
+    return false;
+  else
+  {
+    using first_t = std::remove_cvref_t<std::tuple_element_t<0, fields_t>>;
+    using first_class_t = typename esbmct::member_traits<first_t>::class_t;
+    using first_member_t = typename esbmct::member_traits<first_t>::member_t;
+    if constexpr (
+      !std::is_same_v<first_class_t, expr2t> ||
+      !std::is_same_v<first_member_t, type2tc>)
+      return false;
+    else
+      return ctor_takes_type_first<K>(
+        std::make_index_sequence<std::tuple_size_v<fields_t> - 1>{});
+  }
+}();
+
+// rebuild_with_type<K> is only instantiated for kinds where
+// supports_with_type_v<K> holds. The dispatcher gates the call on that
+// trait; instantiating for an unsupported kind is a programmer error
+// that the static_assert below catches at compile time.
+template <class K, std::size_t... Is>
+expr2tc rebuild_with_type_impl(
+  const K &k,
+  const type2tc &new_type,
+  std::index_sequence<Is...>)
+{
+  static_assert(
+    supports_with_type_v<K>,
+    "with_type called on a kind whose first field is not &expr2t::type. "
+    "This kind derives its type from operands (e.g. constant_bool, "
+    "relation ops) and cannot have its type substituted. Either teach "
+    "the kind to list &expr2t::type first and accept it in its primary "
+    "constructor, or restructure the caller so it does not need "
+    "with_type for this kind.");
+  // First field is the type slot; rebuild from new_type + the rest.
+  return make_irep<K>(new_type, (k.*std::get<Is + 1>(K::fields))...);
+}
+
 template <class K>
 expr2tc rebuild_with_type(const K &k, const type2tc &new_type)
 {
-  return std::apply(
-    [&](auto first_mp, auto... rest) -> expr2tc {
-      using first_t = std::remove_cvref_t<decltype(first_mp)>;
-      if constexpr (
-        (std::is_same_v<first_t, type2tc expr2t::*> ||
-         std::is_same_v<first_t, const type2tc expr2t::*>) &&
-        std::is_constructible_v<
-          K,
-          const type2tc &,
-          decltype(k.*rest)...>)
-        return make_irep<K>(new_type, k.*rest...);
-      else
-      {
-        (void)new_type;
-        log_error(
-          "with_type called on kind {} which has no substitutable type",
-          get_expr_id(k));
-        abort();
-      }
-    },
-    K::fields);
+  constexpr std::size_t N = std::tuple_size_v<decltype(K::fields)>;
+  return rebuild_with_type_impl(k, new_type, std::make_index_sequence<N - 1>{});
+}
+
+[[noreturn]] void with_type_unsupported(const expr2t &e)
+{
+  log_error(
+    "with_type called on kind {} which has no substitutable type",
+    get_expr_id(e));
+  abort();
 }
 } // namespace
 
 expr2tc expr2t::with_type(const type2tc &new_type) const
 {
+  // Dispatcher: instantiate rebuild_with_type<K> only for kinds that
+  // support it. Unsupported kinds go to a shared runtime error path; the
+  // static_assert inside rebuild_with_type then guards against accidentally
+  // instantiating it for an unsupported K from anywhere else.
   switch (expr_id)
   {
 #define IREP2_EXPR(kind, _)                                                    \
   case kind##_id:                                                              \
-    return rebuild_with_type(static_cast<const kind##2t &>(*this), new_type);
+    if constexpr (supports_with_type_v<kind##2t>)                              \
+      return rebuild_with_type(                                                \
+        static_cast<const kind##2t &>(*this), new_type);                       \
+    else                                                                       \
+      with_type_unsupported(*this);
 #include <irep2/expr_kinds.inc>
 #undef IREP2_EXPR
+  case end_expr_id:
+    break;
   }
   __builtin_unreachable();
 }
@@ -430,6 +497,8 @@ size_t expr2t::crc() const
     return esbmct::generic_do_crc(static_cast<const kind##2t &>(*this));
 #include <irep2/expr_kinds.inc>
 #undef IREP2_EXPR
+  case end_expr_id:
+    break;
   }
   __builtin_unreachable();
 }
@@ -443,6 +512,8 @@ void expr2t::hash(crypto_hash &h) const
     return esbmct::generic_hash(static_cast<const kind##2t &>(*this), h);
 #include <irep2/expr_kinds.inc>
 #undef IREP2_EXPR
+  case end_expr_id:
+    break;
   }
   __builtin_unreachable();
 }
@@ -457,6 +528,8 @@ list_of_memberst expr2t::tostring(unsigned int indent) const
       static_cast<const kind##2t &>(*this), indent);
 #include <irep2/expr_kinds.inc>
 #undef IREP2_EXPR
+  case end_expr_id:
+    break;
   }
   __builtin_unreachable();
 }
@@ -471,6 +544,8 @@ const expr2tc *expr2t::get_sub_expr(size_t idx) const
       static_cast<const kind##2t &>(*this), idx);
 #include <irep2/expr_kinds.inc>
 #undef IREP2_EXPR
+  case end_expr_id:
+    break;
   }
   __builtin_unreachable();
 }
@@ -485,6 +560,8 @@ size_t expr2t::get_num_sub_exprs() const
       static_cast<const kind##2t &>(*this));
 #include <irep2/expr_kinds.inc>
 #undef IREP2_EXPR
+  case end_expr_id:
+    break;
   }
   __builtin_unreachable();
 }
@@ -499,6 +576,8 @@ void expr2t::foreach_operand_impl_const(const_op_delegate &f) const
       static_cast<const kind##2t &>(*this), f);
 #include <irep2/expr_kinds.inc>
 #undef IREP2_EXPR
+  case end_expr_id:
+    break;
   }
   __builtin_unreachable();
 }
@@ -513,11 +592,11 @@ void expr2t::foreach_operand_impl(op_delegate &f)
       static_cast<kind##2t &>(*this), f);
 #include <irep2/expr_kinds.inc>
 #undef IREP2_EXPR
+  case end_expr_id:
+    break;
   }
   __builtin_unreachable();
 }
-
-#pragma GCC diagnostic pop
 
 void assert_arith_2ops_consistency(
   [[maybe_unused]] const type2tc &t,

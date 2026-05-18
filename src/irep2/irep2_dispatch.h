@@ -234,10 +234,16 @@ namespace esbmct
 // --------------------------------------------------------------------------
 // generic_cmp: structural equality over K::fields.
 // Precondition: a.expr_id == o.expr_id (checked at the switch boundary).
+//
+// Also acts as the canonical instantiation site for the per-kind
+// `assert_kind_invariants<K>()` static_assert chain: every expr dispatcher
+// case lands here, so adding a new kind without a valid `fields` tuple
+// fails to compile at the dispatcher, not silently at cmp/crc/hash time.
 // --------------------------------------------------------------------------
 template <class K>
 bool generic_cmp(const K &a, const expr2t &o)
 {
+  static_assert(assert_kind_invariants<K>());
   const K &b = static_cast<const K &>(o);
   bool eq = true;
   std::apply(
@@ -381,6 +387,9 @@ void generic_foreach_operand_impl(K &a, expr2t::op_delegate &f)
 template <class K>
 bool generic_cmp_type(const K &a, const type2t &o)
 {
+  // Canonical instantiation site for the per-kind invariant chain on the
+  // type side; see generic_cmp() above for rationale.
+  static_assert(assert_kind_invariants<K>());
   const K &b = static_cast<const K &>(o);
   bool eq = true;
   std::apply(

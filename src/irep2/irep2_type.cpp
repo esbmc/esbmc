@@ -210,10 +210,10 @@ unsigned int code_type2t::get_width() const
 }
 
 /*********************** Switch-on-type_id dispatchers ************************/
-// `end_type_id` is a sentinel never used as a live id; suppress the Wswitch
-// noise it generates while keeping per-kind exhaustiveness via the X-macro.
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wswitch"
+// `end_type_id` is a sentinel never used as a live id; including it as a
+// switch case (with -Wswitch enabled) makes the compiler enforce per-kind
+// exhaustiveness via the X-macro — adding a new kind without wiring it into
+// type_kinds.inc fails to compile here.
 
 bool type2t::cmp(const type2t &o) const
 {
@@ -227,6 +227,8 @@ bool type2t::cmp(const type2t &o) const
       static_cast<const kind##_type2t &>(*this), o);
 #include <irep2/type_kinds.inc>
 #undef IREP2_TYPE
+  case end_type_id:
+    break;
   }
   __builtin_unreachable();
 }
@@ -243,6 +245,8 @@ int type2t::lt(const type2t &o) const
       static_cast<const kind##_type2t &>(*this), o);
 #include <irep2/type_kinds.inc>
 #undef IREP2_TYPE
+  case end_type_id:
+    break;
   }
   __builtin_unreachable();
 }
@@ -257,6 +261,8 @@ type2tc type2t::clone() const
       static_cast<const kind##_type2t &>(*this));
 #include <irep2/type_kinds.inc>
 #undef IREP2_TYPE
+  case end_type_id:
+    break;
   }
   __builtin_unreachable();
 }
@@ -271,6 +277,8 @@ size_t type2t::crc() const
       static_cast<const kind##_type2t &>(*this));
 #include <irep2/type_kinds.inc>
 #undef IREP2_TYPE
+  case end_type_id:
+    break;
   }
   __builtin_unreachable();
 }
@@ -286,6 +294,8 @@ void type2t::hash(crypto_hash &h) const
     return;
 #include <irep2/type_kinds.inc>
 #undef IREP2_TYPE
+  case end_type_id:
+    break;
   }
   __builtin_unreachable();
 }
@@ -300,6 +310,8 @@ list_of_memberst type2t::tostring(unsigned int indent) const
       static_cast<const kind##_type2t &>(*this), indent);
 #include <irep2/type_kinds.inc>
 #undef IREP2_TYPE
+  case end_type_id:
+    break;
   }
   __builtin_unreachable();
 }
@@ -315,6 +327,8 @@ void type2t::foreach_subtype_impl_const(const_subtype_delegate &f) const
     return;
 #include <irep2/type_kinds.inc>
 #undef IREP2_TYPE
+  case end_type_id:
+    break;
   }
   __builtin_unreachable();
 }
@@ -330,6 +344,8 @@ void type2t::foreach_subtype_impl(subtype_delegate &f)
     return;
 #include <irep2/type_kinds.inc>
 #undef IREP2_TYPE
+  case end_type_id:
+    break;
   }
   __builtin_unreachable();
 }
@@ -343,11 +359,11 @@ unsigned int type2t::get_width() const
     return static_cast<const kind##_type2t &>(*this).get_width();
 #include <irep2/type_kinds.inc>
 #undef IREP2_TYPE
+  case end_type_id:
+    break;
   }
   __builtin_unreachable();
 }
-
-#pragma GCC diagnostic pop
 
 // Field-name tables consumed by generic_tostring_type. Indexed by the
 // order in each type kind's `fields` tuple.

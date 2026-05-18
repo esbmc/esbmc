@@ -1003,6 +1003,130 @@ namespace esbmct
  *  way of defining ireps. */
 const unsigned int num_type_fields = 6;
 
+// ---------------------------------------------------------------------------
+// Per-kind invariants for the flat irep2 layout.
+//
+// Each concrete kind exposes:
+//   * A `static constexpr auto fields` tuple of member pointers covering its
+//     user-visible storage. Pointers may refer to members of the kind itself
+//     OR of its base (e.g. `&expr2t::type` for kinds whose type slot is part
+//     of the trait set).
+//   * A `static std::string field_names[num_type_fields]` array of labels for
+//     the pretty-printer.
+//
+// `assert_kind_invariants<K>()` packages the two compile-time checks we want
+// every concrete kind to satisfy:
+//
+//   1. `fields_cover_class<K>()` — the member pointers in K::fields that
+//      refer to K (i.e. not to a base) collectively cover the derived-class
+//      storage span, modulo trailing padding (< alignof(K)). If someone
+//      adds a raw `BigInt extra;` to a kind and forgets to extend `fields`,
+//      this fires.
+//
+//   2. The number of derived-class entries in K::fields is at most
+//      num_type_fields, so the field_names[] array indexing in
+//      generic_tostring is in-bounds.
+//
+// Instantiated for every kind from the switch dispatchers (each `case`
+// references `K::fields`, which transitively forces the static_asserts in
+// the helpers below). Adding a new kind without listing its fields gets a
+// compile error from this site rather than a silent bug at cmp/crc/hash time.
+// ---------------------------------------------------------------------------
+
+template <class P>
+struct member_traits;
+template <class C, class M>
+struct member_traits<M C::*>
+{
+  using class_t = C;
+  using member_t = M;
+};
+template <class C, class M>
+struct member_traits<const M C::*>
+{
+  using class_t = C;
+  using member_t = M;
+};
+
+// Sizeof the i-th K::fields entry, but only if it refers to K itself
+// (member pointers into the base class point at base storage, so they
+// shouldn't be counted against the derived-class storage span).
+template <class K, std::size_t I>
+constexpr std::size_t nth_field_size_in_derived()
+{
+  using P = std::remove_cvref_t<decltype(std::get<I>(K::fields))>;
+  using class_t = typename member_traits<P>::class_t;
+  if constexpr (std::is_same_v<class_t, K>)
+    return sizeof(typename member_traits<P>::member_t);
+  else
+    return 0;
+}
+
+template <class K, std::size_t... Is>
+constexpr std::size_t sum_derived_field_sizes(std::index_sequence<Is...>)
+{
+  return (nth_field_size_in_derived<K, Is>() + ... + std::size_t{0});
+}
+
+template <class K, std::size_t... Is>
+constexpr std::size_t count_derived_field_entries(std::index_sequence<Is...>)
+{
+  return (
+    (std::is_same_v<
+       typename member_traits<
+         std::remove_cvref_t<decltype(std::get<Is>(K::fields))>>::class_t,
+       K>
+       ? std::size_t{1}
+       : std::size_t{0}) +
+    ... + std::size_t{0});
+}
+
+// `fields_cover_class<K>()` — the sum of derived-class field sizes in
+// K::fields must equal `sizeof(K) - sizeof(base)`, modulo at most
+// `alignof(K) - 1` bytes of trailing padding. Catches missed-member-in-tuple
+// at compile time for any kind where the missed member is at least one byte
+// larger than the existing trailing padding (which covers every realistic
+// case — irep2 nodes use pointer-sized fields almost exclusively).
+template <class K>
+constexpr bool fields_cover_class()
+{
+  using fields_t = std::remove_cv_t<decltype(K::fields)>;
+  constexpr std::size_t derived_storage = sizeof(K) - sizeof(typename K::base_type);
+  constexpr std::size_t covered = sum_derived_field_sizes<K>(
+    std::make_index_sequence<std::tuple_size_v<fields_t>>{});
+  return derived_storage - covered < alignof(K);
+}
+
+// `derived_field_count<K>()` — number of K::fields entries that live in K
+// itself (not in K::base_type). Compared against num_type_fields to ensure
+// the field_names[] indexing in generic_tostring stays in-bounds.
+template <class K>
+constexpr std::size_t derived_field_count()
+{
+  using fields_t = std::remove_cv_t<decltype(K::fields)>;
+  return count_derived_field_entries<K>(
+    std::make_index_sequence<std::tuple_size_v<fields_t>>{});
+}
+
+template <class K>
+constexpr bool assert_kind_invariants()
+{
+  static_assert(
+    fields_cover_class<K>(),
+    "irep2 kind invariant: fields tuple does not cover the derived class "
+    "storage. Either add the missing member pointer to the kind's "
+    "`fields = std::make_tuple(...)`, or — if the member is intentionally "
+    "excluded from cmp/crc/hash — list every non-excluded member explicitly "
+    "and document the omission.");
+  static_assert(
+    derived_field_count<K>() <= num_type_fields,
+    "irep2 kind invariant: this kind has more derived-class field entries "
+    "than esbmct::num_type_fields. Either bump num_type_fields and the "
+    "corresponding field_names[] arrays, or replace the fixed-size array "
+    "with one sized by std::tuple_size_v<decltype(fields)>.");
+  return true;
+}
+
 } // namespace esbmct
 
 inline std::ostream &operator<<(std::ostream &out, const expr2tc &a)
