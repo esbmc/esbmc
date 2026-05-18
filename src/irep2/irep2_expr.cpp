@@ -340,7 +340,7 @@ bool expr2t::cmp(const expr2t &o) const
   case end_expr_id:
     break;
   }
-  __builtin_unreachable();
+  std::unreachable();
 }
 
 int expr2t::lt(const expr2t &o) const
@@ -357,7 +357,7 @@ int expr2t::lt(const expr2t &o) const
   case end_expr_id:
     break;
   }
-  __builtin_unreachable();
+  std::unreachable();
 }
 
 expr2tc expr2t::clone() const
@@ -372,7 +372,7 @@ expr2tc expr2t::clone() const
   case end_expr_id:
     break;
   }
-  __builtin_unreachable();
+  std::unreachable();
 }
 
 namespace
@@ -483,7 +483,7 @@ expr2tc expr2t::with_type(const type2tc &new_type) const
   case end_expr_id:
     break;
   }
-  __builtin_unreachable();
+  std::unreachable();
 }
 
 size_t expr2t::crc() const
@@ -498,7 +498,7 @@ size_t expr2t::crc() const
   case end_expr_id:
     break;
   }
-  __builtin_unreachable();
+  std::unreachable();
 }
 
 void expr2t::hash(crypto_hash &h) const
@@ -513,7 +513,7 @@ void expr2t::hash(crypto_hash &h) const
   case end_expr_id:
     break;
   }
-  __builtin_unreachable();
+  std::unreachable();
 }
 
 list_of_memberst expr2t::tostring(unsigned int indent) const
@@ -529,7 +529,7 @@ list_of_memberst expr2t::tostring(unsigned int indent) const
   case end_expr_id:
     break;
   }
-  __builtin_unreachable();
+  std::unreachable();
 }
 
 const expr2tc *expr2t::get_sub_expr(size_t idx) const
@@ -545,7 +545,7 @@ const expr2tc *expr2t::get_sub_expr(size_t idx) const
   case end_expr_id:
     break;
   }
-  __builtin_unreachable();
+  std::unreachable();
 }
 
 size_t expr2t::get_num_sub_exprs() const
@@ -561,7 +561,7 @@ size_t expr2t::get_num_sub_exprs() const
   case end_expr_id:
     break;
   }
-  __builtin_unreachable();
+  std::unreachable();
 }
 
 void expr2t::foreach_operand_impl_const(const_op_delegate &f) const
@@ -577,7 +577,7 @@ void expr2t::foreach_operand_impl_const(const_op_delegate &f) const
   case end_expr_id:
     break;
   }
-  __builtin_unreachable();
+  std::unreachable();
 }
 
 void expr2t::foreach_operand_impl(op_delegate &f)
@@ -593,7 +593,7 @@ void expr2t::foreach_operand_impl(op_delegate &f)
   case end_expr_id:
     break;
   }
-  __builtin_unreachable();
+  std::unreachable();
 }
 
 void assert_arith_2ops_consistency(

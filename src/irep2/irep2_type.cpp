@@ -229,7 +229,7 @@ bool type2t::cmp(const type2t &o) const
   case end_type_id:
     break;
   }
-  __builtin_unreachable();
+  std::unreachable();
 }
 
 int type2t::lt(const type2t &o) const
@@ -247,7 +247,7 @@ int type2t::lt(const type2t &o) const
   case end_type_id:
     break;
   }
-  __builtin_unreachable();
+  std::unreachable();
 }
 
 type2tc type2t::clone() const
@@ -262,7 +262,7 @@ type2tc type2t::clone() const
   case end_type_id:
     break;
   }
-  __builtin_unreachable();
+  std::unreachable();
 }
 
 size_t type2t::crc() const
@@ -278,7 +278,7 @@ size_t type2t::crc() const
   case end_type_id:
     break;
   }
-  __builtin_unreachable();
+  std::unreachable();
 }
 
 void type2t::hash(crypto_hash &h) const
@@ -294,7 +294,7 @@ void type2t::hash(crypto_hash &h) const
   case end_type_id:
     break;
   }
-  __builtin_unreachable();
+  std::unreachable();
 }
 
 list_of_memberst type2t::tostring(unsigned int indent) const
@@ -310,7 +310,7 @@ list_of_memberst type2t::tostring(unsigned int indent) const
   case end_type_id:
     break;
   }
-  __builtin_unreachable();
+  std::unreachable();
 }
 
 void type2t::foreach_subtype_impl_const(const_subtype_delegate &f) const
@@ -327,7 +327,7 @@ void type2t::foreach_subtype_impl_const(const_subtype_delegate &f) const
   case end_type_id:
     break;
   }
-  __builtin_unreachable();
+  std::unreachable();
 }
 
 void type2t::foreach_subtype_impl(subtype_delegate &f)
@@ -343,7 +343,7 @@ void type2t::foreach_subtype_impl(subtype_delegate &f)
   case end_type_id:
     break;
   }
-  __builtin_unreachable();
+  std::unreachable();
 }
 
 unsigned int type2t::get_width() const
@@ -358,7 +358,7 @@ unsigned int type2t::get_width() const
   case end_type_id:
     break;
   }
-  __builtin_unreachable();
+  std::unreachable();
 }
 
 // Field-name tables consumed by generic_tostring_type. Indexed by the

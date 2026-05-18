@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <sstream>
+#include <utility>
 #include <solvers/smt/smt_conv.h>
 #include <util/message/format.h>
 #include <util/type_byte_size.h>
@@ -75,7 +76,7 @@ smt_astt smt_convt::convert_ptr_cmp(
     op = greaterthanequal2tc(s1, s2);
     break;
   default:
-    __builtin_unreachable();
+    std::unreachable();
   }
   return convert_ast(op);
 }
