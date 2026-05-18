@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 main.c
 --termination --unwind 3
-^VERIFICATION FAILED$
+^VERIFICATION SUCCESSFUL$
