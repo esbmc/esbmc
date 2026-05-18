@@ -6,10 +6,8 @@
 #include <python-frontend/math_guard_utils.h>
 #include <python-frontend/python_exception_handler.h>
 #include <python-frontend/python_list.h>
-#include <python-frontend/python_set.h>
 #include <python-frontend/string_builder.h>
 #include <python-frontend/symbol_id.h>
-#include <python-frontend/tuple_handler.h>
 #include <python-frontend/type_handler.h>
 #include <python-frontend/type_utils.h>
 #include <util/arith_tools.h>
@@ -248,7 +246,8 @@ static bool try_extract_complex_parts_from_json(
   // Helper: extract a numeric literal from a JSON node, supporting
   // Constant nodes, UnaryOp(USub/UAdd, Constant), etc.
   std::function<std::optional<double>(const nlohmann::json &)> get_numeric;
-  get_numeric = [&](const nlohmann::json &node) -> std::optional<double> {
+  get_numeric = [&](const nlohmann::json &node) -> std::optional<double>
+  {
     if (!node.contains("_type"))
       return std::nullopt;
 
@@ -829,205 +828,6 @@ std::string function_call_expr::get_object_name() const
   return json_utils::get_object_alias(converter_.ast(), obj_name);
 }
 
-const symbolt *
-function_call_expr::get_object_list_symbol(std::string &display_name) const
-{
-  const auto &func_value = call_["func"]["value"];
-
-  // Subscript case: e.g. nested[0].append(99) — resolve the inner list symbol
-  // via the compile-time list_type_map rather than through a plain name lookup.
-  if (func_value["_type"] == "Subscript")
-  {
-    const auto &base_node = func_value["value"];
-    if (!base_node.contains("id"))
-      return nullptr;
-
-    std::string base_name = base_node["id"].get<std::string>();
-    base_name = json_utils::get_object_alias(converter_.ast(), base_name);
-
-    symbol_id base_sym_id = converter_.create_symbol_id();
-    base_sym_id.set_object(base_name);
-    const symbolt *base_sym = converter_.find_symbol(base_sym_id.to_string());
-    if (!base_sym)
-      return nullptr;
-
-    const auto &slice_node = func_value["slice"];
-    const typet list_type = converter_.get_type_handler().get_list_type();
-    const std::string &base_id = base_sym->id.as_string();
-
-    // Nested list (list-of-list) path: only meaningful when the base is itself
-    // a list, since list_type_map keys list-of-list types.  For non-list bases
-    // (e.g. dicts whose value is a list) we fall through to the get_expr
-    // dispatch below, which can also resolve dict-subscript receivers.
-    if (base_sym->type == list_type)
-    {
-      // Constant index: resolve directly from list_type_map.
-      if (
-        slice_node["_type"] == "Constant" &&
-        slice_node["value"].is_number_integer())
-      {
-        const size_t index = slice_node["value"].get<size_t>();
-
-        if (python_list::get_list_element_type(base_id, index) != list_type)
-          return nullptr;
-
-        const std::string inner_id =
-          python_list::get_list_element_id(base_id, index);
-        if (inner_id.empty())
-          return nullptr;
-
-        display_name = base_name + "[" + std::to_string(index) + "]";
-        return converter_.find_symbol(inner_id);
-      }
-
-      // Non-constant index (e.g. nested[i].append(v)): delegate to the existing
-      // subscript handler.  For comprehension-generated nested lists the handler
-      // hits the list_type_map early-return path and yields the template inner
-      // list symbol (the element produced inside the loop body) without emitting
-      // any runtime instructions.
-      const exprt subscript_expr = converter_.get_expr(func_value);
-      if (subscript_expr.is_symbol())
-      {
-        const symbolt *sym =
-          converter_.find_symbol(subscript_expr.identifier().as_string());
-        if (sym && sym->type == list_type)
-        {
-          const std::string idx_str = slice_node.contains("id")
-                                        ? slice_node["id"].get<std::string>()
-                                        : "(expr)";
-          display_name = base_name + "[" + idx_str + "]";
-          return sym;
-        }
-      }
-      return nullptr;
-    }
-
-    // Dict subscript whose value is a list (e.g. d[k].append(v) where
-    // d is a dict[K, list[V]] or a defaultdict(list)).  The dict-subscript
-    // expression returns the stored PyListObject pointer; wrap it in a
-    // temp symbol so list method handlers can treat it as a named list.
-    // List mutations through the temp alias the dict slot because lists in
-    // the Python model are reference-typed (PyListObject *).  Mirrors the
-    // $attr_list$ / $call_list$ pattern below.
-    const exprt subscript_expr = converter_.get_expr(func_value);
-    if (subscript_expr.type() == list_type)
-    {
-      symbolt &tmp = converter_.create_tmp_symbol(
-        call_, "$dict_list$", list_type, subscript_expr);
-      std::string idx_str = "(expr)";
-      if (slice_node.contains("id"))
-        idx_str = slice_node["id"].get<std::string>();
-      else if (
-        slice_node["_type"] == "Constant" &&
-        slice_node["value"].is_number_integer())
-        idx_str = std::to_string(slice_node["value"].get<size_t>());
-      display_name = base_name + "[" + idx_str + "]";
-      return &tmp;
-    }
-
-    return nullptr;
-  }
-
-  // Attribute case: e.g. obj.mutable_attr.append(1)
-  // Resolve the attribute access via get_expr(), which already handles the
-  // class-attribute fallback (instance attr not set → class-level symbol).
-  if (func_value["_type"] == "Attribute")
-  {
-    const exprt attr_expr = converter_.get_expr(func_value);
-    const typet list_type = converter_.get_type_handler().get_list_type();
-
-    if (
-      func_value.contains("value") && func_value["value"].contains("id") &&
-      func_value.contains("attr"))
-    {
-      display_name = func_value["value"]["id"].get<std::string>() + "." +
-                     func_value["attr"].get<std::string>();
-    }
-
-    if (attr_expr.is_symbol())
-    {
-      const symbolt *sym =
-        converter_.find_symbol(attr_expr.identifier().as_string());
-      if (sym && sym->type == list_type)
-        return sym;
-    }
-
-    // Instance attribute: attr_expr is a member_exprt (struct field access) of
-    // list pointer type. list_type is PyListObject*, so both the temp and the
-    // struct member point to the same PyListObject. All list mutations through
-    // the temp are visible via the original member (same pointer, same object).
-    //
-    // The temp symbol stores attr_expr as its value so that
-    // materialize_list_symbol() can emit the declaration lazily — only in
-    // handler methods, never inside discriminators (is_list_method_call, etc.).
-    if (attr_expr.type() == list_type)
-    {
-      symbolt &tmp = converter_.create_tmp_symbol(
-        call_, "$attr_list$", list_type, attr_expr);
-      return &tmp;
-    }
-
-    return nullptr;
-  }
-
-  // Call case: e.g. a.setdefault(k, []).append(99)
-  // receiver is a function call whose return value is a list pointer.
-  // Materialize the call result into a $call_list$ temp symbol
-  // so list method handlers can treat it as a named list.
-  // The declaration of the temp is emitted lazily by materialize_list_symbol().
-  if (func_value["_type"] == "Call")
-  {
-    const exprt call_expr = converter_.get_expr(func_value);
-    const typet list_type = converter_.get_type_handler().get_list_type();
-    if (call_expr.type() == list_type)
-    {
-      symbolt &tmp = converter_.create_tmp_symbol(
-        call_, "$call_list$", list_type, call_expr);
-      display_name = "$call_list$";
-      return &tmp;
-    }
-    return nullptr;
-  }
-
-  // Plain name case: e.g. mylist.append(99)
-  display_name = get_object_name();
-  symbol_id list_symbol_id = converter_.create_symbol_id();
-  list_symbol_id.set_object(display_name);
-  return converter_.find_symbol(list_symbol_id.to_string());
-}
-
-// Emit the IR declaration for an instance-attribute list temp symbol.
-//
-// get_object_list_symbol() creates a temp symbol (named "$attr_list$...") that
-// holds the member_exprt of an instance attribute list as its value.  This is
-// kept as a pure lookup so that discriminators (is_list_method_call, etc.) do
-// not emit IR as a side-effect.  Each list method handler calls this function
-// once, just after get_object_list_symbol(), to emit the actual code_declt that
-// initialises the temp pointer from the struct member.
-//
-// For non-instance-attribute symbols (global lists, class-level lists) the
-// function is a no-op.
-void function_call_expr::materialize_list_symbol(const symbolt *sym) const
-{
-  if (!sym || sym->value.is_nil())
-    return;
-  // Only emit a declaration for temp symbols produced by
-  // get_object_list_symbol() from non-named receivers.  These are identified
-  // by the prefixes "$attr_list$", "$call_list$", and "$dict_list$".
-  // Regular list symbols have a nil value and are declared elsewhere; this
-  // guard prevents re-declaring them.
-  const std::string &name = sym->name.as_string();
-  if (
-    name.find("$attr_list$") == std::string::npos &&
-    name.find("$call_list$") == std::string::npos &&
-    name.find("$dict_list$") == std::string::npos)
-    return;
-  code_declt decl(symbol_expr(*sym));
-  decl.copy_to_operands(sym->value);
-  decl.location() = sym->location;
-  converter_.current_block->copy_to_operands(decl);
-}
-
 bool function_call_expr::is_min_max_call() const
 {
   const std::string &func_name = function_id_.get_function();
@@ -1081,717 +881,6 @@ exprt to_value_expr(const exprt &arg, const namespacet &ns)
   if (func_call.type().is_nil() || func_call.type().id() == "empty")
     func_call.type() = arg.type();
   return func_call;
-}
-
-exprt function_call_expr::handle_list_insert() const
-{
-  const auto &args = call_["args"];
-
-  if (args.size() != 2)
-    throw std::runtime_error("insert() takes exactly two arguments");
-
-  std::string list_display_name;
-  const symbolt *list_symbol = get_object_list_symbol(list_display_name);
-  materialize_list_symbol(list_symbol);
-
-  if (!list_symbol)
-    throw std::runtime_error("List variable not found: " + list_display_name);
-
-  exprt index_expr = converter_.get_expr(args[0]);
-  exprt value_to_insert = converter_.get_expr(args[1]);
-
-  if (value_to_insert.is_constant())
-  {
-    symbolt &insert_value_symbol = converter_.create_tmp_symbol(
-      call_, "insert_value", size_type(), gen_zero(size_type()));
-    code_declt insert_value(symbol_expr(insert_value_symbol));
-    insert_value.copy_to_operands(value_to_insert);
-    converter_.current_block->copy_to_operands(insert_value);
-  }
-
-  python_list list(converter_, nlohmann::json());
-  list.add_type_info(
-    list_symbol->id.as_string(),
-    value_to_insert.identifier().as_string(),
-    value_to_insert.type());
-
-  return list.build_insert_list_call(
-    *list_symbol, index_expr, call_, value_to_insert);
-}
-
-exprt function_call_expr::handle_list_clear() const
-{
-  std::string list_display_name;
-  const symbolt *list_symbol = get_object_list_symbol(list_display_name);
-  materialize_list_symbol(list_symbol);
-
-  if (!list_symbol)
-    throw std::runtime_error("List variable not found: " + list_display_name);
-
-  // Find the list_clear C function
-  const symbolt *clear_func =
-    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_clear");
-  assert(clear_func);
-
-  // Build function call
-  code_function_callt clear_call;
-  clear_call.function() = symbol_expr(*clear_func);
-  clear_call.arguments().push_back(symbol_expr(*list_symbol));
-  clear_call.type() = empty_typet();
-  clear_call.location() = converter_.get_location_from_decl(call_);
-
-  return clear_call;
-}
-
-exprt function_call_expr::handle_list_pop() const
-{
-  const auto &args = call_["args"];
-
-  // pop() can take 0 or 1 arguments (default pops last element)
-  if (args.size() > 1)
-    throw std::runtime_error("pop() takes at most 1 argument");
-
-  const symbolt *list_symbol = nullptr;
-
-  // Create temporary symbols from binary expressions (e.g., (x-y).pop()).
-  if (
-    call_["func"].contains("value") &&
-    call_["func"]["value"].contains("_type") &&
-    call_["func"]["value"]["_type"] == "BinOp")
-  {
-    exprt list_expr = converter_.get_expr(call_["func"]["value"]);
-    if (list_expr.is_symbol())
-    {
-      list_symbol = converter_.symbol_table().find_symbol(
-        to_symbol_expr(list_expr).get_identifier());
-    }
-  }
-
-  if (!list_symbol)
-  {
-    std::string list_display_name;
-    list_symbol = get_object_list_symbol(list_display_name);
-    materialize_list_symbol(list_symbol);
-    if (!list_symbol)
-      throw std::runtime_error("List variable not found: " + list_display_name);
-  }
-
-  // Determine the index (default is -1 for last element)
-  exprt index_expr;
-  if (args.empty())
-  {
-    // No argument: pop last element (index -1)
-    index_expr = from_integer(-1, signedbv_typet(64));
-  }
-  else
-  {
-    // Use provided index
-    index_expr = converter_.get_expr(args[0]);
-  }
-
-  // Delegate to python_list to build the pop operation
-  python_list list_helper(converter_, call_);
-  return list_helper.build_pop_list_call(*list_symbol, index_expr, call_);
-}
-
-bool function_call_expr::is_tuple_method_call() const
-{
-  if (call_["func"]["_type"] != "Attribute")
-    return false;
-
-  const std::string &method_name = function_id_.get_function();
-  if (method_name != "count" && method_name != "index")
-    return false;
-
-  exprt receiver = converter_.get_expr(call_["func"]["value"]);
-  return converter_.get_tuple_handler().is_tuple_type(receiver.type());
-}
-
-exprt function_call_expr::handle_tuple_method() const
-{
-  const std::string &method_name = function_id_.get_function();
-  const auto &args = call_["args"];
-  if (args.size() != 1)
-    throw std::runtime_error(
-      "tuple." + method_name + "() takes exactly one argument");
-
-  exprt receiver = converter_.get_expr(call_["func"]["value"]);
-  const struct_typet &tuple_type = to_struct_type(receiver.type());
-  const auto &components = tuple_type.components();
-
-  exprt elem = converter_.get_expr(args[0]);
-
-  if (method_name == "count")
-  {
-    // sum(t.element_i == elem ? 1 : 0)
-    typet result_type = int_type();
-    exprt total = gen_zero(result_type);
-    for (const auto &comp : components)
-    {
-      exprt member = member_exprt(receiver, comp.get_name(), comp.type());
-      exprt eq = equality_exprt(member, elem);
-      if_exprt sel(eq, gen_one(result_type), gen_zero(result_type));
-      sel.type() = result_type;
-      total = plus_exprt(total, sel);
-      total.type() = result_type;
-    }
-    return total;
-  }
-
-  // method_name == "index"
-  // Return the smallest k for which t.element_k == elem; assert if absent.
-  if (components.empty())
-    throw std::runtime_error("tuple.index() on empty tuple");
-
-  // Build "any matched" guard so we can assert the element is present.
-  typet result_type = int_type();
-  exprt any_match = gen_boolean(false);
-  for (const auto &comp : components)
-  {
-    exprt member = member_exprt(receiver, comp.get_name(), comp.type());
-    exprt eq = equality_exprt(member, elem);
-    any_match = or_exprt(any_match, eq);
-  }
-  code_assertt found_assert(any_match);
-  found_assert.location() = converter_.get_location_from_decl(call_);
-  found_assert.location().comment("ValueError: tuple.index(x): x not in tuple");
-  converter_.add_instruction(found_assert);
-
-  // Build chain right-to-left: result_(n-1) is index n-1, falling back to
-  // earlier matches as we walk backwards. Net effect: leftmost match wins.
-  size_t n = components.size();
-  exprt result = from_integer(BigInt(n - 1), result_type);
-  for (size_t k = n - 1; k-- > 0;)
-  {
-    exprt member =
-      member_exprt(receiver, components[k].get_name(), components[k].type());
-    exprt eq = equality_exprt(member, elem);
-    if_exprt sel(eq, from_integer(BigInt(k), result_type), result);
-    sel.type() = result_type;
-    result = sel;
-  }
-  return result;
-}
-
-bool function_call_expr::is_dict_method_call() const
-{
-  if (call_["func"]["_type"] != "Attribute")
-    return false;
-
-  const std::string &method_name = function_id_.get_function();
-
-  if (
-    !python_dict_handler::is_value_returning_method(method_name) &&
-    method_name != "update")
-    return false;
-
-  // For "pop", which exists on both list and dict, treat as dict.pop() when
-  // the receiver does not resolve to a list symbol.
-  if (method_name == "pop")
-  {
-    std::string dummy;
-    const symbolt *sym = get_object_list_symbol(dummy);
-    const typet list_type = type_handler_.get_list_type();
-    return sym == nullptr || sym->type != list_type;
-  }
-
-  return true;
-}
-
-exprt function_call_expr::handle_dict_method() const
-{
-  const std::string &method_name = function_id_.get_function();
-
-  // Resolve the dict to a symbol.
-  // Named receivers look up by name;
-  // inline literals (e.g. `{"a":1}.get(...)`) have none,
-  // so spill into a tmp first.
-  exprt dict_expr;
-  std::string dict_name = get_object_name();
-  if (!dict_name.empty())
-  {
-    symbol_id dict_symbol_id = converter_.create_symbol_id();
-    dict_symbol_id.set_object(dict_name);
-    const symbolt *dict_symbol =
-      converter_.find_symbol(dict_symbol_id.to_string());
-    if (!dict_symbol)
-      throw std::runtime_error("Dictionary variable not found: " + dict_name);
-    dict_expr = symbol_expr(*dict_symbol);
-  }
-  else
-  {
-    exprt literal = converter_.get_expr(call_["func"]["value"]);
-    symbolt &tmp = converter_.create_tmp_symbol(
-      call_, "$dict_lit$", literal.type(), exprt());
-    converter_.add_instruction(code_declt(symbol_expr(tmp)));
-    converter_.add_instruction(code_assignt(symbol_expr(tmp), literal));
-    dict_expr = symbol_expr(tmp);
-  }
-
-  if (method_name == "get")
-    return converter_.get_dict_handler()->handle_dict_get(dict_expr, call_);
-
-  if (method_name == "setdefault")
-    return converter_.get_dict_handler()->handle_dict_setdefault(
-      dict_expr, call_);
-
-  if (method_name == "update")
-    return converter_.get_dict_handler()->handle_dict_update(dict_expr, call_);
-
-  if (method_name == "pop")
-    return converter_.get_dict_handler()->handle_dict_pop(dict_expr, call_);
-
-  if (method_name == "popitem")
-    return converter_.get_dict_handler()->handle_dict_popitem(dict_expr, call_);
-
-  if (method_name == "copy")
-    return converter_.get_dict_handler()->handle_dict_copy(dict_expr, call_);
-
-  throw std::runtime_error("Unsupported dict method: " + method_name);
-}
-
-bool function_call_expr::is_dict_class_method_call() const
-{
-  if (call_["func"]["_type"] != "Attribute")
-    return false;
-  const auto &value = call_["func"]["value"];
-  if (!value.contains("_type") || value["_type"] != "Name")
-    return false;
-  if (value["id"] != "dict")
-    return false;
-
-  const std::string &method_name = function_id_.get_function();
-  return method_name == "fromkeys";
-}
-
-exprt function_call_expr::handle_list_copy() const
-{
-  const auto &args = call_["args"];
-
-  if (!args.empty())
-    throw std::runtime_error("copy() takes no arguments");
-
-  std::string list_display_name;
-  const symbolt *list_symbol = get_object_list_symbol(list_display_name);
-  materialize_list_symbol(list_symbol);
-
-  if (!list_symbol)
-    throw std::runtime_error("List variable not found: " + list_display_name);
-
-  // Delegate to python_list to build the copy operation
-  python_list list_helper(converter_, call_);
-  return list_helper.build_copy_list_call(*list_symbol, call_);
-}
-
-exprt function_call_expr::handle_list_remove() const
-{
-  const auto &args = call_["args"];
-
-  if (args.size() != 1)
-    throw std::runtime_error("remove() takes exactly one argument");
-
-  std::string list_display_name;
-  const symbolt *list_symbol = get_object_list_symbol(list_display_name);
-  materialize_list_symbol(list_symbol);
-
-  if (!list_symbol)
-    throw std::runtime_error("List variable not found: " + list_display_name);
-
-  exprt value_to_remove = converter_.get_expr(args[0]);
-
-  python_list list_helper(converter_, call_);
-  exprt result =
-    list_helper.build_remove_list_call(*list_symbol, call_, value_to_remove);
-
-  return result;
-}
-
-exprt function_call_expr::handle_list_sort() const
-{
-  const auto &args = call_["args"];
-  if (!args.empty())
-    throw std::runtime_error(
-      "sort() positional arguments are not supported; "
-      "use sort() with no arguments");
-
-  // sort() supports a `reverse=` keyword. `key=` is not handled yet; reject
-  // explicitly rather than dropping it silently.
-  bool reverse = false;
-  if (call_.contains("keywords"))
-  {
-    for (const auto &kw : call_["keywords"])
-    {
-      const std::string name = kw.value("arg", "");
-      if (name == "reverse")
-      {
-        exprt v = converter_.get_expr(kw["value"]);
-        if (!v.is_constant())
-          throw std::runtime_error(
-            "sort(reverse=...) requires a constant boolean");
-        reverse = v.is_true();
-      }
-      else
-        throw std::runtime_error(
-          "sort() keyword argument '" + name +
-          "' is not supported (only reverse=)");
-    }
-  }
-
-  std::string list_display_name;
-  const symbolt *list_symbol = get_object_list_symbol(list_display_name);
-  materialize_list_symbol(list_symbol);
-
-  if (!list_symbol)
-    throw std::runtime_error("List variable not found: " + list_display_name);
-
-  const std::string &list_id = list_symbol->id.as_string();
-
-  // ── Determine type_flag and float_type_id ─────────────────────────────────
-  //
-  // type_flag:
-  //   0 = all-integer          → int64_t comparison    (SMT-fast, no FP)
-  //   1 = all-float            → *(double*) bit-read
-  //   2 = string/lexicographic → memcmp
-  //   3 = mixed int + float    → per-element dispatch via float_type_id
-
-  int type_flag = 0;
-  size_t float_type_id = 0;
-  python_list::get_list_type_flags(
-    list_id, converter_.get_type_handler(), type_flag, float_type_id);
-
-  // ── Locate the C model function ────────────────────────────────────────────
-  const symbolt *sort_func =
-    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_sort");
-  if (!sort_func)
-    throw std::runtime_error(
-      "__ESBMC_list_sort function not found in symbol table");
-
-  // ── Emit the call: __ESBMC_list_sort(list, type_flag, float_type_id) ──────
-  code_function_callt sort_call;
-  sort_call.function() = symbol_expr(*sort_func);
-  sort_call.arguments().push_back(symbol_expr(*list_symbol));
-  sort_call.arguments().push_back(from_integer(type_flag, int_type()));
-  sort_call.arguments().push_back(
-    from_integer(float_type_id, unsignedbv_typet(config.ansi_c.address_width)));
-  sort_call.type() = empty_typet();
-  sort_call.location() = converter_.get_location_from_decl(call_);
-
-  // For reverse=True, sort ascending then reverse in place via the existing
-  // __ESBMC_list_reverse model. Wrap both calls in a code_blockt.
-  if (!reverse)
-    return sort_call;
-
-  const symbolt *reverse_func =
-    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_reverse");
-  if (!reverse_func)
-    throw std::runtime_error(
-      "__ESBMC_list_reverse function not found in symbol table");
-
-  code_function_callt reverse_call;
-  reverse_call.function() = symbol_expr(*reverse_func);
-  reverse_call.arguments().push_back(symbol_expr(*list_symbol));
-  reverse_call.type() = empty_typet();
-  reverse_call.location() = converter_.get_location_from_decl(call_);
-
-  python_list::reverse_type_info(list_id);
-
-  code_blockt block;
-  block.copy_to_operands(sort_call);
-  block.copy_to_operands(reverse_call);
-  return block;
-}
-
-exprt function_call_expr::handle_list_reverse() const
-{
-  const auto &args = call_["args"];
-
-  if (!args.empty())
-    throw std::runtime_error("reverse() takes no arguments");
-
-  std::string list_display_name;
-  const symbolt *list_symbol = get_object_list_symbol(list_display_name);
-  materialize_list_symbol(list_symbol);
-
-  if (!list_symbol)
-    throw std::runtime_error("List variable not found: " + list_display_name);
-
-  // Locate the C model function __ESBMC_list_reverse
-  const symbolt *reverse_func =
-    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_reverse");
-  assert(reverse_func);
-
-  // Emit: __ESBMC_list_reverse(list)
-  code_function_callt reverse_call;
-  reverse_call.function() = symbol_expr(*reverse_func);
-  reverse_call.arguments().push_back(symbol_expr(*list_symbol));
-  reverse_call.type() = empty_typet();
-  reverse_call.location() = converter_.get_location_from_decl(call_);
-
-  // Reverse the compile-time type-info vector to mirror the runtime
-  // reordering, so that subsequent index-based type lookups remain valid.
-  python_list::reverse_type_info(list_symbol->id.as_string());
-
-  return reverse_call;
-}
-
-bool function_call_expr::is_set_method_call() const
-{
-  if (call_["func"]["_type"] != "Attribute")
-    return false;
-
-  const std::string &method_name = function_id_.get_function();
-  if (
-    method_name != "add" && method_name != "discard" &&
-    method_name != "issubset" && method_name != "update" &&
-    method_name != "symmetric_difference")
-    return false;
-
-  std::string dummy;
-  const symbolt *sym = get_object_list_symbol(dummy);
-  return sym != nullptr && sym->is_set;
-}
-
-exprt function_call_expr::handle_set_method() const
-{
-  const std::string &method_name = function_id_.get_function();
-  const auto &args = call_["args"];
-
-  if (args.size() != 1)
-    throw std::runtime_error(method_name + "() takes exactly one argument");
-
-  std::string set_display_name;
-  const symbolt *set_symbol = get_object_list_symbol(set_display_name);
-  materialize_list_symbol(set_symbol);
-  if (!set_symbol)
-    throw std::runtime_error("Set variable not found: " + set_display_name);
-
-  // add/discard take a single element value.
-  if (method_name == "add" || method_name == "discard")
-  {
-    exprt elem = converter_.get_expr(args[0]);
-    python_list helper(converter_, call_);
-    return helper.build_set_membership_call(
-      *set_symbol, call_, elem, method_name);
-  }
-
-  // issubset / update / symmetric_difference take another set/iterable.
-  exprt other = converter_.get_expr(args[0]);
-  python_set set_helper(converter_, call_);
-  return set_helper.build_set_method_call(
-    *set_symbol, other, call_, method_name);
-}
-
-bool function_call_expr::is_list_method_call() const
-{
-  if (call_["func"]["_type"] != "Attribute")
-    return false;
-
-  const std::string &method_name = function_id_.get_function();
-
-  if (
-    method_name != "append" && method_name != "pop" &&
-    method_name != "insert" && method_name != "remove" &&
-    method_name != "clear" && method_name != "extend" &&
-    method_name != "copy" && method_name != "sort" && method_name != "reverse")
-    return false;
-
-  // "pop" is shared between list and dict. Disambiguate using the actual
-  // symbol type: only treat as list.pop() when the receiver resolves to a
-  // symbol whose type is the list type.
-  if (method_name == "pop")
-  {
-    // A BinOp receiver (e.g., (s1 - s2).pop()) is always a set/list: dicts
-    // do not support arithmetic operators. handle_list_pop() already handles
-    // this case, so route it here before the symbol-type check.
-    if (
-      call_["func"].contains("value") &&
-      call_["func"]["value"].contains("_type") &&
-      call_["func"]["value"]["_type"] == "BinOp")
-      return true;
-
-    std::string dummy;
-    const symbolt *sym = get_object_list_symbol(dummy);
-    const typet list_type = type_handler_.get_list_type();
-    return sym != nullptr && sym->type == list_type;
-  }
-
-  // "copy" is shared between list and dict. Treat as list.copy() only when
-  // the receiver resolves to a list symbol; otherwise let dispatch fall
-  // through to handle_dict_method().
-  if (method_name == "copy")
-  {
-    // BinOp receivers (e.g. (s1 - s2).copy()) are list-like, since dicts do
-    // not support arithmetic operators.
-    if (
-      call_["func"].contains("value") &&
-      call_["func"]["value"].contains("_type") &&
-      call_["func"]["value"]["_type"] == "BinOp")
-      return true;
-
-    std::string dummy;
-    const symbolt *sym = get_object_list_symbol(dummy);
-    const typet list_type = type_handler_.get_list_type();
-    return sym != nullptr && sym->type == list_type;
-  }
-
-  return true;
-}
-
-exprt function_call_expr::handle_list_method() const
-{
-  const std::string &method_name = function_id_.get_function();
-
-  if (method_name == "append")
-    return handle_list_append();
-  if (method_name == "insert")
-    return handle_list_insert();
-  if (method_name == "extend")
-    return handle_list_extend();
-  if (method_name == "clear")
-    return handle_list_clear();
-  if (method_name == "pop")
-    return handle_list_pop();
-  if (method_name == "copy")
-    return handle_list_copy();
-  if (method_name == "remove")
-    return handle_list_remove();
-  if (method_name == "sort")
-    return handle_list_sort();
-  if (method_name == "reverse")
-    return handle_list_reverse();
-  // Add other methods as needed
-
-  throw std::runtime_error("Unsupported list method: " + method_name);
-}
-
-exprt function_call_expr::handle_list_append() const
-{
-  const auto &args = call_["args"];
-
-  if (args.size() != 1)
-    throw std::runtime_error("append() takes exactly one argument");
-
-  std::string list_display_name;
-  const symbolt *list_symbol = get_object_list_symbol(list_display_name);
-  materialize_list_symbol(list_symbol);
-
-  if (!list_symbol)
-    throw std::runtime_error("List variable not found: " + list_display_name);
-
-  // Get the value to append
-  exprt value_to_append = converter_.get_expr(args[0]);
-
-  // If value_to_append is a function call, materialize its return value
-  bool is_func_call = (value_to_append.is_code() &&
-                       value_to_append.get("statement") == "function_call") ||
-                      (value_to_append.id() == "sideeffect" &&
-                       value_to_append.get("statement") == "function_call");
-
-  if (is_func_call)
-  {
-    exprt func_expr;
-    exprt::operandst func_args;
-    typet ret_type;
-
-    if (value_to_append.is_code())
-    {
-      const code_function_callt &call =
-        to_code_function_call(to_code(value_to_append));
-      func_expr = call.function();
-      func_args = call.arguments();
-      ret_type = call.type();
-    }
-    else
-    {
-      // side_effect_expr_function_callt
-      const side_effect_expr_function_callt &call =
-        to_side_effect_expr_function_call(value_to_append);
-      func_expr = call.function();
-      func_args = call.arguments();
-      ret_type = call.type();
-    }
-
-    if (ret_type.is_nil() || ret_type.is_empty())
-    {
-      log_warning(
-        "list.append with function call: unknown return type, assuming int");
-      ret_type = int_type();
-    }
-
-    symbolt &tmp_var = converter_.create_tmp_symbol(
-      call_, "$append_ret$", ret_type, gen_zero(ret_type));
-
-    code_declt tmp_decl(symbol_expr(tmp_var));
-    tmp_decl.location() = converter_.get_location_from_decl(call_);
-    converter_.current_block->copy_to_operands(tmp_decl);
-
-    // Create function call with lhs
-    code_function_callt new_call;
-    new_call.function() = func_expr;
-    new_call.arguments() = func_args;
-    new_call.lhs() = symbol_expr(tmp_var);
-    new_call.type() = ret_type;
-    new_call.location() = converter_.get_location_from_decl(call_);
-    converter_.current_block->copy_to_operands(new_call);
-
-    // Replace value_to_append with the temporary variable
-    value_to_append = symbol_expr(tmp_var);
-  }
-
-  if (
-    value_to_append.type().is_array() &&
-    value_to_append.type().subtype() == char_type())
-  {
-    const array_typet &array_type = to_array_type(value_to_append.type());
-    // Only convert single-element char arrays (string literals)
-    if (array_type.size().is_constant())
-    {
-      const constant_exprt &size_const = to_constant_expr(array_type.size());
-      BigInt size_value = binary2integer(size_const.value().c_str(), false);
-      if (size_value == 1)
-        value_to_append.type() = gen_pointer_type(char_type());
-    }
-  }
-
-  if (value_to_append.is_constant())
-  {
-    // Create tmp variable to hold value
-    symbolt &append_value_symbol = converter_.create_tmp_symbol(
-      call_, "append_value", size_type(), gen_zero(size_type()));
-    code_declt append_value(symbol_expr(append_value_symbol));
-    append_value.copy_to_operands(value_to_append);
-    converter_.current_block->copy_to_operands(append_value);
-  }
-
-  python_list list(converter_, nlohmann::json());
-
-  list.add_type_info(
-    list_symbol->id.as_string(),
-    value_to_append.identifier().as_string(),
-    value_to_append.type());
-
-  return list.build_push_list_call(*list_symbol, call_, value_to_append);
-}
-
-exprt function_call_expr::handle_list_extend() const
-{
-  const auto &args = call_["args"];
-
-  if (args.size() != 1)
-    throw std::runtime_error("extend() takes exactly one argument");
-
-  std::string list_display_name;
-  const symbolt *list_symbol = get_object_list_symbol(list_display_name);
-  materialize_list_symbol(list_symbol);
-
-  if (!list_symbol)
-    throw std::runtime_error("List variable not found: " + list_display_name);
-
-  exprt other_list = converter_.get_expr(args[0]);
-
-  python_list list(converter_, nlohmann::json());
-
-  return list.build_extend_list_call(*list_symbol, call_, other_list);
 }
 
 bool function_call_expr::is_print_call() const
@@ -1876,7 +965,8 @@ function_call_expr::get_dispatch_table()
 
     // Introspection functions (isinstance, hasattr)
     {[this]() { return is_introspection_call(); },
-     [this]() {
+     [this]()
+     {
        if (function_id_.get_function() == "isinstance")
          return handle_isinstance();
        else
@@ -1900,7 +990,8 @@ function_call_expr::get_dispatch_table()
      "all()"},
 
     // int.to_bytes()
-    {[this]() {
+    {[this]()
+     {
        if (call_["func"]["_type"] != "Attribute")
          return false;
        if (function_id_.get_function() != "to_bytes")
@@ -1916,7 +1007,8 @@ function_call_expr::get_dispatch_table()
 
     // Min/Max functions
     {[this]() { return is_min_max_call(); },
-     [this]() {
+     [this]()
+     {
        const std::string &func_name = function_id_.get_function();
        if (func_name == "min")
          return handle_min_max("min", exprt::i_lt);
@@ -1928,7 +1020,8 @@ function_call_expr::get_dispatch_table()
     // __iter__ on builtin iterables (range, list, tuple, str, set, etc.)
     // Returns the object itself: we model iteration via index-based while
     // loops, so the iterable is the iterator.
-    {[this]() {
+    {[this]()
+     {
        if (call_["func"]["_type"] != "Attribute")
          return false;
        if (function_id_.get_function() != "__iter__")
@@ -1959,9 +1052,7 @@ function_call_expr::get_dispatch_table()
     // Dict class methods (dict.fromkeys), matched before instance-method dispatch
     // The receiver is the class name, not a dict symbol.
     {[this]() { return is_dict_class_method_call(); },
-     [this]() {
-       return converter_.get_dict_handler()->handle_dict_fromkeys(call_);
-     },
+     [this]() { return handle_dict_class_method(); },
      "dict class methods"},
 
     // Dict methods
@@ -1970,11 +1061,13 @@ function_call_expr::get_dispatch_table()
      "dict methods"},
 
     // Math module functions (isnan, isinf)
-    {[this]() {
+    {[this]()
+     {
        const std::string &func_name = function_id_.get_function();
        return func_name == "__ESBMC_isnan" || func_name == "__ESBMC_isinf";
      },
-     [this]() {
+     [this]()
+     {
        const std::string &func_name = function_id_.get_function();
        const auto &args = call_["args"];
 
@@ -2011,7 +1104,8 @@ function_call_expr::get_dispatch_table()
 
     // cmath.log / cmath.log10: lower directly to complex-safe IR to avoid
     // backend typing mismatches from model-level dispatch.
-    {[this]() {
+    {[this]()
+     {
        if (!(call_.contains("func") && call_["func"].contains("_type") &&
              call_["func"]["_type"] == "Attribute"))
          return false;
@@ -2021,7 +1115,8 @@ function_call_expr::get_dispatch_table()
        const std::string &func_name = function_id_.get_function();
        return func_name == "log" || func_name == "log10";
      },
-     [this]() -> exprt {
+     [this]() -> exprt
+     {
        const std::string &raw_func_name = function_id_.get_function();
        std::string func_name = raw_func_name;
        if (
@@ -2065,7 +1160,8 @@ function_call_expr::get_dispatch_table()
 
     // cmath inverse functions: use a fast path only on pure-imaginary inputs
     // and delegate all other cases to the Python cmath model implementation.
-    {[this]() {
+    {[this]()
+     {
        if (!(call_.contains("func") && call_["func"].contains("_type") &&
              call_["func"]["_type"] == "Attribute"))
          return false;
@@ -2077,7 +1173,8 @@ function_call_expr::get_dispatch_table()
          func_name == "asin" || func_name == "atan" || func_name == "asinh" ||
          func_name == "atanh");
      },
-     [this]() -> exprt {
+     [this]() -> exprt
+     {
        const std::string &raw_func_name = function_id_.get_function();
        const std::string func_name = raw_func_name.rfind("__ESBMC_", 0) == 0
                                        ? raw_func_name.substr(8)
@@ -2087,7 +1184,8 @@ function_call_expr::get_dispatch_table()
                                ? call_["keywords"]
                                : nlohmann::json::array();
 
-       auto raise_type_error = [this](const std::string &msg) -> exprt {
+       auto raise_type_error = [this](const std::string &msg) -> exprt
+       {
          return converter_.get_exception_handler().gen_exception_raise(
            "TypeError", msg);
        };
@@ -2162,7 +1260,8 @@ function_call_expr::get_dispatch_table()
      "cmath inverse pure-imag fast path"},
 
     // Math module functions (sin, cos, sqrt, exp, log, etc.)
-    {[this]() {
+    {[this]()
+     {
        const std::string &func_name = function_id_.get_function();
        std::string caller;
        if (
@@ -2175,43 +1274,45 @@ function_call_expr::get_dispatch_table()
        return converter_.get_math_handler().is_math_dispatch_target_cached(
          caller, func_name);
      },
-     [this]() -> exprt {
+     [this]() -> exprt
+     {
        const std::string &raw_func_name = function_id_.get_function();
        const std::string func_name = raw_func_name.rfind("__ESBMC_", 0) == 0
                                        ? raw_func_name.substr(8)
                                        : raw_func_name;
        const auto &args = call_["args"];
-       auto raise_math_real_type_error = [this]() -> exprt {
-         return complex_utils::raise_math_real_type_error_expr(converter_);
-       };
-       auto raise_math_int_type_error = [this]() -> exprt {
-         return complex_utils::raise_math_int_type_error_expr(converter_);
-       };
-       auto has_complex_arg = [](const exprt &arg_expr) -> bool {
-         return is_complex_type(arg_expr.type());
-       };
-       const auto call_has_complex = [&]() -> bool {
+       auto raise_math_real_type_error = [this]() -> exprt
+       { return complex_utils::raise_math_real_type_error_expr(converter_); };
+       auto raise_math_int_type_error = [this]() -> exprt
+       { return complex_utils::raise_math_int_type_error_expr(converter_); };
+       auto has_complex_arg = [](const exprt &arg_expr) -> bool
+       { return is_complex_type(arg_expr.type()); };
+       const auto call_has_complex = [&]() -> bool
+       {
          return math_guard_utils::call_has_complex_in_args_or_keywords(
            call_,
            converter_,
            type_handler_,
            converter_.current_function_name());
        };
-       auto require_one_arg = [&]() -> exprt {
+       auto require_one_arg = [&]() -> exprt
+       {
          if (args.size() != 1)
            throw std::runtime_error(
              func_name + "() expects exactly 1 argument");
          return converter_.get_expr(args[0]);
        };
 
-       auto require_two_args = [&]() -> std::pair<exprt, exprt> {
+       auto require_two_args = [&]() -> std::pair<exprt, exprt>
+       {
          if (args.size() != 2)
            throw std::runtime_error(
              func_name + "() expects exactly 2 arguments");
          return {converter_.get_expr(args[0]), converter_.get_expr(args[1])};
        };
        auto validate_real_arg =
-         [&](const exprt &arg_expr) -> std::optional<exprt> {
+         [&](const exprt &arg_expr) -> std::optional<exprt>
+       {
          if (is_cpp_throw_expr(arg_expr))
            return arg_expr;
          if (has_complex_arg(arg_expr))
@@ -2220,8 +1321,8 @@ function_call_expr::get_dispatch_table()
        };
        auto validate_real_args =
          [&](
-           const exprt &lhs_expr,
-           const exprt &rhs_expr) -> std::optional<exprt> {
+           const exprt &lhs_expr, const exprt &rhs_expr) -> std::optional<exprt>
+       {
          if (is_cpp_throw_expr(lhs_expr))
            return lhs_expr;
          if (is_cpp_throw_expr(rhs_expr))
@@ -2496,7 +1597,8 @@ function_call_expr::get_dispatch_table()
            // If either argument is a constant struct (tuple literal), store it
            // in a temporary local variable so that the GOTO IR has a proper
            // symbol whose address the solver can track.
-           auto materialize = [&](exprt &arg) {
+           auto materialize = [&](exprt &arg)
+           {
              if (arg.is_constant())
              {
                symbolt &tmp = converter_.create_tmp_symbol(
@@ -2539,7 +1641,8 @@ function_call_expr::get_dispatch_table()
      "math.comb"},
 
     // divmod function
-    {[this]() {
+    {[this]()
+     {
        const std::string &func_name = function_id_.get_function();
        return func_name == "divmod";
      },
@@ -2547,11 +1650,13 @@ function_call_expr::get_dispatch_table()
      "divmod"},
 
     // round() builtin function
-    {[this]() {
+    {[this]()
+     {
        const std::string &func_name = function_id_.get_function();
        return func_name == "round" && function_id_.get_prefix() == "py:";
      },
-     [this]() {
+     [this]()
+     {
        if (call_["args"].empty())
          return converter_.get_exception_handler().gen_exception_raise(
            "TypeError", "round() missing required argument");
@@ -2566,10 +1671,12 @@ function_call_expr::get_dispatch_table()
      "type()"},
 
     // repr() built-in — handle complex, delegate rest to general call
-    {[this]() {
+    {[this]()
+     {
        return function_id_.get_function() == "repr" && !call_["args"].empty();
      },
-     [this]() {
+     [this]()
+     {
        const auto &arg = call_["args"][0];
        double real_val = 0.0, imag_val = 0.0;
        if (try_extract_complex_parts_from_json(
@@ -2592,7 +1699,8 @@ function_call_expr::get_dispatch_table()
      "repr()"},
 
     // Built-in type constructors (int, float, str, bool, etc.)
-    {[this]() {
+    {[this]()
+     {
        const std::string &func_name = function_id_.get_function();
        return type_utils::is_builtin_type(func_name) ||
               type_utils::is_consensus_type(func_name);
@@ -2602,7 +1710,8 @@ function_call_expr::get_dispatch_table()
 
     // Regex module validation
     {[this]() { return is_re_module_call(); },
-     [this]() {
+     [this]()
+     {
        exprt validation_result = validate_re_module_args();
        if (!validation_result.is_nil())
          return validation_result;
@@ -2709,7 +1818,8 @@ exprt function_call_expr::handle_general_function_call()
             std::stable_sort(
               elems.begin(),
               elems.end(),
-              [](const sortable_elem &a, const sortable_elem &b) {
+              [](const sortable_elem &a, const sortable_elem &b)
+              {
                 if (a.key == b.key)
                   return a.pos < b.pos;
                 return a.key < b.key;
@@ -3248,12 +2358,14 @@ exprt function_call_expr::handle_general_function_call()
   const typet &return_type = to_code_type(func_symbol->type).return_type();
   call.type() = return_type;
 
-  auto bind_instance_receiver = [&](exprt receiver) -> exprt {
+  auto bind_instance_receiver = [&](exprt receiver) -> exprt
+  {
     return receiver.type().is_pointer() ? receiver : gen_address_of(receiver);
   };
 
   auto bind_instance_receiver_symbol =
-    [&](const symbolt &receiver_symbol) -> exprt {
+    [&](const symbolt &receiver_symbol) -> exprt
+  {
     exprt receiver = symbol_expr(receiver_symbol);
     return bind_instance_receiver(receiver);
   };
@@ -4134,7 +3246,8 @@ function_call_expr::find_possible_class_types(const symbolt *obj_symbol) const
       func_node["body"].is_array())
     {
       std::function<void(const nlohmann::json &)> find_returns;
-      find_returns = [&](const nlohmann::json &node) {
+      find_returns = [&](const nlohmann::json &node)
+      {
         if (
           !node.is_object() || !node.contains("_type") ||
           !node["_type"].is_string())
@@ -4374,7 +3487,8 @@ exprt function_call_expr::check_argument_types(
     }
   }
 
-  auto types_match = [&](const typet &expected, const typet &actual) {
+  auto types_match = [&](const typet &expected, const typet &actual)
+  {
     return base_type_eq(expected, actual, converter_.ns) ||
            (type_utils::is_string_type(expected) &&
             type_utils::is_string_type(actual));

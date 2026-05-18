@@ -136,6 +136,16 @@ private:
    */
   const symbolt *get_object_list_symbol(std::string &display_name) const;
   void materialize_list_symbol(const symbolt *sym) const;
+  const symbolt *resolve_list_symbol_or_throw(std::string &display_name) const;
+  const symbolt *resolve_set_symbol_or_throw(std::string &display_name) const;
+  const symbolt *
+  find_required_symbol(const std::string &id, const std::string &message) const;
+  bool has_binop_receiver() const;
+  bool has_attribute_receiver() const;
+  bool is_ambiguous_list_dict_method(const std::string &method_name) const;
+  bool receiver_is_list_symbol() const;
+  bool receiver_is_set_symbol() const;
+  exprt resolve_dict_expr_or_throw() const;
 
   /*
    * Handles int-to-str conversions (e.g., str(65)) by generating
@@ -285,6 +295,7 @@ private:
 
   // Dict class method detection (e.g. dict.fromkeys([1, 2, 3]))
   bool is_dict_class_method_call() const;
+  exprt handle_dict_class_method() const;
 
   // Set method detection and handling
   bool is_set_method_call() const;
