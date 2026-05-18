@@ -1,0 +1,4 @@
+CORE
+main.c
+--unchecked-return-value-check --incremental-bmc
+^VERIFICATION SUCCESSFUL$
