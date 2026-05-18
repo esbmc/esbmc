@@ -166,7 +166,7 @@ void scan_forward(
 } // namespace
 
 bool goto_check_unchecked_return::runOnFunction(
-  std::pair<const dstring, goto_functiont> &F)
+  std::pair<const irep_idt, goto_functiont> &F)
 {
   if (!F.second.body_available)
     return false;
