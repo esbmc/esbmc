@@ -51,6 +51,10 @@ class Lock:
     def release(self) -> None:
         """Mark the lock free; assert it was held."""
         __ESBMC_atomic_begin()
+        # nosec B101: ESBMC's parser.py consumes this assert via
+        # ast.parse() and lowers it to a verification claim, so the
+        # bandit/Codacy concern about `python -O` byte-code stripping
+        # does not apply to the ESBMC pipeline.
         assert self._locked == 1, "must hold lock upon unlock"
         self._locked = 0
         __ESBMC_atomic_end()
