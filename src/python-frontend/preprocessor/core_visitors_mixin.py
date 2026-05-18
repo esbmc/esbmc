@@ -449,7 +449,7 @@ class CoreVisitorsMixin:
         import decimal as _decimal_mod
 
         if len(node.args) == 0:
-            dec = _decimal_mod.Decimal()
+            dec = _decimal_mod.Decimal("0")
         elif len(node.args) == 1:
             dec = self._decimal_from_single_arg(node.args[0], _decimal_mod)
         else:
