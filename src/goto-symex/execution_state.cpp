@@ -442,9 +442,9 @@ bool execution_statet::check_if_ileaves_blocked()
     // and to what thread.
     return true;
 
-  const bool main_ended_here = !threads_state.empty() &&
-                               (threads_state[0].thread_ended ||
-                                threads_state[0].call_stack.empty());
+  const bool main_ended_here =
+    !threads_state.empty() &&
+    (threads_state[0].thread_ended || threads_state[0].call_stack.empty());
   if (
     owning_rt->main_thread_ended && main_ended_here &&
     !options.get_bool_option("deadlock-check") &&
