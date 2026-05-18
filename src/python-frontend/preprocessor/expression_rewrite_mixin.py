@@ -288,12 +288,12 @@ class ExpressionRewriteMixin:
         left, right = node.test.left, node.test.comparators[0]
         for name in self._SYMMETRIC_EQ_TRANSFORMS:
             fn = getattr(self, name)
-            for l, r in ((left, right), (right, left)):
-                rewritten = fn(l, r, node)
+            for lhs, rhs in ((left, right), (right, left)):
+                rewritten = fn(lhs, rhs, node)
                 if rewritten is not None:
                     return [], rewritten
-        for l, r in ((left, right), (right, left)):
-            prefix, rewritten = self._try_lower_expr_tuple_literal_eq(l, r, node)
+        for lhs, rhs in ((left, right), (right, left)):
+            prefix, rewritten = self._try_lower_expr_tuple_literal_eq(lhs, rhs, node)
             if rewritten is not None:
                 return prefix or [], rewritten
         return [], None
