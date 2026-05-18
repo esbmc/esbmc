@@ -1409,8 +1409,8 @@ execution_statet::state_hashing_level2t::generate_l2_state_hash() const
   unsigned int total;
   size_t hash_sz = sizeof(crypto_hash::hash);
 
-  uint8_t *data =
-    (uint8_t *)alloca(current_hashes.size() * hash_sz * sizeof(uint8_t));
+  uint8_t *data = static_cast<uint8_t *>(
+    alloca(current_hashes.size() * hash_sz * sizeof(uint8_t)));
 
   total = 0;
   for (const auto &current_hashe : current_hashes)
