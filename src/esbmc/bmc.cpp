@@ -704,6 +704,17 @@ static nlohmann::json parse_claim_location(const std::string &loc)
   return j;
 }
 
+// Predicate used by both the final and the verbose k-path reporters.
+static bool is_kpath_maximal(const std::string &claim_sig)
+{
+  const auto &redundant = goto_coveraget::k_path_spanning_redundant;
+  // claim_sig = "msg\tloc"; loc has no tabs, so rfind is robust if a
+  // future emission path puts a tab in msg.
+  const auto tab = claim_sig.rfind('\t');
+  return redundant.count(
+           {claim_sig.substr(0, tab), claim_sig.substr(tab + 1)}) == 0;
+}
+
 void report_coverage(
   const optionst &options,
   std::unordered_set<std::string> &reached_claims,
@@ -940,17 +951,8 @@ void report_coverage(
     // Bertolino, IEEE TSE 2003). Filter reached_claims against
     // k_path_spanning_redundant so a reached-but-subsumed goal does not
     // inflate the numerator against the maximal-only denominator.
-    const auto &redundant = goto_coveraget::k_path_spanning_redundant;
-    auto is_maximal = [&redundant](const std::string &claim_sig) {
-      // claim_sig = "msg\tloc"; loc has no tabs, so rfind is robust if a
-      // future emission path puts a tab in msg.
-      const auto tab = claim_sig.rfind('\t');
-      return redundant.count(
-               {claim_sig.substr(0, tab), claim_sig.substr(tab + 1)}) == 0;
-    };
-
-    const size_t tracked_instance =
-      std::count_if(reached_claims.begin(), reached_claims.end(), is_maximal);
+    const size_t tracked_instance = std::count_if(
+      reached_claims.begin(), reached_claims.end(), is_kpath_maximal);
 
     log_success("\n[Coverage]\n");
     log_result("k-Path Witnesses : {}", total);
@@ -1093,6 +1095,7 @@ void bmct::report_coverage_verbose(
   const bool &is_cond_cov,
   const bool &is_branch_cov,
   const bool &is_branch_func_cov,
+  const bool &is_k_path_cov,
   const std::unordered_set<std::string> &reached_claims,
   const std::unordered_multiset<std::string> &reached_mul_claims)
 {
@@ -1177,6 +1180,20 @@ void bmct::report_coverage_verbose(
           "Branch Function Coverage: {}%", tracked_instance * 100.0 / totals);
       else
         log_result("Branch Function Coverage: 0%");
+    }
+    else if (is_k_path_cov)
+    {
+      // Match the final reporter's spanning-set formula so per-witness
+      // progress agrees with the final summary.
+      const size_t tracked_instance = std::count_if(
+        reached_claims.begin(), reached_claims.end(), is_kpath_maximal);
+
+      if (options.get_bool_option("k-path-coverage-claims"))
+        log_status("\n  {} : SATISFIED", prettify_solidity_expr(claim_sig));
+
+      log_result(
+        "Current k-Path Coverage: {}%\n",
+        tracked_instance * 100.0 / goto_coveraget::total_kpath_spanning);
     }
     else
     {
@@ -2133,6 +2150,7 @@ smt_convt::resultt bmct::multi_property_check(
           is_cond_cov,
           is_branch_cov,
           is_branch_func_cov,
+          is_k_path_cov,
           reached_claims,
           reached_mul_claims);
       else if (!is_cov_silent)
