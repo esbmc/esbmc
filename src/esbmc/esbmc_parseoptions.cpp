@@ -1625,7 +1625,8 @@ int esbmc_parseoptionst::do_bmc_strategy(
       bool is_havoc_reliable = !options.get_bool_option("add-symex-value-sets");
       if (k_step > 1 && is_havoc_reliable)
       {
-        tvt is_res = is_inductive_step_violated(options, goto_functions, k_step);
+        tvt is_res =
+          is_inductive_step_violated(options, goto_functions, k_step);
         if (is_res.is_false())
         {
           log_result(
