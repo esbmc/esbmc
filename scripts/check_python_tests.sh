@@ -42,6 +42,8 @@ ignored_dirs=(
   "esbmc-assert-no-msg"
   "esbmc-assert"
   "esbmc-assume"
+  "esbmc-assert"
+  "esbmc-assert-no-msg"
   "enumerate15"
   "enumerate15_fail"
   "func-no-params-types-fail"
