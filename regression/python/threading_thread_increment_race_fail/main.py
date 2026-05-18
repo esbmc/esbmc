@@ -3,21 +3,20 @@ import threading
 # Two concurrent threads perform a read-modify-write on the same
 # module-level global with no synchronisation. The classic interleaving
 # where both threads read counter==0 before either writes leaves
-# counter==1, violating the assertion.
+# counter==1, violating the assertion. ESBMC explores that interleaving
+# and reports VERIFICATION FAILED.
 #
-# Regression for #4584. ESBMC reports the assertion violation under
-# ``--data-races-check``: the flag both adds race-eligibility yields
-# at every shared-global access and (via execution_statet::
-# check_if_ileaves_blocked) keeps interleaving generation alive after
-# __ESBMC_main has ended in some sibling schedule, which is what lets
-# the DFS construct the race-exposing schedule, leaving the renamed
-# value of counter at 1 (not 2) in the user-level claim.
-#
-# Without ``--data-races-check`` the assertion is still missed: the
-# tree-global ``main_thread_ended`` flag fires while later schedules
-# still have live spawned threads, pruning the race-exposing branches.
-# A robust scheduler-side fix needs deeper changes to how that flag
-# interacts with DFS backtracking (#4584 follow-up).
+# Regression for #4584. Building on PR #4587 (which taught
+# execution_statet::get_expr_globals to mark Python module globals as
+# race-eligible), the scheduler-side change gates the
+# ``main_thread_ended`` pruning in check_if_ileaves_blocked on the
+# current schedule's own main thread having ended — not on the
+# tree-global flag set the first time any schedule's __ESBMC_main ran
+# to END_FUNCTION. The Python frontend's user code lives in
+# python_user_main (called by __ESBMC_main between two cleanup hooks),
+# so the global flag was firing while later-explored schedules still
+# had live spawned threads, pruning the race-exposing branches and
+# leaving the renamed value of counter at 2 in the user-level claim.
 counter: int = 0
 
 

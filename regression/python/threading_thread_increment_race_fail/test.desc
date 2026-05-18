@@ -1,5 +1,5 @@
 CORE
 main.py
---incremental-bmc --context-bound 2 --data-races-check
+--incremental-bmc --context-bound 2
 ^VERIFICATION FAILED$
 ^.*assertion.*$
