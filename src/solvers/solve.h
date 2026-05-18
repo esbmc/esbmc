@@ -19,4 +19,10 @@ smt_convt *create_solver(
   const namespacet &ns,
   const optionst &options);
 
+/// Abort early if the user explicitly selected an SMT solver that was not
+/// built into this ESBMC binary. Safe to call before parsing the program;
+/// returns silently when no explicit selection was made (the default picker
+/// will choose from whatever is built in at solver-creation time).
+void check_solver_availability(const optionst &options);
+
 #endif

@@ -18,6 +18,7 @@ extern "C"
 
 #include <esbmc/bmc.h>
 #include <esbmc/esbmc_parseoptions.h>
+#include <solvers/solve.h>
 #include <cctype>
 #include <clang-c-frontend/clang_c_language.h>
 #include <util/config.h>
@@ -688,6 +689,10 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
 
   if (cmdline.isset("sarif-output"))
     options.set_option("sarif-output", cmdline.getval("sarif-output"));
+
+  // Fail fast if the user explicitly requested an SMT solver that is not
+  // built into this ESBMC binary, before spending time parsing the program.
+  check_solver_availability(options);
 
   config.options = options;
 }
