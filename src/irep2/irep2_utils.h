@@ -221,15 +221,20 @@ inline bool is_false(const expr2tc &expr)
   return false;
 }
 
-inline expr2tc gen_true_expr()
+// Returning by const reference is sound here: `c` has static storage
+// duration and outlives every possible caller. Callers that bind to an
+// `expr2tc` value get the usual refcount-bump copy; callers that pass
+// the result through to a function taking `const expr2tc &` save one
+// pair of atomic refcount ops per call.
+inline const expr2tc &gen_true_expr()
 {
-  static expr2tc c = constant_bool2tc(true);
+  static const expr2tc c = constant_bool2tc(true);
   return c;
 }
 
-inline expr2tc gen_false_expr()
+inline const expr2tc &gen_false_expr()
 {
-  static expr2tc c = constant_bool2tc(false);
+  static const expr2tc c = constant_bool2tc(false);
   return c;
 }
 
