@@ -85,16 +85,29 @@ public:
     target,
     function_enter,
     function_return,
-    branching
+    branching,
+    unknown
   };
 
-  Type type;
+  enum Action
+  {
+    follow, // must be passed exactly once
+    avoid,  // must never be passed
+    cycle   // must be passed infinitely
+  };
+
+  Type type = unknown;
+  Action action = follow;
+  size_t segment_idx = 0;
+  size_t wp_idx_in_seg = 0;
   std::string file;
   std::string value;
   std::string format;
   BigInt line = c_nonset;
   BigInt column = c_nonset;
   std::string function;
+  irep_idt line_id;
+  irep_idt function_id;
 };
 
 class invariant
@@ -105,10 +118,11 @@ public:
     loop_invariant,
     loop_transition_invariant,
     location_invariant,
-    location_transition_invariant
+    location_transition_invariant,
+    unknown
   };
 
-  Type type;
+  Type type = unknown;
   std::string file;
   std::string value;
   std::string format;

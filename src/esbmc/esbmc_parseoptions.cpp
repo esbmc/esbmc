@@ -33,6 +33,7 @@ extern "C"
 #include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/goto_inline.h>
 #include <goto-programs/goto_k_induction.h>
+#include <goto-programs/goto_loop_simplify.h>
 #include <goto-programs/goto_loop_invariant.h>
 #include <goto-programs/abstract-interpretation/interval_analysis.h>
 #include <goto-programs/abstract-interpretation/gcse.h>
@@ -424,8 +425,19 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
 
   if (cmdline.isset("validate-correctness-witness"))
   {
+    if (!cmdline.isset("witness"))
+    {
+      log_error(
+        "--validate-correctness-witness requires --witness <file.yaml>");
+      abort();
+    }
     const std::string witness = cmdline.getval("witness");
     const boost::filesystem::path wp(witness);
+    if (!boost::filesystem::exists(wp))
+    {
+      log_error("Witness file '{}' does not exist.", witness);
+      abort();
+    }
     if (wp.extension() != ".yaml" && wp.extension() != ".yml")
     {
       log_error(
@@ -434,6 +446,31 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
       abort();
     }
     options.set_option("validate-correctness-witness", true);
+    options.set_option("witness", witness);
+  }
+
+  if (cmdline.isset("validate-violation-witness"))
+  {
+    if (!cmdline.isset("witness"))
+    {
+      log_error("--validate-violation-witness requires --witness <file.yaml>");
+      abort();
+    }
+    const std::string witness = cmdline.getval("witness");
+    const boost::filesystem::path wp(witness);
+    if (!boost::filesystem::exists(wp))
+    {
+      log_error("Witness file '{}' does not exist.", witness);
+      abort();
+    }
+    if (wp.extension() != ".yaml" && wp.extension() != ".yml")
+    {
+      log_error(
+        "Witness file has extension {}, expected yaml or yml.",
+        wp.extension().string());
+      abort();
+    }
+    options.set_option("validate-violation-witness", true);
     options.set_option("witness", witness);
   }
 
@@ -2310,6 +2347,14 @@ bool esbmc_parseoptionst::process_goto_program(
 
     goto_check(ns, options, goto_functions);
 
+    // Eliminate goto-level no-op loops (empty body, dead modified vars).
+    // Runs AFTER goto_check so that any check assertions inserted into a
+    // loop body (overflow, div-by-zero, bounds, ...) make body_is_safe
+    // refuse the erasure — preserving checks that would otherwise be
+    // silently dropped. Skipped under --termination / --unwinding-
+    // assertions because loop presence is observable in those modes.
+    goto_loop_simplify(goto_functions);
+
     if (options.get_bool_option("atomicity-check"))
       goto_atomicity_check(goto_functions, ns, context);
 
@@ -2917,7 +2962,7 @@ static void collect_symbol_names(
   if (is_symbol2t(e))
   {
     const symbol2t &thesym = to_symbol2t(e);
-    assert(thesym.rlevel == 0);
+    assert(thesym.rlevel == symbol_renaming_level::level0);
     std::string sym = thesym.get_symbol_name();
 
     used_syms.insert(sym);

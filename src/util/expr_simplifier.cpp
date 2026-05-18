@@ -77,31 +77,38 @@ expr2tc expr2t::simplify(bool suppress_reassoc) const
     // same-chain child is locally bounded and produces a canonicalized
     // sub-chain that our step 4 then merges. Correctness over a small
     // amount of duplicated work.
+    // Single-pass operand walk via foreach_operand: visits every operand
+    // exactly once, with no per-step get_sub_expr(idx) re-walk from index
+    // zero. The indexed form was O(F * N) per node (F = number of fields,
+    // N = number of operands in the widest vector field), which dominated
+    // simplify() on wide constant_array / chain expressions.
     bool changed = false;
     std::list<expr2tc> newoperands;
+    size_t idx = 0;
+    const bool is_with = expr_id == with_id;
 
-    for (size_t idx = 0; idx < get_num_sub_exprs(); idx++)
-    {
+    foreach_operand([&](const expr2tc &e) {
       expr2tc tmp;
-      const expr2tc *e = get_sub_expr(idx);
 
-      if (expr_id == with_id && idx == 0 && is_with2t(*e))
+      // Don't simplify the first operand of a with-of-with: it's already
+      // been simplified at construction time.
+      if (is_with && idx == 0 && is_with2t(e))
       {
-        // Don't simplify the first operand of a with-of-with: it's already
-        // been simplified at construction time.
         newoperands.push_back(tmp);
-        continue;
+        ++idx;
+        return;
       }
 
-      if (!is_nil_expr(*e))
+      if (!is_nil_expr(e))
       {
-        tmp = (*e)->simplify(suppress_reassoc);
+        tmp = e->simplify(suppress_reassoc);
         if (!is_nil_expr(tmp))
           changed = true;
       }
 
       newoperands.push_back(tmp);
-    }
+      ++idx;
+    });
 
     // Step 2: build the "current" form of the expression — either the
     // original (if no operand changed) or a clone with rewritten operands.
@@ -1094,7 +1101,8 @@ expr2tc with2t::do_simplify() const
     const constant_struct2t &c_struct = to_constant_struct2t(source_value);
     const constant_string2t &memb = to_constant_string2t(update_field);
     unsigned no = static_cast<const struct_union_data &>(*type.get())
-                    .get_component_number(memb.value);
+                    .get_component_number(memb.value)
+                    .value();
     assert(no < c_struct.datatype_members.size());
 
     if (c_struct.datatype_members[no] == update_value)
@@ -1111,7 +1119,8 @@ expr2tc with2t::do_simplify() const
     const union_type2t &thetype = to_union_type(c_union.type);
     const constant_string2t &memb = to_constant_string2t(update_field);
     unsigned no = static_cast<const struct_union_data &>(*c_union.type.get())
-                    .get_component_number(memb.value);
+                    .get_component_number(memb.value)
+                    .value();
     assert(no < thetype.member_names.size());
 
     // If the update value type matches the current lump of data's type, we can
@@ -1196,7 +1205,8 @@ expr2tc member2t::do_simplify() const
   {
     unsigned no =
       static_cast<const struct_union_data &>(*source_value->type.get())
-        .get_component_number(member);
+        .get_component_number(member)
+        .value();
 
     // Clone constant struct, update its field according to this "with".
     expr2tc s;
@@ -1349,6 +1359,11 @@ expr2tc pointer_object2t::do_simplify() const
   return expr2tc();
 }
 
+expr2tc pointer_capability2t::do_simplify() const
+{
+  return expr2tc();
+}
+
 expr2tc pointer_offset2t::do_simplify() const
 {
   // XXX - this could be better. But the current implementation catches most
@@ -1437,7 +1452,8 @@ expr2tc pointer_offset2t::do_simplify() const
         const struct_union_data &struct_data =
           static_cast<const struct_union_data &>(
             *member.source_value->type.get());
-        unsigned member_no = struct_data.get_component_number(member.member);
+        unsigned member_no =
+          struct_data.get_component_number(member.member).value();
         if (member_no == 0)
           return base_offset;
       }
@@ -2956,8 +2972,8 @@ static expr2tc combine_constant_shifts(
   if (!fits_in_width(sum, amt_width, amt_signed))
     return expr2tc();
 
-  return expr2tc(std::make_shared<ShiftT>(
-    type, inner.side_1, from_integer(sum, outer_amt->type)));
+  return make_irep<ShiftT>(
+    type, inner.side_1, from_integer(sum, outer_amt->type));
 }
 
 expr2tc shl2t::do_simplify() const
@@ -3386,7 +3402,7 @@ static expr2tc simplify_relations(
       auto cancel = [&](expr2tc a, expr2tc b) -> expr2tc {
         if (!coerce_to_common_type(a, b))
           return expr2tc();
-        expr2tc rel(std::make_shared<constructor>(a, b));
+        expr2tc rel = make_irep<constructor>(a, b);
         return typecast_check_return(type, rel);
       };
 
@@ -5183,8 +5199,8 @@ static expr2tc simplify_floatbv_2ops(
     // Were we able to simplify the sides?
     if ((side_1 != simplified_side_1) || (side_2 != simplified_side_2))
     {
-      expr2tc new_op(std::make_shared<constructor>(
-        type, simplified_side_1, simplified_side_2, rounding_mode));
+      expr2tc new_op = make_irep<constructor>(
+        type, simplified_side_1, simplified_side_2, rounding_mode);
 
       return typecast_check_return(type, new_op);
     }
@@ -5730,3 +5746,36 @@ expr2tc byte_update2t::do_simplify() const
     constant_int2tc(
       get_uint_type(src_value.length()), string2integer(src_value, 2)));
 }
+
+// Nil-returning do_simplify stubs for classes that ride a fold macro
+// declaring an out-of-line override but have no per-class simplification
+// rule yet. Each just defers to expr2t's default behaviour.
+#define ESBMC_NIL_SIMPLIFY(name)                                               \
+  expr2tc name##2t ::do_simplify() const                                       \
+  {                                                                            \
+    return expr2tc();                                                          \
+  }
+
+ESBMC_NIL_SIMPLIFY(valid_object)
+ESBMC_NIL_SIMPLIFY(races_check)
+ESBMC_NIL_SIMPLIFY(deallocated_obj)
+ESBMC_NIL_SIMPLIFY(unknown)
+ESBMC_NIL_SIMPLIFY(invalid)
+ESBMC_NIL_SIMPLIFY(null_object)
+ESBMC_NIL_SIMPLIFY(capability_base)
+ESBMC_NIL_SIMPLIFY(capability_top)
+ESBMC_NIL_SIMPLIFY(dynamic_size)
+ESBMC_NIL_SIMPLIFY(code_expression)
+ESBMC_NIL_SIMPLIFY(code_return)
+ESBMC_NIL_SIMPLIFY(code_free)
+ESBMC_NIL_SIMPLIFY(code_cpp_del_array)
+ESBMC_NIL_SIMPLIFY(code_cpp_delete)
+ESBMC_NIL_SIMPLIFY(code_decl)
+ESBMC_NIL_SIMPLIFY(code_dead)
+ESBMC_NIL_SIMPLIFY(code_cpp_throw_decl)
+ESBMC_NIL_SIMPLIFY(code_cpp_throw_decl_end)
+ESBMC_NIL_SIMPLIFY(isinstance)
+ESBMC_NIL_SIMPLIFY(hasattr)
+ESBMC_NIL_SIMPLIFY(isnone)
+
+#undef ESBMC_NIL_SIMPLIFY

@@ -18,6 +18,8 @@ goto_symex_statet::goto_symex_statet(
 {
   use_value_set = true;
   num_instructions = 0;
+  cur_seg = 0;
+  cur_wp = 0;
   thread_ended = false;
   guard.make_true();
 }
@@ -43,6 +45,9 @@ goto_symex_statet &goto_symex_statet::operator=(const goto_symex_statet &state)
   function_unwind = state.function_unwind;
   use_value_set = state.use_value_set;
   call_stack = state.call_stack;
+  witness_segs = state.witness_segs;
+  cur_seg = state.cur_seg;
+  cur_wp = state.cur_wp;
   return *this;
 }
 
@@ -292,10 +297,10 @@ void goto_symex_statet::assignment(expr2tc &lhs, const expr2tc &rhs)
   // identifier should be l0 or l1, make sure it's l1
 
   assert(
-    lhs_sym.rlevel != symbol2t::level2 &&
-    lhs_sym.rlevel != symbol2t::level2_global);
+    lhs_sym.rlevel != symbol_renaming_level::level2 &&
+    lhs_sym.rlevel != symbol_renaming_level::level2_global);
 
-  if (lhs_sym.rlevel == symbol2t::level0)
+  if (lhs_sym.rlevel == symbol_renaming_level::level0)
     top().level1.get_ident_name(lhs);
 
   expr2tc l1_lhs = lhs;
@@ -555,4 +560,16 @@ std::vector<stack_framet> goto_symex_statet::gen_stack_trace() const
   }
 
   return trace;
+}
+
+void goto_symex_statet::advance_witness_position()
+{
+  if (cur_seg >= witness_segs.size())
+    return;
+  ++cur_wp;
+  if (cur_wp >= witness_segs[cur_seg].size())
+  {
+    ++cur_seg;
+    cur_wp = 0;
+  }
 }

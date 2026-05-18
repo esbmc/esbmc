@@ -1,5 +1,317 @@
 Release Notes of the ESBMC model checker
 
+*** ESBMC v8.3 Release Notes
+This release of ESBMC v8.3 substantially expands the Python frontend with broad tuple and set support, comprehensive dataclass conformance, context manager (with/async with) lowering, and new operational models for collections (deque, OrderedDict), random, and time. C/C++ verification gains C++17/20/23 language features (structured bindings, deducing this, C++20 paren aggregate init, class template argument deduction, if consteval, paren aggregate init) and a large batch of new operational models (std::filesystem, std::any, std::variant, std::expected, std::source_location, std::span, std::underlying_type). The release introduces CWE mapping with SARIF output, k-path coverage, violation-witness validation, a rewritten simplifier with reassociation and peephole expansion, and makes Bitwuzla the default SMT solver. Toolchain support is bumped to Clang 22, and interval range analysis (IR-IEEE) is extended with theorem-driven RNA/RDN/RUP/RTZ rounding-mode lifting for ieee_div. Below is a summary of the new features, enhancements, and bug fixes:
+
+* New Features
+** Python Frontend
+*** Tuple Support
+- Inferred tuple element types for bare 'tuple' annotations (#4524).
+- Supported tuple slicing t[a:b:c] (#4370).
+- Supported tuple + (concat) and * (repeat) (#4369).
+- Supported tuple.count() and tuple.index() (#4368, #4101).
+- Supported tuple variable index and for-loop on homogeneous tuples (#4367).
+- Honoured key= on min() and max() for tuple-of-constants pattern (#4393).
+- Supported tuples in all()/any() and rejected unknown args (#4302).
+- Supported tuple type aliases and hardened list literal folding (#4165).
+*** Set Support
+- Added support for set comprehensions (#4371).
+- Added support for set.add() and set.discard() (#4365).
+- Added issubset / update / symmetric_difference / frozenset (#4392).
+- Accepted set and Set-literal iterables in any() / all() (#4362).
+*** Dataclass Support
+- Added dataclass decorator expansion for the Python frontend (#4155).
+- Added dataclass module import infrastructure (#4142).
+- Added dataclass public API support and coverage (#4329).
+- Extended dataclass conformance support (#4387).
+- Supported advanced dataclass flags, derived methods and inheritance (#4197).
+- Stabilised dataclass lifecycle semantics (#4178).
+- Synthesised __init__ with field(), default_factory and aliased imports (#4167).
+- Refactored to extract DataclassMixin from the preprocessor (#4487).
+*** Context Managers
+- Supported with/async with statements via preprocessor desugaring (#4152).
+- Honoured __exit__ True return for context-manager suppression (#4372).
+- Documented with/async with support and its limitation.
+*** Type Inference and Annotations
+- Inferred class type for methods returning self (#4522).
+- Supported range aliases and trivial range wrappers (#4521).
+- Inferred concrete types for None-initialised class attributes via usage-site scanning (#4162).
+- Added support for inline literals and smarter return-type inference (#4130, #4146).
+- Supported tuple type aliases and hardened list literal folding (#4165).
+- Guarded infer_loop_variable_types against null AnnAssign value (#4512).
+*** Imports and Modules
+- Scoped the entry-script skip to top-level module load (#4517).
+- Resolved transitive imports through intermediate modules (#4511).
+- Gracefully skipped unresolvable imports instead of crashing (#4156).
+- Embedded the ast2json library and ran mypy as a subprocess (#3790).
+*** Dictionary Operations
+- Routed dict.copy() to a dict-aware handler (#4358).
+- Supported dict.fromkeys() class method (#4124).
+- Fixed dict comprehension to evaluate key/value per iteration (#4299).
+- Fixed dict-of-class-instance subscript and value-type inference (#4384).
+- Fixed dict subscript attribute access and bare-dict value type inference (#4164).
+- Fixed dict_eq and added fast paths for tuple-key sizes (#4227).
+*** List Operations
+- Honoured key= on list.sort() and sorted() on tracked literals (#4395).
+- Honoured reverse= on list.sort() and sorted() (#4363).
+- Honoured step in list slicing (xs[::2], xs[::-1]) (#4332).
+- Supported list method chains on call-returned receivers (#4103).
+- Fixed list string handling and promoted list34 coverage (#4097).
+- Fixed list * n for variable lists (#4063).
+- Preserved container type on subscript assignment (#4073).
+- Fixed join(genexp) lowering in recursive scenario (#4141).
+*** Built-ins and Higher-Order Functions
+- Added all() builtin function support (#3990).
+- Honoured default= keyword on min() and max() (#4360).
+- Honoured start in sum(iterable, start) (#4359).
+- Honoured fill / align / width in f-string format spec (#4374).
+- Supported str(obj).__str__ dispatch and f-string member interpolation (#4068).
+*** Module Models
+- Added deque and OrderedDict to the collections model (#4376).
+- Added seed/choice/shuffle/sample to the random model (#4375).
+- Added time module model (#4063).
+- Fixed builtin time import for sleep regression (#4069).
+*** Robustness and Fixes
+- Fixed crash on nested attribute assignment (#4115, #4171).
+- Coerced struct class instance to pointer for reference-identity (#4116, #4170).
+- Flattened detect_and_process_submodules (#4328).
+- Tidied operational-model stubs (#4327).
+- Fixed PEP8 E275/E501 in transform.py and models/re.py (#4268).
+- Fixed PEP 257 docstring violations in frontend models and parser (#4253).
+- Fixed pydocstyle documentation violations (#4221).
+- Suppressed pylint rules unsafe to rewrite in operational models (#4265).
+- Suppressed pylint function-redefined in model stubs (#4228).
+- Silenced Codacy pyflakes F821 on operational models (#4256).
+- Disabled Pyflakes F821 via .prospector.yaml (#4257).
+- Silenced Codacy redefined-builtin on operational models (#4255).
+- Pinned parser.py open() encoding and adopted f-strings (#4261).
+- Fixed two use-before-assignment bugs flagged by pylint (#4260).
+- Tightened chained comparison in int.from_bytes loop (#4263).
+- Removed unused variables and added ForwardRef typing stub (#4231).
+*** Regression and Testing
+- Added rover simulator and additional Python test cases.
+- Added test cases for string and mixed types.
+- Promoted python/jpl to CORE with --no-unwinding-assertions (#4099).
+- Replaced incidental --incremental-bmc with --unwind N in python/ regressions (#4459).
+
+** C/C++ Verification
+*** Language Support (C++17/20/23)
+- Supported C++17 structured bindings (#4382).
+- Handled C++23 explicit object parameter (deducing this) (#4383).
+- Skipped implicit object arg for static operator() (#4381).
+- Lowered CXXParenListInitExpr (C++20 paren aggregate init) (#4380).
+- Supported C++17/20 class template argument deduction (#4389).
+- Mapped char8_t builtin to unsigned 8-bit integer (#4378).
+- Emitted init-statement of C++17 if/switch (#4379).
+- Handled UsingEnumDecl (C++20 'using enum') (#4204).
+- Fixed segfault on C++23 'if consteval' (#4196, #4199).
+- Supported C++11 inheriting constructors (using Base::Base) (#4280).
+- Added cmp_three_way for the C++20 spaceship operator (#4407).
+- Synthesised member/base destructor chain in dtor bodies (#4452).
+- Wrapped bitfield LHS in ctor member-init list (#4283).
+- Supported noexcept value-dep and 3 member-pointer casts (#4288).
+- Lazy-registered methods missing in cross-TU class views (#4417).
+- Fixed double-adjustment crash on C++20 padded struct members (#4215).
+- Fixed switch-case type mismatch for scoped enum conditions (#4217).
+*** Multiple Inheritance and Dispatch
+- Fixed explicit cast receiver in multiple inheritance (#4449).
+- Throw std::bad_cast on dynamic_cast<T&> failure (#4304).
+- Routed dynamic_cast through C++-frontend dispatch (#4147).
+- Quick fix for dynamic_cast (#4229).
+*** Clang 22 Support
+- Handled UsingType for clang >= 22 (#4182, #4187).
+- Fixed tag-id mismatch in annotate_class_method on Clang 22+ (#4188).
+- Guarded NestedNameSpecifier::getAsType on Clang 22 (#4180, #4184).
+- Handled Clang 22 record kind for elaborated types (#4144).
+*** GCC and C Extensions
+- Supported GCC nested functions (#4072).
+- Fixed nested-function transform: gated behind flag, fixed name collision and __label__ (#4100).
+- Added byte-level __builtin_bit_cast and fixed list_reference-3 typo (#4411).
+- Supported C verification complex type (#4133).
+- Supported UserDefinedLiteral node (#4105).
+- Fixed value-init crash for derived struct with class base (#4237, #4238).
+- Fixed aggregate-init crash for derived struct with bitfield base (#4232, #4233).
+- Fixed mk_eq crash on switch with fall-through enum cases (#4234, #4235).
+- Fixed index on non-array struct base (#4333).
+- Fixed crash on range-based for over 2D array of struct (#4334).
+*** Operational Models (C++17/20/23 standard library)
+- Added minimal C++17 <filesystem> (#4404).
+- Added minimal C++17 <any> (#4391).
+- Added minimal C++17 <variant> (#4390).
+- Added C++23 <expected> (#4388).
+- Added minimal C++20 <source_location> (#4385).
+- Added std::span and complete std::type_traits (#4194).
+- Added std::underlying_type and underlying_type_t (#4213).
+- Added bundled <optional> and <chrono> shims (#4246).
+- Added std::clamp to bundled <algorithm> (#4278).
+- Added std::chrono::duration::max/min/zero static members (#4277).
+- Added std::tuple as a literal type for constexpr arrays (#4276).
+- Added const begin()/end() overloads to std::list (#4451).
+- Exposed C library names in std:: from <cstdlib> (#4453).
+- Exposed float_t and double_t in std via <cmath> (#4287).
+- Made std::array accessors constexpr (#4269, #4274).
+- Made bundled std::array an aggregate (#4243, #4244).
+- Used angle-bracket include for <array> in bundled <span> (#4279).
+- Bundled <span> must transitively include <bit> (#4249).
+- Bundled <bit> bit_cast<T*> must accept const From (#4250).
+- Fixed std::bit_cast<T*> aliasing for symex (#4191, #4192).
+- Added state-reset destructors to stack-backed OM containers (#3983, #4172).
+- Fixed multiset::insert return type (#4472).
+- Fixed find_first_of / find_first_not_of / rfind overloads (#4421).
+- Fixed std::string::find_last_of overloads (#4413).
+- Fixed sstream operator<< for char and floating-point (#4414).
+- Propagated it_str through string iterator copies; NUL temp in append<T> (#4415).
+- Fixed <algorithm> heap/sort/partition operations and 6 KNOWNBUG tests (#4409).
+- Zero-init class globals and tightened alloca-name match (4 KNOWNBUG) (#4410).
+- Enabled two stream/string KNOWNBUG regressions (#4412).
+- Enabled gcc-template-tests/pretty1 (Clang __PRETTY_FUNCTION__ form) (#4445).
+- Bumped ch16_3 unwind so strchr terminates (#4454).
+- Bounded N in cpp_sum_class so k-induction can discharge it (#4450).
+- Stopped forcing T() into uninitialized vector slots (#4285).
+- Added __ESBMC_HIDE to __VERIFIER_nondet_memory.
+*** Function Contracts
+- Fixed __ESBMC_is_fresh codegen for the bare-pointer form (#4212).
+- Fixed --enforce-contract '*' --function skipping pointer-param allocation (#4075).
+*** Concurrency
+- Added support for pthread_cancel and the cancellation API (#4138).
+- Enabled atomicity-check and interval-symex-guard goto-programs tests (#4059).
+- Emitted ATOMIC_BEGIN/END without migrating an empty codet (#4189).
+
+** Solidity Frontend
+- Comprehensive Solidity frontend refactoring and implementation (#4236).
+- Reclassified constructor_4 regression from THOROUGH to CORE (#4122).
+- Addressed Codacy perf findings in Solidity grammar and array_conv (#4323).
+
+** Verification Features
+*** CWE Mapping and SARIF Output
+- Mapped property violations to CWE ids and added SARIF output (#4488).
+- Extended --uninitialised-vars-check to scalar arrays (CWE-457) (#4507).
+- Detected uninitialised local scalar reads as CWE-457 (#4501).
+- Mapped deadlock-check assertions to CWE-833 (#4499).
+- Moved CWE mapping into the Hugo website (#4500).
+*** Coverage
+- Added --k-path-coverage Phase 1 (issue #4325) (#4330).
+- Added k-path spanning-set scoring (#4335 PR1) (#4340).
+- Documented --k-path-coverage on the website (#4339).
+- Documented --k-path-coverage --generate-ctest-testcase (#4418).
+- Documented all coverage modes and fixed the assertion-coverage example (#4457).
+- Skipped ASSUME in condition coverage (#4291, #4292).
+- Added STL coverage tests for vector/map/set (#4336).
+- Aligned nondet_long/ulong with frontend declarations in ctestgen (#4316).
+- Emitted portable, round-trip-safe FP literals in CTest cases (#4306).
+- Updated deduplication algorithm for ctestcase generation (#4160).
+- Silenced cppcheck unusedLabel on __ESBMC_HIDE markers (#4322).
+*** Witness
+- Added violation witness validation (#4505).
+- Added a preprocessor to enable clang to parse the c_expression (#4239).
+- Rendered struct fields and floats unambiguously (#4320).
+- Enumerated violating inputs per property with --all-witnesses (#4310).
+- Moved --all-witnesses/--max-witnesses to the Witness help group (#4324).
+- Added special treatment for branching waypoints (#4102).
+- Enabled assumption in YAML-based witness waypoint (#4066).
+*** Interval Range Analysis (IR-IEEE)
+- Added theorem-driven RNA interval lifting for ieee_div (#4062).
+- Added theorem-driven RUP interval lifting for ieee_div (#4094).
+- Added theorem-driven RDN interval lifting for ieee_div (#4096).
+- Added theorem-driven RTZ interval lifting for ieee_div (#4104).
+- Fixed isinf/isfinite semantics under --ir-ieee encoding (#4202).
+- Demoted noisy float conversion log to debug (#4205).
+- Fixed constant_floatbv encoding in int_encoding mode (#4140).
+*** Overflow Checking
+- Flagged negative shift distance under --overflow-check (#4242).
+- Fixed signed shl checks for C++20 [expr.shift]/2 (#4241).
+- Skipped C++20 signed shl claim only for non-negative E1 (#4211).
+- Don't flag signed left-shift wrap under C++20+ (#4203), with subsequent revert/refinement (#4208).
+*** Simplifier
+- Simplifier rewrite, reassociation, and peephole expansion (#4282).
+*** Symbolic Execution and GOTO
+- Preserved __noreturn semantics of __assert_fail under --no-assertions (#4442).
+- Modelled missing args on function-pointer calls as nondet (#4289).
+- Collapsed phi_function rhs merge into if/else-if/else (#4254).
+- Split builtin_functions.cpp into focused files (#4166).
+- Removed dead code in builtin_functions/ (codecov cleanup) (#4168).
+- Fixed copy_count simplify and added regression tests for builtin_functions (#4169).
+- Fixed printf_formatter missing hex/octal specifiers and length modifiers (#4121).
+- Fixed malloc with negative size causing vacuous verification (#4114).
+- Fixed multi-property missing assertion results in inductive step (#4060).
+- Ported goto_inlinet to native irep2 (#4177).
+- Ported goto_coverage condition helpers to native irep2 (#4181).
+- Ported assign_params_as_non_det to native irep2 (#4176).
+- Drained legacy irep from race-detection module (#4175); subsequently reverted (#4259).
+*** Pointer Analysis
+- Honoured mode.unaligned in check_pointer_alignment (#4273).
+- Fixed zero-sized type-pun through struct member (#4113).
+- Fixed big-endian byte access into struct via dyn offset (#4108).
+*** SMT Backend
+- Made Bitwuzla the default SMT solver (#4131).
+- Updated supported solvers and features based on CVC5 enhancements (#4161).
+- Removed orphaned mk_bvnand / mk_bvnor across all backends (#4465).
+- Fixed zero-width struct members in bitcast/byte ops (#4173).
+- Fixed crash in byte update when source and update widths are equal (#4111).
+- Fixed union array member access to respect endianness (#4112).
+- Fixed int-to-ptr cast inconsistency (issue #1539) (#4125).
+- Argv model: assume non-null entries per C11 §5.1.2.2.1 (experimental) (#4067).
+*** IRep2 and Internals
+- Removed dead bitnand2t / bitnor2t expression kinds (#4464).
+- Removed dead code_init2t expression kind (#4463).
+- Removed unused bvnxor / bitnxor irep (#4286).
+- Removed unused cmt_lvalue exprt attribute (#4120).
+- Replaced unsigned with size_t for get_num_sub_exprs/get_sub_expr (#4074).
+- Lock-free reads for the string interning pool (#4485).
+- Replaced C-style casts in bigint and migrated (#4326).
+- Replaced C-style casts with explicit C++ casts (#4222).
+- Replaced string::find()==0 with starts_with() (#4225).
+- Preferred prefix ++/-- for iterators (#4224, #4258, #4266).
+- Reduced variable scope in goto_coverage, smt_casts, smt_byteops, solidity_convert (#4223).
+- Fixed conditions that are always true or false (Cppcheck) (#4226).
+- Tolerated nil sub-operands in base_type(expr2tc&) (#4095).
+- Banner and help text print to stdout (#4153).
+- Refactored color output logic, reorganised CLI options (carried over from v8.2 polishing).
+
+** Build System
+- Respected ENABLE_<solver>=OFF when $HOME/<solver> exists (#4470).
+- Enabled cmakelint and fixed lint issues (#4469).
+- Slimmed macOS and Windows PR suites (#4461).
+- Capped regression timeout and moved long-running tests to disabled/ (#4186).
+- Updated Windows LLVM (#4301).
+- Bumped pytest to >=9.0.3 (CVE-2025-71176) (#4157).
+- Bumped pygments from 2.19.2 to 2.20.0 (#3935).
+- Removed Claude code review workflow (#4307).
+- Added Claude Code GitHub Workflow (#4185).
+- Added query-based filtering to check_python_tests.sh with ignored_dirs preserved (#4174).
+- Removed 33 byte-identical duplicate regression tests (#4462).
+- Replaced incidental --incremental-bmc with --unwind N (esbmc/) (#4456).
+- Updated .gitignore to include build directory pattern.
+- Refactored GitHub Actions workflow for coverage upload.
+- CI: squash commits now resubmit merged coverage (#4109).
+- Added script to extract SV-COMP scores every year (#4110).
+- Reformatted clang headers transform.py to 4-space indent (#4262).
+- Added esbmc-verifier and creduce-reducer agents.
+
+** Documentation
+- Refreshed SV-COMP history graph quarterly (#4154, #4158, #4275, #4303, #4419, #4478, #4483, #4498).
+- Added SV-COMP history graph on README/website with quarterly auto-refresh (#4123).
+- Rewrote src/solvers README as a developer extension guide (#4471).
+- Added README for src/irep2 (#4458).
+- Added IRep2 stub page to the theory section (#4468).
+- Added SMT formula generation page to the theory section.
+- Added SSA Documentation update for the ESBMC website (#4132).
+- Streamlined the build guide: quick start vs complete build.
+- Updated Python docs: usage, limitations, random model, supported features.
+- Reconciled Python limitations doc with current behaviour (#4297).
+- Updated Python supported-features with missing constructs and modules.
+- Fixed website 404s on Python docs links with mixed-case filenames.
+- Fixed doc TOC: stopped nesting all sections under Quantifiers (#4321).
+- Consolidated the esbmc-verifier agent description in CLAUDE.md (#4308).
+- Added an Available Subagents section and AGENTS.md note (#4298).
+- Fixed Zulip link in README.md (#4128, #4148).
+- Removed an open parenthesis in the documentation (#4127).
+- Updated funding agencies and refined wording in README.
+- Fixed build-esbmc-mac.sh description: solvers are optional, Bitwuzla also offered.
+- Removed outdated Python frontend disclaimer from the building guide.
+- Updated competition statistics in stats-30s.txt, stats-100s, and stats-600s.txt.
+
+
 *** ESBMC v8.2 Release Notes
 This release of ESBMC v8.2 introduces comprehensive complex number support in the Python frontend along with initial generator support and new models for collections.Counter, heapq, and collections.defaultdict. The release adds a theorem-driven interval range analysis (IR-IEEE, formerly IR-RA) covering all IEEE-754 rounding modes for addition, subtraction, multiplication, and division, enables interval-based guard and assertion pruning in symbolic execution, and upgrades Bitwuzla to 0.9.0 with quantifier support. C/C++ verification gains multiple-inheritance virtual dispatch fixes, expanded unique_ptr and function contract support, and a YAML witness parser. Below is a summary of the new features, enhancements, and bug fixes:
 

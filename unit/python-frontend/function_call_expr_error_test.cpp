@@ -5,14 +5,15 @@
 // System includes before custom ones with ESBMC macros
 #include <nlohmann/json.hpp>
 
-#include <python-frontend/function_call_expr.h>
+#include <python-frontend/function_call/expr.h>
 #include <python-frontend/python_converter.h>
-#include <python-frontend/function_call_cache.h>
+#include <python-frontend/function_call/cache.h>
 #include <python-frontend/global_scope.h>
 #include <python-frontend/symbol_id.h>
 #include <util/config.h>
 #include <util/context.h>
 #include <util/python_types.h>
+#include <util/std_expr.h>
 
 using json = nlohmann::json;
 
@@ -56,6 +57,12 @@ public:
   static std::string get_object_name(const function_call_expr &fce)
   {
     return fce.get_object_name();
+  }
+
+  static std::optional<std::string>
+  extract_string_from_symbol(const function_call_expr &fce, const symbolt *sym)
+  {
+    return fce.extract_string_from_symbol(sym);
   }
 };
 
@@ -562,4 +569,60 @@ TEST_CASE(
   REQUIRE_NOTHROW(
     obj_name = function_call_expr_test_access::get_object_name(fce));
   REQUIRE(obj_name.empty());
+}
+
+TEST_CASE(
+  "extract_string_from_symbol handles conditional char operands safely",
+  "[python-frontend][complex][string-extraction]")
+{
+  ensure_config_initialized();
+
+  json ast = make_dummy_ast();
+  json call = make_dummy_call();
+  contextt ctx;
+  global_scope gs;
+  python_converter converter(ctx, &ast, gs);
+  symbol_id sid("test.py", "", "test_func");
+  function_call_expr fce(sid, call, converter);
+
+  auto make_char = [](char c) -> exprt {
+    return from_integer(static_cast<unsigned char>(c), char_type());
+  };
+
+  SECTION("decodes array chars wrapped by constant-guard if expressions")
+  {
+    const typet arr_t = array_typet(char_type(), from_integer(3, size_type()));
+    exprt value("array", arr_t);
+    value.copy_to_operands(
+      if_exprt(true_exprt(), make_char('4'), make_char('8')),
+      if_exprt(false_exprt(), make_char('1'), make_char('2')),
+      make_char('\0'));
+
+    symbolt sym;
+    sym.value = value;
+    sym.type = arr_t;
+
+    auto extracted =
+      function_call_expr_test_access::extract_string_from_symbol(fce, &sym);
+    REQUIRE(extracted.has_value());
+    REQUIRE(*extracted == "42");
+  }
+
+  SECTION("returns nullopt for unresolved symbolic branch with different chars")
+  {
+    const typet arr_t = array_typet(char_type(), from_integer(2, size_type()));
+    exprt value("array", arr_t);
+    value.copy_to_operands(
+      if_exprt(
+        symbol_exprt("cond", bool_typet()), make_char('4'), make_char('7')),
+      make_char('\0'));
+
+    symbolt sym;
+    sym.value = value;
+    sym.type = arr_t;
+
+    auto extracted =
+      function_call_expr_test_access::extract_string_from_symbol(fce, &sym);
+    REQUIRE_FALSE(extracted.has_value());
+  }
 }

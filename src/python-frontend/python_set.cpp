@@ -1038,8 +1038,7 @@ exprt python_set::build_set_method_call(
     converter_.add_instruction(
       code_assignt(symbol_expr(result), gen_boolean(true)));
 
-    const symbolt *size_func =
-      symtab.find_symbol("c:@F@__ESBMC_list_size");
+    const symbolt *size_func = symtab.find_symbol("c:@F@__ESBMC_list_size");
     const symbolt *at_func = symtab.find_symbol("c:@F@__ESBMC_list_at");
     const symbolt *contains_func =
       symtab.find_symbol("c:@F@__ESBMC_list_contains");

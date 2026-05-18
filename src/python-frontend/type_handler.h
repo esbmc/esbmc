@@ -185,6 +185,15 @@ public:
 
   typet get_tuple_type(const nlohmann::json &tuple_node) const;
 
+  /**
+   * @brief Returns the registered struct type used for Python slice objects.
+   *
+   * The struct is defined in `c2goto/library/python/python_types.h` as
+   * `__ESBMC_PySliceObj`. The frontend constructs values of this type when
+   * lowering `Slice` AST nodes and the `slice()` builtin.
+   */
+  typet get_slice_type() const;
+
   /*
    * Determines the type of an operand in binary operations.
    * @param operand The JSON node representing the operand.

@@ -79,8 +79,16 @@ void rw_sett::read_write_rec(
     const symbolt *symbol = ns.lookup(symbol_expr.get_identifier());
     if (symbol)
     {
+      // Python module-level globals carry static_lifetime=false to keep
+      // them out of the C-side static-init pass (their values double as
+      // const-prop snapshots in the Python frontend). The Python frontend
+      // sets file_local=false on them so this filter recognises them
+      // as race-eligible shared state.
+      const bool python_global =
+        symbol->mode == "Python" && !symbol->file_local;
       if (
-        (!symbol->static_lifetime && !dereferenced) || symbol->is_thread_local)
+        (!symbol->static_lifetime && !dereferenced && !python_global) ||
+        symbol->is_thread_local)
       {
         return; // ignore for now
       }

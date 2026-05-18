@@ -16,7 +16,7 @@ void goto_symext::symex_cpp_new(
 {
   expr2tc size = code.size;
 
-  bool do_array = (code.kind == sideeffect2t::cpp_new_arr);
+  bool do_array = (code.kind == sideeffect2t::allockind::cpp_new_arr);
 
   unsigned int &dynamic_counter = get_dynamic_counter();
   dynamic_counter++;
