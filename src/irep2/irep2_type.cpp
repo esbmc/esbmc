@@ -400,6 +400,19 @@ std::vector<type2tc> struct_union_members(const type2tc &t)
   }
 }
 
+std::vector<type2tc> &struct_union_members(type2tc &t)
+{
+  switch (t->type_id)
+  {
+  case type2t::struct_id:
+    return to_struct_type(t).members;
+  case type2t::union_id:
+    return to_union_type(t).members;
+  default:
+    irep2_bad_family_cast(t->type_id, "struct_union_members(mutating)");
+  }
+}
+
 std::vector<irep_idt> struct_union_member_names(const type2tc &t)
 {
   static const irep_idt real_id("real"), imag_id("imag");

@@ -571,13 +571,20 @@ public:
 // temporary lifetime extension.
 //
 // Small per-call copies in exchange for a single point of truth per
-// field. Direct mutation goes via the concrete kind (e.g.
-// `to_struct_type(t).members`); these read-only views are not the
-// right tool for that.
+// field. Direct mutation goes via the mutating overload below (or via
+// the concrete kind, e.g. `to_struct_type(t).members`).
 std::vector<type2tc> struct_union_members(const type2tc &t);
 std::vector<irep_idt> struct_union_member_names(const type2tc &t);
 irep_idt struct_union_name(const type2tc &t);
 bool struct_union_packed(const type2tc &t);
+
+/** Mutating reference to a struct/union's members vector. Unlike the
+ *  read-only overload this does NOT synthesise a view for complex_type
+ *  (which has no members vector), so it is restricted to struct_id and
+ *  union_id; passing anything else aborts. Detaches @p t first via the
+ *  non-const `to_*_type` accessor, so the returned reference is safe to
+ *  mutate. */
+std::vector<type2tc> &struct_union_members(type2tc &t);
 
 /** Index of @p comp in struct/union/complex member_names, or nullopt
  *  if it is missing or duplicated (the latter is malformed IR). */
