@@ -283,8 +283,7 @@ class ExpressionRewriteMixin:
 
     def _apply_assert_eq_rewrites(self, node):
         if not (isinstance(node.test, ast.Compare) and len(node.test.ops) == 1
-                and isinstance(node.test.ops[0], ast.Eq)
-                and len(node.test.comparators) == 1):
+                and isinstance(node.test.ops[0], ast.Eq) and len(node.test.comparators) == 1):
             return [], None
         left, right = node.test.left, node.test.comparators[0]
         for name in self._SYMMETRIC_EQ_TRANSFORMS:
