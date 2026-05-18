@@ -4202,7 +4202,7 @@ expr2tc smt_convt::get(const expr2tc &expr)
     // changed, then rebuild res with that type. Mirrors the original two-level
     // walk (outer array + its immediate subtype if also array); preserves the
     // historic behaviour of not recursing further.
-    auto resolve_size = [this](expr2tc s) {
+    auto resolve_size = [this](const expr2tc &s) {
       if (!is_nil_expr(s) && is_symbol2t(s))
         return get(s);
       return s;
@@ -4887,7 +4887,7 @@ smt_astt smt_ast::update(
   smt_convt *ctx,
   smt_astt value,
   unsigned int idx,
-  expr2tc idx_expr) const
+  const expr2tc &idx_expr) const
 {
   // If we're having an update applied to us, then the only valid situation
   // this can occur in is if we're an array.

@@ -177,9 +177,9 @@ expr2tc gen_one(const type2tc &type)
 
 expr2tc distribute_vector_operation(
   expr2t::expr_ids id,
-  expr2tc op1,
-  expr2tc op2,
-  expr2tc rm)
+  const expr2tc &op1,
+  const expr2tc &op2,
+  const expr2tc &rm)
 {
 #ifndef NDEBUG
   assert(is_vector_type(op1) || (op2 && is_vector_type(op2)));

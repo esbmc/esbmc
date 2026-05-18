@@ -120,7 +120,7 @@ smt_astt tuple_sym_smt_ast::update(
   smt_convt *ctx,
   smt_astt value,
   unsigned int idx,
-  expr2tc idx_expr [[maybe_unused]] /*ndebug*/) const
+  const expr2tc &idx_expr [[maybe_unused]] /*ndebug*/) const
 {
   smt_convt::ast_vec eqs;
   assert(

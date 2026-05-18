@@ -512,7 +512,7 @@ static bool handle_introspection_expr(const exprt &expr, expr2tc &new_expr_ref)
   return false;
 }
 
-expr2tc sym_name_to_symbol(irep_idt init, type2tc type)
+expr2tc sym_name_to_symbol(const irep_idt &init, const type2tc &type)
 {
   const symbolt *sym = migrate_namespace_lookup->lookup(init);
   symbol2t::renaming_level target_level;
@@ -533,8 +533,14 @@ expr2tc sym_name_to_symbol(irep_idt init, type2tc type)
     // hashes.
     // Fix this by ensuring that /all/ symbols with the same name use the type
     // from the global symbol table.
-    type = migrate_type(sym->type);
-    return symbol2tc(type, init, symbol_renaming_level::level0, 0, 0, 0, 0);
+    return symbol2tc(
+      migrate_type(sym->type),
+      init,
+      symbol_renaming_level::level0,
+      0,
+      0,
+      0,
+      0);
   }
   if (
     init.as_string().compare(0, 3, "cs$") == 0 ||

@@ -81,7 +81,7 @@ smt_astt array_sym_smt_ast::update(
   smt_convt *ctx,
   smt_astt value,
   unsigned int idx,
-  expr2tc idx_expr) const
+  const expr2tc &idx_expr) const
 {
   const array_type2t array_type = to_array_type(sort->get_tuple_type());
   const type2tc &eltype = is_pointer_type(array_type.subtype)

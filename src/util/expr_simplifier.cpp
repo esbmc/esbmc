@@ -324,7 +324,7 @@ struct Addtor
     // Is a vector operation ? Apply the op
     if (is_constant_vector2t(op1) || is_constant_vector2t(op2))
     {
-      auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
+      auto op = [](const type2tc &t, const expr2tc &e1, const expr2tc &e2) {
         return add2tc(t, e1, e2);
       };
       return distribute_vector_operation(op, op1, op2);
@@ -525,7 +525,7 @@ struct Subtor
     // Is a vector operation ? Apply the op
     if (is_constant_vector2t(op1) || is_constant_vector2t(op2))
     {
-      auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
+      auto op = [](const type2tc &t, const expr2tc &e1, const expr2tc &e2) {
         return sub2tc(t, e1, e2);
       };
       return distribute_vector_operation(op, op1, op2);
@@ -702,7 +702,8 @@ expr2tc sub2t::do_simplify() const
     // integer offsets, and the surviving sub's result type is the parent
     // sub's type (ptrdiff for pointer-pointer subtraction, otherwise the
     // arith type) — coerce the operands so the rebuilt sub2tc is valid.
-    auto cancel_sub = [&](expr2tc a, expr2tc b) -> expr2tc {
+    auto cancel_sub = [&](const expr2tc &a_in, const expr2tc &b_in) -> expr2tc {
+      expr2tc a = a_in, b = b_in;
       if (!coerce_to_common_type(a, b))
         return expr2tc();
       // The arith_2ops invariant requires the operand widths match the
@@ -761,7 +762,7 @@ struct Multor
     // Is a vector operation ? Apply the op
     if (is_constant_vector2t(op1) || is_constant_vector2t(op2))
     {
-      auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
+      auto op = [](const type2tc &t, const expr2tc &e1, const expr2tc &e2) {
         return mul2tc(t, e1, e2);
       };
       return distribute_vector_operation(op, op1, op2);
@@ -873,7 +874,7 @@ struct DivModtor
     // Is a vector operation ? Apply the op
     if (is_constant_vector2t(op1) || is_constant_vector2t(op2))
     {
-      auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
+      auto op = [](const type2tc &t, const expr2tc &e1, const expr2tc &e2) {
         if constexpr (Div)
           return div2tc(t, e1, e2);
         else
@@ -2512,7 +2513,7 @@ expr2tc bitand2t::do_simplify() const
   // Is a vector operation ? Apply the op
   if (is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
   {
-    auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
+    auto op = [](const type2tc &t, const expr2tc &e1, const expr2tc &e2) {
       return bitand2tc(t, e1, e2);
     };
     return distribute_vector_operation(op, side_1, side_2);
@@ -2792,7 +2793,7 @@ expr2tc bitor2t::do_simplify() const
   // Is a vector operation ? Apply the op
   if (is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
   {
-    auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
+    auto op = [](const type2tc &t, const expr2tc &e1, const expr2tc &e2) {
       return bitor2tc(t, e1, e2);
     };
     return distribute_vector_operation(op, side_1, side_2);
@@ -2867,7 +2868,7 @@ expr2tc bitxor2t::do_simplify() const
   // Is a vector operation ? Apply the op
   if (is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
   {
-    auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
+    auto op = [](const type2tc &t, const expr2tc &e1, const expr2tc &e2) {
       return bitxor2tc(t, e1, e2);
     };
     return distribute_vector_operation(op, side_1, side_2);
@@ -2990,7 +2991,7 @@ expr2tc shl2t::do_simplify() const
 
   if (is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
   {
-    auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
+    auto op = [](const type2tc &t, const expr2tc &e1, const expr2tc &e2) {
       return shl2tc(t, e1, e2);
     };
     return distribute_vector_operation(op, side_1, side_2);
@@ -3013,7 +3014,7 @@ expr2tc lshr2t::do_simplify() const
 
   if (is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
   {
-    auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
+    auto op = [](const type2tc &t, const expr2tc &e1, const expr2tc &e2) {
       return lshr2tc(t, e1, e2);
     };
     return distribute_vector_operation(op, side_1, side_2);
@@ -3049,7 +3050,7 @@ expr2tc ashr2t::do_simplify() const
   // Is a vector operation ? Apply the op
   if (is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
   {
-    auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
+    auto op = [](const type2tc &t, const expr2tc &e1, const expr2tc &e2) {
       return ashr2tc(t, e1, e2);
     };
     return distribute_vector_operation(op, side_1, side_2);
@@ -3393,7 +3394,8 @@ static expr2tc simplify_relations(
       // two surviving offsets. Coerce both to a common type so the rebuilt
       // node is well-formed even when the offsets carry different concrete
       // bv widths — `arr + (int)c` vs `arr + (long)c` from a p++ chain.
-      auto cancel = [&](expr2tc a, expr2tc b) -> expr2tc {
+      auto cancel = [&](const expr2tc &a_in, const expr2tc &b_in) -> expr2tc {
+        expr2tc a = a_in, b = b_in;
         if (!coerce_to_common_type(a, b))
           return expr2tc();
         expr2tc rel = make_irep<constructor>(a, b);
@@ -3720,7 +3722,8 @@ expr2tc equality2t::do_simplify() const
   // operands have differing concrete types (pointer-arith chains often mix
   // `(int)c` with `(long)e`), coerce both to a common type so the rebuilt
   // equality is well-formed.
-  auto cancel_eq = [](expr2tc a, expr2tc b) -> expr2tc {
+  auto cancel_eq = [](const expr2tc &a_in, const expr2tc &b_in) -> expr2tc {
+    expr2tc a = a_in, b = b_in;
     if (!coerce_to_common_type(a, b))
       return expr2tc();
     return equality2tc(a, b);
@@ -3903,7 +3906,8 @@ expr2tc notequal2t::do_simplify() const
 
   // d + c != d + e -> c != e (cancel common addend). Coerce surviving
   // operands to a common type when their concrete types differ.
-  auto cancel_neq = [](expr2tc a, expr2tc b) -> expr2tc {
+  auto cancel_neq = [](const expr2tc &a_in, const expr2tc &b_in) -> expr2tc {
+    expr2tc a = a_in, b = b_in;
     if (!coerce_to_common_type(a, b))
       return expr2tc();
     return notequal2tc(a, b);
@@ -5262,7 +5266,7 @@ struct IEEE_addtor
     // Is a vector operation ? Apply the op
     if (is_constant_vector2t(op1) || is_constant_vector2t(op2))
     {
-      auto op = [rm](type2tc t, expr2tc e1, expr2tc e2) {
+      auto op = [&rm](const type2tc &t, const expr2tc &e1, const expr2tc &e2) {
         return ieee_add2tc(t, e1, e2, rm);
       };
       return distribute_vector_operation(op, op1, op2);
@@ -5308,7 +5312,7 @@ struct IEEE_subtor
     // Is a vector operation ? Apply the op
     if (is_constant_vector2t(op1) || is_constant_vector2t(op2))
     {
-      auto op = [rm](type2tc t, expr2tc e1, expr2tc e2) {
+      auto op = [&rm](const type2tc &t, const expr2tc &e1, const expr2tc &e2) {
         return ieee_sub2tc(t, e1, e2, rm);
       };
       return distribute_vector_operation(op, op1, op2);
@@ -5353,7 +5357,7 @@ struct IEEE_multor
     // Is a vector operation ? Apply the op
     if (is_constant_vector2t(op1) || is_constant_vector2t(op2))
     {
-      auto op = [rm](type2tc t, expr2tc e1, expr2tc e2) {
+      auto op = [&rm](const type2tc &t, const expr2tc &e1, const expr2tc &e2) {
         return ieee_mul2tc(t, e1, e2, rm);
       };
       return distribute_vector_operation(op, op1, op2);
@@ -5415,7 +5419,7 @@ struct IEEE_divtor
   {
     if (is_constant_vector2t(op1) || is_constant_vector2t(op2))
     {
-      auto op = [rm](type2tc t, expr2tc e1, expr2tc e2) {
+      auto op = [&rm](const type2tc &t, const expr2tc &e1, const expr2tc &e2) {
         return ieee_div2tc(t, e1, e2, rm);
       };
       return distribute_vector_operation(op, op1, op2);

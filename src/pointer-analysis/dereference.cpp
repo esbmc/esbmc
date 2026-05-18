@@ -2204,7 +2204,7 @@ expr2tc dereferencet::stitch_together_from_byte_array(
 expr2tc dereferencet::stitch_together_from_byte_array(
   const type2tc &type,
   const expr2tc &byte_array,
-  expr2tc offset_bits)
+  const expr2tc &offset_bits)
 {
   /* TODO: check array bounds, (alignment?) */
   assert(is_array_type(byte_array));
@@ -2237,16 +2237,16 @@ expr2tc dereferencet::stitch_together_from_byte_array(
   unsigned int num_bytes =
     compute_num_bytes_to_extract(offset_bits, num_bits64);
 
-  offset_bits =
+  expr2tc bit_offset_in_byte =
     modulus2tc(offset_bits->type, offset_bits, gen_long(offset_bits->type, 8));
-  simplify(offset_bits);
+  simplify(bit_offset_in_byte);
 
   return bitcast2tc(
     type,
     extract_bits_from_byte_array(
       stitch_together_from_byte_array(
         num_bytes, extract_bytes(byte_array, num_bytes, offset_bytes)),
-      offset_bits,
+      bit_offset_in_byte,
       num_bits64));
 }
 
@@ -2612,7 +2612,7 @@ void dereferencet::check_alignment(
 }
 
 unsigned int dereferencet::compute_num_bytes_to_extract(
-  const expr2tc offset,
+  const expr2tc &offset,
   unsigned long num_bits)
 {
   // We need to calculate the correct number of bytes to extract.

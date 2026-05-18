@@ -1019,7 +1019,7 @@ smt_astt z3_smt_ast::update(
   smt_convt *conv,
   smt_astt value,
   unsigned int idx,
-  expr2tc idx_expr) const
+  const expr2tc &idx_expr) const
 {
   if (sort->id == SMT_SORT_ARRAY)
     return smt_ast::update(conv, value, idx, idx_expr);

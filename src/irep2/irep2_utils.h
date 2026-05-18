@@ -320,7 +320,10 @@ expr2tc gen_one(const type2tc &type);
    * @return expr2tc with the resulting vector
    */
 template <typename Func>
-inline expr2tc distribute_vector_operation(Func func, expr2tc op1, expr2tc op2)
+inline expr2tc distribute_vector_operation(
+  Func func,
+  const expr2tc &op1,
+  const expr2tc &op2)
 {
   assert(is_constant_vector2t(op1) || is_constant_vector2t(op2));
   /*
@@ -400,9 +403,9 @@ inline expr2tc distribute_vector_operation(Func func, expr2tc op1, expr2tc op2)
  *  / migration sites that already have the expr_id at hand. */
 expr2tc distribute_vector_operation(
   expr2t::expr_ids id,
-  expr2tc op1,
-  expr2tc op2 = expr2tc(),
-  expr2tc rm = expr2tc());
+  const expr2tc &op1,
+  const expr2tc &op2 = expr2tc(),
+  const expr2tc &rm = expr2tc());
 
 // Build a comparison-category struct value with the discriminant set to v.
 // Used for the C++20 spaceship operator: strong_ordering / weak_ordering /

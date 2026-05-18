@@ -103,11 +103,11 @@ void goto_contractort::get_intervals(
   goto_functions.update();
 }
 
-void goto_contractort::parse_intervals(expr2tc expr)
+void goto_contractort::parse_intervals(const expr2tc &orig_expr)
 {
   double value;
 
-  expr = get_base_object(expr);
+  expr2tc expr = get_base_object(orig_expr);
 
   if (is_and2t(expr))
   {
@@ -780,7 +780,8 @@ bool expr_to_ibex_parser::is_unsupported_operator_in_constraint_not(
          is_equality2t(e) || is_modulus2t(e) || is_or2t(e) || is_and2t(e);
 }
 
-ibex::Function *expr_to_ibex_parser::create_function_from_expr2t(expr2tc expr)
+ibex::Function *
+expr_to_ibex_parser::create_function_from_expr2t(const expr2tc &expr)
 {
   ibex::Function *f = nullptr;
   ibex::Function *g, *h;
@@ -873,7 +874,7 @@ ibex::Function *expr_to_ibex_parser::create_function_from_expr2t(expr2tc expr)
   return f;
 }
 
-int expr_to_ibex_parser::create_variable_from_expr2t(expr2tc expr)
+int expr_to_ibex_parser::create_variable_from_expr2t(const expr2tc &expr)
 {
   if (is_symbol2t(expr))
   {
