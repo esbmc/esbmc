@@ -133,10 +133,10 @@ ESBMC (release 7.x) and contrasts it with mainline CBMC.
   without manual stubbing.
 
 **Recent competition results and industrial use.**
-* In [SV-COMP](/sv-comp) 2025 ESBMC-kind placed **2nd in ReachSafety**
-  and **3rd in MemSafety**, and in SV-COMP 2026 it placed **2nd in
+* In [SV-COMP](/sv-comp) 2025 ESBMC-kind placed **2nd in ReachSafety**,
+  and, in SV-COMP 2026, it placed **2nd in
   ReachSafety**. In [Test-COMP](/test-comp), ESBMC (via the FuSeBMC
-  test-generator) has won **1st Overall in 2023, 2024, 2025 and 2026**,
+  test-generator) has won **1st Overall in 2023, 2024, 2025, and 2026**,
   with 1st place in *Cover-Error* every year and 1st (or 2nd in 2025) in
   *Cover-Branches*.
 * Industrial deployments include the verification of Arm's
