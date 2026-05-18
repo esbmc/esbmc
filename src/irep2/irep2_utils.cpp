@@ -461,9 +461,7 @@ std::string type_to_string(const sideeffect_allockind &data, int)
 
 std::string type_to_string(const unsigned int &theval, int)
 {
-  char buffer[64];
-  snprintf(buffer, 63, "%d", theval);
-  return std::string(buffer);
+  return std::to_string(theval);
 }
 
 std::string type_to_string(const constant_string_kindt &theval, int)
@@ -632,14 +630,12 @@ int do_type_lt(
   if (side1.size() != side2.size())
     return side1.size() < side2.size() ? -1 : 1;
 
-  int tmp = 0;
-  std::vector<expr2tc>::const_iterator it2 = side2.begin();
+  auto it2 = side2.begin();
   for (auto const &it : side1)
   {
-    tmp = it->lt(**it2);
-    if (tmp != 0)
+    if (int tmp = it->lt(**it2); tmp != 0)
       return tmp;
-    it2++;
+    ++it2;
   }
   return 0;
 }
@@ -648,19 +644,15 @@ int do_type_lt(
   const std::vector<type2tc> &side1,
   const std::vector<type2tc> &side2)
 {
-  if (side1.size() < side2.size())
-    return -1;
-  else if (side1.size() > side2.size())
-    return 1;
+  if (side1.size() != side2.size())
+    return side1.size() < side2.size() ? -1 : 1;
 
-  int tmp = 0;
-  std::vector<type2tc>::const_iterator it2 = side2.begin();
+  auto it2 = side2.begin();
   for (auto const &it : side1)
   {
-    tmp = it->lt(**it2);
-    if (tmp != 0)
+    if (int tmp = it->lt(**it2); tmp != 0)
       return tmp;
-    it2++;
+    ++it2;
   }
   return 0;
 }
