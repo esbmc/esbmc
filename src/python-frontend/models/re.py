@@ -361,8 +361,8 @@ def _is_paren_digit_plus(pattern: str, pattern_len: int) -> bool:
     r"""Return True iff ``pattern`` is exactly ``(\d+)``."""
     if pattern_len != 5:
         return False
-    return (pattern[0] == '(' and pattern[1] == '\\' and pattern[2] == 'd'
-            and pattern[3] == '+' and pattern[4] == ')')
+    return (pattern[0] == '(' and pattern[1] == '\\' and pattern[2] == 'd' and pattern[3] == '+'
+            and pattern[4] == ')')
 
 
 def _group(pattern: str, string: str, n: int) -> str:
