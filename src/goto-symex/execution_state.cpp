@@ -455,6 +455,14 @@ bool execution_statet::check_if_ileaves_blocked()
   return false;
 }
 
+bool execution_statet::all_threads_terminal() const
+{
+  for (const auto &ts : threads_state)
+    if (!ts.thread_ended && !ts.call_stack.empty())
+      return false;
+  return true;
+}
+
 void execution_statet::end_thread()
 {
   get_active_state().thread_ended = true;
