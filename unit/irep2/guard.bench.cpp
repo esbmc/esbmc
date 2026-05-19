@@ -208,11 +208,16 @@ TEST_CASE("guard2tc microbench: equality", "[bench]")
   {
     return a256 == b256;
   };
+  guard2tc a10k = build_guard(10000);
+  guard2tc b10k = build_guard(10000);
+  guard2tc shared10k_copy = a10k;
   BENCHMARK("equal size=10000")
   {
-    guard2tc a = build_guard(10000);
-    guard2tc b = build_guard(10000);
-    return a == b;
+    return a10k == b10k;
+  };
+  BENCHMARK("equal size=10000 (shared base)")
+  {
+    return a10k == shared10k_copy;
   };
   BENCHMARK("unequal size=16 (full-list cmp)")
   {
