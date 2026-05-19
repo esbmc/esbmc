@@ -4236,10 +4236,10 @@ expr2tc smt_convt::get_by_ast(const type2tc &type, smt_astt a)
     return get_by_value(type, get_bv(a, is_signedbv_type(type)));
 
   case type2t::fixedbv_id:
-    if(int_encoding)
+    if (int_encoding)
     {
       BigInt numerator, denominator;
-      if(get_rational(a, numerator, denominator))
+      if (get_rational(a, numerator, denominator))
       {
         const auto &fixed_type = to_fixedbv_type(type);
         fixedbvt fbv(fixedbv_spect(fixed_type.width, fixed_type.integer_bits));

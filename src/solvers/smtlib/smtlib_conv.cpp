@@ -358,9 +358,9 @@ smtlib_convt::smtlib_convt(const namespacet &_ns, const optionst &_options)
 {
   std::string logic;
   const bool has_quantifiers = options.get_bool_option("has-quantifiers");
-  if(options.get_bool_option("int-encoding"))
+  if (options.get_bool_option("int-encoding"))
     logic = has_quantifiers ? "AUFLIRA" : "QF_AUFLIRA";
-  else if(options.get_bool_option("floatbv"))
+  else if (options.get_bool_option("floatbv"))
     logic = has_quantifiers ? "AUFBV" : "QF_AUFBV";
   else
     logic = has_quantifiers ? "AUFBVFP" : "QF_AUFBVFP";
