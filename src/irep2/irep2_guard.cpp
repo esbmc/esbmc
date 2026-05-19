@@ -173,7 +173,13 @@ guard2tc &operator|=(guard2tc &g1, const guard2tc &g2)
   if (new_g1.is_single_symbol() && new_g2.is_single_symbol())
     simplify(or_expr);
 
-  g1.clear_append(common);
+  // Reuse common directly instead of clear_append'ing it: common
+  // already has its and-chain materialised, and clear_append would
+  // rebuild it conjunct-by-conjunct through add() — pointless work
+  // on long shared prefixes. Move-assign rather than copy so the
+  // vector and the cached chain transfer without per-element atomic
+  // refcount churn.
+  g1 = std::move(common);
   g1.add(or_expr);
   return g1;
 }
