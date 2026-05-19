@@ -103,7 +103,8 @@ exprt python_set::get_from_iterable(
   if (iterable.id() == "string-constant")
   {
     std::set<unsigned char> unique_chars;
-    const std::string literal = id2string(to_string_constant(iterable).mb_value());
+    const std::string literal =
+      id2string(to_string_constant(iterable).mb_value());
     for (unsigned char ch : literal)
     {
       if (ch == '\0')
