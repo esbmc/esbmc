@@ -218,6 +218,16 @@ void guard2tc::dump() const
 
 bool operator==(const guard2tc &g1, const guard2tc &g2)
 {
+  // Fast equality #1: same underlying node. Copy of the same guard or
+  // a self-compare hits this — extremely cheap, two pointer reads.
+  // Both nil also matches (two empty/true guards). The cached chain
+  // is deterministic in guard_list, so shared base ⇒ matching list
+  // under our mutator invariants.
+  if (
+    static_cast<const expr2tc &>(g1).get() ==
+    static_cast<const expr2tc &>(g2).get())
+    return true;
+
   // Fast inequality: if both guards have a cached crc and they differ,
   // the underlying and-chains differ, so the conjuncts must too. This
   // turns repeated comparisons of long guards (e.g. in symex state
