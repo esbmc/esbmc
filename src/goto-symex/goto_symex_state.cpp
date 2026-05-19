@@ -135,22 +135,14 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
       return true;
   }
 
-  // Keeping additional with data achieves nothing; no code in ESBMC inspects
-  // with chains to extract data from them.
-  // FIXME: actually benchmark this and look at timing results, it may be
-  // important benchmarks (i.e. TACAS) work better with some propagation
+  // Propagate WITH-chains uniformly across BMC, --incremental-bmc, and
+  // --k-induction. Previously these incremental modes short-circuited the
+  // chain-propagation logic below for perf, but that suppressed propagation
+  // of constant struct/array updates that later passes rely on -- the Python
+  // dict OM relied on it to keep user assertions reachable through symex.
+  // See issue #4629.
   if (is_with2t(expr))
   {
-    if (
-      config.options.get_bool_option("incremental-bmc") ||
-      config.options.get_bool_option("k-induction"))
-      // When this option is enabled, the constant propagation
-      // with feature will significantly impact performance.
-      // More importantly, the use of incremental-BMC / k-induction does not heavily
-      // rely on constants to determine the boundaries. Even if there is a known
-      // loop size, esbmc starts unwinding from min k
-      return false;
-
     // Handle WITH chains for structs where all updates are constants
     if (is_struct_type(expr->type))
     {
