@@ -2366,10 +2366,12 @@ def main():
     # Generate JSON from AST for the main file.
     generate_ast_json(tree, filename, None, output_dir)
 
-    # Process and convert AST for memory models
-    models_dir = os.path.join(output_dir, "models")
+    _emit_model_jsons(output_dir)
 
-    # Iterate over all .py files in the directory
+
+def _emit_model_jsons(output_dir):
+    """Generate AST JSON for each memory-model module in ``output_dir/models``."""
+    models_dir = os.path.join(output_dir, "models")
     for python_file in glob.glob(os.path.join(models_dir, "*.py")):
         filename = os.path.basename(python_file)
         module_name = filename[:-3]
@@ -2385,7 +2387,6 @@ def main():
 
         with open(python_file, encoding="utf-8") as model:
             model_tree = ast.parse(model.read())
-            # Generate JSON from AST for the memory models.
             generate_ast_json(model_tree, filename, None, output_dir)
 
 
