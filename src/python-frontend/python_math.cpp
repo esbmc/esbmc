@@ -451,7 +451,7 @@ exprt python_math::handle_power(exprt lhs, exprt rhs)
       pow_bigint_non_negative(*resolved_base_value, exponent);
     // ESBMC approximates Python int as int64 (see type_handler::get_typet
     // FIXME); reject overflow at fold time rather than letting from_integer
-    // silently truncate. Issue #1964.
+    // silently truncate. Bignum support tracked in #4642.
     const unsigned width = bv_width(lhs.type());
     const bool is_signed = lhs.type().is_signedbv();
     const BigInt min_val = is_signed ? -BigInt::power2(width - 1) : BigInt(0);
@@ -465,11 +465,11 @@ exprt python_math::handle_power(exprt lhs, exprt rhs)
         std::to_string(width) +
         "-bit int. ESBMC approximates Python int as a fixed-width "
         "bitvector; arbitrary-precision int support is tracked in "
-        "issue #1964.");
+        "issue #4642.");
     return from_integer(power_value, lhs.type());
   }
 
-  // TODO(#1964): exponents above kMaxConstantFoldExponent fall through to
+  // TODO(#4642): exponents above kMaxConstantFoldExponent fall through to
   // build_power_expression below, which builds a symbolic multiplication tree
   // at the same int64 type — the result still wraps silently on overflow.
   // Full bignum support will close this residual gap.
