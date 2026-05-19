@@ -158,31 +158,32 @@ guard2tc &operator|=(guard2tc &g1, const guard2tc &g2)
   //   g1'    = g1 \ common,
   //   g2'    = g2 \ common.
   // Hash-set membership rather than std::set_* because guard_list is
-  // in insertion order, not sorted.
+  // in insertion order, not sorted. Build g2_set once, then mutate it
+  // as we scan g1: `erase(c)` returns 1 iff c is in common, in which
+  // case the matched entry is removed from g2_set so what remains is
+  // exactly g2's residual set. One set construction covers all three
+  // outputs (common, new_g1, new_g2).
   std::unordered_set<expr2tc, irep2_hash> g2_set(
     g2.guard_list.begin(), g2.guard_list.end());
 
   guard2tc common;
-  common.guard_list.reserve(std::min(g1.guard_list.size(), g2_set.size()));
-  for (const auto &c : g1.guard_list)
-    if (g2_set.count(c))
-      common.guard_list.push_back(c);
-  common.build_guard_expr();
-
-  std::unordered_set<expr2tc, irep2_hash> common_set(
-    common.guard_list.begin(), common.guard_list.end());
-
   guard2tc new_g1;
+  common.guard_list.reserve(std::min(g1.guard_list.size(), g2_set.size()));
   new_g1.guard_list.reserve(g1.guard_list.size());
   for (const auto &c : g1.guard_list)
-    if (!common_set.count(c))
+  {
+    if (g2_set.erase(c))
+      common.guard_list.push_back(c);
+    else
       new_g1.guard_list.push_back(c);
+  }
+  common.build_guard_expr();
   new_g1.build_guard_expr();
 
   guard2tc new_g2;
-  new_g2.guard_list.reserve(g2.guard_list.size());
+  new_g2.guard_list.reserve(g2_set.size());
   for (const auto &c : g2.guard_list)
-    if (!common_set.count(c))
+    if (g2_set.count(c))
       new_g2.guard_list.push_back(c);
   new_g2.build_guard_expr();
 
