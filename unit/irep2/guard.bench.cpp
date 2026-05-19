@@ -43,6 +43,37 @@ build_overlapping(unsigned shared, unsigned diverge)
 }
 } // namespace
 
+// Regression: operator-= / operator|= must treat guard_list as a set,
+// not a sequence. Two guards with the same conjuncts in different
+// insertion orders must compose identically.
+TEST_CASE("guard2tc set-op ordering", "[probe]")
+{
+  config.ansi_c.word_size = 32;
+
+  guard2tc g1;
+  g1.add(sym("a"));
+  g1.add(sym("b"));
+  g1.add(sym("c"));
+  g1.add(sym("d"));
+
+  guard2tc g2;
+  g2.add(sym("d"));
+  g2.add(sym("c"));
+  g2.add(sym("b"));
+  g2.add(sym("a"));
+
+  REQUIRE(g1.guard_list.size() == 4);
+  REQUIRE(g2.guard_list.size() == 4);
+
+  guard2tc diff = g1;
+  diff -= g2;
+  REQUIRE(diff.guard_list.size() == 0);
+
+  guard2tc disj = g1;
+  disj |= g2;
+  REQUIRE(disj.guard_list.size() == 4);
+}
+
 TEST_CASE("guard2tc microbench: incremental construction", "[bench]")
 {
   config.ansi_c.word_size = 32;
@@ -59,6 +90,10 @@ TEST_CASE("guard2tc microbench: incremental construction", "[bench]")
   {
     return build_guard(256);
   };
+  BENCHMARK("add() x 10000")
+  {
+    return build_guard(10000);
+  };
 }
 
 TEST_CASE("guard2tc microbench: copy", "[bench]")
@@ -67,6 +102,7 @@ TEST_CASE("guard2tc microbench: copy", "[bench]")
   guard2tc g16 = build_guard(16);
   guard2tc g64 = build_guard(64);
   guard2tc g256 = build_guard(256);
+  guard2tc g10000 = build_guard(10000);
 
   BENCHMARK("copy guard size=16")
   {
@@ -83,6 +119,11 @@ TEST_CASE("guard2tc microbench: copy", "[bench]")
     guard2tc copy = g256;
     return copy;
   };
+  BENCHMARK("copy guard size=10000")
+  {
+    guard2tc copy = g10000;
+    return copy;
+  };
 }
 
 TEST_CASE("guard2tc microbench: as_expr", "[bench]")
@@ -92,6 +133,7 @@ TEST_CASE("guard2tc microbench: as_expr", "[bench]")
   guard2tc one = build_guard(1);
   guard2tc g16 = build_guard(16);
   guard2tc g256 = build_guard(256);
+  guard2tc g10000 = build_guard(10000);
 
   BENCHMARK("as_expr() empty")
   {
@@ -108,6 +150,10 @@ TEST_CASE("guard2tc microbench: as_expr", "[bench]")
   BENCHMARK("as_expr() size=256")
   {
     return g256.as_expr();
+  };
+  BENCHMARK("as_expr() size=10000")
+  {
+    return g10000.as_expr();
   };
 }
 
@@ -145,6 +191,12 @@ TEST_CASE("guard2tc microbench: equality", "[bench]")
   {
     return a256 == b256;
   };
+  BENCHMARK("equal size=10000")
+  {
+    guard2tc a = build_guard(10000);
+    guard2tc b = build_guard(10000);
+    return a == b;
+  };
   BENCHMARK("unequal size=16 (full-list cmp)")
   {
     return a16 == differ16;
@@ -160,6 +212,33 @@ TEST_CASE("guard2tc microbench: equality", "[bench]")
   BENCHMARK("equal size=256 (warm crc)")
   {
     return warm_a256 == warm_b256;
+  };
+}
+
+TEST_CASE("guard2tc microbench: append", "[bench]")
+{
+  config.ansi_c.word_size = 32;
+
+  BENCHMARK("append size=16 onto empty")
+  {
+    guard2tc dst;
+    guard2tc src = build_guard(16);
+    dst.append(src);
+    return dst;
+  };
+  BENCHMARK("append size=256 onto empty")
+  {
+    guard2tc dst;
+    guard2tc src = build_guard(256);
+    dst.append(src);
+    return dst;
+  };
+  BENCHMARK("append size=10000 onto empty")
+  {
+    guard2tc dst;
+    guard2tc src = build_guard(10000);
+    dst.append(src);
+    return dst;
   };
 }
 
@@ -185,6 +264,12 @@ TEST_CASE("guard2tc microbench: operator|=", "[bench]")
     a |= b;
     return a;
   };
+  BENCHMARK("|= shared=5000 diverge=5000")
+  {
+    auto [a, b] = build_overlapping(5000, 5000);
+    a |= b;
+    return a;
+  };
 }
 
 TEST_CASE("guard2tc microbench: operator-=", "[bench]")
@@ -205,6 +290,15 @@ TEST_CASE("guard2tc microbench: operator-=", "[bench]")
     guard2tc shared = build_guard(128, "s");
     guard2tc a = shared;
     for (unsigned i = 0; i < 128; ++i)
+      a.add(sym("a" + std::to_string(i)));
+    a -= shared;
+    return a;
+  };
+  BENCHMARK("-= huge (10000 minus shared 5000)")
+  {
+    guard2tc shared = build_guard(5000, "s");
+    guard2tc a = shared;
+    for (unsigned i = 0; i < 5000; ++i)
       a.add(sym("a" + std::to_string(i)));
     a -= shared;
     return a;
