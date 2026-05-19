@@ -138,16 +138,14 @@ std::string python_converter::get_python_type_category(const typet &t) const
     return "";
 
   // Python has no `char`: single-character results from `chr()` and string
-  // indexing are 1-char strings. ESBMC models them as 8-bit integers (with or
-  // without the `#cpp_type==char` marker — string indexing in particular
-  // drops the marker), so bucket any 8-bit int with the string category
-  // before the generic numeric check below would otherwise pull them in.
-  // Python's own `int` is `long_long_int_type` (64-bit), so a width-8 int can
-  // only originate from char-level handling here.
-  if (
-    type_utils::is_string_type(t) ||
-    (type_utils::is_integer_type(t) &&
-     static_cast<const bv_typet &>(t).get_width() == 8))
+  // indexing are 1-char strings. ESBMC models them as 8-bit integers tagged
+  // with `#cpp_type==char` (set explicitly in type_handler::get_typet for
+  // `chr()` and in python_list::index for string subscript). A bare width-8
+  // int *without* the marker is something else (e.g. `dtype=np.int8`,
+  // 8-bit user int annotation) and must remain in the numeric tower —
+  // misclassifying it as "string" turns `np.add(127, 1, dtype=np.int8) ==
+  // -128` into a spurious cross-type fold to False.
+  if (type_utils::is_string_type(t) || type_utils::is_char_type(t))
     return "string";
 
   // Python's numeric tower coerces within itself; complex is checked first
