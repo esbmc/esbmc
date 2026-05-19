@@ -22,8 +22,7 @@
 #include <util/std_expr.h>
 #include <util/type_byte_size.h>
 
-// global data, horrible
-unsigned int dereferencet::invalid_counter = 0;
+thread_local unsigned int dereferencet::invalid_counter = 0;
 
 // Look for the base of an expression such as &a->b[1];, where all we're doing
 // is performing some pointer arithmetic, rather than actually performing some

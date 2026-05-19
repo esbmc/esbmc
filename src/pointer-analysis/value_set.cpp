@@ -17,8 +17,8 @@
 #include <util/std_expr.h>
 #include <util/type_byte_size.h>
 
-object_numberingt value_sett::object_numbering;
-object_number_numberingt value_sett::obj_numbering_refset;
+thread_local object_numberingt value_sett::object_numbering;
+thread_local object_number_numberingt value_sett::obj_numbering_refset;
 
 void value_sett::output(std::ostream &out) const
 {

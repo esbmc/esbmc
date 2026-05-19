@@ -2351,14 +2351,28 @@ bool esbmc_parseoptionst::process_goto_program(
       }
     }
 
-    if (cmdline.isset("interval-analysis") || cmdline.isset("goto-contractor"))
-    {
-      interval_analysis(goto_functions, ns, options);
-    }
-
     bool is_k_induction = cmdline.isset("inductive-step") ||
                           cmdline.isset("k-induction") ||
                           cmdline.isset("k-induction-parallel");
+
+    if (cmdline.isset("interval-analysis") || cmdline.isset("goto-contractor"))
+    {
+      // Plain interval analysis without k-induction: run with LOOP_MODE so
+      // each loop gets a before-back-edge ASSUME(bounds) and an after-loop
+      // ASSUME(bounds). The default GUARD_INSTRUCTIONS_LOCAL emits bounds
+      // at every assume/assert/goto, which is more uniform but loses the
+      // per-loop framing.
+      //
+      // With k-induction, stay on GUARD_INSTRUCTIONS_LOCAL: instructions
+      // matching k-induction's later transformations rely on the
+      // per-instruction bounds being available everywhere, and the
+      // post-k-induction pass below adds the at-loop-head bounds that
+      // tighten the inductive hypothesis.
+      const auto mode =
+        is_k_induction ? INTERVAL_INSTRUMENTATION_MODE::GUARD_INSTRUCTIONS_LOCAL
+                       : INTERVAL_INSTRUMENTATION_MODE::LOOP_MODE;
+      interval_analysis(goto_functions, ns, options, mode);
+    }
 
     if (cmdline.isset("validate-correctness-witness"))
     {
@@ -2390,6 +2404,22 @@ bool esbmc_parseoptionst::process_goto_program(
         bool use_frame_rule = cmdline.isset("loop-frame-rule");
         goto_loop_invariant(goto_functions, context, use_frame_rule);
       }
+    }
+
+    // Pass B (post-k-induction loop bounds): when interval analysis ran
+    // earlier and k-induction has now finished inserting its nondet havoc
+    // before each loop head, recompute bounds with k-induction's preamble
+    // instructions treated as transparent, then insert an ASSUME(bounds)
+    // right before each loop's exit-test. The ASSUME is marked
+    // inductive_step_instruction = true so only the inductive step sees
+    // it; base case and forward condition skip it. This is the place where
+    // interval analysis actually strengthens the inductive hypothesis.
+    if (
+      (cmdline.isset("interval-analysis") ||
+       cmdline.isset("goto-contractor")) &&
+      is_k_induction)
+    {
+      instrument_loop_bounds_after_kind(goto_functions, ns, options);
     }
 
     if (

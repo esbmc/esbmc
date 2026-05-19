@@ -112,10 +112,6 @@ void goto_k_inductiont::goto_k_induction()
     if (function_loop.get_modified_loop_vars().empty())
       continue;
 
-    if (
-      config.options.get_bool_option("add-symex-value-sets") &&
-      function_loop.contains_only_pointers())
-      continue;
     // Start the loop conversion
     convert_finite_loop(function_loop);
   }
@@ -126,6 +122,13 @@ void goto_k_inductiont::convert_finite_loop(loopst &loop)
   // Get current loop head and loop exit
   goto_programt::targett loop_head = loop.get_original_loop_head();
   goto_programt::targett loop_exit = loop.get_original_loop_exit();
+
+  // The branch cache is loop-scoped: a cached `reaches` value is computed
+  // against this loop's `loop_exit`, and the cached guards were collected
+  // along this loop's recursive walk. Nested loops share the goto_k_inductiont
+  // instance (one per function), so without clearing here the outer loop's
+  // entries would be reused by the inner loop with a different `loop_exit`.
+  marked_branch.clear();
 
   guardst guards;
   get_entry_cond_rec(loop_head, loop_exit, guards);
@@ -166,7 +169,14 @@ bool goto_k_inductiont::get_entry_cond_rec(
   {
     auto it = marked_branch.find(tmp_head->location_number);
     if (it != marked_branch.end())
-      return it->second;
+    {
+      // Re-inject the guards the first visit collected here. Storing
+      // only `reaches` lost these guards on every cache hit and silently
+      // weakened the entry-condition assume.
+      guards.insert(
+        it->second.guards_to_merge.begin(), it->second.guards_to_merge.end());
+      return it->second.reaches;
+    }
 
     /* TODO: disable this for now, it will be used for termination evaluation
      * in the future.
@@ -218,26 +228,34 @@ bool goto_k_inductiont::get_entry_cond_rec(
           get_entry_cond_rec(++new_tmp_head, loop_exit, false_branch_guard);
       }
 
-      // If we evaluated both sides of the branch, mark it so we don't
-      // have to do it again.
-      marked_branch[branch_number] = (false_branch ^ true_branch);
+      // Cache: store BOTH the recursion's reach-status at this branch
+      // AND the guards that should be re-injected on a later cache hit.
+      branch_cache_entryt entry;
+      entry.reaches = false_branch && true_branch;
 
-      // If both side reach the end of the loop or if both side don't reach it
+      // If both sides reach the end of the loop or if neither reaches it
       // we can ignore them
       if (!(false_branch ^ true_branch))
+      {
+        marked_branch[branch_number] = std::move(entry);
         return false_branch && true_branch;
+      }
 
       // At least only one of the branches reach the end of the loop, so
-      // collect the guards
+      // collect the guards from the non-reaching side.
       if (!true_branch)
       {
         guards.insert(true_branch_guard.begin(), true_branch_guard.end());
+        entry.guards_to_merge = std::move(true_branch_guard);
+        marked_branch[branch_number] = std::move(entry);
         return false;
       }
 
       if (!false_branch)
       {
         guards.insert(false_branch_guard.begin(), false_branch_guard.end());
+        entry.guards_to_merge = std::move(false_branch_guard);
+        marked_branch[branch_number] = std::move(entry);
         return false;
       }
     }
@@ -271,13 +289,6 @@ void goto_k_inductiont::make_nondet_assign(
   goto_programt dest;
   for (auto const &lhs : loop_vars)
   {
-    // do not assign nondeterministic value to pointers if we assume
-    // objects extracted from the value set analysis
-    if (
-      config.options.get_bool_option("add-symex-value-sets") &&
-      is_pointer_type(lhs))
-      continue;
-
     // Generate a nondeterministic value for the loop variable
     expr2tc rhs = gen_nondet(lhs->type);
 
@@ -311,17 +322,18 @@ void goto_k_inductiont::make_nondet_assign(
 
 static bool contains_rec(const expr2tc &expr, const loopst::loop_varst &vars)
 {
+  // Check this node first: if it's a tracked symbol, we're done.
+  if (is_symbol2t(expr) && vars.find(expr) != vars.end())
+    return true;
+
+  // Otherwise recurse into operands and stop at the first match.
   bool res = false;
   expr->foreach_operand([&vars, &res](const expr2tc &e) {
-    if (!is_nil_expr(e))
-      res = contains_rec(e, vars) || res;
-    return res;
+    if (res || is_nil_expr(e))
+      return;
+    res = contains_rec(e, vars);
   });
-
-  if (!is_symbol2t(expr))
-    return res;
-
-  return (vars.find(expr) != vars.end()) || res;
+  return res;
 }
 
 void goto_k_inductiont::remove_unrelated_loop_cond(
