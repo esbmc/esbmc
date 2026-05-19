@@ -116,6 +116,12 @@ void guard2tc::build_guard_expr()
 
 void guard2tc::append(const guard2tc &other)
 {
+  // Reserve up-front so the per-add() push_back doesn't trigger a
+  // geometric reallocation in the middle of the loop. The bound is
+  // exact when `other` has no nested and2ts and no true/false
+  // sentinels — those cases would push less. Caller must not pass
+  // *this as `other`; vector growth would invalidate the range-for.
+  guard_list.reserve(guard_list.size() + other.guard_list.size());
   for (const auto &c : other.guard_list)
     add(c);
 }
