@@ -17,7 +17,16 @@
  *  guardt::g_expr/build_guard_expr split), so as_expr() and implicit
  *  conversions are pure reads. A default-constructed guard has an
  *  empty list and a nil base; as_expr() then short-circuits to
- *  `gen_true_expr()` without touching the base. */
+ *  `gen_true_expr()` without touching the base.
+ *
+ *  Invariant: `guard_list` is treated as a set of conjuncts — no
+ *  duplicates are expected since `x && x ≡ x`. operator-= and
+ *  operator|= use hash-set membership probes which give set rather
+ *  than multiset semantics; symex's natural pattern of adding fresh
+ *  branch symbols preserves uniqueness. Injecting the same conjunct
+ *  twice leaves a logically-redundant duplicate in the list and
+ *  weakens the set-op equality guarantees but does not produce
+ *  unsound path conditions. */
 class guard2tc : public expr2tc
 {
 public:
@@ -47,8 +56,6 @@ public:
 private:
   bool is_single_symbol() const;
   void clear();
-  void clear_append(const guard2tc &other);
-  void clear_insert(const expr2tc &expr);
 
   /** Append a single non-and2t conjunct, applying the same trivial
    *  absorptions add() does. Used by the fast path in add() and by

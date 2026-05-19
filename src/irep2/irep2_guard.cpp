@@ -173,14 +173,14 @@ guard2tc &operator|=(guard2tc &g1, const guard2tc &g2)
     common.guard_list.begin(), common.guard_list.end());
 
   guard2tc new_g1;
-  new_g1.guard_list.reserve(g1.guard_list.size() - common.guard_list.size());
+  new_g1.guard_list.reserve(g1.guard_list.size());
   for (const auto &c : g1.guard_list)
     if (!common_set.count(c))
       new_g1.guard_list.push_back(c);
   new_g1.build_guard_expr();
 
   guard2tc new_g2;
-  new_g2.guard_list.reserve(g2.guard_list.size() - common.guard_list.size());
+  new_g2.guard_list.reserve(g2.guard_list.size());
   for (const auto &c : g2.guard_list)
     if (!common_set.count(c))
       new_g2.guard_list.push_back(c);
@@ -202,12 +202,9 @@ guard2tc &operator|=(guard2tc &g1, const guard2tc &g2)
   if (new_g1.is_single_symbol() && new_g2.is_single_symbol())
     simplify(or_expr);
 
-  // Reuse common directly instead of clear_append'ing it: common
-  // already has its and-chain materialised, and clear_append would
-  // rebuild it conjunct-by-conjunct through add() — pointless work
-  // on long shared prefixes. Move-assign rather than copy so the
-  // vector and the cached chain transfer without per-element atomic
-  // refcount churn.
+  // common already has its and-chain materialised; move it into g1
+  // (transfers vector + cached chain without per-element refcount
+  // churn) then extend with the OR of the residuals.
   g1 = std::move(common);
   g1.add(or_expr);
   return g1;
@@ -284,16 +281,4 @@ void guard2tc::clear()
 {
   guard_list.clear();
   expr2tc::reset();
-}
-
-void guard2tc::clear_append(const guard2tc &other)
-{
-  clear();
-  append(other);
-}
-
-void guard2tc::clear_insert(const expr2tc &expr)
-{
-  clear();
-  add(expr);
 }
