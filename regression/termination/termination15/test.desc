@@ -1,4 +1,4 @@
 CORE
 main.c
---termination
+--termination --unwind 3
 ^VERIFICATION FAILED$

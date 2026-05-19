@@ -1584,14 +1584,65 @@ int esbmc_parseoptionst::do_bmc_strategy(
     // termination
     if (options.get_bool_option("termination"))
     {
+      // `assert(false)` was inserted after main() and every loop havoc'd
+      // by goto_termination. Property: "all executions terminate".
+      //
+      //   - Forward condition UNSAT at k:
+      //       All states up to depth k are reachable — loops have fully
+      //       unwound within k iters. Universal termination proven.
+      //       Property HOLDS → return 0.
+      //
+      //   - Inductive step UNSAT at k:
+      //       From no havoc'd iterate can the program reach end-of-main
+      //       within k iters. A non-terminating execution exists.
+      //       Property REFUTED → return 1.
+      //
+      // IS SAT is NOT a success condition: it only witnesses one
+      // terminating path from one havoc'd state, which doesn't prove
+      // all paths terminate.
+      //
+      // IS UNSAT is only sound when the k-induction havoc actually
+      // covered the loop variables. Under --add-symex-value-sets,
+      // loops that only modify pointers are SKIPPED by the havoc
+      // transform (see goto_k_induction.cpp:91-94), so the IS just
+      // runs the concrete initial state forward. IS UNSAT then means
+      // "loop hasn't exited within k iters from initial state" —
+      // which says nothing about non-termination; the loop may simply
+      // need more iters. Disable the IS non-termination signal in
+      // that mode and rely on FC alone.
+      //
+      // Skip IS for k = 1 (degenerates to a base-case check).
       if (does_forward_condition_hold(options, goto_functions, k_step)
             .is_false())
+      {
+        log_result(
+          "\nForward condition shows all executions terminate "
+          "(k = {:d})",
+          k_step);
         return 0;
+      }
 
-      /* Disable this for now as it is causing more than 100 errors on SV-COMP
-      if(!is_inductive_step_violated(options, goto_functions, k_step))
-        return false;
-      */
+      bool is_havoc_reliable = !options.get_bool_option("add-symex-value-sets");
+      if (k_step > 1 && is_havoc_reliable)
+      {
+        tvt is_res =
+          is_inductive_step_violated(options, goto_functions, k_step);
+        // Symex may have set disable-inductive-step mid-run (function
+        // pointers, recursion, concurrency). The IS UNSAT result is
+        // then a vacuous "0 VCCs to falsify" and not a real
+        // non-termination witness. Treat it as inconclusive.
+        if (
+          is_res.is_false() &&
+          !options.get_bool_option("disable-inductive-step"))
+        {
+          log_result(
+            "\nInductive step shows a non-terminating execution "
+            "(k = {:d})",
+            k_step);
+          return 1;
+        }
+        // IS SAT or UNKNOWN — inconclusive, try larger k.
+      }
     }
     // incremental-bmc
     if (options.get_bool_option("incremental-bmc"))
@@ -2344,6 +2395,15 @@ bool esbmc_parseoptionst::process_goto_program(
       abort();
 #endif
     }
+
+    // --termination: reduce non-termination to a reachability safety
+    // property by inserting `assert(false)` right after the call to
+    // `main()` in `__ESBMC_main`. The BMC driver then iterates the base
+    // case; UNSAT at some k proves the assert is unreachable up to that
+    // unwinding bound, i.e. no path of length k terminates. See
+    // do_bmc_strategy for the loop side.
+    if (cmdline.isset("termination"))
+      goto_termination(goto_functions);
 
     goto_check(ns, options, goto_functions);
 

@@ -16,41 +16,68 @@ void goto_k_induction(goto_functionst &goto_functions)
 
 void goto_termination(goto_functionst &goto_functions)
 {
+  // Termination as a safety property. Two transformations:
+  //
+  //   1. Apply the k-induction loop transformation (havoc loop vars +
+  //      assume entry condition) to every loop. The inductive step
+  //      then runs from an arbitrary loop state — so if it cannot
+  //      reach end-of-main, no iterate of the loop can.
+  //   2. Insert `assert(false)` right after the call to `main()` in
+  //      `__ESBMC_main`. The reduction is:
+  //
+  //        program does NOT terminate  iff  assert is unreachable
+  //
+  //      In the inductive step, UNSAT (assert unreachable from havoc'd
+  //      state) proves non-termination outright. In the base case,
+  //      SAT (assert reachable from concrete initial state) refutes it.
+  // Apply k-induction (havoc + assume_entry) to every function except
+  // __ESBMC_main: that's where we insert the termination marker, and
+  // running k-induction there would scan its (loop-free) body and
+  // potentially mutate it.
   Forall_goto_functions (it, goto_functions)
-    if (it->second.body_available)
+    if (it->second.body_available && it->first != "__ESBMC_main")
       goto_k_inductiont(it->first, goto_functions, it->second);
   goto_functions.update();
 
   auto function = goto_functions.function_map.find("__ESBMC_main");
+  if (function == goto_functions.function_map.end())
+    return;
 
-  // Search for __ESBMC_main
-  auto it = function->second.body.instructions.begin();
-  while (it != function->second.body.instructions.end())
-  {
-    if (it->is_function_call())
-    {
-      auto const &call = to_code_function_call2t(it->code);
-      if (to_symbol2t(call.function).thename.as_string() == "c:@F@main")
-        break;
-    }
-    it++;
-  }
-  assert(it != function->second.body.instructions.end());
+  // Place the termination marker right before __ESBMC_main's
+  // END_FUNCTION. Inserting after a specific FUNCTION_CALL (e.g. the
+  // c:@F@main call) would be fragile — C++ name mangling, the Python
+  // frontend (python_user_main), and --function-renamed entries all
+  // produce different callee symbols, and assert-aborting on a
+  // missing match would crash the strategy. Inserting at end-of-
+  // wrapper is shape-agnostic: control reaches it exactly when the
+  // program is about to return from __ESBMC_main, which is the
+  // semantic point we want to detect.
+  auto end_it = function->second.body.instructions.begin();
+  while (end_it != function->second.body.instructions.end() &&
+         end_it->type != END_FUNCTION)
+    ++end_it;
+  if (end_it == function->second.body.instructions.end())
+    return; // no END_FUNCTION; nothing safe to anchor to
 
-  // Create assert(0) as termination marker.
-  // This assertion fails when reached, allowing reachability analysis
-  // to detect program termination vs. infinite execution
-  goto_programt dest;
-  goto_programt::targett t = dest.add_instruction(ASSERT);
-  // Always false - assertion always fails when reached
-  t->guard = gen_false_expr();
-  t->inductive_step_instruction = true;
-  t->inductive_assertion = false;
-  t->location.comment("termination");
+  // Insert `assert(false)` immediately before __ESBMC_main's
+  // END_FUNCTION. Mark it `inductive_step_instruction` so that
+  // execution_state.cpp:215 skips it during base_case and
+  // forward_condition (we don't want FC's "all states reachable"
+  // proof to be derailed by an always-false VCC) — it only fires in
+  // the inductive step, where it serves as the "did we reach end-of-
+  // main from a havoc'd iterate?" probe.
+  //
+  // Use `insert` (not `insert_swap`): we want to INSERT before the
+  // target, preserving it. insert_swap would overwrite the target.
+  auto inserted = function->second.body.instructions.insert(
+    end_it, goto_programt::instructiont());
+  inserted->type = ASSERT;
+  inserted->guard = gen_false_expr();
+  inserted->location.comment("termination");
+  inserted->function = "__ESBMC_main";
+  inserted->inductive_step_instruction = true;
 
-  // And add it one instruction after the call to main
-  it++;
-  function->second.body.insert_swap(it, dest);
+  goto_functions.update();
 }
 
 void goto_k_inductiont::goto_k_induction()

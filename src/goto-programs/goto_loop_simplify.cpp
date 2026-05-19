@@ -640,34 +640,16 @@ bool simplify_function_once(goto_functiont &fn)
       is_dowhile = true;
     }
 
-    // Under --termination: only the empty-body `while (1) {}` /
-    // `for (;;) {}` shape is sound to collapse — the body cannot
-    // contain a break/return/goto-out or a reachable assert, so the
-    // rewrite to assume(false) faithfully models the unreachable
-    // post-loop state. body_is_safe rejects anything beyond
-    // LOCATION/SKIP/DECL/DEAD and non-pointer ASSIGNs; we additionally
-    // require modified.empty() so even the trivial ASSIGNs are absent.
-    // The previous "fire on any constant-false guard" version produced
-    // ~880 incorrect-true verdicts on SV-COMP's Termination-* tracks
-    // by collapsing loops whose bodies had reachable internal exits.
+    // Under --termination: skip every rewrite in this pass. The
+    // termination reduction in goto_termination (k-induction over
+    // havoc'd loops + assert(false) marker after main) is the sole
+    // termination-mode transformation. Collapsing `while (1) {}` to
+    // assume(false) here would feed FC a false termination signal:
+    // SV-COMP requires non-terminating programs to be reported as
+    // false (LTL(F end) violation), but assume(false) kills the path
+    // at depth 0 and FC closes UNSAT, masking the non-termination.
     if (config.options.get_bool_option("termination"))
-    {
-      expr2tc exit_guard_simp = exit_guard;
-      simplify(exit_guard_simp);
-      if (is_false(exit_guard_simp))
-      {
-        name_set modified;
-        if (
-          body_is_safe(body_first, loop_exit, loop_head, modified) &&
-          modified.empty())
-        {
-          loop_head->make_assumption(gen_false_expr());
-          erase_loop(std::next(loop_head), loop_exit);
-          changed = true;
-        }
-      }
       continue;
-    }
 
     // Refuse if loop_head has any incoming GOTO other than the
     // back-edge. An external `goto L; … L: while(...)` would land on

@@ -236,10 +236,13 @@ void execution_statet::symex_step(reachability_treet &art)
     (base_case || forward_condition) && instruction.inductive_step_instruction)
   {
     // This assertion will prevent us of having weird side-effects (issue #538)
-    // e.g. having inductive step instructions in a incremental strategy
+    // e.g. having inductive step instructions in a incremental strategy.
+    // --termination also legitimately produces inductive-step instructions
+    // (the post-main assert(false) marker inserted by goto_termination).
     assert(
-      k_induction &&
-      "Inductive step instructions should be set only for k-induction");
+      (k_induction || options.get_bool_option("termination")) &&
+      "Inductive step instructions should be set only for k-induction "
+      "or termination");
     cur_state->source.pc++;
     return;
   }
@@ -273,13 +276,20 @@ void execution_statet::symex_step(reachability_treet &art)
       (instruction.function == "c:@F@main" ||
        instruction.function == "c:@F@main#") &&
       !options.get_bool_option("deadlock-check") &&
-      !options.get_bool_option("memory-leak-check"))
+      !options.get_bool_option("memory-leak-check") &&
+      !options.get_bool_option("termination"))
     {
       // check whether we reached the end of the main function and
       // whether we are not checking for (local and global) deadlocks and memory leaks.
       // We should end the main thread to avoid exploring further interleavings
       // TODO: once we support at_exit, we should check this code
       // TODO: we should support verifying memory leaks in multi-threaded C programs.
+      //
+      // Skipped under --termination: the strategy inserts an
+      // `assert(false)` after the main() call in __ESBMC_main to
+      // detect terminating paths. The assume(false) here would kill
+      // the path before reaching that marker; the assertion would
+      // never become a VCC.
       assume(gen_false_expr());
       end_thread();
       interleaving_unviable = true;
