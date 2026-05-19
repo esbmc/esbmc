@@ -1194,7 +1194,8 @@ __ESBMC_HIDE:;
 
   // Use unsigned magnitude so INT64_MIN is representable without overflow.
   int negative = v < 0;
-  unsigned long long mag = negative ? -(unsigned long long)v : (unsigned long long)v;
+  unsigned long long mag =
+    negative ? -(unsigned long long)v : (unsigned long long)v;
 
   // Write digits right-to-left into a 20-byte scratch (max 20 decimal digits).
   char digits[20];
