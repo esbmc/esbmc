@@ -296,7 +296,8 @@ private:
    *  @param guard The guard for evaluating this expression.
    *  @param mode The manner in which the result of this deref is accessed.
    */
-  virtual void dereference_guard_expr(expr2tc &expr, guard2tc &guard, modet mode);
+  virtual void
+  dereference_guard_expr(expr2tc &expr, guard2tc &guard, modet mode);
 
   /** Interpret an address-of expression. There's the potential that it's just
    *  taking the address of a dereference, which just evaluates to some pointer
@@ -428,8 +429,10 @@ private:
     const expr2tc &lexical_offset,
     expr2tc &pointer_guard);
 
-  void
-  deref_invalid_ptr(const expr2tc &deref_expr, const guard2tc &guard, modet mode);
+  void deref_invalid_ptr(
+    const expr2tc &deref_expr,
+    const guard2tc &guard,
+    modet mode);
 
   static const expr2tc &get_symbol(const expr2tc &object);
   void bounds_check(
@@ -473,8 +476,10 @@ private:
     const type2tc &type,
     const guard2tc &guard,
     modet mode);
-  void
-  check_alignment(BigInt minwidth, const expr2tc &offset, const guard2tc &guard);
+  void check_alignment(
+    BigInt minwidth,
+    const expr2tc &offset,
+    const guard2tc &guard);
   unsigned int static compute_num_bytes_to_extract(
     const expr2tc &offset,
     unsigned long num_bits);

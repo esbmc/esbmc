@@ -741,7 +741,10 @@ void execution_statet::execute_guard()
 
   if (active_thread != last_active_thread)
     target->assumption(
-      guard2tc().as_expr(), parent_guard, get_active_state().source, first_loop);
+      guard2tc().as_expr(),
+      parent_guard,
+      get_active_state().source,
+      first_loop);
 }
 
 unsigned int execution_statet::add_thread(const goto_programt *prog)

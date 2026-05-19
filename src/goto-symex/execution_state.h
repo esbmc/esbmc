@@ -207,8 +207,10 @@ public:
    *  @param guard A guard for the assignment, true by default
    *  @param type Assignment type, visible by default
    */
-  void symex_assign(const expr2tc &code, const bool hidden, const guard2tc &guard)
-    override;
+  void symex_assign(
+    const expr2tc &code,
+    const bool hidden,
+    const guard2tc &guard) override;
 
   /**
    *  Symbolically assert something.

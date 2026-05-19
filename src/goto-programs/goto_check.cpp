@@ -56,8 +56,10 @@ protected:
     const guard2tc &guard,
     const locationt &loc);
 
-  void
-  bounds_check(const expr2tc &expr, const guard2tc &guard, const locationt &loc);
+  void bounds_check(
+    const expr2tc &expr,
+    const guard2tc &guard,
+    const locationt &loc);
 
   void pointer_rel_check(
     const expr2tc &expr,
