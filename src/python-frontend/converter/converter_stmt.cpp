@@ -1208,7 +1208,9 @@ python_converter::extract_target_name(const nlohmann::json &target) const
   else if (target_type == "Attribute")
     return target["attr"].get<std::string>();
   else if (target_type == "Subscript")
-    return target["value"]["id"].get<std::string>();
+    // Recurse through nested Subscripts (e.g. board[0][0] = x) to reach the
+    // root container's Name/Attribute, which carries the symbol id.
+    return extract_target_name(target["value"]);
 
   throw std::runtime_error(
     "Unsupported assignment target type: " + target_type.get<std::string>());

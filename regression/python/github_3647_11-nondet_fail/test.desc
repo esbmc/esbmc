@@ -1,4 +1,4 @@
-THOROUGH
+CORE
 main.py
---no-standard-checks --unwind 9 --smt-symex-guard
+--no-standard-checks --incremental-bmc --smt-symex-guard
 ^VERIFICATION FAILED$
