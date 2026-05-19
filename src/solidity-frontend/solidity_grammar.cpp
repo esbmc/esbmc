@@ -1,3 +1,10 @@
+/// \file solidity_grammar.cpp
+/// \brief Implementation of Solidity grammar classification functions.
+///
+/// Maps solc JSON AST node fields (type strings, operator tokens, node kinds)
+/// to the corresponding SolidityGrammar enums. Includes lookup tables for all
+/// uint/int bit-widths, operator precedence, and string-to-enum conversions.
+
 #include <fmt/core.h>
 #include <solidity-frontend/solidity_convert.h>
 #include <solidity-frontend/solidity_grammar.h>
@@ -175,7 +182,7 @@ bool is_address_member_call(const nlohmann::json &expr)
 // check if it is a function defined in a library
 bool is_sol_library_function(const int ref_id)
 {
-  const auto &func_ref = solidity_convertert::find_decl_ref_unique_id(
+  const auto &func_ref = solidity_convertert::find_node_by_id(
     solidity_convertert::src_ast_json["nodes"], ref_id);
   if (func_ref.empty() || func_ref.is_null())
     return false;
@@ -218,18 +225,8 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
     {
       return TupleTypeName;
     }
-    else if (typeIdentifier.find("t_mapping$") != std::string::npos)
+    else if (typeIdentifier.compare(0, 10, "t_mapping$") == 0)
     {
-      std::string target = "t_mapping$";
-
-      size_t first = typeIdentifier.find(target);
-      size_t second = typeIdentifier.find(target, first + 1);
-
-      if (first != std::string::npos && second != std::string::npos)
-      {
-        log_error("Currently we do not support nested mapping");
-        return TypeNameTError;
-      }
       return MappingTypeName;
     }
     else if (typeIdentifier.compare(0, 8, "t_array$") == 0)
@@ -271,11 +268,11 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
     else if (
       uint_string_to_type_map.count(typeString) ||
       int_string_to_type_map.count(typeString) || typeString == "bool" ||
-      typeString == "string" || typeString.find("literal_string") == 0 ||
+      typeString == "string" || typeString.starts_with("literal_string") ||
       typeString == "string storage ref" ||
       typeString == "string storage pointer" || typeString == "string memory" ||
       typeString == "address payable" || typeString == "address" ||
-      typeString.compare(0, 5, "bytes") == 0)
+      typeString.starts_with("bytes"))
     {
       // For state var declaration,
       return ElementaryTypeName;
@@ -413,7 +410,7 @@ ElementaryTypeNameT get_elementary_type_name_t(const nlohmann::json &type_name)
     // Will not be used
     return RA_LITERAL;
   }
-  if (typeString.find("literal_string") == 0)
+  if (typeString.starts_with("literal_string"))
   {
     return STRING_LITERAL;
   }
@@ -640,6 +637,10 @@ BlockT get_block_t(const nlohmann::json &block)
   {
     return BlockWhileStatement;
   }
+  else if (block["nodeType"] == "DoWhileStatement")
+  {
+    return BlockDoWhileStatement;
+  }
   else if (block["nodeType"] == "ExpressionStatement")
   {
     return BlockExpressionStatement;
@@ -660,6 +661,7 @@ const char *block_to_str(BlockT type)
     ENUM_TO_STR(BlockForStatement)
     ENUM_TO_STR(BlockIfStatement)
     ENUM_TO_STR(BlockWhileStatement)
+    ENUM_TO_STR(BlockDoWhileStatement)
     ENUM_TO_STR(BlockExpressionStatement)
     ENUM_TO_STR(BlockTError)
   default:
@@ -701,6 +703,10 @@ StatementT get_statement_t(const nlohmann::json &stmt)
   {
     return WhileStatement;
   }
+  else if (stmt["nodeType"] == "DoWhileStatement")
+  {
+    return DoWhileStatement;
+  }
   else if (stmt["nodeType"] == "Continue")
   {
     return ContinueStatement;
@@ -725,6 +731,10 @@ StatementT get_statement_t(const nlohmann::json &stmt)
   {
     return TryStatement;
   }
+  else if (stmt["nodeType"] == "InlineAssembly")
+  {
+    return InlineAssemblyStatement;
+  }
   else
   {
     log_error(
@@ -746,6 +756,7 @@ const char *statement_to_str(StatementT type)
     ENUM_TO_STR(ForStatement)
     ENUM_TO_STR(IfStatement)
     ENUM_TO_STR(WhileStatement)
+    ENUM_TO_STR(DoWhileStatement)
     ENUM_TO_STR(StatementTError)
     ENUM_TO_STR(ContinueStatement)
     ENUM_TO_STR(BreakStatement)
@@ -753,6 +764,7 @@ const char *statement_to_str(StatementT type)
     ENUM_TO_STR(EmitStatement)
     ENUM_TO_STR(PlaceholderStatement)
     ENUM_TO_STR(TryStatement)
+    ENUM_TO_STR(InlineAssemblyStatement)
   default:
   {
     assert(!"Unknown statement type");
@@ -782,6 +794,7 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
     const std::string typeString = expr["typeDescriptions"]["typeString"];
     if (
       typeString.compare(0, 9, "int_const") == 0 &&
+      typeString.find("...") == std::string::npos &&
       (!expr.contains("value") ||
        expr["value"].get<std::string>().find(".") != std::string::npos))
       return LiteralWithRational;
@@ -904,6 +917,10 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
   {
     return IndexAccess;
   }
+  else if (expr["nodeType"] == "IndexRangeAccess")
+  {
+    return IndexRangeAccess;
+  }
 
   // fall-through
   log_error(
@@ -939,6 +956,10 @@ ExpressionT get_unary_expr_operator_t(const nlohmann::json &expr, bool uo_pre)
   else if (expr["operator"] == "!")
   {
     return UO_LNot;
+  }
+  else if (expr["operator"] == "delete")
+  {
+    return UO_Delete;
   }
   else
   {
@@ -1130,6 +1151,7 @@ const char *expression_to_str(ExpressionT type)
     ENUM_TO_STR(UO_Minus)
     ENUM_TO_STR(UO_Not)
     ENUM_TO_STR(UO_LNot)
+    ENUM_TO_STR(UO_Delete)
 
     ENUM_TO_STR(ConditionalOperatorClass)
 
@@ -1154,6 +1176,7 @@ const char *expression_to_str(ExpressionT type)
     ENUM_TO_STR(CallOptionsExprClass)
     ENUM_TO_STR(ImplicitCastExprClass)
     ENUM_TO_STR(IndexAccess)
+    ENUM_TO_STR(IndexRangeAccess)
     ENUM_TO_STR(NewExpression)
     ENUM_TO_STR(AddressMemberCall)
     ENUM_TO_STR(LibraryMemberCall)
@@ -1209,7 +1232,7 @@ const char *func_decl_ref_to_str(FunctionDeclRefT type)
 }
 
 // auxiliary type for implicit casting
-ImplicitCastTypeT get_implicit_cast_type_t(std::string cast)
+ImplicitCastTypeT get_implicit_cast_type_t(const std::string &cast)
 {
   if (cast == "LValueToRValue")
   {
@@ -1275,6 +1298,507 @@ VisibilityT get_access_t(const nlohmann::json &ast_node)
     abort();
   }
   return UnknownT;
+}
+
+// ====== SolType enum support ======
+
+#define SOL_ENUM_TO_STR(s)                                                     \
+  case SolType::s:                                                             \
+    return #s;
+
+const char *sol_type_to_str(SolType t)
+{
+  switch (t)
+  {
+    SOL_ENUM_TO_STR(UINT8)
+    SOL_ENUM_TO_STR(UINT16)
+    SOL_ENUM_TO_STR(UINT24)
+    SOL_ENUM_TO_STR(UINT32)
+    SOL_ENUM_TO_STR(UINT40)
+    SOL_ENUM_TO_STR(UINT48)
+    SOL_ENUM_TO_STR(UINT56)
+    SOL_ENUM_TO_STR(UINT64)
+    SOL_ENUM_TO_STR(UINT72)
+    SOL_ENUM_TO_STR(UINT80)
+    SOL_ENUM_TO_STR(UINT88)
+    SOL_ENUM_TO_STR(UINT96)
+    SOL_ENUM_TO_STR(UINT104)
+    SOL_ENUM_TO_STR(UINT112)
+    SOL_ENUM_TO_STR(UINT120)
+    SOL_ENUM_TO_STR(UINT128)
+    SOL_ENUM_TO_STR(UINT136)
+    SOL_ENUM_TO_STR(UINT144)
+    SOL_ENUM_TO_STR(UINT152)
+    SOL_ENUM_TO_STR(UINT160)
+    SOL_ENUM_TO_STR(UINT168)
+    SOL_ENUM_TO_STR(UINT176)
+    SOL_ENUM_TO_STR(UINT184)
+    SOL_ENUM_TO_STR(UINT192)
+    SOL_ENUM_TO_STR(UINT200)
+    SOL_ENUM_TO_STR(UINT208)
+    SOL_ENUM_TO_STR(UINT216)
+    SOL_ENUM_TO_STR(UINT224)
+    SOL_ENUM_TO_STR(UINT232)
+    SOL_ENUM_TO_STR(UINT240)
+    SOL_ENUM_TO_STR(UINT248)
+    SOL_ENUM_TO_STR(UINT256)
+    SOL_ENUM_TO_STR(INT8)
+    SOL_ENUM_TO_STR(INT16)
+    SOL_ENUM_TO_STR(INT24)
+    SOL_ENUM_TO_STR(INT32)
+    SOL_ENUM_TO_STR(INT40)
+    SOL_ENUM_TO_STR(INT48)
+    SOL_ENUM_TO_STR(INT56)
+    SOL_ENUM_TO_STR(INT64)
+    SOL_ENUM_TO_STR(INT72)
+    SOL_ENUM_TO_STR(INT80)
+    SOL_ENUM_TO_STR(INT88)
+    SOL_ENUM_TO_STR(INT96)
+    SOL_ENUM_TO_STR(INT104)
+    SOL_ENUM_TO_STR(INT112)
+    SOL_ENUM_TO_STR(INT120)
+    SOL_ENUM_TO_STR(INT128)
+    SOL_ENUM_TO_STR(INT136)
+    SOL_ENUM_TO_STR(INT144)
+    SOL_ENUM_TO_STR(INT152)
+    SOL_ENUM_TO_STR(INT160)
+    SOL_ENUM_TO_STR(INT168)
+    SOL_ENUM_TO_STR(INT176)
+    SOL_ENUM_TO_STR(INT184)
+    SOL_ENUM_TO_STR(INT192)
+    SOL_ENUM_TO_STR(INT200)
+    SOL_ENUM_TO_STR(INT208)
+    SOL_ENUM_TO_STR(INT216)
+    SOL_ENUM_TO_STR(INT224)
+    SOL_ENUM_TO_STR(INT232)
+    SOL_ENUM_TO_STR(INT240)
+    SOL_ENUM_TO_STR(INT248)
+    SOL_ENUM_TO_STR(INT256)
+    SOL_ENUM_TO_STR(BOOL)
+    SOL_ENUM_TO_STR(ADDRESS)
+    SOL_ENUM_TO_STR(ADDRESS_PAYABLE)
+    SOL_ENUM_TO_STR(STRING)
+    SOL_ENUM_TO_STR(ENUM)
+    SOL_ENUM_TO_STR(BYTES1)
+    SOL_ENUM_TO_STR(BYTES2)
+    SOL_ENUM_TO_STR(BYTES3)
+    SOL_ENUM_TO_STR(BYTES4)
+    SOL_ENUM_TO_STR(BYTES5)
+    SOL_ENUM_TO_STR(BYTES6)
+    SOL_ENUM_TO_STR(BYTES7)
+    SOL_ENUM_TO_STR(BYTES8)
+    SOL_ENUM_TO_STR(BYTES9)
+    SOL_ENUM_TO_STR(BYTES10)
+    SOL_ENUM_TO_STR(BYTES11)
+    SOL_ENUM_TO_STR(BYTES12)
+    SOL_ENUM_TO_STR(BYTES13)
+    SOL_ENUM_TO_STR(BYTES14)
+    SOL_ENUM_TO_STR(BYTES15)
+    SOL_ENUM_TO_STR(BYTES16)
+    SOL_ENUM_TO_STR(BYTES17)
+    SOL_ENUM_TO_STR(BYTES18)
+    SOL_ENUM_TO_STR(BYTES19)
+    SOL_ENUM_TO_STR(BYTES20)
+    SOL_ENUM_TO_STR(BYTES21)
+    SOL_ENUM_TO_STR(BYTES22)
+    SOL_ENUM_TO_STR(BYTES23)
+    SOL_ENUM_TO_STR(BYTES24)
+    SOL_ENUM_TO_STR(BYTES25)
+    SOL_ENUM_TO_STR(BYTES26)
+    SOL_ENUM_TO_STR(BYTES27)
+    SOL_ENUM_TO_STR(BYTES28)
+    SOL_ENUM_TO_STR(BYTES29)
+    SOL_ENUM_TO_STR(BYTES30)
+    SOL_ENUM_TO_STR(BYTES31)
+    SOL_ENUM_TO_STR(BYTES32)
+  case SolType::BYTES_DYN:
+    return "BytesDynamic";
+  case SolType::BYTES_STATIC:
+    return "BytesStatic";
+    SOL_ENUM_TO_STR(INT_CONST)
+    SOL_ENUM_TO_STR(STRING_LITERAL)
+    SOL_ENUM_TO_STR(ARRAY)
+    SOL_ENUM_TO_STR(ARRAY_LITERAL)
+    SOL_ENUM_TO_STR(DYNARRAY)
+    SOL_ENUM_TO_STR(ARRAY_CALLOC)
+    SOL_ENUM_TO_STR(MAPPING)
+    SOL_ENUM_TO_STR(STRUCT)
+    SOL_ENUM_TO_STR(CONTRACT)
+    SOL_ENUM_TO_STR(LIBRARY)
+    SOL_ENUM_TO_STR(TUPLE_RETURNS)
+    SOL_ENUM_TO_STR(TUPLE_INSTANCE)
+    SOL_ENUM_TO_STR(UNSET)
+  }
+  return "UNSET";
+}
+
+#undef SOL_ENUM_TO_STR
+
+SolType str_to_sol_type(const std::string &s)
+{
+  static const std::unordered_map<std::string, SolType> map = {
+    {"UINT8", SolType::UINT8},
+    {"UINT16", SolType::UINT16},
+    {"UINT24", SolType::UINT24},
+    {"UINT32", SolType::UINT32},
+    {"UINT40", SolType::UINT40},
+    {"UINT48", SolType::UINT48},
+    {"UINT56", SolType::UINT56},
+    {"UINT64", SolType::UINT64},
+    {"UINT72", SolType::UINT72},
+    {"UINT80", SolType::UINT80},
+    {"UINT88", SolType::UINT88},
+    {"UINT96", SolType::UINT96},
+    {"UINT104", SolType::UINT104},
+    {"UINT112", SolType::UINT112},
+    {"UINT120", SolType::UINT120},
+    {"UINT128", SolType::UINT128},
+    {"UINT136", SolType::UINT136},
+    {"UINT144", SolType::UINT144},
+    {"UINT152", SolType::UINT152},
+    {"UINT160", SolType::UINT160},
+    {"UINT168", SolType::UINT168},
+    {"UINT176", SolType::UINT176},
+    {"UINT184", SolType::UINT184},
+    {"UINT192", SolType::UINT192},
+    {"UINT200", SolType::UINT200},
+    {"UINT208", SolType::UINT208},
+    {"UINT216", SolType::UINT216},
+    {"UINT224", SolType::UINT224},
+    {"UINT232", SolType::UINT232},
+    {"UINT240", SolType::UINT240},
+    {"UINT248", SolType::UINT248},
+    {"UINT256", SolType::UINT256},
+    {"INT8", SolType::INT8},
+    {"INT16", SolType::INT16},
+    {"INT24", SolType::INT24},
+    {"INT32", SolType::INT32},
+    {"INT40", SolType::INT40},
+    {"INT48", SolType::INT48},
+    {"INT56", SolType::INT56},
+    {"INT64", SolType::INT64},
+    {"INT72", SolType::INT72},
+    {"INT80", SolType::INT80},
+    {"INT88", SolType::INT88},
+    {"INT96", SolType::INT96},
+    {"INT104", SolType::INT104},
+    {"INT112", SolType::INT112},
+    {"INT120", SolType::INT120},
+    {"INT128", SolType::INT128},
+    {"INT136", SolType::INT136},
+    {"INT144", SolType::INT144},
+    {"INT152", SolType::INT152},
+    {"INT160", SolType::INT160},
+    {"INT168", SolType::INT168},
+    {"INT176", SolType::INT176},
+    {"INT184", SolType::INT184},
+    {"INT192", SolType::INT192},
+    {"INT200", SolType::INT200},
+    {"INT208", SolType::INT208},
+    {"INT216", SolType::INT216},
+    {"INT224", SolType::INT224},
+    {"INT232", SolType::INT232},
+    {"INT240", SolType::INT240},
+    {"INT248", SolType::INT248},
+    {"INT256", SolType::INT256},
+    {"BOOL", SolType::BOOL},
+    {"ADDRESS", SolType::ADDRESS},
+    {"ADDRESS_PAYABLE", SolType::ADDRESS_PAYABLE},
+    {"STRING", SolType::STRING},
+    {"ENUM", SolType::ENUM},
+    {"BYTES1", SolType::BYTES1},
+    {"BYTES2", SolType::BYTES2},
+    {"BYTES3", SolType::BYTES3},
+    {"BYTES4", SolType::BYTES4},
+    {"BYTES5", SolType::BYTES5},
+    {"BYTES6", SolType::BYTES6},
+    {"BYTES7", SolType::BYTES7},
+    {"BYTES8", SolType::BYTES8},
+    {"BYTES9", SolType::BYTES9},
+    {"BYTES10", SolType::BYTES10},
+    {"BYTES11", SolType::BYTES11},
+    {"BYTES12", SolType::BYTES12},
+    {"BYTES13", SolType::BYTES13},
+    {"BYTES14", SolType::BYTES14},
+    {"BYTES15", SolType::BYTES15},
+    {"BYTES16", SolType::BYTES16},
+    {"BYTES17", SolType::BYTES17},
+    {"BYTES18", SolType::BYTES18},
+    {"BYTES19", SolType::BYTES19},
+    {"BYTES20", SolType::BYTES20},
+    {"BYTES21", SolType::BYTES21},
+    {"BYTES22", SolType::BYTES22},
+    {"BYTES23", SolType::BYTES23},
+    {"BYTES24", SolType::BYTES24},
+    {"BYTES25", SolType::BYTES25},
+    {"BYTES26", SolType::BYTES26},
+    {"BYTES27", SolType::BYTES27},
+    {"BYTES28", SolType::BYTES28},
+    {"BYTES29", SolType::BYTES29},
+    {"BYTES30", SolType::BYTES30},
+    {"BYTES31", SolType::BYTES31},
+    {"BYTES32", SolType::BYTES32},
+    {"BytesDynamic", SolType::BYTES_DYN},
+    {"BytesStatic", SolType::BYTES_STATIC},
+    {"INT_CONST", SolType::INT_CONST},
+    {"STRING_LITERAL", SolType::STRING_LITERAL},
+    {"ARRAY", SolType::ARRAY},
+    {"ARRAY_LITERAL", SolType::ARRAY_LITERAL},
+    {"DYNARRAY", SolType::DYNARRAY},
+    {"ARRAY_CALLOC", SolType::ARRAY_CALLOC},
+    {"MAPPING", SolType::MAPPING},
+    {"STRUCT", SolType::STRUCT},
+    {"CONTRACT", SolType::CONTRACT},
+    {"LIBRARY", SolType::LIBRARY},
+    {"TUPLE_RETURNS", SolType::TUPLE_RETURNS},
+    {"TUPLE_INSTANCE", SolType::TUPLE_INSTANCE},
+  };
+  auto it = map.find(s);
+  return it != map.end() ? it->second : SolType::UNSET;
+}
+
+SolType elementary_to_sol_type(ElementaryTypeNameT t)
+{
+  switch (t)
+  {
+  case UINT8:
+    return SolType::UINT8;
+  case UINT16:
+    return SolType::UINT16;
+  case UINT24:
+    return SolType::UINT24;
+  case UINT32:
+    return SolType::UINT32;
+  case UINT40:
+    return SolType::UINT40;
+  case UINT48:
+    return SolType::UINT48;
+  case UINT56:
+    return SolType::UINT56;
+  case UINT64:
+    return SolType::UINT64;
+  case UINT72:
+    return SolType::UINT72;
+  case UINT80:
+    return SolType::UINT80;
+  case UINT88:
+    return SolType::UINT88;
+  case UINT96:
+    return SolType::UINT96;
+  case UINT104:
+    return SolType::UINT104;
+  case UINT112:
+    return SolType::UINT112;
+  case UINT120:
+    return SolType::UINT120;
+  case UINT128:
+    return SolType::UINT128;
+  case UINT136:
+    return SolType::UINT136;
+  case UINT144:
+    return SolType::UINT144;
+  case UINT152:
+    return SolType::UINT152;
+  case UINT160:
+    return SolType::UINT160;
+  case UINT168:
+    return SolType::UINT168;
+  case UINT176:
+    return SolType::UINT176;
+  case UINT184:
+    return SolType::UINT184;
+  case UINT192:
+    return SolType::UINT192;
+  case UINT200:
+    return SolType::UINT200;
+  case UINT208:
+    return SolType::UINT208;
+  case UINT216:
+    return SolType::UINT216;
+  case UINT224:
+    return SolType::UINT224;
+  case UINT232:
+    return SolType::UINT232;
+  case UINT240:
+    return SolType::UINT240;
+  case UINT248:
+    return SolType::UINT248;
+  case UINT256:
+    return SolType::UINT256;
+  case INT8:
+    return SolType::INT8;
+  case INT16:
+    return SolType::INT16;
+  case INT24:
+    return SolType::INT24;
+  case INT32:
+    return SolType::INT32;
+  case INT40:
+    return SolType::INT40;
+  case INT48:
+    return SolType::INT48;
+  case INT56:
+    return SolType::INT56;
+  case INT64:
+    return SolType::INT64;
+  case INT72:
+    return SolType::INT72;
+  case INT80:
+    return SolType::INT80;
+  case INT88:
+    return SolType::INT88;
+  case INT96:
+    return SolType::INT96;
+  case INT104:
+    return SolType::INT104;
+  case INT112:
+    return SolType::INT112;
+  case INT120:
+    return SolType::INT120;
+  case INT128:
+    return SolType::INT128;
+  case INT136:
+    return SolType::INT136;
+  case INT144:
+    return SolType::INT144;
+  case INT152:
+    return SolType::INT152;
+  case INT160:
+    return SolType::INT160;
+  case INT168:
+    return SolType::INT168;
+  case INT176:
+    return SolType::INT176;
+  case INT184:
+    return SolType::INT184;
+  case INT192:
+    return SolType::INT192;
+  case INT200:
+    return SolType::INT200;
+  case INT208:
+    return SolType::INT208;
+  case INT216:
+    return SolType::INT216;
+  case INT224:
+    return SolType::INT224;
+  case INT232:
+    return SolType::INT232;
+  case INT240:
+    return SolType::INT240;
+  case INT248:
+    return SolType::INT248;
+  case INT256:
+    return SolType::INT256;
+  case BOOL:
+    return SolType::BOOL;
+  case ADDRESS:
+    return SolType::ADDRESS;
+  case ADDRESS_PAYABLE:
+    return SolType::ADDRESS_PAYABLE;
+  case STRING:
+    return SolType::STRING;
+  case STRING_LITERAL:
+    return SolType::STRING_LITERAL;
+  case BYTES:
+    return SolType::BYTES_DYN;
+  case BYTES1:
+    return SolType::BYTES1;
+  case BYTES2:
+    return SolType::BYTES2;
+  case BYTES3:
+    return SolType::BYTES3;
+  case BYTES4:
+    return SolType::BYTES4;
+  case BYTES5:
+    return SolType::BYTES5;
+  case BYTES6:
+    return SolType::BYTES6;
+  case BYTES7:
+    return SolType::BYTES7;
+  case BYTES8:
+    return SolType::BYTES8;
+  case BYTES9:
+    return SolType::BYTES9;
+  case BYTES10:
+    return SolType::BYTES10;
+  case BYTES11:
+    return SolType::BYTES11;
+  case BYTES12:
+    return SolType::BYTES12;
+  case BYTES13:
+    return SolType::BYTES13;
+  case BYTES14:
+    return SolType::BYTES14;
+  case BYTES15:
+    return SolType::BYTES15;
+  case BYTES16:
+    return SolType::BYTES16;
+  case BYTES17:
+    return SolType::BYTES17;
+  case BYTES18:
+    return SolType::BYTES18;
+  case BYTES19:
+    return SolType::BYTES19;
+  case BYTES20:
+    return SolType::BYTES20;
+  case BYTES21:
+    return SolType::BYTES21;
+  case BYTES22:
+    return SolType::BYTES22;
+  case BYTES23:
+    return SolType::BYTES23;
+  case BYTES24:
+    return SolType::BYTES24;
+  case BYTES25:
+    return SolType::BYTES25;
+  case BYTES26:
+    return SolType::BYTES26;
+  case BYTES27:
+    return SolType::BYTES27;
+  case BYTES28:
+    return SolType::BYTES28;
+  case BYTES29:
+    return SolType::BYTES29;
+  case BYTES30:
+    return SolType::BYTES30;
+  case BYTES31:
+    return SolType::BYTES31;
+  case BYTES32:
+    return SolType::BYTES32;
+  default:
+    return SolType::UNSET;
+  }
+}
+
+bool is_uint_type(SolType t)
+{
+  return t >= SolType::UINT8 && t <= SolType::UINT256;
+}
+
+bool is_int_type(SolType t)
+{
+  return t >= SolType::INT8 && t <= SolType::INT256;
+}
+
+bool is_integer_type(SolType t)
+{
+  return is_uint_type(t) || is_int_type(t);
+}
+
+bool is_bytesN_type(SolType t)
+{
+  return t >= SolType::BYTES1 && t <= SolType::BYTES32;
+}
+
+bool is_bytes_type(SolType t)
+{
+  return is_bytesN_type(t) || t == SolType::BYTES_DYN ||
+         t == SolType::BYTES_STATIC;
+}
+
+bool is_address_type(SolType t)
+{
+  return t == SolType::ADDRESS || t == SolType::ADDRESS_PAYABLE;
 }
 
 }; // namespace SolidityGrammar

@@ -2,7 +2,7 @@
 
 #include <nlohmann/json.hpp>
 #include <python-frontend/complex_handler.h>
-#include <python-frontend/function_call_cache.h>
+#include <python-frontend/function_call/cache.h>
 #include <python-frontend/global_scope.h>
 #include <python-frontend/python_dict_handler.h>
 #include <python-frontend/python_math.h>
@@ -16,6 +16,7 @@
 #include <util/symbol_generator.h>
 #include <map>
 #include <set>
+#include <unordered_map>
 #include <utility>
 
 class codet;
@@ -214,6 +215,16 @@ public:
     const locationt &location,
     const typet &type) const;
 
+  // Register a ``void name(void)`` C intrinsic in the Python symbol
+  // table if not already present. Used for ESBMC built-ins whose bodies
+  // live in the C library (cprover_library) but whose call sites are
+  // synthesised by the Python frontend (atomic_begin/end, yield, the
+  // pthread main hooks, __pyt_*); the C-style ``c:@F@<name>`` id is
+  // needed so c2goto's linker resolves the call to the library body.
+  void ensure_void_void_intrinsic(
+    const std::string &name,
+    const locationt &location);
+
   exprt make_char_array_expr(
     const std::vector<unsigned char> &string_literal,
     const typet &t);
@@ -350,6 +361,16 @@ private:
     const exprt &lhs,
     const exprt &rhs);
 
+  /// Rewrites `sl.start/stop/step is/is not None` to a check of the
+  /// corresponding `has_start/has_stop/has_step` flag on __ESBMC_PySliceObj.
+  /// Returns `nil_exprt()` when the operands are not a slice-member access
+  /// paired with a None literal, so the caller continues with default
+  /// None-comparison handling.
+  exprt try_lower_slice_member_is_none(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs);
+
   symbolt &create_tmp_symbol(
     const nlohmann::json &element,
     const std::string var_name,
@@ -383,6 +404,26 @@ private:
   void handle_float_division(exprt &lhs, exprt &rhs, exprt &bin_expr) const;
 
   exprt get_tuple_expr(const nlohmann::json &element);
+
+  /**
+   * @brief Build a Python slice object from a `Slice` AST node.
+   *
+   * Lowers `lower`, `upper` and `step` into integer fields of a
+   * `PySliceObject` struct constant; absent components leave their integer
+   * field zero and clear the corresponding `has_*` flag.
+   */
+  exprt build_slice_object(const nlohmann::json &slice_node);
+
+  /**
+   * @brief Build a Python slice object from a `slice()` builtin call.
+   *
+   * Supports the one-, two- and three-argument forms; missing trailing
+   * arguments and explicit `None` arguments are recorded via the `has_*`
+   * flags. Both lowering paths share the same `PySliceObject` shape.
+   */
+  exprt build_slice_from_args(
+    const nlohmann::json &args,
+    const nlohmann::json &source_node);
 
   std::pair<exprt, exprt>
   resolve_comparison_operands_internal(const exprt &lhs, const exprt &rhs);
@@ -438,6 +479,26 @@ private:
     const std::string &class_name,
     const std::string &attr_name);
 
+  /**
+   * @brief Build a tuple struct type from an AST value node when the annotation
+   *        is bare `tuple`.
+   *
+   * Walks a `Tuple` literal's elements and synthesises a struct_typet whose
+   * components mirror the element types. Constants are typed by their JSON
+   * kind; `Name` elements are resolved through @p param_annotations (used to
+   * recover types of parameters referenced inside `__init__`-style bodies);
+   * everything else falls back to `any_type()`. Returns `empty_typet()` when
+   * the node is not a Tuple literal.
+   *
+   * @param value_node       AST node holding the RHS of `attr: tuple = <rhs>`.
+   * @param param_annotations Parameter-name → annotation AST map for the
+   *                          enclosing function (may be empty).
+   * @return A struct_typet tagged as a tuple, or empty_typet on failure.
+   */
+  typet infer_tuple_struct_from_value(
+    const nlohmann::json &value_node,
+    const std::unordered_map<std::string, nlohmann::json> &param_annotations);
+
   exprt get_return_from_func(const char *func_symbol_id);
 
   void create_builtin_symbols();
@@ -462,6 +523,17 @@ private:
     const nlohmann::json &module_ast,
     module_locator &locator,
     code_blockt &accumulated_code);
+
+  /// Walk the import graph rooted at @p module_ast (without annotating or
+  /// generating code) and parse each reachable module's JSON AST into
+  /// @ref module_ast_pool_. Mirrors @ref process_module_imports's reach:
+  /// top-level imports plus imports directly inside top-level
+  /// FunctionDef bodies. Idempotent on names already pooled. Used so that
+  /// annotators for any one module can see subscript usages from any
+  /// other module in the graph (GitHub #4554).
+  void pre_collect_module_asts(
+    const nlohmann::json &module_ast,
+    module_locator &locator);
 
   symbolt *find_function_in_base_classes(
     const std::string &class_name,
@@ -767,6 +839,20 @@ private:
     const nlohmann::json &element);
 
   /**
+   * @brief Handles tuple `+` (concat) and `*` (repeat) operators.
+   *
+   * Concatenation builds a new tuple struct whose components are the
+   * concatenation of the operand tuples; repetition with a constant int
+   * builds an n-fold repeat. Returns nil_exprt for non-tuple operands or
+   * unsupported variants (e.g. variable repeat count).
+   */
+  exprt handle_tuple_operations(
+    const std::string &op,
+    exprt &lhs,
+    exprt &rhs,
+    const nlohmann::json &element);
+
+  /**
    * @brief Handles type mismatches in relational operations.
    *
    * Processes single-character comparisons and float-vs-string comparisons.
@@ -933,6 +1019,14 @@ private:
   std::map<std::string, std::set<std::string>> instance_attr_map;
   /// Map imported modules to their corresponding paths
   std::unordered_map<std::string, std::string> imported_modules;
+
+  /// Pool of every reachable imported module's parsed JSON AST, keyed by
+  /// module name. Populated by @ref pre_collect_module_asts before any
+  /// annotation runs so that @ref import_module_into_block can expose the
+  /// full pool to each module's annotator as extra subscript inference
+  /// sources (GitHub #4554). Owns the JSONs to keep their addresses stable
+  /// across annotator calls.
+  std::map<std::string, nlohmann::json> module_ast_pool_;
   /// Maps any symbol currently known to refer to an input() string
   /// (e.g. $input_str$N or a variable aliasing it) to its $input_len$N symbol ID
   std::unordered_map<std::string, std::string> input_str_to_len_sym_;

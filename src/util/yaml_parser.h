@@ -1,6 +1,5 @@
 #pragma once
 
-#include <goto-programs/goto_functions.h>
 #include <goto-symex/witnesses.h>
 #include <string>
 #include <vector>
@@ -9,27 +8,35 @@
 class yaml_parser
 {
 public:
-  explicit yaml_parser(
-    const std::string &path,
-    contextt &ns,
-    optionst &options);
-  ~yaml_parser() = default;
+  static std::vector<invariant> read_invariants(const std::string &path);
+  static std::vector<waypoint> get_waypoints(const std::string &path);
+  /// Returns true and sets @p out to the target waypoint if the witness has
+  /// one; otherwise returns false.  Triggers parsing if not yet cached.
+  static bool get_target_waypoint(const std::string &path, waypoint &out);
 
-  // load the witness file in YAML format
-  bool load_file();
-  // extract loop invariant from YAML witness file
-  bool get_invariants();
-  // inject loop invariants to goto functions
-  bool inject_loop_invariants(goto_functionst &goto_functions);
+  // Reads the source file at `source_path` and returns a new source string
+  // with witness intrinsic calls inserted before each annotated line.
+  // `#line` directives after each injection refer to `original_path` so that
+  // Clang source locations point back to the real file.
+  static std::string build_injected_source(
+    const std::string &source_path,
+    const std::string &original_path,
+    const std::vector<invariant> &invariants);
+
+  // Reads the source file at `source_path` and returns a new source string
+  // with `__ESBMC_witness_assume` calls injected before each assumption
+  // waypoint line.  Multiple assumptions at the same line are injected in
+  // order so that a stateful queue in symex can drain them correctly.
+  static std::string build_violation_witness_source(
+    const std::string &source_path,
+    const std::string &original_path,
+    const std::vector<waypoint> &waypoints);
 
 private:
-  // path to witness file
-  std::string file_path_;
-  YAML::Node root_;
-  contextt &context_;
-  optionst &options_;
-  typedef std::vector<invariant> invariantst;
-  invariantst parsed_invariants_;
-  invariant parse_invariant(const YAML::Node &node) const;
-  invariant::Type type_from_string(const std::string &s) const;
+  static invariant parse_invariant(const YAML::Node &node);
+  static invariant::Type type_from_string(const std::string &s);
+
+  static waypoint parse_waypoint(const YAML::Node &node);
+  static waypoint::Type waypoint_type_from_string(const std::string &s);
+  static waypoint::Action action_from_string(const std::string &s);
 };

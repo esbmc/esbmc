@@ -472,6 +472,18 @@ public:
   handle_dict_update(const exprt &dict_expr, const nlohmann::json &call_node);
 
   /**
+   * @brief Handles dict.copy() method calls.
+   * Returns a shallow copy of the dictionary: a new dict whose keys and
+   * values lists are independent copies of the source's, so mutating the
+   * copy does not affect the original.
+   * @param dict_expr The source dictionary expression
+   * @param call_node The function call AST node
+   * @return Expression representing the copied dict.
+   */
+  exprt
+  handle_dict_copy(const exprt &dict_expr, const nlohmann::json &call_node);
+
+  /**
    * @brief Handles dict.fromkeys() class method calls.
    *
    * Implements dict.fromkeys(iterable, value=None):
@@ -483,6 +495,25 @@ public:
    * @return Expression for the resulting dict symbol.
    */
   exprt handle_dict_fromkeys(const nlohmann::json &call_node);
+
+  /**
+   * @brief Handles dict(iterable) constructor calls.
+   *
+   * Synthesises a Dict literal from the iterable and routes through
+   * get_dict_literal. Supported iterable forms:
+   * - list/tuple/set of 2-tuples: dict([(k1,v1), (k2,v2), ...])
+   * - list of 2-char strings: dict(["ab", "cd"])
+   * - set wrapping any of the above: dict(set([(k,v),...]))
+   *
+   * Returns nil_exprt for unsupported forms. The caller falls back to
+   * generic call dispatch, which may produce broken GOTO for iterables
+   * this handler does not recognise — extend the matcher in the .cpp
+   * implementation rather than relying on the fallback for new forms.
+   *
+   * @param call_node The function call AST node (Call(Name("dict"), [arg])).
+   * @return Expression for the resulting dict symbol, or nil_exprt.
+   */
+  exprt handle_dict_constructor(const nlohmann::json &call_node);
 
   /**
    * @brief Compares two dictionaries for equality or inequality

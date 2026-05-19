@@ -1,10 +1,21 @@
 #include <goto-programs/goto_coverage.h>
+#include <goto-programs/k_path_spanning.h>
+#include <irep2/irep2_utils.h>
+
+#include <algorithm>
+#include <cassert>
+#include <deque>
+#include <vector>
 
 size_t goto_coveraget::total_assert = 0;
 size_t goto_coveraget::total_assert_ins = 0;
 std::set<std::pair<std::string, std::string>> goto_coveraget::total_cond;
 size_t goto_coveraget::total_branch = 0;
 size_t goto_coveraget::total_func_branch = 0;
+size_t goto_coveraget::total_kpath = 0;
+size_t goto_coveraget::total_kpath_spanning = 0;
+std::set<std::pair<std::string, std::string>>
+  goto_coveraget::k_path_spanning_redundant;
 std::set<std::pair<std::string, std::string>> goto_coveraget::all_claims;
 
 std::string goto_coveraget::get_filename_from_path(std::string path)
@@ -35,10 +46,10 @@ void goto_coveraget::replace_all_asserts_to_guard(
       if (filter(f_it->first, goto_program))
         continue;
 
-      std::string cur_filename;
       Forall_goto_program_instructions (it, goto_program)
       {
-        cur_filename = get_filename_from_path(it->location.file().as_string());
+        std::string cur_filename =
+          get_filename_from_path(it->location.file().as_string());
         if (location_pool.count(cur_filename) == 0)
           continue;
 
@@ -97,10 +108,10 @@ void goto_coveraget::replace_all_asserts_to_assume()
       if (filter(f_it->first, goto_program))
         continue;
 
-      std::string cur_filename;
       Forall_goto_program_instructions (it, goto_program)
       {
-        cur_filename = get_filename_from_path(it->location.file().as_string());
+        std::string cur_filename =
+          get_filename_from_path(it->location.file().as_string());
         if (location_pool.count(cur_filename) == 0)
           continue;
 
@@ -157,12 +168,12 @@ void goto_coveraget::branch_function_coverage()
       if (filter(f_it->first, goto_program))
         continue;
 
-      std::string cur_filename;
       bool flg = true;
 
       Forall_goto_program_instructions (it, goto_program)
       {
-        cur_filename = get_filename_from_path(it->location.file().as_string());
+        std::string cur_filename =
+          get_filename_from_path(it->location.file().as_string());
         // skip if it's not the verifying files
         // probably a library
         if (location_pool.count(cur_filename) == 0)
@@ -239,11 +250,10 @@ void goto_coveraget::branch_coverage()
       if (filter(f_it->first, goto_program))
         continue;
 
-      std::string cur_filename;
-
       Forall_goto_program_instructions (it, goto_program)
       {
-        cur_filename = get_filename_from_path(it->location.file().as_string());
+        std::string cur_filename =
+          get_filename_from_path(it->location.file().as_string());
         // skip if it's not the verifying files
         // probably a library
         if (location_pool.count(cur_filename) == 0)
@@ -282,6 +292,297 @@ void goto_coveraget::branch_coverage()
   all_claims = get_total_cond_assert();
 
   // avoid Assertion `call_stack.back().goto_state_map.size() == 0' failed
+  goto_functions.update();
+}
+
+// Post-simplification depth of an expression tree, capped early once the
+// caller's threshold is exceeded. Used to gate emission of the structural
+// witness (issue #4325).
+static size_t expr_depth(const expr2tc &e, size_t cap)
+{
+  if (is_nil_expr(e))
+    return 0;
+  size_t n = e->get_num_sub_exprs();
+  if (n == 0)
+    return 1;
+  size_t d = 0;
+  for (size_t i = 0; i < n; ++i)
+  {
+    const expr2tc *sub = e->get_sub_expr(i);
+    if (sub == nullptr)
+      continue;
+    d = std::max(d, expr_depth(*sub, cap));
+    if (d > cap)
+      return d + 1;
+  }
+  return 1 + d;
+}
+
+/*
+k-path coverage (Phase 1 — see GitHub issue #4325).
+
+For each branching `IF g GOTO L`, emit one coverage goal per combination of
+the last (n-1) prior branch directions × the two outcomes of the current
+branch. Each goal is `assert(!witness)` where `witness = d_1 ∧ … ∧ d_k`
+with each d_i either a prior branch guard or its negation; multi_property
+marks a goal as reached when the assertion is falsifiable, i.e. when the
+corresponding path is feasible. This mirrors the existing branch_coverage
+inversion convention.
+
+Bounded by the textual order of branches within a function (cheap and
+deterministic). Joins make this an *over-approximation* of true path
+coverage — some witnesses may be infeasible and stay uncovered, which is
+correct under the spanning-set scoring proposed in #4325.
+
+Goal count per branch: 2^min(prefix_size+1, n). Capped per function by
+`k_path_max_goals`; on overflow the instrumentation aborts with an
+actionable error rather than silently truncating (decision locked in #4325).
+*/
+void goto_coveraget::k_path_coverage()
+{
+  log_progress("Adding k-path coverage assertions (n={})...", k_path_n);
+  total_kpath = 0;
+  total_kpath_spanning = 0;
+  k_path_spanning_redundant.clear();
+  k_path_spanning_sett spanning;
+
+  // Defense-in-depth: parseoptions rejects N==0 and N>30 at the CLI, but
+  // re-check here in case the method is invoked via another code path.
+  // 30 keeps `1 << pdepth` well below the size_t shift limit and below
+  // any reasonable goal cap.
+  static constexpr size_t K_PATH_N_MAX = 30;
+  if (k_path_n == 0 || k_path_n > K_PATH_N_MAX)
+  {
+    log_error(
+      "--k-path-coverage requires 1 <= N <= {} (got {})",
+      K_PATH_N_MAX,
+      k_path_n);
+    abort();
+  }
+
+  std::unordered_set<std::string> location_pool = {};
+  location_pool.insert(get_filename_from_path(filename));
+  for (auto const &inc : config.ansi_c.include_files)
+    location_pool.insert(get_filename_from_path(inc));
+
+  Forall_goto_functions (f_it, goto_functions)
+  {
+    if (!f_it->second.body_available || f_it->first == "__ESBMC_main")
+      continue;
+
+    goto_programt &goto_program = f_it->second.body;
+    if (filter(f_it->first, goto_program))
+      continue;
+
+    // Sliding window of the last (n-1) prior branch guards in textual order.
+    // Reset per function: each function is its own k-path scope (#4325).
+    std::deque<expr2tc> prefix;
+    size_t function_goals = 0;
+
+    Forall_goto_program_instructions (it, goto_program)
+    {
+      std::string cur_filename =
+        get_filename_from_path(it->location.file().as_string());
+      if (location_pool.count(cur_filename) == 0)
+        continue;
+
+      if (it->location.property().as_string() == "skipped")
+        continue;
+
+      // Mirror branch_coverage: neutralise existing assertions so they don't
+      // confuse multi_property_check.
+      if (
+        it->is_assert() &&
+        it->location.property().as_string() != "replaced assertion" &&
+        it->location.property().as_string() != "instrumented assertion")
+      {
+        if (cov_assume_asserts)
+          replace_assert_to_assume(it);
+        else
+          replace_assert_to_guard(gen_true_expr(), it, false);
+        continue;
+      }
+
+      // Conditional forward branch. Backward unconditional gotos (loop
+      // back-edges) carry guard=true and are skipped here; iteration
+      // semantics are picked up later by ESBMC's --unwind unrolling.
+      if (it->is_goto() && !is_true(it->guard))
+      {
+        if (it->is_target())
+          target_num = it->target_number;
+
+        const expr2tc current_guard = it->guard;
+        // pdepth is bounded by k_path_n - 1 <= K_PATH_N_MAX - 1 = 29
+        // (enforced above), so the shift below cannot overflow. Assert as
+        // a tripwire — silent overflow would be unsound.
+        const size_t pdepth = std::min(prefix.size(), k_path_n - 1);
+        assert(pdepth < 30 && "pdepth bounded by parseoptions cap");
+        const size_t pcombos = size_t(1) << pdepth;
+        const size_t branch_goals = 2 * pcombos;
+
+        if (
+          branch_goals > k_path_max_goals ||
+          function_goals > k_path_max_goals - branch_goals)
+        {
+          log_error(
+            "k-path coverage: per-function goal count would exceed "
+            "--k-path-max-goals={} in '{}'. Lower --k-path-coverage=N "
+            "(currently {}) or raise --k-path-max-goals.",
+            k_path_max_goals,
+            id2string(f_it->first),
+            k_path_n);
+          abort();
+        }
+
+        // The deque is trimmed to ≤ (n-1) entries at the bottom of every
+        // branch iteration, so its current contents are exactly the active
+        // prefix.
+        std::vector<expr2tc> active(prefix.begin(), prefix.end());
+
+        for (size_t mask = 0; mask < pcombos; ++mask)
+        {
+          // Build the prefix witness for this direction mask, while
+          // tracking (stored-guard, polarity) pairs so we can drop mask
+          // combinations that are unsat by construction.
+          //
+          // ESBMC's `simplify` recognises 2-term `p ∧ ¬p` but does not
+          // fold chained forms like `p ∧ q ∧ ¬p` to FALSE — it would
+          // instrument a tautological `assert(¬(p ∧ q ∧ ¬p))` that can
+          // never be falsified, permanently inflating the denominator.
+          // Catching this at construction time is sound (we only drop
+          // witnesses we can prove unsat by syntactic structure) and
+          // preserves the single-term behaviour of the simplifier.
+          //
+          // Phase-1 limitation: this only catches *syntactic* same-atom
+          // contradictions (same stored guard with opposing polarities).
+          // Semantically contradictory pairs across different stored
+          // expressions — e.g. `(x == 1) ∧ (x == 2)` from successive
+          // switch-case branches — require comparison-domain reasoning
+          // and are out of scope for this PR.
+          expr2tc pwit;
+          std::vector<std::pair<expr2tc, bool>> atoms;
+          atoms.reserve(pdepth);
+          bool contradictory = false;
+          for (size_t i = 0; i < pdepth; ++i)
+          {
+            const bool pol = (mask & (size_t(1) << i)) != 0;
+            for (const auto &[h, p] : atoms)
+            {
+              if (h == active[i] && p != pol)
+              {
+                contradictory = true;
+                break;
+              }
+            }
+            if (contradictory)
+              break;
+            atoms.emplace_back(active[i], pol);
+            expr2tc d = pol ? active[i] : gen_not_expr(active[i]);
+            pwit = is_nil_expr(pwit) ? d : gen_and_expr(pwit, d);
+          }
+          if (contradictory)
+            continue;
+
+          // Emit one goal per current direction. Skip the direction if
+          // it would contradict an atom already in the prefix.
+          const expr2tc current_neg = gen_not_expr(current_guard);
+          for (size_t cd = 0; cd < 2; ++cd)
+          {
+            const bool cdir_pol = (cd == 0);
+            bool cdir_conflict = false;
+            for (const auto &[h, p] : atoms)
+            {
+              if (h == current_guard && p != cdir_pol)
+              {
+                cdir_conflict = true;
+                break;
+              }
+            }
+            if (cdir_conflict)
+              continue;
+
+            const expr2tc &cdir = cdir_pol ? current_guard : current_neg;
+            expr2tc full = is_nil_expr(pwit) ? cdir : gen_and_expr(pwit, cdir);
+            simplify(full);
+
+            if (is_false(full))
+              continue;
+            if (is_true(full))
+              continue;
+
+            if (expr_depth(full, k_path_witness_depth) > k_path_witness_depth)
+            {
+              // Phase 1: drop witnesses past the depth cap. The hashed
+              // ghost-flag fallback for deep prefixes is Phase 2 (#4325).
+              continue;
+            }
+
+            expr2tc neg_full = gen_not_expr(full);
+            simplify(neg_full);
+
+            std::string idf = from_expr(ns, "", full);
+            insert_assert(goto_program, it, neg_full, idf);
+
+            // Record the goal's full atom multiset (prefix + current
+            // direction) so the spanning-set analysis can drop subsumed
+            // emissions from the coverage denominator.
+            std::vector<std::pair<expr2tc, bool>> goal_atoms = atoms;
+            goal_atoms.emplace_back(current_guard, cdir_pol);
+            spanning.add_goal(
+              std::move(goal_atoms), idf, it->location.as_string());
+
+            ++function_goals;
+          }
+        }
+
+        prefix.push_back(current_guard);
+        if (prefix.size() > k_path_n - 1)
+          prefix.pop_front();
+      }
+    }
+  }
+
+  total_kpath = get_total_instrument();
+  all_claims = get_total_cond_assert();
+
+  // Soundness invariant: each insert_assert call above paired with
+  // exactly one spanning.add_goal call, so the number of goals tracked
+  // in the spanning analysis must equal the number of instrumented
+  // assertions counted in the goto programs. A divergence means the
+  // emission path diverged from the spanning bookkeeping (e.g. a future
+  // edit added an insert_assert without the matching add_goal, or vice
+  // versa) and the spanning-set denominator would be silently wrong.
+  // ESBMC is a verifier — we abort rather than report an unsound
+  // coverage percentage.
+  if (spanning.total() != static_cast<size_t>(total_kpath))
+  {
+    log_error(
+      "k-path coverage: internal invariant violated — spanning.total()={} "
+      "but get_total_instrument()={}. Each instrumented assertion must "
+      "have a matching spanning.add_goal entry. Aborting rather than "
+      "report an unsound coverage percentage.",
+      spanning.total(),
+      total_kpath);
+    abort();
+  }
+
+  // Compute the spanning-set after every goal has been collected. The
+  // resulting size is the Phase-2 denominator; redundant_claims feeds the
+  // JSON `feasibility` field.
+  //
+  // Secondary invariant: the simplifier never collapses two semantically
+  // distinct witnesses to the same idf string, so spanning_size_ is
+  // bounded above by all_claims.size() + |redundant|, which is what
+  // allows the bmc.cpp coverage cap to make sense. Any future change
+  // that reuses an idf across distinct witnesses or alters from_expr()
+  // formatting must preserve this 1:1 mapping or the percentage will
+  // silently deflate.
+  spanning.finalize();
+  total_kpath_spanning = spanning.spanning_size();
+  for (const auto &claim : all_claims)
+    if (spanning.is_redundant(claim.first, claim.second))
+      k_path_spanning_redundant.insert(claim);
+
   goto_functions.update();
 }
 
@@ -415,10 +716,10 @@ void goto_coveraget::condition_coverage()
       if (filter(f_it->first, goto_program))
         continue;
 
-      std::string cur_filename;
       Forall_goto_program_instructions (it, goto_program)
       {
-        cur_filename = get_filename_from_path(it->location.file().as_string());
+        std::string cur_filename =
+          get_filename_from_path(it->location.file().as_string());
         if (location_pool.count(cur_filename) == 0)
           continue;
 
@@ -443,25 +744,26 @@ void goto_coveraget::condition_coverage()
           check there operands.
         */
 
+        // Skip ASSUME instructions: __VERIFIER_assume / __ESBMC_assume
+        // express path constraints, not program logic, so their guards
+        // must not contribute to condition-coverage claims (issue #4291).
+        if (it->is_assume())
+          continue;
+
         // e.g. assert(a == 1);
         if (
-          it->is_assume() ||
-          (it->is_assert() &&
-           it->location.property().as_string() != "replaced assertion"))
+          it->is_assert() &&
+          it->location.property().as_string() != "replaced assertion")
         {
           if (!is_nil_expr(it->guard))
           {
             expr2tc guard = handle_single_guard(it->guard, true);
             gen_cond_cov_assert(guard, expr2tc(), goto_program, it);
             // after adding the instrumentation, we neutralize the original assert
-            if (!it->is_assume())
-            {
-              // do not change assume, as it will modify program's logic
-              if (cov_assume_asserts)
-                replace_assert_to_assume(it);
-              else
-                replace_assert_to_guard(gen_true_expr(), it, false);
-            }
+            if (cov_assume_asserts)
+              replace_assert_to_assume(it);
+            else
+              replace_assert_to_guard(gen_true_expr(), it, false);
           }
         }
 
@@ -842,7 +1144,22 @@ bool goto_coveraget::is_target_func(
     abort();
   }
 
-  return sym->name.as_string() == tgt_name;
+  exprt symbol = symbol_expr(*ns.lookup(f));
+  std::string sym_name = symbol.name().as_string();
+  if (sym_name == tgt_name)
+    return true;
+
+  // For Solidity: modifier expansion renames functions from "func" to
+  // "func_modifierName". Support prefix matching so that --function func
+  // matches func_modifierName.
+  if (
+    config.language.lid == language_idt::SOLIDITY &&
+    sym_name.size() > tgt_name.size() &&
+    sym_name.substr(0, tgt_name.size()) == tgt_name &&
+    sym_name[tgt_name.size()] == '_')
+    return true;
+
+  return false;
 }
 
 // negate the condition inside the assertion
@@ -864,10 +1181,10 @@ void goto_coveraget::negating_asserts(const std::string &tgt_fname)
       if (filter(f_it->first, goto_program))
         continue;
 
-      std::string cur_filename;
       Forall_goto_program_instructions (it, goto_program)
       {
-        cur_filename = get_filename_from_path(it->location.file().as_string());
+        std::string cur_filename =
+          get_filename_from_path(it->location.file().as_string());
         if (location_pool.count(cur_filename) == 0)
           continue;
 

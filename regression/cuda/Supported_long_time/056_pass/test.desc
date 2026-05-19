@@ -1,6 +1,4 @@
 THOROUGH
 main.cu
---unwind 9 --force-malloc-success --state-hashing --context-bound 2 --no-bounds-check
-
+--unwind 9 --force-malloc-success --state-hashing --context-bound 2 --no-bounds-check --smt-symex-guard --smt-symex-assume
 ^VERIFICATION SUCCESSFUL$
-

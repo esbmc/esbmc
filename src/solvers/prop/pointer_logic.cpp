@@ -74,7 +74,7 @@ expr2tc pointer_logict::object_rec(
 {
   if (is_array_type(src->type))
   {
-    const array_type2t &arrtype = to_array_type(*src->type.get());
+    const array_type2t &arrtype = to_array_type(src->type);
     BigInt size = type_byte_size(arrtype.subtype);
 
     if (size == 0)

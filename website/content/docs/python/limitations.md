@@ -7,24 +7,18 @@ weight: 4
 
 ## Control Flow and Loops
 
-- `for` loops support direct iteration over `range()`, lists, and strings. Iteration over tuples and generators is not yet supported.
-- Comprehensions (list, dict, set, generator) are not supported.
+- `for` loops support direct iteration over `range()`, lists, strings, and generators (functions using `yield` and generator expressions). Iteration over tuples is not yet supported.
+- List comprehensions and generator expressions are supported. Set comprehensions are not supported (`Unsupported expression SetComp`). Dictionary comprehensions are accepted by the parser but produce a dictionary whose subsequent key lookups raise `KeyError`.
 - Iteration over dictionaries via `d.keys()`, `d.values()`, and `d.items()` is supported inside `for` loops (see [Supported Features — Dictionaries](./supported-features#dictionaries)).
-
-## Context Managers
-
-- Only the non-exceptional execution path is modelled: `__enter__` is called before the body and `__exit__` is called after, but exception propagation and suppression via the `__exit__` return value are not yet supported.
 
 ## Lists
 
-- String slicing does not support a step value (e.g., `s[::2]` is not supported).
 - `list.sort()` does not support the `key` or `reverse` keyword arguments.
 - `sorted()` does not support the `key` or `reverse` keyword arguments.
 
 ## Sets
 
-- Set methods (`.add()`, `.discard()`, `.remove()`, `.update()`, `.issubset()`, `.issuperset()`, `.symmetric_difference()`) are not supported; use binary operators (`-`, `&`, `|`) instead.
-- Set ordering operators (`<`, `<=`, `>`, `>=` for subset/superset relations) are not supported.
+- Set methods `.add()`, `.discard()`, `.update()`, `.issubset()`, `.issuperset()`, and `.symmetric_difference()` are not supported; use binary operators (`-`, `&`, `|`) instead. (`.remove()` happens to work because sets share the underlying list model.)
 - `frozenset` is not supported.
 
 ## Dictionaries
@@ -41,13 +35,13 @@ weight: 4
 
 ## Complex Numbers
 
-- The `complex()` constructor does not support string arguments (e.g., `complex("1+2j")` is not supported).
+- The `complex()` constructor accepts string arguments only when the string is a compile-time constant (e.g., `complex("1+2j")` is folded by the frontend). Constructing from a runtime string fails with "Unhandled symbol format in string extraction".
 - `cmath.polar()` and `cmath.rect()` rely on the `atan2` model; results may differ from CPython in edge cases involving signed zeros and NaN.
 
 ## Built-in Functions
 
 - `min()` and `max()` support two-argument form and single-list form only; the `key` and `default` keyword arguments are not supported.
-- `any()` and `all()` currently support only list literals as arguments; other iterable types are not supported.
+- `any()` and `all()` currently support only list literals as arguments. `any()` rejects other iterables with a parse-time error; `all()` may trigger a dereference failure on non-list iterables.
 - `sum()` supports `int` and `float` element types only; the optional `start` argument is not supported.
 - `sorted()` supports `int`, `float`, and `str` element types only; `key` and `reverse` keyword arguments are not supported.
 - `input()` is modelled as a nondeterministic string with a maximum length of 256 characters (under-approximation).
@@ -57,14 +51,12 @@ weight: 4
 ## Lambda Expressions
 
 - Return type inference is naive and defaults to `double`.
-- Higher-order and nested lambda expressions are not supported.
 - Parameter types are assumed to be `double` for simplicity.
 
 ## F-Strings
 
 - Complex expressions inside f-strings may have limited support.
 - Only basic integer (`:d`, `:i`) and float (`:.Nf`) format specs are supported; advanced format specs (e.g., string alignment `:>10`, `:<5`) are not.
-- Nested f-strings are not supported.
 - Custom format specifications for user-defined types are not supported.
 
 ## Union and Any Types
@@ -130,6 +122,25 @@ weight: 4
 ## Missing Return Detection
 
 - Does not analyze return statements inside lambda expressions within the main function body.
+
+## Concurrency
+
+- **`Lock` model is invisible to `--deadlock-check`** ([#4581](https://github.com/esbmc/esbmc/issues/4581)). `threading.Lock.acquire` lowers to `__ESBMC_atomic_begin / __ESBMC_assume / __ESBMC_atomic_end`, mirroring `pthread_mutex_lock_noassert`. The deadlock checker only inspects the pthread mutex wait graph, so reverse-order lock acquisition between two Python threads is *not* reported as a deadlock — ESBMC explores all interleavings and reports `VERIFICATION SUCCESSFUL`.
+- **`Thread(args=(instance,))` value-copies object arguments** ([#4583](https://github.com/esbmc/esbmc/issues/4583)). When a `Thread` target receives a class instance with non-trivial attributes (e.g. a `threading.Lock`), the args-capture struct copies the descriptor by value and breaks attribute dereference inside the trampoline body. Workaround: share state via module-level globals instead of instance attributes passed through `args=`.
+- **Symex does not interleave at Python module-global accesses** ([#4584](https://github.com/esbmc/esbmc/issues/4584)). `--data-races-check` correctly flags W/W races on a module global, but symex's per-statement scheduler does not insert interleaving points at function-internal reads/writes of these globals. A classic split read-modify-write race (`tmp = counter; counter = tmp + 1` from two threads) reports `VERIFICATION SUCCESSFUL` instead of finding the schedule where both threads read `counter == 0` before either writes. The C equivalent of the same program is correctly reported as `VERIFICATION FAILED`.
+- **Thread shapes refused at parse time** with explicit errors:
+  - `Thread` subclassing with `run` override
+  - Lambda or runtime-variable `target=`
+  - Positional argument forms (`Thread(f, (a, b))`)
+  - `args=` bound to a variable instead of a tuple literal (`Thread(target=f, args=payload)`)
+  - `daemon=`, `name=`, `kwargs=`, `group=` keyword arguments
+  - `Thread` construction inside loops or comprehensions
+  - `Thread` reassignment within the same scope
+  - `Thread` as a class attribute (`class C: t = Thread(...)`)
+  - `target` defined after the caller in source order
+  - `from threading import *`
+- **Other `threading` primitives are not supported**: `RLock`, `Semaphore`, `Condition`, `Event`, `Barrier`, `Timer` are refused at parse time. `queue.Queue` is also unsupported and blocks the existing `regression/python/concurrency_fail` example.
+- **The CPython Global Interpreter Lock (GIL) is not modelled** ([#4579](https://github.com/esbmc/esbmc/issues/4579)). Translated programs execute under sequentially-consistent POSIX semantics rather than GIL-serialised bytecode execution, so the analysis over-approximates the set of feasible interleavings compared to actual CPython execution. This preserves safety but may produce spurious concurrency counterexamples.
 
 ## Module System
 

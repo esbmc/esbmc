@@ -1,16 +1,25 @@
+# pylint: disable=redefined-builtin,undefined-variable,unused-argument
+# Some functions in this module intentionally shadow Python built-ins
+# (e.g. `round`) and reference typing forward-declarations (e.g. `Any`)
+# that have no Python binding: they are the operational models ESBMC
+# uses to verify Python programs, so they must match the built-in names
+# exactly. Argument names are part of the API contract matched by ESBMC's
+# Python converter, even when the abstract body does not reference them.
+
+
 # Stubs for type inference.
-def array(l: list[Any]) -> list[Any]:
-    return l
+def array(data: list[Any]) -> list[Any]:
+    return data
 
 
 def zeros(shape: int) -> list[float]:
-    l: list[float] = [0.0]
-    return l
+    result: list[float] = [0.0]
+    return result
 
 
 def ones(shape: int) -> list[float]:
-    l: list[float] = [1.0]
-    return l
+    result: list[float] = [1.0]
+    return result
 
 
 def add(a: int, b: int) -> float:

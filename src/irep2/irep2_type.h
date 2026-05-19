@@ -1,34 +1,26 @@
 #ifndef IREP2_TYPE_H_
 #define IREP2_TYPE_H_
 
+#include <optional>
 #include <irep2/irep2.h>
 #include <util/type.h>
 
-// Start with forward class definitions
-
-class bool_type2t;
-class empty_type2t;
-class symbol_type2t;
-class struct_type2t;
-class union_type2t;
+// Forward-declare a concrete <kind>_type2t class for every entry in
+// type_kinds.inc. The same manifest drives the type_ids enum in
+// irep2.h and the is_/to_/try_to_ predicate generators below.
+#define IREP2_TYPE(kind, pretty) class kind##_type2t;
+#include <irep2/type_kinds.inc>
+#undef IREP2_TYPE
+// bv_type2t is a shared base of unsignedbv_type2t and signedbv_type2t;
+// it isn't itself a kind in the manifest so forward-declare it here.
 class bv_type2t;
-class unsignedbv_type2t;
-class signedbv_type2t;
-class code_type2t;
-class array_type2t;
-class vector_type2t;
-class pointer_type2t;
-class fixedbv_type2t;
-class floatbv_type2t;
-class complex_type2t;
-class cpp_name_type2t;
 
 // We also require in advance, the actual classes that store type data.
 
 class symbol_type_data : public type2t
 {
 public:
-  symbol_type_data(type2t::type_ids id, const dstring sym_name)
+  symbol_type_data(type2t::type_ids id, const irep_idt sym_name)
     : type2t(id), symbol_name(sym_name)
   {
   }
@@ -63,14 +55,14 @@ public:
   }
   struct_union_data(const struct_union_data &ref) = default;
 
-  /** Fetch index number of member. Given a textual name of a member of a
-   *  struct or union, this method will look up what index it is into the
-   *  vector of types that make up this struct/union. Always returns the correct
-   *  index, if you give it a name that isn't part of this struct/union it'll
-   *  abort.
+  /** Fetch index number of member. Looks up the position of @p name in
+   *  member_names. Returns std::nullopt when there is no match or more
+   *  than one match (the latter is malformed IR); callers that treat
+   *  either case as a logic bug should `.value()` the result and let
+   *  std::bad_optional_access surface, or assert before unwrapping.
    *  @param name Name of member of this struct/union to look up.
-   *  @return Index into members/member_names vectors */
-  unsigned int get_component_number(const irep_idt &name) const;
+   *  @return Index into members/member_names vectors, or nullopt. */
+  std::optional<unsigned int> get_component_number(const irep_idt &name) const;
 
   const std::vector<type2tc> &get_structure_members() const;
   const std::vector<irep_idt> &get_structure_member_names() const;
@@ -298,8 +290,7 @@ public:
   template <typename... Args>                                                  \
   inline type2tc basename##_type2tc(Args &&...args)                            \
   {                                                                            \
-    return type2tc(std::static_pointer_cast<type2t>(                           \
-      std::make_shared<basename##_type2t>(std::forward<Args>(args)...)));      \
+    return make_irep<basename##_type2t>(std::forward<Args>(args)...);          \
   }                                                                            \
   typedef esbmct::                                                             \
     type_methods2<basename##_type2t, superclass, superclass::traits>           \
@@ -365,7 +356,7 @@ class symbol_type2t : public symbol_type_methods
 {
 public:
   /** Primary constructor. @param sym_name Name of symbolic type. */
-  symbol_type2t(const dstring &sym_name)
+  symbol_type2t(const irep_idt &sym_name)
     : symbol_type_methods(symbol_id, sym_name)
   {
   }
@@ -518,17 +509,23 @@ public:
   array_type2t(const type2tc &_subtype, const expr2tc &size, bool inf)
     : array_type_methods(array_id, _subtype, size, inf)
   {
-    // If we can simplify the array size, do so
-    // XXX, this is probably massively inefficient. Some kind of boundary in
-    // the checking process should exist to eliminate this requirement.
+    // Constant-fold the size expression so identical array types compare
+    // equal regardless of how their size was constructed. Skip the work
+    // when the size is already a constant_int (the common case from the
+    // frontend) — simplify() would just return nil for it but the walk
+    // still costs a few cycles. Long-term fix is to normalise sizes at
+    // the frontend / migration boundary instead.
     if (!is_nil_expr(size))
     {
       assert(
         size->type->type_id == signedbv_id ||
         size->type->type_id == unsignedbv_id);
-      expr2tc sz = size->simplify();
-      if (!is_nil_expr(sz))
-        array_size = sz;
+      if (size->expr_id != expr2t::constant_int_id)
+      {
+        expr2tc sz = size->simplify();
+        if (!is_nil_expr(sz))
+          array_size = sz;
+      }
     }
   }
   array_type2t(const array_type2t &ref) = default;
@@ -537,32 +534,46 @@ public:
 
   unsigned int get_width() const override;
 
-  /** Exception for invalid manipulations of an infinitely sized array. No
-   *  actual data stored. */
-  class inf_sized_array_excp
+  /** Common base for the two array-sizing exceptions thrown by
+   *  array_type2t::get_width (and friends). Lets callers `catch (const
+   *  array_size_excp &)` for unified handling, or one of the concrete
+   *  subclasses below when they need to distinguish infinite from
+   *  dynamic. Derives from std::exception so generic exception
+   *  machinery (e.g. catch(std::exception &)) sees them too. */
+  class array_size_excp : public std::exception
   {
-    virtual const char *what() const throw()
+  public:
+    const char *what() const noexcept override
+    {
+      return "array size is not statically known";
+    }
+  };
+
+  /** Exception for invalid manipulations of an infinitely sized array.
+   *  No payload — the array carries no concrete size. */
+  class inf_sized_array_excp : public array_size_excp
+  {
+  public:
+    const char *what() const noexcept override
     {
       return "infinite sized array encountered";
     }
   };
 
-  /** Exception for invalid manipultions of dynamically sized arrays.
-   *  Stores the size of the array in the exception; this way the catcher
-   *  has it immediately to hand. */
-  class dyn_sized_array_excp
+  /** Exception for invalid manipulations of dynamically sized arrays.
+   *  Stores the symbolic size of the array so the catcher has it
+   *  immediately to hand. */
+  class dyn_sized_array_excp : public array_size_excp
   {
   public:
     dyn_sized_array_excp(const expr2tc &_size) : size(_size)
     {
     }
 
-    virtual const char *what() const throw()
+    const char *what() const noexcept override
     {
       return "Sizeof nondeterministically sized array encountered";
     }
-
-    virtual ~dyn_sized_array_excp() = default;
 
     expr2tc size;
   };
@@ -584,10 +595,9 @@ public:
   vector_type2t(const type2tc &_subtype, const expr2tc &size)
     : vector_type_methods(vector_id, _subtype, size, false)
   {
-    // If we can simplify the array size, do so
-    // XXX, this is probably massively inefficient. Some kind of boundary in
-    // the checking process should exist to eliminate this requirement.
-    if (!is_nil_expr(size))
+    // Mirror array_type2t: skip simplify() when the size is already a
+    // literal. See note in array_type2t for the normalisation rationale.
+    if (!is_nil_expr(size) && size->expr_id != expr2t::constant_int_id)
     {
       expr2tc sz = size->simplify();
       if (!is_nil_expr(sz))
@@ -714,12 +724,11 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-// Generate some "is-this-a-blah" macros, and type conversion macros. This is
-// fine in terms of using/ keywords in syntax, because the preprocessor
-// preprocesses everything out.
-#ifdef NDEBUG
-#  define dynamic_cast static_cast
-#endif
+// Generate "is_<name>_type" predicates and "to_<name>_type" downcasts. The
+// downcasts route through irep2_checked_type_cast so a bad to_*_type throws
+// irep2_cast_error in every build mode rather than invoking undefined
+// behaviour under NDEBUG (the previous design redefined dynamic_cast as
+// static_cast in release).
 #define type_macros(name)                                                      \
   inline bool is_##name##_type(const expr2tc &e)                               \
   {                                                                            \
@@ -731,39 +740,24 @@ public:
   }                                                                            \
   inline const name##_type2t &to_##name##_type(const type2tc &t)               \
   {                                                                            \
-    return dynamic_cast<const name##_type2t &>(*t.get());                      \
+    return irep2_checked_type_cast<const name##_type2t>(                       \
+      *t.get(), type2t::name##_id, #name);                                     \
   }                                                                            \
   inline name##_type2t &to_##name##_type(type2tc &t)                           \
   {                                                                            \
-    return dynamic_cast<name##_type2t &>(*t.get());                            \
+    return irep2_checked_type_cast<name##_type2t>(                             \
+      *t.get(), type2t::name##_id, #name);                                     \
   }                                                                            \
-  inline name##_type2t &to_##name##_type(type2t &t)                            \
+  inline const name##_type2t *try_to_##name##_type(const type2tc &t)           \
   {                                                                            \
-    return dynamic_cast<name##_type2t &>(t);                                   \
-  }                                                                            \
-  inline const name##_type2t &to_##name##_type(const type2t &t)                \
-  {                                                                            \
-    return dynamic_cast<const name##_type2t &>(t);                             \
+    return is_##name##_type(t) ? &to_##name##_type(t) : nullptr;               \
   }
 
-type_macros(bool);
-type_macros(empty);
-type_macros(symbol);
-type_macros(struct);
-type_macros(union);
-type_macros(code);
-type_macros(array);
-type_macros(vector);
-type_macros(pointer);
-type_macros(unsignedbv);
-type_macros(signedbv);
-type_macros(fixedbv);
-type_macros(floatbv);
-type_macros(complex);
-type_macros(cpp_name);
+// Instantiate the is_/to_/try_to_ predicate triple for every kind in
+// type_kinds.inc. Same manifest as the enum and forward declarations.
+#define IREP2_TYPE(kind, pretty) type_macros(kind);
+#include <irep2/type_kinds.inc>
+#undef IREP2_TYPE
 #undef type_macros
-#ifdef dynamic_cast
-#  undef dynamic_cast
-#endif
 
 #endif /* IREP2_TYPE_H_ */

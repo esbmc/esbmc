@@ -428,16 +428,22 @@ exprt python_dict_handler::get_dict_comprehension(const nlohmann::json &element)
   loop_var_assign.location() = location;
   loop_body.copy_to_operands(loop_var_assign);
 
+  // Keep current_block redirected to loop_body across the whole pair build:
+  // get_expr, contains(), get_list_element_info() and other helpers used by
+  // handle_dict_subscript_assign emit DECL/ASSIGN side effects via
+  // add_instruction(), which targets current_block. Restoring too early would
+  // hoist the contains check and the key/value temporaries out of the loop,
+  // freezing them at their pre-loop values and leaving the dict empty.
   code_blockt *saved_block = converter_.current_block;
   converter_.current_block = &loop_body;
   exprt key_expr = converter_.get_expr(element["key"]);
   exprt value_expr = converter_.get_expr(element["value"]);
-  converter_.current_block = saved_block;
 
   // Reuse the normal dict assignment path for each generated pair
   code_blockt pair_block;
   handle_dict_subscript_assign(
     symbol_expr(dict_sym), key_expr, value_expr, location, element, pair_block);
+  converter_.current_block = saved_block;
 
   if (generator.contains("ifs") && !generator["ifs"].empty())
   {
@@ -872,6 +878,21 @@ exprt python_dict_handler::handle_dict_subscript(
     return result;
   }
 
+  // Class-struct value: cast stored void* to the struct type and dereference.
+  {
+    namespacet ns(symbol_table_);
+    typet underlying = resolved_type;
+    if (underlying.id() == "symbol")
+      underlying = ns.follow(underlying);
+    if (underlying.is_struct() && !is_dict_type(underlying))
+    {
+      typecast_exprt value_as_struct_ptr(obj_value, pointer_typet(underlying));
+      dereference_exprt result(value_as_struct_ptr, underlying);
+      result.type() = underlying;
+      return result;
+    }
+  }
+
   // Default: cast void* to char* for string values
   typecast_exprt value_as_string(obj_value, gen_pointer_type(char_type()));
   return value_as_string;
@@ -965,6 +986,10 @@ void python_dict_handler::handle_dict_subscript_assign(
   set_value_call.arguments().push_back(symbol_expr(*value_info.elem_type_sym));
   set_value_call.arguments().push_back(value_info.elem_size);
   set_value_call.arguments().push_back(from_integer(BigInt(0), size_type()));
+  set_value_call.arguments().push_back(from_integer(
+    BigInt(converter_.get_type_handler().is_pointer_free(
+      value_info.elem_symbol->type)),
+    int_type()));
   set_value_call.type() = bool_type();
   set_value_call.location() = location;
   update_block.copy_to_operands(set_value_call);
@@ -985,6 +1010,10 @@ void python_dict_handler::handle_dict_subscript_assign(
   push_key_call.arguments().push_back(symbol_expr(*key_info.elem_type_sym));
   push_key_call.arguments().push_back(key_info.elem_size);
   push_key_call.arguments().push_back(from_integer(BigInt(0), size_type()));
+  push_key_call.arguments().push_back(from_integer(
+    BigInt(converter_.get_type_handler().is_pointer_free(
+      key_info.elem_symbol->type)),
+    int_type()));
   push_key_call.type() = bool_type();
   push_key_call.location() = location;
   insert_block.copy_to_operands(push_key_call);
@@ -997,6 +1026,10 @@ void python_dict_handler::handle_dict_subscript_assign(
   push_value_call.arguments().push_back(symbol_expr(*value_info.elem_type_sym));
   push_value_call.arguments().push_back(value_info.elem_size);
   push_value_call.arguments().push_back(from_integer(BigInt(0), size_type()));
+  push_value_call.arguments().push_back(from_integer(
+    BigInt(converter_.get_type_handler().is_pointer_free(
+      value_info.elem_symbol->type)),
+    int_type()));
   push_value_call.type() = bool_type();
   push_value_call.location() = location;
   insert_block.copy_to_operands(push_value_call);
@@ -1341,8 +1374,115 @@ typet python_dict_handler::resolve_expected_type_for_dict_subscript(
   nlohmann::json var_decl = json_utils::find_var_decl(
     var_name, converter_.get_current_func_name(), converter_.get_ast_json());
 
-  if (var_decl.empty() || !var_decl.contains("annotation"))
+  if (var_decl.empty())
     return empty_typet();
+
+  // No annotation or bare `dict`:
+  // peek at the literal's first value to infer the value type.
+  const bool no_annotation =
+    !var_decl.contains("annotation") || var_decl["annotation"].is_null();
+  const bool bare_dict_annotation =
+    !no_annotation && var_decl["annotation"].is_object() &&
+    var_decl["annotation"].value("_type", std::string()) == "Name" &&
+    var_decl["annotation"].value("id", std::string()) == "dict" &&
+    !var_decl["annotation"].contains("slice");
+  if (no_annotation || bare_dict_annotation)
+  {
+    if (
+      var_decl.contains("value") && var_decl["value"].is_object() &&
+      var_decl["value"].value("_type", std::string()) == "Dict" &&
+      var_decl["value"].contains("values") &&
+      var_decl["value"]["values"].is_array() &&
+      !var_decl["value"]["values"].empty())
+    {
+      const std::string kind =
+        var_decl["value"]["values"][0].value("_type", std::string());
+      if (kind == "List")
+        return type_handler_.get_list_type();
+      if (kind == "Dict")
+        return get_dict_struct_type();
+    }
+    // Empty literal `d = {}`:
+    // scan the enclosing function's top-level statements and pick the most
+    // recent `d[k] = Klass(...)` assignment as the subscript value type.
+    // A later `d = {}` re-init resets the candidate so the next assignment
+    // dominates — keeps the inferred type aligned with the live dict.
+    // Without it, d[k] reads on an empty literal default to char*.
+    if (
+      var_decl.contains("value") && var_decl["value"].is_object() &&
+      var_decl["value"].value("_type", std::string()) == "Dict" &&
+      (!var_decl["value"].contains("values") ||
+       !var_decl["value"]["values"].is_array() ||
+       var_decl["value"]["values"].empty()))
+    {
+      std::vector<std::string> fn_path =
+        json_utils::split_function_path(converter_.get_current_func_name());
+      if (!fn_path.empty())
+      {
+        const auto &func_node =
+          json_utils::find_function_by_path(converter_.get_ast_json(), fn_path);
+        if (
+          !func_node.empty() && func_node.contains("body") &&
+          func_node["body"].is_array())
+        {
+          symbol_typet candidate;
+          bool have_candidate = false;
+          for (const auto &stmt : func_node["body"])
+          {
+            if (
+              !stmt.contains("_type") || stmt["_type"] != "Assign" ||
+              !stmt.contains("targets") || !stmt["targets"].is_array() ||
+              stmt["targets"].empty())
+              continue;
+            const auto &tgt = stmt["targets"][0];
+
+            // `d = {}` re-init clears the candidate;
+            // the next subscript assignment dominates.
+            if (
+              tgt.is_object() && tgt.value("_type", std::string()) == "Name" &&
+              tgt.value("id", std::string()) == var_name &&
+              stmt.contains("value") && stmt["value"].is_object() &&
+              stmt["value"].value("_type", std::string()) == "Dict" &&
+              (!stmt["value"].contains("values") ||
+               !stmt["value"]["values"].is_array() ||
+               stmt["value"]["values"].empty()))
+            {
+              have_candidate = false;
+              continue;
+            }
+
+            if (
+              !tgt.is_object() ||
+              tgt.value("_type", std::string()) != "Subscript" ||
+              !tgt.contains("value") || !tgt["value"].is_object() ||
+              tgt["value"].value("_type", std::string()) != "Name" ||
+              tgt["value"].value("id", std::string()) != var_name ||
+              !stmt.contains("value") || !stmt["value"].is_object())
+              continue;
+            const auto &rhs = stmt["value"];
+            if (
+              rhs.value("_type", std::string()) == "Call" &&
+              rhs.contains("func") && rhs["func"].is_object() &&
+              rhs["func"].value("_type", std::string()) == "Name" &&
+              rhs["func"].contains("id"))
+            {
+              const std::string class_name =
+                rhs["func"]["id"].get<std::string>();
+              if (json_utils::is_class(class_name, converter_.get_ast_json()))
+              {
+                candidate = symbol_typet("tag-" + class_name);
+                have_candidate = true;
+              }
+            }
+          }
+          if (have_candidate)
+            return candidate;
+        }
+      }
+    }
+    if (no_annotation)
+      return empty_typet();
+  }
 
   // Check if the annotation is just a simple type (e.g., "dict")
   // If so, try to get the full type from the RHS (function call)
@@ -1916,6 +2056,10 @@ exprt python_dict_handler::handle_dict_setdefault(
     push_key_call.arguments().push_back(symbol_expr(*key_info.elem_type_sym));
     push_key_call.arguments().push_back(key_info.elem_size);
     push_key_call.arguments().push_back(from_integer(BigInt(0), size_type()));
+    push_key_call.arguments().push_back(from_integer(
+      BigInt(converter_.get_type_handler().is_pointer_free(
+        key_info.elem_symbol->type)),
+      int_type()));
     push_key_call.type() = bool_type();
     push_key_call.location() = location;
     else_block.copy_to_operands(push_key_call);
@@ -1964,6 +2108,10 @@ exprt python_dict_handler::handle_dict_setdefault(
       push_value_call.arguments().push_back(value_info.elem_size);
       push_value_call.arguments().push_back(
         from_integer(BigInt(0), size_type()));
+      push_value_call.arguments().push_back(from_integer(
+        BigInt(converter_.get_type_handler().is_pointer_free(
+          value_info.elem_symbol->type)),
+        int_type()));
       push_value_call.type() = bool_type();
       push_value_call.location() = location;
       else_block.copy_to_operands(push_value_call);
@@ -1992,11 +2140,57 @@ exprt python_dict_handler::handle_dict_setdefault(
   return symbol_expr(result_var);
 }
 
+exprt python_dict_handler::handle_dict_copy(
+  const exprt &dict_expr,
+  const nlohmann::json &call_node)
+{
+  if (!call_node["args"].empty())
+    throw std::runtime_error("dict.copy() takes no arguments");
+
+  locationt location = converter_.get_location_from_decl(call_node);
+  struct_typet dict_type = get_dict_struct_type();
+  typet list_type = type_handler_.get_list_type();
+
+  // Resolve __ESBMC_list_copy: returns a new PyListObject* with the same
+  // elements as its argument. Used here on both keys and values lists.
+  const symbolt *list_copy_func =
+    symbol_table_.find_symbol("c:@F@__ESBMC_list_copy");
+  if (!list_copy_func)
+    throw std::runtime_error("__ESBMC_list_copy not found");
+
+  // Allocate destination dict.
+  symbolt &new_dict_sym =
+    converter_.create_tmp_symbol(call_node, "$dict_copy$", dict_type, exprt());
+  code_declt new_dict_decl(symbol_expr(new_dict_sym));
+  new_dict_decl.location() = location;
+  converter_.add_instruction(new_dict_decl);
+
+  // Copy each list independently so mutating the copy leaves the source
+  // untouched.
+  auto copy_list_member = [&](const irep_idt &name) {
+    member_exprt src(dict_expr, name, list_type);
+    member_exprt dst(symbol_expr(new_dict_sym), name, list_type);
+    code_function_callt copy_call;
+    copy_call.function() = symbol_expr(*list_copy_func);
+    copy_call.arguments().push_back(src);
+    copy_call.lhs() = dst;
+    copy_call.type() = list_type;
+    copy_call.location() = location;
+    converter_.add_instruction(copy_call);
+  };
+
+  copy_list_member("keys");
+  copy_list_member("values");
+
+  return symbol_expr(new_dict_sym);
+}
+
 bool python_dict_handler::is_value_returning_method(
   const std::string &method_name)
 {
   return method_name == "pop" || method_name == "get" ||
-         method_name == "setdefault" || method_name == "popitem";
+         method_name == "setdefault" || method_name == "popitem" ||
+         method_name == "copy";
 }
 
 // Retrieve a typed value from a PyObj's void* value field.
@@ -2581,6 +2775,79 @@ exprt python_dict_handler::handle_dict_fromkeys(const nlohmann::json &call_node)
 
   create_dict_from_literal(synthetic_dict, symbol_expr(dict_sym));
   return symbol_expr(dict_sym);
+}
+
+exprt python_dict_handler::handle_dict_constructor(
+  const nlohmann::json &call_node)
+{
+  if (!call_node.contains("args") || !call_node["args"].is_array())
+    return nil_exprt();
+  const auto &args = call_node["args"];
+  if (args.size() != 1)
+    return nil_exprt();
+
+  // Peel any nesting of set/list/tuple/frozenset wrappers around the
+  // iterable. dict(set([(k,v),...])) and dict(list([])) are common, and
+  // dict(list(set(...))) appears occasionally — stop at the first inner
+  // value that is not a recognised wrapper Call.
+  const nlohmann::json *arg = &args[0];
+  while (arg->value("_type", "") == "Call" && arg->contains("func") &&
+         (*arg)["func"].value("_type", "") == "Name")
+  {
+    const std::string id = (*arg)["func"].value("id", "");
+    if (
+      (id != "set" && id != "list" && id != "tuple" && id != "frozenset") ||
+      !arg->contains("args") || !(*arg)["args"].is_array() ||
+      (*arg)["args"].size() != 1)
+      break;
+    arg = &(*arg)["args"][0];
+  }
+
+  const std::string &arg_type = arg->value("_type", "");
+  if (arg_type != "List" && arg_type != "Tuple" && arg_type != "Set")
+    return nil_exprt();
+  if (!arg->contains("elts") || !(*arg)["elts"].is_array())
+    return nil_exprt();
+
+  nlohmann::json keys = nlohmann::json::array();
+  nlohmann::json values = nlohmann::json::array();
+  for (const auto &elt : (*arg)["elts"])
+  {
+    // (k, v) tuple element.
+    if (
+      elt.value("_type", "") == "Tuple" && elt.contains("elts") &&
+      elt["elts"].is_array() && elt["elts"].size() == 2)
+    {
+      keys.push_back(elt["elts"][0]);
+      values.push_back(elt["elts"][1]);
+      continue;
+    }
+    // 2-char string Constant: dict(["ab"]) → {'a': 'b'}.
+    if (
+      elt.value("_type", "") == "Constant" && elt.contains("value") &&
+      elt["value"].is_string() && elt["value"].get<std::string>().size() == 2)
+    {
+      const std::string s = elt["value"].get<std::string>();
+      nlohmann::json k = elt;
+      nlohmann::json v = elt;
+      k["value"] = std::string(1, s[0]);
+      v["value"] = std::string(1, s[1]);
+      keys.push_back(std::move(k));
+      values.push_back(std::move(v));
+      continue;
+    }
+    // Anything else.
+    return nil_exprt();
+  }
+
+  // Hand off to the Dict-literal lowering used for {k:v, ...}.
+  nlohmann::json synthetic_dict = call_node;
+  synthetic_dict.erase("args");
+  synthetic_dict.erase("func");
+  synthetic_dict["_type"] = "Dict";
+  synthetic_dict["keys"] = std::move(keys);
+  synthetic_dict["values"] = std::move(values);
+  return get_dict_literal(synthetic_dict);
 }
 
 exprt python_dict_handler::handle_dict_update(

@@ -1,0 +1,7 @@
+THOROUGH
+main.cpp
+--condition-coverage --unwind 4 --no-unwinding-assertions
+^Reached Conditions:  4
+^Short Circuited Conditions:  2
+^Total Conditions:  6
+^VERIFICATION FAILED$

@@ -922,17 +922,33 @@ BidIt partition(BidIt first, BidIt last, Pr pred)
 template <class BidIt, class Pr>
 BidIt stable_partition(BidIt first, BidIt last, Pr pred)
 {
-  while (first <= last)
+  // Skip leading elements that already satisfy pred.
+  while (first != last && pred(*first))
+    ++first;
+  if (first == last)
+    return first;
+
+  // For each subsequent element that satisfies pred, rotate it into place
+  // at *first by shifting [first, next) one position to the right.
+  // O(n^2) worst case but stable, which std::stable_partition requires.
+  BidIt next = first;
+  ++next;
+  for (; next != last; ++next)
   {
-    while (first != last && pred(*first))
+    if (pred(*next))
+    {
+      auto tmp = *next;
+      BidIt i = next;
+      while (i != first)
+      {
+        BidIt prev = i;
+        --prev;
+        *i = *prev;
+        i = prev;
+      }
+      *first = tmp;
       ++first;
-    if (first == last--)
-      break;
-    while (first != last && !pred(*last))
-      --last;
-    if (first == last)
-      break;
-    swap(*first++, *last);
+    }
   }
   return first;
 }
@@ -1084,7 +1100,7 @@ void stable_sort(BidIt begin, BidIt end, Pr pred)
   for (i = begin; i != end; i++)
   {
     j = i;
-    while (pred(*j, *(j - 1)) && (j != begin))
+    while ((j != begin) && pred(*j, *(j - 1)))
     {
       swap(*j, *(j - 1));
       j--;
@@ -1185,7 +1201,7 @@ RanIt partial_sort_copy(InIt first1, InIt last1, RanIt first2, RanIt last2)
   for (i = first2; i != last2; i++)
   {
     j = i;
-    while ((*j < *(j - 1)) && (j != first2))
+    while ((j != first2) && (*j < *(j - 1)))
     {
       std::swap(*j, *(j - 1));
       j--;
@@ -1199,7 +1215,7 @@ RanIt partial_sort_copy(InIt first1, InIt last1, RanIt first2, RanIt last2)
       for (i = first2; i != last2; i++)
       {
         j = i;
-        while ((*j < *(j - 1)) && (j != first2))
+        while ((j != first2) && (*j < *(j - 1)))
         {
           std::swap(*j, *(j - 1));
           j--;
@@ -1221,7 +1237,7 @@ RanIt partial_sort_copy(InIt *first1, InIt *last1, RanIt first2, RanIt last2)
   for (i = first2; i != last2; i++)
   {
     j = i;
-    while ((*j < *(j - 1)) && (j != first2))
+    while ((j != first2) && (*j < *(j - 1)))
     {
       std::swap(*j, *(j - 1));
       j--;
@@ -1235,7 +1251,7 @@ RanIt partial_sort_copy(InIt *first1, InIt *last1, RanIt first2, RanIt last2)
       for (i = first2; i != last2; i++)
       {
         j = i;
-        while ((*j < *(j - 1)) && (j != first2))
+        while ((j != first2) && (*j < *(j - 1)))
         {
           std::swap(*j, *(j - 1));
           j--;
@@ -1262,7 +1278,7 @@ RanIt partial_sort_copy(
   for (i = first2; i != last2; i++)
   {
     j = i;
-    while (pred(*j, *(j - 1)) && (j != first2))
+    while ((j != first2) && pred(*j, *(j - 1)))
     {
       std::swap(*j, *(j - 1));
       j--;
@@ -1276,7 +1292,7 @@ RanIt partial_sort_copy(
       for (i = first2; i != last2; i++)
       {
         j = i;
-        while (pred(*j, *(j - 1)) && (j != first2))
+        while ((j != first2) && pred(*j, *(j - 1)))
         {
           std::swap(*j, *(j - 1));
           j--;
@@ -1303,7 +1319,7 @@ RanIt partial_sort_copy(
   for (i = first2; i != last2; i++)
   {
     j = i;
-    while (pred(*j, *(j - 1)) && (j != first2))
+    while ((j != first2) && pred(*j, *(j - 1)))
     {
       std::swap(*j, *(j - 1));
       j--;
@@ -1317,7 +1333,7 @@ RanIt partial_sort_copy(
       for (i = first2; i != last2; i++)
       {
         j = i;
-        while (pred(*j, *(j - 1)) && (j != first2))
+        while ((j != first2) && pred(*j, *(j - 1)))
         {
           std::swap(*j, *(j - 1));
           j--;
@@ -1340,12 +1356,13 @@ void nth_element(RanIt first, RanIt nth, RanIt last)
     {
       swap(*pilgrim, *nth);
       nth = pilgrim;
-      pos = nth - 1;
-      while (*nth < *pos)
+      while (nth != first)
       {
+        pos = nth - 1;
+        if (!(*nth < *pos))
+          break;
         swap(*nth, *pos);
         nth = pos;
-        pos--;
       }
     }
   }
@@ -1363,12 +1380,13 @@ void nth_element(RanIt first, RanIt nth, RanIt last, Pr pred)
     {
       swap(*pilgrim, *nth);
       nth = pilgrim;
-      pos = nth - 1;
-      while (pred(*nth, *pos))
+      while (nth != first)
       {
+        pos = nth - 1;
+        if (!pred(*nth, *pos))
+          break;
         swap(*nth, *pos);
         nth = pos;
-        pos--;
       }
     }
   }
@@ -2123,191 +2141,106 @@ OutIt set_symmetric_difference(
 template <class RanIt>
 void push_heap(RanIt first, RanIt last)
 {
-  int n = 0;
-  RanIt t = first;
-  while (t++ != last)
-    n++;
-  int i = n / 2;
-  int pai, filho;
-  t = last;
-  for (int j = 0; j < n / 2; j++)
+  // Sift up the element at *(last - 1) within the max-heap [first, last).
+  auto n = last - first;
+  if (n <= 1)
+    return;
+  auto child = n - 1;
+  while (child > 0)
   {
-    if (i > 0)
+    auto parent = (child - 1) / 2;
+    if (*(first + parent) < *(first + child))
     {
-      i--;
-      *t = *(first + i);
+      auto tmp = *(first + parent);
+      *(first + parent) = *(first + child);
+      *(first + child) = tmp;
+      child = parent;
     }
     else
-    {
-      n--;
-      if (n == 0)
-      {
-        return;
-      }
-      *t = *(first + n);
-      *(first + n) = *first;
-    }
-    pai = i;
-    filho = i * 2 + 1;
-    while (filho < n)
-    {
-      if ((filho + 1 < n) && (*(first + filho + 1) > *(first + filho)))
-        filho++;
-      if (*(first + filho) > *t)
-      {
-        *(first + pai) = *(first + filho);
-        pai = filho;
-        filho = pai * 2 + 1;
-      }
-      else
-        break;
-    }
-    *(first + pai) = *t;
+      break;
   }
 }
 
 template <class RanIt, class Pr>
 void push_heap(RanIt first, RanIt last, Pr pred)
 {
-  int n = 0;
-  RanIt t = first;
-  while (t++ != last)
-    n++;
-  int i = n / 2;
-  int pai, filho;
-  t = last;
-  for (int j = 0; j < n / 2; j++)
+  auto n = last - first;
+  if (n <= 1)
+    return;
+  auto child = n - 1;
+  while (child > 0)
   {
-    if (i > 0)
+    auto parent = (child - 1) / 2;
+    if (pred(*(first + parent), *(first + child)))
     {
-      i--;
-      *t = *(first + i);
+      auto tmp = *(first + parent);
+      *(first + parent) = *(first + child);
+      *(first + child) = tmp;
+      child = parent;
     }
     else
-    {
-      n--;
-      if (n == 0)
-      {
-        return;
-      }
-      *t = *(first + n);
-      *(first + n) = *first;
-    }
-    int aux = i * 2 + 1;
-    pai = i;
-    filho = aux;
-    while (filho < n)
-    {
-      if ((filho + 1 < n) && (pred(*(first + filho), *(first + filho + 1))))
-        filho++;
-      if (pred(*(first + filho), *t))
-      {
-        *(first + pai) = *(first + filho);
-        pai = filho;
-        filho = pai * 2 + 1;
-      }
-      else
-        break;
-    }
-    *(first + pai) = *t;
+      break;
   }
 }
 
 template <class RanIt>
 void pop_heap(RanIt first, RanIt last)
 {
-  swap(*first, *(last - 1));
-  last = last - 1;
-  int n = 0;
-  RanIt t = first;
-  while (t++ != last)
-    n++;
-  int i = n / 2;
-  int pai, filho;
-  t = last;
-  for (int j = 0; j < n / 2; j++)
+  // Move max to end, then sift down [first, last - 1).
+  auto n = last - first;
+  if (n <= 1)
+    return;
+  auto tmp = *first;
+  *first = *(last - 1);
+  *(last - 1) = tmp;
+  --n;
+  decltype(n) parent = 0;
+  while (true)
   {
-    if (i > 0)
+    auto child = 2 * parent + 1;
+    if (child >= n)
+      break;
+    if (child + 1 < n && *(first + child) < *(first + child + 1))
+      ++child;
+    if (*(first + parent) < *(first + child))
     {
-      i--;
-      *t = *(first + i);
+      auto t = *(first + parent);
+      *(first + parent) = *(first + child);
+      *(first + child) = t;
+      parent = child;
     }
     else
-    {
-      n--;
-      if (n == 0)
-      {
-        return;
-      }
-      *t = *(first + n);
-      *(first + n) = *first;
-    }
-    int aux = i * 2 + 1;
-    pai = i;
-    filho = aux;
-    while (filho < n)
-    {
-      if ((filho + 1 < n) && (*(first + filho) < *(first + filho + 1)))
-        filho++;
-      if (*(first + filho) < *t)
-      {
-        *(first + pai) = *(first + filho);
-        pai = filho;
-        filho = pai * 2 + 1;
-      }
-      else
-        break;
-    }
-    *(first + pai) = *t;
+      break;
   }
 }
 
 template <class RanIt, class Pr>
 void pop_heap(RanIt first, RanIt last, Pr pred)
 {
-  swap(*first, *(last - 1));
-  last = last - 1;
-  int n = 0;
-  RanIt t = first;
-  while (t++ != last)
-    n++;
-  int i = n / 2;
-  int pai, filho;
-  t = last;
-  for (int j = 0; j < n / 2; j++)
+  auto n = last - first;
+  if (n <= 1)
+    return;
+  auto tmp = *first;
+  *first = *(last - 1);
+  *(last - 1) = tmp;
+  --n;
+  decltype(n) parent = 0;
+  while (true)
   {
-    if (i > 0)
+    auto child = 2 * parent + 1;
+    if (child >= n)
+      break;
+    if (child + 1 < n && pred(*(first + child), *(first + child + 1)))
+      ++child;
+    if (pred(*(first + parent), *(first + child)))
     {
-      i--;
-      *t = *(first + i);
+      auto t = *(first + parent);
+      *(first + parent) = *(first + child);
+      *(first + child) = t;
+      parent = child;
     }
     else
-    {
-      n--;
-      if (n == 0)
-      {
-        return;
-      }
-      *t = *(first + n);
-      *(first + n) = *first;
-    }
-    int aux = i * 2 + 1;
-    pai = i;
-    filho = aux;
-    while (filho < n)
-    {
-      if ((filho + 1 < n) && (pred(*(first + filho), *(first + filho + 1))))
-        filho++;
-      if (pred(*(first + filho), *t))
-      {
-        *(first + pai) = *(first + filho);
-        pai = filho;
-        filho = pai * 2 + 1;
-      }
-      else
-        break;
-    }
-    *(first + pai) = *t;
+      break;
   }
 }
 
@@ -2344,47 +2277,27 @@ void make_heap(RanIt first, RanIt last)
 template <class RanIt, class Pr>
 void make_heap(RanIt first, RanIt last, Pr pred)
 {
-  int n = 0;
-  RanIt t = first;
-  while (t++ != last)
-    n++;
-  int i = n / 2;
-  int pai, filho;
-  t = last;
-  for (int j = 0; j < n / 2; j++)
+  auto n = last - first;
+  for (int i = (n / 2) - 1; i >= 0; --i)
   {
-    if (i > 0)
+    int parent = i;
+    auto value = *(first + parent);
+    while (true)
     {
-      i--;
-      *t = *(first + i);
-    }
-    else
-    {
-      n--;
-      if (n == 0)
+      int child = 2 * parent + 1;
+      if (child >= n)
+        break;
+      if (child + 1 < n && pred(*(first + child), *(first + child + 1)))
+        ++child;
+      if (pred(value, *(first + child)))
       {
-        return;
-      }
-      *t = *(first + n);
-      *(first + n) = *first;
-    }
-    int aux = i * 2 + 1;
-    pai = i;
-    filho = aux;
-    while (filho < n)
-    {
-      if ((filho + 1 < n) && (pred(*(first + filho), *(first + filho + 1))))
-        filho++;
-      if (pred(*(first + filho), *t))
-      {
-        *(first + pai) = *(first + filho);
-        pai = filho;
-        filho = pai * 2 + 1;
+        *(first + parent) = *(first + child);
+        parent = child;
       }
       else
         break;
     }
-    *(first + pai) = *t;
+    *(first + parent) = value;
   }
 }
 
@@ -2467,6 +2380,29 @@ const T &min(const T &left, const T &right)
     return left;
   else
     return right;
+}
+
+// Returns by value (T) rather than the standard's `const T&` to avoid an IR
+// materialisation issue where `const T&` returns lose their value across the
+// callee scope exit (see issue #4251).
+template <class T>
+T clamp(const T &v, const T &lo, const T &hi)
+{
+  if (v < lo)
+    return lo;
+  if (hi < v)
+    return hi;
+  return v;
+}
+
+template <class T, class Compare>
+T clamp(const T &v, const T &lo, const T &hi, Compare comp)
+{
+  if (comp(v, lo))
+    return lo;
+  if (comp(hi, v))
+    return hi;
+  return v;
 }
 
 template <class FwdIt>

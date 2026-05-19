@@ -24,6 +24,7 @@ extern "C"
 #include <util/filesystem.h>
 #include <csignal>
 #include <cstdlib>
+#include <limits>
 #include <util/expr_util.h>
 #include <iostream>
 #include <goto-programs/add_race_assertions.h>
@@ -32,6 +33,7 @@ extern "C"
 #include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/goto_inline.h>
 #include <goto-programs/goto_k_induction.h>
+#include <goto-programs/goto_loop_simplify.h>
 #include <goto-programs/goto_loop_invariant.h>
 #include <goto-programs/abstract-interpretation/interval_analysis.h>
 #include <goto-programs/abstract-interpretation/gcse.h>
@@ -43,6 +45,8 @@ extern "C"
 #include <goto-programs/set_claims.h>
 #include <goto-programs/show_claims.h>
 #include <goto-programs/loop_unroll.h>
+#include <goto-programs/goto_check_uninit_vars.h>
+#include <goto-programs/goto_check_unchecked_return.h>
 #include <goto-programs/mark_decl_as_non_det.h>
 #include <goto-programs/assign_params_as_non_det.h>
 #include <goto2c/goto2c.h>
@@ -58,7 +62,6 @@ extern "C"
 #include <goto-programs/goto_cfg.h>
 #include <langapi/language_util.h>
 #include <goto-programs/contracts/contracts.h>
-#include <util/yaml_parser.h>
 
 #ifndef _WIN32
 #  include <sys/wait.h>
@@ -420,6 +423,57 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("partial-loops", false);
   }
 
+  if (cmdline.isset("validate-correctness-witness"))
+  {
+    if (!cmdline.isset("witness"))
+    {
+      log_error(
+        "--validate-correctness-witness requires --witness <file.yaml>");
+      abort();
+    }
+    const std::string witness = cmdline.getval("witness");
+    const boost::filesystem::path wp(witness);
+    if (!boost::filesystem::exists(wp))
+    {
+      log_error("Witness file '{}' does not exist.", witness);
+      abort();
+    }
+    if (wp.extension() != ".yaml" && wp.extension() != ".yml")
+    {
+      log_error(
+        "Witness file has extension {}, expected yaml or yml.",
+        wp.extension().string());
+      abort();
+    }
+    options.set_option("validate-correctness-witness", true);
+    options.set_option("witness", witness);
+  }
+
+  if (cmdline.isset("validate-violation-witness"))
+  {
+    if (!cmdline.isset("witness"))
+    {
+      log_error("--validate-violation-witness requires --witness <file.yaml>");
+      abort();
+    }
+    const std::string witness = cmdline.getval("witness");
+    const boost::filesystem::path wp(witness);
+    if (!boost::filesystem::exists(wp))
+    {
+      log_error("Witness file '{}' does not exist.", witness);
+      abort();
+    }
+    if (wp.extension() != ".yaml" && wp.extension() != ".yml")
+    {
+      log_error(
+        "Witness file has extension {}, expected yaml or yml.",
+        wp.extension().string());
+      abort();
+    }
+    options.set_option("validate-violation-witness", true);
+    options.set_option("witness", witness);
+  }
+
   // --loop-invariant implicitly enables k-induction solving so that
   // do_bmc_strategy runs the full base/forward/inductive-step loop.
   if (
@@ -531,6 +585,30 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("multi-property", true);
   }
 
+  // --all-witnesses also activates --multi-property
+  if (cmdline.isset("all-witnesses"))
+  {
+    if (cmdline.isset("max-witnesses"))
+    {
+      int max_w = std::stoi(cmdline.getval("max-witnesses"));
+      if (max_w < 0)
+      {
+        log_error("--max-witnesses must be >= 0 (got {})", max_w);
+        abort();
+      }
+    }
+
+    const bool was_multi = options.get_bool_option("multi-property") ||
+                           cmdline.isset("multi-property");
+    if (!was_multi)
+      log_status("--all-witnesses: auto-enabling --multi-property");
+    options.set_option("multi-property", true);
+    // Don't disturb base-case if the user explicitly picked a different
+    // k-induction phase (forward-condition-only or inductive-step-only).
+    if (!cmdline.isset("forward-condition") && !cmdline.isset("inductive-step"))
+      options.set_option("base-case", true);
+  }
+
   // If multi-property is on, we should set base-case
   if (cmdline.isset("multi-property"))
   {
@@ -610,6 +688,9 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("witness-output-graphml", filename + ".graphml");
   }
 
+  if (cmdline.isset("sarif-output"))
+    options.set_option("sarif-output", cmdline.getval("sarif-output"));
+
   config.options = options;
 }
 
@@ -681,6 +762,20 @@ int esbmc_parseoptionst::doit()
     goto_preprocess_algorithms.emplace_back(
       std::make_unique<apply_intrinsic_unroller>());
 
+    // Uninitialised-variable check (CWE-457) must run before
+    // mark_decl_as_non_det, which would otherwise overwrite every
+    // uninitialised DECL with a nondet ASSIGN and erase the property.
+    if (cmdline.isset("uninitialised-vars-check"))
+      goto_preprocess_algorithms.emplace_back(
+        std::make_unique<goto_check_uninit_vars>(context));
+
+    // Unchecked-return-value check (CWE-252). Runs as a preprocessing
+    // algorithm so the inserted ASSERTs participate in the same path-
+    // condition pruning as the rest of the goto-program.
+    if (cmdline.isset("unchecked-return-value-check"))
+      goto_preprocess_algorithms.emplace_back(
+        std::make_unique<goto_check_unchecked_return>(context));
+
     // Explicitly marking all declared variables as "nondet"
     goto_preprocess_algorithms.emplace_back(
       std::make_unique<mark_decl_as_non_det>(context));
@@ -706,15 +801,70 @@ int esbmc_parseoptionst::doit()
   optionst options;
   get_command_line_options(options);
 
-  // for solidity
-  if (cmdline.isset("sol"))
+  // for solidity: detect .sol files in positional args or via --sol
   {
-    // set default options
-    options.set_option(
-      "no-align-check", true); // no need to check alignment in solidity
-    options.set_option("no-unlimited-scanf-check", true);
-    options.set_option(
-      "force-malloc-success", true); // for calloc in the 'newexpression'
+    bool is_solidity = cmdline.isset("sol");
+    if (!is_solidity)
+    {
+      for (const auto &arg : cmdline.args)
+      {
+        if (arg.size() >= 4 && arg.substr(arg.size() - 4) == ".sol")
+        {
+          is_solidity = true;
+          break;
+        }
+      }
+    }
+    if (is_solidity)
+    {
+      options.set_option(
+        "no-align-check", true); // no need to check alignment in solidity
+      options.set_option("no-unlimited-scanf-check", true);
+      options.set_option(
+        "force-malloc-success", true); // for calloc in the 'newexpression'
+
+      // Auto-select the best SMT backend for Solidity when the user did not
+      // explicitly ask for one. Z3 is significantly slower than modern QF_BV
+      // engines on the 256-bit bit-vector arithmetic pervasive in Solidity
+      // (uint256, mappings, etc.), so prefer Bitwuzla / CVC5 / Boolector.
+      //
+      // Exception: k-induction and incremental-bmc issue many incremental
+      // queries where Z3 has historically been more robust than CVC5; keep
+      // the default (Z3) there so existing regression tests do not regress.
+      const bool incremental_mode =
+        cmdline.isset("k-induction") || cmdline.isset("k-induction-parallel") ||
+        cmdline.isset("incremental-bmc") || cmdline.isset("falsification");
+      const bool user_picked_solver =
+        cmdline.isset("z3") || cmdline.isset("cvc5") ||
+        cmdline.isset("bitwuzla") || cmdline.isset("boolector") ||
+        cmdline.isset("yices") || cmdline.isset("mathsat") ||
+        cmdline.isset("cvc4") || cmdline.isset("smtlib") ||
+        cmdline.isset("default-solver");
+      if (!user_picked_solver && !incremental_mode)
+      {
+        const std::string padded =
+          std::string(" ") + ESBMC_AVAILABLE_SOLVERS + " ";
+        const char *preferred[] = {"bitwuzla", "cvc5", "boolector", "z3"};
+        const char *chosen = nullptr;
+        for (const char *name : preferred)
+        {
+          if (padded.find(std::string(" ") + name + " ") != std::string::npos)
+          {
+            chosen = name;
+            break;
+          }
+        }
+        if (chosen)
+        {
+          options.set_option("default-solver", chosen);
+          log_status(
+            "Solidity: auto-selecting '{}' as SMT backend (Z3 is much "
+            "slower on 256-bit bit-vector arithmetic). Override with "
+            "--z3 / --cvc5 / --bitwuzla / --boolector or --default-solver.",
+            chosen);
+        }
+      }
+    }
   }
 
   // Create and preprocess a GOTO program
@@ -2005,13 +2155,48 @@ bool esbmc_parseoptionst::process_goto_program(
                   cmdline.isset("branch-coverage") ||
                   cmdline.isset("branch-coverage-claims") ||
                   cmdline.isset("branch-function-coverage") ||
-                  cmdline.isset("branch-function-coverage-claims");
+                  cmdline.isset("branch-function-coverage-claims") ||
+                  cmdline.isset("k-path-coverage") ||
+                  cmdline.isset("k-path-coverage-claims");
 
     // For coverage mode, treat extra input files (cmdline.args[1:]) as include
     // files so that the coverage location_pool covers all input sources.
     if (is_coverage && cmdline.args.size() > 1)
       for (size_t i = 1; i < cmdline.args.size(); i++)
         config.ansi_c.include_files.push_back(cmdline.args[i]);
+
+    // For Solidity coverage mode: neutralize the multi-transaction harness loop.
+    // The _ESBMC_Main_* functions contain a while(nondet_bool()) loop that calls
+    // user functions repeatedly. This causes massive symex overhead in coverage
+    // mode where we only need each function executed once. Convert backward GOTOs
+    // (loop back-edges) in _ESBMC_Main* functions to SKIPs so the loop body
+    // executes exactly once.
+    if (is_coverage)
+    {
+      bool is_sol = cmdline.isset("sol");
+      if (!is_sol)
+        for (const auto &arg : cmdline.args)
+          if (arg.size() >= 4 && arg.substr(arg.size() - 4) == ".sol")
+          {
+            is_sol = true;
+            break;
+          }
+      if (is_sol)
+      {
+        Forall_goto_functions (f_it, goto_functions)
+        {
+          std::string fname = f_it->first.as_string();
+          if (fname.find("_ESBMC_Main") == std::string::npos)
+            continue;
+          Forall_goto_program_instructions (it, f_it->second.body)
+          {
+            if (it->is_backwards_goto())
+              it->make_skip();
+          }
+        }
+        goto_functions.update();
+      }
+    }
 
     // Expand --no-standard-checks before goto_check (also expanded before
     // goto_convert in parse_goto_program; re-expanding here is idempotent
@@ -2116,24 +2301,6 @@ bool esbmc_parseoptionst::process_goto_program(
     if (cmdline.isset("validate-correctness-witness"))
     {
       log_status("Enable correctness witness validation 2.0");
-      options.set_option("loop-invariant", true);
-      std::string path = cmdline.getval("witness");
-      boost::filesystem::path n(path);
-
-      if (n.extension() != ".yaml" && n.extension() != ".yml")
-      {
-        // Unexpected extension
-        log_error("Unsupported witness format, expected yaml or yml");
-        return true;
-      }
-
-      yaml_parser parser(path, context, options);
-      if (parser.load_file())
-        return true;
-
-      if (parser.inject_loop_invariants(goto_functions))
-        return true;
-
       remove_no_op(goto_functions);
       goto_loop_invariant_combined(goto_functions);
     }
@@ -2179,6 +2346,14 @@ bool esbmc_parseoptionst::process_goto_program(
     }
 
     goto_check(ns, options, goto_functions);
+
+    // Eliminate goto-level no-op loops (empty body, dead modified vars).
+    // Runs AFTER goto_check so that any check assertions inserted into a
+    // loop body (overflow, div-by-zero, bounds, ...) make body_is_safe
+    // refuse the erasure — preserving checks that would otherwise be
+    // silently dropped. Skipped under --termination / --unwinding-
+    // assertions because loop presence is observable in those modes.
+    goto_loop_simplify(goto_functions);
 
     if (options.get_bool_option("atomicity-check"))
       goto_atomicity_check(goto_functions, ns, context);
@@ -2333,6 +2508,112 @@ bool esbmc_parseoptionst::process_goto_program(
       goto_coveraget tmp(ns, goto_functions, filename);
       tmp.cov_assume_asserts = cmdline.isset("cov-assume-asserts");
       tmp.branch_function_coverage();
+    }
+
+    if (
+      cmdline.isset("k-path-coverage") ||
+      cmdline.isset("k-path-coverage-claims"))
+    {
+      // Hard cap on the prefix depth. Goal count per branch grows as
+      // 2^(N-1), and (N-1) >= 64 would overflow size_t in `1 << pdepth`.
+      // 30 leaves 2^29 goals/branch — already far above any reasonable
+      // --k-path-max-goals — and gives a comfortable safety margin from
+      // the size_t shift limit. Defense-in-depth: also enforced inside
+      // goto_coveraget::k_path_coverage().
+      static constexpr int K_PATH_N_MAX = 30;
+
+      options.set_option("base-case", true);
+      options.set_option("multi-property", true);
+      options.set_option("keep-verified-claims", false);
+      options.set_option("no-pointer-check", true);
+      // Separate boolean enable flag in the option_map. Required because
+      // `optionst::get_bool_option(name)` is `atoi(value)`, so storing the
+      // CLI int value of `--k-path-coverage` (which is `0` for the no-arg
+      // case under boost's implicit_value, or any user-supplied integer)
+      // would silently mis-report the feature as disabled in bmc.cpp.
+      options.set_option("k-path-coverage-enabled", true);
+
+      if (cmdline.isset("unwind"))
+        options.set_option("no-unwinding-assertions", true);
+
+      std::string filename = cmdline.args[0];
+      goto_coveraget tmp(ns, goto_functions, filename);
+      if (cmdline.isset("function"))
+        tmp.set_target(cmdline.getval("function"));
+      tmp.cov_assume_asserts = cmdline.isset("cov-assume-asserts");
+
+      // Resolve N: explicit --k-path-coverage=N > --unwind > fallback 4.
+      // The CLI option uses implicit_value(INT_MIN), so `--k-path-coverage`
+      // without `=N` parses as INT_MIN (the "no value" sentinel) and falls
+      // through to --unwind / 4. Any other non-positive value (incl.
+      // explicit `=0` or `=-1`) is rejected — silently falling through
+      // would defeat the user's intent.
+      const int K_PATH_N_SENTINEL = std::numeric_limits<int>::min();
+      int n_arg = K_PATH_N_SENTINEL;
+      if (cmdline.isset("k-path-coverage"))
+        n_arg = atoi(cmdline.getval("k-path-coverage"));
+      if (n_arg > 0)
+      {
+        if (n_arg > K_PATH_N_MAX)
+        {
+          log_error(
+            "--k-path-coverage=N requires 1 <= N <= {} (got {})",
+            K_PATH_N_MAX,
+            n_arg);
+          return true;
+        }
+        tmp.k_path_n = static_cast<size_t>(n_arg);
+      }
+      else if (n_arg != K_PATH_N_SENTINEL)
+      {
+        // Explicit non-positive value — reject rather than silently
+        // falling back.
+        log_error(
+          "--k-path-coverage=N requires 1 <= N <= {} (got {})",
+          K_PATH_N_MAX,
+          n_arg);
+        return true;
+      }
+      else if (cmdline.isset("unwind"))
+      {
+        int u = atoi(cmdline.getval("unwind"));
+        if (u <= 0 || u > K_PATH_N_MAX)
+        {
+          log_error(
+            "--k-path-coverage cannot derive N from --unwind={} (must be "
+            "in 1..{}); pass --k-path-coverage=N explicitly",
+            u,
+            K_PATH_N_MAX);
+          return true;
+        }
+        tmp.k_path_n = static_cast<size_t>(u);
+      }
+      else
+      {
+        tmp.k_path_n = 4;
+        log_status(
+          "--k-path-coverage: no N or --unwind specified; defaulting to "
+          "N=4");
+      }
+
+      auto read_positive = [&](const char *flag, size_t &dst) -> bool {
+        if (!cmdline.isset(flag))
+          return true;
+        int v = atoi(cmdline.getval(flag));
+        if (v <= 0)
+        {
+          log_error("--{} requires a positive integer (got {})", flag, v);
+          return false;
+        }
+        dst = static_cast<size_t>(v);
+        return true;
+      };
+      if (!read_positive("k-path-witness-depth", tmp.k_path_witness_depth))
+        return true;
+      if (!read_positive("k-path-max-goals", tmp.k_path_max_goals))
+        return true;
+
+      tmp.k_path_coverage();
     }
 
     if (cmdline.isset("negating-property"))
@@ -2681,7 +2962,7 @@ static void collect_symbol_names(
   if (is_symbol2t(e))
   {
     const symbol2t &thesym = to_symbol2t(e);
-    assert(thesym.rlevel == 0);
+    assert(thesym.rlevel == symbol_renaming_level::level0);
     std::string sym = thesym.get_symbol_name();
 
     used_syms.insert(sym);

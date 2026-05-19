@@ -23,6 +23,25 @@ exprt type_handler::get_expr_helper(const nlohmann::json &json) const
   return const_cast<python_converter &>(converter_).get_expr(json);
 }
 
+bool type_handler::is_pointer_free(const typet &t) const
+{
+  namespacet ns(converter_.symbol_table());
+  typet ty = (t.id() == "symbol") ? ns.follow(t) : t;
+
+  if (ty.is_pointer())
+    return false;
+  if (ty.is_array())
+    return is_pointer_free(ty.subtype());
+  if (ty.is_struct() || ty.is_union())
+  {
+    for (const auto &comp : to_struct_union_type(ty).components())
+      if (!is_pointer_free(comp.type()))
+        return false;
+    return true;
+  }
+  return true; // primitives
+}
+
 bool type_handler::is_constructor_call(const nlohmann::json &json) const
 {
   if (
@@ -418,6 +437,17 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   if (ast_type == "bool")
     return bool_type();
 
+  // slice — Python's slice() builtin, modelled as __ESBMC_PySliceObj.
+  // Only resolve to the slice struct if the operational model is loaded;
+  // otherwise fall through so early type-handler queries don't assert.
+  if (ast_type == "slice")
+  {
+    const symbolt *sym =
+      converter_.symbol_table().find_symbol("tag-struct __ESBMC_PySliceObj");
+    if (sym)
+      return symbol_typet(sym->id);
+  }
+
   if (ast_type == "complex")
   {
     const char *complex_type_id = "tag-complex";
@@ -539,6 +569,14 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
 
   if (!is_defined)
   {
+    // Imported free functions (e.g. "from dataclasses import replace") can
+    // appear in call expressions and should not be treated as unknown type
+    // names during inference.
+    const std::string import_probe =
+      "py:" + converter_.python_file() + "@" + ast_type;
+    if (converter_.find_imported_symbol(import_probe) != nullptr)
+      return any_type();
+
     const nlohmann::json &decl =
       json_utils::find_var_decl(ast_type, "", converter_.ast());
     if (!decl.empty() && decl.contains("value") && decl["value"].is_object())
@@ -915,6 +953,14 @@ typet type_handler::get_list_element_type() const
   type = converter_.symbol_table().find_symbol(type_id);
   assert(type);
   return symbol_typet(type->id);
+}
+
+typet type_handler::get_slice_type() const
+{
+  const symbolt *slice_type_symbol =
+    converter_.symbol_table().find_symbol("tag-struct __ESBMC_PySliceObj");
+  assert(slice_type_symbol);
+  return symbol_typet(slice_type_symbol->id);
 }
 
 /// This method inspects the JSON representation of a Python operand node and attempts to

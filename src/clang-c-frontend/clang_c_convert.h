@@ -43,6 +43,7 @@ class MemberExpr;
 class EnumConstantDecl;
 class APValue;
 class AlignedAttr;
+class InitListExpr;
 } // namespace clang
 
 std::string
@@ -98,7 +99,7 @@ protected:
   const clang::FunctionDecl *current_functionDecl;
 
   bool convert_builtin_types();
-  bool convert_top_level_decl();
+  virtual bool convert_top_level_decl();
 
   /**
    *  Since this class is inherited by clang-cpp-frontend,
@@ -184,7 +185,17 @@ protected:
     const typet &orig_type,
     typet &new_type);
 
+  /* If `fd` is a bitfield, replace `t` with the bitfield-wrapped type
+   * carrying the #bitfield/width-N marker symex relies on. No-op otherwise.
+   * Centralises the wrapping logic shared by struct-component construction,
+   * member-expression lowering, and ctor member-initialiser-list lowering. */
+  bool wrap_bitfield_type_if_needed(const clang::FieldDecl &fd, typet &t);
+
   virtual bool get_expr(const clang::Stmt &stmt, exprt &new_expr);
+
+  bool get_base_flattened_inits(
+    const clang::InitListExpr &init,
+    std::vector<exprt> &flat);
 
   bool get_enum_value(const clang::EnumConstantDecl *e, exprt &new_expr);
 

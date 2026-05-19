@@ -107,14 +107,13 @@ typedef struct thread_key
 __attribute__((annotate(
   "__ESBMC_inf_size"))) static __ESBMC_thread_key __ESBMC_pthread_thread_key[1];
 
-static int insert_key_value(pthread_key_t key, const void *value)
+static void insert_key_value(pthread_key_t key, const void *value)
 {
 __ESBMC_HIDE:;
   pthread_t thread = __ESBMC_get_thread_id();
   __ESBMC_pthread_thread_key[thread].thread = thread;
   __ESBMC_pthread_thread_key[thread].key = key;
   __ESBMC_pthread_thread_key[thread].value = value;
-  return 0;
 }
 
 static __ESBMC_thread_key *search_key(pthread_key_t key)
@@ -776,29 +775,12 @@ __ESBMC_HIDE:;
     key != NULL,
     "In pthread_key_create, key parameter must be different than NULL.");
   // the value NULL shall be associated with the new key in all active threads
-  int result = insert_key_value(__ESBMC_next_thread_key, NULL);
+  insert_key_value(__ESBMC_next_thread_key, NULL);
   __ESBMC_thread_key_destructors[__ESBMC_next_thread_key] = destructor;
   // store the newly created key value at *key
   *key = __ESBMC_next_thread_key++;
-  // check whether we have failed to insert the key into our list.
-  if (result < 0)
-  {
-    if (nondet_bool())
-    {
-      // Insufficient memory exists to create the key.
-      result = ENOMEM;
-    }
-    else
-    {
-      // The system lacked the necessary resources
-      // to create another thread-specific data key, or
-      // the system-imposed limit on the total number of
-      // keys per process {PTHREAD_KEYS_MAX} has been exceeded.
-      result = EAGAIN;
-    }
-  }
   __ESBMC_atomic_end();
-  return result;
+  return 0;
 }
 
 // The pthread_getspecific() function shall return
@@ -831,20 +813,10 @@ __ESBMC_HIDE:;
 int pthread_setspecific(pthread_key_t key, const void *value)
 {
 __ESBMC_HIDE:;
-  int result;
   __ESBMC_atomic_begin();
-  result = insert_key_value(key, value);
-  if (result < 0)
-  {
-    // Insufficient memory exists to associate
-    // the value with the key.
-    result = ENOMEM;
-  }
-  else if (value == NULL)
-  {
-    // The key value is invalid.
-    result = EINVAL;
-  }
+  insert_key_value(key, value);
+  // The key value is invalid when value is NULL.
+  int result = (value == NULL) ? EINVAL : 0;
   __ESBMC_atomic_end();
   return result;
 }
@@ -971,4 +943,110 @@ void pthread_cleanup_pop(int execute)
     // Call the cleanup function with the provided argument
     function(arg);
   }
+}
+
+/* Python ``threading.Thread`` helpers.
+ *
+ * The Python frontend's AST rewrite of ``threading.Thread`` lowers
+ * each construction site to a per-site ``void(void)`` trampoline (a
+ * Python function reading its arguments from module-level globals)
+ * plus calls to these three intrinsics:
+ *
+ *   1. The spawn itself uses ``__ESBMC_spawn_thread`` directly — its
+ *      argument has to be a literal ``address_of`` of the trampoline
+ *      symbol (see ``intrinsic_spawn_thread`` in
+ *      ``builtin_functions/threads.cpp``), and the Python converter
+ *      wraps the trampoline reference accordingly.
+ *
+ *   2. ``__pyt_init_tid(tid)`` sets the pthread bookkeeping for the
+ *      freshly-spawned thread (running/ended flags, counter bumps) so
+ *      ``__pyt_join`` and the deadlock detector see consistent state.
+ *      Mirrors the bookkeeping ``pthread_create`` does after its own
+ *      call to ``__ESBMC_spawn_thread``.
+ *
+ *   3. ``__pyt_terminate()`` marks the calling thread ended,
+ *      decrements the running count, and cuts subsequent execution
+ *      paths. The synthesised trampoline calls this as its last
+ *      statement so ``__pyt_join`` can observe the ``ended`` flag.
+ *
+ *   4. ``__pyt_join(tid)`` blocks until the named thread is ended.
+ *      Mirrors ``pthread_join_switch`` (deadlock-aware) so symex's
+ *      interleaving search can find the right schedule.
+ */
+
+void __pyt_init_tid(unsigned int tid)
+{
+__ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
+  __ESBMC_num_total_threads++;
+  __ESBMC_num_threads_running++;
+  __ESBMC_pthread_thread_running[tid] = 1;
+  __ESBMC_pthread_thread_ended[tid] = 0;
+  __ESBMC_pthread_end_values[tid] = NULL;
+  __ESBMC_atomic_end();
+}
+
+void __pyt_terminate(void)
+{
+__ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
+  pthread_t threadid = __ESBMC_get_thread_id();
+  __ESBMC_pthread_thread_ended[threadid] = 1;
+  __ESBMC_num_threads_running--;
+  // ``pthread_trampoline`` additionally assumes
+  // ``__ESBMC_blocked_threads_count == 0`` to prune deadlocked
+  // schedules from its own path; we deliberately omit that assume
+  // here so the join-side deadlock detector
+  // (``blocked_threads_count != num_threads_running`` in
+  // ``__pyt_join``) is the sole oracle, avoiding a circular
+  // dependency where the joiner's pending block forces the spawned
+  // thread to stall in terminate.
+  __ESBMC_terminate_thread();
+  __ESBMC_atomic_end(); // unreachable; mirrors pthread_trampoline.
+  __ESBMC_assume(0);
+}
+
+void __pyt_join(unsigned int thread)
+{
+__ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
+  _Bool ended = __ESBMC_pthread_thread_ended[(int)thread];
+  if (!ended)
+  {
+    __ESBMC_blocked_threads_count++;
+    // Deadlock if every running thread is now blocked.
+    __ESBMC_assert(
+      __ESBMC_blocked_threads_count != __ESBMC_num_threads_running,
+      "Deadlocked state in __pyt_join");
+  }
+  __ESBMC_atomic_end();
+  // Block this thread until the target has ended.
+  __ESBMC_assume(ended);
+}
+
+/* threading.Lock deadlock-aware bookkeeping.
+ *
+ * Called from ``Lock.acquire`` in the deadlock-aware variant of the
+ * Python operational model (``models/threading_deadlock.py``) on the
+ * branch where the lock is already held by another thread. Mirrors the
+ * else-branch of ``pthread_mutex_lock_check``: bump the global blocked
+ * counter and assert that not every running thread is now blocked. The
+ * Python caller wraps this call in its own ``__ESBMC_atomic_begin`` /
+ * ``__ESBMC_atomic_end`` pair, so the bump-and-assert is atomic with
+ * the lock-field read that decided to block.
+ *
+ * The counter bump persists on a path that the caller then kills with
+ * ``__ESBMC_assume(unlocked)``; symex's interleaving search observes
+ * the bumped value on alternative schedules where two or more threads
+ * have all reached this point, which is where the global deadlock
+ * predicate (``blocked_threads_count == num_threads_running``) becomes
+ * true.
+ */
+void __ESBMC_pylock_block_and_check(void)
+{
+__ESBMC_HIDE:;
+  __ESBMC_blocked_threads_count++;
+  __ESBMC_assert(
+    __ESBMC_blocked_threads_count != __ESBMC_num_threads_running,
+    "Deadlocked state in threading.Lock.acquire");
 }

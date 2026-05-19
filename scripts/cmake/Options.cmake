@@ -59,8 +59,14 @@ option(CORE_REGRESSION_ONLY "Only add tests in the regression that are CORE (def
 
 # these URLs are all for an x86_64 target
 if(WIN32)
-  set(DEFAULT_LLVM_URL "https://github.com/XLiZHI/esbmc/releases/download/v17/llvm+clang+lld-16.0.0-x86_64-windows-msvc-release-mt.zip")
-  set(DEFAULT_LLVM_NAME "llvm+clang+lld-16.0.0-x86_64-windows-msvc-release-mt")
+  set(DEFAULT_LLVM_URL "https://github.com/llvm/llvm-project/releases/download/llvmorg-22.1.4/clang+llvm-22.1.4-x86_64-pc-windows-msvc.tar.xz")
+  set(DEFAULT_LLVM_NAME "clang+llvm-22.1.4-x86_64-pc-windows-msvc")
+
+  set(DEFAULT_Z3_URL "https://github.com/Z3Prover/z3/releases/download/z3-4.13.3/z3-4.13.3-x64-win.zip")
+  set(DEFAULT_Z3_NAME z3-4.13.3-x64-win)
+
+  set(MATHSAT_URL "https://mathsat.fbk.eu/download.php?file=mathsat-5.6.10-win64-msvc.zip")
+  set(MATHSAT_NAME "mathsat-5.6.10-win64-msvc")
 else()
   set(DEFAULT_LLVM_URL "https://github.com/esbmc/esbmc/releases/download/v7.10/clang+llvm-21.1.2-x86_64-linux-gnu-ubuntu-22.04.tar.xz")
   set(DEFAULT_LLVM_NAME "clang+llvm-21.1.2-x86_64-linux-gnu-ubuntu-22.04")
@@ -96,7 +102,7 @@ set(ESBMC_CHERI_PURECAP_SYSROOT "" CACHE STRING "Path containing the mips64-unkn
 set(ESBMC_BUNDLE_LIBC_32BIT "${ENABLE_BUNDLE_LIBC_32BIT}" CACHE BOOL "Enable 32-bit libc bundling" FORCE)
 
 # Demand C++23
-set (CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD 23)
 
 # Used by try_compile
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)

@@ -178,14 +178,15 @@ interval_domaint::get_interval_from_const(const expr2tc &e) const
   if (value1.is_double())
     result.make_le_than(value1.to_double());
   else
-    log_warning("Failed to convert value1: {}", value1.to_string_decimal(10));
+    log_debug(
+      "interval", "Failed to convert value1: {}", value1.to_string_decimal(10));
 
   // a >= value2
   if (value2.is_double())
     result.make_ge_than(value2.to_double());
   else
-    log_warning(
-      "Failed to convert value2: {}", value2.to_string_decimal(10)); //
+    log_debug(
+      "interval", "Failed to convert value2: {}", value2.to_string_decimal(10));
 
   assert(!result.is_bottom());
   return result;
@@ -526,9 +527,6 @@ T interval_domaint::get_interval(const expr2tc &e) const
   case expr2t::bitor_id:
   case expr2t::bitand_id:
   case expr2t::bitxor_id:
-  case expr2t::bitnand_id:
-  case expr2t::bitnor_id:
-  case expr2t::bitnxor_id:
     if (enable_interval_bitwise_arithmetic)
     {
       const auto &bit_op = dynamic_cast<const bit_2ops &>(*e);
@@ -552,13 +550,6 @@ T interval_domaint::get_interval(const expr2tc &e) const
         result = lhs & rhs;
       else if (is_bitxor2t(e))
         result = lhs ^ rhs;
-
-      else if (is_bitnand2t(e))
-        result = T::bitnot(lhs & rhs);
-      else if (is_bitnor2t(e))
-        result = T::bitnot(lhs | rhs);
-      else if (is_bitnxor2t(e))
-        result = T::bitnot(lhs ^ rhs);
     }
     break;
 

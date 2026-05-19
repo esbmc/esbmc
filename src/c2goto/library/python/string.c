@@ -481,8 +481,7 @@ __ESBMC_HIDE:;
     if ((unsigned char)s[i] == 0xC3 && (unsigned char)s[i + 1] == 0x9F)
     {
       buffer[j++] = 'S';
-      if (j < 255)
-        buffer[j++] = 'S';
+      buffer[j++] = 'S';
       i += 2;
     }
     else if (s[i] >= 'a' && s[i] <= 'z')

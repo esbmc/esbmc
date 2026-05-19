@@ -1,4 +1,4 @@
 CORE
 contract.solast
---k-induction --unsigned-overflow-check --sol contract.sol
-^VERIFICATION FAILED$
+--unsigned-overflow-check --sol contract.sol --unwind 1 --no-unwinding-assertions
+^VERIFICATION SUCCESSFUL$

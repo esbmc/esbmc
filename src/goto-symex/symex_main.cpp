@@ -125,6 +125,12 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
     check_incremental(new_expr, msg))
     return; // Verification succeeded, no further action needed
 
+  if (
+    validate_witness && !witness_target_line.empty() &&
+    !has_prefix(msg, "unwinding assertion loop") &&
+    cur_state->source.pc->location.get_line() != witness_target_line)
+    new_expr = gen_true_expr();
+
   // add assertion to the target equation
   assertion(new_expr, msg);
 
@@ -165,6 +171,10 @@ bool goto_symext::is_assume_false(const expr2tc &assumption)
 {
   if (options.get_bool_option("smt-symex-assume"))
   {
+    // Do nothing if the assumption is already true
+    if (is_true(assumption))
+      return false;
+
     runtime_encoded_equationt *rte =
       dynamic_cast<runtime_encoded_equationt *>(target.get());
 
@@ -191,6 +201,10 @@ void goto_symext::assume(const expr2tc &the_assumption)
   cur_state->rename(assumption);
   do_simplify(assumption);
 
+  // Check for assume-false against the renamed+simplified expression
+  // BEFORE guard_expr mutates it
+  bool assume_is_false = is_assume_false(assumption);
+
   if (is_true(assumption))
     return;
 
@@ -201,7 +215,7 @@ void goto_symext::assume(const expr2tc &the_assumption)
   target->assumption(tmp_guard, assumption, cur_state->source, first_loop);
 
   // If we're assuming false, make the guard for the following statement false
-  if (is_false(the_assumption) || is_assume_false(the_assumption))
+  if (assume_is_false)
     cur_state->guard.make_false();
 }
 
@@ -510,15 +524,13 @@ void goto_symext::symex_assume()
     // We don't perform constant propagation on it.
     expr2tc lhs = to_equality2t(c).side_1;
     expr2tc rhs = to_equality2t(c).side_2;
-    if (
-      is_symbol2t(lhs) && is_constant_expr(rhs) &&
-      !(is_constant_floatbv2t(rhs) &&
-        to_constant_floatbv2t(rhs).value.is_zero()))
+    auto is_float_zero = [](const expr2tc &e) {
+      const constant_floatbv2t *f = try_to_constant_floatbv2t(e);
+      return f && f->value.is_zero();
+    };
+    if (is_symbol2t(lhs) && is_constant_expr(rhs) && !is_float_zero(rhs))
       cur_state->assignment(lhs, rhs);
-    else if (
-      is_symbol2t(rhs) && is_constant_expr(lhs) &&
-      !(is_constant_floatbv2t(lhs) &&
-        to_constant_floatbv2t(lhs).value.is_zero()))
+    else if (is_symbol2t(rhs) && is_constant_expr(lhs) && !is_float_zero(lhs))
       cur_state->assignment(rhs, lhs);
   }
 }
@@ -890,7 +902,7 @@ void goto_symext::run_intrinsic(
         expr2tc(),
         std::vector<expr2tc>(),
         type2tc(),
-        sideeffect2t::nondet);
+        sideeffect2t::allockind::nondet);
 
       symex_assign(code_assign2tc(item.object, val), false, cur_state->guard);
     }
@@ -1010,7 +1022,8 @@ void goto_symext::run_intrinsic(
   if (
     has_prefix(symname, "c:@F@__ESBMC_pthread_start_main_hook") ||
     has_prefix(symname, "c:@F@__ESBMC_pthread_end_main_hook") ||
-    has_prefix(symname, "c:@F@__ESBMC_atexit_handler"))
+    has_prefix(symname, "c:@F@__ESBMC_atexit_handler") ||
+    has_prefix(symname, "c:@F@__ESBMC_pylock_block_and_check"))
   {
     bump_call(func_call, symname);
     return;
@@ -1043,10 +1056,11 @@ void goto_symext::run_intrinsic(
     return;
   }
 
-  // PythonList methods
+  // PythonList / dict / set methods
   if (
     has_prefix(symname, "c:@F@__ESBMC_list") ||
-    has_prefix(symname, "c:@F@__ESBMC_dict"))
+    has_prefix(symname, "c:@F@__ESBMC_dict") ||
+    has_prefix(symname, "c:@F@__ESBMC_set"))
   {
     bump_call(func_call, symname);
     return;
@@ -1068,6 +1082,38 @@ void goto_symext::run_intrinsic(
 
   if (has_prefix(symname, "c:@F@__ESBMC_unroll"))
     return;
+
+  if (symname == "c:@F@__ESBMC_throw_bad_cast")
+  {
+    symex_throw_bad_cast();
+    return;
+  }
+
+  if (symname == "c:@F@__ESBMC_witness_assume")
+  {
+    if (!validate_witness)
+      return;
+
+    // operands: [seg_idx_const, wp_idx_const, constraint]
+    if (func_call.operands.size() < 3)
+      return;
+    size_t seg_idx = to_constant_int2t(func_call.operands[0]).value.to_uint64();
+    size_t wp_idx = to_constant_int2t(func_call.operands[1]).value.to_uint64();
+
+    if (seg_idx != cur_state->cur_seg || wp_idx != cur_state->cur_wp)
+      return;
+
+    const waypoint &wp = cur_state->witness_segs[seg_idx][wp_idx];
+    expr2tc arg = func_call.operands[2];
+    cur_state->rename(arg);
+
+    if (wp.action == waypoint::avoid)
+      assume(not2tc(arg));
+    else
+      assume(arg);
+    cur_state->advance_witness_position();
+    return;
+  }
 
   log_error(
     "Function call to non-intrinsic prefixed with __ESBMC (fatal)\n"
@@ -1155,7 +1201,7 @@ void goto_symext::add_memory_leak_checks()
      */
     fine_timet start_time = current_time();
     std::unordered_map<expr2tc, expr2tc, irep2_hash> globals_point_to;
-    bool has_unknown = false;
+
     value_set_analysist va(ns);
 
     /* List of sets of all globally reachable symbols (encoded as a list of
@@ -1183,7 +1229,7 @@ void goto_symext::add_memory_leak_checks()
      * the user code has constructed circular data structures, maintain a set
      * of visited symbols. */
     std::unordered_set<std::string> visited;
-    for (int i = 0; !has_unknown && !globals.empty(); i++)
+    for (int i = 0; !globals.empty(); i++)
     {
       std::vector<std::pair<expr2tc, std::list<value_sett::entryt>>> tmp;
       for (const auto &[path_to_e, g] : globals)
@@ -1250,7 +1296,7 @@ void goto_symext::add_memory_leak_checks()
                 assert(is_structure_type(p));
                 const struct_union_data &u =
                   static_cast<const struct_union_data &>(*p->type);
-                unsigned n = u.get_component_number(c.member_name);
+                unsigned n = u.get_component_number(c.member_name).value();
                 p = member2tc(u.members[n], p, c.member_name);
               }
               continue;
@@ -1430,25 +1476,21 @@ void goto_symext::add_memory_leak_checks()
 
     if (log_debug(
           "memcleanup",
-          "memcleanup: time: {}s, unknown: {}, globals point to:",
-          time2string(current_time() - start_time),
-          has_unknown))
+          "memcleanup: time: {}s, globals point to:",
+          time2string(current_time() - start_time)))
       for (const auto &[e, g] : globals_point_to)
         log_debug(
           "memcleanup",
           "memcleanup:  {}",
           to_symbol2t(to_address_of2t(e).ptr_obj).get_symbol_name());
 
-    if (has_unknown)
-      maybe_global_target = [](expr2tc) { return gen_true_expr(); };
-    else
-      maybe_global_target = [tgts = std::move(globals_point_to)](expr2tc obj) {
-        // Accumulator for OR-ing conditions
-        expr2tc is_any;
-        // Iterate over each (expression, condition) pair in tgts
-        for (const auto &[e, g] : tgts)
-        {
-          /* XXX: 'obj' is the address of a statically known dynamic object,
+    maybe_global_target = [tgts = std::move(globals_point_to)](expr2tc obj) {
+      // Accumulator for OR-ing conditions
+      expr2tc is_any;
+      // Iterate over each (expression, condition) pair in tgts
+      for (const auto &[e, g] : tgts)
+      {
+        /* XXX: 'obj' is the address of a statically known dynamic object,
            *      couldn't we just statically check whether the symbol 'e'
            *      addresses is the same as 'obj' directly?
            *
@@ -1459,13 +1501,13 @@ void goto_symext::add_memory_leak_checks()
            *   then 'g' is combined with 'same_object2tc(obj, e)'.
            * - Otherwise, we directly use 'same_object2tc(obj, e)'.
            */
-          expr2tc same = (is_and2t(g) || is_same_object2t(g))
-                           ? and2tc(g, same_object2tc(obj, e))
-                           : same_object2tc(obj, e);
-          is_any = is_any ? or2tc(is_any, same) : same;
-        }
-        return is_any ? is_any : gen_false_expr();
-      };
+        expr2tc same = (is_and2t(g) || is_same_object2t(g))
+                         ? and2tc(g, same_object2tc(obj, e))
+                         : same_object2tc(obj, e);
+        is_any = is_any ? or2tc(is_any, same) : same;
+      }
+      return is_any ? is_any : gen_false_expr();
+    };
   }
 
   for (auto const &it : dynamic_memory)

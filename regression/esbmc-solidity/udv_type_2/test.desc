@@ -1,0 +1,4 @@
+CORE
+contract.solast
+--sol contract.sol --contract UDVTestFail --bound --unwind 2 --no-unwinding-assertions
+^VERIFICATION FAILED$

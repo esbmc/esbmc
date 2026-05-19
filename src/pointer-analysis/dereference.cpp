@@ -618,6 +618,15 @@ void dereferencet::check_pointer_alignment(
   const expr2tc &deref_expr,
   const guardt &guard)
 {
+  // Caller has already declared the access is known-unaligned (e.g.
+  // member of a __attribute__((packed)) struct accessed through a
+  // pointer such as `this`). dereference_expr_nonscalar() sets this
+  // flag when walking into a packed-struct member; honour it here so
+  // we mirror the suppression already done at the scalar
+  // check_alignment() site below.
+  if (mode.unaligned)
+    return;
+
   // Only check alignment for scalar read/write operations (excluding code and pointer types)
   if (
     !(is_read(mode) || is_write(mode)) || !is_scalar_type(type) ||
@@ -1405,7 +1414,7 @@ void dereferencet::construct_from_const_struct_offset(
       return;
     }
 
-    if (int_offset > m_offs && (int_offset - m_offs + access_size <= m_size))
+    if (int_offset - m_offs + access_size <= m_size)
     {
       // This access is in the bounds of this member, but isn't at the start.
       // XXX that might be an alignment error.
@@ -2678,6 +2687,10 @@ expr2tc dereferencet::extract_bits_from_byte_array(
   result = lshr2tc(value->type, value, shft_expr);
   result = typecast2tc(rtype, result);
   result = bitand2tc(rtype, result, mask_expr);
-  simplify(result);
+  // Don't simplify here: when the mask is the all-ones constant for rtype
+  // (always the case — mask = (1<<num_bits) - 1) the simplifier collapses
+  // the bitand wrapper and (for shft = 0) the inner lshr, leaving a shape
+  // symex_assign_bitfield can no longer recognise as a bitfield write.
+  // Read-side use simplifies again later through the normal pipeline.
   return result;
 }

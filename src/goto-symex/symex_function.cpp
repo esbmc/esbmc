@@ -13,6 +13,21 @@
 #include <util/pretty.h>
 #include <util/std_expr.h>
 
+bool goto_symex_utils::is_alloca_return_value_name(const std::string &name)
+{
+  static const std::string prefix = "return_value$_alloca$";
+  size_t pos = name.rfind(prefix);
+  if (pos == std::string::npos)
+    return false;
+  size_t rest = pos + prefix.size();
+  if (rest == name.size())
+    return false;
+  for (size_t i = rest; i < name.size(); ++i)
+    if (name[i] < '0' || name[i] > '9')
+      return false;
+  return true;
+}
+
 bool goto_symext::get_unwind_recursion(
   const irep_idt &identifier,
   BigInt unwind)
@@ -59,20 +74,48 @@ unsigned goto_symext::argument_assignments(
 
   // iterates over the types of the arguments
   for (unsigned int name_idx = 0; name_idx < function_type.arguments.size();
-       ++name_idx, ++it1)
+       ++name_idx)
   {
-    // if you run out of actual arguments there was a mismatch
+    const irep_idt &identifier = function_type.argument_names[name_idx];
+
+    // If we run out of actual arguments before the formal parameter list is
+    // exhausted, the call site disagrees with the function definition.  In
+    // practice this occurs when a function pointer with an unprototyped type
+    // (e.g. void (*g)()) is used to call a function with a different
+    // signature.  Model the missing argument as a nondeterministic value,
+    // mirroring the symmetric "too many arguments" branch below which
+    // silently drops extras.
     if (it1 == arguments.end())
     {
-      claim(gen_false_expr(), "function call: not enough arguments");
-      return UINT_MAX;
-    }
+      log_warning(
+        "function call to '{}': missing argument for parameter '{}'; "
+        "modelled as nondet",
+        id2string(function_identifier),
+        id2string(identifier));
 
-    const irep_idt &identifier = function_type.argument_names[name_idx];
+      if (identifier != "")
+      {
+        const type2tc &arg_type = function_type.arguments[name_idx];
+        expr2tc lhs = symbol2tc(arg_type, identifier);
+        symex_decl(code_decl2tc(arg_type, identifier));
+
+        unsigned int &nondet_count = get_nondet_counter();
+        expr2tc rhs = symbol2tc(
+          arg_type, "nondet$symex::nondet" + i2string(nondet_count++));
+
+        symex_assign(
+          code_assign2tc(lhs, rhs),
+          !options.get_bool_option("generate-html-report"));
+      }
+      continue;
+    }
 
     // Don't assign arguments if they have no name, see regression spec21
     if (identifier == "")
+    {
+      ++it1;
       continue;
+    }
 
     if (is_nil_expr(*it1))
     {
@@ -157,6 +200,8 @@ unsigned goto_symext::argument_assignments(
         code_assign2tc(lhs, rhs),
         !options.get_bool_option("generate-html-report"));
     }
+
+    ++it1;
   }
 
   unsigned va_index = UINT_MAX;
@@ -170,7 +215,7 @@ unsigned goto_symext::argument_assignments(
       ++va_count;
 
     va_index = va_count;
-    for (; it1 != arguments.end(); it1++, va_count++)
+    for (; it1 != arguments.end(); ++it1, va_count++)
     {
       irep_idt identifier =
         id2string(function_identifier) + "::va_arg" + std::to_string(va_count);
@@ -583,9 +628,7 @@ void goto_symext::pop_frame()
     frame.level1.get_ident_name(l1_sym);
 
     // Call free on alloca'd objects
-    if (
-      it.base_name.as_string().find("return_value$_alloca$") !=
-      std::string::npos)
+    if (goto_symex_utils::is_alloca_return_value_name(it.base_name.as_string()))
       symex_free(code_free2tc(l1_sym));
 
     // Erase from level 1 propagation

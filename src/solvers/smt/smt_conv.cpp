@@ -1276,8 +1276,10 @@ smt_astt smt_convt::apply_ieee754_semantics(
 
 smt_astt smt_convt::get_double_max_normal()
 {
-  // IEEE 754 double precision maximum normal positive value (~(2-2^-52)*2^1023)
-  return mk_smt_real("1.7976931348623157e+308");
+  // IEEE 754 double: (2^53-1)*2^971 (exact rational, no rounding)
+  static const std::string val =
+    integer2string((power(2, 53) - 1) * power(2, 971));
+  return mk_smt_real(val);
 }
 
 smt_astt smt_convt::get_single_min_normal()
@@ -1294,8 +1296,10 @@ smt_astt smt_convt::get_single_min_subnormal()
 
 smt_astt smt_convt::get_single_max_normal()
 {
-  // IEEE 754 single precision maximum normal positive value (~(2-2^-23)*2^127)
-  return mk_smt_real("3.4028234663852886e+38");
+  // IEEE 754 single: (2^24-1)*2^104 (exact rational, no rounding)
+  static const std::string val =
+    integer2string((power(2, 24) - 1) * power(2, 104));
+  return mk_smt_real(val);
 }
 
 smt_astt smt_convt::get_double_eps_rel()
@@ -1441,7 +1445,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     if (!cu.init_field.empty())
     {
       const union_type2t &ut = to_union_type(expr->type);
-      unsigned c = ut.get_component_number(cu.init_field);
+      unsigned c = ut.get_component_number(cu.init_field).value();
       /* Can only initialize unions by expressions of same type as init_field */
       assert(src_expr->type->type_id == ut.members[c]->type_id);
     }
@@ -1472,10 +1476,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       if (is_tuple_ast_type(arr.subtype))
         a = tuple_api->tuple_fresh(sort);
       else
-        a = mk_fresh(
-          sort,
-          "inf_array",
-          convert_sort(get_flattened_array_subtype(expr->type)));
+        a = mk_fresh(sort, "inf_array", convert_sort(arr.subtype));
       break;
     }
 
@@ -2114,7 +2115,8 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       const union_type2t &tu = to_union_type(expr->type);
       assert(is_constant_string2t(with.update_field));
       unsigned c =
-        tu.get_component_number(to_constant_string2t(with.update_field).value);
+        tu.get_component_number(to_constant_string2t(with.update_field).value)
+          .value();
       uint64_t mem_bits = type_byte_size_bits(tu.members[c]).to_uint64();
       expr2tc upd = bitcast2tc(
         get_uint_type(mem_bits), typecast2tc(tu.members[c], with.update_value));
@@ -2425,12 +2427,43 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     }
     else
     {
-      expr2tc lt = lessthan2tc(abs.value, gen_zero(abs.value->type));
+      // Lower as `(x >= 0) ? x : -x`. The opposite-sense `(x < 0) ? -x : x`
+      // is logically equivalent but bitwuzla preprocesses the `>= 0` shape
+      // significantly faster. Fixes a 7x regression on
+      // sv-benchmarks/c/xcsp/AllInterval-017.
+      //
+      // The branch-free `bvsub(bvxor(x, ashr(x, w-1)), ashr(x, w-1))`
+      // form was tried (it's the canonical SMT-LIB abs encoding) and is
+      // ~8x slower on AllInterval-017 under bitwuzla — the ite form
+      // gives the solver a clean case-split that meshes with the
+      // surrounding all-distinct + abs-difference chain, while the xor
+      // form mixes the sign bit into bitvector arithmetic and seems to
+      // defeat term-graph sharing in this pattern.
+      expr2tc ge = greaterthanequal2tc(abs.value, gen_zero(abs.value->type));
       expr2tc neg = neg2tc(abs.value->type, abs.value);
-      expr2tc ite = if2tc(abs.type, lt, neg, abs.value);
+      expr2tc ite = if2tc(abs.type, ge, abs.value, neg);
 
       a = convert_ast(ite);
     }
+    break;
+  }
+  case expr2t::cmp_three_way_id:
+  {
+    // C++20 spaceship `a <=> b`. Lower to the equivalent ITE chain
+    // producing a comparison-category struct value:
+    //   side_1 <  side_2  ->  T{-1}    (less)
+    //   side_1 == side_2  ->  T{ 0}    (equivalent / equal)
+    //   else              ->  T{ 1}    (greater)
+    // Operands are captured once via the recursive convert_ast on the
+    // children — preserving the IR-level cmp_three_way2t up to here.
+    const cmp_three_way2t &cw = to_cmp_three_way2t(expr);
+
+    expr2tc lt = lessthan2tc(cw.side_1, cw.side_2);
+    expr2tc eq = equality2tc(cw.side_1, cw.side_2);
+    expr2tc inner = if2tc(
+      cw.type, eq, make_cmp_value(cw.type, 0), make_cmp_value(cw.type, 1));
+    expr2tc outer = if2tc(cw.type, lt, make_cmp_value(cw.type, -1), inner);
+    a = convert_ast(outer);
     break;
   }
   case expr2t::lessthan_id:
@@ -2591,21 +2624,6 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     a = mk_bvxor(args[0], args[1]);
     break;
   }
-  case expr2t::bitnand_id:
-  {
-    a = mk_bvnand(args[0], args[1]);
-    break;
-  }
-  case expr2t::bitnor_id:
-  {
-    a = mk_bvnor(args[0], args[1]);
-    break;
-  }
-  case expr2t::bitnxor_id:
-  {
-    a = mk_bvnxor(args[0], args[1]);
-    break;
-  }
   case expr2t::bitnot_id:
   {
     a = mk_bvnot(args[0]);
@@ -2703,8 +2721,9 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
 
     // We only want expressions of typecast(address_of(symbol)) or address_of(symbol).
     {
-      if (is_typecast2t(symbol) && is_address_of2t(to_typecast2t(symbol).from))
-        symbol = to_address_of2t(to_typecast2t(symbol).from).ptr_obj;
+      if (const typecast2t *tc = try_to_typecast2t(symbol);
+          tc && is_address_of2t(tc->from))
+        symbol = to_address_of2t(tc->from).ptr_obj;
 
       else if (is_address_of2t(symbol))
         symbol = to_address_of2t(symbol).ptr_obj;
@@ -2809,6 +2828,24 @@ smt_sortt smt_convt::convert_sort(const type2tc &type)
   case type2t::vector_id:
   case type2t::array_id:
   {
+    // Nested infinite arrays (e.g. Solidity nested mappings): do NOT flatten.
+    // Create Array(BV64, Array(BV64, V)) with recursive convert_sort.
+    // Only applicable to genuine array types — vectors are always finite,
+    // and to_array_type(vector_type) throws std::bad_cast under -DNDEBUG-off
+    // builds (where the type_macros' dynamic_cast is real, not static_cast).
+    if (is_array_type(type))
+    {
+      const array_type2t &arrtype = to_array_type(type);
+      if (arrtype.size_is_infinite && is_array_type(arrtype.subtype))
+      {
+        type2tc t = make_array_domain_type(arrtype);
+        smt_sortt d = mk_int_bv_sort(t->get_width());
+        smt_sortt r = convert_sort(arrtype.subtype);
+        result = mk_array_sort(d, r);
+        break;
+      }
+    }
+
     // Index arrays by the smallest integer required to represent its size.
     // Unless it's either infinite or dynamic in size, in which case use the
     // machine int size. Also, faff about if it's an array of arrays, extending
@@ -2844,6 +2881,14 @@ smt_sortt smt_convt::convert_sort(const type2tc &type)
     result = mk_int_bv_sort(type_byte_size_bits(type).to_uint64());
     break;
   }
+
+  case type2t::empty_id:
+    // Empty type can appear during Solidity nested mapping encoding
+    // when the 'with' expression generates intermediate void-typed subexpressions.
+    // Return a minimal sort as placeholder — these are never directly used in
+    // solver queries and the verification result is unaffected.
+    result = mk_int_bv_sort(1);
+    break;
 
   default:
     log_error(
@@ -3058,13 +3103,58 @@ smt_astt smt_convt::convert_is_nan(const expr2tc &expr)
   return fp_api->mk_smt_fpbv_is_nan(operand);
 }
 
+// Returns the max-normal SMT real for single/double floatbv, or nullptr for
+// any other format (caller must handle the unsupported case explicitly).
+static smt_astt get_max_normal(smt_convt &conv, const floatbv_type2t &fbv_type)
+{
+  const auto single_spec = ieee_float_spect::single_precision();
+  const auto double_spec = ieee_float_spect::double_precision();
+  if (fbv_type.exponent == single_spec.e && fbv_type.fraction == single_spec.f)
+    return conv.get_single_max_normal();
+  if (fbv_type.exponent == double_spec.e && fbv_type.fraction == double_spec.f)
+    return conv.get_double_max_normal();
+  return nullptr;
+}
+
+// Returns the min-normal SMT real for single/double floatbv, or nullptr.
+static smt_astt get_min_normal(smt_convt &conv, const floatbv_type2t &fbv_type)
+{
+  const auto single_spec = ieee_float_spect::single_precision();
+  const auto double_spec = ieee_float_spect::double_precision();
+  if (fbv_type.exponent == single_spec.e && fbv_type.fraction == single_spec.f)
+    return conv.get_single_min_normal();
+  if (fbv_type.exponent == double_spec.e && fbv_type.fraction == double_spec.f)
+    return conv.get_double_min_normal();
+  return nullptr;
+}
+
 smt_astt smt_convt::convert_is_inf(const expr2tc &expr)
 {
   const isinf2t &isinf = to_isinf2t(expr);
 
   // Anything other than floats will never be infs
-  if (!is_floatbv_type(isinf.value) || int_encoding)
+  if (!is_floatbv_type(isinf.value))
     return mk_smt_bool(false);
+
+  if (int_encoding)
+  {
+    // In integer/real encoding a float is "infinite" when its real value
+    // exceeds the maximum finite float magnitude: |f| > max_normal.
+    const floatbv_type2t &fbv_type = to_floatbv_type(isinf.value->type);
+    smt_astt max_val = get_max_normal(*this, fbv_type);
+    if (!max_val)
+    {
+      log_warning(
+        "isinf: unsupported float format (exp={}, frac={}); returning false",
+        fbv_type.exponent,
+        fbv_type.fraction);
+      return mk_smt_bool(false);
+    }
+    smt_astt operand = convert_ast(isinf.value);
+    smt_astt pos_inf = mk_gt(operand, max_val);
+    smt_astt neg_inf = mk_lt(operand, mk_sub(get_zero_real(), max_val));
+    return mk_or(pos_inf, neg_inf);
+  }
 
   smt_astt operand = convert_ast(isinf.value);
   return fp_api->mk_smt_fpbv_is_inf(operand);
@@ -3075,8 +3165,36 @@ smt_astt smt_convt::convert_is_normal(const expr2tc &expr)
   const isnormal2t &isnormal = to_isnormal2t(expr);
 
   // Anything other than floats will always be normal
-  if (!is_floatbv_type(isnormal.value) || int_encoding)
+  if (!is_floatbv_type(isnormal.value))
     return mk_smt_bool(true);
+
+  if (int_encoding)
+  {
+    // In integer/real encoding a float is normal when min_normal <= |f| <=
+    // max_normal.  Zero and subnormals (|f| < min_normal) are not normal.
+    const floatbv_type2t &fbv_type = to_floatbv_type(isnormal.value->type);
+    smt_astt max_val = get_max_normal(*this, fbv_type);
+    smt_astt min_val = get_min_normal(*this, fbv_type);
+    if (!max_val || !min_val)
+    {
+      log_warning(
+        "isnormal: unsupported float format (exp={}, frac={}); returning true",
+        fbv_type.exponent,
+        fbv_type.fraction);
+      return mk_smt_bool(true);
+    }
+    smt_astt zero = get_zero_real();
+    smt_astt neg_max = mk_sub(zero, max_val);
+    smt_astt neg_min = mk_sub(zero, min_val);
+    smt_astt operand = convert_ast(isnormal.value);
+    // |f| >= min_normal: f >= min_normal || f <= -min_normal
+    smt_astt above_min =
+      mk_or(mk_ge(operand, min_val), mk_le(operand, neg_min));
+    // |f| <= max_normal: f <= max_normal && f >= -max_normal
+    smt_astt below_max =
+      mk_and(mk_le(operand, max_val), mk_ge(operand, neg_max));
+    return mk_and(above_min, below_max);
+  }
 
   smt_astt operand = convert_ast(isnormal.value);
   return fp_api->mk_smt_fpbv_is_normal(operand);
@@ -3087,8 +3205,27 @@ smt_astt smt_convt::convert_is_finite(const expr2tc &expr)
   const isfinite2t &isfinite = to_isfinite2t(expr);
 
   // Anything other than floats will always be finite
-  if (!is_floatbv_type(isfinite.value) || int_encoding)
+  if (!is_floatbv_type(isfinite.value))
     return mk_smt_bool(true);
+
+  if (int_encoding)
+  {
+    // In integer/real encoding a float is finite when |f| <= max_normal.
+    const floatbv_type2t &fbv_type = to_floatbv_type(isfinite.value->type);
+    smt_astt max_val = get_max_normal(*this, fbv_type);
+    if (!max_val)
+    {
+      log_warning(
+        "isfinite: unsupported float format (exp={}, frac={}); returning true",
+        fbv_type.exponent,
+        fbv_type.fraction);
+      return mk_smt_bool(true);
+    }
+    smt_astt operand = convert_ast(isfinite.value);
+    smt_astt pos_ok = mk_le(operand, max_val);
+    smt_astt neg_ok = mk_ge(operand, mk_sub(get_zero_real(), max_val));
+    return mk_and(pos_ok, neg_ok);
+  }
 
   smt_astt value = convert_ast(isfinite.value);
 
@@ -3489,8 +3626,14 @@ type2tc make_array_domain_type(const array_type2t &arr)
     return get_uint_type(array_domain_width_or_word_size(arr));
   }
 
-  // This is an array of arrays -- we're going to convert this into a single
-  // array that has an extended domain. Work out that width.
+  // Infinite arrays of arrays (e.g. nested Solidity mappings) are NOT
+  // flattened — each level uses its own domain.  flatten_array_type()
+  // already skips infinite arrays, so the domain must stay single-level.
+  if (arr.size_is_infinite)
+    return get_uint_type(array_domain_width_or_word_size(arr));
+
+  // This is a finite array of arrays -- we're going to convert this into a
+  // single array that has an extended domain. Work out that width.
 
   unsigned int domwidth = array_domain_width_or_word_size(arr);
 
@@ -3633,12 +3776,21 @@ smt_astt smt_convt::convert_array_index(const expr2tc &expr)
   expr2tc src_value = index.source_value;
 
   expr2tc newidx;
-  if (is_index2t(index.source_value))
+  // Source type might not be an array (e.g. vector); to_array_type() throws
+  // std::bad_cast under -DNDEBUG-off builds. Gate the size_is_infinite probe
+  // on is_array_type() before dereferencing.
+  const bool src_is_infinite_array =
+    is_array_type(index.source_value->type) &&
+    to_array_type(index.source_value->type).size_is_infinite;
+  if (is_index2t(index.source_value) && !src_is_infinite_array)
   {
+    // Finite multi-dimensional arrays: flatten via decompose_select_chain.
     newidx = decompose_select_chain(expr, src_value);
   }
   else
   {
+    // Single-level index, or infinite arrays (nested Solidity mappings) —
+    // use direct select without flattening.
     newidx = fix_array_idx(index.index, index.source_value->type);
   }
 
@@ -3668,12 +3820,18 @@ smt_astt smt_convt::convert_array_store(const expr2tc &expr)
   expr2tc newidx;
 
   if (
-    is_array_type(with.type) && is_array_type(to_array_type(with.type).subtype))
+    is_array_type(with.type) &&
+    is_array_type(to_array_type(with.type).subtype) &&
+    !to_array_type(with.type).size_is_infinite)
   {
+    // Finite multi-dimensional arrays: flatten into single array with extended
+    // domain via decompose_store_chain.
     newidx = decompose_store_chain(expr, update_val);
   }
   else
   {
+    // Single-level arrays, or infinite arrays (including nested infinite arrays
+    // used by Solidity nested mappings) — use direct index.
     newidx = fix_array_idx(with.update_field, with.type);
   }
 
@@ -3812,6 +3970,13 @@ type2tc smt_convt::get_flattened_array_subtype(const type2tc &type)
   // Get the subtype of an array, ensuring that any intermediate arrays have
   // been flattened.
 
+  // For infinite arrays of arrays (nested Solidity mappings), do NOT flatten
+  // past the first level — each level uses its own SMT array sort.
+  if (
+    is_array_type(type) && to_array_type(type).size_is_infinite &&
+    is_array_type(to_array_type(type).subtype))
+    return to_array_type(type).subtype;
+
   type2tc type_rec = type;
   while (is_array_type(type_rec) || is_vector_type(type_rec))
   {
@@ -3854,7 +4019,11 @@ expr2tc smt_convt::get(const expr2tc &expr)
     expr2tc src_value = index.source_value;
 
     expr2tc newidx;
-    if (is_index2t(index.source_value))
+    // Same NDEBUG-off safety guard as in convert_array_index() above.
+    const bool src_is_infinite_array =
+      is_array_type(index.source_value->type) &&
+      to_array_type(index.source_value->type).size_is_infinite;
+    if (is_index2t(index.source_value) && !src_is_infinite_array)
     {
       newidx = decompose_select_chain(expr, src_value);
     }
@@ -3902,7 +4071,8 @@ expr2tc smt_convt::get(const expr2tc &expr)
 
     if (
       is_array_type(with.type) &&
-      is_array_type(to_array_type(with.type).subtype))
+      is_array_type(to_array_type(with.type).subtype) &&
+      !to_array_type(with.type).size_is_infinite)
     {
       decompose_store_chain(expr, update_val);
     }
@@ -4487,6 +4657,17 @@ smt_astt smt_convt::convert_array_of_prep(const expr2tc &expr)
   expr2tc base_init;
   unsigned long array_size = 0;
 
+  // Nested infinite arrays (e.g. Solidity nested mappings): do NOT flatten.
+  // Create Array(BV64, Array(BV64, V)) where the inner initializer is itself
+  // an array_of that will be recursively converted.
+  if (arrtype.size_is_infinite && is_array_type(arrtype.subtype))
+  {
+    // Convert the inner array_of initializer directly (recursive)
+    smt_astt inner = convert_ast(arrof.initializer);
+    array_size = array_domain_width_or_word_size(arrtype);
+    return array_api->convert_array_of(inner, array_size);
+  }
+
   // So: we have an array_of, that we have to convert into a bunch of stores.
   // However, it might be a nested array. If that's the case, then we're
   // guaranteed to have another array_of in the initializer which we can flatten
@@ -4994,27 +5175,6 @@ smt_astt smt_convt::mk_bvneg(smt_astt a)
 smt_astt smt_convt::mk_bvnot(smt_astt a)
 {
   (void)a;
-  abort();
-}
-
-smt_astt smt_convt::mk_bvnxor(smt_astt a, smt_astt b)
-{
-  (void)a;
-  (void)b;
-  abort();
-}
-
-smt_astt smt_convt::mk_bvnor(smt_astt a, smt_astt b)
-{
-  (void)a;
-  (void)b;
-  abort();
-}
-
-smt_astt smt_convt::mk_bvnand(smt_astt a, smt_astt b)
-{
-  (void)a;
-  (void)b;
   abort();
 }
 

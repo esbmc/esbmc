@@ -1,0 +1,7 @@
+THOROUGH
+main.cpp
+--branch-coverage --unwind 4 --no-unwinding-assertions
+^Branches : 4
+^Reached : 2
+^Branch Coverage: 50%
+^VERIFICATION FAILED$

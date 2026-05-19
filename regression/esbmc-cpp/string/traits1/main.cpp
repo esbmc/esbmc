@@ -2,6 +2,7 @@
 #include <iostream>
 #include <cassert>
 #include <cstring>
+#include <exception>
 
 // Test case demonstrating char_traits usage in C++
 // Save as: char_traits_test.cpp

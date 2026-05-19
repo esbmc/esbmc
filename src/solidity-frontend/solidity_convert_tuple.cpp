@@ -1,5 +1,12 @@
+/// \file solidity_convert_tuple.cpp
+/// \brief Tuple expression conversion for the Solidity frontend.
+///
+/// Converts Solidity tuple expressions and multi-return-value function calls
+/// from the solc JSON AST. Handles tuple declarations, tuple assignments
+/// (destructuring), and the creation of temporary variables for multi-valued
+/// returns.
+
 #include <solidity-frontend/solidity_convert.h>
-#include <solidity-frontend/solidity_template.h>
 #include <solidity-frontend/typecast.h>
 #include <util/arith_tools.h>
 #include <util/bitvector.h>
@@ -9,11 +16,7 @@
 #include <util/mp_arith.h>
 #include <util/std_expr.h>
 #include <util/message.h>
-#include <regex>
-#include <optional>
-
 #include <fstream>
-#include <iostream>
 
 bool solidity_convertert::get_tuple_definition(const nlohmann::json &ast_node)
 {
@@ -115,7 +118,7 @@ bool solidity_convertert::get_tuple_instance(
 
   // get type
   typet t = context.find_symbol(id)->type;
-  t.set("#sol_type", "TUPLE_INSTANCE");
+  set_sol_type(t, SolidityGrammar::SolType::TUPLE_INSTANCE);
   assert(t.id() == typet::id_struct);
 
   // get instance name,id
@@ -220,23 +223,57 @@ bool solidity_convertert::get_tuple_function_ref(
   const nlohmann::json &ast_node,
   exprt &new_expr)
 {
-  assert(ast_node.contains("nodeType") && ast_node["nodeType"] == "Identifier");
+  assert(ast_node.contains("nodeType"));
 
+  // Resolve the function declaration ID depending on the node type:
+  // - Identifier: direct function reference (e.g., func())
+  // - MemberAccess: cross-contract call (e.g., p.getPair())
+  int ref_decl_id;
+  if (ast_node["nodeType"] == "Identifier")
+  {
+    ref_decl_id = ast_node["referencedDeclaration"].get<int>();
+  }
+  else if (ast_node["nodeType"] == "MemberAccess")
+  {
+    ref_decl_id = ast_node["referencedDeclaration"].get<int>();
+  }
+  else
+  {
+    log_error(
+      "get_tuple_function_ref: unexpected nodeType '{}'",
+      ast_node["nodeType"].get<std::string>());
+    return true;
+  }
+
+  // The tuple instance was created when the callee function was processed.
+  // Look it up using the callee's contract name as scope.
+  // First try the current contract, then search all contracts.
   std::string c_name;
   get_current_contract_name(ast_node, c_name);
-  if (c_name.empty())
-    return true;
 
-  std::string name =
-    "tuple_instance$" +
-    std::to_string(ast_node["referencedDeclaration"].get<int>());
+  std::string name = "tuple_instance$" + std::to_string(ref_decl_id);
   std::string id = "sol:@C@" + c_name + "@" + name;
 
-  if (context.find_symbol(id) == nullptr)
-    return true;
+  if (context.find_symbol(id) != nullptr)
+  {
+    new_expr = symbol_expr(*context.find_symbol(id));
+    return false;
+  }
 
-  new_expr = symbol_expr(*context.find_symbol(id));
-  return false;
+  // For cross-contract calls, the tuple instance is in the callee's contract scope.
+  // Search all contracts for the tuple instance.
+  for (const auto &contract_name : contractNamesList)
+  {
+    std::string alt_id = "sol:@C@" + contract_name + "@" + name;
+    if (context.find_symbol(alt_id) != nullptr)
+    {
+      new_expr = symbol_expr(*context.find_symbol(alt_id));
+      return false;
+    }
+  }
+
+  log_error("cannot find tuple instance for declaration id {}", ref_decl_id);
+  return true;
 }
 
 // Knowing that there is a component x in the struct_tuple_instance A, we construct A.x
@@ -270,16 +307,16 @@ void solidity_convertert::get_tuple_function_call(const exprt &op)
 void solidity_convertert::get_llc_ret_tuple(symbolt &s)
 {
   log_debug("solidity", "\tconvert return value to tuple");
-  std::string _id = "tag-sol_llc_ret";
+  std::string _id = lib_prefix + "sol_llc_ret";
   if (context.find_symbol(_id) == nullptr)
   {
-    log_error("cannot find library symbol tag-sol_llc_ret");
+    log_error("cannot find library symbol {}", _id);
     abort();
   }
   const symbolt &struct_sym = *context.find_symbol(_id);
 
   typet sym_t = struct_sym.type;
-  sym_t.set("#sol_type", "TUPLE_INSTANCE");
+  set_sol_type(sym_t, SolidityGrammar::SolType::TUPLE_INSTANCE);
 
   std::string name, id;
   name = "tuple_instance$" + std::to_string(aux_counter);
@@ -295,7 +332,15 @@ void solidity_convertert::get_llc_ret_tuple(symbolt &s)
   // value
   typet t = struct_sym.type;
   exprt inits = gen_zero(t);
-  inits.op0() = nondet_bool_expr;
+  // Cast nondet_bool to match the struct field type (C frontend compiles
+  // _Bool/bool as unsigned int in struct layout due to padding)
+  exprt bool_val = nondet_bool_expr;
+  if (inits.op0().type() != nondet_bool_expr.type())
+  {
+    typecast_exprt cast(nondet_bool_expr, inits.op0().type());
+    bool_val = cast;
+  }
+  inits.op0() = bool_val;
   inits.op1() = nondet_uint_expr;
   added_sym.value = inits;
   s = added_sym;
@@ -338,8 +383,11 @@ void solidity_convertert::get_string_assignment(
 }
 
 /*
-  lhs: code_blockt
-  rhs: tuple_return / tuple_instancce
+  lhs: code_blockt — each operand is a target expr or nil (omitted slot)
+  rhs: tuple_return / tuple_instance — a struct symbol with mem0, mem1, ... components
+
+  Uses explicit position-based matching: LHS position i maps to RHS component "mem{i}".
+  This is robust regardless of which positions are omitted on either side.
 */
 bool solidity_convertert::construct_tuple_assigments(
   const nlohmann::json &expr,
@@ -348,63 +396,224 @@ bool solidity_convertert::construct_tuple_assigments(
 {
   log_debug("solidity", "Handling tuple assignment.");
 
-  typet lt = lhs.type();
   typet rt = rhs.type();
-  std::string rt_sol = rt.get("#sol_type").as_string();
+  SolidityGrammar::SolType rt_sol = get_sol_type(rt);
 
-  assert(lt.is_code() && to_code(lhs).statement() == "block");
+  assert(lhs.type().is_code() && to_code(lhs).statement() == "block");
   exprt new_rhs = rhs;
-  if (rt_sol == "TUPLE_RETURNS")
+  if (rt_sol == SolidityGrammar::SolType::TUPLE_RETURNS)
   {
-    // e.g. (x,y) = func(); (x,y) = func(func2()); (x, (x,y)) = (x, func());
-    // ==>
-    //    func(); // this initializes the tuple instance
-    //    x = tuple.mem0;
-    //    y = tuple.mem1;
-    if (get_tuple_function_ref(expr["rightHandSide"]["expression"], new_rhs))
-      return true;
+    // (x,y) = func();
+    // => func() populates tuple instance; then extract members
+    // The function call JSON is in "rightHandSide" (Assignment) or "initialValue" (VarDeclStmt)
+    const nlohmann::json *rhs_call_json = nullptr;
+    if (expr.contains("rightHandSide"))
+      rhs_call_json = &expr["rightHandSide"];
+    else if (expr.contains("initialValue"))
+      rhs_call_json = &expr["initialValue"];
 
-    // add function call
+    if (rhs_call_json && rhs_call_json->contains("expression"))
+    {
+      if (get_tuple_function_ref((*rhs_call_json)["expression"], new_rhs))
+        return true;
+    }
+    else
+    {
+      log_error("tuple assignment: cannot locate function call in RHS");
+      return true;
+    }
+
     get_tuple_function_call(rhs);
   }
 
-  // e.g. (x,y) = (1,2); (x,y) = (func(),x);
-  // =>
-  //  t.mem0 = 1; #1
-  //  t.mem1 = 2; #2
-  //  x = t.mem0; #3
-  //  y = t.mem1; #4
-  // where #1 and #2 are already in the expr_backBlockDecl
+  if (!new_rhs.type().is_struct())
+  {
+    log_error("expecting struct type for tuple RHS, got {}", new_rhs);
+    return true;
+  }
 
-  // do #3 #4
+  // Build component lookup for the RHS struct.
+  // For generated tuple structs, components are named "mem0", "mem1", etc.
+  // For library structs (sol_llc_ret), components have their own names (x, y, ...).
+  // We build both a name map and a positional list of non-padding components.
+  const struct_typet &rhs_struct = to_struct_type(new_rhs.type());
+  std::map<std::string, exprt> rhs_by_name;
+  std::vector<exprt> rhs_by_pos; // non-padding components in order
+  for (const auto &comp : rhs_struct.components())
+  {
+    std::string cname = comp.get_name().as_string();
+    rhs_by_name[cname] = comp;
+    // Skip padding components (anon_pad$N)
+    if (cname.find("anon_pad") == std::string::npos)
+      rhs_by_pos.push_back(comp);
+  }
+
+  // Match LHS targets to RHS components by position
   std::set<exprt> assigned_symbol;
   for (size_t i = 0; i < lhs.operands().size(); i++)
   {
-    // e.g. (, x) = (1, 2)
-    //      null <=> tuple2.mem0
-    //         x <=> tuple2.mem1
     exprt lop = lhs.operands().at(i);
     if (lop.is_nil() || assigned_symbol.count(lop))
-      // e.g. (,y) = (1,2)
-      // or   (x,x) = (1, 2); assert(x==1) hold
-      // we skip the variable that has been assigned
       continue;
-    assigned_symbol.insert(lop);
 
-    exprt rop;
-    if (!new_rhs.type().is_struct())
+    // Try positional name "mem{i}" first (generated tuple structs),
+    // then fall back to positional index (library structs like sol_llc_ret).
+    std::string mem_name = "mem" + std::to_string(i);
+    exprt comp;
+    auto it = rhs_by_name.find(mem_name);
+    if (it != rhs_by_name.end())
+      comp = it->second;
+    else if (i < rhs_by_pos.size())
+      comp = rhs_by_pos[i];
+    else
     {
-      log_error("expecting struct type, got {}", new_rhs);
+      log_error(
+        "tuple assignment: cannot find RHS component for position {}", i);
       return true;
     }
-    if (get_tuple_member_call(
-          new_rhs.identifier(),
-          to_struct_type(new_rhs.type()).components().at(i),
-          rop))
+
+    exprt rop;
+    if (get_tuple_member_call(new_rhs.identifier(), comp, rop))
       return true;
 
+    // Nested tuple: LHS operand is a code_blockt (inner tuple),
+    // RHS component is a tuple struct — recursively unpack.
+    if (
+      lop.type().is_code() && lop.is_code() &&
+      to_code(lop).statement() == "block" &&
+      get_sol_type(rop.type()) == SolidityGrammar::SolType::TUPLE_INSTANCE)
+    {
+      // rop is a tuple instance symbol — recursively assign inner members
+      if (construct_tuple_assigments(expr, lop, rop))
+        return true;
+      continue;
+    }
+
+    assigned_symbol.insert(lop);
     get_tuple_assignment(expr, lop, rop);
   }
+  return false;
+}
+
+bool solidity_convertert::flatten_nested_tuple_assignment(
+  const nlohmann::json &expr,
+  const nlohmann::json &lhs_json,
+  const nlohmann::json &rhs_json)
+{
+  // Flatten nested tuple assignments by walking LHS and RHS in parallel.
+  // For each leaf LHS target, resolve the corresponding RHS value and assign.
+  //
+  // Example: ((a, b), c) = (getPair(), 30)
+  //   LHS components: [TupleExpression(a,b), Identifier(c)]
+  //   RHS components: [FunctionCall(getPair), Literal(30)]
+  //   Result: call getPair() → a = tuple.mem0, b = tuple.mem1, c = 30
+
+  assert(lhs_json.value("nodeType", "") == "TupleExpression");
+  assert(lhs_json.contains("components"));
+
+  const auto &lhs_comps = lhs_json["components"];
+  const auto &rhs_comps = rhs_json["components"];
+
+  for (size_t i = 0; i < lhs_comps.size(); i++)
+  {
+    if (lhs_comps[i].is_null())
+      continue; // omitted slot
+
+    if (i >= rhs_comps.size())
+    {
+      log_error("nested tuple: LHS has more components than RHS");
+      return true;
+    }
+
+    if (lhs_comps[i].value("nodeType", "") == "TupleExpression")
+    {
+      // Nested LHS: ((a, b), ...) — RHS must be a tuple-returning function call
+      const auto &rhs_val = rhs_comps[i];
+      typet rhs_t;
+      if (get_type_description(rhs_val["typeDescriptions"], rhs_t))
+        return true;
+
+      if (get_sol_type(rhs_t) == SolidityGrammar::SolType::TUPLE_RETURNS)
+      {
+        // RHS is a function call returning tuple.
+        // 1. Call the function (populates its tuple instance)
+        exprt func_call;
+        if (get_expr(rhs_val, rhs_val["typeDescriptions"], func_call))
+          return true;
+        get_tuple_function_call(func_call);
+
+        // 2. Find the tuple instance for this function
+        assert(rhs_val.contains("expression"));
+        exprt tuple_inst;
+        if (get_tuple_function_ref(rhs_val["expression"], tuple_inst))
+          return true;
+
+        // 3. Assign inner LHS targets from the tuple instance members
+        const struct_typet &inner_struct = to_struct_type(tuple_inst.type());
+        const auto &inner_lhs_comps = lhs_comps[i]["components"];
+        size_t mem_idx = 0;
+        for (size_t j = 0; j < inner_lhs_comps.size(); j++)
+        {
+          if (inner_lhs_comps[j].is_null())
+          {
+            mem_idx++;
+            continue;
+          }
+
+          // Find component by name "mem{j}"
+          std::string mem_name = "mem" + std::to_string(j);
+          bool found = false;
+          for (const auto &comp : inner_struct.components())
+          {
+            if (comp.get_name().as_string() == mem_name)
+            {
+              exprt target;
+              if (get_expr(
+                    inner_lhs_comps[j],
+                    inner_lhs_comps[j]["typeDescriptions"],
+                    target))
+                return true;
+
+              exprt member;
+              if (get_tuple_member_call(tuple_inst.identifier(), comp, member))
+                return true;
+
+              get_tuple_assignment(expr, target, member);
+              found = true;
+              break;
+            }
+          }
+          if (!found)
+          {
+            log_error(
+              "nested tuple: cannot find inner component '{}'", mem_name);
+            return true;
+          }
+          mem_idx++;
+        }
+      }
+      else
+      {
+        // Nested LHS but RHS is a tuple literal — recurse
+        if (flatten_nested_tuple_assignment(expr, lhs_comps[i], rhs_comps[i]))
+          return true;
+      }
+    }
+    else
+    {
+      // Leaf LHS target — direct assignment
+      exprt target;
+      if (get_expr(lhs_comps[i], lhs_comps[i]["typeDescriptions"], target))
+        return true;
+
+      exprt value;
+      if (get_expr(rhs_comps[i], rhs_comps[i]["typeDescriptions"], value))
+        return true;
+
+      get_tuple_assignment(expr, target, value);
+    }
+  }
+
   return false;
 }
 
@@ -413,8 +622,19 @@ void solidity_convertert::get_tuple_assignment(
   const exprt &lop,
   exprt rop)
 {
+  // When the LHS is `bytes memory` but the RHS is not bytes (e.g. the `y`
+  // component of sol_llc_ret, which is a plain uint placeholder), substitute a
+  // fresh nondet BytesDynamic so that `data.length` has the correct type and a
+  // fully unconstrained symbolic length value.
+  // We use get_nondet_expr with lop.type() to avoid any sort mismatch that
+  // would arise from casting the uint placeholder to BytesDynamic.
+  if (is_bytes_type(lop.type()) && !is_bytes_type(rop.type()))
+  {
+    get_nondet_expr(lop.type(), rop);
+  }
+
   exprt assign_expr;
-  if (lop.type().get("#sol_type") == "STRING")
+  if (get_sol_type(lop.type()) == SolidityGrammar::SolType::STRING)
     get_string_assignment(lop, rop, assign_expr);
   else
   {

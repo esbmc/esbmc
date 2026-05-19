@@ -1,7 +1,7 @@
 #include <goto-programs/mark_decl_as_non_det.h>
 #include <util/prefix.h>
 bool mark_decl_as_non_det::runOnFunction(
-  std::pair<const dstring, goto_functiont> &F)
+  std::pair<const irep_idt, goto_functiont> &F)
 {
   if (!F.second.body_available)
     return false; // Didn't changed anything

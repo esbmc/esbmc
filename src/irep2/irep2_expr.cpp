@@ -1,132 +1,40 @@
 #include <memory>
-#include <boost/functional/hash.hpp>
 #include <util/fixedbv.h>
 #include <util/i2string.h>
 #include <util/ieee_float.h>
 #include <irep2/irep2_type.h>
 #include <irep2/irep2_expr.h>
 #include <irep2/irep2_utils.h>
+#include <util/message/format.h>
 #include <util/migrate.h>
 #include <util/std_types.h>
 
+// Pretty names indexed by expr2t::expr_ids. Driven by expr_kinds.inc;
+// adding a new expression kind there automatically populates this
+// table and the static_assert below guards against the array drifting
+// out of sync with the enum (which is also generated from the .inc).
 static const char *expr_names[] = {
-  "constant_int",
-  "constant_fixedbv",
-  "constant_floatbv",
-  "constant_bool",
-  "constant_string",
-  "constant_struct",
-  "constant_union",
-  "constant_array",
-  "constant_vector",
-  "constant_array_of",
-  "symbol",
-  "typecast",
-  "bitcast",
-  "nearbyint",
-  "if",
-  "equality",
-  "notequal",
-  "lessthan",
-  "greaterthan",
-  "lessthanequal",
-  "greaterthanequal",
-  "not",
-  "and",
-  "or",
-  "xor",
-  "implies",
-  "bitand",
-  "bitor",
-  "bitxor",
-  "bitnand",
-  "bitnor",
-  "bitnxor",
-  "bitnot",
-  "lshr",
-  "neg",
-  "abs",
-  "add",
-  "sub",
-  "mul",
-  "div",
-  "ieee_add",
-  "ieee_sub",
-  "ieee_mul",
-  "ieee_div",
-  "ieee_fma",
-  "ieee_sqrt",
-  "popcount",
-  "bswap",
-  "modulus",
-  "shl",
-  "ashr",
-  "dynamic_object",
-  "same_object",
-  "pointer_offset",
-  "pointer_object",
-  "pointer_capability",
-  "address_of",
-  "byte_extract",
-  "byte_update",
-  "with",
-  "member",
-  "member_ref",
-  "ptr_mem",
-  "index",
-  "isnan",
-  "overflow",
-  "overflow_cast",
-  "overflow_neg",
-  "unknown",
-  "invalid",
-  "NULL-object",
-  "dereference",
-  "valid_object",
-  "races_check",
-  "deallocated_obj",
-  "dynamic_size",
-  "sideeffect",
-  "code_block",
-  "code_assign",
-  "code_init",
-  "code_decl",
-  "code_dead",
-  "code_printf",
-  "code_expression",
-  "code_return",
-  "code_skip",
-  "code_free",
-  "code_goto",
-  "object_descriptor",
-  "code_function_call",
-  "code_comma_id",
-  "invalid_pointer",
-  "code_asm",
-  "cpp_del_array",
-  "cpp_delete",
-  "cpp_catch",
-  "cpp_throw",
-  "cpp_throw_decl",
-  "cpp_throw_decl_end",
-  "isinf",
-  "isnormal",
-  "isfinite",
-  "signbit",
-  "concat",
-  "extract",
-  "capability_base",
-  "capability_top",
-  "forall",
-  "exists",
-  "isinstance",
-  "hasattr",
-  "isnone"};
-// If this fires, you've added/removed an expr id, and need to update the list
-// above (which is ordered according to the enum list)
+#define IREP2_EXPR(kind, pretty) pretty,
+#include <irep2/expr_kinds.inc>
+#undef IREP2_EXPR
+};
 static_assert(
   sizeof(expr_names) == (expr2t::end_expr_id * sizeof(char *)),
-  "Missing expr name");
+  "expr_names[] disagrees with expr2t::expr_ids — somebody edited "
+  "the manifest without going through expr_kinds.inc");
+
+void irep2_bad_expr_cast(unsigned actual, unsigned expected, const char *target)
+{
+  const char *actual_name =
+    (actual < expr2t::end_expr_id) ? expr_names[actual] : "<out-of-range>";
+  const char *expected_name =
+    (expected < expr2t::end_expr_id) ? expr_names[expected] : "<out-of-range>";
+  throw irep2_cast_error(fmt::format(
+    "irep2: to_{}2t() called on expr whose expr_id is {} (target {})",
+    expected_name,
+    actual_name,
+    target));
+}
 
 /*************************** Base expr2t definitions **************************/
 
@@ -135,10 +43,14 @@ expr2t::expr2t(const type2tc &_type, expr_ids id)
 {
 }
 
-expr2t::expr2t(const expr2t &ref) : expr_id(ref.expr_id), type(ref.type)
+expr2t::expr2t(const expr2t &ref)
+  : irep2t(), expr_id(ref.expr_id), type(ref.type)
 {
-  std::lock_guard lock(ref.crc_mutex);
-  crc_val = ref.crc_val;
+  // Snapshot the cached CRC. Relaxed is enough: callers must already
+  // honour the single-writer contract documented in irep2.h, and the
+  // copy is itself a new value not yet visible to anyone else.
+  crc_val.store(
+    ref.crc_val.load(std::memory_order_relaxed), std::memory_order_relaxed);
 }
 
 bool expr2t::operator==(const expr2t &ref) const
@@ -202,9 +114,13 @@ size_t expr2t::crc() const
 
 size_t expr2t::do_crc() const
 {
-  boost::hash_combine(this->crc_val, type->do_crc());
-  boost::hash_combine(this->crc_val, (uint8_t)expr_id);
-  return this->crc_val;
+  // The atomic crc_val is the cache cell; hash_combine wants a plain
+  // size_t reference. Work on a local, then publish.
+  size_t v = this->crc_val.load(std::memory_order_relaxed);
+  esbmct::hash_combine(v, type->do_crc());
+  esbmct::hash_combine(v, (uint8_t)expr_id);
+  this->crc_val.store(v, std::memory_order_release);
+  return v;
 }
 
 void expr2t::hash(crypto_hash &hash) const
@@ -267,30 +183,27 @@ bool constant_bool2t::is_false() const
   return !value;
 }
 
-std::string symbol_data::get_symbol_name() const
+std::string symbol2t::get_symbol_name() const
 {
   switch (rlevel)
   {
-  case level0:
+  case symbol_renaming_level::level0:
     return thename.as_string();
-  case level1:
+  case symbol_renaming_level::level1:
     return thename.as_string() + "?" + i2string(level1_num) + "!" +
            i2string(thread_num);
-  case level2:
+  case symbol_renaming_level::level2:
     return thename.as_string() + "?" + i2string(level1_num) + "!" +
            i2string(thread_num) + "&" + i2string(node_num) + "#" +
            i2string(level2_num);
-  case level1_global:
-    // Just return global name,
+  case symbol_renaming_level::level1_global:
     return thename.as_string();
-  case level2_global:
-    // Global name with l2 details
+  case symbol_renaming_level::level2_global:
     return thename.as_string() + "&" + i2string(node_num) + "#" +
            i2string(level2_num);
-  default:
-    assert(0 && "Unrecognized renaming level enum");
-    abort();
   }
+  assert(0 && "Unrecognized renaming level enum");
+  abort();
 }
 
 namespace
@@ -368,6 +281,8 @@ static void assert_type_compat_for_with(const type2tc &a, const type2tc &b)
     const array_type2t &bt = to_array_type(b);
     assert_type_compat_for_with(at.subtype, bt.subtype);
     assert(at.size_is_infinite == bt.size_is_infinite);
+    if (at.size_is_infinite)
+      return;
     if (is_symbol2t(at.array_size) || is_symbol2t(bt.array_size))
       return;
     assert(at.array_size == bt.array_size);
@@ -415,9 +330,9 @@ void with2t::assert_consistency() const
       dynamic_cast<const struct_union_data *>(source_value->type.get());
     assert(d);
     assert(update_field->expr_id == constant_string_id);
-    unsigned c =
-      d->get_component_number(to_constant_string2t(update_field).value);
-    assert_type_compat_for_with(update_value->type, d->members[c]);
+    auto c = d->get_component_number(to_constant_string2t(update_field).value);
+    assert(c.has_value());
+    assert_type_compat_for_with(update_value->type, d->members[*c]);
   }
   assert(type == source_value->type);
 }
@@ -437,12 +352,29 @@ const expr2tc &object_descriptor2t::get_root_object() const
   } while (1);
 }
 
-arith_2ops::arith_2ops(
-  const type2tc &t,
-  arith_ops::expr_ids id,
-  const expr2tc &v1,
-  const expr2tc &v2)
-  : arith_ops(t, id), side_1(v1), side_2(v2)
+printf_kindt printf_kind_from_name(const irep_idt &name)
+{
+  if (name == "printf")
+    return printf_kindt::PRINTF;
+  if (name == "fprintf")
+    return printf_kindt::FPRINTF;
+  if (name == "dprintf")
+    return printf_kindt::DPRINTF;
+  if (name == "sprintf")
+    return printf_kindt::SPRINTF;
+  if (name == "vfprintf")
+    return printf_kindt::VFPRINTF;
+  if (name == "snprintf")
+    return printf_kindt::SNPRINTF;
+  assert(0 && "Unrecognized printf-family base_name");
+  abort();
+}
+
+void assert_arith_2ops_consistency(
+  [[maybe_unused]] const type2tc &t,
+  [[maybe_unused]] expr2t::expr_ids id,
+  [[maybe_unused]] const expr2tc &v1,
+  [[maybe_unused]] const expr2tc &v2)
 {
 #ifndef NDEBUG /* only check consistency in non-Release builds */
   bool p1 = is_pointer_type(v1);
