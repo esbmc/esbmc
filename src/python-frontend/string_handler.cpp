@@ -1377,6 +1377,17 @@ exprt string_handler::convert_to_string(const exprt &expr)
         if (t.is_floatbv() && bv_width(t) == 64 && float_bits.length() == 64)
         {
           str_value = float_to_string(float_bits, 64, 6);
+          // Match Python's str(float): drop trailing fractional zeros, keep
+          // at least one digit after the dot ("5.0" rather than "5.").
+          auto dot = str_value.find('.');
+          if (dot != std::string::npos)
+          {
+            size_t last_nonzero = str_value.find_last_not_of('0');
+            if (last_nonzero == dot)
+              str_value.resize(dot + 2);
+            else
+              str_value.resize(last_nonzero + 1);
+          }
         }
       }
 
@@ -1414,8 +1425,23 @@ exprt string_handler::convert_to_string(const exprt &expr)
     return expr;
   }
 
-  // For non-constant expressions, we'd need runtime conversion
-  // For now, create a placeholder string
+  // Non-constant scalars: dispatch to the matching __python_*_to_str
+  // operational model in src/c2goto/library/python/string.c. The model
+  // returns a char* whose contents depend on the runtime value of `expr`,
+  // so symex builds an accurate string for every reachable case.
+  if (t.is_bool())
+    return converter_.get_string_builder().build_runtime_str_conversion_call(
+      "__python_bool_to_str", bool_type(), expr);
+
+  if (type_utils::is_integer_type(t))
+    return converter_.get_string_builder().build_runtime_str_conversion_call(
+      "__python_int_to_str", long_long_int_type(), expr);
+
+  if (t.is_floatbv())
+    return converter_.get_string_builder().build_runtime_str_conversion_call(
+      "__python_float_to_str", double_type(), expr);
+
+  // Anything else (struct, array of non-char, etc.) is currently unsupported.
   std::string placeholder = "<expr>";
   typet string_type =
     type_handler_.build_array(char_type(), placeholder.size() + 1);

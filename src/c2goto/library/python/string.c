@@ -1176,3 +1176,190 @@ __ESBMC_HIDE:;
   buffer[dst_idx] = '\0';
   return buffer;
 }
+
+// Python int -> str. Matches str(int) for any 64-bit signed integer:
+// decimal digits, leading '-' for negatives, NUL-terminated.
+// Buffer fits the widest case: "-9223372036854775808" + NUL = 21 bytes.
+char *__python_int_to_str(long long v)
+{
+__ESBMC_HIDE:;
+  char *buffer = __ESBMC_alloca(21);
+
+  if (v == 0)
+  {
+    buffer[0] = '0';
+    buffer[1] = '\0';
+    return buffer;
+  }
+
+  // Use unsigned magnitude so INT64_MIN is representable without overflow.
+  int negative = v < 0;
+  unsigned long long mag = negative ? -(unsigned long long)v : (unsigned long long)v;
+
+  // Write digits right-to-left into a 20-byte scratch (max 20 decimal digits).
+  char digits[20];
+  size_t n = 0;
+  while (mag > 0)
+  {
+    digits[n++] = (char)('0' + (mag % 10));
+    mag /= 10;
+  }
+
+  size_t pos = 0;
+  if (negative)
+    buffer[pos++] = '-';
+
+  while (n > 0)
+    buffer[pos++] = digits[--n];
+
+  buffer[pos] = '\0';
+  return buffer;
+}
+
+// Python bool -> str. Returns "True" / "False" with the usual capitalisation.
+char *__python_bool_to_str(_Bool b)
+{
+__ESBMC_HIDE:;
+  char *buffer = __ESBMC_alloca(6);
+  if (b)
+  {
+    buffer[0] = 'T';
+    buffer[1] = 'r';
+    buffer[2] = 'u';
+    buffer[3] = 'e';
+    buffer[4] = '\0';
+  }
+  else
+  {
+    buffer[0] = 'F';
+    buffer[1] = 'a';
+    buffer[2] = 'l';
+    buffer[3] = 's';
+    buffer[4] = 'e';
+    buffer[5] = '\0';
+  }
+  return buffer;
+}
+
+// Python float -> str. Approximates CPython's str(float) for typical cases:
+// integral value -> "X.0", finite non-integral -> shortest "fixed" form with
+// trailing zeros stripped, special values -> "nan"/"inf"/"-inf".
+// The fixed-precision printout used here matches the existing
+// handle_float_to_str() compile-time path (std::to_string + trailing zeros
+// stripped).
+char *__python_float_to_str(double v)
+{
+__ESBMC_HIDE:;
+  char *buffer = __ESBMC_alloca(64);
+
+  if (v != v)
+  {
+    buffer[0] = 'n';
+    buffer[1] = 'a';
+    buffer[2] = 'n';
+    buffer[3] = '\0';
+    return buffer;
+  }
+
+  size_t pos = 0;
+  if (v < 0.0)
+  {
+    buffer[pos++] = '-';
+    v = -v;
+  }
+
+  // Infinity check: any value larger than the largest representable double
+  // after negation is infinite.
+  if (v > 1.7976931348623157e+308)
+  {
+    buffer[pos++] = 'i';
+    buffer[pos++] = 'n';
+    buffer[pos++] = 'f';
+    buffer[pos] = '\0';
+    return buffer;
+  }
+
+  // Values >= ULLONG_MAX (~1.8e19) cannot be safely cast to unsigned long long
+  // (out-of-range float-to-integer conversion is undefined behaviour in C).
+  // Emit a fixed-point approximation using pure floating-point arithmetic so
+  // the cast below always has a value in [0, ULLONG_MAX).
+  // 1.8446744073709551616e19 is the next double above ULLONG_MAX.
+  if (v >= 1.8446744073709552e19)
+  {
+    // Print the integer part digit-by-digit via powers of 10 encoded as double.
+    // We emit at most 20 significant digits then append ".0".
+    // Use a two-pass approach: determine the order of magnitude, then extract
+    // digits top-down using only double arithmetic.
+    double scale = 1.0;
+    // Find the highest power of 10 <= v (at most 10^308).
+    double tmp = v;
+    while (tmp >= 10.0)
+    {
+      tmp /= 10.0;
+      scale *= 10.0;
+    }
+    // tmp is now in [1,10); emit digits
+    size_t digit_count = 0;
+    while (scale >= 1.0 && digit_count < 20)
+    {
+      int d = (int)tmp;
+      if (d < 0)
+        d = 0;
+      if (d > 9)
+        d = 9;
+      buffer[pos++] = (char)('0' + d);
+      tmp = (tmp - (double)d) * 10.0;
+      scale /= 10.0;
+      digit_count++;
+    }
+    // Always append ".0" to match the "X.0" style for integral values.
+    buffer[pos++] = '.';
+    buffer[pos++] = '0';
+    buffer[pos] = '\0';
+    return buffer;
+  }
+
+  // Integer part: split off the whole-number portion. Cast is safe because
+  // v has been bounded above to be < ULLONG_MAX.
+  unsigned long long ip = (unsigned long long)v;
+  double frac = v - (double)ip;
+
+  // Write integer digits right-to-left into a 20-byte scratch.
+  char digits[20];
+  size_t n = 0;
+  if (ip == 0)
+    digits[n++] = '0';
+  while (ip > 0)
+  {
+    digits[n++] = (char)('0' + (ip % 10));
+    ip /= 10;
+  }
+  while (n > 0)
+    buffer[pos++] = digits[--n];
+
+  buffer[pos++] = '.';
+
+  // Fractional part: emit up to 6 digits (matches std::to_string default).
+  size_t frac_start = pos;
+  size_t i = 0;
+  while (i < 6)
+  {
+    frac *= 10.0;
+    int digit = (int)frac;
+    if (digit < 0)
+      digit = 0;
+    if (digit > 9)
+      digit = 9;
+    buffer[pos++] = (char)('0' + digit);
+    frac -= (double)digit;
+    i++;
+  }
+
+  // Strip trailing zeros from the fractional digits, but keep at least one
+  // digit so the result reads like "X.0" rather than "X.".
+  while (pos > frac_start + 1 && buffer[pos - 1] == '0')
+    pos--;
+
+  buffer[pos] = '\0';
+  return buffer;
+}
