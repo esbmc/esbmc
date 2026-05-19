@@ -1627,7 +1627,13 @@ int esbmc_parseoptionst::do_bmc_strategy(
       {
         tvt is_res =
           is_inductive_step_violated(options, goto_functions, k_step);
-        if (is_res.is_false())
+        // Symex may have set disable-inductive-step mid-run (function
+        // pointers, recursion, concurrency). The IS UNSAT result is
+        // then a vacuous "0 VCCs to falsify" and not a real
+        // non-termination witness. Treat it as inconclusive.
+        if (
+          is_res.is_false() &&
+          !options.get_bool_option("disable-inductive-step"))
         {
           log_result(
             "\nInductive step shows a non-terminating execution "
