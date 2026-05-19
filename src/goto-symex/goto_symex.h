@@ -192,7 +192,7 @@ protected:
    *  example (ideally they should be intrinsics...), but also printf and
    *  variable declarations are handled here.
    */
-  void symex_other(const expr2tc code);
+  void symex_other(const expr2tc &code);
 
   /**
    *  Interpret an DECL instruction.
@@ -202,14 +202,14 @@ protected:
    *  variables (which is what entering a function and declaring variables
    *  does).
    */
-  void symex_decl(const expr2tc code);
+  void symex_decl(const expr2tc &code);
 
   /**
    *  Interpret an DEAD instruction.
    *  It calls free on alloca'd symbols and erase the symbols from the
    *  propagation map.
    */
-  void symex_dead(const expr2tc code);
+  void symex_dead(const expr2tc &code);
 
   /**
    *  Interpret an ASSUME instruction.

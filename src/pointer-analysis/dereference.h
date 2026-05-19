@@ -449,7 +449,7 @@ private:
   expr2tc stitch_together_from_byte_array(
     const type2tc &type,
     const expr2tc &byte_array,
-    expr2tc offset_bits);
+    const expr2tc &offset_bits);
   void dereference_failure(
     const std::string &error_class,
     const std::string &error_name,
@@ -476,7 +476,7 @@ private:
   void
   check_alignment(BigInt minwidth, const expr2tc &offset, const guardt &guard);
   unsigned int static compute_num_bytes_to_extract(
-    const expr2tc offset,
+    const expr2tc &offset,
     unsigned long num_bits);
   static expr2tc extract_bits_from_byte_array(
     const expr2tc &value,

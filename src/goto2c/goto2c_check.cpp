@@ -233,7 +233,7 @@ void check_if_sideeffect_or_assign_expr(expr2tc expr [[maybe_unused]])
 // This method iterates recursively through subexpressions
 // and checks whether any of them is a "sideeffect"
 // or "assign" expression
-void goto2ct::check_guard(expr2tc expr)
+void goto2ct::check_guard(const expr2tc &expr)
 {
   check_if_sideeffect_or_assign_expr(expr);
   for (size_t i = 0; i < expr->get_num_sub_exprs(); i++)

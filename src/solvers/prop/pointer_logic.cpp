@@ -95,11 +95,9 @@ expr2tc pointer_logict::object_rec(
   }
   if (is_structure_type(src))
   {
-    const struct_union_data &data_ref =
-      dynamic_cast<const struct_union_data &>(*src->type);
-    const std::vector<type2tc> &members = data_ref.get_structure_members();
+    const std::vector<type2tc> &members = struct_union_members(src->type);
     const std::vector<irep_idt> &member_names =
-      data_ref.get_structure_member_names();
+      struct_union_member_names(src->type);
 
     assert(offset >= 0);
 

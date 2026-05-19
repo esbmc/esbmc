@@ -329,10 +329,7 @@ void goto_symext::symex_assign(
   /* TODO: either we support empty classes/structs/unions, or we don't. */
   if (is_structure_type(code.target->type))
   {
-    const struct_union_data &t2 =
-      static_cast<const struct_union_data &>(*code.target->type);
-
-    if (t2.members.empty())
+    if (struct_union_members(code.target->type).empty())
       return;
   }
 
@@ -577,8 +574,8 @@ void goto_symext::symex_assign_typecast(
       assert(to_struct_type(migrate_type_back(lhs->type))
                .is_prefix_of(to_struct_type(migrate_type_back(from->type))));
 
-      const struct_union_data &lhs_data = to_struct_type(lhs->type);
-      const struct_union_data &from_data = to_struct_type(from->type);
+      const struct_type2t &lhs_data = to_struct_type(lhs->type);
+      const struct_type2t &from_data = to_struct_type(from->type);
 
       size_t n = lhs_data.members.size();
       assert(n <= from_data.members.size());
