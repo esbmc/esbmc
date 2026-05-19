@@ -1,6 +1,6 @@
 # pylint: disable=undefined-variable
-# `__VERIFIER_nondet_bool` is an ESBMC intrinsic matched by name by
-# the Python converter; it has no Python binding.
+# `__VERIFIER_nondet_bool`, `nondet_str`, `nondet_int` are ESBMC intrinsics
+# matched by name by the Python converter; they have no Python binding.
 #
 # pylint: disable=too-many-locals,too-many-branches,too-many-boolean-expressions,line-too-long
 # This module hosts a hand-rolled regex matcher whose control-flow shape
@@ -330,6 +330,85 @@ def search(pattern: str, string: str) -> bool:
     # For patterns with metacharacters, use nondeterministic behavior
     has_match: bool = __VERIFIER_nondet_bool()
     return has_match
+
+
+# Match-object accessors
+# ----------------------
+# CPython exposes captured groups, the tuple of groups, and span via methods
+# on a Match object returned from re.match/search/fullmatch. ESBMC's Python
+# frontend cannot soundly model an Optional[Match] return without breaking
+# truthiness assertions on every existing re* regression test, so the
+# parser rewrites ``m.group(N)`` / ``m.groups()`` / ``m.span(N)`` into
+# direct calls to the helpers below when ``m`` was bound by
+# re.match/search/fullmatch. The helpers recompute the matched substring
+# from the original (pattern, string) pair the parser captured at the
+# binding site; for patterns the recognisers below do not understand they
+# return a nondeterministic value (sound for verification).
+
+
+def _digit_prefix_len(string: str, string_len: int) -> int:
+    """Return the length of the leading digit run in ``string``."""
+    i: int = 0
+    while i < string_len:
+        c: str = string[i]
+        if c < '0' or c > '9':
+            return i
+        i = i + 1
+    return string_len
+
+
+def _is_paren_digit_plus(pattern: str, pattern_len: int) -> bool:
+    r"""Return True iff ``pattern`` is exactly ``(\d+)``."""
+    if pattern_len != 5:
+        return False
+    return (pattern[0] == '(' and pattern[1] == '\\' and pattern[2] == 'd'
+            and pattern[3] == '+' and pattern[4] == ')')
+
+
+def _group(pattern: str, string: str, n: int) -> str:
+    """Return the n-th captured group when re.match(pattern, string) succeeded.
+
+    Group 0 is the full match. For supported patterns the recognised
+    substring is returned exactly; for everything else a symbolic string
+    is returned so downstream assertions remain sound.
+    """
+    pattern_len: int = len(pattern)
+    string_len: int = len(string)
+
+    if _is_paren_digit_plus(pattern, pattern_len):
+        if n == 0 or n == 1:
+            return string[0:_digit_prefix_len(string, string_len)]
+
+    return nondet_str()
+
+
+def _groups(pattern: str, string: str) -> tuple:
+    """Return the tuple of capturing groups (group 1, group 2, ...)."""
+    pattern_len: int = len(pattern)
+    string_len: int = len(string)
+
+    if _is_paren_digit_plus(pattern, pattern_len):
+        return (string[0:_digit_prefix_len(string, string_len)], )
+
+    return (nondet_str(), )
+
+
+def _span(pattern: str, string: str, n: int) -> tuple:
+    """Return the ``(start, end)`` tuple for the n-th group.
+
+    For group 0 this is the span of the full match. For supported patterns
+    the exact bounds are returned; for everything else a symbolic pair is
+    returned so downstream assertions remain sound.
+    """
+    pattern_len: int = len(pattern)
+    string_len: int = len(string)
+    end: int = _digit_prefix_len(string, string_len)
+
+    if _is_paren_digit_plus(pattern, pattern_len):
+        if n == 0 or n == 1:
+            return (0, end)
+
+    return (nondet_int(), nondet_int())
 
 
 def fullmatch(pattern: str, string: str) -> bool:
