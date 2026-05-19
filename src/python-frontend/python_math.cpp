@@ -3,6 +3,7 @@
 #include <python-frontend/type_utils.h>
 #include <python-frontend/math_guard_utils.h>
 #include <util/arith_tools.h>
+#include <util/bitvector.h>
 #include <util/c_types.h>
 #include <util/ieee_float.h>
 #include <util/std_code.h>
@@ -435,20 +436,42 @@ exprt python_math::handle_power(exprt lhs, exprt rhs)
     {
       resolved_base_value = binary2integer(
         resolved_lhs.value().as_string(), resolved_lhs.type().is_signedbv());
-      // Constant folding very large integer powers can be more expensive than
-      // keeping a logarithmic symbolic tree; cap it to keep conversion fast.
-      if (exponent <= kMaxConstantFoldExponent)
-      {
-        const BigInt power_value =
-          pow_bigint_non_negative(*resolved_base_value, exponent);
-        return from_integer(power_value, lhs.type());
-      }
     }
     catch (...)
     {
-      // Fall back to symbolic encoding if constant conversion overflows/ fails.
+      // Fall back to symbolic encoding if constant conversion fails.
     }
   }
+
+  // Cap constant folding to keep conversion fast; large symbolic trees are
+  // cheaper than huge BigInt powers.
+  if (resolved_base_value.has_value() && exponent <= kMaxConstantFoldExponent)
+  {
+    const BigInt power_value =
+      pow_bigint_non_negative(*resolved_base_value, exponent);
+    // ESBMC approximates Python int as int64 (see type_handler::get_typet
+    // FIXME); reject overflow at fold time rather than letting from_integer
+    // silently truncate. Issue #1964.
+    const unsigned width = bv_width(lhs.type());
+    const bool is_signed = lhs.type().is_signedbv();
+    const BigInt min_val = is_signed ? -BigInt::power2(width - 1) : BigInt(0);
+    const BigInt max_val = is_signed ? BigInt::power2(width - 1) - 1
+                                     : BigInt::power2(width) - 1;
+    if (power_value < min_val || power_value > max_val)
+      throw std::runtime_error(
+        "Python int overflow: " + integer2string(*resolved_base_value) + " ** "
+        + integer2string(exponent) + " = " + integer2string(power_value)
+        + " does not fit in " + std::to_string(width)
+        + "-bit int. ESBMC approximates Python int as a fixed-width "
+          "bitvector; arbitrary-precision int support is tracked in "
+          "issue #1964.");
+    return from_integer(power_value, lhs.type());
+  }
+
+  // TODO(#1964): exponents above kMaxConstantFoldExponent fall through to
+  // build_power_expression below, which builds a symbolic multiplication tree
+  // at the same int64 type — the result still wraps silently on overflow.
+  // Full bignum support will close this residual gap.
 
   // Check resolved base for special cases
   if (resolved_base_value.has_value())
