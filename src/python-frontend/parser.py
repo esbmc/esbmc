@@ -221,6 +221,26 @@ def _is_thread_constructor(
     return False
 
 
+def _is_thread_construction_with_target_kw(
+    value: ast.expr | None,
+    module_aliases: set[str],
+    thread_aliases: set[str],
+) -> bool:
+    """Return ``True`` iff ``value`` is a real ``Thread(target=...)`` call.
+
+    Used by the threading-rewrite path to recognise the construction
+    arm: a ``threading.Thread`` call with no positional arguments and a
+    ``target=`` keyword. A user subclass whose ``__init__`` accepts a
+    parameter named ``target`` is excluded by the ``_is_thread_constructor``
+    check.
+    """
+    if not (isinstance(value, ast.Call) and not value.args):
+        return False
+    if not _is_thread_constructor(value, module_aliases, thread_aliases):
+        return False
+    return any(kw.arg == "target" for kw in value.keywords)
+
+
 def _base_is_thread(
     base: ast.expr,
     module_aliases: set[str],
@@ -1607,10 +1627,8 @@ def _try_rewrite_statement(
     if (
         target_name is not None
         and target_name in scope_sites
-        and isinstance(value, ast.Call)
-        and not value.args
-        and _is_thread_constructor(value, module_aliases, thread_aliases)
-        and any(kw.arg == "target" for kw in value.keywords)
+        and _is_thread_construction_with_target_kw(
+            value, module_aliases, thread_aliases)
     ):
         return _rewrite_construction_stmt(stmt, value, scope_sites[target_name][0])
 
@@ -2366,10 +2384,12 @@ def main():
     # Generate JSON from AST for the main file.
     generate_ast_json(tree, filename, None, output_dir)
 
-    # Process and convert AST for memory models
-    models_dir = os.path.join(output_dir, "models")
+    _emit_model_jsons(output_dir)
 
-    # Iterate over all .py files in the directory
+
+def _emit_model_jsons(output_dir):
+    """Generate AST JSON for each memory-model module in ``output_dir/models``."""
+    models_dir = os.path.join(output_dir, "models")
     for python_file in glob.glob(os.path.join(models_dir, "*.py")):
         filename = os.path.basename(python_file)
         module_name = filename[:-3]
@@ -2385,7 +2405,6 @@ def main():
 
         with open(python_file, encoding="utf-8") as model:
             model_tree = ast.parse(model.read())
-            # Generate JSON from AST for the memory models.
             generate_ast_json(model_tree, filename, None, output_dir)
 
 

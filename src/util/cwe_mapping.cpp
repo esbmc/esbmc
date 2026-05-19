@@ -99,6 +99,9 @@ const std::vector<entry_t> &rules_table()
       // Uninitialised local scalar (CWE-457).
       {"use of uninitialized variable",
        {"uninitialised-variable", "Use of uninitialized variable", {457}}},
+      // Unchecked return value of fallible call (CWE-252).
+      {"unchecked return value",
+       {"unchecked-return-value", "Unchecked return value", {252}}},
       // Reachability.
       {"unreachable code reached",
        {"reachable-error", "Reachable error/assertion", {617}}},
@@ -130,6 +133,7 @@ const std::map<unsigned, std::string_view> &names_map()
     {190, "Integer Overflow or Wraparound"},
     {191, "Integer Underflow (Wrap or Wraparound)"},
     {193, "Off-by-one Error"},
+    {252, "Unchecked Return Value"},
     {362,
      "Concurrent Execution using Shared Resource with Improper "
      "Synchronization"},

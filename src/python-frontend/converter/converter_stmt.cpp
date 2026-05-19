@@ -1208,7 +1208,9 @@ python_converter::extract_target_name(const nlohmann::json &target) const
   else if (target_type == "Attribute")
     return target["attr"].get<std::string>();
   else if (target_type == "Subscript")
-    return target["value"]["id"].get<std::string>();
+    // Recurse through nested Subscripts (e.g. board[0][0] = x) to reach the
+    // root container's Name/Attribute, which carries the symbol id.
+    return extract_target_name(target["value"]);
 
   throw std::runtime_error(
     "Unsupported assignment target type: " + target_type.get<std::string>());
@@ -1437,7 +1439,6 @@ void python_converter::get_var_assign(
       lhs_symbol = symbol_table_.find_symbol(sid.global_to_string().c_str());
 
     // Symbol creation
-    bool symbol_created = false;
     if (!lhs_symbol || !is_global)
     {
       std::string module_name = location_begin.get_file().as_string();
@@ -1455,7 +1456,7 @@ void python_converter::get_var_assign(
       symbol.file_local = !current_func_name_.empty();
       symbol.is_extern = false;
 
-      symbol_created = (lhs_symbol == nullptr);
+      bool symbol_created = (lhs_symbol == nullptr);
       lhs_symbol = symbol_table_.move_symbol_to_context(symbol);
 
       // Add declaration statement ONLY for newly created local variables
