@@ -95,13 +95,19 @@ on:
         - NoDataRace-Huawei-Concurrency-Challenges
         - MemSafety-Huawei-Concurrency-Challenges
         - NoOverflows-Huawei-Concurrency-Challenges
-      cpachecker:
-        description: "Run CPAChecker for witness validation"
+      validate:
+        description: "Run witness validation after benchexec"
         required: true
         type: boolean
+      validator:
+        type: choice
+        description: "Witness validator to use (only used when validate is enabled)"
+        options:
+        - CPAChecker
+        - ESBMC
       witness:
         type: choice
-        description: Benchexec witness run mode
+        description: "Witness run mode (only used when validate is enabled)"
         options:
         - Full
         - Correctness
@@ -174,34 +180,37 @@ jobs:
         with:
           name: esbmc-result
           path: output.zip  
-      - name: Checkout code
-        if: ${{ inputs.cpachecker == true }}
+      - name: Checkout code for validation
+        if: ${{ inputs.validate == true }}
         uses: actions/checkout@v4
         with:
-          path: esbmc-src      
+          path: esbmc-src
       - name: Run Validation (Full)
-        if: ${{ inputs.cpachecker == true && inputs.mode == 'Full' }}
+        if: ${{ inputs.validate == true && inputs.mode == 'Full' }}
         run: ./esbmc-src/scripts/witness.sh -f
         env:
           WITNESS_OPTS: ${{ inputs.witness }}
+          VALIDATOR: ${{ inputs.validator }}
       - name: Run Validation (RunSet)
-        if: ${{ inputs.cpachecker == true && inputs.mode == 'RunSet' }}
+        if: ${{ inputs.validate == true && inputs.mode == 'RunSet' }}
         run: ./esbmc-src/scripts/witness.sh -r ${{ inputs.runset }}
         env:
           WITNESS_OPTS: ${{ inputs.witness }}
+          VALIDATOR: ${{ inputs.validator }}
       - name: Run Validation (Task)
-        if: ${{ inputs.cpachecker == true && inputs.mode == 'Task' }}
+        if: ${{ inputs.validate == true && inputs.mode == 'Task' }}
         run: ./esbmc-src/scripts/witness.sh -t ${{ inputs.task }}
         env:
           WITNESS_OPTS: ${{ inputs.witness }}
-      - name: Move output
-        if: ${{ inputs.cpachecker == true }}
-        run: mv $HOME/witness-output.zip ./witness-output.zip      
-      - name: Show summary (CPAChecker)
-        if: ${{ inputs.cpachecker == true }}
+          VALIDATOR: ${{ inputs.validator }}
+      - name: Move validation output
+        if: ${{ inputs.validate == true }}
+        run: mv $HOME/witness-output.zip ./witness-output.zip
+      - name: Show validation summary
+        if: ${{ inputs.validate == true }}
         run: tail -v $HOME/witness-output/*results*.txt | sed -E 's|^==> .*/([^/.]+)\..* <==$|==> \1 <==|'
       - uses: actions/upload-artifact@v4
-        if: ${{ inputs.cpachecker == true }}
+        if: ${{ inputs.validate == true }}
         with:
           name: witness-result
           path: witness-output.zip
