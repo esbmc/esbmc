@@ -1622,7 +1622,18 @@ int esbmc_parseoptionst::do_bmc_strategy(
         return 0;
       }
 
-      bool is_havoc_reliable = !options.get_bool_option("add-symex-value-sets");
+      // IS UNSAT is only sound when k-induction actually havoc'd every
+      // loop the property depends on. goto_k_induction skips a loop
+      // when its modified set is empty (then `disable-inductive-step`
+      // gets set mid-symex by the function-pointer / recursion /
+      // concurrency hooks) OR when --add-symex-value-sets is on AND
+      // every modified variable is a pointer
+      // (goto_k_induction.cpp:91-94). The former is handled by the
+      // disable-inductive-step check below; the latter needs a
+      // structural look at the loop set.
+      bool is_havoc_reliable =
+        !options.get_bool_option("add-symex-value-sets") ||
+        !has_pointer_only_loop(goto_functions);
       if (k_step > 1 && is_havoc_reliable)
       {
         tvt is_res =

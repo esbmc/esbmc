@@ -80,6 +80,30 @@ void goto_termination(goto_functionst &goto_functions)
   goto_functions.update();
 }
 
+bool has_pointer_only_loop(goto_functionst &goto_functions)
+{
+  Forall_goto_functions (it, goto_functions)
+  {
+    if (!it->second.body_available || it->first == "__ESBMC_main")
+      continue;
+    goto_loopst loops(it->first, goto_functions, it->second);
+    for (auto &loop : loops.get_loops())
+    {
+      // Exclude empty modified sets — those are skipped by
+      // goto_k_induction's first check (line 88) regardless of
+      // --add-symex-value-sets, and contains_only_pointers vacuously
+      // returns true on an empty set. The IS-soundness gate we want
+      // here is specifically the value-sets + pointer-only combo
+      // (the line 91-94 skip).
+      if (loop.get_modified_loop_vars().empty())
+        continue;
+      if (loop.contains_only_pointers())
+        return true;
+    }
+  }
+  return false;
+}
+
 void goto_k_inductiont::goto_k_induction()
 {
   // Full unwind the program
