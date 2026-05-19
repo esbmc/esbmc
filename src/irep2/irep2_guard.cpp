@@ -17,24 +17,53 @@ expr2tc guard2tc::as_expr() const
 
 void guard2tc::add(const expr2tc &expr)
 {
+  // Fast path: the input is a non-and2t leaf. No worklist needed —
+  // skip straight to the single-conjunct insertion. This is the
+  // overwhelmingly common case (typical add() call in symex passes
+  // a freshly-computed branch condition that's a symbol, equality,
+  // or other non-and leaf).
+  if (!is_and2t(expr))
+  {
+    add_leaf(expr);
+    return;
+  }
+
+  // Slow path: input has nested and2ts to unfold. Use a heap
+  // worklist instead of recursion so a deep left-leaning chain
+  // (which symex can build) doesn't blow the thread stack at ~10k+
+  // levels. Depth-first, left-side first, so leaf order matches
+  // the historic recursive version.
+  std::vector<expr2tc> worklist;
+  worklist.push_back(expr);
+  while (!worklist.empty())
+  {
+    expr2tc cur = std::move(worklist.back());
+    worklist.pop_back();
+
+    if (is_and2t(cur))
+    {
+      const and2t &theand = to_and2t(cur);
+      worklist.push_back(theand.side_2);
+      worklist.push_back(theand.side_1);
+      continue;
+    }
+    add_leaf(cur);
+  }
+}
+
+void guard2tc::add_leaf(const expr2tc &expr)
+{
+  // Invariant on entry: `expr` is not an and2t. Apply the trivial
+  // absorptions and append.
   if (is_false() || ::is_true(expr))
     return;
 
   if (is_true() || ::is_false(expr))
     clear();
-  else if (is_and2t(expr))
-  {
-    const and2t &theand = to_and2t(expr);
-    add(theand.side_1);
-    add(theand.side_2);
-    return;
-  }
 
   guard_list.push_back(expr);
 
-  // Update the chain of ands
-
-  // Easy case, there is no chain yet
+  // Update the cached and-chain incrementally.
   if (is_nil_expr(*this))
   {
     assert(guard_list.size() == 1);

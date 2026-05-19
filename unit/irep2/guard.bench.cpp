@@ -43,6 +43,23 @@ build_overlapping(unsigned shared, unsigned diverge)
 }
 } // namespace
 
+// Regression: a deep left-leaning and2t chain handed to add() must
+// not blow the stack. A 50000-deep chain recursed through the old
+// implementation would overflow a default 8MB stack.
+TEST_CASE("guard2tc add() deep and-chain", "[probe]")
+{
+  config.ansi_c.word_size = 32;
+
+  const unsigned depth = 50000;
+  expr2tc chain = sym("c0");
+  for (unsigned i = 1; i < depth; ++i)
+    chain = and2tc(chain, sym("c" + std::to_string(i)));
+
+  guard2tc g;
+  g.add(chain);
+  REQUIRE(g.guard_list.size() == depth);
+}
+
 // Regression: operator-= / operator|= must treat guard_list as a set,
 // not a sequence. Two guards with the same conjuncts in different
 // insertion orders must compose identically.

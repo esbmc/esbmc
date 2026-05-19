@@ -50,6 +50,11 @@ private:
   void clear_append(const guard2tc &other);
   void clear_insert(const expr2tc &expr);
 
+  /** Append a single non-and2t conjunct, applying the same trivial
+   *  absorptions add() does. Used by the fast path in add() and by
+   *  the slow-path worklist after unfolding nested and2ts to leaves. */
+  void add_leaf(const expr2tc &expr);
+
   /** Build the and-chain into the expr2tc base from guard_list. Used
    *  after operator-= / operator|= installs a fresh list. Asserts that
    *  the base is nil (callers reset it first). */
