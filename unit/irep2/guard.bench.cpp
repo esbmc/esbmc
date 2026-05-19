@@ -43,6 +43,36 @@ build_overlapping(unsigned shared, unsigned diverge)
 }
 } // namespace
 
+// Regression: save-then-restore via move-assignment must keep the
+// expr2tc base and guard_list in sync. The original guardt::swap
+// was preserved by the migration, but inheriting from expr2tc
+// brings irep_container::swap into scope; the inherited version
+// swaps only the base, silently desyncing guard_list and breaking
+// the add_leaf invariant. To make that footgun impossible, the
+// member swap is `= delete`d in guard2tc — callers must use
+// `g = std::move(other)` for save/restore.
+TEST_CASE("guard2tc move-restore consistency", "[probe]")
+{
+  config.ansi_c.word_size = 32;
+
+  guard2tc original;
+  original.add(sym("o0"));
+  original.add(sym("o1"));
+
+  // Save, mutate, restore via move-assign. This is the exact
+  // pattern goto_check and pointer-analysis dereference use.
+  guard2tc snapshot(original);
+  original.add(sym("extra"));
+  REQUIRE(original.guard_list.size() == 3);
+  original = std::move(snapshot);
+
+  // Restored guard must be internally consistent: another add()
+  // mustn't trip the base ⟺ list invariant.
+  REQUIRE(original.guard_list.size() == 2);
+  original.add(sym("o2"));
+  REQUIRE(original.guard_list.size() == 3);
+}
+
 // Regression: a deep left-leaning and2t chain handed to add() must
 // not blow the stack. A 50000-deep chain recursed through the old
 // implementation would overflow a default 8MB stack.

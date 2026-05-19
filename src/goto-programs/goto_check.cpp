@@ -1076,7 +1076,7 @@ void goto_checkt::check_rec(
         guard.add(e);
     });
 
-    guard.swap(old_guards);
+    guard = std::move(old_guards);
     return;
   }
 
@@ -1093,7 +1093,7 @@ void goto_checkt::check_rec(
       guard2tc old_guards(guard);
       guard.add(i.cond);
       check_rec(i.true_value, guard, loc, false);
-      guard.swap(old_guards);
+      guard = std::move(old_guards);
     }
 
     // Check false path, the guard is negated
@@ -1103,7 +1103,7 @@ void goto_checkt::check_rec(
       make_not(tmp);
       guard.add(tmp);
       check_rec(i.false_value, guard, loc, false);
-      guard.swap(old_guards);
+      guard = std::move(old_guards);
     }
 
     return;

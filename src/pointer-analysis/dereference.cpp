@@ -237,7 +237,7 @@ void dereferencet::dereference_guard_expr(
     });
 
     // Reset guard to where it was.
-    guard.swap(old_guards);
+    guard = std::move(old_guards);
     return;
   }
 
@@ -257,7 +257,7 @@ void dereferencet::dereference_guard_expr(
     guard2tc old_guards(guard);
     guard.add(ifref.cond);
     dereference_expr(ifref.true_value, guard, mode);
-    guard.swap(old_guards);
+    guard = std::move(old_guards);
   }
 
   if (o2)
@@ -266,7 +266,7 @@ void dereferencet::dereference_guard_expr(
     expr2tc tmp = not2tc(ifref.cond);
     guard.add(tmp);
     dereference_expr(ifref.false_value, guard, mode);
-    guard.swap(old_guards);
+    guard = std::move(old_guards);
   }
 
   return;

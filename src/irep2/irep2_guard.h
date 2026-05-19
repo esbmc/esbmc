@@ -51,6 +51,13 @@ public:
   void make_true();
   void make_false();
 
+  /** Deleted. The inherited `irep_container::swap` would silently
+   *  swap only the expr2tc base and leave `guard_list` desynced —
+   *  use `g = std::move(other)` instead, which moves both members
+   *  atomically and is one-way (cheaper than swap when the source
+   *  goes out of scope immediately after). */
+  void swap(guard2tc &) = delete;
+
   void dump() const;
 
 private:
