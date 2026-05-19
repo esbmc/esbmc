@@ -455,16 +455,17 @@ exprt python_math::handle_power(exprt lhs, exprt rhs)
     const unsigned width = bv_width(lhs.type());
     const bool is_signed = lhs.type().is_signedbv();
     const BigInt min_val = is_signed ? -BigInt::power2(width - 1) : BigInt(0);
-    const BigInt max_val = is_signed ? BigInt::power2(width - 1) - 1
-                                     : BigInt::power2(width) - 1;
+    const BigInt max_val =
+      is_signed ? BigInt::power2(width - 1) - 1 : BigInt::power2(width) - 1;
     if (power_value < min_val || power_value > max_val)
       throw std::runtime_error(
-        "Python int overflow: " + integer2string(*resolved_base_value) + " ** "
-        + integer2string(exponent) + " = " + integer2string(power_value)
-        + " does not fit in " + std::to_string(width)
-        + "-bit int. ESBMC approximates Python int as a fixed-width "
-          "bitvector; arbitrary-precision int support is tracked in "
-          "issue #1964.");
+        "Python int overflow: " + integer2string(*resolved_base_value) +
+        " ** " + integer2string(exponent) + " = " +
+        integer2string(power_value) + " does not fit in " +
+        std::to_string(width) +
+        "-bit int. ESBMC approximates Python int as a fixed-width "
+        "bitvector; arbitrary-precision int support is tracked in "
+        "issue #1964.");
     return from_integer(power_value, lhs.type());
   }
 
