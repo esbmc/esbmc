@@ -4,7 +4,7 @@
 #include <pointer-analysis/value_sets.h>
 #include <set>
 #include <util/expr.h>
-#include <util/guard.h>
+#include <irep2/irep2_guard.h>
 #include <util/namespace.h>
 #include <util/options.h>
 
@@ -110,9 +110,9 @@ public:
   virtual void dereference_failure(
     const std::string &property,
     const std::string &msg,
-    const guardt &guard) = 0;
+    const guard2tc &guard) = 0;
 
-  virtual void dereference_assume(const guardt &guard) = 0;
+  virtual void dereference_assume(const guard2tc &guard) = 0;
 
   /** Fetch the set of values that the given pointer variable can point at.
    *  @param expr Pointer symbol to get the value set of.
@@ -252,12 +252,12 @@ public:
    *  @param The way in which this dereference is being accessed. Only affects
    *         the assertions that are generated.
    */
-  virtual void dereference_expr(expr2tc &expr, guardt &guard, modet mode);
+  virtual void dereference_expr(expr2tc &expr, guard2tc &guard, modet mode);
 
   virtual expr2tc dereference(
     const expr2tc &dest,
     const type2tc &type,
-    const guardt &guard,
+    const guard2tc &guard,
     modet mode,
     const expr2tc &extra_offset);
 
@@ -296,7 +296,8 @@ private:
    *  @param guard The guard for evaluating this expression.
    *  @param mode The manner in which the result of this deref is accessed.
    */
-  virtual void dereference_guard_expr(expr2tc &expr, guardt &guard, modet mode);
+  virtual void
+  dereference_guard_expr(expr2tc &expr, guard2tc &guard, modet mode);
 
   /** Interpret an address-of expression. There's the potential that it's just
    *  taking the address of a dereference, which just evaluates to some pointer
@@ -306,7 +307,7 @@ private:
    *  @param mode The manner iin which the result of this deref is accessed.
    */
   virtual void
-  dereference_addrof_expr(expr2tc &expr, guardt &guard, modet mode);
+  dereference_addrof_expr(expr2tc &expr, guard2tc &guard, modet mode);
 
   /** Interpret an expression that accesses a nonscalar type. This means that
    *  it's an index or member (or some other glue expr) on top of a dereference
@@ -335,7 +336,7 @@ private:
    */
   virtual expr2tc dereference_expr_nonscalar(
     expr2tc &expr,
-    guardt &guard,
+    guard2tc &guard,
     modet mode,
     const expr2tc &base);
 
@@ -358,7 +359,7 @@ private:
     modet mode,
     const type2tc &type,
     const expr2tc &deref_expr,
-    const guardt &guard);
+    const guard2tc &guard);
 
   /** Construct an expression representing the pointer's offset, in bits, from
    *  the base of the containing object. This is used for alignment checking
@@ -424,21 +425,23 @@ private:
     modet mode,
     const expr2tc &deref_expr,
     const type2tc &type,
-    const guardt &guard,
+    const guard2tc &guard,
     const expr2tc &lexical_offset,
     expr2tc &pointer_guard);
 
-  void
-  deref_invalid_ptr(const expr2tc &deref_expr, const guardt &guard, modet mode);
+  void deref_invalid_ptr(
+    const expr2tc &deref_expr,
+    const guard2tc &guard,
+    modet mode);
 
   static const expr2tc &get_symbol(const expr2tc &object);
   void bounds_check(
     const expr2tc &expr,
     const expr2tc &offset,
     const type2tc &type,
-    const guardt &guard,
+    const guard2tc &guard,
     const expr2tc &deref = expr2tc());
-  void valid_check(const expr2tc &expr, const guardt &guard, modet mode);
+  void valid_check(const expr2tc &expr, const guard2tc &guard, modet mode);
   std::vector<expr2tc> extract_bytes(
     const expr2tc &object,
     unsigned int bytes,
@@ -453,11 +456,11 @@ private:
   void dereference_failure(
     const std::string &error_class,
     const std::string &error_name,
-    const guardt &guard);
-  void alignment_failure(const std::string &error_name, const guardt &guard);
+    const guard2tc &guard);
+  void alignment_failure(const std::string &error_name, const guard2tc &guard);
 
   void bad_base_type_failure(
-    const guardt &guard,
+    const guard2tc &guard,
     const std::string &wants,
     const std::string &have);
 
@@ -465,16 +468,18 @@ private:
     expr2tc &value,
     const expr2tc &offset,
     const type2tc &type,
-    const guardt &guard,
+    const guard2tc &guard,
     modet mode);
   void check_data_obj_access(
     const expr2tc &value,
     const expr2tc &offset,
     const type2tc &type,
-    const guardt &guard,
+    const guard2tc &guard,
     modet mode);
-  void
-  check_alignment(BigInt minwidth, const expr2tc &offset, const guardt &guard);
+  void check_alignment(
+    BigInt minwidth,
+    const expr2tc &offset,
+    const guard2tc &guard);
   unsigned int static compute_num_bytes_to_extract(
     const expr2tc &offset,
     unsigned long num_bits);
@@ -488,7 +493,7 @@ public:
     expr2tc &value,
     const expr2tc &offset,
     const type2tc &type,
-    const guardt &guard,
+    const guard2tc &guard,
     modet mode,
     unsigned long alignment = 0);
 
@@ -505,13 +510,13 @@ private:
     expr2tc &value,
     const expr2tc &offset,
     const type2tc &type,
-    const guardt &guard,
+    const guard2tc &guard,
     modet mode);
   void construct_from_dyn_struct_offset(
     expr2tc &value,
     const expr2tc &offset,
     const type2tc &type,
-    const guardt &guard,
+    const guard2tc &guard,
     unsigned long alignment,
     modet mode,
     const expr2tc *failed_symbol = nullptr);
@@ -519,27 +524,27 @@ private:
     expr2tc &value,
     const expr2tc &offset,
     const type2tc &type,
-    const guardt &guard,
+    const guard2tc &guard,
     unsigned long alignment,
     modet mode);
   void construct_struct_ref_from_const_offset_array(
     expr2tc &value,
     const expr2tc &offs,
     const type2tc &type,
-    const guardt &guard,
+    const guard2tc &guard,
     modet mode,
     unsigned long alignment);
   void construct_struct_ref_from_const_offset(
     expr2tc &value,
     const expr2tc &offs,
     const type2tc &type,
-    const guardt &guard,
+    const guard2tc &guard,
     modet mode);
   void construct_struct_ref_from_dyn_offset(
     expr2tc &value,
     const expr2tc &offs,
     const type2tc &type,
-    const guardt &guard,
+    const guard2tc &guard,
     modet mode);
   void construct_struct_ref_from_dyn_offs_rec(
     const expr2tc &value,
@@ -552,7 +557,7 @@ private:
     expr2tc &value,
     const expr2tc &offset,
     const type2tc &type,
-    const guardt &guard,
+    const guard2tc &guard,
     modet mode,
     unsigned long alignment = 0);
 

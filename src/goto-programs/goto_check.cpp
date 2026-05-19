@@ -6,7 +6,7 @@
 #include <util/base_type.h>
 #include <util/config.h>
 #include <util/expr_util.h>
-#include <util/guard.h>
+#include <irep2/irep2_guard.h>
 #include <util/i2string.h>
 #include <util/location.h>
 #include <util/migrate.h>
@@ -47,36 +47,38 @@ protected:
 
   void check_rec(
     const expr2tc &expr,
-    guardt &guard,
+    guard2tc &guard,
     const locationt &loc,
     bool address);
 
   void div_by_zero_check(
     const expr2tc &expr,
-    const guardt &guard,
+    const guard2tc &guard,
     const locationt &loc);
 
-  void
-  bounds_check(const expr2tc &expr, const guardt &guard, const locationt &loc);
+  void bounds_check(
+    const expr2tc &expr,
+    const guard2tc &guard,
+    const locationt &loc);
 
   void pointer_rel_check(
     const expr2tc &expr,
-    const guardt &guard,
+    const guard2tc &guard,
     const locationt &loc);
 
   void overflow_check(
     const expr2tc &expr,
-    const guardt &guard,
+    const guard2tc &guard,
     const locationt &loc);
 
   void float_overflow_check(
     const expr2tc &expr,
-    const guardt &guard,
+    const guard2tc &guard,
     const locationt &loc);
 
   void cast_overflow_check(
     const expr2tc &expr,
-    const guardt &guard,
+    const guard2tc &guard,
     const locationt &loc);
 
   /** check for the buffer overflow in scanf/fscanf */
@@ -93,10 +95,10 @@ protected:
     bool &buf_overflow);
 
   void
-  shift_check(const expr2tc &expr, const guardt &guard, const locationt &loc);
+  shift_check(const expr2tc &expr, const guard2tc &guard, const locationt &loc);
 
   void
-  nan_check(const expr2tc &expr, const guardt &guard, const locationt &loc);
+  nan_check(const expr2tc &expr, const guard2tc &guard, const locationt &loc);
 
   void is_instance_check(
     goto_programt::targett target,
@@ -126,7 +128,7 @@ protected:
     const std::string &comment,
     const std::string &property,
     const locationt &location,
-    const guardt &guard);
+    const guard2tc &guard);
 
   goto_programt new_code;
   std::set<expr2tc> assertions;
@@ -145,7 +147,7 @@ protected:
 
 void goto_checkt::div_by_zero_check(
   const expr2tc &expr,
-  const guardt &guard,
+  const guard2tc &guard,
   const locationt &loc)
 {
   if (disable_div_by_zero_check)
@@ -173,7 +175,7 @@ void goto_checkt::div_by_zero_check(
 
 void goto_checkt::float_overflow_check(
   const expr2tc &expr,
-  const guardt &guard,
+  const guard2tc &guard,
   const locationt &loc)
 {
   if (!enable_overflow_check)
@@ -252,7 +254,7 @@ void goto_checkt::float_overflow_check(
 
 void goto_checkt::cast_overflow_check(
   const expr2tc &expr,
-  const guardt &guard,
+  const guard2tc &guard,
   const locationt &loc)
 {
   // For Solidity, narrowing casts (e.g. uint256 → uint8) need overflow checks
@@ -311,7 +313,7 @@ void goto_checkt::cast_overflow_check(
 
 void goto_checkt::overflow_check(
   const expr2tc &expr,
-  const guardt &guard,
+  const guard2tc &guard,
   const locationt &loc)
 {
   if (
@@ -592,7 +594,7 @@ void goto_checkt::input_overflow_check(
 
 void goto_checkt::shift_check(
   const expr2tc &expr,
-  const guardt &guard,
+  const guard2tc &guard,
   const locationt &loc)
 {
   overflow_check(expr, guard, loc);
@@ -658,7 +660,7 @@ void goto_checkt::shift_check(
 
 void goto_checkt::nan_check(
   const expr2tc &expr,
-  const guardt &guard,
+  const guard2tc &guard,
   const locationt &loc)
 {
   if (!enable_nan_check)
@@ -878,7 +880,7 @@ expr2tc goto_checkt::build_python_type_operand(const typet &type) const
 
 void goto_checkt::pointer_rel_check(
   const expr2tc &expr,
-  const guardt &guard,
+  const guard2tc &guard,
   const locationt &loc)
 {
   if (disable_pointer_check || disable_pointer_relation_check)
@@ -920,7 +922,7 @@ static bool has_dereference(const expr2tc &expr)
 
 void goto_checkt::bounds_check(
   const expr2tc &expr,
-  const guardt &guard,
+  const guard2tc &guard,
   const locationt &loc)
 {
   (void)guard;
@@ -992,7 +994,7 @@ void goto_checkt::add_guarded_claim(
   const std::string &comment,
   const std::string &property,
   const locationt &location,
-  const guardt &guard)
+  const guard2tc &guard)
 {
   expr2tc e = expr;
 
@@ -1019,7 +1021,7 @@ void goto_checkt::add_guarded_claim(
 
 void goto_checkt::check_rec(
   const expr2tc &expr,
-  guardt &guard,
+  guard2tc &guard,
   const locationt &loc,
   bool address)
 {
@@ -1059,7 +1061,7 @@ void goto_checkt::check_rec(
   {
     assert(is_bool_type(expr));
 
-    guardt old_guards(guard);
+    guard2tc old_guards(guard);
 
     bool is_or = is_or2t(expr);
     expr->foreach_operand([this, &is_or, &guard, &loc](const expr2tc &e) {
@@ -1076,7 +1078,7 @@ void goto_checkt::check_rec(
         guard.add(e);
     });
 
-    guard.swap(old_guards);
+    guard = std::move(old_guards);
     return;
   }
 
@@ -1090,20 +1092,20 @@ void goto_checkt::check_rec(
 
     // Check true path
     {
-      guardt old_guards(guard);
+      guard2tc old_guards(guard);
       guard.add(i.cond);
       check_rec(i.true_value, guard, loc, false);
-      guard.swap(old_guards);
+      guard = std::move(old_guards);
     }
 
     // Check false path, the guard is negated
     {
-      guardt old_guards(guard);
+      guard2tc old_guards(guard);
       expr2tc tmp = i.cond;
       make_not(tmp);
       guard.add(tmp);
       check_rec(i.false_value, guard, loc, false);
-      guard.swap(old_guards);
+      guard = std::move(old_guards);
     }
 
     return;
@@ -1174,7 +1176,7 @@ void goto_checkt::check_rec(
 
 void goto_checkt::check(const expr2tc &expr, const locationt &loc)
 {
-  guardt guard;
+  guard2tc guard;
   check_rec(expr, guard, loc, false);
 }
 
@@ -1241,7 +1243,7 @@ void goto_checkt::goto_check(goto_programt &goto_program)
                 expr2tc cast_overflow =
                   overflow_cast2tc(assign.source, narrow_width);
                 make_not(cast_overflow);
-                guardt guard;
+                guard2tc guard;
                 add_guarded_claim(
                   cast_overflow,
                   "Narrowing assignment overflow",

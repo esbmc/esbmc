@@ -7,3 +7,10 @@ add_executable(irep2bench irep2.bench.cpp)
 target_include_directories(irep2bench PRIVATE ${Boost_INCLUDE_DIRS})
 target_link_libraries(irep2bench
   PRIVATE util_esbmc Catch2::Catch2 ${OS_INCLUDE_LIBS})
+
+# Guard-specific microbenchmarks. Run locally with:
+#   ./unit/irep2/guardbench '[bench]'
+add_executable(guardbench guard.bench.cpp)
+target_include_directories(guardbench PRIVATE ${Boost_INCLUDE_DIRS})
+target_link_libraries(guardbench
+  PRIVATE util_esbmc Catch2::Catch2 ${OS_INCLUDE_LIBS})

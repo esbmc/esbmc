@@ -41,7 +41,7 @@ bool goto_program_dereferencet::has_failed_symbol(
 void goto_program_dereferencet::dereference_failure(
   const std::string &property,
   const std::string &msg,
-  const guardt &guard)
+  const guard2tc &guard)
 {
   expr2tc guard_expr = guard.as_expr();
 
@@ -67,7 +67,7 @@ void goto_program_dereferencet::dereference_failure(
   }
 }
 
-void goto_program_dereferencet::dereference_assume(const guardt &guard)
+void goto_program_dereferencet::dereference_assume(const guard2tc &guard)
 {
   expr2tc guard_expr = guard.as_expr();
 
@@ -103,7 +103,7 @@ void goto_program_dereferencet::dereference_expr(
   const bool checks_only,
   const dereferencet::modet mode)
 {
-  guardt guard;
+  guard2tc guard;
 
   if (checks_only)
   {
@@ -180,7 +180,7 @@ void goto_program_dereferencet::dereference_instruction(
       // via pointer analysis, instead just assert that it's a valid pointer.
       const dereference2t &deref = to_dereference2t(func_call.function);
       expr2tc invalid_ptr = invalid_pointer2tc(deref.value);
-      guardt guard;
+      guard2tc guard;
       guard.add(invalid_ptr);
       if (!options.get_bool_option("no-pointer-check"))
       {
@@ -219,7 +219,7 @@ void goto_program_dereferencet::dereference_instruction(
       code_free2t &free = to_code_free2t(i.code);
       expr2tc operand = free.operand;
 
-      guardt guard;
+      guard2tc guard;
       // Result discarded
       dereference.dereference(
         operand, operand->type, guard, dereferencet::FREE, expr2tc());

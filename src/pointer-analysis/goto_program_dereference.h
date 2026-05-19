@@ -47,9 +47,9 @@ protected:
   void dereference_failure(
     const std::string &property,
     const std::string &msg,
-    const guardt &guard) override;
+    const guard2tc &guard) override;
 
-  void dereference_assume(const guardt &guard) override;
+  void dereference_assume(const guard2tc &guard) override;
 
   bool is_live_variable(const expr2tc &sym) override
   {
