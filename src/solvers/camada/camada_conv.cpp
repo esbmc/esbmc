@@ -573,33 +573,6 @@ public:
       return z3_int_bitwise_unary(a, [](const z3::expr &v) { return ~v; });
     return wrap(solver->mkBVNot(expr(a)), a->sort);
   }
-  smt_astt mk_bvnxor(smt_astt a, smt_astt b) override
-  {
-    if (int_encoding && backend == camada_backendt::z3)
-      return z3_int_bitwise_binary(
-        a, b, [](const z3::expr &lhs, const z3::expr &rhs) {
-          return ~(lhs ^ rhs);
-        });
-    return wrap(solver->mkBVXnor(expr(a), expr(b)), a->sort);
-  }
-  smt_astt mk_bvnor(smt_astt a, smt_astt b) override
-  {
-    if (int_encoding && backend == camada_backendt::z3)
-      return z3_int_bitwise_binary(
-        a, b, [](const z3::expr &lhs, const z3::expr &rhs) {
-          return ~(lhs | rhs);
-        });
-    return wrap(solver->mkBVNor(expr(a), expr(b)), a->sort);
-  }
-  smt_astt mk_bvnand(smt_astt a, smt_astt b) override
-  {
-    if (int_encoding && backend == camada_backendt::z3)
-      return z3_int_bitwise_binary(
-        a, b, [](const z3::expr &lhs, const z3::expr &rhs) {
-          return ~(lhs & rhs);
-        });
-    return wrap(solver->mkBVNand(expr(a), expr(b)), a->sort);
-  }
   smt_astt mk_bvxor(smt_astt a, smt_astt b) override
   {
     if (int_encoding && backend == camada_backendt::z3)
