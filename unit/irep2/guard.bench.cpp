@@ -89,6 +89,19 @@ TEST_CASE("guard2tc set-op ordering", "[probe]")
   guard2tc disj = g1;
   disj |= g2;
   REQUIRE(disj.guard_list.size() == 4);
+
+  // Prefix case: if g2 is a prefix of g1 (so new_g2 is empty), the
+  // disjunction reduces to g2 alone. The result should equal g2.
+  guard2tc prefix;
+  prefix.add(sym("a"));
+  prefix.add(sym("b"));
+  guard2tc extended;
+  extended.add(sym("a"));
+  extended.add(sym("b"));
+  extended.add(sym("c"));
+  guard2tc subsumed = extended;
+  subsumed |= prefix;
+  REQUIRE(subsumed.guard_list.size() == 2);
 }
 
 TEST_CASE("guard2tc microbench: incremental construction", "[bench]")
@@ -290,6 +303,19 @@ TEST_CASE("guard2tc microbench: operator|=", "[bench]")
   {
     auto [a, b] = build_overlapping(5000, 5000);
     a |= b;
+    return a;
+  };
+  // Hits the empty-residuals shortcut: b is a prefix of a (a has all
+  // of b plus 5000 more conjuncts), so new_g2 is empty, the
+  // disjunction reduces to b alone, and we skip the or2tc + chain
+  // extension entirely.
+  BENCHMARK("|= subsumed: 10000 |= prefix 5000")
+  {
+    guard2tc shared = build_guard(5000, "s");
+    guard2tc a = shared;
+    for (unsigned i = 0; i < 5000; ++i)
+      a.add(sym("a" + std::to_string(i)));
+    a |= shared;
     return a;
   };
 }

@@ -186,13 +186,15 @@ guard2tc &operator|=(guard2tc &g1, const guard2tc &g2)
       new_g2.guard_list.push_back(c);
   new_g2.build_guard_expr();
 
-  // When both residuals are empty, g1 and g2 had identical conjunct
-  // sets — the disjunction reduces to `common` alone. Short-circuit
-  // before constructing an or(true, true) that the simplifier path
-  // only catches for atomic residuals.
-  if (new_g1.is_true() && new_g2.is_true())
+  // If either residual is empty, that side equals `common` itself, so
+  // the disjunction reduces to `common || (common && other) ≡ common`.
+  // Skip the or2tc construction and chain-extend entirely. Covers the
+  // pathological case where one guard is a prefix of the other (a
+  // common pattern at branch joins where one side adds extra
+  // conjuncts), and the identical-set case.
+  if (new_g1.is_true() || new_g2.is_true())
   {
-    g1 = common;
+    g1 = std::move(common);
     return g1;
   }
 
