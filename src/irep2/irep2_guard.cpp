@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <unordered_set>
 #include <irep2/irep2_guard.h>
 #include <irep2/irep2_utils.h>
 #include <util/std_expr.h>
@@ -9,7 +10,9 @@ expr2tc guard2tc::as_expr() const
   // current chain for size >= 1: single conjunct → that conjunct,
   // multi → and-chain. Only the empty-list case needs a translation
   // (base stays nil so default-constructed guards don't allocate).
-  return is_true() ? gen_true_expr() : static_cast<const expr2tc &>(*this);
+  if (is_true())
+    return gen_true_expr();
+  return *this;
 }
 
 void guard2tc::add(const expr2tc &expr)
@@ -90,13 +93,19 @@ void guard2tc::append(const guard2tc &other)
 
 guard2tc &operator-=(guard2tc &g1, const guard2tc &g2)
 {
+  // Set difference by hashed membership: result is conjuncts in g1
+  // not in g2. Order-independent, so it stays correct regardless of
+  // how the two guards' lists were built up (which std::set_difference
+  // is NOT — it requires sorted ranges, and guard_list is in
+  // insertion order).
+  std::unordered_set<expr2tc, irep2_hash> g2_set(
+    g2.guard_list.begin(), g2.guard_list.end());
+
   std::vector<expr2tc> diff;
-  std::set_difference(
-    g1.guard_list.begin(),
-    g1.guard_list.end(),
-    g2.guard_list.begin(),
-    g2.guard_list.end(),
-    std::back_inserter(diff));
+  diff.reserve(g1.guard_list.size());
+  for (const auto &c : g1.guard_list)
+    if (g2_set.find(c) == g2_set.end())
+      diff.push_back(c);
 
   g1.clear();
   g1.guard_list.swap(diff);
@@ -106,6 +115,7 @@ guard2tc &operator-=(guard2tc &g1, const guard2tc &g2)
 
 guard2tc &operator|=(guard2tc &g1, const guard2tc &g2)
 {
+  // Trivial absorptions.
   if (g2.is_false() || g1.is_true())
     return g1;
   if (g1.is_false() || g2.is_true())
@@ -114,49 +124,51 @@ guard2tc &operator|=(guard2tc &g1, const guard2tc &g2)
     return g1;
   }
 
-  if (g1.is_single_symbol() && g2.is_single_symbol())
-  {
-    expr2tc or_expr = or2tc(g1.guard_list.front(), g2.guard_list.front());
-    simplify(or_expr);
+  // g1 || g2 == common && (g1' || g2'), where
+  //   common = g1 ∩ g2  (as conjunct sets),
+  //   g1'    = g1 \ common,
+  //   g2'    = g2 \ common.
+  // Hash-set membership rather than std::set_* because guard_list is
+  // in insertion order, not sorted.
+  std::unordered_set<expr2tc, irep2_hash> g2_set(
+    g2.guard_list.begin(), g2.guard_list.end());
 
-    if (::is_true(or_expr))
-    {
-      g1.make_true();
-      return g1;
-    }
-
-    g1.clear_insert(or_expr);
-    return g1;
-  }
-
-  // Factor out the common prefix: g1 || g2 == common && (g1' || g2').
   guard2tc common;
-  std::set_intersection(
-    g1.guard_list.begin(),
-    g1.guard_list.end(),
-    g2.guard_list.begin(),
-    g2.guard_list.end(),
-    std::back_inserter(common.guard_list));
+  common.guard_list.reserve(std::min(g1.guard_list.size(), g2_set.size()));
+  for (const auto &c : g1.guard_list)
+    if (g2_set.count(c))
+      common.guard_list.push_back(c);
   common.build_guard_expr();
 
+  std::unordered_set<expr2tc, irep2_hash> common_set(
+    common.guard_list.begin(), common.guard_list.end());
+
   guard2tc new_g1;
-  std::set_difference(
-    g1.guard_list.begin(),
-    g1.guard_list.end(),
-    common.guard_list.begin(),
-    common.guard_list.end(),
-    std::back_inserter(new_g1.guard_list));
+  new_g1.guard_list.reserve(g1.guard_list.size() - common.guard_list.size());
+  for (const auto &c : g1.guard_list)
+    if (!common_set.count(c))
+      new_g1.guard_list.push_back(c);
   new_g1.build_guard_expr();
 
   guard2tc new_g2;
-  std::set_difference(
-    g2.guard_list.begin(),
-    g2.guard_list.end(),
-    common.guard_list.begin(),
-    common.guard_list.end(),
-    std::back_inserter(new_g2.guard_list));
+  new_g2.guard_list.reserve(g2.guard_list.size() - common.guard_list.size());
+  for (const auto &c : g2.guard_list)
+    if (!common_set.count(c))
+      new_g2.guard_list.push_back(c);
   new_g2.build_guard_expr();
 
+  // When both residuals are empty, g1 and g2 had identical conjunct
+  // sets — the disjunction reduces to `common` alone. Short-circuit
+  // before constructing an or(true, true) that the simplifier path
+  // only catches for atomic residuals.
+  if (new_g1.is_true() && new_g2.is_true())
+  {
+    g1 = common;
+    return g1;
+  }
+
+  // When both residuals are atomic, the OR may simplify trivially
+  // (e.g. `a || !a` → true); ask the simplifier.
   expr2tc or_expr = or2tc(new_g1.as_expr(), new_g2.as_expr());
   if (new_g1.is_single_symbol() && new_g2.is_single_symbol())
     simplify(or_expr);
