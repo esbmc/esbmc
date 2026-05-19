@@ -337,6 +337,16 @@ public:
   bool check_if_ileaves_blocked();
 
   /**
+   *  True iff every thread in this schedule has reached a terminal state,
+   *  i.e. has either ended or has an empty call stack. This is the precondition
+   *  for treating the schedule's tail as program termination — only then is it
+   *  sound to fire end-of-program checks such as the memory-leak walker, since
+   *  a still-running thread may hold the only live reference to a dynamic
+   *  object via its stack frames.
+   */
+  bool all_threads_terminal() const;
+
+  /**
    *  Create a new thread.
    *  Creates and initializes a new thread, running at the start of the GOTO
    *  program prog.
