@@ -124,25 +124,26 @@ jobs:
           echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
 
       - name: Download benchexec results
-        env:
-          GH_TOKEN: ${{ github.token }}
+        uses: actions/download-artifact@v4
+        with:
+          name: esbmc-result
+          path: ${{ runner.temp }}
+          run-id: ${{ steps.parse.outputs.run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Extract benchexec results
         run: |
-          gh run download "${{ steps.parse.outputs.run_id }}" \
-            --repo esbmc/esbmc \
-            --name esbmc-result \
-            --dir ./
-          unzip output.zip
-          mv esbmc-output $HOME/esbmc-output
+          rm -rf $HOME/esbmc-output
+          unzip -q ${{ runner.temp }}/output.zip -d $HOME
 
       - name: Download ESBMC binary (from benchexec run)
         if: ${{ inputs.esbmc_source == 'Download from benchexec run' }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh run download "${{ steps.parse.outputs.run_id }}" \
-            --repo esbmc/esbmc \
-            --name 'release-ubuntu-24.04--b Release -e OFF -C' \
-            --dir ./
+        uses: actions/download-artifact@v4
+        with:
+          name: 'release-ubuntu-24.04--b Release -e OFF -C'
+          path: ./
+          run-id: ${{ steps.parse.outputs.run_id }}
+          github-token: ${{ github.token }}
 
       - name: Download ESBMC binary (rebuilt)
         if: ${{ inputs.esbmc_source == 'Rebuild' }}
