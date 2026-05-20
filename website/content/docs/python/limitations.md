@@ -64,19 +64,20 @@ weight: 4
 ## Regular Expressions (`re` module)
 
 - Only `re.match()`, `re.search()`, and `re.fullmatch()` are supported.
-- Match objects do not expose group-capture methods (`.group()`, `.groups()`, `.span()`).
+- Group-capture methods (`.group()`, `.groups()`, `.span()`) are rewritten by the parser into direct calls to internal helpers, and only the `(\d+)` pattern is recognised precisely; everything else returns a nondeterministic value.
+- The result of `re.match` / `re.search` / `re.fullmatch` is a `bool`, not an `Optional[Match]`. `if m:` works; `if m is None:` does not. The pattern recognisers also enforce full-string match for the supported patterns, so `re.match` does not match a prefix of a longer string (tracked in [#4664](https://github.com/esbmc/esbmc/issues/4664)).
 - Complex patterns beyond the explicitly supported constructs exhibit nondeterministic behavior.
 - Not supported: lookahead/lookbehind assertions, backreferences, named groups, conditional patterns, Unicode property escapes.
 
 ## Random Module
 
-- `random.choice()`, `random.shuffle()`, `random.sample()`, `random.seed()`, and other functions beyond `random()`, `uniform()`, `randint()`, `getrandbits()`, and `randrange()` are not yet supported.
+- Functions beyond `random()`, `uniform()`, `randint()`, `getrandbits()`, `randrange()`, `choice()`, `shuffle()`, `sample()`, and `seed()` are not yet supported.
 
 ## Collections Module
 
-- `defaultdict`: Only basic subscript access/assignment is supported. The `__missing__` hook, type-factory calls (e.g., `defaultdict(list)`), and methods beyond `__getitem__`/`__setitem__` are not supported.
-- `Counter`: Only `__getitem__`, `__setitem__`, `values()`, and truthiness are supported. `most_common()`, `elements()`, `subtract()`, `update()`, and arithmetic operators on `Counter` are not supported.
-- `OrderedDict`, `deque`, `namedtuple`, `ChainMap`, and other `collections` types are not supported.
+- `defaultdict`: subscript access/assignment and the common type-factory form (`defaultdict(list)`, with `.append()` on the materialised list) are supported. The `__missing__` hook and other methods are not.
+- `Counter`: only `__getitem__`, `__setitem__`, `values()`, and truthiness are supported. `most_common()` accepts the call but its result is unusable in any subsequent expression (frontend error on comparison); `elements()`, `subtract()`, `update()`, and arithmetic operators are not supported.
+- `OrderedDict` and `deque` support construction and basic indexing / append / `__setitem__`. `namedtuple`, `ChainMap`, and other `collections` types are not supported.
 
 ## Datetime Module
 
@@ -138,4 +139,4 @@ weight: 4
 
 ## Module System
 
-- Built-in variable support is limited to `__name__`; `__file__`, `__doc__`, `__package__`, and other built-ins are not yet supported.
+- Built-in variable support is limited to `__name__` and `__file__`; `__doc__`, `__package__`, and other built-ins are not yet supported.
