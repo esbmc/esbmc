@@ -611,6 +611,16 @@ void assert_arith_2ops_consistency(
     assert(is_bv_type(t));
     assert(t->get_width() == config.ansi_c.address_width);
   }
+  else if (is_bigint_type(t))
+  {
+    // bigint (issue #4642) has no fixed width — the bv-width parity check
+    // below would throw symbolic_type_excp via t->get_width(). Require that
+    // both operands are also bigint-typed; mixed signedbv/bigint operands
+    // must be coerced via an explicit typecast2tc before the arith node is
+    // built.
+    assert(p2 || is_bigint_type(v1->type));
+    assert(p1 || is_bigint_type(v2->type));
+  }
   else if (!(is_vector_type(v1->type) || is_vector_type(v2->type)))
   {
     assert(

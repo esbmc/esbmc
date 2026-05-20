@@ -265,8 +265,15 @@ static expr2tc simplify_arith_2ops(
     simpl_res = TFunctor<BigInt>::simplify(
       simplified_side_1, simplified_side_2, is_constant, get_value);
   }
-  else if (is_bv_type(simplified_side_1) || is_bv_type(simplified_side_2))
+  else if (
+    is_bv_type(simplified_side_1) || is_bv_type(simplified_side_2) ||
+    is_bigint_type(simplified_side_1) || is_bigint_type(simplified_side_2))
   {
+    // bv and bigint share the same constant_int2t representation; the
+    // BigInt arithmetic in TFunctor folds both correctly. The from_integer
+    // call below width-clips bv results, and is a no-op for bigint (issue
+    // #4642 PR 4646 fixup made from_integer(bigint, BigInt) preserve the
+    // value unchanged).
     std::function<bool(const expr2tc &)> is_constant =
       (bool (*)(const expr2tc &)) & is_constant_int2t;
 
@@ -964,8 +971,11 @@ static expr2tc simplify_arith_1op(const type2tc &type, const expr2tc &value)
     return expr2tc();
 
   expr2tc simpl_res;
-  if (is_bv_type(value))
+  if (is_bv_type(value) || is_bigint_type(value))
   {
+    // Shared path: TFunctor's BigInt arithmetic folds both bv and bigint
+    // (issue #4642). The from_integer round-trip clips bv results to width
+    // and is a no-op for bigint thanks to the PR 4646 fixup.
     std::function<constant_int2t &(expr2tc &)> to_constant =
       (constant_int2t & (*)(expr2tc &)) to_constant_int2t;
 
@@ -3440,8 +3450,14 @@ static expr2tc simplify_relations(
 
   expr2tc simpl_res;
 
-  if (is_bv_type(simplified_side_1) || is_bv_type(simplified_side_2))
+  if (
+    is_bv_type(simplified_side_1) || is_bv_type(simplified_side_2) ||
+    is_bigint_type(simplified_side_1) || is_bigint_type(simplified_side_2))
   {
+    // bv and bigint share constant_int2t; TFunctor's BigInt comparison
+    // folds both correctly. Without this branch covering bigint, guard
+    // simplification in goto-symex would leave `equality(const, const)`
+    // unfolded for bigint operands (issue #4642).
     std::function<bool(const expr2tc &)> is_constant =
       (bool (*)(const expr2tc &)) & is_constant_int2t;
 
@@ -3617,11 +3633,17 @@ expr2tc equality2t::do_simplify() const
   // the entire shape: the add, BOTH its operands, and c2 must share a
   // single arithmetic domain. Mixed widths (e.g. (x_u8 + c_u16) == c2_u16)
   // would silently rewrite into something that confuses modular semantics.
+  //
+  // bigint (issue #4642) has no fixed width, so the fits_in_width check
+  // below would throw symbolic_type_excp. Bigint diff arithmetic is exact
+  // (no modular wrap), so the rewrite is sound — but skipping here is the
+  // safer Phase 2B move; the structural equality survives to SMT lowering.
   if (
     is_add2t(side_1) && is_constant_int2t(side_2) &&
     side_1->type == side_2->type &&
     to_add2t(side_1).side_1->type == side_2->type &&
-    to_add2t(side_1).side_2->type == side_2->type)
+    to_add2t(side_1).side_2->type == side_2->type &&
+    !is_bigint_type(side_2->type))
   {
     const add2t &add_expr = to_add2t(side_1);
 
@@ -3654,12 +3676,14 @@ expr2tc equality2t::do_simplify() const
     }
   }
 
-  // (x - c1) == c2 -> x == (c2 + c1). Same homogeneity requirement.
+  // (x - c1) == c2 -> x == (c2 + c1). Same homogeneity requirement and
+  // same bigint skip as the (x + c1) case above (issue #4642).
   if (
     is_sub2t(side_1) && is_constant_int2t(side_2) &&
     side_1->type == side_2->type &&
     to_sub2t(side_1).side_1->type == side_2->type &&
-    to_sub2t(side_1).side_2->type == side_2->type)
+    to_sub2t(side_1).side_2->type == side_2->type &&
+    !is_bigint_type(side_2->type))
   {
     const sub2t &sub_expr = to_sub2t(side_1);
 
@@ -3843,11 +3867,13 @@ expr2tc notequal2t::do_simplify() const
   // (x + c1) != c2 -> x != (c2 - c1), and the (c1 + x) != c2 mirror.
   // Same homogeneity requirement as the equality case: the add, BOTH its
   // operands, and c2 must all share a single arithmetic domain.
+  // bigint (issue #4642): skip, see analogous skip in equality2t::do_simplify.
   if (
     is_add2t(side_1) && is_constant_int2t(side_2) &&
     side_1->type == side_2->type &&
     to_add2t(side_1).side_1->type == side_2->type &&
-    to_add2t(side_1).side_2->type == side_2->type)
+    to_add2t(side_1).side_2->type == side_2->type &&
+    !is_bigint_type(side_2->type))
   {
     const add2t &add_expr = to_add2t(side_1);
     const BigInt &c2 = to_constant_int2t(side_2).value;
@@ -3879,12 +3905,14 @@ expr2tc notequal2t::do_simplify() const
     }
   }
 
-  // (x - c1) != c2 -> x != (c2 + c1). Same homogeneity requirement.
+  // (x - c1) != c2 -> x != (c2 + c1). Same homogeneity requirement and
+  // bigint skip (issue #4642).
   if (
     is_sub2t(side_1) && is_constant_int2t(side_2) &&
     side_1->type == side_2->type &&
     to_sub2t(side_1).side_1->type == side_2->type &&
-    to_sub2t(side_1).side_2->type == side_2->type)
+    to_sub2t(side_1).side_2->type == side_2->type &&
+    !is_bigint_type(side_2->type))
   {
     const sub2t &sub_expr = to_sub2t(side_1);
 

@@ -761,3 +761,209 @@ SCENARIO(
     }
   }
 }
+
+SCENARIO(
+  "bigint arithmetic preserves precision through simplify",
+  "[core][irep2]")
+{
+  // Phase 2B contract: arithmetic over bigint-typed constant_int2t operands
+  // must simplify without clipping the value to any fixed width. The
+  // existing simplify_arith_2ops dispatch gated on is_bv_type, so before
+  // PR 2B the bigint branch was unreachable — folds either declined or
+  // truncated through a synthetic typecast.
+  const type2tc bigint = bigint_type2tc();
+  const BigInt a = BigInt::power2(200);
+  const BigInt b = BigInt::power2(199);
+
+  GIVEN("add2tc(bigint, 2^200, 2^200)")
+  {
+    expr2tc e =
+      add2tc(bigint, constant_int2tc(bigint, a), constant_int2tc(bigint, a));
+    THEN("simplify folds to 2^201 unclipped")
+    {
+      expr2tc s = e->simplify();
+      REQUIRE(!is_nil_expr(s));
+      REQUIRE(is_constant_int2t(s));
+      REQUIRE(is_bigint_type(s->type));
+      REQUIRE(to_constant_int2t(s).value == BigInt::power2(201));
+    }
+  }
+
+  GIVEN("sub2tc(bigint, 2^200, 2^199)")
+  {
+    expr2tc e =
+      sub2tc(bigint, constant_int2tc(bigint, a), constant_int2tc(bigint, b));
+    THEN("simplify folds to 2^199 unclipped")
+    {
+      expr2tc s = e->simplify();
+      REQUIRE(!is_nil_expr(s));
+      REQUIRE(is_constant_int2t(s));
+      REQUIRE(is_bigint_type(s->type));
+      REQUIRE(to_constant_int2t(s).value == b);
+    }
+  }
+
+  GIVEN("mul2tc(bigint, 2^200, 2^200)")
+  {
+    expr2tc e =
+      mul2tc(bigint, constant_int2tc(bigint, a), constant_int2tc(bigint, a));
+    THEN("simplify folds to 2^400 unclipped")
+    {
+      expr2tc s = e->simplify();
+      REQUIRE(!is_nil_expr(s));
+      REQUIRE(is_constant_int2t(s));
+      REQUIRE(is_bigint_type(s->type));
+      REQUIRE(to_constant_int2t(s).value == BigInt::power2(400));
+    }
+  }
+
+  GIVEN("neg2tc(bigint, 2^200)")
+  {
+    expr2tc e = neg2tc(bigint, constant_int2tc(bigint, a));
+    THEN("simplify folds to -(2^200) with the sign preserved")
+    {
+      expr2tc s = e->simplify();
+      REQUIRE(!is_nil_expr(s));
+      REQUIRE(is_constant_int2t(s));
+      REQUIRE(is_bigint_type(s->type));
+      REQUIRE(to_constant_int2t(s).value == -a);
+    }
+  }
+
+  GIVEN("add2tc(bigint, 0, 2^200) — identity short-circuit")
+  {
+    expr2tc e = add2tc(
+      bigint,
+      constant_int2tc(bigint, BigInt(0)),
+      constant_int2tc(bigint, a));
+    THEN("add2t::do_simplify returns the non-zero side unclipped")
+    {
+      expr2tc s = e->simplify();
+      REQUIRE(!is_nil_expr(s));
+      REQUIRE(is_constant_int2t(s));
+      REQUIRE(is_bigint_type(s->type));
+      REQUIRE(to_constant_int2t(s).value == a);
+    }
+  }
+
+  GIVEN("div2tc(bigint, 2^400, 2^200) — exact division of huge values")
+  {
+    expr2tc e = div2tc(
+      bigint,
+      constant_int2tc(bigint, BigInt::power2(400)),
+      constant_int2tc(bigint, a));
+    THEN("simplify folds to 2^200 unclipped")
+    {
+      expr2tc s = e->simplify();
+      REQUIRE(!is_nil_expr(s));
+      REQUIRE(is_constant_int2t(s));
+      REQUIRE(is_bigint_type(s->type));
+      REQUIRE(to_constant_int2t(s).value == a);
+    }
+  }
+
+  GIVEN("modulus2tc(bigint, 2^400 + 7, 2^200)")
+  {
+    expr2tc e = modulus2tc(
+      bigint,
+      constant_int2tc(bigint, BigInt::power2(400) + BigInt(7)),
+      constant_int2tc(bigint, a));
+    THEN("simplify folds to 7 (no width clipping)")
+    {
+      expr2tc s = e->simplify();
+      REQUIRE(!is_nil_expr(s));
+      REQUIRE(is_constant_int2t(s));
+      REQUIRE(is_bigint_type(s->type));
+      REQUIRE(to_constant_int2t(s).value == BigInt(7));
+    }
+  }
+
+  GIVEN("chained mul: ((2^200) * 2) * 2 — depth-2 fold")
+  {
+    expr2tc inner = mul2tc(
+      bigint,
+      constant_int2tc(bigint, a),
+      constant_int2tc(bigint, BigInt(2)));
+    expr2tc outer =
+      mul2tc(bigint, inner, constant_int2tc(bigint, BigInt(2)));
+    THEN("simplify folds the whole chain to 2^202 unclipped")
+    {
+      expr2tc s = outer->simplify();
+      REQUIRE(!is_nil_expr(s));
+      REQUIRE(is_constant_int2t(s));
+      REQUIRE(is_bigint_type(s->type));
+      REQUIRE(to_constant_int2t(s).value == BigInt::power2(202));
+    }
+  }
+
+  GIVEN("mul of opposite-sign huge values")
+  {
+    expr2tc e =
+      mul2tc(bigint, constant_int2tc(bigint, -a), constant_int2tc(bigint, a));
+    THEN("simplify folds to -(2^400) with sign preserved")
+    {
+      expr2tc s = e->simplify();
+      REQUIRE(!is_nil_expr(s));
+      REQUIRE(is_constant_int2t(s));
+      REQUIRE(is_bigint_type(s->type));
+      REQUIRE(to_constant_int2t(s).value == -BigInt::power2(400));
+    }
+  }
+
+  GIVEN("div(0, 2^200) — numerator zero short-circuit")
+  {
+    expr2tc e = div2tc(
+      bigint,
+      constant_int2tc(bigint, BigInt(0)),
+      constant_int2tc(bigint, a));
+    THEN("simplify folds to 0 (no width-dependent zero generation)")
+    {
+      expr2tc s = e->simplify();
+      REQUIRE(!is_nil_expr(s));
+      REQUIRE(is_constant_int2t(s));
+      REQUIRE(is_bigint_type(s->type));
+      REQUIRE(to_constant_int2t(s).value == BigInt(0));
+    }
+  }
+
+  GIVEN("equality of two equal bigint constants")
+  {
+    expr2tc e = equality2tc(
+      constant_int2tc(bigint, BigInt::power2(200)),
+      constant_int2tc(bigint, BigInt::power2(200)));
+    THEN("simplify folds to true via the relations BigInt path")
+    {
+      expr2tc s = e->simplify();
+      REQUIRE(!is_nil_expr(s));
+      REQUIRE(is_constant_bool2t(s));
+      REQUIRE(to_constant_bool2t(s).value == true);
+    }
+  }
+
+  GIVEN("equality of two distinct bigint constants")
+  {
+    expr2tc e = equality2tc(
+      constant_int2tc(bigint, a),
+      constant_int2tc(bigint, b));
+    THEN("simplify folds to false")
+    {
+      expr2tc s = e->simplify();
+      REQUIRE(!is_nil_expr(s));
+      REQUIRE(is_constant_bool2t(s));
+      REQUIRE(to_constant_bool2t(s).value == false);
+    }
+  }
+
+  GIVEN("lessthan(2^199, 2^200)")
+  {
+    expr2tc e = lessthan2tc(
+      constant_int2tc(bigint, b), constant_int2tc(bigint, a));
+    THEN("simplify folds to true")
+    {
+      expr2tc s = e->simplify();
+      REQUIRE(!is_nil_expr(s));
+      REQUIRE(is_constant_bool2t(s));
+      REQUIRE(to_constant_bool2t(s).value == true);
+    }
+  }
+}
