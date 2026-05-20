@@ -1,6 +1,7 @@
 #include <python-frontend/char_utils.h>
 #include <python-frontend/exception_utils.h>
 #include <python-frontend/json_utils.h>
+#include <python-frontend/python_int_overflow.h>
 #include <python-frontend/python_list.h>
 #include <python-frontend/string_handler.h>
 #include <python-frontend/string_handler_utils.h>
@@ -79,7 +80,7 @@ format_value_from_json(const nlohmann::json &arg, python_converter &converter)
     // null `value`. Refuse to fold to the string "None"; raise the same
     // overflow diagnostic the rest of the frontend uses.
     if (arg.contains("_bigint"))
-      throw std::runtime_error(
+      throw python_int_overflow_excp(
         "Python int overflow: literal " + arg["_bigint"].get<std::string>() +
         " does not fit in 64-bit int. ESBMC approximates Python int as a "
         "fixed-width bitvector; arbitrary-precision int support is tracked in "
@@ -1484,6 +1485,15 @@ exprt string_handler::get_fstring_expr(const nlohmann::json &element)
       parts.push_back(part_expr);
       total_estimated_size += get_string_size(part_expr) -
                               1; // -1 to avoid double counting terminators
+    }
+    catch (const python_int_overflow_excp &)
+    {
+      // Bignum overflow is a soundness diagnostic, not a recoverable
+      // parse hiccup — re-throw so the top-level error path surfaces it
+      // instead of letting the f-string silently render as "<e>" and
+      // the surrounding assertion succeed for the wrong reason. Issue
+      // #4642.
+      throw;
     }
     catch (const std::exception &e)
     {

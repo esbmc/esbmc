@@ -7,6 +7,7 @@
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python_dict_handler.h>
 #include <python-frontend/python_exception_handler.h>
+#include <python-frontend/python_int_overflow.h>
 #include <python-frontend/python_lambda.h>
 #include <python-frontend/python_list.h>
 #include <python-frontend/python_math.h>
@@ -138,7 +139,7 @@ exprt python_converter::get_literal(const nlohmann::json &element)
   if (element.contains("_bigint"))
   {
     const std::string &digits = element["_bigint"].get<std::string>();
-    throw std::runtime_error(
+    throw python_int_overflow_excp(
       "Python int overflow: literal " + digits +
       " does not fit in 64-bit int. ESBMC approximates Python int as a "
       "fixed-width bitvector; arbitrary-precision int support is tracked in "

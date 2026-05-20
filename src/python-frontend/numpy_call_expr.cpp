@@ -1,6 +1,7 @@
 #include <python-frontend/json_utils.h>
 #include <python-frontend/numpy_call_expr.h>
 #include <python-frontend/python_converter.h>
+#include <python-frontend/python_int_overflow.h>
 #include <python-frontend/symbol_id.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
@@ -354,7 +355,7 @@ T get_constant_value(const nlohmann::json &node)
   // same message they get from get_literal.
   auto reject_bigint = [](const nlohmann::json &c) {
     if (c.contains("_bigint"))
-      throw std::runtime_error(
+      throw python_int_overflow_excp(
         "Python int overflow: literal " + c["_bigint"].get<std::string>() +
         " does not fit in 64-bit int. ESBMC approximates Python int as a "
         "fixed-width bitvector; arbitrary-precision int support is tracked in "
