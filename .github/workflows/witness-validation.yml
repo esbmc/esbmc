@@ -237,10 +237,13 @@ jobs:
       - name: Extract witness results
         run: unzip witness-output.zip || true
 
-      - name: Generate combined table
+      - name: Generate html table
         run: ./scripts/competitions/compare-runs.sh esbmc-output witness-output
 
       - uses: actions/upload-artifact@v7
         with:
-          name: combined-table
-          path: diff-esbmc-output-witness-output/
+          name: html-table
+          path: |
+            diff-esbmc-output-witness-output/
+            esbmc-output/
+            witness-output/
