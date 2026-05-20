@@ -5,12 +5,37 @@
 #include <python-frontend/python_typechecking.h>
 #include <python-frontend/symbol_id.h>
 #include <util/arith_tools.h>
+#include <util/config.h>
 #include <util/context.h>
 #include <util/c_types.h>
 #include <util/message.h>
 #include <util/python_types.h>
 
 #include <regex>
+
+namespace
+{
+// 512-bit signed bitvector for Python int under --ir. Roughly 154 decimal
+// digits; covers factorial(170), 64-byte from_bytes round-trips, bit_length
+// on values up to 2^509. Under int-encoding the SMT layer drops widths and
+// the value space is unbounded — the width here only sizes constant-fold
+// intermediates. Issue #4642.
+constexpr unsigned kPythonBignumWidth = 512;
+} // namespace
+
+unsigned type_handler::python_int_width()
+{
+  return config.options.get_bool_option("int-encoding")
+           ? kPythonBignumWidth
+           : static_cast<unsigned>(config.ansi_c.long_long_int_width);
+}
+
+typet type_handler::python_int_typet()
+{
+  if (config.options.get_bool_option("int-encoding"))
+    return signedbv_typet(kPythonBignumWidth);
+  return long_long_int_type();
+}
 
 type_handler::type_handler(const python_converter &converter)
   : converter_(converter)
