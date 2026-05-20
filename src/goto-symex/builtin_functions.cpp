@@ -3200,4 +3200,3 @@ void goto_symext::volatile_check(expr2tc &expr)
     });
   }
 }
-
