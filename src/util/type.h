@@ -81,6 +81,7 @@ public:
   static irep_idt t_integer;
   static irep_idt t_signedbv;
   static irep_idt t_unsignedbv;
+  static irep_idt t_bigint;
   static irep_idt t_rational;
   static irep_idt t_real;
   static irep_idt t_natural;

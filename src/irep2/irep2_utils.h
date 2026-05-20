@@ -9,7 +9,8 @@
 
 std::string indent_str_irep2(unsigned int indent);
 
-/** Test whether type is an integer. */
+/** Test whether type is a fixed-width integer (signed or unsigned bv).
+ *  Does NOT match bigint_type2t, fixedbv_type2t, or floatbv_type2t. */
 inline bool is_bv_type(const type2tc &t)
 {
   return t->type_id == type2t::unsignedbv_id ||
@@ -35,11 +36,12 @@ inline bool is_comparison_expr(const expr2tc &e)
          is_greaterthanequal2t(e);
 }
 
-/** Test whether type is a number type - bv, fixedbv or floatbv. */
+/** Test whether type is a number type - bv, bigint, fixedbv or floatbv. */
 inline bool is_number_type(const type2tc &t)
 {
   return t->type_id == type2t::unsignedbv_id ||
          t->type_id == type2t::signedbv_id ||
+         t->type_id == type2t::bigint_id ||
          t->type_id == type2t::fixedbv_id || t->type_id == type2t::floatbv_id ||
          t->type_id == type2t::bool_id;
 }

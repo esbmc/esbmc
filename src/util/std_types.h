@@ -24,6 +24,17 @@ public:
   }
 };
 
+/** Arbitrary-precision integer legacy companion to bigint_type2t.
+ *  Carries no width. See issue #4642. */
+class bigint_typet : public typet
+{
+public:
+  bigint_typet()
+  {
+    id(t_bigint);
+  }
+};
+
 class symbol_typet : public typet
 {
 public:

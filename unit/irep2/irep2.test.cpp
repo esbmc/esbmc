@@ -580,3 +580,111 @@ SCENARIO("get_sub_expr returns nullptr past the operand count", "[core][irep2]")
     }
   }
 }
+
+// Foundation tests for bigint_type2t (issue #4642). Phase 2A introduces the
+// kind with no SMT lowering and no symex behaviour, so coverage is limited
+// to the type-level contract: identity, classification, equality, hashing,
+// width semantics, migrate round-trip, and that constant_int2t can carry
+// arbitrary-precision values when typed bigint without width clipping.
+SCENARIO("bigint_type2t identity and classification", "[core][irep2]")
+{
+  type2tc t = bigint_type2tc();
+
+  THEN("downcasts and predicates report bigint")
+  {
+    REQUIRE(t->type_id == type2t::bigint_id);
+    REQUIRE(is_bigint_type(t));
+    REQUIRE(try_to_bigint_type(t) != nullptr);
+  }
+
+  THEN("bigint is a number and scalar, but not a bv, fractional, or byte type")
+  {
+    REQUIRE(is_number_type(t));
+    REQUIRE(is_scalar_type(t));
+    REQUIRE_FALSE(is_bv_type(t));
+    REQUIRE_FALSE(is_fractional_type(t));
+    REQUIRE_FALSE(is_byte_type(t));
+    REQUIRE_FALSE(is_bool_type(t));
+  }
+
+  THEN("get_width throws because bigint is unbounded")
+  {
+    REQUIRE_THROWS_AS(t->get_width(), type2t::symbolic_type_excp);
+  }
+
+  THEN("pretty-prints as bigint")
+  {
+    REQUIRE(t->pretty(0).find("bigint") != std::string::npos);
+  }
+}
+
+SCENARIO("bigint_type2t structural equality and hashing", "[core][irep2]")
+{
+  type2tc a = bigint_type2tc();
+  type2tc b = bigint_type2tc();
+  type2tc i64 = signedbv_type2tc(64);
+  type2tc boolt = bool_type2tc();
+
+  THEN("two bigint types compare equal and hash identically")
+  {
+    REQUIRE(a == b);
+    REQUIRE(a->crc() == b->crc());
+  }
+
+  THEN("bigint is distinct from signedbv(64) and from bool")
+  {
+    REQUIRE_FALSE(a == i64);
+    REQUIRE_FALSE(a == boolt);
+  }
+}
+
+SCENARIO("bigint_type2t migrate round-trip", "[core][irep2]")
+{
+  type2tc original = bigint_type2tc();
+
+  WHEN("we migrate back to legacy irep and forward again")
+  {
+    typet legacy = migrate_type_back(original);
+    type2tc round = migrate_type(legacy);
+
+    THEN("the legacy form carries the bigint id")
+    {
+      REQUIRE(legacy.id() == typet::t_bigint);
+    }
+
+    THEN("the round-tripped irep2 type matches the original")
+    {
+      REQUIRE(round == original);
+      REQUIRE(is_bigint_type(round));
+    }
+  }
+}
+
+SCENARIO(
+  "constant_int2t carries arbitrary precision under bigint type",
+  "[core][irep2]")
+{
+  // 2^200 — far beyond any fixed-width bitvector ESBMC currently uses. Phase
+  // 2A's contract is that the value survives in the IR with the bigint type
+  // attached; SMT lowering arrives in PR 2C / 2D.
+  BigInt huge = BigInt::power2(200);
+  expr2tc k = constant_int2tc(bigint_type2tc(), huge);
+
+  THEN("the value round-trips unchanged")
+  {
+    REQUIRE(is_constant_int2t(k));
+    REQUIRE(to_constant_int2t(k).value == huge);
+  }
+
+  THEN("the carried type is bigint")
+  {
+    REQUIRE(is_bigint_type(k->type));
+  }
+
+  THEN("two equally-constructed constants compare equal and hash equally")
+  {
+    expr2tc k2 = constant_int2tc(bigint_type2tc(), huge);
+    REQUIRE(k == k2);
+    REQUIRE(k->crc() == k2->crc());
+  }
+}

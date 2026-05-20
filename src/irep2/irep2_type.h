@@ -28,6 +28,7 @@ irep_typedefs(struct);
 irep_typedefs(union);
 irep_typedefs(unsignedbv);
 irep_typedefs(signedbv);
+irep_typedefs(bigint);
 irep_typedefs(code);
 irep_typedefs(array);
 irep_typedefs(pointer);
@@ -220,6 +221,25 @@ public:
   unsigned int width;
 
   static constexpr auto fields = std::make_tuple(&signedbv_type2t::width);
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+/** Arbitrary-precision integer.
+ *  Carries no width — operands are unbounded mathematical integers. Backends
+ *  that natively support SMT_SORT_INT lower this to an `Int` term; backends
+ *  that don't lower to a wide bitvector with a mandatory overflow trap (see
+ *  issue #4642). No payload.
+ */
+class bigint_type2t : public type2t
+{
+public:
+  bigint_type2t() : type2t(bigint_id)
+  {
+  }
+  bigint_type2t(const bigint_type2t &ref) = default;
+  unsigned int get_width() const;
+
+  static constexpr auto fields = std::make_tuple();
   static std::string field_names[esbmct::num_type_fields];
 };
 

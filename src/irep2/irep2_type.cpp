@@ -109,6 +109,14 @@ unsigned int signedbv_type2t::get_width() const
   return width;
 }
 
+unsigned int bigint_type2t::get_width() const
+{
+  // Bignum is unbounded; callers querying a fixed width have made a category
+  // error. Lowering passes that need a concrete width must typecast to a
+  // bitvector type first.
+  throw symbolic_type_excp();
+}
+
 unsigned int array_type2t::get_width() const
 {
   // Two edge cases: the array can have infinite size, or it can have a dynamic
@@ -377,6 +385,8 @@ std::string unsignedbv_type2t::field_names[esbmct::num_type_fields] =
   {"width", "", "", "", ""};
 std::string signedbv_type2t::field_names[esbmct::num_type_fields] =
   {"width", "", "", "", ""};
+std::string bigint_type2t::field_names[esbmct::num_type_fields] =
+  {"", "", "", "", ""};
 std::string code_type2t::field_names[esbmct::num_type_fields] =
   {"arguments", "ret_type", "argument_names", "ellipsis", ""};
 std::string array_type2t::field_names[esbmct::num_type_fields] =

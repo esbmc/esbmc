@@ -124,6 +124,9 @@ static type2tc migrate_type0(const typet &type)
     return unsignedbv_type2tc(iwidth);
   }
 
+  if (type.id() == typet::t_bigint)
+    return bigint_type2tc();
+
   if (type.id() == "c_enum" || type.id() == "incomplete_c_enum")
   {
     // 6.7.2.2.3 of C99 says enumeration values shall have "int" types.
@@ -2242,6 +2245,8 @@ typet migrate_type_back(const type2tc &ref)
     return bool_typet();
   case type2t::empty_id:
     return empty_typet();
+  case type2t::bigint_id:
+    return bigint_typet();
   case type2t::symbol_id:
   {
     const symbol_type2t &ref2 = to_symbol_type(ref);

@@ -21,6 +21,7 @@ bool is_array_like(const typet &type)
 
 irep_idt typet::t_signedbv = irep_idt("signedbv");
 irep_idt typet::t_unsignedbv = irep_idt("unsignedbv");
+irep_idt typet::t_bigint = irep_idt("bigint");
 irep_idt typet::t_complex = irep_idt("complex");
 irep_idt typet::t_floatbv = irep_idt("floatbv");
 irep_idt typet::t_fixedbv = irep_idt("fixedbv");
