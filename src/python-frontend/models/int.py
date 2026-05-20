@@ -1,7 +1,11 @@
-# pylint: disable=redefined-builtin
+# pylint: disable=redefined-builtin,undefined-variable
 # This class intentionally shadows the Python built-in `int`: it is the
 # operational model ESBMC uses to verify Python programs, so it must
-# match the built-in name exactly.
+# match the built-in name exactly. The `undefined-variable` disable covers
+# the internal `IntWide` annotation used by `bit_length` — see issues
+# #1964 / #4642. ESBMC's type_handler maps `IntWide` to a wider signed
+# bitvector; it is not a Python symbol, so defining it at module scope
+# here would interfere with ESBMC's symbol processing of the OM.
 class int:
 
     @classmethod
