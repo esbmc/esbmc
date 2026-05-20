@@ -33,12 +33,16 @@ class int:
         return result
 
     @classmethod
-    # bit_lenght() count the bits needed to represent an integer in binary
-    def bit_length(cls, n: int) -> int:
+    # bit_length() counts the bits needed to represent an integer in binary.
+    # `n` is annotated `IntWide` so the OM accepts bignum scalars produced
+    # by ** under --ir (e.g. 2**64) without truncating at the call boundary.
+    # Narrow int inputs sign-extend on entry. `length` stays `int` — the
+    # bit count itself fits trivially. Issues #1964 (Part 2) and #4642.
+    def bit_length(cls, n: IntWide) -> int:
         length: int = 0
 
         while n > 0:
-            n: int = n >> 1
+            n: IntWide = n >> 1
             length: int = length + 1  # Count how many times the number is shifted
 
         return length
