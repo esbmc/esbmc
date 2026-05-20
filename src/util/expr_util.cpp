@@ -37,6 +37,13 @@ exprt gen_zero(const typet &type, bool array_as_array_of)
 
     result.value(value);
   }
+  else if (type_id == "bigint")
+  {
+    // bigint (issue #4642): no width — store the literal as a decimal string,
+    // mirroring from_integer(BigInt, typet) so callers that build zero via
+    // gen_zero and then migrate get a value that round-trips losslessly.
+    result.value("0");
+  }
   else if (type_id == "bool")
   {
     result.make_false();
@@ -116,6 +123,11 @@ exprt gen_one(const typet &type)
       value += '0';
     value += '1';
     result.value(value);
+  }
+  else if (type_id == "bigint")
+  {
+    // bigint (issue #4642): decimal-string encoding, no width.
+    result.value("1");
   }
   else if (type_id == "fixedbv")
   {

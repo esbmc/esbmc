@@ -36,7 +36,10 @@ inline bool is_comparison_expr(const expr2tc &e)
          is_greaterthanequal2t(e);
 }
 
-/** Test whether type is a number type - bv, bigint, fixedbv or floatbv. */
+/** Test whether type is a number type - bv, bigint, fixedbv, floatbv, or bool.
+ *  bool has been classified as a number here since the predicate was first
+ *  introduced; several callers (notably expr_simplifier's typecast folding)
+ *  rely on that. */
 inline bool is_number_type(const type2tc &t)
 {
   return t->type_id == type2t::unsignedbv_id ||

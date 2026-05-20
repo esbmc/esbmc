@@ -10,8 +10,12 @@ void typet::move_to_subtypes(typet &type)
 bool is_number(const typet &type)
 {
   const std::string &id = type.id_string();
+  // bigint (issue #4642) is semantically a number. Including it here keeps
+  // the legacy classifier consistent with irep2's is_number_type, so legacy
+  // simplify/typecast routes won't silently drop arbitrary-precision int
+  // operands into the non-numeric branch.
   return id == "complex" || id == "unsignedbv" || id == "signedbv" ||
-         id == "floatbv" || id == "fixedbv";
+         id == "floatbv" || id == "fixedbv" || id == "bigint";
 }
 
 bool is_array_like(const typet &type)

@@ -54,6 +54,13 @@ exprt from_integer(const BigInt &int_value, const typet &type)
     expr.value(integer2binary(int_value, bv_width(type)));
     return expr;
   }
+  if (type_id == "bigint")
+  {
+    // bigint (issue #4642): no width, decimal-string encoding so the legacy
+    // expr round-trips through migrate without precision loss.
+    expr.value(integer2string(int_value, 10));
+    return expr;
+  }
   if (type_id == "bool")
   {
     if (int_value == 0)
@@ -78,6 +85,10 @@ expr2tc from_integer(const BigInt &int_value, const type2tc &type)
   {
   case type2t::bool_id:
     return !int_value.is_zero() ? gen_true_expr() : gen_false_expr();
+
+  case type2t::bigint_id:
+    // bigint (issue #4642) has no width; the value flows through unchanged.
+    return constant_int2tc(type, int_value);
 
   case type2t::unsignedbv_id:
   case type2t::signedbv_id:

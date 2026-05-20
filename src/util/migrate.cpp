@@ -654,6 +654,17 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
   {
     type = migrate_type(expr.type());
 
+    // bigint constants (issue #4642) carry a decimal string in expr.value()
+    // rather than a fixed-width binary representation — bigint has no width,
+    // so binary2bigint can't be used. The reverse direction in
+    // migrate_expr_back emits the matching decimal encoding.
+    if (type->type_id == type2t::bigint_id)
+    {
+      new_expr_ref =
+        constant_int2tc(type, BigInt(expr.value().as_string().c_str()));
+      return;
+    }
+
     bool is_signed = false;
     if (type->type_id == type2t::signedbv_id)
       is_signed = true;
@@ -2447,6 +2458,14 @@ exprt migrate_expr_back(const expr2tc &ref)
     const constant_int2t &ref2 = to_constant_int2t(ref);
     typet thetype = migrate_type_back(ref->type);
     constant_exprt theexpr(thetype);
+    if (ref->type->type_id == type2t::bigint_id)
+    {
+      // bigint (issue #4642) has no fixed width; serialise the value as a
+      // decimal string so the round-trip is lossless. migrate_expr's bigint
+      // branch parses the matching encoding back into a BigInt.
+      theexpr.set_value(integer2string(ref2.value, 10));
+      return theexpr;
+    }
     unsigned int width = atoi(thetype.width().as_string().c_str());
     theexpr.set_value(integer2binary(ref2.value, width));
     return theexpr;

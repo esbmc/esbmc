@@ -4,7 +4,10 @@
 #include <irep2/irep2.h>
 #include <irep2/irep2_dispatch.h>
 #include <irep2/irep2_utils.h>
+#include <util/arith_tools.h>
 #include <util/crypto_hash.h>
+#include <util/expr_util.h>
+#include <util/mp_arith.h>
 
 namespace
 {
@@ -686,5 +689,74 @@ SCENARIO(
     expr2tc k2 = constant_int2tc(bigint_type2tc(), huge);
     REQUIRE(k == k2);
     REQUIRE(k->crc() == k2->crc());
+  }
+
+  THEN("from_integer(huge, bigint_type) preserves the value")
+  {
+    expr2tc via_helper = from_integer(huge, bigint_type2tc());
+    REQUIRE(is_constant_int2t(via_helper));
+    REQUIRE(to_constant_int2t(via_helper).value == huge);
+    REQUIRE(via_helper == k);
+  }
+
+  THEN("legacy from_integer(huge, bigint_typet) emits the decimal encoding")
+  {
+    exprt legacy_helper = from_integer(huge, migrate_type_back(bigint_type2tc()));
+    REQUIRE(legacy_helper.type().id() == typet::t_bigint);
+    REQUIRE(legacy_helper.value().as_string() == integer2string(huge, 10));
+  }
+
+  THEN("gen_zero / gen_one on bigint_typet produce well-formed legacy exprs")
+  {
+    exprt z = gen_zero(migrate_type_back(bigint_type2tc()));
+    exprt o = gen_one(migrate_type_back(bigint_type2tc()));
+    REQUIRE_FALSE(z.is_nil());
+    REQUIRE_FALSE(o.is_nil());
+    REQUIRE(z.type().id() == typet::t_bigint);
+    REQUIRE(o.type().id() == typet::t_bigint);
+    REQUIRE(z.value().as_string() == "0");
+    REQUIRE(o.value().as_string() == "1");
+  }
+}
+
+SCENARIO(
+  "constant_int2t with bigint type survives migrate round-trip",
+  "[core][irep2]")
+{
+  // bigint has no fixed width; migrate_expr_back's default constant_int
+  // encoding reads thetype.width() and emits an empty binary value. The
+  // dedicated bigint encoding stores a decimal string in expr.value() so
+  // the round-trip is lossless for any BigInt magnitude or sign. See PR
+  // #4646 review (Copilot finding #3).
+  const std::vector<BigInt> samples{
+    BigInt::power2(200),
+    -BigInt::power2(200) - BigInt(1),
+    BigInt(0),
+    BigInt(1),
+    BigInt(-1),
+    BigInt::power2(63),                            // INT64_MAX + 1
+    -BigInt::power2(63) - BigInt(1),               // INT64_MIN - 1
+    BigInt::power2(1024) + BigInt::power2(512)};   // not a single bit
+
+  GIVEN("a representative bigint constant_int2t")
+  {
+    THEN("each sample round-trips losslessly via migrate")
+    {
+      for (const BigInt &v : samples)
+      {
+        expr2tc original = constant_int2tc(bigint_type2tc(), v);
+        exprt legacy = migrate_expr_back(original);
+        REQUIRE(legacy.type().id() == typet::t_bigint);
+        REQUIRE(legacy.value().as_string() == integer2string(v, 10));
+
+        expr2tc round;
+        migrate_expr(legacy, round);
+        REQUIRE(is_constant_int2t(round));
+        REQUIRE(is_bigint_type(round->type));
+        REQUIRE(to_constant_int2t(round).value == v);
+        REQUIRE(round == original);
+        REQUIRE(round->crc() == original->crc());
+      }
+    }
   }
 }
