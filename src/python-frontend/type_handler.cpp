@@ -129,7 +129,11 @@ std::string type_handler::type_to_string(const typet &t) const
   if (t == double_type())
     return "float";
 
-  if (t == long_long_int_type())
+  // Both the default int64 lowering and the --ir bignum widening
+  // produced by python_int_typet() name the same Python type. Method
+  // dispatch (e.g. `(2 ** 64).bit_length()`) keys off this string, so
+  // both widths must map to "int". Issue #1964 / #4642.
+  if (t == long_long_int_type() || t == python_int_typet())
     return "int";
 
   if (t == long_long_uint_type())
@@ -451,6 +455,16 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   // We approximate using 64-bit signed integer here.
   if (ast_type == "int" || ast_type == "GeneralizedIndex")
     return long_long_int_type(); // FIXME: Support bignum for true Python semantics
+
+  // Internal alias for operational models that need a width-polymorphic
+  // signed integer parameter — accepts both narrow and wide Python int
+  // values without truncating at the call boundary. Currently used by
+  // models/int.py::bit_length so that `int(2 ** 64).bit_length()` works
+  // under --ir without forcing every other `int`-typed callsite into the
+  // wider representation (which would cascade into the list/dict/set OM,
+  // see #4653). Issue #1964 / #4642.
+  if (ast_type == "IntWide")
+    return python_int_typet();
 
   // Unsigned integers used in domains like Ethereum or system modeling
   if (
