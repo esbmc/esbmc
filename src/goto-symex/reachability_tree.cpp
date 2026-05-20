@@ -563,7 +563,7 @@ goto_symext::symex_resultt reachability_treet::get_next_formula()
       if (check_for_hash_collision())
       {
         post_hash_collision_cleanup();
-        log_status("hashed");
+        //log_status("hashed");
         break;
       }
 
