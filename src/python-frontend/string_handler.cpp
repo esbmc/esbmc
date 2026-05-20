@@ -75,6 +75,15 @@ format_value_from_json(const nlohmann::json &arg, python_converter &converter)
   std::string value;
   if (arg.contains("_type") && arg["_type"] == "Constant")
   {
+    // Bignum literal (issue #4642): the constant carries `_bigint` and a
+    // null `value`. Refuse to fold to the string "None"; raise the same
+    // overflow diagnostic the rest of the frontend uses.
+    if (arg.contains("_bigint"))
+      throw std::runtime_error(
+        "Python int overflow: literal " + arg["_bigint"].get<std::string>() +
+        " does not fit in 64-bit int. ESBMC approximates Python int as a "
+        "fixed-width bitvector; arbitrary-precision int support is tracked in "
+        "issue #4642.");
     if (arg["value"].is_null())
       return "None";
     if (arg["value"].is_string())
