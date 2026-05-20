@@ -1522,8 +1522,10 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     {
       a = convert_pointer_arith(expr, expr->type);
     }
-    else if (int_encoding)
+    else if (int_encoding || is_bigint_type(expr->type))
     {
+      // bigint (issue #4642) always uses the Int-sort op regardless of the
+      // global int_encoding flag; its convert_sort path returned mk_int_sort.
       a = mk_add(args[0], args[1]);
     }
     else
@@ -1541,7 +1543,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     {
       a = convert_pointer_arith(expr, expr->type);
     }
-    else if (int_encoding)
+    else if (int_encoding || is_bigint_type(expr->type))
     {
       a = mk_sub(args[0], args[1]);
     }
@@ -1567,7 +1569,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       a = mk_bvmul(args[0], args[1]);
       a = mk_extract(a, fbvt.width + fraction_bits - 1, fraction_bits);
     }
-    else if (int_encoding)
+    else if (int_encoding || is_bigint_type(expr->type))
     {
       a = mk_mul(args[0], args[1]);
     }
@@ -1599,8 +1601,9 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       a = mk_bvsdiv(args[0], args[1]);
       a = mk_extract(a, fbvt.width - 1, 0);
     }
-    else if (int_encoding)
+    else if (int_encoding || is_bigint_type(expr->type))
     {
+      // bigint (issue #4642) uses Int-sort division.
       a = mk_div(args[0], args[1]);
     }
     else if (is_unsignedbv_type(d.side_1) && is_unsignedbv_type(d.side_2))
@@ -2077,8 +2080,9 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   {
     auto m = to_modulus2t(expr);
 
-    if (int_encoding)
+    if (int_encoding || is_bigint_type(expr->type))
     {
+      // bigint (issue #4642) uses Int-sort modulus.
       a = mk_mod(args[0], args[1]);
     }
     else if (is_fixedbv_type(m.side_1) && is_fixedbv_type(m.side_2))
@@ -2491,8 +2495,9 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     {
       a = convert_ptr_cmp(lt.side_1, lt.side_2, expr);
     }
-    else if (int_encoding)
+    else if (int_encoding || is_bigint_type(lt.side_1))
     {
+      // bigint (issue #4642) uses Int-sort comparison.
       a = mk_lt(args[0], args[1]);
     }
     else if (is_floatbv_type(lt.side_1) && is_floatbv_type(lt.side_2))
@@ -2522,8 +2527,9 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     {
       a = convert_ptr_cmp(lte.side_1, lte.side_2, expr);
     }
-    else if (int_encoding)
+    else if (int_encoding || is_bigint_type(lte.side_1))
     {
+      // bigint (issue #4642) uses Int-sort comparison.
       a = mk_le(args[0], args[1]);
     }
     else if (is_floatbv_type(lte.side_1) && is_floatbv_type(lte.side_2))
@@ -2553,8 +2559,9 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     {
       a = convert_ptr_cmp(gt.side_1, gt.side_2, expr);
     }
-    else if (int_encoding)
+    else if (int_encoding || is_bigint_type(gt.side_1))
     {
+      // bigint (issue #4642) uses Int-sort comparison.
       a = mk_gt(args[0], args[1]);
     }
     else if (is_floatbv_type(gt.side_1) && is_floatbv_type(gt.side_2))
@@ -2584,8 +2591,9 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     {
       a = convert_ptr_cmp(gte.side_1, gte.side_2, expr);
     }
-    else if (int_encoding)
+    else if (int_encoding || is_bigint_type(gte.side_1))
     {
+      // bigint (issue #4642) uses Int-sort comparison.
       a = mk_ge(args[0], args[1]);
     }
     else if (is_floatbv_type(gte.side_1) && is_floatbv_type(gte.side_2))
@@ -2655,8 +2663,9 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   case expr2t::neg_id:
   {
     const neg2t &neg = to_neg2t(expr);
-    if (int_encoding)
+    if (int_encoding || is_bigint_type(expr->type))
     {
+      // bigint (issue #4642) uses Int-sort negation.
       a = mk_neg(args[0]);
     }
     else if (is_floatbv_type(neg.value))
@@ -2826,6 +2835,17 @@ smt_sortt smt_convt::convert_sort(const type2tc &type)
     break;
   }
 
+  case type2t::bigint_id:
+  {
+    // bigint (issue #4642) lowers to SMT_SORT_INT on Int-capable backends.
+    // Backends that don't override mk_int_sort (bitwuzla, boolector, the
+    // bitblast SAT layer) abort with the existing "Chosen solver doesn't
+    // support integer sorts" diagnostic — PR 2D will route those through a
+    // wide bitvector with an overflow trap.
+    result = mk_int_sort();
+    break;
+  }
+
   case type2t::fixedbv_id:
   {
     unsigned int int_bits = to_fixedbv_type(type).integer_bits;
@@ -2956,6 +2976,13 @@ smt_astt smt_convt::convert_terminal(const expr2tc &expr)
   case expr2t::constant_int_id:
   {
     const constant_int2t &theint = to_constant_int2t(expr);
+    // bigint (issue #4642): always lowers to SMT_SORT_INT regardless of the
+    // global int_encoding option — it has no fixed width, so the bv branch
+    // (and the get_width() call below) cannot be taken. Backends that don't
+    // override mk_int_sort/mk_smt_int abort with the existing "Chosen
+    // solver doesn't support integer sorts" diagnostic.
+    if (is_bigint_type(expr->type))
+      return mk_smt_int(theint.value);
     unsigned int width = expr->type->get_width();
     if (int_encoding)
       return mk_smt_int(theint.value);
