@@ -131,6 +131,49 @@ static void attach_symbol_location(exprt &expr, contextt &symbol_table)
     expr.location() = sym->location;
 }
 
+std::string python_converter::get_python_type_category(const typet &t) const
+{
+  // Unannotated any_type (void*) — caller keeps the existing coercion path.
+  if (t.is_pointer() && t.subtype().id() == "empty")
+    return "";
+
+  // Python has no `char`: single-character results from `chr()` and string
+  // indexing are 1-char strings. ESBMC models them as 8-bit integers tagged
+  // with `#cpp_type==char` (set explicitly in type_handler::get_typet for
+  // `chr()` and in python_list::index for string subscript). A bare width-8
+  // int *without* the marker is something else (e.g. `dtype=np.int8`,
+  // 8-bit user int annotation) and must remain in the numeric tower —
+  // misclassifying it as "string" turns `np.add(127, 1, dtype=np.int8) ==
+  // -128` into a spurious cross-type fold to False.
+  if (type_utils::is_string_type(t) || type_utils::is_char_type(t))
+    return "string";
+
+  // Python's numeric tower coerces within itself; complex is checked first
+  // because it is a struct and would otherwise fall through to class_inst.
+  if (
+    is_complex_type(t) || t.is_bool() || t.is_floatbv() ||
+    type_utils::is_integer_type(t))
+    return "numeric";
+
+  // Any remaining non-string array (e.g. bytes literal `b'A'`).
+  if (t.is_array())
+    return "bytes";
+
+  if (t == type_handler_.get_list_type())
+    return "list";
+
+  if (dict_handler_->is_dict_type(t))
+    return "dict";
+
+  if (tuple_handler_->is_tuple_type(t))
+    return "tuple";
+
+  // User-defined class instances are deliberately reported as unknown so the
+  // caller falls through to `dispatch_dunder_operator`, which honours a
+  // user-defined `__eq__`. A cross-type fold here would silently bypass it.
+  return "";
+}
+
 exprt handle_float_vs_string(exprt &bin_expr, const std::string &op)
 {
   if (op == "Eq")
@@ -377,6 +420,18 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 
   attach_symbol_location(lhs, symbol_table());
   attach_symbol_location(rhs, symbol_table());
+
+  // Python rule: cross-type `==`/`!=` returns False/True without coercion,
+  // except within the numeric tower (bool/int/float/complex). Fold here, before
+  // the dict/list/tuple/SMT-encoding paths that otherwise crash on mismatched
+  // operands (e.g. float vs bytes, dict vs int, list vs int — issue #4628).
+  if (op == "Eq" || op == "NotEq")
+  {
+    const std::string lc = get_python_type_category(lhs.type());
+    const std::string rc = get_python_type_category(rhs.type());
+    if (!lc.empty() && !rc.empty() && lc != rc)
+      return gen_boolean(op == "NotEq");
+  }
 
   // Handle set operations (difference, intersection, union)
   typet list_type = type_handler_.get_list_type();
