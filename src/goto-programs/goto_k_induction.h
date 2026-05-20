@@ -8,8 +8,6 @@
 
 void goto_k_induction(goto_functionst &goto_functions);
 
-void goto_termination(goto_functionst &goto_functions);
-
 class goto_k_inductiont : public goto_loopst
 {
 public:
