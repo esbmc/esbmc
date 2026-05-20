@@ -40,8 +40,7 @@ inline bool is_comparison_expr(const expr2tc &e)
 inline bool is_number_type(const type2tc &t)
 {
   return t->type_id == type2t::unsignedbv_id ||
-         t->type_id == type2t::signedbv_id ||
-         t->type_id == type2t::bigint_id ||
+         t->type_id == type2t::signedbv_id || t->type_id == type2t::bigint_id ||
          t->type_id == type2t::fixedbv_id || t->type_id == type2t::floatbv_id ||
          t->type_id == type2t::bool_id;
 }
