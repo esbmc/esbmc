@@ -993,9 +993,8 @@ smt_astt cvc5_convt::mk_smt_int(const BigInt &theint)
   // BigInt::to_int64 silently truncates past 64 bits, so for values outside
   // the int64 range fall back to cvc5::Solver::mkInteger(const std::string&)
   // which accepts an arbitrary-precision decimal literal. Issue #4642.
-  cvc5::Term e = theint.is_int64()
-                   ? slv.mkInteger(theint.to_int64())
-                   : slv.mkInteger(integer2string(theint, 10));
+  cvc5::Term e = theint.is_int64() ? slv.mkInteger(theint.to_int64())
+                                   : slv.mkInteger(integer2string(theint, 10));
   return new_ast(e, mk_int_sort());
 }
 
