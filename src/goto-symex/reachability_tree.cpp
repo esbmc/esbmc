@@ -551,8 +551,11 @@ goto_symext::symex_resultt reachability_treet::get_next_formula()
     if (por)
     {
       get_cur_state().calculate_mpor_constraints();
-      if (get_cur_state().is_transition_blocked_by_mpor())
+      if (get_cur_state().is_transition_blocked_by_mpor()){
+        //log_status("cut by mpor");
         break;
+
+      }
     }
 
     if (state_hashing)

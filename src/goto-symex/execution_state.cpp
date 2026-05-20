@@ -1,6 +1,7 @@
 #include <goto-symex/execution_state.h>
 #include <goto-symex/reachability_tree.h>
 #include <langapi/language_ui.h>
+#include <langapi/language_util.h>
 #include <langapi/languages.h>
 #include <langapi/mode.h>
 #include <sstream>
@@ -16,6 +17,7 @@
 #include <util/string2array.h>
 #include <vector>
 #include <util/yaml_parser.h>
+#include <iostream>
 
 unsigned int execution_statet::node_count = 0;
 unsigned int execution_statet::dynamic_counter = 0;
@@ -219,6 +221,7 @@ void execution_statet::symex_step(reachability_treet &art)
 {
   statet &state = get_active_state();
   const goto_programt::instructiont &instruction = *state.source.pc;
+  //log_status("active_thread: {}, location: {}", active_thread, instruction.location);
   last_insn = &instruction;
 
   merge_gotos();
@@ -812,9 +815,6 @@ unsigned int execution_statet::add_thread(const goto_programt *prog)
 
 void execution_statet::analyze_assign(const expr2tc &code)
 {
-  if (get_active_state().guard.is_false())
-    return;
-  
   if (is_nil_expr(code))
     return;
 
@@ -835,9 +835,6 @@ void execution_statet::analyze_assign(const expr2tc &code)
 
 void execution_statet::analyze_read(const expr2tc &code)
 {
-  if (get_active_state().guard.is_false())
-    return;
-  
   if (is_nil_expr(code))
     return;
 
@@ -1161,6 +1158,35 @@ void execution_statet::calculate_mpor_constraints()
 
   mpor_says_no = !can_run;
 
+  // if (mpor_says_no)
+  // {
+  //   log_status("MPOR pruning: no dependency, dumping per-thread accesses");
+  //   for (unsigned int t = 0; t < threads_state.size(); t++)
+  //   {
+  //     std::ostringstream rs;
+  //     rs << "  thread " << t << " reads: {";
+  //     bool first = true;
+  //     for (const expr2tc &e : thread_last_reads[t])
+  //     {
+  //       rs << (first ? " " : ", ") << from_expr(ns, "", e);
+  //       first = false;
+  //     }
+  //     rs << " }";
+  //     log_status("{}", rs.str());
+
+  //     std::ostringstream ws;
+  //     ws << "  thread " << t << " writes: {";
+  //     first = true;
+  //     for (const expr2tc &e : thread_last_writes[t])
+  //     {
+  //       ws << (first ? " " : ", ") << from_expr(ns, "", e);
+  //       first = false;
+  //     }
+  //     ws << " }";
+  //     log_status("{}", ws.str());
+  //   }
+  // }
+
   dependency_chain = new_dep_chain;
 }
 
@@ -1168,14 +1194,53 @@ bool execution_statet::has_cswitch_point_occured() const
 {
   // Context switches can occur due to being forced, or by global state access
 
-  if (cswitch_forced)
+  if (cswitch_forced){
+   // log_status("force switch");
     return true;
+  }
 
-  if (
-    thread_last_reads[active_thread].size() != 0 ||
-    thread_last_writes[active_thread].size() != 0)
+  // Mutex / condition-var / rwlock / barrier / spinlock accesses should
+  // contribute to MPOR dependency tracking (so lock/unlock pairs create
+  // dependency chains between threads), but must not by themselves force
+  // a context switch point here — they already drive scheduling through
+  // the pthread library's explicit switch mechanisms, and treating every
+  // lock access as a cswitch point blows up the DFS width.
+  auto is_pthread_sync_type = [](const type2tc &t) {
+    if (is_nil_type(t))
+      return false;
+    if (is_struct_type(t))
+    {
+      const std::string &n = to_struct_type(t).name.as_string();
+      return n.find("pthread_mutex_t") != std::string::npos ||
+             n.find("pthread_cond_t") != std::string::npos ||
+             n.find("pthread_rwlock_t") != std::string::npos ||
+             n.find("pthread_barrier_t") != std::string::npos ||
+             n.find("pthread_spinlock_t") != std::string::npos;
+    }
+    if (is_union_type(t))
+    {
+      const std::string &n = to_union_type(t).name.as_string();
+      return n.find("pthread_mutex_t") != std::string::npos ||
+             n.find("pthread_cond_t") != std::string::npos ||
+             n.find("pthread_rwlock_t") != std::string::npos;
+    }
+
+    return false;
+  };
+
+  auto any_non_sync = [&](const std::set<expr2tc> &s) {
+    for (const auto &e : s)
+      if (!is_pthread_sync_type(e->type))
+        return true;
+    return false;
+  };
+
+  if (any_non_sync(thread_last_reads[active_thread]) ||
+      any_non_sync(thread_last_writes[active_thread])){
+        //log_status("switch point");
     return true;
-
+      }
+  //log_status("no switch");
   return false;
 }
 
@@ -1340,6 +1405,7 @@ void execution_statet::ex_state_level2t::rename(expr2tc &identifier)
 
 dfs_execution_statet::~dfs_execution_statet()
 {
+  //log_status("Pop a state.");
   // Delete target; or if we're encoding at runtime, pop a context.
   if (smt_during_symex)
     target->pop_ctx();
@@ -1347,6 +1413,7 @@ dfs_execution_statet::~dfs_execution_statet()
 
 std::shared_ptr<execution_statet> dfs_execution_statet::clone() const
 {
+  //log_status("Push a state.");
   std::shared_ptr<dfs_execution_statet> d =
     std::make_shared<dfs_execution_statet>(*this);
 
