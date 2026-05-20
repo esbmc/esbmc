@@ -701,7 +701,8 @@ SCENARIO(
 
   THEN("legacy from_integer(huge, bigint_typet) emits the decimal encoding")
   {
-    exprt legacy_helper = from_integer(huge, migrate_type_back(bigint_type2tc()));
+    exprt legacy_helper =
+      from_integer(huge, migrate_type_back(bigint_type2tc()));
     REQUIRE(legacy_helper.type().id() == typet::t_bigint);
     REQUIRE(legacy_helper.value().as_string() == integer2string(huge, 10));
   }
@@ -734,9 +735,9 @@ SCENARIO(
     BigInt(0),
     BigInt(1),
     BigInt(-1),
-    BigInt::power2(63),                            // INT64_MAX + 1
-    -BigInt::power2(63) - BigInt(1),               // INT64_MIN - 1
-    BigInt::power2(1024) + BigInt::power2(512)};   // not a single bit
+    BigInt::power2(63),                          // INT64_MAX + 1
+    -BigInt::power2(63) - BigInt(1),             // INT64_MIN - 1
+    BigInt::power2(1024) + BigInt::power2(512)}; // not a single bit
 
   GIVEN("a representative bigint constant_int2t")
   {
