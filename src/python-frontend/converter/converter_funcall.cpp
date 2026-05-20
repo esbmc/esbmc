@@ -708,8 +708,8 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
         // normal builder, whose recursion into get_literal raises the
         // overflow diagnostic. Without this guard the null `value` is taken
         // as Python None below and the bignum is silently consumed.
-        const bool arg_is_bigint = arg_node["_type"] == "Constant" &&
-                                   arg_node.contains("_bigint");
+        const bool arg_is_bigint =
+          arg_node["_type"] == "Constant" && arg_node.contains("_bigint");
         const bool usub_operand_is_bigint =
           arg_node["_type"] == "UnaryOp" && arg_node["op"]["_type"] == "USub" &&
           arg_node["operand"]["_type"] == "Constant" &&
