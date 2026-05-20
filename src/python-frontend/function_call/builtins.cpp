@@ -1062,11 +1062,12 @@ exprt function_call_expr::handle_complex() const
              (t.is_unsignedbv() && to_unsignedbv_type(t).get_width() == 8);
     };
     const typet &vt = value.type();
-    const bool is_textual_array = vt.is_array() && is_char_subtype(vt.subtype());
+    const bool is_textual_array =
+      vt.is_array() && is_char_subtype(vt.subtype());
     const bool is_textual_pointer =
       vt.is_pointer() && is_char_subtype(vt.subtype());
-    const bool is_bare_char = is_char_subtype(vt) && !vt.is_array() &&
-                              !vt.is_pointer();
+    const bool is_bare_char =
+      is_char_subtype(vt) && !vt.is_array() && !vt.is_pointer();
 
     if (vt.is_array() && !is_textual_array)
       return raise_type_error(
