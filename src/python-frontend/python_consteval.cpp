@@ -504,6 +504,13 @@ python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
   // Constants
   if (type == "Constant")
   {
+    // Bignum literals tagged by parser.py (issue #4642) carry value:null
+    // alongside the `_bigint` digit string. Decline to fold so the call
+    // falls back through to get_literal, which raises the overflow
+    // diagnostic. Without this guard a bignum literal in const-foldable
+    // position would be silently treated as Python None.
+    if (node.contains("_bigint"))
+      return std::nullopt;
     const auto &val = node["value"];
     if (val.is_null())
       return PyConstValue::make_none();

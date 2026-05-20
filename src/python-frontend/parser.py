@@ -35,6 +35,55 @@ import tempfile
 from libs.ast2json import ast2json as ast2json_func
 from preprocessor import Preprocessor
 
+# Python ints are arbitrary precision; the JSON wire format used by the C++
+# frontend stores them as numbers, which nlohmann::json silently truncates to
+# double once they exceed uint64. Tag any int Constant whose value does not
+# fit int64 so the C++ side can detect and diagnose the overflow without
+# losing precision, and replace the numeric value with `null` — direct C++
+# readers of Constant["value"] then bail via their `is_number_integer()`
+# guard. The dedicated `get_literal()` path, plus the consteval and funcall
+# pre-scan paths, check `_bigint` first and refuse to fold. Issue #4642
+# tracks the bignum lowering that will eventually consume the tag.
+#
+# When a Constant sits in the `operand` position of UnaryOp(USub, …) Python's
+# ast.parse splits a negative literal like ``-(2**63)`` into the surrounding
+# minus and a positive Constant; the inner Constant is technically out of
+# int64 range even though the final value is INT64_MIN. Take that one-level
+# context into account so valid INT64_MIN literals are accepted while true
+# out-of-range literals (signed or not) still trap.
+_INT64_MIN = -(1 << 63)
+_INT64_MAX = (1 << 63) - 1
+
+
+def _fits_int64(v):
+    return _INT64_MIN <= v <= _INT64_MAX
+
+
+def _is_usub_unaryop(node):
+    return (isinstance(node, dict)
+            and node.get("_type") == "UnaryOp"
+            and isinstance(node.get("op"), dict)
+            and node["op"].get("_type") == "USub")
+
+
+def _tag_bignum_constants(node, in_usub_operand=False):
+    if isinstance(node, dict):
+        if node.get("_type") == "Constant":
+            v = node.get("value")
+            if isinstance(v, int) and not isinstance(v, bool):
+                effective = -v if in_usub_operand else v
+                if not _fits_int64(effective):
+                    node["_bigint"] = str(v)
+                    node["value"] = None
+            return  # Constants are leaves — no nested Constants inside
+        is_usub = _is_usub_unaryop(node)
+        for k, v in node.items():
+            _tag_bignum_constants(
+                v, in_usub_operand=(is_usub and k == "operand"))
+    elif isinstance(node, list):
+        for v in node:
+            _tag_bignum_constants(v)
+
 
 def run_mypy_strict(filename):
     """Run mypy as a subprocess when available; skip otherwise."""
@@ -2203,6 +2252,7 @@ def generate_ast_json(tree, python_filename, elements_to_import, output_dir, mod
     )
     ast_json["filename"] = python_filename
     ast_json["ast_output_dir"] = output_dir
+    _tag_bignum_constants(ast_json)
 
     # Build JSON path
     if module_qualname:

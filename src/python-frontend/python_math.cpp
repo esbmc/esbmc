@@ -1,5 +1,6 @@
 #include <python-frontend/python_math.h>
 #include <python-frontend/python_converter.h>
+#include <python-frontend/python_int_overflow.h>
 #include <python-frontend/type_utils.h>
 #include <python-frontend/math_guard_utils.h>
 #include <util/arith_tools.h>
@@ -458,7 +459,7 @@ exprt python_math::handle_power(exprt lhs, exprt rhs)
     const BigInt max_val =
       is_signed ? BigInt::power2(width - 1) - 1 : BigInt::power2(width) - 1;
     if (power_value < min_val || power_value > max_val)
-      throw std::runtime_error(
+      throw python_int_overflow_excp(
         "Python int overflow: " + integer2string(*resolved_base_value) +
         " ** " + integer2string(exponent) + " = " +
         integer2string(power_value) + " does not fit in " +

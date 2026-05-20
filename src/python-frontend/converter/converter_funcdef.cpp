@@ -185,7 +185,13 @@ python_converter::infer_types_from_returns(const nlohmann::json &function_body)
         if (val["_type"] == "Constant")
         {
           const auto &constant_val = val["value"];
-          if (constant_val.is_number_float())
+          // Bignum literal (issue #4642): tagged Constants carry `_bigint`
+          // alongside a null `value`. Classify as int rather than None so
+          // type inference still produces an int return type; the actual
+          // overflow diagnostic fires later in get_literal.
+          if (val.contains("_bigint"))
+            flags.has_int = true;
+          else if (constant_val.is_number_float())
             flags.has_float = true;
           else if (constant_val.is_number_integer())
             flags.has_int = true;
@@ -759,6 +765,11 @@ typet python_converter::infer_return_type_from_body(const nlohmann::json &body)
       // Constant returns (including strings)
       if (ret_val["_type"] == "Constant" && ret_val.contains("value"))
       {
+        // Bignum literal (issue #4642): tagged Constant has null value but
+        // the function genuinely returns an int. Use int rather than fall
+        // through to the null → none branch in infer_constant_type.
+        if (ret_val.contains("_bigint"))
+          return long_long_int_type();
         typet inferred = infer_constant_type(ret_val["value"]);
         if (!inferred.is_empty())
           return inferred;
@@ -938,8 +949,11 @@ void python_converter::get_function_definition(
         {
           if (s["value"].is_null())
             return true;
+          // Bignum literals (issue #4642) carry `_bigint` with a null value;
+          // they are int returns, not None.
           if (
-            s["value"]["_type"] == "Constant" && s["value"]["value"].is_null())
+            s["value"]["_type"] == "Constant" &&
+            s["value"]["value"].is_null() && !s["value"].contains("_bigint"))
             return true;
         }
         if (s.contains("body") && s["body"].is_array() && scan(s["body"]))
