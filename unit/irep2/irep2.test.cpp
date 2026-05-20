@@ -833,9 +833,7 @@ SCENARIO(
   GIVEN("add2tc(bigint, 0, 2^200) — identity short-circuit")
   {
     expr2tc e = add2tc(
-      bigint,
-      constant_int2tc(bigint, BigInt(0)),
-      constant_int2tc(bigint, a));
+      bigint, constant_int2tc(bigint, BigInt(0)), constant_int2tc(bigint, a));
     THEN("add2t::do_simplify returns the non-zero side unclipped")
     {
       expr2tc s = e->simplify();
@@ -881,11 +879,8 @@ SCENARIO(
   GIVEN("chained mul: ((2^200) * 2) * 2 — depth-2 fold")
   {
     expr2tc inner = mul2tc(
-      bigint,
-      constant_int2tc(bigint, a),
-      constant_int2tc(bigint, BigInt(2)));
-    expr2tc outer =
-      mul2tc(bigint, inner, constant_int2tc(bigint, BigInt(2)));
+      bigint, constant_int2tc(bigint, a), constant_int2tc(bigint, BigInt(2)));
+    expr2tc outer = mul2tc(bigint, inner, constant_int2tc(bigint, BigInt(2)));
     THEN("simplify folds the whole chain to 2^202 unclipped")
     {
       expr2tc s = outer->simplify();
@@ -913,9 +908,7 @@ SCENARIO(
   GIVEN("div(0, 2^200) — numerator zero short-circuit")
   {
     expr2tc e = div2tc(
-      bigint,
-      constant_int2tc(bigint, BigInt(0)),
-      constant_int2tc(bigint, a));
+      bigint, constant_int2tc(bigint, BigInt(0)), constant_int2tc(bigint, a));
     THEN("simplify folds to 0 (no width-dependent zero generation)")
     {
       expr2tc s = e->simplify();
@@ -942,9 +935,8 @@ SCENARIO(
 
   GIVEN("equality of two distinct bigint constants")
   {
-    expr2tc e = equality2tc(
-      constant_int2tc(bigint, a),
-      constant_int2tc(bigint, b));
+    expr2tc e =
+      equality2tc(constant_int2tc(bigint, a), constant_int2tc(bigint, b));
     THEN("simplify folds to false")
     {
       expr2tc s = e->simplify();
@@ -956,8 +948,8 @@ SCENARIO(
 
   GIVEN("lessthan(2^199, 2^200)")
   {
-    expr2tc e = lessthan2tc(
-      constant_int2tc(bigint, b), constant_int2tc(bigint, a));
+    expr2tc e =
+      lessthan2tc(constant_int2tc(bigint, b), constant_int2tc(bigint, a));
     THEN("simplify folds to true")
     {
       expr2tc s = e->simplify();
