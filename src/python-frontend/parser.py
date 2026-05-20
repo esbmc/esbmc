@@ -35,6 +35,36 @@ import tempfile
 from libs.ast2json import ast2json as ast2json_func
 from preprocessor import Preprocessor
 
+# Python ints are arbitrary precision; the JSON wire format used by the C++
+# frontend stores them as numbers, which nlohmann::json silently truncates to
+# double once they exceed uint64. Tag any int Constant outside int64 range so
+# the C++ side can detect and diagnose the overflow without losing precision,
+# and replace the numeric value with `null` — every direct C++ reader of
+# Constant["value"] currently guards with `is_number_integer()`, so a null
+# value fails that check and short-circuits any silent miscompilation that
+# would otherwise occur on consteval, funcall pre-scan, f-strings, builtins,
+# etc. The dedicated `get_literal()` path checks `_bigint` first and raises.
+# Issue #4642 tracks the bignum lowering that will eventually consume the tag.
+_INT64_MIN = -(1 << 63)
+_INT64_MAX = (1 << 63) - 1
+
+
+def _is_bignum_int(v):
+    return (isinstance(v, int) and not isinstance(v, bool)
+            and not (_INT64_MIN <= v <= _INT64_MAX))
+
+
+def _tag_bignum_constants(node):
+    if isinstance(node, dict):
+        if node.get("_type") == "Constant" and _is_bignum_int(node.get("value")):
+            node["_bigint"] = str(node["value"])
+            node["value"] = None
+        for v in node.values():
+            _tag_bignum_constants(v)
+    elif isinstance(node, list):
+        for v in node:
+            _tag_bignum_constants(v)
+
 
 def run_mypy_strict(filename):
     """Run mypy as a subprocess when available; skip otherwise."""
@@ -2203,6 +2233,7 @@ def generate_ast_json(tree, python_filename, elements_to_import, output_dir, mod
     )
     ast_json["filename"] = python_filename
     ast_json["ast_output_dir"] = output_dir
+    _tag_bignum_constants(ast_json)
 
     # Build JSON path
     if module_qualname:

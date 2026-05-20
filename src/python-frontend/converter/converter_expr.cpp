@@ -125,6 +125,26 @@ exprt python_converter::get_literal(const nlohmann::json &element)
                         ? element["operand"]["value"]
                         : element["value"];
 
+  // Bignum literal tagged by parser.py (issue #4642). Checked before the null
+  // branch below because parser.py replaces tagged literals' `value` with null
+  // so direct readers (consteval, funcall pre-scan, f-strings) bail via their
+  // `is_number_integer()` guard instead of silently folding bignum to 0. Until
+  // arbitrary-precision int lands in the irep2 type system, reject the literal
+  // explicitly rather than letting nlohmann::json silently truncate values
+  // above uint64 to double or letting from_integer wrap values in [2^63, 2^64)
+  // into negative int64. UnaryOp(USub, Constant(_bigint=...)) is dispatched
+  // through convert_unop → get_expr(operand) → get_literal(operand), so the
+  // trap fires from the recursive Constant entry and needs no special case.
+  if (element.contains("_bigint"))
+  {
+    const std::string &digits = element["_bigint"].get<std::string>();
+    throw std::runtime_error(
+      "Python int overflow: literal " + digits +
+      " does not fit in 64-bit int. ESBMC approximates Python int as a "
+      "fixed-width bitvector; arbitrary-precision int support is tracked in "
+      "issue #4642.");
+  }
+
   // Handle None literals (null values)
   if (value.is_null())
   {
