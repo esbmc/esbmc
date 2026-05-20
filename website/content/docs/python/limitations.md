@@ -7,19 +7,18 @@ weight: 4
 
 ## Control Flow and Loops
 
-- `for` loops support direct iteration over `range()`, lists, strings, and generators (functions using `yield` and generator expressions). Iteration over tuples is not yet supported.
-- List comprehensions and generator expressions are supported. Set comprehensions are not supported (`Unsupported expression SetComp`). Dictionary comprehensions are accepted by the parser but produce a dictionary whose subsequent key lookups raise `KeyError`.
+- `for` loops support direct iteration over `range()`, lists, strings, tuples, and generators (functions using `yield` and generator expressions).
+- List, set, and generator comprehensions are supported. Dictionary comprehensions are accepted by the parser but produce a dictionary whose subsequent key lookups raise `KeyError`.
 - Iteration over dictionaries via `d.keys()`, `d.values()`, and `d.items()` is supported inside `for` loops (see [Supported Features — Dictionaries](./supported-features#dictionaries)).
 
 ## Lists
 
-- `list.sort()` does not support the `key` or `reverse` keyword arguments.
-- `sorted()` does not support the `key` or `reverse` keyword arguments.
+- `list.sort()` does not support the `key` keyword argument; `reverse` is supported.
+- `sorted()` does not support the `key` keyword argument; `reverse` is supported.
 
 ## Sets
 
-- Set methods `.add()`, `.discard()`, `.update()`, `.issubset()`, `.issuperset()`, and `.symmetric_difference()` are not supported; use binary operators (`-`, `&`, `|`) instead. (`.remove()` happens to work because sets share the underlying list model.)
-- `frozenset` is not supported.
+- Set methods `.issubset()`, `.issuperset()`, and `.symmetric_difference()` are not supported; use the equivalent binary operators (`<=`, `>=`, `^`) instead.
 
 ## Dictionaries
 
@@ -27,23 +26,19 @@ weight: 4
 
 ## Tuples
 
-- Tuple indexing requires constant indices; variable indices (e.g., `t[i]` where `i` is a variable) are not supported.
-- Tuple iteration (`for item in my_tuple:`) is not yet supported.
-- Tuple methods `.count()` and `.index()` are not yet supported.
-- Tuple concatenation (`+`) and repetition (`*`) are not yet supported.
-- Tuple slicing is not yet supported.
+- Tuple repetition (`*`) is not yet supported and currently aborts the frontend.
 
 ## Complex Numbers
 
-- The `complex()` constructor accepts string arguments only when the string is a compile-time constant (e.g., `complex("1+2j")` is folded by the frontend). Constructing from a runtime string fails with "Unhandled symbol format in string extraction".
+- The `complex()` constructor accepts string arguments only when the string is a compile-time constant (e.g., `complex("1+2j")` is folded by the frontend). Constructing from a runtime string is rejected with the error `complex() does not support non-literal string arguments`.
 - `cmath.polar()` and `cmath.rect()` rely on the `atan2` model; results may differ from CPython in edge cases involving signed zeros and NaN.
 
 ## Built-in Functions
 
-- `min()` and `max()` support two-argument form and single-list form only; the `key` and `default` keyword arguments are not supported.
+- `min()` and `max()` support two-argument form and single-list form only; the `key` keyword argument is not supported (`default` is supported).
 - `any()` and `all()` currently support only list literals as arguments. `any()` rejects other iterables with a parse-time error; `all()` may trigger a dereference failure on non-list iterables.
-- `sum()` supports `int` and `float` element types only; the optional `start` argument is not supported.
-- `sorted()` supports `int`, `float`, and `str` element types only; `key` and `reverse` keyword arguments are not supported.
+- `sum()` supports `int` and `float` element types only.
+- `sorted()` supports `int`, `float`, and `str` element types only; the `key` keyword argument is not supported (`reverse` is supported).
 - `input()` is modelled as a nondeterministic string with a maximum length of 256 characters (under-approximation).
 - `print()` evaluates all arguments for side effects but does not produce actual output during verification.
 - `enumerate()` supports standard usage patterns but may have limitations with complex nested iterables or advanced parameter combinations.
@@ -56,7 +51,6 @@ weight: 4
 ## F-Strings
 
 - Complex expressions inside f-strings may have limited support.
-- Only basic integer (`:d`, `:i`) and float (`:.Nf`) format specs are supported; advanced format specs (e.g., string alignment `:>10`, `:<5`) are not.
 - Custom format specifications for user-defined types are not supported.
 
 ## Union and Any Types
