@@ -2,6 +2,7 @@
 #include <cstdarg>
 #include <cstdint>
 #include <sstream>
+#include <util/mp_arith.h>
 #include <yices_conv.h>
 #include <assert.h>
 
@@ -630,7 +631,13 @@ smt_astt yices_convt::mk_isint(smt_astt)
 
 smt_astt yices_convt::mk_smt_int(const BigInt &theint)
 {
-  term_t term = yices_int64(theint.to_int64());
+  // BigInt::to_int64 silently truncates past 64 bits, so for values outside
+  // the int64 range build the term from a decimal string via
+  // yices_parse_rational — already exercised by mk_smt_real below. Issue
+  // #4642.
+  term_t term = theint.is_int64()
+                  ? yices_int64(theint.to_int64())
+                  : yices_parse_rational(integer2string(theint, 10).c_str());
   smt_sortt s = mk_int_sort();
   return new_ast(term, s);
 }
