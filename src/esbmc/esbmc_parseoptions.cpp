@@ -1513,7 +1513,8 @@ int esbmc_parseoptionst::do_bmc_strategy(
   // proof or refutation has been found.  In multi-property mode the loop may
   // have continued past an earlier violation, so we must return 1 even when
   // the closing step (FC/IS) itself succeeds.
-  auto conclude = [&]() -> int {
+  auto conclude = [&]() -> int
+  {
     // In coverage mode violations are expected; always report success.
     if (any_violation_found && !is_coverage)
     {
@@ -1624,17 +1625,14 @@ int esbmc_parseoptionst::do_bmc_strategy(
 
       // IS UNSAT is only sound when k-induction actually havoc'd every
       // loop the property depends on. goto_k_induction skips a loop
-      // when its modified set is empty (then `disable-inductive-step`
-      // gets set mid-symex by the function-pointer / recursion /
-      // concurrency hooks) OR when --add-symex-value-sets is on AND
-      // every modified variable is a pointer
-      // (goto_k_induction.cpp:91-94). The former is handled by the
-      // disable-inductive-step check below; the latter needs a
-      // structural look at the loop set.
-      bool is_havoc_reliable =
-        !options.get_bool_option("add-symex-value-sets") ||
-        !has_pointer_only_loop(goto_functions);
-      if (k_step > 1 && is_havoc_reliable)
+      // when its modified set is empty — in that case
+      // disable-inductive-step gets set mid-symex by the function-
+      // pointer / recursion / concurrency hooks and the IS verdict is
+      // treated as inconclusive below. Pointer-modifying loops are
+      // now sound under --add-symex-value-sets thanks to the
+      // value-set assume in symex_dereference, so no extra structural
+      // gate is needed.
+      if (k_step > 1)
       {
         tvt is_res =
           is_inductive_step_violated(options, goto_functions, k_step);
@@ -2355,22 +2353,30 @@ bool esbmc_parseoptionst::process_goto_program(
                           cmdline.isset("k-induction") ||
                           cmdline.isset("k-induction-parallel");
 
+    // --termination reuses k-induction's havoc machinery via
+    // goto_termination, so the post-havoc invariant injection applies
+    // to it too. Treat termination like k-induction for the purpose
+    // of interval-analysis pipeline gating.
+    bool wants_kind_pipeline =
+      is_k_induction || options.get_bool_option("termination");
+
     if (cmdline.isset("interval-analysis") || cmdline.isset("goto-contractor"))
     {
-      // Plain interval analysis without k-induction: run with LOOP_MODE so
-      // each loop gets a before-back-edge ASSUME(bounds) and an after-loop
-      // ASSUME(bounds). The default GUARD_INSTRUCTIONS_LOCAL emits bounds
-      // at every assume/assert/goto, which is more uniform but loses the
-      // per-loop framing.
+      // Plain interval analysis without k-induction-style havoc: run
+      // with LOOP_MODE so each loop gets a before-back-edge
+      // ASSUME(bounds) and an after-loop ASSUME(bounds). The default
+      // GUARD_INSTRUCTIONS_LOCAL emits bounds at every assume/assert/
+      // goto, which is more uniform but loses the per-loop framing.
       //
-      // With k-induction, stay on GUARD_INSTRUCTIONS_LOCAL: instructions
-      // matching k-induction's later transformations rely on the
-      // per-instruction bounds being available everywhere, and the
-      // post-k-induction pass below adds the at-loop-head bounds that
-      // tighten the inductive hypothesis.
+      // With k-induction (or termination), stay on
+      // GUARD_INSTRUCTIONS_LOCAL: instructions matching k-induction's
+      // later transformations rely on the per-instruction bounds being
+      // available everywhere, and the post-k-induction pass below adds
+      // the at-loop-head bounds that tighten the inductive hypothesis.
       const auto mode =
-        is_k_induction ? INTERVAL_INSTRUMENTATION_MODE::GUARD_INSTRUCTIONS_LOCAL
-                       : INTERVAL_INSTRUMENTATION_MODE::LOOP_MODE;
+        wants_kind_pipeline
+          ? INTERVAL_INSTRUMENTATION_MODE::GUARD_INSTRUCTIONS_LOCAL
+          : INTERVAL_INSTRUMENTATION_MODE::LOOP_MODE;
       interval_analysis(goto_functions, ns, options, mode);
     }
 
@@ -2406,18 +2412,33 @@ bool esbmc_parseoptionst::process_goto_program(
       }
     }
 
+    // --termination: reduce non-termination to a reachability safety
+    // property by inserting per-loop assert(false) markers and
+    // applying the k-induction havoc to every loop. Runs BEFORE
+    // instrument_loop_bounds_after_kind so the post-havoc invariant
+    // injection sees the transformed IR.
+    //
+    // Gated on options.get_bool_option, not cmdline.isset: when both
+    // --k-induction and --termination are passed, k-induction wins
+    // (line ~487 sets options.termination = false). cmdline.isset
+    // would still see the original CLI value, incorrectly firing
+    // goto_termination on k-induction-only runs.
+    if (options.get_bool_option("termination"))
+      goto_termination(goto_functions);
+
     // Pass B (post-k-induction loop bounds): when interval analysis ran
-    // earlier and k-induction has now finished inserting its nondet havoc
-    // before each loop head, recompute bounds with k-induction's preamble
-    // instructions treated as transparent, then insert an ASSUME(bounds)
-    // right before each loop's exit-test. The ASSUME is marked
-    // inductive_step_instruction = true so only the inductive step sees
-    // it; base case and forward condition skip it. This is the place where
-    // interval analysis actually strengthens the inductive hypothesis.
+    // earlier and k-induction (or --termination's equivalent havoc) has
+    // now finished inserting its nondet havoc before each loop head,
+    // recompute bounds with k-induction's preamble instructions treated
+    // as transparent, then insert an ASSUME(bounds) right before each
+    // loop's exit-test. The ASSUME is marked inductive_step_instruction
+    // = true so only the inductive step sees it; base case and forward
+    // condition skip it. This is the place where interval analysis
+    // actually strengthens the inductive hypothesis.
     if (
       (cmdline.isset("interval-analysis") ||
        cmdline.isset("goto-contractor")) &&
-      is_k_induction)
+      wants_kind_pipeline)
     {
       instrument_loop_bounds_after_kind(goto_functions, ns, options);
     }
@@ -2436,15 +2457,6 @@ bool esbmc_parseoptionst::process_goto_program(
       abort();
 #endif
     }
-
-    // --termination: reduce non-termination to a reachability safety
-    // property by inserting `assert(false)` right after the call to
-    // `main()` in `__ESBMC_main`. The BMC driver then iterates the base
-    // case; UNSAT at some k proves the assert is unreachable up to that
-    // unwinding bound, i.e. no path of length k terminates. See
-    // do_bmc_strategy for the loop side.
-    if (cmdline.isset("termination"))
-      goto_termination(goto_functions);
 
     goto_check(ns, options, goto_functions);
 
@@ -2476,11 +2488,24 @@ bool esbmc_parseoptionst::process_goto_program(
     add_property_monitors(goto_functions, ns);
 
     // Once again, remove all unreachable and no-op code that could have been
-    // introduced by the above algorithms
-    if (!(cmdline.isset("no-remove-no-op")))
+    // introduced by the above algorithms.
+    //
+    // Skip these cleanups under --termination: goto_termination inserts
+    // per-loop ASSERT(false) markers preceded by GOTO orig_target. The
+    // GOTO is structurally a "GOTO to next instruction" no-op so
+    // remove_no_op would erase it, and ASSERT(false) is treated as
+    // having no fall-through successor by get_successors, so
+    // remove_unreachable would then strip every original instruction
+    // that was only reachable via the marker. Both transformations
+    // corrupt the termination CFG. The marker block is intentionally
+    // small and ignoring it costs nothing.
+    const bool skip_cleanup_for_termination =
+      options.get_bool_option("termination");
+    if (!(cmdline.isset("no-remove-no-op") || skip_cleanup_for_termination))
       remove_no_op(goto_functions);
 
-    if (!(cmdline.isset("no-remove-unreachable") || is_mul || is_coverage))
+    if (!(cmdline.isset("no-remove-unreachable") || is_mul || is_coverage ||
+          skip_cleanup_for_termination))
       remove_unreachable(goto_functions);
 
     goto_functions.update();
@@ -2697,7 +2722,8 @@ bool esbmc_parseoptionst::process_goto_program(
           "N=4");
       }
 
-      auto read_positive = [&](const char *flag, size_t &dst) -> bool {
+      auto read_positive = [&](const char *flag, size_t &dst) -> bool
+      {
         if (!cmdline.isset(flag))
           return true;
         int v = atoi(cmdline.getval(flag));
@@ -2964,18 +2990,20 @@ void esbmc_parseoptionst::add_property_monitors(
 {
   std::map<std::string, std::pair<std::set<std::string>, expr2tc>> monitors;
 
-  context.foreach_operand([this, &monitors](const symbolt &s) {
-    if (
-      !has_prefix(s.name, "__ESBMC_property_") ||
-      s.name.as_string().find("$type") != std::string::npos)
-      return;
+  context.foreach_operand(
+    [this, &monitors](const symbolt &s)
+    {
+      if (
+        !has_prefix(s.name, "__ESBMC_property_") ||
+        s.name.as_string().find("$type") != std::string::npos)
+        return;
 
-    // strip prefix "__ESBMC_property_"
-    std::string prop_name = s.name.as_string().substr(17);
-    std::set<std::string> used_syms;
-    expr2tc main_expr = calculate_a_property_monitor(prop_name, used_syms);
-    monitors[prop_name] = std::pair{used_syms, main_expr};
-  });
+      // strip prefix "__ESBMC_property_"
+      std::string prop_name = s.name.as_string().substr(17);
+      std::set<std::string> used_syms;
+      expr2tc main_expr = calculate_a_property_monitor(prop_name, used_syms);
+      monitors[prop_name] = std::pair{used_syms, main_expr};
+    });
 
   if (monitors.size() == 0)
     return;
@@ -3070,10 +3098,12 @@ static void collect_symbol_names(
   }
   else
   {
-    e->foreach_operand([&prefix, &used_syms](const expr2tc &e) {
-      if (!is_nil_expr(e))
-        collect_symbol_names(e, prefix, used_syms);
-    });
+    e->foreach_operand(
+      [&prefix, &used_syms](const expr2tc &e)
+      {
+        if (!is_nil_expr(e))
+          collect_symbol_names(e, prefix, used_syms);
+      });
   }
 }
 
@@ -3165,9 +3195,8 @@ static unsigned int calc_globals_used(const namespacet &ns, const expr2tc &expr)
   {
     unsigned int globals = 0;
 
-    expr->foreach_operand([&globals, &ns](const expr2tc &e) {
-      globals += calc_globals_used(ns, e);
-    });
+    expr->foreach_operand([&globals, &ns](const expr2tc &e)
+                          { globals += calc_globals_used(ns, e); });
     return globals;
   }
 
@@ -3256,42 +3285,43 @@ void esbmc_parseoptionst::process_function_contracts(
   // This includes functions with:
   // 1. Explicit contract clauses (__ESBMC_requires, __ESBMC_ensures, __ESBMC_assigns)
   // 2. __attribute__((annotate("__ESBMC_contract"))) annotation
-  auto collect_functions_with_contracts =
-    [&contracts, &goto_functions, &ctx]() {
-      std::set<std::string> result;
-      forall_goto_functions (it, goto_functions)
+  auto collect_functions_with_contracts = [&contracts, &goto_functions, &ctx]()
+  {
+    std::set<std::string> result;
+    forall_goto_functions (it, goto_functions)
+    {
+      if (!it->second.body_available)
+        continue;
+
+      std::string func_name = id2string(it->first);
+
+      // Use is_compiler_generated (which correctly handles C++ USR IDs like
+      // "c:@F@fst#*1I#") instead of a raw '#' string filter, which would
+      // incorrectly skip all C++ functions with parameters.
+      if (contracts.is_compiler_generated(func_name))
+        continue;
+
+      // Check for explicit contract clauses in function body
+      if (contracts.has_contracts(it->second.body))
       {
-        if (!it->second.body_available)
-          continue;
-
-        std::string func_name = id2string(it->first);
-
-        // Use is_compiler_generated (which correctly handles C++ USR IDs like
-        // "c:@F@fst#*1I#") instead of a raw '#' string filter, which would
-        // incorrectly skip all C++ functions with parameters.
-        if (contracts.is_compiler_generated(func_name))
-          continue;
-
-        // Check for explicit contract clauses in function body
-        if (contracts.has_contracts(it->second.body))
-        {
-          result.insert(func_name);
-          continue;
-        }
-
-        // Check for __attribute__((annotate("__ESBMC_contract"))) annotation
-        symbolt *func_sym = ctx.find_symbol(it->first);
-        if (func_sym && contracts.is_annotated_contract_function(*func_sym))
-        {
-          result.insert(func_name);
-        }
+        result.insert(func_name);
+        continue;
       }
-      return result;
-    };
+
+      // Check for __attribute__((annotate("__ESBMC_contract"))) annotation
+      symbolt *func_sym = ctx.find_symbol(it->first);
+      if (func_sym && contracts.is_annotated_contract_function(*func_sym))
+      {
+        result.insert(func_name);
+      }
+    }
+    return result;
+  };
 
   // Lambda function to process function list (handles "*" wildcard)
-  auto process_function_list = [&collect_functions_with_contracts](
-                                 const std::list<std::string> &func_list) {
+  auto process_function_list =
+    [&collect_functions_with_contracts](const std::list<std::string> &func_list)
+  {
     std::set<std::string> result;
     for (const auto &func : func_list)
     {
@@ -3346,21 +3376,22 @@ void esbmc_parseoptionst::process_function_contracts(
 
   // Lambda to collect ONLY functions with __ESBMC_contract annotation
   auto collect_annotated_contract_functions =
-    [&contracts, &goto_functions, &ctx]() {
-      std::set<std::string> result;
-      forall_goto_functions (it, goto_functions)
-      {
-        if (!it->second.body_available)
-          continue;
-        std::string func_name = id2string(it->first);
-        if (contracts.is_compiler_generated(func_name))
-          continue;
-        symbolt *func_sym = ctx.find_symbol(it->first);
-        if (func_sym && contracts.is_annotated_contract_function(*func_sym))
-          result.insert(func_name);
-      }
-      return result;
-    };
+    [&contracts, &goto_functions, &ctx]()
+  {
+    std::set<std::string> result;
+    forall_goto_functions (it, goto_functions)
+    {
+      if (!it->second.body_available)
+        continue;
+      std::string func_name = id2string(it->first);
+      if (contracts.is_compiler_generated(func_name))
+        continue;
+      symbolt *func_sym = ctx.find_symbol(it->first);
+      if (func_sym && contracts.is_annotated_contract_function(*func_sym))
+        result.insert(func_name);
+    }
+    return result;
+  };
 
   // Process --enforce-all-contracts
   if (has_enforce_all)

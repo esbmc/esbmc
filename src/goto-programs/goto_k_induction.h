@@ -10,17 +10,6 @@ void goto_k_induction(goto_functionst &goto_functions);
 
 void goto_termination(goto_functionst &goto_functions);
 
-/// Returns true iff some loop in @p goto_functions has every modified
-/// variable of pointer type. Mirrors goto_k_induction's skip
-/// condition (goto_k_induction.cpp:91-94): under
-/// --add-symex-value-sets, goto_k_induction skips such loops so the
-/// inductive step never sees a havoc'd state for them. The
-/// --termination strategy reads this to gate IS-UNSAT-as-non-
-/// termination: when a pointer-only loop exists, IS UNSAT can just
-/// mean "concrete state didn't reach end-of-main in k iters" — not a
-/// real non-termination witness.
-bool has_pointer_only_loop(goto_functionst &goto_functions);
-
 class goto_k_inductiont : public goto_loopst
 {
 public:
