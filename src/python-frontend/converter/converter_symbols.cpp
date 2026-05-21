@@ -55,8 +55,11 @@ void python_converter::update_symbol(const exprt &expr) const
     {
       try
       {
-        // Convert binary string to integer.
-        int64_t int_val = std::stoll(binary_value_str, nullptr, 2);
+        // Convert binary string to integer. binary2integer accepts any width,
+        // so we don't lose precision on bignum constants emitted by the
+        // --ir-gated ** widening for #1964 Part 2 / #4642.
+        const bool is_signed = expr_type.is_signedbv();
+        const BigInt int_val = binary2integer(binary_value_str, is_signed);
 
         // Create a new constant expression with the converted value and type.
         exprt new_value = from_integer(int_val, expr_type);

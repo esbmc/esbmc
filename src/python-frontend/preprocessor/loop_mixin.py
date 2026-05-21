@@ -586,6 +586,14 @@ class LoopMixin:
         if len(enumerate_call.args) > 2:
             raise TypeError(
                 f"enumerate() takes at most 2 arguments ({len(enumerate_call.args)} given)")
+        for kw in getattr(enumerate_call, "keywords", []) or []:
+            if kw.arg is None:
+                raise TypeError("enumerate() does not accept **kwargs")
+            if kw.arg != "start":
+                raise TypeError(f"enumerate() got an unexpected keyword argument '{kw.arg}'")
+        if (len(enumerate_call.args) == 2
+                and any(kw.arg == "start" for kw in (enumerate_call.keywords or []))):
+            raise TypeError("enumerate() got multiple values for argument 'start'")
 
     def _parse_enumerate_target(self, target):
         """Parse and validate the for loop target, return target information."""
@@ -615,11 +623,19 @@ class LoopMixin:
         """Extract and validate iterable and start value from enumerate call."""
         iterable = enumerate_call.args[0]
 
+        start_value = None
         if len(enumerate_call.args) > 1:
             start_value = enumerate_call.args[1]
-            self._validate_start_value(start_value)
         else:
+            for kw in (enumerate_call.keywords or []):
+                if kw.arg == "start":
+                    start_value = kw.value
+                    break
+
+        if start_value is None:
             start_value = self.create_constant_node(0, node)
+        else:
+            self._validate_start_value(start_value)
 
         return iterable, start_value
 

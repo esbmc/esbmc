@@ -560,3 +560,39 @@ exprt string_builder::concatenate_strings_via_c_function(
 
   return concat_call;
 }
+
+exprt string_builder::build_runtime_str_conversion_call(
+  const std::string &fn_name,
+  const typet &arg_type,
+  const exprt &arg)
+{
+  const std::string func_symbol_id = "c:@F@" + fn_name;
+  symbolt *fn_symbol = get_symbol_table().find_symbol(func_symbol_id);
+  if (!fn_symbol)
+  {
+    symbolt new_symbol;
+    new_symbol.name = fn_name;
+    new_symbol.id = func_symbol_id;
+    new_symbol.mode = "C";
+    new_symbol.is_extern = true;
+
+    code_typet fn_type;
+    fn_type.return_type() = gen_pointer_type(char_type());
+    fn_type.arguments().push_back(code_typet::argumentt(arg_type));
+    new_symbol.type = fn_type;
+
+    get_symbol_table().add(new_symbol);
+    fn_symbol = get_symbol_table().find_symbol(func_symbol_id);
+  }
+
+  exprt arg_expr = arg;
+  if (arg_expr.type() != arg_type)
+    arg_expr = typecast_exprt(arg_expr, arg_type);
+
+  side_effect_expr_function_callt call;
+  call.function() = symbol_expr(*fn_symbol);
+  call.arguments().push_back(arg_expr);
+  call.type() = gen_pointer_type(char_type());
+
+  return call;
+}

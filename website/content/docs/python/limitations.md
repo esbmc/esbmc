@@ -24,10 +24,6 @@ weight: 4
 
 - Supported operations are: literals, subscript access/assignment, `del`, `in`/`not in`, equality, iteration over `keys()`/`values()`/`items()`, `update()`, `get()`, `setdefault()`, `pop()`, and `popitem()`. Other methods (e.g., `copy()`) are not yet implemented.
 
-## Tuples
-
-- Tuple repetition (`*`) is not yet supported and currently aborts the frontend.
-
 ## Complex Numbers
 
 - The `complex()` constructor accepts string arguments only when the string is a compile-time constant (e.g., `complex("1+2j")` is folded by the frontend). Constructing from a runtime string is rejected with the error `complex() does not support non-literal string arguments`.
@@ -40,8 +36,8 @@ weight: 4
 - `sum()` supports `int` and `float` element types only.
 - `sorted()` supports `int`, `float`, and `str` element types only; the `key` keyword argument is not supported (`reverse` is supported).
 - `input()` is modelled as a nondeterministic string with a maximum length of 256 characters (under-approximation).
-- `print()` evaluates all arguments for side effects but does not produce actual output during verification.
-- `enumerate()` supports standard usage patterns but may have limitations with complex nested iterables or advanced parameter combinations.
+- `print()` evaluates each argument expression once (so safety checks and call side effects reach the GOTO program) but produces no actual output during verification.
+- `enumerate()` supports the iterable + `start` keyword forms; nested or unusually-shaped iterables are not exercised by the regression suite and may surface edge cases.
 
 ## Lambda Expressions
 
@@ -65,7 +61,7 @@ weight: 4
 
 - Only `re.match()`, `re.search()`, and `re.fullmatch()` are supported.
 - Group-capture methods (`.group()`, `.groups()`, `.span()`) are rewritten by the parser into direct calls to internal helpers, and only the `(\d+)` pattern is recognised precisely; everything else returns a nondeterministic value.
-- The result of `re.match` / `re.search` / `re.fullmatch` is a `bool`, not an `Optional[Match]`. `if m:` works; `if m is None:` does not. The pattern recognisers also enforce full-string match for the supported patterns, so `re.match` does not match a prefix of a longer string (tracked in [#4664](https://github.com/esbmc/esbmc/issues/4664)).
+- The result of `re.match` / `re.search` / `re.fullmatch` is a `bool`, not an `Optional[Match]`: `if m:` works, `if m is None:` does not.
 - Complex patterns beyond the explicitly supported constructs exhibit nondeterministic behavior.
 - Not supported: lookahead/lookbehind assertions, backreferences, named groups, conditional patterns, Unicode property escapes.
 
@@ -76,7 +72,8 @@ weight: 4
 ## Collections Module
 
 - `defaultdict`: subscript access/assignment and the common type-factory form (`defaultdict(list)`, with `.append()` on the materialised list) are supported. The `__missing__` hook and other methods are not.
-- `Counter`: only `__getitem__`, `__setitem__`, `values()`, and truthiness are supported. `most_common()` accepts the call but its result is unusable in any subsequent expression (frontend error on comparison); `elements()`, `subtract()`, `update()`, and arithmetic operators are not supported.
+- `Counter`: only `__getitem__`, `__setitem__`, `values()`, and truthiness are supported. `most_common()` accepts the call but its result is unusable in any subsequent expression — comparisons trip a frontend "Unsupported comparison" error ([#4665](https://github.com/esbmc/esbmc/issues/4665)). `elements()`, `subtract()`, and arithmetic operators are not supported.
+- `Counter.update(...)` / `dict.update(...)` accept only the single-positional-argument form; the keyword-argument form (`c.update(a=1)`) is rejected at parse time even though it is valid CPython.
 - `OrderedDict` and `deque` support construction and basic indexing / append / `__setitem__`. `namedtuple`, `ChainMap`, and other `collections` types are not supported.
 
 ## Datetime Module
@@ -101,7 +98,8 @@ weight: 4
 
 ## NumPy Module
 
-- Arrays are modelled as plain Python lists; array shapes, dtypes, multi-dimensional indexing (`a[i, j]`), and broadcasting are not supported.
+- Arrays are modelled as plain Python lists; array shapes, dtypes, multi-dimensional indexing (`a[i, j]`), and broadcasting are not supported. Reading `.shape` raises `AttributeError`, and `a[i, j]` is rejected with `TypeError: multi-dimensional indexing (a[i, j, ...]) is not supported`.
+- Adding a scalar to a 1D array (`a + n`) currently aborts the SMT encoder with a sort-width assertion in `mk_store` ([#4668](https://github.com/esbmc/esbmc/issues/4668)).
 - Most NumPy functions beyond those listed in [Supported Features — NumPy](./supported-features#numpy-module-numpy) are not available.
 - Several math stub functions (e.g., `np.sin`, `np.sqrt`) return constant placeholder values rather than computing the real result; these are suitable only for type-inference testing, not numerical verification.
 - `numpy.linalg.det` is a 2-scalar stub; general matrix operations are not supported.

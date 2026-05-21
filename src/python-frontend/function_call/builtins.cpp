@@ -1049,19 +1049,33 @@ exprt function_call_expr::handle_complex() const
     if (is_unsigned_byte_array(value.type()))
       return raise_type_error(
         "complex() first argument must be a string or a number, not 'bytes'");
-    if (value.type().is_array())
-    {
-      const typet &elem_type = value.type().subtype();
-      const bool is_textual_char_array =
-        elem_type == char_type() ||
-        (elem_type.is_signedbv() &&
-         to_signedbv_type(elem_type).get_width() == 8) ||
-        (elem_type.is_unsignedbv() &&
-         to_unsignedbv_type(elem_type).get_width() == 8);
-      if (!is_textual_char_array)
-        return raise_type_error(
-          "complex() first argument must be a string or a number, not 'bytes'");
-    }
+    // Detect textual string operands (array of char / pointer to char / a
+    // bare char) whose compile-time value could not be extracted above. The
+    // existing constant-folding paths handle literals and constant-folded
+    // conditionals; anything else (function parameters, return values from
+    // calls, etc.) reaches here with a string-typed value but no constant
+    // contents. Typecasting such a value to double generates an ill-typed
+    // SMT expression that aborts the encoder, so reject it explicitly.
+    auto is_char_subtype = [](const typet &t) {
+      return t == char_type() ||
+             (t.is_signedbv() && to_signedbv_type(t).get_width() == 8) ||
+             (t.is_unsignedbv() && to_unsignedbv_type(t).get_width() == 8);
+    };
+    const typet &vt = value.type();
+    const bool is_textual_array =
+      vt.is_array() && is_char_subtype(vt.subtype());
+    const bool is_textual_pointer =
+      vt.is_pointer() && is_char_subtype(vt.subtype());
+    const bool is_bare_char =
+      is_char_subtype(vt) && !vt.is_array() && !vt.is_pointer();
+
+    if (vt.is_array() && !is_textual_array)
+      return raise_type_error(
+        "complex() first argument must be a string or a number, not 'bytes'");
+
+    if (is_textual_array || is_textual_pointer || is_bare_char)
+      throw std::runtime_error(
+        "complex() does not support non-literal string arguments");
 
     if (is_complex_type(value.type()))
       return value;
@@ -1290,15 +1304,18 @@ exprt function_call_expr::handle_print() const
   const auto &args = call_["args"];
   for (const auto &arg_node : args)
   {
-    // Direct call arguments (print(f(...))) are currently lowered through
-    // the regular expression flow and may trigger invalid cast paths when
-    // re-materialized as expression statements here.
-    // Keep them non-materialized for now and only materialize non-call
-    // expressions such as arithmetic operators (e.g., print(a + b)).
-    if (arg_node.contains("_type") && arg_node["_type"] == "Call")
-      continue;
-
     exprt arg_expr = converter_.get_expr(arg_node);
+
+    // get_expr() on a Call node returns a code_function_callt (statement-form
+    // expression), not the call's return value. Emit it directly so the
+    // callee's side effects reach the GOTO program; the print return value
+    // would otherwise be discarded along with the call itself.
+    if (arg_expr.is_code() && arg_expr.get("statement") == "function_call")
+    {
+      converter_.current_block->copy_to_operands(to_code(arg_expr));
+      continue;
+    }
+
     if (arg_expr.is_nil())
       throw std::runtime_error(
         "Failed to convert print() argument to expression");
