@@ -757,10 +757,10 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         // attribute was read on a value whose symbol type is not a class
         // struct -- e.g. ``a.shape`` on a numpy array (which the frontend
         // models as a plain list), or any other non-class object.
-        const std::string base_name = element.contains("value") &&
-                                          element["value"].contains("id")
-                                        ? element["value"]["id"].get<std::string>()
-                                        : std::string();
+        const std::string base_name =
+          element.contains("value") && element["value"].contains("id")
+            ? element["value"]["id"].get<std::string>()
+            : std::string();
         std::ostringstream msg;
         msg << "AttributeError: '";
         if (!base_name.empty())
