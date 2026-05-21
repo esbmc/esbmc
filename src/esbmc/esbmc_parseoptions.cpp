@@ -1805,7 +1805,17 @@ tvt esbmc_parseoptionst::is_inductive_step_violated(
   bmct bmc(goto_functions, options, context);
 
   log_progress("Checking inductive step, k = {:d}", k_step);
-  switch (do_bmc(bmc))
+  int res = do_bmc(bmc);
+
+  // Symex may flip `disable-inductive-step` mid-run when it encounters
+  // a construct the IS cannot soundly handle (recursion, threads,
+  // function-pointer calls). In that case the BMC result is the
+  // outcome of an incomplete IS encoding — its UNSAT does not prove
+  // safety. Discard the result and report UNKNOWN.
+  if (options.get_bool_option("disable-inductive-step"))
+    return tvt(tvt::TV_UNKNOWN);
+
+  switch (res)
   {
   case smt_convt::P_SATISFIABLE:
     return tvt(tvt::TV_TRUE);
