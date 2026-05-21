@@ -1,6 +1,7 @@
 #include <python-frontend/char_utils.h>
 #include <python-frontend/exception_utils.h>
 #include <python-frontend/json_utils.h>
+#include <python-frontend/python_int_overflow.h>
 #include <python-frontend/python_list.h>
 #include <python-frontend/string_handler.h>
 #include <python-frontend/string_handler_utils.h>
@@ -75,6 +76,15 @@ format_value_from_json(const nlohmann::json &arg, python_converter &converter)
   std::string value;
   if (arg.contains("_type") && arg["_type"] == "Constant")
   {
+    // Bignum literal (issue #4642): the constant carries `_bigint` and a
+    // null `value`. Refuse to fold to the string "None"; raise the same
+    // overflow diagnostic the rest of the frontend uses.
+    if (arg.contains("_bigint"))
+      throw python_int_overflow_excp(
+        "Python int overflow: literal " + arg["_bigint"].get<std::string>() +
+        " does not fit in 64-bit int. ESBMC approximates Python int as a "
+        "fixed-width bitvector; arbitrary-precision int support is tracked in "
+        "issue #4642.");
     if (arg["value"].is_null())
       return "None";
     if (arg["value"].is_string())
@@ -1377,6 +1387,17 @@ exprt string_handler::convert_to_string(const exprt &expr)
         if (t.is_floatbv() && bv_width(t) == 64 && float_bits.length() == 64)
         {
           str_value = float_to_string(float_bits, 64, 6);
+          // Match Python's str(float): drop trailing fractional zeros, keep
+          // at least one digit after the dot ("5.0" rather than "5.").
+          auto dot = str_value.find('.');
+          if (dot != std::string::npos)
+          {
+            size_t last_nonzero = str_value.find_last_not_of('0');
+            if (last_nonzero == dot)
+              str_value.resize(dot + 2);
+            else
+              str_value.resize(last_nonzero + 1);
+          }
         }
       }
 
@@ -1414,8 +1435,23 @@ exprt string_handler::convert_to_string(const exprt &expr)
     return expr;
   }
 
-  // For non-constant expressions, we'd need runtime conversion
-  // For now, create a placeholder string
+  // Non-constant scalars: dispatch to the matching __python_*_to_str
+  // operational model in src/c2goto/library/python/string.c. The model
+  // returns a char* whose contents depend on the runtime value of `expr`,
+  // so symex builds an accurate string for every reachable case.
+  if (t.is_bool())
+    return converter_.get_string_builder().build_runtime_str_conversion_call(
+      "__python_bool_to_str", bool_type(), expr);
+
+  if (type_utils::is_integer_type(t))
+    return converter_.get_string_builder().build_runtime_str_conversion_call(
+      "__python_int_to_str", long_long_int_type(), expr);
+
+  if (t.is_floatbv())
+    return converter_.get_string_builder().build_runtime_str_conversion_call(
+      "__python_float_to_str", double_type(), expr);
+
+  // Anything else (struct, array of non-char, etc.) is currently unsupported.
   std::string placeholder = "<expr>";
   typet string_type =
     type_handler_.build_array(char_type(), placeholder.size() + 1);
@@ -1475,6 +1511,15 @@ exprt string_handler::get_fstring_expr(const nlohmann::json &element)
       parts.push_back(part_expr);
       total_estimated_size += get_string_size(part_expr) -
                               1; // -1 to avoid double counting terminators
+    }
+    catch (const python_int_overflow_excp &)
+    {
+      // Bignum overflow is a soundness diagnostic, not a recoverable
+      // parse hiccup — re-throw so the top-level error path surfaces it
+      // instead of letting the f-string silently render as "<e>" and
+      // the surrounding assertion succeed for the wrong reason. Issue
+      // #4642.
+      throw;
     }
     catch (const std::exception &e)
     {

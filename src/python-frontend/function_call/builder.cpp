@@ -48,6 +48,7 @@ const std::string kStrlen = "strlen";
 const std::string kEsbmcAssume = "__ESBMC_assume";
 const std::string kVerifierAssume = "__VERIFIER_assume";
 const std::string kEsbmcAssert = "__ESBMC_assert";
+const std::string kEsbmcUnreachable = "__ESBMC_unreachable";
 const std::string kLoopInvariant = "__loop_invariant";
 const std::string kEsbmcLoopInvariant = "__ESBMC_loop_invariant";
 const std::string kEsbmcCover = "__ESBMC_cover";
@@ -92,6 +93,12 @@ bool function_call_builder::is_assume_call(const symbol_id &function_id) const
 bool function_call_builder::is_assert_call(const symbol_id &function_id) const
 {
   return function_id.get_function() == kEsbmcAssert;
+}
+
+bool function_call_builder::is_unreachable_call(
+  const symbol_id &function_id) const
+{
+  return function_id.get_function() == kEsbmcUnreachable;
 }
 
 bool function_call_builder::is_len_call(const symbol_id &function_id) const
@@ -491,7 +498,7 @@ symbol_id function_call_builder::build_function_id() const
   }
   else if (
     is_assume_call(function_id) || is_assert_call(function_id) ||
-    is_cover_call(function_id))
+    is_cover_call(function_id) || is_unreachable_call(function_id))
   {
     function_id.clear();
   }
@@ -787,6 +794,28 @@ exprt function_call_builder::build() const
     cover_code.location() = loc;
 
     return cover_code;
+  }
+
+  // __ESBMC_unreachable: emit a call to the C-style symbol so symex's
+  // intrinsic handler in symex_main.cpp fires under
+  // --enable-unreachability-intrinsic. Lowering matches the atomic_*
+  // pattern below: register a void(void) symbol id and call it.
+  if (is_unreachable_call(function_id))
+  {
+    if (!call_["args"].empty())
+      throw std::runtime_error("__ESBMC_unreachable takes no arguments");
+
+    code_typet fn_type;
+    fn_type.return_type() = empty_typet();
+
+    locationt location = converter_.get_location_from_decl(call_);
+    converter_.ensure_void_void_intrinsic(kEsbmcUnreachable, location);
+
+    code_function_callt call;
+    call.function() = symbol_exprt("c:@F@" + kEsbmcUnreachable, fn_type);
+    call.type() = empty_typet();
+    call.location() = location;
+    return call;
   }
 
   // __ESBMC_atomic_begin / __ESBMC_atomic_end: thin wrappers around the C

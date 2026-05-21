@@ -703,6 +703,22 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       std::vector<PyConstValue> const_args;
       for (const auto &arg_node : element["args"])
       {
+        // Bignum literal (issue #4642): the constant carries `_bigint` and a
+        // null `value`. Refuse to fold so the call falls back through to the
+        // normal builder, whose recursion into get_literal raises the
+        // overflow diagnostic. Without this guard the null `value` is taken
+        // as Python None below and the bignum is silently consumed.
+        const bool arg_is_bigint =
+          arg_node["_type"] == "Constant" && arg_node.contains("_bigint");
+        const bool usub_operand_is_bigint =
+          arg_node["_type"] == "UnaryOp" && arg_node["op"]["_type"] == "USub" &&
+          arg_node["operand"]["_type"] == "Constant" &&
+          arg_node["operand"].contains("_bigint");
+        if (arg_is_bigint || usub_operand_is_bigint)
+        {
+          all_const = false;
+          break;
+        }
         if (arg_node["_type"] == "Constant" && arg_node["value"].is_string())
         {
           const_args.push_back(
