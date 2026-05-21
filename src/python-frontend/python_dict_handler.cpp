@@ -3043,7 +3043,8 @@ extract_int_int_dict_literal(const nlohmann::json &node)
   // ``{True: a, 1: b}`` to a one-element dict, which ``std::map<int64_t,
   // int64_t>`` cannot model. Negative literals also fall through here because
   // they arrive as ``UnaryOp(USub, Constant(N))``, not ``Constant(-N)``.
-  auto pull_int_constant = [](const nlohmann::json &n) -> std::optional<int64_t> {
+  auto pull_int_constant =
+    [](const nlohmann::json &n) -> std::optional<int64_t> {
     if (!n.contains("_type") || n["_type"] != "Constant")
       return std::nullopt;
     if (!n.contains("value") || !n["value"].is_number_integer())
@@ -3084,8 +3085,7 @@ extract_int_int_dict_literal(const nlohmann::json &node)
     node["func"].contains("value") &&
     node["func"]["value"].value("_type", std::string()) == "Name" &&
     node["func"]["value"].value("id", std::string()) == "dict" &&
-    node.contains("args") && node["args"].is_array() &&
-    !node["args"].empty())
+    node.contains("args") && node["args"].is_array() && !node["args"].empty())
   {
     const auto &args = node["args"];
     const auto &keys_node = args[0];
