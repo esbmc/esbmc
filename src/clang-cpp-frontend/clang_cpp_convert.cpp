@@ -1999,8 +1999,11 @@ bool clang_cpp_convertert::get_function_params(
   // expression is the first regular parameter, so route them through the
   // same path.
   if (
-    !fd.isCXXClassMember() || cxxmd.isStatic() ||
-    cxxmd.isExplicitObjectMemberFunction())
+    !fd.isCXXClassMember() || cxxmd.isStatic()
+#if CLANG_VERSION_MAJOR >= 18
+    || cxxmd.isExplicitObjectMemberFunction()
+#endif
+  )
     return clang_c_convertert::get_function_params(fd, params);
 
   // Add this pointer to first arg
