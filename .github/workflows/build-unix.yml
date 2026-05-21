@@ -1,9 +1,8 @@
-
 on:
   workflow_call:
     inputs:
       operating-system:
-        description: "Targeted OS (e.g. ubuntu-latest, windows-latest)"
+        description: "Targeted OS (e.g. ubuntu-24.04, windows-latest)"
         required: true
         type: string
       build-flags:
@@ -18,58 +17,48 @@ on:
 jobs:
   build:
     name: Build ESBMC (${{ inputs.operating-system }})
-    runs-on: ${{ inputs.operating-system }}
+    runs-on: ${{ inputs.operating-system == 'ubuntu-24.04' && fromJSON('["self-hosted", "development"]') || inputs.operating-system }}
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    # For restore ccache
-    - uses: hendrikmuhs/ccache-action@v1.2
-      if: ${{ startsWith(inputs.operating-system, 'ubuntu-') }}
-      # TODO: Onpush and PR used different CMake flags
-      with:
-        restore: ${{ github.event_name == 'push' }}
-        save: ${{ github.event_name == 'push' }}
-        key: ${{ inputs.operating-system }}-${{ hashFiles('**/*.cpp','**/*.h') }}
-        restore-keys: |
-          ${{ inputs.operating-system }}
-        evict-old-files: 2d
+      - uses: hendrikmuhs/ccache-action@v1.2
+        if: ${{ startsWith(inputs.operating-system, 'ubuntu-') }}
+        with:
+          restore: ${{ github.event_name == 'push' }}
+          save: ${{ github.event_name == 'push' }}
+          key: ${{ inputs.operating-system }}-${{ hashFiles('**/*.cpp','**/*.h') }}
+          restore-keys: |
+            ${{ inputs.operating-system }}
+          evict-old-files: 2d
 
-    - name: Build ESBMC
-      run: ./scripts/build.sh ${{ inputs.build-flags }}
-    - uses: actions/upload-artifact@v4
-      with:
-        name: release-${{ inputs.operating-system }}-${{ inputs.build-flags }}
-        path: ./release
-    
-    - name: Check Python regression tests
-      if: ${{ inputs.testing == true }}
-      run: |
-        # Set PATH to include Python 3.12 and user-installed tools (mypy, meson, etc.)
-        export PATH="$(brew --prefix python@3.12)/bin:$HOME/Library/Python/3.12/bin:$PATH"
-        chmod +x scripts/check_python_tests.sh
-        ./scripts/check_python_tests.sh
+      - name: Build ESBMC
+        run: ./scripts/build.sh ${{ inputs.build-flags }}
+        env:
+          CMAKE_BUILD_PARALLEL_LEVEL: ${{ runner.os == 'Linux' && '16' || '4' }}
+          PIP_BREAK_SYSTEM_PACKAGES: "1"
 
-    - name: Run tests
-      if: ${{ inputs.testing == true }}
-      run: |
-        # Set PATH to include Python 3.12 and user-installed tools (mypy, meson, etc.)
-        export PATH="$(brew --prefix python@3.12)/bin:$HOME/Library/Python/3.12/bin:$PATH"
-        cd build/
-        # Cap the per-test TIMEOUT property at 120s. ctest --timeout is ignored
-        # when tests set TIMEOUT via set_tests_properties (regression/CMakeLists.txt),
-        # so we override the cache variable that feeds it and reconfigure.
-        cmake -DESBMC_REGRESS_TIMEOUT=120 .
-        # macOS PR: only the python/ suite (anchored — excludes python-intensive
-        # and python-coverage, which already run on Linux). The Python frontend is
-        # the one part of ESBMC whose toolchain materially differs across OSes
-        # (Homebrew Python, stdlib paths); the rest of the regression suite is
-        # platform-portable and covered by the Linux PR job.
-        # On PR Linux, skip python-intensive to keep fast feedback.
-        # On other systems/events (push, dispatch), run everything.
-        if [[ "${{ inputs.operating-system }}" =~ ^macos ]]; then
-          ctest -j4 --output-on-failure --progress -L '^python/$'
-        elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
-          ctest -j4 --output-on-failure --progress -LE python-intensive .
-        else
-          ctest -j4 --output-on-failure --progress .
-        fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ inputs.operating-system }}-${{ inputs.build-flags }}
+          path: ./release
+
+      - name: Check Python regression tests
+        if: ${{ inputs.testing == true }}
+        run: |
+          export PATH="$(brew --prefix python@3.12)/bin:$HOME/Library/Python/3.12/bin:$PATH"
+          chmod +x scripts/check_python_tests.sh
+          ./scripts/check_python_tests.sh
+
+      - name: Run tests
+        if: ${{ inputs.testing == true }}
+        run: |
+          export PATH="$(brew --prefix python@3.12)/bin:$HOME/Library/Python/3.12/bin:$PATH"
+          cd build/
+          cmake -DESBMC_REGRESS_TIMEOUT=120 .
+          if [[ "${{ inputs.operating-system }}" =~ ^macos ]]; then
+            ctest -j$(nproc) --output-on-failure --progress -L python
+          elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            ctest -j$(nproc) --output-on-failure --progress -LE python-intensive .
+          else
+            ctest -j10 --output-on-failure --progress .
+          fi
