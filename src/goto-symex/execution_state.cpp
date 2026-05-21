@@ -1201,8 +1201,9 @@ bool execution_statet::has_cswitch_point_occured() const
     return false;
   };
 
-  if (any_non_sync(thread_last_reads[active_thread]) ||
-      any_non_sync(thread_last_writes[active_thread]))
+  if (
+    any_non_sync(thread_last_reads[active_thread]) ||
+    any_non_sync(thread_last_writes[active_thread]))
     return true;
   return false;
 }
