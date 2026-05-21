@@ -62,6 +62,18 @@ public:
     const exprt &rhs,
     const nlohmann::json &left);
 
+  /// Build a side-effect call to a `char *fn(arg_type)` operational model.
+  ///
+  /// Looks up (or lazily creates) the function symbol for `fn_name` with the
+  /// signature `char *fn_name(arg_type)` and returns a
+  /// side_effect_expr_function_callt invoking it with `arg`. Used to dispatch
+  /// `str(int_var)`, `str(float_var)`, `str(bool_var)` to the matching
+  /// `__python_*_to_str` model at runtime.
+  exprt build_runtime_str_conversion_call(
+    const std::string &fn_name,
+    const typet &arg_type,
+    const exprt &arg);
+
 private:
   python_converter &converter_;
   string_handler *str_handler_;
