@@ -54,8 +54,8 @@ jobs:
         # (path handling, line endings, Clang frontend) live inside esbmc/.
         # On push events, run everything.
         if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-          ctest -j4 --output-on-failure --progress -L 'esbmc/|floats/' . -C RelWithDebInfo
+          ctest -j4 --output-on-failure --progress -L 'esbmc/|floats/' . -C Debug
         else
-          ctest -j4 --output-on-failure --progress . -C RelWithDebInfo
+          ctest -j4 --output-on-failure --progress . -C Debug
         fi
       shell: bash
