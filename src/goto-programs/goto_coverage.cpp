@@ -720,20 +720,6 @@ void goto_coveraget::k_path_coverage()
             if (cdir_conflict)
               continue;
 
-            // Build goal_atoms before the checks below so the comparison-
-            // domain test and spanning.add_goal share one vector.
-            std::vector<std::pair<expr2tc, bool>> goal_atoms = atoms;
-            goal_atoms.emplace_back(current_guard, cdir_pol);
-
-            // Drop goals whose conjunction pins a variable to an empty
-            // integer range (e.g. x==1 && x==2).
-            // simplify() does not do this cross-term reasoning,
-            // so otherwise the tautological
-            // assert(!witness) can never be falsified and permanently
-            // inflates the spanning denominator.
-            if (kpath_atoms_comparison_unsat(goal_atoms))
-              continue;
-
             const expr2tc &cdir = cdir_pol ? current_guard : current_neg;
             expr2tc full = is_nil_expr(pwit) ? cdir : gen_and_expr(pwit, cdir);
             simplify(full);
@@ -749,6 +735,17 @@ void goto_coveraget::k_path_coverage()
               // ghost-flag fallback for deep prefixes is Phase 2 (#4325).
               continue;
             }
+
+            // Drop goals whose conjunction pins a variable to an empty
+            // integer range (e.g. x==1 && x==2). simplify() does not do this
+            // cross-term reasoning, so otherwise the tautological
+            // assert(!witness) can never be falsified and permanently
+            // inflates the spanning denominator. Built after the cheaper
+            // checks above so goals they skip don't pay for the vector.
+            std::vector<std::pair<expr2tc, bool>> goal_atoms = atoms;
+            goal_atoms.emplace_back(current_guard, cdir_pol);
+            if (kpath_atoms_comparison_unsat(goal_atoms))
+              continue;
 
             expr2tc neg_full = gen_not_expr(full);
             simplify(neg_full);
