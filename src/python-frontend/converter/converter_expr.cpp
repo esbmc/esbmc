@@ -999,9 +999,9 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     // subscript onto an int).
     if (
       !array_type.is_array() && !array_type.is_pointer() &&
-      !array_type.is_struct() && (array_type.is_signedbv() ||
-                                  array_type.is_unsignedbv() ||
-                                  array_type.is_floatbv() || array_type.is_bool()))
+      !array_type.is_struct() &&
+      (array_type.is_signedbv() || array_type.is_unsignedbv() ||
+       array_type.is_floatbv() || array_type.is_bool()))
     {
       std::string type_name;
       if (array_type.is_bool())
