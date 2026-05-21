@@ -2,7 +2,7 @@
 #include <python-frontend/python_dict_handler.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python_list.h>
-#include <python-frontend/string_builder.h>
+#include <python-frontend/string/string_builder.h>
 #include <python-frontend/tuple_handler.h>
 #include <python-frontend/type_handler.h>
 #include <util/arith_tools.h>

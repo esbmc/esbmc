@@ -5,7 +5,7 @@
 #include <python-frontend/type_handler.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/symbol_id.h>
-#include <python-frontend/string_builder.h>
+#include <python-frontend/string/string_builder.h>
 #include <util/expr.h>
 #include <util/type.h>
 #include <util/symbol.h>
