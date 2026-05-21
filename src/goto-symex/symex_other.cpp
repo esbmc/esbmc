@@ -4,7 +4,7 @@
 #include <irep2/irep2.h>
 #include <util/pretty.h>
 
-void goto_symext::symex_other(const expr2tc code)
+void goto_symext::symex_other(const expr2tc &code)
 {
   expr2tc code2 = code;
   if (is_code_expression2t(code2))
@@ -44,7 +44,7 @@ void goto_symext::symex_other(const expr2tc code)
     throw "goto_symext: unexpected statement: " + get_expr_id(code2);
 }
 
-void goto_symext::symex_decl(const expr2tc code)
+void goto_symext::symex_decl(const expr2tc &code)
 {
   assert(is_code_decl2t(code));
 
@@ -103,7 +103,7 @@ void goto_symext::symex_decl(const expr2tc code)
   }
 }
 
-void goto_symext::symex_dead(const expr2tc code)
+void goto_symext::symex_dead(const expr2tc &code)
 {
   assert(is_code_dead2t(code));
 

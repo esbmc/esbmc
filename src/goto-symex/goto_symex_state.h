@@ -13,7 +13,7 @@
 #include <string>
 #include <unordered_set>
 #include <util/crypto_hash.h>
-#include <util/guard.h>
+#include <irep2/irep2_guard.h>
 #include <util/i2string.h>
 #include <irep2/irep2.h>
 #include <memory>
@@ -96,7 +96,7 @@ public:
     std::shared_ptr<renaming::level2t> level2_ptr;
     renaming::level2t &level2;
     value_sett value_set;
-    guardt guard;
+    guard2tc guard;
     unsigned int thread_id;
     variable_name_sett local_variables;
 
@@ -209,7 +209,7 @@ public:
     unsigned int va_index;
 
     /** Record the entry guard of the function */
-    guardt entry_guard;
+    guard2tc entry_guard;
 
     /** Record if the function body is hidden */
     bool hidden;
@@ -435,9 +435,9 @@ public:
   bool thread_ended;
 
   /** Current state guard of this thread. */
-  guardt guard;
+  guard2tc guard;
   /** Guard of global context. */
-  guardt global_guard;
+  guard2tc global_guard;
   /** Current program location of this thread. */
   symex_targett::sourcet source;
   /** Counter for how many times a particular variable has been declared:

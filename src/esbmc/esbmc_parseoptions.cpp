@@ -18,6 +18,7 @@ extern "C"
 
 #include <esbmc/bmc.h>
 #include <esbmc/esbmc_parseoptions.h>
+#include <solvers/solve.h>
 #include <cctype>
 #include <clang-c-frontend/clang_c_language.h>
 #include <util/config.h>
@@ -338,6 +339,29 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   {
     options.set_option("int-encoding", true);
     options.set_option("ir-ieee", true);
+  }
+
+  // --ir requests integer/real arithmetic encoding via the SMT Int sort.
+  // Bitwuzla and Boolector are bit-vector-only backends; pairing them with
+  // --ir silently produces wrong-answer behaviour at solve time. cvc4, cvc5,
+  // yices, and mathsat all support Int and are left alone.
+  if (cmdline.isset("ir") || cmdline.isset("ir-ieee"))
+  {
+    for (const char *s : {"bitwuzla", "boolector"})
+    {
+      if (cmdline.isset(s))
+      {
+        log_error(
+          "--{} requires a solver that supports integer/real arithmetic. "
+          "--{} only supports bit-vector arithmetic. Re-run without --{}, "
+          "or drop --{} (--ir defaults to Z3).",
+          cmdline.isset("ir-ieee") ? "ir-ieee" : "ir",
+          s,
+          s,
+          s);
+        exit(1);
+      }
+    }
   }
   if (cmdline.isset("fixedbv"))
     options.set_option("fixedbv", true);
@@ -690,6 +714,10 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
 
   if (cmdline.isset("sarif-output"))
     options.set_option("sarif-output", cmdline.getval("sarif-output"));
+
+  // Fail fast if the user explicitly requested an SMT solver that is not
+  // built into this ESBMC binary, before spending time parsing the program.
+  check_solver_availability(options);
 
   config.options = options;
 }

@@ -9,7 +9,7 @@
  * @param type: type of the expression
  * @return int negative means error, positive is the quantity to unroll
  */
-expr2tc create_value_expr(int value, type2tc type);
+expr2tc create_value_expr(int value, const type2tc &type);
 
 /**
  * @brief Create a lessthanequal expression of the form LHS <= RHS

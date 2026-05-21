@@ -7,11 +7,12 @@
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python_dict_handler.h>
 #include <python-frontend/python_exception_handler.h>
+#include <python-frontend/python_int_overflow.h>
 #include <python-frontend/python_lambda.h>
 #include <python-frontend/python_list.h>
 #include <python-frontend/python_math.h>
-#include <python-frontend/string_builder.h>
-#include <python-frontend/string_handler.h>
+#include <python-frontend/string/string_builder.h>
+#include <python-frontend/string/string_handler.h>
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/tuple_handler.h>
 #include <python-frontend/type_handler.h>
@@ -124,6 +125,26 @@ exprt python_converter::get_literal(const nlohmann::json &element)
   const auto &value = (element["_type"] == "UnaryOp")
                         ? element["operand"]["value"]
                         : element["value"];
+
+  // Bignum literal tagged by parser.py (issue #4642). Checked before the null
+  // branch below because parser.py replaces tagged literals' `value` with null
+  // so direct readers (consteval, funcall pre-scan, f-strings) bail via their
+  // `is_number_integer()` guard instead of silently folding bignum to 0. Until
+  // arbitrary-precision int lands in the irep2 type system, reject the literal
+  // explicitly rather than letting nlohmann::json silently truncate values
+  // above uint64 to double or letting from_integer wrap values in [2^63, 2^64)
+  // into negative int64. UnaryOp(USub, Constant(_bigint=...)) is dispatched
+  // through convert_unop → get_expr(operand) → get_literal(operand), so the
+  // trap fires from the recursive Constant entry and needs no special case.
+  if (element.contains("_bigint"))
+  {
+    const std::string &digits = element["_bigint"].get<std::string>();
+    throw python_int_overflow_excp(
+      "Python int overflow: literal " + digits +
+      " does not fit in 64-bit int. ESBMC approximates Python int as a "
+      "fixed-width bitvector; arbitrary-precision int support is tracked in "
+      "issue #4642.");
+  }
 
   // Handle None literals (null values)
   if (value.is_null())
@@ -730,7 +751,27 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       }
       if (!class_symbol)
       {
-        throw std::runtime_error("Class \"" + obj_type_name + "\" not found");
+        // Surface a Python-level AttributeError naming the attribute and the
+        // location of the access. The previous "Class '' not found" message
+        // leaked an internal lookup vocabulary and was emitted whenever an
+        // attribute was read on a value whose symbol type is not a class
+        // struct -- e.g. ``a.shape`` on a numpy array (which the frontend
+        // models as a plain list), or any other non-class object.
+        const std::string base_name =
+          element.contains("value") && element["value"].contains("id")
+            ? element["value"]["id"].get<std::string>()
+            : std::string();
+        std::ostringstream msg;
+        msg << "AttributeError: '";
+        if (!base_name.empty())
+          msg << base_name;
+        else
+          msg << "object";
+        msg << "' has no attribute '" << attr_name << "'";
+        const locationt loc = get_location_from_decl(element);
+        if (!loc.is_nil())
+          msg << " at " << loc.get_file() << ":" << loc.get_line();
+        throw std::runtime_error(msg.str());
       }
 
       struct_typet &class_type =
@@ -967,6 +1008,23 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         build_dunder_call(element["value"], "__getitem__", args, element);
       expr = get_function_call(call_node);
       break;
+    }
+
+    // Multi-dimensional indexing ``a[i, j]`` -- the slice AST is a Tuple of
+    // index expressions. This is the canonical numpy 2D-indexing form. The
+    // frontend models numpy arrays as plain 1D Python lists, so the operation
+    // is unsupported; rejecting it explicitly produces a clean Python-level
+    // error rather than tripping `Unexpected type in int/ptr typecast` deep
+    // inside the SMT encoder when the resulting expression is consumed.
+    if (slice.contains("_type") && slice["_type"] == "Tuple")
+    {
+      std::ostringstream msg;
+      msg << "TypeError: multi-dimensional indexing (a[i, j, ...]) is not "
+             "supported; numpy arrays are modelled as 1D lists";
+      const locationt loc = get_location_from_decl(element);
+      if (!loc.is_nil())
+        msg << " at " << loc.get_file() << ":" << loc.get_line();
+      throw std::runtime_error(msg.str());
     }
 
     // Handle regular array/list subscripting

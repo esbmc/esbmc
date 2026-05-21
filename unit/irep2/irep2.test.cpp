@@ -2,7 +2,7 @@
 #include <catch2/catch.hpp>
 #include <limits>
 #include <irep2/irep2.h>
-#include <irep2/irep2_template_utils.h>
+#include <irep2/irep2_dispatch.h>
 #include <irep2/irep2_utils.h>
 #include <util/crypto_hash.h>
 
@@ -61,7 +61,7 @@ void test_constructed_equally(const expr2tc e1, const expr2tc e2)
   // "The == operator should return true"
   REQUIRE(e1 == e2);
   // "Their crc should be the same"
-  REQUIRE(e1->do_crc() == e2->do_crc());
+  REQUIRE(e1->crc() == e2->crc());
   // Their hash should be the same"
   e1->hash(c_hash);
   e2->hash(c_hash2);
@@ -80,7 +80,7 @@ void test_constructed_differently(const expr2tc e1, const expr2tc e2)
   // "The == operator should return false"
   REQUIRE(e1 != e2);
   // "Their crc should not be the same"
-  REQUIRE(e1->do_crc() != e2->do_crc());
+  REQUIRE(e1->crc() != e2->crc());
   // "Their hash should not be the same"
 
   e1->hash(c_hash);
@@ -156,10 +156,10 @@ SCENARIO(
       REQUIRE(small_lt_big != big_lt_small);
     }
 
-    THEN("ltchecked is antisymmetric and non-zero")
+    THEN("lt is antisymmetric and non-zero")
     {
-      int forward = small->ltchecked(*big);
-      int reverse = big->ltchecked(*small);
+      int forward = small->lt(*big);
+      int reverse = big->lt(*small);
       REQUIRE(forward != 0);
       REQUIRE(reverse != 0);
       REQUIRE(forward == -reverse);
@@ -439,6 +439,94 @@ SCENARIO("COW detach leaves the other handle unchanged", "[core][irep2]")
       {
         REQUIRE(raw(a) == before);
       }
+    }
+  }
+}
+
+// Sanity-check the flat-layout switch dispatchers on a representative
+// expr kind (not2t).
+SCENARIO("not2t flat-layout dispatchers (issue #4560)", "[core][irep2]")
+{
+  GIVEN("A not2t wrapping a constant_int expression")
+  {
+    type2tc word = get_uint_type(config.ansi_c.word_size);
+    expr2tc inner = constant_int2tc(word, BigInt(3));
+    expr2tc e_not = not2tc(inner);
+    expr2tc e_not2 = not2tc(inner); // independent copy with same value
+
+    THEN("cmp returns true for structurally-equal operands")
+    {
+      REQUIRE(e_not->cmp(*e_not2));
+      REQUIRE(e_not->cmp(*e_not));
+    }
+
+    THEN("lt is 0 for equal operands")
+    {
+      REQUIRE(e_not->lt(*e_not) == 0);
+    }
+
+    THEN("crc agrees between equal nodes")
+    {
+      REQUIRE(e_not->crc() == e_not2->crc());
+    }
+
+    THEN("get_num_sub_exprs returns 1")
+    {
+      REQUIRE(e_not->get_num_sub_exprs() == 1u);
+    }
+
+    THEN("get_sub_expr(0) is the wrapped operand")
+    {
+      const expr2tc *p = e_not->get_sub_expr(0);
+      REQUIRE(p != nullptr);
+      REQUIRE(*p == inner);
+    }
+
+    THEN("get_sub_expr out-of-range returns nullptr")
+    {
+      REQUIRE(e_not->get_sub_expr(1) == nullptr);
+    }
+
+    THEN("clone produces a structurally equal independent copy")
+    {
+      expr2tc cloned = e_not->clone();
+      REQUIRE(cloned.get() != e_not.get());
+      REQUIRE(*cloned == *e_not);
+    }
+
+    THEN("foreach_operand visits exactly the one operand")
+    {
+      std::vector<expr2tc> visited;
+      e_not->foreach_operand(
+        [&](const expr2tc &sub) { visited.push_back(sub); });
+      REQUIRE(visited.size() == 1u);
+      REQUIRE(visited[0] == inner);
+    }
+  }
+
+  GIVEN("Two not2t with different operands")
+  {
+    type2tc word = get_uint_type(config.ansi_c.word_size);
+    expr2tc a = not2tc(constant_int2tc(word, BigInt(1)));
+    expr2tc b = not2tc(constant_int2tc(word, BigInt(2)));
+
+    THEN("cmp returns false")
+    {
+      REQUIRE(!a->cmp(*b));
+    }
+
+    THEN("lt is antisymmetric")
+    {
+      int fwd = a->lt(*b);
+      int rev = b->lt(*a);
+      REQUIRE(fwd != 0);
+      REQUIRE(rev != 0);
+      REQUIRE((fwd < 0) != (rev < 0));
+    }
+
+    THEN("crc differs")
+    {
+      REQUIRE(a->crc() != b->crc());
     }
   }
 }

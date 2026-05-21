@@ -5,7 +5,7 @@
 #include <python-frontend/python_dict_handler.h>
 #include <python-frontend/python_list.h>
 #include <python-frontend/python_math.h>
-#include <python-frontend/string_handler.h>
+#include <python-frontend/string/string_handler.h>
 #include <python-frontend/tuple_handler.h>
 #include <python-frontend/type_handler.h>
 #include <python-frontend/type_utils.h>
@@ -129,6 +129,49 @@ static void attach_symbol_location(exprt &expr, contextt &symbol_table)
   symbolt *sym = symbol_table.find_symbol(id);
   if (sym != nullptr)
     expr.location() = sym->location;
+}
+
+std::string python_converter::get_python_type_category(const typet &t) const
+{
+  // Unannotated any_type (void*) — caller keeps the existing coercion path.
+  if (t.is_pointer() && t.subtype().id() == "empty")
+    return "";
+
+  // Python has no `char`: single-character results from `chr()` and string
+  // indexing are 1-char strings. ESBMC models them as 8-bit integers tagged
+  // with `#cpp_type==char` (set explicitly in type_handler::get_typet for
+  // `chr()` and in python_list::index for string subscript). A bare width-8
+  // int *without* the marker is something else (e.g. `dtype=np.int8`,
+  // 8-bit user int annotation) and must remain in the numeric tower —
+  // misclassifying it as "string" turns `np.add(127, 1, dtype=np.int8) ==
+  // -128` into a spurious cross-type fold to False.
+  if (type_utils::is_string_type(t) || type_utils::is_char_type(t))
+    return "string";
+
+  // Python's numeric tower coerces within itself; complex is checked first
+  // because it is a struct and would otherwise fall through to class_inst.
+  if (
+    is_complex_type(t) || t.is_bool() || t.is_floatbv() ||
+    type_utils::is_integer_type(t))
+    return "numeric";
+
+  // Any remaining non-string array (e.g. bytes literal `b'A'`).
+  if (t.is_array())
+    return "bytes";
+
+  if (t == type_handler_.get_list_type())
+    return "list";
+
+  if (dict_handler_->is_dict_type(t))
+    return "dict";
+
+  if (tuple_handler_->is_tuple_type(t))
+    return "tuple";
+
+  // User-defined class instances are deliberately reported as unknown so the
+  // caller falls through to `dispatch_dunder_operator`, which honours a
+  // user-defined `__eq__`. A cross-type fold here would silently bypass it.
+  return "";
 }
 
 exprt handle_float_vs_string(exprt &bin_expr, const std::string &op)
@@ -377,6 +420,18 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 
   attach_symbol_location(lhs, symbol_table());
   attach_symbol_location(rhs, symbol_table());
+
+  // Python rule: cross-type `==`/`!=` returns False/True without coercion,
+  // except within the numeric tower (bool/int/float/complex). Fold here, before
+  // the dict/list/tuple/SMT-encoding paths that otherwise crash on mismatched
+  // operands (e.g. float vs bytes, dict vs int, list vs int — issue #4628).
+  if (op == "Eq" || op == "NotEq")
+  {
+    const std::string lc = get_python_type_category(lhs.type());
+    const std::string rc = get_python_type_category(rhs.type());
+    if (!lc.empty() && !rc.empty() && lc != rc)
+      return gen_boolean(op == "NotEq");
+  }
 
   // Handle set operations (difference, intersection, union)
   typet list_type = type_handler_.get_list_type();
@@ -678,7 +733,7 @@ exprt python_converter::handle_array_operations(
   exprt &rhs,
   const nlohmann::json &left,
   const nlohmann::json &right,
-  const nlohmann::json & /*element*/)
+  const nlohmann::json &element)
 {
   if (!lhs.type().is_array() && !rhs.type().is_array())
     return nil_exprt();
@@ -691,10 +746,37 @@ exprt python_converter::handle_array_operations(
     return gen_boolean(op == "Eq");
   }
 
-  // Handle string concatenation
+  // Handle string concatenation -- only valid for char-arrays. Numeric
+  // arrays (e.g. ``np.array([1, 2, 3])``, modelled as ``long int [N]``)
+  // reaching this path via ``a + n`` previously got force-cast to char*
+  // and fed to __python_str_concat, which then crashed the bitwuzla
+  // mk_store on the sort-width mismatch. Reject numeric-array arithmetic
+  // explicitly: broadcasting is unsupported.
   if (op == "Add")
+  {
+    auto is_char_subtype = [](const typet &t) {
+      if (!t.is_array())
+        return false;
+      const typet &elt = t.subtype();
+      return elt == char_type() ||
+             (elt.is_signedbv() && to_signedbv_type(elt).get_width() == 8) ||
+             (elt.is_unsignedbv() && to_unsignedbv_type(elt).get_width() == 8);
+    };
+    const bool lhs_char = is_char_subtype(lhs.type());
+    const bool rhs_char = is_char_subtype(rhs.type());
+    if (!lhs_char && !rhs_char)
+    {
+      std::ostringstream msg;
+      msg << "TypeError: arithmetic on numeric arrays is not supported "
+             "(numpy broadcasting is not modelled)";
+      const locationt loc = get_location_from_decl(element);
+      if (!loc.is_nil())
+        msg << " at " << loc.get_file() << ":" << loc.get_line();
+      throw std::runtime_error(msg.str());
+    }
     return string_handler_.handle_string_concatenation_with_promotion(
       lhs, rhs, left, right);
+  }
 
   return nil_exprt();
 }

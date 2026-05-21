@@ -12,7 +12,7 @@
 void goto_symext::symex_cpp_new(
   const expr2tc &lhs,
   const sideeffect2t &code,
-  const guardt &guard)
+  const guard2tc &guard)
 {
   expr2tc size = code.size;
 
@@ -67,16 +67,17 @@ void goto_symext::symex_cpp_new(
   expr2tc ptr_obj = pointer_object2tc(pointer_type2(), ptr_rhs);
   track_new_pointer(ptr_obj, newtype, guard, size);
 
-  guardt g(cur_state->guard);
+  guard2tc g(cur_state->guard);
   g.append(guard);
   dynamic_memory.emplace_back(rhs_copy, g, false, symbol.name.as_string());
 }
 
 void goto_symext::symex_cpp_delete(const expr2tc &expr)
 {
-  const auto &code = static_cast<const code_expression_data &>(*expr);
-
-  expr2tc tmp = code.operand;
+  // expr is code_cpp_delete or code_cpp_del_array; both have exactly
+  // one sub-expression — the pointer being deleted.
+  assert(is_code_cpp_delete2t(expr) || is_code_cpp_del_array2t(expr));
+  expr2tc tmp = *expr->get_sub_expr(0);
 
   internal_deref_items.clear();
   expr2tc deref = dereference2tc(get_empty_type(), tmp);

@@ -52,37 +52,49 @@ conversions live in `util/migrate.{h,cpp}`.
 
 | File | Contents |
 |------|----------|
-| `irep2.h` | Base classes `irep2t`, `type2t`, `expr2t`; the `irep_container` smart pointer (alias `expr2tc` / `type2tc`); the `make_irep` factory; `function_ref`; `hash_combine`; checked-cast helpers; flat `irep_methods2` template. |
+| `irep2.h` | Base classes `irep2t`, `type2t`, `expr2t`; the `irep_container` smart pointer (alias `expr2tc` / `type2tc`); the `make_irep` factory; `function_ref`; `hash_combine`; checked-cast helpers; the switch-on-id dispatchers for `cmp`/`lt`/`clone`/etc. |
 | `expr_kinds.inc` / `type_kinds.inc` | Manifest of node kinds in declaration order. Single source of truth. |
-| `irep2_type.h` / `irep2_type.cpp` | Concrete type classes (`bool_type2t`, `signedbv_type2t`, `array_type2t`, `pointer_type2t`, `struct_type2t`, ...). |
-| `irep2_expr.h` / `irep2_expr.cpp` | Concrete expression classes (`constant_int2t`, `symbol2t`, `add2t`, `if2t`, `code_assign2t`, ...) and their *data* base classes (`constant_int_data`, `arith_2ops`, ...). |
-| `irep2_utils.h` | Inline predicates and helpers (`is_bv_type`, `is_number_type`, `is_scalar_type`, `is_multi_dimensional_array`, simplification helpers). |
-| `irep2_templates.h` | Per-field-type helpers (`do_type2string`, `do_get_sub_expr`, `do_count_sub_exprs`, `call_*_delegate`) used by the method generators. |
-| `irep2_template_utils.h` / `templates/irep2_template_utils.cpp` | Per-field-type overloads of `do_type_cmp`, `do_type_lt`, `do_type_crc`, `do_type_hash`, `type_to_string`. |
-| `irep2_meta_templates.h` | Out-of-line definitions of `irep_methods2`'s templated methods, which walk `traits::fields` (a `std::tuple` of field traits) via C++17 fold expressions. |
-| `irep2_instantiate.h` | `ESBMC_INSTANTIATE_TYPE` / `ESBMC_INSTANTIATE_EXPR` macros used by the per-node `templates/*.cpp` to force out-of-line emission of the methods. |
-| `templates/*.cpp` | Out-of-line explicit instantiations of the per-node template methods (split into several TUs to keep compile times manageable). |
+| `irep2_type.h` / `irep2_type.cpp` | Concrete type classes (`bool_type2t`, `signedbv_type2t`, `array_type2t`, `pointer_type2t`, `struct_type2t`, ...). Each kind inherits directly from `type2t` and owns its fields. Free family helpers in the same header (`struct_union_members`, `array_or_vector_subtype`, ...) provide uniform field access when the caller doesn't care which specific kind it is. |
+| `irep2_expr.h` / `irep2_expr.cpp` | Concrete expression classes (`constant_int2t`, `symbol2t`, `add2t`, `if2t`, `code_assign2t`, ...). Each kind inherits directly from `expr2t`. |
+| `irep2_utils.h` | Inline predicates and helpers (`is_bv_type`, `is_number_type`, `is_scalar_type`, simplification helpers). |
+| `irep2_dispatch.h` | Generic `generic_*<K>` helpers that walk a kind's `K::fields` tuple via `std::apply` to implement cmp/lt/crc/hash/tostring/clone/get_sub_expr/foreach_operand uniformly, plus the per-field-type overloads they invoke (`do_type_cmp`, `do_type_lt`, `do_type_crc`, `do_type_hash`, `type_to_string`, `do_get_sub_expr`, `call_*_delegate`). Switch dispatchers on `expr2t`/`type2t` route to these. |
+| `irep2_utils.cpp` | Definitions for the predicates and dispatch-catalogue overloads declared in `irep2_utils.h` and `irep2_dispatch.h`. |
 | `CMakeLists.txt` | Builds the `irep2` static library; depends on `bigint`, `fmt`, and privately `crypto_hash`. No Boost. |
 
 ## Anatomy of a node
 
-A concrete node is composed by inheritance from three layers:
+Each concrete kind inherits directly from `expr2t` (or `type2t`, with a
+small set of shared `*_data` intermediates on the type side) and
+declares its fields plus two static class members:
 
-1. A **data class** holds the fields and exposes them as `field_traits`
-   so the method-generator templates can enumerate them — e.g.
-   `constant_int_data` holds a `BigInt value` field.
-2. An **`esbmct::expr2t_traits<...>`** (or `type2t_traits<...>`)
-   instance lists those fields as a `std::tuple`. The flat
-   `irep_methods2` class in `irep2.h` consumes that tuple via fold
-   expressions to generate `clone`, `cmp`, `lt`, `do_crc`, `hash`,
-   `tostring`, `foreach_operand`, `get_sub_expr`, etc.
-3. The user-facing class (e.g. `constant_int2t`) inherits from the
-   data class and `irep_methods2` (transitively), picking up all the
-   generated members.
+```cpp
+struct not2t : expr2t {
+  expr2tc value;
+  not2t(const type2tc &t, const expr2tc &v) : expr2t(t, not_id), value(v) {}
+  static constexpr auto fields = std::make_tuple(&not2t::value);
+  static std::string field_names[esbmct::num_type_fields];
+};
+```
 
-Net effect: adding a new node is a single-line manifest entry plus
-the data and concrete class definitions. Comparison, hashing,
-pretty-printing and operand iteration are generated for you.
+The generic helpers in `irep2_dispatch.h` walk `K::fields` via
+`std::apply` to implement `cmp`, `lt`, `clone`, `do_crc`, `hash`,
+`tostring`, `get_sub_expr`, and `foreach_operand` once for every kind.
+The switch-on-id dispatchers on `expr2t` / `type2t` (driven by the
+`expr_kinds.inc` / `type_kinds.inc` X-macro manifests) route each call
+to the matching `generic_*<K>`.
+
+Net effect: adding a new node is a single-line manifest entry plus a
+concrete class with `fields` / `field_names`. Comparison, hashing,
+pretty-printing, and operand iteration are generated by the dispatchers
+for free.
+
+The `fields` tuple is canonical for the kind's primary constructor
+argument order, after the type slot (so `K(type, f1, f2, ...)` matches
+`K::fields = make_tuple(&K::f1, &K::f2, ...)` — or
+`make_tuple(&expr2t::type, &K::f1, &K::f2, ...)` for kinds where the
+type is itself part of the structural identity). `get_sub_expr(i)`
+indexes into this tuple after skipping non-expr2tc fields, so the tuple
+order is observable to callers.
 
 ## Working with containers
 
@@ -121,15 +133,15 @@ Notes:
    The pretty-name string is what `pretty()` and diagnostic messages
    print; it usually matches the identifier verbatim but may diverge
    (`null_object` prints as `NULL-object`).
-2. Define a *data* class in `irep2_expr.h` / `irep2_type.h` listing
-   each field with `esbmct::field_traits<...>` and aggregating them
-   into a `traits` typedef.
-3. Define the user-facing `<kind>2t` class (typically empty — it just
-   inherits the data class and registers methods via the matching
-   `_methods` typedef).
-4. Add an explicit instantiation to the matching file under
-   `templates/` so the generated methods get emitted out-of-line.
-5. If the node has semantics worth modelling, teach `do_simplify`
+2. Define the `<kind>2t` class in `irep2_expr.h` / `irep2_type.h`:
+   inherit from `expr2t` / `type2t` (or a shared `*_data` base on the
+   type side), declare each field, write a primary constructor
+   `(type, field1, field2, ...)`, and add a `static constexpr auto
+   fields = std::make_tuple(&kind2t::field1, ...)` tuple in the same
+   order as the constructor parameters.
+3. Add the `field_names` table for the kind in `irep2_expr.cpp` /
+   `irep2_type.cpp` — one string per `fields` entry, in tuple order.
+4. If the node has semantics worth modelling, teach `do_simplify`
    (defined out-of-line in `src/util/expr_simplifier.cpp` for
    non-trivial nodes) and the relevant lowering passes (symex, SMT
    conversion in `src/solvers/`, `goto2c`) about it.
@@ -154,7 +166,7 @@ Defined by `ESBMC_LIST_OF_TYPES` in `irep2.h`; declared in `irep2_type.h`.
 | `empty` | "Void" — used for void pointers, void function returns, statements. |
 | `symbol` | Placeholder/symbolic type used while linking, or for recursive references inside structs/arrays. |
 | `struct` | C `struct` and C++ class data. Carries member types, names, pretty names, struct name, and `packed` flag. |
-| `union` | C `union`. Same shape as `struct` (shares `struct_union_data`). |
+| `union` | C `union`. Same field shape as `struct` (members, names, packed, ...). |
 | `code` | Function type: argument types, argument names, return type, ellipsis flag. |
 | `array` | Fixed, infinite, or dynamically-sized array. Holds `subtype`, `array_size`, and `size_is_infinite`. |
 | `vector` | SIMD-style fixed-size vector. Same backing data as `array` but distinct semantics. |
@@ -163,7 +175,7 @@ Defined by `ESBMC_LIST_OF_TYPES` in `irep2.h`; declared in `irep2_type.h`.
 | `signedbv` | Signed bitvector of given `width`. |
 | `fixedbv` | Fixed-point bitvector — total width split into integer and fraction bits. |
 | `floatbv` | IEEE-754 floating-point — fraction-bit and exponent-bit counts. |
-| `complex` | C `_Complex` — pair of identical scalar components (shares `struct_union_data`). |
+| `complex` | C `_Complex` — pair of identical scalar components. Currently stored with the same `members`/`member_names`/... shape as `struct`/`union` so the SMT tuple lowering can treat it uniformly; a follow-up will redesign it as a primitive `subtype` field. |
 | `cpp_name` | C++ qualified name with template arguments; used transiently by the C++ frontend. |
 
 ## Reference: expressions
@@ -380,9 +392,10 @@ ordinary expression tree. Their type is `empty` unless noted.
 - **Detach semantics.** Holding a raw `T *` from `irep2tc::get()` (non-const)
   detaches; calling `get()` const does not. Don't cache the raw pointer
   across non-const accesses on shared containers.
-- **CRC cache.** Any non-const access resets `crc_val` to 0. Concurrent
-  readers of the same node must go through `crc()` (which locks
-  `crc_mutex`), not the raw field.
+- **CRC cache.** `crc_val` is a `std::atomic<size_t>` with `0` meaning
+  "not yet computed". Readers do an acquire load and skip recompute on
+  a hit; producers compute on a local and release-store the result.
+  Concurrent readers should call `crc()`, not the raw field.
 - **`type2t::get_width()` can throw.** Symbolic, infinite-sized, or
   dynamically-sized types raise `symbolic_type_excp` /
   `array_type2t::inf_sized_array_excp` / `dyn_sized_array_excp`. Callers

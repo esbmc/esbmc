@@ -283,7 +283,7 @@ goto_cse::obtain_max_sub_expr(const expr2tc &e, const cse_domaint &state) const
     return e;
 
   expr2tc result = expr2tc();
-  e->foreach_operand([this, &result, &state](const expr2tc e_inner) {
+  e->foreach_operand([this, &result, &state](const expr2tc &e_inner) {
     if (!result && e_inner)
       result = obtain_max_sub_expr(e_inner, state);
   });

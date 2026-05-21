@@ -22,13 +22,12 @@ void base_type(type2tc &type, const namespacet &ns)
   }
   else if (is_structure_type(type))
   {
-    struct_union_data &data = static_cast<struct_union_data &>(*type.get());
-
-    for (auto &it : data.members)
-    {
-      type2tc &subtype = it;
-      base_type(subtype, ns);
-    }
+    for (type2tc &it : struct_union_members(type))
+      base_type(it, ns);
+  }
+  else if (is_complex_type(type))
+  {
+    base_type(to_complex_type(type).subtype, ns);
   }
 }
 
@@ -85,7 +84,13 @@ void base_type(expr2tc &expr, const namespacet &ns)
   if (is_nil_expr(expr))
     return;
 
-  base_type(expr->type, ns);
+  // Resolve symbol-types in a local copy (CoW detaches automatically) and,
+  // if the result differs, rebuild the expression with the resolved type
+  // via expr2t::with_type. Keeps expr2t::type immutable.
+  type2tc resolved = expr->type;
+  base_type(resolved, ns);
+  if (resolved != expr->type)
+    expr = expr->with_type(resolved);
 
   expr->Foreach_operand([&ns](expr2tc &e) { base_type(e, ns); });
 }
@@ -141,27 +146,25 @@ bool base_type_eqt::base_type_eq_rec(const type2tc &type1, const type2tc &type2)
 
   if (is_struct_type(type1) || is_union_type(type1))
   {
-    const struct_union_data &data1 =
-      static_cast<const struct_union_data &>(*type1.get());
-    const struct_union_data &data2 =
-      static_cast<const struct_union_data &>(*type2.get());
-
     // Packed structs will have a different layout from unpacked structs.
     // Might be some corner cases where this isn't the case, but at a conceptual
     // level they're different.
-    if (data1.packed != data2.packed)
+    if (struct_union_packed(type1) != struct_union_packed(type2))
       return false;
 
-    if (data1.members.size() != data2.members.size())
+    const std::vector<type2tc> &members1 = struct_union_members(type1);
+    const std::vector<type2tc> &members2 = struct_union_members(type2);
+    const std::vector<irep_idt> &names1 = struct_union_member_names(type1);
+    const std::vector<irep_idt> &names2 = struct_union_member_names(type2);
+
+    if (members1.size() != members2.size())
       return false;
 
-    for (unsigned i = 0; i < data1.members.size(); i++)
+    for (unsigned i = 0; i < members1.size(); i++)
     {
-      const type2tc &subtype1 = data1.members[i];
-      const type2tc &subtype2 = data2.members[i];
-      if (!base_type_eq_rec(subtype1, subtype2))
+      if (!base_type_eq_rec(members1[i], members2[i]))
         return false;
-      if (data1.member_names[i] != data2.member_names[i])
+      if (names1[i] != names2[i])
         return false;
     }
 

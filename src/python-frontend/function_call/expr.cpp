@@ -7,7 +7,7 @@
 #include <python-frontend/python_exception_handler.h>
 #include <python-frontend/python_list.h>
 #include <python-frontend/python_set.h>
-#include <python-frontend/string_builder.h>
+#include <python-frontend/string/string_builder.h>
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/tuple_handler.h>
 #include <python-frontend/type_handler.h>
@@ -728,6 +728,15 @@ exprt function_call_expr::build_constant_from_arg() const
         "str", value_expr, converter_.get_location_from_decl(call_));
       if (!dunder_result.is_nil())
         return dunder_result;
+
+      // Numeric / boolean variables: convert_to_string folds constants to a
+      // char array literal and dispatches non-constants to the matching
+      // __python_*_to_str operational model. Strings flow through unchanged.
+      const typet &vt = value_expr.type();
+      if (
+        vt.is_bool() || type_utils::is_integer_type(vt) || vt.is_floatbv() ||
+        type_utils::is_string_type(vt))
+        return converter_.get_string_handler().convert_to_string(value_expr);
     }
     arg_size = handle_str(arg);
   }

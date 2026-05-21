@@ -33,7 +33,7 @@ void rw_sett::compute(const exprt &expr)
     else if (statement == "function_call")
     {
       assert(code.operands().size());
-      read_write_rec(code.op0(), false, true, "", guardt(), nil_exprt());
+      read_write_rec(code.op0(), false, true, "", guard2tc(), nil_exprt());
       // For function calls, we first check to see if the function has a body available,
       // and if so, we skip it because we also check inside the function
       // If not, we need check these args
@@ -60,7 +60,7 @@ void rw_sett::compute(const exprt &expr)
 void rw_sett::assign(const exprt &lhs, const exprt &rhs)
 {
   read_rec(rhs);
-  read_write_rec(lhs, false, true, "", guardt(), nil_exprt());
+  read_write_rec(lhs, false, true, "", guard2tc(), nil_exprt());
 }
 
 void rw_sett::read_write_rec(
@@ -68,7 +68,7 @@ void rw_sett::read_write_rec(
   bool r,
   bool w,
   const std::string &suffix,
-  const guardt &guard,
+  const guard2tc &guard,
   const exprt &original_expr,
   bool dereferenced)
 {
@@ -162,14 +162,14 @@ void rw_sett::read_write_rec(
     assert(expr.operands().size() == 3);
     read_rec(expr.op0(), guard, original_expr);
 
-    guardt true_guard(guard);
+    guard2tc true_guard(guard);
     expr2tc tmp_expr;
     migrate_expr(expr.op0(), tmp_expr);
     true_guard.add(tmp_expr);
     read_write_rec(
       expr.op1(), r, w, suffix, true_guard, original_expr, dereferenced);
 
-    guardt false_guard(guard);
+    guard2tc false_guard(guard);
     migrate_expr(gen_not(expr.op0()), tmp_expr);
     false_guard.add(tmp_expr);
     read_write_rec(

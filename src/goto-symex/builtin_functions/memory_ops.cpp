@@ -507,7 +507,7 @@ void goto_symext::intrinsic_memcpy(
   // Sane checks here
   for (dereference_callbackt::internal_item &item : src_items)
   {
-    guardt guard = ex_state.cur_state->guard;
+    guard2tc guard = ex_state.cur_state->guard;
     guard.add(item.guard);
     expr2tc &item_object = item.object;
     expr2tc &item_offset = item.offset;
@@ -597,7 +597,7 @@ void goto_symext::intrinsic_memcpy(
 
   for (dereference_callbackt::internal_item &item : internal_deref_items)
   {
-    guardt guard = ex_state.cur_state->guard;
+    guard2tc guard = ex_state.cur_state->guard;
     guard.add(item.guard);
     // expr2tc &item_object = item.object;
     // expr2tc &item_offset = item.offset;
@@ -668,7 +668,7 @@ void goto_symext::intrinsic_memcpy(
         return;
       }
 
-      guardt assignment_guard = guard;
+      guard2tc assignment_guard = guard;
       assignment_guard.add(src_item.guard);
 
       symex_assign(
@@ -815,7 +815,7 @@ void goto_symext::intrinsic_memset(
   // Where are we pointing to?
   for (auto &item : internal_deref_items)
   {
-    guardt guard = ex_state.cur_state->guard;
+    guard2tc guard = ex_state.cur_state->guard;
     expr2tc item_object = item.object;
     expr2tc item_offset = item.offset;
     guard.add(item.guard);

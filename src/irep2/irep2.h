@@ -36,7 +36,6 @@
 #include <memory>
 #include <stdexcept>
 #include <thread>
-#include <tuple>
 #include <type_traits>
 #include <utility>
 #include <util/compiler_defs.h>
@@ -50,14 +49,8 @@
 // predicate generators, the pretty name tables) #include the matching
 // .inc with a redefining IREP2_EXPR / IREP2_TYPE macro.
 
-// Even crazier forward decls,
 namespace esbmct
 {
-template <typename... Args>
-class expr2t_traits;
-template <typename... Args>
-class type2t_traits;
-
 /** Type-erased callable reference: non-owning, two pointers wide, no
  *  heap allocation. Replaces the historic `std::function` delegates
  *  used by foreach_operand / foreach_subtype. The contract is a
@@ -124,8 +117,6 @@ inline void hash_combine(std::size_t &seed, const T &v)
 
 class type2t;
 class expr2t;
-class constant_array2t;
-class constant_vector2t;
 
 /** Reference counted container for irep2 nodes.
  *
@@ -152,21 +143,33 @@ class constant_vector2t;
 template <class T>
 class irep_container
 {
+private:
+  // Private tag gate for the raw-pointer adopt constructor. Only
+  // `make_irep` and other befriended factories can construct one,
+  // which means user code cannot do `expr2tc(new foo2t(...))` — the
+  // canonical idiom is the per-kind `foo2tc(...)` factory (itself a
+  // thin wrapper over make_irep). The tag carries no state.
+  struct make_tag
+  {
+    explicit make_tag() = default;
+  };
+
+  // Adopt a freshly-allocated node. The pointee's refcount must be 0
+  // (i.e. just-new'd); we bump it to 1.
+  irep_container(T *raw, make_tag) noexcept : ptr_(raw)
+  {
+    if (ptr_)
+      ptr_->refcount.fetch_add(1, std::memory_order_relaxed);
+  }
+
+  template <class U, class... Args>
+  friend irep_container<typename U::base_type> make_irep(Args &&...args);
+
 public:
   // Default: empty container, nullptr inside. `noexcept`/`constexpr` to
   // preserve the storage-class properties of the previous design.
   constexpr irep_container() noexcept : ptr_(nullptr)
   {
-  }
-
-  // Adopt a freshly-allocated node. The pointee's refcount must be 0
-  // (i.e. just-new'd); we bump it to 1. The factory functions in
-  // irep2_expr.h / irep2_type.h are the only intended callers of this
-  // overload; outside code constructs containers via copy/move.
-  explicit irep_container(T *raw) noexcept : ptr_(raw)
-  {
-    if (ptr_)
-      ptr_->refcount.fetch_add(1, std::memory_order_relaxed);
   }
 
   irep_container(const irep_container &ref) noexcept : ptr_(ref.ptr_)
@@ -318,12 +321,12 @@ public:
   {
     const T *foo = get();
     // Acquire ordering on the load so a non-zero cached value also
-    // synchronises with the writer that produced it (do_crc()'s release
+    // synchronises with the writer that produced it (crc()'s release
     // store), and we observe whatever node state went into computing it.
     if (size_t cached = foo->crc_val.load(std::memory_order_acquire);
         cached != 0)
       return cached;
-    return foo->do_crc();
+    return foo->crc();
   }
 
   /* Provide comparison operators here as inline friends so they don't pollute
@@ -448,8 +451,9 @@ typedef irep_container<expr2t> expr2tc;
 template <class T, class... Args>
 inline irep_container<typename T::base_type> make_irep(Args &&...args)
 {
-  return irep_container<typename T::base_type>(
-    new T(std::forward<Args>(args)...));
+  using container_t = irep_container<typename T::base_type>;
+  return container_t(
+    new T(std::forward<Args>(args)...), typename container_t::make_tag{});
 }
 
 typedef std::pair<std::string, std::string> member_entryt;
@@ -560,9 +564,6 @@ public:
     end_type_id
   };
 
-  /* Define default traits */
-  typedef typename esbmct::type2t_traits<> traits;
-
   /** Symbolic type exception class.
    *  To be thrown when attempting to fetch the width of a symbolic type, such
    *  as empty or code. Caller will have to worry about what to do about that.
@@ -593,8 +594,8 @@ protected:
   /** Copy constructor */
   type2t(const type2t &ref);
 
-  virtual void foreach_subtype_impl_const(const_subtype_delegate &t) const = 0;
-  virtual void foreach_subtype_impl(subtype_delegate &t) = 0;
+  void foreach_subtype_impl_const(const_subtype_delegate &t) const;
+  void foreach_subtype_impl(subtype_delegate &t);
 
 public:
   // Provide base / container types for some templates stuck on top:
@@ -617,16 +618,13 @@ public:
    *  @throws array_type2t::dyn_sized_array_excp
    *  @return Size of types byte representation, in bits
    */
-  virtual unsigned int get_width() const = 0;
+  unsigned int get_width() const;
 
   bool operator==(const type2t &ref) const;
   bool operator!=(const type2t &ref) const;
   bool operator<(const type2t &ref) const;
 
-  /** Produce a string representation of type.
-   *  Takes body of the current type and produces a human readable
-   *  representation. Similar to the string-irept's pretty method, although a
-   *  different format.
+  /** Produce a human-readable string representation of type.
    *  @param indent Number of spaces to indent lines by in the output
    *  @return String obj containing representation of this object
    */
@@ -648,41 +646,19 @@ public:
    */
   size_t crc() const;
 
-  /** Perform checked invocation of cmp method.
-   *  Takes reference to another type - if they have the same type id, invoke
-   *  the cmp function and return its result. Otherwise, return false. Using
-   *  this method ensures thatthe implementer of cmp knows the reference it
-   *  operates on is on the same type as itself.
-   *  @param ref Reference to type to compare this object against
-   *  @return True if types are the same, false otherwise.
-   */
-  bool cmpchecked(const type2t &ref) const;
-
-  /** Perform checked invocation of lt method.
-   *  Identical to cmpchecked, except with the lt method.
-   *  @see cmpchecked
-   *  @param ref Reference to type to measure this against.
-   *  @return 0 if types are the same, 1 if this > ref, -1 if ref > this.
-   */
-  int ltchecked(const type2t &ref) const;
-
-  /** Virtual method to compare two types.
-   *  To be overridden by an extending type; assumes that itself and the
-   *  parameter are of the same extended type. Call via cmpchecked.
-   *  @see cmpchecked
-   *  @param ref Reference to (same class of) type to compare against
+  /** Structural comparison. Switch-dispatches on type_id and walks the
+   *  kind's K::fields; returns false immediately when the type_ids differ.
+   *  @param ref Reference to type to compare against
    *  @return True if types match, false otherwise
    */
-  virtual bool cmp(const type2t &ref) const = 0;
+  bool cmp(const type2t &ref) const;
 
-  /** Virtual method to compare two types.
-   *  To be overridden by an extending type; assumes that itself and the
-   *  parameter are of the same extended type. Call via cmpchecked.
-   *  @see cmpchecked
-   *  @param ref Reference to (same class of) type to compare against
+  /** Trinary structural ordering. Mirrors `cmp` but returns -1/0/+1;
+   *  mismatched type_ids are ordered by the id itself.
+   *  @param ref Reference to type to measure against
    *  @return 0 if types are the same, 1 if this > ref, -1 if ref > this.
    */
-  virtual int lt(const type2t &ref) const;
+  int lt(const type2t &ref) const;
 
   /** Extract a list of members from type as strings.
    *  Produces a list of pairs, mapping a member name to a string value. Used
@@ -691,32 +667,22 @@ public:
    *  @param indent Number of spaces to indent output strings with, if multiline
    *  @return list of name:value pairs.
    */
-  virtual list_of_memberst tostring(unsigned int indent) const = 0;
-
-  /** Perform crc operation accumulating into parameter.
-   *  Performs the operation of the crc method, but overridden to be specific to
-   *  a particular type. Accumulates data into the hash object parameter.
-   *  @see cmp
-   *  @param seed Hash to accumulate hash data into.
-   *  @return Hash value
-   */
-  virtual size_t do_crc() const;
+  list_of_memberst tostring(unsigned int indent) const;
 
   /** Perform hash operation accumulating into parameter.
    *  Feeds data as appropriate to the type of the expression into the
-   *  parameter, to be hashed. Like crc and do_crc, but for some other kind
-   *  of hash scenario.
+   *  parameter, to be hashed. Like crc, but for some other kind of hash
+   *  scenario.
    *  @see cmp
    *  @see crc
-   *  @see do_crc
    *  @param hash Object to accumulate hash data into.
    */
-  virtual void hash(crypto_hash &hash) const;
+  void hash(crypto_hash &hash) const;
 
   /** Clone method. Self explanatory.
    *  @return New container, containing a duplicate of this object.
    */
-  virtual type2tc clone() const = 0;
+  type2tc clone() const;
 
   // Please see the equivalent methods in expr2t for documentation
   template <typename T>
@@ -734,8 +700,7 @@ public:
   }
 
   /** Instance of type_ids recording this types type. */
-  // XXX XXX XXX this should be const
-  type_ids type_id;
+  const type_ids type_id;
 
   // CRC cache: 0 means "not yet computed". Atomic so concurrent readers
   // see either the prior value or the fresh one — never a torn read.
@@ -747,9 +712,6 @@ public:
 };
 
 /** Fetch identifying name for a type.
- *  I.E., this is the class of the type, what you'd get if you called type.id()
- *  with the old stringy irep. Ideally this should be a class method, but as it
- *  was added as a hack I haven't got round to it yet.
  *  @param type Type to fetch identifier for
  *  @return String containing name of type class.
  */
@@ -785,11 +747,6 @@ public:
     end_expr_id
   };
 
-  /** Type for list of constant expr operands */
-  typedef std::list<const expr2tc *> expr_operands;
-  /** Type for list of non-constant expr operands */
-  typedef std::list<expr2tc *> Expr_operands;
-
   // Non-owning callable references; see commentary on type2t's variants.
   typedef esbmct::function_ref<void(const expr2tc &)> const_op_delegate;
   typedef esbmct::function_ref<void(expr2tc &)> op_delegate;
@@ -803,40 +760,31 @@ protected:
   /** Copy constructor */
   expr2t(const expr2t &ref);
 
-  virtual void foreach_operand_impl_const(const_op_delegate &expr) const = 0;
-  virtual void foreach_operand_impl(op_delegate &expr) = 0;
+  void foreach_operand_impl_const(const_op_delegate &expr) const;
+  void foreach_operand_impl(op_delegate &expr);
 
 public:
   // Provide base / container types for some templates stuck on top:
   typedef expr2tc container_type;
   typedef expr2t base_type;
-  // Also provide base traits
-  typedef esbmct::expr2t_traits<> traits;
 
   virtual ~expr2t() = default;
 
-  /** Clone method. Self explanatory. */
-  virtual expr2tc clone() const = 0;
+  expr2tc clone() const;
 
-  /* These are all self explanatory */
+  /** Build a fresh expression of the same kind and field values as this
+   *  one, but with a different type. Assumes every kind's primary
+   *  constructor takes (type, fields...) matching its K::fields tuple
+   *  in order. */
+  expr2tc with_type(const type2tc &new_type) const;
+
   bool operator==(const expr2t &ref) const;
   bool operator<(const expr2t &ref) const;
   bool operator!=(const expr2t &ref) const;
 
-  /** Perform type-checked call to lt method.
-   *  Checks that this object and the one we're comparing against have the same
-   *  expr class, so that the lt method can assume it's working on objects of
-   *  the same type.
-   *  @see type2t::ltchecked
-   *  @param ref Expression object we're comparing this object against.
-   *  @return 0 If exprs are the same, 1 if this > ref, -1 if ref > this.
-   */
-  int ltchecked(const expr2t &ref) const;
-
   /** Produce textual representation of this expr.
-   *  Like the stringy-irep's pretty method, this takes the current object and
-   *  produces a textual representation that can be read by a human to
-   *  understand what's going on.
+   *  Takes the current object and produces a textual representation that
+   *  can be read by a human to understand what's going on.
    *  @param indent Number of spaces to indent the output string lines by
    *  @return String object containing textual expr representation.
    */
@@ -856,27 +804,21 @@ public:
    */
   size_t crc() const;
 
-  /** Perform comparison operation between this and another expr.
-   *  Overridden by subclasses of expr2t to compare different members of this
-   *  and the passed in object. Assumes that the passed in object is the same
-   *  class type as this; Should be called via operator==, which will do that
-   *  check automagically.
+  /** Structural comparison. The expr_id check is done by the switch
+   *  dispatcher inside, so callers don't have to gate the call on kind.
+   *  Should normally be reached via operator==.
    *  @see type2t::cmp
    *  @param ref Expr object to compare this against
    *  @return True if objects are the same; false otherwise.
    */
-  virtual bool cmp(const expr2t &ref) const;
+  bool cmp(const expr2t &ref) const;
 
-  /** Compare two expr objects.
-   *  Overridden by subclasses - takes two expr objects (this and ref) of the
-   *  same type, and compares them, in the same manner as memcmp. The assumption
-   *  that the objects are of the same type means lt should be called via
-   *  ltchecked to check for different expr types.
-   *  @see type2t::lt
+  /** Trinary structural ordering. Mirrors `cmp` but returns -1/0/+1;
+   *  mismatched expr_ids are ordered by the id itself.
    *  @param ref Expr object to compare this against
    *  @return 0 If exprs are the same, 1 if this > ref, -1 if ref > this.
    */
-  virtual int lt(const expr2t &ref) const;
+  int lt(const expr2t &ref) const;
 
   /** Convert fields of subclasses to a string representation.
    *  Used internally by the pretty method - creates a list of pairs
@@ -886,49 +828,30 @@ public:
    *  @param indent Number of spaces to indent multiline output by
    *  @return list of string pairs, of form fieldname:value
    */
-  virtual list_of_memberst tostring(unsigned int indent) const = 0;
-
-  /** Perform digest/hash function on expr object.
-   *  Takes all fields in this exprs and adds them to the passed in hash object
-   *  to compute an expression-hash. Overridden by subclasses.
-   *  @param seed Hash to accumulate expression data into.
-   *  @return Hash value
-   */
-  virtual size_t do_crc() const;
+  list_of_memberst tostring(unsigned int indent) const;
 
   /** Perform hash operation accumulating into parameter.
    *  Feeds data as appropriate to the type of the expression into the
-   *  parameter, to be hashed. Like crc and do_crc, but for some other kind
-   *  of hash scenario.
+   *  parameter, to be hashed. Like crc, but for some other kind of hash
+   *  scenario.
    *  @see cmp
    *  @see crc
-   *  @see do_crc
    *  @param hash Object to accumulate hash data into.
    */
-  virtual void hash(crypto_hash &hash) const;
+  void hash(crypto_hash &hash) const;
 
   /** Fetch a sub-operand.
    *  These can come out of any field that is an expr2tc, or contains them.
    *  No particular numbering order is promised.
    */
-  virtual const expr2tc *get_sub_expr(size_t idx) const = 0;
-
-  /** Fetch a sub-operand. Non-const version.
-   *  These can come out of any field that is an expr2tc, or contains them.
-   *  No particular numbering order is promised.
-   */
-  virtual expr2tc *get_sub_expr_nc(size_t idx) = 0;
+  const expr2tc *get_sub_expr(size_t idx) const;
 
   /** Count the number of sub-exprs there are.
    */
-  virtual size_t get_num_sub_exprs() const = 0;
+  size_t get_num_sub_exprs() const;
 
   /** Simplify an expression.
-   *  Similar to simplification in the string-based irep, this generates an
-   *  expression with any calculations or operations that can be simplified,
-   *  simplified. In contrast to the old form though, this creates a new expr
-   *  if something gets simplified, just to make it clear exactly what's
-   *  going on.
+   *  Returns a new expression when a calculation or operation can be folded.
    *  @return Either a nil expr (null pointer contents) if nothing could be
    *          simplified or a simplified expression.
    */
@@ -973,20 +896,16 @@ public:
 
   /** Indirect, abstract operand iteration.
    *
-   *  Provide a lambda-based accessor equivalent to the forall_operands2 macro
-   *  where anonymous code (actually a delegate?) gets run over each operand
-   *  expression. Because the full type of the expression isn't known by the
-   *  caller, and each delegate is it's own type, we need to wrap it in a
-   *  std::function before funneling it through a virtual function.
+   *  Lambda-based accessor: the delegate is called on every expr2tc field
+   *  in this expression, in K::fields order. For a vector<expr2tc> field,
+   *  the delegate is called once per element. Delegates are wrapped in a
+   *  non-owning `function_ref` so any callable (lambda, free function,
+   *  member-pointer-with-bound-instance) flows through without dynamic
+   *  allocation.
    *
-   *  For the purpose of this method, an operand is another instance of an
-   *  expr2tc. This means the delegate will be called on any expr2tc field of
-   *  the expression, in the order they appear in the traits. For a vector of
-   *  expressions, the delegate will be called for each element, in order.
-   *
-   *  The uncapitalized version is const; the capitalized version is non-const
-   *  (and so one needs to .get() a mutable expr2t pointer when calling). When
-   *  modifying operands, preserving type correctness is imperative.
+   *  The lowercase version is const; the capitalised version is non-const
+   *  (and so one needs to .get() a mutable expr2t pointer when calling).
+   *  When modifying operands, preserving type correctness is imperative.
    *
    *  @param t A delegate to be called for each expression operand; must have
    *           a type of void f(const expr2tc &)
@@ -994,8 +913,6 @@ public:
   template <typename T>
   void foreach_operand(T &&t) const
   {
-    // function_ref borrows the caller's callable directly; no
-    // type-erasure allocation.
     const_op_delegate wrapped(t);
     foreach_operand_impl_const(wrapped);
   }
@@ -1011,7 +928,7 @@ public:
   const expr_ids expr_id;
 
   /** Type of this expr. All exprs have a type. */
-  type2tc type;
+  const type2tc type;
 
   // CRC cache; see commentary on type2t::crc_val.
   mutable std::atomic<size_t> crc_val;
@@ -1034,9 +951,6 @@ inline std::size_t hash_value(const expr2tc &expr)
 }
 
 /** Fetch string identifier for an expression.
- *  Returns the class name of the expr passed in - this is equivalent to the
- *  result of expr.id() in old stringy irep. Should ideally be a method of
- *  expr2t, but haven't got around to moving it yet.
  *  @param expr Expression to operate upon
  *  @return String containing class name of expression.
  */
@@ -1051,84 +965,33 @@ static inline std::string get_expr_id(const expr2tc &expr)
   return get_expr_id(*expr);
 }
 
-/** Template for providing templated methods to irep classes (type2t/expr2t).
+/** Containers and field-walking infrastructure for irep2 nodes.
  *
- *  What this does: we give irep_methods2 a type trait record that contains
- *  a std::tuple, the elements of which describe each field in the class
- *  we're operating on. For each field we get:
+ *  Each concrete kind (e.g. `add2t`, `if2t`, `array_type2t`) inherits
+ *  directly from `expr2t` / `type2t` and carries:
  *
- *    - The type of the field
- *    - The class that field is part of
- *    - A pointer offset to that field.
+ *    static constexpr auto fields = std::make_tuple(&Kind::field1, ...);
+ *    static std::string field_names[num_type_fields];
  *
- *  What this means, is that we can @a type @a generically access a member
- *  of a class from within the template, without knowing what type it is,
- *  what its name is, or even what type contains it.
+ *  The generic_*<K> helpers in `irep2_dispatch.h` walk that tuple via
+ *  std::apply to implement clone/cmp/lt/crc/hash/tostring and operand
+ *  iteration. The switch-on-id dispatchers on `expr2t` / `type2t`
+ *  select the right K per kind from the X-macro manifests
+ *  (`expr_kinds.inc`, `type_kinds.inc`).
  *
- *  We can then use that to make all the boring methods of ireps type
- *  generic too. For example: we can make the comparision method by accessing
- *  each field in the class we're dealing with, passing them to another
- *  function to do the comparison (with the type resolved by templates or
- *  via overloading), and then inspecting the output of that.
+ *  Each kind also has a container alias `<kind>2tc` (alias for
+ *  `irep_container<expr2t>` / `irep_container<type2t>`) and a factory
+ *  `<kind>2tc(args...)` that wraps `make_irep<T>(args...)`. Containers
+ *  behave like value types via copy-on-write: const access shares the
+ *  pointee, non-const `get()` / `operator->` / `operator*` calls
+ *  `detach()` first (clones into a fresh refcount=1 object when shared).
  *
- *  In fact, we can make type generic implementations of all the following
- *  methods in expr2t: clone, tostring, cmp, lt, do_crc, hash.
- *  Similar methods, minus the operands, can be made generic in type2t.
- *
- *  So, that's what these templates provide; an irep class can be made by
- *  inheriting from this template, telling it what class it'll end up with,
- *  and what to subclass from, and what the fields in the class being derived
- *  from look like. This means we can construct a type hierarchy with whatever
- *  inheritance we like and whatever fields we like, then latch irep_methods2
- *  on top of that to implement all the anoying boring boilerplate code.
- *
- *  ----
- *
- *  In addition, we also define container types for each irep, which is
- *  essentially a type-safeish wrapper around a std::shared_ptr (i.e.,
- *  reference counter). One can create a new irep with syntax such as:
- *
- *    foo2tc bar(type, operand1, operand2);
- *
- *  One can transparently access the irep fields through dereference, such as:
- *
- *    bar->operand1 = 0;
- *
- *  This all replicates the CBMC expression situation, but with the addition
- *  of types.
- *
- *  ----
- *
- *  The following functions can be used to inspect an irep2 object:
- *
- *    is_${suffix}()
- *    to_${suffix}()
- *
- *  For expr2tc the suffix is the name of the class, while for type2t it is the
- *  name of the class without the trailing "2t", e.g.
- *
- *    is_bool_type(type)
- *    to_constant_int2t(expr)
- *
- *  The to_* functions return a (const) reference for a (const) expr2tc or
- *  type2tc parameter. The non-const versions perform a so-called "detach"
- *  operation, which ensures that the to-be-modified object is not referenced by
- *  any other irep2 terms in use. This detach operation is explained in more
- *  detail in the comment about irep_container. Because const-ness is used to
- *  decide whether to detach or not, when working with irep2 it is *critical*
- *  that const_cast<>() is used only where it's safe to. Best practice is to
- *  put a formal safety proof into the comment about const_cast usage.
- *
- *  The above functions are defined by type_macros and expr_macros in the
- *  respective irep2 header.
- *
- *  ----
- *
- *  The traits defined here are used to generically implement the functions
- *  operating on a type2t's or an expr2t's fields, like .dump() and the
- *  iterators foreach_subtype() and foreach_operand().
- *
- *  (The required traits hacks need cleaning up too).
+ *  Identification and downcasting helpers `is_<kind>2t(expr)`,
+ *  `to_<kind>2t(expr)`, `try_to_<kind>2t(expr)` are macro-generated by
+ *  `irep2_expr.h` / `irep2_type.h` from the same manifests. `to_*`
+ *  throws `irep2_cast_error` on a kind mismatch; `try_to_*` returns
+ *  `nullptr`. The non-const downcast goes through the non-const
+ *  container accessor, so it triggers detach automatically.
  */
 namespace esbmct
 {
@@ -1139,247 +1002,130 @@ namespace esbmct
  *  way of defining ireps. */
 const unsigned int num_type_fields = 6;
 
-/** Record for properties of an irep field.
- *  This type records, for any particular field:
- *    * It's type
- *    * The class that it's a member of
- *    * A class pointer to this field
- *  The aim being that we have enough information about the field to
- *  manipulate it without any further traits. */
-template <typename R, typename C, R C::*v>
-class field_traits
+// ---------------------------------------------------------------------------
+// Per-kind invariants for the flat irep2 layout.
+//
+// Each concrete kind exposes:
+//   * A `static constexpr auto fields` tuple of member pointers covering its
+//     user-visible storage. Pointers may refer to members of the kind itself
+//     OR of its base (e.g. `&expr2t::type` for kinds whose type slot is part
+//     of the trait set).
+//   * A `static std::string field_names[num_type_fields]` array of labels for
+//     the pretty-printer.
+//
+// `assert_kind_invariants<K>()` packages the two compile-time checks we want
+// every concrete kind to satisfy:
+//
+//   1. `fields_cover_class<K>()` — the member pointers in K::fields that
+//      refer to K (i.e. not to a base) collectively cover the derived-class
+//      storage span, modulo trailing padding (< alignof(K)). If someone
+//      adds a raw `BigInt extra;` to a kind and forgets to extend `fields`,
+//      this fires.
+//
+//   2. The number of derived-class entries in K::fields is at most
+//      num_type_fields, so the field_names[] array indexing in
+//      generic_tostring is in-bounds.
+//
+// Instantiated for every kind from the switch dispatchers (each `case`
+// references `K::fields`, which transitively forces the static_asserts in
+// the helpers below). Adding a new kind without listing its fields gets a
+// compile error from this site rather than a silent bug at cmp/crc/hash time.
+// ---------------------------------------------------------------------------
+
+template <class P>
+struct member_traits;
+template <class C, class M>
+struct member_traits<M C::*>
 {
-public:
-  typedef R result_type;
-  typedef C source_class;
-  typedef R C::*membr_ptr;
-  static constexpr membr_ptr value = v;
+  using class_t = C;
+  using member_t = M;
+};
+template <class C, class M>
+struct member_traits<const M C::*>
+{
+  using class_t = C;
+  using member_t = M;
 };
 
-template <typename R, typename C, R C::*v>
-constexpr
-  typename field_traits<R, C, v>::membr_ptr field_traits<R, C, v>::value;
-
-/** Trait class for type2t ireps.
- *  This takes a list of field traits and puts it in a tuple, with the record
- *  for the type_id field (common to all type2t's) put at the front. The
- *  `fields` tuple drives the per-field fold expressions in irep_methods2;
- *  it is the single source of truth for which fields participate in
- *  cmp/lt/crc/hash/operand-iteration. */
-template <typename... Args>
-class type2t_traits
+// Sizeof the i-th K::fields entry, but only if it refers to K itself
+// (member pointers into the base class point at base storage, so they
+// shouldn't be counted against the derived-class storage span).
+template <class K, std::size_t I>
+constexpr std::size_t nth_field_size_in_derived()
 {
-public:
-  typedef field_traits<type2t::type_ids, type2t, &type2t::type_id>
-    type_id_field;
-  typedef std::tuple<type_id_field, Args...> fields;
-  typedef type2t base2t;
-};
+  using P = std::remove_cvref_t<decltype(std::get<I>(K::fields))>;
+  using class_t = typename member_traits<P>::class_t;
+  if constexpr (std::is_same_v<class_t, K>)
+    return sizeof(typename member_traits<P>::member_t);
+  else
+    return 0;
+}
 
-/** Trait class for expr2t ireps.
- *  Same idea as type2t_traits but with an expr_id slot and a type slot
- *  prepended (every expr2t carries both). Records some additional flags
- *  about the usage of the expression -- specifically what a unary
- *  constructor will do (@see something2tc::something2tc). */
-template <typename... Args>
-class expr2t_traits
+template <class K, std::size_t... Is>
+constexpr std::size_t sum_derived_field_sizes(std::index_sequence<Is...>)
 {
-public:
-  typedef field_traits<const expr2t::expr_ids, expr2t, &expr2t::expr_id>
-    expr_id_field;
-  typedef field_traits<type2tc, expr2t, &expr2t::type> type_field;
-  typedef std::tuple<expr_id_field, type_field, Args...> fields;
-  typedef expr2t base2t;
-};
+  return (nth_field_size_in_derived<K, Is>() + ... + std::size_t{0});
+}
 
-// "Specialization" for expr kinds where the type is derived, like boolean
-// typed exprs. Should actually become a more structured expr2t_traits
-// that can be specialized in this way, at a later date. Might want to
-// move the presumed type down to the _data class at that time too.
-template <typename... Args>
-class expr2t_traits_notype
+template <class K, std::size_t... Is>
+constexpr std::size_t count_derived_field_entries(std::index_sequence<Is...>)
 {
-public:
-  typedef field_traits<const expr2t::expr_ids, expr2t, &expr2t::expr_id>
-    expr_id_field;
-  typedef std::tuple<expr_id_field, Args...> fields;
-  typedef expr2t base2t;
-};
+  return (
+    (std::is_same_v<
+       typename member_traits<
+         std::remove_cvref_t<decltype(std::get<Is>(K::fields))>>::class_t,
+       K>
+       ? std::size_t{1}
+       : std::size_t{0}) +
+    ... + std::size_t{0});
+}
 
-// Declaration of irep and expr methods templates. The class walks
-// `traits::fields` (a std::tuple of field_traits entries) via fold
-// expressions in a single non-recursive class.
-template <class derived, class baseclass, typename traits>
-class irep_methods2;
-template <class derived, class baseclass, typename traits>
-class expr_methods2;
-template <class derived, class baseclass, typename traits>
-class type_methods2;
-
-/** Definition of irep methods template.
- *
- *  @param derived The inheritor class, like add2t
- *  @param baseclass Class containing fields for methods to be defined over
- *  @param traits Type traits for baseclass
- *
- *  A typical irep inheritance looks like this:
- *
- *    b   Base class, such as type2t or expr2t
- *    d   Data class, containing storage fields for ireps
- *    M   irep_methods2 — implements the boilerplate methods (cmp/lt/
- *        clone/crc/hash/tostring/operand iteration) by walking
- *        traits::fields with a fold expression
- *    t   Top level class such as add2t
- *
- *  Each method body is a single fold over the trait list — no inheritance
- *  recursion, no per-field chain levels, no Boost.MP11. Adding a new node
- *  needs the data class to declare its fields and a fields tuple in its
- *  traits; the methods are inherited unchanged.
- */
-template <class derived, class baseclass, typename traits>
-class irep_methods2 : public baseclass
+// `fields_cover_class<K>()` — the sum of derived-class field sizes in
+// K::fields must equal `sizeof(K) - sizeof(base)`, modulo at most
+// `alignof(K) - 1` bytes of trailing padding. Catches missed-member-in-tuple
+// at compile time for any kind where the missed member is at least one byte
+// larger than the existing trailing padding (which covers every realistic
+// case — irep2 nodes use pointer-sized fields almost exclusively).
+template <class K>
+constexpr bool fields_cover_class()
 {
-public:
-  typedef typename baseclass::base_type base2t;
-  typedef irep_container<base2t> base_container2tc;
+  using fields_t = std::remove_cv_t<decltype(K::fields)>;
+  constexpr std::size_t derived_storage =
+    sizeof(K) - sizeof(typename K::base_type);
+  constexpr std::size_t covered = sum_derived_field_sizes<K>(
+    std::make_index_sequence<std::tuple_size_v<fields_t>>{});
+  return derived_storage - covered < alignof(K);
+}
 
-  template <typename... Args>
-  irep_methods2(const Args &...args) : baseclass(args...)
-  {
-  }
-
-  // Copy constructor. Construct from derived ref rather than just
-  // irep_methods2, because the template above will be able to directly
-  // match a const derived &, and so the compiler won't cast it up to
-  // const irep_methods2 & and call the copy constructor. Fix this by
-  // defining a copy constructor that exactly matches the (only) use case.
-  irep_methods2(const derived &ref) : baseclass(ref)
-  {
-  }
-
-  // The trait list is a std::tuple of field_traits<R, C, R C::*> entries.
-  // for_each_field instantiates a default-constructed field_traits per
-  // element (they carry only constexpr state) and lets the caller use
-  // decltype(f) to recover R / C / value.
-  template <typename F>
-  static void for_each_field(F &&f)
-  {
-    std::apply(
-      [&](auto... entries) { (f(entries), ...); }, typename traits::fields{});
-  }
-
-  // Method bodies live in irep2_meta_templates.h, which is included
-  // after irep2_template_utils.h so the per-field-type helpers
-  // (do_type_cmp, do_type_lt, do_type_crc, do_type_hash, do_type2string,
-  // do_get_sub_expr*, call_expr_delegate, call_type_delegate) are
-  // visible at the point of instantiation. Keeping the bodies out of
-  // irep2.h avoids the dependency cycle that would otherwise force
-  // irep2.h to include irep2_template_utils.h before the types those
-  // helpers operate on (sideeffect_data::allockind etc.) are defined.
-  base_container2tc clone() const override;
-  list_of_memberst tostring(unsigned int indent) const override;
-  bool cmp(const base2t &ref) const override;
-  int lt(const base2t &ref) const override;
-  size_t do_crc() const override;
-  void hash(crypto_hash &h) const override;
-
-protected:
-  // Helpers reused by expr_methods2 and type_methods2. Definitions in
-  // irep2_meta_templates.h.
-  const expr2tc *get_sub_expr_impl(size_t desired) const;
-  expr2tc *get_sub_expr_nc_impl(size_t desired);
-  size_t get_num_sub_exprs_impl() const;
-
-  template <typename Delegate>
-  void foreach_operand_impl_const_inner(Delegate &f) const;
-  template <typename Delegate>
-  void foreach_operand_impl_inner(Delegate &f);
-
-  template <typename Delegate>
-  void foreach_subtype_impl_const_inner(Delegate &f) const;
-  template <typename Delegate>
-  void foreach_subtype_impl_inner(Delegate &f);
-};
-
-/** Expression methods template for expr ireps.
- *  This class works on the same principle as @irep_methods2 but provides
- *  head methods for get_sub_expr and so forth, which are
- *  specific to expression ireps. The actual implementation of these methods
- *  are provided in irep_methods to avoid un-necessary recursion but are
- *  protected; here we provide the head methods publically to allow the
- *  programmer to call in.
- *  */
-template <class derived, class baseclass, typename traits>
-class expr_methods2 : public irep_methods2<derived, baseclass, traits>
+// `derived_field_count<K>()` — number of K::fields entries that live in K
+// itself (not in K::base_type). Compared against num_type_fields to ensure
+// the field_names[] indexing in generic_tostring stays in-bounds.
+template <class K>
+constexpr std::size_t derived_field_count()
 {
-public:
-  typedef irep_methods2<derived, baseclass, traits> superclass;
+  using fields_t = std::remove_cv_t<decltype(K::fields)>;
+  return count_derived_field_entries<K>(
+    std::make_index_sequence<std::tuple_size_v<fields_t>>{});
+}
 
-  template <typename... Args>
-  expr_methods2(const Args &...args) : superclass(args...)
-  {
-  }
-
-  // See notes on irep_methods2 copy constructor
-  expr_methods2(const derived &ref) : superclass(ref)
-  {
-  }
-
-  const expr2tc *get_sub_expr(size_t i) const override
-  {
-    return this->get_sub_expr_impl(i);
-  }
-
-  expr2tc *get_sub_expr_nc(size_t i) override
-  {
-    return this->get_sub_expr_nc_impl(i);
-  }
-
-  size_t get_num_sub_exprs() const override
-  {
-    return this->get_num_sub_exprs_impl();
-  }
-
-  void foreach_operand_impl_const(expr2t::const_op_delegate &f) const override
-  {
-    this->foreach_operand_impl_const_inner(f);
-  }
-
-  void foreach_operand_impl(expr2t::op_delegate &f) override
-  {
-    this->foreach_operand_impl_inner(f);
-  }
-};
-
-/** Type methods template for type ireps.
- *  Like @expr_methods2, but for types. */
-template <class derived, class baseclass, typename traits>
-class type_methods2 : public irep_methods2<derived, baseclass, traits>
+template <class K>
+constexpr bool assert_kind_invariants()
 {
-public:
-  typedef irep_methods2<derived, baseclass, traits> superclass;
-
-  template <typename... Args>
-  type_methods2(const Args &...args) : superclass(args...)
-  {
-  }
-
-  // See notes on irep_methods2 copy constructor
-  type_methods2(const derived &ref) : superclass(ref)
-  {
-  }
-
-  void
-  foreach_subtype_impl_const(type2t::const_subtype_delegate &f) const override
-  {
-    this->foreach_subtype_impl_const_inner(f);
-  }
-
-  void foreach_subtype_impl(type2t::subtype_delegate &f) override
-  {
-    this->foreach_subtype_impl_inner(f);
-  }
-};
+  static_assert(
+    fields_cover_class<K>(),
+    "irep2 kind invariant: fields tuple does not cover the derived class "
+    "storage. Either add the missing member pointer to the kind's "
+    "`fields = std::make_tuple(...)`, or — if the member is intentionally "
+    "excluded from cmp/crc/hash — list every non-excluded member explicitly "
+    "and document the omission.");
+  static_assert(
+    derived_field_count<K>() <= num_type_fields,
+    "irep2 kind invariant: this kind has more derived-class field entries "
+    "than esbmct::num_type_fields. Either bump num_type_fields and the "
+    "corresponding field_names[] arrays, or replace the fixed-size array "
+    "with one sized by std::tuple_size_v<decltype(fields)>.");
+  return true;
+}
 
 } // namespace esbmct
 
@@ -1424,6 +1170,7 @@ public:
 irep2_bad_type_cast(unsigned actual, unsigned expected, const char *target);
 [[noreturn]] void
 irep2_bad_expr_cast(unsigned actual, unsigned expected, const char *target);
+[[noreturn]] void irep2_bad_family_cast(unsigned actual, const char *accessor);
 
 // Checked downcast for type2t / expr2t hierarchies. The is_*_type / is_*2t
 // predicates already do a single enum compare; these helpers do the same

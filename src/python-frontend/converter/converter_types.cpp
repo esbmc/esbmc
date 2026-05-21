@@ -67,8 +67,9 @@ python_converter::extract_non_none_type(const nlohmann::json &annotation_node)
     [&](const nlohmann::json &node) -> std::string {
     if (
       node.contains("_type") && node["_type"] == "Constant" &&
-      node.contains("value") && node["value"].is_null())
-      return ""; // This is None
+      node.contains("value") && node["value"].is_null() &&
+      !node.contains("_bigint"))
+      return ""; // This is None (a tagged bignum is not None — issue #4642)
 
     if (node.contains("id"))
       return node["id"].get<std::string>();
@@ -319,6 +320,11 @@ typet python_converter::get_type_from_annotation(
         // Handle Literal with single value (e.g., Literal["foo"] or Literal[NAME])
         if (slice["_type"] == "Constant" && slice.contains("value"))
         {
+          // Bignum literal annotation: tagged Constants carry a null value
+          // (issue #4642). The literal is still an int — do not let
+          // infer_literal_type misclassify it as None.
+          if (slice.contains("_bigint"))
+            return long_long_int_type();
           typet result = infer_literal_type(slice["value"]);
           if (!result.is_empty())
             return result;

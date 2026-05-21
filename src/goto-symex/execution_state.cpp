@@ -319,9 +319,9 @@ void execution_statet::symex_step(reachability_treet &art)
 void execution_statet::symex_assign(
   const expr2tc &code,
   const bool hidden,
-  const guardt &guard)
+  const guard2tc &guard)
 {
-  pre_goto_guard = guardt();
+  pre_goto_guard = guard2tc();
 
   goto_symext::symex_assign(code, hidden, guard);
 
@@ -331,7 +331,7 @@ void execution_statet::symex_assign(
 
 void execution_statet::claim(const expr2tc &expr, const std::string &msg)
 {
-  pre_goto_guard = guardt();
+  pre_goto_guard = guard2tc();
 
   goto_symext::claim(expr, msg);
 
@@ -351,7 +351,7 @@ void execution_statet::symex_goto(const expr2tc &old_guard)
 
 void execution_statet::assume(const expr2tc &assumption)
 {
-  pre_goto_guard = guardt();
+  pre_goto_guard = guard2tc();
 
   goto_symext::assume(assumption);
 
@@ -455,6 +455,14 @@ bool execution_statet::check_if_ileaves_blocked()
   return false;
 }
 
+bool execution_statet::all_threads_terminal() const
+{
+  for (const auto &ts : threads_state)
+    if (!ts.thread_ended && !ts.call_stack.empty())
+      return false;
+  return true;
+}
+
 void execution_statet::end_thread()
 {
   get_active_state().thread_ended = true;
@@ -546,7 +554,7 @@ void execution_statet::preserve_last_paths()
       }
       else
       {
-        guardt tmp(ls.guard);
+        guard2tc tmp(ls.guard);
         tmp |= gs.guard;
 
         expr2tc foo = tmp.as_expr();
@@ -698,7 +706,7 @@ void execution_statet::execute_guard()
   {
     // If `pre_goto_guard` is false, create a temporary guard (`tmp`)
     // that combines `pre_goto_guard` with the guard of the last active thread.
-    guardt tmp = pre_goto_guard;
+    guard2tc tmp = pre_goto_guard;
 
     // Use the OR operator to merge `pre_goto_guard` with the guard of the
     // last active thread, stored in `threads_state[last_active_thread].guard`.
@@ -723,7 +731,7 @@ void execution_statet::execute_guard()
     if (active_thread != last_active_thread)
     {
       target->assumption(
-        guardt().as_expr(),
+        guard2tc().as_expr(),
         parent_guard,
         get_active_state().source,
         first_loop);
@@ -741,7 +749,10 @@ void execution_statet::execute_guard()
 
   if (active_thread != last_active_thread)
     target->assumption(
-      guardt().as_expr(), parent_guard, get_active_state().source, first_loop);
+      guard2tc().as_expr(),
+      parent_guard,
+      get_active_state().source,
+      first_loop);
 }
 
 unsigned int execution_statet::add_thread(const goto_programt *prog)

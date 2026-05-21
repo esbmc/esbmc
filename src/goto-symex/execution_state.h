@@ -207,8 +207,10 @@ public:
    *  @param guard A guard for the assignment, true by default
    *  @param type Assignment type, visible by default
    */
-  void symex_assign(const expr2tc &code, const bool hidden, const guardt &guard)
-    override;
+  void symex_assign(
+    const expr2tc &code,
+    const bool hidden,
+    const guard2tc &guard) override;
 
   /**
    *  Symbolically assert something.
@@ -335,6 +337,16 @@ public:
    *  @return True if the current state prohibits context switches.
    */
   bool check_if_ileaves_blocked();
+
+  /**
+   *  True iff every thread in this schedule has reached a terminal state,
+   *  i.e. has either ended or has an empty call stack. This is the precondition
+   *  for treating the schedule's tail as program termination — only then is it
+   *  sound to fire end-of-program checks such as the memory-leak walker, since
+   *  a still-running thread may hold the only live reference to a dynamic
+   *  object via its stack frames.
+   */
+  bool all_threads_terminal() const;
 
   /**
    *  Create a new thread.
@@ -549,7 +561,7 @@ public:
   /** State guard prior to a GOTO instruction causing a cswitch. Any thread
    *  interleaved after a GOTO will be composed with this guard, rather than
    *  the guard from any of the branches of the GOTO itself. */
-  guardt pre_goto_guard;
+  guard2tc pre_goto_guard;
   /** TID of monitor thread, for monitor intrinsics. */
   unsigned int monitor_tid;
   /** Whether monitor_tid is set. */

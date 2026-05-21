@@ -255,23 +255,9 @@ static type2tc migrate_type0(const typet &type)
 
   if (type.id() == typet::t_complex)
   {
-    std::vector<type2tc> members;
-    std::vector<irep_idt> names;
-    std::vector<irep_idt> pretty_names;
-    const struct_union_typet &strct = to_complex_type(type);
-    const struct_union_typet::componentst comps = strct.components();
-
-    for (const auto &comp : comps)
-    {
-      type2tc ref = migrate_type(comp.type());
-
-      members.push_back(ref);
-      names.push_back(comp.get(typet::a_name));
-      pretty_names.push_back(comp.get(typet::a_pretty_name));
-    }
-
-    irep_idt name = "complex";
-    return complex_type2tc(members, names, pretty_names, name);
+    // C `_Complex T` lowers to a 2-component struct (real, imag) in the
+    // legacy irept; the irep2 representation is just the element type.
+    return complex_type2tc(migrate_type(to_complex_type(type).base_type()));
   }
 
   if (type.id() == typet::t_code)
@@ -526,7 +512,7 @@ static bool handle_introspection_expr(const exprt &expr, expr2tc &new_expr_ref)
   return false;
 }
 
-expr2tc sym_name_to_symbol(irep_idt init, type2tc type)
+expr2tc sym_name_to_symbol(const irep_idt &init, const type2tc &type)
 {
   const symbolt *sym = migrate_namespace_lookup->lookup(init);
   symbol2t::renaming_level target_level;
@@ -547,8 +533,8 @@ expr2tc sym_name_to_symbol(irep_idt init, type2tc type)
     // hashes.
     // Fix this by ensuring that /all/ symbols with the same name use the type
     // from the global symbol table.
-    type = migrate_type(sym->type);
-    return symbol2tc(type, init, symbol_renaming_level::level0, 0, 0, 0, 0);
+    return symbol2tc(
+      migrate_type(sym->type), init, symbol_renaming_level::level0, 0, 0, 0, 0);
   }
   if (
     init.as_string().compare(0, 3, "cs$") == 0 ||
@@ -2404,24 +2390,10 @@ typet migrate_type_back(const type2tc &ref)
   }
   case type2t::complex_id:
   {
-    unsigned int idx;
+    // complex_typet::set_base_type populates the (real, imag) components
+    // for us from the element type.
     complex_typet thetype;
-    struct_union_typet::componentst comps;
-    const complex_type2t &ref2 = to_complex_type(ref);
-
-    idx = 0;
-    for (auto const &it : ref2.members)
-    {
-      struct_union_typet::componentt component;
-      component.id("component");
-      component.type() = migrate_type_back(it);
-      component.set_name(irep_idt(ref2.member_names[idx]));
-      component.pretty_name(irep_idt(ref2.member_pretty_names[idx]));
-      comps.push_back(component);
-      idx++;
-    }
-
-    thetype.components() = comps;
+    thetype.set_base_type(migrate_type_back(to_complex_type(ref).subtype));
     return thetype;
   }
   case type2t::cpp_name_id:

@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <sstream>
+#include <utility>
 #include <solvers/smt/smt_conv.h>
 #include <util/message/format.h>
 #include <util/type_byte_size.h>
@@ -38,7 +39,7 @@ smt_astt smt_convt::convert_ptr_cmp(
   // it's obviously broken).
   assert(is_pointer_type(side1));
   assert(is_pointer_type(side2));
-  assert(dynamic_cast<const relation_data *>(templ_expr.get()));
+  assert(is_comp_expr(templ_expr));
 
   /* Compare just the offsets. This is compatible with both C and CHERI-C,
    * because we already asserted that they point to the same object (unless
@@ -51,19 +52,40 @@ smt_astt smt_convt::convert_ptr_cmp(
    * which case offsets could flip sign. */
   type2tc type = get_uint_type(config.ansi_c.address_width);
   type2tc stype = get_int_type(config.ansi_c.address_width);
-  expr2tc op = templ_expr;
-  relation_data &rel = static_cast<relation_data &>(*op);
-  rel.side_1 = typecast2tc(type, pointer_offset2tc(stype, side1));
-  rel.side_2 = typecast2tc(type, pointer_offset2tc(stype, side2));
+  expr2tc s1 = typecast2tc(type, pointer_offset2tc(stype, side1));
+  expr2tc s2 = typecast2tc(type, pointer_offset2tc(stype, side2));
+  expr2tc op;
+  switch (templ_expr->expr_id)
+  {
+  case expr2t::equality_id:
+    op = equality2tc(s1, s2);
+    break;
+  case expr2t::notequal_id:
+    op = notequal2tc(s1, s2);
+    break;
+  case expr2t::lessthan_id:
+    op = lessthan2tc(s1, s2);
+    break;
+  case expr2t::greaterthan_id:
+    op = greaterthan2tc(s1, s2);
+    break;
+  case expr2t::lessthanequal_id:
+    op = lessthanequal2tc(s1, s2);
+    break;
+  case expr2t::greaterthanequal_id:
+    op = greaterthanequal2tc(s1, s2);
+    break;
+  default:
+    std::unreachable();
+  }
   return convert_ast(op);
 }
 
 smt_astt
 smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
 {
-  const arith_2ops &expr_ref = static_cast<const arith_2ops &>(*expr);
-  const expr2tc &side1 = expr_ref.side_1;
-  const expr2tc &side2 = expr_ref.side_2;
+  const expr2tc &side1 = *expr->get_sub_expr(0);
+  const expr2tc &side2 = *expr->get_sub_expr(1);
 
   // So eight cases; one for each combination of two operands and the return
   // type, being pointer or nonpointer. So with P=pointer, N= notpointer,
@@ -548,8 +570,7 @@ smt_astt smt_convt::convert_addr_of(const expr2tc &expr)
   {
     // Take the address of whatever's being cast. Either way, they all end up
     // being of a pointer_tuple type, so this should be fine.
-    expr2tc tmp = address_of2tc(type2tc(), to_typecast2t(obj.ptr_obj).from);
-    tmp->type = obj.type;
+    expr2tc tmp = address_of2tc(obj.type, to_typecast2t(obj.ptr_obj).from);
     return convert_ast(tmp);
   }
 

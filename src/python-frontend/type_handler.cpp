@@ -5,12 +5,37 @@
 #include <python-frontend/python_typechecking.h>
 #include <python-frontend/symbol_id.h>
 #include <util/arith_tools.h>
+#include <util/config.h>
 #include <util/context.h>
 #include <util/c_types.h>
 #include <util/message.h>
 #include <util/python_types.h>
 
 #include <regex>
+
+namespace
+{
+// 512-bit signed bitvector for Python int under --ir. Roughly 154 decimal
+// digits; covers factorial(170), 64-byte from_bytes round-trips, bit_length
+// on values up to 2^509. Under int-encoding the SMT layer drops widths and
+// the value space is unbounded — the width here only sizes constant-fold
+// intermediates. Issue #4642.
+constexpr unsigned kPythonBignumWidth = 512;
+} // namespace
+
+unsigned type_handler::python_int_width()
+{
+  return config.options.get_bool_option("int-encoding")
+           ? kPythonBignumWidth
+           : static_cast<unsigned>(config.ansi_c.long_long_int_width);
+}
+
+typet type_handler::python_int_typet()
+{
+  if (config.options.get_bool_option("int-encoding"))
+    return signedbv_typet(kPythonBignumWidth);
+  return long_long_int_type();
+}
 
 type_handler::type_handler(const python_converter &converter)
   : converter_(converter)
@@ -104,7 +129,11 @@ std::string type_handler::type_to_string(const typet &t) const
   if (t == double_type())
     return "float";
 
-  if (t == long_long_int_type())
+  // Both the default int64 lowering and the --ir bignum widening
+  // produced by python_int_typet() name the same Python type. Method
+  // dispatch (e.g. `(2 ** 64).bit_length()`) keys off this string, so
+  // both widths must map to "int". Issue #1964 / #4642.
+  if (t == long_long_int_type() || t == python_int_typet())
     return "int";
 
   if (t == long_long_uint_type())
@@ -426,6 +455,16 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   // We approximate using 64-bit signed integer here.
   if (ast_type == "int" || ast_type == "GeneralizedIndex")
     return long_long_int_type(); // FIXME: Support bignum for true Python semantics
+
+  // Internal alias for operational models that need a width-polymorphic
+  // signed integer parameter — accepts both narrow and wide Python int
+  // values without truncating at the call boundary. Currently used by
+  // models/int.py::bit_length so that `int(2 ** 64).bit_length()` works
+  // under --ir without forcing every other `int`-typed callsite into the
+  // wider representation (which would cascade into the list/dict/set OM,
+  // see #4653). Issue #1964 / #4642.
+  if (ast_type == "IntWide")
+    return python_int_typet();
 
   // Unsigned integers used in domains like Ethereum or system modeling
   if (
