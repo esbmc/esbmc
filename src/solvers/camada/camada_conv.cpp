@@ -70,9 +70,11 @@ class camada_tuple_ast : public camada_expr
 public:
   using camada_expr::camada_expr;
 
-  smt_astt
-  update(smt_convt *ctx, smt_astt value, unsigned int idx, expr2tc idx_expr)
-    const override;
+  smt_astt update(
+    smt_convt *ctx,
+    smt_astt value,
+    unsigned int idx,
+    const expr2tc &idx_expr) const override;
 
   smt_astt project(smt_convt *ctx, unsigned int elem) const override;
 };
@@ -1021,10 +1023,10 @@ public:
       return mk_array_sort(d, subtypesort);
     }
 
-    const struct_union_data &strct = get_type_def(type);
+    const std::vector<type2tc> &members = struct_union_members(type);
     std::vector<camada::SMTSortRef> field_sorts;
-    field_sorts.reserve(strct.members.size());
-    for (const auto &member : strct.members)
+    field_sorts.reserve(members.size());
+    for (const auto &member : members)
       field_sorts.push_back(
         to_solver_smt_sort<camada::SMTSortRef>(convert_sort(member))->s);
 
@@ -1155,32 +1157,31 @@ public:
 
   expr2tc tuple_get(const type2tc &type, smt_astt sym) override
   {
-    const struct_union_data &strct = get_type_def(type);
+    const std::vector<type2tc> &members = struct_union_members(type);
 
     if (is_pointer_type(type))
     {
-      smt_astt object = wrap(
-        solver->mkTupleSelect(expr(sym), 0), convert_sort(strct.members[0]));
-      smt_astt offset = wrap(
-        solver->mkTupleSelect(expr(sym), 1), convert_sort(strct.members[1]));
+      smt_astt object =
+        wrap(solver->mkTupleSelect(expr(sym), 0), convert_sort(members[0]));
+      smt_astt offset =
+        wrap(solver->mkTupleSelect(expr(sym), 1), convert_sort(members[1]));
 
       unsigned int num =
-        get_bv(object, is_signedbv_type(strct.members[0])).to_uint64();
+        get_bv(object, is_signedbv_type(members[0])).to_uint64();
       unsigned int offs =
-        get_bv(offset, is_signedbv_type(strct.members[1])).to_uint64();
+        get_bv(offset, is_signedbv_type(members[1])).to_uint64();
       pointer_logict::pointert p(num, BigInt(offs));
       return pointer_logic.back().pointer_expr(p, type);
     }
 
     std::vector<expr2tc> outmem;
-    outmem.reserve(strct.members.size());
-    for (std::size_t i = 0; i < strct.members.size(); ++i)
+    outmem.reserve(members.size());
+    for (std::size_t i = 0; i < members.size(); ++i)
     {
       outmem.push_back(get_by_ast(
-        strct.members[i],
+        members[i],
         wrap(
-          solver->mkTupleSelect(expr(sym), i),
-          convert_sort(strct.members[i]))));
+          solver->mkTupleSelect(expr(sym), i), convert_sort(members[i]))));
     }
 
     return constant_struct2tc(type, std::move(outmem));
@@ -1379,7 +1380,7 @@ smt_astt camada_tuple_ast::update(
   smt_convt *ctx,
   smt_astt value,
   unsigned int idx,
-  expr2tc idx_expr) const
+  const expr2tc &idx_expr) const
 {
   if (sort->id == SMT_SORT_ARRAY)
     return smt_ast::update(ctx, value, idx, idx_expr);
@@ -1388,10 +1389,11 @@ smt_astt camada_tuple_ast::update(
   assert(is_nil_expr(idx_expr));
 
   auto *cam_ctx = static_cast<camada_convt *>(ctx);
-  const struct_union_data &data = ctx->get_type_def(sort->get_tuple_type());
+  const std::vector<type2tc> &members =
+    struct_union_members(sort->get_tuple_type());
   std::vector<camada::SMTExprRef> fields;
-  fields.reserve(data.members.size());
-  for (std::size_t i = 0; i < data.members.size(); ++i)
+  fields.reserve(members.size());
+  for (std::size_t i = 0; i < members.size(); ++i)
   {
     if (i == idx)
       fields.push_back(to_solver_smt_ast<camada_expr>(value)->a);
@@ -1405,9 +1407,10 @@ smt_astt camada_tuple_ast::update(
 smt_astt camada_tuple_ast::project(smt_convt *ctx, unsigned int elem) const
 {
   auto *cam_ctx = static_cast<camada_convt *>(ctx);
-  const struct_union_data &data = ctx->get_type_def(sort->get_tuple_type());
-  assert(elem < data.members.size());
-  const smt_sort *idx_sort = ctx->convert_sort(data.members[elem]);
+  const std::vector<type2tc> &members =
+    struct_union_members(sort->get_tuple_type());
+  assert(elem < members.size());
+  const smt_sort *idx_sort = ctx->convert_sort(members[elem]);
   return cam_ctx->wrap(cam_ctx->solver->mkTupleSelect(a, elem), idx_sort);
 }
 
