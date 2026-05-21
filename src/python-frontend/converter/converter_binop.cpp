@@ -733,7 +733,7 @@ exprt python_converter::handle_array_operations(
   exprt &rhs,
   const nlohmann::json &left,
   const nlohmann::json &right,
-  const nlohmann::json & /*element*/)
+  const nlohmann::json &element)
 {
   if (!lhs.type().is_array() && !rhs.type().is_array())
     return nil_exprt();
@@ -746,10 +746,37 @@ exprt python_converter::handle_array_operations(
     return gen_boolean(op == "Eq");
   }
 
-  // Handle string concatenation
+  // Handle string concatenation -- only valid for char-arrays. Numeric
+  // arrays (e.g. ``np.array([1, 2, 3])``, modelled as ``long int [N]``)
+  // reaching this path via ``a + n`` previously got force-cast to char*
+  // and fed to __python_str_concat, which then crashed the bitwuzla
+  // mk_store on the sort-width mismatch. Reject numeric-array arithmetic
+  // explicitly: broadcasting is unsupported.
   if (op == "Add")
+  {
+    auto is_char_subtype = [](const typet &t) {
+      if (!t.is_array())
+        return false;
+      const typet &elt = t.subtype();
+      return elt == char_type() ||
+             (elt.is_signedbv() && to_signedbv_type(elt).get_width() == 8) ||
+             (elt.is_unsignedbv() && to_unsignedbv_type(elt).get_width() == 8);
+    };
+    const bool lhs_char = is_char_subtype(lhs.type());
+    const bool rhs_char = is_char_subtype(rhs.type());
+    if (!lhs_char && !rhs_char)
+    {
+      std::ostringstream msg;
+      msg << "TypeError: arithmetic on numeric arrays is not supported "
+             "(numpy broadcasting is not modelled)";
+      const locationt loc = get_location_from_decl(element);
+      if (!loc.is_nil())
+        msg << " at " << loc.get_file() << ":" << loc.get_line();
+      throw std::runtime_error(msg.str());
+    }
     return string_handler_.handle_string_concatenation_with_promotion(
       lhs, rhs, left, right);
+  }
 
   return nil_exprt();
 }
