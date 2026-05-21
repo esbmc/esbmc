@@ -24,10 +24,6 @@ weight: 4
 
 - Supported operations are: literals, subscript access/assignment, `del`, `in`/`not in`, equality, iteration over `keys()`/`values()`/`items()`, `update()`, `get()`, `setdefault()`, `pop()`, and `popitem()`. Other methods (e.g., `copy()`) are not yet implemented.
 
-## Tuples
-
-- Tuple repetition (`*`) is not yet supported and currently aborts the frontend ([#4661](https://github.com/esbmc/esbmc/issues/4661)).
-
 ## Complex Numbers
 
 - The `complex()` constructor accepts string arguments only when the string is a compile-time constant (e.g., `complex("1+2j")` is folded by the frontend). Constructing from a runtime string is rejected with the error `complex() does not support non-literal string arguments`.
