@@ -1,4 +1,4 @@
-#include <python-frontend/char_utils.h>
+#include <python-frontend/string/char_utils.h>
 #include <python-frontend/complex_handler.h>
 #include <python-frontend/converter/converter_internal.h>
 #include <python-frontend/convert_float_literal.h>
@@ -15,7 +15,7 @@
 #include <python-frontend/python_lambda.h>
 #include <python-frontend/python_list.h>
 #include <python-frontend/python_typechecking.h>
-#include <python-frontend/string_builder.h>
+#include <python-frontend/string/string_builder.h>
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/tuple_handler.h>
 #include <python-frontend/type_utils.h>
