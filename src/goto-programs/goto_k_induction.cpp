@@ -313,8 +313,39 @@ void goto_k_inductiont::assume_loop_entry_cond_before_loop(
   goto_programt::targett &loop_exit,
   const guardst &guards)
 {
-  goto_programt::targett tmp_head = loop_head;
-  for (; tmp_head != loop_exit; tmp_head++)
+  // Build the combined entry condition by ANDing every per-branch guard
+  // collected in `guards`. Each entry was added by get_entry_cond_rec as
+  // the path condition for staying inside the loop body. The legacy
+  // implementation inserted one ASSUME per matching branch position
+  // via insert_swap(tmp_head, dest), which placed the ASSUME *at* the
+  // branch instruction. For the IF that is the loop's exit test, the
+  // back-edge ends up targeting that ASSUME — so on every iteration
+  // including the one whose body falsifies the entry condition, the
+  // ASSUME fires *before* the IF and kills the natural-exit path in
+  // the inductive step. The result is a vacuous UNSAT proof (see
+  // e.g. SV-COMP `sll_of_sll_nondet_append-2` and other nested
+  // while-loops over linked lists).
+  //
+  // Instead, combine all the per-branch guards into one expression
+  // and insert ONE ASSUME(entry_cond) AFTER the IF (loop_head) via
+  // raw `insert` so the back-edge keeps targeting the IF — not the
+  // ASSUME. After make_nondet_assign runs and adjust_loop_head_and_exit
+  // retargets the back-edge to the IF (loop_head), the IS layout is:
+  //
+  //   HAVOC x, ...                 [inductive_step]
+  //   loop_head: IF !cond GOTO exit                 <- original IF
+  //   ASSUME(entry_cond)           [inductive_step] <- this insert
+  //   body
+  //   GOTO loop_head  -> targets the IF (skips HAVOC + ASSUME)
+  //   exit:
+  //
+  // The IF can naturally exit (no ASSUME blocks it). When the IF
+  // falls through (we entered the body), the ASSUME asserts the
+  // entry condition on the iteration's start state — the canonical
+  // k-induction inductive-hypothesis strengthening.
+  guard2tc combined;
+  for (goto_programt::targett tmp_head = loop_head; tmp_head != loop_exit;
+       tmp_head++)
   {
     auto const g = guards.find(tmp_head->location_number);
     if (g == guards.end())
@@ -322,17 +353,31 @@ void goto_k_inductiont::assume_loop_entry_cond_before_loop(
 
     expr2tc loop_cond = g->second.as_expr();
 
-    if (is_nil_expr(loop_cond))
+    if (is_nil_expr(loop_cond) || is_true(loop_cond))
+      continue;
+
+    // A guard that simplifies to false would make the assume kill the
+    // path even before the loop. Preserve the legacy "bail out" choice:
+    // any unresolved false among the branch guards skips the whole
+    // entry-cond instrumentation.
+    if (is_false(loop_cond))
       return;
 
-    if (is_true(loop_cond) || is_false(loop_cond))
-      return;
-
-    goto_programt dest;
-    assume_cond(loop_cond, dest, tmp_head->location);
-
-    goto_function.body.insert_swap(tmp_head, dest);
+    combined.add(loop_cond);
   }
+
+  expr2tc combined_expr = combined.as_expr();
+  if (
+    is_nil_expr(combined_expr) || is_true(combined_expr) ||
+    is_false(combined_expr))
+    return;
+
+  goto_programt::instructiont instruction;
+  instruction.type = ASSUME;
+  instruction.guard = combined_expr;
+  instruction.inductive_step_instruction = true;
+  instruction.location = loop_head->location;
+  goto_function.body.instructions.insert(std::next(loop_head), instruction);
 }
 
 void goto_k_inductiont::adjust_loop_head_and_exit(
