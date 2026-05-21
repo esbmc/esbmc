@@ -36,8 +36,9 @@ struct snapshot
 
 snapshot take()
 {
-  return {count.load(std::memory_order_relaxed),
-          bytes.load(std::memory_order_relaxed)};
+  return {
+    count.load(std::memory_order_relaxed),
+    bytes.load(std::memory_order_relaxed)};
 }
 
 struct delta
@@ -219,8 +220,8 @@ TEST_CASE("memory: bulk allocation pressure", "[probe]")
     }
     auto d = w.now();
     WARN(
-      "build+destroy " << n << " equality nodes: " << d.count
-                       << " allocs, " << d.bytes << " bytes total");
+      "build+destroy " << n << " equality nodes: " << d.count << " allocs, "
+                       << d.bytes << " bytes total");
   }
 }
 
@@ -279,8 +280,8 @@ TEST_CASE("memory: small-kind allocation hammer", "[probe]")
   }
   auto d = w.now();
   WARN(
-    "50000 mixed small-kind nodes: " << d.count << " allocs, "
-                                     << d.bytes << " bytes");
+    "50000 mixed small-kind nodes: " << d.count << " allocs, " << d.bytes
+                                     << " bytes");
 }
 
 TEST_CASE("memory: irep_container copy storm", "[probe]")
@@ -298,8 +299,8 @@ TEST_CASE("memory: irep_container copy storm", "[probe]")
     copies.push_back(root);
   auto d = w.now();
   WARN(
-    "100000 refcount copies of one node: " << d.count << " allocs, "
-                                           << d.bytes << " bytes");
+    "100000 refcount copies of one node: " << d.count << " allocs, " << d.bytes
+                                           << " bytes");
 }
 
 // ============================================================================
@@ -317,7 +318,9 @@ TEST_CASE("memory: synthetic symex workload RSS", "[probe]")
   // process has its steady-state allocator footprint already in
   // place — without this, the first measurement absorbs initial
   // heap growth that's unrelated to the workload.
-  { std::vector<expr2tc> warmup(1024); }
+  {
+    std::vector<expr2tc> warmup(1024);
+  }
 
   const std::size_t rss_before = rss::vm_rss_kb();
   const std::size_t peak_before = rss::vm_peak_kb();
@@ -342,8 +345,7 @@ TEST_CASE("memory: synthetic symex workload RSS", "[probe]")
   WARN(
     "synthetic workload: VmRSS delta = "
     << (rss_after - rss_before) << " kB, VmPeak delta = "
-    << (peak_after - peak_before) << " kB (live nodes: " << live.size()
-    << ")");
+    << (peak_after - peak_before) << " kB (live nodes: " << live.size() << ")");
 
   // Hold `live` to end of scope so the after-snapshot is meaningful.
   REQUIRE(live.size() == 200000);
