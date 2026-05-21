@@ -379,7 +379,33 @@ void python_converter::convert()
 
       std::ifstream model_file(model_path.str());
       nlohmann::json model_json;
-      model_file >> model_json;
+      if (!model_file.is_open())
+      {
+        // parser.py exited before producing this model — the user's
+        // program almost certainly hit an unresolvable import that
+        // aborted the AST generation pipeline (issue #2012). Surface
+        // a structured error instead of letting the downstream
+        // ``>> model_json`` throw an uncaught nlohmann parse_error.
+        log_error(
+          "Python frontend: missing operational-model AST '{}'. "
+          "This usually means parser.py exited before generating it; "
+          "check the parser output above for the underlying error.",
+          model_path.str());
+        exit(1);
+      }
+      try
+      {
+        model_file >> model_json;
+      }
+      catch (const nlohmann::json::exception &e)
+      {
+        log_error(
+          "Python frontend: failed to parse operational-model AST "
+          "'{}': {}.",
+          model_path.str(),
+          e.what());
+        exit(1);
+      }
       model_file.close();
 
       size_t pos = file.rfind("/");

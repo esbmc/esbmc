@@ -141,7 +141,21 @@ bool python_languaget::parse(const std::string &path)
     exit(1);
   }
 
-  ast = nlohmann::json::parse(ast_json);
+  try
+  {
+    ast = nlohmann::json::parse(ast_json);
+  }
+  catch (const nlohmann::json::exception &e)
+  {
+    // parser.py exited 0 but left a truncated or empty AST file. Report
+    // it instead of aborting via an uncaught nlohmann parse_error
+    // (issue #2012).
+    log_error(
+      "<python-parser> failed to parse generated AST {}: {}\n",
+      script_path.str(),
+      e.what());
+    exit(1);
+  }
 
   if (config.options.get_bool_option("parse-tree-only"))
     return false;
