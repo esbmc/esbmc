@@ -1304,15 +1304,18 @@ exprt function_call_expr::handle_print() const
   const auto &args = call_["args"];
   for (const auto &arg_node : args)
   {
-    // Direct call arguments (print(f(...))) are currently lowered through
-    // the regular expression flow and may trigger invalid cast paths when
-    // re-materialized as expression statements here.
-    // Keep them non-materialized for now and only materialize non-call
-    // expressions such as arithmetic operators (e.g., print(a + b)).
-    if (arg_node.contains("_type") && arg_node["_type"] == "Call")
-      continue;
-
     exprt arg_expr = converter_.get_expr(arg_node);
+
+    // get_expr() on a Call node returns a code_function_callt (statement-form
+    // expression), not the call's return value. Emit it directly so the
+    // callee's side effects reach the GOTO program; the print return value
+    // would otherwise be discarded along with the call itself.
+    if (arg_expr.is_code() && arg_expr.get("statement") == "function_call")
+    {
+      converter_.current_block->copy_to_operands(to_code(arg_expr));
+      continue;
+    }
+
     if (arg_expr.is_nil())
       throw std::runtime_error(
         "Failed to convert print() argument to expression");
