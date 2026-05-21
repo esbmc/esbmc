@@ -119,6 +119,7 @@ def check_usage():
 def is_imported_model(module_name):
     models = [
         "math",
+        "cmath",
         "os",
         "numpy",
         "esbmc",
