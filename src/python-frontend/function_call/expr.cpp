@@ -7,7 +7,7 @@
 #include <python-frontend/python_exception_handler.h>
 #include <python-frontend/python_list.h>
 #include <python-frontend/python_set.h>
-#include <python-frontend/string_builder.h>
+#include <python-frontend/string/string_builder.h>
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/tuple_handler.h>
 #include <python-frontend/type_handler.h>
