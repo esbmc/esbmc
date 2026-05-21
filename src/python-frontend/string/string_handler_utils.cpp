@@ -1,6 +1,6 @@
 #include <python-frontend/json_utils.h>
 #include <python-frontend/python_converter.h>
-#include <python-frontend/string_handler_utils.h>
+#include <python-frontend/string/string_handler_utils.h>
 
 #include <stdexcept>
 
