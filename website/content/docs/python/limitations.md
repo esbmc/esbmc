@@ -65,7 +65,7 @@ weight: 4
 
 - Only `re.match()`, `re.search()`, and `re.fullmatch()` are supported.
 - Group-capture methods (`.group()`, `.groups()`, `.span()`) are rewritten by the parser into direct calls to internal helpers, and only the `(\d+)` pattern is recognised precisely; everything else returns a nondeterministic value.
-- The result of `re.match` / `re.search` / `re.fullmatch` is a `bool`, not an `Optional[Match]`. `if m:` works; `if m is None:` does not. The pattern recognisers also enforce full-string match for the supported patterns, so `re.match` does not match a prefix of a longer string (tracked in [#4664](https://github.com/esbmc/esbmc/issues/4664)).
+- The result of `re.match` / `re.search` / `re.fullmatch` is a `bool`, not an `Optional[Match]`: `if m:` works, `if m is None:` does not.
 - Complex patterns beyond the explicitly supported constructs exhibit nondeterministic behavior.
 - Not supported: lookahead/lookbehind assertions, backreferences, named groups, conditional patterns, Unicode property escapes.
 
