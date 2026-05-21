@@ -11,8 +11,8 @@
 #include <python-frontend/python_lambda.h>
 #include <python-frontend/python_list.h>
 #include <python-frontend/python_math.h>
-#include <python-frontend/string_builder.h>
-#include <python-frontend/string_handler.h>
+#include <python-frontend/string/string_builder.h>
+#include <python-frontend/string/string_handler.h>
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/tuple_handler.h>
 #include <python-frontend/type_handler.h>
@@ -751,7 +751,27 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       }
       if (!class_symbol)
       {
-        throw std::runtime_error("Class \"" + obj_type_name + "\" not found");
+        // Surface a Python-level AttributeError naming the attribute and the
+        // location of the access. The previous "Class '' not found" message
+        // leaked an internal lookup vocabulary and was emitted whenever an
+        // attribute was read on a value whose symbol type is not a class
+        // struct -- e.g. ``a.shape`` on a numpy array (which the frontend
+        // models as a plain list), or any other non-class object.
+        const std::string base_name =
+          element.contains("value") && element["value"].contains("id")
+            ? element["value"]["id"].get<std::string>()
+            : std::string();
+        std::ostringstream msg;
+        msg << "AttributeError: '";
+        if (!base_name.empty())
+          msg << base_name;
+        else
+          msg << "object";
+        msg << "' has no attribute '" << attr_name << "'";
+        const locationt loc = get_location_from_decl(element);
+        if (!loc.is_nil())
+          msg << " at " << loc.get_file() << ":" << loc.get_line();
+        throw std::runtime_error(msg.str());
       }
 
       struct_typet &class_type =
@@ -988,6 +1008,23 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         build_dunder_call(element["value"], "__getitem__", args, element);
       expr = get_function_call(call_node);
       break;
+    }
+
+    // Multi-dimensional indexing ``a[i, j]`` -- the slice AST is a Tuple of
+    // index expressions. This is the canonical numpy 2D-indexing form. The
+    // frontend models numpy arrays as plain 1D Python lists, so the operation
+    // is unsupported; rejecting it explicitly produces a clean Python-level
+    // error rather than tripping `Unexpected type in int/ptr typecast` deep
+    // inside the SMT encoder when the resulting expression is consumed.
+    if (slice.contains("_type") && slice["_type"] == "Tuple")
+    {
+      std::ostringstream msg;
+      msg << "TypeError: multi-dimensional indexing (a[i, j, ...]) is not "
+             "supported; numpy arrays are modelled as 1D lists";
+      const locationt loc = get_location_from_decl(element);
+      if (!loc.is_nil())
+        msg << " at " << loc.get_file() << ":" << loc.get_line();
+      throw std::runtime_error(msg.str());
     }
 
     // Handle regular array/list subscripting

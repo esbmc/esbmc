@@ -98,7 +98,7 @@ weight: 4
 
 ## NumPy Module
 
-- Arrays are modelled as plain Python lists; array shapes, dtypes, multi-dimensional indexing (`a[i, j]`), and broadcasting are not supported. Reading `.shape` reports the misleading frontend error `Class "" not found`, and using the result of `a[i, j]` triggers `Unexpected type in int/ptr typecast` — these surface as opaque frontend errors rather than clean `Unsupported …` rejections ([#4666](https://github.com/esbmc/esbmc/issues/4666)).
+- Arrays are modelled as plain Python lists; array shapes, dtypes, multi-dimensional indexing (`a[i, j]`), and broadcasting are not supported. Reading `.shape` raises `AttributeError`, and `a[i, j]` is rejected with `TypeError: multi-dimensional indexing (a[i, j, ...]) is not supported`.
 - Adding a scalar to a 1D array (`a + n`) currently aborts the SMT encoder with a sort-width assertion in `mk_store` ([#4668](https://github.com/esbmc/esbmc/issues/4668)).
 - Most NumPy functions beyond those listed in [Supported Features — NumPy](./supported-features#numpy-module-numpy) are not available.
 - Several math stub functions (e.g., `np.sin`, `np.sqrt`) return constant placeholder values rather than computing the real result; these are suitable only for type-inference testing, not numerical verification.
