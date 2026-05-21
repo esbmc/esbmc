@@ -24,7 +24,9 @@
 # 3) String constraint solving can be expensive; we may need further strategies for handling large string programs.
 
 
-def try_match_char_class_range(pattern: str, pattern_len: int, string: str,
+def try_match_char_class_range(pattern: str,
+                               pattern_len: int,
+                               string: str,
                                prefix_only: bool = False) -> int:
     """Match [x-y]+ or [x-y]* patterns.
 
@@ -75,7 +77,9 @@ def try_match_char_class_range(pattern: str, pattern_len: int, string: str,
     return 1
 
 
-def try_match_digit_sequence(pattern: str, pattern_len: int, string: str,
+def try_match_digit_sequence(pattern: str,
+                             pattern_len: int,
+                             string: str,
                              prefix_only: bool = False) -> int:
     r"""Match \d+ or \d* patterns.
 
