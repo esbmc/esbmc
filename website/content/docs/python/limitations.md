@@ -11,10 +11,6 @@ weight: 4
 - List comprehensions and generator expressions are supported. Set comprehensions are not supported (`Unsupported expression SetComp`). Dictionary comprehensions are accepted by the parser but produce a dictionary whose subsequent key lookups raise `KeyError`.
 - Iteration over dictionaries via `d.keys()`, `d.values()`, and `d.items()` is supported inside `for` loops (see [Supported Features — Dictionaries](./supported-features#dictionaries)).
 
-## Context Managers
-
-- `__enter__` is invoked before the body and `__exit__` after. Exceptions raised inside the `with` block propagate, but `__exit__`'s return value is ignored: returning `True` does not suppress the exception.
-
 ## Lists
 
 - `list.sort()` does not support the `key` or `reverse` keyword arguments.
@@ -126,6 +122,25 @@ weight: 4
 ## Missing Return Detection
 
 - Does not analyze return statements inside lambda expressions within the main function body.
+
+## Concurrency
+
+- **`Lock` model is invisible to `--deadlock-check`** ([#4581](https://github.com/esbmc/esbmc/issues/4581)). `threading.Lock.acquire` lowers to `__ESBMC_atomic_begin / __ESBMC_assume / __ESBMC_atomic_end`, mirroring `pthread_mutex_lock_noassert`. The deadlock checker only inspects the pthread mutex wait graph, so reverse-order lock acquisition between two Python threads is *not* reported as a deadlock — ESBMC explores all interleavings and reports `VERIFICATION SUCCESSFUL`.
+- **`Thread(args=(instance,))` value-copies object arguments** ([#4583](https://github.com/esbmc/esbmc/issues/4583)). When a `Thread` target receives a class instance with non-trivial attributes (e.g. a `threading.Lock`), the args-capture struct copies the descriptor by value and breaks attribute dereference inside the trampoline body. Workaround: share state via module-level globals instead of instance attributes passed through `args=`.
+- **Symex does not interleave at Python module-global accesses** ([#4584](https://github.com/esbmc/esbmc/issues/4584)). `--data-races-check` correctly flags W/W races on a module global, but symex's per-statement scheduler does not insert interleaving points at function-internal reads/writes of these globals. A classic split read-modify-write race (`tmp = counter; counter = tmp + 1` from two threads) reports `VERIFICATION SUCCESSFUL` instead of finding the schedule where both threads read `counter == 0` before either writes. The C equivalent of the same program is correctly reported as `VERIFICATION FAILED`.
+- **Thread shapes refused at parse time** with explicit errors:
+  - `Thread` subclassing with `run` override
+  - Lambda or runtime-variable `target=`
+  - Positional argument forms (`Thread(f, (a, b))`)
+  - `args=` bound to a variable instead of a tuple literal (`Thread(target=f, args=payload)`)
+  - `daemon=`, `name=`, `kwargs=`, `group=` keyword arguments
+  - `Thread` construction inside loops or comprehensions
+  - `Thread` reassignment within the same scope
+  - `Thread` as a class attribute (`class C: t = Thread(...)`)
+  - `target` defined after the caller in source order
+  - `from threading import *`
+- **Other `threading` primitives are not supported**: `RLock`, `Semaphore`, `Condition`, `Event`, `Barrier`, `Timer` are refused at parse time. `queue.Queue` is also unsupported and blocks the existing `regression/python/concurrency_fail` example.
+- **The CPython Global Interpreter Lock (GIL) is not modelled** ([#4579](https://github.com/esbmc/esbmc/issues/4579)). Translated programs execute under sequentially-consistent POSIX semantics rather than GIL-serialised bytecode execution, so the analysis over-approximates the set of feasible interleavings compared to actual CPython execution. This preserves safety but may produce spurious concurrency counterexamples.
 
 ## Module System
 

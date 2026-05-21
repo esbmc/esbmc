@@ -8,14 +8,14 @@
 void symex_dereference_statet::dereference_failure(
   const std::string &property [[maybe_unused]],
   const std::string &msg,
-  const guardt &guard)
+  const guard2tc &guard)
 {
   expr2tc g = guard.as_expr();
   goto_symex.replace_dynamic_allocation(g);
   goto_symex.claim(not2tc(g), "dereference failure: " + msg);
 }
 
-void symex_dereference_statet::dereference_assume(const guardt &guard)
+void symex_dereference_statet::dereference_assume(const guard2tc &guard)
 {
   expr2tc g = guard.as_expr();
   goto_symex.replace_dynamic_allocation(g);
@@ -146,9 +146,9 @@ bool symex_dereference_statet::is_live_variable(const expr2tc &symbol)
   // NB, symbols shouldn't hit this point with no renaming (i.e. level0),
   // this should eventually be asserted.
   if (
-    to_symbol2t(sym).rlevel == symbol2t::level0 ||
-    to_symbol2t(sym).rlevel == symbol2t::level1_global ||
-    to_symbol2t(sym).rlevel == symbol2t::level2_global)
+    to_symbol2t(sym).rlevel == symbol_renaming_level::level0 ||
+    to_symbol2t(sym).rlevel == symbol_renaming_level::level1_global ||
+    to_symbol2t(sym).rlevel == symbol_renaming_level::level2_global)
     return true;
 
   goto_symex.replace_dynamic_allocation(sym);
@@ -191,7 +191,7 @@ void goto_symext::dereference(expr2tc &expr, dereferencet::modet mode)
   assert(!cur_state->call_stack.empty());
   cur_state->top().level1.rename(expr);
 
-  guardt guard;
+  guard2tc guard;
   if (is_free(mode))
   {
     expr2tc tmp = expr;

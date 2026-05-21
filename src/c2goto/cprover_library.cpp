@@ -252,7 +252,24 @@ const static std::vector<std::string> python_c_models = {
   "__ESBMC_list_push_dict_ptr",
   "__ESBMC_list_lt",
   "__ESBMC_set_add",
-  "__ESBMC_set_discard"};
+  "__ESBMC_set_discard",
+  "__ESBMC_slice_create",
+  // Python threading.Thread lowering helpers (pthread_lib.c).
+  // Bodies call __ESBMC_atomic_begin / __ESBMC_atomic_end (which
+  // goto_convert lowers via __ESBMC_yield); python_converter ensures
+  // the yield symbol is registered before goto-conversion runs.
+  "__pyt_init_tid",
+  "__pyt_join",
+  "__pyt_terminate",
+  // Pulled in by python_converter.cpp's __ESBMC_main wrapping so
+  // num_threads_running counts the main thread (deadlock-detector
+  // invariant in __pyt_join / pthread_join_switch).
+  "__ESBMC_pthread_start_main_hook",
+  "__ESBMC_pthread_end_main_hook",
+  // threading.Lock deadlock-aware acquire bookkeeping. Called from the
+  // ``--deadlock-check`` variant of the Python ``Lock`` model
+  // (models/threading_deadlock.py). Mirrors pthread_mutex_lock_check.
+  "__ESBMC_pylock_block_and_check"};
 
 // Solidity operational model functions
 const static std::vector<std::string> solidity_c_models = {

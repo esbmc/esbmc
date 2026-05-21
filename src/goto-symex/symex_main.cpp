@@ -171,6 +171,10 @@ bool goto_symext::is_assume_false(const expr2tc &assumption)
 {
   if (options.get_bool_option("smt-symex-assume"))
   {
+    // Do nothing if the assumption is already true
+    if (is_true(assumption))
+      return false;
+
     runtime_encoded_equationt *rte =
       dynamic_cast<runtime_encoded_equationt *>(target.get());
 
@@ -197,6 +201,10 @@ void goto_symext::assume(const expr2tc &the_assumption)
   cur_state->rename(assumption);
   do_simplify(assumption);
 
+  // Check for assume-false against the renamed+simplified expression
+  // BEFORE guard_expr mutates it
+  bool assume_is_false = is_assume_false(assumption);
+
   if (is_true(assumption))
     return;
 
@@ -207,7 +215,7 @@ void goto_symext::assume(const expr2tc &the_assumption)
   target->assumption(tmp_guard, assumption, cur_state->source, first_loop);
 
   // If we're assuming false, make the guard for the following statement false
-  if (is_false(the_assumption) || is_assume_false(the_assumption))
+  if (assume_is_false)
     cur_state->guard.make_false();
 }
 
@@ -516,15 +524,13 @@ void goto_symext::symex_assume()
     // We don't perform constant propagation on it.
     expr2tc lhs = to_equality2t(c).side_1;
     expr2tc rhs = to_equality2t(c).side_2;
-    if (
-      is_symbol2t(lhs) && is_constant_expr(rhs) &&
-      !(is_constant_floatbv2t(rhs) &&
-        to_constant_floatbv2t(rhs).value.is_zero()))
+    auto is_float_zero = [](const expr2tc &e) {
+      const constant_floatbv2t *f = try_to_constant_floatbv2t(e);
+      return f && f->value.is_zero();
+    };
+    if (is_symbol2t(lhs) && is_constant_expr(rhs) && !is_float_zero(rhs))
       cur_state->assignment(lhs, rhs);
-    else if (
-      is_symbol2t(rhs) && is_constant_expr(lhs) &&
-      !(is_constant_floatbv2t(lhs) &&
-        to_constant_floatbv2t(lhs).value.is_zero()))
+    else if (is_symbol2t(rhs) && is_constant_expr(lhs) && !is_float_zero(lhs))
       cur_state->assignment(rhs, lhs);
   }
 }
@@ -896,7 +902,7 @@ void goto_symext::run_intrinsic(
         expr2tc(),
         std::vector<expr2tc>(),
         type2tc(),
-        sideeffect2t::nondet);
+        sideeffect2t::allockind::nondet);
 
       symex_assign(code_assign2tc(item.object, val), false, cur_state->guard);
     }
@@ -1016,7 +1022,8 @@ void goto_symext::run_intrinsic(
   if (
     has_prefix(symname, "c:@F@__ESBMC_pthread_start_main_hook") ||
     has_prefix(symname, "c:@F@__ESBMC_pthread_end_main_hook") ||
-    has_prefix(symname, "c:@F@__ESBMC_atexit_handler"))
+    has_prefix(symname, "c:@F@__ESBMC_atexit_handler") ||
+    has_prefix(symname, "c:@F@__ESBMC_pylock_block_and_check"))
   {
     bump_call(func_call, symname);
     return;
@@ -1257,7 +1264,7 @@ void goto_symext::add_memory_leak_checks()
             i,
             e.identifier,
             e.suffix);
-          sym_expr2->type = migrate_type(sym->type);
+          sym_expr2 = sym_expr2->with_type(migrate_type(sym->type));
 
           /* Rename so that it reflects the current state. */
           assert(cur_state->call_stack.size() >= 1);
@@ -1287,10 +1294,11 @@ void goto_symext::add_memory_leak_checks()
               for (expr2tc &p : sub_exprs)
               {
                 assert(is_structure_type(p));
-                const struct_union_data &u =
-                  static_cast<const struct_union_data &>(*p->type);
-                unsigned n = u.get_component_number(c.member_name);
-                p = member2tc(u.members[n], p, c.member_name);
+                unsigned n =
+                  struct_union_get_component_number(p->type, c.member_name)
+                    .value();
+                p =
+                  member2tc(struct_union_members(p->type)[n], p, c.member_name);
               }
               continue;
             }

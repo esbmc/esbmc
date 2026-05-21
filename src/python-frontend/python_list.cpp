@@ -2294,7 +2294,13 @@ exprt python_list::handle_index_access(
     guard.then_case() = throw_code;
     converter_.add_instruction(guard);
 
-    return index_exprt(array, idx, char_type());
+    // Tag with #cpp_type==char so downstream consumers (notably
+    // python_converter::get_python_type_category) can distinguish a 1-char
+    // string element from an arbitrary 8-bit int (e.g. dtype=np.int8) without
+    // resorting to a fragile width-only heuristic.
+    typet char_t = char_type();
+    char_t.set("#cpp_type", "char");
+    return index_exprt(array, idx, char_t);
   }
 
   // For char* (string function parameter), implement Python single-index

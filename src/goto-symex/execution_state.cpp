@@ -134,7 +134,7 @@ execution_statet::execution_statet(const execution_statet &ex)
   // Regenerate threads state using new objects state_level2 ref
   threads_state.clear();
   std::vector<goto_symex_statet>::const_iterator it;
-  for (it = ex.threads_state.begin(); it != ex.threads_state.end(); it++)
+  for (it = ex.threads_state.begin(); it != ex.threads_state.end(); ++it)
   {
     goto_symex_statet state(*it, *state_level2, global_value_set);
     threads_state.push_back(state);
@@ -194,14 +194,14 @@ execution_statet &execution_statet::operator=(const execution_statet &ex)
   {
     for (goto_symex_statet::call_stackt::iterator it2 = it.call_stack.begin();
          it2 != it.call_stack.end();
-         it2++)
+         ++it2)
     {
       for (auto &it3 : it2->goto_state_map)
       {
         for (goto_symex_statet::goto_state_listt::iterator it4 =
                it3.second.begin();
              it4 != it3.second.begin();
-             it4++)
+             ++it4)
         {
           ex_state_level2t &l2 = dynamic_cast<ex_state_level2t &>(it4->level2);
           l2.owner = this;
@@ -319,9 +319,9 @@ void execution_statet::symex_step(reachability_treet &art)
 void execution_statet::symex_assign(
   const expr2tc &code,
   const bool hidden,
-  const guardt &guard)
+  const guard2tc &guard)
 {
-  pre_goto_guard = guardt();
+  pre_goto_guard = guard2tc();
 
   goto_symext::symex_assign(code, hidden, guard);
 
@@ -331,7 +331,7 @@ void execution_statet::symex_assign(
 
 void execution_statet::claim(const expr2tc &expr, const std::string &msg)
 {
-  pre_goto_guard = guardt();
+  pre_goto_guard = guard2tc();
 
   goto_symext::claim(expr, msg);
 
@@ -351,7 +351,7 @@ void execution_statet::symex_goto(const expr2tc &old_guard)
 
 void execution_statet::assume(const expr2tc &assumption)
 {
-  pre_goto_guard = guardt();
+  pre_goto_guard = guard2tc();
 
   goto_symext::assume(assumption);
 
@@ -399,7 +399,7 @@ expr2tc execution_statet::get_guard_identifier()
   return symbol2tc(
     get_bool_type(),
     guard_execution,
-    symbol2t::level1,
+    symbol_renaming_level::level1,
     CS_number,
     0,
     node_id,
@@ -453,6 +453,14 @@ bool execution_statet::check_if_ileaves_blocked()
     return true;
 
   return false;
+}
+
+bool execution_statet::all_threads_terminal() const
+{
+  for (const auto &ts : threads_state)
+    if (!ts.thread_ended && !ts.call_stack.empty())
+      return false;
+  return true;
 }
 
 void execution_statet::end_thread()
@@ -546,7 +554,7 @@ void execution_statet::preserve_last_paths()
       }
       else
       {
-        guardt tmp(ls.guard);
+        guard2tc tmp(ls.guard);
         tmp |= gs.guard;
 
         expr2tc foo = tmp.as_expr();
@@ -698,7 +706,7 @@ void execution_statet::execute_guard()
   {
     // If `pre_goto_guard` is false, create a temporary guard (`tmp`)
     // that combines `pre_goto_guard` with the guard of the last active thread.
-    guardt tmp = pre_goto_guard;
+    guard2tc tmp = pre_goto_guard;
 
     // Use the OR operator to merge `pre_goto_guard` with the guard of the
     // last active thread, stored in `threads_state[last_active_thread].guard`.
@@ -723,7 +731,7 @@ void execution_statet::execute_guard()
     if (active_thread != last_active_thread)
     {
       target->assumption(
-        guardt().as_expr(),
+        guard2tc().as_expr(),
         parent_guard,
         get_active_state().source,
         first_loop);
@@ -741,7 +749,10 @@ void execution_statet::execute_guard()
 
   if (active_thread != last_active_thread)
     target->assumption(
-      guardt().as_expr(), parent_guard, get_active_state().source, first_loop);
+      guard2tc().as_expr(),
+      parent_guard,
+      get_active_state().source,
+      first_loop);
 }
 
 unsigned int execution_statet::add_thread(const goto_programt *prog)
@@ -919,9 +930,20 @@ void execution_statet::get_expr_globals(
 
     // Rename to level1 to avoid shared varible mismatch in mpor.
     cur_state->top().level1.rename(p);
+    // Python module-level globals carry static_lifetime=false (their
+    // symbol.value field doubles as a const-prop snapshot in the Python
+    // frontend), but the frontend marks them with file_local=false to
+    // signal "shared module state". Recognise them here so symex inserts
+    // interleaving points at their reads/writes, matching the
+    // race-eligible bypass added to rw_set.cpp.
+    //
+    // Necessary but not sufficient on its own: the scheduler-side DFS /
+    // MPOR limiters tracked in #4584 also need to be loosened before
+    // assertion-based race tests like increment_race flip to FAILED.
+    const bool python_global = symbol->mode == "Python" && !symbol->file_local;
     if (
       symbol->static_lifetime || symbol->type.is_dynamic_set() ||
-      point_to_global)
+      point_to_global || python_global)
     {
       std::list<unsigned int> threadId_list;
       auto it_find = art1->vars_map.find(p);
@@ -1000,21 +1022,21 @@ bool execution_statet::check_mpor_dependency(unsigned int j, unsigned int l)
   // Double write intersection
   for (std::set<expr2tc>::const_iterator it = thread_last_writes[j].begin();
        it != thread_last_writes[j].end();
-       it++)
+       ++it)
     if (thread_last_writes[l].find(*it) != thread_last_writes[l].end())
       return true;
 
   // This read what that wrote intersection
   for (std::set<expr2tc>::const_iterator it = thread_last_reads[j].begin();
        it != thread_last_reads[j].end();
-       it++)
+       ++it)
     if (thread_last_writes[l].find(*it) != thread_last_writes[l].end())
       return true;
 
   // We wrote what that reads intersection
   for (std::set<expr2tc>::const_iterator it = thread_last_writes[j].begin();
        it != thread_last_writes[j].end();
-       it++)
+       ++it)
     if (thread_last_reads[l].find(*it) != thread_last_reads[l].end())
       return true;
 
@@ -1194,7 +1216,7 @@ void execution_statet::print_stack_traces(unsigned int indent) const
     spaces += " ";
 
   i = 0;
-  for (it = threads_state.begin(); it != threads_state.end(); it++)
+  for (it = threads_state.begin(); it != threads_state.end(); ++it)
   {
     std::ostringstream oss;
     oss << spaces << "Thread " << i++ << ":"
@@ -1398,8 +1420,8 @@ execution_statet::state_hashing_level2t::generate_l2_state_hash() const
   unsigned int total;
   size_t hash_sz = sizeof(crypto_hash::hash);
 
-  uint8_t *data =
-    (uint8_t *)alloca(current_hashes.size() * hash_sz * sizeof(uint8_t));
+  uint8_t *data = static_cast<uint8_t *>(
+    alloca(current_hashes.size() * hash_sz * sizeof(uint8_t)));
 
   total = 0;
   for (const auto &current_hashe : current_hashes)

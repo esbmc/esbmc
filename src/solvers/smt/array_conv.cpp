@@ -1345,13 +1345,13 @@ smt_astt array_ast::update(
   smt_convt *ctx [[maybe_unused]],
   smt_astt value,
   unsigned int idx,
-  expr2tc idx_expr) const
+  const expr2tc &idx_expr) const
 {
-  if (is_nil_expr(idx_expr))
-    idx_expr =
-      constant_int2tc(get_uint_type(sort->get_domain_width()), BigInt(idx));
-
-  return array_ctx->mk_store(this, idx_expr, value, sort);
+  const expr2tc &idx_resolved =
+    is_nil_expr(idx_expr)
+      ? constant_int2tc(get_uint_type(sort->get_domain_width()), BigInt(idx))
+      : idx_expr;
+  return array_ctx->mk_store(this, idx_resolved, value, sort);
 }
 
 smt_astt

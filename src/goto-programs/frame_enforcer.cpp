@@ -273,7 +273,7 @@ void frame_enforcert::patch_old_snapshot_assigns(goto_programt &prog) const
     if (!is_sideeffect2t(assign.source))
       continue;
     const sideeffect2t &effect = to_sideeffect2t(assign.source);
-    if (effect.kind != sideeffect2t::old_snapshot)
+    if (effect.kind != sideeffect2t::allockind::old_snapshot)
       continue;
 
     // The operand of old_snapshot is the original variable

@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR:.*Only bare `super\(\)\.__init__\(\)` at statement level inside `__init__` is supported

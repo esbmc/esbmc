@@ -1,16 +1,22 @@
 #ifndef STL_FUNCTIONAL
 #define STL_FUNCTIONAL
 
-#include <cassert>
-#include <utility> // std::forward
 #include <cstddef>
-#include <type_traits>
-#include <cstdint> // for uint32_t, uint64_t
-#include <cmath>   // for INFINITY
-#include <string>  // for std::string
+#include "OM_compiler_defs.h" // OM_CONSTEXPR
+
+#if __cplusplus >= 201103L
+#  include <cassert>
+#  include <utility> // std::forward
+#  include <type_traits>
+#  include <cstdint> // for uint32_t, uint64_t
+#  include <cmath>   // for INFINITY
+#  include <string>  // for std::string
+#endif
 
 namespace std
 {
+
+#if __cplusplus >= 201103L
 
 // Base class for callable objects
 class callable_base
@@ -337,7 +343,7 @@ struct hash<unsigned long long>
 };
 
 // Specialization for size_t (only if different from unsigned long)
-#if !defined(__SIZEOF_SIZE_T__) || (__SIZEOF_SIZE_T__ != __SIZEOF_LONG__)
+#  if !defined(__SIZEOF_SIZE_T__) || (__SIZEOF_SIZE_T__ != __SIZEOF_LONG__)
 template <>
 struct hash<size_t>
 {
@@ -346,7 +352,7 @@ struct hash<size_t>
     return __esbmc_deterministic_hash(key);
   }
 };
-#endif
+#  endif
 
 // Specializations for floating point types
 template <>
@@ -452,20 +458,22 @@ struct hash<::std::string>
   }
 };
 
-// Legacy binary_function class template (for compatibility)
+#endif // __cplusplus >= 201103L
+
+// Legacy binary_function class template (typedef-based — valid in C++03 too)
 template <typename Arg1, typename Arg2, typename Result>
 struct binary_function
 {
-  using first_argument_type = Arg1;
-  using second_argument_type = Arg2;
-  using result_type = Result;
+  typedef Arg1 first_argument_type;
+  typedef Arg2 second_argument_type;
+  typedef Result result_type;
 };
 
 // Arithmetic Operations
 template <typename T = int>
 struct plus
 {
-  constexpr T operator()(const T &a, const T &b) const
+  OM_CONSTEXPR T operator()(const T &a, const T &b) const
   {
     return a + b;
   }
@@ -474,7 +482,7 @@ struct plus
 template <typename T = int>
 struct minus
 {
-  constexpr T operator()(const T &a, const T &b) const
+  OM_CONSTEXPR T operator()(const T &a, const T &b) const
   {
     return a - b;
   }
@@ -483,7 +491,7 @@ struct minus
 template <typename T = int>
 struct multiplies
 {
-  constexpr T operator()(const T &a, const T &b) const
+  OM_CONSTEXPR T operator()(const T &a, const T &b) const
   {
     return a * b;
   }
@@ -492,7 +500,7 @@ struct multiplies
 template <typename T = int>
 struct divides
 {
-  constexpr T operator()(const T &a, const T &b) const
+  OM_CONSTEXPR T operator()(const T &a, const T &b) const
   {
     return a / b;
   }
@@ -501,7 +509,7 @@ struct divides
 template <typename T = int>
 struct modulus
 {
-  constexpr T operator()(const T &a, const T &b) const
+  OM_CONSTEXPR T operator()(const T &a, const T &b) const
   {
     return a % b;
   }
@@ -510,7 +518,7 @@ struct modulus
 template <typename T = int>
 struct negate
 {
-  constexpr T operator()(const T &a) const
+  OM_CONSTEXPR T operator()(const T &a) const
   {
     return -a;
   }
@@ -520,7 +528,7 @@ struct negate
 template <typename T = int>
 struct equal_to
 {
-  constexpr bool operator()(const T &a, const T &b) const
+  OM_CONSTEXPR bool operator()(const T &a, const T &b) const
   {
     return a == b;
   }
@@ -529,7 +537,7 @@ struct equal_to
 template <typename T = int>
 struct not_equal_to
 {
-  constexpr bool operator()(const T &a, const T &b) const
+  OM_CONSTEXPR bool operator()(const T &a, const T &b) const
   {
     return a != b;
   }
@@ -538,7 +546,7 @@ struct not_equal_to
 template <typename T = int>
 struct greater
 {
-  constexpr bool operator()(const T &a, const T &b) const
+  OM_CONSTEXPR bool operator()(const T &a, const T &b) const
   {
     return a > b;
   }
@@ -547,7 +555,7 @@ struct greater
 template <typename T = int>
 struct less
 {
-  constexpr bool operator()(const T &a, const T &b) const
+  OM_CONSTEXPR bool operator()(const T &a, const T &b) const
   {
     return a < b;
   }
@@ -556,7 +564,7 @@ struct less
 template <typename T = int>
 struct greater_equal
 {
-  constexpr bool operator()(const T &a, const T &b) const
+  OM_CONSTEXPR bool operator()(const T &a, const T &b) const
   {
     return a >= b;
   }
@@ -565,7 +573,7 @@ struct greater_equal
 template <typename T = int>
 struct less_equal
 {
-  constexpr bool operator()(const T &a, const T &b) const
+  OM_CONSTEXPR bool operator()(const T &a, const T &b) const
   {
     return a <= b;
   }
@@ -575,7 +583,7 @@ struct less_equal
 template <typename T = bool>
 struct logical_and
 {
-  constexpr bool operator()(const T &a, const T &b) const
+  OM_CONSTEXPR bool operator()(const T &a, const T &b) const
   {
     return a && b;
   }
@@ -584,7 +592,7 @@ struct logical_and
 template <typename T = bool>
 struct logical_or
 {
-  constexpr bool operator()(const T &a, const T &b) const
+  OM_CONSTEXPR bool operator()(const T &a, const T &b) const
   {
     return a || b;
   }
@@ -593,7 +601,7 @@ struct logical_or
 template <typename T = bool>
 struct logical_not
 {
-  constexpr bool operator()(const T &a) const
+  OM_CONSTEXPR bool operator()(const T &a) const
   {
     return !a;
   }
@@ -603,7 +611,7 @@ struct logical_not
 template <typename T = int>
 struct bit_and
 {
-  constexpr T operator()(const T &a, const T &b) const
+  OM_CONSTEXPR T operator()(const T &a, const T &b) const
   {
     return a & b;
   }
@@ -612,7 +620,7 @@ struct bit_and
 template <typename T = int>
 struct bit_or
 {
-  constexpr T operator()(const T &a, const T &b) const
+  OM_CONSTEXPR T operator()(const T &a, const T &b) const
   {
     return a | b;
   }
@@ -621,7 +629,7 @@ struct bit_or
 template <typename T = int>
 struct bit_xor
 {
-  constexpr T operator()(const T &a, const T &b) const
+  OM_CONSTEXPR T operator()(const T &a, const T &b) const
   {
     return a ^ b;
   }
@@ -630,18 +638,20 @@ struct bit_xor
 template <typename T = int>
 struct bit_not
 {
-  constexpr T operator()(const T &a) const
+  OM_CONSTEXPR T operator()(const T &a) const
   {
     return ~a;
   }
 };
 
+#if __cplusplus >= 201103L
 // Simplified std::invoke model
 template <typename Func, typename... Args>
 decltype(auto) invoke(Func &&f, Args &&...args)
 {
   return ::std::forward<Func>(f)(::std::forward<Args>(args)...);
 }
+#endif
 
 } // namespace std
 

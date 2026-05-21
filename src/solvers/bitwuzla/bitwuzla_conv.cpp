@@ -705,16 +705,14 @@ expr2tc bitwuzla_convt::get_array_elem(
 smt_astt bitwuzla_convt::overflow_arith(const expr2tc &expr)
 {
   const overflow2t &overflow = to_overflow2t(expr);
-  const arith_2ops &opers = static_cast<const arith_2ops &>(*overflow.operand);
+  const expr2tc &op1 = *overflow.operand->get_sub_expr(0);
+  const expr2tc &op2 = *overflow.operand->get_sub_expr(1);
 
-  const bitw_smt_ast *side1 =
-    to_solver_smt_ast<bitw_smt_ast>(convert_ast(opers.side_1));
-  const bitw_smt_ast *side2 =
-    to_solver_smt_ast<bitw_smt_ast>(convert_ast(opers.side_2));
+  const bitw_smt_ast *side1 = to_solver_smt_ast<bitw_smt_ast>(convert_ast(op1));
+  const bitw_smt_ast *side2 = to_solver_smt_ast<bitw_smt_ast>(convert_ast(op2));
 
   // Guess whether we're performing a signed or unsigned comparison.
-  bool is_signed =
-    (is_signedbv_type(opers.side_1) || is_signedbv_type(opers.side_2));
+  bool is_signed = (is_signedbv_type(op1) || is_signedbv_type(op2));
 
   BitwuzlaTerm res;
   if (is_add2t(overflow.operand))

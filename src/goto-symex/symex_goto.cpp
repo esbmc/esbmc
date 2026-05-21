@@ -78,10 +78,10 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
       new_guard_true = true;
   }
 
+  const not2t *old_not = try_to_not2t(old_guard);
   if (
     options.get_option("witness-output-yaml") != "" && forward &&
-    !is_constant(old_guard) &&
-    !(is_not2t(old_guard) && is_constant(to_not2t(old_guard).value)))
+    !is_constant(old_guard) && !(old_not && is_constant(old_not->value)))
   {
     // Normalize the branching condition so that cond=true always means
     // "the branch body was reached". For standard GOTOs (IF !cond GOTO skip)
@@ -107,8 +107,10 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
   // tracking loop counters.
 
   // Violation-witness: steer branch direction if the current waypoint is a
-  // branching at this location.
-  if (validate_witness && cur_state->cur_seg < cur_state->witness_segs.size())
+  // branching at this location.  Skip backward GOTOs (loop back edges).
+  if (
+    validate_witness && forward &&
+    cur_state->cur_seg < cur_state->witness_segs.size())
   {
     const auto &seg = cur_state->witness_segs[cur_state->cur_seg];
     if (cur_state->cur_wp < seg.size())
@@ -243,9 +245,8 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
     // produce new guard symbol
     expr2tc guard_expr;
 
-    if (
-      is_symbol2t(new_guard) ||
-      (is_not2t(new_guard) && is_symbol2t(to_not2t(new_guard).value)))
+    const not2t *new_not = try_to_not2t(new_guard);
+    if (is_symbol2t(new_guard) || (new_not && is_symbol2t(new_not->value)))
     {
       guard_expr = new_guard;
     }
@@ -293,7 +294,7 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
   }
 }
 
-static inline guardt merge_state_guards(
+static inline guard2tc merge_state_guards(
   goto_symext::statet::goto_statet &goto_state,
   goto_symex_statet &state)
 {
@@ -347,7 +348,7 @@ void goto_symext::merge_gotos()
 
     // Merge guards. Don't write this to `state` yet because we might move
     // goto_state over it below.
-    guardt new_guard = merge_state_guards(goto_state, *cur_state);
+    guard2tc new_guard = merge_state_guards(goto_state, *cur_state);
 
     if (!goto_state.guard.is_false())
     {
@@ -403,7 +404,7 @@ void goto_symext::phi_function(const statet::goto_statet &goto_state)
 
   const auto &goto_variables = goto_state.level2.current_names;
 
-  guardt tmp_guard;
+  guard2tc tmp_guard;
   if (
     !variables.empty() && !cur_state->guard.is_false() &&
     !goto_state.guard.is_false())

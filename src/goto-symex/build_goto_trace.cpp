@@ -35,7 +35,8 @@ expr2tc build_lhs(smt_convt &smt_conv, const expr2tc &lhs)
     break;
   }
 
-  renaming::renaming_levelt::get_original_name(new_lhs, symbol2t::level0);
+  renaming::renaming_levelt::get_original_name(
+    new_lhs, symbol_renaming_level::level0);
   return new_lhs;
 }
 
@@ -45,7 +46,8 @@ expr2tc build_rhs(smt_convt &smt_conv, const expr2tc &rhs)
     return rhs;
 
   auto new_rhs = smt_conv.get(rhs);
-  renaming::renaming_levelt::get_original_name(new_rhs, symbol2t::level0);
+  renaming::renaming_levelt::get_original_name(
+    new_rhs, symbol_renaming_level::level0);
   return new_rhs;
 }
 

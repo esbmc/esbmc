@@ -453,8 +453,8 @@ private:
   ibex::Ctc *create_contractor_from_expr2t_not(const expr2tc &);
   ibex::NumConstraint *create_constraint_from_expr2t_not(const expr2tc &);
 
-  ibex::Function *create_function_from_expr2t(expr2tc);
-  int create_variable_from_expr2t(expr2tc);
+  ibex::Function *create_function_from_expr2t(const expr2tc &);
+  int create_variable_from_expr2t(const expr2tc &);
   void parse_error(const expr2tc &);
   bool is_constraint_operator_not(const expr2tc &expr);
   bool is_unsupported_operator_in_constraint_not(const expr2tc &expr);
@@ -608,7 +608,7 @@ private:
    */
   void insert_assume(goto_functionst goto_functions);
 
-  void parse_intervals(expr2tc);
+  void parse_intervals(const expr2tc &orig_expr);
 
   bool initialize_main_function_loops();
 

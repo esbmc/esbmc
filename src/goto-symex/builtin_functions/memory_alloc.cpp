@@ -14,7 +14,7 @@
 expr2tc goto_symext::symex_malloc(
   const expr2tc &lhs,
   const sideeffect2t &code,
-  const guardt &guard)
+  const guard2tc &guard)
 {
   return symex_mem(true, lhs, code, guard);
 }
@@ -22,7 +22,7 @@ expr2tc goto_symext::symex_malloc(
 expr2tc goto_symext::symex_alloca(
   const expr2tc &lhs,
   const sideeffect2t &code,
-  const guardt &guard)
+  const guard2tc &guard)
 {
   return symex_mem(false, lhs, code, guard);
 }
@@ -61,7 +61,7 @@ void goto_symext::copy_memory_content(
   const expr2tc &new_elem_count,
   const type2tc &elem_type,
   bool old_is_array,
-  const guardt &guard)
+  const guard2tc &guard)
 {
   if (
     is_nil_expr(old_base_array) || is_nil_expr(old_elem_count) ||
@@ -107,7 +107,7 @@ void goto_symext::copy_memory_content(
     {
       expr2tc idx = constant_int2tc(size_type2(), BigInt(i));
       expr2tc should_copy = lessthan2tc(idx, copy_count);
-      guardt copy_guard = guard;
+      guard2tc copy_guard = guard;
       copy_guard.add(should_copy);
 
       if (!copy_guard.is_false())
@@ -130,7 +130,7 @@ void goto_symext::copy_single_element(
   const type2tc &elem_type,
   const type2tc &new_elem_type,
   bool old_is_array,
-  const guardt &guard)
+  const guard2tc &guard)
 {
   expr2tc old_elem =
     old_is_array ? index2tc(elem_type, old_base_array, idx) : old_base_array;
@@ -143,7 +143,7 @@ void goto_symext::copy_single_element(
 void goto_symext::symex_realloc(
   const expr2tc &lhs,
   const sideeffect2t &code,
-  const guardt &guard)
+  const guard2tc &guard)
 {
   expr2tc src_ptr = code.operand;
   expr2tc realloc_size = code.size; // This is in bytes
@@ -198,7 +198,7 @@ void goto_symext::symex_realloc(
 bool goto_symext::handle_realloc_zero_size(
   const expr2tc &lhs,
   const sideeffect2t &code,
-  const guardt &guard,
+  const guard2tc &guard,
   const expr2tc &realloc_size)
 {
   expr2tc zero_size = gen_zero(realloc_size->type);
@@ -340,7 +340,7 @@ expr2tc goto_symext::create_result_pointer(
 expr2tc goto_symext::model_allocation_failure(
   const expr2tc &result,
   const expr2tc &old_ptr,
-  const guardt &guard)
+  const guard2tc &guard)
 {
   if (!options.get_bool_option("force-realloc-success"))
   {
@@ -350,7 +350,7 @@ expr2tc goto_symext::model_allocation_failure(
       expr2tc(),
       std::vector<expr2tc>(),
       type2tc(),
-      sideeffect2t::nondet);
+      sideeffect2t::allockind::nondet);
     replace_nondet(alloc_fail);
 
     expr2tc null_ptr = symbol2tc(result->type, "NULL");
@@ -374,7 +374,7 @@ expr2tc goto_symext::model_allocation_failure(
 void goto_symext::update_pointer_validity(
   const expr2tc &old_ptr,
   const expr2tc &alloc_fail,
-  const guardt &guard)
+  const guard2tc &guard)
 {
   expr2tc old_ptr_obj = pointer_object2tc(pointer_type2(), old_ptr);
   dereference(old_ptr_obj, dereferencet::READ);
@@ -394,7 +394,7 @@ void goto_symext::finalize_realloc_result(
   const expr2tc &lhs,
   const expr2tc &result,
   const expr2tc &new_array,
-  const guardt &guard,
+  const guard2tc &guard,
   const expr2tc &realloc_size)
 {
   expr2tc result_copy(result);
@@ -407,7 +407,7 @@ void goto_symext::finalize_realloc_result(
   track_new_pointer(ptr_obj, new_array->type, guard, realloc_size);
 
   // Add to dynamic memory tracking
-  guardt alloc_guard = cur_state->guard;
+  guard2tc alloc_guard = cur_state->guard;
   alloc_guard.append(guard);
 
   unsigned int dynamic_counter = get_dynamic_counter();
@@ -418,7 +418,7 @@ void goto_symext::finalize_realloc_result(
 expr2tc goto_symext::symex_mem_inf(
   const expr2tc &lhs,
   const type2tc &base_type,
-  const guardt &guard)
+  const guard2tc &guard)
 {
   if (is_nil_expr(lhs))
     return expr2tc(); // ignore
@@ -464,7 +464,7 @@ expr2tc goto_symext::symex_mem_inf(
   do_simplify(rhs_addrof);
   expr2tc rhs = rhs_addrof;
   expr2tc ptr_rhs = rhs;
-  guardt alloc_guard = cur_state->guard;
+  guard2tc alloc_guard = cur_state->guard;
 
   if (rhs->type != lhs->type)
     rhs = typecast2tc(lhs->type, rhs);
@@ -489,7 +489,7 @@ expr2tc goto_symext::symex_mem(
   const bool is_malloc,
   const expr2tc &lhs,
   const sideeffect2t &code,
-  const guardt &guard)
+  const guard2tc &guard)
 {
   if (is_nil_expr(lhs))
     return expr2tc(); // ignore
@@ -605,7 +605,7 @@ expr2tc goto_symext::symex_mem(
 
   expr2tc rhs = rhs_addrof;
   expr2tc ptr_rhs = rhs;
-  guardt alloc_guard = cur_state->guard;
+  guard2tc alloc_guard = cur_state->guard;
 
   if (options.get_bool_option("malloc-zero-is-null"))
   {
@@ -624,7 +624,7 @@ expr2tc goto_symext::symex_mem(
       expr2tc(),
       std::vector<expr2tc>(),
       type2tc(),
-      sideeffect2t::nondet);
+      sideeffect2t::allockind::nondet);
     replace_nondet(choice);
 
     rhs = if2tc(rhs->type, choice, rhs, null_sym);
@@ -658,7 +658,7 @@ expr2tc goto_symext::symex_mem(
 void goto_symext::track_new_pointer(
   const expr2tc &ptr_obj,
   const type2tc &new_type,
-  const guardt &guard,
+  const guard2tc &guard,
   const expr2tc &size)
 {
   // Simplify ptr_obj before using it in any expressions
@@ -692,18 +692,24 @@ void goto_symext::track_new_pointer(
 
 void goto_symext::symex_free(const expr2tc &expr)
 {
-  const auto &code = static_cast<const code_expression_data &>(*expr);
+  // expr is any 1-op code kind: code_free (from symex_other) or
+  // code_cpp_delete / code_cpp_del_array (delegated via symex_cpp_delete).
+  // All have exactly one sub-expression — the pointer being freed.
+  assert(
+    is_code_free2t(expr) || is_code_cpp_delete2t(expr) ||
+    is_code_cpp_del_array2t(expr));
+  const expr2tc &operand = *expr->get_sub_expr(0);
 
   // Trigger 'free'-mode dereference of this pointer. Should generate various
   // dereference failure callbacks.
-  expr2tc tmp = code.operand;
+  expr2tc tmp = operand;
   dereference(tmp, dereferencet::FREE);
 
   // Don't rely on the output of dereference in free mode; instead fetch all
   // the internal dereference state for pointed at objects, and creates claims
   // that if pointed at, their offset is zero.
   internal_deref_items.clear();
-  tmp = code.operand;
+  tmp = operand;
 
   // Create temporary, dummy, dereference
   tmp = dereference2tc(get_uint8_type(), tmp);
@@ -720,7 +726,7 @@ void goto_symext::symex_free(const expr2tc &expr)
 
     for (auto const &item : internal_deref_items)
     {
-      guardt g = cur_state->guard;
+      guard2tc g = cur_state->guard;
       g.add(item.guard);
 
       // Check if the offset of the object being freed is zero
@@ -763,7 +769,7 @@ void goto_symext::symex_free(const expr2tc &expr)
 
   // Clear the alloc bit.
   type2tc sym_type = array_type2tc(get_bool_type(), expr2tc(), true);
-  expr2tc ptr_obj = pointer_object2tc(pointer_type2(), code.operand);
+  expr2tc ptr_obj = pointer_object2tc(pointer_type2(), operand);
   dereference(ptr_obj, dereferencet::READ);
 
   expr2tc valid_sym = symbol2tc(sym_type, valid_ptr_arr_name);

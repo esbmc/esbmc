@@ -18,6 +18,7 @@ extern "C"
 
 #include <esbmc/bmc.h>
 #include <esbmc/esbmc_parseoptions.h>
+#include <solvers/solve.h>
 #include <cctype>
 #include <clang-c-frontend/clang_c_language.h>
 #include <util/config.h>
@@ -33,6 +34,7 @@ extern "C"
 #include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/goto_inline.h>
 #include <goto-programs/goto_k_induction.h>
+#include <goto-programs/goto_loop_simplify.h>
 #include <goto-programs/goto_loop_invariant.h>
 #include <goto-programs/abstract-interpretation/interval_analysis.h>
 #include <goto-programs/abstract-interpretation/gcse.h>
@@ -45,6 +47,7 @@ extern "C"
 #include <goto-programs/show_claims.h>
 #include <goto-programs/loop_unroll.h>
 #include <goto-programs/goto_check_uninit_vars.h>
+#include <goto-programs/goto_check_unchecked_return.h>
 #include <goto-programs/mark_decl_as_non_det.h>
 #include <goto-programs/assign_params_as_non_det.h>
 #include <goto2c/goto2c.h>
@@ -423,8 +426,19 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
 
   if (cmdline.isset("validate-correctness-witness"))
   {
+    if (!cmdline.isset("witness"))
+    {
+      log_error(
+        "--validate-correctness-witness requires --witness <file.yaml>");
+      abort();
+    }
     const std::string witness = cmdline.getval("witness");
     const boost::filesystem::path wp(witness);
+    if (!boost::filesystem::exists(wp))
+    {
+      log_error("Witness file '{}' does not exist.", witness);
+      abort();
+    }
     if (wp.extension() != ".yaml" && wp.extension() != ".yml")
     {
       log_error(
@@ -438,8 +452,18 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
 
   if (cmdline.isset("validate-violation-witness"))
   {
+    if (!cmdline.isset("witness"))
+    {
+      log_error("--validate-violation-witness requires --witness <file.yaml>");
+      abort();
+    }
     const std::string witness = cmdline.getval("witness");
     const boost::filesystem::path wp(witness);
+    if (!boost::filesystem::exists(wp))
+    {
+      log_error("Witness file '{}' does not exist.", witness);
+      abort();
+    }
     if (wp.extension() != ".yaml" && wp.extension() != ".yml")
     {
       log_error(
@@ -668,6 +692,10 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   if (cmdline.isset("sarif-output"))
     options.set_option("sarif-output", cmdline.getval("sarif-output"));
 
+  // Fail fast if the user explicitly requested an SMT solver that is not
+  // built into this ESBMC binary, before spending time parsing the program.
+  check_solver_availability(options);
+
   config.options = options;
 }
 
@@ -745,6 +773,13 @@ int esbmc_parseoptionst::doit()
     if (cmdline.isset("uninitialised-vars-check"))
       goto_preprocess_algorithms.emplace_back(
         std::make_unique<goto_check_uninit_vars>(context));
+
+    // Unchecked-return-value check (CWE-252). Runs as a preprocessing
+    // algorithm so the inserted ASSERTs participate in the same path-
+    // condition pruning as the rest of the goto-program.
+    if (cmdline.isset("unchecked-return-value-check"))
+      goto_preprocess_algorithms.emplace_back(
+        std::make_unique<goto_check_unchecked_return>(context));
 
     // Explicitly marking all declared variables as "nondet"
     goto_preprocess_algorithms.emplace_back(
@@ -2347,6 +2382,14 @@ bool esbmc_parseoptionst::process_goto_program(
 
     goto_check(ns, options, goto_functions);
 
+    // Eliminate goto-level no-op loops (empty body, dead modified vars).
+    // Runs AFTER goto_check so that any check assertions inserted into a
+    // loop body (overflow, div-by-zero, bounds, ...) make body_is_safe
+    // refuse the erasure — preserving checks that would otherwise be
+    // silently dropped. Skipped under --termination / --unwinding-
+    // assertions because loop presence is observable in those modes.
+    goto_loop_simplify(goto_functions);
+
     if (options.get_bool_option("atomicity-check"))
       goto_atomicity_check(goto_functions, ns, context);
 
@@ -2954,7 +2997,7 @@ static void collect_symbol_names(
   if (is_symbol2t(e))
   {
     const symbol2t &thesym = to_symbol2t(e);
-    assert(thesym.rlevel == 0);
+    assert(thesym.rlevel == symbol_renaming_level::level0);
     std::string sym = thesym.get_symbol_name();
 
     used_syms.insert(sym);
