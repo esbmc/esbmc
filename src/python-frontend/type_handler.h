@@ -145,6 +145,20 @@ public:
    */
   typet get_typet(const std::string &ast_type, size_t type_size = 0) const;
 
+  /**
+   * Lowering for Python `int` — arbitrarily large in the language spec.
+   * Default (bitvector backends): int64 approximation via long_long_int_type().
+   * Under --ir (int-encoding=true): a wide signed bitvector. SMT layer strips
+   * the width at conversion time, giving true unbounded semantics; the width
+   * exists only to keep the IR self-consistent and to size constant-fold
+   * intermediate values. See issue #4642.
+   */
+  static typet python_int_typet();
+
+  /// Bit width of python_int_typet() — exposed for callsites that need to
+  /// compute representable ranges (e.g. constant-fold exponent caps).
+  static unsigned python_int_width();
+
   /*
    * Creates a typet directly from a JSON value.
    * @param elem A JSON node representing a value.
