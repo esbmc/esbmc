@@ -361,6 +361,10 @@ __ESBMC_HIDE:;
 int pthread_join_noswitch(pthread_t thread, void **retval)
 {
 __ESBMC_HIDE:;
+  //Tong: Dummy read, for recording mopr dependency of pthread_create()/join(), to avoid losing the dependency
+  //relation when the cs swich is forced by pthread om. Should have a more elegant way to do. 
+  _Bool ended_sync = __ESBMC_pthread_thread_ended[(int)thread];
+
   pthread_testcancel();
   __ESBMC_atomic_begin();
 

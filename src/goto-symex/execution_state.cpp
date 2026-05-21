@@ -888,8 +888,7 @@ void execution_statet::get_expr_globals(
              n == "c:@__ESBMC_is_dynamic" ||
              n == "c:@__ESBMC_blocked_threads_count" ||
              n.find("c:pthread_lib") != std::string::npos ||
-             n == "c:@__ESBMC_rounding_mode" ||
-             n.find("c:@__ESBMC_pthread_thread") != std::string::npos;
+             n == "c:@__ESBMC_rounding_mode";
     };
 
     // Resolve pointer parameters/locals BEFORE applying the internal-name
