@@ -111,7 +111,6 @@ weight: 4
 ## Exception Handling
 
 - Core built-in exception types are supported, but not all Python standard library exceptions; custom exception hierarchies with complex inheritance patterns may not be fully handled.
-- A user-defined exception subclass caught by its parent class (e.g. `class B(A): pass; raise B(); except A:`) currently aborts conversion with `_init_undefined` / `migrate expr failed` rather than matching the parent ([#4670](https://github.com/esbmc/esbmc/issues/4670)).
 
 ## Class Attributes
 
