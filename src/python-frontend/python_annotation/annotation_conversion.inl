@@ -761,6 +761,8 @@ std::string python_annotation<Json>::get_type_from_binary_expr(
     type = get_type_from_binary_expr(lhs, body);
   else if (lhs["_type"] == "List")
     type = "list";
+  else if (lhs["_type"] == "Tuple")
+    type = "tuple";
   // Floor division (//) operations always result in an integer value
   else if (
     stmt.contains("value") && stmt["value"]["op"]["_type"] == "FloorDiv")
