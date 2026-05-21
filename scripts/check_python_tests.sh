@@ -48,6 +48,7 @@ ignored_dirs=(
   "esbmc-unreachable-dead"
   "esbmc-unreachable-flag-off"
   "esbmc-unreachable-reachable"
+  "esbmc-unreachable-truncated-loop"
   "enumerate15"
   "enumerate15_fail"
   "func-no-params-types-fail"
