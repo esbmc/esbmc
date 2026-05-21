@@ -48,6 +48,13 @@ bool goto_symext::get_unwind_recursion(
 
       // Disable inductive step on recursion
       options.set_option("disable-inductive-step", true);
+
+      // If we're actually running the inductive step right now, abort
+      // symex: the IS encoding would be unsound, and finishing it just
+      // wastes time and risks producing a contradictory verdict before
+      // the strategy layer can downgrade the result to UNKNOWN.
+      if (inductive_step)
+        throw inductive_step_disabled_exceptiont("recursion");
     }
 
     const symbolt &symbol = *ns.lookup(identifier);
@@ -464,6 +471,10 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
       "k-induction does not support function pointer calls yet. "
       "Disabling inductive step");
     options.set_option("disable-inductive-step", true);
+
+    // See the recursion site for the rationale.
+    if (inductive_step)
+      throw inductive_step_disabled_exceptiont("function pointer call");
   }
   if (is_nil_expr(call.function))
   {

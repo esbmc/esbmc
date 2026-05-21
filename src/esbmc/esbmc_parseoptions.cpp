@@ -18,6 +18,7 @@ extern "C"
 
 #include <esbmc/bmc.h>
 #include <esbmc/esbmc_parseoptions.h>
+#include <goto-symex/goto_symex.h>
 #include <solvers/solve.h>
 #include <cctype>
 #include <clang-c-frontend/clang_c_language.h>
@@ -1856,9 +1857,20 @@ int esbmc_parseoptionst::do_bmc(bmct &bmc)
 {
   log_progress("Starting Bounded Model Checking");
 
-  smt_convt::resultt res = bmc.start_bmc();
-  if (res == smt_convt::P_ERROR)
-    abort();
+  smt_convt::resultt res;
+  try
+  {
+    res = bmc.start_bmc();
+  }
+  catch (const inductive_step_disabled_exceptiont &e)
+  {
+    // Symex hit an IS-unsound construct (recursion, threads,
+    // function-pointer call) and threw to short-circuit. Return
+    // P_ERROR so the strategy layer drops to TV_UNKNOWN; the caller
+    // also checks `disable-inductive-step` to suppress any verdict.
+    log_status("Inductive step aborted: {}", e.reason);
+    res = smt_convt::P_ERROR;
+  }
 
 #ifdef HAVE_SENDFILE_ESBMC
   if (bmc.options.get_bool_option("memstats"))
