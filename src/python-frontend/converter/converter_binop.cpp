@@ -485,6 +485,12 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     dict_handler_->is_dict_type(lhs.type()) &&
     dict_handler_->is_dict_type(rhs.type()) && (op == "Eq" || op == "NotEq"))
   {
+    // Fold literal-vs-literal dict equality at conversion time. Skipping the
+    // O(n^2) __ESBMC_dict_eq runtime model here is the dominant win under
+    // --incremental-bmc, where each k iteration would otherwise re-symbolise
+    // the comparison from scratch (issue #4623).
+    if (auto folded = dict_handler_->try_constant_fold_eq(left, right))
+      return gen_boolean(op == "NotEq" ? !*folded : *folded);
     return dict_handler_->compare(lhs, rhs, op);
   }
 

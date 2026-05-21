@@ -37,6 +37,7 @@ ignored_dirs=(
   "dict_del13_fail"
   "dict_del14"
   "dict_del14_fail"
+  "dict_eq_runtime"
   "div6_fail"
   "div7_fail"
   "esbmc-assert-no-msg"
