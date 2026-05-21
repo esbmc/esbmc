@@ -1,12 +1,12 @@
-#include <python-frontend/char_utils.h>
+#include <python-frontend/string/char_utils.h>
 #include <python-frontend/exception_utils.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/python_int_overflow.h>
 #include <python-frontend/python_list.h>
-#include <python-frontend/string_handler.h>
-#include <python-frontend/string_handler_utils.h>
+#include <python-frontend/string/string_handler.h>
+#include <python-frontend/string/string_handler_utils.h>
 #include <python-frontend/python_converter.h>
-#include <python-frontend/string_builder.h>
+#include <python-frontend/string/string_builder.h>
 #include <python-frontend/tuple_handler.h>
 #include <python-frontend/type_utils.h>
 #include <python-frontend/symbol_id.h>
