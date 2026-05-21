@@ -327,3 +327,21 @@ endforeach()
 list(REMOVE_DUPLICATES _camada_solvers)
 list(JOIN _camada_solvers " " _camada_solvers_str)
 set(ESBMC_AVAILABLE_SOLVERS "${_camada_solvers_str}" PARENT_SCOPE)
+
+# Windows: ship runtime DLLs from camada's downloaded deps tree alongside
+# esbmc.exe. Without this, esbmc.exe exits silently at startup when the OS
+# loader cannot find libz3.dll, which the deleted src/solvers/z3/CMakeLists.txt
+# used to install via its own find_file(...libz3.dll...) rule.
+if(WIN32 AND DEFINED CAMADA_DEPS_INSTALL_DIR)
+  foreach(_dll libz3.dll)
+    find_file(_solver_dll ${_dll}
+      HINTS "${CAMADA_DEPS_INSTALL_DIR}"
+      PATH_SUFFIXES bin
+      NO_DEFAULT_PATH)
+    if(_solver_dll)
+      message(STATUS "Windows will install ${_solver_dll}")
+      install(FILES "${_solver_dll}" DESTINATION bin)
+    endif()
+    unset(_solver_dll CACHE)
+  endforeach()
+endif()
