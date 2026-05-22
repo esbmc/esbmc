@@ -1027,6 +1027,35 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       throw std::runtime_error(msg.str());
     }
 
+    // Reject subscripting scalar numeric / boolean values up front. CPython
+    // raises "TypeError: 'int'/'float'/'bool' object is not subscriptable";
+    // the list handler below silently produces an unresolved-type value that
+    // later trips the binop "Unsupported comparison with unresolved operand
+    // type" error far from the actual mistake (e.g. when the user expects
+    // a tuple from a Counter.most_common() result and chains a second
+    // subscript onto an int).
+    if (
+      !array_type.is_array() && !array_type.is_pointer() &&
+      !array_type.is_struct() &&
+      (array_type.is_signedbv() || array_type.is_unsignedbv() ||
+       array_type.is_floatbv() || array_type.is_bool()))
+    {
+      std::string type_name;
+      if (array_type.is_bool())
+        type_name = "bool";
+      else if (array_type.is_floatbv())
+        type_name = "float";
+      else
+        type_name = "int";
+
+      std::ostringstream msg;
+      msg << "TypeError: '" << type_name << "' object is not subscriptable";
+      const locationt loc = get_location_from_decl(element);
+      if (!loc.is_nil())
+        msg << " at " << loc.get_file() << ":" << loc.get_line();
+      throw std::runtime_error(msg.str());
+    }
+
     // Handle regular array/list subscripting
     python_list list(*this, element);
     expr = list.index(array, slice);
