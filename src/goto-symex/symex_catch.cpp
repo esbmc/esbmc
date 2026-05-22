@@ -301,7 +301,7 @@ bool goto_symext::symex_throw_bad_cast()
     }
 
     // Build a nondet operand of bad_cast type for the thrown object.
-    type2tc bad_cast_type = migrate_type(bad_cast_sym->get_type());
+    type2tc bad_cast_type = migrate_symbol_type(*bad_cast_sym);
     expr2tc nondet_op = sideeffect2tc(
       bad_cast_type,
       expr2tc(),

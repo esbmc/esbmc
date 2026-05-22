@@ -1076,7 +1076,7 @@ void goto_symext::run_intrinsic(
 
     symex_mem_inf(
       func_call.ret,
-      migrate_type(list_object_symbol->get_type()),
+      migrate_symbol_type(*list_object_symbol),
       cur_state->guard);
 
     return;
@@ -1266,7 +1266,7 @@ void goto_symext::add_memory_leak_checks()
             i,
             e.identifier,
             e.suffix);
-          sym_expr2 = sym_expr2->with_type(migrate_type(sym->get_type()));
+          sym_expr2 = sym_expr2->with_type(migrate_symbol_type(*sym));
 
           /* Rename so that it reflects the current state. */
           assert(cur_state->call_stack.size() >= 1);

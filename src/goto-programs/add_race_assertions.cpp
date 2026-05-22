@@ -91,7 +91,7 @@ void w_guardst::add_initialization(goto_programt &goto_program)
     migrate_expr(symbol, new_sym);
 
     expr2tc falsity = s.get_type().is_array()
-                        ? gen_zero(migrate_type(s.get_type()), true)
+                        ? gen_zero(migrate_symbol_type(s), true)
                         : gen_false_expr();
     t = goto_program.insert(t);
     t->type = ASSIGN;

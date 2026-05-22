@@ -244,7 +244,7 @@ frame_enforcert::collect_global_variables(const contextt &context)
       return;
 
     // Build symbol expression
-    type2tc global_type = migrate_type(s.get_type());
+    type2tc global_type = migrate_symbol_type(s);
     expr2tc sym_expr = symbol2tc(global_type, s.id);
 
     // Skip pointer types (consistent with loop frame rule behavior)

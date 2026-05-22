@@ -11,10 +11,21 @@
 
 // Don't ask
 class namespacet;
+class symbolt;
 extern const namespacet *migrate_namespace_lookup;
 
 type2tc migrate_type(const typet &type);
 void migrate_expr(const exprt &expr, expr2tc &new_expr);
+
+// IREP2 form of a symbol's type. Single chokepoint for the symbol-table
+// migration (esbmc/esbmc#4715, B2 S1): equivalent to
+// migrate_type(sym.get_type()) today, but centralised so the storage can later
+// become IREP2-native without touching callers again. In debug builds it also
+// asserts the IREP2 form is stable under a round-trip through legacy irept --
+// the property (proven for synthetic types in unit/util/migrate.test.cpp) that
+// makes deriving the legacy field from IREP2 lossless, now checked on every
+// real symbol type the pipeline reads.
+type2tc migrate_symbol_type(const symbolt &sym);
 
 typet migrate_type_back(const type2tc &ref);
 exprt migrate_expr_back(const expr2tc &ref);

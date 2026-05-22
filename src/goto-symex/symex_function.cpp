@@ -159,7 +159,7 @@ unsigned goto_symext::argument_assignments(
             const symbol_type2t &sym_type = to_symbol_type(ptr_subtype);
             symbolt const *sym = ns.lookup(sym_type.symbol_name);
             if (sym)
-              ptr_subtype = migrate_type(sym->get_type());
+              ptr_subtype = migrate_symbol_type(*sym);
             else
               break;
           }
