@@ -27,6 +27,13 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr);
 // real symbol type the pipeline reads.
 type2tc migrate_symbol_type(const symbolt &sym);
 
+// IREP2 form of a symbol's value. Value-side counterpart of
+// migrate_symbol_type (esbmc/esbmc#4715, B2 S2). The debug cross-check is
+// *guarded*: function bodies (sym.get_type().is_code()) are skipped because
+// migrate_expr_back cannot reconstruct a code_block -- a body is migrated
+// forward only (see unit/util/migrate.test.cpp); nil values are skipped too.
+void migrate_symbol_value(const symbolt &sym, expr2tc &dest);
+
 typet migrate_type_back(const type2tc &ref);
 exprt migrate_expr_back(const expr2tc &ref);
 
