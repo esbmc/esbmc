@@ -224,7 +224,7 @@ unsigned goto_symext::argument_assignments(
       symbolt symbol;
       symbol.id = identifier;
       symbol.name = "va_arg" + std::to_string(va_count);
-      symbol.get_type() = migrate_type_back((*it1)->type);
+      set_symbol_type(symbol, (*it1)->type);
 
       if (new_context.move(symbol))
       {
