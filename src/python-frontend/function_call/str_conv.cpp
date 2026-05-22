@@ -620,14 +620,17 @@ exprt function_call_expr::handle_ascii() const
         ? '"'
         : '\'';
 
-    auto append_escape = [](std::string &out, unsigned long cp) {
+    // cp is a Unicode code point (<= 0x10FFFF), so an unsigned int holds it
+    // and the widest escape is \U + 8 hex digits; using %08x (not %08lx) keeps
+    // the output within buf and avoids GCC's -Wformat-truncation.
+    auto append_escape = [](std::string &out, unsigned cp) {
       char buf[12];
       if (cp <= 0xff)
-        std::snprintf(buf, sizeof(buf), "\\x%02lx", cp);
+        std::snprintf(buf, sizeof(buf), "\\x%02x", cp);
       else if (cp <= 0xffff)
-        std::snprintf(buf, sizeof(buf), "\\u%04lx", cp);
+        std::snprintf(buf, sizeof(buf), "\\u%04x", cp);
       else
-        std::snprintf(buf, sizeof(buf), "\\U%08lx", cp);
+        std::snprintf(buf, sizeof(buf), "\\U%08x", cp);
       out += buf;
     };
 
@@ -670,7 +673,7 @@ exprt function_call_expr::handle_ascii() const
       else
       {
         // Decode one UTF-8 sequence to a code point, then escape it.
-        unsigned long cp = 0;
+        unsigned cp = 0;
         int extra = 0;
         if ((c & 0xe0) == 0xc0)
         {
