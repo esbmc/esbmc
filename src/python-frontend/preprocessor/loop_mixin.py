@@ -1387,7 +1387,8 @@ class LoopMixin:
         node.iter = saved
         return iter_var_name, [iter_assign], element_type
 
-    def _make_target_assign(self, node, target, iter_var_name, index_var, element_type):
+    def _make_target_assign(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+            self, node, target, iter_var_name, index_var, element_type):
         """Build `target = iter_var[index]` plus any tuple/list unpacking assigns."""
         current = ast.Subscript(
             value=ast.Name(id=iter_var_name, ctx=ast.Load()),
@@ -1472,7 +1473,7 @@ class LoopMixin:
             ast.fix_missing_locations(stmt)
         return result
 
-    def _transform_filter_for(self, node):
+    def _transform_filter_for(self, node):  # pylint: disable=too-many-locals
         """for x in filter(func, seq): -> while loop over seq guarded by func(x).
 
         filter(None, seq) keeps truthy elements.
@@ -1511,7 +1512,7 @@ class LoopMixin:
             ast.fix_missing_locations(stmt)
         return result
 
-    def _transform_zip_for(self, node):
+    def _transform_zip_for(self, node):  # pylint: disable=too-many-locals
         """for a, b, ... in zip(s0, s1, ...): -> parallel index-based while loop.
 
         Iterates up to the shortest sequence (Python's zip semantics).
