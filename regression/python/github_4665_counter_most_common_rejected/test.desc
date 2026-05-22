@@ -1,5 +1,5 @@
 CORE
 main.py
---unwind 4
+--unwind 3
 ^VERIFICATION FAILED$
 Counter.most_common is not modelled \(issue #4665\)
