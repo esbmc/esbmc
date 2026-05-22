@@ -67,9 +67,8 @@ void goto_convert_functionst::add_return(
   t->make_return();
   t->location = location;
 
-  const typet &thetype = (f.type.return_type().id() == "symbol")
-                           ? ns.follow(f.type.return_type())
-                           : f.type.return_type();
+  const typet rt = migrate_type_back(to_code_type(f.type).ret_type);
+  const typet &thetype = (rt.id() == "symbol") ? ns.follow(rt) : rt;
   exprt rhs = exprt("sideeffect", thetype);
   rhs.statement("nondet");
 
@@ -98,7 +97,7 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
     functions.function_map.emplace(identifier, goto_functiont());
 
   goto_functiont &f = functions.function_map.at(identifier);
-  f.type = to_code_type(symbol.type);
+  f.type = migrate_type(symbol.type);
   f.body_available = symbol.value.is_not_nil();
 
   if (!f.body_available)
@@ -128,9 +127,10 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
 
   targets = targetst();
   targets.set_return(end_function);
-  targets.has_return_value = f.type.return_type().id() != "empty" &&
-                             f.type.return_type().id() != "constructor" &&
-                             f.type.return_type().id() != "destructor";
+  // constructor/destructor return types migrate to empty_type (see
+  // util/migrate.cpp), so the legacy three-way id check collapses to this.
+  targets.has_return_value =
+    to_code_type(f.type).ret_type->type_id != type2t::empty_id;
 
   goto_convert_rec(code, f.body);
 

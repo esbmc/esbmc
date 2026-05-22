@@ -201,12 +201,20 @@ python_converter::infer_types_from_returns(const nlohmann::json &function_body)
             flags.has_none = true;
           else
           {
+            // A string/object/array return literal in an Any-typed function
+            // cannot be folded into the numeric TypeFlags hierarchy. Don't
+            // abort the whole conversion (issue #2848): skip this return so
+            // any numeric sibling return still drives the inferred type, and
+            // an all-non-numeric body falls back to the caller's default.
             std::string type_name = constant_val.is_string()   ? "string"
                                     : constant_val.is_object() ? "object"
                                     : constant_val.is_array()  ? "array"
                                                                : "unknown";
-            throw std::runtime_error(
-              "Unsupported return type '" + type_name + "' detected");
+            log_debug(
+              "python",
+              "infer_types_from_returns: ignoring unsupported return literal "
+              "of type '{}' for Any inference",
+              type_name);
           }
         }
         else if (val["_type"] == "BinOp" || val["_type"] == "UnaryOp")

@@ -2,6 +2,7 @@
 #include <python-frontend/python_converter.h>
 #include <util/c_types.h>
 #include <python-frontend/python_exception_handler.h>
+#include <python-frontend/function_call/expr.h>
 #include <python-frontend/type_handler.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/symbol_id.h>
@@ -751,13 +752,22 @@ exprt python_list::get()
     if (elem.is_symbol())
       return elem;
 
+    // A list element that is itself a function call (e.g. ``[nd(), nd()]``)
+    // comes back from get_expr as a code_function_callt (a code statement).
+    // Assigning that directly to the temp produces a malformed assignment
+    // whose RHS is a call statement; it leaks into the SSA and crashes the
+    // SMT backend on a null operand (issue #4699). Normalise it to a
+    // side-effect call expression so create_tmp_symbol/code_assignt lower it
+    // to a proper function call, exactly as a statement-level ``x = nd()``.
+    const exprt value_elem = to_value_expr(elem, converter_.name_space());
+
     symbolt &tmp = converter_.create_tmp_symbol(
-      list_value_, "$list_elem$", elem.type(), elem);
+      list_value_, "$list_elem$", value_elem.type(), value_elem);
     code_declt decl(symbol_expr(tmp));
     decl.location() = location;
     converter_.add_instruction(decl);
 
-    code_assignt assign(symbol_expr(tmp), elem);
+    code_assignt assign(symbol_expr(tmp), value_elem);
     assign.location() = location;
     converter_.add_instruction(assign);
     return symbol_expr(tmp);
@@ -2098,8 +2108,7 @@ exprt python_list::handle_index_access(
       size_t subscript_depth = 0;
       const nlohmann::json *cur = &list_value_;
       while (cur->is_object() && cur->contains("value") &&
-             (*cur)["value"].is_object() &&
-             (*cur)["value"].contains("_type") &&
+             (*cur)["value"].is_object() && (*cur)["value"].contains("_type") &&
              (*cur)["value"]["_type"] == "Subscript")
       {
         ++subscript_depth;

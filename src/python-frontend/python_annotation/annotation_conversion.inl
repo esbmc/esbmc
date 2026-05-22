@@ -698,6 +698,47 @@ std::string python_annotation<Json>::get_argument_type(const Json &arg)
   return ""; // Cannot determine type
 }
 
+// Recursively search a statement subtree for the first
+// ``<name>.append(arg)`` call and return its argument node. Returns an
+// empty Json when no such append exists. Used to recover the element
+// type of an empty list literal (issue #3239).
+template <class Json>
+static Json find_first_append_arg(const Json &node, const std::string &name)
+{
+  if (node.is_object())
+  {
+    if (
+      node.value("_type", std::string()) == "Call" && node.contains("func") &&
+      node["func"].is_object() &&
+      node["func"].value("_type", std::string()) == "Attribute" &&
+      node["func"].value("attr", std::string()) == "append" &&
+      node["func"].contains("value") && node["func"]["value"].is_object() &&
+      node["func"]["value"].value("_type", std::string()) == "Name" &&
+      node["func"]["value"].value("id", std::string()) == name &&
+      node.contains("args") && node["args"].is_array() &&
+      node["args"].size() == 1)
+    {
+      return node["args"][0];
+    }
+    for (auto it = node.begin(); it != node.end(); ++it)
+    {
+      Json found = find_first_append_arg(*it, name);
+      if (!found.empty())
+        return found;
+    }
+  }
+  else if (node.is_array())
+  {
+    for (const auto &child : node)
+    {
+      Json found = find_first_append_arg(child, name);
+      if (!found.empty())
+        return found;
+    }
+  }
+  return Json();
+}
+
 // Method to get the full type of a list literal
 template <class Json>
 std::string
@@ -2278,7 +2319,45 @@ InferResult python_annotation<Json>::infer_type(
   if (value_type == "Constant")
     inferred_type = get_type_from_constant(stmt["value"]);
   else if (value_type == "List")
+  {
+    // Non-empty literals stay as a bare ``list`` so the converter keeps its
+    // permissive, per-element (possibly heterogeneous) handling.
     inferred_type = "list";
+
+    // An *empty* literal leaves the element type unresolved, so a loop
+    // variable bound from it (e.g. the ``for p in primes`` synthesised
+    // from ``all(... for p in primes)``) gets an inconsistent bit-width
+    // and trips assert_arith_2ops_consistency in integer arithmetic
+    // (issue #3239). Recover the element type from the first
+    // ``<target>.append(arg)`` in the same scope, but only commit to a
+    // concrete ``list[int]`` when that argument actually resolves to an
+    // int -- otherwise (object/float/str/unresolved) keep the permissive
+    // bare ``list`` so object lists such as ``result = []; result.append(obj)``
+    // are unaffected.
+    const auto &elts = stmt["value"];
+    if (
+      (!elts.contains("elts") || elts["elts"].empty()) &&
+      stmt.contains("targets") && stmt["targets"].is_array() &&
+      !stmt["targets"].empty() && stmt["targets"][0].is_object() &&
+      stmt["targets"][0].value("_type", std::string()) == "Name")
+    {
+      const std::string target_name =
+        stmt["targets"][0].value("id", std::string());
+      if (!target_name.empty())
+      {
+        // Only commit to list[int] when the first append argument resolves
+        // to a *direct* integer scalar. An argument that borrows its
+        // int-ness through an indirection -- e.g. ``result.append(actions[i])``
+        // where ``actions`` is a heterogeneous object list mis-typed as
+        // list[int] -- must keep the permissive bare ``list``, otherwise the
+        // object elements collapse to ints and later attribute/method
+        // resolution fails (jpl_1 regression).
+        Json append_arg = find_first_append_arg(body, target_name);
+        if (!append_arg.empty() && append_arg_is_plain_int(append_arg))
+          inferred_type = "list[int]";
+      }
+    }
+  }
   else if (value_type == "Set")
     inferred_type = "set";
   else if (value_type == "Tuple")
@@ -2465,6 +2544,36 @@ Json python_annotation<Json>::find_var_node_for_inference(
     var_node = find_annotated_assign(var_name, ast_["body"]);
 
   return var_node;
+}
+
+template <class Json>
+bool python_annotation<Json>::append_arg_is_plain_int(const Json &arg)
+{
+  const std::string type = arg.value("_type", std::string());
+
+  if (type == "Constant")
+    return get_type_from_constant(arg) == "int";
+
+  if (type == "BinOp" || type == "UnaryOp")
+    return get_argument_type(arg) == "int";
+
+  if (type == "Name")
+  {
+    Json var_node = find_var_node_for_inference(arg.value("id", std::string()));
+    // An int annotation (e.g. a ``for n in range(...)`` target the
+    // annotation pass typed as ``n: int``) is trustworthy.
+    if (has_annotation(var_node))
+      return json_utils::get_annotation_type_name(var_node["annotation"]) ==
+             "int";
+    // Otherwise follow the binding's RHS; a name bound to a subscript,
+    // attribute, or call lands on the default branch below and is rejected.
+    if (var_node.contains("value") && var_node["value"].is_object())
+      return append_arg_is_plain_int(var_node["value"]);
+    return false;
+  }
+
+  // Subscript / Attribute / Call / ... -- indirection, do not trust.
+  return false;
 }
 
 // Infer return type from non-recursive return statements
