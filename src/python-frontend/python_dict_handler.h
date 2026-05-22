@@ -80,6 +80,7 @@
 #include <util/expr.h>
 #include <nlohmann/json.hpp>
 
+#include <optional>
 #include <string>
 
 class python_converter;
@@ -535,6 +536,29 @@ public:
    * @return Boolean expression representing the comparison result
    */
   exprt compare(const exprt &lhs, const exprt &rhs, const std::string &op);
+
+  /**
+   * @brief Constant-fold a dict-vs-dict equality when both AST operands are
+   * literal int-keyed, int-valued dicts (or their ``dict.fromkeys([...], v)``
+   * equivalent).
+   *
+   * Replaces the otherwise-quadratic ``__ESBMC_dict_eq`` runtime model call
+   * for the common literal-vs-literal pattern, which is the dominant cost
+   * under ``--incremental-bmc`` when each k iteration re-symbolises the
+   * comparison from scratch.
+   *
+   * Returns ``nullopt`` when either operand falls outside the recognised
+   * literal shape; callers must then fall back to the runtime model.
+   * Only int keys and int values are recognised today: string / nested /
+   * mixed-type dict literals fall through unchanged.
+   *
+   * @param lhs Left-hand AST node (Compare.left or BinOp.left).
+   * @param rhs Right-hand AST node (Compare.comparators[0] or BinOp.right).
+   * @return ``true`` / ``false`` if both sides fold; ``nullopt`` otherwise.
+   */
+  std::optional<bool> try_constant_fold_eq(
+    const nlohmann::json &lhs,
+    const nlohmann::json &rhs) const;
 
 private:
   /// Reference to the main Python converter
