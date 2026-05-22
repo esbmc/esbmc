@@ -129,12 +129,12 @@ jobs:
       - name: Setup SV-Benchmarks version
         run: cd $HOME/sv-benchmarks && git fetch --all --tags --force && git checkout ${{ inputs.svbenchmarks }} && if [ "${{ inputs.svbenchmarks }}" == "main" ]; then git reset --hard origin/main; fi
       - name: Download Linux Build
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: 'release-ubuntu-24.04--b Release -e OFF -C'
           path: ./
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           path: esbmc-src
       - name: Set up the custom runset
@@ -176,13 +176,13 @@ jobs:
         run: mv $HOME/output.zip ./output.zip      
       - name: Debug Info
         run: ls
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: esbmc-result
           path: output.zip  
       - name: Checkout code for validation
         if: ${{ inputs.validate == true }}
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           path: esbmc-src
       - name: Run Validation (Full)
@@ -209,7 +209,7 @@ jobs:
       - name: Show validation summary
         if: ${{ inputs.validate == true }}
         run: tail -v $HOME/witness-output/*results*.txt | sed -E 's|^==> .*/([^/.]+)\..* <==$|==> \1 <==|'
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: ${{ inputs.validate == true }}
         with:
           name: witness-result
