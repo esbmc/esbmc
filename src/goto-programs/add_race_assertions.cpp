@@ -31,10 +31,10 @@ public:
     symbolt new_symbol;
     new_symbol.id = identifier;
     new_symbol.name = identifier;
-    new_symbol.type =
+    new_symbol.get_type() =
       original_expr.is_index() ? migrate_type_back(index) : typet("bool");
     new_symbol.static_lifetime = true;
-    new_symbol.value.make_false();
+    new_symbol.get_value().make_false();
 
     symbolt *symbol_ptr;
     context.move(new_symbol, symbol_ptr);
@@ -78,9 +78,9 @@ void w_guardst::add_initialization(goto_programt &goto_program)
   symbolt new_symbol;
   new_symbol.id = identifier;
   new_symbol.name = identifier;
-  new_symbol.type = migrate_type_back(arrayt);
+  new_symbol.get_type() = migrate_type_back(arrayt);
   new_symbol.static_lifetime = true;
-  new_symbol.value.make_false();
+  new_symbol.get_value().make_false();
   context.move_symbol_to_context(new_symbol);
 
   for (const auto &w_guard : w_guards)
@@ -90,8 +90,9 @@ void w_guardst::add_initialization(goto_programt &goto_program)
     expr2tc new_sym;
     migrate_expr(symbol, new_sym);
 
-    expr2tc falsity = s.type.is_array() ? gen_zero(migrate_type(s.type), true)
-                                        : gen_false_expr();
+    expr2tc falsity = s.get_type().is_array()
+                        ? gen_zero(migrate_type(s.get_type()), true)
+                        : gen_false_expr();
     t = goto_program.insert(t);
     t->type = ASSIGN;
     t->code = code_assign2tc(new_sym, falsity);

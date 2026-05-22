@@ -291,7 +291,7 @@ exprt python_converter::handle_membership_operator(
   {
     const symbolt *sym = symbol_table_.find_symbol(rhs.identifier());
     if (sym)
-      rhs_resolved_type = sym->type;
+      rhs_resolved_type = sym->get_type();
   }
 
   if (rhs_resolved_type.id() == "symbol")

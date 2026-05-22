@@ -595,7 +595,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           symbol_id func_sid(current_python_file, "", var_name);
           symbolt *func_symbol =
             symbol_table_.find_symbol(func_sid.to_string());
-          if (func_symbol && func_symbol->type.is_code())
+          if (func_symbol && func_symbol->get_type().is_code())
           {
             expr = symbol_expr(*func_symbol);
             break;
@@ -631,7 +631,9 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     // If the looked-up symbol is an enum class attribute with int type,
     // wrap it in the proper enum struct expression so callers that expect
     // the enum class type (e.g. function parameters) receive a struct value.
-    if (is_class_attr && symbol->type.is_signedbv() && element.contains("attr"))
+    if (
+      is_class_attr && symbol->get_type().is_signedbv() &&
+      element.contains("attr"))
     {
       std::string cn = var_name;
       if (cn.starts_with("C@"))
@@ -649,7 +651,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       const std::string &attr_name = element["attr"].get<std::string>();
 
       // Delegate complex attribute access (.real, .imag) to the handler.
-      if (is_complex_type(symbol->type))
+      if (is_complex_type(symbol->get_type()))
       {
         exprt result =
           complex_handler_.handle_attribute_access(expr, attr_name);
@@ -662,8 +664,9 @@ exprt python_converter::get_expr(const nlohmann::json &element)
 
       // Get object type name from symbol. e.g.: tag-MyClass
       std::string obj_type_name;
-      const typet &symbol_type =
-        (symbol->type.is_pointer()) ? symbol->type.subtype() : symbol->type;
+      const typet &symbol_type = (symbol->get_type().is_pointer())
+                                   ? symbol->get_type().subtype()
+                                   : symbol->get_type();
 
       // Handle union types
       if (symbol_type.is_array() && symbol_type.subtype() == char_type())
@@ -679,9 +682,9 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           if (target_class_symbol)
             return; // Already found
 
-          if (s.id.as_string().find("tag-") == 0 && s.type.is_struct())
+          if (s.id.as_string().find("tag-") == 0 && s.get_type().is_struct())
           {
-            const struct_typet &struct_type = to_struct_type(s.type);
+            const struct_typet &struct_type = to_struct_type(s.get_type());
             if (struct_type.has_component(attr_name))
               target_class_symbol = const_cast<symbolt *>(&s);
           }
@@ -695,16 +698,17 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         }
 
         // Create a typecast from char* to target_class*
-        typet target_ptr_type = gen_pointer_type(target_class_symbol->type);
+        typet target_ptr_type =
+          gen_pointer_type(target_class_symbol->get_type());
         exprt casted_expr = typecast_exprt(expr, target_ptr_type);
 
         // Dereference to get the object
-        exprt deref_expr("dereference", target_class_symbol->type);
+        exprt deref_expr("dereference", target_class_symbol->get_type());
         deref_expr.copy_to_operands(casted_expr);
 
         // Access the member on the object
         const struct_typet &target_struct =
-          to_struct_type(target_class_symbol->type);
+          to_struct_type(target_class_symbol->get_type());
         const typet &attr_type = target_struct.get_component(attr_name).type();
         typet clean_type = clean_attribute_type(attr_type);
 
@@ -739,9 +743,9 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         symbol_table_.foreach_operand_in_order([&](const symbolt &s) {
           if (!fallback_class_id.empty())
             return;
-          if (s.id.as_string().find("tag-") == 0 && s.type.is_struct())
+          if (s.id.as_string().find("tag-") == 0 && s.get_type().is_struct())
           {
-            const struct_typet &st = to_struct_type(s.type);
+            const struct_typet &st = to_struct_type(s.get_type());
             if (st.has_component(attr_name))
               fallback_class_id = s.id.as_string();
           }
@@ -775,7 +779,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       }
 
       struct_typet &class_type =
-        static_cast<struct_typet &>(class_symbol->type);
+        static_cast<struct_typet &>(class_symbol->get_type());
       auto build_member_expr_from_class = [&](const typet &attr_type) -> exprt {
         typet clean_type = clean_attribute_type(attr_type);
         exprt base = symbol_expr(*symbol);

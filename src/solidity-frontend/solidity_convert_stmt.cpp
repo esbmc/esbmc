@@ -739,10 +739,10 @@ bool solidity_convertert::get_statement(
         {
           const symbolt &sym =
             *context.find_symbol(var_decl.op0().identifier());
-          symbol_exprt sym_expr(sym.id, sym.type);
+          symbol_exprt sym_expr(sym.id, sym.get_type());
 
           exprt nondet_val;
-          get_nondet_expr(sym.type, nondet_val);
+          get_nondet_expr(sym.get_type(), nondet_val);
 
           code_assignt assign(sym_expr, nondet_val);
           assign.location() = loc;
@@ -785,9 +785,9 @@ bool solidity_convertert::get_statement(
           {
             const symbolt &sym =
               *context.find_symbol(var_decl.op0().identifier());
-            symbol_exprt sym_expr(sym.id, sym.type);
+            symbol_exprt sym_expr(sym.id, sym.get_type());
             exprt nondet_val;
-            get_nondet_expr(sym.type, nondet_val);
+            get_nondet_expr(sym.get_type(), nondet_val);
             code_assignt assign(sym_expr, nondet_val);
             assign.location() = loc;
             catch_block.copy_to_operands(var_decl);

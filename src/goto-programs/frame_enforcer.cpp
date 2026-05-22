@@ -231,7 +231,7 @@ frame_enforcert::collect_global_variables(const contextt &context)
 
   context.foreach_operand([&globals](const symbolt &s) {
     // Skip functions, types, and non-lvalue symbols
-    if (s.type.is_code() || s.is_type || !s.lvalue)
+    if (s.get_type().is_code() || s.is_type || !s.lvalue)
       return;
 
     // Only process static lifetime variables (globals and static locals)
@@ -244,7 +244,7 @@ frame_enforcert::collect_global_variables(const contextt &context)
       return;
 
     // Build symbol expression
-    type2tc global_type = migrate_type(s.type);
+    type2tc global_type = migrate_type(s.get_type());
     expr2tc sym_expr = symbol2tc(global_type, s.id);
 
     // Skip pointer types (consistent with loop frame rule behavior)
@@ -359,7 +359,7 @@ expr2tc frame_enforcert::create_snapshot_symbol(
   symbolt snapshot_symbol;
   snapshot_symbol.name = snapshot_name;
   snapshot_symbol.id = snapshot_name;
-  snapshot_symbol.type = migrate_type_back(original->type);
+  snapshot_symbol.get_type() = migrate_type_back(original->type);
   snapshot_symbol.lvalue = true;
   snapshot_symbol.static_lifetime = false;
   snapshot_symbol.file_local = false;

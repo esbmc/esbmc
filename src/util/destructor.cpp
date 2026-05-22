@@ -18,7 +18,8 @@ code_function_callt get_destructor(const namespacet &ns, const typet &type)
       const symbolt *cpp_delete = ns.get_context().find_symbol(it->second);
 
       code_function_callt function_call;
-      function_call.function() = symbol_exprt(cpp_delete->id, cpp_delete->type);
+      function_call.function() =
+        symbol_exprt(cpp_delete->id, cpp_delete->get_type());
 
       return function_call;
     }

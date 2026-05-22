@@ -369,9 +369,11 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
    * infinite recursion if the type we're defining refers to itself
    * (via pointers): it either is already being defined (up the stack somewhere)
    * or it's already a complete struct or union in the context. */
-  if (!sym->type.incomplete() && sym->type.id() != "incomplete_struct")
+  if (
+    !sym->get_type().incomplete() &&
+    sym->get_type().id() != "incomplete_struct")
     return false;
-  sym->type.remove(irept::a_incomplete);
+  sym->get_type().remove(irept::a_incomplete);
 
   clang::RecordDecl *rd_def = rd.getDefinition();
   assert(rd_def);
@@ -427,10 +429,10 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   assert(sym && "symbol disappeared from context during field conversion");
   symbolt symbol = *sym;
   context.erase_symbol(symbol.id);
-  symbol.type = t;
+  symbol.get_type() = t;
   sym = context.move_symbol_to_context(symbol);
 
-  if (get_struct_union_class_methods_decls(*rd_def, sym->type))
+  if (get_struct_union_class_methods_decls(*rd_def, sym->get_type()))
     return true;
 
   return false;
@@ -545,8 +547,8 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
 
     // Initialize with zero value, if the symbol has initial value,
     // it will be added later on in this method
-    symbol.value = gen_zero(get_complete_type(t, ns), true);
-    symbol.value.zero_initializer(true);
+    symbol.get_value() = gen_zero(get_complete_type(t, ns), true);
+    symbol.get_value().zero_initializer(true);
   }
 
   symbolt *added_symbol = nullptr;
@@ -616,7 +618,7 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
     added_symbol = context.move_symbol_to_context(symbol);
     gen_typecast(ns, val, t);
     if (!aggregate_without_init)
-      added_symbol->value = val;
+      added_symbol->get_value() = val;
 
     code_declt decl(symbol_expr(*added_symbol));
     decl.location() = location_begin;
@@ -643,7 +645,7 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
 
       gen_typecast(ns, val, t);
 
-      added_symbol->value = val;
+      added_symbol->get_value() = val;
       decl.operands().push_back(val);
     }
 
@@ -738,14 +740,14 @@ bool clang_c_convertert::get_function(
     }
   }
 
-  added_symbol.type = type;
+  added_symbol.get_type() = type;
   new_expr.type() = type;
 
   // We need: a type, a name, and an optional body.
   // Always call get_function_body so overrides (e.g. the C++ frontend) can
   // synthesise a body for bodyless declarations such as trivial destructors.
   // The base implementation returns immediately when fd.hasBody() is false.
-  if (get_function_body(fd, added_symbol.value, type))
+  if (get_function_body(fd, added_symbol.get_value(), type))
     return true;
 
   // Restore old functionDecl
@@ -2138,7 +2140,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     cl.static_lifetime = !current_block || compound.isFileScope();
     cl.is_extern = false;
     cl.file_local = true;
-    cl.value = initializer;
+    cl.get_value() = initializer;
 
     new_expr = symbol_expr(cl);
 
@@ -4243,7 +4245,7 @@ void clang_c_convertert::get_default_symbol(
   symbol.mode = mode;
   symbol.module = module_name;
   symbol.location = std::move(location);
-  symbol.type = std::move(type);
+  symbol.get_type() = std::move(type);
   symbol.name = name;
   symbol.id = id;
 }

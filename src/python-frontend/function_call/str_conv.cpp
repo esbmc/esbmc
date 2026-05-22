@@ -190,7 +190,7 @@ exprt function_call_expr::handle_chr(nlohmann::json &arg) const
         var_expr, loc);
     }
 
-    exprt val = sym->value;
+    exprt val = sym->get_value();
 
     if (!val.is_constant())
       val = converter_.get_resolved_value(val);
@@ -299,7 +299,7 @@ exprt function_call_expr::handle_ord(nlohmann::json &arg) const
         "NameError", "variable '" + var_name + "' is not defined");
     }
 
-    typet operand_type = sym->value.type();
+    typet operand_type = sym->get_value().type();
     std::string py_type = type_handler_.type_to_string(operand_type);
 
     if (operand_type != char_type() && py_type != "str")
@@ -310,7 +310,7 @@ exprt function_call_expr::handle_ord(nlohmann::json &arg) const
     }
 
     // For runtime variables (mutable), try to extract constant value if available
-    if (sym->lvalue && !sym->value.is_nil())
+    if (sym->lvalue && !sym->get_value().is_nil())
     {
       auto value_opt = extract_string_from_symbol(sym);
       if (value_opt)
@@ -336,7 +336,7 @@ exprt function_call_expr::handle_ord(nlohmann::json &arg) const
     }
 
     // Use runtime conversion for variables without constant value or failed extraction
-    if (sym->value.is_nil() || sym->lvalue)
+    if (sym->get_value().is_nil() || sym->lvalue)
     {
       exprt var_expr = converter_.get_expr(arg);
 
@@ -573,7 +573,7 @@ exprt function_call_expr::handle_oct(nlohmann::json &arg) const
 std::optional<std::string>
 function_call_expr::extract_string_from_symbol(const symbolt *sym) const
 {
-  const exprt &val = sym->value;
+  const exprt &val = sym->get_value();
   std::string result;
 
   if (val.id() == "if" && val.operands().size() == 3)
@@ -581,13 +581,13 @@ function_call_expr::extract_string_from_symbol(const symbolt *sym) const
     const exprt &cond = val.operands()[0];
 
     symbolt true_sym;
-    true_sym.value = val.operands()[1];
-    true_sym.type = true_sym.value.type();
+    true_sym.get_value() = val.operands()[1];
+    true_sym.get_type() = true_sym.get_value().type();
     auto true_text = extract_string_from_symbol(&true_sym);
 
     symbolt false_sym;
-    false_sym.value = val.operands()[2];
-    false_sym.type = false_sym.value.type();
+    false_sym.get_value() = val.operands()[2];
+    false_sym.get_type() = false_sym.get_value().type();
     auto false_text = extract_string_from_symbol(&false_sym);
 
     if (cond.is_true())

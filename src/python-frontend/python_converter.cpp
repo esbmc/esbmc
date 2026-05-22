@@ -120,7 +120,7 @@ static void add_global_static_variable(
   std::string id = "c:@" + name;
   symbolt symbol;
   symbol.mode = "C";
-  symbol.type = std::move(t);
+  symbol.get_type() = std::move(t);
   symbol.name = name;
   symbol.id = id;
 
@@ -128,8 +128,8 @@ static void add_global_static_variable(
   symbol.static_lifetime = true;
   symbol.is_extern = false;
   symbol.file_local = false;
-  symbol.value = gen_zero(t, true);
-  symbol.value.zero_initializer(true);
+  symbol.get_value() = gen_zero(t, true);
+  symbol.get_value().zero_initializer(true);
 
   symbolt *added_symbol = ctx.move_symbol_to_context(symbol);
   assert(added_symbol);
@@ -189,7 +189,7 @@ void python_converter::create_builtin_symbols()
         integer2binary(BigInt(0), bv_width(char_type_ref)),
         integer2string(BigInt(0)),
         char_type_ref);
-      sym.value = value_expr;
+      sym.get_value() = value_expr;
 
       symbol_table_.add(sym);
     };
@@ -513,7 +513,7 @@ void python_converter::convert()
     call.function() = symbol_expr(*symbol);
 
     const code_typet::argumentst &arguments =
-      to_code_type(symbol->type).arguments();
+      to_code_type(symbol->get_type()).arguments();
 
     // Function args are nondet values
     for (const code_typet::argumentt &arg : arguments)
@@ -641,7 +641,7 @@ void python_converter::convert()
     symbolt init_symbol;
     init_symbol.id = "python_init";
     init_symbol.name = "python_init";
-    init_symbol.type = init_type;
+    init_symbol.get_type() = init_type;
     init_symbol.lvalue = true;
     init_symbol.is_extern = false;
     init_symbol.file_local = false;
@@ -655,7 +655,7 @@ void python_converter::convert()
     code_blockt init_body;
     init_body.copy_to_operands(esbmc_hide);
     init_body.copy_to_operands(init_code);
-    init_symbol.value.swap(init_body);
+    init_symbol.get_value().swap(init_body);
 
     if (symbol_table_.move(init_symbol))
     {
@@ -670,12 +670,12 @@ void python_converter::convert()
   symbolt user_main_symbol;
   user_main_symbol.id = "python_user_main";
   user_main_symbol.name = "python_user_main";
-  user_main_symbol.type = user_main_type;
+  user_main_symbol.get_type() = user_main_type;
   user_main_symbol.lvalue = true;
   user_main_symbol.is_extern = false;
   user_main_symbol.file_local = false;
   user_main_symbol.location = get_location_from_decl(*ast_json);
-  user_main_symbol.value = user_code;
+  user_main_symbol.get_value() = user_code;
 
   if (symbol_table_.move(user_main_symbol))
   {
@@ -690,7 +690,7 @@ void python_converter::convert()
   symbolt main_symbol;
   main_symbol.id = "__ESBMC_main";
   main_symbol.name = "__ESBMC_main";
-  main_symbol.type = main_type;
+  main_symbol.get_type() = main_type;
   main_symbol.lvalue = true;
   main_symbol.is_extern = false;
   main_symbol.file_local = false;
@@ -700,9 +700,9 @@ void python_converter::convert()
 
   // 1. Initialize static lifetime variables
   symbol_table_.foreach_operand_in_order([&main_body](const symbolt &s) {
-    if (s.static_lifetime && !s.value.is_nil() && !s.type.is_code())
+    if (s.static_lifetime && !s.get_value().is_nil() && !s.get_type().is_code())
     {
-      code_assignt assign(symbol_expr(s), s.value);
+      code_assignt assign(symbol_expr(s), s.get_value());
       assign.location() = s.location;
       main_body.copy_to_operands(assign);
     }
@@ -776,7 +776,7 @@ void python_converter::convert()
 
   main_body.copy_to_operands(make_hook_call("__ESBMC_pthread_end_main_hook"));
 
-  main_symbol.value.swap(main_body);
+  main_symbol.get_value().swap(main_body);
 
   if (symbol_table_.move(main_symbol))
   {

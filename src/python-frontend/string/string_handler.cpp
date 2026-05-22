@@ -956,10 +956,12 @@ bool string_handler::try_extract_const_string_expr(
     const auto &sym_expr = to_symbol_expr(str_expr);
     const symbolt *symbol =
       find_cached_symbol(sym_expr.get_identifier().as_string());
-    if (!symbol || symbol->value.is_nil() || !symbol->value.type().is_array())
+    if (
+      !symbol || symbol->get_value().is_nil() ||
+      !symbol->get_value().type().is_array())
       return false;
 
-    out = extract_string_from_array_operands(symbol->value);
+    out = extract_string_from_array_operands(symbol->get_value());
     return true;
   }
 
@@ -989,9 +991,9 @@ BigInt string_handler::get_string_size(const exprt &expr)
     if (expr.is_symbol())
     {
       const symbolt *symbol = find_cached_symbol(expr.identifier().as_string());
-      if (symbol && symbol->type.is_array())
+      if (symbol && symbol->get_type().is_array())
       {
-        const auto &arr_type = to_array_type(symbol->type);
+        const auto &arr_type = to_array_type(symbol->get_type());
         return binary2integer(arr_type.size().value().as_string(), false);
       }
       // For non-array symbols, we need a reasonable default since we can't compute actual size
@@ -1242,8 +1244,8 @@ exprt string_handler::apply_format_specification(
             const symbolt *symbol =
               find_cached_symbol(sym_expr.get_identifier().as_string());
 
-            if (symbol && symbol->value.is_constant())
-              float_bits = &symbol->value.value().as_string();
+            if (symbol && symbol->get_value().is_constant())
+              float_bits = &symbol->get_value().value().as_string();
           }
 
           if (float_bits && float_bits->length() == float_width)
@@ -1295,12 +1297,14 @@ exprt string_handler::convert_to_string(const exprt &expr)
     if (symbol)
     {
       // If symbol has string type, return it
-      if (symbol->type.is_array() && symbol->type.subtype() == char_type())
+      if (
+        symbol->get_type().is_array() &&
+        symbol->get_type().subtype() == char_type())
         return expr;
 
       // If symbol has a constant value, convert that
-      if (symbol->value.is_constant())
-        return convert_to_string(symbol->value);
+      if (symbol->get_value().is_constant())
+        return convert_to_string(symbol->get_value());
     }
   }
 
@@ -1673,7 +1677,7 @@ exprt string_handler::handle_string_membership(
     const symbolt *sym = find_cached_symbol(lhs.get_string("identifier"));
     if (sym)
     {
-      const typet &value_type = sym->value.type();
+      const typet &value_type = sym->get_value().type();
       if (
         (value_type.is_signedbv() || value_type.is_unsignedbv()) &&
         bv_width(value_type) == char_width)
@@ -1701,7 +1705,7 @@ exprt string_handler::handle_string_membership(
       strchr_type.return_type() = char_ptr;
       strchr_type.arguments().push_back(code_typet::argumentt(char_ptr));
       strchr_type.arguments().push_back(code_typet::argumentt(int_type()));
-      new_symbol.type = strchr_type;
+      new_symbol.get_type() = strchr_type;
 
       symbol_table_.add(new_symbol);
       strchr_symbol = find_cached_c_function_symbol("c:@F@strchr");
@@ -1741,8 +1745,10 @@ exprt string_handler::handle_string_membership(
     if (e.is_symbol())
     {
       const symbolt *sym = find_cached_symbol(e.identifier().as_string());
-      if (sym && sym->value.is_constant() && sym->value.type().is_array())
-        return &sym->value;
+      if (
+        sym && sym->get_value().is_constant() &&
+        sym->get_value().type().is_array())
+        return &sym->get_value();
     }
     return nullptr;
   };
@@ -2155,10 +2161,12 @@ exprt string_handler::try_handle_len_string_fast_path(
     symbolt *arg_symbol = converter_.find_symbol(
       to_symbol_expr(arg_expr).get_identifier().as_string());
     if (
-      arg_symbol && arg_symbol->value.is_not_nil() &&
-      arg_symbol->value.type().is_array() && arg_symbol->value.is_constant())
+      arg_symbol && arg_symbol->get_value().is_not_nil() &&
+      arg_symbol->get_value().type().is_array() &&
+      arg_symbol->get_value().is_constant())
     {
-      const array_typet &arr_type = to_array_type(arg_symbol->value.type());
+      const array_typet &arr_type =
+        to_array_type(arg_symbol->get_value().type());
       if (
         type_utils::is_char_type(arr_type.subtype()) &&
         arr_type.size().is_constant())

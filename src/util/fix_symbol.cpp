@@ -6,8 +6,8 @@ void fix_symbolt::fix_symbol(symbolt &symbol)
   if (it != type_map.end())
     symbol.id = it->second.id();
 
-  replace(symbol.type);
-  replace(symbol.value);
+  replace(symbol.get_type());
+  replace(symbol.get_value());
 }
 
 void fix_symbolt::fix_context(contextt &context)

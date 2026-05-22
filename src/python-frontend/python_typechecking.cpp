@@ -176,7 +176,7 @@ exprt python_typechecking::build_isinstance_check(
     {
       const symbolt *symbol = ns.lookup(pointed_type);
       if (symbol != nullptr)
-        pointed_type = symbol->type;
+        pointed_type = symbol->get_type();
     }
 
     if (pointed_type.is_struct())

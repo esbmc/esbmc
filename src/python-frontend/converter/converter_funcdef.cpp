@@ -100,7 +100,7 @@ symbolt python_converter::create_return_temp_variable(
   symbolt temp_symbol;
   temp_symbol.id = temp_sid.to_string();
   temp_symbol.name = temp_sid.to_string();
-  temp_symbol.type = return_type;
+  temp_symbol.get_type() = return_type;
   temp_symbol.lvalue = true;
   temp_symbol.static_lifetime = false;
   temp_symbol.location = location;
@@ -609,7 +609,7 @@ void python_converter::process_function_arguments(
               {
                 symbolt *param_sym = symbol_table_.find_symbol(param_id);
                 if (param_sym)
-                  param_sym->type = default_expr.type();
+                  param_sym->get_type() = default_expr.type();
               }
             }
           }
@@ -666,7 +666,7 @@ void python_converter::process_function_arguments(
       {
         symbolt *param_sym = symbol_table_.find_symbol(param_id);
         if (param_sym)
-          param_sym->type = list_t;
+          param_sym->get_type() = list_t;
       }
     }
   }
@@ -702,7 +702,7 @@ void python_converter::process_function_arguments(
     {
       symbolt *param_sym = symbol_table_.find_symbol(param_id);
       if (param_sym)
-        param_sym->type = ptr_type;
+        param_sym->get_type() = ptr_type;
     }
   }
 }
@@ -994,7 +994,7 @@ void python_converter::get_function_definition(
         typet optional_type = type_handler_.build_optional_type(value_type);
         type.return_type() = optional_type;
         current_element_type = optional_type;
-        added_symbol->type = type;
+        added_symbol->get_type() = type;
       }
     }
     else
@@ -1005,7 +1005,7 @@ void python_converter::get_function_definition(
         type_handler_.build_optional_type(type.return_type());
       type.return_type() = optional_type;
       current_element_type = optional_type;
-      added_symbol->type = type;
+      added_symbol->get_type() = type;
     }
   }
 
@@ -1018,7 +1018,7 @@ void python_converter::get_function_definition(
     {
       type.return_type() = inferred_type;
       current_element_type = inferred_type;
-      added_symbol->type = type;
+      added_symbol->get_type() = type;
     }
   }
 
@@ -1039,7 +1039,7 @@ void python_converter::get_function_definition(
     if (!inferred_type.is_empty())
     {
       type.return_type() = inferred_type;
-      added_symbol->type = type; // Update the symbol's type
+      added_symbol->get_type() = type; // Update the symbol's type
     }
   }
 
@@ -1063,7 +1063,7 @@ void python_converter::get_function_definition(
           if (!ret_type.is_empty())
           {
             type.return_type() = ret_type;
-            added_symbol->type = type;
+            added_symbol->get_type() = type;
             break;
           }
         }
@@ -1089,7 +1089,7 @@ void python_converter::get_function_definition(
   // Validate return paths
   validate_return_paths(function_node, type, function_body);
 
-  added_symbol->value = function_body;
+  added_symbol->get_value() = function_body;
 
   scope_stack_.pop_back();
 

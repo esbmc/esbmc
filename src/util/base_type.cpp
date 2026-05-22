@@ -9,9 +9,9 @@ void base_type(type2tc &type, const namespacet &ns)
   {
     const symbolt *symbol = ns.lookup(to_symbol_type(type).symbol_name);
 
-    if (symbol && symbol->is_type && !symbol->type.is_nil())
+    if (symbol && symbol->is_type && !symbol->get_type().is_nil())
     {
-      type = migrate_type(symbol->type);
+      type = migrate_type(symbol->get_type());
       base_type(type, ns); // recursive call
       return;
     }
@@ -37,9 +37,9 @@ void base_type(typet &type, const namespacet &ns)
   {
     const symbolt *symbol = ns.lookup(type.identifier());
 
-    if (symbol && symbol->is_type && !symbol->type.is_nil())
+    if (symbol && symbol->is_type && !symbol->get_type().is_nil())
     {
-      type = symbol->type;
+      type = symbol->get_type();
       base_type(type, ns); // recursive call
       return;
     }
@@ -125,7 +125,7 @@ bool base_type_eqt::base_type_eq_rec(const type2tc &type1, const type2tc &type2)
     if (!symbol->is_type)
       throw "symbol " + id2string(symbol->name) + " is not a type";
 
-    type2tc tmp = migrate_type(symbol->type);
+    type2tc tmp = migrate_type(symbol->get_type());
     return base_type_eq_rec(tmp, type2);
   }
 
@@ -137,7 +137,7 @@ bool base_type_eqt::base_type_eq_rec(const type2tc &type1, const type2tc &type2)
     if (!symbol->is_type)
       throw "symbol " + id2string(symbol->name) + " is not a type";
 
-    type2tc tmp = migrate_type(symbol->type);
+    type2tc tmp = migrate_type(symbol->get_type());
     return base_type_eq_rec(type1, tmp);
   }
 
@@ -239,7 +239,7 @@ bool base_type_eqt::base_type_eq_rec(const typet &type1, const typet &type2)
     if (!symbol->is_type)
       throw "symbol " + id2string(symbol->name) + " is not a type";
 
-    return base_type_eq_rec(symbol->type, type2);
+    return base_type_eq_rec(symbol->get_type(), type2);
   }
 
   if (type2.id() == "symbol")
@@ -250,7 +250,7 @@ bool base_type_eqt::base_type_eq_rec(const typet &type1, const typet &type2)
     if (!symbol->is_type)
       throw "symbol " + id2string(symbol->name) + " is not a type";
 
-    return base_type_eq_rec(type1, symbol->type);
+    return base_type_eq_rec(type1, symbol->get_type());
   }
 
   if (type1.id() != type2.id())
@@ -450,7 +450,7 @@ static bool is_subclass_of_rec(
   {
     // look at the list of bases; see if the subclass name is a base of this
     // object. Currently, old-irep.
-    forall_irep (it, symbol->type.find("bases").get_sub())
+    forall_irep (it, symbol->get_type().find("bases").get_sub())
     {
       const std::string &basename = it->id_string();
       if (basename == supername)

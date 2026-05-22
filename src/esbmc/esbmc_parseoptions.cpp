@@ -3011,7 +3011,7 @@ expr2tc esbmc_parseoptionst::calculate_a_property_monitor(
   const symbolt *fn = context.find_symbol("c:@F@" + name + "_status");
   assert(fn);
 
-  const codet &fn_code = to_code(fn->value);
+  const codet &fn_code = to_code(fn->get_value());
   assert(fn_code.get_statement() == "block");
   assert(fn_code.operands().size() == 1);
 
@@ -3107,7 +3107,7 @@ static unsigned int calc_globals_used(const namespacet &ns, const expr2tc &expr)
 
   const symbolt *sym = ns.lookup(identifier);
   assert(sym);
-  if (sym->static_lifetime || sym->type.is_dynamic_set())
+  if (sym->static_lifetime || sym->get_type().is_dynamic_set())
     return 1;
 
   return 0;

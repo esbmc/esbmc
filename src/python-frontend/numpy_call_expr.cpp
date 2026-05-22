@@ -321,7 +321,7 @@ void numpy_call_expr::broadcast_check(const nlohmann::json &operands) const
 
       // Retrieve the current operand's array shape.
       std::vector<int> current_shape =
-        converter_.type_handler_.get_array_type_shape(s->type);
+        converter_.type_handler_.get_array_type_shape(s->get_type());
 
       // For subsequent operands, compare shapes using broadcasting rules.
       if (!is_first_operand)

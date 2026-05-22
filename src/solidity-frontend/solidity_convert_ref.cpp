@@ -680,7 +680,7 @@ bool solidity_convertert::get_sol_builtin_ref(
             aux_sym.file_local = true;
 
             auto &inserted = *move_symbol_to_context(aux_sym);
-            inserted.value = default_value;
+            inserted.get_value() = default_value;
 
             code_declt decl(symbol_expr(inserted));
             decl.operands().push_back(default_value);
@@ -714,7 +714,7 @@ bool solidity_convertert::get_sol_builtin_ref(
               l);
             auto &added_aux = *move_symbol_to_context(aux_idx);
             code_declt decl(symbol_expr(added_aux));
-            added_aux.value = args;
+            added_aux.get_value() = args;
             decl.operands().push_back(args);
             move_to_front_block(decl);
             args = address_of_exprt(symbol_expr(added_aux));
@@ -834,7 +834,7 @@ bool solidity_convertert::get_sol_builtin_ref(
 
           side_effect_expr_function_callt first;
           get_library_function_call_no_args(
-            "string_concat", "c:@F@string_concat", sym->type, l, first);
+            "string_concat", "c:@F@string_concat", sym->get_type(), l, first);
           first.arguments().push_back(args[0]);
           first.arguments().push_back(args[1]);
 
@@ -843,7 +843,7 @@ bool solidity_convertert::get_sol_builtin_ref(
           {
             side_effect_expr_function_callt next;
             get_library_function_call_no_args(
-              "string_concat", "c:@F@string_concat", sym->type, l, next);
+              "string_concat", "c:@F@string_concat", sym->get_type(), l, next);
             next.arguments().push_back(result);
             next.arguments().push_back(args[i]);
             result = next;
@@ -865,7 +865,7 @@ bool solidity_convertert::get_sol_builtin_ref(
           get_library_function_call_no_args(
             "bytes_dynamic_concat",
             "c:@F@bytes_dynamic_concat",
-            sym->type,
+            sym->get_type(),
             l,
             first);
           first.arguments().push_back(args[0]);
@@ -879,7 +879,7 @@ bool solidity_convertert::get_sol_builtin_ref(
             get_library_function_call_no_args(
               "bytes_dynamic_concat",
               "c:@F@bytes_dynamic_concat",
-              sym->type,
+              sym->get_type(),
               l,
               next);
             next.arguments().push_back(result);
@@ -913,13 +913,13 @@ bool solidity_convertert::get_sol_builtin_ref(
     {
       symbolt &sym = *context.find_symbol(id_var);
 
-      if (sym.value.is_empty() || sym.value.is_zero())
+      if (sym.get_value().is_empty() || sym.get_value().is_zero())
       {
         // update: set the value to rand (default 0）
         // since all the current support built-in vars are uint type.
         // we just set the value to c:@F@nondet_uint
         symbolt &r = *context.find_symbol("c:@F@nondet_uint");
-        sym.value = r.value;
+        sym.get_value() = r.get_value();
       }
       new_expr = symbol_expr(sym);
     }

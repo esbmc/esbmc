@@ -363,8 +363,8 @@ bool solidity_languaget::typecheck(contextt &context, const std::string &module)
   // adjusted by c2goto's clang_c_adjust).
   std::unordered_map<std::string, exprt> saved_values;
   new_context.Foreach_operand([&](symbolt &s) {
-    if (lib_symbols.count(s.id.as_string()) && s.value.is_not_nil())
-      saved_values[s.id.as_string()] = s.value;
+    if (lib_symbols.count(s.id.as_string()) && s.get_value().is_not_nil())
+      saved_values[s.id.as_string()] = s.get_value();
   });
 
   clang_cpp_adjust adjuster(new_context);
@@ -376,7 +376,7 @@ bool solidity_languaget::typecheck(contextt &context, const std::string &module)
   {
     symbolt *s = new_context.find_symbol(id);
     if (s)
-      s->value = std::move(val);
+      s->get_value() = std::move(val);
   }
 
   if (c_link(

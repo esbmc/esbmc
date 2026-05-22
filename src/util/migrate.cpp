@@ -26,13 +26,13 @@ inline code_function_callt invoke_intrinsic(
 
   symbolt symbol;
   symbol.mode = "C";
-  symbol.type = code_type;
+  symbol.get_type() = code_type;
   symbol.name = name;
   symbol.id = name;
   symbol.is_extern = false;
   symbol.file_local = false;
 
-  exprt tmp("symbol", symbol.type);
+  exprt tmp("symbol", symbol.get_type());
   tmp.identifier(symbol.id);
   tmp.name(symbol.name);
 
@@ -534,7 +534,13 @@ expr2tc sym_name_to_symbol(const irep_idt &init, const type2tc &type)
     // Fix this by ensuring that /all/ symbols with the same name use the type
     // from the global symbol table.
     return symbol2tc(
-      migrate_type(sym->type), init, symbol_renaming_level::level0, 0, 0, 0, 0);
+      migrate_type(sym->get_type()),
+      init,
+      symbol_renaming_level::level0,
+      0,
+      0,
+      0,
+      0);
   }
   if (
     init.as_string().compare(0, 3, "cs$") == 0 ||

@@ -1818,7 +1818,7 @@ bool clang_cpp_convertert::get_function_body(
             symbolt new_symbol;
             new_symbol.name = "array_init$";
             new_symbol.id = id2string(this_ptr.identifier()) + "_array_init$";
-            new_symbol.type = this_type;
+            new_symbol.get_type() = this_type;
             if (context.move(new_symbol, array_init_sym))
             {
               log_error(
@@ -2339,12 +2339,12 @@ bool clang_cpp_convertert::annotate_class_method(
     symbolt *fd_symb = get_fd_symbol(cxxmdd);
     if (fd_symb)
     {
-      fd_symb->type = component_type;
+      fd_symb->get_type() = component_type;
       /*
        * we indicate the need for vptr initializations in contructor.
        * vptr initializations will be added in the adjuster.
        */
-      fd_symb->value.need_vptr_init(has_vptr_component);
+      fd_symb->get_value().need_vptr_init(has_vptr_component);
     }
   }
 
@@ -2548,7 +2548,7 @@ void clang_cpp_convertert::get_base_components_methods(
     assert(s);
     base_ids.emplace_back(s->id);
 
-    const struct_typet &base_type = to_struct_type(s->type);
+    const struct_typet &base_type = to_struct_type(s->get_type());
 
     // pull components in
     const struct_typet::componentst &components = base_type.components();

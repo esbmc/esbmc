@@ -427,7 +427,7 @@ bool solidity_convertert::get_new_mapping_index_access(
     get_call.arguments().push_back(address_of_exprt(array));
     get_call.arguments().push_back(pos);
     solidity_gen_typecast(ns, get_call, aux_type);
-    added_sym.value = get_call;
+    added_sym.get_value() = get_call;
     decl.operands().push_back(get_call);
     move_to_front_block(decl);
 
@@ -475,7 +475,7 @@ bool solidity_convertert::get_new_mapping_index_access(
       value_t, struct_contract_name, call, map_struct_get);
 
     // struct temp = map_users_get(&array, pos);
-    added_sym.value = map_struct_get;
+    added_sym.get_value() = map_struct_get;
     decl.operands().push_back(map_struct_get);
     move_to_front_block(decl);
 
@@ -556,7 +556,7 @@ void solidity_convertert::get_mapping_struct_function(
   // for typcast
   side_effect_expr_function_callt temp_call = gen_call;
   solidity_gen_typecast(ns, temp_call, aux_type);
-  added_sym.value = temp_call;
+  added_sym.get_value() = temp_call;
   decl.operands().push_back(temp_call);
   // move to func body
   func_body.operands().push_back(decl);
@@ -584,7 +584,7 @@ void solidity_convertert::get_mapping_struct_function(
   code_declt decl2(symbol_expr(added_sym2));
   // zero value
   exprt inits = gen_zero(get_complete_type(aux_type2, ns), true);
-  added_sym2.value = inits;
+  added_sym2.get_value() = inits;
   decl2.operands().push_back(inits);
   // move to func body
   func_body.operands().push_back(decl2);
@@ -602,7 +602,7 @@ void solidity_convertert::get_mapping_struct_function(
   ret.return_value() = if_expr;
   func_body.operands().push_back(ret);
 
-  func_sym.value = func_body;
+  func_sym.get_value() = func_body;
 
   // func call
   call.function() = symbol_expr(func_sym);

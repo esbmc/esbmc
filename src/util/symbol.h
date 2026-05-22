@@ -12,8 +12,6 @@
 class symbolt
 {
 public:
-  typet type;
-  exprt value;
   locationt location;
   irep_idt id;
   irep_idt module;
@@ -32,6 +30,29 @@ public:
 
   symbolt();
 
+  // Accessors for the (now private) `type`/`value` fields. Introduced for the
+  // IREP2 symbol-table migration (esbmc/esbmc#4715, B2): all access goes
+  // through these so the storage can later become IREP2-native without touching
+  // every caller again. The mutable overloads are a transitional convenience
+  // (writes/swaps); a later step routes writes through a setter so the IREP2
+  // form can be kept in sync.
+  const typet &get_type() const
+  {
+    return type;
+  }
+  typet &get_type()
+  {
+    return type;
+  }
+  const exprt &get_value() const
+  {
+    return value;
+  }
+  exprt &get_value()
+  {
+    return value;
+  }
+
   void clear();
 
   void swap(symbolt &b);
@@ -43,6 +64,10 @@ public:
   void from_irep(const irept &src);
 
   irep_idt get_function_name() const;
+
+private:
+  typet type;
+  exprt value;
 };
 
 std::ostream &operator<<(std::ostream &out, const symbolt &symbol);
