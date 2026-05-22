@@ -66,12 +66,12 @@ public:
   {
     return (
       name == "int" || name == "float" || name == "bool" || name == "str" ||
-      name == "chr" || name == "hex" || name == "oct" || name == "ord" ||
-      name == "tuple" || name == "list" || name == "dict" || name == "set" ||
-      name == "frozenset" || name == "bytes" || name == "set" ||
-      name == "bytearray" || name == "range" || name == "complex" ||
-      name == "type" || name == "object" || name == "abs" || name == "None" ||
-      name == "divmod" || name == "slice");
+      name == "chr" || name == "hex" || name == "oct" || name == "bin" ||
+      name == "ord" || name == "tuple" || name == "list" || name == "dict" ||
+      name == "set" || name == "frozenset" || name == "bytes" ||
+      name == "set" || name == "bytearray" || name == "range" ||
+      name == "complex" || name == "type" || name == "object" ||
+      name == "abs" || name == "None" || name == "divmod" || name == "slice");
   }
 
   static bool is_consensus_type(const std::string &name)

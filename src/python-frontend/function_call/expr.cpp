@@ -699,6 +699,10 @@ exprt function_call_expr::build_constant_from_arg() const
   else if (func_name == "oct")
     return handle_oct(arg);
 
+  // Handle bin: Handles binary string arguments
+  else if (func_name == "bin")
+    return handle_bin(arg);
+
   // Handle abs: Returns the absolute value of an integer or float literal
   else if (func_name == "abs")
     return handle_abs(arg);
@@ -2554,6 +2558,38 @@ function_call_expr::get_dispatch_table()
      },
      [this]() { return handle_divmod(); },
      "divmod"},
+
+    // pow() builtin (2- and 3-argument forms)
+    {[this]() {
+       return function_id_.get_function() == "pow" &&
+              function_id_.get_prefix() == "py:";
+     },
+     [this]() { return handle_pow(); },
+     "pow() builtin"},
+
+    // issubclass() builtin
+    {[this]() {
+       return function_id_.get_function() == "issubclass" &&
+              function_id_.get_prefix() == "py:";
+     },
+     [this]() { return handle_issubclass(); },
+     "issubclass() builtin"},
+
+    // callable() builtin
+    {[this]() {
+       return function_id_.get_function() == "callable" &&
+              function_id_.get_prefix() == "py:";
+     },
+     [this]() { return handle_callable(); },
+     "callable() builtin"},
+
+    // ascii() builtin
+    {[this]() {
+       return function_id_.get_function() == "ascii" &&
+              function_id_.get_prefix() == "py:";
+     },
+     [this]() { return handle_ascii(); },
+     "ascii() builtin"},
 
     // round() builtin function
     {[this]() {

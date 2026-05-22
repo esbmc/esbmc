@@ -542,16 +542,42 @@ exprt function_call_expr::handle_base_conversion(
       "TypeError", func_name + "() argument must be an integer");
   }
 
-  // Convert to string with appropriate base and prefix
-  std::ostringstream oss;
-  oss << (is_negative ? "-" + prefix : prefix) << base_formatter;
+  std::string result_str;
+  if (func_name == "bin")
+  {
+    // C++ iostreams have no binary formatter, so build the digits manually.
+    // Compute the magnitude via unsigned modular negation (well-defined for
+    // LLONG_MIN, unlike std::llabs). Key off int_value's own sign: the USub
+    // branch above stores a positive magnitude with is_negative set, while the
+    // direct-integer branch leaves int_value signed.
+    unsigned long long mag =
+      (int_value < 0) ? (0ULL - static_cast<unsigned long long>(int_value))
+                      : static_cast<unsigned long long>(int_value);
+    std::string digits;
+    if (mag == 0)
+      digits = "0";
+    else
+      while (mag != 0)
+      {
+        digits.push_back(static_cast<char>('0' + (mag & 1U)));
+        mag >>= 1U;
+      }
+    std::reverse(digits.begin(), digits.end());
+    result_str = (is_negative ? "-" + prefix : prefix) + digits;
+  }
+  else
+  {
+    // Convert to string with appropriate base and prefix
+    std::ostringstream oss;
+    oss << (is_negative ? "-" + prefix : prefix) << base_formatter;
 
-  // For hex, also apply nouppercase
-  if (func_name == "hex")
-    oss << std::nouppercase;
+    // For hex, also apply nouppercase
+    if (func_name == "hex")
+      oss << std::nouppercase;
 
-  oss << std::llabs(int_value);
-  const std::string result_str = oss.str();
+    oss << std::llabs(int_value);
+    result_str = oss.str();
+  }
 
   // Create string type and return character array expression
   typet t = type_handler_.get_typet("str", result_str.size() + 1);
@@ -567,6 +593,141 @@ exprt function_call_expr::handle_hex(nlohmann::json &arg) const
 exprt function_call_expr::handle_oct(nlohmann::json &arg) const
 {
   return handle_base_conversion(arg, "oct", "0o", std::oct);
+}
+
+exprt function_call_expr::handle_ascii() const
+{
+  const auto &args = call_["args"];
+  if (args.size() != 1)
+    return converter_.get_exception_handler().gen_exception_raise(
+      "TypeError", "ascii() takes exactly one argument");
+
+  const auto &arg = args[0];
+
+  // String constant: produce the quoted, ASCII-escaped repr form. This is the
+  // only case where ascii() differs from str(): non-printable and non-ASCII
+  // code points are rendered as \xNN / \uNNNN / \UNNNNNNNN escapes.
+  if (
+    arg["_type"] == "Constant" && arg.contains("value") &&
+    arg["value"].is_string())
+  {
+    const std::string s = arg["value"].get<std::string>();
+
+    // CPython prefers single quotes, switching to double quotes only when the
+    // string contains ' but not ".
+    const char quote =
+      (s.find('\'') != std::string::npos && s.find('"') == std::string::npos)
+        ? '"'
+        : '\'';
+
+    auto append_escape = [](std::string &out, unsigned long cp) {
+      char buf[12];
+      if (cp <= 0xff)
+        std::snprintf(buf, sizeof(buf), "\\x%02lx", cp);
+      else if (cp <= 0xffff)
+        std::snprintf(buf, sizeof(buf), "\\u%04lx", cp);
+      else
+        std::snprintf(buf, sizeof(buf), "\\U%08lx", cp);
+      out += buf;
+    };
+
+    std::string out;
+    out.push_back(quote);
+    for (size_t i = 0; i < s.size();)
+    {
+      const unsigned char c = static_cast<unsigned char>(s[i]);
+      if (c == static_cast<unsigned char>(quote) || c == '\\')
+      {
+        out.push_back('\\');
+        out.push_back(static_cast<char>(c));
+        ++i;
+      }
+      else if (c == '\n')
+      {
+        out += "\\n";
+        ++i;
+      }
+      else if (c == '\r')
+      {
+        out += "\\r";
+        ++i;
+      }
+      else if (c == '\t')
+      {
+        out += "\\t";
+        ++i;
+      }
+      else if (c < 0x20 || c == 0x7f)
+      {
+        append_escape(out, c);
+        ++i;
+      }
+      else if (c < 0x80)
+      {
+        out.push_back(static_cast<char>(c));
+        ++i;
+      }
+      else
+      {
+        // Decode one UTF-8 sequence to a code point, then escape it.
+        unsigned long cp = 0;
+        int extra = 0;
+        if ((c & 0xe0) == 0xc0)
+        {
+          cp = c & 0x1f;
+          extra = 1;
+        }
+        else if ((c & 0xf0) == 0xe0)
+        {
+          cp = c & 0x0f;
+          extra = 2;
+        }
+        else if ((c & 0xf8) == 0xf0)
+        {
+          cp = c & 0x07;
+          extra = 3;
+        }
+        else
+        {
+          // Invalid lead byte: escape the raw byte.
+          append_escape(out, c);
+          ++i;
+          continue;
+        }
+        if (i + extra >= s.size())
+        {
+          append_escape(out, c);
+          ++i;
+          continue;
+        }
+        for (int k = 1; k <= extra; ++k)
+          cp = (cp << 6) | (static_cast<unsigned char>(s[i + k]) & 0x3f);
+        append_escape(out, cp);
+        i += extra + 1;
+      }
+    }
+    out.push_back(quote);
+    return converter_.get_string_builder().build_string_literal(out);
+  }
+
+  // Non-string argument: ascii(x) == repr(x), which for numbers and bools is
+  // identical to str(x). Reuse the existing str conversion machinery.
+  exprt value_expr = converter_.get_expr(arg);
+  if (!value_expr.is_nil() && value_expr.statement() != "cpp-throw")
+  {
+    const typet &vt = value_expr.type();
+    if (vt.is_bool() || type_utils::is_integer_type(vt) || vt.is_floatbv())
+      return converter_.get_string_handler().convert_to_string(value_expr);
+  }
+  return converter_.get_exception_handler().gen_exception_raise(
+    "TypeError", "ascii() argument type not supported");
+}
+
+exprt function_call_expr::handle_bin(nlohmann::json &arg) const
+{
+  // The formatter is unused for binary (handled manually in
+  // handle_base_conversion); std::dec is passed only to satisfy the signature.
+  return handle_base_conversion(arg, "bin", "0b", std::dec);
 }
 
 /// Extracts the character string represented by a symbol's constant value.
