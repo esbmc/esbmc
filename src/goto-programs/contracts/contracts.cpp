@@ -916,7 +916,7 @@ void code_contractst::enforce_contracts(
     goto_functiont new_func;
     new_func.body = wrapper;
     if (func_sym->type.is_code())
-      new_func.type = to_code_type(func_sym->type);
+      new_func.type = migrate_type(func_sym->type);
     new_func.body_available = true;
     new_func.update_instructions_function(original_id);
 
