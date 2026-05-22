@@ -135,9 +135,8 @@ bool python_languaget::parse(const std::string &path)
       std::string major;
       std::getline(version_out, major);
       version_proc.wait();
-      while (!major.empty() &&
-             (major.back() == '\r' || major.back() == '\n' ||
-              major.back() == ' '))
+      while (!major.empty() && (major.back() == '\r' || major.back() == '\n' ||
+                                major.back() == ' '))
         major.pop_back();
       if (major != "3")
       {
