@@ -53,6 +53,7 @@ add_library(pythonfrontend STATIC
             function_call/builder.cpp
             string/string_builder.cpp
             string/string_handler.cpp
+            string/string_method_handler.cpp
             string/string_handler_utils.cpp
             exception_utils.cpp
             string/char_utils.cpp
