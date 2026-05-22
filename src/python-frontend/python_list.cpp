@@ -85,12 +85,26 @@ static typet get_elem_type_from_annotation(
 {
   // Extract element type from a Subscript node such as list[T]
   auto extract_subscript_elem = [&](const nlohmann::json &ann) -> typet {
+    if (!ann.contains("slice") || !ann["slice"].is_object())
+      return typet();
+    const auto &slice = ann["slice"];
+
+    // Simple element: list[int], list[str], ...
+    if (slice.contains("id") && slice["id"].is_string())
+      return type_handler_.get_typet(slice["id"].get<std::string>());
+
+    // Nested container element: list[list[T]], list[dict[K, V]], ...
+    // Resolve to the container's own type (list[T] -> __ESBMC_PyListObj*),
+    // so the caller treats W[i] as a list and re-routes W[i][j] through
+    // __ESBMC_list_at.
     if (
-      ann.contains("slice") && ann["slice"].is_object() &&
-      ann["slice"].contains("id") && ann["slice"]["id"].is_string())
+      slice.contains("_type") && slice["_type"] == "Subscript" &&
+      slice.contains("value") && slice["value"].is_object() &&
+      slice["value"].contains("id") && slice["value"]["id"].is_string())
     {
-      return type_handler_.get_typet(ann["slice"]["id"].get<std::string>());
+      return type_handler_.get_typet(slice["value"]["id"].get<std::string>());
     }
+
     return typet();
   };
 
@@ -1800,9 +1814,15 @@ exprt python_list::handle_index_access(
 
           if (elem_type == converter_.get_type_handler().get_list_type())
           {
-            symbolt *nested_list = converter_.find_symbol(elem_id);
-            assert(nested_list);
-            return symbol_expr(*nested_list);
+            // Compile-time symbol resolution is only valid when the entry
+            // records a concrete inner-list symbol (literal case).  For
+            // parameter-annotation-only entries (elem_id is empty), fall
+            // through to the dynamic __ESBMC_list_at path below.
+            if (!elem_id.empty())
+            {
+              if (symbolt *nested_list = converter_.find_symbol(elem_id))
+                return symbol_expr(*nested_list);
+            }
           }
         }
       }
@@ -2065,6 +2085,58 @@ exprt python_list::handle_index_access(
       auto type_map_it = list_type_map.find(list_name);
       if (type_map_it != list_type_map.end() && !type_map_it->second.empty())
         elem_type = type_map_it->second.back().second;
+    }
+
+    // Nested subscript chains like W[i][j] where the base is a Name with a
+    // nested list annotation (e.g. list[list[T]]).  list_node is null in this
+    // case because list_value_["value"] is itself a Subscript rather than a
+    // Name, so the standard paths above can't see W's annotation.  Walk the
+    // Subscript chain down to the base Name and peel that many layers off the
+    // annotation, then hand the result to the existing extractor.
+    if (elem_type == typet())
+    {
+      size_t subscript_depth = 0;
+      const nlohmann::json *cur = &list_value_;
+      while (cur->is_object() && cur->contains("value") &&
+             (*cur)["value"].is_object() &&
+             (*cur)["value"].contains("_type") &&
+             (*cur)["value"]["_type"] == "Subscript")
+      {
+        ++subscript_depth;
+        cur = &(*cur)["value"];
+      }
+      if (
+        subscript_depth > 0 && cur->is_object() && cur->contains("value") &&
+        (*cur)["value"].is_object() && (*cur)["value"].contains("id") &&
+        (*cur)["value"]["id"].is_string())
+      {
+        nlohmann::json base_decl = json_utils::find_var_decl(
+          (*cur)["value"]["id"].get<std::string>(),
+          converter_.current_function_name(),
+          converter_.ast());
+        if (!base_decl.is_null() && base_decl.contains("annotation"))
+        {
+          nlohmann::json drilled = base_decl["annotation"];
+          for (size_t k = 0; k < subscript_depth; ++k)
+          {
+            if (
+              !drilled.is_object() || !drilled.contains("_type") ||
+              drilled["_type"] != "Subscript" || !drilled.contains("slice"))
+            {
+              drilled = nlohmann::json();
+              break;
+            }
+            drilled = drilled["slice"];
+          }
+          if (!drilled.is_null())
+          {
+            nlohmann::json synth;
+            synth["annotation"] = drilled;
+            elem_type = get_elem_type_from_annotation(
+              synth, converter_.get_type_handler());
+          }
+        }
+      }
     }
 
     // Python allows indexing lists with unknown element type in dynamic code.
