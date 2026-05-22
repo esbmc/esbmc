@@ -86,6 +86,11 @@ private:
 
   // ----- AST lookup and walk helpers -----
   Json find_var_node_for_inference(const std::string &var_name);
+  // Whether an empty-list append argument resolves to a *direct* integer
+  // scalar (literal, int-annotated name, or name bound to a plain int
+  // source) rather than through a container/object indirection. See the
+  // call site in infer_type (issue #3239 / jpl_1 regression).
+  bool append_arg_is_plain_int(const Json &arg);
   const Json
   find_annotated_assign(const std::string &node_name, const Json &body);
   Json
