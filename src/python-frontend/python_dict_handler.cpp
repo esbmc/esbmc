@@ -89,7 +89,7 @@ struct_typet python_dict_handler::get_dict_struct_type()
   const std::string dict_type_name = "tag-__python_dict__";
   symbolt *existing = symbol_table_.find_symbol(dict_type_name);
   if (existing)
-    return to_struct_type(existing->type);
+    return to_struct_type(existing->get_type());
 
   struct_typet dict_struct;
   dict_struct.tag("__python_dict__");
@@ -107,7 +107,7 @@ struct_typet python_dict_handler::get_dict_struct_type()
   symbolt type_symbol;
   type_symbol.id = dict_type_name;
   type_symbol.name = dict_type_name;
-  type_symbol.type = dict_struct;
+  type_symbol.get_type() = dict_struct;
   type_symbol.mode = "Python";
   type_symbol.is_type = true;
   symbol_table_.add(type_symbol);
@@ -647,8 +647,8 @@ exprt python_dict_handler::handle_dict_subscript(
 
   exprt key_arg;
   if (
-    key_info.elem_symbol->type.is_pointer() &&
-    key_info.elem_symbol->type.subtype() == char_type())
+    key_info.elem_symbol->get_type().is_pointer() &&
+    key_info.elem_symbol->get_type().subtype() == char_type())
     key_arg = symbol_expr(*key_info.elem_symbol);
   else
     key_arg = address_of_exprt(symbol_expr(*key_info.elem_symbol));
@@ -741,7 +741,7 @@ exprt python_dict_handler::handle_dict_subscript(
     const symbolt *elem_sym =
       symbol_table_.find_symbol(sym_type.get_identifier());
     if (elem_sym)
-      element_type = elem_sym->type;
+      element_type = elem_sym->get_type();
   }
 
   // Create dereference and explicitly set its type
@@ -953,8 +953,8 @@ void python_dict_handler::handle_dict_subscript_assign(
 
   exprt key_arg;
   if (
-    key_info.elem_symbol->type.is_pointer() &&
-    key_info.elem_symbol->type.subtype() == char_type())
+    key_info.elem_symbol->get_type().is_pointer() &&
+    key_info.elem_symbol->get_type().subtype() == char_type())
     key_arg = symbol_expr(*key_info.elem_symbol);
   else
     key_arg = address_of_exprt(symbol_expr(*key_info.elem_symbol));
@@ -976,8 +976,8 @@ void python_dict_handler::handle_dict_subscript_assign(
 
   exprt value_arg;
   if (
-    value_info.elem_symbol->type.is_pointer() &&
-    value_info.elem_symbol->type.subtype() == char_type())
+    value_info.elem_symbol->get_type().is_pointer() &&
+    value_info.elem_symbol->get_type().subtype() == char_type())
     value_arg = symbol_expr(*value_info.elem_symbol);
   else
     value_arg = address_of_exprt(symbol_expr(*value_info.elem_symbol));
@@ -988,7 +988,7 @@ void python_dict_handler::handle_dict_subscript_assign(
   set_value_call.arguments().push_back(from_integer(BigInt(0), size_type()));
   set_value_call.arguments().push_back(from_integer(
     BigInt(converter_.get_type_handler().is_pointer_free(
-      value_info.elem_symbol->type)),
+      value_info.elem_symbol->get_type())),
     int_type()));
   set_value_call.type() = bool_type();
   set_value_call.location() = location;
@@ -1012,7 +1012,7 @@ void python_dict_handler::handle_dict_subscript_assign(
   push_key_call.arguments().push_back(from_integer(BigInt(0), size_type()));
   push_key_call.arguments().push_back(from_integer(
     BigInt(converter_.get_type_handler().is_pointer_free(
-      key_info.elem_symbol->type)),
+      key_info.elem_symbol->get_type())),
     int_type()));
   push_key_call.type() = bool_type();
   push_key_call.location() = location;
@@ -1028,7 +1028,7 @@ void python_dict_handler::handle_dict_subscript_assign(
   push_value_call.arguments().push_back(from_integer(BigInt(0), size_type()));
   push_value_call.arguments().push_back(from_integer(
     BigInt(converter_.get_type_handler().is_pointer_free(
-      value_info.elem_symbol->type)),
+      value_info.elem_symbol->get_type())),
     int_type()));
   push_value_call.type() = bool_type();
   push_value_call.location() = location;
@@ -1159,8 +1159,8 @@ void python_dict_handler::handle_dict_delete(
 
   exprt key_arg;
   if (
-    key_info.elem_symbol->type.is_pointer() &&
-    key_info.elem_symbol->type.subtype() == char_type())
+    key_info.elem_symbol->get_type().is_pointer() &&
+    key_info.elem_symbol->get_type().subtype() == char_type())
     key_arg = symbol_expr(*key_info.elem_symbol);
   else
     key_arg = address_of_exprt(symbol_expr(*key_info.elem_symbol));
@@ -1532,7 +1532,7 @@ bool python_dict_handler::handle_subscript_assignment_check(
   {
     const symbolt *sym = symbol_table_.find_symbol(container_expr.identifier());
     if (sym)
-      container_type = sym->type;
+      container_type = sym->get_type();
   }
 
   // Use the namespace from converter, not a method that doesn't exist
@@ -1700,8 +1700,8 @@ exprt python_dict_handler::handle_dict_get(
 
   exprt key_arg;
   if (
-    key_info.elem_symbol->type.is_pointer() &&
-    key_info.elem_symbol->type.subtype() == char_type())
+    key_info.elem_symbol->get_type().is_pointer() &&
+    key_info.elem_symbol->get_type().subtype() == char_type())
     key_arg = symbol_expr(*key_info.elem_symbol);
   else
     key_arg = address_of_exprt(symbol_expr(*key_info.elem_symbol));
@@ -1920,8 +1920,8 @@ exprt python_dict_handler::handle_dict_setdefault(
   // Build key arg
   exprt key_arg;
   if (
-    key_info.elem_symbol->type.is_pointer() &&
-    key_info.elem_symbol->type.subtype() == char_type())
+    key_info.elem_symbol->get_type().is_pointer() &&
+    key_info.elem_symbol->get_type().subtype() == char_type())
     key_arg = symbol_expr(*key_info.elem_symbol);
   else
     key_arg = address_of_exprt(symbol_expr(*key_info.elem_symbol));
@@ -2058,7 +2058,7 @@ exprt python_dict_handler::handle_dict_setdefault(
     push_key_call.arguments().push_back(from_integer(BigInt(0), size_type()));
     push_key_call.arguments().push_back(from_integer(
       BigInt(converter_.get_type_handler().is_pointer_free(
-        key_info.elem_symbol->type)),
+        key_info.elem_symbol->get_type())),
       int_type()));
     push_key_call.type() = bool_type();
     push_key_call.location() = location;
@@ -2093,8 +2093,8 @@ exprt python_dict_handler::handle_dict_setdefault(
         list_handler.get_list_element_info(call_node, effective_default);
 
       if (
-        value_info.elem_symbol->type.is_pointer() &&
-        value_info.elem_symbol->type.subtype() == char_type())
+        value_info.elem_symbol->get_type().is_pointer() &&
+        value_info.elem_symbol->get_type().subtype() == char_type())
         value_arg = symbol_expr(*value_info.elem_symbol);
       else
         value_arg = address_of_exprt(symbol_expr(*value_info.elem_symbol));
@@ -2110,7 +2110,7 @@ exprt python_dict_handler::handle_dict_setdefault(
         from_integer(BigInt(0), size_type()));
       push_value_call.arguments().push_back(from_integer(
         BigInt(converter_.get_type_handler().is_pointer_free(
-          value_info.elem_symbol->type)),
+          value_info.elem_symbol->get_type())),
         int_type()));
       push_value_call.type() = bool_type();
       push_value_call.location() = location;
@@ -2287,8 +2287,8 @@ exprt python_dict_handler::handle_dict_pop(
 
   exprt key_arg;
   if (
-    key_info.elem_symbol->type.is_pointer() &&
-    key_info.elem_symbol->type.subtype() == char_type())
+    key_info.elem_symbol->get_type().is_pointer() &&
+    key_info.elem_symbol->get_type().subtype() == char_type())
     key_arg = symbol_expr(*key_info.elem_symbol);
   else
     key_arg = address_of_exprt(symbol_expr(*key_info.elem_symbol));

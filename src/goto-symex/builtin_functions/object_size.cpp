@@ -99,7 +99,7 @@ void goto_symext::intrinsic_builtin_object_size(
             const symbol_type2t &symtype = to_symbol_type(ptr_subtype);
             const symbolt *symbol = ns.lookup(symtype.symbol_name);
             addressed_type = (symbol != nullptr)
-                               ? migrate_type(symbol->type)
+                               ? migrate_type(symbol->get_type())
                                : internal_deref_items.front().object->type;
           }
           else

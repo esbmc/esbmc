@@ -62,7 +62,7 @@ void goto_symext::volatile_check(expr2tc &expr)
   {
     const symbol2t &s = to_symbol2t(expr);
     const symbolt *sym = new_context.find_symbol(s.thename);
-    if (sym && sym->type.cmt_volatile())
+    if (sym && sym->get_type().cmt_volatile())
     {
       log_debug("volatile check", "variable: {}", sym->name.as_string());
       unsigned int &nondet_count = get_nondet_counter();

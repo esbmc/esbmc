@@ -203,7 +203,7 @@ exprt python_math::resolve_symbol(const exprt &operand) const
   {
     symbolt *s = symbol_table.find_symbol(operand.identifier());
     assert(s && "Symbol not found in symbol table");
-    return s->value;
+    return s->get_value();
   }
   return operand;
 }

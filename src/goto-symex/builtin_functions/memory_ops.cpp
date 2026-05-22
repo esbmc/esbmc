@@ -804,7 +804,9 @@ void goto_symext::intrinsic_memset(
     if (is_symbol2t(*base))
     {
       const symbolt *sym = ns.lookup(to_symbol2t(*base).thename);
-      if (sym != nullptr && sym->static_lifetime && sym->type.cmt_constant())
+      if (
+        sym != nullptr && sym->static_lifetime &&
+        sym->get_type().cmt_constant())
       {
         bump_call(func_call, "c:@F@__memset_impl");
         return;

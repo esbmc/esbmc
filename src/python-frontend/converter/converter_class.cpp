@@ -24,13 +24,13 @@ exprt python_converter::make_enum_member_struct_expr(
 {
   // Get the struct type for the enum class (e.g. tag-TrafficLight)
   const symbolt *type_sym = symbol_table_.find_symbol("tag-" + class_name);
-  if (!type_sym || !type_sym->type.is_struct())
+  if (!type_sym || !type_sym->get_type().is_struct())
   {
     log_error("Enum class '{}' has no struct type in symbol table", class_name);
     abort();
   }
 
-  const struct_typet &st = to_struct_type(type_sym->type);
+  const struct_typet &st = to_struct_type(type_sym->get_type());
   if (st.components().size() < 2)
   {
     log_error(
@@ -49,8 +49,8 @@ exprt python_converter::make_enum_member_struct_expr(
     symbolt str_sym;
     str_sym.id = str_id;
     str_sym.name = "_name_" + member_name;
-    str_sym.type = str_val.type();
-    str_sym.value = str_val;
+    str_sym.get_type() = str_val.type();
+    str_sym.get_value() = str_val;
     str_sym.static_lifetime = true;
     str_sym.is_extern = false;
     str_sym.file_local = true;
@@ -105,7 +105,7 @@ exprt python_converter::create_member_expression(
   const typet &attr_type)
 {
   typet clean_type = clean_attribute_type(attr_type);
-  exprt source = symbol_exprt(symbol.id, symbol.type);
+  exprt source = symbol_exprt(symbol.id, symbol.get_type());
   if (source.type().is_pointer())
   {
     exprt deref("dereference");

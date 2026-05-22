@@ -179,7 +179,7 @@ symbol_id function_call_builder::build_function_id() const
             python_file, current_class_name, current_function_name);
           var_sid.set_object(name);
           symbolt *var_symbol = converter_.find_symbol(var_sid.to_string());
-          return var_symbol ? var_symbol->type : typet();
+          return var_symbol ? var_symbol->get_type() : typet();
         }
         else if (node["_type"] == "Attribute")
         {
@@ -216,7 +216,7 @@ symbol_id function_call_builder::build_function_id() const
             cls_sid.set_object(attr);
             symbolt *cls_sym = converter_.find_symbol(cls_sid.to_string());
             if (cls_sym)
-              return cls_sym->type;
+              return cls_sym->get_type();
             return typet();
           }
           return typet();
@@ -394,7 +394,7 @@ symbol_id function_call_builder::build_function_id() const
       symbolt *var_symbol = converter_.find_symbol(var_sid.to_string());
 
       auto symbol_points_to_list = [&](const symbolt *sym) -> bool {
-        return sym && is_pylist_object_type(sym->type, converter_.ns);
+        return sym && is_pylist_object_type(sym->get_type(), converter_.ns);
       };
 
       const bool var_symbol_is_list = symbol_points_to_list(var_symbol);
@@ -445,9 +445,10 @@ symbol_id function_call_builder::build_function_id() const
       // Check if this is a tuple by looking up the variable's type
       if (var_type == "tuple" || var_type.empty())
       {
-        if (var_symbol && var_symbol->type.id() == "struct")
+        if (var_symbol && var_symbol->get_type().id() == "struct")
         {
-          const struct_typet &struct_type = to_struct_type(var_symbol->type);
+          const struct_typet &struct_type =
+            to_struct_type(var_symbol->get_type());
 
           // Check if this is a tuple by examining the tag
           if (struct_type.tag().as_string().find("tag-tuple") == 0)
@@ -545,9 +546,9 @@ symbol_id function_call_builder::build_function_id() const
       }
 
       // Extract class name from the type, following symbol references
-      typet var_type = var_symbol->type.is_pointer()
-                         ? var_symbol->type.subtype()
-                         : var_symbol->type;
+      typet var_type = var_symbol->get_type().is_pointer()
+                         ? var_symbol->get_type().subtype()
+                         : var_symbol->get_type();
 
       // Follow symbol type references using the converter's namespace
       var_type = converter_.ns.follow(var_type);
@@ -625,7 +626,7 @@ exprt function_call_builder::build() const
       if (arg_symbol)
       {
         auto list_struct =
-          try_get_pylist_struct_type(arg_symbol->type, converter_.ns);
+          try_get_pylist_struct_type(arg_symbol->get_type(), converter_.ns);
         if (list_struct)
         {
           code_typet list_size_type;

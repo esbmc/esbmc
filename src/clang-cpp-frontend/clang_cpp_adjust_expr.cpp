@@ -13,19 +13,19 @@ clang_cpp_adjust::clang_cpp_adjust(contextt &_context)
 
 void clang_cpp_adjust::gen_implicit_union_copy_move_constructor(symbolt &symbol)
 {
-  if (!symbol.type.is_code())
+  if (!symbol.get_type().is_code())
     return;
 
-  code_typet &ctor_type = to_code_type(symbol.type);
+  code_typet &ctor_type = to_code_type(symbol.get_type());
 
   if (
     ctor_type.return_type().id() != "constructor" ||
     !ctor_type.return_type().get_bool("#implicit_union_copy_move_constructor"))
     return;
 
-  if (symbol.value.is_not_nil())
+  if (symbol.get_value().is_not_nil())
   {
-    code_blockt &ctor_body = to_code_block(to_code(symbol.value));
+    code_blockt &ctor_body = to_code_block(to_code(symbol.get_value()));
     assert(
       ctor_body.operands().size() == 1 &&
       ctor_body.op0().statement() ==
@@ -34,9 +34,9 @@ void clang_cpp_adjust::gen_implicit_union_copy_move_constructor(symbolt &symbol)
   else
   {
     code_blockt ctor_body;
-    symbol.value = ctor_body;
+    symbol.get_value() = ctor_body;
   }
-  code_blockt &ctor_body = to_code_block(to_code(symbol.value));
+  code_blockt &ctor_body = to_code_block(to_code(symbol.get_value()));
   /* https://en.cppreference.com/w/cpp/language/copy_constructor#Implicitly-defined_copy_constructor
    * > If the implicitly-declared copy constructor is not deleted, it is defined (that is, a function body is generated and compiled)
    * > by the compiler if odr-used or needed for constant evaluation(since C++11).
@@ -210,7 +210,7 @@ void clang_cpp_adjust::adjust_cpp_member(member_exprt &expr)
   }
   // compoment's type shall be the same as member_exprt's type
   // and both are of the type `code`
-  assert(comp_symb->type.is_code());
+  assert(comp_symb->get_type().is_code());
   exprt method_call = symbol_expr(*comp_symb);
   expr.swap(method_call);
 }
@@ -417,7 +417,7 @@ void clang_cpp_adjust::convert_exception_id(
     irep_idt identifier = type.identifier();
 
     // Check if base class exists
-    typet t = ns.lookup(identifier)->type;
+    typet t = ns.lookup(identifier)->get_type();
 
     // only get the base class when throwing
     if (t.id() == "struct" && !is_catch)

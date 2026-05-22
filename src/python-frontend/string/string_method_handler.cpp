@@ -374,8 +374,8 @@ exprt string_handler::handle_string_lstrip(
       const symbolt *symbol =
         find_cached_symbol(str_expr.identifier().as_string());
       if (
-        symbol && symbol->value.is_constant() &&
-        symbol->value.type().is_array())
+        symbol && symbol->get_value().is_constant() &&
+        symbol->get_value().type().is_array())
         can_fold_constant = true;
     }
   }
@@ -419,8 +419,8 @@ exprt string_handler::handle_string_lstrip(
       {
         const symbolt *sym =
           find_cached_symbol(chars_arg.identifier().as_string());
-        chars_foldable =
-          sym && sym->value.is_constant() && sym->value.type().is_array();
+        chars_foldable = sym && sym->get_value().is_constant() &&
+                         sym->get_value().type().is_array();
       }
 
       if (chars_foldable)
@@ -566,8 +566,8 @@ exprt string_handler::handle_string_strip(
       const symbolt *symbol =
         find_cached_symbol(str_expr.identifier().as_string());
       if (
-        symbol && symbol->value.is_constant() &&
-        symbol->value.type().is_array())
+        symbol && symbol->get_value().is_constant() &&
+        symbol->get_value().type().is_array())
         can_fold_constant = true;
     }
   }
@@ -614,8 +614,8 @@ exprt string_handler::handle_string_strip(
       {
         const symbolt *sym =
           find_cached_symbol(chars_arg.identifier().as_string());
-        chars_foldable =
-          sym && sym->value.is_constant() && sym->value.type().is_array();
+        chars_foldable = sym && sym->get_value().is_constant() &&
+                         sym->get_value().type().is_array();
       }
 
       if (chars_foldable)
@@ -735,7 +735,8 @@ exprt string_handler::handle_string_rstrip(
     const symbolt *symbol =
       find_cached_symbol(str_expr.identifier().as_string());
     if (
-      symbol && symbol->value.is_constant() && symbol->value.type().is_array())
+      symbol && symbol->get_value().is_constant() &&
+      symbol->get_value().type().is_array())
       can_fold_constant = true;
   }
 
@@ -778,8 +779,8 @@ exprt string_handler::handle_string_rstrip(
       {
         const symbolt *sym =
           find_cached_symbol(chars_arg.identifier().as_string());
-        chars_foldable =
-          sym && sym->value.is_constant() && sym->value.type().is_array();
+        chars_foldable = sym && sym->get_value().is_constant() &&
+                         sym->get_value().type().is_array();
       }
 
       if (chars_foldable)

@@ -38,7 +38,7 @@ contextt &test_context()
   {
     symbolt x;
     x.id = x.name = "x";
-    x.type = migrate_type_back(get_int_type(32));
+    x.get_type() = migrate_type_back(get_int_type(32));
     x.lvalue = true;
     ctx.add(x);
     initialised = true;

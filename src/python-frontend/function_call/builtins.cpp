@@ -263,9 +263,10 @@ exprt function_call_expr::handle_isinstance() const
     }
 
     const symbolt *var_symbol = converter_.ns.lookup(lookup_name);
-    if (var_symbol && var_symbol->value.is_constant())
+    if (var_symbol && var_symbol->get_value().is_constant())
     {
-      const constant_exprt &const_val = to_constant_expr(var_symbol->value);
+      const constant_exprt &const_val =
+        to_constant_expr(var_symbol->get_value());
       std::string value_str = const_val.get_value().as_string();
       // Check if this constant value is a type name
       if (type_utils::is_type_identifier(value_str))
@@ -928,8 +929,9 @@ exprt function_call_expr::handle_complex() const
       const symbolt *sym = lookup_python_symbol((*real_json)["id"]);
       if (sym)
       {
-        const typet &symbol_type =
-          sym->value.type().is_not_nil() ? sym->value.type() : sym->type;
+        const typet &symbol_type = sym->get_value().type().is_not_nil()
+                                     ? sym->get_value().type()
+                                     : sym->get_type();
         if (
           symbol_type.is_array() && symbol_type.subtype().is_unsignedbv() &&
           to_unsignedbv_type(symbol_type.subtype()).get_width() == 8)
@@ -973,19 +975,19 @@ exprt function_call_expr::handle_complex() const
 
           // Handle runtime conditionals that select between two string literals:
           // if cond then "a" else "b" -> if cond then complex(a) else complex(b).
-          const exprt &sym_val = sym->value;
+          const exprt &sym_val = sym->get_value();
           if (sym_val.id() == "if" && sym_val.operands().size() == 3)
           {
             const exprt &cond = sym_val.operands()[0];
 
             symbolt true_sym;
-            true_sym.value = sym_val.operands()[1];
-            true_sym.type = true_sym.value.type();
+            true_sym.get_value() = sym_val.operands()[1];
+            true_sym.get_type() = true_sym.get_value().type();
             auto true_text = extract_string_from_symbol(&true_sym);
 
             symbolt false_sym;
-            false_sym.value = sym_val.operands()[2];
-            false_sym.type = false_sym.value.type();
+            false_sym.get_value() = sym_val.operands()[2];
+            false_sym.get_type() = false_sym.get_value().type();
             auto false_text = extract_string_from_symbol(&false_sym);
 
             auto parse_complex_text =

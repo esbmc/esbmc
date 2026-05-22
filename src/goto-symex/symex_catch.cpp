@@ -63,7 +63,7 @@ bool goto_symext::is_python_exception_subtype(
     return false;
 
   // Get the bases from the type metadata
-  const irept &bases = thrown_symbol->type.find("bases");
+  const irept &bases = thrown_symbol->get_type().find("bases");
 
   if (bases.is_nil())
     return false;
@@ -291,9 +291,9 @@ bool goto_symext::symex_throw_bad_cast()
     std::vector<irep_idt> exception_list;
     const std::string type_id = id2string(bad_cast_sym->id);
     exception_list.emplace_back(type_id.substr(4)); // "std::bad_cast"
-    if (bad_cast_sym->type.id() == "struct")
+    if (bad_cast_sym->get_type().id() == "struct")
     {
-      const struct_typet &st = to_struct_type(bad_cast_sym->type);
+      const struct_typet &st = to_struct_type(bad_cast_sym->get_type());
       const exprt &bases = static_cast<const exprt &>(st.find("bases"));
       if (bases.is_not_nil())
         for (const auto &base : bases.get_sub())
@@ -301,7 +301,7 @@ bool goto_symext::symex_throw_bad_cast()
     }
 
     // Build a nondet operand of bad_cast type for the thrown object.
-    type2tc bad_cast_type = migrate_type(bad_cast_sym->type);
+    type2tc bad_cast_type = migrate_type(bad_cast_sym->get_type());
     expr2tc nondet_op = sideeffect2tc(
       bad_cast_type,
       expr2tc(),
@@ -331,7 +331,7 @@ bool goto_symext::terminate_handler()
   // It'll call the current function handler
   if (!is_included)
   {
-    codet terminate_function = to_code(tmp->value.op0());
+    codet terminate_function = to_code(tmp->get_value().op0());
 
     // We only call it if the user replaced the default one
     if (terminate_function.op1().identifier() == "std::default_terminate()")
@@ -371,7 +371,7 @@ bool goto_symext::unexpected_handler()
 
     expr2tc the_call;
     code_function_callt unexpected_function;
-    unexpected_function.function() = handler->value;
+    unexpected_function.function() = handler->get_value();
     migrate_expr(unexpected_function, the_call);
 
     // Indicate there we're inside the unexpected flow
@@ -379,7 +379,7 @@ bool goto_symext::unexpected_handler()
 
     // Call the function
     symex_function_call(the_call);
-    unexpected_end = handler->value.identifier();
+    unexpected_end = handler->get_value().identifier();
     return true;
   }
 

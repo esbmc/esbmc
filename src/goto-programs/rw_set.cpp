@@ -36,7 +36,7 @@ void rw_sett::compute(const expr2tc &expr)
     if (is_symbol2t(code.function))
     {
       const symbolt *symbol = ns.lookup(to_symbol2t(code.function).thename);
-      if (symbol->value.is_nil() || symbol->name == "__VERIFIER_assert")
+      if (symbol->get_value().is_nil() || symbol->name == "__VERIFIER_assert")
         for (const expr2tc &arg : code.operands)
         {
           if (is_address_of2t(arg))
@@ -112,7 +112,7 @@ void rw_sett::read_write_rec(
 
     // C11 _Atomic variables are never involved in data races
     // (§5.1.2.4p4: concurrent accesses to atomic objects are not races).
-    if (symbol->type.get_bool("#atomic"))
+    if (symbol->get_type().get_bool("#atomic"))
       return;
 
     irep_idt object = id2string(symbol_expr.thename) + suffix;

@@ -24,7 +24,7 @@ void goto_convert_functionst::goto_convert()
 
   symbol_listt symbol_list;
   context.Foreach_operand_in_order([&symbol_list](symbolt &s) {
-    if (!s.is_type && s.type.is_code())
+    if (!s.is_type && s.get_type().is_code())
       symbol_list.push_back(&s);
   });
 
@@ -85,8 +85,8 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
   // Note: can be removed probably? as the new clang-cpp-frontend should've
   // done a pretty good job at resolving template overloading
   if (
-    symbol.value.get("#speculative_template") == "1" &&
-    symbol.value.get("#template_in_use") != "1")
+    symbol.get_value().get("#speculative_template") == "1" &&
+    symbol.get_value().get("#template_in_use") != "1")
     return;
 
   // make tmp variables local to function
@@ -97,23 +97,23 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
     functions.function_map.emplace(identifier, goto_functiont());
 
   goto_functiont &f = functions.function_map.at(identifier);
-  f.type = migrate_type(symbol.type);
-  f.body_available = symbol.value.is_not_nil();
+  f.type = migrate_type(symbol.get_type());
+  f.body_available = symbol.get_value().is_not_nil();
 
   if (!f.body_available)
     return;
 
-  if (!symbol.value.is_code())
+  if (!symbol.get_value().is_code())
   {
     log_error("got invalid code for function `{}'", id2string(identifier));
     abort();
   }
 
-  const codet &code = to_code(symbol.value);
+  const codet &code = to_code(symbol.get_value());
 
   locationt end_location;
 
-  if (to_code(symbol.value).get_statement() == "block")
+  if (to_code(symbol.get_value()).get_statement() == "block")
     end_location =
       static_cast<const locationt &>(to_code_block(code).end_location());
   else
@@ -395,7 +395,7 @@ void goto_convert_functionst::wallop_type_impl(
   symbolt *s = context.find_symbol(name);
   if (s != nullptr)
   {
-    rename_types(s->type, *s, sname);
+    rename_types(s->get_type(), *s, sname);
   }
 
   deps.clear();
@@ -417,8 +417,8 @@ void goto_convert_functionst::thrash_type_symbols()
   // to decide what name is a type or not.
   typename_sett names;
   context.foreach_operand([this, &names](const symbolt &s) {
-    collect_expr(s.value, names);
-    collect_type(s.type, names);
+    collect_expr(s.get_value(), names);
+    collect_type(s.get_type(), names);
   });
 
   // Try to compute their dependencies.
@@ -428,8 +428,8 @@ void goto_convert_functionst::thrash_type_symbols()
     if (names.find(s.id) != names.end())
     {
       typename_sett list;
-      collect_expr(s.value, list);
-      collect_type(s.type, list);
+      collect_expr(s.get_value(), list);
+      collect_type(s.get_type(), list);
       typenames[s.id] = list;
     }
   });
@@ -447,7 +447,7 @@ void goto_convert_functionst::thrash_type_symbols()
 
   // And now all the types have a fixed form, rename types in all existing code.
   context.Foreach_operand([this](symbolt &s) {
-    rename_types(s.type, s, s.id);
-    rename_exprs(s.value, s, s.id);
+    rename_types(s.get_type(), s, s.id);
+    rename_exprs(s.get_value(), s, s.id);
   });
 }

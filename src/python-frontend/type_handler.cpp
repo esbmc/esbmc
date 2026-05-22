@@ -113,7 +113,7 @@ bool type_handler::is_constructor_call(const nlohmann::json &json) const
   const contextt &symbol_table = converter_.symbol_table();
 
   symbol_table.foreach_operand([&](const symbolt &s) {
-    if (s.type.id() == "struct" && s.name == func_name)
+    if (s.get_type().id() == "struct" && s.name == func_name)
     {
       is_ctor_call = true;
       return;
@@ -497,7 +497,7 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
       symbolt type_symbol;
       type_symbol.id = complex_type_id;
       type_symbol.name = "complex";
-      type_symbol.type = get_complex_struct_type();
+      type_symbol.get_type() = get_complex_struct_type();
       type_symbol.mode = "Python";
       type_symbol.is_type = true;
       symbol_table.move_symbol_to_context(type_symbol);
@@ -595,7 +595,7 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   {
     symbolt *s = converter_.find_symbol(std::string("tag-" + ast_type));
     if (s)
-      return s->type;
+      return s->get_type();
   }
 
   // Check if it's a built-in type (handles tuple, list, dict, etc.)
@@ -965,7 +965,7 @@ typet type_handler::get_list_type(const nlohmann::json &list_value) const
     symbolt *func_symbol = converter_.find_symbol(sid.to_string());
 
     assert(func_symbol);
-    return static_cast<code_typet &>(func_symbol->type).return_type();
+    return static_cast<code_typet &>(func_symbol->get_type()).return_type();
   }
 
   if (list_value.contains("_type") && list_value["_type"] == "BinOp")

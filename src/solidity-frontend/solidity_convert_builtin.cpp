@@ -241,12 +241,12 @@ void solidity_convertert::move_builtin_to_contract(
     abort();
   }
   symbolt &c_sym = *context.find_symbol(c_id);
-  assert(c_sym.type.is_struct());
+  assert(c_sym.get_type().is_struct());
 
   if (!is_method)
   {
     // check if it's already inserted
-    for (auto i : to_struct_type(c_sym.type).components())
+    for (auto i : to_struct_type(c_sym.get_type()).components())
     {
       if (i.identifier() == sym.identifier())
         return;
@@ -254,13 +254,13 @@ void solidity_convertert::move_builtin_to_contract(
 
     struct_typet::componentt comp(sym.name(), sym.name(), sym.type());
     comp.set_access(access);
-    comp.type().set("#member_name", c_sym.type.tag());
-    to_struct_type(c_sym.type).components().push_back(comp);
+    comp.type().set("#member_name", c_sym.get_type().tag());
+    to_struct_type(c_sym.get_type()).components().push_back(comp);
   }
   else
   {
     // check if it's already inserted
-    for (auto i : to_struct_type(c_sym.type).methods())
+    for (auto i : to_struct_type(c_sym.get_type()).methods())
     {
       if (i.identifier() == sym.identifier())
         return;
@@ -274,7 +274,7 @@ void solidity_convertert::move_builtin_to_contract(
     comp.pretty_name(sym.name());
     comp.set_access(access);
     comp.id("symbol");
-    to_struct_type(c_sym.type).methods().push_back(comp);
+    to_struct_type(c_sym.get_type()).methods().push_back(comp);
   }
 }
 
@@ -295,12 +295,12 @@ void solidity_convertert::get_builtin_symbol(
 
   symbolt sym;
   get_default_symbol(sym, "C++", t, name, id, l);
-  sym.type.set("#sol_state_var", "1");
+  sym.get_type().set("#sol_state_var", "1");
   sym.file_local = true;
   sym.lvalue = true;
   auto &added_sym = *move_symbol_to_context(sym);
   code_declt decl(symbol_expr(added_sym));
-  added_sym.value = val;
+  added_sym.get_value() = val;
   decl.operands().push_back(val);
   move_to_initializer(decl);
 
@@ -373,7 +373,7 @@ void solidity_convertert::get_aux_property_function(
   type.arguments().push_back(param);
 
   // populate param
-  added_symbol.type = type;
+  added_symbol.get_type() = type;
   // move to struct symbol
   move_builtin_to_contract(cname, symbol_expr(added_symbol), true);
 
@@ -454,7 +454,7 @@ void solidity_convertert::get_aux_property_function(
   _block.move_to_operands(ret_uint);
 
   // populate body
-  added_symbol.value = _block;
+  added_symbol.get_value() = _block;
 
   // do function call
   side_effect_expr_function_callt _call;

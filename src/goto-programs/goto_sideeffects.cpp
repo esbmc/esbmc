@@ -1009,7 +1009,7 @@ void goto_convertt::remove_function_call(
   symbolt new_symbol;
 
   new_symbol.name = "return_value$";
-  new_symbol.type = expr.type();
+  new_symbol.get_type() = expr.type();
   new_symbol.location = expr.location();
 
   // get name of function, if available
@@ -1122,7 +1122,7 @@ void goto_convertt::remove_cpp_new(
   symbolt new_symbol;
 
   new_symbol.name = "new_ptr$" + std::to_string(++tmp_symbol.counter);
-  new_symbol.type = expr.type();
+  new_symbol.get_type() = expr.type();
   new_symbol.id = tmp_symbol.prefix + id2string(new_symbol.name);
 
   new_name(new_symbol);
@@ -1233,7 +1233,7 @@ void goto_convertt::remove_statement_expression(
   decl.location() = location;
   convert_decl(decl, dest);
 
-  symbol_exprt tmp_symbol_expr(new_symbol.id, new_symbol.type);
+  symbol_exprt tmp_symbol_expr(new_symbol.id, new_symbol.get_type());
   tmp_symbol_expr.location() = location;
 
   if (last.statement() == "expression")

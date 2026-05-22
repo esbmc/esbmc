@@ -159,7 +159,7 @@ unsigned goto_symext::argument_assignments(
             const symbol_type2t &sym_type = to_symbol_type(ptr_subtype);
             symbolt const *sym = ns.lookup(sym_type.symbol_name);
             if (sym)
-              ptr_subtype = migrate_type(sym->type);
+              ptr_subtype = migrate_type(sym->get_type());
             else
               break;
           }
@@ -224,7 +224,7 @@ unsigned goto_symext::argument_assignments(
       symbolt symbol;
       symbol.id = identifier;
       symbol.name = "va_arg" + std::to_string(va_count);
-      symbol.type = migrate_type_back((*it1)->type);
+      symbol.get_type() = migrate_type_back((*it1)->type);
 
       if (new_context.move(symbol))
       {
