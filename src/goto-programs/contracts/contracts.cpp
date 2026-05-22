@@ -699,7 +699,7 @@ void code_contractst::havoc_static_globals(
       return;
 
     // Build LHS symbol expression
-    type2tc global_type = migrate_type(s.get_type());
+    type2tc global_type = migrate_symbol_type(s);
     expr2tc lhs = symbol2tc(global_type, s.id);
 
     // Do not assign nondeterministic values to pointers when value-set based
@@ -916,7 +916,7 @@ void code_contractst::enforce_contracts(
     goto_functiont new_func;
     new_func.body = wrapper;
     if (func_sym->get_type().is_code())
-      new_func.type = migrate_type(func_sym->get_type());
+      new_func.type = migrate_symbol_type(*func_sym);
     new_func.body_available = true;
     new_func.update_instructions_function(original_id);
 
@@ -1338,7 +1338,7 @@ goto_programt code_contractst::generate_checking_wrapper(
   {
     const code_typet &code_type = to_code_type(original_func.get_type());
     // Convert function type to irep2
-    type2tc func_type = migrate_type(original_func.get_type());
+    type2tc func_type = migrate_symbol_type(original_func);
 
     // Build parameter list
     std::vector<expr2tc> arguments;

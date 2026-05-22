@@ -870,7 +870,7 @@ expr2tc goto_checkt::build_python_type_operand(const typet &type) const
     const symbolt *symbol = ns.lookup(followed);
     if (symbol == nullptr)
       return expr2tc();
-    type2tc symbol_type = migrate_type(symbol->get_type());
+    type2tc symbol_type = migrate_symbol_type(*symbol);
     return symbol2tc(symbol_type, symbol->id);
   }
 

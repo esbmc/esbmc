@@ -11,7 +11,7 @@ void base_type(type2tc &type, const namespacet &ns)
 
     if (symbol && symbol->is_type && !symbol->get_type().is_nil())
     {
-      type = migrate_type(symbol->get_type());
+      type = migrate_symbol_type(*symbol);
       base_type(type, ns); // recursive call
       return;
     }
@@ -125,7 +125,7 @@ bool base_type_eqt::base_type_eq_rec(const type2tc &type1, const type2tc &type2)
     if (!symbol->is_type)
       throw "symbol " + id2string(symbol->name) + " is not a type";
 
-    type2tc tmp = migrate_type(symbol->get_type());
+    type2tc tmp = migrate_symbol_type(*symbol);
     return base_type_eq_rec(tmp, type2);
   }
 
@@ -137,7 +137,7 @@ bool base_type_eqt::base_type_eq_rec(const type2tc &type1, const type2tc &type2)
     if (!symbol->is_type)
       throw "symbol " + id2string(symbol->name) + " is not a type";
 
-    type2tc tmp = migrate_type(symbol->get_type());
+    type2tc tmp = migrate_symbol_type(*symbol);
     return base_type_eq_rec(type1, tmp);
   }
 

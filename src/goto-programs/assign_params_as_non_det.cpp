@@ -24,7 +24,7 @@ symbolt *assign_params_as_non_det::get_default_symbol(
 /// Build an irep2 symbol expression referring to @p sym.
 static expr2tc sym_to_expr2tc(const symbolt &sym)
 {
-  return symbol2tc(migrate_type(sym.get_type()), sym.id);
+  return symbol2tc(migrate_symbol_type(sym), sym.id);
 }
 
 /// Append @p instr (with location and function copied from @p it) before @p it
@@ -132,7 +132,7 @@ bool assign_params_as_non_det::runOnFunction(
     insert_before(
       goto_program,
       it,
-      code_decl2tc(migrate_type(flag_sym->get_type()), flag_sym->id),
+      code_decl2tc(migrate_symbol_type(*flag_sym), flag_sym->id),
       DECL,
       l);
 
@@ -149,7 +149,7 @@ bool assign_params_as_non_det::runOnFunction(
     insert_before(
       goto_program,
       it,
-      code_decl2tc(migrate_type(obj_sym->get_type()), obj_sym->id),
+      code_decl2tc(migrate_symbol_type(*obj_sym), obj_sym->id),
       DECL,
       l);
 

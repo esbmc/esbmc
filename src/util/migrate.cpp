@@ -377,6 +377,22 @@ type2tc migrate_type(const typet &type)
   return ty2;
 }
 
+type2tc migrate_symbol_type(const symbolt &sym)
+{
+  type2tc result = migrate_type(sym.get_type());
+#ifndef NDEBUG
+  // The IREP2 form of a real symbol's type must be stable under a round-trip
+  // through legacy irept (migrate_type_back then migrate_type). This is the
+  // property unit/util/migrate.test.cpp proves for synthetic types; asserting
+  // it here exercises it on every symbol type the pipeline reads, which is what
+  // makes deriving the legacy field from IREP2 lossless once storage flips.
+  assert(
+    migrate_type(migrate_type_back(result)) == result &&
+    "symbol type not stable under IREP2<->irept round-trip");
+#endif
+  return result;
+}
+
 static const typet &decide_on_expr_type(const exprt &side1, const exprt &side2)
 {
   // For some arithmetic expr, decide on the result of operating on them.

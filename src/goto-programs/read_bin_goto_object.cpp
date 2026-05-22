@@ -80,7 +80,7 @@ bool read_bin_goto_object(
       if (it == goto_functions.function_map.end())
         goto_functions.function_map.emplace(symbol.id, goto_functiont());
       goto_functions.function_map.at(symbol.id).type =
-        migrate_type(symbol.get_type());
+        migrate_symbol_type(symbol);
     }
 
     // Add functions only from the list if there is a whitelist

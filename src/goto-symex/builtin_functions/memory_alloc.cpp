@@ -50,7 +50,7 @@ expr2tc goto_symext::create_dynamic_memory_symbol(
     "alignment", constant_exprt(config.ansi_c.max_alignment(), size_type()));
 
   new_context.add(symbol);
-  type2tc new_type = migrate_type(symbol.get_type());
+  type2tc new_type = migrate_symbol_type(symbol);
   return symbol2tc(new_type, symbol.id);
 }
 
@@ -447,7 +447,7 @@ expr2tc goto_symext::symex_mem_inf(
   symbol.mode = "C";
   new_context.add(symbol);
 
-  type2tc new_type = migrate_type(symbol.get_type());
+  type2tc new_type = migrate_symbol_type(symbol);
 
   type2tc rhs_type;
   expr2tc rhs_ptr_obj;
@@ -579,14 +579,14 @@ expr2tc goto_symext::symex_mem(
 
   new_context.add(symbol);
 
-  type2tc new_type = migrate_type(symbol.get_type());
+  type2tc new_type = migrate_symbol_type(symbol);
 
   type2tc rhs_type;
   expr2tc rhs_ptr_obj;
 
   if (size_is_one)
   {
-    rhs_type = migrate_type(symbol.get_type());
+    rhs_type = migrate_symbol_type(symbol);
     rhs_ptr_obj = symbol2tc(new_type, symbol.id);
   }
   else
