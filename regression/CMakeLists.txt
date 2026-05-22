@@ -305,3 +305,22 @@ foreach(regression IN LISTS REGRESSIONS)
     endif()
     add_esbmc_regression("${regression}" "${MODES}")
 endforeach()
+
+# Tests that legitimately run close to the per-test TIMEOUT on CI's Linux
+# runners (locally ~20-30s; CI ~75-110s; CI cap 120s, leaving no headroom).
+# Double their TIMEOUT relative to the global cap so transient CI slowness
+# doesn't flap them, while keeping the rest of the suite's fail-fast budget
+# unchanged.
+math(EXPR ESBMC_REGRESS_TIMEOUT_SLOW "${ESBMC_REGRESS_TIMEOUT} * 2")
+set(_slow_regression_tests
+    "regression/humaneval/humaneval_34"
+    "regression/humaneval/humaneval_54"
+    "regression/quixbugs/next_palindrome"
+    "regression/quixbugs/pascal"
+    "regression/ai-generated-code/two_sum"
+)
+foreach(_t IN LISTS _slow_regression_tests)
+    if(TEST ${_t})
+        set_tests_properties(${_t} PROPERTIES TIMEOUT ${ESBMC_REGRESS_TIMEOUT_SLOW})
+    endif()
+endforeach()

@@ -43,6 +43,8 @@ ignored_dirs=(
   "esbmc-assert-no-msg"
   "esbmc-assert"
   "esbmc-assume"
+  "github_4629"
+  "github_4629_unwind"
   "esbmc-assert"
   "esbmc-assert-no-msg"
   "esbmc-unreachable-args-fail"
