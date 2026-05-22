@@ -1180,8 +1180,7 @@ public:
     {
       outmem.push_back(get_by_ast(
         members[i],
-        wrap(
-          solver->mkTupleSelect(expr(sym), i), convert_sort(members[i]))));
+        wrap(solver->mkTupleSelect(expr(sym), i), convert_sort(members[i]))));
     }
 
     return constant_struct2tc(type, std::move(outmem));
