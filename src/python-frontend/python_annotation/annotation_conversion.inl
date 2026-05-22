@@ -698,6 +698,47 @@ std::string python_annotation<Json>::get_argument_type(const Json &arg)
   return ""; // Cannot determine type
 }
 
+// Recursively search a statement subtree for the first
+// ``<name>.append(arg)`` call and return its argument node. Returns an
+// empty Json when no such append exists. Used to recover the element
+// type of an empty list literal (issue #3239).
+template <class Json>
+static Json find_first_append_arg(const Json &node, const std::string &name)
+{
+  if (node.is_object())
+  {
+    if (
+      node.value("_type", std::string()) == "Call" && node.contains("func") &&
+      node["func"].is_object() &&
+      node["func"].value("_type", std::string()) == "Attribute" &&
+      node["func"].value("attr", std::string()) == "append" &&
+      node["func"].contains("value") && node["func"]["value"].is_object() &&
+      node["func"]["value"].value("_type", std::string()) == "Name" &&
+      node["func"]["value"].value("id", std::string()) == name &&
+      node.contains("args") && node["args"].is_array() &&
+      node["args"].size() == 1)
+    {
+      return node["args"][0];
+    }
+    for (auto it = node.begin(); it != node.end(); ++it)
+    {
+      Json found = find_first_append_arg(*it, name);
+      if (!found.empty())
+        return found;
+    }
+  }
+  else if (node.is_array())
+  {
+    for (const auto &child : node)
+    {
+      Json found = find_first_append_arg(child, name);
+      if (!found.empty())
+        return found;
+    }
+  }
+  return Json();
+}
+
 // Method to get the full type of a list literal
 template <class Json>
 std::string
@@ -2278,7 +2319,38 @@ InferResult python_annotation<Json>::infer_type(
   if (value_type == "Constant")
     inferred_type = get_type_from_constant(stmt["value"]);
   else if (value_type == "List")
+  {
+    // Non-empty literals stay as a bare ``list`` so the converter keeps its
+    // permissive, per-element (possibly heterogeneous) handling.
     inferred_type = "list";
+
+    // An *empty* literal leaves the element type unresolved, so a loop
+    // variable bound from it (e.g. the ``for p in primes`` synthesised
+    // from ``all(... for p in primes)``) gets an inconsistent bit-width
+    // and trips assert_arith_2ops_consistency in integer arithmetic
+    // (issue #3239). Recover the element type from the first
+    // ``<target>.append(arg)`` in the same scope, but only commit to a
+    // concrete ``list[int]`` when that argument actually resolves to an
+    // int -- otherwise (object/float/str/unresolved) keep the permissive
+    // bare ``list`` so object lists such as ``result = []; result.append(obj)``
+    // are unaffected.
+    const auto &elts = stmt["value"];
+    if (
+      (!elts.contains("elts") || elts["elts"].empty()) &&
+      stmt.contains("targets") && stmt["targets"].is_array() &&
+      !stmt["targets"].empty() && stmt["targets"][0].is_object() &&
+      stmt["targets"][0].value("_type", std::string()) == "Name")
+    {
+      const std::string target_name =
+        stmt["targets"][0].value("id", std::string());
+      if (!target_name.empty())
+      {
+        Json append_arg = find_first_append_arg(body, target_name);
+        if (!append_arg.empty() && get_argument_type(append_arg) == "int")
+          inferred_type = "list[int]";
+      }
+    }
+  }
   else if (value_type == "Set")
     inferred_type = "set";
   else if (value_type == "Tuple")
