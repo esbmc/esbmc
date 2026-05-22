@@ -2108,8 +2108,7 @@ exprt python_list::handle_index_access(
       size_t subscript_depth = 0;
       const nlohmann::json *cur = &list_value_;
       while (cur->is_object() && cur->contains("value") &&
-             (*cur)["value"].is_object() &&
-             (*cur)["value"].contains("_type") &&
+             (*cur)["value"].is_object() && (*cur)["value"].contains("_type") &&
              (*cur)["value"]["_type"] == "Subscript")
       {
         ++subscript_depth;
