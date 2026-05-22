@@ -884,6 +884,16 @@ typet type_handler::get_list_type(const nlohmann::json &list_value) const
         std::string type_string = slice["value"].get<std::string>();
         t = get_typet(type_utils::remove_quotes(type_string));
       }
+      else if (
+        slice["_type"] == "Subscript" && slice.contains("value") &&
+        slice["value"].is_object() && slice["value"].contains("id") &&
+        slice["value"]["id"].is_string())
+      {
+        // Nested container like list[list[T]] or list[dict[K, V]] — resolve
+        // to the inner container's own type so subsequent subscripts route
+        // through the right element-access primitive.
+        t = get_typet(slice["value"]["id"].get<std::string>());
+      }
       else
         t = empty_typet();
       return pointer_typet(t);

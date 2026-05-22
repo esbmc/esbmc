@@ -761,6 +761,8 @@ std::string python_annotation<Json>::get_type_from_binary_expr(
     type = get_type_from_binary_expr(lhs, body);
   else if (lhs["_type"] == "List")
     type = "list";
+  else if (lhs["_type"] == "Tuple")
+    type = "tuple";
   // Floor division (//) operations always result in an integer value
   else if (
     stmt.contains("value") && stmt["value"]["op"]["_type"] == "FloorDiv")
@@ -2110,6 +2112,13 @@ std::string python_annotation<Json>::get_type_from_method(const Json &call)
       return "list";
     // setdefault/get/pop return the value, not the dict — recover its
     // container shape from the default arg when the dict is untyped.
+    // When that fails (no default arg supplied, e.g. ``d.get(key)``),
+    // fall back to "Any" rather than the receiver's "dict" type: the
+    // returned value is an element, never the container itself, and
+    // letting "dict" propagate up causes the assignment-LHS symbol to
+    // be created as __python_dict__ — the dict-handler then emits a
+    // d.keys/d.values access whose member type later trips a member2t
+    // assertion at symex time (tracked in #4682).
     if (
       obj_type == "dict" && call["func"].contains("attr") &&
       (call["func"]["attr"] == "setdefault" ||
@@ -2118,6 +2127,7 @@ std::string python_annotation<Json>::get_type_from_method(const Json &call)
       std::string t = infer_type_from_default_arg_shape(call["args"]);
       if (!t.empty())
         return t;
+      return "Any";
     }
     type = obj_type;
   }

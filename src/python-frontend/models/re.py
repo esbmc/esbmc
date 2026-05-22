@@ -24,8 +24,18 @@
 # 3) String constraint solving can be expensive; we may need further strategies for handling large string programs.
 
 
-def try_match_char_class_range(pattern: str, pattern_len: int, string: str) -> int:
-    """Match [x-y]+ or [x-y]* patterns"""
+def try_match_char_class_range(pattern: str,
+                               pattern_len: int,
+                               string: str,
+                               prefix_only: bool = False) -> int:
+    """Match [x-y]+ or [x-y]* patterns.
+
+    When ``prefix_only`` is False (default, used by ``fullmatch``), every
+    character of ``string`` must lie in [x-y]. When True (used by ``match``),
+    only the leading run of in-range characters is required: ``+`` needs at
+    least one such character, ``*`` always matches at the start of the
+    string. This mirrors CPython's at-the-start semantics for ``re.match``.
+    """
     if pattern_len != 6:
         return -1
 
@@ -47,6 +57,15 @@ def try_match_char_class_range(pattern: str, pattern_len: int, string: str) -> i
     if string_len == 0:
         return 1 if quantifier == '*' else 0
 
+    if prefix_only:
+        # `*` matches the empty prefix always; `+` requires one leading char.
+        if quantifier == '*':
+            return 1
+        c0: str = string[0]
+        if c0 < start_char or c0 > end_char:
+            return 0
+        return 1
+
     i: int = 0
     while i < string_len:
         c: str = string[i]
@@ -58,8 +77,15 @@ def try_match_char_class_range(pattern: str, pattern_len: int, string: str) -> i
     return 1
 
 
-def try_match_digit_sequence(pattern: str, pattern_len: int, string: str) -> int:
-    r"""Match \d+ or \d* patterns"""
+def try_match_digit_sequence(pattern: str,
+                             pattern_len: int,
+                             string: str,
+                             prefix_only: bool = False) -> int:
+    r"""Match \d+ or \d* patterns.
+
+    See ``try_match_char_class_range`` for the ``prefix_only`` semantics:
+    full-string when False, at-the-start when True.
+    """
     if pattern_len != 3:
         return -1
 
@@ -77,6 +103,14 @@ def try_match_digit_sequence(pattern: str, pattern_len: int, string: str) -> int
 
     if string_len == 0:
         return 1 if quantifier == '*' else 0
+
+    if prefix_only:
+        if quantifier == '*':
+            return 1
+        c0: str = string[0]
+        if c0 < '0' or c0 > '9':
+            return 0
+        return 1
 
     i: int = 0
     while i < string_len:
@@ -204,12 +238,15 @@ def match(pattern: str, string: str) -> bool:
         if ch0 == '.' and ch1 == '*':
             return True
 
-    # Try each pattern recognizer
-    result: int = try_match_char_class_range(pattern, pattern_len, string)
+    # Try each pattern recognizer. ``re.match`` matches at the START of the
+    # string, so the quantified recognizers run in prefix mode -- a non-
+    # matching suffix is fine, as long as the leading run satisfies the
+    # quantifier (one-or-more for ``+``, zero-or-more for ``*``).
+    result: int = try_match_char_class_range(pattern, pattern_len, string, True)
     if result >= 0:
         return result == 1
 
-    result = try_match_digit_sequence(pattern, pattern_len, string)
+    result = try_match_digit_sequence(pattern, pattern_len, string, True)
     if result >= 0:
         return result == 1
 

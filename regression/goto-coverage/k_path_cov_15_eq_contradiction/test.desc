@@ -1,0 +1,5 @@
+CORE
+main.c
+--k-path-coverage=2 --unwind 2 --no-unwinding-assertions
+^k-Path Coverage: 100%$
+^VERIFICATION FAILED$

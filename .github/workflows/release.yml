@@ -10,11 +10,17 @@ jobs:
   build:
     strategy:
       matrix:
-        os: [ubuntu-24.04, windows-latest]
+        include:
+          - os: ubuntu-24.04
+            flags: '-b RelWithDebInfo -e OFF'
+          - os: windows-latest
+            flags: '-b RelWithDebInfo -e OFF'
+          - os: macos-latest
+            flags: '-b RelWithDebInfo -e OFF -c 21'
     uses: ./.github/workflows/build.yml
     with:
       operating-system: ${{ matrix.os }}
-      build-flags: '-b RelWithDebInfo -e OFF'
+      build-flags: ${{ matrix.flags }}
       testing: false
 
   build-info:
@@ -39,6 +45,13 @@ jobs:
           path: ./windows-release
       - name: Create Windows Release file
         run: zip -r esbmc-windows.zip ./windows-release
+      - name: Download macOS Build
+        uses: actions/download-artifact@v4
+        with:
+          name: 'release-macos-latest--b RelWithDebInfo -e OFF -c 21'
+          path: ./macos-release
+      - name: Create macOS Release file
+        run: zip -r esbmc-macos.zip ./macos-release
       - name: Download Info Manual
         uses: actions/download-artifact@v4
         with:
@@ -57,4 +70,5 @@ jobs:
           files: |
             esbmc-linux.zip
             esbmc-windows.zip
+            esbmc-macos.zip
             esbmc.info
