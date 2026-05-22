@@ -55,12 +55,13 @@ public:
 
   const exprt get_w_guard_expr(const rw_sett::entryt &entry)
   {
-    return get_guard_symbol_expr(entry.original_expr);
+    return get_guard_symbol_expr(migrate_expr_back(entry.original_expr));
   }
 
   const exprt get_assertion(const rw_sett::entryt &entry)
   {
-    return gen_not(get_guard_symbol_expr(entry.original_expr));
+    return gen_not(
+      get_guard_symbol_expr(migrate_expr_back(entry.original_expr)));
   }
 
   void add_initialization(goto_programt &goto_program);
@@ -127,13 +128,11 @@ void add_race_assertions(
        instruction.is_assume()) &&
       !is_atomic)
     {
-      exprt tmp_expr;
-      if (instruction.is_goto() || instruction.is_assert())
-        tmp_expr = migrate_expr_back(instruction.guard);
-      else
-        tmp_expr = migrate_expr_back(instruction.code);
+      const expr2tc &rw_expr =
+        (instruction.is_goto() || instruction.is_assert()) ? instruction.guard
+                                                           : instruction.code;
 
-      rw_sett rw_set(ns, i_it, tmp_expr);
+      rw_sett rw_set(ns, i_it, rw_expr);
 
       if (rw_set.entries.empty())
         continue;
@@ -186,7 +185,8 @@ void add_race_assertions(
 
         t->type = ASSIGN;
         code_assignt theassign(
-          w_guards.get_w_guard_expr(e_it->second), e_it->second.get_guard());
+          w_guards.get_w_guard_expr(e_it->second),
+          migrate_expr_back(e_it->second.get_guard().as_expr()));
 
         migrate_expr(theassign, t->code);
 
