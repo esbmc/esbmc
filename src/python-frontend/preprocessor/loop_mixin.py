@@ -1354,8 +1354,8 @@ class LoopMixin:
     @staticmethod
     def _is_zip_call(it):
         """Return True if `it` is a zip(...) call with at least one argument."""
-        return (isinstance(it, ast.Call) and isinstance(it.func, ast.Name)
-                and it.func.id == "zip" and len(it.args) >= 1 and not it.keywords)
+        return (isinstance(it, ast.Call) and isinstance(it.func, ast.Name) and it.func.id == "zip"
+                and len(it.args) >= 1 and not it.keywords)
 
     @staticmethod
     def _is_filter_call(it):
@@ -1398,8 +1398,10 @@ class LoopMixin:
         name = self._name_id_or_none(target) or "ESBMC_loop_var"
         ann = ast.Name(id=(element_type if element_type and element_type != "Any" else "Any"),
                        ctx=ast.Load())
-        assign = ast.AnnAssign(
-            target=ast.Name(id=name, ctx=ast.Store()), annotation=ann, value=current, simple=1)
+        assign = ast.AnnAssign(target=ast.Name(id=name, ctx=ast.Store()),
+                               annotation=ann,
+                               value=current,
+                               simple=1)
         self.ensure_all_locations(assign, node)
         out = [assign]
         if isinstance(target, (ast.Tuple, ast.List)):
@@ -1408,10 +1410,9 @@ class LoopMixin:
                     continue
                 unpack = ast.Assign(
                     targets=[ast.Name(id=elt.id, ctx=ast.Store())],
-                    value=ast.Subscript(
-                        value=ast.Name(id=name, ctx=ast.Load()),
-                        slice=ast.Constant(value=i),
-                        ctx=ast.Load()),
+                    value=ast.Subscript(value=ast.Name(id=name, ctx=ast.Load()),
+                                        slice=ast.Constant(value=i),
+                                        ctx=ast.Load()),
                 )
                 self.ensure_all_locations(unpack, node)
                 out.append(unpack)
@@ -1423,10 +1424,9 @@ class LoopMixin:
         inc = ast.AnnAssign(
             target=self.create_name_node(index_var, ast.Store(), node),
             annotation=self.create_name_node("int", ast.Load(), node),
-            value=ast.BinOp(
-                left=self.create_name_node(index_var, ast.Load(), node),
-                op=op,
-                right=self.create_constant_node(abs(step), node)),
+            value=ast.BinOp(left=self.create_name_node(index_var, ast.Load(), node),
+                            op=op,
+                            right=self.create_constant_node(abs(step), node)),
             simple=1,
         )
         self.ensure_all_locations(inc, node)
@@ -1447,20 +1447,18 @@ class LoopMixin:
         index_assign = ast.AnnAssign(
             target=self.create_name_node(index_var, ast.Store(), node),
             annotation=self.create_name_node("int", ast.Load(), node),
-            value=ast.BinOp(
-                left=self.create_name_node(length_var, ast.Load(), node),
-                op=ast.Sub(),
-                right=self.create_constant_node(1, node)),
+            value=ast.BinOp(left=self.create_name_node(length_var, ast.Load(), node),
+                            op=ast.Sub(),
+                            right=self.create_constant_node(1, node)),
             simple=1,
         )
         self.ensure_all_locations(index_assign, node)
         setup.append(index_assign)
 
         # while ESBMC_index >= 0:
-        while_cond = ast.Compare(
-            left=self.create_name_node(index_var, ast.Load(), node),
-            ops=[ast.GtE()],
-            comparators=[self.create_constant_node(0, node)])
+        while_cond = ast.Compare(left=self.create_name_node(index_var, ast.Load(), node),
+                                 ops=[ast.GtE()],
+                                 comparators=[self.create_constant_node(0, node)])
         self.ensure_all_locations(while_cond, node)
 
         body = self._make_target_assign(node, node.target, iter_var_name, index_var, element_type)
@@ -1498,10 +1496,9 @@ class LoopMixin:
         if isinstance(func, ast.Constant) and func.value is None:
             pred = ast.Name(id=name, ctx=ast.Load())
         else:
-            pred = ast.Call(
-                func=copy.deepcopy(func),
-                args=[ast.Name(id=name, ctx=ast.Load())],
-                keywords=[])
+            pred = ast.Call(func=copy.deepcopy(func),
+                            args=[ast.Name(id=name, ctx=ast.Load())],
+                            keywords=[])
         self.ensure_all_locations(pred, node)
         guard = ast.If(test=pred, body=list(node.body), orelse=[])
         self.ensure_all_locations(guard, node)
@@ -1536,19 +1533,17 @@ class LoopMixin:
 
         # ESBMC_length = min(len(iter0), len(iter1), ...)
         def len_call(nm):
-            call = ast.Call(
-                func=self.create_name_node("len", ast.Load(), node),
-                args=[self.create_name_node(nm, ast.Load(), node)],
-                keywords=[])
+            call = ast.Call(func=self.create_name_node("len", ast.Load(), node),
+                            args=[self.create_name_node(nm, ast.Load(), node)],
+                            keywords=[])
             self.ensure_all_locations(call, node)
             return call
 
         length_expr = len_call(iter_names[0])
         for nm in iter_names[1:]:
-            length_expr = ast.Call(
-                func=self.create_name_node("min", ast.Load(), node),
-                args=[length_expr, len_call(nm)],
-                keywords=[])
+            length_expr = ast.Call(func=self.create_name_node("min", ast.Load(), node),
+                                   args=[length_expr, len_call(nm)],
+                                   keywords=[])
             self.ensure_all_locations(length_expr, node)
 
         length_assign = ast.AnnAssign(
@@ -1570,30 +1565,29 @@ class LoopMixin:
             for tgt, nm, et in zip(targets, iter_names, elem_types):
                 if not isinstance(tgt, ast.Name):
                     continue
-                cur = ast.Subscript(
-                    value=ast.Name(id=nm, ctx=ast.Load()),
-                    slice=ast.Name(id=index_var, ctx=ast.Load()),
-                    ctx=ast.Load())
+                cur = ast.Subscript(value=ast.Name(id=nm, ctx=ast.Load()),
+                                    slice=ast.Name(id=index_var, ctx=ast.Load()),
+                                    ctx=ast.Load())
                 ann = ast.Name(id=(et if et and et != "Any" else "Any"), ctx=ast.Load())
-                assign = ast.AnnAssign(
-                    target=ast.Name(id=tgt.id, ctx=ast.Store()),
-                    annotation=ann, value=cur, simple=1)
+                assign = ast.AnnAssign(target=ast.Name(id=tgt.id, ctx=ast.Store()),
+                                       annotation=ann,
+                                       value=cur,
+                                       simple=1)
                 self.ensure_all_locations(assign, node)
                 body.append(assign)
         else:
             # Single target variable receives a tuple of the parallel elements.
             name = self._name_id_or_none(target) or "ESBMC_loop_var"
             elts = [
-                ast.Subscript(
-                    value=ast.Name(id=nm, ctx=ast.Load()),
-                    slice=ast.Name(id=index_var, ctx=ast.Load()),
-                    ctx=ast.Load()) for nm in iter_names
+                ast.Subscript(value=ast.Name(id=nm, ctx=ast.Load()),
+                              slice=ast.Name(id=index_var, ctx=ast.Load()),
+                              ctx=ast.Load()) for nm in iter_names
             ]
             tup = ast.Tuple(elts=elts, ctx=ast.Load())
-            assign = ast.AnnAssign(
-                target=ast.Name(id=name, ctx=ast.Store()),
-                annotation=ast.Name(id="tuple", ctx=ast.Load()),
-                value=tup, simple=1)
+            assign = ast.AnnAssign(target=ast.Name(id=name, ctx=ast.Store()),
+                                   annotation=ast.Name(id="tuple", ctx=ast.Load()),
+                                   value=tup,
+                                   simple=1)
             self.ensure_all_locations(assign, node)
             body.append(assign)
 
