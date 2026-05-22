@@ -119,6 +119,47 @@ bool python_languaget::parse(const std::string &path)
     exit(1);
   }
 
+  // Verify the interpreter is Python 3 — parser.py uses f-strings, which
+  // Python 2.x cannot parse, surfacing a cryptic SyntaxError (issue #1967).
+  // The check prints just the major version so a single getline suffices.
+  {
+    bp::ipstream version_out;
+    try
+    {
+      bp::child version_proc(
+        python_exec_path,
+        std::vector<std::string>{
+          "-c", "import sys; print(sys.version_info[0])"},
+        bp::std_out > version_out,
+        bp::std_err > bp::null);
+      std::string major;
+      std::getline(version_out, major);
+      version_proc.wait();
+      while (!major.empty() && (major.back() == '\r' || major.back() == '\n' ||
+                                major.back() == ' '))
+        major.pop_back();
+      if (major != "3")
+      {
+        log_error(
+          "ESBMC's Python frontend requires Python 3 (interpreter at "
+          "'{}' reports major version '{}'). Re-run with "
+          "--python <path-to-python3>.\n",
+          python_exec_path.string(),
+          major.empty() ? std::string("?") : major);
+        exit(1);
+      }
+    }
+    catch (const std::exception &e)
+    {
+      log_error(
+        "Failed to determine Python version for '{}': {}. "
+        "Re-run with --python <path-to-python3>.\n",
+        python_exec_path.string(),
+        e.what());
+      exit(1);
+    }
+  }
+
   // Create a child process to execute Python
   bp::child process(python_exec_path, args);
 
