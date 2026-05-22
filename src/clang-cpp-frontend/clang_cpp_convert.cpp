@@ -14,6 +14,8 @@ CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 #include <clang/Index/USRGeneration.h>
 #include <clang/Frontend/ASTUnit.h>
 #include <clang/AST/ParentMapContext.h>
+#include <llvm/ADT/SmallVector.h>
+#include <llvm/ADT/STLExtras.h>
 #include <llvm/Support/raw_os_ostream.h>
 CC_DIAGNOSTIC_POP()
 
@@ -1503,151 +1505,102 @@ void clang_cpp_convertert::build_member_from_component(
   component.swap(member);
 }
 
-// Look up the destructor of a class type by iterating the struct's methods
-// (the destructor is registered as the unique member function whose
-// return-type id is "destructor"). More robust than util/get_destructor,
-// which keys symbol_base_map by tag and so misses template instantiations
-// where the tag string is "struct A<B>" rather than "A<B>".
-static bool find_class_destructor(
-  const namespacet &ns,
-  const typet &type,
-  code_function_callt &call)
-{
-  typet followed = type;
-  if (followed.id() == "symbol")
-    followed = ns.follow(followed);
-  if (followed.id() != "struct")
-    return false;
-
-  for (const auto &component : to_struct_type(followed).methods())
-  {
-    if (!component.type().is_code())
-      continue;
-    const code_typet &code_type = to_code_type(component.type());
-    if (code_type.return_type().id() != "destructor")
-      continue;
-
-    exprt fn("symbol", component.type());
-    fn.identifier(component.name());
-    call = code_function_callt();
-    call.function() = fn;
-    return true;
-  }
-  return false;
-}
-
 bool clang_cpp_convertert::build_destructor_chain(
-  const clang::FunctionDecl &fd,
+  const clang::CXXDestructorDecl &dd,
   code_blockt &body)
 {
-  const auto *dd = llvm::dyn_cast<clang::CXXDestructorDecl>(&fd);
-  if (!dd)
-    return false;
-
-  const clang::CXXRecordDecl *parent = dd->getParent();
+  const clang::CXXRecordDecl *parent = dd.getParent();
   if (!parent || !parent->hasDefinition())
     return false;
 
-  // Locate `this` for the destructor we're synthesising. Both member and
-  // base chains build their argument from `this`. By the time
-  // get_function_body runs for a CXXDestructor, the implicit `this`
-  // parameter must already have been registered in this_map by
-  // get_function; a miss is a frontend invariant violation, not a
-  // routinely-skippable case.
-  std::size_t this_addr = reinterpret_cast<std::size_t>(fd.getFirstDecl());
+  std::size_t this_addr = reinterpret_cast<std::size_t>(dd.getFirstDecl());
   auto this_it = this_map.find(this_addr);
   assert(
     this_it != this_map.end() &&
     "destructor reached body synthesis without a registered `this`");
-  const typet this_ptr_type = this_it->second.second;
 
-  // 1. Member-subobject destructors, in reverse declaration order.
-  std::vector<const clang::FieldDecl *> fields;
-  for (const clang::FieldDecl *f : parent->fields())
-    fields.push_back(f);
+  const irep_idt &this_id = this_it->second.first;
+  const typet &this_ptr_type = this_it->second.second;
+  exprt deref =
+    dereference_exprt(symbol_exprt(this_id, this_ptr_type), this_ptr_type);
 
-  for (auto rit = fields.rbegin(); rit != fields.rend(); ++rit)
+  // Trivial destructors are no-ops; skip symbol table lookup for them.
+  auto lookup_dtor = [&](const clang::CXXDestructorDecl *d) -> const symbolt * {
+    if (!d || d->isTrivial())
+      return nullptr;
+    std::string name, id;
+    get_decl_name(*d, name, id);
+    return ns.lookup(irep_idt(id));
+  };
+
+  // Build and append a destructor call to `body`.
+  auto emit_dtor_call = [&](const symbolt &sym, exprt arg) {
+    exprt fn("symbol", sym.type);
+    fn.identifier(sym.id);
+    code_function_callt call;
+    call.function() = fn;
+    call.arguments().push_back(std::move(arg));
+    body.operands().push_back(std::move(call));
+  };
+
+  // Cast `this` to the base's expected pointer type and emit the call.
+  auto emit_base_dtor = [&](const symbolt &sym) {
+    exprt this_expr = symbol_exprt(this_id, this_ptr_type);
+    gen_typecast(
+      ns, this_expr, to_code_type(sym.type).arguments().front().type());
+    emit_dtor_call(sym, std::move(this_expr));
+  };
+
+  // 1. Member subobjects, reverse declaration order (C++ [class.dtor]/9).
+  llvm::SmallVector<const clang::FieldDecl *, 8> fields(parent->fields());
+  for (const clang::FieldDecl *field : llvm::reverse(fields))
   {
-    const clang::FieldDecl *field = *rit;
-    clang::QualType field_qt = field->getType();
-
-    // Only class-typed members can have a destructor to call.
-    // TODO: array-of-class members (`T member[N]`) are silently skipped
-    // here because getAsCXXRecordDecl() returns null for array types.
-    // C++ [class.dtor]/9 requires element destructors to run in reverse
-    // index order; covered by KNOWNBUG `cpp/dtor_array_member`.
-    if (!field_qt->getAsCXXRecordDecl())
+    clang::QualType qt = field->getType();
+    const clang::CXXRecordDecl *rec = qt->getAsCXXRecordDecl();
+    if (!rec)
+      continue;
+    const symbolt *sym = lookup_dtor(rec->getDestructor());
+    if (!sym)
       continue;
 
     typet field_type;
-    if (get_type(field_qt, field_type))
+    if (get_type(qt, field_type))
       return true;
 
-    code_function_callt dtor_call;
-    if (!find_class_destructor(ns, field_type, dtor_call))
-      continue;
-
-    // Resolve the field's symbol id so the member expression carries the
-    // same #identifier the rest of the frontend uses.
-    exprt field_ref;
-    if (get_decl_ref(*field, field_ref))
-      return true;
-
-    // Build &(*this).field.  dereference_exprt(op, tp) sets the type to
-    // tp.subtype(), so pass the pointer type and get the struct back.
-    exprt this_sym = symbol_exprt(this_it->second.first, this_ptr_type);
-    exprt deref = dereference_exprt(this_sym, this_ptr_type);
-    member_exprt member(deref, field_ref.name(), field_type);
-
-    dtor_call.arguments().push_back(address_of_exprt(member));
-    body.operands().push_back(dtor_call);
+    std::string field_name, field_id;
+    get_decl_name(*field, field_name, field_id);
+    emit_dtor_call(
+      *sym, address_of_exprt(member_exprt(deref, field_name, field_type)));
   }
 
-  // 2. Base-subobject destructors, in reverse declaration order.
-  //    Virtual bases are handled by the most-derived class only; skip here.
-  //    TODO: ESBMC does not yet model the Itanium ABI's split between the
-  //    complete-object destructor (D1, walks virtual bases exactly once) and
-  //    the base-object destructor (D2, skips them). Until that split exists,
-  //    virtual bases are never destroyed; covered by KNOWNBUG
-  //    `cpp/dtor_virtual_base`.
-  std::vector<const clang::CXXBaseSpecifier *> bases;
-  for (const auto &b : parent->bases())
-    bases.push_back(&b);
-
-  if (bases.empty())
-    return false;
-
-  for (auto rit = bases.rbegin(); rit != bases.rend(); ++rit)
+  // 2. Direct non-virtual base subobjects, reverse declaration order.
+  for (const clang::CXXBaseSpecifier &base : llvm::reverse(parent->bases()))
   {
-    const clang::CXXBaseSpecifier *base = *rit;
-    if (base->isVirtual())
+    if (base.isVirtual())
       continue;
-
-    clang::QualType base_qt = base->getType();
-    if (!base_qt->getAsCXXRecordDecl())
+    const clang::CXXRecordDecl *rec = base.getType()->getAsCXXRecordDecl();
+    if (!rec)
       continue;
-
-    typet base_type;
-    if (get_type(base_qt, base_type))
-      return true;
-
-    code_function_callt dtor_call;
-    if (!find_class_destructor(ns, base_type, dtor_call))
+    const symbolt *sym = lookup_dtor(rec->getDestructor());
+    if (!sym)
       continue;
+    emit_base_dtor(*sym);
+  }
 
-    // Cast `this` to the base destructor's expected `this` pointer type.
-    const code_typet &dtor_code_type =
-      to_code_type(dtor_call.function().type());
-    if (dtor_code_type.arguments().empty())
+  // 3. Virtual base subobjects, reverse declaration order.
+  // ESBMC does not model the Itanium D1/D2 destructor split, so virtual bases
+  // are called unconditionally. Diamond hierarchies with non-trivial virtual-
+  // base destructors are not yet supported (lookup_dtor skips trivial ones,
+  // so structural-only diamond tests are safe).
+  for (const clang::CXXBaseSpecifier &vbase : llvm::reverse(parent->vbases()))
+  {
+    const clang::CXXRecordDecl *rec = vbase.getType()->getAsCXXRecordDecl();
+    if (!rec)
       continue;
-    const typet base_this_type = dtor_code_type.arguments().at(0).type();
-
-    exprt this_expr =
-      symbol_exprt(this_it->second.first, this_it->second.second);
-    gen_typecast(ns, this_expr, base_this_type);
-
-    dtor_call.arguments().push_back(this_expr);
-    body.operands().push_back(dtor_call);
+    const symbolt *sym = lookup_dtor(rec->getDestructor());
+    if (!sym)
+      continue;
+    emit_base_dtor(*sym);
   }
 
   return false;
@@ -1662,18 +1615,20 @@ bool clang_cpp_convertert::get_function_body(
   // synthesise a body (hasBody() returns false), leaving symbol.value as nil.
   // Start with an empty block; the member/base destructor chain is appended
   // below by build_destructor_chain, matching C++ [class.dtor]/9 semantics.
-  bool synthesised_dtor_body = false;
-  if (const auto *dd = llvm::dyn_cast<clang::CXXDestructorDecl>(&fd))
+  // Implicit/defaulted destructors have no AST body; synthesise an empty one.
+  // All other bodyless functions are declarations only — skip them.
+  if (!fd.hasBody())
   {
-    if (!fd.hasBody() && (dd->isImplicit() || dd->isExplicitlyDefaulted()))
-    {
-      new_expr = code_blockt();
-      synthesised_dtor_body = true;
-    }
+    if (
+      fd.getKind() != clang::Decl::CXXDestructor ||
+      (!fd.isImplicit() && !fd.isExplicitlyDefaulted()))
+      return false;
+    new_expr = code_blockt();
   }
+  else if (clang_c_convertert::get_function_body(fd, new_expr, ftype))
+    return true;
 
-  // do nothing if function body doesn't exist (and we haven't synthesised one)
-  if (!fd.hasBody() && !synthesised_dtor_body)
+  if (new_expr.statement() != "block")
     return false;
 
   // Retrieve the mapping between captured variables
@@ -1691,17 +1646,6 @@ bool clang_cpp_convertert::get_function_body(
         std::pair<field_mapt, clang::FieldDecl *>(captures, thisCapture);
     }
   }
-
-  // Parse body, unless we already synthesised an empty body for an
-  // implicit/defaulted destructor above.
-  if (!synthesised_dtor_body)
-  {
-    if (clang_c_convertert::get_function_body(fd, new_expr, ftype))
-      return true;
-  }
-
-  if (new_expr.statement() != "block")
-    return false;
 
   code_blockt &body = to_code_block(to_code(new_expr));
 
@@ -1889,9 +1833,10 @@ bool clang_cpp_convertert::get_function_body(
 
   // if it's a destructor, append the implicit chain of member-subobject
   // and base-subobject destructor calls.
-  if (fd.getKind() == clang::Decl::CXXDestructor)
+  else if (fd.getKind() == clang::Decl::CXXDestructor)
   {
-    if (build_destructor_chain(fd, body))
+    if (build_destructor_chain(
+          static_cast<const clang::CXXDestructorDecl &>(fd), body))
       return true;
   }
 
