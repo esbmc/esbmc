@@ -939,6 +939,18 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   case ExpressionType::SUBSCRIPT:
   {
     exprt array = get_expr(element["value"]);
+
+    // If evaluating the base raised (e.g. bin()/hex()/oct() on a non-constant
+    // integer returns a cpp-throw side effect), propagate the exception rather
+    // than attempting to index it. Slicing a thrown exception is meaningless
+    // and would build an address_of over a non-array operand, crashing the
+    // converter.
+    if (array.is_nil() || array.statement() == "cpp-throw")
+    {
+      expr = array;
+      break;
+    }
+
     const nlohmann::json &slice = element["slice"];
     typet array_type = ns.follow(array.type());
 
