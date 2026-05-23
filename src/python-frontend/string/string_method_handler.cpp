@@ -2,6 +2,7 @@
 #include <python-frontend/exception_utils.h>
 #include <python-frontend/python_int_overflow.h>
 #include <python-frontend/python_list.h>
+#include <python-frontend/string/string_method_dispatch.h>
 #include <python-frontend/string/string_handler.h>
 #include <python-frontend/string/string_handler_utils.h>
 #include <python-frontend/python_converter.h>
@@ -88,7 +89,7 @@ format_value_from_json(const nlohmann::json &arg, python_converter &converter)
 }
 } // namespace
 
-namespace
+namespace string_method_dispatch
 {
 using keyword_valuest = string_call_utils::keyword_valuest;
 using string_call_utils::collect_keyword_values;
@@ -98,7 +99,7 @@ using string_call_utils::required_arg_node_or_throw;
 using string_call_utils::required_constant_int_arg;
 using string_call_utils::resolve_positional_or_keyword_arg;
 
-static std::optional<exprt> dispatch_replace_method(
+std::optional<exprt> dispatch_replace_method(
   string_handler &self,
   const std::string &method_name,
   const nlohmann::json &args,
@@ -152,7 +153,7 @@ static std::optional<exprt> dispatch_replace_method(
     get_location());
 }
 
-static std::optional<exprt> dispatch_count_method(
+std::optional<exprt> dispatch_count_method(
   string_handler &self,
   const std::string &method_name,
   const nlohmann::json &args,
@@ -208,7 +209,7 @@ static bool is_falsey_constant(const nlohmann::json &node)
   return false;
 }
 
-static std::optional<exprt> dispatch_splitlines_method(
+std::optional<exprt> dispatch_splitlines_method(
   string_handler &self,
   const std::string &method_name,
   const nlohmann::json &call_json,
@@ -242,13 +243,14 @@ struct split_method_argst
   long long maxsplit = -1;
 };
 
-static std::optional<exprt> dispatch_split_method(
+static bool is_none_literal_json(const nlohmann::json &node);
+
+std::optional<exprt> dispatch_split_method(
   const std::string &method_name,
   const nlohmann::json &receiver_json,
   const nlohmann::json &call_json,
   const nlohmann::json &args,
   const keyword_valuest &keyword_values,
-  const std::function<bool(const nlohmann::json &)> &is_none_literal,
   const std::function<exprt()> &get_receiver_expr,
   python_converter &converter)
 {
@@ -268,7 +270,7 @@ static std::optional<exprt> dispatch_split_method(
   const nlohmann::json *maxsplit_node = resolve_positional_or_keyword_arg(
     "split", args, keyword_values, "maxsplit", 1, false);
 
-  if (sep_node == nullptr || is_none_literal(*sep_node))
+  if (sep_node == nullptr || is_none_literal_json(*sep_node))
   {
     parsed.separator = "";
   }
@@ -343,7 +345,7 @@ static std::optional<exprt> dispatch_split_method(
     converter, call_json, input, parsed.separator, parsed.maxsplit);
 }
 
-static std::optional<exprt> dispatch_no_arg_string_methods(
+std::optional<exprt> dispatch_no_arg_string_methods(
   string_handler &self,
   const std::string &method_name,
   const nlohmann::json &args,
@@ -384,7 +386,7 @@ static std::optional<exprt> dispatch_no_arg_string_methods(
   return std::nullopt;
 }
 
-static std::optional<exprt> dispatch_one_arg_string_methods(
+std::optional<exprt> dispatch_one_arg_string_methods(
   string_handler &self,
   const std::string &method_name,
   const nlohmann::json &args,
@@ -481,7 +483,7 @@ static search_args_parsedt parse_string_search_args(
   return parsed;
 }
 
-static std::optional<exprt> dispatch_search_string_methods(
+std::optional<exprt> dispatch_search_string_methods(
   string_handler &self,
   const std::string &method_name,
   const nlohmann::json &call_json,
@@ -551,7 +553,7 @@ static bool is_utf8_literal_json(const nlohmann::json &node)
   return boost::iequals(encoding, "utf-8") || boost::iequals(encoding, "utf8");
 }
 
-static std::optional<exprt> dispatch_decode_join_method(
+std::optional<exprt> dispatch_decode_join_method(
   string_handler &self,
   const std::string &method_name,
   const nlohmann::json &call_json,
@@ -630,7 +632,7 @@ static std::optional<exprt> dispatch_decode_join_method(
   return std::nullopt;
 }
 
-static std::optional<exprt> dispatch_spacing_and_padding_methods(
+std::optional<exprt> dispatch_spacing_and_padding_methods(
   string_handler &self,
   const std::string &method_name,
   const nlohmann::json &args,
@@ -745,7 +747,7 @@ static std::optional<exprt> dispatch_spacing_and_padding_methods(
   return std::nullopt;
 }
 
-static std::optional<exprt> dispatch_format_methods(
+std::optional<exprt> dispatch_format_methods(
   string_handler &self,
   const std::string &method_name,
   const nlohmann::json &call_json,
@@ -766,196 +768,6 @@ static std::optional<exprt> dispatch_format_methods(
 
   return std::nullopt;
 }
-} // namespace
-
-namespace string_method_dispatch
-{
-using keyword_valuest = string_call_utils::keyword_valuest;
-
-std::optional<exprt> dispatch_decode_join_method(
-  string_handler &self,
-  const std::string &method_name,
-  const nlohmann::json &call_json,
-  const nlohmann::json &receiver_json,
-  const nlohmann::json &args,
-  const keyword_valuest &keyword_values,
-  python_converter &converter)
-{
-  return ::dispatch_decode_join_method(
-    self,
-    method_name,
-    call_json,
-    receiver_json,
-    args,
-    keyword_values,
-    converter);
-}
-
-std::optional<exprt> dispatch_no_arg_string_methods(
-  string_handler &self,
-  const std::string &method_name,
-  const nlohmann::json &args,
-  const keyword_valuest &keyword_values,
-  const std::function<exprt()> &get_receiver_expr,
-  const std::function<locationt()> &get_location)
-{
-  return ::dispatch_no_arg_string_methods(
-    self, method_name, args, keyword_values, get_receiver_expr, get_location);
-}
-
-std::optional<exprt> dispatch_one_arg_string_methods(
-  string_handler &self,
-  const std::string &method_name,
-  const nlohmann::json &args,
-  const keyword_valuest &keyword_values,
-  const std::function<exprt()> &get_receiver_expr,
-  const std::function<locationt()> &get_location,
-  python_converter &converter)
-{
-  return ::dispatch_one_arg_string_methods(
-    self,
-    method_name,
-    args,
-    keyword_values,
-    get_receiver_expr,
-    get_location,
-    converter);
-}
-
-std::optional<exprt> dispatch_search_string_methods(
-  string_handler &self,
-  const std::string &method_name,
-  const nlohmann::json &call_json,
-  const nlohmann::json &args,
-  const keyword_valuest &keyword_values,
-  const std::function<exprt()> &get_receiver_expr,
-  const std::function<locationt()> &get_location,
-  python_converter &converter)
-{
-  return ::dispatch_search_string_methods(
-    self,
-    method_name,
-    call_json,
-    args,
-    keyword_values,
-    get_receiver_expr,
-    get_location,
-    converter);
-}
-
-std::optional<exprt> dispatch_spacing_and_padding_methods(
-  string_handler &self,
-  const std::string &method_name,
-  const nlohmann::json &args,
-  const keyword_valuest &keyword_values,
-  const std::function<exprt()> &get_receiver_expr,
-  const std::function<locationt()> &get_location,
-  python_converter &converter)
-{
-  return ::dispatch_spacing_and_padding_methods(
-    self,
-    method_name,
-    args,
-    keyword_values,
-    get_receiver_expr,
-    get_location,
-    converter);
-}
-
-std::optional<exprt> dispatch_replace_method(
-  string_handler &self,
-  const std::string &method_name,
-  const nlohmann::json &args,
-  const keyword_valuest &keyword_values,
-  const std::function<exprt()> &get_receiver_expr,
-  const std::function<locationt()> &get_location,
-  python_converter &converter)
-{
-  return ::dispatch_replace_method(
-    self,
-    method_name,
-    args,
-    keyword_values,
-    get_receiver_expr,
-    get_location,
-    converter);
-}
-
-std::optional<exprt> dispatch_count_method(
-  string_handler &self,
-  const std::string &method_name,
-  const nlohmann::json &args,
-  const keyword_valuest &keyword_values,
-  const std::function<exprt()> &get_receiver_expr,
-  const std::function<locationt()> &get_location,
-  python_converter &converter)
-{
-  return ::dispatch_count_method(
-    self,
-    method_name,
-    args,
-    keyword_values,
-    get_receiver_expr,
-    get_location,
-    converter);
-}
-
-std::optional<exprt> dispatch_splitlines_method(
-  string_handler &self,
-  const std::string &method_name,
-  const nlohmann::json &call_json,
-  const nlohmann::json &args,
-  const keyword_valuest &keyword_values,
-  const std::function<exprt()> &get_receiver_expr,
-  const std::function<locationt()> &get_location)
-{
-  return ::dispatch_splitlines_method(
-    self,
-    method_name,
-    call_json,
-    args,
-    keyword_values,
-    get_receiver_expr,
-    get_location);
-}
-
-std::optional<exprt> dispatch_format_methods(
-  string_handler &self,
-  const std::string &method_name,
-  const nlohmann::json &call_json,
-  const keyword_valuest &keyword_values,
-  const std::function<exprt()> &get_receiver_expr,
-  const std::function<locationt()> &get_location)
-{
-  return ::dispatch_format_methods(
-    self,
-    method_name,
-    call_json,
-    keyword_values,
-    get_receiver_expr,
-    get_location);
-}
-
-std::optional<exprt> dispatch_split_method(
-  const std::string &method_name,
-  const nlohmann::json &receiver_json,
-  const nlohmann::json &call_json,
-  const nlohmann::json &args,
-  const keyword_valuest &keyword_values,
-  const std::function<exprt()> &get_receiver_expr,
-  python_converter &converter)
-{
-  return ::dispatch_split_method(
-    method_name,
-    receiver_json,
-    call_json,
-    args,
-    keyword_values,
-    ::is_none_literal_json,
-    get_receiver_expr,
-    converter);
-}
-
 } // namespace string_method_dispatch
 
 exprt string_handler::handle_string_startswith(
@@ -1269,7 +1081,8 @@ exprt string_handler::handle_string_lstrip(
     {
       if (chars_arg.is_nil())
       {
-        auto is_whitespace = [](const exprt &ch) -> bool {
+        auto is_whitespace = [](const exprt &ch) -> bool
+        {
           BigInt char_val =
             binary2integer(ch.value().as_string(), ch.type().is_signedbv());
           char c = static_cast<char>(char_val.to_uint64());
@@ -1299,7 +1112,8 @@ exprt string_handler::handle_string_lstrip(
         std::vector<exprt> strip_set =
           string_builder_->extract_string_chars(chars_arg);
 
-        auto is_in_strip_set = [&strip_set](const exprt &ch) -> bool {
+        auto is_in_strip_set = [&strip_set](const exprt &ch) -> bool
+        {
           BigInt cv =
             binary2integer(ch.value().as_string(), ch.type().is_signedbv());
           char c = static_cast<char>(cv.to_uint64());
@@ -1461,7 +1275,8 @@ exprt string_handler::handle_string_strip(
     {
       if (chars_arg.is_nil())
       {
-        auto is_whitespace = [](const exprt &ch) -> bool {
+        auto is_whitespace = [](const exprt &ch) -> bool
+        {
           BigInt char_val =
             binary2integer(ch.value().as_string(), ch.type().is_signedbv());
           char c = static_cast<char>(char_val.to_uint64());
@@ -1494,7 +1309,8 @@ exprt string_handler::handle_string_strip(
         std::vector<exprt> strip_set =
           string_builder_->extract_string_chars(chars_arg);
 
-        auto is_in_strip_set = [&strip_set](const exprt &ch) -> bool {
+        auto is_in_strip_set = [&strip_set](const exprt &ch) -> bool
+        {
           BigInt cv =
             binary2integer(ch.value().as_string(), ch.type().is_signedbv());
           char c = static_cast<char>(cv.to_uint64());
@@ -1629,7 +1445,8 @@ exprt string_handler::handle_string_rstrip(
     {
       if (chars_arg.is_nil())
       {
-        auto is_whitespace = [](const exprt &ch) -> bool {
+        auto is_whitespace = [](const exprt &ch) -> bool
+        {
           BigInt char_val =
             binary2integer(ch.value().as_string(), ch.type().is_signedbv());
           char c = static_cast<char>(char_val.to_uint64());
@@ -1659,7 +1476,8 @@ exprt string_handler::handle_string_rstrip(
         std::vector<exprt> strip_set =
           string_builder_->extract_string_chars(chars_arg);
 
-        auto is_in_strip_set = [&strip_set](const exprt &ch) -> bool {
+        auto is_in_strip_set = [&strip_set](const exprt &ch) -> bool
+        {
           BigInt cv =
             binary2integer(ch.value().as_string(), ch.type().is_signedbv());
           char c = static_cast<char>(cv.to_uint64());
