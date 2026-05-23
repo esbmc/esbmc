@@ -379,13 +379,15 @@ type2tc migrate_type(const typet &type)
 
 type2tc migrate_symbol_type(const symbolt &sym)
 {
-  type2tc result = migrate_type(sym.get_type());
+  // S4b: the IREP2 form is cached on `symbolt`; this is an O(1) lookup that
+  // populates the cache lazily from the legacy field on first read. The legacy
+  // setters invalidate the cache, so it cannot go stale.
+  const type2tc &result = sym.get_type2();
 #ifndef NDEBUG
-  // The IREP2 form of a real symbol's type must be stable under a round-trip
-  // through legacy irept (migrate_type_back then migrate_type). This is the
-  // property unit/util/migrate.test.cpp proves for synthetic types; asserting
-  // it here exercises it on every symbol type the pipeline reads, which is what
-  // makes deriving the legacy field from IREP2 lossless once storage flips.
+  // Round-trip cross-check: the cached IREP2 form must be stable under legacy
+  // back-and-forth migration. Unit/util/migrate.test.cpp proves this for
+  // synthetic types; asserting it here exercises it on every real symbol the
+  // pipeline reads.
   assert(
     migrate_type(migrate_type_back(result)) == result &&
     "symbol type not stable under IREP2<->irept round-trip");
@@ -395,14 +397,14 @@ type2tc migrate_symbol_type(const symbolt &sym)
 
 void migrate_symbol_value(const symbolt &sym, expr2tc &dest)
 {
-  migrate_expr(sym.get_value(), dest);
+  // S4b: read from the symbol's cached IREP2 form (lazy-populated; see
+  // get_value2). Eliminates the per-call migrate_expr() that previously ran on
+  // every read of a symbol value.
+  dest = sym.get_value2();
 #ifndef NDEBUG
   // Cross-check is guarded: function bodies skip because migrate_expr_back
   // cannot reconstruct a code_block (a body is migrated forward only -- see
-  // unit/util/migrate.test.cpp); nil values are vacuous. For everything else
-  // (initialisers, contract requires/ensures, ...) assert IREP2-side
-  // idempotence -- the property that makes deriving the legacy field from
-  // IREP2 lossless for non-body symbol values.
+  // unit/util/migrate.test.cpp); nil values are vacuous.
   if (!sym.get_type().is_code() && !sym.get_value().is_nil())
   {
     expr2tc roundtrip;
@@ -416,9 +418,10 @@ void migrate_symbol_value(const symbolt &sym, expr2tc &dest)
 
 void set_symbol_type(symbolt &sym, const type2tc &t)
 {
-  // Today: back-migrate and store the legacy field. When storage flips to
-  // IREP2-native (S4b) only this function changes -- the callers stay put.
-  sym.set_type(migrate_type_back(t));
+  // S4b: route through the IREP2-side setter on symbolt. It stores `t` as the
+  // cache (no re-migration on the next read) and derives the legacy field via
+  // migrate_type_back exactly once.
+  sym.set_type(t);
 }
 
 static const typet &decide_on_expr_type(const exprt &side1, const exprt &side2)

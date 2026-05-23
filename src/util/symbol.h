@@ -5,6 +5,7 @@
 
 #include <list>
 #include <vector>
+#include <irep2/irep2.h>
 #include <util/config.h>
 #include <util/expr.h>
 #include <util/location.h>
@@ -33,9 +34,7 @@ public:
   // Accessors for the (now private) `type`/`value` fields. Introduced for the
   // IREP2 symbol-table migration (esbmc/esbmc#4715, B2): all access goes
   // through these so the storage can later become IREP2-native without touching
-  // every caller again. The mutable overloads are a transitional convenience
-  // (writes/swaps); a later step routes writes through a setter so the IREP2
-  // form can be kept in sync.
+  // every caller again.
   const typet &get_type() const
   {
     return type;
@@ -45,28 +44,33 @@ public:
     return value;
   }
 
-  // Setters for the (private) type/value fields. The mutable accessors were
-  // removed in B2 S4a (esbmc/esbmc#4715): all writes go through these so the
-  // storage can later become IREP2-native (S4b) -- mutable get_type()/get_value()
-  // returning references would let writes bypass the eventual IREP2-cache
-  // invalidation. For IREP2-side writes use set_symbol_type / set_symbol_value
-  // in migrate.h (they call these legacy setters internally).
-  void set_type(const typet &t)
-  {
-    type = t;
-  }
-  void set_type(typet &&t)
-  {
-    type = std::move(t);
-  }
-  void set_value(const exprt &v)
-  {
-    value = v;
-  }
-  void set_value(exprt &&v)
-  {
-    value = std::move(v);
-  }
+  // Setters for the (private) type/value fields. Writes go exclusively through
+  // these (audit completed in B2 S4a, esbmc/esbmc#4715) so the IREP2 shadow
+  // (S4b) can be kept consistent: every write invalidates the cache; the next
+  // get_type2/get_value2 lazily re-derives via migrate_type/migrate_expr.
+  void set_type(const typet &t);
+  void set_type(typet &&t);
+  void set_value(const exprt &v);
+  void set_value(exprt &&v);
+
+  // IREP2-side accessors (esbmc/esbmc#4715, B2 S4b). The IREP2 form of the
+  // type/value is cached: populated lazily by these getters via
+  // migrate_type/migrate_expr, eagerly by set_type(const type2tc&), and
+  // invalidated by every legacy setter. migrate_symbol_type /
+  // migrate_symbol_value read these directly, replacing the previous O(size)
+  // re-migration on every read with an O(1) cached lookup.
+  const type2tc &get_type2() const;
+  const expr2tc &get_value2() const;
+
+  // IREP2-side type setter (S4b). Stores the IREP2 form authoritatively and
+  // derives the legacy `typet` once via migrate_type_back, instead of the
+  // legacy-first / re-migrate-on-read sequence in set_symbol_type. Currently
+  // called via set_symbol_type(symbolt&, const type2tc&) in util/migrate.h;
+  // exposed here so a future flip can route directly. No expr2tc-side setter:
+  // function-body values cannot round-trip (migrate_expr_back rejects
+  // code_block2t, see unit/util/migrate.test.cpp), and no caller writes IREP2
+  // symbol values today.
+  void set_type(const type2tc &t);
 
   void clear();
 
@@ -83,6 +87,16 @@ public:
 private:
   typet type;
   exprt value;
+
+  // IREP2 shadow of `type` / `value`. `*_valid` distinguishes
+  // "cached form matches legacy" from "stale, recompute on next read". The
+  // shadow is mutable so get_type2/get_value2 can populate it from a const
+  // method; consistency with legacy is ensured by the public setter contract
+  // (S4a routed every write through set_type/set_value, S4b makes them invalidate).
+  mutable type2tc type2_cache;
+  mutable expr2tc value2_cache;
+  mutable bool type2_valid;
+  mutable bool value2_valid;
 };
 
 std::ostream &operator<<(std::ostream &out, const symbolt &symbol);
