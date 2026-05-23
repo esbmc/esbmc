@@ -1535,7 +1535,7 @@ bool clang_cpp_convertert::build_destructor_chain(
 
   // Build and append a destructor call to `body`.
   auto emit_dtor_call = [&](const symbolt &sym, exprt arg) {
-    exprt fn("symbol", sym.type);
+    exprt fn("symbol", sym.get_type());
     fn.identifier(sym.id);
     code_function_callt call;
     call.function() = fn;
@@ -1547,7 +1547,7 @@ bool clang_cpp_convertert::build_destructor_chain(
   auto emit_base_dtor = [&](const symbolt &sym) {
     exprt this_expr = symbol_exprt(this_id, this_ptr_type);
     gen_typecast(
-      ns, this_expr, to_code_type(sym.type).arguments().front().type());
+      ns, this_expr, to_code_type(sym.get_type()).arguments().front().type());
     emit_dtor_call(sym, std::move(this_expr));
   };
 
@@ -1625,27 +1625,31 @@ bool clang_cpp_convertert::get_function_body(
       return false;
     new_expr = code_blockt();
   }
-  else if (clang_c_convertert::get_function_body(fd, new_expr, ftype))
-    return true;
+  else
+  {
+    // Retrieve the mapping between captured variables and the members that
+    // store their values or references. Must be populated before parsing the
+    // body so that cap_map lookups inside the body translation succeed.
+    if (const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(&fd))
+    {
+      if (md->getParent()->getLambdaCallOperator() == md)
+      {
+        field_mapt captures;
+        clang::FieldDecl *thisCapture{};
+        md->getParent()->getCaptureFields(captures, thisCapture);
+
+        std::size_t address = reinterpret_cast<std::size_t>(md->getFirstDecl());
+        cap_map[address] =
+          std::pair<field_mapt, clang::FieldDecl *>(captures, thisCapture);
+      }
+    }
+
+    if (clang_c_convertert::get_function_body(fd, new_expr, ftype))
+      return true;
+  }
 
   if (new_expr.statement() != "block")
     return false;
-
-  // Retrieve the mapping between captured variables
-  // and the members that store their values or references
-  if (const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(&fd))
-  {
-    if (md->getParent()->getLambdaCallOperator() == md)
-    {
-      field_mapt captures;
-      clang::FieldDecl *thisCapture{};
-      md->getParent()->getCaptureFields(captures, thisCapture);
-
-      std::size_t address = reinterpret_cast<std::size_t>(md->getFirstDecl());
-      cap_map[address] =
-        std::pair<field_mapt, clang::FieldDecl *>(captures, thisCapture);
-    }
-  }
 
   code_blockt &body = to_code_block(to_code(new_expr));
 
