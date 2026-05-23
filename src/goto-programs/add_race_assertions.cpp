@@ -31,8 +31,8 @@ public:
     symbolt new_symbol;
     new_symbol.id = identifier;
     new_symbol.name = identifier;
-    new_symbol.set_type(
-      original_expr.is_index() ? migrate_type_back(index) : typet("bool"));
+    set_symbol_type(
+      new_symbol, original_expr.is_index() ? index : get_bool_type());
     new_symbol.static_lifetime = true;
     {
       exprt v = new_symbol.get_value();

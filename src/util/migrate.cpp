@@ -581,7 +581,7 @@ expr2tc sym_name_to_symbol(const irep_idt &init, const type2tc &type)
     // Fix this by ensuring that /all/ symbols with the same name use the type
     // from the global symbol table.
     return symbol2tc(
-      migrate_type(sym->get_type()),
+      migrate_symbol_type(*sym),
       init,
       symbol_renaming_level::level0,
       0,
