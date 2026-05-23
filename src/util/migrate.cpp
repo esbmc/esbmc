@@ -398,14 +398,19 @@ type2tc migrate_symbol_type(const symbolt &sym)
 
 void migrate_symbol_value(const symbolt &sym, expr2tc &dest)
 {
-  // S4b: read from the symbol's cached IREP2 form (lazy-populated; see
-  // get_value2). Eliminates the per-call migrate_expr() that previously ran on
-  // every read of a symbol value.
+  // V2: read the symbol's IREP2 value form directly. After the value-side
+  // flip (esbmc/esbmc#4715, V-track V2) the IREP2 expr2tc is the dominant
+  // representation on IREP2-side writes and is derived lazily from the legacy
+  // cache when the caller wrote on the legacy side.
   dest = sym.get_value2();
 #ifndef NDEBUG
-  // Cross-check is guarded: function bodies skip because migrate_expr_back
-  // cannot reconstruct a code_block (a body is migrated forward only -- see
-  // unit/util/migrate.test.cpp); nil values are vacuous.
+  // Cross-check: assert the IREP2 value form is stable under the
+  // migration round-trip migrate_expr(migrate_expr_back(e)) == e. V1
+  // (#4737) closed the back-migration coverage gap so this is safe for
+  // every expr2t kind, but we still skip function bodies (no caller goes
+  // through this path on them today, and the assertion would force a
+  // potentially-large body round-trip for no signal) and nil values
+  // (vacuous).
   if (!sym.get_type().is_code() && !sym.get_value().is_nil())
   {
     expr2tc roundtrip;
