@@ -31,10 +31,14 @@ public:
     symbolt new_symbol;
     new_symbol.id = identifier;
     new_symbol.name = identifier;
-    new_symbol.get_type() =
-      original_expr.is_index() ? migrate_type_back(index) : typet("bool");
+    new_symbol.set_type(
+      original_expr.is_index() ? migrate_type_back(index) : typet("bool"));
     new_symbol.static_lifetime = true;
-    new_symbol.get_value().make_false();
+    {
+      exprt v = new_symbol.get_value();
+      v.make_false();
+      new_symbol.set_value(std::move(v));
+    }
 
     symbolt *symbol_ptr;
     context.move(new_symbol, symbol_ptr);
@@ -80,7 +84,11 @@ void w_guardst::add_initialization(goto_programt &goto_program)
   new_symbol.name = identifier;
   set_symbol_type(new_symbol, arrayt);
   new_symbol.static_lifetime = true;
-  new_symbol.get_value().make_false();
+  {
+    exprt v = new_symbol.get_value();
+    v.make_false();
+    new_symbol.set_value(std::move(v));
+  }
   context.move_symbol_to_context(new_symbol);
 
   for (const auto &w_guard : w_guards)

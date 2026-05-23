@@ -190,9 +190,12 @@ symbolt *clang_cpp_convertert::add_vtable_type_symbol(
   vt_type_symb.id = vt_name;
   vt_type_symb.name = vtable_type_prefix + type.tag().as_string();
   vt_type_symb.mode = mode;
-  vt_type_symb.get_type() = struct_typet();
+  {
+    struct_typet st;
+    st.set("name", vt_type_symb.id);
+    vt_type_symb.set_type(std::move(st));
+  }
   vt_type_symb.is_type = true;
-  vt_type_symb.get_type().set("name", vt_type_symb.id);
   vt_type_symb.location = comp.location();
   vt_type_symb.module =
     get_modulename_from_path(comp.location().file().as_string());
@@ -266,8 +269,12 @@ void clang_cpp_convertert::add_vtable_type_entry(
   vt_entry.location() = comp.location();
   // add an entry to the virtual table
   assert(vtable_type_symbol);
-  struct_typet &vtable_type = to_struct_type(vtable_type_symbol->get_type());
-  vtable_type.components().push_back(vt_entry);
+  {
+    typet t = vtable_type_symbol->get_type();
+    struct_typet &vtable_type = to_struct_type(t);
+    vtable_type.components().push_back(vt_entry);
+    vtable_type_symbol->set_type(std::move(t));
+  }
 }
 
 void clang_cpp_convertert::add_thunk_method(
@@ -340,7 +347,7 @@ void clang_cpp_convertert::add_thunk_method(
   thunk_func_symb.name = component.base_name();
   thunk_func_symb.mode = mode;
   thunk_func_symb.location = component.location();
-  thunk_func_symb.get_type() = component.type();
+  thunk_func_symb.set_type(component.type());
   thunk_func_symb.module =
     get_modulename_from_path(component.location().file().as_string());
 
@@ -348,7 +355,11 @@ void clang_cpp_convertert::add_thunk_method(
   set_thunk_name(thunk_func_symb, base_class_id);
 
   // update the type of `this` argument in thunk
-  update_thunk_this_type(thunk_func_symb.get_type(), base_class_id);
+  {
+    typet t = thunk_func_symb.get_type();
+    update_thunk_this_type(t, base_class_id);
+    thunk_func_symb.set_type(std::move(t));
+  }
 
   // add symbols for arguments of this thunk function
   add_thunk_method_arguments(thunk_func_symb);
@@ -411,7 +422,8 @@ void clang_cpp_convertert::add_thunk_method_arguments(symbolt &thunk_func_symb)
    * Each argument symbol's id is of the form - "<thunk_func_symbol_ID>::<argument_base_name>"
    */
 
-  code_typet &code_type = to_code_type(thunk_func_symb.get_type());
+  typet thunk_type = thunk_func_symb.get_type();
+  code_typet &code_type = to_code_type(thunk_type);
   code_typet::argumentst &args = code_type.arguments();
   for (unsigned i = 0; i < args.size(); i++)
   {
@@ -423,7 +435,7 @@ void clang_cpp_convertert::add_thunk_method_arguments(symbolt &thunk_func_symb)
     arg_symb.name = base_name;
     arg_symb.mode = mode;
     arg_symb.location = thunk_func_symb.location;
-    arg_symb.get_type() = arg.type();
+    arg_symb.set_type(arg.type());
 
     // Change argument identifier field to thunk function
     arg.set("#identifier", arg_symb.id);
@@ -441,6 +453,7 @@ void clang_cpp_convertert::add_thunk_method_arguments(symbolt &thunk_func_symb)
       abort();
     }
   }
+  thunk_func_symb.set_type(std::move(thunk_type));
 }
 
 void clang_cpp_convertert::add_thunk_method_body(
@@ -448,8 +461,8 @@ void clang_cpp_convertert::add_thunk_method_body(
   const struct_typet::componentt &component,
   uint64_t base_offset)
 {
-  code_typet &code_type = to_code_type(thunk_func_symb.get_type());
-  code_typet::argumentst &args = code_type.arguments();
+  const code_typet &code_type = to_code_type(thunk_func_symb.get_type());
+  const code_typet::argumentst &args = code_type.arguments();
 
   // Build the adjusted 'this' to pass to the overriding method.
   // The thunk receives a Base*, but the overriding method expects Derived*.
@@ -493,7 +506,7 @@ void clang_cpp_convertert::add_thunk_method_body_return(
    *  RETURN: return_value;
    * END_FUNCTION
    */
-  code_typet::argumentst &args =
+  const code_typet::argumentst &args =
     to_code_type(thunk_func_symb.get_type()).arguments();
 
   side_effect_expr_function_callt expr_call;
@@ -512,7 +525,7 @@ void clang_cpp_convertert::add_thunk_method_body_return(
   code_returnt code_return;
   code_return.return_value() = expr_call;
 
-  thunk_func_symb.get_value() = code_return;
+  thunk_func_symb.set_value(code_return);
 }
 
 void clang_cpp_convertert::add_thunk_method_body_no_return(
@@ -526,7 +539,7 @@ void clang_cpp_convertert::add_thunk_method_body_no_return(
    *  FUNCTION_CALL: do_something((Derived*)this);
    * END_FUNCTION
    */
-  code_typet::argumentst &args =
+  const code_typet::argumentst &args =
     to_code_type(thunk_func_symb.get_type()).arguments();
 
   code_function_callt code_func;
@@ -541,7 +554,7 @@ void clang_cpp_convertert::add_thunk_method_body_no_return(
       symbol_expr(*namespacet(context).lookup(args[i].cmt_identifier())));
   }
 
-  thunk_func_symb.get_value() = code_func;
+  thunk_func_symb.set_value(code_func);
 }
 
 void clang_cpp_convertert::add_thunk_component_to_type(
@@ -656,7 +669,7 @@ void clang_cpp_convertert::add_vtable_variable_symbols(
     vt_symb_var.module =
       get_modulename_from_path(type.location().file().as_string());
     vt_symb_var.location = vt_symb_type->location;
-    vt_symb_var.get_type() = symbol_typet(vt_symb_type->id);
+    vt_symb_var.set_type(symbol_typet(vt_symb_type->id));
     vt_symb_var.lvalue = true;
     vt_symb_var.static_lifetime = true;
 
@@ -672,7 +685,7 @@ void clang_cpp_convertert::add_vtable_variable_symbols(
       assert(value.type().id() == compo.type().id());
       values.operands().push_back(value);
     }
-    vt_symb_var.get_value() = values;
+    vt_symb_var.set_value(values);
 
     if (context.move(vt_symb_var))
     {

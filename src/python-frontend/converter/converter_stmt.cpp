@@ -289,7 +289,7 @@ void python_converter::handle_assignment_type_adjustments(
   {
     rhs = address_of_exprt(rhs);
     if (lhs_symbol && !is_ctor_call)
-      lhs_symbol->get_value() = rhs;
+      lhs_symbol->set_value(rhs);
     return;
   }
 
@@ -303,7 +303,7 @@ void python_converter::handle_assignment_type_adjustments(
     rhs.type().subtype().is_code() &&
     !(lhs.type().is_pointer() && lhs.type().subtype().is_code()))
   {
-    lhs_symbol->get_type() = rhs.type();
+    lhs_symbol->set_type(rhs.type());
     lhs.type() = rhs.type();
   }
 
@@ -324,9 +324,9 @@ void python_converter::handle_assignment_type_adjustments(
     if (rhs_struct.tag().as_string().find("tag-tuple") == 0)
     {
       // Update symbol type from empty to concrete tuple type
-      lhs_symbol->get_type() = rhs.type();
+      lhs_symbol->set_type(rhs.type());
       lhs.type() = rhs.type();
-      lhs_symbol->get_value() = rhs;
+      lhs_symbol->set_value(rhs);
     }
   }
   else if (lhs_symbol)
@@ -380,7 +380,7 @@ void python_converter::handle_assignment_type_adjustments(
         rhs = typecast_exprt(rhs, lhs.type());
       }
       if (!rhs.type().is_empty() && !is_ctor_call)
-        lhs_symbol->get_value() = rhs;
+        lhs_symbol->set_value(rhs);
       return;
     }
     // Handle string-to-string variable assignments
@@ -392,7 +392,7 @@ void python_converter::handle_assignment_type_adjustments(
         rhs_symbol->get_value().type().is_array())
       {
         rhs = rhs_symbol->get_value();
-        lhs_symbol->get_type() = rhs.type();
+        lhs_symbol->set_type(rhs.type());
         lhs.type() = rhs.type();
       }
     }
@@ -403,7 +403,7 @@ void python_converter::handle_assignment_type_adjustments(
       // Should we model it uniformly using char* ?
       const typet &element_type = to_array_type(rhs.type()).subtype();
       typet pointer_type = gen_pointer_type(element_type);
-      lhs_symbol->get_type() = pointer_type;
+      lhs_symbol->set_type(pointer_type);
       lhs.type() = pointer_type;
       rhs = string_handler_.get_array_base_address(rhs);
     }
@@ -435,7 +435,7 @@ void python_converter::handle_assignment_type_adjustments(
           lhs_symbol->get_type() != type_handler_.get_list_type();
         if (!is_incompatible)
         {
-          lhs_symbol->get_type() = rhs.type();
+          lhs_symbol->set_type(rhs.type());
           lhs.type() = rhs.type();
         }
       }
@@ -443,7 +443,7 @@ void python_converter::handle_assignment_type_adjustments(
     else if (rhs.type() == none_type())
     {
       // Adjust pointer_type() to pointer_typet(empty_typet())
-      lhs_symbol->get_type() = rhs.type();
+      lhs_symbol->set_type(rhs.type());
       lhs.type() = rhs.type();
     }
     // No annotation or preprocessor-inferred Any: propagate rhs type to lhs.
@@ -455,12 +455,12 @@ void python_converter::handle_assignment_type_adjustments(
       !rhs.type().is_code() &&
       !(rhs.type().is_pointer() && rhs.type().subtype().id() == "empty"))
     {
-      lhs_symbol->get_type() = rhs.type();
+      lhs_symbol->set_type(rhs.type());
       lhs.type() = rhs.type();
     }
 
     if (!rhs.type().is_empty() && !is_ctor_call)
-      lhs_symbol->get_value() = rhs;
+      lhs_symbol->set_value(rhs);
   }
 }
 
@@ -1032,7 +1032,7 @@ void python_converter::handle_function_call_rhs(
     symbolt *func_symbol =
       symbol_table_.find_symbol(rhs.op1().identifier().c_str());
     assert(func_symbol);
-    if (!static_cast<code_typet &>(func_symbol->get_type())
+    if (!static_cast<const code_typet &>(func_symbol->get_type())
            .return_type()
            .is_empty())
     {
@@ -1862,7 +1862,7 @@ void python_converter::get_var_assign(
       thetype.size().is_constant();
       assert(thetype.size().is_nil());
 #endif
-      lhs_symbol->get_type() = rhs.type();
+      lhs_symbol->set_type(rhs.type());
 
       code_declt decl(symbol_expr(*lhs_symbol), rhs);
       decl.location() = location_begin;
@@ -1892,8 +1892,11 @@ void python_converter::get_var_assign(
   }
   else
   {
-    lhs_symbol->get_value() = gen_zero(current_element_type, true);
-    lhs_symbol->get_value().zero_initializer(true);
+    {
+      exprt v = gen_zero(current_element_type, true);
+      v.zero_initializer(true);
+      lhs_symbol->set_value(std::move(v));
+    }
 
     code_declt decl(symbol_expr(*lhs_symbol));
     decl.location() = location_begin;
@@ -2068,7 +2071,7 @@ void python_converter::get_compound_assign(
       if (symbol)
       {
         // Update the symbol's type to pointer if concatenated returns pointer
-        symbol->get_type() = concatenated.type();
+        symbol->set_type(concatenated.type());
 
         // Update LHS to be a symbol with the new type
         lhs = symbol_exprt(symbol->id, symbol->get_type());
@@ -2077,7 +2080,7 @@ void python_converter::get_compound_assign(
         // (it will be assigned via the assignment statement)
         if (concatenated.type().is_array())
         {
-          symbol->get_value() = concatenated;
+          symbol->set_value(concatenated);
         }
       }
     }

@@ -430,7 +430,7 @@ symbolt python_exception_handler::create_assert_temp_variable(
   symbolt temp_symbol;
   temp_symbol.id = temp_sid_str;
   temp_symbol.name = temp_sid_str;
-  temp_symbol.get_type() = bool_type();
+  temp_symbol.set_type(bool_type());
   temp_symbol.lvalue = true;
   temp_symbol.static_lifetime = false;
   temp_symbol.location = location;

@@ -31,8 +31,7 @@ void clang_cpp_adjust::gen_vptr_initializations(symbolt &symbol)
    *  - a ctor symbol shall contain a function body modelled by code_blockt
    *  - symbol should be of code type
    */
-  code_typet &ctor_type = to_code_type(symbol.get_type());
-  code_blockt &ctor_body = to_code_block(to_code(symbol.get_value()));
+  const code_typet &ctor_type = to_code_type(symbol.get_type());
 
   /*
    *  vptr initializations shall be done in ctor
@@ -50,6 +49,10 @@ void clang_cpp_adjust::gen_vptr_initializations(symbolt &symbol)
   const struct_typet::componentst &components =
     to_struct_type(ctor_class_symb->get_type()).components();
 
+  // Read-modify-set the value to mutate the body and clear need_vptr_init.
+  exprt value = symbol.get_value();
+  code_blockt &ctor_body = to_code_block(to_code(value));
+
   // iterate over the `components` and initialize each virtual pointers
   for (const auto &comp : components)
   {
@@ -63,7 +66,8 @@ void clang_cpp_adjust::gen_vptr_initializations(symbolt &symbol)
     ctor_body.operands().push_back(code_expr);
   }
 
-  symbol.get_value().need_vptr_init(false);
+  value.need_vptr_init(false);
+  symbol.set_value(std::move(value));
 }
 
 void clang_cpp_adjust::gen_vptr_init_code(

@@ -16,27 +16,29 @@ void clang_cpp_adjust::gen_implicit_union_copy_move_constructor(symbolt &symbol)
   if (!symbol.get_type().is_code())
     return;
 
-  code_typet &ctor_type = to_code_type(symbol.get_type());
+  const code_typet &ctor_type = to_code_type(symbol.get_type());
 
   if (
     ctor_type.return_type().id() != "constructor" ||
     !ctor_type.return_type().get_bool("#implicit_union_copy_move_constructor"))
     return;
 
+  // Read-modify-set the value to mutate its body.
+  exprt value;
   if (symbol.get_value().is_not_nil())
   {
-    code_blockt &ctor_body = to_code_block(to_code(symbol.get_value()));
+    value = symbol.get_value();
+    const code_blockt &existing_body = to_code_block(to_code(value));
     assert(
-      ctor_body.operands().size() == 1 &&
-      ctor_body.op0().statement() ==
+      existing_body.operands().size() == 1 &&
+      existing_body.op0().statement() ==
         "throw_decl"); // just a sanity check that we don't accidentally change any clang generated body in the future
   }
   else
   {
-    code_blockt ctor_body;
-    symbol.get_value() = ctor_body;
+    value = code_blockt();
   }
-  code_blockt &ctor_body = to_code_block(to_code(symbol.get_value()));
+  code_blockt &ctor_body = to_code_block(to_code(value));
   /* https://en.cppreference.com/w/cpp/language/copy_constructor#Implicitly-defined_copy_constructor
    * > If the implicitly-declared copy constructor is not deleted, it is defined (that is, a function body is generated and compiled)
    * > by the compiler if odr-used or needed for constant evaluation(since C++11).
@@ -58,6 +60,8 @@ void clang_cpp_adjust::gen_implicit_union_copy_move_constructor(symbolt &symbol)
   copy_ctor_assign.location() = ctor_body.location();
   adjust_assign(copy_ctor_assign);
   ctor_body.operands().push_back(copy_ctor_assign);
+
+  symbol.set_value(std::move(value));
 }
 
 void clang_cpp_adjust::adjust_symbol(symbolt &symbol)

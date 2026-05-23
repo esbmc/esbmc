@@ -1282,7 +1282,7 @@ goto_programt code_contractst::generate_checking_wrapper(
       symbolt ret_val_symbol;
       ret_val_symbol.name = ret_val_id;
       ret_val_symbol.id = ret_val_id;
-      ret_val_symbol.get_type() = return_type_irep1;
+      ret_val_symbol.set_type(return_type_irep1);
       ret_val_symbol.lvalue = true;
       ret_val_symbol.static_lifetime = false;
       ret_val_symbol.location = location;
@@ -1892,8 +1892,8 @@ expr2tc code_contractst::create_snapshot_variable(
   symbolt snapshot_symbol;
   snapshot_symbol.name = snapshot_name;
   snapshot_symbol.id = snapshot_name;
-  snapshot_symbol.get_type() =
-    migrate_type_back(expr->type); // IRep2 → IRep1 conversion
+  snapshot_symbol.set_type(
+    migrate_type_back(expr->type)); // IRep2 → IRep1 conversion
   snapshot_symbol.lvalue = true;
   snapshot_symbol.static_lifetime = false;
   snapshot_symbol.file_local = false;

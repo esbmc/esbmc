@@ -255,7 +255,11 @@ void solidity_convertert::move_builtin_to_contract(
     struct_typet::componentt comp(sym.name(), sym.name(), sym.type());
     comp.set_access(access);
     comp.type().set("#member_name", c_sym.get_type().tag());
-    to_struct_type(c_sym.get_type()).components().push_back(comp);
+    {
+      typet t = c_sym.get_type();
+      to_struct_type(t).components().push_back(comp);
+      c_sym.set_type(std::move(t));
+    }
   }
   else
   {
@@ -274,7 +278,11 @@ void solidity_convertert::move_builtin_to_contract(
     comp.pretty_name(sym.name());
     comp.set_access(access);
     comp.id("symbol");
-    to_struct_type(c_sym.get_type()).methods().push_back(comp);
+    {
+      typet t = c_sym.get_type();
+      to_struct_type(t).methods().push_back(comp);
+      c_sym.set_type(std::move(t));
+    }
   }
 }
 
@@ -295,12 +303,16 @@ void solidity_convertert::get_builtin_symbol(
 
   symbolt sym;
   get_default_symbol(sym, "C++", t, name, id, l);
-  sym.get_type().set("#sol_state_var", "1");
+  {
+    typet st = sym.get_type();
+    st.set("#sol_state_var", "1");
+    sym.set_type(std::move(st));
+  }
   sym.file_local = true;
   sym.lvalue = true;
   auto &added_sym = *move_symbol_to_context(sym);
   code_declt decl(symbol_expr(added_sym));
-  added_sym.get_value() = val;
+  added_sym.set_value(val);
   decl.operands().push_back(val);
   move_to_initializer(decl);
 
@@ -373,7 +385,7 @@ void solidity_convertert::get_aux_property_function(
   type.arguments().push_back(param);
 
   // populate param
-  added_symbol.get_type() = type;
+  added_symbol.set_type(type);
   // move to struct symbol
   move_builtin_to_contract(cname, symbol_expr(added_symbol), true);
 
@@ -454,7 +466,7 @@ void solidity_convertert::get_aux_property_function(
   _block.move_to_operands(ret_uint);
 
   // populate body
-  added_symbol.get_value() = _block;
+  added_symbol.set_value(_block);
 
   // do function call
   side_effect_expr_function_callt _call;

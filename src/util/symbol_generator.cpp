@@ -14,7 +14,7 @@ symbolt &symbol_generator::new_symbol(
     new_symbol.name = name_prefix + i2string(++counter);
     new_symbol.id = prefix + id2string(new_symbol.name);
     new_symbol.lvalue = true;
-    new_symbol.get_type() = type;
+    new_symbol.set_type(type);
   } while (context.move(new_symbol, symbol_ptr));
 
   return *symbol_ptr;

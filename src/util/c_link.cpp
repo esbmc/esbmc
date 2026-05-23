@@ -106,7 +106,7 @@ void c_linkt::duplicate_type(symbolt &in_context, symbolt &new_symbol)
       new_symbol.get_type().id() == "struct")
     {
       // replace old symbol
-      in_context.get_type() = new_symbol.get_type();
+      in_context.set_type(new_symbol.get_type());
     }
     else if (
       in_context.get_type().id() == "struct" &&
@@ -119,7 +119,7 @@ void c_linkt::duplicate_type(symbolt &in_context, symbolt &new_symbol)
       ns.follow(new_symbol.get_type()).is_array())
     {
       // store new type
-      in_context.get_type() = new_symbol.get_type();
+      in_context.set_type(new_symbol.get_type());
     }
     else if (
       ns.follow(in_context.get_type()).is_array() &&
@@ -179,9 +179,16 @@ void c_linkt::duplicate_symbol(symbolt &in_context, symbolt &new_symbol)
       if (in_context.get_value().is_nil())
       {
         // the one with body wins!
-        in_context.get_value().swap(new_symbol.get_value());
-        in_context.get_type().swap(
-          new_symbol.get_type()); // for argument identifiers
+        exprt v = in_context.get_value();
+        exprt nv = new_symbol.get_value();
+        v.swap(nv);
+        in_context.set_value(std::move(v));
+        new_symbol.set_value(std::move(nv));
+        typet t = in_context.get_type();
+        typet nt = new_symbol.get_type();
+        t.swap(nt); // for argument identifiers
+        in_context.set_type(std::move(t));
+        new_symbol.set_type(std::move(nt));
       }
       else if (in_context.get_type().inlined())
       {
@@ -235,12 +242,12 @@ void c_linkt::duplicate_symbol(symbolt &in_context, symbolt &new_symbol)
       if (old_type.is_incomplete_array() && new_type.is_array())
       {
         // store new type
-        in_context.get_type() = new_symbol.get_type();
+        in_context.set_type(new_symbol.get_type());
       }
       else if (old_type.is_pointer() && new_type.is_array())
       {
         // store new type
-        in_context.get_type() = new_symbol.get_type();
+        in_context.set_type(new_symbol.get_type());
       }
       else if (old_type.is_array() && new_type.is_pointer())
       {
@@ -253,7 +260,7 @@ void c_linkt::duplicate_symbol(symbolt &in_context, symbolt &new_symbol)
       else if (old_type.id() == "incomplete_struct" && new_type.is_struct())
       {
         // store new type
-        in_context.get_type() = new_symbol.get_type();
+        in_context.set_type(new_symbol.get_type());
       }
       else if (old_type.is_struct() && new_type.id() == "incomplete_struct")
       {
@@ -307,7 +314,11 @@ void c_linkt::duplicate_symbol(symbolt &in_context, symbolt &new_symbol)
       }
       else
       {
-        in_context.get_value().swap(new_symbol.get_value());
+        exprt v = in_context.get_value();
+        exprt nv = new_symbol.get_value();
+        v.swap(nv);
+        in_context.set_value(std::move(v));
+        new_symbol.set_value(std::move(nv));
         in_context.is_extern = false;
       }
     }

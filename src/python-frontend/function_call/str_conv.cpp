@@ -745,13 +745,13 @@ function_call_expr::extract_string_from_symbol(const symbolt *sym) const
     const exprt &cond = val.operands()[0];
 
     symbolt true_sym;
-    true_sym.get_value() = val.operands()[1];
-    true_sym.get_type() = true_sym.get_value().type();
+    true_sym.set_value(val.operands()[1]);
+    true_sym.set_type(true_sym.get_value().type());
     auto true_text = extract_string_from_symbol(&true_sym);
 
     symbolt false_sym;
-    false_sym.get_value() = val.operands()[2];
-    false_sym.get_type() = false_sym.get_value().type();
+    false_sym.set_value(val.operands()[2]);
+    false_sym.set_type(false_sym.get_value().type());
     auto false_text = extract_string_from_symbol(&false_sym);
 
     if (cond.is_true())
