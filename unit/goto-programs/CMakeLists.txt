@@ -6,3 +6,4 @@ new_unit_test(interval-analysis-test "interval_analysis.test.cpp" "test_goto_fac
 new_unit_test(available-expressions-test "available_expressions.test.cpp" "test_goto_factory;gotoalgorithms;abstract-interpretation;langapi")
 new_unit_test(interval-symex-guard-test "interval_symex_guard.test.cpp" "mode_table_obj;abstract-interpretation;langapi")
 new_unit_test(k-path-spanning-test "k_path_spanning.test.cpp" "gotoprograms;langapi")
+new_unit_test(rw-set-test "rw_set.test.cpp" "gotoprograms;pointeranalysis;solve")
