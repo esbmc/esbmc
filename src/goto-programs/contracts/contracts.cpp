@@ -1887,13 +1887,13 @@ expr2tc code_contractst::create_snapshot_variable(
   // Note: symbolt uses IRep1 (typet) while we work with IRep2 (type2tc).
   // This is ESBMC's architecture: Symbol Table is IRep1-based for global state,
   // while modern code (GOTO programs, contracts) uses IRep2 for local logic.
-  // Migration is needed at the boundary when adding symbols to context.
-  // If ESBMC migrates Symbol Table to IRep2, update this to use expr->type directly.
+  // Set the symbol's IREP2 type directly via the migrate-layer chokepoint;
+  // set_symbol_type stores the cache authoritatively and derives the legacy
+  // field via migrate_type_back exactly once (esbmc/esbmc#4715, B2 S4b).
   symbolt snapshot_symbol;
   snapshot_symbol.name = snapshot_name;
   snapshot_symbol.id = snapshot_name;
-  snapshot_symbol.set_type(
-    migrate_type_back(expr->type)); // IRep2 → IRep1 conversion
+  set_symbol_type(snapshot_symbol, expr->type);
   snapshot_symbol.lvalue = true;
   snapshot_symbol.static_lifetime = false;
   snapshot_symbol.file_local = false;
