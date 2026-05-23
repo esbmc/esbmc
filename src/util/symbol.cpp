@@ -22,32 +22,35 @@ void symbolt::clear()
   type_ = type2tc();
   legacy_type_cache_ = typet();
   legacy_type_valid_ = true;
+  type2_valid_ = true;
   value2_cache = expr2tc();
   value2_valid = false;
 }
 
-// Type setters. The legacy variants forward-migrate to the IREP2 source
-// and keep the cache fresh with the input -- no later back-migration is
-// needed for get_type(). The IREP2 setter stores the source directly and
-// invalidates the cache; the next get_type() back-migrates (nil case
-// handled inside get_type()).
+// Type setters. Each setter writes one side and invalidates the other;
+// the read side derives lazily via migrate_type_back / migrate_type on
+// first access. The lazy split matches the value-side shape (S4b) and
+// avoids forward-migrating typets whose sub-expressions (e.g. an array
+// size built from a legacy binary_exprt with no type set) would not
+// survive the recursive descent.
 void symbolt::set_type(const typet &t)
 {
-  type_ = migrate_type(t);
   legacy_type_cache_ = t;
   legacy_type_valid_ = true;
+  type2_valid_ = false;
 }
 
 void symbolt::set_type(typet &&t)
 {
-  type_ = migrate_type(t);
   legacy_type_cache_ = std::move(t);
   legacy_type_valid_ = true;
+  type2_valid_ = false;
 }
 
 void symbolt::set_type(const type2tc &t)
 {
   type_ = t;
+  type2_valid_ = true;
   legacy_type_valid_ = false;
 }
 
@@ -76,6 +79,19 @@ const typet &symbolt::get_type() const
     legacy_type_valid_ = true;
   }
   return legacy_type_cache_;
+}
+
+const type2tc &symbolt::get_type2() const
+{
+  if (!type2_valid_)
+  {
+    // Symmetric to get_type(): an empty-id legacy typet is the only safe
+    // input migrate_type cannot consume, so it maps to a nil IREP2 form.
+    type_ = legacy_type_cache_.id().empty() ? type2tc()
+                                            : migrate_type(legacy_type_cache_);
+    type2_valid_ = true;
+  }
+  return type_;
 }
 
 const expr2tc &symbolt::get_value2() const
@@ -114,6 +130,7 @@ void symbolt::swap(symbolt &b)
   SYM_SWAP2(is_set);
   SYM_SWAP2(type_);
   SYM_SWAP2(legacy_type_valid_);
+  SYM_SWAP2(type2_valid_);
   SYM_SWAP2(value2_cache);
   SYM_SWAP2(value2_valid);
 }
@@ -211,16 +228,12 @@ void symbolt::to_irep(irept &dest) const
 
 void symbolt::from_irep(const irept &src)
 {
-  // Bridge the on-disk legacy form into both representations: the legacy
-  // cache takes src.type() verbatim, the IREP2 source eagerly forward-
-  // migrates. A serialized symbol whose type lacks an id (e.g.
-  // default-constructed at write time) maps to a nil IREP2 source,
-  // matching the pre-S5a state where the legacy field was default-
-  // constructed.
+  // Bridge the on-disk legacy form into the legacy cache; the IREP2
+  // representation is derived lazily on the next get_type2() call
+  // (matching the setter semantics -- forward migration is never eager).
   legacy_type_cache_ = src.type();
-  type_ = legacy_type_cache_.id().empty() ? type2tc()
-                                          : migrate_type(legacy_type_cache_);
   legacy_type_valid_ = true;
+  type2_valid_ = false;
 
   value = static_cast<const exprt &>(src.symvalue());
   value2_valid = false;

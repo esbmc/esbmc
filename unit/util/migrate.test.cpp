@@ -141,12 +141,75 @@ TEST_CASE("migrate expr round-trips for symbol and address-of", "[migrate]")
 TEST_CASE("migrate expr round-trips for code statements", "[migrate]")
 {
   // Individual code statements round-trip (goto2c back-migrates instructions
-  // one at a time). Note: migrate_expr_back deliberately does NOT support a
-  // whole code_block2t — a function body's legacy codet block is migrated
-  // forward only (it is the source of truth), so the symbol-table migration
-  // never needs to reconstruct a block from IREP2.
+  // one at a time).
   use_test_ns();
   expr2tc lhs = symbol2tc(get_int_type(32), "x");
   expr2tc rhs = constant_int2tc(get_int_type(32), BigInt(7));
   require_expr_roundtrip(code_assign2tc(lhs, rhs));
+}
+
+// V1 of the symbol-table V-track (esbmc/esbmc#4715): five expr2t kinds had
+// gaps in the migration layer (no back-arm, or no forward-arm, or neither).
+// These tests pin the round-trip property -- migrate_expr_back followed by
+// migrate_expr returns an equal IREP2 node -- that the value-side flip (V2)
+// relies on. The arms are dead code in the pipeline today; nothing constructs
+// the matching legacy form. The tests exercise them via the IREP2 constructors
+// directly, so the gate is independent of which frontend produces a body.
+
+TEST_CASE("migrate expr round-trips for code_block", "[migrate][b2-vtrack]")
+{
+  use_test_ns();
+  expr2tc lhs = symbol2tc(get_int_type(32), "x");
+  expr2tc rhs = constant_int2tc(get_int_type(32), BigInt(1));
+  std::vector<expr2tc> stmts{
+    code_assign2tc(lhs, rhs),
+    code_assign2tc(lhs, constant_int2tc(get_int_type(32), BigInt(2)))};
+  require_expr_roundtrip(code_block2tc(stmts));
+}
+
+TEST_CASE(
+  "migrate expr round-trips for code_block (empty)",
+  "[migrate][b2-vtrack]")
+{
+  // The zero-operand corner is the one a freshly-emitted empty body would hit;
+  // pinning it explicitly is cheap insurance against an iterator-on-empty bug.
+  require_expr_roundtrip(code_block2tc(std::vector<expr2tc>{}));
+}
+
+TEST_CASE("migrate expr round-trips for code_cpp_catch", "[migrate][b2-vtrack]")
+{
+  std::vector<irep_idt> exceptions{"std::exception", "std::runtime_error"};
+  require_expr_roundtrip(code_cpp_catch2tc(exceptions));
+}
+
+TEST_CASE(
+  "migrate expr round-trips for code_cpp_throw_decl",
+  "[migrate][b2-vtrack]")
+{
+  // Forward direction already existed pre-V1; V1 added the back-arm so this
+  // round-trips here without the legacy form being constructed by hand.
+  std::vector<irep_idt> exceptions{"std::bad_alloc"};
+  require_expr_roundtrip(code_cpp_throw_decl2tc(exceptions));
+}
+
+TEST_CASE(
+  "migrate expr round-trips for code_cpp_throw_decl_end",
+  "[migrate][b2-vtrack]")
+{
+  std::vector<irep_idt> exceptions{"std::bad_alloc"};
+  require_expr_roundtrip(code_cpp_throw_decl_end2tc(exceptions));
+}
+
+TEST_CASE(
+  "migrate expr round-trips for pointer_capability",
+  "[migrate][b2-vtrack]")
+{
+  // pointer_capability is the only V1 kind that had no legacy form at all
+  // before this PR: it is constructed solver-side via pointer_capability2tc.
+  // V1 picks the legacy id "pointer_capability" symmetrically with
+  // pointer_object's existing pair, so back-then-forward round-trips.
+  use_test_ns();
+  expr2tc base = symbol2tc(get_int_type(32), "x");
+  type2tc cap_t = unsignedbv_type2tc(64);
+  require_expr_roundtrip(pointer_capability2tc(cap_t, base));
 }

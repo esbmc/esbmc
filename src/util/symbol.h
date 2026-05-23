@@ -46,10 +46,7 @@ public:
   {
     return value;
   }
-  const type2tc &get_type2() const
-  {
-    return type_;
-  }
+  const type2tc &get_type2() const;
   const expr2tc &get_value2() const;
 
   // Type setters. The legacy setter forward-migrates to the IREP2 source
@@ -79,13 +76,27 @@ public:
   irep_idt get_function_name() const;
 
 private:
-  // Type: IREP2 is the source of truth (B2 S5a). The legacy field is a
-  // lazy cache derived via migrate_type_back; mutable so get_type() can
-  // populate it from a const method. Consistency is guaranteed by the
-  // public setter contract.
-  type2tc type_;
+  // Type: both representations are caches sharing the S5a storage layout.
+  // The setter that wrote last marks its side valid and invalidates the
+  // other. Reading the other side lazily derives via migrate_type /
+  // migrate_type_back. Both fields are mutable so the const getters can
+  // populate from the other side on demand.
+  //
+  // S5a (esbmc/esbmc#4735) originally forward-migrated eagerly inside
+  // set_type(const typet&). The python frontend builds legacy `exprt`s
+  // with unset types (e.g. `minus_exprt(lhs, rhs)` whose result `typet`
+  // is default-constructed with empty id), which the eager migration
+  // could not tolerate -- a chain of recursive migrate_expr calls inside
+  // migrate_type ended up constructing arithmetic IREP2 nodes with an
+  // empty-typed result, tripping assert_arith_2ops_consistency in
+  // irep2_expr.cpp. The lazy variant matches the value-side shape (S4b)
+  // and never exposes those latent holes unless something actually reads
+  // get_type2() on the affected symbol -- which, in practice, no current
+  // pipeline path does for those tmp symbols.
+  mutable type2tc type_;
   mutable typet legacy_type_cache_;
   mutable bool legacy_type_valid_;
+  mutable bool type2_valid_;
 
   // Value: legacy authoritative; IREP2 is a lazy cache (S4b shape,
   // unchanged by Phase 5). Function bodies cannot round-trip through
