@@ -1,5 +1,6 @@
 #include <util/location.h>
 #include <util/message.h>
+#include <util/migrate.h>
 #include <util/symbol.h>
 
 symbolt::symbolt()
@@ -16,6 +17,61 @@ void symbolt::clear()
   is_set = false;
   python_annotation_types.clear();
   id = module = name = mode = "";
+  type2_cache = type2tc();
+  value2_cache = expr2tc();
+  type2_valid = false;
+  value2_valid = false;
+}
+
+void symbolt::set_type(const typet &t)
+{
+  type = t;
+  type2_valid = false;
+}
+
+void symbolt::set_type(typet &&t)
+{
+  type = std::move(t);
+  type2_valid = false;
+}
+
+void symbolt::set_value(const exprt &v)
+{
+  value = v;
+  value2_valid = false;
+}
+
+void symbolt::set_value(exprt &&v)
+{
+  value = std::move(v);
+  value2_valid = false;
+}
+
+void symbolt::set_type(const type2tc &t)
+{
+  type2_cache = t;
+  type2_valid = true;
+  type = migrate_type_back(t);
+}
+
+const type2tc &symbolt::get_type2() const
+{
+  if (!type2_valid)
+  {
+    type2_cache = migrate_type(type);
+    type2_valid = true;
+  }
+  return type2_cache;
+}
+
+const expr2tc &symbolt::get_value2() const
+{
+  if (!value2_valid)
+  {
+    migrate_expr(value, value2_cache);
+    value2_valid = true;
+  }
+  return value2_cache;
 }
 
 void symbolt::swap(symbolt &b)
@@ -42,6 +98,10 @@ void symbolt::swap(symbolt &b)
   SYM_SWAP2(is_extern);
   SYM_SWAP2(is_thread_local);
   SYM_SWAP2(is_set);
+  SYM_SWAP2(type2_cache);
+  SYM_SWAP2(value2_cache);
+  SYM_SWAP2(type2_valid);
+  SYM_SWAP2(value2_valid);
 }
 
 void symbolt::dump() const
@@ -134,6 +194,10 @@ void symbolt::from_irep(const irept &src)
 {
   type = src.type();
   value = static_cast<const exprt &>(src.symvalue());
+  // Reloaded legacy fields invalidate any prior IREP2 cache; the next
+  // get_type2/get_value2 will re-derive.
+  type2_valid = false;
+  value2_valid = false;
   location = static_cast<const locationt &>(src.location());
 
   id = src.name();
