@@ -29,7 +29,7 @@ symbolt python_converter::create_symbol(
   symbol.mode = "Python";
   symbol.module = module;
   symbol.location = location;
-  symbol.get_type() = type;
+  symbol.set_type(type);
   symbol.name = name;
   symbol.id = id;
   return symbol;

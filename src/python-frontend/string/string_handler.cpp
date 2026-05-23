@@ -1116,7 +1116,7 @@ exprt string_handler::handle_string_membership(
       strchr_type.return_type() = char_ptr;
       strchr_type.arguments().push_back(code_typet::argumentt(char_ptr));
       strchr_type.arguments().push_back(code_typet::argumentt(int_type()));
-      new_symbol.get_type() = strchr_type;
+      new_symbol.set_type(strchr_type);
 
       symbol_table_.add(new_symbol);
       strchr_symbol = find_cached_c_function_symbol("c:@F@strchr");

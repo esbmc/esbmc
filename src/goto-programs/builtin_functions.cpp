@@ -1404,9 +1404,9 @@ void goto_convertt::do_function_call_symbol(
   {
     symbolt new_symbol;
     new_symbol.name = "__ESBMC_unexpected";
-    new_symbol.get_type() = arguments[0].type();
+    new_symbol.set_type(arguments[0].type());
     new_symbol.id = "c:@F@" + id2string(new_symbol.name);
-    new_symbol.get_value() = arguments[0].op0().op0();
+    new_symbol.set_value(arguments[0].op0().op0());
     new_name(new_symbol);
     return;
   }

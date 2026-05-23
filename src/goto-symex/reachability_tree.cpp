@@ -29,7 +29,7 @@ reachability_treet::reachability_treet(
 {
   // Put a few useful symbols in the symbol table.
   symbolt sym;
-  sym.get_type() = bool_typet();
+  sym.set_type(bool_typet());
   sym.id = "execution_statet::\\guard_exec";
   sym.name = "execution_statet::\\guard_exec";
   context.move(sym);

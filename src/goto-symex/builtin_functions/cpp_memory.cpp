@@ -39,9 +39,11 @@ void goto_symext::symex_cpp_new(
                       ? type2tc(array_type2tc(renamedtype2, code.size, false))
                       : renamedtype2;
 
-  set_symbol_type(symbol, newtype);
-
-  symbol.get_type().dynamic(true);
+  {
+    typet t = migrate_type_back(newtype);
+    t.dynamic(true);
+    symbol.set_type(std::move(t));
+  }
 
   new_context.add(symbol);
 

@@ -1089,7 +1089,7 @@ exprt python_list::build_split_list(
     symbolt new_symbol;
     new_symbol.name = func_name;
     new_symbol.id = func_name;
-    new_symbol.get_type() = func_type;
+    new_symbol.set_type(func_type);
     new_symbol.mode = "C";
     new_symbol.module = "python";
     new_symbol.location = location;
@@ -1209,7 +1209,7 @@ const symbolt &python_list::get_str_slice_sym()
     slice_type.arguments().push_back(code_typet::argumentt(ll_type));
     slice_type.arguments().push_back(code_typet::argumentt(ll_type));
     slice_type.arguments().push_back(code_typet::argumentt(ll_type));
-    new_symbol.get_type() = slice_type;
+    new_symbol.set_type(slice_type);
     converter_.symbol_table().add(new_symbol);
     sym = converter_.symbol_table().find_symbol(id);
   }
@@ -2599,7 +2599,7 @@ exprt python_list::compare(
       typet list_ptr = converter_.get_type_handler().get_list_type();
       func_type.arguments().push_back(code_typet::argumentt(list_ptr));
       func_type.arguments().push_back(code_typet::argumentt(list_ptr));
-      new_symbol.get_type() = func_type;
+      new_symbol.set_type(func_type);
 
       converter_.symbol_table().add(new_symbol);
       set_eq_func =
@@ -2822,7 +2822,7 @@ exprt python_list::compare(
       func_type.arguments().push_back(code_typet::argumentt(list_ptr));
       func_type.arguments().push_back(code_typet::argumentt(int_type()));
       func_type.arguments().push_back(code_typet::argumentt(size_type()));
-      new_symbol.get_type() = func_type;
+      new_symbol.set_type(func_type);
 
       converter_.symbol_table().add(new_symbol);
       list_lt_func_sym =

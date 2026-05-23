@@ -42,12 +42,15 @@ expr2tc goto_symext::create_dynamic_memory_symbol(
   symbol.mode = "C";
 
   typet renamedtype = ns.follow(migrate_type_back(elem_type));
-  symbol.get_type() = typet(typet::t_array);
-  symbol.get_type().subtype() = renamedtype;
-  symbol.get_type().size(migrate_expr_back(size_expr));
-  symbol.get_type().dynamic(true);
-  symbol.get_type().set(
-    "alignment", constant_exprt(config.ansi_c.max_alignment(), size_type()));
+  {
+    typet t(typet::t_array);
+    t.subtype() = renamedtype;
+    t.size(migrate_expr_back(size_expr));
+    t.dynamic(true);
+    t.set(
+      "alignment", constant_exprt(config.ansi_c.max_alignment(), size_type()));
+    symbol.set_type(std::move(t));
+  }
 
   new_context.add(symbol);
   type2tc new_type = migrate_symbol_type(symbol);
@@ -440,10 +443,13 @@ expr2tc goto_symext::symex_mem_inf(
 
   typet renamedtype = ns.follow(migrate_type_back(type));
 
-  symbol.get_type() = array_typet(renamedtype, exprt("infinity", size_type()));
-  symbol.get_type().dynamic(true);
-  symbol.get_type().set(
-    "alignment", constant_exprt(config.ansi_c.max_alignment(), size_type()));
+  {
+    typet t = array_typet(renamedtype, exprt("infinity", size_type()));
+    t.dynamic(true);
+    t.set(
+      "alignment", constant_exprt(config.ansi_c.max_alignment(), size_type()));
+    symbol.set_type(std::move(t));
+  }
   symbol.mode = "C";
   new_context.add(symbol);
 
@@ -561,19 +567,21 @@ expr2tc goto_symext::symex_mem(
   symbol.lvalue = true;
 
   typet renamedtype = ns.follow(migrate_type_back(type));
-  if (size_is_one)
-    symbol.get_type() = renamedtype;
-  else
   {
-    symbol.get_type() = typet(typet::t_array);
-    symbol.get_type().subtype() = renamedtype;
-    symbol.get_type().size(migrate_expr_back(size));
+    typet t;
+    if (size_is_one)
+      t = renamedtype;
+    else
+    {
+      t = typet(typet::t_array);
+      t.subtype() = renamedtype;
+      t.size(migrate_expr_back(size));
+    }
+    t.dynamic(true);
+    t.set(
+      "alignment", constant_exprt(config.ansi_c.max_alignment(), size_type()));
+    symbol.set_type(std::move(t));
   }
-
-  symbol.get_type().dynamic(true);
-
-  symbol.get_type().set(
-    "alignment", constant_exprt(config.ansi_c.max_alignment(), size_type()));
 
   symbol.mode = "C";
 

@@ -218,7 +218,7 @@ result_symbol(const irep_idt &identifier, const typet &type, contextt &context)
   symbolt symbol;
   symbol.id = id2string(identifier) + "::1::result";
   symbol.name = "result";
-  symbol.get_type() = type;
+  symbol.set_type(type);
 
   context.add(symbol);
 

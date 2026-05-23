@@ -778,8 +778,10 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         throw std::runtime_error(msg.str());
       }
 
-      struct_typet &class_type =
-        static_cast<struct_typet &>(class_symbol->get_type());
+      // Read-modify-set: we may push_back a new component into the class
+      // type, so own it locally and set it back at the end.
+      typet class_symbol_type = class_symbol->get_type();
+      struct_typet &class_type = static_cast<struct_typet &>(class_symbol_type);
       auto build_member_expr_from_class = [&](const typet &attr_type) -> exprt {
         typet clean_type = clean_attribute_type(attr_type);
         exprt base = symbol_expr(*symbol);
@@ -819,6 +821,8 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           struct_typet::componentt comp = python_frontend::build_component(
             class_type.tag().as_string(), attr_name, current_element_type);
           class_type.components().push_back(comp);
+          // Persist the mutation back to the symbol (read-modify-set).
+          class_symbol->set_type(class_symbol_type);
         }
 
         // Register instance attribute for both regular and normalized keys

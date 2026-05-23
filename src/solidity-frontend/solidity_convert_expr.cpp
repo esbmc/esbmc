@@ -362,7 +362,7 @@ bool solidity_convertert::get_expr(
         arr_sym.file_local = true;
         arr_sym.lvalue = true;
         auto &added = *move_symbol_to_context(arr_sym);
-        added.get_value() = gen_zero(get_complete_type(arr_t, ns), true);
+        added.set_value(gen_zero(get_complete_type(arr_t, ns), true));
       }
 
       new_expr = symbol_expr(*context.find_symbol(arr_id));
@@ -1840,7 +1840,7 @@ bool solidity_convertert::get_contract_member_call_expr(
         locationt());
       symbolt &added_old_sender = *move_symbol_to_context(old_sender);
       code_declt old_sender_decl(symbol_expr(added_old_sender));
-      added_old_sender.get_value() = msg_sender;
+      added_old_sender.set_value(msg_sender);
       old_sender_decl.operands().push_back(msg_sender);
       move_to_front_block(old_sender_decl);
 
@@ -2026,7 +2026,7 @@ bool solidity_convertert::get_index_access_expr(
       temp_sym.file_local = true;
       temp_sym.lvalue = true;
       auto &tmp_added_sym = *move_symbol_to_context(temp_sym);
-      tmp_added_sym.get_value() = array;
+      tmp_added_sym.set_value(array);
       code_declt decl(symbol_expr(tmp_added_sym));
       decl.operands().push_back(array);
       move_to_front_block(decl);
@@ -2047,7 +2047,7 @@ bool solidity_convertert::get_index_access_expr(
           get_call);
         get_call.arguments().push_back(address_of_exprt(arg_val));
         get_call.arguments().push_back(pos);
-        added_sym.get_value() = get_call;
+        added_sym.set_value(get_call);
 
         code_declt decl(symbol_expr(added_sym));
         decl.operands().push_back(get_call);
@@ -2091,7 +2091,7 @@ bool solidity_convertert::get_index_access_expr(
         get_call.arguments().push_back(address_of_exprt(arg_val));
         get_call.arguments().push_back(dynamic_pool);
         get_call.arguments().push_back(pos);
-        added_sym.get_value() = get_call;
+        added_sym.set_value(get_call);
 
         code_declt decl(symbol_expr(added_sym));
         decl.operands().push_back(get_call);

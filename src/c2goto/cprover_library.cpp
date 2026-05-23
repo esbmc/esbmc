@@ -695,7 +695,7 @@ void add_cprover_library(contextt &context, const languaget *language)
       exprt value = exprt(
         "sideeffect", get_complete_type(s.get_type(), namespacet{context}));
       value.statement("nondet");
-      s.get_value() = value;
+      s.set_value(value);
     }
   });
 }

@@ -497,7 +497,7 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
       symbolt type_symbol;
       type_symbol.id = complex_type_id;
       type_symbol.name = "complex";
-      type_symbol.get_type() = get_complex_struct_type();
+      type_symbol.set_type(get_complex_struct_type());
       type_symbol.mode = "Python";
       type_symbol.is_type = true;
       symbol_table.move_symbol_to_context(type_symbol);
@@ -965,7 +965,8 @@ typet type_handler::get_list_type(const nlohmann::json &list_value) const
     symbolt *func_symbol = converter_.find_symbol(sid.to_string());
 
     assert(func_symbol);
-    return static_cast<code_typet &>(func_symbol->get_type()).return_type();
+    return static_cast<const code_typet &>(func_symbol->get_type())
+      .return_type();
   }
 
   if (list_value.contains("_type") && list_value["_type"] == "BinOp")

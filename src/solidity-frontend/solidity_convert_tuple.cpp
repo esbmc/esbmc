@@ -101,7 +101,7 @@ bool solidity_convertert::get_tuple_definition(const nlohmann::json &ast_node)
   }
 
   t.location() = location_begin;
-  added_symbol.get_type() = t;
+  added_symbol.set_type(t);
 
   return false;
 }
@@ -139,8 +139,11 @@ bool solidity_convertert::get_tuple_instance(
   symbol.static_lifetime = true;
   symbol.file_local = true;
 
-  symbol.get_value() = gen_zero(get_complete_type(t, ns), true);
-  symbol.get_value().zero_initializer(true);
+  {
+    exprt _v = gen_zero(get_complete_type(t, ns), true);
+    _v.zero_initializer(true);
+    symbol.set_value(std::move(_v));
+  }
   symbolt &added_symbol = *move_symbol_to_context(symbol);
   new_expr = symbol_expr(added_symbol);
   new_expr.identifier(id);
@@ -342,7 +345,7 @@ void solidity_convertert::get_llc_ret_tuple(symbolt &s)
   }
   inits.op0() = bool_val;
   inits.op1() = nondet_uint_expr;
-  added_sym.get_value() = inits;
+  added_sym.set_value(inits);
   s = added_sym;
 }
 

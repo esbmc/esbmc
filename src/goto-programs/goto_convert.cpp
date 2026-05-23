@@ -673,7 +673,7 @@ void goto_convertt::convert_decl(const codet &code, goto_programt &dest)
   {
     // This means that it was a VLA declaration and we need to
     // to rewrite the symbol as well
-    s->get_type() = var.type();
+    s->set_type(var.type());
   }
 
   exprt initializer = nil_exprt();

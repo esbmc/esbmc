@@ -26,7 +26,7 @@ inline code_function_callt invoke_intrinsic(
 
   symbolt symbol;
   symbol.mode = "C";
-  symbol.get_type() = code_type;
+  symbol.set_type(code_type);
   symbol.name = name;
   symbol.id = name;
   symbol.is_extern = false;
@@ -417,8 +417,8 @@ void migrate_symbol_value(const symbolt &sym, expr2tc &dest)
 void set_symbol_type(symbolt &sym, const type2tc &t)
 {
   // Today: back-migrate and store the legacy field. When storage flips to
-  // IREP2-native (S4) only this function changes -- the 14+ callers stay put.
-  sym.get_type() = migrate_type_back(t);
+  // IREP2-native (S4b) only this function changes -- the callers stay put.
+  sym.set_type(migrate_type_back(t));
 }
 
 static const typet &decide_on_expr_type(const exprt &side1, const exprt &side2)

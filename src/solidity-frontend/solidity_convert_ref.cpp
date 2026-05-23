@@ -680,7 +680,7 @@ bool solidity_convertert::get_sol_builtin_ref(
             aux_sym.file_local = true;
 
             auto &inserted = *move_symbol_to_context(aux_sym);
-            inserted.get_value() = default_value;
+            inserted.set_value(default_value);
 
             code_declt decl(symbol_expr(inserted));
             decl.operands().push_back(default_value);
@@ -714,7 +714,7 @@ bool solidity_convertert::get_sol_builtin_ref(
               l);
             auto &added_aux = *move_symbol_to_context(aux_idx);
             code_declt decl(symbol_expr(added_aux));
-            added_aux.get_value() = args;
+            added_aux.set_value(args);
             decl.operands().push_back(args);
             move_to_front_block(decl);
             args = address_of_exprt(symbol_expr(added_aux));
@@ -919,7 +919,7 @@ bool solidity_convertert::get_sol_builtin_ref(
         // since all the current support built-in vars are uint type.
         // we just set the value to c:@F@nondet_uint
         symbolt &r = *context.find_symbol("c:@F@nondet_uint");
-        sym.get_value() = r.get_value();
+        sym.set_value(r.get_value());
       }
       new_expr = symbol_expr(sym);
     }

@@ -65,7 +65,7 @@ protected:
     symbol.mode = "C";
     symbol.module = module;
     symbol.location = std::move(get_location(module, function_name));
-    symbol.get_type() = std::move(t);
+    symbol.set_type(std::move(t));
     symbol.name = name;
     symbol.id = id;
     return symbol;
@@ -119,7 +119,7 @@ protected:
     code_type.arguments().push_back(uint_type());
     symbolt symbol;
     symbol.mode = "C";
-    symbol.get_type() = code_type;
+    symbol.set_type(code_type);
     symbol.name = allocation_function;
     symbol.id = allocation_function;
     symbol.is_extern = false;
@@ -143,7 +143,7 @@ protected:
     code_type.arguments().push_back(pointer_typet(empty_typet()));
     symbolt symbol;
     symbol.mode = "C";
-    symbol.get_type() = code_type;
+    symbol.set_type(code_type);
     symbol.name = func;
     symbol.id = func;
     symbol.is_extern = false;

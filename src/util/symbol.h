@@ -40,17 +40,32 @@ public:
   {
     return type;
   }
-  typet &get_type()
-  {
-    return type;
-  }
   const exprt &get_value() const
   {
     return value;
   }
-  exprt &get_value()
+
+  // Setters for the (private) type/value fields. The mutable accessors were
+  // removed in B2 S4a (esbmc/esbmc#4715): all writes go through these so the
+  // storage can later become IREP2-native (S4b) -- mutable get_type()/get_value()
+  // returning references would let writes bypass the eventual IREP2-cache
+  // invalidation. For IREP2-side writes use set_symbol_type / set_symbol_value
+  // in migrate.h (they call these legacy setters internally).
+  void set_type(const typet &t)
   {
-    return value;
+    type = t;
+  }
+  void set_type(typet &&t)
+  {
+    type = std::move(t);
+  }
+  void set_value(const exprt &v)
+  {
+    value = v;
+  }
+  void set_value(exprt &&v)
+  {
+    value = std::move(v);
   }
 
   void clear();

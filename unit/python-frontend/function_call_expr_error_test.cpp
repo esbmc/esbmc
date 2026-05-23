@@ -599,8 +599,8 @@ TEST_CASE(
       make_char('\0'));
 
     symbolt sym;
-    sym.get_value() = value;
-    sym.get_type() = arr_t;
+    sym.set_value(value);
+    sym.set_type(arr_t);
 
     auto extracted =
       function_call_expr_test_access::extract_string_from_symbol(fce, &sym);
@@ -618,8 +618,8 @@ TEST_CASE(
       make_char('\0'));
 
     symbolt sym;
-    sym.get_value() = value;
-    sym.get_type() = arr_t;
+    sym.set_value(value);
+    sym.set_type(arr_t);
 
     auto extracted =
       function_call_expr_test_access::extract_string_from_symbol(fce, &sym);

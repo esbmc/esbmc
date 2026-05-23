@@ -34,7 +34,11 @@ bool clang_c_adjust::adjust()
   {
     symbolt &symbol = **it;
     if (symbol.is_type)
-      adjust_type(symbol.get_type());
+    {
+      typet t = symbol.get_type();
+      adjust_type(t);
+      symbol.set_type(std::move(t));
+    }
   }
 
   Forall_symbol_list(it, symbol_list)
@@ -52,14 +56,22 @@ bool clang_c_adjust::adjust()
 void clang_c_adjust::adjust_symbol(symbolt &symbol)
 {
   if (!symbol.get_value().is_nil())
-    adjust_expr(symbol.get_value());
+  {
+    exprt v = symbol.get_value();
+    adjust_expr(v);
+    symbol.set_value(std::move(v));
+  }
 
   if (
     symbol.get_type().is_code() &&
     has_prefix(symbol.id.as_string(), "c:@F@main"))
     adjust_argc_argv(symbol);
 
-  adjust_type(symbol.get_type());
+  {
+    typet t = symbol.get_type();
+    adjust_type(t);
+    symbol.set_type(std::move(t));
+  }
 }
 
 void clang_c_adjust::adjust_expr(exprt &expr)
@@ -827,7 +839,7 @@ void clang_c_adjust::adjust_side_effect_function_call(
           param_symbol.id = id2string(identifier_with_type) + "::" + base_name;
           param_symbol.name = base_name;
           param_symbol.location = f_op.location();
-          param_symbol.get_type() = arguments[i].type();
+          param_symbol.set_type(arguments[i].type());
           param_symbol.lvalue = true;
           param_symbol.is_parameter = true;
           param_symbol.file_local = true;
@@ -842,10 +854,10 @@ void clang_c_adjust::adjust_side_effect_function_call(
         new_symbol.id = identifier_with_type;
         new_symbol.name = f_op.name();
         new_symbol.location = expr.location();
-        new_symbol.get_type() = poly.type();
+        new_symbol.set_type(poly.type());
         code_blockt implementation =
           instantiate_gcc_polymorphic_builtin(identifier, to_symbol_expr(poly));
-        new_symbol.get_value() = implementation;
+        new_symbol.set_value(implementation);
 
         context.add(new_symbol);
       }
@@ -881,11 +893,15 @@ void clang_c_adjust::adjust_side_effect_function_call(
         new_symbol.id = identifier;
         new_symbol.name = f_op.name();
         new_symbol.location = expr.location();
-        new_symbol.get_type() = f_op.type();
+        new_symbol.set_type(f_op.type());
         new_symbol.mode = "C";
 
         // Adjust type
-        to_code_type(new_symbol.get_type()).make_ellipsis();
+        {
+          typet t = new_symbol.get_type();
+          to_code_type(t).make_ellipsis();
+          new_symbol.set_type(std::move(t));
+        }
         to_code_type(f_op.type()).make_ellipsis();
         context.add(new_symbol);
       }
@@ -1404,7 +1420,7 @@ void clang_c_adjust::adjust_argc_argv(const symbolt &main_symbol)
   symbolt argc_symbol;
   argc_symbol.name = "argc";
   argc_symbol.id = "argc'";
-  argc_symbol.get_type() = op0.type();
+  argc_symbol.set_type(op0.type());
   argc_symbol.static_lifetime = true;
   argc_symbol.lvalue = true;
 
@@ -1421,7 +1437,7 @@ void clang_c_adjust::adjust_argc_argv(const symbolt &main_symbol)
   symbolt argv_symbol;
   argv_symbol.name = "argv";
   argv_symbol.id = "argv'";
-  argv_symbol.get_type() = array_typet(op1.type().subtype(), size_expr);
+  argv_symbol.set_type(array_typet(op1.type().subtype(), size_expr));
   argv_symbol.static_lifetime = true;
   argv_symbol.lvalue = true;
 
@@ -1435,7 +1451,7 @@ void clang_c_adjust::adjust_argc_argv(const symbolt &main_symbol)
     symbolt envp_size_symbol;
     envp_size_symbol.name = "envp_size";
     envp_size_symbol.id = "envp_size'";
-    envp_size_symbol.get_type() = op0.type(); // same type as argc!
+    envp_size_symbol.set_type(op0.type()); // same type as argc!
     envp_size_symbol.static_lifetime = true;
 
     symbolt *envp_new_size_symbol;
@@ -1444,11 +1460,11 @@ void clang_c_adjust::adjust_argc_argv(const symbolt &main_symbol)
     symbolt envp_symbol;
     envp_symbol.name = "envp";
     envp_symbol.id = "envp'";
-    envp_symbol.get_type() = op2.type();
+    envp_symbol.set_type(op2.type());
     envp_symbol.static_lifetime = true;
     exprt size_expr = symbol_expr(*envp_new_size_symbol);
-    envp_symbol.get_type() =
-      array_typet(envp_symbol.get_type().subtype(), size_expr);
+    envp_symbol.set_type(
+      array_typet(envp_symbol.get_type().subtype(), size_expr));
 
     symbolt *envp_new_symbol;
     context.move(envp_symbol, envp_new_symbol);
@@ -1501,7 +1517,7 @@ void clang_c_adjust::adjust_builtin_va_arg(exprt &expr)
   symbolt symbol;
   symbol.name = "__ESBMC_va_arg";
   symbol.id = "__ESBMC_va_arg";
-  symbol.get_type() = symbol_type;
+  symbol.set_type(symbol_type);
 
   context.move(symbol);
 }

@@ -376,7 +376,7 @@ bool solidity_languaget::typecheck(contextt &context, const std::string &module)
   {
     symbolt *s = new_context.find_symbol(id);
     if (s)
-      s->get_value() = std::move(val);
+      s->set_value(std::move(val));
   }
 
   if (c_link(

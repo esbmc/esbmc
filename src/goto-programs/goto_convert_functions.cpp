@@ -395,7 +395,9 @@ void goto_convert_functionst::wallop_type_impl(
   symbolt *s = context.find_symbol(name);
   if (s != nullptr)
   {
-    rename_types(s->get_type(), *s, sname);
+    typet t = s->get_type();
+    rename_types(t, *s, sname);
+    s->set_type(std::move(t));
   }
 
   deps.clear();
@@ -447,7 +449,11 @@ void goto_convert_functionst::thrash_type_symbols()
 
   // And now all the types have a fixed form, rename types in all existing code.
   context.Foreach_operand([this](symbolt &s) {
-    rename_types(s.get_type(), s, s.id);
-    rename_exprs(s.get_value(), s, s.id);
+    typet t = s.get_type();
+    rename_types(t, s, s.id);
+    s.set_type(std::move(t));
+    exprt v = s.get_value();
+    rename_exprs(v, s, s.id);
+    s.set_value(std::move(v));
   });
 }

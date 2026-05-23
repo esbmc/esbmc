@@ -1818,7 +1818,7 @@ bool clang_cpp_convertert::get_function_body(
             symbolt new_symbol;
             new_symbol.name = "array_init$";
             new_symbol.id = id2string(this_ptr.identifier()) + "_array_init$";
-            new_symbol.get_type() = this_type;
+            new_symbol.set_type(this_type);
             if (context.move(new_symbol, array_init_sym))
             {
               log_error(
@@ -2339,12 +2339,16 @@ bool clang_cpp_convertert::annotate_class_method(
     symbolt *fd_symb = get_fd_symbol(cxxmdd);
     if (fd_symb)
     {
-      fd_symb->get_type() = component_type;
+      fd_symb->set_type(component_type);
       /*
        * we indicate the need for vptr initializations in contructor.
        * vptr initializations will be added in the adjuster.
        */
-      fd_symb->get_value().need_vptr_init(has_vptr_component);
+      {
+        exprt v = fd_symb->get_value();
+        v.need_vptr_init(has_vptr_component);
+        fd_symb->set_value(std::move(v));
+      }
     }
   }
 

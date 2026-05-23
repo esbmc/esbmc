@@ -8,7 +8,7 @@ symbolt *assign_params_as_non_det::get_default_symbol(
 {
   symbolt symbol;
   symbol.location = std::move(location);
-  symbol.get_type() = std::move(type);
+  symbol.set_type(std::move(type));
   symbol.name = name;
   symbol.id = id;
 
