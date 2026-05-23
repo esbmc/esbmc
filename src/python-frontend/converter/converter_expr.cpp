@@ -28,6 +28,20 @@
 
 using namespace json_utils;
 
+static bool contains_cpp_throw(const exprt &expr)
+{
+  if (expr.statement() == "cpp-throw")
+    return true;
+
+  for (const auto &op : expr.operands())
+  {
+    if (contains_cpp_throw(op))
+      return true;
+  }
+
+  return false;
+}
+
 static ExpressionType get_expression_type(const nlohmann::json &element)
 {
   // Return UNKNOWN if the expected "_type" field is missing
@@ -953,7 +967,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     // than attempting to index it. Slicing a thrown exception is meaningless
     // and would build an address_of over a non-array operand, crashing the
     // converter.
-    if (array.is_nil() || array.statement() == "cpp-throw")
+    if (array.is_nil() || contains_cpp_throw(array))
     {
       expr = array;
       break;
