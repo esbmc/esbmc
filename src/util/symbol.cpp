@@ -30,10 +30,9 @@ void symbolt::clear()
 
 // Type setters. Each setter writes one side and invalidates the other;
 // the read side derives lazily via migrate_type_back / migrate_type on
-// first access. The lazy split matches the value-side shape (post-V2)
-// and avoids forward-migrating typets whose sub-expressions (e.g. an
-// array size built from a legacy binary_exprt with no type set) would
-// not survive the recursive descent.
+// first access. The lazy split avoids forward-migrating typets whose
+// sub-expressions (e.g. an array size built from a legacy binary_exprt
+// with no type set) would not survive the recursive descent.
 void symbolt::set_type(const typet &t)
 {
   legacy_type_cache_ = t;
@@ -55,10 +54,10 @@ void symbolt::set_type(const type2tc &t)
   legacy_type_valid_ = false;
 }
 
-// Value setters. Mirror of the type setters after B2 V2: each writes one
-// side and invalidates the other; the read side derives lazily via
-// migrate_expr / migrate_expr_back (the back direction is safe for all
-// expr2t kinds after V1, #4737).
+// Value setters. Mirror of the type setters: each writes one side and
+// invalidates the other; the read side derives lazily via migrate_expr /
+// migrate_expr_back. The back direction covers every expr2t kind a symbol
+// value may hold, including code_block2t for function bodies.
 void symbolt::set_value(const exprt &v)
 {
   legacy_value_cache_ = v;
@@ -115,9 +114,8 @@ const exprt &symbolt::get_value() const
     // Mirror of get_type(): a nil IREP2 value must not be fed to
     // migrate_expr_back (it derefs the held pointer). Return a nil exprt
     // instead -- the shape a freshly-cleared symbolt has on the legacy
-    // side. V1 (#4737) closed the back-migration coverage gap so
-    // non-nil values back-migrate cleanly for every expr2t kind a
-    // symbol value may hold, including function bodies.
+    // side. For non-nil values, migrate_expr_back covers every expr2t
+    // kind a symbol value may hold, including function bodies.
     if (is_nil_expr(value_))
       legacy_value_cache_.make_nil();
     else

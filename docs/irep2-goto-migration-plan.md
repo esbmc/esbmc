@@ -37,7 +37,7 @@ structural sharing, on-disk format compatibility).
 | # | Boundary | Where | Legacy type | Why it persists | Risk |
 |---|----------|-------|-------------|-----------------|------|
 | B1 | **Frontend → goto lowering input** | `goto_convert*` consume `codet` (`goto_convert_class.h:18,37,131-167`; `goto_convert.cpp:117`) | `codet`/`exprt` | The clang/python/etc. frontends emit `symbolt::value` as `codet`; `goto_convert` migrates per-instruction (`goto_convert.cpp:136` `migrate_expr`) | Medium |
-| B2 | **Symbol table** | `symbolt::value` (`exprt`), `symbolt::type` (`typet`) (`src/util/symbol.h:15-16`) | `exprt`/`typet` | Shared by *all* frontends and serialization; the lowering target | **High (foundational)** |
+| B2 | **Symbol table** | `symbolt::value` (`expr2tc`), `symbolt::type` (`type2tc`) (`src/util/symbol.h`) | IREP2 | **Done.** Storage flipped to IREP2 source-of-truth with lazy legacy caches (S5a #4735 → V1 #4737 → V2 #4741 → S6). End-state design in `docs/irep2-symbol-table-s6-plan.md`. | (closed) |
 | B3 | **`goto_functiont::type`** | `code_typet type` (`src/goto-programs/goto_functions.h:24`) | `code_typet` (irept) | Function signature still stored stringy | Medium |
 | B4 | **Goto-binary serialization** | `goto_program_irep.cpp:4-57`, `goto_program_serialization.cpp`, `goto_function_serialization.cpp`, `read_bin_goto_object.cpp`, `write_goto_binary.cpp`, `src/util/irep_serialization.{h,cpp}` | `irept` | On-disk format is `irept`; converted via `migrate_expr_back`/`migrate_expr` on each I/O | **High (format compat + hashing)** |
 | B5 | **`rw_set` data-race pass** | `rw_set.h:17-18` stores `exprt original_expr`, `exprt guard`; `rw_set.cpp:8-72` operates in `exprt` | `exprt` | Pass never migrated; still computes over legacy expressions | Medium |
@@ -296,11 +296,17 @@ Phase 0  Instrumentation + baselines        (no behaviour change)
 Phase 1  Pure-analysis leaf passes (B6')     ── lowest risk, no coupling
 Phase 2  rw_set / data-race (B5)             ── self-contained island
 Phase 3  goto_functiont::type (B3)           ── behind adaptor
-Phase 4  Symbol table (B2)                   ── FOUNDATION, shadow-field method
-           ├ 4a shadow fields + assertions
-           ├ 4b switch readers
-           ├ 4c switch writers (kills B6 round-trips)
-           └ 4d symbol (de)serialization  ── couples to Phase 5
+Phase 4  Symbol table (B2)                   ── DONE (executed via S0..V2+S6)
+           ├ S0 encapsulate accessors           #4724
+           ├ S1 chokepoints + cross-check       #4725, #4727
+           ├ S3 IREP2 writer chokepoint         #4728
+           ├ S4a audit writes / remove ref-gets #4729
+           ├ S4b IREP2 lazy cache               #4730
+           ├ S2 closeout                        #4731
+           ├ S5a type source-of-truth flip      #4735 (+ #4739 hotfix)
+           ├ V1 close back-migration coverage   #4737
+           ├ V2 value source-of-truth flip      #4741
+           └ S6 end-state: lazy caches retained #4742, docs/irep2-symbol-table-s6-plan.md
 Phase 5  Goto-binary serialization (B4)      ── versioned, back-compat reader kept
 Phase 6  Frontend lowering input (B1)        ── OPTIONAL / deferrable
 Phase 7  Cleanup: delete dead migrate paths  ── only after correctness proven

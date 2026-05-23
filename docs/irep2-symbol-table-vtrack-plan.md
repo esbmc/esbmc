@@ -1,5 +1,11 @@
 # V-track — Symbol-Value Source-of-Truth Decision
 
+> **Status: complete.** V1 (#4737) closed the `migrate_expr_back`
+> coverage gap for the 5 missing kinds. V2 (#4741) flipped
+> `symbolt::value` to IREP2 storage with a lazy legacy cache, designed
+> lazy from day one. End-state ABI recorded in
+> `irep2-symbol-table-s6-plan.md`.
+
 Plan for the value-side counterpart to Phase 5 of the IREP2 symbol-
 table migration (esbmc/esbmc#4715). Phase 5 (#4732, #4735) flipped
 `symbolt::type` to IREP2 storage and left `symbolt::value` exactly as

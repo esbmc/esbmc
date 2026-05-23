@@ -29,18 +29,20 @@ public:
 
   symbolt();
 
-  // Type and value accessors. After B2 S5a (#4735, lazy variant restored in
-  // #4739) and B2 V2 (esbmc/esbmc#4715, the value-side flip below) both
-  // representations are *caches* sharing the same storage layout: whichever
-  // setter last wrote marks its side valid and invalidates the other; the
-  // const reader on the invalidated side lazily derives via the migration
-  // layer on first access.
+  // Type and value accessors. After the symbol-table migration
+  // (esbmc/esbmc#4715, boundary B2), the IREP2 forms `type_` / `value_` are
+  // the source of truth on both sides; the legacy `typet` / `exprt` are
+  // permanent on-demand caches populated lazily by the const readers.
+  // Whichever setter last wrote marks its side valid and invalidates the
+  // other; the reader on the invalidated side lazily derives via the
+  // migration layer on first access. This is the end-state design, not
+  // transitional -- see docs/irep2-symbol-table-s6-plan.md.
   //
   // The lazy split is deliberate: an eager forward migrate at set_type /
   // set_value would walk legacy sub-expressions that the existing frontends
   // sometimes build without populating intermediate types or kinds. The
-  // post-#4739 design tolerates those latent holes as long as nothing reads
-  // the IREP2 side of the affected symbol -- which, in practice, no current
+  // lazy design tolerates those latent holes as long as nothing reads the
+  // IREP2 side of the affected symbol -- which, in practice, no current
   // pipeline path does for the tmp symbols involved.
   const typet &get_type() const;
   const exprt &get_value() const;
@@ -54,11 +56,12 @@ public:
   void set_type(typet &&t);
   void set_type(const type2tc &t);
 
-  // Value setters. Mirror of the type setters after B2 V2: legacy variants
-  // store the legacy form and invalidate the IREP2 side; the IREP2-side
-  // setter stores expr2tc directly and invalidates the legacy side. V1
-  // (#4737) is the precondition that makes the back-migration safe for
-  // function-body symbols (code_block2t round-trips).
+  // Value setters. Mirror of the type setters: legacy variants store the
+  // legacy form and invalidate the IREP2 side; the IREP2-side setter
+  // stores expr2tc directly and invalidates the legacy side. `migrate_expr_back`
+  // covers every expr2t kind a symbol value may hold -- including
+  // code_block2t for function bodies -- so the lazy back-migration in
+  // get_value() is safe regardless of what was written.
   void set_value(const exprt &v);
   void set_value(exprt &&v);
   void set_value(const expr2tc &v);
@@ -76,22 +79,18 @@ public:
   irep_idt get_function_name() const;
 
 private:
-  // Type: both representations are caches sharing the S5a storage layout.
-  // The setter that wrote last marks its side valid and invalidates the
-  // other. Reading the other side lazily derives via migrate_type /
-  // migrate_type_back. Both fields are mutable so the const getters can
-  // populate from the other side on demand.
+  // Type and value storage. IREP2 (`type_`, `value_`) is the source of
+  // truth on both sides; the legacy fields (`legacy_*_cache_`) are
+  // permanent on-demand caches. The setter that wrote last marks its
+  // side valid and invalidates the other; reading the invalidated side
+  // lazily derives via migrate_type / migrate_type_back /
+  // migrate_expr / migrate_expr_back. All fields are mutable so the
+  // const readers can populate from the other side on demand.
   mutable type2tc type_;
   mutable typet legacy_type_cache_;
   mutable bool legacy_type_valid_;
   mutable bool type2_valid_;
 
-  // Value: same shape as the type side after B2 V2. expr2tc is the dominant
-  // form on IREP2-side writes; legacy `exprt` is derived lazily via
-  // migrate_expr_back. V1 (#4737) closed the back-migration coverage gap so
-  // function bodies (code_block2t and the four other previously-missing
-  // kinds) can round-trip, which is the precondition for the V2 flip to be
-  // safe.
   mutable expr2tc value_;
   mutable exprt legacy_value_cache_;
   mutable bool legacy_value_valid_;
