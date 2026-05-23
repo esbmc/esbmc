@@ -39,7 +39,7 @@ void goto_symext::symex_cpp_new(
                       ? type2tc(array_type2tc(renamedtype2, code.size, false))
                       : renamedtype2;
 
-  symbol.get_type() = migrate_type_back(newtype);
+  set_symbol_type(symbol, newtype);
 
   symbol.get_type().dynamic(true);
 

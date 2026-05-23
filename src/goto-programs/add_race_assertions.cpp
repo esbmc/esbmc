@@ -78,7 +78,7 @@ void w_guardst::add_initialization(goto_programt &goto_program)
   symbolt new_symbol;
   new_symbol.id = identifier;
   new_symbol.name = identifier;
-  new_symbol.get_type() = migrate_type_back(arrayt);
+  set_symbol_type(new_symbol, arrayt);
   new_symbol.static_lifetime = true;
   new_symbol.get_value().make_false();
   context.move_symbol_to_context(new_symbol);

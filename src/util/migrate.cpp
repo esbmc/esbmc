@@ -414,6 +414,13 @@ void migrate_symbol_value(const symbolt &sym, expr2tc &dest)
 #endif
 }
 
+void set_symbol_type(symbolt &sym, const type2tc &t)
+{
+  // Today: back-migrate and store the legacy field. When storage flips to
+  // IREP2-native (S4) only this function changes -- the 14+ callers stay put.
+  sym.get_type() = migrate_type_back(t);
+}
+
 static const typet &decide_on_expr_type(const exprt &side1, const exprt &side2)
 {
   // For some arithmetic expr, decide on the result of operating on them.

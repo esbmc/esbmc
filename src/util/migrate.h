@@ -34,6 +34,13 @@ type2tc migrate_symbol_type(const symbolt &sym);
 // forward only (see unit/util/migrate.test.cpp); nil values are skipped too.
 void migrate_symbol_value(const symbolt &sym, expr2tc &dest);
 
+// Set a symbol's type from an IREP2 form (esbmc/esbmc#4715, B2 S3). The
+// chokepoint for symbol-type writes: today it back-migrates to the legacy
+// field, but when storage flips to IREP2-native (S4) only this function
+// changes, not its 14+ callers. Replaces the previous round-trip pattern
+// `sym.get_type() = migrate_type_back(t)` at the call sites.
+void set_symbol_type(symbolt &sym, const type2tc &t);
+
 typet migrate_type_back(const type2tc &ref);
 exprt migrate_expr_back(const expr2tc &ref);
 

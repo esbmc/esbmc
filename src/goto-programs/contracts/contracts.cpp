@@ -1727,7 +1727,7 @@ expr2tc code_contractst::extract_struct_members_to_temps(
         symbolt temp_symbol;
         temp_symbol.name = temp_id;
         temp_symbol.id = temp_id;
-        temp_symbol.get_type() = migrate_type_back(member.type);
+        set_symbol_type(temp_symbol, member.type);
         temp_symbol.lvalue = true;
         temp_symbol.static_lifetime = false;
         temp_symbol.location = location;
@@ -2142,7 +2142,7 @@ code_contractst::materialize_ptr_field_snapshots(
         symbolt snap_sym_obj;
         snap_sym_obj.name = snap_name;
         snap_sym_obj.id = snap_name;
-        snap_sym_obj.get_type() = migrate_type_back(ftype);
+        set_symbol_type(snap_sym_obj, ftype);
         snap_sym_obj.lvalue = true;
         snap_sym_obj.static_lifetime = false;
         snap_sym_obj.file_local = false;
@@ -2328,7 +2328,7 @@ code_contractst::materialize_ptr_deref_snapshots(
         symbolt snap_obj;
         snap_obj.name = snap_name;
         snap_obj.id = snap_name;
-        snap_obj.get_type() = migrate_type_back(ftype);
+        set_symbol_type(snap_obj, ftype);
         snap_obj.lvalue = true;
         snap_obj.static_lifetime = false;
         snap_obj.file_local = false;
@@ -2366,7 +2366,7 @@ code_contractst::materialize_ptr_deref_snapshots(
       symbolt snap_obj;
       snap_obj.name = snap_name;
       snap_obj.id = snap_name;
-      snap_obj.get_type() = migrate_type_back(pointee);
+      set_symbol_type(snap_obj, pointee);
       snap_obj.lvalue = true;
       snap_obj.static_lifetime = false;
       snap_obj.file_local = false;
@@ -2498,7 +2498,7 @@ code_contractst::materialize_arr_elem_snapshots(
     symbolt j_obj;
     j_obj.name = j_sym_name;
     j_obj.id = j_sym_name;
-    j_obj.get_type() = migrate_type_back(j_type);
+    set_symbol_type(j_obj, j_type);
     j_obj.lvalue = true;
     j_obj.static_lifetime = false;
     j_obj.file_local = false;
@@ -2537,7 +2537,7 @@ code_contractst::materialize_arr_elem_snapshots(
     symbolt snap_obj;
     snap_obj.name = snap_sym_name;
     snap_obj.id = snap_sym_name;
-    snap_obj.get_type() = migrate_type_back(elem_type);
+    set_symbol_type(snap_obj, elem_type);
     snap_obj.lvalue = true;
     snap_obj.static_lifetime = false;
     snap_obj.file_local = false;
@@ -3760,7 +3760,7 @@ void code_contractst::add_pointer_validity_assumptions(
         symbolt harness_sym;
         harness_sym.name = harness_var_name;
         harness_sym.id = harness_var_name;
-        harness_sym.get_type() = migrate_type_back(resolved_type);
+        set_symbol_type(harness_sym, resolved_type);
         harness_sym.lvalue = true;
         harness_sym.static_lifetime = false;
         harness_sym.location = location;

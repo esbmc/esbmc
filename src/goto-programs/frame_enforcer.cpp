@@ -359,7 +359,7 @@ expr2tc frame_enforcert::create_snapshot_symbol(
   symbolt snapshot_symbol;
   snapshot_symbol.name = snapshot_name;
   snapshot_symbol.id = snapshot_name;
-  snapshot_symbol.get_type() = migrate_type_back(original->type);
+  set_symbol_type(snapshot_symbol, original->type);
   snapshot_symbol.lvalue = true;
   snapshot_symbol.static_lifetime = false;
   snapshot_symbol.file_local = false;
