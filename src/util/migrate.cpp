@@ -379,17 +379,18 @@ type2tc migrate_type(const typet &type)
 
 type2tc migrate_symbol_type(const symbolt &sym)
 {
-  // S4b: the IREP2 form is cached on `symbolt`; this is an O(1) lookup that
-  // populates the cache lazily from the legacy field on first read. The legacy
-  // setters invalidate the cache, so it cannot go stale.
+  // S5a: the IREP2 form is the source of truth on `symbolt`; get_type2()
+  // returns the stored field directly (no cache logic on this side).
   const type2tc &result = sym.get_type2();
 #ifndef NDEBUG
-  // Round-trip cross-check: the cached IREP2 form must be stable under legacy
-  // back-and-forth migration. Unit/util/migrate.test.cpp proves this for
-  // synthetic types; asserting it here exercises it on every real symbol the
-  // pipeline reads.
+  // Round-trip cross-check: the stored IREP2 form must be stable under a
+  // legacy back-and-forth migration. Unit/util/migrate.test.cpp proves this
+  // for synthetic types; asserting it here exercises it on every real symbol
+  // the pipeline reads. Skip nil sources -- migrate_type_back null-derefs on
+  // them, and a nil source has no legacy form to compare against anyway.
   assert(
-    migrate_type(migrate_type_back(result)) == result &&
+    (is_nil_type(result) ||
+     migrate_type(migrate_type_back(result)) == result) &&
     "symbol type not stable under IREP2<->irept round-trip");
 #endif
   return result;
@@ -418,9 +419,9 @@ void migrate_symbol_value(const symbolt &sym, expr2tc &dest)
 
 void set_symbol_type(symbolt &sym, const type2tc &t)
 {
-  // S4b: route through the IREP2-side setter on symbolt. It stores `t` as the
-  // cache (no re-migration on the next read) and derives the legacy field via
-  // migrate_type_back exactly once.
+  // S5a: route through the IREP2-side setter on symbolt. The setter stores
+  // `t` as the source of truth; the legacy `typet` is derived lazily on the
+  // next get_type() call via migrate_type_back.
   sym.set_type(t);
 }
 

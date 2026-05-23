@@ -17,22 +17,38 @@ void symbolt::clear()
   is_set = false;
   python_annotation_types.clear();
   id = module = name = mode = "";
-  type2_cache = type2tc();
+  // Both type representations reset to nil consistently; no migration is
+  // invoked here -- reading either side returns a nil/default form.
+  type_ = type2tc();
+  legacy_type_cache_ = typet();
+  legacy_type_valid_ = true;
   value2_cache = expr2tc();
-  type2_valid = false;
   value2_valid = false;
 }
 
+// Type setters. The legacy variants forward-migrate to the IREP2 source
+// and keep the cache fresh with the input -- no later back-migration is
+// needed for get_type(). The IREP2 setter stores the source directly and
+// invalidates the cache; the next get_type() back-migrates (nil case
+// handled inside get_type()).
 void symbolt::set_type(const typet &t)
 {
-  type = t;
-  type2_valid = false;
+  type_ = migrate_type(t);
+  legacy_type_cache_ = t;
+  legacy_type_valid_ = true;
 }
 
 void symbolt::set_type(typet &&t)
 {
-  type = std::move(t);
-  type2_valid = false;
+  type_ = migrate_type(t);
+  legacy_type_cache_ = std::move(t);
+  legacy_type_valid_ = true;
+}
+
+void symbolt::set_type(const type2tc &t)
+{
+  type_ = t;
+  legacy_type_valid_ = false;
 }
 
 void symbolt::set_value(const exprt &v)
@@ -47,21 +63,19 @@ void symbolt::set_value(exprt &&v)
   value2_valid = false;
 }
 
-void symbolt::set_type(const type2tc &t)
+const typet &symbolt::get_type() const
 {
-  type2_cache = t;
-  type2_valid = true;
-  type = migrate_type_back(t);
-}
-
-const type2tc &symbolt::get_type2() const
-{
-  if (!type2_valid)
+  if (!legacy_type_valid_)
   {
-    type2_cache = migrate_type(type);
-    type2_valid = true;
+    // A nil IREP2 source must not be fed to migrate_type_back (it derefs
+    // the held pointer). Return a default `typet` instead; this matches
+    // the pre-S5a behaviour of a freshly-cleared symbolt whose legacy
+    // `type` field was default-constructed.
+    legacy_type_cache_ =
+      is_nil_type(type_) ? typet() : migrate_type_back(type_);
+    legacy_type_valid_ = true;
   }
-  return type2_cache;
+  return legacy_type_cache_;
 }
 
 const expr2tc &symbolt::get_value2() const
@@ -78,7 +92,6 @@ void symbolt::swap(symbolt &b)
 {
 #define SYM_SWAP1(x) x.swap(b.x)
 
-  SYM_SWAP1(type);
   SYM_SWAP1(value);
   SYM_SWAP1(id);
   SYM_SWAP1(module);
@@ -86,6 +99,7 @@ void symbolt::swap(symbolt &b)
   SYM_SWAP1(mode);
   SYM_SWAP1(location);
   SYM_SWAP1(python_annotation_types);
+  SYM_SWAP1(legacy_type_cache_);
 
 #define SYM_SWAP2(x) std::swap(x, b.x)
 
@@ -98,9 +112,9 @@ void symbolt::swap(symbolt &b)
   SYM_SWAP2(is_extern);
   SYM_SWAP2(is_thread_local);
   SYM_SWAP2(is_set);
-  SYM_SWAP2(type2_cache);
+  SYM_SWAP2(type_);
+  SYM_SWAP2(legacy_type_valid_);
   SYM_SWAP2(value2_cache);
-  SYM_SWAP2(type2_valid);
   SYM_SWAP2(value2_valid);
 }
 
@@ -118,8 +132,11 @@ void symbolt::show(std::ostream &out) const
   out << "Module......: " << module << "\n";
   out << "Mode........: " << mode << " (" << mode << ")"
       << "\n";
-  if (type.is_not_nil())
-    out << "Type........: " << type.pretty(4) << "\n";
+  // Read the type through the accessor: the legacy `typet` is a derived
+  // cache after S5a, so a direct field reference would expose stale data.
+  const typet &t = get_type();
+  if (t.is_not_nil())
+    out << "Type........: " << t.pretty(4) << "\n";
   if (value.is_not_nil())
     out << "Value.......: " << value.pretty(4) << "\n";
 
@@ -155,7 +172,9 @@ std::ostream &operator<<(std::ostream &out, const symbolt &symbol)
 void symbolt::to_irep(irept &dest) const
 {
   dest.clear();
-  dest.type() = type;
+  // Derive the legacy `typet` from the IREP2 source via get_type() and
+  // serialize as before -- same on-disk format, no goto-binary change.
+  dest.type() = get_type();
   dest.symvalue(value);
   dest.location(location);
   dest.name(id);
@@ -192,12 +211,20 @@ void symbolt::to_irep(irept &dest) const
 
 void symbolt::from_irep(const irept &src)
 {
-  type = src.type();
+  // Bridge the on-disk legacy form into both representations: the legacy
+  // cache takes src.type() verbatim, the IREP2 source eagerly forward-
+  // migrates. A serialized symbol whose type lacks an id (e.g.
+  // default-constructed at write time) maps to a nil IREP2 source,
+  // matching the pre-S5a state where the legacy field was default-
+  // constructed.
+  legacy_type_cache_ = src.type();
+  type_ = legacy_type_cache_.id().empty() ? type2tc()
+                                          : migrate_type(legacy_type_cache_);
+  legacy_type_valid_ = true;
+
   value = static_cast<const exprt &>(src.symvalue());
-  // Reloaded legacy fields invalidate any prior IREP2 cache; the next
-  // get_type2/get_value2 will re-derive.
-  type2_valid = false;
   value2_valid = false;
+
   location = static_cast<const locationt &>(src.location());
 
   id = src.name();
