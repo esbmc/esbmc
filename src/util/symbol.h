@@ -36,7 +36,7 @@ public:
   // Whichever setter last wrote marks its side valid and invalidates the
   // other; the reader on the invalidated side lazily derives via the
   // migration layer on first access. This is the end-state design, not
-  // transitional -- see docs/irep2-symbol-table-s6-plan.md.
+  // transitional -- see docs/irep2-migration.md.
   //
   // The lazy split is deliberate: an eager forward migrate at set_type /
   // set_value would walk legacy sub-expressions that the existing frontends

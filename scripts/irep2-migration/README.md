@@ -1,9 +1,12 @@
 # IREP2 goto-program migration — differential harness (Phase 0)
 
 Tooling for the legacy-IREP → IREP2 migration of the goto-program pipeline.
-This is **Phase 0** of the plan in
-[`docs/irep2-goto-migration-plan.md`](../../docs/irep2-goto-migration-plan.md);
-tracking issue [esbmc/esbmc#4715](https://github.com/esbmc/esbmc/issues/4715).
+This was **Phase 0** of the migration recorded in
+[`docs/irep2-migration.md`](../../docs/irep2-migration.md); the migration
+itself completed under tracking issue
+[esbmc/esbmc#4715](https://github.com/esbmc/esbmc/issues/4715) (closed).
+The harness is retained as the differential goto-binary diff and surface-ratio
+census tooling for any future incremental work.
 
 Phase 0 changes **no** ESBMC behaviour — it adds the safety net that every later
 migration PR is gated on: a way to prove a patch leaves the generated goto
