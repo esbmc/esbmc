@@ -414,11 +414,15 @@ void python_converter::get_attributes_from_self(
       }
       else if (
         stmt["annotation"].contains("_type") &&
-        stmt["annotation"]["_type"] == "Subscript")
+        (stmt["annotation"]["_type"] == "Subscript" ||
+         stmt["annotation"]["_type"] == "BinOp"))
       {
-        // Subscript annotation like dict[str, int] or list[int]
+        // Subscript annotation like dict[str, int], list[int], Optional[int]
+        // or PEP 604 union BinOp like int | None (get_type_from_annotation
+        // already maps `T | None` to gen_pointer_type(T), the same shape it
+        // produces for Optional[T]).
         typet type = get_type_from_annotation(stmt["annotation"], stmt);
-        if (type.is_nil())
+        if (type.is_nil() || type.is_empty())
         {
           log_warning(
             "Skipping attribute '{}' with unsupported annotation type",
