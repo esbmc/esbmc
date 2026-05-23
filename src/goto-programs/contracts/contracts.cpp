@@ -496,7 +496,7 @@ expr2tc code_contractst::extract_requires_clause(const symbolt &contract_symbol)
   // For now, return the entire value as requires
   // TODO: Parse structured contract data if needed
   expr2tc req;
-  migrate_expr(contract_symbol.get_value(), req);
+  migrate_symbol_value(contract_symbol, req);
   return req;
 }
 

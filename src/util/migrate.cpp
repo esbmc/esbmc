@@ -393,6 +393,27 @@ type2tc migrate_symbol_type(const symbolt &sym)
   return result;
 }
 
+void migrate_symbol_value(const symbolt &sym, expr2tc &dest)
+{
+  migrate_expr(sym.get_value(), dest);
+#ifndef NDEBUG
+  // Cross-check is guarded: function bodies skip because migrate_expr_back
+  // cannot reconstruct a code_block (a body is migrated forward only -- see
+  // unit/util/migrate.test.cpp); nil values are vacuous. For everything else
+  // (initialisers, contract requires/ensures, ...) assert IREP2-side
+  // idempotence -- the property that makes deriving the legacy field from
+  // IREP2 lossless for non-body symbol values.
+  if (!sym.get_type().is_code() && !sym.get_value().is_nil())
+  {
+    expr2tc roundtrip;
+    migrate_expr(migrate_expr_back(dest), roundtrip);
+    assert(
+      roundtrip == dest &&
+      "symbol value not stable under IREP2<->irept round-trip");
+  }
+#endif
+}
+
 static const typet &decide_on_expr_type(const exprt &side1, const exprt &side2)
 {
   // For some arithmetic expr, decide on the result of operating on them.
