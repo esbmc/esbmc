@@ -87,7 +87,7 @@ bool python_languaget::parse(const std::string &path)
 
   ast_output_dir = dump_python_script();
   fs::path parser_path(ast_output_dir);
-  parser_path /= "parser.py";
+  parser_path /= "parser/__main__.py";
 
   // Execute Python script to generate JSON file from AST
   std::vector<std::string> args = {parser_path.string(), path, ast_output_dir};
@@ -119,7 +119,7 @@ bool python_languaget::parse(const std::string &path)
     exit(1);
   }
 
-  // Verify the interpreter is Python 3 — parser.py uses f-strings, which
+  // Verify the interpreter is Python 3 — parser/__main__.py uses f-strings, which
   // Python 2.x cannot parse, surfacing a cryptic SyntaxError (issue #1967).
   // The check prints just the major version so a single getline suffices.
   {
@@ -166,7 +166,7 @@ bool python_languaget::parse(const std::string &path)
   // Wait for execution
   process.wait();
 
-  // parser.py execution failed
+  // parser/__main__.py execution failed
   if (process.exit_code())
     exit(process.exit_code());
 
@@ -188,7 +188,7 @@ bool python_languaget::parse(const std::string &path)
   }
   catch (const nlohmann::json::exception &e)
   {
-    // parser.py exited 0 but left a truncated or empty AST file. Report
+    // parser/__main__.py exited 0 but left a truncated or empty AST file. Report
     // it instead of aborting via an uncaught nlohmann parse_error
     // (issue #2012).
     log_error(
