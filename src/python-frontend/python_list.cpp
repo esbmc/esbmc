@@ -1227,10 +1227,10 @@ exprt python_list::handle_range_slice(
 
   // Handle regular array/string slicing (not list slicing)
   // String parameters come as pointer-to-char, so handle both arrays and char pointers
-  bool is_string_slice =
-    (resolved_array_type != resolved_list_type && resolved_array_type.is_array()) ||
-    (resolved_array_type.is_pointer() &&
-     resolved_array_type.subtype() == char_type());
+  bool is_string_slice = (resolved_array_type != resolved_list_type &&
+                          resolved_array_type.is_array()) ||
+                         (resolved_array_type.is_pointer() &&
+                          resolved_array_type.subtype() == char_type());
 
   // Determine step value (default 1).
   bool has_step = slice_node.contains("step") && !slice_node["step"].is_null();
@@ -1439,7 +1439,8 @@ exprt python_list::handle_range_slice(
     else if (step_val != 1)
     {
       // For step > 1: length = ceil((upper - lower) / step)
-      exprt range = size_sub(to_size_expr(upper_expr), to_size_expr(lower_expr));
+      exprt range =
+        size_sub(to_size_expr(upper_expr), to_size_expr(lower_expr));
       exprt step_const = from_integer(step_val, size_type());
       exprt step_minus_one = from_integer(step_val - 1, size_type());
       slice_len = size_div(size_add(range, step_minus_one), step_const);
@@ -1492,8 +1493,8 @@ exprt python_list::handle_range_slice(
     {
       // result[i] = array[lower + i * step]
       exprt step_const = from_integer(step_val, size_type());
-      src_idx =
-        size_add(to_size_expr(lower_expr), size_mul(symbol_expr(idx), step_const));
+      src_idx = size_add(
+        to_size_expr(lower_expr), size_mul(symbol_expr(idx), step_const));
     }
     else
     {
@@ -1854,12 +1855,10 @@ exprt python_list::handle_index_access(
   }
 
   // Handle different array types
-  const bool is_char_array =
-    resolved_array_type.is_array() &&
-    resolved_array_type.subtype() == char_type();
-  const bool is_char_ptr =
-    resolved_array_type.is_pointer() &&
-    resolved_array_type.subtype() == char_type();
+  const bool is_char_array = resolved_array_type.is_array() &&
+                             resolved_array_type.subtype() == char_type();
+  const bool is_char_ptr = resolved_array_type.is_pointer() &&
+                           resolved_array_type.subtype() == char_type();
 
   if (
     (array.type().is_symbol() || array.type().subtype().is_symbol()) &&

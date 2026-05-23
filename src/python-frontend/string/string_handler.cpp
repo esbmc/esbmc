@@ -1064,8 +1064,7 @@ exprt string_handler::handle_string_membership(
   exprt rhs_str = ensure_null_terminated_string(rhs);
 
   // Obtain the actual array expression (handle both constants and symbols)
-  auto get_array_expr = [this](const exprt &e) -> const exprt *
-  {
+  auto get_array_expr = [this](const exprt &e) -> const exprt * {
     if (e.is_constant() && e.type().is_array())
       return &e;
     if (e.is_symbol())
@@ -1082,8 +1081,7 @@ exprt string_handler::handle_string_membership(
   const exprt *needle_array = get_array_expr(lhs_str);
   const exprt *haystack_array = get_array_expr(rhs_str);
   auto try_extract_constant_chars_from_ast =
-    [this](const nlohmann::json *node) -> std::optional<std::vector<BigInt>>
-  {
+    [this](const nlohmann::json *node) -> std::optional<std::vector<BigInt>> {
     if (node == nullptr)
       return std::nullopt;
     std::string text;
@@ -1109,8 +1107,7 @@ exprt string_handler::handle_string_membership(
   }
 
   const auto contains_embedded_null =
-    [](const exprt *array_expr) -> std::optional<bool>
-  {
+    [](const exprt *array_expr) -> std::optional<bool> {
     if (array_expr == nullptr || !array_expr->type().is_array())
       return std::nullopt;
 
@@ -1616,8 +1613,7 @@ exprt string_handler::try_len_fast_path_from_name_arg(
   }
 
   auto const_string_len_from_symbol =
-    [this](const std::string &name) -> std::optional<BigInt>
-  {
+    [this](const std::string &name) -> std::optional<BigInt> {
     if (name != "__name__")
       return std::nullopt;
 
@@ -1643,9 +1639,9 @@ exprt string_handler::try_len_fast_path_from_name_arg(
     return BigInt(utf8_codepoint_count(name_value));
   };
 
-  auto joinedstr_len = [&const_string_len_from_symbol](
-                         const nlohmann::json &joined) -> std::optional<BigInt>
-  {
+  auto joinedstr_len =
+    [&const_string_len_from_symbol](
+      const nlohmann::json &joined) -> std::optional<BigInt> {
     if (!joined.contains("values") || !joined["values"].is_array())
       return std::nullopt;
 
@@ -1737,8 +1733,7 @@ exprt string_handler::handle_string_attribute_call(
       : empty_json_array;
 
   std::optional<exprt> cached_receiver_expr;
-  auto get_receiver_expr = [&]() -> exprt
-  {
+  auto get_receiver_expr = [&]() -> exprt {
     if (!cached_receiver_expr.has_value())
       cached_receiver_expr = converter_.get_expr(receiver_json);
     return *cached_receiver_expr;
@@ -1755,15 +1750,13 @@ exprt string_handler::handle_string_attribute_call(
   }
 
   std::optional<locationt> cached_location;
-  auto get_location = [&]() -> locationt
-  {
+  auto get_location = [&]() -> locationt {
     if (!cached_location.has_value())
       cached_location = converter_.get_location_from_decl(call_json);
     return *cached_location;
   };
 
-  auto has_keyword_unpacking = [&]() -> bool
-  {
+  auto has_keyword_unpacking = [&]() -> bool {
     for (const auto &kw : keywords)
     {
       if (kw.contains("arg") && kw["arg"].is_null())
@@ -2164,8 +2157,7 @@ exprt string_handler::handle_single_char_comparison(
   exprt &rhs)
 {
   // Dereference pointer to character if needed
-  auto maybe_dereference = [](const exprt &expr) -> exprt
-  {
+  auto maybe_dereference = [](const exprt &expr) -> exprt {
     if (
       expr.type().is_pointer() && (expr.type().subtype().is_signedbv() ||
                                    expr.type().subtype().is_unsignedbv()))
@@ -2178,8 +2170,7 @@ exprt string_handler::handle_single_char_comparison(
   };
 
   // Create comparison expression with location info
-  auto create_comparison = [&](const exprt &left, const exprt &right) -> exprt
-  {
+  auto create_comparison = [&](const exprt &left, const exprt &right) -> exprt {
     exprt comp_expr(converter_.get_op(op, bool_type()), bool_type());
     comp_expr.copy_to_operands(left, right);
 

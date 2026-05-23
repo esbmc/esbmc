@@ -169,9 +169,8 @@ python_converter::infer_types_from_returns(const nlohmann::json &function_body)
 {
   TypeFlags flags;
 
-  std::function<void(const nlohmann::json &)> scan =
-    [&](const nlohmann::json &body)
-  {
+  std::function<void(const nlohmann::json &)> scan = [&](const nlohmann::json
+                                                           &body) {
     for (const auto &stmt : body)
     {
       if (stmt["_type"] == "Return" && stmt["value"].is_null())
@@ -737,8 +736,7 @@ void python_converter::validate_return_paths(
 
 typet python_converter::infer_return_type_from_body(const nlohmann::json &body)
 {
-  auto infer_constant_type = [](const nlohmann::json &constant_value) -> typet
-  {
+  auto infer_constant_type = [](const nlohmann::json &constant_value) -> typet {
     if (constant_value.is_number_float())
       return double_type();
     if (constant_value.is_number_integer())
@@ -950,11 +948,9 @@ void python_converter::get_function_definition(
   // This applies even when the function has an explicit return annotation:
   // Python does not enforce annotations, so `-> int` with `return None` in
   // the body must be modelled as Optional[int].
-  auto body_has_none_return = [](const nlohmann::json &body) -> bool
-  {
+  auto body_has_none_return = [](const nlohmann::json &body) -> bool {
     std::function<bool(const nlohmann::json &)> scan =
-      [&](const nlohmann::json &stmts) -> bool
-    {
+      [&](const nlohmann::json &stmts) -> bool {
       for (const auto &s : stmts)
       {
         if (s["_type"] == "Return")
