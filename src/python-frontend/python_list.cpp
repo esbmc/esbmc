@@ -1220,13 +1220,17 @@ exprt python_list::handle_range_slice(
   const exprt &array,
   const nlohmann::json &slice_node)
 {
+  const namespacet ns(converter_.symbol_table());
   const typet list_type = converter_.get_type_handler().get_list_type();
+  const typet resolved_array_type = ns.follow(array.type());
+  const typet resolved_list_type = ns.follow(list_type);
 
   // Handle regular array/string slicing (not list slicing)
   // String parameters come as pointer-to-char, so handle both arrays and char pointers
   bool is_string_slice =
-    (array.type() != list_type && array.type().is_array()) ||
-    (array.type().is_pointer() && array.type().subtype() == char_type());
+    (resolved_array_type != resolved_list_type && resolved_array_type.is_array()) ||
+    (resolved_array_type.is_pointer() &&
+     resolved_array_type.subtype() == char_type());
 
   // Determine step value (default 1).
   bool has_step = slice_node.contains("step") && !slice_node["step"].is_null();
@@ -1269,7 +1273,9 @@ exprt python_list::handle_range_slice(
 
     // For pointer types (function parameters), delegate to __python_str_slice
     // which uses __ESBMC_alloca and survives function returns.
-    if (array.type().is_pointer() && array.type().subtype() == char_type())
+    if (
+      resolved_array_type.is_pointer() &&
+      resolved_array_type.subtype() == char_type())
     {
       const symbolt &slice_func_ref = get_str_slice_sym();
 
@@ -1317,18 +1323,44 @@ exprt python_list::handle_range_slice(
     }
 
     // For array types (local string literals), generate inline loop
+    auto to_size_expr = [&](const exprt &expr) -> exprt {
+      if (expr.type() == size_type())
+        return expr;
+      return typecast_exprt(expr, size_type());
+    };
+    auto size_add = [&](const exprt &lhs, const exprt &rhs) -> exprt {
+      plus_exprt out(lhs, rhs);
+      out.type() = size_type();
+      return out;
+    };
+    auto size_sub = [&](const exprt &lhs, const exprt &rhs) -> exprt {
+      minus_exprt out(lhs, rhs);
+      out.type() = size_type();
+      return out;
+    };
+    auto size_mul = [&](const exprt &lhs, const exprt &rhs) -> exprt {
+      mult_exprt out(lhs, rhs);
+      out.type() = size_type();
+      return out;
+    };
+    auto size_div = [&](const exprt &lhs, const exprt &rhs) -> exprt {
+      div_exprt out(lhs, rhs);
+      out.type() = size_type();
+      return out;
+    };
+
     // Determine element type and logical length
     typet elem_type;
     exprt array_len;
     exprt logical_len;
 
     {
-      const array_typet &src_type = to_array_type(array.type());
+      const array_typet &src_type = to_array_type(resolved_array_type);
       elem_type = src_type.subtype();
-      array_len = src_type.size();
+      array_len = to_size_expr(src_type.size());
       // For char arrays (strings), exclude null terminator from logical length
       logical_len = (elem_type == char_type())
-                      ? minus_exprt(array_len, gen_one(size_type()))
+                      ? size_sub(array_len, gen_one(size_type()))
                       : array_len;
     }
 
@@ -1336,23 +1368,23 @@ exprt python_list::handle_range_slice(
     auto process_bound =
       [&](const std::string &bound_name, const exprt &default_value) -> exprt {
       if (!slice_node.contains(bound_name) || slice_node[bound_name].is_null())
-        return default_value;
+        return to_size_expr(default_value);
 
       const auto &bound = slice_node[bound_name];
 
       // Check if negative index
       if (bound["_type"] == "UnaryOp" && bound["op"]["_type"] == "USub")
       {
-        exprt abs_value = converter_.get_expr(bound["operand"]);
+        exprt abs_value = to_size_expr(converter_.get_expr(bound["operand"]));
         // Clamp to 0 when abs_value > logical_len (avoids unsigned underflow)
         exprt overflow(">", bool_type());
         overflow.copy_to_operands(abs_value, logical_len);
-        exprt converted = minus_exprt(logical_len, abs_value);
+        exprt converted = size_sub(logical_len, abs_value);
         return if_exprt(overflow, gen_zero(size_type()), converted);
       }
 
       exprt e = converter_.get_expr(bound);
-      return remove_function_calls_recursive(e, slice_node);
+      return to_size_expr(remove_function_calls_recursive(e, slice_node));
     };
 
     // Process bounds: defaults depend on step direction
@@ -1361,7 +1393,7 @@ exprt python_list::handle_range_slice(
     {
       // For negative step: default lower = len-1, default upper = -1 (before 0)
       lower_expr =
-        process_bound("lower", minus_exprt(logical_len, gen_one(size_type())));
+        process_bound("lower", size_sub(logical_len, gen_one(size_type())));
     }
     else
     {
@@ -1401,24 +1433,25 @@ exprt python_list::handle_range_slice(
       }
       else
       {
-        slice_len = plus_exprt(lower_expr, gen_one(size_type()));
+        slice_len = size_add(lower_expr, gen_one(size_type()));
       }
     }
     else if (step_val != 1)
     {
       // For step > 1: length = ceil((upper - lower) / step)
-      exprt range = minus_exprt(upper_expr, lower_expr);
+      exprt range = size_sub(to_size_expr(upper_expr), to_size_expr(lower_expr));
       exprt step_const = from_integer(step_val, size_type());
       exprt step_minus_one = from_integer(step_val - 1, size_type());
-      slice_len = div_exprt(plus_exprt(range, step_minus_one), step_const);
+      slice_len = size_div(size_add(range, step_minus_one), step_const);
     }
     else
     {
-      slice_len = minus_exprt(upper_expr, lower_expr);
+      slice_len = size_sub(to_size_expr(upper_expr), to_size_expr(lower_expr));
     }
 
     // Create result array type with extra space for null terminator
     plus_exprt result_size(slice_len, gen_one(size_type()));
+    result_size.type() = size_type();
     array_typet result_type(elem_type, result_size);
 
     // Create temporary for sliced array
@@ -1447,12 +1480,12 @@ exprt python_list::handle_range_slice(
       // result[i] = array[lower - i] (for step=-1)
       // For other negative steps: result[i] = array[lower - i * |step|]
       if (step_val == -1)
-        src_idx = minus_exprt(lower_expr, symbol_expr(idx));
+        src_idx = size_sub(to_size_expr(lower_expr), symbol_expr(idx));
       else
       {
         exprt abs_step = from_integer(-step_val, size_type());
-        src_idx =
-          minus_exprt(lower_expr, mult_exprt(symbol_expr(idx), abs_step));
+        src_idx = size_sub(
+          to_size_expr(lower_expr), size_mul(symbol_expr(idx), abs_step));
       }
     }
     else if (step_val != 1)
@@ -1460,12 +1493,12 @@ exprt python_list::handle_range_slice(
       // result[i] = array[lower + i * step]
       exprt step_const = from_integer(step_val, size_type());
       src_idx =
-        plus_exprt(lower_expr, mult_exprt(symbol_expr(idx), step_const));
+        size_add(to_size_expr(lower_expr), size_mul(symbol_expr(idx), step_const));
     }
     else
     {
       // result[i] = array[lower + i]
-      src_idx = plus_exprt(lower_expr, symbol_expr(idx));
+      src_idx = size_add(to_size_expr(lower_expr), symbol_expr(idx));
     }
 
     index_exprt src(array, src_idx, elem_type);
@@ -1524,6 +1557,16 @@ exprt python_list::handle_range_slice(
   // for the common step==1 case.
   const typet signed_t = signed_size_type();
   const typet counter_type = negative_step ? signed_t : size_type();
+  auto signed_add = [&](const exprt &lhs, const exprt &rhs) -> exprt {
+    plus_exprt out(lhs, rhs);
+    out.type() = signed_t;
+    return out;
+  };
+  auto signed_sub = [&](const exprt &lhs, const exprt &rhs) -> exprt {
+    minus_exprt out(lhs, rhs);
+    out.type() = signed_t;
+    return out;
+  };
 
   // Resolve a slice bound following CPython's slice.indices(len) semantics.
   // Returns an expression of `counter_type`. We always work through signed
@@ -1543,7 +1586,7 @@ exprt python_list::handle_range_slice(
     {
       if (negative_step)
         resolved = is_upper ? from_integer(-1, signed_t)
-                            : minus_exprt(size_signed, one_s);
+                            : signed_sub(size_signed, one_s);
       else
         resolved = is_upper ? size_signed : zero_s;
     }
@@ -1551,8 +1594,7 @@ exprt python_list::handle_range_slice(
     {
       exprt val_signed =
         typecast_exprt(converter_.get_expr(slice_node[name]), signed_t);
-      exprt size_plus_val("+", signed_t);
-      size_plus_val.copy_to_operands(size_signed, val_signed);
+      exprt size_plus_val = signed_add(size_signed, val_signed);
       exprt is_neg("<", bool_type());
       is_neg.copy_to_operands(val_signed, zero_s);
       resolved = if_exprt(is_neg, size_plus_val, val_signed);
@@ -1567,7 +1609,7 @@ exprt python_list::handle_range_slice(
     //                                to keep the expression in a known range)
     const exprt under = negative_step ? from_integer(-1, signed_t) : zero_s;
     const exprt over =
-      negative_step ? minus_exprt(size_signed, one_s) : size_signed;
+      negative_step ? signed_sub(size_signed, one_s) : size_signed;
 
     exprt is_under("<", bool_type());
     is_under.copy_to_operands(resolved, under);
@@ -1744,6 +1786,9 @@ exprt python_list::handle_index_access(
   const exprt &array,
   const nlohmann::json &slice_node)
 {
+  const namespacet ns(converter_.symbol_table());
+  const typet resolved_array_type = ns.follow(array.type());
+
   // Find list node for type information
   nlohmann::json list_node;
   if (
@@ -1809,7 +1854,16 @@ exprt python_list::handle_index_access(
   }
 
   // Handle different array types
-  if (array.type().is_symbol() || array.type().subtype().is_symbol())
+  const bool is_char_array =
+    resolved_array_type.is_array() &&
+    resolved_array_type.subtype() == char_type();
+  const bool is_char_ptr =
+    resolved_array_type.is_pointer() &&
+    resolved_array_type.subtype() == char_type();
+
+  if (
+    (array.type().is_symbol() || array.type().subtype().is_symbol()) &&
+    !is_char_array && !is_char_ptr)
   {
     // Handle list types (symbol-based)
     typet elem_type;
@@ -2351,14 +2405,14 @@ exprt python_list::handle_index_access(
   }
 
   // Handle static string indexing with IndexError on out-of-bounds
-  if (array.type().is_array() && array.type().subtype() == char_type())
+  if (is_char_array)
   {
     exprt idx = pos_expr;
     if (idx.type() != size_type())
       idx = typecast_exprt(idx, size_type());
 
     // Logical string length excludes the null terminator
-    exprt array_size = to_array_type(array.type()).size();
+    exprt array_size = to_array_type(resolved_array_type).size();
     if (array_size.type() != size_type())
       array_size = typecast_exprt(array_size, size_type());
     exprt one = from_integer(1, size_type());
@@ -2392,7 +2446,7 @@ exprt python_list::handle_index_access(
   // semantics: normalize negative indices, raise IndexError on out-of-bounds,
   // then return a fresh single-char null-terminated string via
   // __python_str_slice so the result is never a dangling pointer.
-  if (array.type().is_pointer() && array.type().subtype() == char_type())
+  if (is_char_ptr)
   {
     typet ll_type = signedbv_typet(64);
     locationt loc = converter_.get_location_from_decl(list_value_);
