@@ -536,13 +536,13 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   if (ast_type == "abs")
     return long_long_int_type();
 
-  // str: immutable sequences of Unicode characters
+  // str/string: immutable sequences of Unicode characters
   // chr(): returns a 1-character string
   // hex(): returns string representation of integer in hex
   // oct(): Converts an integer to a lowercase octal string
   if (
-    ast_type == "str" || ast_type == "chr" || ast_type == "hex" ||
-    ast_type == "oct")
+    ast_type == "str" || ast_type == "string" || ast_type == "chr" ||
+    ast_type == "hex" || ast_type == "oct")
   {
     if (type_size == 1)
     {

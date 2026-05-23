@@ -854,7 +854,7 @@ void python_converter::get_function_definition(
     {
       type.return_type() = dict_handler_->get_dict_struct_type();
     }
-    else if (return_type == "str")
+    else if (return_type == "str" || return_type == "string")
     {
       // String return types should be pointers, not arrays
       type.return_type() = gen_pointer_type(char_type());
@@ -891,7 +891,7 @@ void python_converter::get_function_definition(
   {
     std::string type_string =
       type_utils::remove_quotes(return_node["value"].get<std::string>());
-    if (type_string == "str")
+    if (type_string == "str" || type_string == "string")
       type.return_type() = gen_pointer_type(char_type());
     else
       type.return_type() = type_handler_.get_typet(type_string);
