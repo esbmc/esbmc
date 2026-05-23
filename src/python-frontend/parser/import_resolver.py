@@ -4,6 +4,7 @@ import ast
 import importlib
 import os
 import sys
+from dataclasses import dataclass
 from types import ModuleType
 from typing import Any, Callable, TypeAlias, TypedDict
 
@@ -22,6 +23,15 @@ GenerateAstJsonFn: TypeAlias = Callable[[ast.AST, str, Any, str, str | None], No
 import_aliases: dict[str, str] = {}
 module_imports: dict[str, ModuleImportInfo] = {}
 module_exports: dict[str, tuple[set[str], dict[str, str], list[str] | None]] = {}
+
+
+@dataclass(frozen=True)
+class ResolverCallbacks:
+    parse_file_canonicalised: ParseFileCanonicalisedFn
+    rewrite_relative_import: RewriteRelativeImportFn
+    snapshot_exports: SnapshotExportsFn
+    propagate_range_aliases: PropagateRangeAliasesFn
+    generate_ast_json: GenerateAstJsonFn
 
 
 def reset_state() -> None:
@@ -125,26 +135,30 @@ def expand_star_import(module) -> list[str] | None:
     return names
 
 
-def process_imports(node: ast.Import | ast.ImportFrom, output_dir: str) -> None:
-    imported_elements = None
-    module_names = []
+def _collect_import_targets(
+    node: ast.Import | ast.ImportFrom,
+) -> tuple[list[str], list[ast.alias] | None]:
     if isinstance(node, ast.Import):
+        module_names: list[str] = []
         for alias_node in node.names:
             module_name = alias_node.name
             alias = alias_node.asname or module_name
             import_aliases[alias] = module_name
             module_names.append(module_name)
-        if not module_names:
-            return
-    elif isinstance(node, ast.ImportFrom):
-        module_name = node.module
-        if not any(a.name == '*' for a in node.names):
-            imported_elements = node.names
-        if module_name:
-            import_aliases[module_name] = module_name
-        module_names = [module_name] if module_name else []
-        if not module_names:
-            return
+        return module_names, None
+
+    module_name = node.module
+    if module_name:
+        import_aliases[module_name] = module_name
+    module_names = [module_name] if module_name else []
+    imported_elements = None if any(a.name == '*' for a in node.names) else node.names
+    return module_names, imported_elements
+
+
+def process_imports(node: ast.Import | ast.ImportFrom, output_dir: str) -> None:
+    module_names, imported_elements = _collect_import_targets(node)
+    if not module_names:
+        return
 
     for module_name in module_names:
         if module_name not in module_imports:
@@ -213,14 +227,7 @@ def filter_imports(tree: ast.AST) -> ast.AST:
     return tree
 
 
-def process_collected_imports(
-    output_dir: str,
-    parse_file_canonicalised_fn: ParseFileCanonicalisedFn,
-    rewrite_relative_import_fn: RewriteRelativeImportFn,
-    snapshot_exports_fn: SnapshotExportsFn,
-    propagate_range_aliases_fn: PropagateRangeAliasesFn,
-    generate_ast_json_fn: GenerateAstJsonFn,
-):
+def process_collected_imports(output_dir: str, callbacks: ResolverCallbacks):
     """Emit collected imports after transitive discovery converges.
 
     Callback parameters wire parser-owned routines (parse, rewrite propagation,
@@ -238,40 +245,51 @@ def process_collected_imports(
             filename = resolve_module_file(module_name, output_dir)
             if not filename:
                 continue
-            tree, preprocessor = parse_file_canonicalised_fn(filename)
+            tree, preprocessor = callbacks.parse_file_canonicalised(filename)
             parsed_trees[module_name] = (tree, filename, preprocessor)
-            module_exports[module_name] = snapshot_exports_fn(preprocessor)
+            module_exports[module_name] = callbacks.snapshot_exports(preprocessor)
             for subnode in ast.walk(tree):
                 if isinstance(subnode, (ast.Import, ast.ImportFrom)):
-                    rewrite_relative_import_fn(subnode, module_name)
+                    callbacks.rewrite_relative_import(subnode, module_name)
                     process_imports(subnode, output_dir)
 
-    propagate_range_aliases_fn(parsed_trees)
+    callbacks.propagate_range_aliases(parsed_trees)
 
     for _module_name, (tree, _filename, preprocessor) in parsed_trees.items():
         preprocessor.finalize_module(tree)
 
-    for module_name, import_info in module_imports.items():
-        imported_elements = None if import_info['import_all'] \
-            else [ast.alias(name, None) for name in import_info['specific_names']]
+    _emit_collected_import_json(parsed_trees, output_dir, callbacks)
 
-        if import_info['specific_names']:
-            for name in list(import_info['specific_names']):
-                emit_module_json(
-                    f"{module_name}.{name}",
-                    output_dir,
-                    generate_ast_json_fn,
-                    parse_file_canonicalised_fn,
-                )
+
+def _emit_collected_import_json(
+    parsed_trees: dict[str, tuple[ast.AST, str, Any]],
+    output_dir: str,
+    callbacks: ResolverCallbacks,
+) -> None:
+    for module_name, import_info in module_imports.items():
+        imported_elements = None if import_info['import_all'] else [
+            ast.alias(name, None) for name in import_info['specific_names']
+        ]
+
+        for name in sorted(import_info['specific_names']):
+            emit_module_json(
+                f"{module_name}.{name}",
+                output_dir,
+                callbacks.generate_ast_json,
+                callbacks.parse_file_canonicalised,
+            )
 
         if module_name not in parsed_trees:
             continue
+
         tree, filename, _preprocessor = parsed_trees[module_name]
-        generate_ast_json_fn(tree,
-                             filename,
-                             imported_elements,
-                             output_dir,
-                             module_qualname=module_name)
+        callbacks.generate_ast_json(
+            tree,
+            filename,
+            imported_elements,
+            output_dir,
+            module_qualname=module_name,
+        )
 
 
 def rewrite_relative_import(node: ast.ImportFrom, parent_module: str | None) -> None:

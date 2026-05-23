@@ -28,6 +28,7 @@ import json
 import os
 import glob
 import base64
+import importlib
 import shutil
 import subprocess
 import tempfile
@@ -43,10 +44,10 @@ if _PYTHON_FRONTEND_DIR not in sys.path:
 from libs.ast2json import ast2json as ast2json_func
 from preprocessor import Preprocessor
 try:
-    from . import import_resolver as import_resolver
+    import_resolver = importlib.import_module(f"{__package__}.import_resolver")
 except ImportError:
     # Support direct script execution: ``python parser/parser.py ...``
-    import import_resolver as import_resolver
+    import_resolver = importlib.import_module("import_resolver")
 
 # Python ints are arbitrary precision; the JSON wire format used by the C++
 # frontend stores them as numbers, which nlohmann::json silently truncates to
@@ -1742,7 +1743,7 @@ def emit_module_json(
     elements_to_import=None,
 ) -> None:
     """Resolve module to file and emit AST JSON."""
-    filename = resolve_module_file(module_qualname, output_dir)
+    filename = import_resolver.resolve_module_file(module_qualname, output_dir)
     if filename:
         emit_file_as_json(filename, output_dir, module_qualname, elements_to_import)
 
@@ -2284,11 +2285,13 @@ def main():
 
     import_resolver.process_collected_imports(
         output_dir,
-        parse_file_canonicalised_fn=parse_file_canonicalised,
-        rewrite_relative_import_fn=import_resolver.rewrite_relative_import,
-        snapshot_exports_fn=_snapshot_exports,
-        propagate_range_aliases_fn=_propagate_range_aliases_across_modules,
-        generate_ast_json_fn=generate_ast_json,
+        import_resolver.ResolverCallbacks(
+            parse_file_canonicalised=parse_file_canonicalised,
+            rewrite_relative_import=import_resolver.rewrite_relative_import,
+            snapshot_exports=_snapshot_exports,
+            propagate_range_aliases=_propagate_range_aliases_across_modules,
+            generate_ast_json=generate_ast_json,
+        ),
     )
 
     # Re-apply range-alias / wrapper rewrites on the entry script using the

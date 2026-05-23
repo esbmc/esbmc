@@ -6,6 +6,7 @@ Keep this module lightweight: import heavy parser code lazily so importing
 
 from __future__ import annotations
 
+import importlib
 from typing import Any
 
 __all__ = [
@@ -16,21 +17,21 @@ __all__ = [
 ]
 
 
+def _impl():
+    return importlib.import_module(f"{__name__}.parser")
+
+
 def main(*args: Any, **kwargs: Any):
-    from .parser import main as _main
-    return _main(*args, **kwargs)
+    return _impl().main(*args, **kwargs)
 
 
 def parse_file(*args: Any, **kwargs: Any):
-    from .parser import parse_file as _parse_file
-    return _parse_file(*args, **kwargs)
+    return _impl().parse_file(*args, **kwargs)
 
 
 def parse_file_canonicalised(*args: Any, **kwargs: Any):
-    from .parser import parse_file_canonicalised as _parse_file_canonicalised
-    return _parse_file_canonicalised(*args, **kwargs)
+    return _impl().parse_file_canonicalised(*args, **kwargs)
 
 
 def generate_ast_json(*args: Any, **kwargs: Any):
-    from .parser import generate_ast_json as _generate_ast_json
-    return _generate_ast_json(*args, **kwargs)
+    return _impl().generate_ast_json(*args, **kwargs)
