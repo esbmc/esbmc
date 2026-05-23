@@ -379,8 +379,10 @@ type2tc migrate_type(const typet &type)
 
 type2tc migrate_symbol_type(const symbolt &sym)
 {
-  // S5a: the IREP2 form is the source of truth on `symbolt`; get_type2()
-  // returns the stored field directly (no cache logic on this side).
+  // The IREP2 form is the source of truth on `symbolt`; get_type2() returns
+  // the stored field directly (lazily populated if a legacy-side setter
+  // wrote last). Kept as a named chokepoint so the round-trip cross-check
+  // below runs on every real symbol type the pipeline reads.
   const type2tc &result = sym.get_type2();
 #ifndef NDEBUG
   // Round-trip cross-check: the stored IREP2 form must be stable under a
@@ -398,14 +400,18 @@ type2tc migrate_symbol_type(const symbolt &sym)
 
 void migrate_symbol_value(const symbolt &sym, expr2tc &dest)
 {
-  // S4b: read from the symbol's cached IREP2 form (lazy-populated; see
-  // get_value2). Eliminates the per-call migrate_expr() that previously ran on
-  // every read of a symbol value.
+  // The IREP2 form is the source of truth on `symbolt`; get_value2() returns
+  // it directly (lazily populated if a legacy-side setter wrote last). Kept
+  // as a named chokepoint so the round-trip cross-check below runs on every
+  // real symbol value the pipeline reads.
   dest = sym.get_value2();
 #ifndef NDEBUG
-  // Cross-check is guarded: function bodies skip because migrate_expr_back
-  // cannot reconstruct a code_block (a body is migrated forward only -- see
-  // unit/util/migrate.test.cpp); nil values are vacuous.
+  // Cross-check: assert the IREP2 value form is stable under the
+  // migration round-trip migrate_expr(migrate_expr_back(e)) == e.
+  // migrate_expr_back covers every expr2t kind a symbol value may hold,
+  // but we still skip function bodies (no caller goes through this path on
+  // them today, and the assertion would force a potentially-large body
+  // round-trip for no signal) and nil values (vacuous).
   if (!sym.get_type().is_code() && !sym.get_value().is_nil())
   {
     expr2tc roundtrip;
@@ -419,8 +425,8 @@ void migrate_symbol_value(const symbolt &sym, expr2tc &dest)
 
 void set_symbol_type(symbolt &sym, const type2tc &t)
 {
-  // S5a: route through the IREP2-side setter on symbolt. The setter stores
-  // `t` as the source of truth; the legacy `typet` is derived lazily on the
+  // Route through the IREP2-side setter on symbolt. The setter stores `t`
+  // as the source of truth; the legacy `typet` is derived lazily on the
   // next get_type() call via migrate_type_back.
   sym.set_type(t);
 }

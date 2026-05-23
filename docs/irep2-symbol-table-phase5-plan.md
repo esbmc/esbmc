@@ -1,5 +1,12 @@
 # Phase 5 — Symbol-Table Source-of-Truth Flip
 
+> **Status: complete.** S5a (#4735, with the lazy-storage fix in #4739)
+> flipped the type side. The V-track (`irep2-symbol-table-vtrack-plan.md`)
+> took the value side. The end-state ABI decision originally framed as
+> S5b is recorded in `irep2-symbol-table-s6-plan.md`: legacy caches are
+> retained permanently; `get_type()` / `get_value()` keep their
+> `const T&` return.
+
 Plan for the next step of the IREP2 symbol-table migration
 (esbmc/esbmc#4715, Boundary B2). Phase 5 turns the IREP2 form of a
 symbol's type into the **stored** field; the legacy `typet` becomes a

@@ -29,39 +29,42 @@ public:
 
   symbolt();
 
-  // Type accessors. After the B2 S5a source-of-truth flip
-  // (esbmc/esbmc#4715), the IREP2 form is the stored field; the legacy
-  // `typet` is derived lazily via migrate_type_back and cached.
+  // Type and value accessors. After the symbol-table migration
+  // (esbmc/esbmc#4715, boundary B2), the IREP2 forms `type_` / `value_` are
+  // the source of truth on both sides; the legacy `typet` / `exprt` are
+  // permanent on-demand caches populated lazily by the const readers.
+  // Whichever setter last wrote marks its side valid and invalidates the
+  // other; the reader on the invalidated side lazily derives via the
+  // migration layer on first access. This is the end-state design, not
+  // transitional -- see docs/irep2-symbol-table-s6-plan.md.
   //
-  //   get_type()  - lazy legacy cache populated from the IREP2 source on
-  //                 first read; invalidated by any IREP2-side write.
-  //   get_type2() - the IREP2 source of truth directly (O(1), no cache
-  //                 logic on this side).
-  //
-  // Value accessors keep the dual-storage shape that S4b shipped: legacy
-  // authoritative, IREP2 lazy cache. The value-side flip is out of scope
-  // for Phase 5 (see docs/irep2-symbol-table-phase5-plan.md V-track).
+  // The lazy split is deliberate: an eager forward migrate at set_type /
+  // set_value would walk legacy sub-expressions that the existing frontends
+  // sometimes build without populating intermediate types or kinds. The
+  // lazy design tolerates those latent holes as long as nothing reads the
+  // IREP2 side of the affected symbol -- which, in practice, no current
+  // pipeline path does for the tmp symbols involved.
   const typet &get_type() const;
-  const exprt &get_value() const
-  {
-    return value;
-  }
+  const exprt &get_value() const;
   const type2tc &get_type2() const;
   const expr2tc &get_value2() const;
 
-  // Type setters. The legacy setter forward-migrates to the IREP2 source
-  // and populates the legacy cache eagerly with its input (no
-  // back-migration needed for the next get_type() read). The IREP2 setter
-  // stores `t` as the source and invalidates the legacy cache; the next
-  // get_type() back-migrates (with the nil case handled explicitly).
+  // Type setters. Each writes one side and invalidates the other; the read
+  // side derives lazily on first access (with the nil/empty-id case guarded
+  // inside the readers).
   void set_type(const typet &t);
   void set_type(typet &&t);
   void set_type(const type2tc &t);
 
-  // Value setters keep the S4b semantics: write legacy, invalidate the
-  // IREP2 lazy cache.
+  // Value setters. Mirror of the type setters: legacy variants store the
+  // legacy form and invalidate the IREP2 side; the IREP2-side setter
+  // stores expr2tc directly and invalidates the legacy side. `migrate_expr_back`
+  // covers every expr2t kind a symbol value may hold -- including
+  // code_block2t for function bodies -- so the lazy back-migration in
+  // get_value() is safe regardless of what was written.
   void set_value(const exprt &v);
   void set_value(exprt &&v);
+  void set_value(const expr2tc &v);
 
   void clear();
 
@@ -76,36 +79,22 @@ public:
   irep_idt get_function_name() const;
 
 private:
-  // Type: both representations are caches sharing the S5a storage layout.
-  // The setter that wrote last marks its side valid and invalidates the
-  // other. Reading the other side lazily derives via migrate_type /
-  // migrate_type_back. Both fields are mutable so the const getters can
-  // populate from the other side on demand.
-  //
-  // S5a (esbmc/esbmc#4735) originally forward-migrated eagerly inside
-  // set_type(const typet&). The python frontend builds legacy `exprt`s
-  // with unset types (e.g. `minus_exprt(lhs, rhs)` whose result `typet`
-  // is default-constructed with empty id), which the eager migration
-  // could not tolerate -- a chain of recursive migrate_expr calls inside
-  // migrate_type ended up constructing arithmetic IREP2 nodes with an
-  // empty-typed result, tripping assert_arith_2ops_consistency in
-  // irep2_expr.cpp. The lazy variant matches the value-side shape (S4b)
-  // and never exposes those latent holes unless something actually reads
-  // get_type2() on the affected symbol -- which, in practice, no current
-  // pipeline path does for those tmp symbols.
+  // Type and value storage. IREP2 (`type_`, `value_`) is the source of
+  // truth on both sides; the legacy fields (`legacy_*_cache_`) are
+  // permanent on-demand caches. The setter that wrote last marks its
+  // side valid and invalidates the other; reading the invalidated side
+  // lazily derives via migrate_type / migrate_type_back /
+  // migrate_expr / migrate_expr_back. All fields are mutable so the
+  // const readers can populate from the other side on demand.
   mutable type2tc type_;
   mutable typet legacy_type_cache_;
   mutable bool legacy_type_valid_;
   mutable bool type2_valid_;
 
-  // Value: legacy authoritative; IREP2 is a lazy cache (S4b shape,
-  // unchanged by Phase 5). Function bodies cannot round-trip through
-  // migrate_expr_back today, which is why the value side is deliberately
-  // not flipped - see docs/irep2-symbol-table-phase5-plan.md for the
-  // V-track.
-  exprt value;
-  mutable expr2tc value2_cache;
-  mutable bool value2_valid;
+  mutable expr2tc value_;
+  mutable exprt legacy_value_cache_;
+  mutable bool legacy_value_valid_;
+  mutable bool value2_valid_;
 };
 
 std::ostream &operator<<(std::ostream &out, const symbolt &symbol);

@@ -1,9 +1,13 @@
 ---
 title: "B2 execution plan — migrating symbolt::type/value to IREP2"
-status: draft
+status: complete
 date: 2026-05-22
 supersedes-detail-in: docs/irep2-goto-migration-phase4-symboltable.md
 tracking-issue: esbmc/esbmc#4715
+historical-record-of: "the plan as drafted; the actual execution followed
+  the staged path captured in irep2-symbol-table-phase5-plan.md (S5a),
+  irep2-symbol-table-vtrack-plan.md (V1, V2) and
+  irep2-symbol-table-s6-plan.md (S6 end state)."
 ---
 
 # Symbol-table (B2) migration — concrete execution plan
@@ -92,6 +96,12 @@ ones).
 
 ## Phased slices
 
+> **All slices below were executed** between #4724 and #4741.
+> The actual storage flip and ABI decisions are recorded in
+> `irep2-symbol-table-phase5-plan.md` (S5a — type flip),
+> `irep2-symbol-table-vtrack-plan.md` (V1, V2 — value-side flip), and
+> `irep2-symbol-table-s6-plan.md` (S6 — end-state ABI).
+
 Every slice: builds, full-corpus **zero goto-diff**, dual-solver
 (Bitwuzla+Z3) verdict agreement, per-tree ctest, `scripts/check_python_tests.sh`
 when Python is touched. Each is an independently revertible PR.
@@ -137,8 +147,13 @@ goto-binaries still load. Gate: full corpus diff = 0; round-trip read/write of
 both old and new binaries identical.
 
 ### S5 — Cleanup
-Remove the legacy field, the derivation shims, and the cross-check. Only after
-S4 is proven. Delete now-dead `migrate_*_back` paths exposed by S3.
+Originally framed as "remove the legacy field" — superseded by the
+end-state decision in `irep2-symbol-table-s6-plan.md`: the legacy
+`typet` / `exprt` fields are retained as **permanent on-demand caches**.
+IREP2 is the source of truth on `symbolt`; the legacy caches are lazy,
+zero-cost-on-unused-paths, and source-API-stable for the 640+ accessor
+call sites. The cross-check is retained inside `migrate_symbol_*` for
+ongoing losslessness evidence.
 
 ## Risk by area
 

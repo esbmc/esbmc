@@ -17,28 +17,27 @@ extern const namespacet *migrate_namespace_lookup;
 type2tc migrate_type(const typet &type);
 void migrate_expr(const exprt &expr, expr2tc &new_expr);
 
-// IREP2 form of a symbol's type. Single chokepoint for the symbol-table
-// migration (esbmc/esbmc#4715, B2 S1): equivalent to
-// migrate_type(sym.get_type()) today, but centralised so the storage can later
-// become IREP2-native without touching callers again. In debug builds it also
-// asserts the IREP2 form is stable under a round-trip through legacy irept --
-// the property (proven for synthetic types in unit/util/migrate.test.cpp) that
-// makes deriving the legacy field from IREP2 lossless, now checked on every
-// real symbol type the pipeline reads.
+// IREP2 form of a symbol's type. Named chokepoint for symbol type reads in
+// the migration layer (esbmc/esbmc#4715, B2): returns `sym.get_type2()` which
+// is the IREP2 source of truth after the B2 storage flip. In debug builds it
+// also asserts the IREP2 form is stable under a round-trip through legacy
+// irept -- the property (proven for synthetic types in
+// unit/util/migrate.test.cpp) that makes the lazy legacy cache on `symbolt`
+// lossless, now checked on every real symbol type the pipeline reads.
 type2tc migrate_symbol_type(const symbolt &sym);
 
 // IREP2 form of a symbol's value. Value-side counterpart of
-// migrate_symbol_type (esbmc/esbmc#4715, B2 S2). The debug cross-check is
-// *guarded*: function bodies (sym.get_type().is_code()) are skipped because
-// migrate_expr_back cannot reconstruct a code_block -- a body is migrated
-// forward only (see unit/util/migrate.test.cpp); nil values are skipped too.
+// migrate_symbol_type. The debug cross-check is *guarded*: function bodies
+// (sym.get_type().is_code()) are skipped (no caller goes through this path on
+// them today, and the assertion would force a potentially-large body
+// round-trip for no signal); nil values are skipped too.
 void migrate_symbol_value(const symbolt &sym, expr2tc &dest);
 
-// Set a symbol's type from an IREP2 form (esbmc/esbmc#4715, B2 S3). The
-// chokepoint for symbol-type writes: today it back-migrates to the legacy
-// field, but when storage flips to IREP2-native (S4) only this function
-// changes, not its 14+ callers. Replaces the previous round-trip pattern
-// `sym.get_type() = migrate_type_back(t)` at the call sites.
+// Set a symbol's type from an IREP2 form (esbmc/esbmc#4715, B2). The
+// chokepoint for symbol-type writes: routes through symbolt's IREP2-side
+// setter, which stores the form natively and invalidates the lazy legacy
+// cache. Replaces the previous round-trip pattern
+// `sym.set_type(migrate_type_back(t))` at the call sites.
 void set_symbol_type(symbolt &sym, const type2tc &t);
 
 typet migrate_type_back(const type2tc &ref);

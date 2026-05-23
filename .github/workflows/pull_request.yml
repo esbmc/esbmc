@@ -17,7 +17,7 @@ jobs:
 
   build-ubuntu:
     uses: ./.github/workflows/build-unix.yml
-    name: static llvm-21 DebugOpt
+    name: static llvm-22 DebugOpt
     with:
       operating-system: ubuntu-24.04
       build-flags: '-b DebugOpt -e ON'
