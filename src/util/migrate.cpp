@@ -2102,6 +2102,56 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     return;
   }
 
+  // V1 of the symbol-table V-track (esbmc/esbmc#4715). Four kinds had only
+  // a back-arm (or neither direction) and could not round-trip through the
+  // migration layer. Adding the forward arms here -- with the matching back
+  // arms in migrate_expr_back -- makes IREP2 -> legacy -> IREP2 idempotent on
+  // each, the gate the V-track plan named for the value-side flip (V2). These
+  // arms are dead code in the pipeline today; nothing constructs the matching
+  // legacy form until V2 routes symbol bodies through the migration layer.
+  if (expr.id() == "code" && expr.statement() == "block")
+  {
+    std::vector<expr2tc> ops;
+    ops.reserve(expr.operands().size());
+    for (const auto &op : expr.operands())
+    {
+      expr2tc o;
+      migrate_expr(op, o);
+      ops.push_back(o);
+    }
+    new_expr_ref = code_block2tc(ops);
+    return;
+  }
+
+  if (expr.id() == "code" && expr.statement() == "cpp-catch")
+  {
+    std::vector<irep_idt> expr_list;
+    const irept::subt &exceptions = expr.find("exception_list").get_sub();
+    for (const auto &e_it : exceptions)
+      expr_list.push_back(e_it.id());
+    new_expr_ref = code_cpp_catch2tc(expr_list);
+    return;
+  }
+
+  if (expr.id() == "code" && expr.statement() == "throw_decl_end")
+  {
+    std::vector<irep_idt> expr_list;
+    const irept::subt &throw_list = expr.find("throw_list").get_sub();
+    for (const auto &e_it : throw_list)
+      expr_list.push_back(e_it.id());
+    new_expr_ref = code_cpp_throw_decl_end2tc(expr_list);
+    return;
+  }
+
+  if (expr.id() == "pointer_capability")
+  {
+    expr2tc theval;
+    migrate_expr(expr.op0(), theval);
+    type2tc type = migrate_type(expr.type());
+    new_expr_ref = pointer_capability2tc(type, theval);
+    return;
+  }
+
   if (expr.id() == "isinf")
   {
     expr2tc theval;
@@ -3513,6 +3563,59 @@ exprt migrate_expr_back(const expr2tc &ref)
 
     codeexpr.copy_to_operands(migrate_expr_back(ref2.operand));
     return codeexpr;
+  }
+  // V1 of the symbol-table V-track (esbmc/esbmc#4715): five expr2t kinds
+  // were uncovered in this switch. Adding back-arms here -- and matching
+  // forward arms in migrate_expr where needed -- lets unit/util/migrate.test.cpp
+  // assert the IREP2 round-trip property on each kind, which is the precondition
+  // for the value-side source-of-truth flip (V2). The arms are dead code in the
+  // pipeline today; they become live when V2 routes symbol values through them.
+  case expr2t::code_block_id:
+  {
+    const code_block2t &ref2 = to_code_block2t(ref);
+    exprt block("code");
+    block.statement("block");
+    for (auto const &op : ref2.operands)
+      block.copy_to_operands(migrate_expr_back(op));
+    return block;
+  }
+  case expr2t::code_cpp_catch_id:
+  {
+    const code_cpp_catch2t &ref2 = to_code_cpp_catch2t(ref);
+    exprt codeexpr("code");
+    codeexpr.statement("cpp-catch");
+    irept::subt &exceptions = codeexpr.add("exception_list").get_sub();
+    for (auto const &it : ref2.exception_list)
+      exceptions.emplace_back(it);
+    return codeexpr;
+  }
+  case expr2t::code_cpp_throw_decl_id:
+  {
+    const code_cpp_throw_decl2t &ref2 = to_code_cpp_throw_decl2t(ref);
+    exprt codeexpr("code");
+    codeexpr.statement("throw-decl");
+    irept::subt &throw_list = codeexpr.add("throw_list").get_sub();
+    for (auto const &it : ref2.exception_list)
+      throw_list.emplace_back(it);
+    return codeexpr;
+  }
+  case expr2t::code_cpp_throw_decl_end_id:
+  {
+    const code_cpp_throw_decl_end2t &ref2 = to_code_cpp_throw_decl_end2t(ref);
+    exprt codeexpr("code");
+    codeexpr.statement("throw_decl_end");
+    irept::subt &throw_list = codeexpr.add("throw_list").get_sub();
+    for (auto const &it : ref2.exception_list)
+      throw_list.emplace_back(it);
+    return codeexpr;
+  }
+  case expr2t::pointer_capability_id:
+  {
+    const pointer_capability2t &ref2 = to_pointer_capability2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt pointer_capval("pointer_capability", thetype);
+    pointer_capval.copy_to_operands(migrate_expr_back(ref2.ptr_obj));
+    return pointer_capval;
   }
   case expr2t::isinf_id:
   {
