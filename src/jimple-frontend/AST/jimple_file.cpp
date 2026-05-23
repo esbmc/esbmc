@@ -156,7 +156,7 @@ exprt jimple_file::to_exprt(contextt &ctx) const
 
   // Finally, the structure is ready. Lets add it
   t.set("width", total_size);
-  added_symbol->get_type() = t;
+  added_symbol->set_type(t);
 
   // Add the methods and definitions
   for (auto const &field : body)
