@@ -112,13 +112,15 @@ bool type_handler::is_constructor_call(const nlohmann::json &json) const
 
   const contextt &symbol_table = converter_.symbol_table();
 
-  symbol_table.foreach_operand([&](const symbolt &s) {
-    if (s.get_type().id() == "struct" && s.name == func_name)
+  symbol_table.foreach_operand(
+    [&](const symbolt &s)
     {
-      is_ctor_call = true;
-      return;
-    }
-  });
+      if (s.get_type().id() == "struct" && s.name == func_name)
+      {
+        is_ctor_call = true;
+        return;
+      }
+    });
 
   return is_ctor_call;
 }
@@ -270,7 +272,8 @@ type_handler::get_var_classname(const nlohmann::json &value_node) const
     return "";
 
   const std::string var_name = value_node["id"].get<std::string>();
-  auto get_class_name = [this](const std::string &name) -> std::string {
+  auto get_class_name = [this](const std::string &name) -> std::string
+  {
     if (name.empty())
       return "";
 
@@ -536,13 +539,13 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   if (ast_type == "abs")
     return long_long_int_type();
 
-  // str: immutable sequences of Unicode characters
+  // str/string: immutable sequences of Unicode characters
   // chr(): returns a 1-character string
   // hex(): returns string representation of integer in hex
   // oct(): Converts an integer to a lowercase octal string
   if (
-    ast_type == "str" || ast_type == "chr" || ast_type == "hex" ||
-    ast_type == "oct")
+    ast_type == "str" || ast_type == "string" || ast_type == "chr" ||
+    ast_type == "hex" || ast_type == "oct")
   {
     if (type_size == 1)
     {
@@ -810,7 +813,8 @@ bool type_handler::has_multiple_types(const nlohmann::json &container) const
     return false;
 
   // Helper lambda that leverages existing get_typet method
-  auto get_element_type = [this](const nlohmann::json &element) -> typet {
+  auto get_element_type = [this](const nlohmann::json &element) -> typet
+  {
     try
     {
       typet elem_type = get_typet(element);
@@ -1062,7 +1066,8 @@ std::string type_handler::get_operand_type(const nlohmann::json &operand) const
     const std::string attr_name = operand["attr"].get<std::string>();
 
     auto find_annotated_attr_type =
-      [&](const nlohmann::json &class_node) -> std::string {
+      [&](const nlohmann::json &class_node) -> std::string
+    {
       if (class_node.empty() || !class_node.contains("body"))
         return std::string();
 
