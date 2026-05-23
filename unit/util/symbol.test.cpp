@@ -11,9 +11,12 @@ Module: Unit tests for symbolt -- specifically the legacy / IREP2
 #include <catch2/catch.hpp>
 
 #include <irep2/irep2.h>
+#include <irep2/irep2_expr.h>
 #include <irep2/irep2_type.h>
 #include <irep2/irep2_utils.h>
+#include <util/arith_tools.h>
 #include <util/migrate.h>
+#include <util/std_code.h>
 #include <util/symbol.h>
 
 SCENARIO(
@@ -218,4 +221,184 @@ TEST_CASE(
   REQUIRE_FALSE(is_code_type(a.get_type2()));
   REQUIRE(b.get_type().is_code());
   REQUIRE(is_code_type(b.get_type2()));
+}
+
+// ---------------------------------------------------------------------------
+// Pre-V2 value-side parity (B2 V-track, docs/irep2-symbol-table-vtrack-plan.md).
+//
+// V2 will mirror S5a on the value side: `expr2tc value_` becomes the dominant
+// representation, the legacy `exprt` is derived lazily via migrate_expr_back
+// (now safe for code_block thanks to V1, #4737). The tests below pin the
+// invariant V2 must preserve: the legacy `get_value().is_code()` query and an
+// equivalent IREP2-side query always agree, on every write path V2 will
+// reshape. They are written so they pass *today* under S4b's value layout and
+// will continue to pass after V2 -- anything in between is a real bug.
+//
+// Mirror of the type-side dual-role tests above (#4733). The "is body"
+// discriminator is the value-side analogue of "is code-typed": for a function
+// symbol the legacy value is a `code_blockt` (id "code") and the IREP2 value
+// is a `code_block2t`; for a data symbol the legacy value is an initialiser
+// expr (or nil) and the IREP2 value is the corresponding kind. We exercise
+// both discriminators side-by-side.
+// ---------------------------------------------------------------------------
+
+namespace
+{
+// Build a legacy code_blockt with two trivial assign statements. The shape a
+// function body has after goto-convert.
+codet make_legacy_body()
+{
+  code_blockt block;
+  // The block needs at least one statement so the round-trip through migrate
+  // exercises a non-empty operands vector (V1 round-trip covers this case in
+  // unit/util/migrate.test.cpp).
+  codet skip("skip");
+  block.move_to_operands(skip);
+  return block;
+}
+
+// Test whether a possibly-nil expr2tc is a code_block2t. The generated
+// is_code_block2t() helper derefs t->expr_id, so it null-derefs on a nil
+// container -- guard nil explicitly.
+bool is_block(const expr2tc &e)
+{
+  return !is_nil_expr(e) && is_code_block2t(e);
+}
+} // namespace
+
+TEST_CASE(
+  "symbolt: legacy is_code on a body value matches IREP2 is_code_block2t",
+  "[core][utils][symbol][b2-vtrack]")
+{
+  symbolt sym;
+  sym.id = sym.name = "fn";
+  sym.mode = "C";
+  sym.set_type(make_legacy_code_type());
+  sym.set_value(make_legacy_body());
+
+  // Legacy: value.id() == "code".
+  REQUIRE(sym.get_value().is_code());
+
+  // IREP2: code_block2t. Going through the IREP2 accessor warms the cache
+  // (S4b shape) or returns the stored field (post-V2 shape) -- same answer
+  // either way.
+  REQUIRE(is_block(sym.get_value2()));
+}
+
+TEST_CASE(
+  "symbolt: legacy is_code on a constant initialiser is false, IREP2 agrees",
+  "[core][utils][symbol][b2-vtrack]")
+{
+  symbolt sym;
+  sym.id = sym.name = "g";
+  sym.mode = "C";
+  sym.static_lifetime = true;
+  sym.set_type(make_legacy_int_type());
+  sym.set_value(from_integer(42, int_type()));
+
+  REQUIRE_FALSE(sym.get_value().is_code());
+  REQUIRE_FALSE(is_block(sym.get_value2()));
+
+  // The IREP2 form should be a constant_int2t -- the symmetric positive
+  // check, not just "not a block".
+  REQUIRE(is_constant_int2t(sym.get_value2()));
+}
+
+TEST_CASE(
+  "symbolt: default-constructed symbol has nil value on both sides",
+  "[core][utils][symbol][b2-vtrack]")
+{
+  symbolt sym;
+  REQUIRE(sym.get_value().is_nil());
+  REQUIRE(is_nil_expr(sym.get_value2()));
+}
+
+TEST_CASE(
+  "symbolt: dual-role -- function with body + same-named static_lifetime "
+  "global with initialiser stay distinct under both value discriminators",
+  "[core][utils][symbol][b2-vtrack]")
+{
+  // Same `base_name` (the colliding bit). Distinct fully-qualified ids -- the
+  // symbol table keys on id, but is_code on the value is what body-walkers
+  // such as goto_convert_functions branch on.
+  symbolt fn;
+  fn.id = "c:test.c@F@f";
+  fn.name = "f";
+  fn.mode = "C";
+  fn.set_type(make_legacy_code_type());
+  fn.set_value(make_legacy_body());
+
+  symbolt g;
+  g.id = "c:@f";
+  g.name = "f";
+  g.mode = "C";
+  g.static_lifetime = true;
+  g.set_type(make_legacy_int_type());
+  g.set_value(from_integer(0, int_type()));
+
+  // Per-symbol parity.
+  REQUIRE(fn.get_value().is_code());
+  REQUIRE(is_block(fn.get_value2()));
+  REQUIRE_FALSE(g.get_value().is_code());
+  REQUIRE_FALSE(is_block(g.get_value2()));
+
+  // And the IREP2 forms must not collapse across symbols.
+  REQUIRE_FALSE(fn.get_value2() == g.get_value2());
+}
+
+TEST_CASE(
+  "symbolt: legacy set_value invalidates the IREP2 value cache; flipping "
+  "body->int->body keeps is_code parity on both sides",
+  "[core][utils][symbol][b2-vtrack]")
+{
+  symbolt sym;
+  sym.id = sym.name = "x";
+  sym.mode = "C";
+  sym.set_type(make_legacy_code_type());
+
+  sym.set_value(make_legacy_body());
+  REQUIRE(sym.get_value().is_code());
+  REQUIRE(is_block(sym.get_value2()));
+
+  // Overwrite with a non-code value: the IREP2 cache must invalidate.
+  sym.set_value(from_integer(1, int_type()));
+  REQUIRE_FALSE(sym.get_value().is_code());
+  REQUIRE_FALSE(is_block(sym.get_value2()));
+
+  // And back.
+  sym.set_value(make_legacy_body());
+  REQUIRE(sym.get_value().is_code());
+  REQUIRE(is_block(sym.get_value2()));
+}
+
+TEST_CASE(
+  "symbolt: swap exchanges the legacy value and the IREP2 value cache, "
+  "preserving is_code on each side of the swap",
+  "[core][utils][symbol][b2-vtrack]")
+{
+  symbolt a;
+  a.id = a.name = "a";
+  a.mode = "C";
+  a.set_type(make_legacy_code_type());
+  a.set_value(make_legacy_body());
+
+  symbolt b;
+  b.id = b.name = "b";
+  b.mode = "C";
+  b.set_type(make_legacy_int_type());
+  b.set_value(from_integer(7, int_type()));
+
+  // Pre-swap: warm the IREP2 value cache on both sides so swap is exercised
+  // with both caches populated -- not just legacy-swap-then-rederive.
+  REQUIRE(is_block(a.get_value2()));
+  REQUIRE_FALSE(is_block(b.get_value2()));
+
+  a.swap(b);
+
+  REQUIRE(a.id == "b");
+  REQUIRE(b.id == "a");
+  REQUIRE_FALSE(a.get_value().is_code());
+  REQUIRE_FALSE(is_block(a.get_value2()));
+  REQUIRE(b.get_value().is_code());
+  REQUIRE(is_block(b.get_value2()));
 }
