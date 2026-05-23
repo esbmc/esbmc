@@ -1828,6 +1828,17 @@ def get_referenced_names(node):
     return referenced
 
 
+def _assign_target_names(target):
+    """Yield names bound by an Assign target, recursing into Tuple/List/Starred."""
+    if isinstance(target, ast.Name):
+        yield target.id
+    elif isinstance(target, (ast.Tuple, ast.List)):
+        for elt in target.elts:
+            yield from _assign_target_names(elt)
+    elif isinstance(target, ast.Starred):
+        yield from _assign_target_names(target.value)
+
+
 import_aliases = {}
 # Track all imports per module to combine them
 module_imports = {}
@@ -2239,6 +2250,16 @@ def generate_ast_json(tree, python_filename, elements_to_import, output_dir, mod
             # Include annotated assignments (e.g., x: int = 42)
             elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
                 if node.target.id in explicitly_imported:
+                    filtered_nodes.append(node)
+
+            # Include plain assignments whose target binds an imported name
+            # (e.g., ``INT_BOUND = 1024`` in ``from M import f, INT_BOUND``).
+            # GitHub #4744. Tuple/list unpacking is treated atomically: if any
+            # bound name matches, the whole statement must survive because the
+            # unpacking is one indivisible binding.
+            elif isinstance(node, ast.Assign):
+                bound = {n for tgt in node.targets for n in _assign_target_names(tgt)}
+                if bound & explicitly_imported:
                     filtered_nodes.append(node)
 
             # Preserve Import/ImportFrom nodes: the C++ converter needs them
