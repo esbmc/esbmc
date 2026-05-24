@@ -135,7 +135,7 @@ void goto_program_dereferencet::dereference_program(
     {
       goto_program.insert_swap(it, new_code.instructions.front());
       new_code.instructions.pop_front();
-      it++;
+      ++it;
     }
   }
 }

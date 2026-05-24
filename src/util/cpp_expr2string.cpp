@@ -92,7 +92,7 @@ cpp_expr2stringt::convert_struct(const exprt &src, unsigned &precedence)
       dest += tmp;
     }
 
-    o_it++;
+    ++o_it;
   }
 
   dest += " }";
