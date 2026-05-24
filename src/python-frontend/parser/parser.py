@@ -1815,6 +1815,63 @@ def _propagate_range_aliases_across_modules(parsed_trees):
             return
 
 
+def _filter_nodes_for_import(tree, elements_to_import):
+    """Return the subset of ``tree.body`` selected by ``elements_to_import``.
+
+    Returns an empty list when no filtering applies (caller should then
+    serialise the original tree).
+    """
+    if not elements_to_import:
+        return []
+
+    explicitly_imported = {elem_info.name for elem_info in elements_to_import}
+
+    # Collect names referenced by the explicitly-imported functions/classes
+    # so transitive dependencies survive the filter.
+    referenced_names = set()
+    for node in tree.body:
+        if isinstance(node, (ast.ClassDef, ast.FunctionDef)) \
+                and node.name in explicitly_imported:
+            referenced_names.update(get_referenced_names(node))
+
+    filtered_nodes = []
+    for node in tree.body:
+        if isinstance(node, (ast.ClassDef, ast.FunctionDef)):
+            if node.name in ('ESBMC_range_has_next_', 'ESBMC_range_next_') \
+                    or node.name in explicitly_imported \
+                    or node.name in referenced_names:
+                filtered_nodes.append(node)
+        elif isinstance(node, ast.AnnAssign) \
+                and isinstance(node.target, ast.Name) \
+                and node.target.id in explicitly_imported:
+            filtered_nodes.append(node)
+        elif isinstance(node, ast.Assign):
+            # Tuple/list unpacking is treated atomically: if any bound name
+            # matches an explicit import, the whole statement survives
+            # because the unpacking is one indivisible binding (GitHub #4744).
+            bound = {n for tgt in node.targets for n in _assign_target_names(tgt)}
+            if bound & explicitly_imported:
+                filtered_nodes.append(node)
+        elif isinstance(node, (ast.Import, ast.ImportFrom)):
+            # Preserve imports so the C++ converter can resolve calls into
+            # transitively-imported modules via the parser-attached
+            # ``full_path`` / ``module_not_found`` attributes.
+            filtered_nodes.append(node)
+    return filtered_nodes
+
+
+def _compute_output_json_path(python_filename, output_dir, module_qualname):
+    """Return the on-disk JSON output path for a parsed Python source file."""
+    if module_qualname:
+        parts = module_qualname.split(".")
+        return os.path.join(output_dir, *parts[:-1], f"{parts[-1]}.json")
+    if python_filename.endswith('__init__.py'):
+        dir_name = os.path.basename(os.path.dirname(python_filename))
+        return os.path.join(output_dir, f"{dir_name}.json")
+    return os.path.join(output_dir,
+                        f"{os.path.basename(python_filename[:-3])}.json")
+
+
 def generate_ast_json(tree, python_filename, elements_to_import, output_dir, module_qualname=None):
     """
     Generate AST JSON from the given Python AST tree.
@@ -1835,79 +1892,18 @@ def generate_ast_json(tree, python_filename, elements_to_import, output_dir, mod
         (e.g. ``pkg.sub.mod``); ``None`` means top-level module.
 
     """
-    # Remove verification-agnostic testing framework imports
     tree = import_resolver.filter_imports(tree)
+    filtered_nodes = _filter_nodes_for_import(tree, elements_to_import)
 
-    # Filter elements to be imported from the module
-    filtered_nodes = []
-    if elements_to_import is not None and elements_to_import:
-        # First pass: collect explicitly imported element names
-        explicitly_imported = {elem_info.name for elem_info in elements_to_import}
-
-        # Collect all referenced names (functions and classes) from explicitly imported functions/classes
-        referenced_names = set()
-        for node in tree.body:
-            if isinstance(node, (ast.ClassDef, ast.FunctionDef)):
-                if node.name in explicitly_imported:
-                    referenced_names.update(get_referenced_names(node))
-
-        # Second pass: include explicitly imported items and their referenced functions/classes
-        for node in tree.body:
-            if isinstance(node, (ast.ClassDef, ast.FunctionDef)):
-                # Always include ESBMC helper functions
-                if node.name in ['ESBMC_range_has_next_', 'ESBMC_range_next_']:
-                    filtered_nodes.append(node)
-                # Include explicitly imported items
-                elif node.name in explicitly_imported:
-                    filtered_nodes.append(node)
-                # Include functions/classes referenced by imported items
-                elif node.name in referenced_names:
-                    filtered_nodes.append(node)
-
-            # Include annotated assignments (e.g., x: int = 42)
-            elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
-                if node.target.id in explicitly_imported:
-                    filtered_nodes.append(node)
-
-            # Include plain assignments whose target binds an imported name
-            # (e.g., ``INT_BOUND = 1024`` in ``from M import f, INT_BOUND``).
-            # GitHub #4744. Tuple/list unpacking is treated atomically: if any
-            # bound name matches, the whole statement must survive because the
-            # unpacking is one indivisible binding.
-            elif isinstance(node, ast.Assign):
-                bound = {n for tgt in node.targets for n in _assign_target_names(tgt)}
-                if bound & explicitly_imported:
-                    filtered_nodes.append(node)
-
-            # Preserve Import/ImportFrom nodes: the C++ converter needs them
-            # (with the parser-attached ``full_path``/``module_not_found``
-            # attributes) to resolve calls into transitively-imported modules.
-            elif isinstance(node, (ast.Import, ast.ImportFrom)):
-                filtered_nodes.append(node)
-
-    # Convert AST to JSON
     ast_json = ast2json_func(
         ast.Module(body=filtered_nodes, type_ignores=[]) if filtered_nodes else tree)
     ast_json["filename"] = python_filename
     ast_json["ast_output_dir"] = output_dir
     _tag_bignum_constants(ast_json)
 
-    # Build JSON path
-    if module_qualname:
-        parts = module_qualname.split(".")
-        json_dir = os.path.join(output_dir, *parts[:-1])  # package subdirs
-        json_filename = os.path.join(json_dir, f"{parts[-1]}.json")
-    else:
-        if python_filename.endswith('__init__.py'):
-            dir_name = os.path.basename(os.path.dirname(python_filename))
-            json_filename = os.path.join(output_dir, f"{dir_name}.json")
-        else:
-            json_filename = os.path.join(output_dir,
-                                         f"{os.path.basename(python_filename[:-3])}.json")
-
+    json_filename = _compute_output_json_path(python_filename, output_dir, module_qualname)
     os.makedirs(os.path.dirname(json_filename), exist_ok=True)
 
-    # Write AST JSON to file
     try:
         with open(json_filename, "w", encoding="utf-8") as json_file:
             json.dump(ast_json, json_file, indent=4, ensure_ascii=False)
