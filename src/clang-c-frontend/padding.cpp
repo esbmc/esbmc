@@ -162,7 +162,7 @@ static void add_padding(struct_typet &type, const namespacet &ns)
 
     for (struct_typet::componentst::iterator it = components.begin();
          it != components.end();
-         it++)
+         ++it)
     {
       bool is_bitfield = it->type().get_bool("#bitfield");
       bool is_extint = it->type().get_bool("#extint");

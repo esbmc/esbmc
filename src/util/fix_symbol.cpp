@@ -18,7 +18,7 @@ void fix_symbolt::fix_context(contextt &context)
 {
   for (type_mapt::const_iterator t_it = type_map.begin();
        t_it != type_map.end();
-       t_it++)
+       ++t_it)
   {
     symbolt *symb = context.find_symbol(t_it->first);
     assert(symb != nullptr);
