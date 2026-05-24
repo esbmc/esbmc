@@ -44,6 +44,15 @@ class LoopMixin:
             return node.id
         return None
 
+    @staticmethod
+    def _is_nullary_lambda(node: ast.AST) -> bool:
+        """Return True when node is an `ast.Lambda` taking no parameters."""
+        if not isinstance(node, ast.Lambda):
+            return False
+        args = node.args
+        return (not args.args and not args.posonlyargs and not args.kwonlyargs
+                and args.vararg is None and args.kwarg is None)
+
     def _pre_annotate_items_loop_vars(self, node):
         """Pre-populate variable_annotations for the loop variables of a dict.items() for loop.
 
@@ -2567,9 +2576,7 @@ class LoopMixin:
             factory_value = ast.List(elts=[], ctx=ast.Load())
         elif isinstance(factory_node, ast.Name) and factory_node.id == "dict":
             factory_value = ast.Dict(keys=[], values=[])
-        elif (isinstance(factory_node, ast.Lambda) and not factory_node.args.args
-              and not factory_node.args.posonlyargs and not factory_node.args.kwonlyargs
-              and factory_node.args.vararg is None and factory_node.args.kwarg is None):
+        elif self._is_nullary_lambda(factory_node):
             # Nullary lambda factory: emit the body expression directly so it
             # routes through the same dict-subscript-assignment path as a
             # literal. The C++ frontend cannot currently invoke
