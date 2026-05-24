@@ -23,6 +23,8 @@ GenerateAstJsonFn: TypeAlias = Callable[[ast.AST, str, Any, str, str | None], No
 import_aliases: dict[str, str] = {}
 module_imports: dict[str, ModuleImportInfo] = {}
 module_exports: dict[str, tuple[set[str], dict[str, str], list[str] | None]] = {}
+_reported_cycles: set[tuple[str, ...]] = set()
+_reported_resolution_failures: set[tuple[str, str, str]] = set()
 
 
 @dataclass(frozen=True)
