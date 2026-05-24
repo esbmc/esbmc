@@ -272,6 +272,10 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
   // CTAD deduction guides (C++17): clang materialises specialisations
   // through the guide, so the guide itself has no runtime form.
   case clang::Decl::CXXDeductionGuide:
+
+  // C++20 concept definitions: clang evaluates the constraint at template
+  // instantiation time, so the ConceptDecl itself has no runtime form.
+  case clang::Decl::Concept:
     break;
 
   // We pretty much ignore this information, clang does the expansion for us.
