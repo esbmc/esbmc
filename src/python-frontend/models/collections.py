@@ -1,6 +1,6 @@
 # Operational model for collections module
 # pylint: disable=function-redefined  # intentional stdlib shadow for ESBMC models
-# pylint: disable=keyword-arg-before-vararg,unused-argument
+# pylint: disable=keyword-arg-before-vararg,unused-argument,undefined-variable
 # defaultdict's signature is pinned: callers in regression/python/
 # (e.g. github_3841_*) pass `default_factory` positionally as in
 # `defaultdict(int)`, so it must come first; and the no-arg form
