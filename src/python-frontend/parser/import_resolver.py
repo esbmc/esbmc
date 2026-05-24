@@ -136,8 +136,7 @@ def expand_star_import(module) -> list[str] | None:
 
 
 def _collect_import_targets(
-    node: ast.Import | ast.ImportFrom,
-) -> tuple[list[str], list[ast.alias] | None]:
+    node: ast.Import | ast.ImportFrom, ) -> tuple[list[str], list[ast.alias] | None]:
     if isinstance(node, ast.Import):
         module_names: list[str] = []
         for alias_node in node.names:
