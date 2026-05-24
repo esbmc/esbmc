@@ -4670,9 +4670,10 @@ void python_list::handle_list_var_unpacking(
   // Subscript whose base Name carries a list[list[T]]-style annotation.
   // Walk down the chain and peel one extra annotation layer (the unpacked
   // tuple/list is the element of the innermost subscript).
-  if (elem_type == typet() && ast_node["value"].is_object() &&
-      ast_node["value"].contains("_type") &&
-      ast_node["value"]["_type"] == "Subscript")
+  if (
+    elem_type == typet() && ast_node["value"].is_object() &&
+    ast_node["value"].contains("_type") &&
+    ast_node["value"]["_type"] == "Subscript")
   {
     size_t subscript_depth = 0;
     const nlohmann::json *cur = &ast_node["value"];
@@ -4711,8 +4712,8 @@ void python_list::handle_list_var_unpacking(
         {
           nlohmann::json synth;
           synth["annotation"] = drilled;
-          elem_type = get_elem_type_from_annotation(
-            synth, converter_.get_type_handler());
+          elem_type =
+            get_elem_type_from_annotation(synth, converter_.get_type_handler());
         }
       }
     }
