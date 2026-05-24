@@ -46,16 +46,12 @@ def reset_state() -> None:
 
 
 def _resolver_error(module_name: str, reason: str, detail: str | None = None) -> None:
-    message = f"ERROR: import resolver [{reason}] for '{module_name}'"
-    if detail:
-        message = f"{message}: {detail}"
+    message = f"ERROR: {detail}" if detail else f"ERROR: {module_name} ({reason})"
     print(message)
 
 
 def _resolver_warning(module_name: str, reason: str, detail: str | None = None) -> None:
-    message = f"WARNING: import resolver [{reason}] for '{module_name}'"
-    if detail:
-        message = f"{message}: {detail}"
+    message = f"WARNING: {detail}" if detail else f"WARNING: {module_name} ({reason})"
     print(message)
 
 
@@ -200,8 +196,8 @@ def import_module_by_name(
             except ImportError:
                 pass
 
-        _resolver_error(module_name, "module-not-found",
-                        "install it with: pip3 install " + module_name)
+        # Keep legacy error text: regression tests assert this exact line.
+        _resolver_error(module_name, "module-not-found", f"Module '{module_name}' not found.")
         return None
 
 
