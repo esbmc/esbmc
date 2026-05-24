@@ -289,6 +289,22 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     return set_handler.get_empty_set();
   }
 
+  // list() with no args — empty list. Lower to a List literal so it routes
+  // through the well-tested `[]` path (python_list::get()).
+  if (
+    element["func"]["_type"] == "Name" && element["func"]["id"] == "list" &&
+    (!element.contains("args") || element["args"].empty()))
+  {
+    nlohmann::json list_node;
+    list_node["_type"] = "List";
+    list_node["elts"] = nlohmann::json::array();
+    for (const char *k :
+         {"lineno", "col_offset", "end_lineno", "end_col_offset"})
+      if (element.contains(k))
+        list_node[k] = element[k];
+    return get_expr(list_node);
+  }
+
   // Handle list(...) calls
   if (
     element["func"]["_type"] == "Name" && element["func"]["id"] == "list" &&
