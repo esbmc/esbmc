@@ -1425,7 +1425,7 @@ typet python_dict_handler::resolve_expected_type_for_dict_subscript(
           !func_node.empty() && func_node.contains("body") &&
           func_node["body"].is_array())
         {
-          symbol_typet candidate;
+          typet candidate;
           bool have_candidate = false;
           for (const auto &stmt : func_node["body"])
           {
@@ -1460,17 +1460,130 @@ typet python_dict_handler::resolve_expected_type_for_dict_subscript(
               !stmt.contains("value") || !stmt["value"].is_object())
               continue;
             const auto &rhs = stmt["value"];
+
+            // Literal RHS: pick the value type from the constant's kind.
+            // Covers `d[k] = 5`, `d[k] = 0.0`, `d[k] = True`, `d[k] = "x"`.
+            if (rhs.value("_type", std::string()) == "Constant" &&
+                rhs.contains("value"))
+            {
+              const auto &lit = rhs["value"];
+              if (lit.is_boolean())
+              {
+                candidate = bool_type();
+                have_candidate = true;
+              }
+              else if (lit.is_number_integer() || lit.is_number_unsigned())
+              {
+                candidate = type_handler_.get_typet("int", 0);
+                have_candidate = true;
+              }
+              else if (lit.is_number_float())
+              {
+                candidate = type_handler_.get_typet("float", 0);
+                have_candidate = true;
+              }
+              else if (lit.is_string())
+              {
+                candidate = gen_pointer_type(char_type());
+                have_candidate = true;
+              }
+              continue;
+            }
+
             if (
               rhs.value("_type", std::string()) == "Call" &&
-              rhs.contains("func") && rhs["func"].is_object() &&
-              rhs["func"].value("_type", std::string()) == "Name" &&
-              rhs["func"].contains("id"))
+              rhs.contains("func") && rhs["func"].is_object())
             {
-              const std::string class_name =
-                rhs["func"]["id"].get<std::string>();
-              if (json_utils::is_class(class_name, converter_.get_ast_json()))
+              const auto &func = rhs["func"];
+
+              // Lambda factory: `defaultdict(lambda: float('inf'))` is
+              // lowered by the preprocessor to `d[k] = (<lambda>)()`. Inspect
+              // the lambda body to determine the value type.
+              if (
+                func.value("_type", std::string()) == "Lambda" &&
+                func.contains("body") && func["body"].is_object())
               {
-                candidate = symbol_typet("tag-" + class_name);
+                const auto &body = func["body"];
+                if (
+                  body.value("_type", std::string()) == "Constant" &&
+                  body.contains("value"))
+                {
+                  const auto &lit = body["value"];
+                  if (lit.is_boolean())
+                  {
+                    candidate = bool_type();
+                    have_candidate = true;
+                  }
+                  else if (lit.is_number_integer() || lit.is_number_unsigned())
+                  {
+                    candidate = type_handler_.get_typet("int", 0);
+                    have_candidate = true;
+                  }
+                  else if (lit.is_number_float())
+                  {
+                    candidate = type_handler_.get_typet("float", 0);
+                    have_candidate = true;
+                  }
+                }
+                else if (
+                  body.value("_type", std::string()) == "Call" &&
+                  body.contains("func") && body["func"].is_object() &&
+                  body["func"].value("_type", std::string()) == "Name" &&
+                  body["func"].contains("id"))
+                {
+                  const std::string body_callee =
+                    body["func"]["id"].get<std::string>();
+                  // `lambda: float('inf')`, `lambda: int()`, ...
+                  if (body_callee == "float")
+                  {
+                    candidate = type_handler_.get_typet("float", 0);
+                    have_candidate = true;
+                  }
+                  else if (body_callee == "int")
+                  {
+                    candidate = type_handler_.get_typet("int", 0);
+                    have_candidate = true;
+                  }
+                  else if (body_callee == "bool")
+                  {
+                    candidate = bool_type();
+                    have_candidate = true;
+                  }
+                  else if (body_callee == "str")
+                  {
+                    candidate = gen_pointer_type(char_type());
+                    have_candidate = true;
+                  }
+                }
+                continue;
+              }
+
+              if (
+                !func.contains("_type") || func["_type"] != "Name" ||
+                !func.contains("id"))
+                continue;
+
+              const std::string callee = func["id"].get<std::string>();
+
+              // Built-in type constructors: `int()`, `float()`, `bool()`,
+              // `str()` — emitted by the preprocessor when lowering
+              // `defaultdict(<builtin>)` reads (see
+              // preprocessor/loop_mixin.py:_make_defaultdict_missing_check).
+              if (
+                callee == "int" || callee == "float" || callee == "bool" ||
+                callee == "str")
+              {
+                if (callee == "str")
+                  candidate = gen_pointer_type(char_type());
+                else
+                  candidate = type_handler_.get_typet(callee, 0);
+                have_candidate = true;
+                continue;
+              }
+
+              if (json_utils::is_class(callee, converter_.get_ast_json()))
+              {
+                candidate = symbol_typet("tag-" + callee);
                 have_candidate = true;
               }
             }
