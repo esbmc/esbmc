@@ -299,6 +299,18 @@ bool string_handler::try_extract_const_string_expr(
   return false;
 }
 
+exprt string_handler::build_nondet_string_fallback(const locationt &location)
+{
+  // Bare nondet `char *`. Used as a sound over-approximation when a
+  // str.*() handler cannot extract a compile-time constant receiver.
+  // Subsequent string ops over this value see arbitrary content, which
+  // preserves soundness for safety properties (we cannot conclude a
+  // specific functional result, but we cannot wrongly conclude SAFE).
+  side_effect_expr_nondett nondet(gen_pointer_type(char_type()));
+  nondet.location() = location;
+  return nondet;
+}
+
 BigInt string_handler::get_string_size(const exprt &expr)
 {
   if (!expr.type().is_array())
