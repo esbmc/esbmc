@@ -160,10 +160,14 @@ def import_module_by_name(
     output_dir: str,
 ) -> ModuleType | str | None:
     if _is_unsupported_module(module_name):
-        print(f"ERROR: \"import {module_name}\" is not supported")
+        _resolver_error(
+            module_name,
+            "unsupported-module",
+            f"\"import {module_name}\" is not supported",
+        )
         sys.exit(3)
 
-    base_module = module_name.split(".")[0]
+    base_module = _base_module_name(module_name)
 
     if _is_testing_framework(base_module):
         return None
@@ -175,7 +179,11 @@ def import_module_by_name(
         if not os.path.exists(path):
             path = os.path.join(model_dir, *parts, "__init__.py")
 
-        return os.path.abspath(path)
+        normalized = _normalize_existing_path(path)
+        if normalized is None:
+            _resolver_error(module_name, "model-not-found", f"expected model file at '{path}'")
+            return None
+        return normalized
 
     try:
         module = importlib.import_module(module_name)
@@ -188,8 +196,7 @@ def import_module_by_name(
             except ImportError:
                 pass
 
-        print(f"ERROR: Module '{module_name}' not found.")
-        print(f"Please install it with: pip3 install {module_name}")
+        _resolver_error(module_name, "module-not-found", "install it with: pip3 install " + module_name)
         return None
 
 
