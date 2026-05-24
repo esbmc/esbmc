@@ -112,6 +112,10 @@ def _is_testing_framework(module_name: str) -> bool:
     return module_name in {"pytest"}
 
 
+def _base_module_name(module_name: str) -> str:
+    return module_name.split(".")[0]
+
+
 def _is_standard_library_file(filename: str) -> bool:
     stdlib_paths = [
         '/usr/lib/python',
@@ -265,13 +269,62 @@ def resolve_module_file(module_qualname: str, output_dir: str) -> str | None:
     return filename
 
 
+def _extract_module_names(node: ast.Import | ast.ImportFrom) -> list[str]:
+    names: list[str]
+    if isinstance(node, ast.Import):
+        names = [alias_node.name for alias_node in node.names]
+    else:
+        names = [node.module] if node.module else []
+
+    filtered: list[str] = []
+    for name in names:
+        if not name:
+            continue
+        if _is_testing_framework(_base_module_name(name)):
+            continue
+        filtered.append(name)
+    return filtered
+
+
+def _find_cycle_from(graph: dict[str, set[str]], start: str) -> tuple[str, ...] | None:
+    stack: list[str] = [start]
+    in_stack: set[str] = {start}
+
+    def dfs(current: str) -> tuple[str, ...] | None:
+        for nxt in graph.get(current, set()):
+            if nxt in in_stack:
+                idx = stack.index(nxt)
+                return tuple(stack[idx:] + [nxt])
+            if nxt not in graph:
+                continue
+            stack.append(nxt)
+            in_stack.add(nxt)
+            found = dfs(nxt)
+            if found:
+                return found
+            in_stack.remove(nxt)
+            stack.pop()
+        return None
+
+    return dfs(start)
+
+
+def _warn_if_cycle(import_graph: dict[str, set[str]], module_name: str) -> None:
+    cycle = _find_cycle_from(import_graph, module_name)
+    if not cycle or cycle in _reported_cycles:
+        return
+    _reported_cycles.add(cycle)
+    readable = " -> ".join(cycle)
+    _resolver_warning(module_name, "cyclic-import", readable)
+
+
 def filter_imports(tree: ast.AST) -> ast.AST:
     filtered_body = []
     for node in tree.body:
         if isinstance(node, ast.Import):
             filtered_names = []
             for alias in node.names:
-                base_module = alias.name.split(".")[0]
+                base_module = _base_module_name(alias.name)
                 if not _is_testing_framework(base_module):
                     filtered_names.append(alias)
             if filtered_names:
