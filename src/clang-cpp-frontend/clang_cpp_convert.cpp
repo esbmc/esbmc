@@ -683,6 +683,19 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     break;
   }
 
+  // C++20 rewritten comparisons: when only operator<=> (or operator==) is
+  // declared, clang synthesises operator</>/<=/>= from it and wraps the
+  // synthesised call as a CXXRewrittenBinaryOperator. The semantic form
+  // is the actual rewrite (e.g. `(a <=> b) < 0`); forward to it.
+  case clang::Stmt::CXXRewrittenBinaryOperatorClass:
+  {
+    const clang::CXXRewrittenBinaryOperator &rb =
+      static_cast<const clang::CXXRewrittenBinaryOperator &>(stmt);
+    if (get_expr(*rb.getSemanticForm(), new_expr))
+      return true;
+    break;
+  }
+
   case clang::Stmt::CXXOperatorCallExprClass:
   {
     const clang::CXXOperatorCallExpr &operator_call =

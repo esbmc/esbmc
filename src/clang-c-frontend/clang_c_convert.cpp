@@ -2636,7 +2636,8 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     if (c.hasAPValueResult())
     {
       clang::APValue value = c.getAPValueResult();
-      if (!get_APValue_expr(value, new_expr))
+      clang::QualType ct = c.getType();
+      if (!get_APValue_expr(value, new_expr, &ct))
         break;
     }
 
@@ -4723,8 +4724,10 @@ bool clang_c_convertert::is_member_decl_static(const clang::MemberExpr &member)
 
 bool clang_c_convertert::get_APValue_expr(
   const clang::APValue &value,
-  exprt &new_expr)
+  exprt &new_expr,
+  const clang::QualType *type_ptr)
 {
+  const clang::QualType type = type_ptr ? *type_ptr : clang::QualType();
   switch (value.getKind())
   {
   case clang::APValue::LValue:
@@ -4749,6 +4752,63 @@ bool clang_c_convertert::get_APValue_expr(
     break;
   }
 
+  case clang::APValue::Struct:
+  {
+    // Lower a constexpr struct value (e.g. C++20 std::strong_ordering::less)
+    // to a struct exprt. Bases come first, then fields, mirroring how
+    // ESBMC flattens base sub-objects into the struct components.
+    if (type.isNull())
+      return true;
+    typet t;
+    if (get_type(type, t))
+      return true;
+    t = get_complete_type(t, ns);
+    if (!t.is_struct())
+      return true;
+    new_expr = gen_zero(t);
+
+    const auto *cxxrd = type->getAsCXXRecordDecl();
+    const auto *rd = type->getAsRecordDecl();
+    unsigned op_idx = 0;
+
+    if (cxxrd)
+    {
+      unsigned base_idx = 0;
+      for (const clang::CXXBaseSpecifier &base : cxxrd->bases())
+      {
+        if (base_idx >= value.getStructNumBases())
+          break;
+        exprt sub;
+        clang::QualType bt = base.getType();
+        if (get_APValue_expr(value.getStructBase(base_idx), sub, &bt))
+          return true;
+        if (op_idx < new_expr.operands().size())
+          new_expr.operands().at(op_idx) = sub;
+        ++base_idx;
+        ++op_idx;
+      }
+    }
+
+    if (rd)
+    {
+      unsigned field_idx = 0;
+      for (const clang::FieldDecl *fd : rd->fields())
+      {
+        if (field_idx >= value.getStructNumFields())
+          break;
+        exprt sub;
+        clang::QualType ft = fd->getType();
+        if (get_APValue_expr(value.getStructField(field_idx), sub, &ft))
+          return true;
+        if (op_idx < new_expr.operands().size())
+          new_expr.operands().at(op_idx) = sub;
+        ++field_idx;
+        ++op_idx;
+      }
+    }
+    break;
+  }
+
   /*
     case clang::APValue::None:
     case clang::APValue::Indeterminate:
@@ -4756,7 +4816,6 @@ bool clang_c_convertert::get_APValue_expr(
     case clang::APValue::FixedPoint:
     case clang::APValue::Vector:
     case clang::APValue::Array:
-    case clang::APValue::Struct:
     case clang::APValue::Union:
     case clang::APValue::AddrLabelDiff:
     case clang::APValue::MemberPointer:
