@@ -21,6 +21,20 @@ namespace
 // the value space is unbounded — the width here only sizes constant-fold
 // intermediates. Issue #4642.
 constexpr unsigned kPythonBignumWidth = 512;
+
+// The bit_length OM (`src/python-frontend/models/int.py`) caps its loop at
+// `length < kPythonBitLengthCap` so symex terminates without `--unwind`
+// (issue #4756). For soundness the cap must be at least
+// kPythonBignumWidth: any input representable in IntWide has bit_length
+// strictly less than kPythonBignumWidth, so the loop exits via `n == 0`
+// and never via the cap. If kPythonBignumWidth grows past the cap, the OM
+// silently underreports — bump kPythonBitLengthCap and the OM literal
+// together (the OM literal cannot read this constant; it is FLAIL-mangled
+// before the C++ side is touched).
+constexpr unsigned kPythonBitLengthCap = 512;
+static_assert(
+  kPythonBignumWidth <= kPythonBitLengthCap,
+  "bit_length OM cap (models/int.py) must cover the full Python int width");
 } // namespace
 
 unsigned type_handler::python_int_width()

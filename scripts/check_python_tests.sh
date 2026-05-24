@@ -82,6 +82,8 @@ ignored_dirs=(
   "github_4548_floordiv_call_arg"
   "github_4548_floordiv_negative"
   "github_4581"
+  "github_4756"
+  "github_4756_fail"
   "github_4668"
   "github_4666_2d"
   "github_4666_shape"
