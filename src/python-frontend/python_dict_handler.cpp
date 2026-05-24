@@ -1427,13 +1427,67 @@ typet python_dict_handler::resolve_expected_type_for_dict_subscript(
         {
           typet candidate;
           bool have_candidate = false;
-          for (const auto &stmt : func_node["body"])
-          {
+          // Walk statements in document order, descending into For/While/If/
+          // Try/With nested bodies — the d[k] = factory() assignments inserted
+          // by the defaultdict preprocessor (see
+          // preprocessor/loop_mixin.py:_lower_defaultdict_reads_in_expr) sit
+          // inside the containing statement, which can be arbitrarily deep
+          // inside nested loops (e.g. quixbugs/shortest_path_lengths).
+          std::function<void(const nlohmann::json &)> visit_stmt;
+          auto visit_body = [&](const nlohmann::json &body) {
+            if (!body.is_array())
+              return;
+            for (const auto &s : body)
+              visit_stmt(s);
+          };
+          visit_stmt = [&](const nlohmann::json &stmt) {
+            if (!stmt.is_object() || !stmt.contains("_type"))
+              return;
+            const std::string &kind = stmt["_type"].get<std::string>();
+            if (kind == "For" || kind == "AsyncFor" || kind == "While")
+            {
+              if (stmt.contains("body"))
+                visit_body(stmt["body"]);
+              if (stmt.contains("orelse"))
+                visit_body(stmt["orelse"]);
+              return;
+            }
+            if (kind == "If")
+            {
+              if (stmt.contains("body"))
+                visit_body(stmt["body"]);
+              if (stmt.contains("orelse"))
+                visit_body(stmt["orelse"]);
+              return;
+            }
+            if (kind == "With" || kind == "AsyncWith")
+            {
+              if (stmt.contains("body"))
+                visit_body(stmt["body"]);
+              return;
+            }
+            if (kind == "Try" || kind == "TryStar")
+            {
+              if (stmt.contains("body"))
+                visit_body(stmt["body"]);
+              if (stmt.contains("orelse"))
+                visit_body(stmt["orelse"]);
+              if (stmt.contains("finalbody"))
+                visit_body(stmt["finalbody"]);
+              if (stmt.contains("handlers") && stmt["handlers"].is_array())
+                for (const auto &h : stmt["handlers"])
+                  if (h.is_object() && h.contains("body"))
+                    visit_body(h["body"]);
+              return;
+            }
+            // Don't descend into nested FunctionDef/Lambda/ClassDef — their
+            // assignments belong to a different scope.
+            if (kind != "Assign")
+              return;
             if (
-              !stmt.contains("_type") || stmt["_type"] != "Assign" ||
               !stmt.contains("targets") || !stmt["targets"].is_array() ||
               stmt["targets"].empty())
-              continue;
+              return;
             const auto &tgt = stmt["targets"][0];
 
             // `d = {}` re-init clears the candidate;
@@ -1448,7 +1502,7 @@ typet python_dict_handler::resolve_expected_type_for_dict_subscript(
                stmt["value"]["values"].empty()))
             {
               have_candidate = false;
-              continue;
+              return;
             }
 
             if (
@@ -1458,7 +1512,7 @@ typet python_dict_handler::resolve_expected_type_for_dict_subscript(
               tgt["value"].value("_type", std::string()) != "Name" ||
               tgt["value"].value("id", std::string()) != var_name ||
               !stmt.contains("value") || !stmt["value"].is_object())
-              continue;
+              return;
             const auto &rhs = stmt["value"];
 
             // Literal RHS: pick the value type from the constant's kind.
@@ -1488,7 +1542,7 @@ typet python_dict_handler::resolve_expected_type_for_dict_subscript(
                 candidate = gen_pointer_type(char_type());
                 have_candidate = true;
               }
-              continue;
+              return;
             }
 
             if (
@@ -1556,13 +1610,13 @@ typet python_dict_handler::resolve_expected_type_for_dict_subscript(
                     have_candidate = true;
                   }
                 }
-                continue;
+                return;
               }
 
               if (
                 !func.contains("_type") || func["_type"] != "Name" ||
                 !func.contains("id"))
-                continue;
+                return;
 
               const std::string callee = func["id"].get<std::string>();
 
@@ -1579,7 +1633,7 @@ typet python_dict_handler::resolve_expected_type_for_dict_subscript(
                 else
                   candidate = type_handler_.get_typet(callee, 0);
                 have_candidate = true;
-                continue;
+                return;
               }
 
               if (json_utils::is_class(callee, converter_.get_ast_json()))
@@ -1588,7 +1642,8 @@ typet python_dict_handler::resolve_expected_type_for_dict_subscript(
                 have_candidate = true;
               }
             }
-          }
+          };
+          visit_body(func_node["body"]);
           if (have_candidate)
             return candidate;
         }

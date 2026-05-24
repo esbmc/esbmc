@@ -2567,6 +2567,20 @@ class LoopMixin:
             factory_value = ast.List(elts=[], ctx=ast.Load())
         elif isinstance(factory_node, ast.Name) and factory_node.id == "dict":
             factory_value = ast.Dict(keys=[], values=[])
+        elif (isinstance(factory_node, ast.Lambda)
+              and not factory_node.args.args
+              and not factory_node.args.posonlyargs
+              and not factory_node.args.kwonlyargs
+              and factory_node.args.vararg is None
+              and factory_node.args.kwarg is None):
+            # Nullary lambda factory: emit the body expression directly so it
+            # routes through the same dict-subscript-assignment path as a
+            # literal. The C++ frontend cannot currently invoke
+            # `(<lambda>)()` correctly — build_function_id only handles Name
+            # and Attribute func types and otherwise resolves to the
+            # enclosing function — so inlining the body avoids the misrouted
+            # call entirely and is semantically identical for a thunk.
+            factory_value = factory_node.body
         else:
             factory_value = ast.Call(func=factory_node, args=[], keywords=[])
         ast.copy_location(factory_value, template)
