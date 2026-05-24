@@ -253,8 +253,9 @@ def process_imports(node: ast.Import | ast.ImportFrom, output_dir: str) -> None:
             continue
         filename = _module_filename(module)
         if filename is None:
-            _warn_resolution_failure(module_name, node, "module-file-not-found")
-            _mark_import_resolution(node, ok=False, reason="module-file-not-found")
+            # Keep historical behavior: modules without an emit-able file
+            # (e.g., standard library/builtins) are skipped, not treated as
+            # missing imports.
             continue
         _mark_import_resolution(node, ok=True, full_path=filename)
 
