@@ -53,6 +53,10 @@ class int:
     # first k that proves the property.
     def bit_length(cls, n: IntWide) -> int:
         length: int = 0
+        # The literal 512 matches kPythonBignumWidth in
+        # src/python-frontend/type_handler.cpp; revisit if that constant
+        # changes or when truly unbounded ints land (#4642), otherwise
+        # bit_length will silently cap at the wrong width.
         while length < 512 and n > 0:
             n: IntWide = n >> 1
             length = length + 1
