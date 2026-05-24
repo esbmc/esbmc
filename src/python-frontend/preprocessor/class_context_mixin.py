@@ -8,6 +8,7 @@ class ClassContextMixin:
         """Track class context for method definitions."""
         old_class_name = getattr(self, "current_class_name", None)
         self.current_class_name = node.name
+        inits_before = len(self._pending_method_default_inits)
 
         node = self.expand_dataclass(node)
         self._collect_class_attr_annotations(node)
@@ -16,6 +17,14 @@ class ClassContextMixin:
         self.generic_visit(node)
 
         self.current_class_name = old_class_name
+
+        # Hoist method default-helper assignments past the outermost ClassDef
+        # so they become module-level statements visible at call sites. For
+        # nested classes, keep them pending until the outer ClassDef exits.
+        if old_class_name is None and len(self._pending_method_default_inits) > inits_before:
+            hoisted = self._pending_method_default_inits[inits_before:]
+            del self._pending_method_default_inits[inits_before:]
+            return [node, *hoisted]
         return node
 
     def _record_exit_suppresses_all(self, class_node):
