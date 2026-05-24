@@ -136,6 +136,25 @@ def _is_standard_library_file(filename: str) -> bool:
     return False
 
 
+def _normalize_existing_path(path: str | None) -> str | None:
+    if not path:
+        return None
+    absolute = os.path.abspath(path)
+    if not os.path.exists(absolute):
+        return None
+    return absolute
+
+
+def _module_filename(module: ModuleType | str | None) -> str | None:
+    candidate = module if isinstance(module, str) else getattr(module, "__file__", None)
+    normalized = _normalize_existing_path(candidate)
+    if not normalized:
+        return None
+    if _is_standard_library_file(normalized):
+        return None
+    return normalized
+
+
 def import_module_by_name(
     module_name: str,
     output_dir: str,
