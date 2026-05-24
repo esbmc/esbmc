@@ -444,15 +444,22 @@ def _emit_submodule_asts(
     output_dir: str,
     generate_ast_json_fn: GenerateAstJsonFn,
 ) -> None:
-    for root, _dirs, files in os.walk(module_dir):
-        for file in files:
+    for root, dirs, files in os.walk(module_dir):
+        # Keep traversal deterministic across platforms/runs for stable CI output.
+        dirs.sort()
+        for file in sorted(files):
             if not file.endswith('.py'):
                 continue
             full_path = os.path.join(root, file)
             try:
                 with open(full_path, "r", encoding="utf-8") as f:
                     tree = ast.parse(f.read())
-            except UnicodeDecodeError:
+            except (OSError, UnicodeDecodeError, SyntaxError) as exc:
+                _resolver_warning(
+                    f"{base_module}.{file}",
+                    "submodule-parse-failed",
+                    f"{full_path}: {exc}",
+                )
                 continue
             generate_ast_json_fn(tree, full_path, None, f"{output_dir}/{base_module}")
 
@@ -465,30 +472,35 @@ def detect_and_process_submodules(
 ) -> None:
     if not isinstance(node, ast.Attribute):
         return
+
     value = node.value
     if not isinstance(value, ast.Name):
         return
 
-    alias = value.id
-    base_module = import_aliases.get(alias)
-
+    base_module = import_aliases.get(value.id)
     if not base_module or not _is_imported_model(base_module):
         return
 
     full_module = f"{base_module}.{node.attr}"
-
     if full_module in processed_submodules:
         return
-    processed_submodules.add(full_module)
 
+    processed_submodules.add(full_module)
     try:
         module = import_module_by_name(full_module, output_dir)
     except SystemExit:
         return
 
-    file_path = module if isinstance(module, str) else module.__file__
-    module_dir = os.path.dirname(file_path)
-    _emit_submodule_asts(module_dir, base_module, output_dir, generate_ast_json_fn)
+    file_path = _module_filename(module)
+    if not file_path:
+        return
+
+    _emit_submodule_asts(
+        os.path.dirname(file_path),
+        base_module,
+        output_dir,
+        generate_ast_json_fn,
+    )
 
 
 def emit_module_json(
@@ -498,6 +510,12 @@ def emit_module_json(
     parse_file_canonicalised_fn: ParseFileCanonicalisedFn,
 ) -> None:
     filename = resolve_module_file(module_qualname, output_dir)
-    if filename:
+    if not filename:
+        _resolver_warning(module_qualname, "module-file-not-found")
+        return
+    try:
         tree, _preprocessor = parse_file_canonicalised_fn(filename)
-        generate_ast_json_fn(tree, filename, None, output_dir, module_qualname=module_qualname)
+    except (OSError, SyntaxError, UnicodeDecodeError) as exc:
+        _resolver_warning(module_qualname, "module-parse-failed", str(exc))
+        return
+    generate_ast_json_fn(tree, filename, None, output_dir, module_qualname=module_qualname)
