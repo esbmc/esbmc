@@ -421,7 +421,14 @@ void goto_symex_statet::fixup_renamed_type(
   expr2tc &expr,
   const type2tc &orig_type)
 {
-  if (is_code_type(orig_type))
+  if (is_code_type(orig_type) || is_code_type(expr->type))
+  {
+    return;
+  }
+  // Empty (void) types have no width; the scalar-vs-scalar width comparison
+  // below would otherwise throw symbolic_type_excp from get_width(). No
+  // fix-up is meaningful for void values, so bail out.
+  if (is_empty_type(orig_type) || is_empty_type(expr->type))
   {
     return;
   }
