@@ -3,9 +3,6 @@ set(CVC4_MIN_VERSION "1.6")
 if(DEFINED CVC4_DIR)
     set(ENABLE_CVC4 ON)
 
-elseif(EXISTS $ENV{HOME}/cvc4)
-    set(ENABLE_CVC4 ON)
-
 else()
     if(ENABLE_CVC4 AND DOWNLOAD_DEPENDENCIES)
         # TODO: Replace this file when we go for CVC5!

@@ -60,7 +60,7 @@ bool python_class_builder::get_bases(struct_typet &st)
 
     ids.emplace_back(bsym->id);
 
-    auto &bty = static_cast<struct_typet &>(bsym->type);
+    const auto &bty = static_cast<const struct_typet &>(bsym->get_type());
     for (const auto &c : bty.components())
       st.components().push_back(c);
   }
@@ -192,11 +192,11 @@ void python_class_builder::gen_ctor(bool has_ud_base, struct_typet &st)
 
   symbolt ctor = conv_.create_symbol(
     mod, conv_.current_class_name_, sid.to_string(), loc, f);
-  ctor.value = code_blockt();
+  ctor.set_value(code_blockt());
   ctor.lvalue = true;
 
   conv_.symbol_table_.add(ctor);
-  st.methods().emplace_back(ctor.name, ctor.type);
+  st.methods().emplace_back(ctor.name, ctor.get_type());
 }
 
 // Check if any base class is TypedDict
@@ -223,15 +223,19 @@ void python_class_builder::build(codet &out)
   // Exception: if the existing type is an empty struct (a model-file stub like
   // 'class List: pass' in models/typing.py), allow the user-defined class with
   // actual fields to override it.
-  if (!sym->type.incomplete())
+  if (!sym->get_type().incomplete())
   {
-    bool is_model_stub = sym->type.id() == "struct" &&
-                         to_struct_type(sym->type).components().empty();
+    bool is_model_stub = sym->get_type().id() == "struct" &&
+                         to_struct_type(sym->get_type()).components().empty();
     if (!is_model_stub)
       return;
   }
 
-  sym->type.remove(irept::a_incomplete);
+  {
+    typet t = sym->get_type();
+    t.remove(irept::a_incomplete);
+    sym->set_type(std::move(t));
+  }
 
   // Handle TypedDict classes: they should be treated as dict types
   // TypedDict provides type hints for dictionaries but at runtime
@@ -241,7 +245,7 @@ void python_class_builder::build(codet &out)
     // Create a dict type alias for this TypedDict class
     // The dict handler provides the canonical dict struct type
     typet dict_type = conv_.get_dict_handler()->get_dict_struct_type();
-    sym->type = dict_type;
+    sym->set_type(dict_type);
     conv_.current_class_name_.clear();
     return;
   }
@@ -256,13 +260,13 @@ void python_class_builder::build(codet &out)
   add_self_attrs(st);
 
   // Partial commit allows nested lookups while building members
-  sym->type = st;
+  sym->set_type(st);
 
   // Add methods, class attributes, and default constructor
   get_members(st, out);
   gen_ctor(has_ud_base, st);
 
   // Finalize type and clear context
-  sym->type = st;
+  sym->set_type(st);
   conv_.current_class_name_.clear();
 }

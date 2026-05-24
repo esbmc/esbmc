@@ -1,0 +1,6 @@
+CORE
+main.c
+--unwind 3 --context-bound 3 --deadlock-check
+^VERIFICATION FAILED$
+^  Deadlocked state in pthread_mutex_lock$
+^  CWE: CWE-833$

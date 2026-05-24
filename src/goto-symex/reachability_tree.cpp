@@ -29,7 +29,7 @@ reachability_treet::reachability_treet(
 {
   // Put a few useful symbols in the symbol table.
   symbolt sym;
-  sym.type = bool_typet();
+  sym.set_type(bool_typet());
   sym.id = "execution_statet::\\guard_exec";
   sym.name = "execution_statet::\\guard_exec";
   context.move(sym);
@@ -291,8 +291,12 @@ void reachability_treet::go_next_state()
       it = cur_state_it;
       cur_state_it--;
 
-      // For the last one:
-      if (execution_states.size() == 1)
+      // For the last one. Only fire the leak walker when every thread has
+      // reached a terminal state — otherwise a still-running spawned thread
+      // may hold the only live reference to a dynamic object via its stack
+      // frame, which the globals-rooted reachability constraint will miss
+      // and spuriously report as a forgotten-memory violation. See #4634.
+      if (execution_states.size() == 1 && (*it)->all_threads_terminal())
         (*it)->add_memory_leak_checks();
 
       execution_states.erase(it);
@@ -573,7 +577,15 @@ goto_symext::symex_resultt reachability_treet::get_next_formula()
     switch_to_next_execution_state();
   }
 
-  (*cur_state_it)->add_memory_leak_checks();
+  // Only fire the leak walker on schedules whose tail is a genuine program
+  // termination — every thread terminal. Otherwise a still-running spawned
+  // thread may hold the only live reference to a dynamic object via its
+  // stack frame; the leak walker's reachability constraint is rooted at
+  // globals only, so it would spuriously report that object forgotten. The
+  // DFS will produce the all-threads-terminal sibling schedule separately,
+  // and the check fires correctly there. See #4634.
+  if ((*cur_state_it)->all_threads_terminal())
+    (*cur_state_it)->add_memory_leak_checks();
 
   has_complete_formula = false;
 

@@ -1,0 +1,9 @@
+CORE
+main.c
+--incremental-bmc --sarif-output -
+^VERIFICATION FAILED$
+"version": "2.1.0"
+"ruleId": "null-pointer-dereference"
+"name": "CWE"
+"version": "4.20"
+"id": "476"

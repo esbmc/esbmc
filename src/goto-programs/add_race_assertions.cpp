@@ -3,7 +3,7 @@
 #include <goto-programs/rw_set.h>
 #include <pointer-analysis/value_sets.h>
 #include <util/expr_util.h>
-#include <util/guard.h>
+#include <irep2/irep2_guard.h>
 #include <util/std_expr.h>
 
 class w_guardst
@@ -31,36 +31,36 @@ public:
     symbolt new_symbol;
     new_symbol.id = identifier;
     new_symbol.name = identifier;
-    new_symbol.type =
-      original_expr.is_index() ? migrate_type_back(index) : typet("bool");
+    set_symbol_type(
+      new_symbol, original_expr.is_index() ? index : get_bool_type());
     new_symbol.static_lifetime = true;
-    new_symbol.value.make_false();
+    {
+      exprt v = new_symbol.get_value();
+      v.make_false();
+      new_symbol.set_value(std::move(v));
+    }
 
     symbolt *symbol_ptr;
     context.move(new_symbol, symbol_ptr);
     return *symbol_ptr;
   }
 
-  const exprt get_guard_symbol_expr(const exprt &original_expr)
+  expr2tc get_guard_symbol_expr(const expr2tc &original_expr)
   {
     // introduce a new expression: RACE_CHECK(&x)
     // its operand is the address of the variable
     // which we will replace during symbolic execution.
-    exprt address = address_of_exprt(original_expr);
-    exprt check("races_check", typet("bool"));
-    check.move_to_operands(address);
-
-    return check;
+    return races_check2tc(address_of2tc(original_expr->type, original_expr));
   }
 
-  const exprt get_w_guard_expr(const rw_sett::entryt &entry)
+  expr2tc get_w_guard_expr(const rw_sett::entryt &entry)
   {
     return get_guard_symbol_expr(entry.original_expr);
   }
 
-  const exprt get_assertion(const rw_sett::entryt &entry)
+  expr2tc get_assertion(const rw_sett::entryt &entry)
   {
-    return gen_not(get_guard_symbol_expr(entry.original_expr));
+    return not2tc(get_guard_symbol_expr(entry.original_expr));
   }
 
   void add_initialization(goto_programt &goto_program);
@@ -82,9 +82,13 @@ void w_guardst::add_initialization(goto_programt &goto_program)
   symbolt new_symbol;
   new_symbol.id = identifier;
   new_symbol.name = identifier;
-  new_symbol.type = migrate_type_back(arrayt);
+  set_symbol_type(new_symbol, arrayt);
   new_symbol.static_lifetime = true;
-  new_symbol.value.make_false();
+  {
+    exprt v = new_symbol.get_value();
+    v.make_false();
+    new_symbol.set_value(std::move(v));
+  }
   context.move_symbol_to_context(new_symbol);
 
   for (const auto &w_guard : w_guards)
@@ -94,8 +98,9 @@ void w_guardst::add_initialization(goto_programt &goto_program)
     expr2tc new_sym;
     migrate_expr(symbol, new_sym);
 
-    expr2tc falsity = s.type.is_array() ? gen_zero(migrate_type(s.type), true)
-                                        : gen_false_expr();
+    expr2tc falsity = s.get_type().is_array()
+                        ? gen_zero(migrate_symbol_type(s), true)
+                        : gen_false_expr();
     t = goto_program.insert(t);
     t->type = ASSIGN;
     t->code = code_assign2tc(new_sym, falsity);
@@ -127,13 +132,11 @@ void add_race_assertions(
        instruction.is_assume()) &&
       !is_atomic)
     {
-      exprt tmp_expr;
-      if (instruction.is_goto() || instruction.is_assert())
-        tmp_expr = migrate_expr_back(instruction.guard);
-      else
-        tmp_expr = migrate_expr_back(instruction.code);
+      const expr2tc &rw_expr =
+        (instruction.is_goto() || instruction.is_assert()) ? instruction.guard
+                                                           : instruction.code;
 
-      rw_sett rw_set(ns, i_it, tmp_expr);
+      rw_sett rw_set(ns, i_it, rw_expr);
 
       if (rw_set.entries.empty())
         continue;
@@ -170,9 +173,7 @@ void add_race_assertions(
       {
         goto_programt::targett t = goto_program.insert(i_it);
 
-        expr2tc assert;
-        migrate_expr(w_guards.get_assertion(e_it->second), assert);
-        t->make_assertion(assert);
+        t->make_assertion(w_guards.get_assertion(e_it->second));
         t->location = original_instruction.location;
         t->location.user_provided(false);
         t->location.comment(e_it->second.get_comment());
@@ -185,10 +186,9 @@ void add_race_assertions(
         goto_programt::targett t = goto_program.insert(i_it);
 
         t->type = ASSIGN;
-        code_assignt theassign(
-          w_guards.get_w_guard_expr(e_it->second), e_it->second.get_guard());
-
-        migrate_expr(theassign, t->code);
+        t->code = code_assign2tc(
+          w_guards.get_w_guard_expr(e_it->second),
+          e_it->second.get_guard().as_expr());
 
         t->location = original_instruction.location;
         i_it = ++t;
@@ -234,9 +234,8 @@ void add_race_assertions(
         goto_programt::targett t = goto_program.insert(i_it);
 
         t->type = ASSIGN;
-        code_assignt theassign(
-          w_guards.get_w_guard_expr(e_it->second), false_exprt());
-        migrate_expr(theassign, t->code);
+        t->code = code_assign2tc(
+          w_guards.get_w_guard_expr(e_it->second), gen_false_expr());
 
         t->location = original_instruction.location;
         i_it = ++t;

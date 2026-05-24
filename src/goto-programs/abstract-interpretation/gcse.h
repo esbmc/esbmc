@@ -145,7 +145,7 @@ public:
 
   virtual bool runOnProgram(goto_functionst &) override;
   virtual bool
-  runOnFunction(std::pair<const dstring, goto_functiont> &F) override;
+  runOnFunction(std::pair<const irep_idt, goto_functiont> &F) override;
 
   // TODO: we should have a method to convert an cse_symbol back to the original expr for CE.
 

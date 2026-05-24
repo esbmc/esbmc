@@ -210,6 +210,9 @@ const static std::vector<std::string> python_c_models = {
   "__python_str_concat",
   "__python_str_repeat",
   "__python_str_slice",
+  "__python_int_to_str",
+  "__python_bool_to_str",
+  "__python_float_to_str",
   "__ESBMC_list_find_index",
   "__ESBMC_list_remove_at",
   "__ESBMC_list_set_at",
@@ -252,7 +255,24 @@ const static std::vector<std::string> python_c_models = {
   "__ESBMC_list_push_dict_ptr",
   "__ESBMC_list_lt",
   "__ESBMC_set_add",
-  "__ESBMC_set_discard"};
+  "__ESBMC_set_discard",
+  "__ESBMC_slice_create",
+  // Python threading.Thread lowering helpers (pthread_lib.c).
+  // Bodies call __ESBMC_atomic_begin / __ESBMC_atomic_end (which
+  // goto_convert lowers via __ESBMC_yield); python_converter ensures
+  // the yield symbol is registered before goto-conversion runs.
+  "__pyt_init_tid",
+  "__pyt_join",
+  "__pyt_terminate",
+  // Pulled in by python_converter.cpp's __ESBMC_main wrapping so
+  // num_threads_running counts the main thread (deadlock-detector
+  // invariant in __pyt_join / pthread_join_switch).
+  "__ESBMC_pthread_start_main_hook",
+  "__ESBMC_pthread_end_main_hook",
+  // threading.Lock deadlock-aware acquire bookkeeping. Called from the
+  // ``--deadlock-check`` variant of the Python ``Lock`` model
+  // (models/threading_deadlock.py). Mirrors pthread_mutex_lock_check.
+  "__ESBMC_pylock_block_and_check"};
 
 // Solidity operational model functions
 const static std::vector<std::string> solidity_c_models = {
@@ -566,22 +586,22 @@ void add_cprover_library(contextt &context, const languaget *language)
 
   // Traverse symbols and get dependencies from both their nested types and values
   new_ctx.foreach_operand([&symbol_deps](const symbolt &s) {
-    generate_symbol_deps(s.id, s.value, symbol_deps);
-    generate_symbol_deps(s.id, s.type, symbol_deps);
+    generate_symbol_deps(s.id, s.get_value(), symbol_deps);
+    generate_symbol_deps(s.id, s.get_type(), symbol_deps);
   });
 
   // Add two hacks; we might use either pthread_mutex_lock or the checked
   // variant; so if one version is used, pull in the other too.
   std::pair<irep_idt, irep_idt> lockcheck(
-    dstring("pthread_mutex_lock"), dstring("pthread_mutex_lock_check"));
+    irep_idt("pthread_mutex_lock"), irep_idt("pthread_mutex_lock_check"));
   symbol_deps.insert(lockcheck);
 
   std::pair<irep_idt, irep_idt> condcheck(
-    dstring("pthread_cond_wait"), dstring("pthread_cond_wait_check"));
+    irep_idt("pthread_cond_wait"), irep_idt("pthread_cond_wait_check"));
   symbol_deps.insert(condcheck);
 
   std::pair<irep_idt, irep_idt> joincheck(
-    dstring("pthread_join"), dstring("pthread_join_noswitch"));
+    irep_idt("pthread_join"), irep_idt("pthread_join_noswitch"));
   symbol_deps.insert(joincheck);
 
   /* Iterate through the new_ctx symbols, figure out which ones to go into store_ctx
@@ -604,7 +624,7 @@ void add_cprover_library(contextt &context, const languaget *language)
     const symbolt *symbol = context.find_symbol(s.id);
     if (
       (is_solidity || uses_whitelist) ||
-      (symbol != nullptr && symbol->value.is_nil()))
+      (symbol != nullptr && symbol->get_value().is_nil()))
     {
       store_ctx.add(s);
       ingest_symbol(s.id, symbol_deps, to_include);
@@ -642,8 +662,8 @@ void add_cprover_library(contextt &context, const languaget *language)
 
       if (uses_whitelist)
       {
-        generate_symbol_deps(s->id, s->value, symbol_deps);
-        generate_symbol_deps(s->id, s->type, symbol_deps);
+        generate_symbol_deps(s->id, s->get_value(), symbol_deps);
+        generate_symbol_deps(s->id, s->get_type(), symbol_deps);
       }
 
       ingest_symbol(*nameit, symbol_deps, to_include);
@@ -664,7 +684,7 @@ void add_cprover_library(contextt &context, const languaget *language)
   // value is nil) will stay unresolved. A normal linker would reject such files, but we provide some compatibility with
   // those and initialize the extern variables to nondet.
   context.Foreach_operand([&context](symbolt &s) {
-    if (s.is_extern && !s.type.is_code())
+    if (s.is_extern && !s.get_type().is_code())
     {
       log_debug(
         "c2goto",
@@ -672,10 +692,10 @@ void add_cprover_library(contextt &context, const languaget *language)
         "nondet! "
         "This code would not compile with an actual compiler.",
         s.id);
-      exprt value =
-        exprt("sideeffect", get_complete_type(s.type, namespacet{context}));
+      exprt value = exprt(
+        "sideeffect", get_complete_type(s.get_type(), namespacet{context}));
       value.statement("nondet");
-      s.value = value;
+      s.set_value(value);
     }
   });
 }

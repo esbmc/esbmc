@@ -28,10 +28,6 @@ else()
 
 endif()
 
-if(EXISTS $ENV{HOME}/bitwuzla)
-    set(ENABLE_BITWUZLA ON)
-endif()
-
 if(ENABLE_BITWUZLA)
 
   if(Bitwuzla_DIR)

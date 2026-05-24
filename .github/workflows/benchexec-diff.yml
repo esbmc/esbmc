@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-slim
     steps:
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
       - name: Install benchexec (for table-generator)
@@ -23,7 +23,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install --user benchexec
           echo "$(python -m site --user-base)/bin" >> "$GITHUB_PATH"
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Extract run IDs from URLs
         id: parse
         run: |
@@ -57,7 +57,7 @@ jobs:
           mv new-extracted/esbmc-output new
       - name: Run diff
         run: ./scripts/competitions/compare-runs.sh old new
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: benchexec-diff
           path: ./diff-old-new

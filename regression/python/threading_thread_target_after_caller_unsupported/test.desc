@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR:.*target=<name> must be defined before

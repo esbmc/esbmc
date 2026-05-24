@@ -161,7 +161,8 @@ protected:
    * these calls in the AST body (they are codegen-only in a real compiler),
    * so the C++ frontend has to synthesise them here.
    */
-  bool build_destructor_chain(const clang::FunctionDecl &fd, code_blockt &body);
+  bool
+  build_destructor_chain(const clang::CXXDestructorDecl &dd, code_blockt &body);
 
   /*
    * Add additional annotations for class/struct/union fields

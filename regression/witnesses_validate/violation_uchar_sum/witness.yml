@@ -1,0 +1,93 @@
+- entry_type: "violation_sequence"
+  metadata:
+    format_version: "2.0"
+    uuid: "e4722525-4e26-4f2f-b43e-52a1859d8123"
+    creation_time: "2026-05-14T13:11:32+01:00"
+    producer:
+      name: "ESBMC kind"
+      version: "8.2.0"
+    task:
+      input_files:
+        - "main.c"
+      input_file_hashes:
+        "main.c": "788d7646eac82f609530b21c31663b77db1405e2b5e4d86a794d2b2e4367fb8a"
+      specification: "G ! call(reach_error())"
+      data_model: "LP64"
+      language: "C"
+  content:
+    - segment:
+        - waypoint:
+            type: "assumption"
+            action: "follow"
+            constraint:
+              value: "n == 2"
+              format: "c_expression"
+            location:
+              file_name: "main.c"
+              line: 10
+              column: 3
+              function: "main"
+    - segment:
+        - waypoint:
+            type: "branching"
+            action: "follow"
+            constraint:
+              value: "false"
+            location:
+              file_name: "main.c"
+              line: 11
+              column: 3
+              function: "main"
+    - segment:
+        - waypoint:
+            type: "branching"
+            action: "follow"
+            constraint:
+              value: "true"
+            location:
+              file_name: "main.c"
+              line: 17
+              column: 3
+              function: "main"
+    - segment:
+        - waypoint:
+            type: "branching"
+            action: "follow"
+            constraint:
+              value: "true"
+            location:
+              file_name: "main.c"
+              line: 17
+              column: 3
+              function: "main"
+    - segment:
+        - waypoint:
+            type: "branching"
+            action: "follow"
+            constraint:
+              value: "false"
+            location:
+              file_name: "main.c"
+              line: 17
+              column: 3
+              function: "main"
+    - segment:
+        - waypoint:
+            type: "branching"
+            action: "follow"
+            constraint:
+              value: "true"
+            location:
+              file_name: "main.c"
+              line: 22
+              column: 3
+              function: "main"
+    - segment:
+        - waypoint:
+            type: "target"
+            action: "follow"
+            location:
+              file_name: "main.c"
+              line: 23
+              column: 5
+              function: "main"

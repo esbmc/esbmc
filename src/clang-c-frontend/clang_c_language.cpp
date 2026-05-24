@@ -244,7 +244,6 @@ void clang_c_languaget::build_compiler_args(
     compiler_args.push_back("-D__CRT__NO_INLINE");
     compiler_args.push_back("-D_USE_MATH_DEFINES");
     compiler_args.push_back("-Wno-implicit-function-declaration");
-    compiler_args.push_back("-Wno-incompatible-pointer-types");
   }
 
 #if ESBMC_SVCOMP
@@ -261,6 +260,10 @@ void clang_c_languaget::build_compiler_args(
   // Add -Wunknown-attributes, preprocessed files with GCC generate a bunch
   // of __leaf__ attributes that we don't care about
   compiler_args.emplace_back("-Wno-unknown-attributes");
+
+  // Suppress incompatible-pointer-types universally; became a hard error in
+  // LLVM 22 and trips on system headers across all platforms.
+  compiler_args.emplace_back("-Wno-incompatible-pointer-types");
 
   /* put custom options at the end of the cmdline such that they can override
    * whatever defaults we put in before. */
@@ -315,8 +318,7 @@ bool clang_c_languaget::parse(const std::string &path)
   const std::string &actual_path =
     nested_transformed ? nested_transformed->path() : path;
 
-  // Inject witness invariants as __ESBMC_loop_invariant / __ESBMC_assume calls
-  // so that Clang parses them naturally.
+  // Inject witness intrinsic calls so that Clang parses them naturally.
   // #line directives after each injection preserve original line numbers.
   std::optional<file_operations::tmp_file> witness_injected;
   if (config.options.get_bool_option("validate-correctness-witness"))
@@ -332,6 +334,15 @@ bool clang_c_languaget::parse(const std::string &path)
       else
         witness_injected = write_witness_tmp(content);
     }
+  }
+  else if (config.options.get_bool_option("validate-violation-witness"))
+  {
+    const std::string witness_path = config.options.get_option("witness");
+    auto waypoints = yaml_parser::get_waypoints(witness_path);
+    std::string content =
+      yaml_parser::build_violation_witness_source(actual_path, path, waypoints);
+    if (!content.empty())
+      witness_injected = write_witness_tmp(content);
   }
   const std::string &compile_path =
     witness_injected ? witness_injected->path() : actual_path;
@@ -567,6 +578,9 @@ _Bool __ESBMC_exists(void*, _Bool);
  * 2. Use the invariants to help the following of the loop continue with a simple assumption
  */
 void __ESBMC_loop_invariant(_Bool);
+
+// Violation-witness: seg_idx/wp_idx uniquely identify the call site; constraint is the assumption.
+void __ESBMC_witness_assume(int, int, _Bool);
 
 /* __ESBMC_loop_assigns: specifies memory locations a loop may modify.
  * Used with --loop-frame-rule for frame condition enforcement.

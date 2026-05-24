@@ -6,8 +6,12 @@ void fix_symbolt::fix_symbol(symbolt &symbol)
   if (it != type_map.end())
     symbol.id = it->second.id();
 
-  replace(symbol.type);
-  replace(symbol.value);
+  typet t = symbol.get_type();
+  replace(t);
+  symbol.set_type(std::move(t));
+  exprt v = symbol.get_value();
+  replace(v);
+  symbol.set_value(std::move(v));
 }
 
 void fix_symbolt::fix_context(contextt &context)

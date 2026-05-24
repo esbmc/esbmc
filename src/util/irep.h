@@ -8,14 +8,11 @@
 #include <vector>
 #include <mutex>
 
-#define USE_DSTRING
 #define SHARING
 
-#include <util/dstring.h>
+#include <util/irep_idt.h>
 
-typedef dstring irep_idt;
-typedef dstring irep_namet;
-typedef dstring_hash irep_id_hash;
+typedef std::hash<irep_idt> irep_id_hash;
 
 #define forall_irep(it, irep)                                                  \
   for (irept::subt::const_iterator it = (irep).begin(); it != (irep).end();    \
@@ -41,7 +38,7 @@ public:
   typedef std::vector<irept> subt;
   //typedef std::list<irept> subt;
 
-  typedef std::map<irep_namet, irept> named_subt;
+  typedef std::map<irep_idt, irept> named_subt;
 
   // Dump contents of irep to stdout. Debugging only.
   void dump() const;
@@ -130,28 +127,28 @@ public:
   // This class has to be able to fiddle with ireps directly.
   friend class irep_serializationt;
 
-  const irept &find(const irep_namet &name) const;
-  irept &add(const irep_namet &name);
+  const irept &find(const irep_idt &name) const;
+  irept &add(const irep_idt &name);
 
-  const std::string &get_string(const irep_namet &name) const
+  const std::string &get_string(const irep_idt &name) const
   {
     return get(name).as_string();
   }
 
-  const irep_idt &get(const irep_namet &name) const;
-  bool get_bool(const irep_namet &name) const;
+  const irep_idt &get(const irep_idt &name) const;
+  bool get_bool(const irep_idt &name) const;
 
-  inline void set(const irep_namet &name, const irep_idt &value)
+  inline void set(const irep_idt &name, const irep_idt &value)
   {
     add(name).id(value);
   }
 
-  void set(const irep_namet &name, const long value);
-  void set(const irep_namet &name, const irept &irep);
+  void set(const irep_idt &name, const long value);
+  void set(const irep_idt &name, const irept &irep);
   //public:
-  void remove(const irep_namet &name);
+  void remove(const irep_idt &name);
   void move_to_sub(irept &irep);
-  void move_to_named_sub(const irep_namet &name, irept &irep);
+  void move_to_named_sub(const irep_idt &name, irept &irep);
 
   inline typet &type()
   {
@@ -1245,7 +1242,7 @@ public:
   std::string pretty(unsigned indent = 0) const;
 
 protected:
-  static bool is_comment(const irep_namet &name)
+  static bool is_comment(const irep_idt &name)
   {
     return !name.empty() && name[0] == '#';
   }
@@ -1303,7 +1300,7 @@ public:
     mutable std::mutex dt_mutex;
 #endif
 
-    dstring data;
+    irep_idt data;
 
     named_subt named_sub;
     named_subt comments;
@@ -1379,7 +1376,7 @@ extern inline const std::string &id2string(const irep_idt &d)
   return d.as_string();
 }
 
-extern inline const std::string &name2string(const irep_namet &n)
+extern inline const std::string &name2string(const irep_idt &n)
 {
   return n.as_string();
 }

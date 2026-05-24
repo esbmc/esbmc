@@ -10,7 +10,7 @@ on:
 jobs:
   j1:
     name: repostats-for-robota-core
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     strategy:
       matrix:
         # The repositories to generate reports for.

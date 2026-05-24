@@ -3,8 +3,6 @@ include(CPM)
 
 if(DEFINED Boolector_DIR)
   set(ENABLE_BOOLECTOR ON)
-elseif(EXISTS $ENV{HOME}/boolector)
-  set(ENABLE_BOOLECTOR ON)
 else()
   if(ENABLE_BOOLECTOR AND DOWNLOAD_DEPENDENCIES)
     # Sadly... Boolector requires some manual execution

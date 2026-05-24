@@ -55,3 +55,8 @@ def assume(cond: bool) -> None:
 def __ESBMC_assert(cond: bool, msg: str) -> None:
     """ESBMC intrinsic: verification assertion"""
     pass
+
+
+def __ESBMC_unreachable() -> None:
+    """ESBMC intrinsic: marks unreachable code; verification fails if reached."""
+    pass

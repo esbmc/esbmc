@@ -1,4 +1,6 @@
 #include <util/c_expr2string.h>
+#include <algorithm>
+#include <cctype>
 #include <unordered_set>
 #include <util/base_type.h>
 #include <util/c_link.h>
@@ -97,31 +99,31 @@ void c_linkt::duplicate(symbolt &in_context, symbolt &new_symbol)
 void c_linkt::duplicate_type(symbolt &in_context, symbolt &new_symbol)
 {
   // check if it is the same -- use base_type_eq
-  if (!base_type_eq(in_context.type, new_symbol.type, ns))
+  if (!base_type_eq(in_context.get_type(), new_symbol.get_type(), ns))
   {
     if (
-      in_context.type.id() == "incomplete_struct" &&
-      new_symbol.type.id() == "struct")
+      in_context.get_type().id() == "incomplete_struct" &&
+      new_symbol.get_type().id() == "struct")
     {
       // replace old symbol
-      in_context.type = new_symbol.type;
+      in_context.set_type(new_symbol.get_type());
     }
     else if (
-      in_context.type.id() == "struct" &&
-      new_symbol.type.id() == "incomplete_struct")
+      in_context.get_type().id() == "struct" &&
+      new_symbol.get_type().id() == "incomplete_struct")
     {
       // ignore
     }
     else if (
-      ns.follow(in_context.type).id() == "incomplete_array" &&
-      ns.follow(new_symbol.type).is_array())
+      ns.follow(in_context.get_type()).id() == "incomplete_array" &&
+      ns.follow(new_symbol.get_type()).is_array())
     {
       // store new type
-      in_context.type = new_symbol.type;
+      in_context.set_type(new_symbol.get_type());
     }
     else if (
-      ns.follow(in_context.type).is_array() &&
-      ns.follow(new_symbol.type).id() == "incomplete_array")
+      ns.follow(in_context.get_type()).is_array() &&
+      ns.follow(new_symbol.get_type()).id() == "incomplete_array")
     {
       // ignore
     }
@@ -145,8 +147,8 @@ void c_linkt::duplicate_symbol(symbolt &in_context, symbolt &new_symbol)
 {
   // see if it is a function or a variable
 
-  bool is_code_in_context = in_context.type.is_code();
-  bool is_code_new_symbol = new_symbol.type.is_code();
+  bool is_code_in_context = in_context.get_type().is_code();
+  bool is_code_new_symbol = new_symbol.get_type().is_code();
 
   if (is_code_in_context != is_code_new_symbol)
   {
@@ -157,9 +159,9 @@ void c_linkt::duplicate_symbol(symbolt &in_context, symbolt &new_symbol)
       "new definition: {}\n"
       "Module: {}",
       in_context.name,
-      to_string(in_context.type),
+      to_string(in_context.get_type()),
       in_context.module,
-      to_string(new_symbol.type),
+      to_string(new_symbol.get_type()),
       new_symbol.module);
     abort();
   }
@@ -172,19 +174,27 @@ void c_linkt::duplicate_symbol(symbolt &in_context, symbolt &new_symbol)
 
     // care about code
 
-    if (!new_symbol.value.is_nil())
+    if (!new_symbol.get_value().is_nil())
     {
-      if (in_context.value.is_nil())
+      if (in_context.get_value().is_nil())
       {
         // the one with body wins!
-        in_context.value.swap(new_symbol.value);
-        in_context.type.swap(new_symbol.type); // for argument identifiers
+        exprt v = in_context.get_value();
+        exprt nv = new_symbol.get_value();
+        v.swap(nv);
+        in_context.set_value(std::move(v));
+        new_symbol.set_value(std::move(nv));
+        typet t = in_context.get_type();
+        typet nt = new_symbol.get_type();
+        t.swap(nt); // for argument identifiers
+        in_context.set_type(std::move(t));
+        new_symbol.set_type(std::move(nt));
       }
-      else if (in_context.type.inlined())
+      else if (in_context.get_type().inlined())
       {
         // ok
       }
-      else if (base_type_eq(in_context.type, new_symbol.type, ns))
+      else if (base_type_eq(in_context.get_type(), new_symbol.get_type(), ns))
       {
         // keep the one in in_context -- libraries come last!
         log_warning(
@@ -209,13 +219,13 @@ void c_linkt::duplicate_symbol(symbolt &in_context, symbolt &new_symbol)
           "  {}:{}:{}: location of the old definition in module {}\n"
           "  {}:{}:{}: location of the new definition in module {}",
           in_context.name,
-          in_context.value.location().file().c_str(),
-          in_context.value.location().line().c_str(),
-          in_context.value.location().column().c_str(),
+          in_context.get_value().location().file().c_str(),
+          in_context.get_value().location().line().c_str(),
+          in_context.get_value().location().column().c_str(),
           in_context.module,
-          new_symbol.value.location().file().c_str(),
-          new_symbol.value.location().line().c_str(),
-          new_symbol.value.location().column().c_str(),
+          new_symbol.get_value().location().file().c_str(),
+          new_symbol.get_value().location().line().c_str(),
+          new_symbol.get_value().location().column().c_str(),
           new_symbol.module);
       }
     }
@@ -224,20 +234,20 @@ void c_linkt::duplicate_symbol(symbolt &in_context, symbolt &new_symbol)
   {
     // both are variables
 
-    if (!base_type_eq(in_context.type, new_symbol.type, ns))
+    if (!base_type_eq(in_context.get_type(), new_symbol.get_type(), ns))
     {
-      const typet &old_type = ns.follow(in_context.type);
-      const typet &new_type = ns.follow(new_symbol.type);
+      const typet &old_type = ns.follow(in_context.get_type());
+      const typet &new_type = ns.follow(new_symbol.get_type());
 
       if (old_type.is_incomplete_array() && new_type.is_array())
       {
         // store new type
-        in_context.type = new_symbol.type;
+        in_context.set_type(new_symbol.get_type());
       }
       else if (old_type.is_pointer() && new_type.is_array())
       {
         // store new type
-        in_context.type = new_symbol.type;
+        in_context.set_type(new_symbol.get_type());
       }
       else if (old_type.is_array() && new_type.is_pointer())
       {
@@ -250,7 +260,7 @@ void c_linkt::duplicate_symbol(symbolt &in_context, symbolt &new_symbol)
       else if (old_type.id() == "incomplete_struct" && new_type.is_struct())
       {
         // store new type
-        in_context.type = new_symbol.type;
+        in_context.set_type(new_symbol.get_type());
       }
       else if (old_type.is_struct() && new_type.id() == "incomplete_struct")
       {
@@ -262,7 +272,16 @@ void c_linkt::duplicate_symbol(symbolt &in_context, symbolt &new_symbol)
       }
 #ifdef _WIN32
       // Windows is not case-sensitive
-      else if (in_context.module.compare_uppercase(new_symbol.module))
+      else if (([](const irep_idt &a, const irep_idt &b) {
+                 const std::string &as = a.as_string(), &bs = b.as_string();
+                 return as.size() == bs.size() &&
+                        std::equal(
+                          as.begin(), as.end(), bs.begin(), [](char x, char y) {
+                            return std::toupper(
+                                     static_cast<unsigned char>(x)) ==
+                                   std::toupper(static_cast<unsigned char>(y));
+                          });
+               })(in_context.module, new_symbol.module))
       {
         // ignore
       }
@@ -278,12 +297,12 @@ void c_linkt::duplicate_symbol(symbolt &in_context, symbolt &new_symbol)
           in_context.location.line().c_str(),
           in_context.location.column().c_str(),
           in_context.module,
-          to_string(in_context.type),
+          to_string(in_context.get_type()),
           new_symbol.location.file().c_str(),
           new_symbol.location.line().c_str(),
           new_symbol.location.column().c_str(),
           new_symbol.module,
-          to_string(new_symbol.type));
+          to_string(new_symbol.get_type()));
       }
     }
 
@@ -295,7 +314,11 @@ void c_linkt::duplicate_symbol(symbolt &in_context, symbolt &new_symbol)
       }
       else
       {
-        in_context.value.swap(new_symbol.value);
+        exprt v = in_context.get_value();
+        exprt nv = new_symbol.get_value();
+        v.swap(nv);
+        in_context.set_value(std::move(v));
+        new_symbol.set_value(std::move(nv));
         in_context.is_extern = false;
       }
     }
@@ -335,7 +358,7 @@ void c_linkt::typecheck()
         subst.location() = s.location;
         symbol_fixer.insert(
           s.id, static_cast<const typet &>(static_cast<const irept &>(subst)));
-        subst.type() = s.type;
+        subst.type() = s.get_type();
         symbol_fixer.insert(s.id, subst);
       }
     }

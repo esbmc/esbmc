@@ -18,8 +18,8 @@ static void complete_type(typet &type, const namespacet &ns)
     const symbolt *sym = ns.lookup(type.identifier());
     assert(sym);
     assert(sym->is_type);
-    assert(!sym->type.is_symbol());
-    type = sym->type;
+    assert(!sym->get_type().is_symbol());
+    type = sym->get_type();
     return complete_type(type, ns);
   }
 }

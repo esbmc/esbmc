@@ -3,7 +3,7 @@
 
 #include <goto-programs/goto_functions.h>
 #include <goto-programs/goto_loops.h>
-#include <util/guard.h>
+#include <irep2/irep2_guard.h>
 #include <irep2/irep2_expr.h>
 
 void goto_k_induction(goto_functionst &goto_functions);
@@ -27,7 +27,7 @@ protected:
   typedef std::unordered_map<unsigned, bool> marked_branchst;
   marked_branchst marked_branch;
 
-  typedef std::unordered_map<unsigned, guardt> guardst;
+  typedef std::unordered_map<unsigned, guard2tc> guardst;
   guardst guards;
 
   void goto_k_induction();

@@ -360,8 +360,11 @@ bool solidity_convertert::get_var_decl(
   if (!set_init && !(is_mapping && is_new_expr && is_byte_static))
   {
     // for both state and non-state variables, set default value as zero
-    symbol.value = gen_zero(get_complete_type(t, ns), true);
-    symbol.value.zero_initializer(true);
+    {
+      exprt _v = gen_zero(get_complete_type(t, ns), true);
+      _v.zero_initializer(true);
+      symbol.set_value(std::move(_v));
+    }
   }
 
   // 6. add symbol into the context
@@ -386,8 +389,11 @@ bool solidity_convertert::get_var_decl(
     len_sym.static_lifetime = true;
     len_sym.file_local = true;
     len_sym.is_extern = false;
-    len_sym.value = gen_zero(unsignedbv_typet(256));
-    len_sym.value.zero_initializer(true);
+    {
+      exprt _v = gen_zero(unsignedbv_typet(256));
+      _v.zero_initializer(true);
+      len_sym.set_value(std::move(_v));
+    }
     move_symbol_to_context(len_sym);
   }
 
@@ -408,8 +414,11 @@ bool solidity_convertert::get_var_decl(
     len_sym.static_lifetime = true;
     len_sym.file_local = true;
     len_sym.is_extern = false;
-    len_sym.value = gen_zero(unsignedbv_typet(256));
-    len_sym.value.zero_initializer(true);
+    {
+      exprt _v = gen_zero(unsignedbv_typet(256));
+      _v.zero_initializer(true);
+      len_sym.set_value(std::move(_v));
+    }
     move_symbol_to_context(len_sym);
   }
 
@@ -485,7 +494,7 @@ bool solidity_convertert::get_var_decl(
       solidity_gen_typecast(ns, acpy_call, t);
       acpy_call.type().set("#sol_array_size", arr_size);
       // set as rvalue
-      added_symbol.value = acpy_call;
+      added_symbol.set_value(acpy_call);
       decl.operands().push_back(acpy_call);
     }
     else
@@ -498,7 +507,7 @@ bool solidity_convertert::get_var_decl(
       // typecast
       solidity_gen_typecast(ns, calc_call, t);
       // set as rvalue
-      added_symbol.value = calc_call;
+      added_symbol.set_value(calc_call);
       decl.operands().push_back(calc_call);
     }
   }
@@ -524,11 +533,14 @@ bool solidity_convertert::get_var_decl(
       const symbolt *len_sym = context.find_symbol(len_id);
       assert(len_sym);
       symbolt &len_mut = const_cast<symbolt &>(*len_sym);
-      len_mut.value = size_expr;
+      len_mut.set_value(size_expr);
     }
     // Zero-initialize the infinite array so elements read as 0
-    added_symbol.value = gen_zero(get_complete_type(t, ns), true);
-    added_symbol.value.zero_initializer(true);
+    {
+      exprt _v = gen_zero(get_complete_type(t, ns), true);
+      _v.zero_initializer(true);
+      added_symbol.set_value(std::move(_v));
+    }
   }
   else if (t_sol_type == SolidityGrammar::SolType::DYNARRAY && set_init)
   {
@@ -547,7 +559,7 @@ bool solidity_convertert::get_var_decl(
       //=> uint* zz = (uint *)calloc(10, sizeof(uint));
       //=> uint* zz = (uint *)calloc(len, sizeof(uint));
       solidity_gen_typecast(ns, val, t);
-      added_symbol.value = val;
+      added_symbol.set_value(val);
       decl.operands().push_back(val);
 
       // get rhs size, e.g. 10
@@ -561,7 +573,7 @@ bool solidity_convertert::get_var_decl(
       exprt func_call;
       if (is_state_var)
         store_update_dyn_array(
-          member_exprt(this_expr, added_symbol.name, added_symbol.type),
+          member_exprt(this_expr, added_symbol.name, added_symbol.get_type()),
           size_expr,
           func_call);
       else
@@ -597,14 +609,14 @@ bool solidity_convertert::get_var_decl(
       // typecast
       solidity_gen_typecast(ns, acpy_call, t);
       // set as rvalue
-      added_symbol.value = acpy_call;
+      added_symbol.set_value(acpy_call);
       decl.operands().push_back(acpy_call);
 
       // store length
       exprt func_call;
       if (is_state_var)
         store_update_dyn_array(
-          member_exprt(this_expr, added_symbol.name, added_symbol.type),
+          member_exprt(this_expr, added_symbol.name, added_symbol.get_type()),
           size_expr,
           func_call);
       else
@@ -647,11 +659,11 @@ bool solidity_convertert::get_var_decl(
     arr_s.file_local = true;
     arr_s.lvalue = true;
     auto &add_added_s = *move_symbol_to_context(arr_s);
-    add_added_s.value = gen_zero(get_complete_type(arr_t, ns), true);
+    add_added_s.set_value(gen_zero(get_complete_type(arr_t, ns), true));
 
     // 2. construct mapping_t struct instance's value
     typet map_t;
-    map_t = context.find_symbol(lib_prefix + "mapping_t")->type;
+    map_t = context.find_symbol(lib_prefix + "mapping_t")->get_type();
 
     assert(map_t.is_struct());
     exprt inits = gen_zero(map_t);
@@ -677,7 +689,7 @@ bool solidity_convertert::get_var_decl(
     solidity_gen_typecast(ns, addr_expr, comps[addr_idx].type());
     inits.operands()[addr_idx] = addr_expr;
 
-    added_symbol.value = inits;
+    added_symbol.set_value(inits);
     decl.operands().push_back(inits);
   }
   else if (!set_init && is_byte_static)
@@ -693,7 +705,7 @@ bool solidity_convertert::get_var_decl(
     exprt len = from_integer(
       std::stoul(t.get("#sol_bytesn_size").as_string()), uint_type());
     call.arguments().push_back(len);
-    added_symbol.value = call;
+    added_symbol.set_value(call);
     decl.operands().push_back(call);
   }
   // now we have rule out other special cases
@@ -701,7 +713,7 @@ bool solidity_convertert::get_var_decl(
   {
     if (get_init_expr(init_value, literal_type, t, val))
       return true;
-    added_symbol.value = val;
+    added_symbol.set_value(val);
     decl.operands().push_back(val);
   }
 
@@ -882,7 +894,7 @@ bool solidity_convertert::get_struct_class(const nlohmann::json &struct_def)
   }
 
   t.location() = location_begin;
-  added_symbol.type = t;
+  added_symbol.set_type(t);
 
   return false;
 }
@@ -1322,7 +1334,7 @@ bool solidity_convertert::get_error_definition(const nlohmann::json &ast_node)
       type.arguments().push_back(param);
     }
   }
-  added_symbol.type = type;
+  added_symbol.set_type(type);
 
   // construct a "__ESBMC_assume(false)" statement
   typet return_type = empty_typet();
@@ -1339,7 +1351,7 @@ bool solidity_convertert::get_error_definition(const nlohmann::json &ast_node)
   // insert it to the body
   code_blockt body;
   body.operands().push_back(call);
-  added_symbol.value = body;
+  added_symbol.set_value(body);
 
   // restore
   current_functionDecl = old_functionDecl;

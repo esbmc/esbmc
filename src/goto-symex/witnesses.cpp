@@ -242,6 +242,13 @@ void create_node_node(nodet &node, xmlnodet &nodenode)
     data_violation.put_value("true");
     nodenode.add_child("data", data_violation);
   }
+  if (!node.cwe.empty())
+  {
+    xmlnodet data_cwe;
+    data_cwe.add("<xmlattr>.key", "cwe");
+    data_cwe.put_value(node.cwe);
+    nodenode.add_child("data", data_cwe);
+  }
   if (node.sink)
   {
     xmlnodet data_sink;
@@ -373,6 +380,13 @@ void create_graphml(xmlnodet &graphml)
   frontier_default_node.put_value("false");
   frontier_node.add_child("default", frontier_default_node);
   graphml.add_child("graphml.key", frontier_node);
+
+  xmlnodet cwe_node;
+  cwe_node.add("<xmlattr>.id", "cwe");
+  cwe_node.put(xmlnodet::path_type("<xmlattr>|attr.name", '|'), "cwe");
+  cwe_node.put(xmlnodet::path_type("<xmlattr>|attr.type", '|'), "string");
+  cwe_node.add("<xmlattr>.for", "node");
+  graphml.add_child("graphml.key", cwe_node);
 
   xmlnodet violation_node;
   violation_node.add("<xmlattr>.id", "violation");
@@ -1377,10 +1391,11 @@ expr2tc make_blocking_expr(const std::vector<collected_nondet_value> &nondets)
   for (const auto &n : nondets)
   {
     expr2tc eq;
+    const constant_floatbv2t *value_fbv =
+      try_to_constant_floatbv2t(n.value_expr);
     if (
-      is_floatbv_type(n.symbol_expr->type) &&
-      is_constant_floatbv2t(n.value_expr) &&
-      to_constant_floatbv2t(n.value_expr).value.is_NaN())
+      is_floatbv_type(n.symbol_expr->type) && value_fbv &&
+      value_fbv->value.is_NaN())
     {
       eq = isnan2tc(n.symbol_expr);
     }

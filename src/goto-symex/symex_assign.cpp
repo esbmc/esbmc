@@ -7,6 +7,7 @@
 #include <util/cprover_prefix.h>
 #include <util/expr_util.h>
 #include <util/i2string.h>
+#include <util/message.h>
 #include <util/usr_utils.h>
 #include <irep2/irep2.h>
 #include <util/migrate.h>
@@ -46,7 +47,8 @@ goto_symext::goto_symext(
     k_induction(options.is_kind()),
     base_case(options.get_bool_option("base-case")),
     forward_condition(options.get_bool_option("forward-condition")),
-    inductive_step(options.get_bool_option("inductive-step"))
+    inductive_step(options.get_bool_option("inductive-step")),
+    validate_witness(options.get_bool_option("validate-violation-witness"))
 {
   const std::string &set = options.get_option("unwindset");
   unsigned int length = set.length();
@@ -228,30 +230,30 @@ void goto_symext::do_simplify(expr2tc &expr)
 void goto_symext::handle_sideeffect(
   const expr2tc &lhs,
   const sideeffect2t &effect,
-  const guardt &guard)
+  const guard2tc &guard)
 {
   switch (effect.kind)
   {
-  case sideeffect2t::cpp_new:
-  case sideeffect2t::cpp_new_arr:
+  case sideeffect2t::allockind::cpp_new:
+  case sideeffect2t::allockind::cpp_new_arr:
     symex_cpp_new(lhs, effect, guard);
     break;
-  case sideeffect2t::realloc:
-    symex_realloc(lhs, effect, guardt());
+  case sideeffect2t::allockind::realloc:
+    symex_realloc(lhs, effect, guard2tc());
     break;
-  case sideeffect2t::malloc:
+  case sideeffect2t::allockind::malloc:
     symex_malloc(lhs, effect, guard);
     break;
-  case sideeffect2t::alloca:
+  case sideeffect2t::allockind::alloca:
     symex_alloca(lhs, effect, guard);
     break;
-  case sideeffect2t::va_arg:
+  case sideeffect2t::allockind::va_arg:
     symex_va_arg(lhs, effect, guard);
     break;
-  case sideeffect2t::printf2:
+  case sideeffect2t::allockind::printf2:
     // Do nothing for printf
     break;
-  case sideeffect2t::old_snapshot:
+  case sideeffect2t::allockind::old_snapshot:
     // __ESBMC_old() snapshots are handled during contract processing.
     // If we encounter one here, it means we're in the original function body
     // (contracts_original_xxx) where the ensures/requires clause is still present.
@@ -270,7 +272,7 @@ void goto_symext::handle_sideeffect(
       symex_assign(code_assign2tc(lhs, result), true, guard);
     }
     break;
-  case sideeffect2t::assigns_target:
+  case sideeffect2t::allockind::assigns_target:
     // __ESBMC_assigns() targets are handled during contract processing
     // In --enforce-contract mode, the assigns clause is extracted and checked,
     // but we don't need to execute anything here during symex.
@@ -285,7 +287,7 @@ void goto_symext::handle_sideeffect(
 bool goto_symext::handle_conditional(
   const expr2tc &lhs,
   const if2t &if_effect,
-  const guardt &guard)
+  const guard2tc &guard)
 {
   bool has_sideeffect = false;
   const expr2tc &cond = if_effect.cond;
@@ -295,7 +297,7 @@ bool goto_symext::handle_conditional(
   // Handle true_value side effects
   if (is_sideeffect2t(true_value))
   {
-    guardt g(guard);
+    guard2tc g(guard);
     g.add(cond);
     handle_sideeffect(lhs, to_sideeffect2t(true_value), g);
     has_sideeffect = true;
@@ -304,7 +306,7 @@ bool goto_symext::handle_conditional(
   // Handle false_value side effects
   if (is_sideeffect2t(false_value))
   {
-    guardt g(guard);
+    guard2tc g(guard);
     g.add(not2tc(cond));
     handle_sideeffect(lhs, to_sideeffect2t(false_value), g);
     has_sideeffect = true;
@@ -316,7 +318,7 @@ bool goto_symext::handle_conditional(
 void goto_symext::symex_assign(
   const expr2tc &code_assign,
   const bool hidden,
-  const guardt &guard)
+  const guard2tc &guard)
 {
   const code_assign2t &code = to_code_assign2t(code_assign);
 
@@ -327,10 +329,7 @@ void goto_symext::symex_assign(
   /* TODO: either we support empty classes/structs/unions, or we don't. */
   if (is_structure_type(code.target->type))
   {
-    const struct_union_data &t2 =
-      static_cast<const struct_union_data &>(*code.target->type);
-
-    if (t2.members.empty())
+    if (struct_union_members(code.target->type).empty())
       return;
   }
 
@@ -383,7 +382,7 @@ void goto_symext::symex_assign(
     }
   }
 
-  guardt g(guard); // NOT the state guard!
+  guard2tc g(guard); // NOT the state guard!
   symex_assign_rec(lhs, original_lhs, rhs, expr2tc(), g, hidden_ssa);
 }
 
@@ -392,7 +391,7 @@ void goto_symext::symex_assign_rec(
   const expr2tc &full_lhs,
   expr2tc &rhs,
   expr2tc full_rhs,
-  guardt &guard,
+  guard2tc &guard,
   const bool hidden)
 {
   if (is_symbol2t(lhs))
@@ -455,7 +454,7 @@ void goto_symext::symex_assign_symbol(
   const expr2tc &full_lhs,
   expr2tc &rhs,
   expr2tc &full_rhs,
-  guardt &guard,
+  guard2tc &guard,
   const bool hidden)
 {
   // put assignment guard in rhs
@@ -488,7 +487,7 @@ void goto_symext::symex_assign_symbol(
     // we can simply skip it - constant propagation can handle it.
     return;
 
-  guardt tmp_guard(cur_state->guard);
+  guard2tc tmp_guard(cur_state->guard);
   tmp_guard.append(guard);
 
   // do the assignment
@@ -509,7 +508,7 @@ void goto_symext::symex_assign_structure(
   const expr2tc &full_lhs,
   expr2tc &rhs,
   expr2tc &full_rhs,
-  guardt &guard,
+  guard2tc &guard,
   const bool hidden)
 {
   const struct_type2t &structtype = to_struct_type(lhs->type);
@@ -534,7 +533,7 @@ void goto_symext::symex_assign_union(
   const expr2tc &full_lhs,
   expr2tc &rhs,
   expr2tc &full_rhs,
-  guardt &guard,
+  guard2tc &guard,
   const bool hidden)
 {
   // For unions, assign through the active member
@@ -550,7 +549,7 @@ void goto_symext::symex_assign_typecast(
   const expr2tc &full_lhs,
   expr2tc &rhs,
   expr2tc &full_rhs,
-  guardt &guard,
+  guard2tc &guard,
   const bool hidden)
 {
   // these may come from dereferencing on the lhs
@@ -575,8 +574,8 @@ void goto_symext::symex_assign_typecast(
       assert(to_struct_type(migrate_type_back(lhs->type))
                .is_prefix_of(to_struct_type(migrate_type_back(from->type))));
 
-      const struct_union_data &lhs_data = to_struct_type(lhs->type);
-      const struct_union_data &from_data = to_struct_type(from->type);
+      const struct_type2t &lhs_data = to_struct_type(lhs->type);
+      const struct_type2t &from_data = to_struct_type(from->type);
 
       size_t n = lhs_data.members.size();
       assert(n <= from_data.members.size());
@@ -619,7 +618,7 @@ void goto_symext::symex_assign_typecast(
             array_type2tc(
               get_uint8_type(), gen_ulong(from_name[i].size() + 1), false),
             from_name[i],
-            constant_string2t::DEFAULT),
+            constant_string_kindt::DEFAULT),
           typecast2tc(from_type[i], member2tc(lhs_type[i], rhs, lhs_name[i])));
       }
 
@@ -652,7 +651,7 @@ void goto_symext::symex_assign_array(
   const expr2tc &full_lhs,
   expr2tc &rhs,
   expr2tc &full_rhs,
-  guardt &guard,
+  guard2tc &guard,
   const bool hidden)
 {
   // lhs must be index operand
@@ -688,7 +687,7 @@ void goto_symext::symex_assign_member(
   const expr2tc &full_lhs,
   expr2tc &rhs,
   expr2tc &full_rhs,
-  guardt &guard,
+  guard2tc &guard,
   const bool hidden)
 {
   // symbolic execution of a struct member assignment
@@ -733,7 +732,8 @@ void goto_symext::symex_assign_member(
   expr2tc new_rhs = with2tc(
     real_lhs->type,
     real_lhs,
-    constant_string2tc(str_type, component_name, constant_string2t::DEFAULT),
+    constant_string2tc(
+      str_type, component_name, constant_string_kindt::DEFAULT),
     rhs);
 
   symex_assign_rec(
@@ -745,7 +745,7 @@ void goto_symext::symex_assign_if(
   const expr2tc &full_lhs,
   expr2tc &rhs,
   expr2tc &full_rhs,
-  guardt &guard,
+  guard2tc &guard,
   const bool hidden)
 {
   // we have (c?a:b)=e;
@@ -756,7 +756,7 @@ void goto_symext::symex_assign_if(
 
   expr2tc cond = ifval.cond;
 
-  guardt old_guard(guard);
+  guard2tc old_guard(guard);
 
   guard.add(cond);
   symex_assign_rec(ifval.true_value, full_lhs, rhs, full_rhs, guard, hidden);
@@ -774,7 +774,7 @@ void goto_symext::symex_assign_byte_extract(
   const expr2tc &full_lhs,
   expr2tc &rhs,
   expr2tc &full_rhs,
-  guardt &guard,
+  guard2tc &guard,
   const bool hidden)
 {
   // we have byte_extract_X(l, b)=r
@@ -824,7 +824,7 @@ void goto_symext::symex_assign_concat(
   const expr2tc &full_lhs,
   expr2tc &rhs,
   expr2tc &,
-  guardt &guard,
+  guard2tc &guard,
   const bool hidden)
 {
 // Right: generate a series of symex assigns.
@@ -893,7 +893,7 @@ void goto_symext::symex_assign_extract(
   const expr2tc &full_lhs,
   expr2tc &rhs,
   expr2tc &full_rhs,
-  guardt &guard,
+  guard2tc &guard,
   const bool hidden)
 {
   const extract2t &ex = to_extract2t(lhs);
@@ -954,7 +954,7 @@ void goto_symext::symex_assign_bitfield(
   const expr2tc &full_lhs,
   expr2tc &rhs,
   expr2tc &full_rhs,
-  guardt &guard,
+  guard2tc &guard,
   const bool hidden)
 {
   /* Expect to assign values to bitfields. Bitfield values are constructed
@@ -1005,7 +1005,8 @@ void goto_symext::symex_assign_bitfield(
 void goto_symext::replace_nondet(expr2tc &expr)
 {
   if (
-    is_sideeffect2t(expr) && to_sideeffect2t(expr).kind == sideeffect2t::nondet)
+    is_sideeffect2t(expr) &&
+    to_sideeffect2t(expr).kind == sideeffect2t::allockind::nondet)
   {
     unsigned int &nondet_count = get_nondet_counter();
     expr =

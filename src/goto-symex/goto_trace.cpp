@@ -8,6 +8,7 @@
 #include <langapi/language_util.h>
 #include <langapi/languages.h>
 #include <util/arith_tools.h>
+#include <util/cwe_mapping.h>
 #include <util/std_types.h>
 #include <ostream>
 
@@ -91,7 +92,12 @@ void goto_trace_stept::output(const namespacet &ns, std::ostream &out) const
         out << "  " << pc->location << "\n";
 
       if (!comment.empty())
+      {
         out << "  " << comment << "\n";
+        std::string cwes = format_cwe_list(cwe_for(comment));
+        if (!cwes.empty())
+          out << "  CWE: " << cwes << "\n";
+      }
       out << "  " << from_expr(ns, "", pc->guard) << "\n";
       out << "\n";
     }
@@ -305,6 +311,7 @@ void violation_graphml_goto_trace(
 
         nodet *violation_node = new nodet();
         violation_node->violation = true;
+        violation_node->cwe = format_cwe_list(cwe_for(step.comment));
 
         edget violation_edge(prev_node, violation_node);
         violation_edge.thread_id = std::to_string(step.thread_nr);
@@ -610,6 +617,9 @@ void show_goto_trace(
         }
 
         out << "  " << step.comment << "\n";
+        std::string cwes = format_cwe_list(cwe_for(step.comment));
+        if (!cwes.empty())
+          out << "  CWE: " << cwes << "\n";
 
         if (step.pc->is_assert())
           out << "  " << from_expr(ns, "", step.pc->guard) << "\n";
