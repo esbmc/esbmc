@@ -642,13 +642,6 @@ void goto_symext::intrinsic_memcpy(
       bump_call(func_call, bump_name);
       return;
     }
-    catch (const type2t::symbolic_type_excp &)
-    {
-      // Defer to the C impl when the object type has no concrete width
-      // (e.g. void value flowing through a Python OM helper).
-      bump_call(func_call, bump_name);
-      return;
-    }
     bool is_out_bounds = ((type_size - number_of_offset) < number_of_bytes) ||
                          (number_of_offset > type_size);
     if (
