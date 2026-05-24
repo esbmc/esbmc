@@ -41,6 +41,50 @@ def reset_state() -> None:
     import_aliases.clear()
     module_imports.clear()
     module_exports.clear()
+    _reported_cycles.clear()
+    _reported_resolution_failures.clear()
+
+
+def _resolver_error(module_name: str, reason: str, detail: str | None = None) -> None:
+    message = f"ERROR: import resolver [{reason}] for '{module_name}'"
+    if detail:
+        message = f"{message}: {detail}"
+    print(message)
+
+
+def _resolver_warning(module_name: str, reason: str, detail: str | None = None) -> None:
+    message = f"WARNING: import resolver [{reason}] for '{module_name}'"
+    if detail:
+        message = f"{message}: {detail}"
+    print(message)
+
+
+def _node_location(node: ast.AST) -> str:
+    line = getattr(node, "lineno", None)
+    col = getattr(node, "col_offset", None)
+    if line is None or col is None:
+        return "?:?"
+    return f"{line}:{col}"
+
+
+def _mark_import_resolution(
+    node: ast.AST,
+    ok: bool,
+    full_path: str | None = None,
+    reason: str | None = None,
+) -> None:
+    node.full_path = full_path
+    node.module_not_found = not ok
+    node.module_resolution_reason = reason
+
+
+def _warn_resolution_failure(module_name: str, node: ast.AST, reason: str) -> None:
+    location = _node_location(node)
+    key = (module_name, reason, location)
+    if key in _reported_resolution_failures:
+        return
+    _reported_resolution_failures.add(key)
+    _resolver_warning(module_name, "resolution-failed", f"{reason} at {location}")
 
 
 def _is_imported_model(module_name: str) -> bool:
