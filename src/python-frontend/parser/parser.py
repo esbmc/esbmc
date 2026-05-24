@@ -1868,8 +1868,7 @@ def _compute_output_json_path(python_filename, output_dir, module_qualname):
     if python_filename.endswith('__init__.py'):
         dir_name = os.path.basename(os.path.dirname(python_filename))
         return os.path.join(output_dir, f"{dir_name}.json")
-    return os.path.join(output_dir,
-                        f"{os.path.basename(python_filename[:-3])}.json")
+    return os.path.join(output_dir, f"{os.path.basename(python_filename[:-3])}.json")
 
 
 def generate_ast_json(tree, python_filename, elements_to_import, output_dir, module_qualname=None):
