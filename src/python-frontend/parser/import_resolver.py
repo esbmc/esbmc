@@ -353,23 +353,33 @@ def process_collected_imports(output_dir: str, callbacks: ResolverCallbacks):
     """
     parsed_trees = {}
     visited = set()
+    import_graph: dict[str, set[str]] = {}
 
     while True:
-        pending = set(module_imports.keys()) - visited
+        pending = sorted(set(module_imports.keys()) - visited)
         if not pending:
             break
         for module_name in pending:
             visited.add(module_name)
             filename = resolve_module_file(module_name, output_dir)
             if not filename:
+                _resolver_warning(module_name, "module-file-not-found")
                 continue
-            tree, preprocessor = callbacks.parse_file_canonicalised(filename)
+            try:
+                tree, preprocessor = callbacks.parse_file_canonicalised(filename)
+            except (OSError, SyntaxError, UnicodeDecodeError) as exc:
+                _resolver_warning(module_name, "module-parse-failed", str(exc))
+                continue
             parsed_trees[module_name] = (tree, filename, preprocessor)
             module_exports[module_name] = callbacks.snapshot_exports(preprocessor)
+            import_graph.setdefault(module_name, set())
             for subnode in ast.walk(tree):
                 if isinstance(subnode, (ast.Import, ast.ImportFrom)):
                     callbacks.rewrite_relative_import(subnode, module_name)
+                    for imported_name in _extract_module_names(subnode):
+                        import_graph[module_name].add(imported_name)
                     process_imports(subnode, output_dir)
+            _warn_if_cycle(import_graph, module_name)
 
     callbacks.propagate_range_aliases(parsed_trees)
 
@@ -416,6 +426,12 @@ def rewrite_relative_import(node: ast.ImportFrom, parent_module: str | None) -> 
         return
 
     parts = parent_module.split(".")
+    if lvl > len(parts):
+        _resolver_warning(
+            parent_module,
+            "relative-import-level-too-high",
+            f"level={lvl}, target={node.module or '<package>'}",
+        )
     idx = len(parts) - lvl
     base = parent_module if idx <= 0 else ".".join(parts[:idx])
     node.module = f"{base}.{node.module}" if node.module else base
