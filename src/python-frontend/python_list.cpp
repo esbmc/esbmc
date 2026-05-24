@@ -4665,9 +4665,64 @@ void python_list::handle_list_var_unpacking(
     elem_type =
       get_elem_type_from_annotation(decl, converter_.get_type_handler());
   }
+
+  // Subscript-chain fallback: e.g. `w, v = items[i-1]` where the RHS is a
+  // Subscript whose base Name carries a list[list[T]]-style annotation.
+  // Walk down the chain and peel one extra annotation layer (the unpacked
+  // tuple/list is the element of the innermost subscript).
+  if (elem_type == typet() && ast_node["value"].is_object() &&
+      ast_node["value"].contains("_type") &&
+      ast_node["value"]["_type"] == "Subscript")
+  {
+    size_t subscript_depth = 0;
+    const nlohmann::json *cur = &ast_node["value"];
+    while (cur->is_object() && cur->contains("value") &&
+           (*cur)["value"].is_object() && (*cur)["value"].contains("_type") &&
+           (*cur)["value"]["_type"] == "Subscript")
+    {
+      ++subscript_depth;
+      cur = &(*cur)["value"];
+    }
+    if (
+      cur->is_object() && cur->contains("value") &&
+      (*cur)["value"].is_object() && (*cur)["value"].contains("id") &&
+      (*cur)["value"]["id"].is_string())
+    {
+      const std::string base_name = (*cur)["value"]["id"].get<std::string>();
+      nlohmann::json base_decl = json_utils::find_var_decl(
+        base_name, converter_.current_function_name(), converter_.ast());
+      if (!base_decl.is_null() && base_decl.contains("annotation"))
+      {
+        nlohmann::json drilled = base_decl["annotation"];
+        // Peel one layer per Subscript node plus one more for the unpacked
+        // element itself.
+        for (size_t k = 0; k <= subscript_depth; ++k)
+        {
+          if (
+            !drilled.is_object() || !drilled.contains("_type") ||
+            drilled["_type"] != "Subscript" || !drilled.contains("slice"))
+          {
+            drilled = nlohmann::json();
+            break;
+          }
+          drilled = drilled["slice"];
+        }
+        if (!drilled.is_null())
+        {
+          nlohmann::json synth;
+          synth["annotation"] = drilled;
+          elem_type = get_elem_type_from_annotation(
+            synth, converter_.get_type_handler());
+        }
+      }
+    }
+  }
+
+  // Final fallback: treat elements as Any rather than aborting the conversion.
+  // Mirrors the subscript-read path which falls back to any_type() when the
+  // element type cannot be inferred (see `python_list::get_expr`).
   if (elem_type == typet())
-    throw std::runtime_error(
-      "Cannot determine element type for list variable unpacking");
+    elem_type = any_type();
 
   // Helper: find or create a variable symbol and assign an expression to it
   auto assign_to_target = [&](
