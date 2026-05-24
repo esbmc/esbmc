@@ -241,21 +241,17 @@ def process_imports(node: ast.Import | ast.ImportFrom, output_dir: str) -> None:
             for elem in imported_elements:
                 module_imports[module_name]['specific_names'].add(elem.name)
 
-        if _is_imported_model(module_name):
-            models_dir = os.path.join(output_dir, "models")
-            filename = os.path.join(models_dir, module_name + ".py")
-        else:
-            module = import_module_by_name(module_name, output_dir)
-            if module is None:
-                node.module_not_found = True
-                continue
-
-            if not hasattr(module, '__file__') or module.__file__ is None:
-                continue
-
-            filename = module.__file__
-
-        node.full_path = filename
+        module = import_module_by_name(module_name, output_dir)
+        if module is None:
+            _warn_resolution_failure(module_name, node, "module-not-found")
+            _mark_import_resolution(node, ok=False, reason="module-not-found")
+            continue
+        filename = _module_filename(module)
+        if filename is None:
+            _warn_resolution_failure(module_name, node, "module-file-not-found")
+            _mark_import_resolution(node, ok=False, reason="module-file-not-found")
+            continue
+        _mark_import_resolution(node, ok=True, full_path=filename)
 
 
 def resolve_module_file(module_qualname: str, output_dir: str) -> str | None:
@@ -263,10 +259,8 @@ def resolve_module_file(module_qualname: str, output_dir: str) -> str | None:
         mod = import_module_by_name(module_qualname, output_dir)
     except SystemExit:
         return None
-    filename = mod if isinstance(mod, str) else getattr(mod, "__file__", None)
-    if not filename or _is_standard_library_file(filename):
-        return None
-    if not os.path.exists(filename):
+    filename = _module_filename(mod)
+    if filename is None:
         return None
     return filename
 
@@ -286,7 +280,7 @@ def filter_imports(tree: ast.AST) -> ast.AST:
 
         elif isinstance(node, ast.ImportFrom):
             if node.module:
-                base_module = node.module.split(".")[0]
+                base_module = _base_module_name(node.module)
                 if not _is_testing_framework(base_module):
                     filtered_body.append(node)
             else:
