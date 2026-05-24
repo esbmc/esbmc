@@ -1463,8 +1463,9 @@ typet python_dict_handler::resolve_expected_type_for_dict_subscript(
 
             // Literal RHS: pick the value type from the constant's kind.
             // Covers `d[k] = 5`, `d[k] = 0.0`, `d[k] = True`, `d[k] = "x"`.
-            if (rhs.value("_type", std::string()) == "Constant" &&
-                rhs.contains("value"))
+            if (
+              rhs.value("_type", std::string()) == "Constant" &&
+              rhs.contains("value"))
             {
               const auto &lit = rhs["value"];
               if (lit.is_boolean())
