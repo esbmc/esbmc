@@ -42,11 +42,18 @@ class int:
     # by ** under --ir (e.g. 2**64) without truncating at the call boundary.
     # Narrow int inputs sign-extend on entry. `length` stays `int` — the
     # bit count itself fits trivially. Issues #1964 (Part 2) and #4642.
+    #
+    # Implementation: loop bounded by `length`, not by the symbolic input n.
+    # The previous `while n > 0: n >>= 1` form forced ESBMC to unwind one
+    # symex iteration per bit for any symbolic n, which does not terminate
+    # without `--unwind` (issue #4756). Adding `length < 512` to the loop
+    # condition gives the unwinder a literal termination bound covering the
+    # full --ir bignum IntWide width (512-bit), and narrow callsites still
+    # exit at n == 0 well before that — incremental BMC terminates at the
+    # first k that proves the property.
     def bit_length(cls, n: IntWide) -> int:
         length: int = 0
-
-        while n > 0:
+        while length < 512 and n > 0:
             n: IntWide = n >> 1
-            length: int = length + 1  # Count how many times the number is shifted
-
+            length = length + 1
         return length
