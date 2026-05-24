@@ -53,10 +53,12 @@ class int:
     # first k that proves the property.
     def bit_length(cls, n: IntWide) -> int:
         length: int = 0
-        # The literal 512 matches kPythonBignumWidth in
-        # src/python-frontend/type_handler.cpp; revisit if that constant
-        # changes or when truly unbounded ints land (#4642), otherwise
-        # bit_length will silently cap at the wrong width.
+        # Soundness: the literal 512 must be >= kPythonBitLengthCap in
+        # src/python-frontend/type_handler.cpp, which a static_assert ties
+        # to kPythonBignumWidth. The OM is FLAIL-mangled before the C++
+        # side is touched, so the literal cannot read the constant — bump
+        # both together when widening Python int (#4642). The static_assert
+        # turns a silently-wrong bit_length into a build break.
         while length < 512 and n > 0:
             n: IntWide = n >> 1
             length = length + 1
