@@ -224,7 +224,7 @@ public:
     int pos;
     key_type *base;
 
-    reverse_iterator(reverse_iterator &i)
+    reverse_iterator(const reverse_iterator &i)
     {
       pos = i.pos;
       base = i.base;
@@ -308,7 +308,7 @@ public:
     int pos;
     key_type *base;
 
-    const_reverse_iterator(const_reverse_iterator &i)
+    const_reverse_iterator(const const_reverse_iterator &i)
     {
       pos = i.pos;
       base = i.base;
@@ -324,7 +324,7 @@ public:
     const_reverse_iterator()
     {
     }
-    const_reverse_iterator &operator=(const_reverse_iterator &i)
+    const_reverse_iterator &operator=(const const_reverse_iterator &i)
     {
       this->pos = i.pos;
       this->base = i.base;
@@ -939,7 +939,7 @@ public:
     int pos;
     key_type *base;
 
-    reverse_iterator(reverse_iterator &i)
+    reverse_iterator(const reverse_iterator &i)
     {
       pos = i.pos;
       base = i.base;
@@ -1023,7 +1023,7 @@ public:
     int pos;
     key_type *base;
 
-    const_reverse_iterator(const_reverse_iterator &i)
+    const_reverse_iterator(const const_reverse_iterator &i)
     {
       pos = i.pos;
       base = i.base;
@@ -1039,7 +1039,7 @@ public:
     const_reverse_iterator()
     {
     }
-    const_reverse_iterator &operator=(const_reverse_iterator &i)
+    const_reverse_iterator &operator=(const const_reverse_iterator &i)
     {
       this->pos = i.pos;
       this->base = i.base;
