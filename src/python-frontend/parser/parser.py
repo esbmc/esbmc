@@ -498,7 +498,7 @@ def _inside_loop_within_scope(node: ast.AST, parents: dict[int, ast.AST]) -> boo
     cursor = parents.get(id(node))
     while cursor is not None:
         if isinstance(
-                cursor,
+            cursor,
             (
                 ast.FunctionDef,
                 ast.AsyncFunctionDef,
@@ -509,7 +509,7 @@ def _inside_loop_within_scope(node: ast.AST, parents: dict[int, ast.AST]) -> boo
         ):
             return False
         if isinstance(
-                cursor,
+            cursor,
             (
                 ast.For,
                 ast.AsyncFor,
@@ -1418,7 +1418,7 @@ def lower_threading_thread_usage(tree: ast.Module, source_filename: str) -> None
     earliest_user_with_thread: int | None = None
     for idx, stmt in enumerate(tree.body):
         if isinstance(
-                stmt,
+            stmt,
             (
                 ast.Import,
                 ast.ImportFrom,
