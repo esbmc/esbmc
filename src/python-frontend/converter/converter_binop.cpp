@@ -659,6 +659,34 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
       else
         cast_to_void_ptr(lhs, rhs.type()); // cast integer to void*
     }
+
+    // Optional[T] is lowered to T* (see converter_types.cpp:457) and a
+    // non-None T value is round-tripped through (T*) at the call site
+    // (e.g. foo(5) -> y = (int*)5). Make equality with a matching primitive
+    // work by casting the primitive side to the pointer type, so the
+    // resulting comparison matches the round-tripped address. Skip ordered
+    // comparisons: they would silently compare addresses, not values.
+    auto is_primitive_ptr = [](const exprt &e) {
+      if (!e.type().is_pointer())
+        return false;
+      const typet &sub = e.type().subtype();
+      return sub.is_signedbv() || sub.is_unsignedbv() || sub.is_floatbv();
+    };
+    auto is_primitive = [](const exprt &e) {
+      return e.type().is_signedbv() || e.type().is_unsignedbv() ||
+             e.type().is_floatbv();
+    };
+    if (op == "Eq" || op == "NotEq" || op == "Is" || op == "IsNot")
+    {
+      if (
+        is_primitive_ptr(lhs) && is_primitive(rhs) &&
+        lhs.type().subtype() == rhs.type())
+        cast_to_void_ptr(rhs, lhs.type());
+      else if (
+        is_primitive_ptr(rhs) && is_primitive(lhs) &&
+        rhs.type().subtype() == lhs.type())
+        cast_to_void_ptr(lhs, rhs.type());
+    }
   }
 
   // Handle special mathematical operations
