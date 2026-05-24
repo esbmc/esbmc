@@ -200,7 +200,8 @@ def import_module_by_name(
             except ImportError:
                 pass
 
-        _resolver_error(module_name, "module-not-found", "install it with: pip3 install " + module_name)
+        _resolver_error(module_name, "module-not-found",
+                        "install it with: pip3 install " + module_name)
         return None
 
 
