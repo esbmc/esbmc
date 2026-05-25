@@ -899,7 +899,7 @@ void execution_statet::get_expr_globals(
     expr2tc p = expr;
     bool point_to_global = false;
     if (
-      symbol->type.is_pointer() && symbol->name != "invalid_object" &&
+      symbol->get_type().is_pointer() && symbol->name != "invalid_object" &&
       !symbol->static_lifetime)
     {
       expr2tc tmp = expr;
@@ -952,7 +952,7 @@ void execution_statet::get_expr_globals(
     // assertion-based race tests like increment_race flip to FAILED.
     const bool python_global = symbol->mode == "Python" && !symbol->file_local;
     if (
-      symbol->static_lifetime || symbol->type.is_dynamic_set() ||
+      symbol->static_lifetime || symbol->get_type().is_dynamic_set() ||
       point_to_global || python_global)
     {
       std::list<unsigned int> threadId_list;

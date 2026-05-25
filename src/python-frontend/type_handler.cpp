@@ -21,6 +21,20 @@ namespace
 // the value space is unbounded — the width here only sizes constant-fold
 // intermediates. Issue #4642.
 constexpr unsigned kPythonBignumWidth = 512;
+
+// The bit_length OM (`src/python-frontend/models/int.py`) caps its loop at
+// `length < kPythonBitLengthCap` so symex terminates without `--unwind`
+// (issue #4756). For soundness the cap must be at least
+// kPythonBignumWidth: any input representable in IntWide has bit_length
+// strictly less than kPythonBignumWidth, so the loop exits via `n == 0`
+// and never via the cap. If kPythonBignumWidth grows past the cap, the OM
+// silently underreports — bump kPythonBitLengthCap and the OM literal
+// together (the OM literal cannot read this constant; it is FLAIL-mangled
+// before the C++ side is touched).
+constexpr unsigned kPythonBitLengthCap = 512;
+static_assert(
+  kPythonBignumWidth <= kPythonBitLengthCap,
+  "bit_length OM cap (models/int.py) must cover the full Python int width");
 } // namespace
 
 unsigned type_handler::python_int_width()
@@ -113,7 +127,7 @@ bool type_handler::is_constructor_call(const nlohmann::json &json) const
   const contextt &symbol_table = converter_.symbol_table();
 
   symbol_table.foreach_operand([&](const symbolt &s) {
-    if (s.type.id() == "struct" && s.name == func_name)
+    if (s.get_type().id() == "struct" && s.name == func_name)
     {
       is_ctor_call = true;
       return;
@@ -497,7 +511,7 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
       symbolt type_symbol;
       type_symbol.id = complex_type_id;
       type_symbol.name = "complex";
-      type_symbol.type = get_complex_struct_type();
+      type_symbol.set_type(get_complex_struct_type());
       type_symbol.mode = "Python";
       type_symbol.is_type = true;
       symbol_table.move_symbol_to_context(type_symbol);
@@ -536,13 +550,13 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   if (ast_type == "abs")
     return long_long_int_type();
 
-  // str: immutable sequences of Unicode characters
+  // str/string: immutable sequences of Unicode characters
   // chr(): returns a 1-character string
   // hex(): returns string representation of integer in hex
   // oct(): Converts an integer to a lowercase octal string
   if (
-    ast_type == "str" || ast_type == "chr" || ast_type == "hex" ||
-    ast_type == "oct")
+    ast_type == "str" || ast_type == "string" || ast_type == "chr" ||
+    ast_type == "hex" || ast_type == "oct")
   {
     if (type_size == 1)
     {
@@ -595,7 +609,7 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   {
     symbolt *s = converter_.find_symbol(std::string("tag-" + ast_type));
     if (s)
-      return s->type;
+      return s->get_type();
   }
 
   // Check if it's a built-in type (handles tuple, list, dict, etc.)
@@ -884,6 +898,16 @@ typet type_handler::get_list_type(const nlohmann::json &list_value) const
         std::string type_string = slice["value"].get<std::string>();
         t = get_typet(type_utils::remove_quotes(type_string));
       }
+      else if (
+        slice["_type"] == "Subscript" && slice.contains("value") &&
+        slice["value"].is_object() && slice["value"].contains("id") &&
+        slice["value"]["id"].is_string())
+      {
+        // Nested container like list[list[T]] or list[dict[K, V]] — resolve
+        // to the inner container's own type so subsequent subscripts route
+        // through the right element-access primitive.
+        t = get_typet(slice["value"]["id"].get<std::string>());
+      }
       else
         t = empty_typet();
       return pointer_typet(t);
@@ -955,7 +979,8 @@ typet type_handler::get_list_type(const nlohmann::json &list_value) const
     symbolt *func_symbol = converter_.find_symbol(sid.to_string());
 
     assert(func_symbol);
-    return static_cast<code_typet &>(func_symbol->type).return_type();
+    return static_cast<const code_typet &>(func_symbol->get_type())
+      .return_type();
   }
 
   if (list_value.contains("_type") && list_value["_type"] == "BinOp")

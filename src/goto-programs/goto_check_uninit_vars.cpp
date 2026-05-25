@@ -68,7 +68,7 @@ type2tc tracked_shadow_type(const symbolt &s)
     return type2tc();
   if (has_prefix(s.id, "__ESBMC_") || has_prefix(s.name, "__ESBMC_"))
     return type2tc();
-  return shadow_type_for(s.type);
+  return shadow_type_for(s.get_type());
 }
 
 /// Record describing one shadow variable, looked up at emit time by sid.

@@ -159,7 +159,7 @@ unsigned goto_symext::argument_assignments(
             const symbol_type2t &sym_type = to_symbol_type(ptr_subtype);
             symbolt const *sym = ns.lookup(sym_type.symbol_name);
             if (sym)
-              ptr_subtype = migrate_type(sym->type);
+              ptr_subtype = migrate_symbol_type(*sym);
             else
               break;
           }
@@ -224,7 +224,7 @@ unsigned goto_symext::argument_assignments(
       symbolt symbol;
       symbol.id = identifier;
       symbol.name = "va_arg" + std::to_string(va_count);
-      symbol.type = migrate_type_back((*it1)->type);
+      set_symbol_type(symbol, (*it1)->type);
 
       if (new_context.move(symbol))
       {
@@ -387,11 +387,9 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
   frame.calling_location = cur_state->source;
   frame.entry_guard = cur_state->guard;
 
-  // assign arguments
-  type2tc tmp_type = migrate_type(goto_function.type);
-
-  frame.va_index =
-    argument_assignments(identifier, to_code_type(tmp_type), arguments);
+  // assign arguments (goto_function.type is already IREP2)
+  frame.va_index = argument_assignments(
+    identifier, to_code_type(goto_function.type), arguments);
 
   frame.end_of_function = --goto_function.body.instructions.end();
   frame.return_value = ret_value;

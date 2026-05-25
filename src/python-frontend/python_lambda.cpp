@@ -37,14 +37,14 @@ void python_lambda::handle_lambda_assignment(
 
   const symbolt *lambda_func_symbol = context_.find_symbol(rhs.identifier());
 
-  if (!lambda_func_symbol || !lambda_func_symbol->type.is_code())
+  if (!lambda_func_symbol || !lambda_func_symbol->get_type().is_code())
   {
     throw std::runtime_error("Lambda function symbol does not have code type");
   }
 
   // Create function pointer type
-  typet func_ptr_type = gen_pointer_type(lambda_func_symbol->type);
-  lhs_symbol->type = func_ptr_type;
+  typet func_ptr_type = gen_pointer_type(lambda_func_symbol->get_type());
+  lhs_symbol->set_type(func_ptr_type);
   lhs.type() = func_ptr_type;
 
   // Convert lambda symbol to address
@@ -180,7 +180,7 @@ symbolt python_lambda::create_symbol(
   symbolt symbol;
   symbol.id = id;
   symbol.name = name;
-  symbol.type = type;
+  symbol.set_type(type);
   symbol.location = location;
   symbol.mode = "Python";
   symbol.module = module_name;
@@ -401,7 +401,11 @@ exprt python_lambda::get_lambda_expr(const nlohmann::json &element)
         if (
           (actual_ret.is_pointer() && actual_ret.subtype().is_code()) ||
           is_optional_struct)
-          to_code_type(added_symbol->type).return_type() = actual_ret;
+        {
+          typet t = added_symbol->get_type();
+          to_code_type(t).return_type() = actual_ret;
+          added_symbol->set_type(std::move(t));
+        }
       }
     }
 
@@ -436,7 +440,7 @@ exprt python_lambda::get_lambda_expr(const nlohmann::json &element)
       lambda_body = closure_body;
     }
 
-    added_symbol->value = lambda_body;
+    added_symbol->set_value(lambda_body);
   }
 
   // Restore context only if we changed it (top-level lambda only)

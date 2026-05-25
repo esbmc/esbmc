@@ -89,7 +89,7 @@ struct_typet python_dict_handler::get_dict_struct_type()
   const std::string dict_type_name = "tag-__python_dict__";
   symbolt *existing = symbol_table_.find_symbol(dict_type_name);
   if (existing)
-    return to_struct_type(existing->type);
+    return to_struct_type(existing->get_type());
 
   struct_typet dict_struct;
   dict_struct.tag("__python_dict__");
@@ -107,7 +107,7 @@ struct_typet python_dict_handler::get_dict_struct_type()
   symbolt type_symbol;
   type_symbol.id = dict_type_name;
   type_symbol.name = dict_type_name;
-  type_symbol.type = dict_struct;
+  type_symbol.set_type(dict_struct);
   type_symbol.mode = "Python";
   type_symbol.is_type = true;
   symbol_table_.add(type_symbol);
@@ -647,8 +647,8 @@ exprt python_dict_handler::handle_dict_subscript(
 
   exprt key_arg;
   if (
-    key_info.elem_symbol->type.is_pointer() &&
-    key_info.elem_symbol->type.subtype() == char_type())
+    key_info.elem_symbol->get_type().is_pointer() &&
+    key_info.elem_symbol->get_type().subtype() == char_type())
     key_arg = symbol_expr(*key_info.elem_symbol);
   else
     key_arg = address_of_exprt(symbol_expr(*key_info.elem_symbol));
@@ -741,7 +741,7 @@ exprt python_dict_handler::handle_dict_subscript(
     const symbolt *elem_sym =
       symbol_table_.find_symbol(sym_type.get_identifier());
     if (elem_sym)
-      element_type = elem_sym->type;
+      element_type = elem_sym->get_type();
   }
 
   // Create dereference and explicitly set its type
@@ -953,8 +953,8 @@ void python_dict_handler::handle_dict_subscript_assign(
 
   exprt key_arg;
   if (
-    key_info.elem_symbol->type.is_pointer() &&
-    key_info.elem_symbol->type.subtype() == char_type())
+    key_info.elem_symbol->get_type().is_pointer() &&
+    key_info.elem_symbol->get_type().subtype() == char_type())
     key_arg = symbol_expr(*key_info.elem_symbol);
   else
     key_arg = address_of_exprt(symbol_expr(*key_info.elem_symbol));
@@ -976,8 +976,8 @@ void python_dict_handler::handle_dict_subscript_assign(
 
   exprt value_arg;
   if (
-    value_info.elem_symbol->type.is_pointer() &&
-    value_info.elem_symbol->type.subtype() == char_type())
+    value_info.elem_symbol->get_type().is_pointer() &&
+    value_info.elem_symbol->get_type().subtype() == char_type())
     value_arg = symbol_expr(*value_info.elem_symbol);
   else
     value_arg = address_of_exprt(symbol_expr(*value_info.elem_symbol));
@@ -988,7 +988,7 @@ void python_dict_handler::handle_dict_subscript_assign(
   set_value_call.arguments().push_back(from_integer(BigInt(0), size_type()));
   set_value_call.arguments().push_back(from_integer(
     BigInt(converter_.get_type_handler().is_pointer_free(
-      value_info.elem_symbol->type)),
+      value_info.elem_symbol->get_type())),
     int_type()));
   set_value_call.type() = bool_type();
   set_value_call.location() = location;
@@ -1012,7 +1012,7 @@ void python_dict_handler::handle_dict_subscript_assign(
   push_key_call.arguments().push_back(from_integer(BigInt(0), size_type()));
   push_key_call.arguments().push_back(from_integer(
     BigInt(converter_.get_type_handler().is_pointer_free(
-      key_info.elem_symbol->type)),
+      key_info.elem_symbol->get_type())),
     int_type()));
   push_key_call.type() = bool_type();
   push_key_call.location() = location;
@@ -1028,7 +1028,7 @@ void python_dict_handler::handle_dict_subscript_assign(
   push_value_call.arguments().push_back(from_integer(BigInt(0), size_type()));
   push_value_call.arguments().push_back(from_integer(
     BigInt(converter_.get_type_handler().is_pointer_free(
-      value_info.elem_symbol->type)),
+      value_info.elem_symbol->get_type())),
     int_type()));
   push_value_call.type() = bool_type();
   push_value_call.location() = location;
@@ -1159,8 +1159,8 @@ void python_dict_handler::handle_dict_delete(
 
   exprt key_arg;
   if (
-    key_info.elem_symbol->type.is_pointer() &&
-    key_info.elem_symbol->type.subtype() == char_type())
+    key_info.elem_symbol->get_type().is_pointer() &&
+    key_info.elem_symbol->get_type().subtype() == char_type())
     key_arg = symbol_expr(*key_info.elem_symbol);
   else
     key_arg = address_of_exprt(symbol_expr(*key_info.elem_symbol));
@@ -1532,7 +1532,7 @@ bool python_dict_handler::handle_subscript_assignment_check(
   {
     const symbolt *sym = symbol_table_.find_symbol(container_expr.identifier());
     if (sym)
-      container_type = sym->type;
+      container_type = sym->get_type();
   }
 
   // Use the namespace from converter, not a method that doesn't exist
@@ -1700,8 +1700,8 @@ exprt python_dict_handler::handle_dict_get(
 
   exprt key_arg;
   if (
-    key_info.elem_symbol->type.is_pointer() &&
-    key_info.elem_symbol->type.subtype() == char_type())
+    key_info.elem_symbol->get_type().is_pointer() &&
+    key_info.elem_symbol->get_type().subtype() == char_type())
     key_arg = symbol_expr(*key_info.elem_symbol);
   else
     key_arg = address_of_exprt(symbol_expr(*key_info.elem_symbol));
@@ -1920,8 +1920,8 @@ exprt python_dict_handler::handle_dict_setdefault(
   // Build key arg
   exprt key_arg;
   if (
-    key_info.elem_symbol->type.is_pointer() &&
-    key_info.elem_symbol->type.subtype() == char_type())
+    key_info.elem_symbol->get_type().is_pointer() &&
+    key_info.elem_symbol->get_type().subtype() == char_type())
     key_arg = symbol_expr(*key_info.elem_symbol);
   else
     key_arg = address_of_exprt(symbol_expr(*key_info.elem_symbol));
@@ -2058,7 +2058,7 @@ exprt python_dict_handler::handle_dict_setdefault(
     push_key_call.arguments().push_back(from_integer(BigInt(0), size_type()));
     push_key_call.arguments().push_back(from_integer(
       BigInt(converter_.get_type_handler().is_pointer_free(
-        key_info.elem_symbol->type)),
+        key_info.elem_symbol->get_type())),
       int_type()));
     push_key_call.type() = bool_type();
     push_key_call.location() = location;
@@ -2093,8 +2093,8 @@ exprt python_dict_handler::handle_dict_setdefault(
         list_handler.get_list_element_info(call_node, effective_default);
 
       if (
-        value_info.elem_symbol->type.is_pointer() &&
-        value_info.elem_symbol->type.subtype() == char_type())
+        value_info.elem_symbol->get_type().is_pointer() &&
+        value_info.elem_symbol->get_type().subtype() == char_type())
         value_arg = symbol_expr(*value_info.elem_symbol);
       else
         value_arg = address_of_exprt(symbol_expr(*value_info.elem_symbol));
@@ -2110,7 +2110,7 @@ exprt python_dict_handler::handle_dict_setdefault(
         from_integer(BigInt(0), size_type()));
       push_value_call.arguments().push_back(from_integer(
         BigInt(converter_.get_type_handler().is_pointer_free(
-          value_info.elem_symbol->type)),
+          value_info.elem_symbol->get_type())),
         int_type()));
       push_value_call.type() = bool_type();
       push_value_call.location() = location;
@@ -2287,8 +2287,8 @@ exprt python_dict_handler::handle_dict_pop(
 
   exprt key_arg;
   if (
-    key_info.elem_symbol->type.is_pointer() &&
-    key_info.elem_symbol->type.subtype() == char_type())
+    key_info.elem_symbol->get_type().is_pointer() &&
+    key_info.elem_symbol->get_type().subtype() == char_type())
     key_arg = symbol_expr(*key_info.elem_symbol);
   else
     key_arg = address_of_exprt(symbol_expr(*key_info.elem_symbol));
@@ -3024,4 +3024,110 @@ exprt python_dict_handler::compare(
   }
 
   return result;
+}
+
+namespace
+{
+// Recognise dict-literal AST nodes whose keys and values are signed-integer
+// Constants. ``dict.fromkeys([k1, k2, ...], v)`` is normalised to the same
+// shape via the same recogniser before comparison.
+//
+// Returns nullopt for anything more complex (non-int keys, non-constant
+// elements, nested dicts, ``dict.fromkeys`` with non-list-literal first arg).
+// Callers must fall back to the runtime ``__ESBMC_dict_eq`` model when this
+// returns nullopt.
+std::optional<std::map<int64_t, int64_t>>
+extract_int_int_dict_literal(const nlohmann::json &node)
+{
+  // Booleans intentionally fall through: ``True == 1`` in Python collapses
+  // ``{True: a, 1: b}`` to a one-element dict, which ``std::map<int64_t,
+  // int64_t>`` cannot model. Negative literals also fall through here because
+  // they arrive as ``UnaryOp(USub, Constant(N))``, not ``Constant(-N)``.
+  auto pull_int_constant =
+    [](const nlohmann::json &n) -> std::optional<int64_t> {
+    if (!n.contains("_type") || n["_type"] != "Constant")
+      return std::nullopt;
+    if (!n.contains("value") || !n["value"].is_number_integer())
+      return std::nullopt;
+    if (n["value"].is_boolean())
+      return std::nullopt;
+    return n["value"].get<int64_t>();
+  };
+
+  // Plain ``{k: v, ...}`` literal.
+  if (node.contains("_type") && node["_type"] == "Dict")
+  {
+    if (
+      !node.contains("keys") || !node.contains("values") ||
+      !node["keys"].is_array() || !node["values"].is_array() ||
+      node["keys"].size() != node["values"].size())
+      return std::nullopt;
+
+    std::map<int64_t, int64_t> entries;
+    for (size_t i = 0; i < node["keys"].size(); ++i)
+    {
+      auto k = pull_int_constant(node["keys"][i]);
+      auto v = pull_int_constant(node["values"][i]);
+      if (!k || !v)
+        return std::nullopt;
+      entries[*k] = *v; // Later writes shadow earlier ones, matching Python.
+    }
+    return entries;
+  }
+
+  // ``dict.fromkeys([k1, k2, ...], v)`` with a list-literal first arg and a
+  // constant int second arg (or default 0/None when omitted).
+  if (
+    node.contains("_type") && node["_type"] == "Call" &&
+    node.contains("func") && node["func"].is_object() &&
+    node["func"].value("_type", std::string()) == "Attribute" &&
+    node["func"].value("attr", std::string()) == "fromkeys" &&
+    node["func"].contains("value") &&
+    node["func"]["value"].value("_type", std::string()) == "Name" &&
+    node["func"]["value"].value("id", std::string()) == "dict" &&
+    node.contains("args") && node["args"].is_array() && !node["args"].empty())
+  {
+    const auto &args = node["args"];
+    const auto &keys_node = args[0];
+    if (
+      !keys_node.contains("_type") || keys_node["_type"] != "List" ||
+      !keys_node.contains("elts") || !keys_node["elts"].is_array())
+      return std::nullopt;
+
+    // CPython defaults dict.fromkeys' fill value to None when omitted; this
+    // recogniser only models int values, so refuse to fold the no-default
+    // form rather than risk equating ``{k: 0}`` with ``{k: None}``.
+    if (args.size() < 2)
+      return std::nullopt;
+    auto v = pull_int_constant(args[1]);
+    if (!v)
+      return std::nullopt;
+    int64_t value = *v;
+
+    std::map<int64_t, int64_t> entries;
+    for (const auto &k_node : keys_node["elts"])
+    {
+      auto k = pull_int_constant(k_node);
+      if (!k)
+        return std::nullopt;
+      entries[*k] = value;
+    }
+    return entries;
+  }
+
+  return std::nullopt;
+}
+} // namespace
+
+std::optional<bool> python_dict_handler::try_constant_fold_eq(
+  const nlohmann::json &lhs,
+  const nlohmann::json &rhs) const
+{
+  auto lhs_map = extract_int_int_dict_literal(lhs);
+  if (!lhs_map)
+    return std::nullopt;
+  auto rhs_map = extract_int_int_dict_literal(rhs);
+  if (!rhs_map)
+    return std::nullopt;
+  return *lhs_map == *rhs_map;
 }

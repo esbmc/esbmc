@@ -18,15 +18,15 @@ concurrency:
 
 jobs:
   regen:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     permissions:
       contents: write
       pull-requests: write
     steps:
-      - uses: actions/checkout@v6.0.2
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-      - uses: actions/setup-python@v6.2.0
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
       - run: pip install 'matplotlib==3.9.*'
@@ -35,7 +35,7 @@ jobs:
           python scripts/sv-comp-graph/sv_comp_history.py \
             --output-dir website/content/images \
             --budgets 30s 100s 300s 600s
-      - uses: peter-evans/create-pull-request@v8.1.1
+      - uses: peter-evans/create-pull-request@v8
         with:
           commit-message: '[docs] refresh SV-COMP history graph'
           title: '[docs] refresh SV-COMP history graph'

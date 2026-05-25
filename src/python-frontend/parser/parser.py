@@ -1,7 +1,7 @@
 # pylint: disable=wrong-import-position
 # Imports below the PY3 check are intentional: the check is a hard fail
 # under Python 2 and must run before the Python-3-only imports (ast,
-# importlib.util, etc.) to produce a clean error message instead of an
+# json, etc.) to produce a clean error message instead of an
 # ImportError stack trace.
 #
 # pylint: disable=c-extension-no-member
@@ -24,16 +24,30 @@ if not PY3:
 
 import ast
 import copy
-import importlib.util
 import json
 import os
 import glob
 import base64
+import importlib
 import shutil
 import subprocess
 import tempfile
+
+# parser.py now lives under python-frontend/parser/. Ensure the parent
+# python-frontend directory is on sys.path so sibling modules/packages
+# (preprocessor/, libs/, etc.) remain importable when executing as a script.
+_PARSER_DIR = os.path.dirname(os.path.abspath(__file__))
+_PYTHON_FRONTEND_DIR = os.path.dirname(_PARSER_DIR)
+if _PYTHON_FRONTEND_DIR not in sys.path:
+    sys.path.insert(0, _PYTHON_FRONTEND_DIR)
+
 from libs.ast2json import ast2json as ast2json_func
 from preprocessor import Preprocessor
+try:
+    import_resolver = importlib.import_module(f"{__package__}.import_resolver")
+except ImportError:
+    # Support direct script execution: ``python parser/parser.py ...``
+    import_resolver = importlib.import_module("import_resolver")
 
 # Python ints are arbitrary precision; the JSON wire format used by the C++
 # frontend stores them as numbers, which nlohmann::json silently truncates to
@@ -60,10 +74,8 @@ def _fits_int64(v):
 
 
 def _is_usub_unaryop(node):
-    return (isinstance(node, dict)
-            and node.get("_type") == "UnaryOp"
-            and isinstance(node.get("op"), dict)
-            and node["op"].get("_type") == "USub")
+    return (isinstance(node, dict) and node.get("_type") == "UnaryOp"
+            and isinstance(node.get("op"), dict) and node["op"].get("_type") == "USub")
 
 
 def _tag_bignum_constants(node, in_usub_operand=False):
@@ -78,8 +90,7 @@ def _tag_bignum_constants(node, in_usub_operand=False):
             return  # Constants are leaves — no nested Constants inside
         is_usub = _is_usub_unaryop(node)
         for k, v in node.items():
-            _tag_bignum_constants(
-                v, in_usub_operand=(is_usub and k == "operand"))
+            _tag_bignum_constants(v, in_usub_operand=(is_usub and k == "operand"))
     elif isinstance(node, list):
         for v in node:
             _tag_bignum_constants(v)
@@ -106,10 +117,8 @@ def run_mypy_strict(filename):
 
 def check_usage():
     if len(sys.argv) < 3 or len(sys.argv) > 4:
-        print(
-            "Usage: python astgen.py <file path> <output directory> "
-            "[--deadlock-check]"
-        )
+        print("Usage: python parser/__main__.py <file path> <output directory> "
+              "[--deadlock-check]")
         sys.exit(2)
     if len(sys.argv) == 4 and sys.argv[3] != "--deadlock-check":
         print(f"Unknown flag: {sys.argv[3]}")
@@ -131,11 +140,6 @@ def is_imported_model(module_name):
         "threading",
     ]
     return module_name in models
-
-
-def is_unsupported_module(module_name):
-    unsuported_modules = ["blah"]
-    return module_name in unsuported_modules
 
 
 # Names from the ``threading`` module that the generic threading reject
@@ -179,16 +183,15 @@ def reject_unsupported_threading_usage(tree: ast.AST, source_filename: str) -> N
     ``from threading import *`` is refused outright because static name
     resolution would require importing the real ``threading`` module.
     """
+
     def fail(line, message: str) -> None:
         print(f"ERROR: {source_filename}:{line}: {message}")
         sys.exit(4)
 
-    unsupported_message = (
-        "is not yet supported by ESBMC. Only threading.Lock is "
-        "currently modelled; Thread/RLock/Semaphore/Condition/Event/"
-        "Barrier/Timer are tracked as follow-ups to the initial "
-        "threading support."
-    )
+    unsupported_message = ("is not yet supported by ESBMC. Only threading.Lock is "
+                           "currently modelled; Thread/RLock/Semaphore/Condition/Event/"
+                           "Barrier/Timer are tracked as follow-ups to the initial "
+                           "threading support.")
 
     module_aliases: set[str] = set()
     name_aliases: dict[str, str] = {}
@@ -210,12 +213,9 @@ def reject_unsupported_threading_usage(tree: ast.AST, source_filename: str) -> N
 
     for node in ast.walk(tree):
         offending: str | None = None
-        if (
-            isinstance(node, ast.Attribute)
-            and isinstance(node.value, ast.Name)
-            and node.value.id in module_aliases
-            and node.attr not in SUPPORTED_THREADING_SYMBOLS
-        ):
+        if (isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name)
+                and node.value.id in module_aliases
+                and node.attr not in SUPPORTED_THREADING_SYMBOLS):
             offending = node.attr
         elif isinstance(node, ast.Name) and node.id in name_aliases:
             original = name_aliases[node.id]
@@ -329,9 +329,7 @@ def _collect_thread_subclass_defs(
     for node in tree.body:
         if not isinstance(node, ast.ClassDef):
             continue
-        if any(
-            _base_is_thread(b, module_aliases, thread_aliases) for b in node.bases
-        ):
+        if any(_base_is_thread(b, module_aliases, thread_aliases) for b in node.bases):
             out[node.name] = node
     return out
 
@@ -345,20 +343,15 @@ def _is_subclass_constructor(
     return isinstance(func, ast.Name) and func.id in subclass_names
 
 
-def _extract_name_binding(
-    stmt: ast.stmt,
-) -> tuple[str | None, ast.expr | None]:
+def _extract_name_binding(stmt: ast.stmt, ) -> tuple[str | None, ast.expr | None]:
     """Return ``(target_name, value)`` for ``Name = value`` / ``Name: T = value``.
 
     Returns ``(None, None)`` for tuple-targets, attribute-targets, augmented
     assigns, and any other statement shape. Used wherever we need to ask
     "is this a simple single-name binding, and what does it assign?"
     """
-    if (
-        isinstance(stmt, ast.Assign)
-        and len(stmt.targets) == 1
-        and isinstance(stmt.targets[0], ast.Name)
-    ):
+    if (isinstance(stmt, ast.Assign) and len(stmt.targets) == 1
+            and isinstance(stmt.targets[0], ast.Name)):
         return stmt.targets[0].id, stmt.value
     if isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name):
         return stmt.target.id, stmt.value
@@ -387,11 +380,8 @@ def _is_super_call_expr(node: ast.AST) -> bool:
     if not isinstance(func, ast.Attribute):
         return False
     inner = func.value
-    return (
-        isinstance(inner, ast.Call)
-        and isinstance(inner.func, ast.Name)
-        and inner.func.id == "super"
-    )
+    return (isinstance(inner, ast.Call) and isinstance(inner.func, ast.Name)
+            and inner.func.id == "super")
 
 
 def _is_super_init_call_stmt(stmt: ast.stmt) -> bool:
@@ -410,13 +400,8 @@ def _is_super_init_call_stmt(stmt: ast.stmt) -> bool:
     if not isinstance(call.func, ast.Attribute) or call.func.attr != "__init__":
         return False
     inner = call.func.value
-    return (
-        isinstance(inner, ast.Call)
-        and isinstance(inner.func, ast.Name)
-        and inner.func.id == "super"
-        and not inner.args
-        and not inner.keywords
-    )
+    return (isinstance(inner, ast.Call) and isinstance(inner.func, ast.Name)
+            and inner.func.id == "super" and not inner.args and not inner.keywords)
 
 
 def _target_name_chain(node: ast.AST) -> str | None:
@@ -513,7 +498,7 @@ def _inside_loop_within_scope(node: ast.AST, parents: dict[int, ast.AST]) -> boo
     cursor = parents.get(id(node))
     while cursor is not None:
         if isinstance(
-            cursor,
+                cursor,
             (
                 ast.FunctionDef,
                 ast.AsyncFunctionDef,
@@ -524,7 +509,7 @@ def _inside_loop_within_scope(node: ast.AST, parents: dict[int, ast.AST]) -> boo
         ):
             return False
         if isinstance(
-            cursor,
+                cursor,
             (
                 ast.For,
                 ast.AsyncFor,
@@ -659,11 +644,10 @@ def validate_threading_thread_usage(tree: ast.Module, source_filename: str) -> N
     # scope; validate each shape (C3-C7); refuse nested subclass defs
     # (C1) so they cannot slip past the module-top collector and reach
     # the converter unstripped.
-    subclass_defs = _collect_thread_subclass_defs(
-        tree, module_aliases, thread_aliases
-    )
+    subclass_defs = _collect_thread_subclass_defs(tree, module_aliases, thread_aliases)
     module_top_class_ids = {
-        id(node) for node in (tree.body if isinstance(tree, ast.Module) else [])
+        id(node)
+        for node in (tree.body if isinstance(tree, ast.Module) else [])
         if isinstance(node, ast.ClassDef)
     }
     for node in ast.walk(tree):
@@ -692,9 +676,7 @@ def validate_threading_thread_usage(tree: ast.Module, source_filename: str) -> N
             )
 
         # C3: must define run.
-        if not any(
-            isinstance(m, ast.FunctionDef) and m.name == "run" for m in cls.body
-        ):
+        if not any(isinstance(m, ast.FunctionDef) and m.name == "run" for m in cls.body):
             fail(
                 cls.lineno,
                 f"Thread subclass `{cls_name}` must define a `run` method.",
@@ -703,10 +685,7 @@ def validate_threading_thread_usage(tree: ast.Module, source_filename: str) -> N
         # C4: cannot override start or join. The lowering replaces
         # calls to these; a user override would be silently bypassed.
         for m in cls.body:
-            if (
-                isinstance(m, ast.FunctionDef)
-                and m.name in THREAD_OVERRIDE_REJECTED_METHODS
-            ):
+            if (isinstance(m, ast.FunctionDef) and m.name in THREAD_OVERRIDE_REJECTED_METHODS):
                 fail(
                     m.lineno,
                     f"Thread subclass `{cls_name}` overrides `{m.name}`. "
@@ -731,9 +710,7 @@ def validate_threading_thread_usage(tree: ast.Module, source_filename: str) -> N
                     # if/while/with/assignment expression where the
                     # strip pass cannot replace it with Pass.
                     matched = any(
-                        _is_super_init_call_stmt(stmt) and stmt.value is inner
-                        for stmt in m.body
-                    )
+                        _is_super_init_call_stmt(stmt) and stmt.value is inner for stmt in m.body)
                     if matched:
                         continue
                 fail(
@@ -756,10 +733,8 @@ def validate_threading_thread_usage(tree: ast.Module, source_filename: str) -> N
             target_name, value = _extract_name_binding(stmt)
             if target_name is None:
                 continue
-            is_subclass_ctor = (
-                isinstance(value, ast.Call)
-                and _is_subclass_constructor(value, subclass_names)
-            )
+            is_subclass_ctor = (isinstance(value, ast.Call)
+                                and _is_subclass_constructor(value, subclass_names))
             if is_subclass_ctor:
                 if target_name in subclass_var_names:
                     fail(
@@ -807,9 +782,8 @@ def validate_threading_thread_usage(tree: ast.Module, source_filename: str) -> N
             continue
         for stmt in node.body:
             _, value = _extract_name_binding(stmt)
-            if isinstance(value, ast.Call) and _is_thread_constructor(
-                value, module_aliases, thread_aliases
-            ):
+            if isinstance(value, ast.Call) and _is_thread_constructor(value, module_aliases,
+                                                                      thread_aliases):
                 fail(
                     stmt.lineno,
                     "threading.Thread bound at class-attribute scope is "
@@ -822,8 +796,7 @@ def validate_threading_thread_usage(tree: ast.Module, source_filename: str) -> N
     # Reject Thread() construction inside loop bodies in the same scope.
     for node in ast.walk(tree):
         if isinstance(node, ast.Call) and _is_thread_constructor(
-            node, module_aliases, thread_aliases
-        ) and _inside_loop_within_scope(node, parents):
+                node, module_aliases, thread_aliases) and _inside_loop_within_scope(node, parents):
             fail(
                 node.lineno,
                 "threading.Thread construction inside a loop is not yet "
@@ -895,12 +868,9 @@ def validate_threading_thread_usage(tree: ast.Module, source_filename: str) -> N
         counts = _scope_name_assign_counts(body)
         for stmt in _collect_scope_statements(body):
             target_name, value = _extract_name_binding(stmt)
-            if (
-                target_name is not None
-                and isinstance(value, ast.Call)
-                and _is_thread_constructor(value, module_aliases, thread_aliases)
-                and counts.get(target_name, 0) > 1
-            ):
+            if (target_name is not None and isinstance(value, ast.Call)
+                    and _is_thread_constructor(value, module_aliases, thread_aliases)
+                    and counts.get(target_name, 0) > 1):
                 fail(
                     stmt.lineno,
                     f"threading.Thread variable `{target_name}` is "
@@ -908,7 +878,6 @@ def validate_threading_thread_usage(tree: ast.Module, source_filename: str) -> N
                     "requires a single-definition binding so the spawn "
                     "site can resolve the target statically.",
                 )
-
 
 
 def _thread_method_receiver(
@@ -959,12 +928,9 @@ def _collect_thread_var_sites(
         scope_sites: dict[str, tuple[int, ast.Call]] = {}
         for stmt in _collect_scope_statements(body):
             target_name, value = _extract_name_binding(stmt)
-            if (
-                target_name is not None
-                and target_name not in scope_sites
-                and isinstance(value, ast.Call)
-                and _is_thread_constructor(value, module_aliases, thread_aliases)
-            ):
+            if (target_name is not None and target_name not in scope_sites
+                    and isinstance(value, ast.Call)
+                    and _is_thread_constructor(value, module_aliases, thread_aliases)):
                 scope_sites[target_name] = (next_id, value)
                 next_id += 1
         if scope_sites:
@@ -992,12 +958,8 @@ def _collect_subclass_sites(
         return out, next_id
     for stmt in tree.body:
         target_name, value = _extract_name_binding(stmt)
-        if (
-            target_name is not None
-            and target_name not in out
-            and isinstance(value, ast.Call)
-            and _is_subclass_constructor(value, subclass_names)
-        ):
+        if (target_name is not None and target_name not in out and isinstance(value, ast.Call)
+                and _is_subclass_constructor(value, subclass_names)):
             out[target_name] = (next_id, value)
             next_id += 1
     return out, next_id
@@ -1020,20 +982,16 @@ def _thread_call_keywords(call_node: ast.Call) -> tuple[ast.expr, list[ast.expr]
         # Use ``raise`` rather than ``assert`` so the check survives
         # ``python -O``.
         if kw.arg not in ("target", "args"):
-            raise RuntimeError(
-                f"unexpected Thread() kwarg {kw.arg!r} reached lowering; "
-                "validator gap"
-            )
+            raise RuntimeError(f"unexpected Thread() kwarg {kw.arg!r} reached lowering; "
+                               "validator gap")
         if kw.arg == "target":
             target_value = kw.value
         elif kw.arg == "args" and isinstance(kw.value, ast.Tuple):
             args_values = list(kw.value.elts)
     if target_value is None:
         # validator guarantees ``target=`` is present
-        raise RuntimeError(
-            "Thread() construction reached lowering without target= kwarg; "
-            "validator gap"
-        )
+        raise RuntimeError("Thread() construction reached lowering without target= kwarg; "
+                           "validator gap")
     return target_value, args_values
 
 
@@ -1046,8 +1004,7 @@ def _build_target_call(target_expr: ast.expr, site_id: int, n_args: int) -> ast.
     the user named.
     """
     args: list[ast.expr] = [
-        ast.Name(id=f"__pythread_arg_{site_id}_{i}", ctx=ast.Load())
-        for i in range(n_args)
+        ast.Name(id=f"__pythread_arg_{site_id}_{i}", ctx=ast.Load()) for i in range(n_args)
     ]
     return ast.Call(func=copy.deepcopy(target_expr), args=args, keywords=[])
 
@@ -1070,23 +1027,15 @@ def _build_trampoline(site_id: int, target_expr: ast.expr, n_args: int) -> ast.F
     """
     body: list[ast.stmt] = []
     if n_args:
-        body.append(
-            ast.Global(
-                names=[f"__pythread_arg_{site_id}_{i}" for i in range(n_args)]
-            )
-        )
-    body.extend(
-        [
-            ast.Expr(value=_build_target_call(target_expr, site_id, n_args)),
-            ast.Expr(
-                value=ast.Call(
-                    func=ast.Name(id="__pyt_terminate", ctx=ast.Load()),
-                    args=[],
-                    keywords=[],
-                )
-            ),
-        ]
-    )
+        body.append(ast.Global(names=[f"__pythread_arg_{site_id}_{i}" for i in range(n_args)]))
+    body.extend([
+        ast.Expr(value=_build_target_call(target_expr, site_id, n_args)),
+        ast.Expr(value=ast.Call(
+            func=ast.Name(id="__pyt_terminate", ctx=ast.Load()),
+            args=[],
+            keywords=[],
+        )),
+    ])
     fn = ast.FunctionDef(
         name=f"__pythread_trampoline_{site_id}",
         args=ast.arguments(
@@ -1122,24 +1071,20 @@ def _build_subclass_trampoline(site_id: int, var_name: str) -> ast.FunctionDef:
     """
     body: list[ast.stmt] = [
         ast.Global(names=[var_name]),
-        ast.Expr(
-            value=ast.Call(
-                func=ast.Attribute(
-                    value=ast.Name(id=var_name, ctx=ast.Load()),
-                    attr="run",
-                    ctx=ast.Load(),
-                ),
-                args=[],
-                keywords=[],
-            )
-        ),
-        ast.Expr(
-            value=ast.Call(
-                func=ast.Name(id="__pyt_terminate", ctx=ast.Load()),
-                args=[],
-                keywords=[],
-            )
-        ),
+        ast.Expr(value=ast.Call(
+            func=ast.Attribute(
+                value=ast.Name(id=var_name, ctx=ast.Load()),
+                attr="run",
+                ctx=ast.Load(),
+            ),
+            args=[],
+            keywords=[],
+        )),
+        ast.Expr(value=ast.Call(
+            func=ast.Name(id="__pyt_terminate", ctx=ast.Load()),
+            args=[],
+            keywords=[],
+        )),
     ]
     return ast.FunctionDef(
         name=f"__pythread_trampoline_{site_id}",
@@ -1189,15 +1134,13 @@ def _strip_thread_inheritance(
         we only need to neutralise the bare-init shape here.
     """
     class_node.bases = [
-        b for b in class_node.bases
-        if not _base_is_thread(b, module_aliases, thread_aliases)
+        b for b in class_node.bases if not _base_is_thread(b, module_aliases, thread_aliases)
     ]
     for stmt in class_node.body:
         if not (isinstance(stmt, ast.FunctionDef) and stmt.name == "__init__"):
             continue
         stmt.body = [
-            ast.Pass() if _is_super_init_call_stmt(inner) else inner
-            for inner in stmt.body
+            ast.Pass() if _is_super_init_call_stmt(inner) else inner for inner in stmt.body
         ]
 
 
@@ -1229,9 +1172,7 @@ def _build_arg_declaration(
         forwarded to the trampoline call site without the
         int-degradation that ``= 0`` would force.
     """
-    target = ast.Name(
-        id=f"__pythread_arg_{site_id}_{arg_index}", ctx=ast.Store()
-    )
+    target = ast.Name(id=f"__pythread_arg_{site_id}_{arg_index}", ctx=ast.Store())
 
     if isinstance(arg_value, ast.Constant):
         v = arg_value.value
@@ -1266,9 +1207,7 @@ def _build_arg_assignment(site_id: int, arg_index: int, value: ast.expr) -> ast.
     the construction-time value into the spawned thread.
     """
     return ast.Assign(
-        targets=[
-            ast.Name(id=f"__pythread_arg_{site_id}_{arg_index}", ctx=ast.Store())
-        ],
+        targets=[ast.Name(id=f"__pythread_arg_{site_id}_{arg_index}", ctx=ast.Store())],
         value=copy.deepcopy(value),
     )
 
@@ -1303,10 +1242,9 @@ def _build_start_statements(site_id: int) -> list[ast.stmt]:
     after which ``__pyt_init_tid`` would reset the ended flag back to
     0 and the subsequent ``__pyt_join`` would deadlock-falsely.
     """
+
     def call(name: str, args: list[ast.expr]) -> ast.Call:
-        return ast.Call(
-            func=ast.Name(id=name, ctx=ast.Load()), args=args, keywords=[]
-        )
+        return ast.Call(func=ast.Name(id=name, ctx=ast.Load()), args=args, keywords=[])
 
     tramp_arg = ast.Name(id=f"__pythread_trampoline_{site_id}", ctx=ast.Load())
     tid_arg = ast.Name(id=f"__pythread_tid_{site_id}", ctx=ast.Load())
@@ -1325,13 +1263,11 @@ def _build_start_statements(site_id: int) -> list[ast.stmt]:
 
 def _build_join_call(site_id: int) -> ast.Expr:
     """Return ``__pyt_join(__pythread_tid_<N>)`` as a statement."""
-    return ast.Expr(
-        value=ast.Call(
-            func=ast.Name(id="__pyt_join", ctx=ast.Load()),
-            args=[ast.Name(id=f"__pythread_tid_{site_id}", ctx=ast.Load())],
-            keywords=[],
-        )
-    )
+    return ast.Expr(value=ast.Call(
+        func=ast.Name(id="__pyt_join", ctx=ast.Load()),
+        args=[ast.Name(id=f"__pythread_tid_{site_id}", ctx=ast.Load())],
+        keywords=[],
+    ))
 
 
 def _rewrite_construction_stmt(
@@ -1360,13 +1296,7 @@ def _rewrite_construction_stmt(
     out: list[ast.stmt] = []
     if args_values:
         out.append(
-            ast.Global(
-                names=[
-                    f"__pythread_arg_{site_id}_{i}"
-                    for i in range(len(args_values))
-                ]
-            )
-        )
+            ast.Global(names=[f"__pythread_arg_{site_id}_{i}" for i in range(len(args_values))]))
     for i, arg_value in enumerate(args_values):
         out.append(_build_arg_assignment(site_id, i, arg_value))
     bare = _build_bare_thread_call(call_node)
@@ -1379,21 +1309,16 @@ def _rewrite_construction_stmt(
                 annotation=stmt.annotation,
                 value=bare,
                 simple=stmt.simple,
-            )
-        )
+            ))
     else:
         # _try_rewrite_statement only dispatches Assign/AnnAssign here.
-        raise RuntimeError(
-            f"_rewrite_construction_stmt received unexpected stmt type "
-            f"{type(stmt).__name__}"
-        )
+        raise RuntimeError(f"_rewrite_construction_stmt received unexpected stmt type "
+                           f"{type(stmt).__name__}")
     return out
 
 
 # pylint: disable-next=too-many-locals,too-many-branches
-def lower_threading_thread_usage(
-    tree: ast.Module, source_filename: str
-) -> None:
+def lower_threading_thread_usage(tree: ast.Module, source_filename: str) -> None:
     """Rewrite ``threading.Thread`` usage into pthread-backed intrinsics.
 
     Runs after :func:`validate_threading_thread_usage` has refused every
@@ -1428,20 +1353,14 @@ def lower_threading_thread_usage(
     # from every direct subclass at module scope. Must happen before
     # site collection so the per-site post-processing sees the rewritten
     # class def.
-    subclass_defs = _collect_thread_subclass_defs(
-        tree, module_aliases, thread_aliases
-    )
+    subclass_defs = _collect_thread_subclass_defs(tree, module_aliases, thread_aliases)
     for cls in subclass_defs.values():
         _strip_thread_inheritance(cls, module_aliases, thread_aliases)
 
     # Stage 2: collect both site shapes under one continuous site-id
     # space so the generated trampoline / tid names never collide.
-    sites_by_scope, next_id = _collect_thread_var_sites(
-        tree, module_aliases, thread_aliases
-    )
-    subclass_sites, next_id = _collect_subclass_sites(
-        tree, set(subclass_defs), next_id
-    )
+    sites_by_scope, next_id = _collect_thread_var_sites(tree, module_aliases, thread_aliases)
+    subclass_sites, next_id = _collect_subclass_sites(tree, set(subclass_defs), next_id)
 
     if not sites_by_scope and not subclass_sites:
         return
@@ -1455,13 +1374,9 @@ def lower_threading_thread_usage(
         for _, (site_id, call_node) in scope_sites.items():
             target_expr, args_values = _thread_call_keywords(call_node)
             for i, arg_value in enumerate(args_values):
-                prelude.append(
-                    _build_arg_declaration(site_id, i, arg_value)
-                )
+                prelude.append(_build_arg_declaration(site_id, i, arg_value))
             prelude.append(_build_tid_declaration(site_id))
-            prelude.append(
-                _build_trampoline(site_id, target_expr, len(args_values))
-            )
+            prelude.append(_build_trampoline(site_id, target_expr, len(args_values)))
 
     # Pick the insertion point that satisfies two source-order
     # constraints simultaneously:
@@ -1486,8 +1401,8 @@ def lower_threading_thread_usage(
     inner_thread_scopes = {
         id(node.body)
         for node in ast.walk(tree)
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-        and id(node.body) in sites_by_scope
+        if isinstance(node, (ast.FunctionDef,
+                             ast.AsyncFunctionDef)) and id(node.body) in sites_by_scope
     }
     target_names: set[str] = set()
     for scope_sites in sites_by_scope.values():
@@ -1503,7 +1418,7 @@ def lower_threading_thread_usage(
     earliest_user_with_thread: int | None = None
     for idx, stmt in enumerate(tree.body):
         if isinstance(
-            stmt,
+                stmt,
             (
                 ast.Import,
                 ast.ImportFrom,
@@ -1513,29 +1428,21 @@ def lower_threading_thread_usage(
             ),
         ):
             insert_at = idx + 1
-        if (
-            isinstance(
-                stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
-            )
-            and stmt.name in target_names
-        ):
+        if (isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+                and stmt.name in target_names):
             latest_target_def_idx = idx
-        if (
-            earliest_user_with_thread is None
-            and isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef))
-            and id(stmt.body) in inner_thread_scopes
-        ):
+        if (earliest_user_with_thread is None
+                and isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef))
+                and id(stmt.body) in inner_thread_scopes):
             earliest_user_with_thread = idx
     if earliest_user_with_thread is not None:
         if latest_target_def_idx >= earliest_user_with_thread:
             offender = tree.body[earliest_user_with_thread]
-            print(
-                f"ERROR: {source_filename}:{offender.lineno}: "
-                "threading.Thread target=<name> must be defined before "
-                "the function that constructs the Thread; define the "
-                "target above its caller, or move the construction to "
-                "module scope."
-            )
+            print(f"ERROR: {source_filename}:{offender.lineno}: "
+                  "threading.Thread target=<name> must be defined before "
+                  "the function that constructs the Thread; define the "
+                  "target above its caller, or move the construction to "
+                  "module scope.")
             sys.exit(4)
         insert_at = earliest_user_with_thread
     else:
@@ -1555,19 +1462,15 @@ def lower_threading_thread_usage(
         if binding_idx is None:
             # Validator C2 guarantees module-top binding; reaching this
             # means a validator gap. Fail loudly.
-            raise RuntimeError(
-                f"subclass binding `{var_name}` reached lowering without "
-                f"a module-top binding statement; validator gap"
-            )
-        subclass_insertions.append(
-            (
-                binding_idx,
-                [
-                    _build_tid_declaration(site_id),
-                    _build_subclass_trampoline(site_id, var_name),
-                ],
-            )
-        )
+            raise RuntimeError(f"subclass binding `{var_name}` reached lowering without "
+                               f"a module-top binding statement; validator gap")
+        subclass_insertions.append((
+            binding_idx,
+            [
+                _build_tid_declaration(site_id),
+                _build_subclass_trampoline(site_id, var_name),
+            ],
+        ))
     for binding_idx, stmts in sorted(subclass_insertions, reverse=True):
         tree.body[binding_idx + 1:binding_idx + 1] = stmts
 
@@ -1585,16 +1488,12 @@ def lower_threading_thread_usage(
         for var_name, site_info in subclass_sites.items():
             scope_sites.setdefault(var_name, site_info)
         if scope_sites:
-            _rewrite_body_in_place(
-                body, scope_sites, module_aliases, thread_aliases
-            )
+            _rewrite_body_in_place(body, scope_sites, module_aliases, thread_aliases)
 
     ast.fix_missing_locations(tree)
 
 
-def _find_binding_stmt_index(
-    tree: ast.Module, call_node: ast.Call
-) -> int | None:
+def _find_binding_stmt_index(tree: ast.Module, call_node: ast.Call) -> int | None:
     """Return the module-top index of the Assign/AnnAssign whose value is ``call_node``."""
     for idx, stmt in enumerate(tree.body):
         if isinstance(stmt, (ast.Assign, ast.AnnAssign)) and stmt.value is call_node:
@@ -1626,9 +1525,7 @@ def _rewrite_body_in_place(
     i = 0
     while i < len(body):
         stmt = body[i]
-        rewritten = _try_rewrite_statement(
-            stmt, scope_sites, module_aliases, thread_aliases
-        )
+        rewritten = _try_rewrite_statement(stmt, scope_sites, module_aliases, thread_aliases)
         if rewritten is not None:
             body[i:i + 1] = rewritten
             i += len(rewritten)
@@ -1674,12 +1571,8 @@ def _try_rewrite_statement(
     a soundness defect.
     """
     target_name, value = _extract_name_binding(stmt)
-    if (
-        target_name is not None
-        and target_name in scope_sites
-        and _is_thread_construction_with_target_kw(
-            value, module_aliases, thread_aliases)
-    ):
+    if (target_name is not None and target_name in scope_sites
+            and _is_thread_construction_with_target_kw(value, module_aliases, thread_aliases)):
         return _rewrite_construction_stmt(stmt, value, scope_sites[target_name][0])
 
     # Method call: t.start() or t.join() at statement level.
@@ -1693,51 +1586,6 @@ def _try_rewrite_statement(
         if receiver is not None:
             return [_build_join_call(scope_sites[receiver][0])]
     return None
-
-
-def is_testing_framework(module_name):
-    # Check if module is a testing framework that should be skipped.
-    testing_frameworks = [
-        "pytest",
-    ]
-    return module_name in testing_frameworks
-
-
-def import_module_by_name(module_name, output_dir):
-    if is_unsupported_module(module_name):
-        print(f"ERROR: \"import {module_name}\" is not supported")
-        sys.exit(3)
-
-    base_module = module_name.split(".")[0]
-
-    # Skip testing frameworks - they don't contain logic to verify
-    if is_testing_framework(base_module):
-        return None
-    if is_imported_model(base_module):
-        parts = module_name.split(".")
-        model_dir = os.path.join(output_dir, "models")
-        path = os.path.join(model_dir, *parts) + ".py"
-
-        if not os.path.exists(path):
-            path = os.path.join(model_dir, *parts, "__init__.py")
-
-        return os.path.abspath(path)
-
-    try:
-        module = importlib.import_module(module_name)
-        return module
-    except ImportError:
-        # Try importing the parent module if this looks like a class/attribute reference
-        if "." in module_name:
-            parent = ".".join(module_name.split(".")[:-1])
-            try:
-                return importlib.import_module(parent)
-            except ImportError:
-                pass
-
-        print(f"ERROR: Module '{module_name}' not found.")
-        print(f"Please install it with: pip3 install {module_name}")
-        return None
 
 
 def encode_bytes(value):
@@ -1789,13 +1637,6 @@ def is_standard_library_file(filename):
     return False
 
 
-def expand_star_import(module) -> list[str] | None:
-    names = getattr(module, '__all__', None)
-    if names is None:
-        names = [n for n in dir(module) if not n.startswith('_')]
-    return names
-
-
 def get_referenced_names(node):
     """
     Find all functions and classes referenced in a function or class definition.
@@ -1828,6 +1669,17 @@ def get_referenced_names(node):
     return referenced
 
 
+def _assign_target_names(target):
+    """Yield names bound by an Assign target, recursing into Tuple/List/Starred."""
+    if isinstance(target, ast.Name):
+        yield target.id
+    elif isinstance(target, (ast.Tuple, ast.List)):
+        for elt in target.elts:
+            yield from _assign_target_names(elt)
+    elif isinstance(target, ast.Starred):
+        yield from _assign_target_names(target.value)
+
+
 import_aliases = {}
 # Track all imports per module to combine them
 module_imports = {}
@@ -1835,126 +1687,7 @@ module_imports = {}
 # entry is (range_aliases, range_wrappers, dunder_all_or_None) and is keyed
 # by qualified module name. The entry script is keyed by ``__main__``.
 module_exports = {}
-
-
 # pylint: disable-next=too-many-locals,too-many-branches
-def process_imports(node, output_dir):
-    """
-    Process import statements in the AST node.
-
-    Parameters
-    ----------
-    node
-        The import node to process.
-    output_dir
-        The directory to save the generated JSON files.
-
-    """
-    imported_elements = None
-    module_names = []
-    if isinstance(node, (ast.Import)):
-        for alias_node in node.names:
-            module_name = alias_node.name
-            alias = alias_node.asname or module_name
-            import_aliases[alias] = module_name
-            module_names.append(module_name)
-        if not module_names:
-            return
-    elif isinstance(node, ast.ImportFrom):
-        module_name = node.module
-        # If it's a star import, leave imported_elements as None to import everything
-        if not any(a.name == '*' for a in node.names):
-            imported_elements = node.names
-        if module_name:
-            import_aliases[module_name] = module_name
-        module_names = [module_name] if module_name else []
-        if not module_names:
-            return
-
-    # Track imports for this module
-    for module_name in module_names:
-        if module_name not in module_imports:
-            module_imports[module_name] = {'import_all': False, 'specific_names': set()}
-
-        if imported_elements is None:
-            # This is an "import module" or "from module import *"; mark to import everything
-            module_imports[module_name]['import_all'] = True
-        else:
-            # Add specific names to the set
-            for elem in imported_elements:
-                module_imports[module_name]['specific_names'].add(elem.name)
-
-        # Check if module is available/installed
-        if is_imported_model(module_name):
-            models_dir = os.path.join(output_dir, "models")
-            filename = os.path.join(models_dir, module_name + ".py")
-        else:
-            module = import_module_by_name(module_name, output_dir)
-            if module is None:
-                # Mark this import node so the C++ frontend knows the module was not found
-                node.module_not_found = True
-                continue
-
-            # Check if module has __file__ attribute (built-in C extensions don't)
-            if not hasattr(module, '__file__') or module.__file__ is None:
-                # Skip built-in C extension modules (e.g., _sre, _socket, etc.)
-                continue
-
-            filename = module.__file__
-
-        # Don't process the file here; we'll do it once after collecting all imports
-        node.full_path = filename
-
-
-def resolve_module_file(module_qualname: str, output_dir: str) -> str | None:
-    """Return file path for module qualname (or None if stdlib/missing)."""
-    try:
-        mod = import_module_by_name(module_qualname, output_dir)
-    except SystemExit:
-        return None
-    filename = mod if isinstance(mod, str) else getattr(mod, "__file__", None)
-    if not filename or is_standard_library_file(filename):
-        return None
-    if not os.path.exists(filename):  # e.g. math.pi is not a submodule
-        return None
-    return filename
-
-
-def filter_imports(tree: ast.AST) -> ast.AST:
-    """
-    Remove import statements for verification-agnostic testing frameworks(import pytest) from the AST.
-
-    This prevents the C++ backend from trying to open JSON files for
-    imported testing frameworks that we intentionally skip.
-    """
-    filtered_body = []
-    for node in tree.body:
-        if isinstance(node, ast.Import):
-            # Filter out frameworks
-            filtered_names = []
-            for alias in node.names:
-                base_module = alias.name.split(".")[0]
-                if not is_testing_framework(base_module):
-                    filtered_names.append(alias)
-            # If all imports were testing frameworks, skip the entire import statement
-            if filtered_names:
-                node.names = filtered_names
-                filtered_body.append(node)
-
-        elif isinstance(node, ast.ImportFrom):
-            # Filter out "from testing_framework import ..." statements
-            if node.module:
-                base_module = node.module.split(".")[0]
-                if not is_testing_framework(base_module):
-                    filtered_body.append(node)
-            else:
-                # Relative import without module (from . import x)
-                filtered_body.append(node)
-        else:
-            filtered_body.append(node)
-
-    tree.body = filtered_body
-    return tree
 
 
 def parse_file(filename: str) -> tuple[ast.AST, Preprocessor]:
@@ -2010,7 +1743,7 @@ def emit_module_json(
     elements_to_import=None,
 ) -> None:
     """Resolve module to file and emit AST JSON."""
-    filename = resolve_module_file(module_qualname, output_dir)
+    filename = import_resolver.resolve_module_file(module_qualname, output_dir)
     if filename:
         emit_file_as_json(filename, output_dir, module_qualname, elements_to_import)
 
@@ -2038,14 +1771,14 @@ def _compute_range_seed(module_node):
     for stmt in module_node.body:
         if not (isinstance(stmt, ast.ImportFrom) and stmt.module):
             continue
-        src_exports = module_exports.get(stmt.module)
+        src_exports = import_resolver.module_exports.get(stmt.module)
         if not src_exports:
             continue
         src_aliases, src_wrappers, src_all = src_exports
         if any(a.name == '*' for a in stmt.names):
-            visible = (set(src_all) if src_all is not None
-                       else {n for n in (set(src_aliases) | set(src_wrappers))
-                             if not n.startswith('_')})
+            visible = (set(src_all) if src_all is not None else
+                       {n
+                        for n in (set(src_aliases) | set(src_wrappers)) if not n.startswith('_')})
             alias_seed |= (set(src_aliases) & visible)
             for w in src_wrappers:
                 if w in visible:
@@ -2076,117 +1809,68 @@ def _propagate_range_aliases_across_modules(parsed_trees):
                                               wrapper_seed=wrapper_seed)
             after = _snapshot_exports(preprocessor)
             if after != before:
-                module_exports[module_name] = after
+                import_resolver.module_exports[module_name] = after
                 changed = True
         if not changed:
             return
 
 
-def process_collected_imports(output_dir):
+def _filter_nodes_for_import(tree, elements_to_import):
+    """Return the subset of ``tree.body`` selected by ``elements_to_import``.
+
+    Returns an empty list when no filtering applies (caller should then
+    serialise the original tree).
     """
-    Emit AST JSON for every transitively-imported module.
+    if not elements_to_import:
+        return []
 
-    Discovery and emission are split into two phases so that names added to
-    ``module_imports[m]['specific_names']`` by a transitive importer (parsed
-    later in the walk) are seen by the emitter for ``m``. A single-phase loop
-    would emit ``m``'s JSON the first time it appears, before its full
-    specific_names set is known, and later expansions would never be
-    re-emitted — causing transitive symbols to silently disappear from the
-    JSON the C++ backend reads.
-    """
-    # Phase 1 — discovery: harvest imports from every reachable module until
-    # module_imports stops growing. Each module is parsed and only the
-    # alias-canonicalisation pre-pass is run; the full visit (which lowers
-    # for-range to a bounded while via visit_For) is deferred to Phase 1c
-    # so it sees aliases resolved by cross-module propagation (#4533).
-    parsed_trees = {}  # module_name -> (tree, filename, preprocessor)
-    visited = set()
+    explicitly_imported = {elem_info.name for elem_info in elements_to_import}
 
-    while True:
-        pending = set(module_imports.keys()) - visited
-        if not pending:
-            break
-        for module_name in pending:
-            visited.add(module_name)
-            filename = resolve_module_file(module_name, output_dir)
-            if not filename:
-                continue
-            tree, preprocessor = parse_file_canonicalised(filename)
-            parsed_trees[module_name] = (tree, filename, preprocessor)
-            module_exports[module_name] = _snapshot_exports(preprocessor)
-            for subnode in ast.walk(tree):
-                if isinstance(subnode, (ast.Import, ast.ImportFrom)):
-                    rewrite_relative_import(subnode, module_name)
-                    process_imports(subnode, output_dir)
+    # Collect names referenced by the explicitly-imported functions/classes
+    # so transitive dependencies survive the filter.
+    referenced_names = set()
+    for node in tree.body:
+        if isinstance(node, (ast.ClassDef, ast.FunctionDef)) \
+                and node.name in explicitly_imported:
+            referenced_names.update(get_referenced_names(node))
 
-    # Phase 1b — cross-module range alias / wrapper propagation (#4525).
-    _propagate_range_aliases_across_modules(parsed_trees)
-
-    # Phase 1c — finalize each module now that aliases are canonical (#4533).
-    for _module_name, (tree, _filename, preprocessor) in parsed_trees.items():
-        preprocessor.finalize_module(tree)
-
-    # Phase 2 — emission: module_imports is now stable, so every emitted JSON
-    # contains the full set of names any importer ever asked for.
-    for module_name, import_info in module_imports.items():
-        imported_elements = None if import_info['import_all'] \
-            else [ast.alias(name, None) for name in import_info['specific_names']]
-
-        # Submodule guess (e.g. "pkg.sub" referenced as "pkg.sub.name")
-        if import_info['specific_names']:
-            for name in list(import_info['specific_names']):
-                emit_module_json(f"{module_name}.{name}", output_dir)
-
-        if module_name not in parsed_trees:
-            continue
-        tree, filename, _preprocessor = parsed_trees[module_name]
-        generate_ast_json(tree,
-                          filename,
-                          imported_elements,
-                          output_dir,
-                          module_qualname=module_name)
+    filtered_nodes = []
+    for node in tree.body:
+        if isinstance(node, (ast.ClassDef, ast.FunctionDef)):
+            if node.name in ('ESBMC_range_has_next_', 'ESBMC_range_next_') \
+                    or node.name in explicitly_imported \
+                    or node.name in referenced_names:
+                filtered_nodes.append(node)
+        elif isinstance(node, ast.AnnAssign) \
+                and isinstance(node.target, ast.Name) \
+                and node.target.id in explicitly_imported:
+            filtered_nodes.append(node)
+        elif isinstance(node, ast.Assign):
+            # Tuple/list unpacking is treated atomically: if any bound name
+            # matches an explicit import, the whole statement survives
+            # because the unpacking is one indivisible binding (GitHub #4744).
+            bound = {n for tgt in node.targets for n in _assign_target_names(tgt)}
+            if bound & explicitly_imported:
+                filtered_nodes.append(node)
+        elif isinstance(node, (ast.Import, ast.ImportFrom)):
+            # Preserve imports so the C++ converter can resolve calls into
+            # transitively-imported modules via the parser-attached
+            # ``full_path`` / ``module_not_found`` attributes.
+            filtered_nodes.append(node)
+    return filtered_nodes
 
 
-def rewrite_relative_import(node, parent_module: str | None):
-    """
-    Rewrite a relative ImportFrom node to be absolute.
-
-    Example node structure for "from .x import y":
-      node.module = "x"
-      node.level = 1
-
-    We need to compute the absolute module path based on
-    parent_module and node.level, then set node.module to
-    the absolute path and reset node.level to 0.
-    """
-    # node.level indicates the number of leading dots:
-    #   from .x import y  → level = 1
-    #   from ..x import y → level = 2
-    #   from math import y → level = 0 (not relative)
-    lvl = getattr(node, "level", 0)
-    if lvl <= 0 or not parent_module:
-        # Nothing to fix if it's already absolute or we don't know the parent module
-        return
-
-    # Split the parent module name into parts, e.g., "pkg.sub" → ["pkg", "sub"]
-    parts = parent_module.split(".")
-
-    # Move up "lvl" levels in the module hierarchy.
-    # Example:
-    #   parent_module = "l.ks", level = 1 → base = "l"
-    #   parent_module = "l", level = 1 → base = "l" (fallback if index <= 0)
-    idx = len(parts) - lvl
-    base = parent_module if idx <= 0 else ".".join(parts[:idx])
-
-    # Rebuild the full absolute module path.
-    # Example:  from .ks import foo  →  from l.ks import foo
-    node.module = f"{base}.{node.module}" if node.module else base
-
-    # Reset level to 0 since it's no longer a relative import.
-    node.level = 0
+def _compute_output_json_path(python_filename, output_dir, module_qualname):
+    """Return the on-disk JSON output path for a parsed Python source file."""
+    if module_qualname:
+        parts = module_qualname.split(".")
+        return os.path.join(output_dir, *parts[:-1], f"{parts[-1]}.json")
+    if python_filename.endswith('__init__.py'):
+        dir_name = os.path.basename(os.path.dirname(python_filename))
+        return os.path.join(output_dir, f"{dir_name}.json")
+    return os.path.join(output_dir, f"{os.path.basename(python_filename[:-3])}.json")
 
 
-# pylint: disable-next=too-many-locals,too-many-branches
 def generate_ast_json(tree, python_filename, elements_to_import, output_dir, module_qualname=None):
     """
     Generate AST JSON from the given Python AST tree.
@@ -2207,134 +1891,23 @@ def generate_ast_json(tree, python_filename, elements_to_import, output_dir, mod
         (e.g. ``pkg.sub.mod``); ``None`` means top-level module.
 
     """
-    # Remove verification-agnostic testing framework imports
-    tree = filter_imports(tree)
+    tree = import_resolver.filter_imports(tree)
+    filtered_nodes = _filter_nodes_for_import(tree, elements_to_import)
 
-    # Filter elements to be imported from the module
-    filtered_nodes = []
-    if elements_to_import is not None and elements_to_import:
-        # First pass: collect explicitly imported element names
-        explicitly_imported = {elem_info.name for elem_info in elements_to_import}
-
-        # Collect all referenced names (functions and classes) from explicitly imported functions/classes
-        referenced_names = set()
-        for node in tree.body:
-            if isinstance(node, (ast.ClassDef, ast.FunctionDef)):
-                if node.name in explicitly_imported:
-                    referenced_names.update(get_referenced_names(node))
-
-        # Second pass: include explicitly imported items and their referenced functions/classes
-        for node in tree.body:
-            if isinstance(node, (ast.ClassDef, ast.FunctionDef)):
-                # Always include ESBMC helper functions
-                if node.name in ['ESBMC_range_has_next_', 'ESBMC_range_next_']:
-                    filtered_nodes.append(node)
-                # Include explicitly imported items
-                elif node.name in explicitly_imported:
-                    filtered_nodes.append(node)
-                # Include functions/classes referenced by imported items
-                elif node.name in referenced_names:
-                    filtered_nodes.append(node)
-
-            # Include annotated assignments (e.g., x: int = 42)
-            elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
-                if node.target.id in explicitly_imported:
-                    filtered_nodes.append(node)
-
-            # Preserve Import/ImportFrom nodes: the C++ converter needs them
-            # (with the parser-attached ``full_path``/``module_not_found``
-            # attributes) to resolve calls into transitively-imported modules.
-            elif isinstance(node, (ast.Import, ast.ImportFrom)):
-                filtered_nodes.append(node)
-
-    # Convert AST to JSON
     ast_json = ast2json_func(
-        ast.Module(body=filtered_nodes, type_ignores=[]) if filtered_nodes else tree
-    )
+        ast.Module(body=filtered_nodes, type_ignores=[]) if filtered_nodes else tree)
     ast_json["filename"] = python_filename
     ast_json["ast_output_dir"] = output_dir
     _tag_bignum_constants(ast_json)
 
-    # Build JSON path
-    if module_qualname:
-        parts = module_qualname.split(".")
-        json_dir = os.path.join(output_dir, *parts[:-1])  # package subdirs
-        json_filename = os.path.join(json_dir, f"{parts[-1]}.json")
-    else:
-        if python_filename.endswith('__init__.py'):
-            dir_name = os.path.basename(os.path.dirname(python_filename))
-            json_filename = os.path.join(output_dir, f"{dir_name}.json")
-        else:
-            json_filename = os.path.join(output_dir,
-                                         f"{os.path.basename(python_filename[:-3])}.json")
-
+    json_filename = _compute_output_json_path(python_filename, output_dir, module_qualname)
     os.makedirs(os.path.dirname(json_filename), exist_ok=True)
 
-    # Write AST JSON to file
     try:
         with open(json_filename, "w", encoding="utf-8") as json_file:
             json.dump(ast_json, json_file, indent=4, ensure_ascii=False)
     except Exception as e:
         print(f"Error writing JSON file: {e}")
-
-
-def _emit_submodule_asts(module_dir, base_module, output_dir):
-    for root, _dirs, files in os.walk(module_dir):
-        for file in files:
-            if not file.endswith('.py'):
-                continue
-            full_path = os.path.join(root, file)
-            try:
-                with open(full_path, "r", encoding="utf-8") as f:
-                    tree = ast.parse(f.read())
-            except UnicodeDecodeError:
-                continue
-            generate_ast_json(tree, full_path, None,
-                              f"{output_dir}/{base_module}")
-
-
-def detect_and_process_submodules(node, processed_submodules, output_dir):
-    """
-    Detect submodule usage in the AST and process each unseen submodule.
-
-    Parameters
-    ----------
-    node
-        The AST node to scan for submodule attribute accesses.
-    processed_submodules
-        Set used to avoid reprocessing submodules already handled in this run.
-    output_dir
-        The directory to save the generated JSON files in.
-
-    """
-    if not isinstance(node, ast.Attribute):
-        return
-    value = node.value
-    if not isinstance(value, ast.Name):
-        return
-
-    alias = value.id
-    base_module = import_aliases.get(alias)
-
-    # Only process submodules of supported model modules
-    if not base_module or not is_imported_model(base_module):
-        return
-
-    full_module = f"{base_module}.{node.attr}"
-
-    # Avoid reprocessing the same submodule
-    if full_module in processed_submodules:
-        return
-    processed_submodules.add(full_module)
-
-    try:
-        module = import_module_by_name(full_module, output_dir)
-    except SystemExit:
-        return
-
-    file_path = module if isinstance(module, str) else module.__file__
-    module_dir = os.path.dirname(file_path)
-    _emit_submodule_asts(module_dir, base_module, output_dir)
 
 
 def check_dependencies():
@@ -2374,15 +1947,12 @@ def _is_re_match_call(node: ast.AST) -> bool:
     func = node.func
     if not isinstance(func, ast.Attribute):
         return False
-    return (isinstance(func.value, ast.Name)
-            and func.value.id == "re"
-            and func.attr in _RE_ENTRY_FUNCS
-            and len(node.args) >= 2)
+    return (isinstance(func.value, ast.Name) and func.value.id == "re"
+            and func.attr in _RE_ENTRY_FUNCS and len(node.args) >= 2)
 
 
-def _build_re_helper_call(
-    helper: str, pat: ast.expr, string: ast.expr, extra_args: list[ast.expr]
-) -> ast.Call:
+def _build_re_helper_call(helper: str, pat: ast.expr, string: ast.expr,
+                          extra_args: list[ast.expr]) -> ast.Call:
     """Build ``re.<helper>(pat, string, *extra_args)``."""
     return ast.Call(
         func=ast.Attribute(
@@ -2396,7 +1966,11 @@ def _build_re_helper_call(
 
 
 _NESTED_BODY_FIELDS = frozenset({
-    "body", "orelse", "handlers", "finalbody", "cases",
+    "body",
+    "orelse",
+    "handlers",
+    "finalbody",
+    "cases",
 })
 
 
@@ -2496,9 +2070,7 @@ def _re_call_from_assignment(stmt: ast.stmt) -> ast.Call | None:
     return value if _is_re_match_call(value) else None
 
 
-def _collect_walrus_re_bindings(
-    node: ast.AST,
-) -> list[tuple[str, ast.Call]]:
+def _collect_walrus_re_bindings(node: ast.AST, ) -> list[tuple[str, ast.Call]]:
     """Find every ``NamedExpr`` whose value is an ``re.match`` call.
 
     Returns ``[(target_name, re_call), ...]`` for ``(m := re.match(p, s))``
@@ -2554,8 +2126,7 @@ def _collect_assigned_names_anywhere(body: list[ast.stmt]) -> set[str]:
                 names.update(_names_from(sub.target))
             elif isinstance(sub, (ast.AugAssign, ast.For, ast.AsyncFor)):
                 names.update(_names_from(sub.target))
-            elif (isinstance(sub, ast.NamedExpr)
-                  and isinstance(sub.target, ast.Name)):
+            elif (isinstance(sub, ast.NamedExpr) and isinstance(sub.target, ast.Name)):
                 names.add(sub.target.id)
             elif isinstance(sub, (ast.With, ast.AsyncWith)):
                 for item in sub.items:
@@ -2667,6 +2238,8 @@ def rewrite_re_match_attribute_calls(tree: ast.Module) -> None:
 def main():
     check_usage()
     check_dependencies()
+    # Keep parser invocations independent when run multiple times in one process.
+    import_resolver.reset_state()
     filename = sys.argv[1]
     output_dir = sys.argv[2]
     deadlock_check = len(sys.argv) == 4 and sys.argv[3] == "--deadlock-check"
@@ -2696,25 +2269,32 @@ def main():
 
     preprocessor = Preprocessor(filename)
     preprocessor.prepare_module(tree)
-    module_exports["__main__"] = _snapshot_exports(preprocessor)
+    import_resolver.module_exports["__main__"] = _snapshot_exports(preprocessor)
 
     # Discover imports first (their nodes are not rewritten by visit_*), so
     # process_collected_imports can build the cross-module export tables that
     # the deferred seed-aware re-rewrite below depends on (#4533).
     for node in ast.walk(tree):
         if isinstance(node, (ast.Import, ast.ImportFrom)):
-            process_imports(node, output_dir)
+            import_resolver.process_imports(node, output_dir)
 
-    process_collected_imports(output_dir)
+    import_resolver.process_collected_imports(
+        output_dir,
+        import_resolver.ResolverCallbacks(
+            parse_file_canonicalised=parse_file_canonicalised,
+            rewrite_relative_import=import_resolver.rewrite_relative_import,
+            snapshot_exports=_snapshot_exports,
+            propagate_range_aliases=_propagate_range_aliases_across_modules,
+            generate_ast_json=generate_ast_json,
+        ),
+    )
 
     # Re-apply range-alias / wrapper rewrites on the entry script using the
     # cross-module export tables built during import processing (#4525), then
     # run the deferred visitor pass so visit_For lowers for-range with the
     # bound it now has access to (#4533).
     alias_seed, wrapper_seed = _compute_range_seed(tree)
-    preprocessor.apply_range_rewrites(tree,
-                                      alias_seed=alias_seed,
-                                      wrapper_seed=wrapper_seed)
+    preprocessor.apply_range_rewrites(tree, alias_seed=alias_seed, wrapper_seed=wrapper_seed)
     tree = preprocessor.finalize_module(tree)
 
     # Tag assignments / constants / attribute accesses on the fully-lowered
@@ -2727,7 +2307,8 @@ def main():
         elif isinstance(node, ast.Constant):
             annotate_constant_node(node)
         elif isinstance(node, ast.Attribute):
-            detect_and_process_submodules(node, processed_submodules, output_dir)
+            import_resolver.detect_and_process_submodules(node, processed_submodules, output_dir,
+                                                          generate_ast_json)
 
     reject_unsupported_threading_usage(tree, filename)
     validate_threading_thread_usage(tree, filename)

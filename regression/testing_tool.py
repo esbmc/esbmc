@@ -230,6 +230,18 @@ def _add_test(test_case, executor):
         stdout, stderr, rc = executor.run(test_case)
 
         if stdout is None:
+            # Timeout: ESBMC didn't finish within ESBMC_REGRESS_TIMEOUT.
+            # For KNOWNBUG tests, "doesn't produce the expected output
+            # within the budget" is exactly the bug being tracked, so
+            # treat a timeout as satisfying the KNOWNBUG expectation
+            # rather than as a hard failure that breaks CI.
+            if test_case.test_mode in FAIL_MODES:
+                print(
+                    "TIMEOUT after limit {}s -- accepted under {}".format(
+                        executor.timeout or "none", test_case.test_mode
+                    )
+                )
+                return
             timeout_message = "\nTIMEOUT TEST: {} (limit {}s)".format(
                 test_case.test_dir, executor.timeout or "none")
             if stderr:

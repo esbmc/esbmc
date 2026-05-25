@@ -28,6 +28,20 @@
 
 using namespace json_utils;
 
+static bool contains_cpp_throw(const exprt &expr)
+{
+  if (expr.statement() == "cpp-throw")
+    return true;
+
+  for (const auto &op : expr.operands())
+  {
+    if (contains_cpp_throw(op))
+      return true;
+  }
+
+  return false;
+}
+
 static ExpressionType get_expression_type(const nlohmann::json &element)
 {
   // Return UNKNOWN if the expected "_type" field is missing
@@ -595,7 +609,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           symbol_id func_sid(current_python_file, "", var_name);
           symbolt *func_symbol =
             symbol_table_.find_symbol(func_sid.to_string());
-          if (func_symbol && func_symbol->type.is_code())
+          if (func_symbol && func_symbol->get_type().is_code())
           {
             expr = symbol_expr(*func_symbol);
             break;
@@ -631,7 +645,9 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     // If the looked-up symbol is an enum class attribute with int type,
     // wrap it in the proper enum struct expression so callers that expect
     // the enum class type (e.g. function parameters) receive a struct value.
-    if (is_class_attr && symbol->type.is_signedbv() && element.contains("attr"))
+    if (
+      is_class_attr && symbol->get_type().is_signedbv() &&
+      element.contains("attr"))
     {
       std::string cn = var_name;
       if (cn.starts_with("C@"))
@@ -649,7 +665,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       const std::string &attr_name = element["attr"].get<std::string>();
 
       // Delegate complex attribute access (.real, .imag) to the handler.
-      if (is_complex_type(symbol->type))
+      if (is_complex_type(symbol->get_type()))
       {
         exprt result =
           complex_handler_.handle_attribute_access(expr, attr_name);
@@ -662,8 +678,9 @@ exprt python_converter::get_expr(const nlohmann::json &element)
 
       // Get object type name from symbol. e.g.: tag-MyClass
       std::string obj_type_name;
-      const typet &symbol_type =
-        (symbol->type.is_pointer()) ? symbol->type.subtype() : symbol->type;
+      const typet &symbol_type = (symbol->get_type().is_pointer())
+                                   ? symbol->get_type().subtype()
+                                   : symbol->get_type();
 
       // Handle union types
       if (symbol_type.is_array() && symbol_type.subtype() == char_type())
@@ -679,9 +696,9 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           if (target_class_symbol)
             return; // Already found
 
-          if (s.id.as_string().find("tag-") == 0 && s.type.is_struct())
+          if (s.id.as_string().find("tag-") == 0 && s.get_type().is_struct())
           {
-            const struct_typet &struct_type = to_struct_type(s.type);
+            const struct_typet &struct_type = to_struct_type(s.get_type());
             if (struct_type.has_component(attr_name))
               target_class_symbol = const_cast<symbolt *>(&s);
           }
@@ -695,16 +712,17 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         }
 
         // Create a typecast from char* to target_class*
-        typet target_ptr_type = gen_pointer_type(target_class_symbol->type);
+        typet target_ptr_type =
+          gen_pointer_type(target_class_symbol->get_type());
         exprt casted_expr = typecast_exprt(expr, target_ptr_type);
 
         // Dereference to get the object
-        exprt deref_expr("dereference", target_class_symbol->type);
+        exprt deref_expr("dereference", target_class_symbol->get_type());
         deref_expr.copy_to_operands(casted_expr);
 
         // Access the member on the object
         const struct_typet &target_struct =
-          to_struct_type(target_class_symbol->type);
+          to_struct_type(target_class_symbol->get_type());
         const typet &attr_type = target_struct.get_component(attr_name).type();
         typet clean_type = clean_attribute_type(attr_type);
 
@@ -739,9 +757,9 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         symbol_table_.foreach_operand_in_order([&](const symbolt &s) {
           if (!fallback_class_id.empty())
             return;
-          if (s.id.as_string().find("tag-") == 0 && s.type.is_struct())
+          if (s.id.as_string().find("tag-") == 0 && s.get_type().is_struct())
           {
-            const struct_typet &st = to_struct_type(s.type);
+            const struct_typet &st = to_struct_type(s.get_type());
             if (st.has_component(attr_name))
               fallback_class_id = s.id.as_string();
           }
@@ -774,8 +792,10 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         throw std::runtime_error(msg.str());
       }
 
-      struct_typet &class_type =
-        static_cast<struct_typet &>(class_symbol->type);
+      // Read-modify-set: we may push_back a new component into the class
+      // type, so own it locally and set it back at the end.
+      typet class_symbol_type = class_symbol->get_type();
+      struct_typet &class_type = static_cast<struct_typet &>(class_symbol_type);
       auto build_member_expr_from_class = [&](const typet &attr_type) -> exprt {
         typet clean_type = clean_attribute_type(attr_type);
         exprt base = symbol_expr(*symbol);
@@ -815,6 +835,8 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           struct_typet::componentt comp = python_frontend::build_component(
             class_type.tag().as_string(), attr_name, current_element_type);
           class_type.components().push_back(comp);
+          // Persist the mutation back to the symbol (read-modify-set).
+          class_symbol->set_type(class_symbol_type);
         }
 
         // Register instance attribute for both regular and normalized keys
@@ -939,6 +961,18 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   case ExpressionType::SUBSCRIPT:
   {
     exprt array = get_expr(element["value"]);
+
+    // If evaluating the base raised (e.g. bin()/hex()/oct() on a non-constant
+    // integer returns a cpp-throw side effect), propagate the exception rather
+    // than attempting to index it. Slicing a thrown exception is meaningless
+    // and would build an address_of over a non-array operand, crashing the
+    // converter.
+    if (array.is_nil() || contains_cpp_throw(array))
+    {
+      expr = array;
+      break;
+    }
+
     const nlohmann::json &slice = element["slice"];
     typet array_type = ns.follow(array.type());
 
@@ -1021,6 +1055,35 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       std::ostringstream msg;
       msg << "TypeError: multi-dimensional indexing (a[i, j, ...]) is not "
              "supported; numpy arrays are modelled as 1D lists";
+      const locationt loc = get_location_from_decl(element);
+      if (!loc.is_nil())
+        msg << " at " << loc.get_file() << ":" << loc.get_line();
+      throw std::runtime_error(msg.str());
+    }
+
+    // Reject subscripting scalar numeric / boolean values up front. CPython
+    // raises "TypeError: 'int'/'float'/'bool' object is not subscriptable";
+    // the list handler below silently produces an unresolved-type value that
+    // later trips the binop "Unsupported comparison with unresolved operand
+    // type" error far from the actual mistake (e.g. when the user expects
+    // a tuple from a Counter.most_common() result and chains a second
+    // subscript onto an int).
+    if (
+      !array_type.is_array() && !array_type.is_pointer() &&
+      !array_type.is_struct() &&
+      (array_type.is_signedbv() || array_type.is_unsignedbv() ||
+       array_type.is_floatbv() || array_type.is_bool()))
+    {
+      std::string type_name;
+      if (array_type.is_bool())
+        type_name = "bool";
+      else if (array_type.is_floatbv())
+        type_name = "float";
+      else
+        type_name = "int";
+
+      std::ostringstream msg;
+      msg << "TypeError: '" << type_name << "' object is not subscriptable";
       const locationt loc = get_location_from_decl(element);
       if (!loc.is_nil())
         msg << " at " << loc.get_file() << ":" << loc.get_line();

@@ -20,23 +20,11 @@ jobs:
     name: Build ESBMC (${{ inputs.operating-system }})
     runs-on: ${{ inputs.operating-system }}
     steps:
-    - uses: actions/checkout@v4
-
-    # For restore ccache
-    - uses: hendrikmuhs/ccache-action@v1.2
-      if: ${{ startsWith(inputs.operating-system, 'ubuntu-') }}
-      # TODO: Onpush and PR used different CMake flags
-      with:
-        restore: ${{ github.event_name == 'push' }}
-        save: ${{ github.event_name == 'push' }}
-        key: ${{ inputs.operating-system }}-${{ hashFiles('**/*.cpp','**/*.h') }}
-        restore-keys: |
-          ${{ inputs.operating-system }}
-        evict-old-files: 2d
+    - uses: actions/checkout@v6
 
     - name: Build ESBMC
       run: ./scripts/build.sh ${{ inputs.build-flags }}
-    - uses: actions/upload-artifact@v4
+    - uses: actions/upload-artifact@v7
       with:
         name: release-${{ inputs.operating-system }}-${{ inputs.build-flags }}
         path: ./release

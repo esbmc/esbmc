@@ -175,7 +175,7 @@ bool solidity_convertert::get_function_definition(
     }
   }
 
-  added_symbol.type = type;
+  added_symbol.set_type(type);
 
   // 11.3 Declare named return parameters as local variables.
   // Solidity allows `returns (uint result) { result = 42; }` where `result`
@@ -305,13 +305,14 @@ bool solidity_convertert::get_function_definition(
         get_default_symbol(
           out_sym,
           debug_modulename,
-          param_sym->type,
+          param_sym->get_type(),
           p_name + "$out",
           out_id,
           location_begin);
         out_sym.static_lifetime = true;
         out_sym.lvalue = true;
-        out_sym.value = gen_zero(get_complete_type(param_sym->type, ns), true);
+        out_sym.set_value(
+          gen_zero(get_complete_type(param_sym->get_type(), ns), true));
         move_symbol_to_context(out_sym);
       }
 
@@ -320,7 +321,7 @@ bool solidity_convertert::get_function_definition(
     }
   }
 
-  added_symbol.value = body_exprt;
+  added_symbol.set_value(body_exprt);
 
   // 13. Restore current_functionDecl
   log_debug("solidity", "@@@ Finish parsing function {}", current_functionName);
@@ -583,7 +584,7 @@ bool solidity_convertert::get_func_modifier(
         return true;
       aux_type.arguments().push_back(arg);
     }
-    a_sym.type = aux_type;
+    a_sym.set_type(aux_type);
     move_builtin_to_contract(c_name, symbol_expr(a_sym), "internal", true);
 
     // same as origin function body
@@ -665,7 +666,7 @@ bool solidity_convertert::get_func_modifier(
       mod_body.move_to_operands(return_expr);
     }
 
-    a_sym.value = mod_body;
+    a_sym.set_value(mod_body);
 
     // reset
     current_functionDecl = old_decl;

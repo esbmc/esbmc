@@ -74,16 +74,16 @@ typet goto2ct::get_base_type(typet type, namespacet ns)
   if (type.id() == "symbol")
   {
     const symbolt *symbol = ns.lookup(type.identifier());
-    if (symbol && symbol->is_type && !symbol->type.is_nil())
-      return get_base_type(symbol->type, ns);
+    if (symbol && symbol->is_type && !symbol->get_type().is_nil())
+      return get_base_type(symbol->get_type(), ns);
   }
 
   // This is to deal with incomplete types and unions
   if (type.id() == "struct" || type.id() == "union")
   {
     const symbolt *symbol = ns.lookup(("tag-" + type.tag().as_string()));
-    if (symbol && symbol->is_type && !symbol->type.is_nil())
-      return symbol->type;
+    if (symbol && symbol->is_type && !symbol->get_type().is_nil())
+      return symbol->get_type();
   }
 
   return type;
@@ -157,12 +157,12 @@ void goto2ct::extract_symbol_tables()
     if (s.is_type)
     {
       if (sym_fun_name.empty())
-        global_types.push_back(s.type);
+        global_types.push_back(s.get_type());
       else
-        local_types[sym_fun_name].push_back(s.type);
+        local_types[sym_fun_name].push_back(s.get_type());
     }
     // This is a function declaration
-    else if (s.type.id() == "code")
+    else if (s.get_type().id() == "code")
       fun_decls.push_back(s);
     // This is an extern variable
     else if (s.is_extern)

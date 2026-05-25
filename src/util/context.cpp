@@ -125,14 +125,14 @@ symbolt *contextt::move_symbol_to_context(symbolt &symbol)
   else
   {
     // types that are code means functions
-    if (s->type.is_code())
+    if (s->get_type().is_code())
     {
-      if (symbol.value.is_not_nil() && !s->value.is_not_nil())
+      if (symbol.get_value().is_not_nil() && !s->get_value().is_not_nil())
         s->swap(symbol);
     }
     else if (s->is_type)
     {
-      if (symbol.type.is_not_nil() && !s->type.is_not_nil())
+      if (symbol.get_type().is_not_nil() && !s->get_type().is_not_nil())
         s->swap(symbol);
     }
     else if (s->is_extern && !symbol.is_extern)

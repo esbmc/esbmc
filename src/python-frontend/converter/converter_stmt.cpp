@@ -289,7 +289,7 @@ void python_converter::handle_assignment_type_adjustments(
   {
     rhs = address_of_exprt(rhs);
     if (lhs_symbol && !is_ctor_call)
-      lhs_symbol->value = rhs;
+      lhs_symbol->set_value(rhs);
     return;
   }
 
@@ -303,7 +303,7 @@ void python_converter::handle_assignment_type_adjustments(
     rhs.type().subtype().is_code() &&
     !(lhs.type().is_pointer() && lhs.type().subtype().is_code()))
   {
-    lhs_symbol->type = rhs.type();
+    lhs_symbol->set_type(rhs.type());
     lhs.type() = rhs.type();
   }
 
@@ -315,7 +315,7 @@ void python_converter::handle_assignment_type_adjustments(
   }
   // Handle tuple assignments with generic tuple annotation
   else if (
-    lhs_symbol && lhs_symbol->type.id() == "empty" &&
+    lhs_symbol && lhs_symbol->get_type().id() == "empty" &&
     rhs.type().id() == "struct")
   {
     const struct_typet &rhs_struct = to_struct_type(rhs.type());
@@ -324,9 +324,9 @@ void python_converter::handle_assignment_type_adjustments(
     if (rhs_struct.tag().as_string().find("tag-tuple") == 0)
     {
       // Update symbol type from empty to concrete tuple type
-      lhs_symbol->type = rhs.type();
+      lhs_symbol->set_type(rhs.type());
       lhs.type() = rhs.type();
-      lhs_symbol->value = rhs;
+      lhs_symbol->set_value(rhs);
     }
   }
   else if (lhs_symbol)
@@ -380,7 +380,7 @@ void python_converter::handle_assignment_type_adjustments(
         rhs = typecast_exprt(rhs, lhs.type());
       }
       if (!rhs.type().is_empty() && !is_ctor_call)
-        lhs_symbol->value = rhs;
+        lhs_symbol->set_value(rhs);
       return;
     }
     // Handle string-to-string variable assignments
@@ -388,11 +388,11 @@ void python_converter::handle_assignment_type_adjustments(
     {
       symbolt *rhs_symbol = symbol_table_.find_symbol(rhs.identifier());
       if (
-        rhs_symbol && rhs_symbol->value.is_constant() &&
-        rhs_symbol->value.type().is_array())
+        rhs_symbol && rhs_symbol->get_value().is_constant() &&
+        rhs_symbol->get_value().type().is_array())
       {
-        rhs = rhs_symbol->value;
-        lhs_symbol->type = rhs.type();
+        rhs = rhs_symbol->get_value();
+        lhs_symbol->set_type(rhs.type());
         lhs.type() = rhs.type();
       }
     }
@@ -403,7 +403,7 @@ void python_converter::handle_assignment_type_adjustments(
       // Should we model it uniformly using char* ?
       const typet &element_type = to_array_type(rhs.type()).subtype();
       typet pointer_type = gen_pointer_type(element_type);
-      lhs_symbol->type = pointer_type;
+      lhs_symbol->set_type(pointer_type);
       lhs.type() = pointer_type;
       rhs = string_handler_.get_array_base_address(rhs);
     }
@@ -428,13 +428,14 @@ void python_converter::handle_assignment_type_adjustments(
         // when a prior declaration exists with the scalar type, as this
         // creates a type inconsistency in the GOTO program.
         bool is_incompatible =
-          rhs.type().is_array() && !lhs_symbol->type.is_array() &&
-          !lhs_symbol->type.is_pointer() && !lhs_symbol->type.id().empty() &&
-          !lhs_symbol->type.is_nil() &&
-          lhs_symbol->type != type_handler_.get_list_type();
+          rhs.type().is_array() && !lhs_symbol->get_type().is_array() &&
+          !lhs_symbol->get_type().is_pointer() &&
+          !lhs_symbol->get_type().id().empty() &&
+          !lhs_symbol->get_type().is_nil() &&
+          lhs_symbol->get_type() != type_handler_.get_list_type();
         if (!is_incompatible)
         {
-          lhs_symbol->type = rhs.type();
+          lhs_symbol->set_type(rhs.type());
           lhs.type() = rhs.type();
         }
       }
@@ -442,7 +443,7 @@ void python_converter::handle_assignment_type_adjustments(
     else if (rhs.type() == none_type())
     {
       // Adjust pointer_type() to pointer_typet(empty_typet())
-      lhs_symbol->type = rhs.type();
+      lhs_symbol->set_type(rhs.type());
       lhs.type() = rhs.type();
     }
     // No annotation or preprocessor-inferred Any: propagate rhs type to lhs.
@@ -454,12 +455,12 @@ void python_converter::handle_assignment_type_adjustments(
       !rhs.type().is_code() &&
       !(rhs.type().is_pointer() && rhs.type().subtype().id() == "empty"))
     {
-      lhs_symbol->type = rhs.type();
+      lhs_symbol->set_type(rhs.type());
       lhs.type() = rhs.type();
     }
 
     if (!rhs.type().is_empty() && !is_ctor_call)
-      lhs_symbol->value = rhs;
+      lhs_symbol->set_value(rhs);
   }
 }
 
@@ -758,7 +759,7 @@ std::string python_converter::infer_type_from_any_annotation(
     const symbolt *obj_sym = symbol_table_.find_symbol(obj_sid.to_string());
     if (obj_sym)
     {
-      typet obj_type = ns.follow(obj_sym->type);
+      typet obj_type = ns.follow(obj_sym->get_type());
       std::string class_name;
       if (obj_type.is_struct())
         class_name = to_struct_type(obj_type).tag().as_string();
@@ -772,9 +773,9 @@ std::string python_converter::infer_type_from_any_annotation(
     }
   }
 
-  if (func_symbol && func_symbol->type.is_code())
+  if (func_symbol && func_symbol->get_type().is_code())
   {
-    const code_typet &func_type = to_code_type(func_symbol->type);
+    const code_typet &func_type = to_code_type(func_symbol->get_type());
     const typet &ret_type = func_type.return_type();
 
     if (lhs_type == "Any")
@@ -920,7 +921,7 @@ symbolt *python_converter::create_symbol_for_unannotated_assign(
     bool is_dict_method =
       python_dict_handler::is_value_returning_method(method) &&
       obj_sym != nullptr &&
-      dict_handler_->is_dict_type(ns.follow(obj_sym->type));
+      dict_handler_->is_dict_type(ns.follow(obj_sym->get_type()));
 
     if (is_dict_method)
     {
@@ -1031,7 +1032,9 @@ void python_converter::handle_function_call_rhs(
     symbolt *func_symbol =
       symbol_table_.find_symbol(rhs.op1().identifier().c_str());
     assert(func_symbol);
-    if (!static_cast<code_typet &>(func_symbol->type).return_type().is_empty())
+    if (!static_cast<const code_typet &>(func_symbol->get_type())
+           .return_type()
+           .is_empty())
     {
       if (auto ret = get_return_from_func(func_symbol->id.c_str());
           !ret.is_nil())
@@ -1591,7 +1594,7 @@ void python_converter::get_var_assign(
       annotation_types = tc.get_annotation_types(lhs_symbol->id.as_string());
       if (
         !annotation_types.empty() &&
-        !tc.should_skip_type_assertion(lhs_symbol->type))
+        !tc.should_skip_type_assertion(lhs_symbol->get_type()))
       {
         annotated_type = annotation_types.front();
         can_emit_annotation_check = true;
@@ -1620,7 +1623,7 @@ void python_converter::get_var_assign(
     is_converting_rhs = true;
 
     if (lhs_symbol)
-      rhs = get_rhs_with_dict_resolution(ast_node, lhs_symbol->type);
+      rhs = get_rhs_with_dict_resolution(ast_node, lhs_symbol->get_type());
     else
       rhs = get_expr(ast_node["value"]);
 
@@ -1666,12 +1669,13 @@ void python_converter::get_var_assign(
       if (expr.is_symbol())
       {
         if (const symbolt *sym = symbol_table_.find_symbol(expr.identifier()))
-          t = sym->type;
+          t = sym->get_type();
       }
       return try_follow_symbol_type(t);
     };
 
-    const typet lhs_runtime_type = lhs_symbol ? lhs_symbol->type : lhs.type();
+    const typet lhs_runtime_type =
+      lhs_symbol ? lhs_symbol->get_type() : lhs.type();
     const typet rhs_runtime_type = resolve_runtime_type(rhs);
     if (
       dict_handler_->is_dict_type(lhs_runtime_type) &&
@@ -1858,7 +1862,7 @@ void python_converter::get_var_assign(
       thetype.size().is_constant();
       assert(thetype.size().is_nil());
 #endif
-      lhs_symbol->type = rhs.type();
+      lhs_symbol->set_type(rhs.type());
 
       code_declt decl(symbol_expr(*lhs_symbol), rhs);
       decl.location() = location_begin;
@@ -1888,8 +1892,11 @@ void python_converter::get_var_assign(
   }
   else
   {
-    lhs_symbol->value = gen_zero(current_element_type, true);
-    lhs_symbol->value.zero_initializer(true);
+    {
+      exprt v = gen_zero(current_element_type, true);
+      v.zero_initializer(true);
+      lhs_symbol->set_value(std::move(v));
+    }
 
     code_declt decl(symbol_expr(*lhs_symbol));
     decl.location() = location_begin;
@@ -1940,7 +1947,7 @@ typet python_converter::resolve_variable_type(
 
   const symbolt *sym = symbol_table_.find_symbol(symbol_id);
   if (sym != nullptr)
-    return sym->type;
+    return sym->get_type();
   else
   {
     log_error(
@@ -2064,16 +2071,16 @@ void python_converter::get_compound_assign(
       if (symbol)
       {
         // Update the symbol's type to pointer if concatenated returns pointer
-        symbol->type = concatenated.type();
+        symbol->set_type(concatenated.type());
 
         // Update LHS to be a symbol with the new type
-        lhs = symbol_exprt(symbol->id, symbol->type);
+        lhs = symbol_exprt(symbol->id, symbol->get_type());
 
         // For pointer results, don't update the value
         // (it will be assigned via the assignment statement)
         if (concatenated.type().is_array())
         {
-          symbol->value = concatenated;
+          symbol->set_value(concatenated);
         }
       }
     }
@@ -2474,7 +2481,8 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
             if (!bool_object.is_symbol())
               bool_object =
                 store_call_result(bool_object, location, "cond_obj");
-            const code_typet &method_type = to_code_type(bool_method->type);
+            const code_typet &method_type =
+              to_code_type(bool_method->get_type());
             side_effect_expr_function_callt bool_call;
             bool_call.function() = symbol_expr(*bool_method);
             bool_call.type() = method_type.return_type();
@@ -3171,7 +3179,7 @@ void python_converter::get_delete_statement(
       {
         const symbolt *sym = symbol_table_.find_symbol(dict_expr.identifier());
         if (sym)
-          dict_type = sym->type;
+          dict_type = sym->get_type();
       }
 
       if (dict_type.id() == "symbol")
@@ -3217,8 +3225,9 @@ void python_converter::get_delete_statement(
       }
 
       // Determine the class struct type from the instance symbol type.
-      const typet &sym_type =
-        inst_sym->type.is_pointer() ? inst_sym->type.subtype() : inst_sym->type;
+      const typet &sym_type = inst_sym->get_type().is_pointer()
+                                ? inst_sym->get_type().subtype()
+                                : inst_sym->get_type();
       typet resolved = sym_type;
       if (resolved.id() == "symbol")
         resolved = ns.follow(resolved);
@@ -3237,7 +3246,8 @@ void python_converter::get_delete_statement(
       const std::string class_tag_id = "tag-" + class_tag;
       const symbolt *class_type_sym = symbol_table_.find_symbol(class_tag_id);
       const struct_typet &class_struct =
-        class_type_sym ? to_struct_type(class_type_sym->type) : struct_type;
+        class_type_sym ? to_struct_type(class_type_sym->get_type())
+                       : struct_type;
 
       // Find the class-level attribute symbol (the default value to restore).
       symbol_id class_sid = create_symbol_id();
