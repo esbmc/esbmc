@@ -766,9 +766,35 @@ typet python_converter::infer_return_type_from_body(const nlohmann::json &body)
         ret_val["id"] == "self" && !current_class_name_.empty())
         return type_handler_.get_typet(current_class_name_);
 
-      // If returning a tuple, infer its type
+      // If returning a tuple, infer its type. This routine runs twice:
+      // once before function body conversion (so return statements can
+      // be typed in the right context), and once afterwards.
+      // tuple_handler evaluates each element via get_expr, which aborts
+      // on a Name that refers to a function-local variable not yet
+      // declared in the symbol table. Restrict the pre-body call to
+      // tuples whose elements are all Constants (or otherwise
+      // resolvable without symbol lookup); for tuples containing
+      // locals, leave the return type empty and let the post-body
+      // second pass infer it. See #4807.
       if (ret_val["_type"] == "Tuple")
-        return tuple_handler_->get_tuple_expr(ret_val).type();
+      {
+        bool all_constant = true;
+        if (ret_val.contains("elts") && ret_val["elts"].is_array())
+        {
+          for (const auto &elt : ret_val["elts"])
+          {
+            if (!elt.contains("_type") || elt["_type"] != "Constant")
+            {
+              all_constant = false;
+              break;
+            }
+          }
+        }
+        if (all_constant)
+          return tuple_handler_->get_tuple_expr(ret_val).type();
+        // Fall through -- post-body inference will pick up the real
+        // type once the local symbols have been declared.
+      }
 
       // Constant returns (including strings)
       if (ret_val["_type"] == "Constant" && ret_val.contains("value"))
