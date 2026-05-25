@@ -315,6 +315,13 @@ math(EXPR ESBMC_REGRESS_TIMEOUT_SLOW "${ESBMC_REGRESS_TIMEOUT} * 2")
 set(_slow_regression_tests
     "regression/humaneval/humaneval_34"
     "regression/humaneval/humaneval_54"
+    # humaneval_111 / _153 / _161 used to fast-crash with
+    # "X() requires constant string" during conversion; with the
+    # consteval+nondet fallback in PR #4811 they now reach symex and
+    # need the extra budget to finish on slower CI runners.
+    "regression/humaneval/humaneval_111"
+    "regression/humaneval/humaneval_153"
+    "regression/humaneval/humaneval_161"
     "regression/quixbugs/next_palindrome"
     "regression/quixbugs/pascal"
     "regression/ai-generated-code/two_sum"
