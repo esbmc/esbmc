@@ -2517,7 +2517,7 @@ bool esbmc_parseoptionst::process_goto_program(
     // refuse the erasure — preserving checks that would otherwise be
     // silently dropped. Skipped under --termination / --unwinding-
     // assertions because loop presence is observable in those modes.
-    goto_loop_simplify(goto_functions);
+    goto_loop_simplify(goto_functions, options);
 
     if (options.get_bool_option("atomicity-check"))
       goto_atomicity_check(goto_functions, ns, context);
