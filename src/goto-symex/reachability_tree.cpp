@@ -29,7 +29,7 @@ reachability_treet::reachability_treet(
 {
   // Put a few useful symbols in the symbol table.
   symbolt sym;
-  sym.type = bool_typet();
+  sym.set_type(bool_typet());
   sym.id = "execution_statet::\\guard_exec";
   sym.name = "execution_statet::\\guard_exec";
   context.move(sym);
@@ -281,15 +281,15 @@ bool reachability_treet::reset_to_unexplored_state()
 void reachability_treet::go_next_state()
 {
   std::list<std::shared_ptr<execution_statet>>::iterator it = cur_state_it;
-  it++;
+  ++it;
   if (it != execution_states.end())
-    cur_state_it++;
+    ++cur_state_it;
   else
   {
     while (execution_states.size() > 0 && !step_next_state())
     {
       it = cur_state_it;
-      cur_state_it--;
+      --cur_state_it;
 
       // For the last one. Only fire the leak walker when every thread has
       // reached a terminal state — otherwise a still-running spawned thread
@@ -303,7 +303,7 @@ void reachability_treet::go_next_state()
     }
 
     if (execution_states.size() > 0)
-      cur_state_it++;
+      ++cur_state_it;
   }
 }
 

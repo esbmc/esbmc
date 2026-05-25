@@ -1,0 +1,4 @@
+CORE
+main.py
+--enable-unreachability-intrinsic --unwind 1
+ERROR: __ESBMC_unreachable takes no arguments

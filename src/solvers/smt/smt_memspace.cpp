@@ -220,7 +220,7 @@ void smt_convt::renumber_symbol_address(
 
   const typet *t = nullptr;
   if (const symbolt *s = ns.lookup(sym.thename))
-    t = &s->type;
+    t = &s->get_type();
 
   // Two different approaches if we do or don't have an address-of pointer
   // variable already.
@@ -520,7 +520,7 @@ smt_astt smt_convt::convert_addr_of(const expr2tc &expr)
 
     const typet *t = nullptr;
     if (const symbolt *s = ns.lookup(symbol.thename))
-      t = &s->type;
+      t = &s->get_type();
 
     return convert_identifier_pointer(obj.ptr_obj, symbol.get_symbol_name(), t);
   }

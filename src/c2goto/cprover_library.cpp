@@ -210,6 +210,9 @@ const static std::vector<std::string> python_c_models = {
   "__python_str_concat",
   "__python_str_repeat",
   "__python_str_slice",
+  "__python_int_to_str",
+  "__python_bool_to_str",
+  "__python_float_to_str",
   "__ESBMC_list_find_index",
   "__ESBMC_list_remove_at",
   "__ESBMC_list_set_at",
@@ -583,8 +586,8 @@ void add_cprover_library(contextt &context, const languaget *language)
 
   // Traverse symbols and get dependencies from both their nested types and values
   new_ctx.foreach_operand([&symbol_deps](const symbolt &s) {
-    generate_symbol_deps(s.id, s.value, symbol_deps);
-    generate_symbol_deps(s.id, s.type, symbol_deps);
+    generate_symbol_deps(s.id, s.get_value(), symbol_deps);
+    generate_symbol_deps(s.id, s.get_type(), symbol_deps);
   });
 
   // Add two hacks; we might use either pthread_mutex_lock or the checked
@@ -621,7 +624,7 @@ void add_cprover_library(contextt &context, const languaget *language)
     const symbolt *symbol = context.find_symbol(s.id);
     if (
       (is_solidity || uses_whitelist) ||
-      (symbol != nullptr && symbol->value.is_nil()))
+      (symbol != nullptr && symbol->get_value().is_nil()))
     {
       store_ctx.add(s);
       ingest_symbol(s.id, symbol_deps, to_include);
@@ -659,8 +662,8 @@ void add_cprover_library(contextt &context, const languaget *language)
 
       if (uses_whitelist)
       {
-        generate_symbol_deps(s->id, s->value, symbol_deps);
-        generate_symbol_deps(s->id, s->type, symbol_deps);
+        generate_symbol_deps(s->id, s->get_value(), symbol_deps);
+        generate_symbol_deps(s->id, s->get_type(), symbol_deps);
       }
 
       ingest_symbol(*nameit, symbol_deps, to_include);
@@ -681,7 +684,7 @@ void add_cprover_library(contextt &context, const languaget *language)
   // value is nil) will stay unresolved. A normal linker would reject such files, but we provide some compatibility with
   // those and initialize the extern variables to nondet.
   context.Foreach_operand([&context](symbolt &s) {
-    if (s.is_extern && !s.type.is_code())
+    if (s.is_extern && !s.get_type().is_code())
     {
       log_debug(
         "c2goto",
@@ -689,10 +692,10 @@ void add_cprover_library(contextt &context, const languaget *language)
         "nondet! "
         "This code would not compile with an actual compiler.",
         s.id);
-      exprt value =
-        exprt("sideeffect", get_complete_type(s.type, namespacet{context}));
+      exprt value = exprt(
+        "sideeffect", get_complete_type(s.get_type(), namespacet{context}));
       value.statement("nondet");
-      s.value = value;
+      s.set_value(value);
     }
   });
 }

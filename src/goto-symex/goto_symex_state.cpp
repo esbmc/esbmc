@@ -135,15 +135,12 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
       return true;
   }
 
-  // Keeping additional with data achieves nothing; no code in ESBMC inspects
-  // with chains to extract data from them.
-  // FIXME: actually benchmark this and look at timing results, it may be
-  // important benchmarks (i.e. TACAS) work better with some propagation
   if (is_with2t(expr))
   {
     if (
-      config.options.get_bool_option("incremental-bmc") ||
-      config.options.get_bool_option("k-induction"))
+      config.language.lid != language_idt::PYTHON &&
+      (config.options.get_bool_option("incremental-bmc") ||
+       config.options.get_bool_option("k-induction")))
       // When this option is enabled, the constant propagation
       // with feature will significantly impact performance.
       // More importantly, the use of incremental-BMC / k-induction does not heavily
@@ -424,7 +421,14 @@ void goto_symex_statet::fixup_renamed_type(
   expr2tc &expr,
   const type2tc &orig_type)
 {
-  if (is_code_type(orig_type))
+  if (is_code_type(orig_type) || is_code_type(expr->type))
+  {
+    return;
+  }
+  // Empty (void) types have no width; the scalar-vs-scalar width comparison
+  // below would otherwise throw symbolic_type_excp from get_width(). No
+  // fix-up is meaningful for void values, so bail out.
+  if (is_empty_type(orig_type) || is_empty_type(expr->type))
   {
     return;
   }

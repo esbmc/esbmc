@@ -1014,7 +1014,7 @@ static inline void static_lifetime_init(const contextt &context, codet &dest)
 
   // call designated "initialization" functions
   context.foreach_operand_in_order([&dest](const symbolt &s) {
-    if (s.type.initialization() && s.type.is_code())
+    if (s.get_type().initialization() && s.get_type().is_code())
     {
       code_function_callt function_call;
       function_call.function() = symbol_expr(s);

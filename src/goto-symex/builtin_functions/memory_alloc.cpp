@@ -42,15 +42,18 @@ expr2tc goto_symext::create_dynamic_memory_symbol(
   symbol.mode = "C";
 
   typet renamedtype = ns.follow(migrate_type_back(elem_type));
-  symbol.type = typet(typet::t_array);
-  symbol.type.subtype() = renamedtype;
-  symbol.type.size(migrate_expr_back(size_expr));
-  symbol.type.dynamic(true);
-  symbol.type.set(
-    "alignment", constant_exprt(config.ansi_c.max_alignment(), size_type()));
+  {
+    typet t(typet::t_array);
+    t.subtype() = renamedtype;
+    t.size(migrate_expr_back(size_expr));
+    t.dynamic(true);
+    t.set(
+      "alignment", constant_exprt(config.ansi_c.max_alignment(), size_type()));
+    symbol.set_type(std::move(t));
+  }
 
   new_context.add(symbol);
-  type2tc new_type = migrate_type(symbol.type);
+  type2tc new_type = migrate_symbol_type(symbol);
   return symbol2tc(new_type, symbol.id);
 }
 
@@ -440,24 +443,27 @@ expr2tc goto_symext::symex_mem_inf(
 
   typet renamedtype = ns.follow(migrate_type_back(type));
 
-  symbol.type = array_typet(renamedtype, exprt("infinity", size_type()));
-  symbol.type.dynamic(true);
-  symbol.type.set(
-    "alignment", constant_exprt(config.ansi_c.max_alignment(), size_type()));
+  {
+    typet t = array_typet(renamedtype, exprt("infinity", size_type()));
+    t.dynamic(true);
+    t.set(
+      "alignment", constant_exprt(config.ansi_c.max_alignment(), size_type()));
+    symbol.set_type(std::move(t));
+  }
   symbol.mode = "C";
   new_context.add(symbol);
 
-  type2tc new_type = migrate_type(symbol.type);
+  type2tc new_type = migrate_symbol_type(symbol);
 
   type2tc rhs_type;
   expr2tc rhs_ptr_obj;
 
-  type2tc subtype = migrate_type(symbol.type.subtype());
+  type2tc subtype = migrate_type(symbol.get_type().subtype());
   expr2tc sym = symbol2tc(new_type, symbol.id);
   expr2tc idx_val = gen_long(size_type2(), 0L);
   expr2tc idx = index2tc(subtype, sym, idx_val);
   do_simplify(idx);
-  rhs_type = migrate_type(symbol.type.subtype());
+  rhs_type = migrate_type(symbol.get_type().subtype());
   rhs_ptr_obj = idx;
 
   expr2tc rhs_addrof = address_of2tc(rhs_type, rhs_ptr_obj);
@@ -561,42 +567,44 @@ expr2tc goto_symext::symex_mem(
   symbol.lvalue = true;
 
   typet renamedtype = ns.follow(migrate_type_back(type));
-  if (size_is_one)
-    symbol.type = renamedtype;
-  else
   {
-    symbol.type = typet(typet::t_array);
-    symbol.type.subtype() = renamedtype;
-    symbol.type.size(migrate_expr_back(size));
+    typet t;
+    if (size_is_one)
+      t = renamedtype;
+    else
+    {
+      t = typet(typet::t_array);
+      t.subtype() = renamedtype;
+      t.size(migrate_expr_back(size));
+    }
+    t.dynamic(true);
+    t.set(
+      "alignment", constant_exprt(config.ansi_c.max_alignment(), size_type()));
+    symbol.set_type(std::move(t));
   }
-
-  symbol.type.dynamic(true);
-
-  symbol.type.set(
-    "alignment", constant_exprt(config.ansi_c.max_alignment(), size_type()));
 
   symbol.mode = "C";
 
   new_context.add(symbol);
 
-  type2tc new_type = migrate_type(symbol.type);
+  type2tc new_type = migrate_symbol_type(symbol);
 
   type2tc rhs_type;
   expr2tc rhs_ptr_obj;
 
   if (size_is_one)
   {
-    rhs_type = migrate_type(symbol.type);
+    rhs_type = migrate_symbol_type(symbol);
     rhs_ptr_obj = symbol2tc(new_type, symbol.id);
   }
   else
   {
-    type2tc subtype = migrate_type(symbol.type.subtype());
+    type2tc subtype = migrate_type(symbol.get_type().subtype());
     expr2tc sym = symbol2tc(new_type, symbol.id);
     expr2tc idx_val = gen_long(size->type, 0L);
     expr2tc idx = index2tc(subtype, sym, idx_val);
     do_simplify(idx);
-    rhs_type = migrate_type(symbol.type.subtype());
+    rhs_type = migrate_type(symbol.get_type().subtype());
     rhs_ptr_obj = idx;
   }
 

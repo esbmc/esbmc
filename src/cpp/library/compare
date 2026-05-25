@@ -1,0 +1,315 @@
+#ifndef ESBMC_COMPARE
+#define ESBMC_COMPARE
+
+// Minimal C++20 <compare> operational model: enough to declare the three
+// comparison categories so user types can default operator<=> per
+// [class.spaceship] in N4861, and to compare those category values
+// against the literal 0 per [cmp.categories].
+//
+// The signed-char value layout matches the one libc++ and libstdc++ use,
+// which is also what Clang's compiler hooks for default <=> assume.
+
+namespace std
+{
+
+namespace __cmp_detail
+{
+// Sentinel type so that `cat == 0` is well-formed but `cat == 1` is not,
+// per [cmp.categories.pre]/p3: comparison operators take a literal-zero
+// argument and SFINAE on the literal-zero property.
+struct __zero_cmp
+{
+  consteval __zero_cmp(int v) noexcept
+  {
+    if (v != 0)
+      __builtin_unreachable();
+  }
+};
+} // namespace __cmp_detail
+
+class partial_ordering
+{
+  signed char __value_;
+  bool __is_ordered_;
+
+  constexpr explicit partial_ordering(signed char v, bool o) noexcept
+    : __value_(v), __is_ordered_(o)
+  {
+  }
+
+public:
+  static const partial_ordering less;
+  static const partial_ordering equivalent;
+  static const partial_ordering greater;
+  static const partial_ordering unordered;
+
+  friend constexpr bool
+  operator==(partial_ordering, partial_ordering) noexcept = default;
+
+  friend constexpr bool
+  operator==(partial_ordering v, __cmp_detail::__zero_cmp) noexcept
+  {
+    return v.__is_ordered_ && v.__value_ == 0;
+  }
+  friend constexpr bool
+  operator<(partial_ordering v, __cmp_detail::__zero_cmp) noexcept
+  {
+    return v.__is_ordered_ && v.__value_ < 0;
+  }
+  friend constexpr bool
+  operator>(partial_ordering v, __cmp_detail::__zero_cmp) noexcept
+  {
+    return v.__is_ordered_ && v.__value_ > 0;
+  }
+  friend constexpr bool
+  operator<=(partial_ordering v, __cmp_detail::__zero_cmp) noexcept
+  {
+    return v.__is_ordered_ && v.__value_ <= 0;
+  }
+  friend constexpr bool
+  operator>=(partial_ordering v, __cmp_detail::__zero_cmp) noexcept
+  {
+    return v.__is_ordered_ && v.__value_ >= 0;
+  }
+  friend constexpr bool
+  operator<(__cmp_detail::__zero_cmp, partial_ordering v) noexcept
+  {
+    return v.__is_ordered_ && 0 < v.__value_;
+  }
+  friend constexpr bool
+  operator>(__cmp_detail::__zero_cmp, partial_ordering v) noexcept
+  {
+    return v.__is_ordered_ && 0 > v.__value_;
+  }
+  friend constexpr bool
+  operator<=(__cmp_detail::__zero_cmp, partial_ordering v) noexcept
+  {
+    return v.__is_ordered_ && 0 <= v.__value_;
+  }
+  friend constexpr bool
+  operator>=(__cmp_detail::__zero_cmp, partial_ordering v) noexcept
+  {
+    return v.__is_ordered_ && 0 >= v.__value_;
+  }
+
+  friend constexpr partial_ordering
+  operator<=>(partial_ordering v, __cmp_detail::__zero_cmp) noexcept
+  {
+    return v;
+  }
+  friend constexpr partial_ordering
+  operator<=>(__cmp_detail::__zero_cmp, partial_ordering v) noexcept
+  {
+    return partial_ordering(-v.__value_, v.__is_ordered_);
+  }
+};
+inline constexpr partial_ordering partial_ordering::less{-1, true};
+inline constexpr partial_ordering partial_ordering::equivalent{0, true};
+inline constexpr partial_ordering partial_ordering::greater{1, true};
+inline constexpr partial_ordering partial_ordering::unordered{0, false};
+
+class weak_ordering
+{
+  signed char __value_;
+
+  constexpr explicit weak_ordering(signed char v) noexcept : __value_(v)
+  {
+  }
+
+public:
+  static const weak_ordering less;
+  static const weak_ordering equivalent;
+  static const weak_ordering greater;
+
+  constexpr operator partial_ordering() const noexcept
+  {
+    if (__value_ == 0)
+      return partial_ordering::equivalent;
+    return __value_ < 0 ? partial_ordering::less : partial_ordering::greater;
+  }
+
+  friend constexpr bool
+  operator==(weak_ordering, weak_ordering) noexcept = default;
+
+  friend constexpr bool
+  operator==(weak_ordering v, __cmp_detail::__zero_cmp) noexcept
+  {
+    return v.__value_ == 0;
+  }
+  friend constexpr bool
+  operator<(weak_ordering v, __cmp_detail::__zero_cmp) noexcept
+  {
+    return v.__value_ < 0;
+  }
+  friend constexpr bool
+  operator>(weak_ordering v, __cmp_detail::__zero_cmp) noexcept
+  {
+    return v.__value_ > 0;
+  }
+  friend constexpr bool
+  operator<=(weak_ordering v, __cmp_detail::__zero_cmp) noexcept
+  {
+    return v.__value_ <= 0;
+  }
+  friend constexpr bool
+  operator>=(weak_ordering v, __cmp_detail::__zero_cmp) noexcept
+  {
+    return v.__value_ >= 0;
+  }
+  friend constexpr bool
+  operator<(__cmp_detail::__zero_cmp, weak_ordering v) noexcept
+  {
+    return 0 < v.__value_;
+  }
+  friend constexpr bool
+  operator>(__cmp_detail::__zero_cmp, weak_ordering v) noexcept
+  {
+    return 0 > v.__value_;
+  }
+  friend constexpr bool
+  operator<=(__cmp_detail::__zero_cmp, weak_ordering v) noexcept
+  {
+    return 0 <= v.__value_;
+  }
+  friend constexpr bool
+  operator>=(__cmp_detail::__zero_cmp, weak_ordering v) noexcept
+  {
+    return 0 >= v.__value_;
+  }
+
+  friend constexpr weak_ordering
+  operator<=>(weak_ordering v, __cmp_detail::__zero_cmp) noexcept
+  {
+    return v;
+  }
+  friend constexpr weak_ordering
+  operator<=>(__cmp_detail::__zero_cmp, weak_ordering v) noexcept
+  {
+    return weak_ordering(-v.__value_);
+  }
+};
+inline constexpr weak_ordering weak_ordering::less{-1};
+inline constexpr weak_ordering weak_ordering::equivalent{0};
+inline constexpr weak_ordering weak_ordering::greater{1};
+
+class strong_ordering
+{
+  signed char __value_;
+
+  constexpr explicit strong_ordering(signed char v) noexcept : __value_(v)
+  {
+  }
+
+public:
+  static const strong_ordering less;
+  static const strong_ordering equal;
+  static const strong_ordering equivalent;
+  static const strong_ordering greater;
+
+  constexpr operator partial_ordering() const noexcept
+  {
+    if (__value_ == 0)
+      return partial_ordering::equivalent;
+    return __value_ < 0 ? partial_ordering::less : partial_ordering::greater;
+  }
+  constexpr operator weak_ordering() const noexcept
+  {
+    if (__value_ == 0)
+      return weak_ordering::equivalent;
+    return __value_ < 0 ? weak_ordering::less : weak_ordering::greater;
+  }
+
+  friend constexpr bool
+  operator==(strong_ordering, strong_ordering) noexcept = default;
+
+  friend constexpr bool
+  operator==(strong_ordering v, __cmp_detail::__zero_cmp) noexcept
+  {
+    return v.__value_ == 0;
+  }
+  friend constexpr bool
+  operator<(strong_ordering v, __cmp_detail::__zero_cmp) noexcept
+  {
+    return v.__value_ < 0;
+  }
+  friend constexpr bool
+  operator>(strong_ordering v, __cmp_detail::__zero_cmp) noexcept
+  {
+    return v.__value_ > 0;
+  }
+  friend constexpr bool
+  operator<=(strong_ordering v, __cmp_detail::__zero_cmp) noexcept
+  {
+    return v.__value_ <= 0;
+  }
+  friend constexpr bool
+  operator>=(strong_ordering v, __cmp_detail::__zero_cmp) noexcept
+  {
+    return v.__value_ >= 0;
+  }
+  friend constexpr bool
+  operator<(__cmp_detail::__zero_cmp, strong_ordering v) noexcept
+  {
+    return 0 < v.__value_;
+  }
+  friend constexpr bool
+  operator>(__cmp_detail::__zero_cmp, strong_ordering v) noexcept
+  {
+    return 0 > v.__value_;
+  }
+  friend constexpr bool
+  operator<=(__cmp_detail::__zero_cmp, strong_ordering v) noexcept
+  {
+    return 0 <= v.__value_;
+  }
+  friend constexpr bool
+  operator>=(__cmp_detail::__zero_cmp, strong_ordering v) noexcept
+  {
+    return 0 >= v.__value_;
+  }
+
+  friend constexpr strong_ordering
+  operator<=>(strong_ordering v, __cmp_detail::__zero_cmp) noexcept
+  {
+    return v;
+  }
+  friend constexpr strong_ordering
+  operator<=>(__cmp_detail::__zero_cmp, strong_ordering v) noexcept
+  {
+    return strong_ordering(-v.__value_);
+  }
+};
+inline constexpr strong_ordering strong_ordering::less{-1};
+inline constexpr strong_ordering strong_ordering::equal{0};
+inline constexpr strong_ordering strong_ordering::equivalent{0};
+inline constexpr strong_ordering strong_ordering::greater{1};
+
+// Common helpers: is_eq, is_neq, is_lt, is_lteq, is_gt, is_gteq.
+constexpr bool is_eq(partial_ordering c) noexcept
+{
+  return c == 0;
+}
+constexpr bool is_neq(partial_ordering c) noexcept
+{
+  return c != 0;
+}
+constexpr bool is_lt(partial_ordering c) noexcept
+{
+  return c < 0;
+}
+constexpr bool is_lteq(partial_ordering c) noexcept
+{
+  return c <= 0;
+}
+constexpr bool is_gt(partial_ordering c) noexcept
+{
+  return c > 0;
+}
+constexpr bool is_gteq(partial_ordering c) noexcept
+{
+  return c >= 0;
+}
+
+} // namespace std
+
+#endif

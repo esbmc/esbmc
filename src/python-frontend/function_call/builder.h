@@ -36,6 +36,11 @@ public:
   bool is_cover_call(const symbol_id &function_id) const;
 
   /*
+   * Checks if __ESBMC_unreachable function is being invoked.
+   */
+  bool is_unreachable_call(const symbol_id &function_id) const;
+
+  /*
    * Checks if the Python len() function is being invoked.
    */
   bool is_len_call(const symbol_id &function_id) const;

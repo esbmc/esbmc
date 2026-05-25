@@ -98,7 +98,7 @@ on:
 
 jobs:
   build-esbmc:
-    if: ${{ inputs.esbmc_source == 'Rebuild' }}
+    if: ${{ inputs.validator == 'ESBMC' && inputs.esbmc_source == 'Rebuild' }}
     uses: ./.github/workflows/build.yml
     with:
       operating-system: ubuntu-24.04
@@ -112,7 +112,7 @@ jobs:
     if: ${{ always() && !cancelled() && (needs.build-esbmc.result == 'success' || needs.build-esbmc.result == 'skipped') }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           path: esbmc-src
 
@@ -124,34 +124,37 @@ jobs:
           echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
 
       - name: Download benchexec results
-        env:
-          GH_TOKEN: ${{ github.token }}
+        uses: actions/download-artifact@v8
+        with:
+          name: esbmc-result
+          path: ./
+          run-id: ${{ steps.parse.outputs.run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Extract benchexec results
         run: |
-          gh run download "${{ steps.parse.outputs.run_id }}" \
-            --repo esbmc/esbmc \
-            --name esbmc-result \
-            --dir ./
-          unzip output.zip
+          rm -rf ./esbmc-output $HOME/esbmc-output
+          unzip -q output.zip
           mv esbmc-output $HOME/esbmc-output
 
       - name: Download ESBMC binary (from benchexec run)
-        if: ${{ inputs.esbmc_source == 'Download from benchexec run' }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh run download "${{ steps.parse.outputs.run_id }}" \
-            --repo esbmc/esbmc \
-            --name 'release-ubuntu-24.04--b Release -e OFF -C' \
-            --dir ./
+        if: ${{ inputs.validator == 'ESBMC' && inputs.esbmc_source == 'Download from benchexec run' }}
+        uses: actions/download-artifact@v8
+        with:
+          name: 'release-ubuntu-24.04--b Release -e OFF -C'
+          path: ./
+          run-id: ${{ steps.parse.outputs.run_id }}
+          github-token: ${{ github.token }}
 
       - name: Download ESBMC binary (rebuilt)
-        if: ${{ inputs.esbmc_source == 'Rebuild' }}
-        uses: actions/download-artifact@v4
+        if: ${{ inputs.validator == 'ESBMC' && inputs.esbmc_source == 'Rebuild' }}
+        uses: actions/download-artifact@v8
         with:
           name: 'release-ubuntu-24.04--b Release -e OFF -C'
           path: ./
 
       - name: Install ESBMC binary
+        if: ${{ inputs.validator == 'ESBMC' }}
         run: |
           mkdir -p $HOME/output-action
           cp bin/esbmc $HOME/output-action/esbmc
@@ -185,7 +188,7 @@ jobs:
       - name: Move validation output
         run: mv $HOME/witness-output.zip ./witness-output.zip
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: witness-result
           path: witness-output.zip
@@ -193,9 +196,10 @@ jobs:
   generate-table:
     runs-on: ubuntu-slim
     needs: run-validation
+    if: ${{ always() && needs.run-validation.result == 'success' }}
     steps:
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
 
@@ -204,7 +208,7 @@ jobs:
           pip install --user benchexec
           echo "$(python -m site --user-base)/bin" >> "$GITHUB_PATH"
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Extract run ID from URL
         id: parse
@@ -214,28 +218,32 @@ jobs:
           echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
 
       - name: Download benchexec results
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh run download "${{ steps.parse.outputs.run_id }}" \
-            --repo esbmc/esbmc \
-            --name esbmc-result \
-            --dir ./
-          unzip output.zip
+        uses: actions/download-artifact@v8
+        with:
+          name: esbmc-result
+          path: ./
+          run-id: ${{ steps.parse.outputs.run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Extract benchexec results
+        run: unzip output.zip || true
 
       - name: Download witness results
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: witness-result
           path: ./
 
       - name: Extract witness results
-        run: unzip witness-output.zip
+        run: unzip witness-output.zip || true
 
-      - name: Generate combined table
+      - name: Generate html table
         run: ./scripts/competitions/compare-runs.sh esbmc-output witness-output
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
-          name: combined-table
-          path: diff-esbmc-output-witness-output/
+          name: html-table
+          path: |
+            diff-esbmc-output-witness-output/
+            esbmc-output/
+            witness-output/

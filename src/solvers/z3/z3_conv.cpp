@@ -848,10 +848,17 @@ smt_astt z3_convt::mk_ite(smt_astt cond, smt_astt t, smt_astt f)
 smt_astt z3_convt::mk_smt_int(const BigInt &theint)
 {
   smt_sortt s = mk_int_sort();
-  if (theint.is_negative())
+  // BigInt::to_int64 silently truncates past 64 bits, so for values outside
+  // the int64 range fall back to the string overload of z3::context::int_val.
+  // BigInt::is_uint64 is intentionally NOT used here even for in-range
+  // positives because it is a magnitude-only predicate (it ignores the sign),
+  // so a negative BigInt whose magnitude fits in uint64 would take the
+  // fast-path and silently flip sign. Issue #4642.
+  if (theint.is_int64())
     return new_ast(z3_ctx.int_val(theint.to_int64()), s);
 
-  return new_ast(z3_ctx.int_val(theint.to_uint64()), s);
+  std::string dec = integer2string(theint, 10);
+  return new_ast(z3_ctx.int_val(dec.c_str()), s);
 }
 
 smt_astt z3_convt::mk_smt_real(const std::string &str)

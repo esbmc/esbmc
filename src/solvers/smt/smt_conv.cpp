@@ -1304,6 +1304,23 @@ smt_astt smt_convt::get_single_max_normal()
   return mk_smt_real(val);
 }
 
+smt_astt smt_convt::get_double_inf_sentinel()
+{
+  // One above double max_normal: used to represent ±∞ in integer encoding.
+  // This value satisfies |x| > max_normal, so isinf/isfinite predicates fire.
+  static const std::string val =
+    integer2string((power(2, 53) - 1) * power(2, 971) + 1);
+  return mk_smt_real(val);
+}
+
+smt_astt smt_convt::get_single_inf_sentinel()
+{
+  // One above single max_normal: used to represent ±∞ in integer encoding.
+  static const std::string val =
+    integer2string((power(2, 24) - 1) * power(2, 104) + 1);
+  return mk_smt_real(val);
+}
+
 smt_astt smt_convt::get_double_eps_rel()
 {
   // Relative error bound for IEEE 754 double under round-to-nearest:
@@ -1930,10 +1947,12 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
         break;
       }
 
-      smt_astt max_val =
-        is_single ? get_single_max_normal() : get_double_max_normal();
+      // Use double_inf_sentinel for all precisions so that div-by-zero results
+      // are consistent with infinity constants (C's INFINITY is a float that
+      // gets cast to double, both must map to the same sentinel value).
+      smt_astt sentinel = get_double_inf_sentinel();
       smt_astt inf_result =
-        mk_ite(mk_lt(side1, zero), mk_sub(zero, max_val), max_val);
+        mk_ite(mk_lt(side1, zero), mk_sub(zero, sentinel), sentinel);
       smt_astt real_result = mk_div(side1, side2);
       const expr2tc &rounding_mode = to_ieee_div2t(expr).rounding_mode;
 
@@ -2997,10 +3016,22 @@ smt_astt smt_convt::convert_terminal(const expr2tc &expr)
     const constant_floatbv2t &thereal = to_constant_floatbv2t(expr);
     if (int_encoding)
     {
-      if (
-        thereal.value.is_zero() || thereal.value.is_NaN() ||
-        thereal.value.is_infinity())
+      if (thereal.value.is_zero() || thereal.value.is_NaN())
         return mk_smt_real("0");
+      if (thereal.value.is_infinity())
+      {
+        // Encode ±∞ as ±double_inf_sentinel (one above double max_normal) for
+        // all float widths. Using the double sentinel universally ensures that
+        // a float INFINITY constant typecast to double (C's INFINITY macro is
+        // float) produces the same value as a double IEEE_DIV(x,0) result.
+        // The double sentinel exceeds both single and double max_normal, so
+        // isinf/isfinite predicates work correctly for both precisions.
+        // NaN handling is deferred to the IEEE corner-case phase.
+        smt_astt sentinel = get_double_inf_sentinel();
+        if (thereal.value.get_sign())
+          return mk_sub(get_zero_real(), sentinel);
+        return sentinel;
+      }
       BigInt frac, exp;
       thereal.value.extract_base2(frac, exp);
       std::string result;

@@ -438,7 +438,7 @@ void goto_symext::phi_function(const statet::goto_statet &goto_state)
     // changed!
     const symbolt &symbol = *ns.lookup(variable.base_name);
 
-    type2tc type = migrate_type(symbol.type);
+    type2tc type = migrate_symbol_type(symbol);
 
     expr2tc cur_state_rhs = symbol2tc(type, symbol.id);
     renaming::level2t::rename_to_record(cur_state_rhs, variable);

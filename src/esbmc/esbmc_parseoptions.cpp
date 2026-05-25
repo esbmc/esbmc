@@ -340,6 +340,29 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("int-encoding", true);
     options.set_option("ir-ieee", true);
   }
+
+  // --ir requests integer/real arithmetic encoding via the SMT Int sort.
+  // Bitwuzla and Boolector are bit-vector-only backends; pairing them with
+  // --ir silently produces wrong-answer behaviour at solve time. cvc4, cvc5,
+  // yices, and mathsat all support Int and are left alone.
+  if (cmdline.isset("ir") || cmdline.isset("ir-ieee"))
+  {
+    for (const char *s : {"bitwuzla", "boolector"})
+    {
+      if (cmdline.isset(s))
+      {
+        log_error(
+          "--{} requires a solver that supports integer/real arithmetic. "
+          "--{} only supports bit-vector arithmetic. Re-run without --{}, "
+          "or drop --{} (--ir defaults to Z3).",
+          cmdline.isset("ir-ieee") ? "ir-ieee" : "ir",
+          s,
+          s,
+          s);
+        exit(1);
+      }
+    }
+  }
   if (cmdline.isset("fixedbv"))
     options.set_option("fixedbv", true);
   else
@@ -2988,7 +3011,7 @@ expr2tc esbmc_parseoptionst::calculate_a_property_monitor(
   const symbolt *fn = context.find_symbol("c:@F@" + name + "_status");
   assert(fn);
 
-  const codet &fn_code = to_code(fn->value);
+  const codet &fn_code = to_code(fn->get_value());
   assert(fn_code.get_statement() == "block");
   assert(fn_code.operands().size() == 1);
 
@@ -3084,7 +3107,7 @@ static unsigned int calc_globals_used(const namespacet &ns, const expr2tc &expr)
 
   const symbolt *sym = ns.lookup(identifier);
   assert(sym);
-  if (sym->static_lifetime || sym->type.is_dynamic_set())
+  if (sym->static_lifetime || sym->get_type().is_dynamic_set())
     return 1;
 
   return 0;

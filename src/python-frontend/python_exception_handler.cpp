@@ -2,7 +2,7 @@
 #include <python-frontend/exception_utils.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python_list.h>
-#include <python-frontend/string_builder.h>
+#include <python-frontend/string/string_builder.h>
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/type_handler.h>
 #include <python-frontend/type_utils.h>
@@ -164,7 +164,31 @@ void python_exception_handler::get_raise_statement(
     // FUNCTION_CALL:  MyException(&return_value, &"message");
     // Throw MyException return_value;
     raise = converter_.get_expr(element["exc"]);
-    if (raise.is_code() && raise.get("statement") == "function_call")
+
+    // get_function_call() returns the `_init_undefined` sentinel when the
+    // raised class (and its bases) define no __init__. Constructors emit
+    // this so var-assign can lower `x = MyClass()` to a bare declaration;
+    // the raise path has no such shortcut, so synthesize a zero-initialised
+    // instance of the class instead. Without this, the sentinel propagates
+    // into the cpp-throw operand and migrate aborts with "_init_undefined
+    // ... migrate expr failed". Covers user exception hierarchies whose
+    // subclasses inherit __init__ from `Exception`.
+    if (raise.id() == "_init_undefined")
+    {
+      if (type.is_empty())
+        type = any_type();
+      // type_handler_.get_typet returns a symbol_typet referring to the
+      // class's tag; gen_zero has no symbol-id branch and would yield a nil
+      // expression, which propagates into the cpp-throw operand and makes
+      // symex treat the throw as a bare re-throw. Resolve the symbol to the
+      // underlying struct before zero-initialising.
+      typet resolved = type;
+      if (resolved.id() == "symbol")
+        resolved = converter_.name_space().follow(type);
+      raise = gen_zero(resolved);
+      raise.type() = type;
+    }
+    else if (raise.is_code() && raise.get("statement") == "function_call")
     {
       code_function_callt call =
         to_code_function_call(converter_.convert_expression_to_code(raise));
@@ -406,7 +430,7 @@ symbolt python_exception_handler::create_assert_temp_variable(
   symbolt temp_symbol;
   temp_symbol.id = temp_sid_str;
   temp_symbol.name = temp_sid_str;
-  temp_symbol.type = bool_type();
+  temp_symbol.set_type(bool_type());
   temp_symbol.lvalue = true;
   temp_symbol.static_lifetime = false;
   temp_symbol.location = location;

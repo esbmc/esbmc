@@ -48,6 +48,7 @@ const std::string kStrlen = "strlen";
 const std::string kEsbmcAssume = "__ESBMC_assume";
 const std::string kVerifierAssume = "__VERIFIER_assume";
 const std::string kEsbmcAssert = "__ESBMC_assert";
+const std::string kEsbmcUnreachable = "__ESBMC_unreachable";
 const std::string kLoopInvariant = "__loop_invariant";
 const std::string kEsbmcLoopInvariant = "__ESBMC_loop_invariant";
 const std::string kEsbmcCover = "__ESBMC_cover";
@@ -92,6 +93,12 @@ bool function_call_builder::is_assume_call(const symbol_id &function_id) const
 bool function_call_builder::is_assert_call(const symbol_id &function_id) const
 {
   return function_id.get_function() == kEsbmcAssert;
+}
+
+bool function_call_builder::is_unreachable_call(
+  const symbol_id &function_id) const
+{
+  return function_id.get_function() == kEsbmcUnreachable;
 }
 
 bool function_call_builder::is_len_call(const symbol_id &function_id) const
@@ -172,7 +179,7 @@ symbol_id function_call_builder::build_function_id() const
             python_file, current_class_name, current_function_name);
           var_sid.set_object(name);
           symbolt *var_symbol = converter_.find_symbol(var_sid.to_string());
-          return var_symbol ? var_symbol->type : typet();
+          return var_symbol ? var_symbol->get_type() : typet();
         }
         else if (node["_type"] == "Attribute")
         {
@@ -209,7 +216,7 @@ symbol_id function_call_builder::build_function_id() const
             cls_sid.set_object(attr);
             symbolt *cls_sym = converter_.find_symbol(cls_sid.to_string());
             if (cls_sym)
-              return cls_sym->type;
+              return cls_sym->get_type();
             return typet();
           }
           return typet();
@@ -387,7 +394,7 @@ symbol_id function_call_builder::build_function_id() const
       symbolt *var_symbol = converter_.find_symbol(var_sid.to_string());
 
       auto symbol_points_to_list = [&](const symbolt *sym) -> bool {
-        return sym && is_pylist_object_type(sym->type, converter_.ns);
+        return sym && is_pylist_object_type(sym->get_type(), converter_.ns);
       };
 
       const bool var_symbol_is_list = symbol_points_to_list(var_symbol);
@@ -438,9 +445,10 @@ symbol_id function_call_builder::build_function_id() const
       // Check if this is a tuple by looking up the variable's type
       if (var_type == "tuple" || var_type.empty())
       {
-        if (var_symbol && var_symbol->type.id() == "struct")
+        if (var_symbol && var_symbol->get_type().id() == "struct")
         {
-          const struct_typet &struct_type = to_struct_type(var_symbol->type);
+          const struct_typet &struct_type =
+            to_struct_type(var_symbol->get_type());
 
           // Check if this is a tuple by examining the tag
           if (struct_type.tag().as_string().find("tag-tuple") == 0)
@@ -491,7 +499,7 @@ symbol_id function_call_builder::build_function_id() const
   }
   else if (
     is_assume_call(function_id) || is_assert_call(function_id) ||
-    is_cover_call(function_id))
+    is_cover_call(function_id) || is_unreachable_call(function_id))
   {
     function_id.clear();
   }
@@ -538,9 +546,9 @@ symbol_id function_call_builder::build_function_id() const
       }
 
       // Extract class name from the type, following symbol references
-      typet var_type = var_symbol->type.is_pointer()
-                         ? var_symbol->type.subtype()
-                         : var_symbol->type;
+      typet var_type = var_symbol->get_type().is_pointer()
+                         ? var_symbol->get_type().subtype()
+                         : var_symbol->get_type();
 
       // Follow symbol type references using the converter's namespace
       var_type = converter_.ns.follow(var_type);
@@ -618,7 +626,7 @@ exprt function_call_builder::build() const
       if (arg_symbol)
       {
         auto list_struct =
-          try_get_pylist_struct_type(arg_symbol->type, converter_.ns);
+          try_get_pylist_struct_type(arg_symbol->get_type(), converter_.ns);
         if (list_struct)
         {
           code_typet list_size_type;
@@ -787,6 +795,28 @@ exprt function_call_builder::build() const
     cover_code.location() = loc;
 
     return cover_code;
+  }
+
+  // __ESBMC_unreachable: emit a call to the C-style symbol so symex's
+  // intrinsic handler in symex_main.cpp fires under
+  // --enable-unreachability-intrinsic. Lowering matches the atomic_*
+  // pattern below: register a void(void) symbol id and call it.
+  if (is_unreachable_call(function_id))
+  {
+    if (!call_["args"].empty())
+      throw std::runtime_error("__ESBMC_unreachable takes no arguments");
+
+    code_typet fn_type;
+    fn_type.return_type() = empty_typet();
+
+    locationt location = converter_.get_location_from_decl(call_);
+    converter_.ensure_void_void_intrinsic(kEsbmcUnreachable, location);
+
+    code_function_callt call;
+    call.function() = symbol_exprt("c:@F@" + kEsbmcUnreachable, fn_type);
+    call.type() = empty_typet();
+    call.location() = location;
+    return call;
   }
 
   // __ESBMC_atomic_begin / __ESBMC_atomic_end: thin wrappers around the C

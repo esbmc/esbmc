@@ -7,46 +7,37 @@ weight: 4
 
 ## Control Flow and Loops
 
-- `for` loops support direct iteration over `range()`, lists, strings, and generators (functions using `yield` and generator expressions). Iteration over tuples is not yet supported.
-- List comprehensions and generator expressions are supported. Set comprehensions are not supported (`Unsupported expression SetComp`). Dictionary comprehensions are accepted by the parser but produce a dictionary whose subsequent key lookups raise `KeyError`.
+- `for` loops support direct iteration over `range()`, lists, strings, tuples, and generators (functions using `yield` and generator expressions).
+- List, set, and generator comprehensions are supported. Dictionary comprehensions are accepted by the parser but produce a dictionary whose subsequent key lookups raise `KeyError`.
 - Iteration over dictionaries via `d.keys()`, `d.values()`, and `d.items()` is supported inside `for` loops (see [Supported Features — Dictionaries](./supported-features#dictionaries)).
 
 ## Lists
 
-- `list.sort()` does not support the `key` or `reverse` keyword arguments.
-- `sorted()` does not support the `key` or `reverse` keyword arguments.
+- `list.sort()` does not support the `key` keyword argument; `reverse` is supported.
+- `sorted()` does not support the `key` keyword argument; `reverse` is supported.
 
 ## Sets
 
-- Set methods `.add()`, `.discard()`, `.update()`, `.issubset()`, `.issuperset()`, and `.symmetric_difference()` are not supported; use binary operators (`-`, `&`, `|`) instead. (`.remove()` happens to work because sets share the underlying list model.)
-- `frozenset` is not supported.
+- Set methods `.issubset()`, `.issuperset()`, and `.symmetric_difference()` are not supported; use the equivalent binary operators (`<=`, `>=`, `^`) instead.
 
 ## Dictionaries
 
 - Supported operations are: literals, subscript access/assignment, `del`, `in`/`not in`, equality, iteration over `keys()`/`values()`/`items()`, `update()`, `get()`, `setdefault()`, `pop()`, and `popitem()`. Other methods (e.g., `copy()`) are not yet implemented.
 
-## Tuples
-
-- Tuple indexing requires constant indices; variable indices (e.g., `t[i]` where `i` is a variable) are not supported.
-- Tuple iteration (`for item in my_tuple:`) is not yet supported.
-- Tuple methods `.count()` and `.index()` are not yet supported.
-- Tuple concatenation (`+`) and repetition (`*`) are not yet supported.
-- Tuple slicing is not yet supported.
-
 ## Complex Numbers
 
-- The `complex()` constructor accepts string arguments only when the string is a compile-time constant (e.g., `complex("1+2j")` is folded by the frontend). Constructing from a runtime string fails with "Unhandled symbol format in string extraction".
+- The `complex()` constructor accepts string arguments only when the string is a compile-time constant (e.g., `complex("1+2j")` is folded by the frontend). Constructing from a runtime string is rejected with the error `complex() does not support non-literal string arguments`.
 - `cmath.polar()` and `cmath.rect()` rely on the `atan2` model; results may differ from CPython in edge cases involving signed zeros and NaN.
 
 ## Built-in Functions
 
-- `min()` and `max()` support two-argument form and single-list form only; the `key` and `default` keyword arguments are not supported.
+- `min()` and `max()` support two-argument form and single-list form only; the `key` keyword argument is not supported (`default` is supported).
 - `any()` and `all()` currently support only list literals as arguments. `any()` rejects other iterables with a parse-time error; `all()` may trigger a dereference failure on non-list iterables.
-- `sum()` supports `int` and `float` element types only; the optional `start` argument is not supported.
-- `sorted()` supports `int`, `float`, and `str` element types only; `key` and `reverse` keyword arguments are not supported.
+- `sum()` supports `int` and `float` element types only.
+- `sorted()` supports `int`, `float`, and `str` element types only; the `key` keyword argument is not supported (`reverse` is supported).
 - `input()` is modelled as a nondeterministic string with a maximum length of 256 characters (under-approximation).
-- `print()` evaluates all arguments for side effects but does not produce actual output during verification.
-- `enumerate()` supports standard usage patterns but may have limitations with complex nested iterables or advanced parameter combinations.
+- `print()` evaluates each argument expression once (so safety checks and call side effects reach the GOTO program) but produces no actual output during verification.
+- `enumerate()` supports the iterable + `start` keyword forms; nested or unusually-shaped iterables are not exercised by the regression suite and may surface edge cases.
 
 ## Lambda Expressions
 
@@ -56,7 +47,6 @@ weight: 4
 ## F-Strings
 
 - Complex expressions inside f-strings may have limited support.
-- Only basic integer (`:d`, `:i`) and float (`:.Nf`) format specs are supported; advanced format specs (e.g., string alignment `:>10`, `:<5`) are not.
 - Custom format specifications for user-defined types are not supported.
 
 ## Union and Any Types
@@ -70,19 +60,21 @@ weight: 4
 ## Regular Expressions (`re` module)
 
 - Only `re.match()`, `re.search()`, and `re.fullmatch()` are supported.
-- Match objects do not expose group-capture methods (`.group()`, `.groups()`, `.span()`).
+- Group-capture methods (`.group()`, `.groups()`, `.span()`) are rewritten by the parser into direct calls to internal helpers, and only the `(\d+)` pattern is recognised precisely; everything else returns a nondeterministic value.
+- The result of `re.match` / `re.search` / `re.fullmatch` is a `bool`, not an `Optional[Match]`: `if m:` works, `if m is None:` does not.
 - Complex patterns beyond the explicitly supported constructs exhibit nondeterministic behavior.
 - Not supported: lookahead/lookbehind assertions, backreferences, named groups, conditional patterns, Unicode property escapes.
 
 ## Random Module
 
-- `random.choice()`, `random.shuffle()`, `random.sample()`, `random.seed()`, and other functions beyond `random()`, `uniform()`, `randint()`, `getrandbits()`, and `randrange()` are not yet supported.
+- Functions beyond `random()`, `uniform()`, `randint()`, `getrandbits()`, `randrange()`, `choice()`, `shuffle()`, `sample()`, and `seed()` are not yet supported.
 
 ## Collections Module
 
-- `defaultdict`: Only basic subscript access/assignment is supported. The `__missing__` hook, type-factory calls (e.g., `defaultdict(list)`), and methods beyond `__getitem__`/`__setitem__` are not supported.
-- `Counter`: Only `__getitem__`, `__setitem__`, `values()`, and truthiness are supported. `most_common()`, `elements()`, `subtract()`, `update()`, and arithmetic operators on `Counter` are not supported.
-- `OrderedDict`, `deque`, `namedtuple`, `ChainMap`, and other `collections` types are not supported.
+- `defaultdict`: subscript access/assignment and the common type-factory form (`defaultdict(list)`, with `.append()` on the materialised list) are supported. The `__missing__` hook and other methods are not.
+- `Counter`: only `__getitem__`, `__setitem__`, `values()`, and truthiness are supported. `most_common()` accepts the call but its result is unusable in any subsequent expression — comparisons trip a frontend "Unsupported comparison" error ([#4665](https://github.com/esbmc/esbmc/issues/4665)). `elements()`, `subtract()`, and arithmetic operators are not supported.
+- `Counter.update(...)` / `dict.update(...)` accept only the single-positional-argument form; the keyword-argument form (`c.update(a=1)`) is rejected at parse time even though it is valid CPython.
+- `OrderedDict` and `deque` support construction and basic indexing / append / `__setitem__`. `namedtuple`, `ChainMap`, and other `collections` types are not supported.
 
 ## Datetime Module
 
@@ -106,7 +98,8 @@ weight: 4
 
 ## NumPy Module
 
-- Arrays are modelled as plain Python lists; array shapes, dtypes, multi-dimensional indexing (`a[i, j]`), and broadcasting are not supported.
+- Arrays are modelled as plain Python lists; array shapes, dtypes, multi-dimensional indexing (`a[i, j]`), and broadcasting are not supported. Reading `.shape` raises `AttributeError`, and `a[i, j]` is rejected with `TypeError: multi-dimensional indexing (a[i, j, ...]) is not supported`.
+- Adding a scalar to a 1D array (`a + n`) currently aborts the SMT encoder with a sort-width assertion in `mk_store` ([#4668](https://github.com/esbmc/esbmc/issues/4668)).
 - Most NumPy functions beyond those listed in [Supported Features — NumPy](./supported-features#numpy-module-numpy) are not available.
 - Several math stub functions (e.g., `np.sin`, `np.sqrt`) return constant placeholder values rather than computing the real result; these are suitable only for type-inference testing, not numerical verification.
 - `numpy.linalg.det` is a 2-scalar stub; general matrix operations are not supported.
@@ -144,4 +137,4 @@ weight: 4
 
 ## Module System
 
-- Built-in variable support is limited to `__name__`; `__file__`, `__doc__`, `__package__`, and other built-ins are not yet supported.
+- Built-in variable support is limited to `__name__` and `__file__`; `__doc__`, `__package__`, and other built-ins are not yet supported.

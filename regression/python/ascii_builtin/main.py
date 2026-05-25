@@ -1,0 +1,5 @@
+assert ascii("a") == "'a'"
+assert ascii("it's") == "\"it's\""
+assert ascii(5) == "5"
+assert ascii("café") == "'caf\\xe9'"
+assert ascii("a\nb") == "'a\\nb'"

@@ -6,7 +6,7 @@
 #include <python-frontend/global_scope.h>
 #include <python-frontend/python_dict_handler.h>
 #include <python-frontend/python_math.h>
-#include <python-frontend/string_handler.h>
+#include <python-frontend/string/string_handler.h>
 #include <python-frontend/type_handler.h>
 #include <python-frontend/type_utils.h>
 #include <python-frontend/python_set.h>
@@ -294,6 +294,18 @@ private:
   exprt get_unary_operator_expr(const nlohmann::json &element);
 
   exprt get_binary_operator_expr(const nlohmann::json &element);
+
+  /// Coarse Python-level type category used to decide whether two operands
+  /// in an `Eq`/`NotEq` comparison are cross-type (Python's rule: different
+  /// types compare unequal without coercion, except within the numeric
+  /// tower of `bool`/`int`/`float`/`complex`).
+  ///
+  /// Returns one of `"numeric"`, `"string"`, `"bytes"`, `"list"`, `"dict"`,
+  /// `"tuple"`, or `""` when the category cannot be determined (unannotated
+  /// `any_type` void*, or a user-defined class instance whose `__eq__` must
+  /// still be dispatched). The caller MUST fall through to the existing
+  /// handling on the empty result.
+  std::string get_python_type_category(const typet &t) const;
 
   bool is_bytes_literal(const nlohmann::json &element);
 

@@ -210,13 +210,9 @@ void get_local_identifiers(
 {
   goto_function.body.get_decl_identifiers(dest);
 
-  const code_typet::argumentst &arguments = goto_function.type.arguments();
-
   // add parameters
-  for (const auto &param : arguments)
-  {
-    const irep_idt &identifier = param.get_identifier();
+  for (const irep_idt &identifier :
+       to_code_type(goto_function.type).argument_names)
     if (identifier != "")
       dest.insert(identifier);
-  }
 }

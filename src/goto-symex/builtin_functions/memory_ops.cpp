@@ -433,6 +433,18 @@ static inline expr2tc do_memcpy_expression(
     return expr2tc();
   }
 
+  // gen_byte_memcpy asserts on get_width(), which throws
+  // symbolic_type_excp for empty/code types. Defer to the C impl in that
+  // case rather than crash — seen when a Python defaultdict factory is a
+  // lambda whose call result has no resolved primitive width.
+  if (
+    is_empty_type(src->type) || is_empty_type(dst->type) ||
+    is_code_type(src->type) || is_code_type(dst->type))
+  {
+    log_debug("memcpy", "Skipping primitive path for empty/code type");
+    return expr2tc();
+  }
+
   // Base-case. Primitives!
   return goto_symex_utils::gen_byte_memcpy(
     src, dst, num_of_bytes, src_offset, dst_offset);
@@ -804,7 +816,9 @@ void goto_symext::intrinsic_memset(
     if (is_symbol2t(*base))
     {
       const symbolt *sym = ns.lookup(to_symbol2t(*base).thename);
-      if (sym != nullptr && sym->static_lifetime && sym->type.cmt_constant())
+      if (
+        sym != nullptr && sym->static_lifetime &&
+        sym->get_type().cmt_constant())
       {
         bump_call(func_call, "c:@F@__memset_impl");
         return;

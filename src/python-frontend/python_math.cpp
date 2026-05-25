@@ -1,9 +1,13 @@
 #include <python-frontend/python_math.h>
 #include <python-frontend/python_converter.h>
+#include <python-frontend/python_int_overflow.h>
 #include <python-frontend/type_utils.h>
 #include <python-frontend/math_guard_utils.h>
+#include <python-frontend/type_handler.h>
 #include <util/arith_tools.h>
+#include <util/bitvector.h>
 #include <util/c_types.h>
+#include <util/config.h>
 #include <util/ieee_float.h>
 #include <util/std_code.h>
 #include <util/std_types.h>
@@ -199,7 +203,7 @@ exprt python_math::resolve_symbol(const exprt &operand) const
   {
     symbolt *s = symbol_table.find_symbol(operand.identifier());
     assert(s && "Symbol not found in symbol table");
-    return s->value;
+    return s->get_value();
   }
   return operand;
 }
@@ -435,20 +439,62 @@ exprt python_math::handle_power(exprt lhs, exprt rhs)
     {
       resolved_base_value = binary2integer(
         resolved_lhs.value().as_string(), resolved_lhs.type().is_signedbv());
-      // Constant folding very large integer powers can be more expensive than
-      // keeping a logarithmic symbolic tree; cap it to keep conversion fast.
-      if (exponent <= kMaxConstantFoldExponent)
-      {
-        const BigInt power_value =
-          pow_bigint_non_negative(*resolved_base_value, exponent);
-        return from_integer(power_value, lhs.type());
-      }
     }
     catch (...)
     {
-      // Fall back to symbolic encoding if constant conversion overflows/ fails.
+      // Fall back to symbolic encoding if constant conversion fails.
     }
   }
+
+  // Cap constant folding to keep conversion fast; large symbolic trees are
+  // cheaper than huge BigInt powers.
+  if (resolved_base_value.has_value() && exponent <= kMaxConstantFoldExponent)
+  {
+    const BigInt power_value =
+      pow_bigint_non_negative(*resolved_base_value, exponent);
+    // ESBMC approximates Python int as int64 (see type_handler::get_typet
+    // FIXME); reject overflow at fold time rather than letting from_integer
+    // silently truncate. Bignum support tracked in #4642.
+    const unsigned width = bv_width(lhs.type());
+    const bool is_signed = lhs.type().is_signedbv();
+    const BigInt min_val = is_signed ? -BigInt::power2(width - 1) : BigInt(0);
+    const BigInt max_val =
+      is_signed ? BigInt::power2(width - 1) - 1 : BigInt::power2(width) - 1;
+    if (power_value < min_val || power_value > max_val)
+    {
+      // Under --ir the SMT layer drops widths and reasons over unbounded
+      // Int. Widen the *result* of ** to the helper type (signedbv(512))
+      // so the BigInt survives IR construction. Issue #1964 (Part 2) /
+      // #4642. This widening is scoped to the ** result and does not flow
+      // back into the lhs operand's type — that's the surgical bound that
+      // avoids the OM byte-width coupling discussed in #4653.
+      if (
+        config.options.get_bool_option("int-encoding") &&
+        type_handler::python_int_width() > width)
+      {
+        const typet wide = type_handler::python_int_typet();
+        const unsigned wide_width = type_handler::python_int_width();
+        const BigInt wide_min = -BigInt::power2(wide_width - 1);
+        const BigInt wide_max = BigInt::power2(wide_width - 1) - 1;
+        if (power_value >= wide_min && power_value <= wide_max)
+          return from_integer(power_value, wide);
+      }
+      throw python_int_overflow_excp(
+        "Python int overflow: " + integer2string(*resolved_base_value) +
+        " ** " + integer2string(exponent) + " = " +
+        integer2string(power_value) + " does not fit in " +
+        std::to_string(width) +
+        "-bit int. ESBMC approximates Python int as a fixed-width "
+        "bitvector; arbitrary-precision int support is tracked in "
+        "issue #4642.");
+    }
+    return from_integer(power_value, lhs.type());
+  }
+
+  // TODO(#4642): exponents above kMaxConstantFoldExponent fall through to
+  // build_power_expression below, which builds a symbolic multiplication tree
+  // at the same int64 type — the result still wraps silently on overflow.
+  // Full bignum support will close this residual gap.
 
   // Check resolved base for special cases
   if (resolved_base_value.has_value())
