@@ -194,6 +194,7 @@ const static std::vector<std::string> python_c_models = {
   "__python_str_strip_chars",
   "__python_char_islower",
   "__python_str_islower",
+  "__python_str_isupper",
   "__python_char_lower",
   "__python_str_lower",
   "__python_char_upper",
