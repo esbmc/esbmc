@@ -381,9 +381,17 @@ void goto_symext::symex_assign(
     // {unknown}. The L1 key is the symbol's level1 name; symex's
     // assignment() uses L1-renamed lhs for value-set updates, so both
     // the pre-havoc and post-havoc entries share the same key.
-    if (is_symbol2t(lhs_for_query))
+    //
+    // Compute the L1 name via an explicit L1 rename. cur_state->rename
+    // may wrap the result in a typecast (e.g. when the symbol's
+    // type changes across renaming levels), which makes is_symbol2t
+    // return false on the renamed form even though the underlying
+    // value-set entry exists.
+    expr2tc l1_lhs = lhs;
+    cur_state->top().level1.rename(l1_lhs);
+    if (is_symbol2t(l1_lhs))
     {
-      is_ptr_havoc_l1_name = to_symbol2t(lhs_for_query).get_symbol_name();
+      is_ptr_havoc_l1_name = to_symbol2t(l1_lhs).get_symbol_name();
       is_ptr_havoc_pre_object_map =
         cur_state->value_set.get_entry(is_ptr_havoc_l1_name, "").object_map;
     }
