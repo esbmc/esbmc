@@ -511,7 +511,26 @@ void python_converter::get_attributes_from_self(
           type = type_handler_.get_typet(annotated_type);
       }
       else
+      {
         type = type_handler_.get_typet(annotated_type);
+        // Python class instances have reference semantics. When the
+        // attribute holds an *aliased* class-instance reference — i.e. the
+        // RHS is a Name referring to another variable (typically a method
+        // parameter), as in `self.head = head` — store the field as a
+        // pointer. Downstream reassignments to chained references
+        // (q.head = curr; curr = curr.nxt) then remain type-consistent
+        // with the address-of lift applied when reading struct-typed
+        // members. Skip when the RHS is a fresh constructor call
+        // (e.g. self.a: A = A()), since the existing pipeline initialises
+        // it in place via FUNCTION_CALL: A(&self->a). See GitHub #4831.
+        bool rhs_is_aliased_name = stmt.contains("value") &&
+                                   stmt["value"].is_object() &&
+                                   stmt["value"].value("_type", "") == "Name";
+        if (
+          rhs_is_aliased_name && type.id() == "symbol" &&
+          json_utils::is_class(annotated_type, *ast_json))
+          type = gen_pointer_type(type);
+      }
 
       if (!clazz.has_component(attr_name))
       {
