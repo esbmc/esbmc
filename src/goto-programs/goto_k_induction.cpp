@@ -236,6 +236,7 @@ void goto_k_inductiont::make_nondet_assign(
   auto const &loop_vars = loop.get_modified_loop_vars();
 
   goto_programt dest;
+  size_t inserted = 0;
   for (auto const &lhs : loop_vars)
   {
     // Generate a nondeterministic value for the loop variable
@@ -247,14 +248,22 @@ void goto_k_inductiont::make_nondet_assign(
     t->code = code_assign2tc(lhs, rhs);
     // Keep the same location as the loop head
     t->location = loop_head->location;
+    ++inserted;
   }
 
   // Insert the generated assignments before the loop head in the program
   goto_function.body.insert_swap(loop_head, dest);
 
-  // Get original head again
-  // Since we are using insert_swap to keep the targets, the
-  // original loop head as shifted to after the assume cond
+  // Restore loop_head to its original position. insert_swap leaves
+  // loop_head pointing at the *first* inserted instruction (or, when
+  // nothing was inserted, at the original loop head). We must advance
+  // it by exactly `inserted` positions so it ends up back at the
+  // original loop_head — and never further, even if a prior pass
+  // (e.g. assume_loop_entry_cond_before_loop) already placed an
+  // inductive_step_instruction right after the loop_head: the old
+  // "walk while inductive_step_instruction" heuristic happily swallowed
+  // that ASSUME too, leaving the back-edge retargeted past the loop's
+  // exit IF and the loop guard bypassed in BC/FC.
   if (is_assert)
   {
     // Restore the original loop head if it was an assertion
@@ -263,9 +272,8 @@ void goto_k_inductiont::make_nondet_assign(
   }
   else
   {
-    // Move past the inserted instructions during the inductive step
-    while ((++loop_head)->inductive_step_instruction)
-      ;
+    for (size_t i = 0; i < inserted; ++i)
+      ++loop_head;
   }
 }
 
