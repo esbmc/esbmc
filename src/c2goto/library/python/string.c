@@ -417,6 +417,45 @@ __ESBMC_HIDE:;
   return has_cased;
 }
 
+// Python string isupper - true iff every cased character is uppercase
+// and there is at least one cased character. Mirrors __python_str_islower
+// with the cases swapped; UTF-8 continuation bytes after a 0xC2..0xDF
+// lead are treated as cased (best-effort Latin-1 supplement coverage).
+_Bool __python_str_isupper(const char *s)
+{
+__ESBMC_HIDE:;
+  if (!s || !*s)
+    return 0;
+
+  _Bool has_cased = 0;
+
+  while (*s)
+  {
+    unsigned char c = (unsigned char)*s;
+
+    if (c >= 'a' && c <= 'z')
+      return 0;
+
+    if (c >= 'A' && c <= 'Z')
+      has_cased = 1;
+
+    if (c >= 0xC2 && c <= 0xDF)
+    {
+      unsigned char next = (unsigned char)*(s + 1);
+      if (next >= 0x80 && next <= 0xBF)
+      {
+        has_cased = 1;
+        s += 2;
+        continue;
+      }
+    }
+
+    s++;
+  }
+
+  return has_cased;
+}
+
 // Python character lower - converts a single character to lowercase
 int __python_char_lower(int c)
 {
