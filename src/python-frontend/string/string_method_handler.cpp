@@ -2316,6 +2316,12 @@ exprt string_handler::handle_string_format(
       }
     }
   }
+  catch (const python_int_overflow_excp &)
+  {
+    // Bignum diagnostic (#4642) must not be swallowed -- the test
+    // suite asserts on the exact error message. Re-throw.
+    throw;
+  }
   catch (const std::runtime_error &e)
   {
     // Any non-constant format argument (line ~88) or unsupported
@@ -2850,6 +2856,11 @@ exprt string_handler::handle_string_format_map(
         throw std::runtime_error("format_map() keys must be constant strings");
       values.emplace(key, format_value_from_json(vals[i], converter_));
     }
+  }
+  catch (const python_int_overflow_excp &)
+  {
+    // Bignum diagnostic (#4642) must not be swallowed.
+    throw;
   }
   catch (const std::runtime_error &e)
   {
