@@ -139,14 +139,13 @@ void goto_loopst::collect_lhs_symbols(
     return;
   }
 
-  expr->foreach_operand(
-    [this, &modified, &unmodified](const expr2tc &e)
-    { collect_lhs_symbols(e, modified, unmodified); });
+  expr->foreach_operand([this, &modified, &unmodified](const expr2tc &e) {
+    collect_lhs_symbols(e, modified, unmodified);
+  });
 
   if (is_symbol2t(expr) && check_var_name(expr))
     modified.insert(expr);
 }
-
 
 bool goto_loopst::compute_function_summary(
   const irep_idt &fname,

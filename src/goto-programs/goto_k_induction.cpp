@@ -241,13 +241,11 @@ static bool contains_rec(const expr2tc &expr, const loopst::loop_varst &vars)
 
   // Otherwise recurse into operands and stop at the first match.
   bool res = false;
-  expr->foreach_operand(
-    [&vars, &res](const expr2tc &e)
-    {
-      if (res || is_nil_expr(e))
-        return;
-      res = contains_rec(e, vars);
-    });
+  expr->foreach_operand([&vars, &res](const expr2tc &e) {
+    if (res || is_nil_expr(e))
+      return;
+    res = contains_rec(e, vars);
+  });
   return res;
 }
 

@@ -178,10 +178,9 @@ void goto_terminationt::insert_markers_for_function(
     infos.push_back(
       {loop.get_original_loop_head(), loop.get_original_loop_exit()});
   std::sort(
-    infos.begin(),
-    infos.end(),
-    [](const loop_info &a, const loop_info &b)
-    { return a.back->location_number > b.back->location_number; });
+    infos.begin(), infos.end(), [](const loop_info &a, const loop_info &b) {
+      return a.back->location_number > b.back->location_number;
+    });
 
   for (const auto &info : infos)
   {

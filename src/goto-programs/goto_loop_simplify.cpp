@@ -16,8 +16,8 @@ void collect_symbol_names(const expr2tc &expr, name_set &out)
     return;
   if (is_symbol2t(expr))
     out.insert(to_symbol2t(expr).thename);
-  expr->foreach_operand([&out](const expr2tc &e)
-                        { collect_symbol_names(e, out); });
+  expr->foreach_operand(
+    [&out](const expr2tc &e) { collect_symbol_names(e, out); });
 }
 
 /// Body-shape predicate. @p body_first is the first instruction inside
