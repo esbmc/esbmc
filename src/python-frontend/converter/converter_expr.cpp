@@ -536,8 +536,25 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         abort();
       }
 
-      // Handle module attribute access (e.g., math.inf)
-      if (is_imported_module(var_name))
+      // Handle module attribute access (e.g., math.inf) — unless the module
+      // name is shadowed by a local binding in the current scope (e.g. a
+      // parameter named `node` when `from node import Node` is in scope).
+      // Python's scoping rules give precedence to the local binding.
+      auto name_has_local_binding = [&](const std::string &name) {
+        symbol_id sid = create_symbol_id();
+        sid.set_object(name);
+        if (find_symbol(sid.to_string()))
+          return true;
+        if (!current_func_name_.empty())
+        {
+          sid.set_function("");
+          if (find_symbol(sid.to_string()))
+            return true;
+        }
+        return false;
+      };
+
+      if (is_imported_module(var_name) && !name_has_local_binding(var_name))
       {
         std::string attr_name = element["attr"].get<std::string>();
         std::string module_path = imported_modules[var_name];
