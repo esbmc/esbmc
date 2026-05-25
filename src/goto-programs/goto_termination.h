@@ -2,6 +2,9 @@
 #define GOTO_PROGRAMS_GOTO_TERMINATION_H_
 
 #include <goto-programs/goto_functions.h>
+#include <goto-programs/goto_k_induction.h>
+#include <goto-programs/goto_loop_transform.h>
+#include <util/options.h>
 
 /// Reduce non-termination to a reachability safety property.
 ///
@@ -19,6 +22,74 @@
 /// Reduction: the program does NOT terminate iff every marker is
 /// unreachable in the inductive step. UNSAT at the marker proves
 /// non-termination; SAT in the base case refutes it.
-void goto_termination(goto_functionst &goto_functions);
+///
+/// Soundness gate: if any loop's modified-var set is empty,
+/// k-induction's make_nondet_assign inserts no havoc for it
+/// (e.g. loops that only write through dereferenced pointers,
+/// `*p = ...`). In that case IS would run the loop concretely and a
+/// "marker unreachable within k unwindings" UNSAT is no longer a
+/// real non-termination witness. The pass sets options'
+/// "disable-inductive-step" so the BMC driver treats IS as
+/// inconclusive for the program.
+void goto_termination(goto_functionst &goto_functions, optionst &options);
+
+class goto_terminationt : public goto_loop_transformt
+{
+public:
+  goto_terminationt(goto_functionst &_goto_functions, optionst &_options)
+    : goto_loop_transformt(_goto_functions),
+      kinduction(_goto_functions),
+      options(_options)
+  {
+  }
+
+protected:
+  /// Skip __ESBMC_main and library helpers (body.hide).
+  bool visit_function(
+    const irep_idt &function_name,
+    const goto_functiont &function) const override;
+
+  /// Accept every loop. Unlike k-induction we don't skip empty-
+  /// modified-var loops here: we still want to know about them so we
+  /// can track that the IS will be unreliable.
+  bool should_transform_loop(const loopst & /*loop*/) const override
+  {
+    return true;
+  }
+
+  /// Delegate the havoc + entry-cond transformation to k-induction
+  /// when the loop has modified vars; track when it doesn't.
+  void transform_loop(
+    const irep_idt &function_name,
+    goto_functiont &goto_function,
+    loopst &loop) override;
+
+  /// After all loops in this function have been visited by
+  /// transform_loop, do the per-loop marker pass for the function.
+  /// Doing it here (rather than during transform_loop) lets us
+  /// process all of the function's loops together — they need to be
+  /// sorted innermost-first, and iterator math is easier when we
+  /// don't intersperse marker inserts with k-induction's transform.
+  void after_function(
+    const irep_idt &function_name,
+    goto_functiont &goto_function) override;
+
+  /// Set the disable-inductive-step option if any loop was left
+  /// untransformed by k-induction (empty modified-vars set).
+  void finalize() override;
+
+private:
+  goto_k_inductiont kinduction;
+  optionst &options;
+
+  /// True iff at least one loop in any function was left
+  /// untransformed because its modified-vars set was empty. When
+  /// true, IS verdicts are unsound and finalize() disables IS.
+  bool any_unhavoced_loop = false;
+
+  void insert_markers_for_function(
+    const irep_idt &function_name,
+    goto_functiont &goto_function);
+};
 
 #endif /* GOTO_PROGRAMS_GOTO_TERMINATION_H_ */

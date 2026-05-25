@@ -2475,7 +2475,7 @@ bool esbmc_parseoptionst::process_goto_program(
     // would still see the original CLI value, incorrectly firing
     // goto_termination on k-induction-only runs.
     if (options.get_bool_option("termination"))
-      goto_termination(goto_functions);
+      goto_termination(goto_functions, options);
 
     // Pass B (post-k-induction loop bounds): when interval analysis ran
     // earlier and k-induction (or --termination's equivalent havoc) has
