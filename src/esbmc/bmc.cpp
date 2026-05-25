@@ -1235,10 +1235,17 @@ void bmct::report_result(smt_convt::resultt &res)
       // verdict is printed by do_bmc_strategy once the loop terminates.
       // Exception: assertion-coverage mode always reports success after
       // coverage analysis, regardless of any violations found.
+      //
+      // Also suppress when symex flipped `disable-inductive-step` mid-run
+      // (recursion, threads, function-pointer calls): the IS encoding is
+      // incomplete, so its UNSAT does not prove safety. is_inductive_step
+      // _violated checks the same flag and returns UNKNOWN, so reporting
+      // SUCCESSFUL here would contradict the strategy-level verdict.
       if (
-        !options.get_bool_option("kind-violation-found") ||
-        options.get_bool_option("assertion-coverage") ||
-        options.get_bool_option("assertion-coverage-claims"))
+        (!options.get_bool_option("kind-violation-found") ||
+         options.get_bool_option("assertion-coverage") ||
+         options.get_bool_option("assertion-coverage-claims")) &&
+        !(is && options.get_bool_option("disable-inductive-step")))
         report_success();
     }
     else

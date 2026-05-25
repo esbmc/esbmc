@@ -262,6 +262,18 @@ class LoopMixin:
             # Handle dict.items() for loops
             self.is_range_loop = False
             return self._transform_items_for(node)
+        # zip(), reversed(<non-range>), and filter() for-loop iteration.
+        # reversed(range(...)) was already rewritten to range(...) above, so
+        # _is_reversed_call here only matches reversed() over other sequences.
+        if self._is_zip_call(node.iter):
+            self.is_range_loop = False
+            return self._transform_zip_for(node)
+        if self._is_reversed_call(node.iter):
+            self.is_range_loop = False
+            return self._transform_reversed_for(node)
+        if self._is_filter_call(node.iter):
+            self.is_range_loop = False
+            return self._transform_filter_for(node)
         list_literal = self.list_literal_values.get(node.iter.id) if isinstance(
             node.iter, ast.Name) else None
         if (list_literal is not None
@@ -586,6 +598,14 @@ class LoopMixin:
         if len(enumerate_call.args) > 2:
             raise TypeError(
                 f"enumerate() takes at most 2 arguments ({len(enumerate_call.args)} given)")
+        for kw in getattr(enumerate_call, "keywords", []) or []:
+            if kw.arg is None:
+                raise TypeError("enumerate() does not accept **kwargs")
+            if kw.arg != "start":
+                raise TypeError(f"enumerate() got an unexpected keyword argument '{kw.arg}'")
+        if (len(enumerate_call.args) == 2
+                and any(kw.arg == "start" for kw in (enumerate_call.keywords or []))):
+            raise TypeError("enumerate() got multiple values for argument 'start'")
 
     def _parse_enumerate_target(self, target):
         """Parse and validate the for loop target, return target information."""
@@ -615,11 +635,19 @@ class LoopMixin:
         """Extract and validate iterable and start value from enumerate call."""
         iterable = enumerate_call.args[0]
 
+        start_value = None
         if len(enumerate_call.args) > 1:
             start_value = enumerate_call.args[1]
-            self._validate_start_value(start_value)
         else:
+            for kw in (enumerate_call.keywords or []):
+                if kw.arg == "start":
+                    start_value = kw.value
+                    break
+
+        if start_value is None:
             start_value = self.create_constant_node(0, node)
+        else:
+            self._validate_start_value(start_value)
 
         return iterable, start_value
 
@@ -1322,6 +1350,257 @@ class LoopMixin:
         )
         self.ensure_all_locations(assert_stmt, node)
         return assert_stmt
+
+    @staticmethod
+    def _is_zip_call(it):
+        """Return True if `it` is a zip(...) call with at least one argument."""
+        return (isinstance(it, ast.Call) and isinstance(it.func, ast.Name) and it.func.id == "zip"
+                and len(it.args) >= 1 and not it.keywords)
+
+    @staticmethod
+    def _is_filter_call(it):
+        """Return True if `it` is a filter(func, iterable) call."""
+        return (isinstance(it, ast.Call) and isinstance(it.func, ast.Name)
+                and it.func.id == "filter" and len(it.args) == 2 and not it.keywords)
+
+    @staticmethod
+    def _is_reversed_call(it):
+        """Return True if `it` is a reversed(seq) call (seq is not range())."""
+        return (isinstance(it, ast.Call) and isinstance(it.func, ast.Name)
+                and it.func.id == "reversed" and len(it.args) == 1 and not it.keywords)
+
+    def _materialize_for_iter(self, node, seq, loop_id, suffix=""):
+        """Bind `seq` to an iterable variable usable by index-based iteration.
+
+        A bare Name is used directly (preserving its type annotation); any other
+        expression is copied into a fresh annotated ESBMC_iter variable. Returns
+        (iter_var_name, setup_statements, element_type).
+        """
+        annotation_id = self._get_iterable_type_annotation(seq)
+        element_type = self._get_element_type_from_container(annotation_id, seq)
+        if isinstance(seq, ast.Name):
+            return seq.id, [], element_type
+        iter_var_name = f"ESBMC_iter_{loop_id}{suffix}"
+        saved = node.iter
+        node.iter = seq
+        iter_assign = self._create_iter_assignment(node, annotation_id, iter_var_name, element_type)
+        node.iter = saved
+        return iter_var_name, [iter_assign], element_type
+
+    def _make_target_assign(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+            self, node, target, iter_var_name, index_var, element_type):
+        """Build `target = iter_var[index]` plus any tuple/list unpacking assigns."""
+        current = ast.Subscript(
+            value=ast.Name(id=iter_var_name, ctx=ast.Load()),
+            slice=ast.Name(id=index_var, ctx=ast.Load()),
+            ctx=ast.Load(),
+        )
+        self.ensure_all_locations(current, node)
+        name = self._name_id_or_none(target) or "ESBMC_loop_var"
+        ann = ast.Name(id=(element_type if element_type and element_type != "Any" else "Any"),
+                       ctx=ast.Load())
+        assign = ast.AnnAssign(target=ast.Name(id=name, ctx=ast.Store()),
+                               annotation=ann,
+                               value=current,
+                               simple=1)
+        self.ensure_all_locations(assign, node)
+        out = [assign]
+        if isinstance(target, (ast.Tuple, ast.List)):
+            for i, elt in enumerate(target.elts):
+                if not isinstance(elt, ast.Name):
+                    continue
+                unpack = ast.Assign(
+                    targets=[ast.Name(id=elt.id, ctx=ast.Store())],
+                    value=ast.Subscript(value=ast.Name(id=name, ctx=ast.Load()),
+                                        slice=ast.Constant(value=i),
+                                        ctx=ast.Load()),
+                )
+                self.ensure_all_locations(unpack, node)
+                out.append(unpack)
+        return out
+
+    def _make_index_step(self, node, index_var, step):
+        """Build `index = index +/- |step|` as an annotated int assignment."""
+        op = ast.Add() if step >= 0 else ast.Sub()
+        inc = ast.AnnAssign(
+            target=self.create_name_node(index_var, ast.Store(), node),
+            annotation=self.create_name_node("int", ast.Load(), node),
+            value=ast.BinOp(left=self.create_name_node(index_var, ast.Load(), node),
+                            op=op,
+                            right=self.create_constant_node(abs(step), node)),
+            simple=1,
+        )
+        self.ensure_all_locations(inc, node)
+        return inc
+
+    def _transform_reversed_for(self, node):
+        """for x in reversed(seq): -> backward index-based while loop over seq."""
+        loop_id = self.iterable_loop_counter
+        self.iterable_loop_counter += 1
+        seq = node.iter.args[0]
+        index_var = f"ESBMC_index_{loop_id}"
+        length_var = f"ESBMC_length_{loop_id}"
+
+        iter_var_name, setup, element_type = self._materialize_for_iter(node, seq, loop_id)
+        setup.append(self._create_length_assignment(node, iter_var_name, length_var))
+
+        # ESBMC_index = ESBMC_length - 1
+        index_assign = ast.AnnAssign(
+            target=self.create_name_node(index_var, ast.Store(), node),
+            annotation=self.create_name_node("int", ast.Load(), node),
+            value=ast.BinOp(left=self.create_name_node(length_var, ast.Load(), node),
+                            op=ast.Sub(),
+                            right=self.create_constant_node(1, node)),
+            simple=1,
+        )
+        self.ensure_all_locations(index_assign, node)
+        setup.append(index_assign)
+
+        # while ESBMC_index >= 0:
+        while_cond = ast.Compare(left=self.create_name_node(index_var, ast.Load(), node),
+                                 ops=[ast.GtE()],
+                                 comparators=[self.create_constant_node(0, node)])
+        self.ensure_all_locations(while_cond, node)
+
+        body = self._make_target_assign(node, node.target, iter_var_name, index_var, element_type)
+        body.append(self._make_index_step(node, index_var, -1))
+        body.extend(node.body)
+
+        while_stmt = ast.While(test=while_cond, body=body, orelse=[])
+        result = setup + [while_stmt]
+        for stmt in result:
+            self.ensure_all_locations(stmt, node)
+            ast.fix_missing_locations(stmt)
+        return result
+
+    def _transform_filter_for(self, node):  # pylint: disable=too-many-locals
+        """for x in filter(func, seq): -> while loop over seq guarded by func(x).
+
+        filter(None, seq) keeps truthy elements.
+        """
+        loop_id = self.iterable_loop_counter
+        self.iterable_loop_counter += 1
+        func = node.iter.args[0]
+        seq = node.iter.args[1]
+        index_var = f"ESBMC_index_{loop_id}"
+        length_var = f"ESBMC_length_{loop_id}"
+
+        iter_var_name, setup, element_type = self._materialize_for_iter(node, seq, loop_id)
+        setup.append(self._create_index_assignment(node, index_var))
+        setup.append(self._create_length_assignment(node, iter_var_name, length_var))
+        while_cond = self._create_while_condition(node, index_var, length_var)
+
+        body = self._make_target_assign(node, node.target, iter_var_name, index_var, element_type)
+        body.append(self._make_index_step(node, index_var, 1))
+
+        name = self._name_id_or_none(node.target) or "ESBMC_loop_var"
+        if isinstance(func, ast.Constant) and func.value is None:
+            pred = ast.Name(id=name, ctx=ast.Load())
+        else:
+            pred = ast.Call(func=copy.deepcopy(func),
+                            args=[ast.Name(id=name, ctx=ast.Load())],
+                            keywords=[])
+        self.ensure_all_locations(pred, node)
+        guard = ast.If(test=pred, body=list(node.body), orelse=[])
+        self.ensure_all_locations(guard, node)
+        body.append(guard)
+
+        while_stmt = ast.While(test=while_cond, body=body, orelse=[])
+        result = setup + [while_stmt]
+        for stmt in result:
+            self.ensure_all_locations(stmt, node)
+            ast.fix_missing_locations(stmt)
+        return result
+
+    def _transform_zip_for(self, node):  # pylint: disable=too-many-locals
+        """for a, b, ... in zip(s0, s1, ...): -> parallel index-based while loop.
+
+        Iterates up to the shortest sequence (Python's zip semantics).
+        """
+        loop_id = self.iterable_loop_counter
+        self.iterable_loop_counter += 1
+        seqs = node.iter.args
+        index_var = f"ESBMC_index_{loop_id}"
+        length_var = f"ESBMC_length_{loop_id}"
+
+        iter_names = []
+        elem_types = []
+        setup = []
+        for i, seq in enumerate(seqs):
+            nm, st, et = self._materialize_for_iter(node, seq, loop_id, suffix=f"_{i}")
+            iter_names.append(nm)
+            elem_types.append(et)
+            setup.extend(st)
+
+        # ESBMC_length = min(len(iter0), len(iter1), ...)
+        def len_call(nm):
+            call = ast.Call(func=self.create_name_node("len", ast.Load(), node),
+                            args=[self.create_name_node(nm, ast.Load(), node)],
+                            keywords=[])
+            self.ensure_all_locations(call, node)
+            return call
+
+        length_expr = len_call(iter_names[0])
+        for nm in iter_names[1:]:
+            length_expr = ast.Call(func=self.create_name_node("min", ast.Load(), node),
+                                   args=[length_expr, len_call(nm)],
+                                   keywords=[])
+            self.ensure_all_locations(length_expr, node)
+
+        length_assign = ast.AnnAssign(
+            target=self.create_name_node(length_var, ast.Store(), node),
+            annotation=self.create_name_node("int", ast.Load(), node),
+            value=length_expr,
+            simple=1,
+        )
+        self.ensure_all_locations(length_assign, node)
+        setup.append(self._create_index_assignment(node, index_var))
+        setup.append(length_assign)
+
+        while_cond = self._create_while_condition(node, index_var, length_var)
+
+        body = []
+        target = node.target
+        targets = target.elts if isinstance(target, (ast.Tuple, ast.List)) else None
+        if targets is not None and len(targets) == len(iter_names):
+            for tgt, nm, et in zip(targets, iter_names, elem_types):
+                if not isinstance(tgt, ast.Name):
+                    continue
+                cur = ast.Subscript(value=ast.Name(id=nm, ctx=ast.Load()),
+                                    slice=ast.Name(id=index_var, ctx=ast.Load()),
+                                    ctx=ast.Load())
+                ann = ast.Name(id=(et if et and et != "Any" else "Any"), ctx=ast.Load())
+                assign = ast.AnnAssign(target=ast.Name(id=tgt.id, ctx=ast.Store()),
+                                       annotation=ann,
+                                       value=cur,
+                                       simple=1)
+                self.ensure_all_locations(assign, node)
+                body.append(assign)
+        else:
+            # Single target variable receives a tuple of the parallel elements.
+            name = self._name_id_or_none(target) or "ESBMC_loop_var"
+            elts = [
+                ast.Subscript(value=ast.Name(id=nm, ctx=ast.Load()),
+                              slice=ast.Name(id=index_var, ctx=ast.Load()),
+                              ctx=ast.Load()) for nm in iter_names
+            ]
+            tup = ast.Tuple(elts=elts, ctx=ast.Load())
+            assign = ast.AnnAssign(target=ast.Name(id=name, ctx=ast.Store()),
+                                   annotation=ast.Name(id="tuple", ctx=ast.Load()),
+                                   value=tup,
+                                   simple=1)
+            self.ensure_all_locations(assign, node)
+            body.append(assign)
+
+        body.append(self._make_index_step(node, index_var, 1))
+        body.extend(node.body)
+
+        while_stmt = ast.While(test=while_cond, body=body, orelse=[])
+        result = setup + [while_stmt]
+        for stmt in result:
+            self.ensure_all_locations(stmt, node)
+            ast.fix_missing_locations(stmt)
+        return result
 
     def _transform_iterable_for(self, node):  # pylint: disable=too-many-locals
         """

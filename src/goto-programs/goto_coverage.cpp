@@ -5,6 +5,8 @@
 #include <algorithm>
 #include <cassert>
 #include <deque>
+#include <map>
+#include <set>
 #include <vector>
 
 size_t goto_coveraget::total_assert = 0;
@@ -318,6 +320,223 @@ static size_t expr_depth(const expr2tc &e, size_t cap)
   return 1 + d;
 }
 
+// True when the conjunction of `atoms` ((guard, polarity) pairs) is
+// unsatisfiable because some scalar variable is pinned to an empty integer
+// range — e.g. `x==1 && x==2` or `x<0 && x>10`. This catches mutually
+// exclusive comparisons on one variable, which the same-atom check (a guard
+// and its negation) and simplify() both miss.
+//
+// Sound by construction: an atom only counts when it is exactly
+// `var <rel> int-const` (after peeling negations and normalising operand
+// order), and bounds are tracked over unbounded integers, so the admissible
+// set is over-approximated and a satisfiable conjunction is never reported
+// unsat. Like the same-atom check it treats a guard as a stable value across
+// the prefix window, so a variable reassigned between two branches is not
+// specially handled here.
+static bool
+kpath_atoms_comparison_unsat(const std::vector<std::pair<expr2tc, bool>> &atoms)
+{
+  enum relt
+  {
+    R_EQ,
+    R_NE,
+    R_LT,
+    R_GT,
+    R_LE,
+    R_GE
+  };
+
+  // Normalise `g` to (symbol-name, rel, constant), folding Boolean
+  // negations into `pol`. Returns false unless `g` is a comparison between
+  // a scalar symbol and an integer constant (either operand order).
+  auto normalise =
+    [](expr2tc g, bool pol, irep_idt &var, relt &rel, BigInt &c) -> bool {
+    while (is_not2t(g))
+    {
+      pol = !pol;
+      g = to_not2t(g).value;
+    }
+
+    relt base;
+    expr2tc s1, s2;
+    if (is_equality2t(g))
+    {
+      base = R_EQ;
+      s1 = to_equality2t(g).side_1;
+      s2 = to_equality2t(g).side_2;
+    }
+    else if (is_notequal2t(g))
+    {
+      base = R_NE;
+      s1 = to_notequal2t(g).side_1;
+      s2 = to_notequal2t(g).side_2;
+    }
+    else if (is_lessthan2t(g))
+    {
+      base = R_LT;
+      s1 = to_lessthan2t(g).side_1;
+      s2 = to_lessthan2t(g).side_2;
+    }
+    else if (is_greaterthan2t(g))
+    {
+      base = R_GT;
+      s1 = to_greaterthan2t(g).side_1;
+      s2 = to_greaterthan2t(g).side_2;
+    }
+    else if (is_lessthanequal2t(g))
+    {
+      base = R_LE;
+      s1 = to_lessthanequal2t(g).side_1;
+      s2 = to_lessthanequal2t(g).side_2;
+    }
+    else if (is_greaterthanequal2t(g))
+    {
+      base = R_GE;
+      s1 = to_greaterthanequal2t(g).side_1;
+      s2 = to_greaterthanequal2t(g).side_2;
+    }
+    else
+      return false;
+
+    // Require one symbol and one integer-constant operand; put the symbol
+    // on the left, mirroring the relation if the operands were swapped.
+    bool swapped = false;
+    if (is_constant_int2t(s1) && is_symbol2t(s2))
+    {
+      std::swap(s1, s2);
+      swapped = true;
+    }
+    else if (!(is_symbol2t(s1) && is_constant_int2t(s2)))
+      return false;
+
+    var = to_symbol2t(s1).get_symbol_name();
+    c = to_constant_int2t(s2).value;
+
+    // Swapping operands mirrors the relation (c < x  <=>  x > c).
+    if (swapped)
+    {
+      switch (base)
+      {
+      case R_LT:
+        base = R_GT;
+        break;
+      case R_GT:
+        base = R_LT;
+        break;
+      case R_LE:
+        base = R_GE;
+        break;
+      case R_GE:
+        base = R_LE;
+        break;
+      default:
+        // EQ / NE are symmetric
+        break;
+      }
+    }
+
+    // Negative polarity takes the complement relation.
+    if (!pol)
+    {
+      switch (base)
+      {
+      case R_EQ:
+        base = R_NE;
+        break;
+      case R_NE:
+        base = R_EQ;
+        break;
+      case R_LT:
+        base = R_GE;
+        break;
+      case R_GE:
+        base = R_LT;
+        break;
+      case R_GT:
+        base = R_LE;
+        break;
+      case R_LE:
+        base = R_GT;
+        break;
+      }
+    }
+
+    rel = base;
+    return true;
+  };
+
+  struct boundst
+  {
+    bool has_lo = false, has_hi = false;
+    BigInt lo, hi;
+    std::set<BigInt> excluded;
+  };
+  std::map<irep_idt, boundst> vars;
+
+  auto raise_lo = [](boundst &b, const BigInt &v) {
+    if (!b.has_lo || v > b.lo)
+    {
+      b.lo = v;
+      b.has_lo = true;
+    }
+  };
+  auto lower_hi = [](boundst &b, const BigInt &v) {
+    if (!b.has_hi || v < b.hi)
+    {
+      b.hi = v;
+      b.has_hi = true;
+    }
+  };
+
+  for (const auto &[g, pol] : atoms)
+  {
+    irep_idt var;
+    relt rel;
+    BigInt c;
+    if (!normalise(g, pol, var, rel, c))
+      continue;
+
+    boundst &b = vars[var];
+    switch (rel)
+    {
+    case R_EQ:
+      raise_lo(b, c);
+      lower_hi(b, c);
+      break;
+    case R_NE:
+      b.excluded.insert(c);
+      break;
+    case R_LT:
+      lower_hi(b, c - 1);
+      break;
+    case R_LE:
+      lower_hi(b, c);
+      break;
+    case R_GT:
+      raise_lo(b, c + 1);
+      break;
+    case R_GE:
+      raise_lo(b, c);
+      break;
+    }
+  }
+
+  for (const auto &[name, b] : vars)
+  {
+    (void)name;
+    if (b.has_lo && b.has_hi)
+    {
+      if (b.lo > b.hi)
+        // empty integer range, e.g. x<0 && x>10
+        return true;
+      // Single admissible point that is also excluded, e.g. x==1 && x!=1.
+      if (b.lo == b.hi && b.excluded.count(b.lo))
+        return true;
+    }
+  }
+  return false;
+}
+
 /*
 k-path coverage (Phase 1 — see GitHub issue #4325).
 
@@ -457,8 +676,8 @@ void goto_coveraget::k_path_coverage()
           // contradictions (same stored guard with opposing polarities).
           // Semantically contradictory pairs across different stored
           // expressions — e.g. `(x == 1) ∧ (x == 2)` from successive
-          // switch-case branches — require comparison-domain reasoning
-          // and are out of scope for this PR.
+          // switch-case branches — require comparison-domain reasoning,
+          // handled per-goal below by kpath_atoms_comparison_unsat.
           expr2tc pwit;
           std::vector<std::pair<expr2tc, bool>> atoms;
           atoms.reserve(pdepth);
@@ -517,6 +736,17 @@ void goto_coveraget::k_path_coverage()
               continue;
             }
 
+            // Drop goals whose conjunction pins a variable to an empty
+            // integer range (e.g. x==1 && x==2). simplify() does not do this
+            // cross-term reasoning, so otherwise the tautological
+            // assert(!witness) can never be falsified and permanently
+            // inflates the spanning denominator. Built after the cheaper
+            // checks above so goals they skip don't pay for the vector.
+            std::vector<std::pair<expr2tc, bool>> goal_atoms = atoms;
+            goal_atoms.emplace_back(current_guard, cdir_pol);
+            if (kpath_atoms_comparison_unsat(goal_atoms))
+              continue;
+
             expr2tc neg_full = gen_not_expr(full);
             simplify(neg_full);
 
@@ -526,8 +756,6 @@ void goto_coveraget::k_path_coverage()
             // Record the goal's full atom multiset (prefix + current
             // direction) so the spanning-set analysis can drop subsumed
             // emissions from the coverage denominator.
-            std::vector<std::pair<expr2tc, bool>> goal_atoms = atoms;
-            goal_atoms.emplace_back(current_guard, cdir_pol);
             spanning.add_goal(
               std::move(goal_atoms), idf, it->location.as_string());
 
@@ -601,7 +829,7 @@ void goto_coveraget::insert_assert(
   to
     1: ASSERT(guard);
     DECL x      <--- it
-    ASSIGN X 1  
+    ASSIGN X 1
 */
 void goto_coveraget::insert_assert(
   goto_programt &goto_program,
@@ -727,7 +955,7 @@ void goto_coveraget::condition_coverage()
           // this stands for the auxiliary condition/branch we added.
           continue;
 
-        /* 
+        /*
           Places that could contains condition
           1. GOTO:          if (x == 1);
           2. ASSIGN:        int x = y && z;
@@ -736,7 +964,7 @@ void goto_coveraget::condition_coverage()
           5. FUNCTION_CALL  test((signed int)(x != y));
           6. RETURN         return x && y;
           7. Other          1?2?3:4
-          The issue is that, the side-effects have been removed 
+          The issue is that, the side-effects have been removed
           thus the condition might have been split or modified.
 
           For assert, assume and goto, we know it contains GUARD
@@ -979,14 +1207,14 @@ expr2tc goto_coveraget::gen_not_expr(const expr2tc &guard)
   rule:
   1. No-op: Do nothing. This means it's a symbol or constant
   2. Binary OP: for boolean expreession, e.g. a>b, a==b, do nothing
-  3. Binary OP: for and/or expresson, add on both side, if possible. Do not add if it's already a binary boolean expression in 2. 
+  3. Binary OP: for and/or expresson, add on both side, if possible. Do not add if it's already a binary boolean expression in 2.
     e.g. if(x==1 && a++) => if(x==1 && a++ !=0)
   4. Others: for any other expresison, including unary, binary and teranry, traverse its op with handle_single_guard recursivly. convert it to not equal in the top level only.
     e.g. if((bool)a+b+c) => if((bool)(a+b+c)!=0)
     typecast <--- add not equal here
     - +
       - a
-      - + 
+      - +
         - b
         - c
   e.g. if(a) => if(a!=0); if(true) => if(true != 0); if(a?b:c:d) => if((a?b:c:d)!=0)

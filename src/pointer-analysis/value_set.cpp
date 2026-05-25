@@ -268,9 +268,8 @@ void value_sett::get_value_set_rec(
       /* We have a member of a union. The value-set of it is the same as the
        * union of the value-sets of each member. */
       assert(is_union_type(memb.source_value->type));
-      auto *u =
-        static_cast<const struct_union_data *>(memb.source_value->type.get());
-      for (const irep_idt &name : u->member_names)
+      for (const irep_idt &name :
+           struct_union_member_names(memb.source_value->type))
         get_value_set_rec(
           memb.source_value,
           dest,
@@ -858,7 +857,7 @@ void value_sett::get_reference_set_rec(const expr2tc &expr, object_mapt &dest)
     {
       const symbolt *sym = ns.lookup(to_symbol2t(expr).thename);
       assert(sym);
-      const irept &a = sym->type.find("alignment");
+      const irept &a = sym->get_type().find("alignment");
       if (a.is_not_nil())
       {
         assert(a.is_constant());
@@ -1117,9 +1116,9 @@ void value_sett::assign(
       // sort-of-valid for the right hand side to be a superclass of the subclass,
       // in which case there are some fields not common between them, so we
       // iterate over the superclasses members.
-      auto *rhs_data = static_cast<const struct_union_data *>(rhs->type.get());
-      const std::vector<type2tc> &members = rhs_data->members;
-      const std::vector<irep_idt> &member_names = rhs_data->member_names;
+      const std::vector<type2tc> &members = struct_union_members(rhs->type);
+      const std::vector<irep_idt> &member_names =
+        struct_union_member_names(rhs->type);
 
       for (size_t i = 0; i < members.size(); i++)
       {
@@ -1398,7 +1397,7 @@ void value_sett::do_function_call(
   const symbolt &symbol,
   const std::vector<expr2tc> &arguments)
 {
-  const code_typet &type = to_code_type(symbol.type);
+  const code_typet &type = to_code_type(symbol.get_type());
 
   type2tc tmp_migrated_type = migrate_type(type);
   const code_type2t &migrated_type =
@@ -1542,12 +1541,12 @@ value_sett::make_member(const expr2tc &src, const irep_idt &component_name)
   const type2tc &type = src->type;
   assert(is_struct_type(type) || is_union_type(type));
 
-  auto *data = static_cast<const struct_union_data *>(type.get());
-  const std::vector<type2tc> &members = data->members;
+  const std::vector<type2tc> &members = struct_union_members(type);
 
   if (is_constant_struct2t(src))
   {
-    unsigned no = data->get_component_number(component_name).value();
+    unsigned no =
+      struct_union_get_component_number(type, component_name).value();
     return to_constant_struct2t(src).datatype_members[no];
   }
   if (is_constant_union2t(src))
@@ -1580,7 +1579,7 @@ value_sett::make_member(const expr2tc &src, const irep_idt &component_name)
   }
 
   // give up
-  unsigned no = data->get_component_number(component_name).value();
+  unsigned no = struct_union_get_component_number(type, component_name).value();
   const type2tc &subtype = members[no];
   expr2tc memb = member2tc(subtype, src, component_name);
   return memb;

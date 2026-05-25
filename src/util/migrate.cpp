@@ -26,13 +26,13 @@ inline code_function_callt invoke_intrinsic(
 
   symbolt symbol;
   symbol.mode = "C";
-  symbol.type = code_type;
+  symbol.set_type(code_type);
   symbol.name = name;
   symbol.id = name;
   symbol.is_extern = false;
   symbol.file_local = false;
 
-  exprt tmp("symbol", symbol.type);
+  exprt tmp("symbol", symbol.get_type());
   tmp.identifier(symbol.id);
   tmp.name(symbol.name);
 
@@ -255,23 +255,9 @@ static type2tc migrate_type0(const typet &type)
 
   if (type.id() == typet::t_complex)
   {
-    std::vector<type2tc> members;
-    std::vector<irep_idt> names;
-    std::vector<irep_idt> pretty_names;
-    const struct_union_typet &strct = to_complex_type(type);
-    const struct_union_typet::componentst comps = strct.components();
-
-    for (const auto &comp : comps)
-    {
-      type2tc ref = migrate_type(comp.type());
-
-      members.push_back(ref);
-      names.push_back(comp.get(typet::a_name));
-      pretty_names.push_back(comp.get(typet::a_pretty_name));
-    }
-
-    irep_idt name = "complex";
-    return complex_type2tc(members, names, pretty_names, name);
+    // C `_Complex T` lowers to a 2-component struct (real, imag) in the
+    // legacy irept; the irep2 representation is just the element type.
+    return complex_type2tc(migrate_type(to_complex_type(type).base_type()));
   }
 
   if (type.id() == typet::t_code)
@@ -389,6 +375,60 @@ type2tc migrate_type(const typet &type)
       type.id() == typet::t_intcap || type.id() == typet::t_uintcap);
   type2tc ty2 = migrate_type0(type);
   return ty2;
+}
+
+type2tc migrate_symbol_type(const symbolt &sym)
+{
+  // The IREP2 form is the source of truth on `symbolt`; get_type2() returns
+  // the stored field directly (lazily populated if a legacy-side setter
+  // wrote last). Kept as a named chokepoint so the round-trip cross-check
+  // below runs on every real symbol type the pipeline reads.
+  const type2tc &result = sym.get_type2();
+#ifndef NDEBUG
+  // Round-trip cross-check: the stored IREP2 form must be stable under a
+  // legacy back-and-forth migration. Unit/util/migrate.test.cpp proves this
+  // for synthetic types; asserting it here exercises it on every real symbol
+  // the pipeline reads. Skip nil sources -- migrate_type_back null-derefs on
+  // them, and a nil source has no legacy form to compare against anyway.
+  assert(
+    (is_nil_type(result) ||
+     migrate_type(migrate_type_back(result)) == result) &&
+    "symbol type not stable under IREP2<->irept round-trip");
+#endif
+  return result;
+}
+
+void migrate_symbol_value(const symbolt &sym, expr2tc &dest)
+{
+  // The IREP2 form is the source of truth on `symbolt`; get_value2() returns
+  // it directly (lazily populated if a legacy-side setter wrote last). Kept
+  // as a named chokepoint so the round-trip cross-check below runs on every
+  // real symbol value the pipeline reads.
+  dest = sym.get_value2();
+#ifndef NDEBUG
+  // Cross-check: assert the IREP2 value form is stable under the
+  // migration round-trip migrate_expr(migrate_expr_back(e)) == e.
+  // migrate_expr_back covers every expr2t kind a symbol value may hold,
+  // but we still skip function bodies (no caller goes through this path on
+  // them today, and the assertion would force a potentially-large body
+  // round-trip for no signal) and nil values (vacuous).
+  if (!sym.get_type().is_code() && !sym.get_value().is_nil())
+  {
+    expr2tc roundtrip;
+    migrate_expr(migrate_expr_back(dest), roundtrip);
+    assert(
+      roundtrip == dest &&
+      "symbol value not stable under IREP2<->irept round-trip");
+  }
+#endif
+}
+
+void set_symbol_type(symbolt &sym, const type2tc &t)
+{
+  // Route through the IREP2-side setter on symbolt. The setter stores `t`
+  // as the source of truth; the legacy `typet` is derived lazily on the
+  // next get_type() call via migrate_type_back.
+  sym.set_type(t);
 }
 
 static const typet &decide_on_expr_type(const exprt &side1, const exprt &side2)
@@ -526,7 +566,7 @@ static bool handle_introspection_expr(const exprt &expr, expr2tc &new_expr_ref)
   return false;
 }
 
-expr2tc sym_name_to_symbol(irep_idt init, type2tc type)
+expr2tc sym_name_to_symbol(const irep_idt &init, const type2tc &type)
 {
   const symbolt *sym = migrate_namespace_lookup->lookup(init);
   symbol2t::renaming_level target_level;
@@ -547,8 +587,14 @@ expr2tc sym_name_to_symbol(irep_idt init, type2tc type)
     // hashes.
     // Fix this by ensuring that /all/ symbols with the same name use the type
     // from the global symbol table.
-    type = migrate_type(sym->type);
-    return symbol2tc(type, init, symbol_renaming_level::level0, 0, 0, 0, 0);
+    return symbol2tc(
+      migrate_symbol_type(*sym),
+      init,
+      symbol_renaming_level::level0,
+      0,
+      0,
+      0,
+      0);
   }
   if (
     init.as_string().compare(0, 3, "cs$") == 0 ||
@@ -2062,6 +2108,56 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     return;
   }
 
+  // V1 of the symbol-table V-track (esbmc/esbmc#4715). Four kinds had only
+  // a back-arm (or neither direction) and could not round-trip through the
+  // migration layer. Adding the forward arms here -- with the matching back
+  // arms in migrate_expr_back -- makes IREP2 -> legacy -> IREP2 idempotent on
+  // each, the gate the V-track plan named for the value-side flip (V2). These
+  // arms are dead code in the pipeline today; nothing constructs the matching
+  // legacy form until V2 routes symbol bodies through the migration layer.
+  if (expr.id() == "code" && expr.statement() == "block")
+  {
+    std::vector<expr2tc> ops;
+    ops.reserve(expr.operands().size());
+    for (const auto &op : expr.operands())
+    {
+      expr2tc o;
+      migrate_expr(op, o);
+      ops.push_back(o);
+    }
+    new_expr_ref = code_block2tc(ops);
+    return;
+  }
+
+  if (expr.id() == "code" && expr.statement() == "cpp-catch")
+  {
+    std::vector<irep_idt> expr_list;
+    const irept::subt &exceptions = expr.find("exception_list").get_sub();
+    for (const auto &e_it : exceptions)
+      expr_list.push_back(e_it.id());
+    new_expr_ref = code_cpp_catch2tc(expr_list);
+    return;
+  }
+
+  if (expr.id() == "code" && expr.statement() == "throw_decl_end")
+  {
+    std::vector<irep_idt> expr_list;
+    const irept::subt &throw_list = expr.find("throw_list").get_sub();
+    for (const auto &e_it : throw_list)
+      expr_list.push_back(e_it.id());
+    new_expr_ref = code_cpp_throw_decl_end2tc(expr_list);
+    return;
+  }
+
+  if (expr.id() == "pointer_capability")
+  {
+    expr2tc theval;
+    migrate_expr(expr.op0(), theval);
+    type2tc type = migrate_type(expr.type());
+    new_expr_ref = pointer_capability2tc(type, theval);
+    return;
+  }
+
   if (expr.id() == "isinf")
   {
     expr2tc theval;
@@ -2404,24 +2500,10 @@ typet migrate_type_back(const type2tc &ref)
   }
   case type2t::complex_id:
   {
-    unsigned int idx;
+    // complex_typet::set_base_type populates the (real, imag) components
+    // for us from the element type.
     complex_typet thetype;
-    struct_union_typet::componentst comps;
-    const complex_type2t &ref2 = to_complex_type(ref);
-
-    idx = 0;
-    for (auto const &it : ref2.members)
-    {
-      struct_union_typet::componentt component;
-      component.id("component");
-      component.type() = migrate_type_back(it);
-      component.set_name(irep_idt(ref2.member_names[idx]));
-      component.pretty_name(irep_idt(ref2.member_pretty_names[idx]));
-      comps.push_back(component);
-      idx++;
-    }
-
-    thetype.components() = comps;
+    thetype.set_base_type(migrate_type_back(to_complex_type(ref).subtype));
     return thetype;
   }
   case type2t::cpp_name_id:
@@ -3487,6 +3569,59 @@ exprt migrate_expr_back(const expr2tc &ref)
 
     codeexpr.copy_to_operands(migrate_expr_back(ref2.operand));
     return codeexpr;
+  }
+  // V1 of the symbol-table V-track (esbmc/esbmc#4715): five expr2t kinds
+  // were uncovered in this switch. Adding back-arms here -- and matching
+  // forward arms in migrate_expr where needed -- lets unit/util/migrate.test.cpp
+  // assert the IREP2 round-trip property on each kind, which is the precondition
+  // for the value-side source-of-truth flip (V2). The arms are dead code in the
+  // pipeline today; they become live when V2 routes symbol values through them.
+  case expr2t::code_block_id:
+  {
+    const code_block2t &ref2 = to_code_block2t(ref);
+    exprt block("code");
+    block.statement("block");
+    for (auto const &op : ref2.operands)
+      block.copy_to_operands(migrate_expr_back(op));
+    return block;
+  }
+  case expr2t::code_cpp_catch_id:
+  {
+    const code_cpp_catch2t &ref2 = to_code_cpp_catch2t(ref);
+    exprt codeexpr("code");
+    codeexpr.statement("cpp-catch");
+    irept::subt &exceptions = codeexpr.add("exception_list").get_sub();
+    for (auto const &it : ref2.exception_list)
+      exceptions.emplace_back(it);
+    return codeexpr;
+  }
+  case expr2t::code_cpp_throw_decl_id:
+  {
+    const code_cpp_throw_decl2t &ref2 = to_code_cpp_throw_decl2t(ref);
+    exprt codeexpr("code");
+    codeexpr.statement("throw-decl");
+    irept::subt &throw_list = codeexpr.add("throw_list").get_sub();
+    for (auto const &it : ref2.exception_list)
+      throw_list.emplace_back(it);
+    return codeexpr;
+  }
+  case expr2t::code_cpp_throw_decl_end_id:
+  {
+    const code_cpp_throw_decl_end2t &ref2 = to_code_cpp_throw_decl_end2t(ref);
+    exprt codeexpr("code");
+    codeexpr.statement("throw_decl_end");
+    irept::subt &throw_list = codeexpr.add("throw_list").get_sub();
+    for (auto const &it : ref2.exception_list)
+      throw_list.emplace_back(it);
+    return codeexpr;
+  }
+  case expr2t::pointer_capability_id:
+  {
+    const pointer_capability2t &ref2 = to_pointer_capability2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt pointer_capval("pointer_capability", thetype);
+    pointer_capval.copy_to_operands(migrate_expr_back(ref2.ptr_obj));
+    return pointer_capval;
   }
   case expr2t::isinf_id:
   {

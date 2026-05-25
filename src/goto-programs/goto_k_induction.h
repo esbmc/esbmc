@@ -3,7 +3,7 @@
 
 #include <goto-programs/goto_functions.h>
 #include <goto-programs/goto_loops.h>
-#include <util/guard.h>
+#include <irep2/irep2_guard.h>
 #include <irep2/irep2_expr.h>
 
 void goto_k_induction(goto_functionst &goto_functions);
@@ -22,7 +22,7 @@ public:
   }
 
 protected:
-  typedef std::unordered_map<unsigned, guardt> guardst;
+  typedef std::unordered_map<unsigned, guard2tc> guardst;
   guardst guards;
 
   /// Cached result of expanding a forward GOTO branch during the

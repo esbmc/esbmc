@@ -319,15 +319,15 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci)
 
   return command_line
 
-def verify(strat, prop, concurrency, dargs, esbmc_ci):
-  # Get command line
+def verify(strat, prop, concurrency, dargs, esbmc_ci, witness_path, validate_mode):
   esbmc_command_line = get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci)
 
-  # Call ESBMC
-  output = run(esbmc_command_line)
+  if witness_path:
+    esbmc_command_line += "--validate-" + validate_mode + "-witness "
+    esbmc_command_line += "--witness " + witness_path + " "
 
+  output = run(esbmc_command_line)
   res = parse_result(output.decode(), category_property)
-  # Parse output
   return res
 
 # Options
@@ -340,6 +340,11 @@ parser.add_argument("-s", "--strategy", help="ESBMC's strategy", choices=["kindu
 parser.add_argument("-c", "--concurrency", help="Set concurrency flags", action='store_true')
 parser.add_argument("-n", "--dry-run", help="do not actually run ESBMC, just print the command", action='store_true')
 parser.add_argument("--ci", help="run this wrapper with special options for the CI (internal use)", action='store_true')
+parser.add_argument("--witness", help="Path to witness file; enables witness validation mode")
+parser.add_argument("--validate-violation-witness", dest="validate_violation", action='store_true',
+                    help="Validate a violation witness (use with --witness)")
+parser.add_argument("--validate-correctness-witness", dest="validate_correctness", action='store_true',
+                    help="Validate a correctness witness (use with --witness)")
 
 args = parser.parse_args()
 
@@ -350,6 +355,7 @@ benchmark = args.benchmark
 strategy = args.strategy
 concurrency = args.concurrency
 esbmc_ci = args.ci
+witness_path = args.witness
 
 if version:
   print(do_exec(esbmc_path + "--version").decode()[6:].strip()),
@@ -362,6 +368,11 @@ if property_file is None:
 if benchmark is None:
   print("Please, specify a benchmark to verify")
   exit(1)
+
+if witness_path and not args.validate_violation and not args.validate_correctness:
+  print("Please specify --validate-violation-witness or --validate-correctness-witness when using --witness")
+  exit(1)
+validate_mode = "violation" if args.validate_violation else "correctness" if args.validate_correctness else None
 
 # Parse property files
 f = open(property_file, 'r')
@@ -384,6 +395,6 @@ else:
   print("Unsupported Property")
   exit(1)
 
-result = verify(strategy, category_property, concurrency, esbmc_dargs, esbmc_ci)
+result = verify(strategy, category_property, concurrency, esbmc_dargs, esbmc_ci, witness_path, validate_mode)
 
 print(get_result_string(result))

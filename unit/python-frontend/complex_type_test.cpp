@@ -82,12 +82,12 @@ TEST_CASE("complex type helpers", "[python-frontend][complex]")
     REQUIRE(complex_type_symbol != nullptr);
     REQUIRE(complex_type_symbol->is_type);
     REQUIRE(complex_type_symbol->id.as_string() == "tag-complex");
-    REQUIRE(is_complex_type(complex_type_symbol->type));
+    REQUIRE(is_complex_type(complex_type_symbol->get_type()));
 
     // Generic paths build named type lookups as "tag-" + struct_tag.
     // Keep struct tag as "complex" so this resolves to "tag-complex".
     const struct_typet &stored_struct =
-      to_struct_type(complex_type_symbol->type);
+      to_struct_type(complex_type_symbol->get_type());
     const std::string derived_lookup = "tag-" + stored_struct.tag().as_string();
     REQUIRE(derived_lookup == "tag-complex");
   }

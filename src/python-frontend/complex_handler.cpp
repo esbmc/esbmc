@@ -335,8 +335,8 @@ exprt complex_handler::handle_binary_op(
     if (rhs.is_symbol())
     {
       const symbolt *s = find_cached_symbol(rhs.identifier().as_string());
-      if (s && !s->value.is_nil())
-        resolved_rhs = s->value;
+      if (s && !s->get_value().is_nil())
+        resolved_rhs = s->get_value();
     }
     else if (
       rhs.id() == "+" || rhs.id() == "-" || rhs.id() == "*" || rhs.id() == "/")

@@ -5,7 +5,7 @@
 #include <boost/functional/hash.hpp>
 #include <util/crypto_hash.h>
 #include <util/expr_util.h>
-#include <util/guard.h>
+#include <irep2/irep2_guard.h>
 #include <util/i2string.h>
 #include <irep2/irep2_expr.h>
 #include <util/std_expr.h>

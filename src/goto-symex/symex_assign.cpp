@@ -230,7 +230,7 @@ void goto_symext::do_simplify(expr2tc &expr)
 void goto_symext::handle_sideeffect(
   const expr2tc &lhs,
   const sideeffect2t &effect,
-  const guardt &guard)
+  const guard2tc &guard)
 {
   switch (effect.kind)
   {
@@ -239,7 +239,7 @@ void goto_symext::handle_sideeffect(
     symex_cpp_new(lhs, effect, guard);
     break;
   case sideeffect2t::allockind::realloc:
-    symex_realloc(lhs, effect, guardt());
+    symex_realloc(lhs, effect, guard2tc());
     break;
   case sideeffect2t::allockind::malloc:
     symex_malloc(lhs, effect, guard);
@@ -287,7 +287,7 @@ void goto_symext::handle_sideeffect(
 bool goto_symext::handle_conditional(
   const expr2tc &lhs,
   const if2t &if_effect,
-  const guardt &guard)
+  const guard2tc &guard)
 {
   bool has_sideeffect = false;
   const expr2tc &cond = if_effect.cond;
@@ -297,7 +297,7 @@ bool goto_symext::handle_conditional(
   // Handle true_value side effects
   if (is_sideeffect2t(true_value))
   {
-    guardt g(guard);
+    guard2tc g(guard);
     g.add(cond);
     handle_sideeffect(lhs, to_sideeffect2t(true_value), g);
     has_sideeffect = true;
@@ -306,7 +306,7 @@ bool goto_symext::handle_conditional(
   // Handle false_value side effects
   if (is_sideeffect2t(false_value))
   {
-    guardt g(guard);
+    guard2tc g(guard);
     g.add(not2tc(cond));
     handle_sideeffect(lhs, to_sideeffect2t(false_value), g);
     has_sideeffect = true;
@@ -318,7 +318,7 @@ bool goto_symext::handle_conditional(
 void goto_symext::symex_assign(
   const expr2tc &code_assign,
   const bool hidden,
-  const guardt &guard)
+  const guard2tc &guard)
 {
   const code_assign2t &code = to_code_assign2t(code_assign);
 
@@ -329,16 +329,51 @@ void goto_symext::symex_assign(
   /* TODO: either we support empty classes/structs/unions, or we don't. */
   if (is_structure_type(code.target->type))
   {
-    const struct_union_data &t2 =
-      static_cast<const struct_union_data &>(*code.target->type);
-
-    if (t2.members.empty())
+    if (struct_union_members(code.target->type).empty())
       return;
   }
 
   expr2tc original_lhs = code.target;
   expr2tc lhs = code.target;
   expr2tc rhs = code.source;
+
+  // The k-induction `make_nondet_assign` pass emits, at every loop
+  // head it transforms, one `ASSIGN p = nondet()` per modified-loop
+  // variable, with `inductive_step_instruction = true`. For pointers
+  // the resulting nondet wipes p's value-set to {*}, and the
+  // dereference-time `--add-symex-value-sets` assume can only pin
+  // the *resolved* address — not the source pointer. The IS encoding
+  // then sees a completely unconstrained p, admitting models where
+  // (say) `step()` writes through one havoc'd alias and `property()`
+  // reads through another, returning SAT on programs that are
+  // actually true (e.g. linked-list traversals where every
+  // dereference goes through the same pointer chain).
+  //
+  // Snapshot p's pre-havoc value-set here, then re-assert it as a
+  // SAME-OBJECT disjunction *after* the assignment lands. This pins
+  // the freshly-nondet p to the set of dynamic objects the
+  // symex-time value-set analysis has accumulated so far (e.g. the
+  // chain of `dynamic_N_value` symbols allocated by prior loop
+  // iterations).
+  value_setst::valuest is_ptr_havoc_pre_values;
+  expr2tc is_ptr_havoc_lhs;
+  if (
+    inductive_step && cur_state->source.pc->inductive_step_instruction &&
+    is_symbol2t(lhs) && is_pointer_type(lhs->type) && is_sideeffect2t(rhs) &&
+    to_sideeffect2t(rhs).kind == sideeffect2t::allockind::nondet &&
+    options.get_bool_option("add-symex-value-sets"))
+  {
+    // Query the value-set using a freshly-renamed copy (the API wants
+    // a renamed pointer expression), but remember the unrenamed lhs
+    // for the assume — goto_symext::assume() renames again, and using
+    // the unrenamed form lets it pick up the post-havoc rename so the
+    // assume binds the *fresh* nondet symbol, not the pre-havoc one.
+    is_ptr_havoc_lhs = lhs;
+    expr2tc lhs_for_query = lhs;
+    cur_state->rename(lhs_for_query);
+    cur_state->value_set.get_value_set(
+      lhs_for_query, is_ptr_havoc_pre_values);
+  }
 
   replace_nondet(lhs);
   replace_nondet(rhs);
@@ -385,8 +420,60 @@ void goto_symext::symex_assign(
     }
   }
 
-  guardt g(guard); // NOT the state guard!
+  guard2tc g(guard); // NOT the state guard!
   symex_assign_rec(lhs, original_lhs, rhs, expr2tc(), g, hidden_ssa);
+
+  // Re-assert the pre-havoc points-to set on the freshly-nondet
+  // pointer. See the snapshot above for the rationale. The disjunct
+  // construction mirrors the per-dereference assume in
+  // symex_dereference.cpp: SAME-OBJECT for non-NULL candidates, a
+  // plain equality with NULL, and `unknown`/`invalid` entries abort
+  // the constraint (a partial set would be unsound).
+  if (!is_nil_expr(is_ptr_havoc_lhs) && !is_ptr_havoc_pre_values.empty())
+  {
+    expr2tc or_accuml;
+    auto add_disjunct = [&or_accuml](const expr2tc &eq) {
+      or_accuml = or_accuml ? or2tc(or_accuml, eq) : eq;
+    };
+
+    bool aborted = false;
+    for (const auto &v : is_ptr_havoc_pre_values)
+    {
+      if (is_unknown2t(v) || is_invalid2t(v))
+      {
+        aborted = true;
+        break;
+      }
+      if (!is_object_descriptor2t(v))
+      {
+        aborted = true;
+        break;
+      }
+
+      const object_descriptor2t &obj = to_object_descriptor2t(v);
+      expr2tc obj_ptr;
+      if (is_null_object2t(obj.object))
+      {
+        type2tc nullptrtype = pointer_type2tc(is_ptr_havoc_lhs->type);
+        obj_ptr = symbol2tc(nullptrtype, "NULL");
+      }
+      else if (is_unknown2t(obj.offset))
+      {
+        obj_ptr = address_of2tc(is_ptr_havoc_lhs->type, obj.object);
+      }
+      else
+      {
+        obj_ptr = add2tc(
+          is_ptr_havoc_lhs->type,
+          address_of2tc(is_ptr_havoc_lhs->type, obj.object),
+          obj.offset);
+      }
+      add_disjunct(same_object2tc(is_ptr_havoc_lhs, obj_ptr));
+    }
+
+    if (!aborted && or_accuml)
+      assume(or_accuml);
+  }
 }
 
 void goto_symext::symex_assign_rec(
@@ -394,7 +481,7 @@ void goto_symext::symex_assign_rec(
   const expr2tc &full_lhs,
   expr2tc &rhs,
   expr2tc full_rhs,
-  guardt &guard,
+  guard2tc &guard,
   const bool hidden)
 {
   if (is_symbol2t(lhs))
@@ -457,7 +544,7 @@ void goto_symext::symex_assign_symbol(
   const expr2tc &full_lhs,
   expr2tc &rhs,
   expr2tc &full_rhs,
-  guardt &guard,
+  guard2tc &guard,
   const bool hidden)
 {
   // put assignment guard in rhs
@@ -490,7 +577,7 @@ void goto_symext::symex_assign_symbol(
     // we can simply skip it - constant propagation can handle it.
     return;
 
-  guardt tmp_guard(cur_state->guard);
+  guard2tc tmp_guard(cur_state->guard);
   tmp_guard.append(guard);
 
   // do the assignment
@@ -511,7 +598,7 @@ void goto_symext::symex_assign_structure(
   const expr2tc &full_lhs,
   expr2tc &rhs,
   expr2tc &full_rhs,
-  guardt &guard,
+  guard2tc &guard,
   const bool hidden)
 {
   const struct_type2t &structtype = to_struct_type(lhs->type);
@@ -536,7 +623,7 @@ void goto_symext::symex_assign_union(
   const expr2tc &full_lhs,
   expr2tc &rhs,
   expr2tc &full_rhs,
-  guardt &guard,
+  guard2tc &guard,
   const bool hidden)
 {
   // For unions, assign through the active member
@@ -552,7 +639,7 @@ void goto_symext::symex_assign_typecast(
   const expr2tc &full_lhs,
   expr2tc &rhs,
   expr2tc &full_rhs,
-  guardt &guard,
+  guard2tc &guard,
   const bool hidden)
 {
   // these may come from dereferencing on the lhs
@@ -577,8 +664,8 @@ void goto_symext::symex_assign_typecast(
       assert(to_struct_type(migrate_type_back(lhs->type))
                .is_prefix_of(to_struct_type(migrate_type_back(from->type))));
 
-      const struct_union_data &lhs_data = to_struct_type(lhs->type);
-      const struct_union_data &from_data = to_struct_type(from->type);
+      const struct_type2t &lhs_data = to_struct_type(lhs->type);
+      const struct_type2t &from_data = to_struct_type(from->type);
 
       size_t n = lhs_data.members.size();
       assert(n <= from_data.members.size());
@@ -654,7 +741,7 @@ void goto_symext::symex_assign_array(
   const expr2tc &full_lhs,
   expr2tc &rhs,
   expr2tc &full_rhs,
-  guardt &guard,
+  guard2tc &guard,
   const bool hidden)
 {
   // lhs must be index operand
@@ -690,7 +777,7 @@ void goto_symext::symex_assign_member(
   const expr2tc &full_lhs,
   expr2tc &rhs,
   expr2tc &full_rhs,
-  guardt &guard,
+  guard2tc &guard,
   const bool hidden)
 {
   // symbolic execution of a struct member assignment
@@ -748,7 +835,7 @@ void goto_symext::symex_assign_if(
   const expr2tc &full_lhs,
   expr2tc &rhs,
   expr2tc &full_rhs,
-  guardt &guard,
+  guard2tc &guard,
   const bool hidden)
 {
   // we have (c?a:b)=e;
@@ -759,7 +846,7 @@ void goto_symext::symex_assign_if(
 
   expr2tc cond = ifval.cond;
 
-  guardt old_guard(guard);
+  guard2tc old_guard(guard);
 
   guard.add(cond);
   symex_assign_rec(ifval.true_value, full_lhs, rhs, full_rhs, guard, hidden);
@@ -777,7 +864,7 @@ void goto_symext::symex_assign_byte_extract(
   const expr2tc &full_lhs,
   expr2tc &rhs,
   expr2tc &full_rhs,
-  guardt &guard,
+  guard2tc &guard,
   const bool hidden)
 {
   // we have byte_extract_X(l, b)=r
@@ -827,7 +914,7 @@ void goto_symext::symex_assign_concat(
   const expr2tc &full_lhs,
   expr2tc &rhs,
   expr2tc &,
-  guardt &guard,
+  guard2tc &guard,
   const bool hidden)
 {
 // Right: generate a series of symex assigns.
@@ -896,7 +983,7 @@ void goto_symext::symex_assign_extract(
   const expr2tc &full_lhs,
   expr2tc &rhs,
   expr2tc &full_rhs,
-  guardt &guard,
+  guard2tc &guard,
   const bool hidden)
 {
   const extract2t &ex = to_extract2t(lhs);
@@ -957,7 +1044,7 @@ void goto_symext::symex_assign_bitfield(
   const expr2tc &full_lhs,
   expr2tc &rhs,
   expr2tc &full_rhs,
-  guardt &guard,
+  guard2tc &guard,
   const bool hidden)
 {
   /* Expect to assign values to bitfields. Bitfield values are constructed

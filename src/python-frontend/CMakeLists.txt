@@ -51,11 +51,12 @@ add_library(pythonfrontend STATIC
             function_call/str_conv.cpp
             numpy_call_expr.cpp
             function_call/builder.cpp
-            string_builder.cpp
-            string_handler.cpp
-            string_handler_utils.cpp
+            string/string_builder.cpp
+            string/string_handler.cpp
+            string/string_method_handler.cpp
+            string/string_handler_utils.cpp
             exception_utils.cpp
-            char_utils.cpp
+            string/char_utils.cpp
             math_guard_utils.cpp
             parse_float.cpp
             tuple_handler.cpp

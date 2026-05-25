@@ -115,6 +115,39 @@ void goto_loopst::collect_loop_symbols(
     out.insert(expr);
 }
 
+// Walk an assignment LHS, classifying each leaf symbol as modified or
+// merely read. See add_loop_var for the rationale; this is the same
+// distinction applied to the function-summary path.
+void goto_loopst::collect_lhs_symbols(
+  const expr2tc &expr,
+  loopst::loop_varst &modified,
+  loopst::loop_varst &unmodified) const
+{
+  if (is_nil_expr(expr))
+    return;
+
+  if (is_dereference2t(expr))
+  {
+    collect_loop_symbols(to_dereference2t(expr).value, unmodified);
+    return;
+  }
+  if (is_index2t(expr))
+  {
+    const index2t &idx = to_index2t(expr);
+    collect_lhs_symbols(idx.source_value, modified, unmodified);
+    collect_loop_symbols(idx.index, unmodified);
+    return;
+  }
+
+  expr->foreach_operand(
+    [this, &modified, &unmodified](const expr2tc &e)
+    { collect_lhs_symbols(e, modified, unmodified); });
+
+  if (is_symbol2t(expr) && check_var_name(expr))
+    modified.insert(expr);
+}
+
+
 bool goto_loopst::compute_function_summary(
   const irep_idt &fname,
   std::vector<irep_idt> &in_progress,
@@ -151,7 +184,8 @@ bool goto_loopst::compute_function_summary(
   {
     if (instr.is_assign())
     {
-      collect_loop_symbols(to_code_assign2t(instr.code).target, local.modified);
+      collect_lhs_symbols(
+        to_code_assign2t(instr.code).target, local.modified, local.unmodified);
     }
     else if (instr.is_function_call())
     {
@@ -248,6 +282,27 @@ void goto_loopst::add_loop_var(
 {
   if (is_nil_expr(expr))
     return;
+
+  // When walking an assign LHS, only the storage being written counts as
+  // modified; sub-expressions used to *locate* that storage are reads.
+  //   `*p = ...`        — pointer `p` is read, the pointee is modified
+  //   `arr[i] = ...`    — index `i` is read, `arr` element is modified
+  //   `s.f = ...`       — struct `s` storage is modified
+  // Without this distinction `*Var_Ptr = ...` adds `Var_Ptr` to the loop's
+  // modified set, which then causes the inductive step to havoc the
+  // pointer at loop entry — unsound if the loop never reassigns it.
+  if (is_modified && is_dereference2t(expr))
+  {
+    add_loop_var(loop, to_dereference2t(expr).value, false);
+    return;
+  }
+  if (is_modified && is_index2t(expr))
+  {
+    const index2t &idx = to_index2t(expr);
+    add_loop_var(loop, idx.source_value, true);
+    add_loop_var(loop, idx.index, false);
+    return;
+  }
 
   expr->foreach_operand([this, &loop, &is_modified](const expr2tc &e) {
     add_loop_var(loop, e, is_modified);

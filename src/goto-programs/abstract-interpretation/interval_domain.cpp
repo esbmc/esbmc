@@ -376,9 +376,8 @@ T interval_domaint::get_interval(const expr2tc &e) const
   case expr2t::xor_id:
   case expr2t::implies_id:
   {
-    const auto &logic_op = dynamic_cast<const logic_2ops &>(*e);
-    tvt lhs = eval_boolean_expression(logic_op.side_1, *this);
-    tvt rhs = eval_boolean_expression(logic_op.side_2, *this);
+    tvt lhs = eval_boolean_expression(*e->get_sub_expr(0), *this);
+    tvt rhs = eval_boolean_expression(*e->get_sub_expr(1), *this);
 
     if (is_and2t(e))
     {
@@ -501,9 +500,8 @@ T interval_domaint::get_interval(const expr2tc &e) const
   case expr2t::modulus_id:
     if (enable_interval_arithmetic)
     {
-      const auto &arith_op = dynamic_cast<const arith_2ops &>(*e);
-      const T lhs = get_interval<T>(arith_op.side_1);
-      const T rhs = get_interval<T>(arith_op.side_2);
+      const T lhs = get_interval<T>(*e->get_sub_expr(0));
+      const T rhs = get_interval<T>(*e->get_sub_expr(1));
       if (is_add2t(e))
         result = lhs + rhs;
 
@@ -529,11 +527,12 @@ T interval_domaint::get_interval(const expr2tc &e) const
   case expr2t::bitxor_id:
     if (enable_interval_bitwise_arithmetic)
     {
-      const auto &bit_op = dynamic_cast<const bit_2ops &>(*e);
-      auto lhs = get_interval<T>(bit_op.side_1);
-      auto rhs = get_interval<T>(bit_op.side_2);
-      lhs.type = bit_op.side_1->type;
-      rhs.type = bit_op.side_2->type;
+      const expr2tc &s1 = *e->get_sub_expr(0);
+      const expr2tc &s2 = *e->get_sub_expr(1);
+      auto lhs = get_interval<T>(s1);
+      auto rhs = get_interval<T>(s2);
+      lhs.type = s1->type;
+      rhs.type = s2->type;
       if (is_shl2t(e))
         result = T::left_shift(lhs, rhs);
 
@@ -959,7 +958,7 @@ void interval_domaint::transform(
   {
     // After a return, all function arguments becomes nondet
     const symbolt *current_function = ns.lookup(instruction.function);
-    type2tc t = migrate_type(current_function->type);
+    type2tc t = migrate_symbol_type(*current_function);
     const code_type2t &function = to_code_type(t);
 
     for (size_t i = 0; i < function.arguments.size(); i++)

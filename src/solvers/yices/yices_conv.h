@@ -30,7 +30,7 @@ public:
     smt_convt *ctx,
     smt_astt value,
     unsigned int idx,
-    expr2tc idx_expr = expr2tc()) const override;
+    const expr2tc &idx_expr = expr2tc()) const override;
 
   void dump() const override;
 

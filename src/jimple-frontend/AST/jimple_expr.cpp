@@ -551,7 +551,7 @@ exprt jimple_static_member::to_exprt(
   // 1. Look over the local scope
   auto symbol_name = get_symbol_name(class_name, function_name, from);
   symbolt &s = *ctx.find_symbol(symbol_name);
-  member_exprt op(symbol_expr(s), "tag-" + field, s.type);
+  member_exprt op(symbol_expr(s), "tag-" + field, s.get_type());
   exprt &base = op.struct_op();
   if (base.type().is_pointer())
   {
@@ -579,7 +579,7 @@ exprt jimple_virtual_member::to_exprt(
   const std::string &function_name) const
 {
   auto result = gen_zero(type->to_typet(ctx));
-  auto struct_type = (*ctx.find_symbol("tag-" + from)).type;
+  auto struct_type = (*ctx.find_symbol("tag-" + from)).get_type();
 
   // 1. Look over the local scope
   auto symbol_name = get_symbol_name(class_name, function_name, variable);

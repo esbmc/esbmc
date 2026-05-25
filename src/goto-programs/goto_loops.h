@@ -56,6 +56,15 @@ protected:
   /// Collect the leaf symbols of `expr` into `out`, applying check_var_name.
   void collect_loop_symbols(const expr2tc &expr, loopst::loop_varst &out) const;
 
+  /// Walk an assignment LHS, classifying each leaf symbol: storage that
+  /// is actually written goes to `modified`, sub-expressions used to
+  /// locate that storage (pointer in `*p`, index in `arr[i]`) go to
+  /// `unmodified`.
+  void collect_lhs_symbols(
+    const expr2tc &expr,
+    loopst::loop_varst &modified,
+    loopst::loop_varst &unmodified) const;
+
   void add_modified_var(loopst &loop, const expr2tc &expr);
   void add_unmodified_var(loopst &loop, const expr2tc &expr);
 

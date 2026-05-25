@@ -10,11 +10,17 @@ jobs:
   build:
     strategy:
       matrix:
-        os: [ubuntu-24.04, windows-latest]
+        include:
+          - os: ubuntu-24.04
+            flags: '-b RelWithDebInfo -e OFF'
+          - os: windows-latest
+            flags: '-b RelWithDebInfo -e OFF'
+          - os: macos-latest
+            flags: '-b RelWithDebInfo -e OFF -c 21'
     uses: ./.github/workflows/build.yml
     with:
       operating-system: ${{ matrix.os }}
-      build-flags: '-b RelWithDebInfo -e OFF'
+      build-flags: ${{ matrix.flags }}
       testing: false
 
   build-info:
@@ -26,28 +32,35 @@ jobs:
     needs: [build, build-info]
     steps:
       - name: Download Linux Build
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: 'release-ubuntu-24.04--b RelWithDebInfo -e OFF'
           path: ./linux-release
       - name: Create Linux Release file
         run: zip -r esbmc-linux.zip ./linux-release
       - name: Download Windows Build
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: release-windows-latest
           path: ./windows-release
       - name: Create Windows Release file
         run: zip -r esbmc-windows.zip ./windows-release
-      - name: Download Info Manual
+      - name: Download macOS Build
         uses: actions/download-artifact@v4
+        with:
+          name: 'release-macos-latest--b RelWithDebInfo -e OFF -c 21'
+          path: ./macos-release
+      - name: Create macOS Release file
+        run: zip -r esbmc-macos.zip ./macos-release
+      - name: Download Info Manual
+        uses: actions/download-artifact@v8
         with:
           name: esbmc-info-manual
           path: .
       - name: Get files
         run: ls
       - name: Do the release
-        uses: softprops/action-gh-release@master
+        uses: softprops/action-gh-release@v3
         with:
           name: 'ESBMC nightly'
           body: 'This is an automated nightly release of ESBMC.'
@@ -57,4 +70,5 @@ jobs:
           files: |
             esbmc-linux.zip
             esbmc-windows.zip
+            esbmc-macos.zip
             esbmc.info
