@@ -30,6 +30,8 @@
 #include <stdexcept>
 #include <vector>
 
+#include <util/message.h>
+
 namespace
 {
 static bool get_constant_int(const exprt &expr, long long &out)
@@ -2018,7 +2020,12 @@ exprt string_handler::handle_string_capitalize(
 {
   std::string input;
   if (!try_extract_const_string_expr(string_obj, input))
-    throw std::runtime_error("capitalize() requires constant string");
+  {
+    log_debug(
+      "python-string",
+      "capitalize() on non-constant receiver: nondet fallback");
+    return build_nondet_string_fallback(location);
+  }
 
   if (!input.empty())
   {
@@ -2041,7 +2048,11 @@ exprt string_handler::handle_string_title(
 {
   std::string input;
   if (!try_extract_const_string_expr(string_obj, input))
-    throw std::runtime_error("title() requires constant string");
+  {
+    log_debug(
+      "python-string", "title() on non-constant receiver: nondet fallback");
+    return build_nondet_string_fallback(location);
+  }
 
   bool new_word = true;
   for (char &ch : input)
@@ -2071,7 +2082,11 @@ exprt string_handler::handle_string_swapcase(
 {
   std::string input;
   if (!try_extract_const_string_expr(string_obj, input))
-    throw std::runtime_error("swapcase() requires constant string");
+  {
+    log_debug(
+      "python-string", "swapcase() on non-constant receiver: nondet fallback");
+    return build_nondet_string_fallback(location);
+  }
 
   for (char &ch : input)
   {
@@ -2096,7 +2111,11 @@ exprt string_handler::handle_string_casefold(
 {
   std::string input;
   if (!try_extract_const_string_expr(string_obj, input))
-    throw std::runtime_error("casefold() requires constant string");
+  {
+    log_debug(
+      "python-string", "casefold() on non-constant receiver: nondet fallback");
+    return build_nondet_string_fallback(location);
+  }
 
   for (char &ch : input)
     ch = to_lower_char(ch);
@@ -2122,7 +2141,11 @@ exprt string_handler::handle_string_count(
     !try_extract_const_string_expr(string_obj, input) ||
     !try_extract_const_string_expr(sub_arg, sub))
   {
-    throw std::runtime_error("count() requires constant strings");
+    log_debug(
+      "python-string", "count() on non-constant receiver/needle: nondet int");
+    side_effect_expr_nondett nondet(long_long_int_type());
+    nondet.location() = location;
+    return nondet;
   }
 
   long long start = 0;
@@ -2516,11 +2539,17 @@ exprt string_handler::handle_string_partition(
 
 exprt string_handler::handle_string_isalnum(
   const exprt &string_obj,
-  [[maybe_unused]] const locationt &location)
+  const locationt &location)
 {
   std::string input;
   if (!try_extract_const_string_expr(string_obj, input))
-    throw std::runtime_error("isalnum() requires constant string");
+  {
+    log_debug(
+      "python-string", "isalnum() on non-constant receiver: nondet bool");
+    side_effect_expr_nondett nondet(bool_type());
+    nondet.location() = location;
+    return nondet;
+  }
   if (input.empty())
     return from_integer(0, bool_type());
 
@@ -2534,11 +2563,17 @@ exprt string_handler::handle_string_isalnum(
 
 exprt string_handler::handle_string_isupper(
   const exprt &string_obj,
-  [[maybe_unused]] const locationt &location)
+  const locationt &location)
 {
   std::string input;
   if (!try_extract_const_string_expr(string_obj, input))
-    throw std::runtime_error("isupper() requires constant string");
+  {
+    log_debug(
+      "python-string", "isupper() on non-constant receiver: nondet bool");
+    side_effect_expr_nondett nondet(bool_type());
+    nondet.location() = location;
+    return nondet;
+  }
   bool has_cased = false;
   for (char ch : input)
   {
