@@ -68,7 +68,7 @@ bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
       !options.get_bool_option("ltl"))
       // Store the set between runs
       algorithms.emplace_back(
-        std::make_unique<assertion_cache>(config.ssa_caching_db));
+        std::make_unique<assertion_cache>(get_ssa_caching_db()));
 
     if (opts.get_bool_option("no-slice"))
       algorithms.emplace_back(std::make_unique<simple_slice>());
@@ -1235,10 +1235,17 @@ void bmct::report_result(smt_convt::resultt &res)
       // verdict is printed by do_bmc_strategy once the loop terminates.
       // Exception: assertion-coverage mode always reports success after
       // coverage analysis, regardless of any violations found.
+      //
+      // Also suppress when symex flipped `disable-inductive-step` mid-run
+      // (recursion, threads, function-pointer calls): the IS encoding is
+      // incomplete, so its UNSAT does not prove safety. is_inductive_step
+      // _violated checks the same flag and returns UNKNOWN, so reporting
+      // SUCCESSFUL here would contradict the strategy-level verdict.
       if (
-        !options.get_bool_option("kind-violation-found") ||
-        options.get_bool_option("assertion-coverage") ||
-        options.get_bool_option("assertion-coverage-claims"))
+        (!options.get_bool_option("kind-violation-found") ||
+         options.get_bool_option("assertion-coverage") ||
+         options.get_bool_option("assertion-coverage-claims")) &&
+        !(is && options.get_bool_option("disable-inductive-step")))
         report_success();
     }
     else
@@ -1308,7 +1315,7 @@ smt_convt::resultt bmct::run(std::shared_ptr<symex_target_equationt> &eq)
     // Clear the cache between thread interleavings to prevent
     // incorrect caching of assertions with different thread contexts
     if (!options.get_bool_option("no-cache-asserts"))
-      config.ssa_caching_db.clear();
+      get_ssa_caching_db().clear();
 
     fine_timet bmc_start = current_time();
     res = run_thread(eq);

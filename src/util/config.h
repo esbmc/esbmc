@@ -183,12 +183,20 @@ public:
 
   static triple host();
 
-  // For caching ssa assertions
-  assert_db ssa_caching_db;
-
   std::vector<std::string> args;
 };
 
 extern configt config;
+
+/// Per-thread SSA assertion cache.
+///
+/// Was a member of configt and therefore process-global; the
+/// thread-based parallel k-induction (BC, FC, IS running concurrently)
+/// hit it as a soundness bug — BC marking an assertion as discharged
+/// would let IS reach a vacuous UNSAT, declaring safety on programs
+/// with real bugs (issue surfaced on regression/k-induction-parallel/
+/// linear_search_bug). The fork-based parallel previously side-stepped
+/// this via process isolation.
+assert_db &get_ssa_caching_db();
 
 #endif

@@ -337,6 +337,44 @@ void goto_symext::symex_assign(
   expr2tc lhs = code.target;
   expr2tc rhs = code.source;
 
+  // The k-induction `make_nondet_assign` pass emits, at every loop
+  // head it transforms, one `ASSIGN p = nondet()` per modified-loop
+  // variable, with `inductive_step_instruction = true`. For pointers
+  // the resulting nondet wipes p's value-set to {*}, and the
+  // dereference-time `--add-symex-value-sets` assume can only pin
+  // the *resolved* address — not the source pointer. The IS encoding
+  // then sees a completely unconstrained p, admitting models where
+  // (say) `step()` writes through one havoc'd alias and `property()`
+  // reads through another, returning SAT on programs that are
+  // actually true (e.g. linked-list traversals where every
+  // dereference goes through the same pointer chain).
+  //
+  // Snapshot p's pre-havoc value-set here, then re-assert it as a
+  // SAME-OBJECT disjunction *after* the assignment lands. This pins
+  // the freshly-nondet p to the set of dynamic objects the
+  // symex-time value-set analysis has accumulated so far (e.g. the
+  // chain of `dynamic_N_value` symbols allocated by prior loop
+  // iterations).
+  value_setst::valuest is_ptr_havoc_pre_values;
+  expr2tc is_ptr_havoc_lhs;
+  if (
+    inductive_step && cur_state->source.pc->inductive_step_instruction &&
+    is_symbol2t(lhs) && is_pointer_type(lhs->type) && is_sideeffect2t(rhs) &&
+    to_sideeffect2t(rhs).kind == sideeffect2t::allockind::nondet &&
+    options.get_bool_option("add-symex-value-sets"))
+  {
+    // Query the value-set using a freshly-renamed copy (the API wants
+    // a renamed pointer expression), but remember the unrenamed lhs
+    // for the assume — goto_symext::assume() renames again, and using
+    // the unrenamed form lets it pick up the post-havoc rename so the
+    // assume binds the *fresh* nondet symbol, not the pre-havoc one.
+    is_ptr_havoc_lhs = lhs;
+    expr2tc lhs_for_query = lhs;
+    cur_state->rename(lhs_for_query);
+    cur_state->value_set.get_value_set(
+      lhs_for_query, is_ptr_havoc_pre_values);
+  }
+
   replace_nondet(lhs);
   replace_nondet(rhs);
   volatile_check(rhs);
@@ -384,6 +422,58 @@ void goto_symext::symex_assign(
 
   guard2tc g(guard); // NOT the state guard!
   symex_assign_rec(lhs, original_lhs, rhs, expr2tc(), g, hidden_ssa);
+
+  // Re-assert the pre-havoc points-to set on the freshly-nondet
+  // pointer. See the snapshot above for the rationale. The disjunct
+  // construction mirrors the per-dereference assume in
+  // symex_dereference.cpp: SAME-OBJECT for non-NULL candidates, a
+  // plain equality with NULL, and `unknown`/`invalid` entries abort
+  // the constraint (a partial set would be unsound).
+  if (!is_nil_expr(is_ptr_havoc_lhs) && !is_ptr_havoc_pre_values.empty())
+  {
+    expr2tc or_accuml;
+    auto add_disjunct = [&or_accuml](const expr2tc &eq) {
+      or_accuml = or_accuml ? or2tc(or_accuml, eq) : eq;
+    };
+
+    bool aborted = false;
+    for (const auto &v : is_ptr_havoc_pre_values)
+    {
+      if (is_unknown2t(v) || is_invalid2t(v))
+      {
+        aborted = true;
+        break;
+      }
+      if (!is_object_descriptor2t(v))
+      {
+        aborted = true;
+        break;
+      }
+
+      const object_descriptor2t &obj = to_object_descriptor2t(v);
+      expr2tc obj_ptr;
+      if (is_null_object2t(obj.object))
+      {
+        type2tc nullptrtype = pointer_type2tc(is_ptr_havoc_lhs->type);
+        obj_ptr = symbol2tc(nullptrtype, "NULL");
+      }
+      else if (is_unknown2t(obj.offset))
+      {
+        obj_ptr = address_of2tc(is_ptr_havoc_lhs->type, obj.object);
+      }
+      else
+      {
+        obj_ptr = add2tc(
+          is_ptr_havoc_lhs->type,
+          address_of2tc(is_ptr_havoc_lhs->type, obj.object),
+          obj.offset);
+      }
+      add_disjunct(same_object2tc(is_ptr_havoc_lhs, obj_ptr));
+    }
+
+    if (!aborted && or_accuml)
+      assume(or_accuml);
+  }
 }
 
 void goto_symext::symex_assign_rec(

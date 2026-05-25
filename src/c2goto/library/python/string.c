@@ -417,6 +417,45 @@ __ESBMC_HIDE:;
   return has_cased;
 }
 
+// Python string isupper - true iff every cased character is uppercase
+// and there is at least one cased character. Mirrors __python_str_islower
+// with the cases swapped; UTF-8 continuation bytes after a 0xC2..0xDF
+// lead are treated as cased (best-effort Latin-1 supplement coverage).
+_Bool __python_str_isupper(const char *s)
+{
+__ESBMC_HIDE:;
+  if (!s || !*s)
+    return 0;
+
+  _Bool has_cased = 0;
+
+  while (*s)
+  {
+    unsigned char c = (unsigned char)*s;
+
+    if (c >= 'a' && c <= 'z')
+      return 0;
+
+    if (c >= 'A' && c <= 'Z')
+      has_cased = 1;
+
+    if (c >= 0xC2 && c <= 0xDF)
+    {
+      unsigned char next = (unsigned char)*(s + 1);
+      if (next >= 0x80 && next <= 0xBF)
+      {
+        has_cased = 1;
+        s += 2;
+        continue;
+      }
+    }
+
+    s++;
+  }
+
+  return has_cased;
+}
+
 // Python character lower - converts a single character to lowercase
 int __python_char_lower(int c)
 {
@@ -547,6 +586,46 @@ __ESBMC_HIDE:;
   buffer[i] = '\0';
 
   return buffer;
+}
+
+// Python string count - count non-overlapping occurrences of `sub` in `s`.
+// Matches the Python semantics: empty `sub` returns len(s) + 1 (counts
+// gaps including before-first and after-last). Bounded to 256 chars on
+// the receiver to keep the symbolic loop tractable for BMC; longer
+// strings trip an explicit assertion rather than silently truncating.
+size_t __python_str_count(const char *s, const char *sub)
+{
+__ESBMC_HIDE:;
+  if (!s || !sub)
+    return 0;
+
+  size_t s_len = __python_strnlen_bounded(s, 256);
+  size_t sub_len = __python_strnlen_bounded(sub, 256);
+
+  if (sub_len == 0)
+    return s_len + 1;
+
+  if (sub_len > s_len)
+    return 0;
+
+  size_t count = 0;
+  size_t i = 0;
+  while (i + sub_len <= s_len)
+  {
+    size_t j = 0;
+    while (j < sub_len && s[i + j] == sub[j])
+      j++;
+    if (j == sub_len)
+    {
+      count++;
+      i += sub_len;
+    }
+    else
+    {
+      i++;
+    }
+  }
+  return count;
 }
 
 int __python_str_find(const char *s1, const char *s2)

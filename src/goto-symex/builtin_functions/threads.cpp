@@ -134,6 +134,10 @@ void goto_symext::intrinsic_spawn_thread(
 
     // Disable inductive step on multi threaded code
     options.set_option("disable-inductive-step", true);
+
+    // See the recursion site for the rationale.
+    if (inductive_step)
+      throw inductive_step_disabled_exceptiont("concurrency");
   }
 
   // As an argument, we expect the address of a symbol.
