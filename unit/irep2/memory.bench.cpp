@@ -75,9 +75,14 @@ struct window
 // Global new/delete: a couple of cycles of overhead on the common path
 // when disabled (atomic load + branch). We avoid replacing the array
 // forms; they're rarer and not the irep2 allocation path.
+//
+// Pair with the standard `::operator new` / `::operator delete` rather
+// than malloc/free so the compiler's allocation-tracking
+// (-Wmismatched-new-delete) sees consistent allocator usage across
+// inlined call sites.
 void *operator new(std::size_t sz)
 {
-  void *p = std::malloc(sz);
+  void *p = ::operator new(sz, std::nothrow);
   if (!p)
     throw std::bad_alloc{};
   if (alloc_stats::enabled.load(std::memory_order_relaxed))
@@ -90,12 +95,12 @@ void *operator new(std::size_t sz)
 
 void operator delete(void *p) noexcept
 {
-  std::free(p);
+  ::operator delete(p, std::nothrow);
 }
 
-void operator delete(void *p, std::size_t) noexcept
+void operator delete(void *p, std::size_t /*sz*/) noexcept
 {
-  std::free(p);
+  ::operator delete(p, std::nothrow);
 }
 
 // ============================================================================
