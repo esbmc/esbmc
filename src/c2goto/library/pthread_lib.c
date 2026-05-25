@@ -368,7 +368,6 @@ __ESBMC_HIDE:;
   if (cancel)
   {
     __ESBMC_pthread_thread_ended[(int)thread] = 1;
-    __ESBMC_atomic_end();
     pthread_exit(PTHREAD_CANCELED);
   }
   __ESBMC_assume(__ESBMC_pthread_thread_ended[(int)thread]);
