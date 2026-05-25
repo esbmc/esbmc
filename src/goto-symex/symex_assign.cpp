@@ -357,6 +357,8 @@ void goto_symext::symex_assign(
   // iterations).
   value_setst::valuest is_ptr_havoc_pre_values;
   expr2tc is_ptr_havoc_lhs;
+  std::string is_ptr_havoc_l1_name;
+  value_sett::object_mapt is_ptr_havoc_pre_object_map;
   if (
     inductive_step && cur_state->source.pc->inductive_step_instruction &&
     is_symbol2t(lhs) && is_pointer_type(lhs->type) && is_sideeffect2t(rhs) &&
@@ -373,6 +375,18 @@ void goto_symext::symex_assign(
     cur_state->rename(lhs_for_query);
     cur_state->value_set.get_value_set(
       lhs_for_query, is_ptr_havoc_pre_values);
+
+    // Also snapshot the raw object_map and remember the L1 key so we
+    // can restore it after the assignment overwrites the entry with
+    // {unknown}. The L1 key is the symbol's level1 name; symex's
+    // assignment() uses L1-renamed lhs for value-set updates, so both
+    // the pre-havoc and post-havoc entries share the same key.
+    if (is_symbol2t(lhs_for_query))
+    {
+      is_ptr_havoc_l1_name = to_symbol2t(lhs_for_query).get_symbol_name();
+      is_ptr_havoc_pre_object_map =
+        cur_state->value_set.get_entry(is_ptr_havoc_l1_name, "").object_map;
+    }
   }
 
   replace_nondet(lhs);
@@ -422,6 +436,24 @@ void goto_symext::symex_assign(
 
   guard2tc g(guard); // NOT the state guard!
   symex_assign_rec(lhs, original_lhs, rhs, expr2tc(), g, hidden_ssa);
+
+  // Restore the value-set entry to the pre-havoc set, replacing the
+  // {unknown} the symex assignment just wrote. The next dereference
+  // through this pointer (in `symex_dereference.cpp`) will read this
+  // restored set and synthesize an ITE chain over the actual
+  // candidate objects — without it, the deref-time assume can pin
+  // the resolved address but can't drive the value-load itself,
+  // because the load expression's value-set is {*}/invalid_object.
+  //
+  // We do this in addition to the assume() below: the assume
+  // constrains the solver, the value-set restore drives the deref
+  // ITE. Both are needed for IS to prove list traversals where the
+  // havoc would otherwise unbind p from the chain.
+  if (!is_ptr_havoc_l1_name.empty() && !is_ptr_havoc_pre_object_map.empty())
+  {
+    cur_state->value_set.get_entry(is_ptr_havoc_l1_name, "").object_map =
+      is_ptr_havoc_pre_object_map;
+  }
 
   // Re-assert the pre-havoc points-to set on the freshly-nondet
   // pointer. See the snapshot above for the rationale. The disjunct
