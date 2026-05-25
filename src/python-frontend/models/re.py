@@ -9,7 +9,11 @@
 # max-bool-expr=5) are tripped by the literal-set tests below; mechanical
 # refactors (extract helper, split function) would require re-validating
 # every regression in regression/python/ that exercises re.match. The
-# matcher is rewritten only when changed for a real reason.
+# matcher is rewritten only when changed for a real reason. McCabe's
+# MC0001 fires on the same shape and is silenced project-wide in
+# .prospector.yaml (pylint's mccabe extension is not loaded in Codacy's
+# Prospector run, so a `too-complex` pragma would itself trip
+# unknown-option-value).
 #
 # pylint: disable=consider-using-in,chained-comparison
 # Equality and range checks are kept as explicit Compare-And-Compare AST

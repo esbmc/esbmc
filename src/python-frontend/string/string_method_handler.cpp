@@ -2156,10 +2156,39 @@ exprt string_handler::handle_string_count(
 {
   std::string input;
   std::string sub;
-  if (
-    !try_extract_const_string_expr(string_obj, input) ||
-    !try_extract_const_string_expr(sub_arg, sub))
+  const bool input_const = try_extract_const_string_expr(string_obj, input);
+  const bool sub_const = try_extract_const_string_expr(sub_arg, sub);
+  if (!input_const || !sub_const)
   {
+    // Prefer the runtime operational model __python_str_count when
+    // start/end are at default (the model doesn't yet handle Python's
+    // slice arguments). Symex's own constant propagation can fold the
+    // call when concrete values flow in, so this is more precise than
+    // a blanket nondet -- and on truly symbolic inputs the result is
+    // a real symbolic count rather than an unconstrained nondet.
+    if (start_arg.is_nil() && end_arg.is_nil())
+    {
+      const symbolt *count_sym =
+        find_cached_c_function_symbol("c:@F@__python_str_count");
+      if (count_sym)
+      {
+        exprt s_copy = string_obj;
+        exprt s_expr = ensure_null_terminated_string(s_copy);
+        exprt s_addr = get_array_base_address(s_expr);
+
+        exprt sub_copy = sub_arg;
+        exprt sub_expr = ensure_null_terminated_string(sub_copy);
+        exprt sub_addr = get_array_base_address(sub_expr);
+
+        side_effect_expr_function_callt call;
+        call.function() = symbol_expr(*count_sym);
+        call.arguments().push_back(s_addr);
+        call.arguments().push_back(sub_addr);
+        call.location() = location;
+        call.type() = size_type();
+        return call;
+      }
+    }
     log_debug(
       "python-string", "count() on non-constant receiver/needle: nondet int");
     side_effect_expr_nondett nondet(long_long_int_type());
@@ -2587,6 +2616,25 @@ exprt string_handler::handle_string_isupper(
   std::string input;
   if (!try_extract_const_string_expr(string_obj, input))
   {
+    // Prefer the runtime operational model __python_str_isupper when
+    // available -- symex's CP folds the call when concrete values flow
+    // in, and otherwise produces a real symbolic predicate rather than
+    // an unconstrained nondet bool.
+    const symbolt *isupper_sym =
+      find_cached_c_function_symbol("c:@F@__python_str_isupper");
+    if (isupper_sym)
+    {
+      exprt s_copy = string_obj;
+      exprt s_expr = ensure_null_terminated_string(s_copy);
+      exprt s_addr = get_array_base_address(s_expr);
+
+      side_effect_expr_function_callt call;
+      call.function() = symbol_expr(*isupper_sym);
+      call.arguments().push_back(s_addr);
+      call.location() = location;
+      call.type() = bool_type();
+      return call;
+    }
     log_debug(
       "python-string", "isupper() on non-constant receiver: nondet bool");
     side_effect_expr_nondett nondet(bool_type());

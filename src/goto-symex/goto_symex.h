@@ -17,6 +17,20 @@
 class reachability_treet; // Forward dec
 class execution_statet;   // Forward dec
 
+// Thrown by symex when the inductive step encounters a construct it cannot
+// soundly encode (recursion, threads, function-pointer calls). The thrower
+// also sets `disable-inductive-step` so the strategy layer downgrades the
+// result to UNKNOWN; the throw short-circuits the rest of symex.
+class inductive_step_disabled_exceptiont
+{
+public:
+  explicit inductive_step_disabled_exceptiont(std::string r)
+    : reason(std::move(r))
+  {
+  }
+  std::string reason;
+};
+
 /**
  *  Primay symbolic execution class.
  *  Contains very little state data, instead implements a large number of
