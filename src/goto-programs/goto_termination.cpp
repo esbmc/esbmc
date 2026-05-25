@@ -40,6 +40,7 @@ void goto_terminationt::transform_loop(
   if (!modified.empty())
   {
     kinduction.transform_loop(function_name, goto_function, loop);
+    inject_noop_cycle_assumes(goto_function, loop);
 
     // Pointer-only-modified loops: k-induction's havoc emits
     // `ASSIGN p = NONDET(ptr_t)` for each modified pointer. Under
@@ -274,5 +275,131 @@ void goto_terminationt::insert_markers_for_function(
         body.instructions.insert(post, marker);
       }
     }
+  }
+}
+
+void goto_terminationt::inject_noop_cycle_assumes(
+  goto_functiont &goto_function,
+  const loopst &loop)
+{
+  // Walk the loop body looking for IFs whose "guard taken" path
+  // reaches the back-edge without crossing any state-modifying
+  // instruction (ASSIGN or FUNCTION_CALL). The IF's guard is then a
+  // no-op-cycle condition: when satisfied, the body has no effect
+  // and the loop iterates forever.
+  //
+  // For each such IF, splice an `ASSUME(guard)` right before the
+  // post-havoc loop_head IF and mark it inductive_step_instruction
+  // so only IS sees it. IS then proves the marker unreachable from
+  // any state satisfying entry-cond AND guard, which is a real
+  // non-termination witness if such states exist.
+  //
+  // We run AFTER kinduction.transform_loop, so the loop_head IF has
+  // moved to a new slot — `loop.get_original_loop_head()` still
+  // refers to the original *iterator* but that slot now holds
+  // kinduction's NONDET ASSIGN (instructiont::swap exchanges
+  // contents but not location_number). The actual IF iterator is
+  // wherever the back-edge points: kinduction's
+  // adjust_loop_head_and_exit retargets the back-edge at loop_head
+  // (or the entry-cond ASSUME just before it). The IF is therefore
+  // reachable by walking the back-edge's target forward to the
+  // first GOTO instruction.
+  goto_programt::targett loop_exit = loop.get_original_loop_exit();
+  if (loop_exit->targets.empty())
+    return;
+  goto_programt::targett post_havoc_head = *loop_exit->targets.begin();
+
+  // The pre-havoc body range (used to detect no-op paths) is the
+  // original [loop_head, loop_exit). We use the *original* iterators
+  // here because they reference the unmodified body instructions
+  // that survived kinduction's rewrite — insert_swap shuffled their
+  // location_numbers but the iterators themselves still walk the
+  // same physical sequence.
+  goto_programt::targett orig_loop_head = loop.get_original_loop_head();
+  if (orig_loop_head == loop_exit)
+    return;
+
+  // Find the actual IF by walking forward from orig_loop_head;
+  // kinduction's mutation moved the IF's CONTENT past the inserted
+  // NONDET/ASSUME instructions, so the original iterator now points
+  // at the first NONDET. Walk forward to the first non-
+  // inductive_step_instruction GOTO — that's the loop_head IF.
+  goto_programt::targett if_it = orig_loop_head;
+  while (if_it != loop_exit &&
+         (if_it->inductive_step_instruction || !if_it->is_goto()))
+    ++if_it;
+  if (if_it == loop_exit)
+    return;
+
+  // Skip nested loops. An IF in an inner loop's body whose target
+  // is "outside the inner loop" (the inner loop's exit) looks
+  // structurally like a no-op-cycle branch of the *outer* loop —
+  // from the outer's perspective the inner loop is "the body", and
+  // the inner's exit-test guard would (incorrectly) be injected as
+  // a no-op witness for the outer. Detect nesting by scanning for
+  // any backwards-GOTO inside the body other than the loop's own
+  // back-edge.
+  for (auto q = std::next(if_it); q != loop_exit; ++q)
+  {
+    if (q->is_backwards_goto())
+      return;
+  }
+
+  for (auto p = std::next(if_it); p != loop_exit; ++p)
+  {
+    if (!p->is_goto() || p->is_backwards_goto() || p->targets.size() != 1)
+      continue;
+
+    auto target = *p->targets.begin();
+    // Only consider IFs whose taken branch stays *inside* the loop
+    // body and skips over body instructions (toward the back-edge).
+    // An IF whose target is outside [p, loop_exit] is an exit edge —
+    // taking it leaves the loop, which is the opposite of a no-op
+    // cycle (the loop *terminates* via that path).
+    //
+    // location_number comparisons aren't reliable after kinduction's
+    // insert_swap (swap doesn't exchange location_number), so we
+    // verify with an iterator walk: target must be reachable from
+    // std::next(p) by walking forward without passing loop_exit.
+    bool target_in_loop = false;
+    for (auto q = std::next(p); q != std::next(loop_exit); ++q)
+    {
+      if (q == target)
+      {
+        target_in_loop = true;
+        break;
+      }
+    }
+    if (!target_in_loop)
+      continue;
+
+    // Walk from the IF's target to the back-edge via fall-through
+    // (i.e., the path control will take if the IF is taken). If we
+    // see any state-modifying instruction, this IF's taken path
+    // doesn't preserve state — not a no-op cycle.
+    bool noop = true;
+    for (auto q = target; q != std::next(loop_exit); ++q)
+    {
+      if (q->is_assign() || q->is_function_call())
+      {
+        noop = false;
+        break;
+      }
+    }
+    if (!noop)
+      continue;
+
+    // p's guard is the IF's "taken" condition. Splice an ASSUME of
+    // it right before post_havoc_head, inductive-step only. This
+    // sits between kinduction's entry-cond ASSUME and the IF, so
+    // it constrains the just-havoced state.
+    goto_programt::instructiont assumption;
+    assumption.type = ASSUME;
+    assumption.guard = p->guard;
+    assumption.location = post_havoc_head->location;
+    assumption.location.comment("termination no-op-cycle witness");
+    assumption.function = post_havoc_head->function;
+    assumption.inductive_step_instruction = true;
+    goto_function.body.instructions.insert(post_havoc_head, assumption);
   }
 }

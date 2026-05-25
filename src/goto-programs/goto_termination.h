@@ -91,6 +91,26 @@ private:
   void insert_markers_for_function(
     const irep_idt &function_name,
     goto_functiont &goto_function);
+
+  /// Look for "no-op-cycle" branches in the loop body: an IF whose
+  /// guard-taken path reaches the back-edge without crossing any
+  /// state-modifying instruction. If found, inject ASSUME(guard) as
+  /// an inductive-step-only instruction right before the loop_head,
+  /// pinning IS to a fixed-point state.
+  ///
+  /// Catches programs like Ex03 (`while (i < 0) if (i != -5) i++;`)
+  /// where there is a state (`i = -5`) at which the loop body has
+  /// no effect, so the loop is non-terminating. K-induction's vanilla
+  /// IS can't decide these — for an arbitrary havoced state, most
+  /// iterates do reach the marker, so IS reports SAT ("unable to
+  /// prove"). Pinning to the fixed-point state lets IS prove
+  /// marker-unreachable → UNSAT → non-termination.
+  ///
+  /// Multiple no-op paths are conjoined: each contributes an
+  /// independent ASSUME. The first one whose guard is satisfiable
+  /// (together with the entry condition) yields the witness.
+  void
+  inject_noop_cycle_assumes(goto_functiont &goto_function, const loopst &loop);
 };
 
 #endif /* GOTO_PROGRAMS_GOTO_TERMINATION_H_ */
