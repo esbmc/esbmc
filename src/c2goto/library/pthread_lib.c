@@ -358,28 +358,20 @@ __ESBMC_HIDE:;
   return 0;
 }
 
-int pthread_join_noswitch(pthread_t thread, void **retval)
-{
+int pthread_join_noswitch(pthread_t thread, void **retval) {
 __ESBMC_HIDE:;
-  //Tong: Dummy read, for recording mopr dependency of pthread_create()/join(), to avoid losing the dependency
-  //relation when the cs swich is forced by pthread om. Should have a more elegant way to do.
-  _Bool ended_sync = __ESBMC_pthread_thread_ended[(int)thread];
-
-  pthread_testcancel();
   __ESBMC_atomic_begin();
-
-  // If the other thread hasn't ended, assume false, because further progress
-  // isn't going to be made. Wait for an interleaving where this is true
-  // instead. This function isn't designed for deadlock detection.
-  _Bool ended = __ESBMC_pthread_thread_ended[(int)thread];
-  __ESBMC_assume(ended);
-
-  // Fetch exit code
-  if (retval != NULL)
-    *retval = __ESBMC_pthread_end_values[(int)thread];
-
+  pthread_t self = __ESBMC_get_thread_id();
+  _Bool cancel = __ESBMC_pthread_cancel_requested[self] &&
+                  __ESBMC_pthread_cancelstate[self] == PTHREAD_CANCEL_ENABLE;
+  if (cancel) {
+    __ESBMC_pthread_thread_ended[(int)thread] = 1;
+    __ESBMC_atomic_end();
+    pthread_exit(PTHREAD_CANCELED);
+  }
+  __ESBMC_assume(__ESBMC_pthread_thread_ended[(int)thread]);
+  if (retval) *retval = __ESBMC_pthread_end_values[(int)thread];
   __ESBMC_atomic_end();
-
   return 0;
 }
 
