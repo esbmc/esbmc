@@ -349,7 +349,7 @@ void goto2ct::assign_scope_ids(goto_programt &goto_program)
         // to the list of scopes and clear the current scope.
         // Otherwise, just continue.
         // !!! Also probably need to check whether it == instructions.rend()
-        if (std::next(it)->type != DEAD && scope_syms_stack.back().size() > 0)
+        if (std::next(it)->type != DEAD)
         {
           scope_syms_stack.push_back({});
         }
