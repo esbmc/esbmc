@@ -562,6 +562,43 @@ __ESBMC_HIDE:;
   return buffer;
 }
 
+// Python string capitalize - returns a copy with the first ASCII letter
+// uppercased and every subsequent ASCII letter lowercased. Non-letter
+// characters pass through unchanged at their positions. Bounded to 255
+// chars on the receiver, like the lower/upper/swapcase models; longer
+// strings trip an explicit assertion rather than silently truncating.
+char *__python_str_capitalize(const char *s)
+{
+__ESBMC_HIDE:;
+  if (!s)
+    return (char *)s;
+
+  char *buffer = __ESBMC_alloca(256);
+
+  size_t i = 0;
+  while (i < 255 && s[i])
+  {
+    char c = s[i];
+    if (i == 0 && c >= 'a' && c <= 'z')
+      buffer[i] = c - ('a' - 'A');
+    else if (i > 0 && c >= 'A' && c <= 'Z')
+      buffer[i] = c + ('a' - 'A');
+    else
+      buffer[i] = c;
+    i++;
+  }
+
+  if (s[i] != '\0')
+  {
+    __ESBMC_assert(
+      0, "String too long for capitalize() - exceeds 255 characters");
+  }
+
+  buffer[i] = '\0';
+
+  return buffer;
+}
+
 // Python string count - count non-overlapping occurrences of `sub` in `s`.
 // Matches the Python semantics: empty `sub` returns len(s) + 1 (counts
 // gaps including before-first and after-last). Bounded to 256 chars on

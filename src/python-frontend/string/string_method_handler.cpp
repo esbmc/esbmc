@@ -2021,6 +2021,25 @@ exprt string_handler::handle_string_capitalize(
   std::string input;
   if (!try_extract_const_string_expr(string_obj, input))
   {
+    // Prefer the runtime operational model __python_str_capitalize when
+    // available -- symex's CP folds the call on concrete arguments,
+    // and otherwise produces a real symbolic char* rather than an
+    // unconstrained nondet pointer.
+    const symbolt *capitalize_sym =
+      find_cached_c_function_symbol("c:@F@__python_str_capitalize");
+    if (capitalize_sym)
+    {
+      exprt s_copy = string_obj;
+      exprt s_expr = ensure_null_terminated_string(s_copy);
+      exprt s_addr = get_array_base_address(s_expr);
+
+      side_effect_expr_function_callt call;
+      call.function() = symbol_expr(*capitalize_sym);
+      call.arguments().push_back(s_addr);
+      call.location() = location;
+      call.type() = gen_pointer_type(char_type());
+      return call;
+    }
     log_debug(
       "python-string",
       "capitalize() on non-constant receiver: nondet fallback");
