@@ -540,7 +540,7 @@ expr2tc dereferencet::make_failed_symbol(const type2tc &out_type)
   symbolt symbol;
   symbol.id = "symex::invalid_object" + i2string(invalid_counter++);
   symbol.name = "invalid_object";
-  symbol.type = migrate_type_back(the_type);
+  set_symbol_type(symbol, the_type);
 
   // make it a lvalue, so we can assign to it
   symbol.lvalue = true;
@@ -2324,7 +2324,8 @@ void dereferencet::valid_check(
       }
 
       /* Writes to globals of const-qualified type are not allowed either. */
-      if (is_write(mode) && sym.static_lifetime && sym.type.cmt_constant())
+      if (
+        is_write(mode) && sym.static_lifetime && sym.get_type().cmt_constant())
       {
         dereference_failure(
           "pointer dereference",

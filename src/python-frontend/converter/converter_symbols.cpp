@@ -33,15 +33,19 @@ void python_converter::update_symbol(const exprt &expr) const
 
   // Update the type of the symbol and its value.
   const typet &expr_type = expr.type();
-  sym->type = expr_type;
-  sym->value.type() = expr_type;
+  sym->set_type(expr_type);
+  {
+    exprt v = sym->get_value();
+    v.type() = expr_type;
+    sym->set_value(std::move(v));
+  }
 
   // Check if the symbol has a constant or bitvector value.
   if (
-    sym->value.is_constant() || sym->value.is_signedbv() ||
-    sym->value.is_unsignedbv())
+    sym->get_value().is_constant() || sym->get_value().is_signedbv() ||
+    sym->get_value().is_unsignedbv())
   {
-    const std::string &binary_value_str = sym->value.value().c_str();
+    const std::string &binary_value_str = sym->get_value().value().c_str();
 
     // Only attempt binary conversion if the string is non-empty and consists
     // solely of '0' and '1' characters (i.e., it is a valid binary string).
@@ -55,14 +59,17 @@ void python_converter::update_symbol(const exprt &expr) const
     {
       try
       {
-        // Convert binary string to integer.
-        int64_t int_val = std::stoll(binary_value_str, nullptr, 2);
+        // Convert binary string to integer. binary2integer accepts any width,
+        // so we don't lose precision on bignum constants emitted by the
+        // --ir-gated ** widening for #1964 Part 2 / #4642.
+        const bool is_signed = expr_type.is_signedbv();
+        const BigInt int_val = binary2integer(binary_value_str, is_signed);
 
         // Create a new constant expression with the converted value and type.
         exprt new_value = from_integer(int_val, expr_type);
 
         // Assign the new value to the symbol.
-        sym->value = new_value;
+        sym->set_value(new_value);
       }
       catch (const std::exception &e)
       {
@@ -250,7 +257,7 @@ python_converter::find_nested_function_symbol(const std::string &name) const
       symbolt *nested_func_symbol =
         symbol_table_.find_symbol(nested_func_sid.to_string()))
     {
-      if (nested_func_symbol->type.is_code())
+      if (nested_func_symbol->get_type().is_code())
         return nested_func_symbol;
     }
 
@@ -357,7 +364,7 @@ symbolt &python_converter::create_tmp_symbol(
   cl.is_extern = false;
   cl.file_local = true;
   if (symbol_value != exprt())
-    cl.value = symbol_value;
+    cl.set_value(symbol_value);
 
   return cl;
 }

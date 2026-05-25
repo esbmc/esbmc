@@ -5,7 +5,7 @@
 #include <python-frontend/python_dict_handler.h>
 #include <python-frontend/python_list.h>
 #include <python-frontend/python_math.h>
-#include <python-frontend/string_handler.h>
+#include <python-frontend/string/string_handler.h>
 #include <python-frontend/tuple_handler.h>
 #include <python-frontend/type_handler.h>
 #include <python-frontend/type_utils.h>
@@ -291,7 +291,7 @@ exprt python_converter::handle_membership_operator(
   {
     const symbolt *sym = symbol_table_.find_symbol(rhs.identifier());
     if (sym)
-      rhs_resolved_type = sym->type;
+      rhs_resolved_type = sym->get_type();
   }
 
   if (rhs_resolved_type.id() == "symbol")
@@ -485,6 +485,12 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     dict_handler_->is_dict_type(lhs.type()) &&
     dict_handler_->is_dict_type(rhs.type()) && (op == "Eq" || op == "NotEq"))
   {
+    // Fold literal-vs-literal dict equality at conversion time. Skipping the
+    // O(n^2) __ESBMC_dict_eq runtime model here is the dominant win under
+    // --incremental-bmc, where each k iteration would otherwise re-symbolise
+    // the comparison from scratch (issue #4623).
+    if (auto folded = dict_handler_->try_constant_fold_eq(left, right))
+      return gen_boolean(op == "NotEq" ? !*folded : *folded);
     return dict_handler_->compare(lhs, rhs, op);
   }
 
@@ -653,6 +659,34 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
       else
         cast_to_void_ptr(lhs, rhs.type()); // cast integer to void*
     }
+
+    // Optional[T] is lowered to T* (see converter_types.cpp:457) and a
+    // non-None T value is round-tripped through (T*) at the call site
+    // (e.g. foo(5) -> y = (int*)5). Make equality with a matching primitive
+    // work by casting the primitive side to the pointer type, so the
+    // resulting comparison matches the round-tripped address. Skip ordered
+    // comparisons: they would silently compare addresses, not values.
+    auto is_primitive_ptr = [](const exprt &e) {
+      if (!e.type().is_pointer())
+        return false;
+      const typet &sub = e.type().subtype();
+      return sub.is_signedbv() || sub.is_unsignedbv() || sub.is_floatbv();
+    };
+    auto is_primitive = [](const exprt &e) {
+      return e.type().is_signedbv() || e.type().is_unsignedbv() ||
+             e.type().is_floatbv();
+    };
+    if (op == "Eq" || op == "NotEq" || op == "Is" || op == "IsNot")
+    {
+      if (
+        is_primitive_ptr(lhs) && is_primitive(rhs) &&
+        lhs.type().subtype() == rhs.type())
+        cast_to_void_ptr(rhs, lhs.type());
+      else if (
+        is_primitive_ptr(rhs) && is_primitive(lhs) &&
+        rhs.type().subtype() == lhs.type())
+        cast_to_void_ptr(lhs, rhs.type());
+    }
   }
 
   // Handle special mathematical operations
@@ -667,26 +701,38 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     const bool lhs_invalid = lhs.type().is_empty() || lhs.type().is_nil();
     const bool rhs_invalid = rhs.type().is_empty() || rhs.type().is_nil();
     locationt loc = get_location_from_decl(element);
+
+    // Sound over-approximation when the comparison cannot be lowered to a
+    // typed binop: either an operand's type is unresolvable, or one side is
+    // a pointer-backed value (e.g. a list/dict variable that has been
+    // reassigned across incompatible types in the same scope) and the
+    // other isn't. Aborting here loses an entire verification run for what
+    // is often a frontend type-inference gap, not a real soundness issue;
+    // returning nondet bool lets symbolic execution explore both outcomes
+    // and keeps safety verification sound (we cannot conclude SAFE when
+    // the real comparison would fail). See #4807.
+    auto nondet_comparison = [&](const char *reason) {
+      log_debug(
+        "python-binop",
+        "{} at {}:{} -- falling back to nondet bool",
+        reason,
+        loc.is_nil() ? std::string("<unknown>") : loc.get_file().as_string(),
+        loc.is_nil() ? std::string("?") : loc.get_line().as_string());
+      side_effect_expr_nondett nondet(bool_type());
+      nondet.location() = loc;
+      return nondet;
+    };
+
     if (lhs_invalid || rhs_invalid)
-    {
-      std::ostringstream msg;
-      msg << "Unsupported comparison with unresolved operand type";
-      if (!loc.is_nil())
-        msg << " at " << loc.get_file() << ":" << loc.get_line();
-      throw std::runtime_error(msg.str());
-    }
+      return nondet_comparison(
+        "unsupported comparison with unresolved operand type");
 
     const bool lhs_ptr = lhs.type().is_pointer();
     const bool rhs_ptr = rhs.type().is_pointer();
     if (lhs_ptr != rhs_ptr)
-    {
-      std::ostringstream msg;
-      msg << "Unsupported comparison between pointer-backed and non-pointer "
-             "values";
-      if (!loc.is_nil())
-        msg << " at " << loc.get_file() << ":" << loc.get_line();
-      throw std::runtime_error(msg.str());
-    }
+      return nondet_comparison(
+        "unsupported comparison between pointer-backed and non-pointer "
+        "values");
   }
 
   // Build the binary expression
@@ -733,7 +779,7 @@ exprt python_converter::handle_array_operations(
   exprt &rhs,
   const nlohmann::json &left,
   const nlohmann::json &right,
-  const nlohmann::json & /*element*/)
+  const nlohmann::json &element)
 {
   if (!lhs.type().is_array() && !rhs.type().is_array())
     return nil_exprt();
@@ -746,10 +792,37 @@ exprt python_converter::handle_array_operations(
     return gen_boolean(op == "Eq");
   }
 
-  // Handle string concatenation
+  // Handle string concatenation -- only valid for char-arrays. Numeric
+  // arrays (e.g. ``np.array([1, 2, 3])``, modelled as ``long int [N]``)
+  // reaching this path via ``a + n`` previously got force-cast to char*
+  // and fed to __python_str_concat, which then crashed the bitwuzla
+  // mk_store on the sort-width mismatch. Reject numeric-array arithmetic
+  // explicitly: broadcasting is unsupported.
   if (op == "Add")
+  {
+    auto is_char_subtype = [](const typet &t) {
+      if (!t.is_array())
+        return false;
+      const typet &elt = t.subtype();
+      return elt == char_type() ||
+             (elt.is_signedbv() && to_signedbv_type(elt).get_width() == 8) ||
+             (elt.is_unsignedbv() && to_unsignedbv_type(elt).get_width() == 8);
+    };
+    const bool lhs_char = is_char_subtype(lhs.type());
+    const bool rhs_char = is_char_subtype(rhs.type());
+    if (!lhs_char && !rhs_char)
+    {
+      std::ostringstream msg;
+      msg << "TypeError: arithmetic on numeric arrays is not supported "
+             "(numpy broadcasting is not modelled)";
+      const locationt loc = get_location_from_decl(element);
+      if (!loc.is_nil())
+        msg << " at " << loc.get_file() << ":" << loc.get_line();
+      throw std::runtime_error(msg.str());
+    }
     return string_handler_.handle_string_concatenation_with_promotion(
       lhs, rhs, left, right);
+  }
 
   return nil_exprt();
 }

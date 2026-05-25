@@ -857,7 +857,7 @@ void value_sett::get_reference_set_rec(const expr2tc &expr, object_mapt &dest)
     {
       const symbolt *sym = ns.lookup(to_symbol2t(expr).thename);
       assert(sym);
-      const irept &a = sym->type.find("alignment");
+      const irept &a = sym->get_type().find("alignment");
       if (a.is_not_nil())
       {
         assert(a.is_constant());
@@ -1397,7 +1397,7 @@ void value_sett::do_function_call(
   const symbolt &symbol,
   const std::vector<expr2tc> &arguments)
 {
-  const code_typet &type = to_code_type(symbol.type);
+  const code_typet &type = to_code_type(symbol.get_type());
 
   type2tc tmp_migrated_type = migrate_type(type);
   const code_type2t &migrated_type =

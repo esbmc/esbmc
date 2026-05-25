@@ -424,9 +424,7 @@ The current version of ESBMC-Python has the following limitations:
   - Parameter types are assumed to be double for simplicity
 - F-String Limitations:
   - Complex expressions within f-strings may have limited support
-  - Advanced format specifications beyond basic integer `(:d, :i)` and float `(:.Nf)` formatting may not be fully supported
   - Nested f-strings are not supported
-  - String alignment and padding format specifications (e.g., `:>10`, `:<5`) are not supported
   - Custom format specifications for user-defined types are not supported
 - Missing Return Statement Detection Limitations:
   - Does not analyze return statements inside lambda expressions within the main function body.
@@ -450,12 +448,7 @@ The current version of ESBMC-Python has the following limitations:
   - Other types (`objects`, `arrays`, `null`) are not supported as return values for Any-typed functions.
   - Type inference defaults to `double (float)` when no specific type can be determined from return statements.
 - Tuple Limitations:
-  - Tuple indexing requires constant indices; variable indices are not supported (e.g., `t[i]` where `i` is a variable will fail).
-  - Tuple iteration (e.g., `for item in my_tuple:`) is not yet supported.
-  - Tuple methods such as `.count()` and `.index()` are not yet supported.
-  - Tuple concatenation with `+` operator is not yet supported.
-  - Tuple repetition with `*` operator is not yet supported.
-  - Tuple slicing is not yet supported.
+  - Tuple repetition with `*` operator is not yet supported (currently aborts the frontend).
 
 ### Example 1: Division by Zero in Python
 

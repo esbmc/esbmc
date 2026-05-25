@@ -251,6 +251,67 @@ def test_sum_of_positive_elements(dict0):
     sum_of_positive_elements(dict0)
 ```
 
+## Higher-Coverage Test Discovery with `--k-path-coverage`
+
+`--branch-coverage` only instruments one witness per branch direction, so two
+test inputs are enough to satisfy a program with two independent branches —
+even when those branches are correlated. `--k-path-coverage` instruments one
+witness per *combination* of the previous `N − 1` branch directions and the
+current direction, so the generated pytest suite exercises bounded-path
+combinations rather than only branch parity. See
+[Coverage > K-Path Coverage](../coverage#k-path-coverage) for the underlying
+metric.
+
+```python
+# example.py
+def f(a: int, b: int) -> int:
+    x = 0
+    if a > 0:
+        x += 1
+    if b > 0:
+        x += 1
+    return x
+
+f(__VERIFIER_nondet_int(), __VERIFIER_nondet_int())
+```
+
+Running with k-path coverage instead of branch coverage:
+
+```bash
+esbmc example.py --k-path-coverage=2 --unwind 4 \
+    --no-unwinding-assertions --generate-pytest-testcase
+```
+
+```
+k-Path Witnesses : 6
+Spanning Set : 4
+Reached : 4
+k-Path Coverage: 100%
+Generated pytest test case with 6 test(s): test_example.py
+```
+
+The generated file contains one parametrised case per witness — covering both
+branches for *each* combination of the prior branch outcome — rather than the
+two cases that `--branch-coverage` would emit:
+
+```python
+@pytest.mark.parametrize("a,b", [
+    (-1, 9223372036854775807),
+    (-1, -1),
+    (9223372036854775807, 9223372036854775807),
+    (9223372036854775807, -1),
+    (9223372036854775807, 0),
+    (-1, 0),
+])
+def test_f(a, b):
+    """Auto-generated test cases for f"""
+    f(a, b)
+```
+
+The witness-depth and per-function goal caps are controllable with
+`--k-path-witness-depth=D` and `--k-path-max-goals=M` respectively when
+exploring deeper paths or correlated-branch hot spots.
+
 ## Comparison with C Test Generation
 
 This feature is similar to the existing `--generate-testcase` flag for C programs, but outputs pytest-compatible Python test files instead of XML.

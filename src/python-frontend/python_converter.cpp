@@ -1,4 +1,4 @@
-#include <python-frontend/char_utils.h>
+#include <python-frontend/string/char_utils.h>
 #include <python-frontend/complex_handler.h>
 #include <python-frontend/converter/converter_internal.h>
 #include <python-frontend/convert_float_literal.h>
@@ -15,7 +15,7 @@
 #include <python-frontend/python_lambda.h>
 #include <python-frontend/python_list.h>
 #include <python-frontend/python_typechecking.h>
-#include <python-frontend/string_builder.h>
+#include <python-frontend/string/string_builder.h>
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/tuple_handler.h>
 #include <python-frontend/type_utils.h>
@@ -120,7 +120,7 @@ static void add_global_static_variable(
   std::string id = "c:@" + name;
   symbolt symbol;
   symbol.mode = "C";
-  symbol.type = std::move(t);
+  symbol.set_type(std::move(t));
   symbol.name = name;
   symbol.id = id;
 
@@ -128,8 +128,11 @@ static void add_global_static_variable(
   symbol.static_lifetime = true;
   symbol.is_extern = false;
   symbol.file_local = false;
-  symbol.value = gen_zero(t, true);
-  symbol.value.zero_initializer(true);
+  {
+    exprt v = gen_zero(t, true);
+    v.zero_initializer(true);
+    symbol.set_value(std::move(v));
+  }
 
   symbolt *added_symbol = ctx.move_symbol_to_context(symbol);
   assert(added_symbol);
@@ -148,28 +151,59 @@ void python_converter::load_c_intrisics(code_blockt &)
   add_global_static_variable(symbol_table_, type2, "__ESBMC_alloc_size");
 }
 
-///  Only addresses __name__; other Python built-ins such as
-/// __file__, __doc__, __package__ are unsupported
+///  Creates ``__name__`` and ``__file__``; ``__doc__`` / ``__package__``
+///  remain unsupported.
 void python_converter::create_builtin_symbols()
 {
-  // Create __name__ symbol
-  symbol_id name_sid(current_python_file, "", "");
-  name_sid.set_object("__name__");
+  const std::string module_name =
+    current_python_file.substr(0, current_python_file.find_last_of("."));
 
   locationt location;
   location.set_file(current_python_file.c_str());
   location.set_line(1);
 
-  std::string module_name =
-    current_python_file.substr(0, current_python_file.find_last_of("."));
+  auto add_string_builtin =
+    [&](const std::string &builtin_name, const std::string &value) {
+      symbol_id sid(current_python_file, "", "");
+      sid.set_object(builtin_name);
 
-  // Determine the value of __name__ based on whether this is the main module or imported
+      typet string_type =
+        type_handler_.build_array(char_type(), value.size() + 1);
+
+      symbolt sym = create_symbol(
+        module_name, builtin_name, sid.to_string(), location, string_type);
+
+      sym.lvalue = true;
+      sym.static_lifetime = true;
+      sym.is_extern = false;
+      sym.file_local = false;
+
+      exprt value_expr = gen_zero(string_type);
+      const typet &char_type_ref = string_type.subtype();
+      for (size_t i = 0; i < value.size(); ++i)
+      {
+        uint8_t ch = value[i];
+        value_expr.operands().at(i) = constant_exprt(
+          integer2binary(BigInt(ch), bv_width(char_type_ref)),
+          integer2string(BigInt(ch)),
+          char_type_ref);
+      }
+      value_expr.operands().at(value.size()) = constant_exprt(
+        integer2binary(BigInt(0), bv_width(char_type_ref)),
+        integer2string(BigInt(0)),
+        char_type_ref);
+      sym.set_value(value_expr);
+
+      symbol_table_.add(sym);
+    };
+
+  // Determine the value of __name__: "__main__" for the main module, else the
+  // module's basename without extension.
   std::string name_value;
   if (current_python_file == main_python_file)
     name_value = "__main__";
   else
   {
-    // Extract module name from filename (e.g., "/path/to/other.py" -> "other")
     size_t last_slash = current_python_file.find_last_of("/\\");
     size_t last_dot = current_python_file.find_last_of(".");
     if (
@@ -185,43 +219,11 @@ void python_converter::create_builtin_symbols()
       name_value = current_python_file;
   }
 
-  typet string_type =
-    type_handler_.build_array(char_type(), name_value.size() + 1);
+  add_string_builtin("__name__", name_value);
 
-  // Create the symbol
-  symbolt name_symbol = create_symbol(
-    module_name, "__name__", name_sid.to_string(), location, string_type);
-
-  name_symbol.lvalue = true;
-  name_symbol.static_lifetime = true;
-  name_symbol.is_extern = false;
-  name_symbol.file_local = false;
-
-  // Set the value
-  exprt name_expr = gen_zero(string_type);
-  const typet &char_type_ref = string_type.subtype();
-
-  for (size_t i = 0; i < name_value.size(); ++i)
-  {
-    uint8_t ch = name_value[i];
-    exprt char_value = constant_exprt(
-      integer2binary(BigInt(ch), bv_width(char_type_ref)),
-      integer2string(BigInt(ch)),
-      char_type_ref);
-    name_expr.operands().at(i) = char_value;
-  }
-
-  // Add null terminator
-  exprt null_char = constant_exprt(
-    integer2binary(BigInt(0), bv_width(char_type_ref)),
-    integer2string(BigInt(0)),
-    char_type_ref);
-  name_expr.operands().at(name_value.size()) = null_char;
-
-  name_symbol.value = name_expr;
-
-  // Add to symbol table
-  symbol_table_.add(name_symbol);
+  // __file__ mirrors CPython: the (absolute) path of the source file. We use
+  // the canonical path the frontend already tracks via current_python_file.
+  add_string_builtin("__file__", current_python_file);
 }
 
 bool python_converter::import_module_into_block(
@@ -380,7 +382,33 @@ void python_converter::convert()
 
       std::ifstream model_file(model_path.str());
       nlohmann::json model_json;
-      model_file >> model_json;
+      if (!model_file.is_open())
+      {
+        // parser.py exited before producing this model — the user's
+        // program almost certainly hit an unresolvable import that
+        // aborted the AST generation pipeline (issue #2012). Surface
+        // a structured error instead of letting the downstream
+        // ``>> model_json`` throw an uncaught nlohmann parse_error.
+        log_error(
+          "Python frontend: missing operational-model AST '{}'. "
+          "This usually means parser.py exited before generating it; "
+          "check the parser output above for the underlying error.",
+          model_path.str());
+        exit(1);
+      }
+      try
+      {
+        model_file >> model_json;
+      }
+      catch (const nlohmann::json::exception &e)
+      {
+        log_error(
+          "Python frontend: failed to parse operational-model AST "
+          "'{}': {}.",
+          model_path.str(),
+          e.what());
+        exit(1);
+      }
       model_file.close();
 
       size_t pos = file.rfind("/");
@@ -488,7 +516,7 @@ void python_converter::convert()
     call.function() = symbol_expr(*symbol);
 
     const code_typet::argumentst &arguments =
-      to_code_type(symbol->type).arguments();
+      to_code_type(symbol->get_type()).arguments();
 
     // Function args are nondet values
     for (const code_typet::argumentt &arg : arguments)
@@ -616,7 +644,7 @@ void python_converter::convert()
     symbolt init_symbol;
     init_symbol.id = "python_init";
     init_symbol.name = "python_init";
-    init_symbol.type = init_type;
+    init_symbol.set_type(init_type);
     init_symbol.lvalue = true;
     init_symbol.is_extern = false;
     init_symbol.file_local = false;
@@ -630,7 +658,11 @@ void python_converter::convert()
     code_blockt init_body;
     init_body.copy_to_operands(esbmc_hide);
     init_body.copy_to_operands(init_code);
-    init_symbol.value.swap(init_body);
+    {
+      exprt v = init_symbol.get_value();
+      v.swap(init_body);
+      init_symbol.set_value(std::move(v));
+    }
 
     if (symbol_table_.move(init_symbol))
     {
@@ -645,12 +677,12 @@ void python_converter::convert()
   symbolt user_main_symbol;
   user_main_symbol.id = "python_user_main";
   user_main_symbol.name = "python_user_main";
-  user_main_symbol.type = user_main_type;
+  user_main_symbol.set_type(user_main_type);
   user_main_symbol.lvalue = true;
   user_main_symbol.is_extern = false;
   user_main_symbol.file_local = false;
   user_main_symbol.location = get_location_from_decl(*ast_json);
-  user_main_symbol.value = user_code;
+  user_main_symbol.set_value(user_code);
 
   if (symbol_table_.move(user_main_symbol))
   {
@@ -665,7 +697,7 @@ void python_converter::convert()
   symbolt main_symbol;
   main_symbol.id = "__ESBMC_main";
   main_symbol.name = "__ESBMC_main";
-  main_symbol.type = main_type;
+  main_symbol.set_type(main_type);
   main_symbol.lvalue = true;
   main_symbol.is_extern = false;
   main_symbol.file_local = false;
@@ -675,9 +707,9 @@ void python_converter::convert()
 
   // 1. Initialize static lifetime variables
   symbol_table_.foreach_operand_in_order([&main_body](const symbolt &s) {
-    if (s.static_lifetime && !s.value.is_nil() && !s.type.is_code())
+    if (s.static_lifetime && !s.get_value().is_nil() && !s.get_type().is_code())
     {
-      code_assignt assign(symbol_expr(s), s.value);
+      code_assignt assign(symbol_expr(s), s.get_value());
       assign.location() = s.location;
       main_body.copy_to_operands(assign);
     }
@@ -751,7 +783,11 @@ void python_converter::convert()
 
   main_body.copy_to_operands(make_hook_call("__ESBMC_pthread_end_main_hook"));
 
-  main_symbol.value.swap(main_body);
+  {
+    exprt v = main_symbol.get_value();
+    v.swap(main_body);
+    main_symbol.set_value(std::move(v));
+  }
 
   if (symbol_table_.move(main_symbol))
   {

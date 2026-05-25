@@ -1,6 +1,6 @@
 # Operational model for collections module
 # pylint: disable=function-redefined  # intentional stdlib shadow for ESBMC models
-# pylint: disable=keyword-arg-before-vararg,unused-argument
+# pylint: disable=keyword-arg-before-vararg,unused-argument,undefined-variable
 # defaultdict's signature is pinned: callers in regression/python/
 # (e.g. github_3841_*) pass `default_factory` positionally as in
 # `defaultdict(int)`, so it must come first; and the no-arg form
@@ -89,30 +89,29 @@ class Counter:
         """Return True iff at least one key has been recorded."""
         return self.count != 0
 
-    def most_common(self, n: int = 1) -> list[int]:
-        """Return a one-element list ``[max_count]`` (or ``[]`` if empty).
+    def most_common(self, n: int = 1) -> list[tuple[int, int]]:
+        """Counter.most_common is not modelled — reject with a clear assertion.
 
-        Approximation: CPython's ``Counter.most_common`` returns up to
-        ``n`` ``(key, count)`` pairs in descending count order. ESBMC's
-        Counter model carries ``tuple[int, int]`` keys, and the Python
-        frontend does not yet lower lists whose elements are tuples (or
-        nested tuples) when they are returned from a method, so the full
-        CPython shape is not yet expressible. The model collapses to
-        just the maximum count, returned as a single-element list, so
-        callers writing ``c.most_common(1)[0]`` get the max count (an
-        ``int``) rather than CPython's ``(key, count)`` tuple. Programs
-        that need keys, ties, or the full ordering must scan ``data``
-        directly. ``n == 0`` returns ``[]``; any ``n >= 1`` returns the
-        single-element list, regardless of ``n``.
+        CPython returns up to ``n`` ``(elem, count)`` pairs sorted by
+        count descending. ESBMC's Counter model does not track which key
+        maps to which count, so the CPython contract cannot be honoured.
+        Rather than silently returning a lossy approximation (which
+        caused issue #4665 by misleading callers that wrote
+        ``c.most_common(n)[i][j]``), this method fires a verification
+        assertion as soon as it is reached. Programs that need counts
+        without keys should iterate ``Counter.data`` directly.
+
+        The return type ``list[tuple[int, int]]`` is kept matching
+        CPython's API surface so the frontend can type-check
+        subscript-of-subscript expressions cleanly before the assertion
+        fires — otherwise callers see the cryptic "Unsupported
+        comparison with unresolved operand type" frontend error
+        instead of the assertion message.
         """
-        if self.count == 0 or n == 0:
-            return []
-        vals: list[int] = self.data.values()
-        size: int = len(vals)
-        best: int = vals[0]
-        i: int = 1
-        while i < size:
-            if vals[i] > best:
-                best = vals[i]
-            i = i + 1
-        return [best]
+        __ESBMC_assert(
+            False,
+            "Counter.most_common is not modelled (issue #4665) — "
+            "iterate Counter.data directly to inspect counts and keys",
+        )
+        placeholder: tuple[int, int] = (0, 0)
+        return [placeholder]

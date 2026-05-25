@@ -1,0 +1,6 @@
+CORE
+main.py
+--k-path-coverage=2 --unwind 4 --no-unwinding-assertions --generate-pytest-testcase
+^k-Path Coverage: 100%
+^Generated pytest test case with \d+ test\(s\)\: test_main\.py
+^VERIFICATION FAILED$

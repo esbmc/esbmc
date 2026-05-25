@@ -5,8 +5,8 @@
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python_lambda.h>
 #include <python-frontend/python_list.h>
-#include <python-frontend/string_builder.h>
-#include <python-frontend/string_handler.h>
+#include <python-frontend/string/string_builder.h>
+#include <python-frontend/string/string_handler.h>
 #include <python-frontend/tuple_handler.h>
 #include <python-frontend/type_handler.h>
 #include <python-frontend/type_utils.h>
@@ -43,17 +43,17 @@ exprt python_converter::get_resolved_value(const exprt &expr)
   const symbol_exprt &sym = to_symbol_expr(expr);
   const symbolt *symbol = symbol_table_.find_symbol(sym.get_identifier());
 
-  if (!symbol || symbol->value.is_nil())
+  if (!symbol || symbol->get_value().is_nil())
     return nil_exprt();
 
   // Return constant values directly
-  if (symbol->value.is_constant())
-    return symbol->value;
+  if (symbol->get_value().is_constant())
+    return symbol->get_value();
 
   // Handle function calls stored as code
-  if (symbol->value.is_code())
+  if (symbol->get_value().is_code())
   {
-    const codet &code = to_code(symbol->value);
+    const codet &code = to_code(symbol->get_value());
 
     if (code.get_statement() == "function_call" && code.operands().size() >= 3)
     {
@@ -80,17 +80,18 @@ exprt python_converter::resolve_function_call(
   const symbolt *func_symbol =
     symbol_table_.find_symbol(func_sym.get_identifier());
 
-  if (!func_symbol || func_symbol->value.is_nil())
+  if (!func_symbol || func_symbol->get_value().is_nil())
     return nil_exprt();
 
   // First check if this function returns a constant value
-  exprt constant_result = get_function_constant_return(func_symbol->value);
+  exprt constant_result =
+    get_function_constant_return(func_symbol->get_value());
   if (!constant_result.is_nil())
     return constant_result;
 
   // Then check if this function is an identity function (returns its parameter)
   if (!is_identity_function(
-        func_symbol->value, func_sym.get_identifier().as_string()))
+        func_symbol->get_value(), func_sym.get_identifier().as_string()))
     return nil_exprt();
 
   // Extract the first argument for identity functions
@@ -116,8 +117,8 @@ exprt python_converter::resolve_function_call(
   {
     const symbol_exprt &sym = to_symbol_expr(arg);
     const symbolt *symbol = symbol_table_.find_symbol(sym.get_identifier());
-    if (symbol && symbol->value.is_constant())
-      arg = symbol->value;
+    if (symbol && symbol->get_value().is_constant())
+      arg = symbol->get_value();
   }
 
   // Return string constants, array constants, and single character constants
@@ -286,6 +287,22 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
   {
     python_set set_handler(*this, element);
     return set_handler.get_empty_set();
+  }
+
+  // list() with no args — empty list. Lower to a List literal so it routes
+  // through the well-tested `[]` path (python_list::get()).
+  if (
+    element["func"]["_type"] == "Name" && element["func"]["id"] == "list" &&
+    (!element.contains("args") || element["args"].empty()))
+  {
+    nlohmann::json list_node;
+    list_node["_type"] = "List";
+    list_node["elts"] = nlohmann::json::array();
+    for (const char *k :
+         {"lineno", "col_offset", "end_lineno", "end_col_offset"})
+      if (element.contains(k))
+        list_node[k] = element[k];
+    return get_expr(list_node);
   }
 
   // Handle list(...) calls
@@ -531,7 +548,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     var_sid.set_object(func_name);
     symbolt *var_symbol = find_symbol(var_sid.to_string());
 
-    if (var_symbol && var_symbol->type.is_pointer())
+    if (var_symbol && var_symbol->get_type().is_pointer())
     {
       // This is an indirect call through function pointer
       side_effect_expr_function_callt call;
@@ -542,7 +559,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       // so that the adjuster can dereference it to a code type (it calls
       // to_code_type on the dereferenced subtype, which would fail on void).
       exprt func_ptr_expr = symbol_expr(*var_symbol);
-      if (var_symbol->type == any_type())
+      if (var_symbol->get_type() == any_type())
         func_ptr_expr =
           typecast_exprt(func_ptr_expr, gen_pointer_type(code_typet()));
       call.function() = func_ptr_expr;
@@ -552,24 +569,25 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       // does not preserve the full code_typet (return type + arguments).
       bool resolved = false;
       if (
-        var_symbol->value.is_address_of() &&
-        !var_symbol->value.operands().empty() &&
-        var_symbol->value.operands()[0].is_symbol())
+        var_symbol->get_value().is_address_of() &&
+        !var_symbol->get_value().operands().empty() &&
+        var_symbol->get_value().operands()[0].is_symbol())
       {
         const symbolt *target_func = symbol_table_.find_symbol(
-          var_symbol->value.operands()[0].identifier());
-        if (target_func && target_func->type.is_code())
+          var_symbol->get_value().operands()[0].identifier());
+        if (target_func && target_func->get_type().is_code())
         {
-          const code_typet &func_type = to_code_type(target_func->type);
+          const code_typet &func_type = to_code_type(target_func->get_type());
           call.type() = func_type.return_type();
           resolved = true;
         }
       }
 
       // Try to get return type from the pointer's subtype
-      if (!resolved && var_symbol->type.subtype().is_code())
+      if (!resolved && var_symbol->get_type().subtype().is_code())
       {
-        const code_typet &func_type = to_code_type(var_symbol->type.subtype());
+        const code_typet &func_type =
+          to_code_type(var_symbol->get_type().subtype());
         call.type() = func_type.return_type();
         resolved = true;
       }
@@ -826,10 +844,10 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       return;
 
     const symbolt *func_symbol = symbol_table_.find_symbol(func.identifier());
-    if (!func_symbol || !func_symbol->type.is_code())
+    if (!func_symbol || !func_symbol->get_type().is_code())
       return;
 
-    const code_typet &func_type = to_code_type(func_symbol->type);
+    const code_typet &func_type = to_code_type(func_symbol->get_type());
     const code_typet::argumentst &params = func_type.arguments();
 
     code_function_callt &call = static_cast<code_function_callt &>(call_expr);
@@ -1001,9 +1019,9 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     if (func.is_symbol())
     {
       const symbolt *func_symbol = symbol_table_.find_symbol(func.identifier());
-      if (func_symbol && func_symbol->type.is_code())
+      if (func_symbol && func_symbol->get_type().is_code())
       {
-        const code_typet &func_type = to_code_type(func_symbol->type);
+        const code_typet &func_type = to_code_type(func_symbol->get_type());
         const code_typet::argumentst &params = func_type.arguments();
         auto &args = call.arguments();
         for (size_t i = 0; i < args.size() && i < params.size(); ++i)
@@ -1019,7 +1037,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
               symbol_table_.find_symbol(arg.identifier());
             if (arg_symbol)
             {
-              arg_actual_type = arg_symbol->type;
+              arg_actual_type = arg_symbol->get_type();
               // Follow symbol type references using namespace
               if (arg_actual_type.id() == "symbol")
                 arg_actual_type = ns.follow(arg_actual_type);
@@ -1112,7 +1130,7 @@ exprt python_converter::get_return_from_func(const char *func_symbol_id)
   symbolt *func_symbol = symbol_table_.find_symbol(func_symbol_id);
   assert(func_symbol);
 
-  const auto &operands = func_symbol->value.operands();
+  const auto &operands = func_symbol->get_value().operands();
 
   for (std::vector<exprt>::const_reverse_iterator it = operands.rbegin();
        it != operands.rend();

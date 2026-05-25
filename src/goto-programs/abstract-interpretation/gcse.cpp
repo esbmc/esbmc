@@ -481,7 +481,7 @@ inline symbolt goto_cse::create_cse_symbol(
   const goto_programt::const_targett &to)
 {
   symbolt symbol;
-  symbol.type = migrate_type_back(t);
+  set_symbol_type(symbol, t);
   symbol.id = fmt::format("{}${}", prefix, symbol_counter++);
   symbol.name = symbol.id;
   symbol.mode = "C";

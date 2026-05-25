@@ -21,7 +21,11 @@ class goto_functiont
 {
 public:
   goto_programt body;
-  code_typet type;
+  // The function signature (a code_type2t). Unlike the legacy code_typet this
+  // replaced, a default-constructed type2tc is nil rather than an empty code
+  // type, so it must be assigned (migrate_type(symbol.type)) before any read:
+  // to_code_type() dereferences it. All construction paths set it before use.
+  type2tc type;
   bool body_available = false;
 
   // The set of functions that have been inlined into this one. Necessary to

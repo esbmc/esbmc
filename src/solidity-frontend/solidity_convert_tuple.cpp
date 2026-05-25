@@ -101,7 +101,7 @@ bool solidity_convertert::get_tuple_definition(const nlohmann::json &ast_node)
   }
 
   t.location() = location_begin;
-  added_symbol.type = t;
+  added_symbol.set_type(t);
 
   return false;
 }
@@ -117,7 +117,7 @@ bool solidity_convertert::get_tuple_instance(
     return true;
 
   // get type
-  typet t = context.find_symbol(id)->type;
+  typet t = context.find_symbol(id)->get_type();
   set_sol_type(t, SolidityGrammar::SolType::TUPLE_INSTANCE);
   assert(t.id() == typet::id_struct);
 
@@ -139,8 +139,11 @@ bool solidity_convertert::get_tuple_instance(
   symbol.static_lifetime = true;
   symbol.file_local = true;
 
-  symbol.value = gen_zero(get_complete_type(t, ns), true);
-  symbol.value.zero_initializer(true);
+  {
+    exprt _v = gen_zero(get_complete_type(t, ns), true);
+    _v.zero_initializer(true);
+    symbol.set_value(std::move(_v));
+  }
   symbolt &added_symbol = *move_symbol_to_context(symbol);
   new_expr = symbol_expr(added_symbol);
   new_expr.identifier(id);
@@ -315,7 +318,7 @@ void solidity_convertert::get_llc_ret_tuple(symbolt &s)
   }
   const symbolt &struct_sym = *context.find_symbol(_id);
 
-  typet sym_t = struct_sym.type;
+  typet sym_t = struct_sym.get_type();
   set_sol_type(sym_t, SolidityGrammar::SolType::TUPLE_INSTANCE);
 
   std::string name, id;
@@ -330,7 +333,7 @@ void solidity_convertert::get_llc_ret_tuple(symbolt &s)
   auto &added_sym = *move_symbol_to_context(symbol);
 
   // value
-  typet t = struct_sym.type;
+  typet t = struct_sym.get_type();
   exprt inits = gen_zero(t);
   // Cast nondet_bool to match the struct field type (C frontend compiles
   // _Bool/bool as unsigned int in struct layout due to padding)
@@ -342,7 +345,7 @@ void solidity_convertert::get_llc_ret_tuple(symbolt &s)
   }
   inits.op0() = bool_val;
   inits.op1() = nondet_uint_expr;
-  added_sym.value = inits;
+  added_sym.set_value(inits);
   s = added_sym;
 }
 

@@ -238,8 +238,13 @@ void goto_inlinet::expand_function_call(
     replace_return(tmp2, lhs);
 
     goto_programt tmp;
+    // parameter_assignments still consumes the legacy code_typet; recover it
+    // from the IREP2 goto-function type at this single call site.
     parameter_assignments(
-      tmp2.instructions.front().location, f.type, arguments, tmp);
+      tmp2.instructions.front().location,
+      to_code_type(migrate_type_back(f.type)),
+      arguments,
+      tmp);
     tmp.destructive_append(tmp2);
 
     if (f.body.hide)

@@ -958,7 +958,7 @@ void interval_domaint::transform(
   {
     // After a return, all function arguments becomes nondet
     const symbolt *current_function = ns.lookup(instruction.function);
-    type2tc t = migrate_type(current_function->type);
+    type2tc t = migrate_symbol_type(*current_function);
     const code_type2t &function = to_code_type(t);
 
     for (size_t i = 0; i < function.arguments.size(); i++)

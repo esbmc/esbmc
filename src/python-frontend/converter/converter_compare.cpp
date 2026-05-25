@@ -1,6 +1,6 @@
-#include <python-frontend/char_utils.h>
+#include <python-frontend/string/char_utils.h>
 #include <python-frontend/python_converter.h>
-#include <python-frontend/string_handler.h>
+#include <python-frontend/string/string_handler.h>
 #include <python-frontend/type_utils.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
@@ -17,15 +17,15 @@ std::pair<exprt, exprt> python_converter::resolve_comparison_operands_internal(
   if (lhs.is_symbol() && lhs.type().is_array())
   {
     const symbolt *sym = symbol_table_.find_symbol(lhs.identifier());
-    if (sym && sym->value.is_constant())
-      resolved_lhs = sym->value;
+    if (sym && sym->get_value().is_constant())
+      resolved_lhs = sym->get_value();
   }
 
   if (rhs.is_symbol() && rhs.type().is_array())
   {
     const symbolt *sym = symbol_table_.find_symbol(rhs.identifier());
-    if (sym && sym->value.is_constant())
-      resolved_rhs = sym->value;
+    if (sym && sym->get_value().is_constant())
+      resolved_rhs = sym->get_value();
   }
 
   return {resolved_lhs, resolved_rhs};
@@ -143,13 +143,13 @@ exprt python_converter::handle_indexed_comparison_internal(
     const symbolt *symbol = symbol_table_.find_symbol(array.identifier());
     if (symbol)
     {
-      resolved_array = symbol->value;
-      if (symbol->value.is_symbol())
+      resolved_array = symbol->get_value();
+      if (symbol->get_value().is_symbol())
       {
         const symbolt *compound =
-          symbol_table_.find_symbol(symbol->value.identifier());
-        if (compound && compound->value.is_constant())
-          resolved_array = compound->value;
+          symbol_table_.find_symbol(symbol->get_value().identifier());
+        if (compound && compound->get_value().is_constant())
+          resolved_array = compound->get_value();
       }
     }
   }
@@ -577,10 +577,10 @@ exprt python_converter::handle_type_identity_check(
       {
         const symbol_exprt &sym = to_symbol_expr(expr);
         const symbolt *symbol = ns.lookup(sym.get_identifier());
-        if (symbol && symbol->value.is_constant())
+        if (symbol && symbol->get_value().is_constant())
         {
           std::string val =
-            to_constant_expr(symbol->value).get_value().as_string();
+            to_constant_expr(symbol->get_value()).get_value().as_string();
 
           if (type_utils::is_type_identifier(val))
           {

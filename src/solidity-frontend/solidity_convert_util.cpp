@@ -192,7 +192,7 @@ void solidity_convertert::get_default_symbol(
   symbol.mode = mode;
   symbol.module = module_name;
   symbol.location = std::move(location);
-  symbol.type = std::move(type);
+  symbol.set_type(std::move(type));
   symbol.name = name;
   symbol.id = id;
 }
@@ -676,7 +676,7 @@ void solidity_convertert::get_aux_array(
 
   symbolt &added_symbol = *move_symbol_to_context(sym);
 
-  added_symbol.value = new_src_expr;
+  added_symbol.set_value(new_src_expr);
   new_expr = symbol_expr(added_symbol);
 }
 
@@ -795,7 +795,7 @@ exprt solidity_convertert::make_aux_var(exprt &val, const locationt &location)
   aux_sym.file_local = true;
 
   auto &added_sym = *move_symbol_to_context(aux_sym);
-  added_sym.value = val;
+  added_sym.set_value(val);
 
   code_declt decl(symbol_expr(added_sym));
   decl.operands().push_back(val);

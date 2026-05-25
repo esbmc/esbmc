@@ -7,7 +7,7 @@
 #include <python-frontend/python_list.h>
 #include <python-frontend/python_typechecking.h>
 #include <util/encoding.h>
-#include <python-frontend/string_handler.h>
+#include <python-frontend/string/string_handler.h>
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/tuple_handler.h>
 #include <python-frontend/type_handler.h>
@@ -100,7 +100,7 @@ symbolt python_converter::create_return_temp_variable(
   symbolt temp_symbol;
   temp_symbol.id = temp_sid.to_string();
   temp_symbol.name = temp_sid.to_string();
-  temp_symbol.type = return_type;
+  temp_symbol.set_type(return_type);
   temp_symbol.lvalue = true;
   temp_symbol.static_lifetime = false;
   temp_symbol.location = location;
@@ -201,12 +201,20 @@ python_converter::infer_types_from_returns(const nlohmann::json &function_body)
             flags.has_none = true;
           else
           {
+            // A string/object/array return literal in an Any-typed function
+            // cannot be folded into the numeric TypeFlags hierarchy. Don't
+            // abort the whole conversion (issue #2848): skip this return so
+            // any numeric sibling return still drives the inferred type, and
+            // an all-non-numeric body falls back to the caller's default.
             std::string type_name = constant_val.is_string()   ? "string"
                                     : constant_val.is_object() ? "object"
                                     : constant_val.is_array()  ? "array"
                                                                : "unknown";
-            throw std::runtime_error(
-              "Unsupported return type '" + type_name + "' detected");
+            log_debug(
+              "python",
+              "infer_types_from_returns: ignoring unsupported return literal "
+              "of type '{}' for Any inference",
+              type_name);
           }
         }
         else if (val["_type"] == "BinOp" || val["_type"] == "UnaryOp")
@@ -601,7 +609,7 @@ void python_converter::process_function_arguments(
               {
                 symbolt *param_sym = symbol_table_.find_symbol(param_id);
                 if (param_sym)
-                  param_sym->type = default_expr.type();
+                  param_sym->set_type(default_expr.type());
               }
             }
           }
@@ -658,7 +666,7 @@ void python_converter::process_function_arguments(
       {
         symbolt *param_sym = symbol_table_.find_symbol(param_id);
         if (param_sym)
-          param_sym->type = list_t;
+          param_sym->set_type(list_t);
       }
     }
   }
@@ -694,7 +702,7 @@ void python_converter::process_function_arguments(
     {
       symbolt *param_sym = symbol_table_.find_symbol(param_id);
       if (param_sym)
-        param_sym->type = ptr_type;
+        param_sym->set_type(ptr_type);
     }
   }
 }
@@ -758,9 +766,35 @@ typet python_converter::infer_return_type_from_body(const nlohmann::json &body)
         ret_val["id"] == "self" && !current_class_name_.empty())
         return type_handler_.get_typet(current_class_name_);
 
-      // If returning a tuple, infer its type
+      // If returning a tuple, infer its type. This routine runs twice:
+      // once before function body conversion (so return statements can
+      // be typed in the right context), and once afterwards.
+      // tuple_handler evaluates each element via get_expr, which aborts
+      // on a Name that refers to a function-local variable not yet
+      // declared in the symbol table. Restrict the pre-body call to
+      // tuples whose elements are all Constants (or otherwise
+      // resolvable without symbol lookup); for tuples containing
+      // locals, leave the return type empty and let the post-body
+      // second pass infer it. See #4807.
       if (ret_val["_type"] == "Tuple")
-        return tuple_handler_->get_tuple_expr(ret_val).type();
+      {
+        bool all_constant = true;
+        if (ret_val.contains("elts") && ret_val["elts"].is_array())
+        {
+          for (const auto &elt : ret_val["elts"])
+          {
+            if (!elt.contains("_type") || elt["_type"] != "Constant")
+            {
+              all_constant = false;
+              break;
+            }
+          }
+        }
+        if (all_constant)
+          return tuple_handler_->get_tuple_expr(ret_val).type();
+        // Fall through -- post-body inference will pick up the real
+        // type once the local symbols have been declared.
+      }
 
       // Constant returns (including strings)
       if (ret_val["_type"] == "Constant" && ret_val.contains("value"))
@@ -846,7 +880,7 @@ void python_converter::get_function_definition(
     {
       type.return_type() = dict_handler_->get_dict_struct_type();
     }
-    else if (return_type == "str")
+    else if (return_type == "str" || return_type == "string")
     {
       // String return types should be pointers, not arrays
       type.return_type() = gen_pointer_type(char_type());
@@ -883,7 +917,7 @@ void python_converter::get_function_definition(
   {
     std::string type_string =
       type_utils::remove_quotes(return_node["value"].get<std::string>());
-    if (type_string == "str")
+    if (type_string == "str" || type_string == "string")
       type.return_type() = gen_pointer_type(char_type());
     else
       type.return_type() = type_handler_.get_typet(type_string);
@@ -986,7 +1020,7 @@ void python_converter::get_function_definition(
         typet optional_type = type_handler_.build_optional_type(value_type);
         type.return_type() = optional_type;
         current_element_type = optional_type;
-        added_symbol->type = type;
+        added_symbol->set_type(type);
       }
     }
     else
@@ -997,7 +1031,7 @@ void python_converter::get_function_definition(
         type_handler_.build_optional_type(type.return_type());
       type.return_type() = optional_type;
       current_element_type = optional_type;
-      added_symbol->type = type;
+      added_symbol->set_type(type);
     }
   }
 
@@ -1010,7 +1044,7 @@ void python_converter::get_function_definition(
     {
       type.return_type() = inferred_type;
       current_element_type = inferred_type;
-      added_symbol->type = type;
+      added_symbol->set_type(type);
     }
   }
 
@@ -1031,7 +1065,7 @@ void python_converter::get_function_definition(
     if (!inferred_type.is_empty())
     {
       type.return_type() = inferred_type;
-      added_symbol->type = type; // Update the symbol's type
+      added_symbol->set_type(type); // Update the symbol's type
     }
   }
 
@@ -1055,7 +1089,7 @@ void python_converter::get_function_definition(
           if (!ret_type.is_empty())
           {
             type.return_type() = ret_type;
-            added_symbol->type = type;
+            added_symbol->set_type(type);
             break;
           }
         }
@@ -1081,7 +1115,7 @@ void python_converter::get_function_definition(
   // Validate return paths
   validate_return_paths(function_node, type, function_body);
 
-  added_symbol->value = function_body;
+  added_symbol->set_value(function_body);
 
   scope_stack_.pop_back();
 

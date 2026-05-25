@@ -37,7 +37,7 @@ bool symex_dereference_statet::has_failed_symbol(
     const symbolt &ptr_symbol =
       *goto_symex.ns.lookup(to_symbol2t(expr).thename);
 
-    const irep_idt &failed_symbol = ptr_symbol.type.failed_symbol();
+    const irep_idt &failed_symbol = ptr_symbol.get_type().failed_symbol();
 
     if (failed_symbol == "")
       return false;

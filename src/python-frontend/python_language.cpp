@@ -87,7 +87,7 @@ bool python_languaget::parse(const std::string &path)
 
   ast_output_dir = dump_python_script();
   fs::path parser_path(ast_output_dir);
-  parser_path /= "parser.py";
+  parser_path /= "parser/__main__.py";
 
   // Execute Python script to generate JSON file from AST
   std::vector<std::string> args = {parser_path.string(), path, ast_output_dir};
@@ -119,13 +119,54 @@ bool python_languaget::parse(const std::string &path)
     exit(1);
   }
 
+  // Verify the interpreter is Python 3 — parser/__main__.py uses f-strings, which
+  // Python 2.x cannot parse, surfacing a cryptic SyntaxError (issue #1967).
+  // The check prints just the major version so a single getline suffices.
+  {
+    bp::ipstream version_out;
+    try
+    {
+      bp::child version_proc(
+        python_exec_path,
+        std::vector<std::string>{
+          "-c", "import sys; print(sys.version_info[0])"},
+        bp::std_out > version_out,
+        bp::std_err > bp::null);
+      std::string major;
+      std::getline(version_out, major);
+      version_proc.wait();
+      while (!major.empty() && (major.back() == '\r' || major.back() == '\n' ||
+                                major.back() == ' '))
+        major.pop_back();
+      if (major != "3")
+      {
+        log_error(
+          "ESBMC's Python frontend requires Python 3 (interpreter at "
+          "'{}' reports major version '{}'). Re-run with "
+          "--python <path-to-python3>.\n",
+          python_exec_path.string(),
+          major.empty() ? std::string("?") : major);
+        exit(1);
+      }
+    }
+    catch (const std::exception &e)
+    {
+      log_error(
+        "Failed to determine Python version for '{}': {}. "
+        "Re-run with --python <path-to-python3>.\n",
+        python_exec_path.string(),
+        e.what());
+      exit(1);
+    }
+  }
+
   // Create a child process to execute Python
   bp::child process(python_exec_path, args);
 
   // Wait for execution
   process.wait();
 
-  // parser.py execution failed
+  // parser/__main__.py execution failed
   if (process.exit_code())
     exit(process.exit_code());
 
@@ -141,7 +182,21 @@ bool python_languaget::parse(const std::string &path)
     exit(1);
   }
 
-  ast = nlohmann::json::parse(ast_json);
+  try
+  {
+    ast = nlohmann::json::parse(ast_json);
+  }
+  catch (const nlohmann::json::exception &e)
+  {
+    // parser/__main__.py exited 0 but left a truncated or empty AST file. Report
+    // it instead of aborting via an uncaught nlohmann parse_error
+    // (issue #2012).
+    log_error(
+      "<python-parser> failed to parse generated AST {}: {}\n",
+      script_path.str(),
+      e.what());
+    exit(1);
+  }
 
   if (config.options.get_bool_option("parse-tree-only"))
     return false;

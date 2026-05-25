@@ -562,6 +562,7 @@ class CoreVisitorsMixin:
 
     def _store_function_defaults(self, node, qualified_name):
         return_nodes = []
+        is_method = "." in qualified_name
         for i in range(1, len(node.args.defaults) + 1):
             arg_index = len(node.args.args) - i
             if arg_index < 0:
@@ -574,7 +575,10 @@ class CoreVisitorsMixin:
                 assignment_node, target_var = self.generate_variable_copy(
                     qualified_name, node.args.args[-i], default_node)
                 self.functionDefaults[(qualified_name, arg_name)] = target_var
-                return_nodes.append(assignment_node)
+                if is_method:
+                    self._pending_method_default_inits.append(assignment_node)
+                else:
+                    return_nodes.append(assignment_node)
             else:
                 self.functionDefaults[(qualified_name, arg_name)] = default_node
         for i, default in enumerate(node.args.kw_defaults):
@@ -587,7 +591,10 @@ class CoreVisitorsMixin:
                 assignment_node, target_var = self.generate_variable_copy(
                     qualified_name, node.args.kwonlyargs[i], default)
                 self.functionDefaults[(qualified_name, kwarg_name)] = target_var
-                return_nodes.append(assignment_node)
+                if is_method:
+                    self._pending_method_default_inits.append(assignment_node)
+                else:
+                    return_nodes.append(assignment_node)
             else:
                 self.functionDefaults[(qualified_name, kwarg_name)] = default
         return return_nodes

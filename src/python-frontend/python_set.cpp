@@ -351,7 +351,7 @@ exprt python_set::get_from_iterable(
       contains_call.function() = symbol_expr(*contains_func);
       contains_call.lhs() = symbol_expr(contains_result);
       contains_call.arguments().push_back(
-        set_symbol.type.is_pointer()
+        set_symbol.get_type().is_pointer()
           ? symbol_expr(set_symbol)
           : address_of_exprt(symbol_expr(set_symbol)));
 
@@ -397,7 +397,7 @@ exprt python_set::get_from_iterable(
       side_effect_expr_function_callt push_call;
       push_call.function() = symbol_expr(*push_obj_func);
       push_call.arguments().push_back(
-        set_symbol.type.is_pointer()
+        set_symbol.get_type().is_pointer()
           ? symbol_expr(set_symbol)
           : address_of_exprt(symbol_expr(set_symbol)));
       push_call.arguments().push_back(symbol_expr(*elem_obj_sym));
