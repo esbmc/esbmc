@@ -1,4 +1,4 @@
 CORE
 main.c
---data-races-check
+--data-races-check --context-bound 3
 ^VERIFICATION SUCCESSFUL$
