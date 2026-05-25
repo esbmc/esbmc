@@ -54,7 +54,7 @@ inline code_function_callt invoke_intrinsic(
 // Why is this a global? Because there are over three hundred call sites to
 // migrate_expr, and it's a huge task to fix them all up to pass a namespace
 // down.
-const namespacet *migrate_namespace_lookup = nullptr;
+thread_local const namespacet *migrate_namespace_lookup = nullptr;
 
 static std::map<irep_idt, BigInt> bin2int_map_signed, bin2int_map_unsigned;
 static std::mutex bin2int_map_signed_mutex, bin2int_map_unsigned_mutex;

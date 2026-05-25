@@ -18,6 +18,7 @@ extern "C"
 
 #include <esbmc/bmc.h>
 #include <esbmc/esbmc_parseoptions.h>
+#include <goto-symex/goto_symex.h>
 #include <solvers/solve.h>
 #include <cctype>
 #include <clang-c-frontend/clang_c_language.h>
@@ -1828,7 +1829,17 @@ tvt esbmc_parseoptionst::is_inductive_step_violated(
   bmct bmc(goto_functions, options, context);
 
   log_progress("Checking inductive step, k = {:d}", k_step);
-  switch (do_bmc(bmc))
+  int res = do_bmc(bmc);
+
+  // Symex may flip `disable-inductive-step` mid-run when it encounters
+  // a construct the IS cannot soundly handle (recursion, threads,
+  // function-pointer calls). In that case the BMC result is the
+  // outcome of an incomplete IS encoding — its UNSAT does not prove
+  // safety. Discard the result and report UNKNOWN.
+  if (options.get_bool_option("disable-inductive-step"))
+    return tvt(tvt::TV_UNKNOWN);
+
+  switch (res)
   {
   case smt_convt::P_SATISFIABLE:
     return tvt(tvt::TV_TRUE);
@@ -1869,9 +1880,20 @@ int esbmc_parseoptionst::do_bmc(bmct &bmc)
 {
   log_progress("Starting Bounded Model Checking");
 
-  smt_convt::resultt res = bmc.start_bmc();
-  if (res == smt_convt::P_ERROR)
-    abort();
+  smt_convt::resultt res;
+  try
+  {
+    res = bmc.start_bmc();
+  }
+  catch (const inductive_step_disabled_exceptiont &e)
+  {
+    // Symex hit an IS-unsound construct (recursion, threads,
+    // function-pointer call) and threw to short-circuit. Return
+    // P_ERROR so the strategy layer drops to TV_UNKNOWN; the caller
+    // also checks `disable-inductive-step` to suppress any verdict.
+    log_status("Inductive step aborted: {}", e.reason);
+    res = smt_convt::P_ERROR;
+  }
 
 #ifdef HAVE_SENDFILE_ESBMC
   if (bmc.options.get_bool_option("memstats"))
@@ -2317,14 +2339,28 @@ bool esbmc_parseoptionst::process_goto_program(
       }
     }
 
-    if (cmdline.isset("interval-analysis") || cmdline.isset("goto-contractor"))
-    {
-      interval_analysis(goto_functions, ns, options);
-    }
-
     bool is_k_induction = cmdline.isset("inductive-step") ||
                           cmdline.isset("k-induction") ||
                           cmdline.isset("k-induction-parallel");
+
+    if (cmdline.isset("interval-analysis") || cmdline.isset("goto-contractor"))
+    {
+      // Plain interval analysis without k-induction: run with LOOP_MODE so
+      // each loop gets a before-back-edge ASSUME(bounds) and an after-loop
+      // ASSUME(bounds). The default GUARD_INSTRUCTIONS_LOCAL emits bounds
+      // at every assume/assert/goto, which is more uniform but loses the
+      // per-loop framing.
+      //
+      // With k-induction, stay on GUARD_INSTRUCTIONS_LOCAL: instructions
+      // matching k-induction's later transformations rely on the
+      // per-instruction bounds being available everywhere, and the
+      // post-k-induction pass below adds the at-loop-head bounds that
+      // tighten the inductive hypothesis.
+      const auto mode =
+        is_k_induction ? INTERVAL_INSTRUMENTATION_MODE::GUARD_INSTRUCTIONS_LOCAL
+                       : INTERVAL_INSTRUMENTATION_MODE::LOOP_MODE;
+      interval_analysis(goto_functions, ns, options, mode);
+    }
 
     if (cmdline.isset("validate-correctness-witness"))
     {
@@ -2356,6 +2392,22 @@ bool esbmc_parseoptionst::process_goto_program(
         bool use_frame_rule = cmdline.isset("loop-frame-rule");
         goto_loop_invariant(goto_functions, context, use_frame_rule);
       }
+    }
+
+    // Pass B (post-k-induction loop bounds): when interval analysis ran
+    // earlier and k-induction has now finished inserting its nondet havoc
+    // before each loop head, recompute bounds with k-induction's preamble
+    // instructions treated as transparent, then insert an ASSUME(bounds)
+    // right before each loop's exit-test. The ASSUME is marked
+    // inductive_step_instruction = true so only the inductive step sees
+    // it; base case and forward condition skip it. This is the place where
+    // interval analysis actually strengthens the inductive hypothesis.
+    if (
+      (cmdline.isset("interval-analysis") ||
+       cmdline.isset("goto-contractor")) &&
+      is_k_induction)
+    {
+      instrument_loop_bounds_after_kind(goto_functions, ns, options);
     }
 
     if (

@@ -911,6 +911,15 @@ void interval_domaint::transform(
   (void)ns;
 
   const goto_programt::instructiont &instruction = *from;
+
+  // Post-k-induction recomputation: the loop's nondet havoc + entry-condition
+  // assume that k-induction inserts before each loop head must be transparent
+  // so the fixpoint at the loop head reflects the *original* program's
+  // dataflow. Without this, the havoc would widen every loop-modified var to
+  // its full type range and the bounds we'd assume back would be useless.
+  if (
+    skip_inductive_step_instructions && instruction.inductive_step_instruction)
+    return;
   switch (instruction.type)
   {
   case DECL:
@@ -1615,6 +1624,7 @@ bool interval_domaint::enable_real_intervals = true;
 bool interval_domaint::enable_assume_asserts = true;
 bool interval_domaint::enable_eval_assumptions = true;
 bool interval_domaint::enable_ibex_contractor = false;
+thread_local bool interval_domaint::skip_inductive_step_instructions = false;
 
 // Widening options
 unsigned interval_domaint::fixpoint_limit = 5;
