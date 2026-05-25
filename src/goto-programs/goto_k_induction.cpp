@@ -7,27 +7,13 @@
 
 void goto_k_induction(goto_functionst &goto_functions)
 {
-  Forall_goto_functions (it, goto_functions)
-    if (it->second.body_available)
-      goto_k_inductiont(it->first, goto_functions, it->second);
-
-  goto_functions.update();
+  goto_k_inductiont(goto_functions).run();
 }
 
-void goto_k_inductiont::goto_k_induction()
-{
-  // Full unwind the program
-  for (auto &function_loop : function_loops)
-  {
-    if (function_loop.get_modified_loop_vars().empty())
-      continue;
-
-    // Start the loop conversion
-    convert_finite_loop(function_loop);
-  }
-}
-
-void goto_k_inductiont::convert_finite_loop(loopst &loop)
+void goto_k_inductiont::transform_loop(
+  const irep_idt & /*function_name*/,
+  goto_functiont &goto_function,
+  loopst &loop)
 {
   // Get current loop head and loop exit
   goto_programt::targett loop_head = loop.get_original_loop_head();
@@ -55,10 +41,10 @@ void goto_k_inductiont::convert_finite_loop(loopst &loop)
   // and the ASSUME ends up between the havocs and the IF.
 
   // Create the nondet assignments on the beginning of the loop
-  make_nondet_assign(loop_head, loop);
+  make_nondet_assign(goto_function, loop_head, loop);
 
   // Assume the loop entry condition before going into the loop
-  assume_loop_entry_cond_before_loop(loop_head, loop_exit, guards);
+  assume_loop_entry_cond_before_loop(goto_function, loop_head, guards);
 
   // Check if the loop exit needs to be updated
   // We must point to the assume that was inserted in the previous
@@ -183,6 +169,7 @@ bool goto_k_inductiont::get_entry_cond_rec(
 }
 
 void goto_k_inductiont::make_nondet_assign(
+  goto_functiont &goto_function,
   goto_programt::targett &loop_head,
   const loopst &loop)
 {
@@ -288,8 +275,8 @@ void goto_k_inductiont::remove_unrelated_loop_cond(
 }
 
 void goto_k_inductiont::assume_loop_entry_cond_before_loop(
+  goto_functiont &goto_function,
   goto_programt::targett &loop_head,
-  goto_programt::targett & /*loop_exit*/,
   const guardst &guards)
 {
   // Combine all per-branch loop-entry guards into one ASSUME and
@@ -389,17 +376,4 @@ void goto_k_inductiont::adjust_loop_head_and_exit(
     // And set the target to be the newly inserted assume(cond)
     loop_head->targets.push_front(_loop_exit);
   }
-}
-
-void goto_k_inductiont::assume_cond(
-  const expr2tc &cond,
-  goto_programt &dest,
-  const locationt &loc)
-{
-  goto_programt tmp_e;
-  goto_programt::targett e = tmp_e.add_instruction(ASSUME);
-  e->inductive_step_instruction = true;
-  e->guard = cond;
-  e->location = loc;
-  dest.destructive_append(tmp_e);
 }

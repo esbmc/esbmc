@@ -26,9 +26,26 @@ void goto_termination(goto_functionst &goto_functions)
   // __ESBMC_main: that's where we insert the termination marker, and
   // running k-induction there would scan its (loop-free) body and
   // potentially mutate it.
-  Forall_goto_functions (it, goto_functions)
-    if (it->second.body_available && it->first != "__ESBMC_main")
-      goto_k_inductiont(it->first, goto_functions, it->second);
+  //
+  // We can't just call goto_k_induction(goto_functions) because the
+  // base run() loop doesn't skip __ESBMC_main. Instead, instantiate
+  // once and drive transform_loop manually per function/loop.
+  // Commit C will fold this into a proper subclass.
+  {
+    goto_k_inductiont kind(goto_functions);
+    Forall_goto_functions (it, goto_functions)
+    {
+      if (!it->second.body_available || it->first == "__ESBMC_main")
+        continue;
+      goto_loopst loops(it->first, goto_functions, it->second);
+      for (auto &loop : loops.get_loops())
+      {
+        if (loop.get_modified_loop_vars().empty())
+          continue;
+        kind.transform_loop(it->first, it->second, loop);
+      }
+    }
+  }
   goto_functions.update();
 
   // Per-loop termination markers: place an ASSERT(false) on every
