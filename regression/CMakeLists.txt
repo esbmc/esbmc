@@ -326,16 +326,23 @@ set(_slow_regression_tests
     "regression/quixbugs/pascal"
     "regression/ai-generated-code/two_sum"
 )
+math(EXPR ESBMC_REGRESS_CTEST_TIMEOUT_SLOW
+     "${ESBMC_REGRESS_TIMEOUT_SLOW} + 30")
 foreach(_t IN LISTS _slow_regression_tests)
     if(TEST ${_t})
-        # Override both the ctest TIMEOUT and the ESBMC_REGRESS_TIMEOUT env
-        # var. The inner Python testing_tool reads ESBMC_REGRESS_TIMEOUT
-        # and self-aborts the ESBMC subprocess at that limit (see
-        # regression/testing_tool.py line ~211); without overriding the
-        # env var the test still times out at the global value, regardless
-        # of ctest's outer cap.
+        # Three coupled budgets to keep aligned:
+        #  - ctest TIMEOUT (outer): hard kill -- if it fires first the
+        #    test is reported FAILED by ctest, the testing_tool's
+        #    KNOWNBUG regex check never runs, and the build fails.
+        #  - ESBMC_REGRESS_TIMEOUT env (inner): testing_tool's own
+        #    timeout. When it fires, testing_tool gracefully terminates
+        #    the ESBMC subprocess and continues to do its regex check
+        #    against partial output, so a KNOWNBUG test correctly
+        #    decides "no SUCCESSFUL printed -> KNOWNBUG satisfied".
+        # The outer must comfortably exceed the inner so testing_tool
+        # wins the race (kill + grace + regex check time).
         set_tests_properties(${_t} PROPERTIES
-          TIMEOUT ${ESBMC_REGRESS_TIMEOUT_SLOW}
+          TIMEOUT ${ESBMC_REGRESS_CTEST_TIMEOUT_SLOW}
           ENVIRONMENT "ESBMC_REGRESS_TIMEOUT=${ESBMC_REGRESS_TIMEOUT_SLOW};ESBMC_REGRESS_MEMORY_LIMIT=${ESBMC_REGRESS_MEMORY_LIMIT}"
         )
     endif()
