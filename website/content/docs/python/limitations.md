@@ -49,6 +49,12 @@ weight: 4
 - Complex expressions inside f-strings may have limited support.
 - Custom format specifications for user-defined types are not supported.
 
+## Strings
+
+- Most `str.*()` methods now degrade to a sound nondeterministic over-approximation when the receiver is not a compile-time constant (see [Supported Features — Strings](./supported-features#strings)). Only `str.count` and `str.isupper` have precise runtime operational models (bounded to a 256-character receiver). Other methods (`swapcase`, `upper`, `lower`, `casefold`, `capitalize`, `title`, `isalnum`, `isnumeric`, `isidentifier`, `removeprefix`, `removesuffix`, `center`, `ljust`, `rjust`, `zfill`, `expandtabs`, `partition`, `format`, `format_map`, `splitlines`, etc.) return a nondet value of the appropriate shape, so assertions on their specific functional result will report `VERIFICATION FAILED` on symbolic input.
+- `partition()` on a non-constant receiver returns `("", "", "")` — the same shape Python uses when the separator is not found.
+- `splitlines()` on a non-constant receiver returns an empty list.
+
 ## Union and Any Types
 
 - Union types are resolved to the widest type among their members (`float > int > bool`) at verification time; true union semantics are not maintained.
@@ -68,6 +74,9 @@ weight: 4
 ## Random Module
 
 - Functions beyond `random()`, `uniform()`, `randint()`, `getrandbits()`, `randrange()`, `choice()`, `shuffle()`, `sample()`, and `seed()` are not yet supported.
+- `random.shuffle(lst)` is an under-approximation that leaves the list untouched.
+- `random.sample(population, k)` is an under-approximation that returns the first `k` elements of `population` rather than `k` distinct nondeterministic indices.
+- `random.seed(a)` is a no-op; the model is stateless, so seeding cannot make subsequent calls deterministic.
 
 ## Collections Module
 

@@ -113,6 +113,28 @@ __ESBMC_HIDE:;
   return 1;
 }
 
+// Python string isalnum - true iff the string is non-empty and every
+// character is a letter (ASCII A-Z / a-z) or a digit (0-9). Matches
+// Python's CPython behaviour on the ASCII subset; broader Unicode
+// category coverage is deliberately out of scope (consistent with the
+// existing isalpha/isdigit/isspace models in this file).
+_Bool __python_str_isalnum(const char *s)
+{
+__ESBMC_HIDE:;
+  if (!s || !*s)
+    return 0;
+
+  while (*s)
+  {
+    unsigned char c = (unsigned char)*s;
+    if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+          (c >= '0' && c <= '9')))
+      return 0;
+    s++;
+  }
+  return 1;
+}
+
 // Python string isspace: checks if all characters are whitespace
 _Bool __python_str_isspace(const char *s)
 {
@@ -571,6 +593,43 @@ __ESBMC_HIDE:;
   {
     __ESBMC_assert(
       0, "String too long for swapcase() - exceeds 255 characters");
+  }
+
+  buffer[i] = '\0';
+
+  return buffer;
+}
+
+// Python string capitalize - returns a copy with the first ASCII letter
+// uppercased and every subsequent ASCII letter lowercased. Non-letter
+// characters pass through unchanged at their positions. Bounded to 255
+// chars on the receiver, like the lower/upper/swapcase models; longer
+// strings trip an explicit assertion rather than silently truncating.
+char *__python_str_capitalize(const char *s)
+{
+__ESBMC_HIDE:;
+  if (!s)
+    return (char *)s;
+
+  char *buffer = __ESBMC_alloca(256);
+
+  size_t i = 0;
+  while (i < 255 && s[i])
+  {
+    char c = s[i];
+    if (i == 0 && c >= 'a' && c <= 'z')
+      buffer[i] = c - ('a' - 'A');
+    else if (i > 0 && c >= 'A' && c <= 'Z')
+      buffer[i] = c + ('a' - 'A');
+    else
+      buffer[i] = c;
+    i++;
+  }
+
+  if (s[i] != '\0')
+  {
+    __ESBMC_assert(
+      0, "String too long for capitalize() - exceeds 255 characters");
   }
 
   buffer[i] = '\0';
