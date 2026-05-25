@@ -289,7 +289,7 @@ void goto_k_inductiont::remove_unrelated_loop_cond(
 
 void goto_k_inductiont::assume_loop_entry_cond_before_loop(
   goto_programt::targett &loop_head,
-  goto_programt::targett &loop_exit,
+  goto_programt::targett & /*loop_exit*/,
   const guardst &guards)
 {
   // Combine all per-branch loop-entry guards into one ASSUME and
@@ -328,15 +328,19 @@ void goto_k_inductiont::assume_loop_entry_cond_before_loop(
   // ASSUME on the iteration where the body's increment had pushed
   // the variable past the exit condition, again killing a natural
   // path.
+  // Iterate the collected guards directly instead of walking the
+  // instruction range and looking each one up by location_number.
+  // After make_nondet_assign's insert_swap, location_number does NOT
+  // travel with the instruction (instructiont::swap does not exchange
+  // location_number), so the iterator advance leaves loop_head
+  // pointing at the original IF with location_number=0 instead of its
+  // original number. The walk-and-lookup approach then misses every
+  // guard. Conjunction is commutative, so iteration order is
+  // irrelevant.
   guard2tc combined;
-  for (goto_programt::targett tmp_head = loop_head; tmp_head != loop_exit;
-       tmp_head++)
+  for (auto const &kv : guards)
   {
-    auto const g = guards.find(tmp_head->location_number);
-    if (g == guards.end())
-      continue;
-
-    expr2tc loop_cond = g->second.as_expr();
+    expr2tc loop_cond = kv.second.as_expr();
 
     if (is_nil_expr(loop_cond) || is_true(loop_cond))
       continue;
