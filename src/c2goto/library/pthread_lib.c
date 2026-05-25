@@ -358,19 +358,22 @@ __ESBMC_HIDE:;
   return 0;
 }
 
-int pthread_join_noswitch(pthread_t thread, void **retval) {
+int pthread_join_noswitch(pthread_t thread, void **retval)
+{
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   pthread_t self = __ESBMC_get_thread_id();
   _Bool cancel = __ESBMC_pthread_cancel_requested[self] &&
-                  __ESBMC_pthread_cancelstate[self] == PTHREAD_CANCEL_ENABLE;
-  if (cancel) {
+                 __ESBMC_pthread_cancelstate[self] == PTHREAD_CANCEL_ENABLE;
+  if (cancel)
+  {
     __ESBMC_pthread_thread_ended[(int)thread] = 1;
     __ESBMC_atomic_end();
     pthread_exit(PTHREAD_CANCELED);
   }
   __ESBMC_assume(__ESBMC_pthread_thread_ended[(int)thread]);
-  if (retval) *retval = __ESBMC_pthread_end_values[(int)thread];
+  if (retval)
+    *retval = __ESBMC_pthread_end_values[(int)thread];
   __ESBMC_atomic_end();
   return 0;
 }
