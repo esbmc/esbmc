@@ -1157,7 +1157,10 @@ public:
 
   expr2tc tuple_get(const type2tc &type, smt_astt sym) override
   {
-    const std::vector<type2tc> &members = struct_union_members(type);
+    // Pointer types lower to pointer_struct in SMT; struct_union_members(type)
+    // would throw on the raw pointer type, so dispatch the pointer case first.
+    const std::vector<type2tc> &members =
+      struct_union_members(is_pointer_type(type) ? pointer_struct : type);
 
     if (is_pointer_type(type))
     {
