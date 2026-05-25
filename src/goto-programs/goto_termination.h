@@ -74,18 +74,19 @@ protected:
     const irep_idt &function_name,
     goto_functiont &goto_function) override;
 
-  /// Set the disable-inductive-step option if any loop was left
-  /// untransformed by k-induction (empty modified-vars set).
+  /// Set the disable-inductive-step option if any loop in any
+  /// function would make IS UNSAT not a real non-termination
+  /// witness (see transform_loop for the cases).
   void finalize() override;
 
 private:
   goto_k_inductiont kinduction;
   optionst &options;
 
-  /// True iff at least one loop in any function was left
-  /// untransformed because its modified-vars set was empty. When
-  /// true, IS verdicts are unsound and finalize() disables IS.
-  bool any_unhavoced_loop = false;
+  /// True iff at least one loop would make IS UNSAT unsound as a
+  /// non-termination witness. When true, finalize() sets
+  /// "disable-inductive-step" for the whole program.
+  bool any_unreliable_is_loop = false;
 
   void insert_markers_for_function(
     const irep_idt &function_name,

@@ -35,9 +35,42 @@ void goto_terminationt::transform_loop(
   goto_functiont &goto_function,
   loopst &loop)
 {
-  if (!loop.get_modified_loop_vars().empty())
+  const auto &modified = loop.get_modified_loop_vars();
+
+  if (!modified.empty())
   {
     kinduction.transform_loop(function_name, goto_function, loop);
+
+    // Pointer-only-modified loops: k-induction's havoc emits
+    // `ASSIGN p = NONDET(ptr_t)` for each modified pointer. Under
+    // --add-symex-value-sets symex constrains the post-havoc value
+    // to remain inside the pre-havoc points-to set, so the
+    // dereferences are sound (they hit the same memory). But the
+    // *contents* of that memory are still whatever the pre-loop
+    // state placed there — the havoc doesn't randomise the
+    // memory the pointers refer to. For loops whose termination
+    // depends on what's read through those pointers (e.g.
+    // strrchr's `while (*t != 0) ++t` walking a NONDET-length
+    // string), IS sees a state where `*t != 0` for every k it
+    // unwinds and reports non-termination spuriously.
+    //
+    // Pre-merge HEAD had a dedicated `has_pointer_only_loop`
+    // function gating IS for exactly this shape; the upstream
+    // k-induction merge removed it on the claim that the value-
+    // set assume made it unnecessary. The assume protects pointer
+    // *aliasing* but not pointed-to-data, so the gate is still
+    // needed.
+    bool all_pointer = true;
+    for (const auto &v : modified)
+    {
+      if (!is_pointer_type(v->type))
+      {
+        all_pointer = false;
+        break;
+      }
+    }
+    if (all_pointer)
+      any_unreliable_is_loop = true;
     return;
   }
 
@@ -70,7 +103,7 @@ void goto_terminationt::transform_loop(
   {
     if (p->is_assign())
     {
-      any_unhavoced_loop = true;
+      any_unreliable_is_loop = true;
       break;
     }
   }
@@ -85,7 +118,7 @@ void goto_terminationt::after_function(
 
 void goto_terminationt::finalize()
 {
-  if (any_unhavoced_loop)
+  if (any_unreliable_is_loop)
     options.set_option("disable-inductive-step", true);
 }
 
