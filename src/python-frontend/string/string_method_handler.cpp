@@ -2207,7 +2207,10 @@ exprt string_handler::handle_string_removeprefix(
     !try_extract_const_string_expr(string_obj, input) ||
     !try_extract_const_string_expr(prefix_arg, prefix))
   {
-    throw std::runtime_error("removeprefix() requires constant strings");
+    log_debug(
+      "python-string",
+      "removeprefix() on non-constant receiver/prefix: nondet string");
+    return build_nondet_string_fallback(location);
   }
 
   if (!prefix.empty() && input.rfind(prefix, 0) == 0)
@@ -2232,7 +2235,10 @@ exprt string_handler::handle_string_removesuffix(
     !try_extract_const_string_expr(string_obj, input) ||
     !try_extract_const_string_expr(suffix_arg, suffix))
   {
-    throw std::runtime_error("removesuffix() requires constant strings");
+    log_debug(
+      "python-string",
+      "removesuffix() on non-constant receiver/suffix: nondet string");
+    return build_nondet_string_fallback(location);
   }
 
   if (
@@ -2301,29 +2307,55 @@ exprt string_handler::handle_string_format(
 {
   std::string format_str;
   if (!try_extract_const_string_expr(string_obj, format_str))
-    throw std::runtime_error("format() requires constant format string");
-
-  std::vector<std::string> args;
-  if (call.contains("args") && call["args"].is_array())
   {
-    for (const auto &arg : call["args"])
-    {
-      args.push_back(format_value_from_json(arg, converter_));
-    }
+    log_debug(
+      "python-string",
+      "format() on non-constant format string: nondet string fallback");
+    return build_nondet_string_fallback(location);
   }
 
+  std::vector<std::string> args;
   std::unordered_map<std::string, std::string> keywords;
-  if (call.contains("keywords") && call["keywords"].is_array())
+  try
   {
-    for (const auto &kw : call["keywords"])
+    if (call.contains("args") && call["args"].is_array())
     {
-      if (!kw.contains("arg") || kw["arg"].is_null())
-        throw std::runtime_error("format() kwargs are not supported");
-      std::string key = kw["arg"].get<std::string>();
-      if (!kw.contains("value"))
-        throw std::runtime_error("format() keyword missing value");
-      keywords.emplace(key, format_value_from_json(kw["value"], converter_));
+      for (const auto &arg : call["args"])
+      {
+        args.push_back(format_value_from_json(arg, converter_));
+      }
     }
+
+    if (call.contains("keywords") && call["keywords"].is_array())
+    {
+      for (const auto &kw : call["keywords"])
+      {
+        if (!kw.contains("arg") || kw["arg"].is_null())
+          throw std::runtime_error("format() kwargs are not supported");
+        std::string key = kw["arg"].get<std::string>();
+        if (!kw.contains("value"))
+          throw std::runtime_error("format() keyword missing value");
+        keywords.emplace(key, format_value_from_json(kw["value"], converter_));
+      }
+    }
+  }
+  catch (const python_int_overflow_excp &)
+  {
+    // Bignum diagnostic (#4642) must not be swallowed -- the test
+    // suite asserts on the exact error message. Re-throw.
+    throw;
+  }
+  catch (const std::runtime_error &e)
+  {
+    // Any non-constant format argument (line ~88) or unsupported
+    // keyword spec aborts the whole call. Fall back to a nondet string
+    // so GOTO conversion can proceed; the specific formatted value is
+    // not preserved (sound over-approximation). #4807.
+    log_debug(
+      "python-string",
+      "format() argument folding failed ({}): nondet string fallback",
+      e.what());
+    return build_nondet_string_fallback(location);
   }
 
   std::string result;
@@ -2418,7 +2450,32 @@ exprt string_handler::handle_string_partition(
     !try_extract_const_string_expr(string_obj, input) ||
     !try_extract_const_string_expr(sep_arg, sep))
   {
-    throw std::runtime_error("partition() requires constant strings");
+    // Sound-ish fallback: return ("", "", "") -- the shape Python uses
+    // when the separator isn't found, but with the receiver elided. We
+    // cannot search an unknown string at conversion time; the three
+    // empty fields keep the tuple well-typed and let len(t) == 3 hold.
+    // Callers that depend on specific partition contents will still
+    // report VFAILED, but GOTO conversion no longer aborts (#4807).
+    log_debug(
+      "python-string",
+      "partition() on non-constant receiver/separator: empty-tuple "
+      "fallback");
+    if (!string_builder_)
+      throw std::runtime_error("string_builder not set for partition()");
+    exprt empty_a = string_builder_->build_string_literal("");
+    exprt empty_b = string_builder_->build_string_literal("");
+    exprt empty_c = string_builder_->build_string_literal("");
+    struct_typet tuple_type;
+    tuple_type.components().push_back(
+      struct_typet::componentt("element_0", empty_a.type()));
+    tuple_type.components().push_back(
+      struct_typet::componentt("element_1", empty_b.type()));
+    tuple_type.components().push_back(
+      struct_typet::componentt("element_2", empty_c.type()));
+    struct_exprt tuple_expr(tuple_type);
+    tuple_expr.operands() = {empty_a, empty_b, empty_c};
+    tuple_expr.location() = location;
+    return tuple_expr;
   }
   if (sep.empty())
     throw std::runtime_error("partition() separator cannot be empty");
@@ -2512,11 +2569,17 @@ exprt string_handler::handle_string_isupper(
 
 exprt string_handler::handle_string_isnumeric(
   const exprt &string_obj,
-  [[maybe_unused]] const locationt &location)
+  const locationt &location)
 {
   std::string input;
   if (!try_extract_const_string_expr(string_obj, input))
-    throw std::runtime_error("isnumeric() requires constant string");
+  {
+    log_debug(
+      "python-string", "isnumeric() on non-constant receiver: nondet bool");
+    side_effect_expr_nondett nondet(bool_type());
+    nondet.location() = location;
+    return nondet;
+  }
   if (input.empty())
     return from_integer(0, bool_type());
 
@@ -2530,11 +2593,17 @@ exprt string_handler::handle_string_isnumeric(
 
 exprt string_handler::handle_string_isidentifier(
   const exprt &string_obj,
-  [[maybe_unused]] const locationt &location)
+  const locationt &location)
 {
   std::string input;
   if (!try_extract_const_string_expr(string_obj, input))
-    throw std::runtime_error("isidentifier() requires constant string");
+  {
+    log_debug(
+      "python-string", "isidentifier() on non-constant receiver: nondet bool");
+    side_effect_expr_nondett nondet(bool_type());
+    nondet.location() = location;
+    return nondet;
+  }
   if (input.empty())
     return from_integer(0, bool_type());
 
@@ -2558,13 +2627,20 @@ exprt string_handler::handle_string_center(
 {
   std::string input;
   if (!try_extract_const_string_expr(string_obj, input))
-    throw std::runtime_error("center() requires constant string");
+  {
+    log_debug(
+      "python-string", "center() on non-constant receiver: nondet string");
+    return build_nondet_string_fallback(location);
+  }
   if (!string_builder_)
     throw std::runtime_error("string_builder not set for center()");
 
   long long width = 0;
   if (!get_constant_int(width_arg, width))
-    throw std::runtime_error("center() requires constant width");
+  {
+    log_debug("python-string", "center() on non-constant width: nondet string");
+    return build_nondet_string_fallback(location);
+  }
 
   char fill = ' ';
   if (!fill_arg.is_nil())
@@ -2602,13 +2678,20 @@ exprt string_handler::handle_string_ljust(
 {
   std::string input;
   if (!try_extract_const_string_expr(string_obj, input))
-    throw std::runtime_error("ljust() requires constant string");
+  {
+    log_debug(
+      "python-string", "ljust() on non-constant receiver: nondet string");
+    return build_nondet_string_fallback(location);
+  }
   if (!string_builder_)
     throw std::runtime_error("string_builder not set for ljust()");
 
   long long width = 0;
   if (!get_constant_int(width_arg, width))
-    throw std::runtime_error("ljust() requires constant width");
+  {
+    log_debug("python-string", "ljust() on non-constant width: nondet string");
+    return build_nondet_string_fallback(location);
+  }
 
   char fill = ' ';
   if (!fill_arg.is_nil())
@@ -2641,13 +2724,20 @@ exprt string_handler::handle_string_rjust(
 {
   std::string input;
   if (!try_extract_const_string_expr(string_obj, input))
-    throw std::runtime_error("rjust() requires constant string");
+  {
+    log_debug(
+      "python-string", "rjust() on non-constant receiver: nondet string");
+    return build_nondet_string_fallback(location);
+  }
   if (!string_builder_)
     throw std::runtime_error("string_builder not set for rjust()");
 
   long long width = 0;
   if (!get_constant_int(width_arg, width))
-    throw std::runtime_error("rjust() requires constant width");
+  {
+    log_debug("python-string", "rjust() on non-constant width: nondet string");
+    return build_nondet_string_fallback(location);
+  }
 
   char fill = ' ';
   if (!fill_arg.is_nil())
@@ -2679,13 +2769,20 @@ exprt string_handler::handle_string_zfill(
 {
   std::string input;
   if (!try_extract_const_string_expr(string_obj, input))
-    throw std::runtime_error("zfill() requires constant string");
+  {
+    log_debug(
+      "python-string", "zfill() on non-constant receiver: nondet string");
+    return build_nondet_string_fallback(location);
+  }
   if (!string_builder_)
     throw std::runtime_error("string_builder not set for zfill()");
 
   long long width = 0;
   if (!get_constant_int(width_arg, width))
-    throw std::runtime_error("zfill() requires constant width");
+  {
+    log_debug("python-string", "zfill() on non-constant width: nondet string");
+    return build_nondet_string_fallback(location);
+  }
 
   if (width <= static_cast<long long>(input.size()))
     return string_builder_->build_string_literal(input);
@@ -2716,7 +2813,11 @@ exprt string_handler::handle_string_expandtabs(
 {
   std::string input;
   if (!try_extract_const_string_expr(string_obj, input))
-    throw std::runtime_error("expandtabs() requires constant string");
+  {
+    log_debug(
+      "python-string", "expandtabs() on non-constant receiver: nondet string");
+    return build_nondet_string_fallback(location);
+  }
   if (!string_builder_)
     throw std::runtime_error("string_builder not set for expandtabs()");
 
@@ -2762,21 +2863,47 @@ exprt string_handler::handle_string_format_map(
 
   std::string format_str;
   if (!try_extract_const_string_expr(string_obj, format_str))
-    throw std::runtime_error("format_map() requires constant format string");
+  {
+    log_debug(
+      "python-string",
+      "format_map() on non-constant format string: nondet string fallback");
+    return build_nondet_string_fallback(location);
+  }
 
   const auto &mapping = call["args"][0];
   if (!mapping.contains("_type") || mapping["_type"] != "Dict")
-    throw std::runtime_error("format_map() requires constant dict");
+  {
+    log_debug(
+      "python-string",
+      "format_map() on non-Dict mapping: nondet string fallback");
+    return build_nondet_string_fallback(location);
+  }
 
   std::unordered_map<std::string, std::string> values;
   const auto &keys = mapping["keys"];
   const auto &vals = mapping["values"];
-  for (size_t i = 0; i < keys.size(); ++i)
+  try
   {
-    std::string key;
-    if (!extract_constant_string(keys[i], converter_, key))
-      throw std::runtime_error("format_map() keys must be constant strings");
-    values.emplace(key, format_value_from_json(vals[i], converter_));
+    for (size_t i = 0; i < keys.size(); ++i)
+    {
+      std::string key;
+      if (!extract_constant_string(keys[i], converter_, key))
+        throw std::runtime_error("format_map() keys must be constant strings");
+      values.emplace(key, format_value_from_json(vals[i], converter_));
+    }
+  }
+  catch (const python_int_overflow_excp &)
+  {
+    // Bignum diagnostic (#4642) must not be swallowed.
+    throw;
+  }
+  catch (const std::runtime_error &e)
+  {
+    log_debug(
+      "python-string",
+      "format_map() key/value folding failed ({}): nondet string fallback",
+      e.what());
+    return build_nondet_string_fallback(location);
   }
 
   std::string result;

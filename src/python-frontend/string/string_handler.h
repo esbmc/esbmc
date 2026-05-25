@@ -737,11 +737,12 @@ private:
    * @brief Build a sound symbolic fallback for a `char *` string value when
    *        a str.*() handler cannot compile-time-fold its receiver.
    *
-   * Used to replace `throw "X() requires constant string"` aborts so that
-   * GOTO conversion can proceed. Emits a bounded `char[N]` of nondet bytes
-   * with a guaranteed null terminator, and returns `&arr[0]`. The verifier
-   * then explores arbitrary string contents — sound over-approximation for
-   * safety properties; specific functional results are not preserved.
+   * Replaces the historical `throw "X() requires constant string"` aborts so
+   * that GOTO conversion can proceed. Returns a `side_effect_expr_nondett`
+   * of pointer-to-char type; subsequent string ops see arbitrary content,
+   * which is sound over-approximation for safety properties (we cannot
+   * conclude a specific functional result, but we cannot wrongly conclude
+   * SAFE either).
    */
   exprt build_nondet_string_fallback(const locationt &location);
 
