@@ -506,6 +506,19 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     cmdline.isset("validate-correctness-witness"))
     options.set_option("k-induction", true);
 
+  // The IS pointer-invariant work (symex_assign / symex_dereference)
+  // only kicks in when --add-symex-value-sets is enabled, and the
+  // SV-COMP wrapper has been setting it for k-induction runs all
+  // along. Mirror that default for direct CLI users so they get the
+  // same IS encoding (and the same proofs of pointer-traversing
+  // loops) without needing to know about the flag. Users can still
+  // opt out via --no-add-symex-value-sets if they hit a regression.
+  if (
+    (cmdline.isset("k-induction") || cmdline.isset("k-induction-parallel") ||
+     cmdline.isset("inductive-step")) &&
+    !cmdline.isset("no-add-symex-value-sets"))
+    options.set_option("add-symex-value-sets", true);
+
   // Check for conflicting strategies
   if (cmdline.isset("k-induction") && cmdline.isset("termination"))
   {
