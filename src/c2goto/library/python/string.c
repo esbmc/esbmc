@@ -501,6 +501,54 @@ __ESBMC_HIDE:;
   return buffer;
 }
 
+// Python string title - returns a copy where the first ASCII letter of
+// each word is uppercased and every other letter is lowercased. A word
+// starts on any letter that is immediately preceded by a non-letter
+// (or by the start of the string); non-letter characters pass through
+// unchanged. Bounded to 255 chars on the receiver, same as the
+// lower/upper/swapcase/capitalize models.
+char *__python_str_title(const char *s)
+{
+__ESBMC_HIDE:;
+  if (!s)
+    return (char *)s;
+
+  char *buffer = __ESBMC_alloca(256);
+
+  _Bool prev_was_letter = 0;
+  size_t i = 0;
+  while (i < 255 && s[i])
+  {
+    char c = s[i];
+    _Bool is_lower = (c >= 'a' && c <= 'z');
+    _Bool is_upper = (c >= 'A' && c <= 'Z');
+
+    if (is_lower || is_upper)
+    {
+      if (!prev_was_letter)
+        buffer[i] = is_upper ? c : (char)(c - ('a' - 'A'));
+      else
+        buffer[i] = is_lower ? c : (char)(c + ('a' - 'A'));
+      prev_was_letter = 1;
+    }
+    else
+    {
+      buffer[i] = c;
+      prev_was_letter = 0;
+    }
+    i++;
+  }
+
+  if (s[i] != '\0')
+  {
+    __ESBMC_assert(0, "String too long for title() - exceeds 255 characters");
+  }
+
+  buffer[i] = '\0';
+
+  return buffer;
+}
+
 int __python_str_find(const char *s1, const char *s2)
 {
 __ESBMC_HIDE:;

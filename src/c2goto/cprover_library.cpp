@@ -198,6 +198,7 @@ const static std::vector<std::string> python_c_models = {
   "__python_str_lower",
   "__python_char_upper",
   "__python_str_upper",
+  "__python_str_title",
   "__python_str_find",
   "__python_str_find_range",
   "__python_str_rfind",
