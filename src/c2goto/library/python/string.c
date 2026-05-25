@@ -501,6 +501,46 @@ __ESBMC_HIDE:;
   return buffer;
 }
 
+// Python string count - count non-overlapping occurrences of `sub` in `s`.
+// Matches the Python semantics: empty `sub` returns len(s) + 1 (counts
+// gaps including before-first and after-last). Bounded to 256 chars on
+// the receiver to keep the symbolic loop tractable for BMC; longer
+// strings trip an explicit assertion rather than silently truncating.
+size_t __python_str_count(const char *s, const char *sub)
+{
+__ESBMC_HIDE:;
+  if (!s || !sub)
+    return 0;
+
+  size_t s_len = __python_strnlen_bounded(s, 256);
+  size_t sub_len = __python_strnlen_bounded(sub, 256);
+
+  if (sub_len == 0)
+    return s_len + 1;
+
+  if (sub_len > s_len)
+    return 0;
+
+  size_t count = 0;
+  size_t i = 0;
+  while (i + sub_len <= s_len)
+  {
+    size_t j = 0;
+    while (j < sub_len && s[i + j] == sub[j])
+      j++;
+    if (j == sub_len)
+    {
+      count++;
+      i += sub_len;
+    }
+    else
+    {
+      i++;
+    }
+  }
+  return count;
+}
+
 int __python_str_find(const char *s1, const char *s2)
 {
 __ESBMC_HIDE:;
