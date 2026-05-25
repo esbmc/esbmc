@@ -85,11 +85,19 @@ void goto_k_inductiont::convert_finite_loop(loopst &loop)
   // Remove loop conditions not related to the written variables
   remove_unrelated_loop_cond(guards, loop);
 
-  // Assume the loop entry condition before go into the loop
-  assume_loop_entry_cond_before_loop(loop_head, loop_exit, guards);
+  // Order matters: the entry-cond ASSUME must constrain the state
+  // *after* the loop vars have been havoced, so we emit the NONDET
+  // havocs first and then place the ASSUME just before loop_head.
+  // make_nondet_assign also rewinds loop_head back onto the original
+  // loop head (post its advance-by-`inserted` step), so by the time
+  // assume_loop_entry_cond_before_loop runs the iterator is correct
+  // and the ASSUME ends up between the havocs and the IF.
 
   // Create the nondet assignments on the beginning of the loop
   make_nondet_assign(loop_head, loop);
+
+  // Assume the loop entry condition before going into the loop
+  assume_loop_entry_cond_before_loop(loop_head, loop_exit, guards);
 
   // Check if the loop exit needs to be updated
   // We must point to the assume that was inserted in the previous
@@ -321,36 +329,42 @@ void goto_k_inductiont::assume_loop_entry_cond_before_loop(
   goto_programt::targett &loop_exit,
   const guardst &guards)
 {
-  // Build the combined entry condition by ANDing every per-branch guard
-  // collected in `guards`. Each entry was added by get_entry_cond_rec as
-  // the path condition for staying inside the loop body. The legacy
-  // implementation inserted one ASSUME per matching branch position
-  // via insert_swap(tmp_head, dest), which placed the ASSUME *at* the
-  // branch instruction. For the IF that is the loop's exit test, the
-  // back-edge ends up targeting that ASSUME — so on every iteration
-  // including the one whose body falsifies the entry condition, the
-  // ASSUME fires *before* the IF and kills the natural-exit path in
-  // the inductive step. The result is a vacuous UNSAT proof (see
-  // e.g. SV-COMP `sll_of_sll_nondet_append-2` and other nested
-  // while-loops over linked lists).
+  // Combine all per-branch loop-entry guards into one ASSUME and
+  // insert it via raw `insert(loop_head, ...)` immediately before the
+  // loop_head IF. This runs *after* make_nondet_assign in
+  // convert_finite_loop, so the layout becomes
   //
-  // Instead, combine all the per-branch guards into one expression
-  // and insert ONE ASSUME(entry_cond) AFTER the IF (loop_head) via
-  // raw `insert` so the back-edge keeps targeting the IF — not the
-  // ASSUME. After make_nondet_assign runs and adjust_loop_head_and_exit
-  // retargets the back-edge to the IF (loop_head), the IS layout is:
-  //
-  //   HAVOC x, ...                 [inductive_step]
-  //   loop_head: IF !cond GOTO exit                 <- original IF
-  //   ASSUME(entry_cond)           [inductive_step] <- this insert
+  //   NONDET havocs               [inductive_step]   <- make_nondet_assign
+  //   ASSUME(entry_cond)          [inductive_step]   <- this insert
+  //   loop_head: IF !cond GOTO exit                  <- original IF
   //   body
-  //   GOTO loop_head  -> targets the IF (skips HAVOC + ASSUME)
+  //   GOTO loop_head  -> back-edge targets the IF
   //   exit:
   //
-  // The IF can naturally exit (no ASSUME blocks it). When the IF
-  // falls through (we entered the body), the ASSUME asserts the
-  // entry condition on the iteration's start state — the canonical
-  // k-induction inductive-hypothesis strengthening.
+  // Two properties matter for soundness/precision:
+  //   1. The ASSUME comes *after* the NONDET havocs, so it constrains
+  //      the just-havoced state (the actual inductive-hypothesis pin),
+  //      not the pre-loop concrete values.
+  //   2. The ASSUME sits *before* loop_head and is reached only via
+  //      fall-through from the havocs. The back-edge
+  //      (adjust_loop_head_and_exit retargets it at loop_head, the
+  //      IF) skips both the havocs and the ASSUME on every iteration
+  //      after the first, so the natural exit on `cond` is never
+  //      blocked by a re-firing entry-cond assume.
+  //
+  // The legacy `insert_swap(tmp_head, ASSUME)` placement (one ASSUME
+  // per branch, swapped *at* the branch instruction) was unsound
+  // for the loop_head IF because insert_swap pins external jumps to
+  // the iterator: back-edges then landed on the ASSUME and re-fired
+  // it on every iteration, killing the natural-exit path in IS and
+  // producing vacuous UNSAT proofs (e.g. SV-COMP
+  // sll_of_sll_nondet_append-2). The earlier fix that combined the
+  // ASSUME and placed it *after* loop_head fixed SLL but over-
+  // constrained loops where the body modifies a loop-exit variable
+  // (e.g. `i++` in array_3-1): the back-edge re-evaluated the
+  // ASSUME on the iteration where the body's increment had pushed
+  // the variable past the exit condition, again killing a natural
+  // path.
   guard2tc combined;
   for (goto_programt::targett tmp_head = loop_head; tmp_head != loop_exit;
        tmp_head++)
@@ -385,7 +399,7 @@ void goto_k_inductiont::assume_loop_entry_cond_before_loop(
   instruction.guard = combined_expr;
   instruction.inductive_step_instruction = true;
   instruction.location = loop_head->location;
-  goto_function.body.instructions.insert(std::next(loop_head), instruction);
+  goto_function.body.instructions.insert(loop_head, instruction);
 }
 
 void goto_k_inductiont::adjust_loop_head_and_exit(
