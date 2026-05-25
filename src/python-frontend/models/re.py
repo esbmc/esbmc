@@ -2,15 +2,18 @@
 # `__VERIFIER_nondet_bool`, `nondet_str`, `nondet_int` are ESBMC intrinsics
 # matched by name by the Python converter; they have no Python binding.
 #
-# pylint: disable=too-many-locals,too-many-branches,too-many-boolean-expressions,line-too-long,too-complex
+# pylint: disable=too-many-locals,too-many-branches,too-many-boolean-expressions,line-too-long
 # This module hosts a hand-rolled regex matcher whose control-flow shape
 # is matched to the converter's audited support for Compare/BoolOp nodes.
 # Pylint's complexity thresholds (max-locals=15, max-branches=15,
-# max-bool-expr=5, and McCabe MC0001 / too-complex) are tripped by the
-# literal-set tests below; mechanical refactors (extract helper, split
-# function) would require re-validating every regression in
-# regression/python/ that exercises re.match. The matcher is rewritten
-# only when changed for a real reason.
+# max-bool-expr=5) are tripped by the literal-set tests below; mechanical
+# refactors (extract helper, split function) would require re-validating
+# every regression in regression/python/ that exercises re.match. The
+# matcher is rewritten only when changed for a real reason. McCabe's
+# MC0001 fires on the same shape and is silenced project-wide in
+# .prospector.yaml (pylint's mccabe extension is not loaded in Codacy's
+# Prospector run, so a `too-complex` pragma would itself trip
+# unknown-option-value).
 #
 # pylint: disable=consider-using-in,chained-comparison
 # Equality and range checks are kept as explicit Compare-And-Compare AST
