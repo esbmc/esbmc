@@ -1340,8 +1340,8 @@ class LoopMixin:
         """
         name = self._name_id_or_none(target_elt)
         if name is not None:
-            body.append(
-                self._create_var_subscript_assign(node, name, list_var, index_var, elem_ann))
+            body.append(self._create_var_subscript_assign(node, name, list_var, index_var,
+                                                          elem_ann))
             return
 
         subscript = ast.Subscript(
