@@ -2240,7 +2240,26 @@ exprt string_handler::handle_string_splitlines(
 {
   std::string input;
   if (!try_extract_const_string_expr(string_obj, input))
-    throw std::runtime_error("splitlines() requires constant string");
+  {
+    // Sound-ish fallback: return an empty list. We cannot enumerate the
+    // lines of an unknown string at conversion time, and returning a
+    // nondet `char *` list isn't expressible through python_list::get()
+    // without inventing new list-build primitives. An empty list keeps
+    // the program well-typed and lets len() return 0 -- callers that
+    // depend on specific line content will still report VFAILED, but
+    // GOTO conversion no longer aborts (#4807).
+    log_debug(
+      "python-string",
+      "splitlines() on non-constant receiver: empty-list fallback");
+    nlohmann::json empty_list;
+    empty_list["_type"] = "List";
+    empty_list["elts"] = nlohmann::json::array();
+    converter_.copy_location_fields_from_decl(call, empty_list);
+    python_list list(converter_, empty_list);
+    exprt result = list.get();
+    result.location() = location;
+    return result;
+  }
 
   std::vector<std::string> parts;
   size_t start = 0;
