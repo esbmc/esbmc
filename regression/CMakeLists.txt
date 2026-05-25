@@ -328,6 +328,15 @@ set(_slow_regression_tests
 )
 foreach(_t IN LISTS _slow_regression_tests)
     if(TEST ${_t})
-        set_tests_properties(${_t} PROPERTIES TIMEOUT ${ESBMC_REGRESS_TIMEOUT_SLOW})
+        # Override both the ctest TIMEOUT and the ESBMC_REGRESS_TIMEOUT env
+        # var. The inner Python testing_tool reads ESBMC_REGRESS_TIMEOUT
+        # and self-aborts the ESBMC subprocess at that limit (see
+        # regression/testing_tool.py line ~211); without overriding the
+        # env var the test still times out at the global value, regardless
+        # of ctest's outer cap.
+        set_tests_properties(${_t} PROPERTIES
+          TIMEOUT ${ESBMC_REGRESS_TIMEOUT_SLOW}
+          ENVIRONMENT "ESBMC_REGRESS_TIMEOUT=${ESBMC_REGRESS_TIMEOUT_SLOW};ESBMC_REGRESS_MEMORY_LIMIT=${ESBMC_REGRESS_MEMORY_LIMIT}"
+        )
     endif()
 endforeach()
