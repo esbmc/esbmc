@@ -687,7 +687,7 @@ bool solidity_convertert::check_sol_ver()
       min_version.patch);
     return true;
   }
-  else if (min_version >= v050 && min_version < v070)
+  else if (min_version < v070)
   {
     log_warning(
       "The minimum solidity version ({}.{}.{}) < 0.7.0 may cause unexpected "
