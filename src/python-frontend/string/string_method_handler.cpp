@@ -2184,7 +2184,10 @@ exprt string_handler::handle_string_removeprefix(
     !try_extract_const_string_expr(string_obj, input) ||
     !try_extract_const_string_expr(prefix_arg, prefix))
   {
-    throw std::runtime_error("removeprefix() requires constant strings");
+    log_debug(
+      "python-string",
+      "removeprefix() on non-constant receiver/prefix: nondet string");
+    return build_nondet_string_fallback(location);
   }
 
   if (!prefix.empty() && input.rfind(prefix, 0) == 0)
@@ -2209,7 +2212,10 @@ exprt string_handler::handle_string_removesuffix(
     !try_extract_const_string_expr(string_obj, input) ||
     !try_extract_const_string_expr(suffix_arg, suffix))
   {
-    throw std::runtime_error("removesuffix() requires constant strings");
+    log_debug(
+      "python-string",
+      "removesuffix() on non-constant receiver/suffix: nondet string");
+    return build_nondet_string_fallback(location);
   }
 
   if (
@@ -2477,11 +2483,17 @@ exprt string_handler::handle_string_isupper(
 
 exprt string_handler::handle_string_isnumeric(
   const exprt &string_obj,
-  [[maybe_unused]] const locationt &location)
+  const locationt &location)
 {
   std::string input;
   if (!try_extract_const_string_expr(string_obj, input))
-    throw std::runtime_error("isnumeric() requires constant string");
+  {
+    log_debug(
+      "python-string", "isnumeric() on non-constant receiver: nondet bool");
+    side_effect_expr_nondett nondet(bool_type());
+    nondet.location() = location;
+    return nondet;
+  }
   if (input.empty())
     return from_integer(0, bool_type());
 
@@ -2495,11 +2507,17 @@ exprt string_handler::handle_string_isnumeric(
 
 exprt string_handler::handle_string_isidentifier(
   const exprt &string_obj,
-  [[maybe_unused]] const locationt &location)
+  const locationt &location)
 {
   std::string input;
   if (!try_extract_const_string_expr(string_obj, input))
-    throw std::runtime_error("isidentifier() requires constant string");
+  {
+    log_debug(
+      "python-string", "isidentifier() on non-constant receiver: nondet bool");
+    side_effect_expr_nondett nondet(bool_type());
+    nondet.location() = location;
+    return nondet;
+  }
   if (input.empty())
     return from_integer(0, bool_type());
 
@@ -2523,13 +2541,20 @@ exprt string_handler::handle_string_center(
 {
   std::string input;
   if (!try_extract_const_string_expr(string_obj, input))
-    throw std::runtime_error("center() requires constant string");
+  {
+    log_debug(
+      "python-string", "center() on non-constant receiver: nondet string");
+    return build_nondet_string_fallback(location);
+  }
   if (!string_builder_)
     throw std::runtime_error("string_builder not set for center()");
 
   long long width = 0;
   if (!get_constant_int(width_arg, width))
-    throw std::runtime_error("center() requires constant width");
+  {
+    log_debug("python-string", "center() on non-constant width: nondet string");
+    return build_nondet_string_fallback(location);
+  }
 
   char fill = ' ';
   if (!fill_arg.is_nil())
@@ -2567,13 +2592,20 @@ exprt string_handler::handle_string_ljust(
 {
   std::string input;
   if (!try_extract_const_string_expr(string_obj, input))
-    throw std::runtime_error("ljust() requires constant string");
+  {
+    log_debug(
+      "python-string", "ljust() on non-constant receiver: nondet string");
+    return build_nondet_string_fallback(location);
+  }
   if (!string_builder_)
     throw std::runtime_error("string_builder not set for ljust()");
 
   long long width = 0;
   if (!get_constant_int(width_arg, width))
-    throw std::runtime_error("ljust() requires constant width");
+  {
+    log_debug("python-string", "ljust() on non-constant width: nondet string");
+    return build_nondet_string_fallback(location);
+  }
 
   char fill = ' ';
   if (!fill_arg.is_nil())
@@ -2606,13 +2638,20 @@ exprt string_handler::handle_string_rjust(
 {
   std::string input;
   if (!try_extract_const_string_expr(string_obj, input))
-    throw std::runtime_error("rjust() requires constant string");
+  {
+    log_debug(
+      "python-string", "rjust() on non-constant receiver: nondet string");
+    return build_nondet_string_fallback(location);
+  }
   if (!string_builder_)
     throw std::runtime_error("string_builder not set for rjust()");
 
   long long width = 0;
   if (!get_constant_int(width_arg, width))
-    throw std::runtime_error("rjust() requires constant width");
+  {
+    log_debug("python-string", "rjust() on non-constant width: nondet string");
+    return build_nondet_string_fallback(location);
+  }
 
   char fill = ' ';
   if (!fill_arg.is_nil())
@@ -2644,13 +2683,20 @@ exprt string_handler::handle_string_zfill(
 {
   std::string input;
   if (!try_extract_const_string_expr(string_obj, input))
-    throw std::runtime_error("zfill() requires constant string");
+  {
+    log_debug(
+      "python-string", "zfill() on non-constant receiver: nondet string");
+    return build_nondet_string_fallback(location);
+  }
   if (!string_builder_)
     throw std::runtime_error("string_builder not set for zfill()");
 
   long long width = 0;
   if (!get_constant_int(width_arg, width))
-    throw std::runtime_error("zfill() requires constant width");
+  {
+    log_debug("python-string", "zfill() on non-constant width: nondet string");
+    return build_nondet_string_fallback(location);
+  }
 
   if (width <= static_cast<long long>(input.size()))
     return string_builder_->build_string_literal(input);
@@ -2681,7 +2727,11 @@ exprt string_handler::handle_string_expandtabs(
 {
   std::string input;
   if (!try_extract_const_string_expr(string_obj, input))
-    throw std::runtime_error("expandtabs() requires constant string");
+  {
+    log_debug(
+      "python-string", "expandtabs() on non-constant receiver: nondet string");
+    return build_nondet_string_fallback(location);
+  }
   if (!string_builder_)
     throw std::runtime_error("string_builder not set for expandtabs()");
 

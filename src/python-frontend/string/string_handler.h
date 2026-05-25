@@ -734,6 +734,19 @@ private:
   bool try_extract_const_string_expr(const exprt &expr, std::string &out);
 
   /**
+   * @brief Build a sound symbolic fallback for a `char *` string value when
+   *        a str.*() handler cannot compile-time-fold its receiver.
+   *
+   * Replaces the historical `throw "X() requires constant string"` aborts so
+   * that GOTO conversion can proceed. Returns a `side_effect_expr_nondett`
+   * of pointer-to-char type; subsequent string ops see arbitrary content,
+   * which is sound over-approximation for safety properties (we cannot
+   * conclude a specific functional result, but we cannot wrongly conclude
+   * SAFE either).
+   */
+  exprt build_nondet_string_fallback(const locationt &location);
+
+  /**
    * @brief Create a character array expression
    * @param chars Character data
    * @param type Array type
