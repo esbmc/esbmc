@@ -541,8 +541,9 @@ public:
   irep_idt guard_execution;
   /** Number of nondeterministic symbols in this state. */
   unsigned nondet_count;
-  /** Number of dynamic objects in this state. */
-  static unsigned dynamic_counter;
+  /** Number of dynamic objects in this state. thread_local so parallel
+   *  symex doesn't race on the counter. */
+  static thread_local unsigned dynamic_counter;
   /** Identifying number for this execution state. Used to distinguish runs
    *  in --schedule mode. */
   unsigned int node_id;
@@ -607,7 +608,10 @@ protected:
   // Static stuff:
 
 public:
-  static unsigned int node_count;
+  // thread_local so parallel symex threads (--k-induction-parallel)
+  // don't race on this counter. Each thread's interleaving exploration
+  // numbers its own nodes; cross-thread numbering isn't meaningful.
+  static thread_local unsigned int node_count;
 
   friend void build_goto_symex_classes();
 };

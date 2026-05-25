@@ -269,6 +269,114 @@ static int count_name_assignments_in_node(
 
 } // namespace
 
+// Narrow AST-level constant propagation for a Name receiver:
+// when `var_name` has exactly one Assign / AnnAssign to it inside `func_scope`
+// AND that assignment's value is a string Constant, return the literal.
+//
+// Deliberately narrow: we only look at the function's own body, not enclosing
+// scopes; we don't trace through aliases; we don't handle augmented
+// assignments. The point is to unlock the common pattern
+//
+//     def f():
+//         msg = "hello"
+//         ...                       # no reassignment of msg
+//         return msg.swapcase()     # receiver looks constant in source
+//                                   # but the local symbol's value is nil
+//                                   # at conversion time
+//
+// without taking on the soundness obligations of a real const-prop pass.
+// If we find more than one assignment we bail (no flow-sensitive reasoning).
+static bool try_const_string_from_single_assignment(
+  const std::string &var_name,
+  const nlohmann::json &func_scope,
+  std::string &out)
+{
+  if (!func_scope.contains("body") || !func_scope["body"].is_array())
+    return false;
+
+  const nlohmann::json *first_const = nullptr;
+  int assignment_count = 0;
+
+  std::function<void(const nlohmann::json &)> walk =
+    [&](const nlohmann::json &body) {
+      for (const auto &stmt : body)
+      {
+        if (!stmt.contains("_type"))
+          continue;
+
+        const std::string &t = stmt["_type"].get<std::string>();
+
+        // Don't descend into nested function/class scopes -- those are
+        // separate symbol tables.
+        if (t == "FunctionDef" || t == "ClassDef" || t == "Lambda")
+          continue;
+
+        // Match `var_name = <expr>` and `var_name: T = <expr>`.
+        const nlohmann::json *assigned_value = nullptr;
+        if (
+          t == "Assign" && stmt.contains("targets") &&
+          stmt["targets"].is_array() && !stmt["targets"].empty())
+        {
+          const auto &tgt = stmt["targets"][0];
+          if (
+            tgt.contains("_type") && tgt["_type"] == "Name" &&
+            tgt.contains("id") && tgt["id"] == var_name &&
+            stmt.contains("value"))
+            assigned_value = &stmt["value"];
+        }
+        else if (
+          t == "AnnAssign" && stmt.contains("target") &&
+          stmt["target"].contains("_type") &&
+          stmt["target"]["_type"] == "Name" && stmt["target"].contains("id") &&
+          stmt["target"]["id"] == var_name && stmt.contains("value") &&
+          !stmt["value"].is_null())
+        {
+          assigned_value = &stmt["value"];
+        }
+        // AugAssign (`var_name += ...`) is also a write -- count it so we
+        // bail if it appears, but don't capture its value as the constant.
+        else if (
+          t == "AugAssign" && stmt.contains("target") &&
+          stmt["target"].contains("_type") &&
+          stmt["target"]["_type"] == "Name" && stmt["target"].contains("id") &&
+          stmt["target"]["id"] == var_name)
+        {
+          ++assignment_count;
+          continue;
+        }
+
+        if (assigned_value != nullptr)
+        {
+          ++assignment_count;
+          if (first_const == nullptr)
+            first_const = assigned_value;
+          continue;
+        }
+
+        for (const char *key : {"body", "orelse", "finalbody"})
+          if (stmt.contains(key) && stmt[key].is_array())
+            walk(stmt[key]);
+
+        if (stmt.contains("handlers") && stmt["handlers"].is_array())
+          for (const auto &h : stmt["handlers"])
+            if (h.contains("body") && h["body"].is_array())
+              walk(h["body"]);
+      }
+    };
+
+  walk(func_scope["body"]);
+
+  if (assignment_count != 1 || first_const == nullptr)
+    return false;
+  if (!first_const->contains("_type") || (*first_const)["_type"] != "Constant")
+    return false;
+  if (!first_const->contains("value") || !(*first_const)["value"].is_string())
+    return false;
+
+  out = (*first_const)["value"].get<std::string>();
+  return true;
+}
+
 bool string_handler::try_extract_const_string_expr(
   const exprt &expr,
   std::string &out)
@@ -282,12 +390,43 @@ bool string_handler::try_extract_const_string_expr(
     const symbolt *symbol =
       find_cached_symbol(sym_expr.get_identifier().as_string());
     if (
-      !symbol || symbol->get_value().is_nil() ||
-      !symbol->get_value().type().is_array())
-      return false;
+      symbol && !symbol->get_value().is_nil() &&
+      symbol->get_value().type().is_array())
+    {
+      out = extract_string_from_array_operands(symbol->get_value());
+      return true;
+    }
 
-    out = extract_string_from_array_operands(symbol->get_value());
-    return true;
+    // AST-level fallback: narrow single-assignment constant lookup. Useful
+    // for `s = "abc"; ... s.method()` patterns where the local symbol's
+    // value isn't yet materialised at conversion time but the assignment
+    // is statically determinable from the function's AST. See the helper
+    // comment above for the soundness scope.
+    const std::string &full_id = sym_expr.get_identifier().as_string();
+    auto last_at = full_id.rfind('@');
+    if (last_at != std::string::npos && last_at + 1 < full_id.size())
+    {
+      std::string bare_name = full_id.substr(last_at + 1);
+      const std::string &current_scope = converter_.get_current_func_name();
+      if (!current_scope.empty())
+      {
+        const nlohmann::json &ast = converter_.get_ast_json();
+        if (ast.contains("body") && ast["body"].is_array())
+        {
+          auto path = json_utils::split_function_path(current_scope);
+          if (!path.empty())
+          {
+            nlohmann::json func_scope =
+              json_utils::find_function(ast["body"], path.back());
+            if (
+              !func_scope.empty() && try_const_string_from_single_assignment(
+                                       bare_name, func_scope, out))
+              return true;
+          }
+        }
+      }
+    }
+    return false;
   }
 
   if (str_expr.type().is_array())
