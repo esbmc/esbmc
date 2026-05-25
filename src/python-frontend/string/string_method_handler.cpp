@@ -2573,6 +2573,25 @@ exprt string_handler::handle_string_isalnum(
   std::string input;
   if (!try_extract_const_string_expr(string_obj, input))
   {
+    // Prefer the runtime operational model __python_str_isalnum when
+    // available -- symex's CP folds the call on concrete arguments
+    // and otherwise produces a real symbolic predicate rather than
+    // an unconstrained nondet bool.
+    const symbolt *isalnum_sym =
+      find_cached_c_function_symbol("c:@F@__python_str_isalnum");
+    if (isalnum_sym)
+    {
+      exprt s_copy = string_obj;
+      exprt s_expr = ensure_null_terminated_string(s_copy);
+      exprt s_addr = get_array_base_address(s_expr);
+
+      side_effect_expr_function_callt call;
+      call.function() = symbol_expr(*isalnum_sym);
+      call.arguments().push_back(s_addr);
+      call.location() = location;
+      call.type() = bool_type();
+      return call;
+    }
     log_debug(
       "python-string", "isalnum() on non-constant receiver: nondet bool");
     side_effect_expr_nondett nondet(bool_type());

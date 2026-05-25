@@ -113,6 +113,28 @@ __ESBMC_HIDE:;
   return 1;
 }
 
+// Python string isalnum - true iff the string is non-empty and every
+// character is a letter (ASCII A-Z / a-z) or a digit (0-9). Matches
+// Python's CPython behaviour on the ASCII subset; broader Unicode
+// category coverage is deliberately out of scope (consistent with the
+// existing isalpha/isdigit/isspace models in this file).
+_Bool __python_str_isalnum(const char *s)
+{
+__ESBMC_HIDE:;
+  if (!s || !*s)
+    return 0;
+
+  while (*s)
+  {
+    unsigned char c = (unsigned char)*s;
+    if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+          (c >= '0' && c <= '9')))
+      return 0;
+    s++;
+  }
+  return 1;
+}
+
 // Python string isspace: checks if all characters are whitespace
 _Bool __python_str_isspace(const char *s)
 {
