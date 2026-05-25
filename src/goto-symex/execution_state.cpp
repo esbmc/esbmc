@@ -923,7 +923,8 @@ void execution_statet::get_expr_globals(
             continue;
           if (is_internal_name(n))
             continue;
-          point_to_global = s->static_lifetime || s->type.is_dynamic_set();
+          point_to_global =
+            s->static_lifetime || s->get_type().is_dynamic_set();
           p = to_object_descriptor2t(obj).object;
           /* Stop when the global symbol is found */
           if (point_to_global)
