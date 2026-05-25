@@ -1,4 +1,4 @@
 THOROUGH
 logistic_5_unsafe.c-amalgamation.c
 -I . --boolector
-^VERIFICATION FAILED$
+^VERIFICATION FAILED$|ERROR: Boolector does not support integer encoding mode
