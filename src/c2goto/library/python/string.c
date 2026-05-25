@@ -530,7 +530,8 @@ __ESBMC_HIDE:;
 
   if (s[i] != '\0')
   {
-    __ESBMC_assert(0, "String too long for swapcase() - exceeds 255 characters");
+    __ESBMC_assert(
+      0, "String too long for swapcase() - exceeds 255 characters");
   }
 
   buffer[i] = '\0';
