@@ -204,6 +204,7 @@ const static std::vector<std::string> python_c_models = {
   "__python_str_rfind_range",
   "__python_str_replace",
   "__python_str_split",
+  "__python_str_count",
   "__ESBMC_create_inf_obj",
   "__python_int",
   "__python_chr",
