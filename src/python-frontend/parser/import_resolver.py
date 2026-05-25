@@ -23,6 +23,8 @@ GenerateAstJsonFn: TypeAlias = Callable[[ast.AST, str, Any, str, str | None], No
 import_aliases: dict[str, str] = {}
 module_imports: dict[str, ModuleImportInfo] = {}
 module_exports: dict[str, tuple[set[str], dict[str, str], list[str] | None]] = {}
+_reported_cycles: set[tuple[str, ...]] = set()
+_reported_resolution_failures: set[tuple[str, str, str]] = set()
 
 
 @dataclass(frozen=True)
@@ -39,6 +41,46 @@ def reset_state() -> None:
     import_aliases.clear()
     module_imports.clear()
     module_exports.clear()
+    _reported_cycles.clear()
+    _reported_resolution_failures.clear()
+
+
+def _resolver_error(module_name: str, reason: str, detail: str | None = None) -> None:
+    message = f"ERROR: {detail}" if detail else f"ERROR: {module_name} ({reason})"
+    print(message)
+
+
+def _resolver_warning(module_name: str, reason: str, detail: str | None = None) -> None:
+    message = f"WARNING: {detail}" if detail else f"WARNING: {module_name} ({reason})"
+    print(message)
+
+
+def _node_location(node: ast.AST) -> str:
+    line = getattr(node, "lineno", None)
+    col = getattr(node, "col_offset", None)
+    if line is None or col is None:
+        return "?:?"
+    return f"{line}:{col}"
+
+
+def _mark_import_resolution(
+    node: ast.AST,
+    ok: bool,
+    full_path: str | None = None,
+    reason: str | None = None,
+) -> None:
+    node.full_path = full_path
+    node.module_not_found = not ok
+    node.module_resolution_reason = reason
+
+
+def _warn_resolution_failure(module_name: str, node: ast.AST, reason: str) -> None:
+    location = _node_location(node)
+    key = (module_name, reason, location)
+    if key in _reported_resolution_failures:
+        return
+    _reported_resolution_failures.add(key)
+    _resolver_warning(module_name, "resolution-failed", f"{reason} at {location}")
 
 
 def _is_imported_model(module_name: str) -> bool:
@@ -66,6 +108,10 @@ def _is_testing_framework(module_name: str) -> bool:
     return module_name in {"pytest"}
 
 
+def _base_module_name(module_name: str) -> str:
+    return module_name.split(".")[0]
+
+
 def _is_standard_library_file(filename: str) -> bool:
     stdlib_paths = [
         '/usr/lib/python',
@@ -90,15 +136,38 @@ def _is_standard_library_file(filename: str) -> bool:
     return False
 
 
+def _normalize_existing_path(path: str | None) -> str | None:
+    if not path:
+        return None
+    absolute = os.path.abspath(path)
+    if not os.path.exists(absolute):
+        return None
+    return absolute
+
+
+def _module_filename(module: ModuleType | str | None) -> str | None:
+    candidate = module if isinstance(module, str) else getattr(module, "__file__", None)
+    normalized = _normalize_existing_path(candidate)
+    if not normalized:
+        return None
+    if _is_standard_library_file(normalized):
+        return None
+    return normalized
+
+
 def import_module_by_name(
     module_name: str,
     output_dir: str,
 ) -> ModuleType | str | None:
     if _is_unsupported_module(module_name):
-        print(f"ERROR: \"import {module_name}\" is not supported")
+        _resolver_error(
+            module_name,
+            "unsupported-module",
+            f"\"import {module_name}\" is not supported",
+        )
         sys.exit(3)
 
-    base_module = module_name.split(".")[0]
+    base_module = _base_module_name(module_name)
 
     if _is_testing_framework(base_module):
         return None
@@ -110,7 +179,11 @@ def import_module_by_name(
         if not os.path.exists(path):
             path = os.path.join(model_dir, *parts, "__init__.py")
 
-        return os.path.abspath(path)
+        normalized = _normalize_existing_path(path)
+        if normalized is None:
+            _resolver_error(module_name, "model-not-found", f"expected model file at '{path}'")
+            return None
+        return normalized
 
     try:
         module = importlib.import_module(module_name)
@@ -123,8 +196,8 @@ def import_module_by_name(
             except ImportError:
                 pass
 
-        print(f"ERROR: Module '{module_name}' not found.")
-        print(f"Please install it with: pip3 install {module_name}")
+        # Keep legacy error text: regression tests assert this exact line.
+        _resolver_error(module_name, "module-not-found", f"Module '{module_name}' not found.")
         return None
 
 
@@ -169,21 +242,18 @@ def process_imports(node: ast.Import | ast.ImportFrom, output_dir: str) -> None:
             for elem in imported_elements:
                 module_imports[module_name]['specific_names'].add(elem.name)
 
-        if _is_imported_model(module_name):
-            models_dir = os.path.join(output_dir, "models")
-            filename = os.path.join(models_dir, module_name + ".py")
-        else:
-            module = import_module_by_name(module_name, output_dir)
-            if module is None:
-                node.module_not_found = True
-                continue
-
-            if not hasattr(module, '__file__') or module.__file__ is None:
-                continue
-
-            filename = module.__file__
-
-        node.full_path = filename
+        module = import_module_by_name(module_name, output_dir)
+        if module is None:
+            _warn_resolution_failure(module_name, node, "module-not-found")
+            _mark_import_resolution(node, ok=False, reason="module-not-found")
+            continue
+        filename = _module_filename(module)
+        if filename is None:
+            # Keep historical behavior: modules without an emit-able file
+            # (e.g., standard library/builtins) are skipped, not treated as
+            # missing imports.
+            continue
+        _mark_import_resolution(node, ok=True, full_path=filename)
 
 
 def resolve_module_file(module_qualname: str, output_dir: str) -> str | None:
@@ -191,12 +261,59 @@ def resolve_module_file(module_qualname: str, output_dir: str) -> str | None:
         mod = import_module_by_name(module_qualname, output_dir)
     except SystemExit:
         return None
-    filename = mod if isinstance(mod, str) else getattr(mod, "__file__", None)
-    if not filename or _is_standard_library_file(filename):
-        return None
-    if not os.path.exists(filename):
+    filename = _module_filename(mod)
+    if filename is None:
         return None
     return filename
+
+
+def _extract_module_names(node: ast.Import | ast.ImportFrom) -> list[str]:
+    names: list[str]
+    if isinstance(node, ast.Import):
+        names = [alias_node.name for alias_node in node.names]
+    else:
+        names = [node.module] if node.module else []
+
+    filtered: list[str] = []
+    for name in names:
+        if not name:
+            continue
+        if _is_testing_framework(_base_module_name(name)):
+            continue
+        filtered.append(name)
+    return filtered
+
+
+def _find_cycle_from(graph: dict[str, set[str]], start: str) -> tuple[str, ...] | None:
+    stack: list[str] = [start]
+    in_stack: set[str] = {start}
+
+    def dfs(current: str) -> tuple[str, ...] | None:
+        for nxt in graph.get(current, set()):
+            if nxt in in_stack:
+                idx = stack.index(nxt)
+                return tuple(stack[idx:] + [nxt])
+            if nxt not in graph:
+                continue
+            stack.append(nxt)
+            in_stack.add(nxt)
+            found = dfs(nxt)
+            if found:
+                return found
+            in_stack.remove(nxt)
+            stack.pop()
+        return None
+
+    return dfs(start)
+
+
+def _warn_if_cycle(import_graph: dict[str, set[str]], module_name: str) -> None:
+    cycle = _find_cycle_from(import_graph, module_name)
+    if not cycle or cycle in _reported_cycles:
+        return
+    _reported_cycles.add(cycle)
+    readable = " -> ".join(cycle)
+    _resolver_warning(module_name, "cyclic-import", readable)
 
 
 def filter_imports(tree: ast.AST) -> ast.AST:
@@ -205,7 +322,7 @@ def filter_imports(tree: ast.AST) -> ast.AST:
         if isinstance(node, ast.Import):
             filtered_names = []
             for alias in node.names:
-                base_module = alias.name.split(".")[0]
+                base_module = _base_module_name(alias.name)
                 if not _is_testing_framework(base_module):
                     filtered_names.append(alias)
             if filtered_names:
@@ -214,7 +331,7 @@ def filter_imports(tree: ast.AST) -> ast.AST:
 
         elif isinstance(node, ast.ImportFrom):
             if node.module:
-                base_module = node.module.split(".")[0]
+                base_module = _base_module_name(node.module)
                 if not _is_testing_framework(base_module):
                     filtered_body.append(node)
             else:
@@ -234,23 +351,33 @@ def process_collected_imports(output_dir: str, callbacks: ResolverCallbacks):
     """
     parsed_trees = {}
     visited = set()
+    import_graph: dict[str, set[str]] = {}
 
     while True:
-        pending = set(module_imports.keys()) - visited
+        pending = sorted(set(module_imports.keys()) - visited)
         if not pending:
             break
         for module_name in pending:
             visited.add(module_name)
             filename = resolve_module_file(module_name, output_dir)
             if not filename:
+                _resolver_warning(module_name, "module-file-not-found")
                 continue
-            tree, preprocessor = callbacks.parse_file_canonicalised(filename)
+            try:
+                tree, preprocessor = callbacks.parse_file_canonicalised(filename)
+            except (OSError, SyntaxError, UnicodeDecodeError) as exc:
+                _resolver_warning(module_name, "module-parse-failed", str(exc))
+                continue
             parsed_trees[module_name] = (tree, filename, preprocessor)
             module_exports[module_name] = callbacks.snapshot_exports(preprocessor)
+            import_graph.setdefault(module_name, set())
             for subnode in ast.walk(tree):
                 if isinstance(subnode, (ast.Import, ast.ImportFrom)):
                     callbacks.rewrite_relative_import(subnode, module_name)
+                    for imported_name in _extract_module_names(subnode):
+                        import_graph[module_name].add(imported_name)
                     process_imports(subnode, output_dir)
+            _warn_if_cycle(import_graph, module_name)
 
     callbacks.propagate_range_aliases(parsed_trees)
 
@@ -297,6 +424,12 @@ def rewrite_relative_import(node: ast.ImportFrom, parent_module: str | None) -> 
         return
 
     parts = parent_module.split(".")
+    if lvl > len(parts):
+        _resolver_warning(
+            parent_module,
+            "relative-import-level-too-high",
+            f"level={lvl}, target={node.module or '<package>'}",
+        )
     idx = len(parts) - lvl
     base = parent_module if idx <= 0 else ".".join(parts[:idx])
     node.module = f"{base}.{node.module}" if node.module else base
@@ -309,15 +442,22 @@ def _emit_submodule_asts(
     output_dir: str,
     generate_ast_json_fn: GenerateAstJsonFn,
 ) -> None:
-    for root, _dirs, files in os.walk(module_dir):
-        for file in files:
+    for root, dirs, files in os.walk(module_dir):
+        # Keep traversal deterministic across platforms/runs for stable CI output.
+        dirs.sort()
+        for file in sorted(files):
             if not file.endswith('.py'):
                 continue
             full_path = os.path.join(root, file)
             try:
                 with open(full_path, "r", encoding="utf-8") as f:
                     tree = ast.parse(f.read())
-            except UnicodeDecodeError:
+            except (OSError, UnicodeDecodeError, SyntaxError) as exc:
+                _resolver_warning(
+                    f"{base_module}.{file}",
+                    "submodule-parse-failed",
+                    f"{full_path}: {exc}",
+                )
                 continue
             generate_ast_json_fn(tree, full_path, None, f"{output_dir}/{base_module}")
 
@@ -330,30 +470,35 @@ def detect_and_process_submodules(
 ) -> None:
     if not isinstance(node, ast.Attribute):
         return
+
     value = node.value
     if not isinstance(value, ast.Name):
         return
 
-    alias = value.id
-    base_module = import_aliases.get(alias)
-
+    base_module = import_aliases.get(value.id)
     if not base_module or not _is_imported_model(base_module):
         return
 
     full_module = f"{base_module}.{node.attr}"
-
     if full_module in processed_submodules:
         return
-    processed_submodules.add(full_module)
 
+    processed_submodules.add(full_module)
     try:
         module = import_module_by_name(full_module, output_dir)
     except SystemExit:
         return
 
-    file_path = module if isinstance(module, str) else module.__file__
-    module_dir = os.path.dirname(file_path)
-    _emit_submodule_asts(module_dir, base_module, output_dir, generate_ast_json_fn)
+    file_path = _module_filename(module)
+    if not file_path:
+        return
+
+    _emit_submodule_asts(
+        os.path.dirname(file_path),
+        base_module,
+        output_dir,
+        generate_ast_json_fn,
+    )
 
 
 def emit_module_json(
@@ -363,6 +508,12 @@ def emit_module_json(
     parse_file_canonicalised_fn: ParseFileCanonicalisedFn,
 ) -> None:
     filename = resolve_module_file(module_qualname, output_dir)
-    if filename:
+    if not filename:
+        _resolver_warning(module_qualname, "module-file-not-found")
+        return
+    try:
         tree, _preprocessor = parse_file_canonicalised_fn(filename)
-        generate_ast_json_fn(tree, filename, None, output_dir, module_qualname=module_qualname)
+    except (OSError, SyntaxError, UnicodeDecodeError) as exc:
+        _resolver_warning(module_qualname, "module-parse-failed", str(exc))
+        return
+    generate_ast_json_fn(tree, filename, None, output_dir, module_qualname=module_qualname)
