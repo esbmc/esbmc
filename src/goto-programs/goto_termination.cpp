@@ -1,9 +1,13 @@
 #include <goto-programs/goto_termination.h>
 #include <goto-programs/goto_k_induction.h>
 #include <goto-programs/goto_loops.h>
+#include <irep2/irep2_expr.h>
+#include <util/c_types.h>
 #include <util/expr_util.h>
+#include <util/std_expr.h>
 #include <algorithm>
 #include <map>
+#include <unordered_set>
 #include <vector>
 
 namespace
@@ -261,9 +265,10 @@ void insert_markers_for_function(
     infos.push_back(
       {loop.get_original_loop_head(), loop.get_original_loop_exit()});
   std::sort(
-    infos.begin(), infos.end(), [](const loop_info &a, const loop_info &b) {
-      return a.back->location_number > b.back->location_number;
-    });
+    infos.begin(),
+    infos.end(),
+    [](const loop_info &a, const loop_info &b)
+    { return a.back->location_number > b.back->location_number; });
 
   for (const auto &info : infos)
   {
@@ -359,10 +364,191 @@ void insert_markers_for_function(
     }
   }
 }
+/// Set of clang-mangled names of functions that unconditionally
+/// terminate the program. Used by the termination walker to decide
+/// that a FUNCTION_CALL is an exit instruction (so any guard that
+/// reaches it is an exit guard).
+using abort_sett = std::unordered_set<irep_idt, irep_id_hash>;
+
+/// Seed the Aborts set with libc / SV-COMP terminators. Each name is
+/// inserted twice — once in its bare form and once with the clang
+/// mangling — because direct calls in user code carry the mangled
+/// form (`c:@F@abort`) but some calls (e.g. from operational models)
+/// may use the bare form.
+void seed_abort_set(abort_sett &aborts)
+{
+  static const char *const seeds[] = {
+    "abort",
+    "exit",
+    "_Exit",
+    "__assert_fail",
+    "__VERIFIER_error",
+  };
+  for (const char *s : seeds)
+  {
+    aborts.insert(irep_idt(s));
+    aborts.insert(irep_idt(std::string("c:@F@") + s));
+  }
+}
+
+/// Returns true iff @p function's body unconditionally calls into an
+/// Aborts callee along every reachable path (no IF, no backward GOTO,
+/// no return). Conservative — used to grow the Aborts set with user-
+/// level wrappers (e.g. `reach_error()` when its body is still
+/// `__assert_fail(...)`).
+bool body_unconditionally_aborts(
+  const goto_functiont &function,
+  const abort_sett &aborts)
+{
+  if (!function.body_available)
+    return false;
+  bool saw_abort = false;
+  for (const auto &inst : function.body.instructions)
+  {
+    if (inst.is_end_function())
+      return saw_abort;
+    if (
+      inst.is_location() || inst.is_skip() || inst.is_decl() ||
+      inst.type == DEAD)
+      continue;
+    if (inst.is_goto())
+      return false; // any branching disqualifies
+    if (inst.is_return() || inst.is_throw() || inst.is_catch())
+      return false;
+    if (inst.is_assume() || inst.is_assert())
+    {
+      if (is_false(inst.guard))
+      {
+        saw_abort = true;
+        continue;
+      }
+      continue;
+    }
+    if (inst.is_assign())
+      continue;
+    if (inst.is_function_call())
+    {
+      const code_function_call2t &call = to_code_function_call2t(inst.code);
+      if (!is_symbol2t(call.function))
+        return false;
+      if (aborts.count(to_symbol2t(call.function).thename))
+      {
+        saw_abort = true;
+        continue;
+      }
+      continue; // non-Aborts call: returns normally, body continues
+    }
+    return false;
+  }
+  return false;
+}
+
+void build_abort_summary(
+  const goto_functionst &goto_functions,
+  abort_sett &aborts)
+{
+  seed_abort_set(aborts);
+  // Fixed-point: a function whose body unconditionally calls an
+  // Aborts function is itself an Aborts function.
+  bool changed = true;
+  while (changed)
+  {
+    changed = false;
+    for (const auto &kv : goto_functions.function_map)
+    {
+      if (aborts.count(kv.first))
+        continue;
+      if (body_unconditionally_aborts(kv.second, aborts))
+      {
+        aborts.insert(kv.first);
+        changed = true;
+      }
+    }
+  }
+}
+
+/// Place an ASSERT(false) marker immediately before every direct
+/// FUNCTION_CALL to an Aborts callee (abort / exit / __assert_fail
+/// / __VERIFIER_error / user-level wrappers around them) that sits
+/// inside a loop body. Without this, programs whose only real loop
+/// exit is via an abort call produce a vacuous IS counterexample —
+/// the natural-exit marker placed by insert_markers_for_function is
+/// statically unreachable from the back-edge, so IS sees no marker
+/// at all and reports non-termination.
+///
+/// The original FUNCTION_CALL is left in place; the marker just
+/// precedes it. Marker is flagged inductive_step_instruction so
+/// BC/FC skip it, matching the natural-exit markers.
+void insert_abort_call_markers_for_function(
+  const irep_idt &function_name,
+  goto_functionst &goto_functions,
+  goto_functiont &goto_function,
+  const abort_sett &aborts)
+{
+  goto_programt &body = goto_function.body;
+  goto_loopst loops(function_name, goto_functions, goto_function);
+  if (loops.get_loops().empty())
+    return;
+
+  // Snapshot per-loop ranges so mid-list inserts don't invalidate the
+  // iteration. Sort inner loops first (back-edge location_number
+  // descending) so outer iterator math stays stable.
+  struct loop_range
+  {
+    goto_programt::targett head;
+    goto_programt::targett back;
+  };
+  std::vector<loop_range> ranges;
+  for (const auto &loop : loops.get_loops())
+    ranges.push_back(
+      {loop.get_original_loop_head(), loop.get_original_loop_exit()});
+  std::sort(
+    ranges.begin(),
+    ranges.end(),
+    [](const loop_range &a, const loop_range &b)
+    { return a.back->location_number > b.back->location_number; });
+
+  for (const auto &r : ranges)
+  {
+    // Snapshot the call instructions to mark; inserting before each
+    // shifts the list but the snapshotted iterators stay valid.
+    std::vector<goto_programt::targett> marks;
+    for (auto p = r.head; p != std::next(r.back); ++p)
+    {
+      if (!p->is_function_call())
+        continue;
+      const code_function_call2t &call = to_code_function_call2t(p->code);
+      if (!is_symbol2t(call.function))
+        continue;
+      const irep_idt &callee = to_symbol2t(call.function).thename;
+      if (aborts.count(callee))
+        marks.push_back(p);
+    }
+
+    for (auto p : marks)
+    {
+      goto_programt::instructiont marker;
+      marker.type = ASSERT;
+      marker.guard = gen_false_expr();
+      marker.location = p->location;
+      marker.location.comment("termination abort-call marker");
+      marker.function = function_name;
+      marker.inductive_step_instruction = true;
+      body.instructions.insert(p, marker);
+    }
+  }
+}
+
 } // namespace
 
 void goto_termination(goto_functionst &goto_functions, optionst &options)
 {
+  // Build the Aborts summary first so insert_abort_call_markers_for_
+  // function can recognise abort/_Exit/__assert_fail and user-level
+  // wrappers around them.
+  abort_sett aborts;
+  build_abort_summary(goto_functions, aborts);
+
   // Apply k-induction's per-loop havoc + assume-entry-cond to every
   // function uniformly. __ESBMC_main is loop-free so this is a no-op
   // there; library helpers (body.hide) DO have loops but those are
@@ -400,6 +586,15 @@ void goto_termination(goto_functionst &goto_functions, optionst &options)
     // Marker pass: needs its own fresh goto_loopst (the loop list is
     // sorted innermost-first internally for stable iterator math).
     insert_markers_for_function(it->first, goto_functions, it->second);
+
+    // Abort-call markers: precede every direct call to an Aborts
+    // function (abort/exit/__assert_fail/...) inside a loop body
+    // with an ASSERT(false). This exposes abort paths to IS so the
+    // marker is reachable along the abort flow, instead of being
+    // stranded at the natural loop exit (which is statically
+    // unreachable for `while(1){... abort();}` shapes).
+    insert_abort_call_markers_for_function(
+      it->first, goto_functions, it->second, aborts);
   }
 
   goto_functions.update();
