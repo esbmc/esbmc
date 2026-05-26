@@ -631,23 +631,40 @@ void goto_termination(goto_functionst &goto_functions, optionst &options)
       continue;
     if (it->first == "__ESBMC_main")
       continue;
-    if (it->second.body.hide)
-      continue;
 
     // For each loop: inject no-op-cycle witnesses + check the IS
     // gate. Both use goto_loopst's natural-loop notion, which is
     // stable across kinduction's rewrites.
-    goto_loopst loops(it->first, goto_functions, it->second);
-    for (auto &loop : loops.get_loops())
+    //
+    // The IS gate (loop_is_is_unreliable) and no-op-cycle witnesses
+    // apply to USER loops only. Library helpers (body.hide) are
+    // verification-harness scaffolding — e.g. __ESBMC_atexit_handler's
+    // `while (atexit_count > 0)` loop, linked into every program,
+    // classifies as the empty-modified-set-with-assign hazard (case b
+    // in loop_is_is_unreliable) and would flip the program-wide IS
+    // gate to "unreliable" for *every* program, disabling IS globally
+    // and making non-termination unprovable. Their termination is
+    // never the reason a user program loops forever, so they must not
+    // contribute to the gate. (The marker pass below DOES run on them,
+    // so a program whose only loop is a library call still gets a
+    // termination claim.)
+    if (!it->second.body.hide)
     {
-      if (!loop.get_modified_loop_vars().empty())
-        inject_noop_cycle_assumes(it->second, loop);
-      if (loop_is_is_unreliable(loop))
-        any_unreliable_is_loop = true;
+      goto_loopst loops(it->first, goto_functions, it->second);
+      for (auto &loop : loops.get_loops())
+      {
+        if (!loop.get_modified_loop_vars().empty())
+          inject_noop_cycle_assumes(it->second, loop);
+        if (loop_is_is_unreliable(loop))
+          any_unreliable_is_loop = true;
+      }
     }
 
     // Marker pass: needs its own fresh goto_loopst (the loop list is
     // sorted innermost-first internally for stable iterator math).
+    // Runs on library helpers too, so a program whose only loop lives
+    // inside a hidden operational model (e.g. main() { memset(...); })
+    // still has a termination claim for IS/FC to discharge.
     insert_markers_for_function(it->first, goto_functions, it->second);
 
     // Abort-call markers: precede every direct call to an Aborts
