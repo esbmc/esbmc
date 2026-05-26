@@ -811,7 +811,9 @@ void c_typecastt::implicit_typecast_followed(
 
       if (src_type == dest_type)
       {
-        expr.get()->type = src_type; // because of qualifiers
+        // Re-attach the source type so any qualifier differences are
+        // discarded (the types compare equal but may not be identical).
+        expr = expr->with_type(src_type);
       }
       else
         do_typecast(expr, dest_type);

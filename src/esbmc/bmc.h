@@ -148,6 +148,7 @@ protected:
     const bool &is_cond_cov,
     const bool &is_branch_cov,
     const bool &is_branch_func_cov,
+    const bool &is_k_path_cov,
     const std::unordered_set<std::string> &reached_claims,
     const std::unordered_multiset<std::string> &reached_mul_claims);
 

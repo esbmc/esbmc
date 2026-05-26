@@ -113,6 +113,28 @@ __ESBMC_HIDE:;
   return 1;
 }
 
+// Python string isalnum - true iff the string is non-empty and every
+// character is a letter (ASCII A-Z / a-z) or a digit (0-9). Matches
+// Python's CPython behaviour on the ASCII subset; broader Unicode
+// category coverage is deliberately out of scope (consistent with the
+// existing isalpha/isdigit/isspace models in this file).
+_Bool __python_str_isalnum(const char *s)
+{
+__ESBMC_HIDE:;
+  if (!s || !*s)
+    return 0;
+
+  while (*s)
+  {
+    unsigned char c = (unsigned char)*s;
+    if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+          (c >= '0' && c <= '9')))
+      return 0;
+    s++;
+  }
+  return 1;
+}
+
 // Python string isspace: checks if all characters are whitespace
 _Bool __python_str_isspace(const char *s)
 {
@@ -417,6 +439,45 @@ __ESBMC_HIDE:;
   return has_cased;
 }
 
+// Python string isupper - true iff every cased character is uppercase
+// and there is at least one cased character. Mirrors __python_str_islower
+// with the cases swapped; UTF-8 continuation bytes after a 0xC2..0xDF
+// lead are treated as cased (best-effort Latin-1 supplement coverage).
+_Bool __python_str_isupper(const char *s)
+{
+__ESBMC_HIDE:;
+  if (!s || !*s)
+    return 0;
+
+  _Bool has_cased = 0;
+
+  while (*s)
+  {
+    unsigned char c = (unsigned char)*s;
+
+    if (c >= 'a' && c <= 'z')
+      return 0;
+
+    if (c >= 'A' && c <= 'Z')
+      has_cased = 1;
+
+    if (c >= 0xC2 && c <= 0xDF)
+    {
+      unsigned char next = (unsigned char)*(s + 1);
+      if (next >= 0x80 && next <= 0xBF)
+      {
+        has_cased = 1;
+        s += 2;
+        continue;
+      }
+    }
+
+    s++;
+  }
+
+  return has_cased;
+}
+
 // Python character lower - converts a single character to lowercase
 int __python_char_lower(int c)
 {
@@ -499,6 +560,169 @@ __ESBMC_HIDE:;
   buffer[j] = '\0';
 
   return buffer;
+}
+
+// Python string swapcase - returns a new string with ASCII lowercase
+// letters uppercased and uppercase letters lowercased; other bytes
+// pass through unchanged. Bounded to 255 chars on the receiver, like
+// __python_str_lower / _upper, to keep the symbolic loop tractable;
+// longer strings trip an explicit assertion rather than silently
+// truncating.
+char *__python_str_swapcase(const char *s)
+{
+__ESBMC_HIDE:;
+  if (!s)
+    return (char *)s;
+
+  char *buffer = __ESBMC_alloca(256);
+
+  size_t i = 0;
+  while (i < 255 && s[i])
+  {
+    char c = s[i];
+    if (c >= 'a' && c <= 'z')
+      buffer[i] = c - ('a' - 'A');
+    else if (c >= 'A' && c <= 'Z')
+      buffer[i] = c + ('a' - 'A');
+    else
+      buffer[i] = c;
+    i++;
+  }
+
+  if (s[i] != '\0')
+  {
+    __ESBMC_assert(
+      0, "String too long for swapcase() - exceeds 255 characters");
+  }
+
+  buffer[i] = '\0';
+
+  return buffer;
+}
+
+// Python string capitalize - returns a copy with the first ASCII letter
+// uppercased and every subsequent ASCII letter lowercased. Non-letter
+// characters pass through unchanged at their positions. Bounded to 255
+// chars on the receiver, like the lower/upper/swapcase models; longer
+// strings trip an explicit assertion rather than silently truncating.
+char *__python_str_capitalize(const char *s)
+{
+__ESBMC_HIDE:;
+  if (!s)
+    return (char *)s;
+
+  char *buffer = __ESBMC_alloca(256);
+
+  size_t i = 0;
+  while (i < 255 && s[i])
+  {
+    char c = s[i];
+    if (i == 0 && c >= 'a' && c <= 'z')
+      buffer[i] = c - ('a' - 'A');
+    else if (i > 0 && c >= 'A' && c <= 'Z')
+      buffer[i] = c + ('a' - 'A');
+    else
+      buffer[i] = c;
+    i++;
+  }
+
+  if (s[i] != '\0')
+  {
+    __ESBMC_assert(
+      0, "String too long for capitalize() - exceeds 255 characters");
+  }
+
+  buffer[i] = '\0';
+
+  return buffer;
+}
+
+// Python string title - returns a copy where the first ASCII letter of
+// each word is uppercased and every other letter is lowercased. A word
+// starts on any letter that is immediately preceded by a non-letter
+// (or by the start of the string); non-letter characters pass through
+// unchanged. Bounded to 255 chars on the receiver, same as the
+// lower/upper/swapcase/capitalize models.
+char *__python_str_title(const char *s)
+{
+__ESBMC_HIDE:;
+  if (!s)
+    return (char *)s;
+
+  char *buffer = __ESBMC_alloca(256);
+
+  _Bool prev_was_letter = 0;
+  size_t i = 0;
+  while (i < 255 && s[i])
+  {
+    char c = s[i];
+    _Bool is_lower = (c >= 'a' && c <= 'z');
+    _Bool is_upper = (c >= 'A' && c <= 'Z');
+
+    if (is_lower || is_upper)
+    {
+      if (!prev_was_letter)
+        buffer[i] = is_upper ? c : (char)(c - ('a' - 'A'));
+      else
+        buffer[i] = is_lower ? c : (char)(c + ('a' - 'A'));
+      prev_was_letter = 1;
+    }
+    else
+    {
+      buffer[i] = c;
+      prev_was_letter = 0;
+    }
+    i++;
+  }
+
+  if (s[i] != '\0')
+  {
+    __ESBMC_assert(0, "String too long for title() - exceeds 255 characters");
+  }
+
+  buffer[i] = '\0';
+
+  return buffer;
+}
+
+// Python string count - count non-overlapping occurrences of `sub` in `s`.
+// Matches the Python semantics: empty `sub` returns len(s) + 1 (counts
+// gaps including before-first and after-last). Bounded to 256 chars on
+// the receiver to keep the symbolic loop tractable for BMC; longer
+// strings trip an explicit assertion rather than silently truncating.
+size_t __python_str_count(const char *s, const char *sub)
+{
+__ESBMC_HIDE:;
+  if (!s || !sub)
+    return 0;
+
+  size_t s_len = __python_strnlen_bounded(s, 256);
+  size_t sub_len = __python_strnlen_bounded(sub, 256);
+
+  if (sub_len == 0)
+    return s_len + 1;
+
+  if (sub_len > s_len)
+    return 0;
+
+  size_t count = 0;
+  size_t i = 0;
+  while (i + sub_len <= s_len)
+  {
+    size_t j = 0;
+    while (j < sub_len && s[i + j] == sub[j])
+      j++;
+    if (j == sub_len)
+    {
+      count++;
+      i += sub_len;
+    }
+    else
+    {
+      i++;
+    }
+  }
+  return count;
 }
 
 int __python_str_find(const char *s1, const char *s2)
@@ -1174,5 +1398,193 @@ __ESBMC_HIDE:;
   }
 
   buffer[dst_idx] = '\0';
+  return buffer;
+}
+
+// Python int -> str. Matches str(int) for any 64-bit signed integer:
+// decimal digits, leading '-' for negatives, NUL-terminated.
+// Buffer fits the widest case: "-9223372036854775808" + NUL = 21 bytes.
+char *__python_int_to_str(long long v)
+{
+__ESBMC_HIDE:;
+  char *buffer = __ESBMC_alloca(21);
+
+  if (v == 0)
+  {
+    buffer[0] = '0';
+    buffer[1] = '\0';
+    return buffer;
+  }
+
+  // Use unsigned magnitude so INT64_MIN is representable without overflow.
+  int negative = v < 0;
+  unsigned long long mag =
+    negative ? -(unsigned long long)v : (unsigned long long)v;
+
+  // Write digits right-to-left into a 20-byte scratch (max 20 decimal digits).
+  char digits[20];
+  size_t n = 0;
+  while (mag > 0)
+  {
+    digits[n++] = (char)('0' + (mag % 10));
+    mag /= 10;
+  }
+
+  size_t pos = 0;
+  if (negative)
+    buffer[pos++] = '-';
+
+  while (n > 0)
+    buffer[pos++] = digits[--n];
+
+  buffer[pos] = '\0';
+  return buffer;
+}
+
+// Python bool -> str. Returns "True" / "False" with the usual capitalisation.
+char *__python_bool_to_str(_Bool b)
+{
+__ESBMC_HIDE:;
+  char *buffer = __ESBMC_alloca(6);
+  if (b)
+  {
+    buffer[0] = 'T';
+    buffer[1] = 'r';
+    buffer[2] = 'u';
+    buffer[3] = 'e';
+    buffer[4] = '\0';
+  }
+  else
+  {
+    buffer[0] = 'F';
+    buffer[1] = 'a';
+    buffer[2] = 'l';
+    buffer[3] = 's';
+    buffer[4] = 'e';
+    buffer[5] = '\0';
+  }
+  return buffer;
+}
+
+// Python float -> str. Approximates CPython's str(float) for typical cases:
+// integral value -> "X.0", finite non-integral -> shortest "fixed" form with
+// trailing zeros stripped, special values -> "nan"/"inf"/"-inf".
+// The fixed-precision printout used here matches the existing
+// handle_float_to_str() compile-time path (std::to_string + trailing zeros
+// stripped).
+char *__python_float_to_str(double v)
+{
+__ESBMC_HIDE:;
+  char *buffer = __ESBMC_alloca(64);
+
+  if (v != v)
+  {
+    buffer[0] = 'n';
+    buffer[1] = 'a';
+    buffer[2] = 'n';
+    buffer[3] = '\0';
+    return buffer;
+  }
+
+  size_t pos = 0;
+  if (v < 0.0)
+  {
+    buffer[pos++] = '-';
+    v = -v;
+  }
+
+  // Infinity check: any value larger than the largest representable double
+  // after negation is infinite.
+  if (v > 1.7976931348623157e+308)
+  {
+    buffer[pos++] = 'i';
+    buffer[pos++] = 'n';
+    buffer[pos++] = 'f';
+    buffer[pos] = '\0';
+    return buffer;
+  }
+
+  // Values >= ULLONG_MAX (~1.8e19) cannot be safely cast to unsigned long long
+  // (out-of-range float-to-integer conversion is undefined behaviour in C).
+  // Emit a fixed-point approximation using pure floating-point arithmetic so
+  // the cast below always has a value in [0, ULLONG_MAX).
+  // 1.8446744073709551616e19 is the next double above ULLONG_MAX.
+  if (v >= 1.8446744073709552e19)
+  {
+    // Print the integer part digit-by-digit via powers of 10 encoded as double.
+    // We emit at most 20 significant digits then append ".0".
+    // Use a two-pass approach: determine the order of magnitude, then extract
+    // digits top-down using only double arithmetic.
+    double scale = 1.0;
+    // Find the highest power of 10 <= v (at most 10^308).
+    double tmp = v;
+    while (tmp >= 10.0)
+    {
+      tmp /= 10.0;
+      scale *= 10.0;
+    }
+    // tmp is now in [1,10); emit digits
+    size_t digit_count = 0;
+    while (scale >= 1.0 && digit_count < 20)
+    {
+      int d = (int)tmp;
+      if (d < 0)
+        d = 0;
+      if (d > 9)
+        d = 9;
+      buffer[pos++] = (char)('0' + d);
+      tmp = (tmp - (double)d) * 10.0;
+      scale /= 10.0;
+      digit_count++;
+    }
+    // Always append ".0" to match the "X.0" style for integral values.
+    buffer[pos++] = '.';
+    buffer[pos++] = '0';
+    buffer[pos] = '\0';
+    return buffer;
+  }
+
+  // Integer part: split off the whole-number portion. Cast is safe because
+  // v has been bounded above to be < ULLONG_MAX.
+  unsigned long long ip = (unsigned long long)v;
+  double frac = v - (double)ip;
+
+  // Write integer digits right-to-left into a 20-byte scratch.
+  char digits[20];
+  size_t n = 0;
+  if (ip == 0)
+    digits[n++] = '0';
+  while (ip > 0)
+  {
+    digits[n++] = (char)('0' + (ip % 10));
+    ip /= 10;
+  }
+  while (n > 0)
+    buffer[pos++] = digits[--n];
+
+  buffer[pos++] = '.';
+
+  // Fractional part: emit up to 6 digits (matches std::to_string default).
+  size_t frac_start = pos;
+  size_t i = 0;
+  while (i < 6)
+  {
+    frac *= 10.0;
+    int digit = (int)frac;
+    if (digit < 0)
+      digit = 0;
+    if (digit > 9)
+      digit = 9;
+    buffer[pos++] = (char)('0' + digit);
+    frac -= (double)digit;
+    i++;
+  }
+
+  // Strip trailing zeros from the fractional digits, but keep at least one
+  // digit so the result reads like "X.0" rather than "X.".
+  while (pos > frac_start + 1 && buffer[pos - 1] == '0')
+    pos--;
+
+  buffer[pos] = '\0';
   return buffer;
 }

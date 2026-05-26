@@ -1,13 +1,9 @@
-add_library(irep2 templates/irep2_templates_expr_data.cpp
-  templates/irep2_templates_expr_ops.cpp
-  templates/irep2_templates_expr_extra.cpp
-  templates/irep2_templates_type.cpp
-  templates/irep2_templates.cpp
-  templates/irep2_template_utils.cpp
+add_library(irep2
   irep2_type.cpp
   irep2_expr.cpp
+  irep2_utils.cpp
+  irep2_guard.cpp
 )
 
-target_include_directories(irep2 PUBLIC ${Boost_INCLUDE_DIRS})
-target_link_libraries(irep2 PUBLIC fmt::fmt bigint ${Boost_LIBRARIES} PRIVATE crypto_hash)
+target_link_libraries(irep2 PUBLIC fmt::fmt bigint PRIVATE crypto_hash)
 

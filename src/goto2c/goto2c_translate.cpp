@@ -92,7 +92,7 @@ goto2ct::translate(std::string function_id, goto_functiont &goto_function)
   // Creating a function symbol
   symbolt fun_sym;
   fun_sym.id = function_id;
-  fun_sym.type = goto_function.type;
+  set_symbol_type(fun_sym, goto_function.type);
   // Translating the function declaration
   out << expr2c(code_declt(symbol_expr(fun_sym)), ns) << "\n";
   // Translating the function body

@@ -244,7 +244,6 @@ void clang_c_languaget::build_compiler_args(
     compiler_args.push_back("-D__CRT__NO_INLINE");
     compiler_args.push_back("-D_USE_MATH_DEFINES");
     compiler_args.push_back("-Wno-implicit-function-declaration");
-    compiler_args.push_back("-Wno-incompatible-pointer-types");
   }
 
 #if ESBMC_SVCOMP
@@ -261,6 +260,10 @@ void clang_c_languaget::build_compiler_args(
   // Add -Wunknown-attributes, preprocessed files with GCC generate a bunch
   // of __leaf__ attributes that we don't care about
   compiler_args.emplace_back("-Wno-unknown-attributes");
+
+  // Suppress incompatible-pointer-types universally; became a hard error in
+  // LLVM 22 and trips on system headers across all platforms.
+  compiler_args.emplace_back("-Wno-incompatible-pointer-types");
 
   /* put custom options at the end of the cmdline such that they can override
    * whatever defaults we put in before. */

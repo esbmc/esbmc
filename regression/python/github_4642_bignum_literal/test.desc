@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: Python int overflow: literal 18446744073709551616 does not fit in 64-bit int.*

@@ -26,13 +26,13 @@ inline code_function_callt invoke_intrinsic(
 
   symbolt symbol;
   symbol.mode = "C";
-  symbol.type = code_type;
+  symbol.set_type(code_type);
   symbol.name = name;
   symbol.id = name;
   symbol.is_extern = false;
   symbol.file_local = false;
 
-  exprt tmp("symbol", symbol.type);
+  exprt tmp("symbol", symbol.get_type());
   tmp.identifier(symbol.id);
   tmp.name(symbol.name);
 
@@ -54,7 +54,7 @@ inline code_function_callt invoke_intrinsic(
 // Why is this a global? Because there are over three hundred call sites to
 // migrate_expr, and it's a huge task to fix them all up to pass a namespace
 // down.
-const namespacet *migrate_namespace_lookup = nullptr;
+thread_local const namespacet *migrate_namespace_lookup = nullptr;
 
 static std::map<irep_idt, BigInt> bin2int_map_signed, bin2int_map_unsigned;
 static std::mutex bin2int_map_signed_mutex, bin2int_map_unsigned_mutex;
@@ -255,23 +255,9 @@ static type2tc migrate_type0(const typet &type)
 
   if (type.id() == typet::t_complex)
   {
-    std::vector<type2tc> members;
-    std::vector<irep_idt> names;
-    std::vector<irep_idt> pretty_names;
-    const struct_union_typet &strct = to_complex_type(type);
-    const struct_union_typet::componentst comps = strct.components();
-
-    for (const auto &comp : comps)
-    {
-      type2tc ref = migrate_type(comp.type());
-
-      members.push_back(ref);
-      names.push_back(comp.get(typet::a_name));
-      pretty_names.push_back(comp.get(typet::a_pretty_name));
-    }
-
-    irep_idt name = "complex";
-    return complex_type2tc(members, names, pretty_names, name);
+    // C `_Complex T` lowers to a 2-component struct (real, imag) in the
+    // legacy irept; the irep2 representation is just the element type.
+    return complex_type2tc(migrate_type(to_complex_type(type).base_type()));
   }
 
   if (type.id() == typet::t_code)
@@ -389,6 +375,60 @@ type2tc migrate_type(const typet &type)
       type.id() == typet::t_intcap || type.id() == typet::t_uintcap);
   type2tc ty2 = migrate_type0(type);
   return ty2;
+}
+
+type2tc migrate_symbol_type(const symbolt &sym)
+{
+  // The IREP2 form is the source of truth on `symbolt`; get_type2() returns
+  // the stored field directly (lazily populated if a legacy-side setter
+  // wrote last). Kept as a named chokepoint so the round-trip cross-check
+  // below runs on every real symbol type the pipeline reads.
+  const type2tc &result = sym.get_type2();
+#ifndef NDEBUG
+  // Round-trip cross-check: the stored IREP2 form must be stable under a
+  // legacy back-and-forth migration. Unit/util/migrate.test.cpp proves this
+  // for synthetic types; asserting it here exercises it on every real symbol
+  // the pipeline reads. Skip nil sources -- migrate_type_back null-derefs on
+  // them, and a nil source has no legacy form to compare against anyway.
+  assert(
+    (is_nil_type(result) ||
+     migrate_type(migrate_type_back(result)) == result) &&
+    "symbol type not stable under IREP2<->irept round-trip");
+#endif
+  return result;
+}
+
+void migrate_symbol_value(const symbolt &sym, expr2tc &dest)
+{
+  // The IREP2 form is the source of truth on `symbolt`; get_value2() returns
+  // it directly (lazily populated if a legacy-side setter wrote last). Kept
+  // as a named chokepoint so the round-trip cross-check below runs on every
+  // real symbol value the pipeline reads.
+  dest = sym.get_value2();
+#ifndef NDEBUG
+  // Cross-check: assert the IREP2 value form is stable under the
+  // migration round-trip migrate_expr(migrate_expr_back(e)) == e.
+  // migrate_expr_back covers every expr2t kind a symbol value may hold,
+  // but we still skip function bodies (no caller goes through this path on
+  // them today, and the assertion would force a potentially-large body
+  // round-trip for no signal) and nil values (vacuous).
+  if (!sym.get_type().is_code() && !sym.get_value().is_nil())
+  {
+    expr2tc roundtrip;
+    migrate_expr(migrate_expr_back(dest), roundtrip);
+    assert(
+      roundtrip == dest &&
+      "symbol value not stable under IREP2<->irept round-trip");
+  }
+#endif
+}
+
+void set_symbol_type(symbolt &sym, const type2tc &t)
+{
+  // Route through the IREP2-side setter on symbolt. The setter stores `t`
+  // as the source of truth; the legacy `typet` is derived lazily on the
+  // next get_type() call via migrate_type_back.
+  sym.set_type(t);
 }
 
 static const typet &decide_on_expr_type(const exprt &side1, const exprt &side2)
@@ -526,7 +566,7 @@ static bool handle_introspection_expr(const exprt &expr, expr2tc &new_expr_ref)
   return false;
 }
 
-expr2tc sym_name_to_symbol(irep_idt init, type2tc type)
+expr2tc sym_name_to_symbol(const irep_idt &init, const type2tc &type)
 {
   const symbolt *sym = migrate_namespace_lookup->lookup(init);
   symbol2t::renaming_level target_level;
@@ -547,8 +587,14 @@ expr2tc sym_name_to_symbol(irep_idt init, type2tc type)
     // hashes.
     // Fix this by ensuring that /all/ symbols with the same name use the type
     // from the global symbol table.
-    type = migrate_type(sym->type);
-    return symbol2tc(type, init, symbol2t::level0, 0, 0, 0, 0);
+    return symbol2tc(
+      migrate_symbol_type(*sym),
+      init,
+      symbol_renaming_level::level0,
+      0,
+      0,
+      0,
+      0);
   }
   if (
     init.as_string().compare(0, 3, "cs$") == 0 ||
@@ -558,7 +604,7 @@ expr2tc sym_name_to_symbol(irep_idt init, type2tc type)
   {
     // This is part of k-induction, where the type is slowly accumulated over
     // time, and the symbol never makes its way into the symbol table :|
-    return symbol2tc(type, init, symbol2t::level0, 0, 0, 0, 0);
+    return symbol2tc(type, init, symbol_renaming_level::level0, 0, 0, 0, 0);
   }
 
   // Renamed to at least level 1,
@@ -570,21 +616,21 @@ expr2tc sym_name_to_symbol(irep_idt init, type2tc type)
   if (thestr.find("#") == std::string::npos)
   {
     // We're level 1.
-    target_level = symbol2t::level1;
+    target_level = symbol_renaming_level::level1;
     and_pos = thestr.size();
     hash_pos = thestr.size();
   }
   else
   {
     // Level 2
-    target_level = symbol2t::level2;
+    target_level = symbol_renaming_level::level2;
     and_pos = thestr.find("&");
     hash_pos = thestr.find("#");
 
     if (at_pos == std::string::npos)
     {
       // However, it's L2 global.
-      target_level = symbol2t::level2_global;
+      target_level = symbol_renaming_level::level2_global;
       end_of_name_pos = and_pos;
     }
   }
@@ -592,7 +638,7 @@ expr2tc sym_name_to_symbol(irep_idt init, type2tc type)
   // Whatever level we're at, set the base name to be nonrenamed.
   irep_idt thename = irep_idt(thestr.substr(0, end_of_name_pos));
 
-  if (target_level != symbol2t::level2_global)
+  if (target_level != symbol_renaming_level::level2_global)
   {
     // Check that at_pos and exm_pos are valid before using them
     if (at_pos == std::string::npos || exm_pos == std::string::npos)
@@ -602,7 +648,8 @@ expr2tc sym_name_to_symbol(irep_idt init, type2tc type)
         "treating as level0 with base name '{}'",
         init,
         thename);
-      return symbol2tc(type, thename, symbol2t::level0, 0, 0, 0, 0);
+      return symbol2tc(
+        type, thename, symbol_renaming_level::level0, 0, 0, 0, 0);
     }
 
     std::string atstr = thestr.substr(at_pos + 1, exm_pos - at_pos - 1);
@@ -616,7 +663,7 @@ expr2tc sym_name_to_symbol(irep_idt init, type2tc type)
     assert(endexmptr != exmstr.c_str());
   }
 
-  if (target_level == symbol2t::level1)
+  if (target_level == symbol_renaming_level::level1)
   {
     return symbol2tc(type, thename, target_level, level1_num, 0, thread_num, 0);
   }
@@ -822,10 +869,10 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     const irep_idt &kind1 = expr.get("kind");
 
-    auto kind2 = kind1 == string_constantt::k_wide ? constant_string2t::WIDE
+    auto kind2 = kind1 == string_constantt::k_wide ? constant_string_kindt::WIDE
                  : kind1 == string_constantt::k_unicode
-                   ? constant_string2t::UNICODE
-                   : constant_string2t::DEFAULT;
+                   ? constant_string_kindt::UNICODE
+                   : constant_string_kindt::DEFAULT;
 
     new_expr_ref = constant_string2tc(t, thestring, kind2);
     return;
@@ -1444,7 +1491,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
       idx = constant_string2tc(
         array_type2tc(get_uint8_type(), gen_ulong(name.size() + 1), false),
         name,
-        constant_string2t::DEFAULT);
+        constant_string_kindt::DEFAULT);
     }
     else
     {
@@ -1775,22 +1822,22 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     sideeffect2t::allockind t;
     if (expr.statement() == "malloc")
-      t = sideeffect2t::malloc;
+      t = sideeffect2t::allockind::malloc;
     else if (expr.statement() == "realloc")
-      t = sideeffect2t::realloc;
+      t = sideeffect2t::allockind::realloc;
     else if (expr.statement() == "alloca")
-      t = sideeffect2t::alloca;
+      t = sideeffect2t::allockind::alloca;
     else if (expr.statement() == "cpp_new")
-      t = sideeffect2t::cpp_new;
+      t = sideeffect2t::allockind::cpp_new;
     else if (expr.statement() == "cpp_new[]")
-      t = sideeffect2t::cpp_new_arr;
+      t = sideeffect2t::allockind::cpp_new_arr;
     else if (expr.statement() == "nondet")
-      t = sideeffect2t::nondet;
+      t = sideeffect2t::allockind::nondet;
     else if (expr.statement() == "va_arg")
-      t = sideeffect2t::va_arg;
+      t = sideeffect2t::allockind::va_arg;
     else if (expr.statement() == "function_call")
     {
-      t = sideeffect2t::function_call;
+      t = sideeffect2t::allockind::function_call;
       const exprt &arguments = expr.op1();
       forall_operands (it, arguments)
       {
@@ -1809,14 +1856,13 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
       if (expr.base_name().empty())
         assert(!"No base_name for code_printf2t");
-      std::string bs_name = expr.base_name().as_string();
-
-      new_expr_ref = code_printf2tc(args, bs_name);
+      new_expr_ref =
+        code_printf2tc(args, printf_kind_from_name(expr.base_name()));
       return;
     }
     else if (expr.statement() == "printf2")
     {
-      t = sideeffect2t::printf2;
+      t = sideeffect2t::allockind::printf2;
       for (auto const &it : expr.operands())
       {
         expr2tc tmp_op;
@@ -1826,34 +1872,34 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     }
     else if (expr.statement() == "preincrement")
     {
-      t = sideeffect2t::preincrement;
+      t = sideeffect2t::allockind::preincrement;
       migrate_expr(expr.op0(), new_expr_ref);
     }
     else if (expr.statement() == "postincrement")
     {
-      t = sideeffect2t::postincrement;
+      t = sideeffect2t::allockind::postincrement;
       migrate_expr(expr.op0(), new_expr_ref);
     }
     else if (expr.statement() == "predecrement")
     {
-      t = sideeffect2t::predecrement;
+      t = sideeffect2t::allockind::predecrement;
       migrate_expr(expr.op0(), new_expr_ref);
     }
     else if (expr.statement() == "postdecrement")
     {
-      t = sideeffect2t::predecrement;
+      t = sideeffect2t::allockind::predecrement;
       migrate_expr(expr.op0(), new_expr_ref);
     }
     else if (expr.statement() == "old_snapshot")
     {
       // __ESBMC_old() in function contracts
-      t = sideeffect2t::old_snapshot;
+      t = sideeffect2t::allockind::old_snapshot;
       migrate_expr(expr.op0(), new_expr_ref);
     }
     else if (expr.statement() == "assigns_target")
     {
       // __ESBMC_assigns() in function contracts
-      t = sideeffect2t::assigns_target;
+      t = sideeffect2t::allockind::assigns_target;
       migrate_expr(expr.op0(), new_expr_ref);
     }
     else
@@ -1907,9 +1953,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     if (expr.base_name().empty())
       assert(!"No base_name for code_printf2t");
-    std::string bs_name = expr.base_name().as_string();
-
-    new_expr_ref = code_printf2tc(ops, bs_name);
+    new_expr_ref = code_printf2tc(ops, printf_kind_from_name(expr.base_name()));
     return;
   }
 
@@ -2061,6 +2105,56 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     }
 
     new_expr_ref = code_cpp_throw_decl2tc(expr_list);
+    return;
+  }
+
+  // V1 of the symbol-table V-track (esbmc/esbmc#4715). Four kinds had only
+  // a back-arm (or neither direction) and could not round-trip through the
+  // migration layer. Adding the forward arms here -- with the matching back
+  // arms in migrate_expr_back -- makes IREP2 -> legacy -> IREP2 idempotent on
+  // each, the gate the V-track plan named for the value-side flip (V2). These
+  // arms are dead code in the pipeline today; nothing constructs the matching
+  // legacy form until V2 routes symbol bodies through the migration layer.
+  if (expr.id() == "code" && expr.statement() == "block")
+  {
+    std::vector<expr2tc> ops;
+    ops.reserve(expr.operands().size());
+    for (const auto &op : expr.operands())
+    {
+      expr2tc o;
+      migrate_expr(op, o);
+      ops.push_back(o);
+    }
+    new_expr_ref = code_block2tc(ops);
+    return;
+  }
+
+  if (expr.id() == "code" && expr.statement() == "cpp-catch")
+  {
+    std::vector<irep_idt> expr_list;
+    const irept::subt &exceptions = expr.find("exception_list").get_sub();
+    for (const auto &e_it : exceptions)
+      expr_list.push_back(e_it.id());
+    new_expr_ref = code_cpp_catch2tc(expr_list);
+    return;
+  }
+
+  if (expr.id() == "code" && expr.statement() == "throw_decl_end")
+  {
+    std::vector<irep_idt> expr_list;
+    const irept::subt &throw_list = expr.find("throw_list").get_sub();
+    for (const auto &e_it : throw_list)
+      expr_list.push_back(e_it.id());
+    new_expr_ref = code_cpp_throw_decl_end2tc(expr_list);
+    return;
+  }
+
+  if (expr.id() == "pointer_capability")
+  {
+    expr2tc theval;
+    migrate_expr(expr.op0(), theval);
+    type2tc type = migrate_type(expr.type());
+    new_expr_ref = pointer_capability2tc(type, theval);
     return;
   }
 
@@ -2406,24 +2500,10 @@ typet migrate_type_back(const type2tc &ref)
   }
   case type2t::complex_id:
   {
-    unsigned int idx;
+    // complex_typet::set_base_type populates the (real, imag) components
+    // for us from the element type.
     complex_typet thetype;
-    struct_union_typet::componentst comps;
-    const complex_type2t &ref2 = to_complex_type(ref);
-
-    idx = 0;
-    for (auto const &it : ref2.members)
-    {
-      struct_union_typet::componentt component;
-      component.id("component");
-      component.type() = migrate_type_back(it);
-      component.set_name(irep_idt(ref2.member_names[idx]));
-      component.pretty_name(irep_idt(ref2.member_pretty_names[idx]));
-      comps.push_back(component);
-      idx++;
-    }
-
-    thetype.components() = comps;
+    thetype.set_base_type(migrate_type_back(to_complex_type(ref).subtype));
     return thetype;
   }
   case type2t::cpp_name_id:
@@ -2505,13 +2585,13 @@ exprt migrate_expr_back(const expr2tc &ref)
     irep_idt kind;
     switch (ref2.kind)
     {
-    case constant_string2t::DEFAULT:
+    case constant_string_kindt::DEFAULT:
       kind = string_constantt::k_default;
       break;
-    case constant_string2t::WIDE:
+    case constant_string_kindt::WIDE:
       kind = string_constantt::k_wide;
       break;
-    case constant_string2t::UNICODE:
+    case constant_string_kindt::UNICODE:
       kind = string_constantt::k_unicode;
       break;
     }
@@ -3236,7 +3316,7 @@ exprt migrate_expr_back(const expr2tc &ref)
     if (!is_nil_expr(ref2.size))
       size = migrate_expr_back(ref2.size);
 
-    if (ref2.kind == sideeffect2t::function_call)
+    if (ref2.kind == sideeffect2t::allockind::function_call)
     {
       // "Operand" is 1st op,
       exprt operand = migrate_expr_back(ref2.operand);
@@ -3246,7 +3326,7 @@ exprt migrate_expr_back(const expr2tc &ref)
         args.copy_to_operands(migrate_expr_back(argument));
       theexpr.copy_to_operands(operand, args);
     }
-    else if (ref2.kind == sideeffect2t::nondet)
+    else if (ref2.kind == sideeffect2t::allockind::nondet)
     {
       ; // Do nothing
     }
@@ -3261,46 +3341,46 @@ exprt migrate_expr_back(const expr2tc &ref)
 
     switch (ref2.kind)
     {
-    case sideeffect2t::malloc:
+    case sideeffect2t::allockind::malloc:
       theexpr.statement("malloc");
       break;
-    case sideeffect2t::realloc:
+    case sideeffect2t::allockind::realloc:
       theexpr.statement("realloc");
       break;
-    case sideeffect2t::alloca:
+    case sideeffect2t::allockind::alloca:
       theexpr.statement("alloca");
       break;
-    case sideeffect2t::cpp_new:
+    case sideeffect2t::allockind::cpp_new:
       theexpr.statement("cpp_new");
       break;
-    case sideeffect2t::cpp_new_arr:
+    case sideeffect2t::allockind::cpp_new_arr:
       theexpr.statement("cpp_new[]");
       break;
-    case sideeffect2t::nondet:
+    case sideeffect2t::allockind::nondet:
       theexpr.statement("nondet");
       break;
-    case sideeffect2t::va_arg:
+    case sideeffect2t::allockind::va_arg:
       theexpr.statement("va_arg");
       break;
-    case sideeffect2t::function_call:
+    case sideeffect2t::allockind::function_call:
       theexpr.statement("function_call");
       break;
-    case sideeffect2t::preincrement:
+    case sideeffect2t::allockind::preincrement:
       theexpr.statement("preincrement");
       break;
-    case sideeffect2t::postincrement:
+    case sideeffect2t::allockind::postincrement:
       theexpr.statement("postincrement");
       break;
-    case sideeffect2t::predecrement:
+    case sideeffect2t::allockind::predecrement:
       theexpr.statement("predecrement");
       break;
-    case sideeffect2t::postdecrement:
+    case sideeffect2t::allockind::postdecrement:
       theexpr.statement("postdecrement");
       break;
-    case sideeffect2t::old_snapshot:
+    case sideeffect2t::allockind::old_snapshot:
       theexpr.statement("old_snapshot");
       break;
-    case sideeffect2t::assigns_target:
+    case sideeffect2t::allockind::assigns_target:
       theexpr.statement("assigns_target");
       break;
     default:
@@ -3348,7 +3428,29 @@ exprt migrate_expr_back(const expr2tc &ref)
     codeexpr.statement(irep_idt("printf"));
     for (auto const &it : ref2.operands)
       codeexpr.operands().push_back(migrate_expr_back(it));
-    codeexpr.base_name(ref2.bs_name);
+    const char *bs_name = nullptr;
+    switch (ref2.kind)
+    {
+    case printf_kindt::PRINTF:
+      bs_name = "printf";
+      break;
+    case printf_kindt::FPRINTF:
+      bs_name = "fprintf";
+      break;
+    case printf_kindt::DPRINTF:
+      bs_name = "dprintf";
+      break;
+    case printf_kindt::SPRINTF:
+      bs_name = "sprintf";
+      break;
+    case printf_kindt::VFPRINTF:
+      bs_name = "vfprintf";
+      break;
+    case printf_kindt::SNPRINTF:
+      bs_name = "snprintf";
+      break;
+    }
+    codeexpr.base_name(bs_name);
     return codeexpr;
   }
   case expr2t::code_expression_id:
@@ -3467,6 +3569,59 @@ exprt migrate_expr_back(const expr2tc &ref)
 
     codeexpr.copy_to_operands(migrate_expr_back(ref2.operand));
     return codeexpr;
+  }
+  // V1 of the symbol-table V-track (esbmc/esbmc#4715): five expr2t kinds
+  // were uncovered in this switch. Adding back-arms here -- and matching
+  // forward arms in migrate_expr where needed -- lets unit/util/migrate.test.cpp
+  // assert the IREP2 round-trip property on each kind, which is the precondition
+  // for the value-side source-of-truth flip (V2). The arms are dead code in the
+  // pipeline today; they become live when V2 routes symbol values through them.
+  case expr2t::code_block_id:
+  {
+    const code_block2t &ref2 = to_code_block2t(ref);
+    exprt block("code");
+    block.statement("block");
+    for (auto const &op : ref2.operands)
+      block.copy_to_operands(migrate_expr_back(op));
+    return block;
+  }
+  case expr2t::code_cpp_catch_id:
+  {
+    const code_cpp_catch2t &ref2 = to_code_cpp_catch2t(ref);
+    exprt codeexpr("code");
+    codeexpr.statement("cpp-catch");
+    irept::subt &exceptions = codeexpr.add("exception_list").get_sub();
+    for (auto const &it : ref2.exception_list)
+      exceptions.emplace_back(it);
+    return codeexpr;
+  }
+  case expr2t::code_cpp_throw_decl_id:
+  {
+    const code_cpp_throw_decl2t &ref2 = to_code_cpp_throw_decl2t(ref);
+    exprt codeexpr("code");
+    codeexpr.statement("throw-decl");
+    irept::subt &throw_list = codeexpr.add("throw_list").get_sub();
+    for (auto const &it : ref2.exception_list)
+      throw_list.emplace_back(it);
+    return codeexpr;
+  }
+  case expr2t::code_cpp_throw_decl_end_id:
+  {
+    const code_cpp_throw_decl_end2t &ref2 = to_code_cpp_throw_decl_end2t(ref);
+    exprt codeexpr("code");
+    codeexpr.statement("throw_decl_end");
+    irept::subt &throw_list = codeexpr.add("throw_list").get_sub();
+    for (auto const &it : ref2.exception_list)
+      throw_list.emplace_back(it);
+    return codeexpr;
+  }
+  case expr2t::pointer_capability_id:
+  {
+    const pointer_capability2t &ref2 = to_pointer_capability2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt pointer_capval("pointer_capability", thetype);
+    pointer_capval.copy_to_operands(migrate_expr_back(ref2.ptr_obj));
+    return pointer_capval;
   }
   case expr2t::isinf_id:
   {

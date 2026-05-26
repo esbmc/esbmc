@@ -101,6 +101,131 @@ void goto_loopst::create_function_loop(
   it1->set_size(size + 1);
 }
 
+void goto_loopst::collect_loop_symbols(
+  const expr2tc &expr,
+  loopst::loop_varst &out) const
+{
+  if (is_nil_expr(expr))
+    return;
+
+  expr->foreach_operand(
+    [this, &out](const expr2tc &e) { collect_loop_symbols(e, out); });
+
+  if (is_symbol2t(expr) && check_var_name(expr))
+    out.insert(expr);
+}
+
+// Walk an assignment LHS, classifying each leaf symbol as modified or
+// merely read. See add_loop_var for the rationale; this is the same
+// distinction applied to the function-summary path.
+void goto_loopst::collect_lhs_symbols(
+  const expr2tc &expr,
+  loopst::loop_varst &modified,
+  loopst::loop_varst &unmodified) const
+{
+  if (is_nil_expr(expr))
+    return;
+
+  if (is_dereference2t(expr))
+  {
+    collect_loop_symbols(to_dereference2t(expr).value, unmodified);
+    return;
+  }
+  if (is_index2t(expr))
+  {
+    const index2t &idx = to_index2t(expr);
+    collect_lhs_symbols(idx.source_value, modified, unmodified);
+    collect_loop_symbols(idx.index, unmodified);
+    return;
+  }
+
+  expr->foreach_operand([this, &modified, &unmodified](const expr2tc &e) {
+    collect_lhs_symbols(e, modified, unmodified);
+  });
+
+  if (is_symbol2t(expr) && check_var_name(expr))
+    modified.insert(expr);
+}
+
+bool goto_loopst::compute_function_summary(
+  const irep_idt &fname,
+  std::vector<irep_idt> &in_progress,
+  function_summaryt &out)
+{
+  auto cached = function_summary_cache.find(fname);
+  if (cached != function_summary_cache.end())
+  {
+    // Union the cached summary into out.
+    out.modified.insert(
+      cached->second.modified.begin(), cached->second.modified.end());
+    out.unmodified.insert(
+      cached->second.unmodified.begin(), cached->second.unmodified.end());
+    return true;
+  }
+
+  auto it = goto_functions.function_map.find(fname);
+  if (it == goto_functions.function_map.end())
+  {
+    log_error("failed to find `{}' in function_map", id2string(fname));
+    abort();
+  }
+  if (!it->second.body_available)
+  {
+    function_summary_cache[fname] = function_summaryt{};
+    return true;
+  }
+
+  in_progress.push_back(fname);
+  bool complete = true;
+  function_summaryt local;
+
+  for (const auto &instr : it->second.body.instructions)
+  {
+    if (instr.is_assign())
+    {
+      collect_lhs_symbols(
+        to_code_assign2t(instr.code).target, local.modified, local.unmodified);
+    }
+    else if (instr.is_function_call())
+    {
+      const code_function_call2t &call = to_code_function_call2t(instr.code);
+      if (is_dereference2t(call.function))
+        continue;
+
+      collect_loop_symbols(call.ret, local.modified);
+
+      const irep_idt &callee = to_symbol2t(call.function).thename;
+      if (
+        std::find(in_progress.begin(), in_progress.end(), callee) !=
+        in_progress.end())
+      {
+        // Cycle cut: matches the legacy "do nothing on recursion" behaviour.
+        // Mark the result incomplete so we don't cache this summary — the
+        // missing recursive contributions are call-site dependent.
+        complete = false;
+        continue;
+      }
+
+      if (!compute_function_summary(callee, in_progress, local))
+        complete = false;
+    }
+    else if (instr.is_goto() || instr.is_assert() || instr.is_assume())
+    {
+      collect_loop_symbols(instr.guard, local.unmodified);
+    }
+  }
+
+  in_progress.pop_back();
+
+  // Fold local into out regardless of completeness.
+  out.modified.insert(local.modified.begin(), local.modified.end());
+  out.unmodified.insert(local.unmodified.begin(), local.unmodified.end());
+
+  if (complete)
+    function_summary_cache[fname] = std::move(local);
+  return complete;
+}
+
 void goto_loopst::get_modified_variables(
   goto_programt::instructionst::iterator instruction,
   function_loopst::iterator loop,
@@ -113,7 +238,6 @@ void goto_loopst::get_modified_variables(
   }
   else if (instruction->is_function_call())
   {
-    // Functions are a bit tricky
     code_function_call2t &function_call =
       to_code_function_call2t(instruction->code);
 
@@ -124,49 +248,29 @@ void goto_loopst::get_modified_variables(
     // First, add its return
     add_loop_var(*loop, function_call.ret, true);
 
-    // The run over the function body and get the modified variables there
-    irep_idt &identifier = to_symbol2t(function_call.function).thename;
+    const irep_idt &identifier = to_symbol2t(function_call.function).thename;
 
-    // This means recursion, do nothing
+    // This means recursion, do nothing — matches legacy behaviour.
     if (
       std::find(function_names.begin(), function_names.end(), identifier) !=
       function_names.end())
       return;
 
-    // We didn't entered this function yet, so add it to the list
-    function_names.push_back(identifier);
-
-    // find code in function map
-    goto_functionst::function_mapt::iterator it =
-      goto_functions.function_map.find(identifier);
-
-    if (it == goto_functions.function_map.end())
-    {
-      log_error("failed to find `{}' in function_map", id2string(identifier));
-      abort();
-    }
-
-    // Avoid iterating over functions that don't have a body
-    if (!it->second.body_available)
-      return;
-
-    for (goto_programt::instructionst::iterator head =
-           it->second.body.instructions.begin();
-         head != it->second.body.instructions.end();
-         ++head)
-    {
-      get_modified_variables(head, loop, function_names);
-    }
+    // Compute (or fetch the cached) summary of the callee. Two loops that
+    // both call the same helper now share the helper's per-symbol set
+    // instead of re-walking the helper from scratch.
+    function_summaryt summary;
+    compute_function_summary(identifier, function_names, summary);
+    for (const auto &v : summary.modified)
+      loop->add_modified_var_to_loop(v);
+    for (const auto &v : summary.unmodified)
+      loop->add_unmodified_var_to_loop(v);
   }
   else if (
     instruction->is_goto() || instruction->is_assert() ||
     instruction->is_assume())
   {
     add_loop_var(*loop, instruction->guard, false);
-  }
-  else if (instruction->is_end_function())
-  {
-    function_names.pop_back();
   }
 }
 
@@ -177,6 +281,27 @@ void goto_loopst::add_loop_var(
 {
   if (is_nil_expr(expr))
     return;
+
+  // When walking an assign LHS, only the storage being written counts as
+  // modified; sub-expressions used to *locate* that storage are reads.
+  //   `*p = ...`        — pointer `p` is read, the pointee is modified
+  //   `arr[i] = ...`    — index `i` is read, `arr` element is modified
+  //   `s.f = ...`       — struct `s` storage is modified
+  // Without this distinction `*Var_Ptr = ...` adds `Var_Ptr` to the loop's
+  // modified set, which then causes the inductive step to havoc the
+  // pointer at loop entry — unsound if the loop never reassigns it.
+  if (is_modified && is_dereference2t(expr))
+  {
+    add_loop_var(loop, to_dereference2t(expr).value, false);
+    return;
+  }
+  if (is_modified && is_index2t(expr))
+  {
+    const index2t &idx = to_index2t(expr);
+    add_loop_var(loop, idx.source_value, true);
+    add_loop_var(loop, idx.index, false);
+    return;
+  }
 
   expr->foreach_operand([this, &loop, &is_modified](const expr2tc &e) {
     add_loop_var(loop, e, is_modified);

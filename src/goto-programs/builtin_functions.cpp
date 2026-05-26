@@ -568,7 +568,7 @@ void goto_convertt::do_function_call_symbol(
     abort();
   }
 
-  if (!symbol->type.is_code())
+  if (!symbol->get_type().is_code())
   {
     log_error(
       "Function `{}' type mismatch: expected code", id2string(identifier));
@@ -576,7 +576,7 @@ void goto_convertt::do_function_call_symbol(
 
   // If the symbol is not nil, i.e., the user defined the expected behavior of
   // the builtin function, we should honor the user function and call it
-  if (symbol->value.is_not_nil() && symbol->value.has_operands())
+  if (symbol->get_value().is_not_nil() && symbol->get_value().has_operands())
   {
     // insert function call
     code_function_callt function_call;
@@ -1404,9 +1404,9 @@ void goto_convertt::do_function_call_symbol(
   {
     symbolt new_symbol;
     new_symbol.name = "__ESBMC_unexpected";
-    new_symbol.type = arguments[0].type();
+    new_symbol.set_type(arguments[0].type());
     new_symbol.id = "c:@F@" + id2string(new_symbol.name);
-    new_symbol.value = arguments[0].op0().op0();
+    new_symbol.set_value(arguments[0].op0().op0());
     new_name(new_symbol);
     return;
   }

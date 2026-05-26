@@ -1,9 +1,8 @@
 #include <util/goto_expr_factory.h>
 
-expr2tc create_value_expr(int value, type2tc type)
+expr2tc create_value_expr(int value, const type2tc &type)
 {
-  BigInt num(value);
-  return constant_int2tc(type, num);
+  return constant_int2tc(type, BigInt(value));
 }
 
 expr2tc create_lessthanequal_relation(expr2tc &lhs, expr2tc &rhs)

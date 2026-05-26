@@ -5,6 +5,7 @@
 #include <util/arith_tools.h>
 #include <util/expr_util.h>
 #include <util/python_types.h>
+#include <util/string_constant.h>
 #include <util/std_code.h>
 #include <util/std_expr.h>
 
@@ -97,6 +98,31 @@ exprt python_set::get_from_iterable(
   python_list list_helper(converter_, element);
   const type_handler &th = converter_.get_type_handler();
   const typet list_type = th.get_list_type();
+
+  // Fast path for concrete string literals to avoid symbolic loop expansion.
+  if (iterable.id() == "string-constant")
+  {
+    std::set<unsigned char> unique_chars;
+    const std::string literal =
+      id2string(to_string_constant(iterable).mb_value());
+    for (unsigned char ch : literal)
+    {
+      if (ch == '\0')
+        break;
+
+      if (!unique_chars.insert(ch).second)
+        continue;
+
+      const exprt elem_expr =
+        from_integer(BigInt(static_cast<unsigned int>(ch)), char_type());
+      exprt set_push_func_call =
+        list_helper.build_push_list_call(set_symbol, element, elem_expr);
+      converter_.add_instruction(set_push_func_call);
+      list_helper.add_type_info(set_id, std::string(), elem_expr.type());
+    }
+
+    return symbol_expr(set_symbol);
+  }
 
   // Determine length expression for the iterable
   exprt length_expr;
@@ -325,7 +351,7 @@ exprt python_set::get_from_iterable(
       contains_call.function() = symbol_expr(*contains_func);
       contains_call.lhs() = symbol_expr(contains_result);
       contains_call.arguments().push_back(
-        set_symbol.type.is_pointer()
+        set_symbol.get_type().is_pointer()
           ? symbol_expr(set_symbol)
           : address_of_exprt(symbol_expr(set_symbol)));
 
@@ -371,7 +397,7 @@ exprt python_set::get_from_iterable(
       side_effect_expr_function_callt push_call;
       push_call.function() = symbol_expr(*push_obj_func);
       push_call.arguments().push_back(
-        set_symbol.type.is_pointer()
+        set_symbol.get_type().is_pointer()
           ? symbol_expr(set_symbol)
           : address_of_exprt(symbol_expr(set_symbol)));
       push_call.arguments().push_back(symbol_expr(*elem_obj_sym));

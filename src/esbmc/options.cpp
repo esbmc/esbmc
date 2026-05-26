@@ -592,6 +592,9 @@ const struct group_opt_templ all_cmd_options[] = {
     {"uninitialised-vars-check",
      NULL,
      "Enable check for reads of uninitialised local variables (CWE-457)"},
+    {"unchecked-return-value-check",
+     NULL,
+     "Enable check for unchecked return values of fallible calls (CWE-252)"},
     {"volatile-check", NULL, "Enable check for volatile variable"},
     {"stack-limit",
      boost::program_options::value<int>()->default_value(-1)->value_name(

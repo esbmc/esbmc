@@ -66,7 +66,7 @@ public:
     smt_convt *ctx,
     smt_astt value,
     unsigned int idx,
-    expr2tc idx_expr = expr2tc()) const override;
+    const expr2tc &idx_expr = expr2tc()) const override;
   smt_astt select(smt_convt *ctx, const expr2tc &idx) const override;
 
   smt_astt eq_fixedsize(smt_convt *ctx, const array_ast *other) const;
