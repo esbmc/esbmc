@@ -422,9 +422,41 @@ void goto_symext::symex_assign(
             type2tc nullptrtype = pointer_type2tc(lhs->type);
             obj_ptr = symbol2tc(nullptrtype, "NULL");
           }
-          else if (!entry.second.offset_is_set)
+          else if (!entry.second.offset_is_set || entry.second.offset == 0)
           {
             obj_ptr = address_of2tc(lhs->type, obj);
+          }
+          else if (
+            is_array_type(obj) &&
+            is_scalar_type(to_array_type(obj->type).subtype))
+          {
+            // Offset is in bytes; convert it to an element index so the
+            // SMT encoding doesn't treat the integer as pointer
+            // arithmetic on the (likely-pointer) lhs type (which scales
+            // by sizeof(lhs subtype) and produces nonsense like &x+32
+            // for what should be &x[1]).
+            const type2tc &elt_t = to_array_type(obj->type).subtype;
+            const BigInt elt_sz_bits(elt_t->get_width());
+            const BigInt elt_sz_bytes = elt_sz_bits / 8;
+            if (
+              elt_sz_bytes != 0 &&
+              entry.second.offset % elt_sz_bytes == BigInt(0))
+            {
+              BigInt idx_val = entry.second.offset / elt_sz_bytes;
+              expr2tc idx = constant_int2tc(index_type2(), idx_val);
+              obj_ptr = address_of2tc(lhs->type, index2tc(elt_t, obj, idx));
+            }
+            else
+            {
+              // Offset doesn't divide evenly — fall back to byte
+              // arithmetic via add2tc; this still produces the wrong
+              // literal for pointer-typed lhs but at least matches
+              // what the deref-time pin does.
+              obj_ptr = add2tc(
+                lhs->type,
+                address_of2tc(lhs->type, obj),
+                gen_ulong(entry.second.offset.to_int64()));
+            }
           }
           else
           {
