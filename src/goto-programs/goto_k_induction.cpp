@@ -97,7 +97,7 @@ void goto_k_inductiont::convert_finite_loop(loopst &loop)
   make_nondet_assign(loop_head, loop);
 
   // Assume the loop entry condition before going into the loop
-  assume_loop_entry_cond_before_loop(loop_head, loop_exit, guards);
+  assume_loop_entry_cond_before_loop(loop_head, guards);
 
   // Check if the loop exit needs to be updated
   // We must point to the assume that was inserted in the previous
@@ -326,7 +326,6 @@ void goto_k_inductiont::remove_unrelated_loop_cond(
 
 void goto_k_inductiont::assume_loop_entry_cond_before_loop(
   goto_programt::targett &loop_head,
-  goto_programt::targett &loop_exit,
   const guardst &guards)
 {
   // Combine all per-branch loop-entry guards into one ASSUME and
@@ -365,15 +364,25 @@ void goto_k_inductiont::assume_loop_entry_cond_before_loop(
   // ASSUME on the iteration where the body's increment had pushed
   // the variable past the exit condition, again killing a natural
   // path.
+  //
+  // Iterate the collected guards directly instead of walking the
+  // instruction range and looking each one up by location_number.
+  // After make_nondet_assign's insert_swap, location_number does NOT
+  // travel with the instruction content (instructiont::swap exchanges
+  // code, type, guard, targets, ... but not location_number — see
+  // goto_program.h), so the iterator advance leaves loop_head pointing
+  // at the original IF carrying the freshly-inserted slot's default
+  // location_number=0 instead of the IF's original number. The
+  // walk-and-lookup approach then misses every guard, the combined
+  // entry condition comes out empty, and no ASSUME is inserted before
+  // the IF — losing the inductive-hypothesis pin and regressing
+  // post-loop assertions in loop-invariants, incremental-smt,
+  // witnesses_validate, and esbmc-solidity tests (issue #4846).
+  // Conjunction is commutative, so iteration order is irrelevant.
   guard2tc combined;
-  for (goto_programt::targett tmp_head = loop_head; tmp_head != loop_exit;
-       tmp_head++)
+  for (auto const &kv : guards)
   {
-    auto const g = guards.find(tmp_head->location_number);
-    if (g == guards.end())
-      continue;
-
-    expr2tc loop_cond = g->second.as_expr();
+    expr2tc loop_cond = kv.second.as_expr();
 
     if (is_nil_expr(loop_cond) || is_true(loop_cond))
       continue;

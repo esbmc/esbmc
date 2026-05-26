@@ -9,7 +9,7 @@
 class w_guardst
 {
 public:
-  w_guardst(contextt &_context) : context(_context)
+  explicit w_guardst(contextt &_context) : context(_context)
   {
   }
 

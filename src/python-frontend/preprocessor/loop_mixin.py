@@ -1119,12 +1119,8 @@ class LoopMixin:
         target = node.target
         body = []
         if isinstance(target, (ast.Tuple, ast.List)) and len(target.elts) == 2:
-            key_var_name = target.elts[0].id
-            val_var_name = target.elts[1].id
-            body.append(
-                self._create_var_subscript_assign(node, key_var_name, keys_var, index_var, key_ann))
-            body.append(
-                self._create_var_subscript_assign(node, val_var_name, vals_var, index_var, val_ann))
+            self._emit_items_unpack(node, body, target.elts[0], keys_var, index_var, key_ann)
+            self._emit_items_unpack(node, body, target.elts[1], vals_var, index_var, val_ann)
         else:
             # Single variable: d.items() yields (key, value) tuples per Python semantics.
             single_var = self._name_id_or_none(target) or "ESBMC_loop_var"
@@ -1332,6 +1328,34 @@ class LoopMixin:
         )
         self.ensure_all_locations(assign, node)
         return assign
+
+    def _emit_items_unpack(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+            self, node, body, target_elt, list_var, index_var, elem_ann):
+        """Append the assignment that binds the i-th key/value of d.items() to ``target_elt``.
+
+        Simple Name target — emits ``name: elem_ann = list_var[index_var]``.
+        Tuple/List target (nested unpacking, e.g. ``for (u, v), w in d.items():``) —
+        emits a destructuring Assign ``target_elt = list_var[index_var]`` so the
+        converter's normal tuple-unpacking-from-subscript path handles it.
+        """
+        name = self._name_id_or_none(target_elt)
+        if name is not None:
+            body.append(self._create_var_subscript_assign(node, name, list_var, index_var,
+                                                          elem_ann))
+            return
+
+        subscript = ast.Subscript(
+            value=ast.Name(id=list_var, ctx=ast.Load()),
+            slice=ast.Name(id=index_var, ctx=ast.Load()),
+            ctx=ast.Load(),
+        )
+        self.ensure_all_locations(subscript, node)
+        unpack = ast.Assign(
+            targets=[target_elt],
+            value=subscript,
+        )
+        self.ensure_all_locations(unpack, node)
+        body.append(unpack)
 
     def _create_dict_size_assertion(self, node, keys_var, length_var):
         """Create dict-size check to detect mutation during iteration."""
