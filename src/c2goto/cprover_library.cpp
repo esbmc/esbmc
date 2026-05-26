@@ -184,6 +184,7 @@ const static std::vector<std::string> python_c_models = {
   "__python_char_isdigit",
   "__python_str_isalpha",
   "__python_char_isalpha",
+  "__python_str_isalnum",
   "__python_str_isspace",
   "isspace",
   "__python_str_lstrip",
@@ -194,16 +195,21 @@ const static std::vector<std::string> python_c_models = {
   "__python_str_strip_chars",
   "__python_char_islower",
   "__python_str_islower",
+  "__python_str_isupper",
   "__python_char_lower",
   "__python_str_lower",
   "__python_char_upper",
   "__python_str_upper",
+  "__python_str_swapcase",
+  "__python_str_capitalize",
+  "__python_str_title",
   "__python_str_find",
   "__python_str_find_range",
   "__python_str_rfind",
   "__python_str_rfind_range",
   "__python_str_replace",
   "__python_str_split",
+  "__python_str_count",
   "__ESBMC_create_inf_obj",
   "__python_int",
   "__python_chr",
@@ -585,10 +591,12 @@ void add_cprover_library(contextt &context, const languaget *language)
     abort();
 
   // Traverse symbols and get dependencies from both their nested types and values
-  new_ctx.foreach_operand([&symbol_deps](const symbolt &s) {
-    generate_symbol_deps(s.id, s.get_value(), symbol_deps);
-    generate_symbol_deps(s.id, s.get_type(), symbol_deps);
-  });
+  new_ctx.foreach_operand(
+    [&symbol_deps](const symbolt &s)
+    {
+      generate_symbol_deps(s.id, s.get_value(), symbol_deps);
+      generate_symbol_deps(s.id, s.get_type(), symbol_deps);
+    });
 
   // Add two hacks; we might use either pthread_mutex_lock or the checked
   // variant; so if one version is used, pull in the other too.
@@ -615,21 +623,23 @@ void add_cprover_library(contextt &context, const languaget *language)
   // Solidity: uses dedicated sol64 binary → ALL symbols in new_ctx, no whitelist.
   bool uses_whitelist = language && language->id() == "python";
 
-  new_ctx.foreach_operand([&context,
-                           &store_ctx,
-                           &symbol_deps,
-                           &to_include,
-                           &is_solidity,
-                           &uses_whitelist](const symbolt &s) {
-    const symbolt *symbol = context.find_symbol(s.id);
-    if (
-      (is_solidity || uses_whitelist) ||
-      (symbol != nullptr && symbol->get_value().is_nil()))
+  new_ctx.foreach_operand(
+    [&context,
+     &store_ctx,
+     &symbol_deps,
+     &to_include,
+     &is_solidity,
+     &uses_whitelist](const symbolt &s)
     {
-      store_ctx.add(s);
-      ingest_symbol(s.id, symbol_deps, to_include);
-    }
-  });
+      const symbolt *symbol = context.find_symbol(s.id);
+      if (
+        (is_solidity || uses_whitelist) ||
+        (symbol != nullptr && symbol->get_value().is_nil()))
+      {
+        store_ctx.add(s);
+        ingest_symbol(s.id, symbol_deps, to_include);
+      }
+    });
 
   /* Now iterate through the dependencies that we know we want to add (due to ingest_symbol filter)
    * These will be symbols that didn't make it into store_ctx
@@ -683,19 +693,21 @@ void add_cprover_library(contextt &context, const languaget *language)
   // library. Only when linking to the libc library, we know that all unresolved extern symbols (those whose
   // value is nil) will stay unresolved. A normal linker would reject such files, but we provide some compatibility with
   // those and initialize the extern variables to nondet.
-  context.Foreach_operand([&context](symbolt &s) {
-    if (s.is_extern && !s.get_type().is_code())
+  context.Foreach_operand(
+    [&context](symbolt &s)
     {
-      log_debug(
-        "c2goto",
-        "extern variable with id {} not found, initializing value to "
-        "nondet! "
-        "This code would not compile with an actual compiler.",
-        s.id);
-      exprt value = exprt(
-        "sideeffect", get_complete_type(s.get_type(), namespacet{context}));
-      value.statement("nondet");
-      s.set_value(value);
-    }
-  });
+      if (s.is_extern && !s.get_type().is_code())
+      {
+        log_debug(
+          "c2goto",
+          "extern variable with id {} not found, initializing value to "
+          "nondet! "
+          "This code would not compile with an actual compiler.",
+          s.id);
+        exprt value = exprt(
+          "sideeffect", get_complete_type(s.get_type(), namespacet{context}));
+        value.statement("nondet");
+        s.set_value(value);
+      }
+    });
 }

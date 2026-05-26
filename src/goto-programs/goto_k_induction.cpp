@@ -226,11 +226,13 @@ bool contains_rec(const expr2tc &expr, const loopst::loop_varst &vars)
 
   // Otherwise recurse into operands and stop at the first match.
   bool res = false;
-  expr->foreach_operand([&vars, &res](const expr2tc &e) {
-    if (res || is_nil_expr(e))
-      return;
-    res = contains_rec(e, vars);
-  });
+  expr->foreach_operand(
+    [&vars, &res](const expr2tc &e)
+    {
+      if (res || is_nil_expr(e))
+        return;
+      res = contains_rec(e, vars);
+    });
   return res;
 }
 
@@ -283,15 +285,34 @@ void assume_loop_entry_cond_before_loop(
   //      after the first, so the natural exit on `cond` is never
   //      blocked by a re-firing entry-cond assume.
   //
+  // The legacy `insert_swap(tmp_head, ASSUME)` placement (one ASSUME
+  // per branch, swapped *at* the branch instruction) was unsound
+  // for the loop_head IF because insert_swap pins external jumps to
+  // the iterator: back-edges then landed on the ASSUME and re-fired
+  // it on every iteration, killing the natural-exit path in IS and
+  // producing vacuous UNSAT proofs (e.g. SV-COMP
+  // sll_of_sll_nondet_append-2). The earlier fix that combined the
+  // ASSUME and placed it *after* loop_head fixed SLL but over-
+  // constrained loops where the body modifies a loop-exit variable
+  // (e.g. `i++` in array_3-1): the back-edge re-evaluated the
+  // ASSUME on the iteration where the body's increment had pushed
+  // the variable past the exit condition, again killing a natural
+  // path.
+  //
   // Iterate the collected guards directly instead of walking the
   // instruction range and looking each one up by location_number.
   // After make_nondet_assign's insert_swap, location_number does NOT
-  // travel with the instruction (instructiont::swap does not exchange
-  // location_number), so the iterator advance leaves loop_head
-  // pointing at the original IF with location_number=0 instead of its
-  // original number. The walk-and-lookup approach then misses every
-  // guard. Conjunction is commutative, so iteration order is
-  // irrelevant.
+  // travel with the instruction content (instructiont::swap exchanges
+  // code, type, guard, targets, ... but not location_number — see
+  // goto_program.h), so the iterator advance leaves loop_head pointing
+  // at the original IF carrying the freshly-inserted slot's default
+  // location_number=0 instead of the IF's original number. The
+  // walk-and-lookup approach then misses every guard, the combined
+  // entry condition comes out empty, and no ASSUME is inserted before
+  // the IF — losing the inductive-hypothesis pin and regressing
+  // post-loop assertions in loop-invariants, incremental-smt,
+  // witnesses_validate, and esbmc-solidity tests (issue #4846).
+  // Conjunction is commutative, so iteration order is irrelevant.
   guard2tc combined;
   for (auto const &kv : guards)
   {

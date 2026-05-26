@@ -378,11 +378,12 @@ void instrument_intervals(
 void dump_intervals(
   std::ostringstream &out,
   const goto_functiont &goto_function,
-  const ait<interval_domaint> &interval_analysis)
+  [[maybe_unused]] const ait<interval_domaint> &interval_analysis)
 {
   forall_goto_program_instructions (i_it, goto_function.body)
   {
-    auto print_vars = [&out, &i_it](const auto &map) {
+    [[maybe_unused]] auto print_vars = [&out, &i_it](const auto &map)
+    {
       for (const auto &interval : map)
       {
         // "state,var,min,max,bot,top";

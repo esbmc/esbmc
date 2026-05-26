@@ -29,14 +29,14 @@ void __ESBMC_set_thread_internal_data(
 #define __ESBMC_rwlock_writer(a) ((a)->__writer)
 
 /* Global tracking data. Should all initialize to 0 / false */
-__attribute__((annotate("__ESBMC_inf_size")))
-_Bool __ESBMC_pthread_thread_running[1];
+__attribute__((
+  annotate("__ESBMC_inf_size"))) _Bool __ESBMC_pthread_thread_running[1];
 
-__attribute__((annotate("__ESBMC_inf_size")))
-_Bool __ESBMC_pthread_thread_ended[1];
+__attribute__((
+  annotate("__ESBMC_inf_size"))) _Bool __ESBMC_pthread_thread_ended[1];
 
-__attribute__((annotate("__ESBMC_inf_size")))
-_Bool __ESBMC_pthread_thread_detach[1];
+__attribute__((
+  annotate("__ESBMC_inf_size"))) _Bool __ESBMC_pthread_thread_detach[1];
 
 __attribute__((
   annotate("__ESBMC_inf_size"))) void *__ESBMC_pthread_end_values[1];
@@ -55,8 +55,8 @@ unsigned short int __ESBMC_blocked_threads_count = 0;
  *   cancel_requested = false
  *   cancelstate      = PTHREAD_CANCEL_ENABLE  (0)
  *   canceltype       = PTHREAD_CANCEL_DEFERRED (0) */
-__attribute__((annotate("__ESBMC_inf_size")))
-_Bool __ESBMC_pthread_cancel_requested[1];
+__attribute__((
+  annotate("__ESBMC_inf_size"))) _Bool __ESBMC_pthread_cancel_requested[1];
 
 __attribute__((
   annotate("__ESBMC_inf_size"))) int __ESBMC_pthread_cancelstate[1];
@@ -361,21 +361,19 @@ __ESBMC_HIDE:;
 int pthread_join_noswitch(pthread_t thread, void **retval)
 {
 __ESBMC_HIDE:;
-  pthread_testcancel();
   __ESBMC_atomic_begin();
-
-  // If the other thread hasn't ended, assume false, because further progress
-  // isn't going to be made. Wait for an interleaving where this is true
-  // instead. This function isn't designed for deadlock detection.
-  _Bool ended = __ESBMC_pthread_thread_ended[(int)thread];
-  __ESBMC_assume(ended);
-
-  // Fetch exit code
-  if (retval != NULL)
+  pthread_t self = __ESBMC_get_thread_id();
+  _Bool cancel = __ESBMC_pthread_cancel_requested[self] &&
+                 __ESBMC_pthread_cancelstate[self] == PTHREAD_CANCEL_ENABLE;
+  if (cancel)
+  {
+    __ESBMC_pthread_thread_ended[(int)thread] = 1;
+    pthread_exit(PTHREAD_CANCELED);
+  }
+  __ESBMC_assume(__ESBMC_pthread_thread_ended[(int)thread]);
+  if (retval)
     *retval = __ESBMC_pthread_end_values[(int)thread];
-
   __ESBMC_atomic_end();
-
   return 0;
 }
 

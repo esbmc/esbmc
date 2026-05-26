@@ -50,14 +50,16 @@ static expr2tc transform_operands_if_changed(
 {
   expr2tc result = expr->clone();
   bool changed = false;
-  result->Foreach_operand([&](expr2tc &op) {
-    expr2tc new_op = transform(op);
-    if (new_op != op)
+  result->Foreach_operand(
+    [&](expr2tc &op)
     {
-      op = new_op;
-      changed = true;
-    }
-  });
+      expr2tc new_op = transform(op);
+      if (new_op != op)
+      {
+        op = new_op;
+        changed = true;
+      }
+    });
   return changed ? result : expr;
 }
 
@@ -149,12 +151,7 @@ symbolt *code_contractst::find_function_symbol(const std::string &function_name)
       candidate && candidate->get_type().is_code() &&
       id2string(candidate->name) == function_name)
     {
-      if (matched == nullptr)
-      {
-        matched = candidate;
-        matched_ids = id2string(it->first);
-      }
-      else
+      if (matched != nullptr)
       {
         matched_ids += ", " + id2string(it->first);
         log_error(
@@ -164,6 +161,8 @@ symbolt *code_contractst::find_function_symbol(const std::string &function_name)
           matched_ids);
         return nullptr;
       }
+      matched = candidate;
+      matched_ids = id2string(it->first);
     }
   }
   return matched;
@@ -441,9 +440,9 @@ static expr2tc inline_temporary_variables(
 
   // For all other expression types, recursively process operands
   expr2tc result = expr->clone();
-  result->Foreach_operand([&](expr2tc &op) {
-    op = inline_temporary_variables(op, function_body, assume_location);
-  });
+  result->Foreach_operand(
+    [&](expr2tc &op)
+    { op = inline_temporary_variables(op, function_body, assume_location); });
 
   return result;
 }
@@ -684,38 +683,40 @@ void code_contractst::havoc_static_globals(
   const locationt &location)
 {
   // Iterate over all symbols in context to find static lifetime globals
-  ns.get_context().foreach_operand([&dest, &location](const symbolt &s) {
-    // Skip functions, types, and non-lvalue symbols
-    if (s.get_type().is_code() || s.is_type || !s.lvalue)
-      return;
+  ns.get_context().foreach_operand(
+    [&dest, &location](const symbolt &s)
+    {
+      // Skip functions, types, and non-lvalue symbols
+      if (s.get_type().is_code() || s.is_type || !s.lvalue)
+        return;
 
-    // Only process static lifetime variables (globals and static locals)
-    if (!s.static_lifetime)
-      return;
+      // Only process static lifetime variables (globals and static locals)
+      if (!s.static_lifetime)
+        return;
 
-    // Skip internal ESBMC symbols
-    std::string sym_name = id2string(s.name);
-    if (sym_name.starts_with("__ESBMC_"))
-      return;
+      // Skip internal ESBMC symbols
+      std::string sym_name = id2string(s.name);
+      if (sym_name.starts_with("__ESBMC_"))
+        return;
 
-    // Build LHS symbol expression
-    type2tc global_type = migrate_symbol_type(s);
-    expr2tc lhs = symbol2tc(global_type, s.id);
+      // Build LHS symbol expression
+      type2tc global_type = migrate_symbol_type(s);
+      expr2tc lhs = symbol2tc(global_type, s.id);
 
-    // Do not assign nondeterministic values to pointers when value-set based
-    // symex objects are enabled, to be consistent with loop invariant havoc.
-    if (
-      config.options.get_bool_option("add-symex-value-sets") &&
-      is_pointer_type(lhs))
-      return;
+      // Do not assign nondeterministic values to pointers when value-set based
+      // symex objects are enabled, to be consistent with loop invariant havoc.
+      if (
+        config.options.get_bool_option("add-symex-value-sets") &&
+        is_pointer_type(lhs))
+        return;
 
-    // Generate nondeterministic value and create assignment
-    expr2tc rhs = gen_nondet(lhs->type);
-    goto_programt::targett t = dest.add_instruction(ASSIGN);
-    t->code = code_assign2tc(lhs, rhs);
-    t->location = location;
-    t->location.comment("contract havoc global");
-  });
+      // Generate nondeterministic value and create assignment
+      expr2tc rhs = gen_nondet(lhs->type);
+      goto_programt::targett t = dest.add_instruction(ASSIGN);
+      t->code = code_assign2tc(lhs, rhs);
+      t->location = location;
+      t->location.comment("contract havoc global");
+    });
 }
 
 void code_contractst::enforce_contracts(
@@ -1129,7 +1130,8 @@ goto_programt code_contractst::generate_checking_wrapper(
   auto add_contract_clause = [&wrapper, &location](
                                const expr2tc &clause,
                                const goto_program_instruction_typet inst_type,
-                               const std::string &comment) {
+                               const std::string &comment)
+  {
     if (!should_add_clause_instruction(clause, inst_type))
       return;
 
@@ -1619,9 +1621,9 @@ expr2tc code_contractst::replace_return_value_in_expr(
 
   // Recursively replace in all operands
   expr2tc new_expr = expr;
-  new_expr->Foreach_operand([this, &ret_val](expr2tc &op) {
-    op = replace_return_value_in_expr(op, ret_val);
-  });
+  new_expr->Foreach_operand(
+    [this, &ret_val](expr2tc &op)
+    { op = replace_return_value_in_expr(op, ret_val); });
 
   // After replacing __ESBMC_return_value, check if we can simplify typecasts
   // If a typecast was added to match __ESBMC_return_value's pointer type,
@@ -1674,9 +1676,9 @@ expr2tc code_contractst::replace_symbol_in_expr(
 
   // Recursively replace in all operands
   expr2tc result = expr->clone();
-  result->Foreach_operand([this, &old_symbol, &new_expr](expr2tc &op) {
-    op = replace_symbol_in_expr(op, old_symbol, new_expr);
-  });
+  result->Foreach_operand(
+    [this, &old_symbol, &new_expr](expr2tc &op)
+    { op = replace_symbol_in_expr(op, old_symbol, new_expr); });
 
   return result;
 }
@@ -1697,7 +1699,8 @@ expr2tc code_contractst::extract_struct_members_to_temps(
 
   // Recursive function to collect and replace member accesses
   std::function<expr2tc(const expr2tc &)> process_expr =
-    [&](const expr2tc &e) -> expr2tc {
+    [&](const expr2tc &e) -> expr2tc
+  {
     if (is_nil_expr(e))
       return e;
 
@@ -1850,9 +1853,9 @@ expr2tc code_contractst::replace_is_fresh_in_ensures_expr(
   }
 
   expr2tc new_expr = expr;
-  new_expr->Foreach_operand([this, &mappings](expr2tc &op) {
-    op = replace_is_fresh_in_ensures_expr(op, mappings);
-  });
+  new_expr->Foreach_operand(
+    [this, &mappings](expr2tc &op)
+    { op = replace_is_fresh_in_ensures_expr(op, mappings); });
 
   return new_expr;
 }
@@ -1993,9 +1996,8 @@ expr2tc code_contractst::replace_old_in_expr(
 
   // Recursively replace in all operands
   expr2tc new_expr = expr->clone();
-  new_expr->Foreach_operand([this, &snapshots](expr2tc &op) {
-    op = replace_old_in_expr(op, snapshots);
-  });
+  new_expr->Foreach_operand([this, &snapshots](expr2tc &op)
+                            { op = replace_old_in_expr(op, snapshots); });
 
   return new_expr;
 }
@@ -2037,9 +2039,8 @@ code_contractst::collect_old_snapshots_from_body(
           auto it = std::find_if(
             unique_exprs.begin(),
             unique_exprs.end(),
-            [&original_expr](const expr_info &info) {
-              return info.original_expr == original_expr;
-            });
+            [&original_expr](const expr_info &info)
+            { return info.original_expr == original_expr; });
 
           if (it != unique_exprs.end())
           {
@@ -2257,7 +2258,8 @@ code_contractst::materialize_ptr_deref_snapshots(
       // Pointer arithmetic (arr+idx, arr-off, ...): check both operands
       // arr[idx] compiles to *(arr+idx), so pointer_target = arr + idx.
       // We check whether the base operand is the param.
-      auto has_param_base = [&param_id](const expr2tc &e) -> bool {
+      auto has_param_base = [&param_id](const expr2tc &e) -> bool
+      {
         const expr2tc *lhs = nullptr;
         if (is_add2t(e))
           lhs = &to_add2t(e).side_1;
@@ -2289,7 +2291,8 @@ code_contractst::materialize_ptr_deref_snapshots(
     {
       // Recursively search for param_id symbol in an expression tree.
       std::function<bool(const expr2tc &)> contains_param =
-        [&](const expr2tc &e) -> bool {
+        [&](const expr2tc &e) -> bool
+      {
         if (!e)
           return false;
         if (is_symbol2t(e) && to_symbol2t(e).thename == param_id)
@@ -3006,9 +3009,9 @@ expr2tc code_contractst::fix_comparison_types(
   // and(or(equality(rv, 0), ...), equality(...))) are fully processed.
   if (is_and2t(expr) || is_or2t(expr))
     return transform_operands_if_changed(
-      expr, [this, &ret_val](const expr2tc &op) {
-        return fix_comparison_types(op, ret_val);
-      });
+      expr,
+      [this, &ret_val](const expr2tc &op)
+      { return fix_comparison_types(op, ret_val); });
 
   // Step 3: For all other expressions, return unchanged
   // We don't recursively process arbitrary expression trees to avoid infinite loops
@@ -3049,9 +3052,9 @@ expr2tc code_contractst::normalize_fp_add_in_ensures(const expr2tc &expr) const
   // For non-add expressions or non-floating-point types, process operands
   // but only one level deep to avoid recursion issues
   if (is_and2t(expr) || is_or2t(expr))
-    return transform_operands_if_changed(expr, [this](const expr2tc &op) {
-      return normalize_fp_add_in_ensures(op);
-    });
+    return transform_operands_if_changed(
+      expr,
+      [this](const expr2tc &op) { return normalize_fp_add_in_ensures(op); });
 
   // For comparison expressions, process both sides
   if (is_comp_expr(expr))
@@ -3419,7 +3422,8 @@ void code_contractst::generate_replacement_at_call(
                                const expr2tc &clause,
                                const goto_program_instruction_typet inst_type,
                                const std::string &comment,
-                               const std::string &property = "") {
+                               const std::string &property = "")
+  {
     if (!should_add_clause_instruction(clause, inst_type))
       return;
 

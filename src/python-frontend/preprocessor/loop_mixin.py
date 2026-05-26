@@ -1119,12 +1119,8 @@ class LoopMixin:
         target = node.target
         body = []
         if isinstance(target, (ast.Tuple, ast.List)) and len(target.elts) == 2:
-            key_var_name = target.elts[0].id
-            val_var_name = target.elts[1].id
-            body.append(
-                self._create_var_subscript_assign(node, key_var_name, keys_var, index_var, key_ann))
-            body.append(
-                self._create_var_subscript_assign(node, val_var_name, vals_var, index_var, val_ann))
+            self._emit_items_unpack(node, body, target.elts[0], keys_var, index_var, key_ann)
+            self._emit_items_unpack(node, body, target.elts[1], vals_var, index_var, val_ann)
         else:
             # Single variable: d.items() yields (key, value) tuples per Python semantics.
             single_var = self._name_id_or_none(target) or "ESBMC_loop_var"
@@ -1332,6 +1328,34 @@ class LoopMixin:
         )
         self.ensure_all_locations(assign, node)
         return assign
+
+    def _emit_items_unpack(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+            self, node, body, target_elt, list_var, index_var, elem_ann):
+        """Append the assignment that binds the i-th key/value of d.items() to ``target_elt``.
+
+        Simple Name target — emits ``name: elem_ann = list_var[index_var]``.
+        Tuple/List target (nested unpacking, e.g. ``for (u, v), w in d.items():``) —
+        emits a destructuring Assign ``target_elt = list_var[index_var]`` so the
+        converter's normal tuple-unpacking-from-subscript path handles it.
+        """
+        name = self._name_id_or_none(target_elt)
+        if name is not None:
+            body.append(self._create_var_subscript_assign(node, name, list_var, index_var,
+                                                          elem_ann))
+            return
+
+        subscript = ast.Subscript(
+            value=ast.Name(id=list_var, ctx=ast.Load()),
+            slice=ast.Name(id=index_var, ctx=ast.Load()),
+            ctx=ast.Load(),
+        )
+        self.ensure_all_locations(subscript, node)
+        unpack = ast.Assign(
+            targets=[target_elt],
+            value=subscript,
+        )
+        self.ensure_all_locations(unpack, node)
+        body.append(unpack)
 
     def _create_dict_size_assertion(self, node, keys_var, length_var):
         """Create dict-size check to detect mutation during iteration."""
@@ -2319,16 +2343,29 @@ class LoopMixin:
         return ast.Name(id="dict", ctx=ast.Load())
 
     def _has_heterogeneous_keys(self, dict_node):
-        """Return True if a dict literal has keys of more than one ESBMC-representable type.
+        """Return True if a dict literal needs per-key loop unrolling at iteration.
 
-        ESBMC stores list elements with a type-specific byte size.  When all
-        keys share the same type the retrieval is consistent; when they differ
-        (e.g. int=8 bytes vs str=strlen+1 bytes) reading with a single fixed
-        size causes an array-bounds violation.
+        Triggers on two cases:
+
+        * Mixed key types (e.g. ``{"a": 1, 2: "b"}``) — ESBMC stores keys in a
+          flat list with a type-specific byte size, so a single retrieval
+          stride cannot read both an ``int`` (8 bytes) and a ``str`` (variable
+          width) without tripping an array-bounds violation.
+
+        * Any tuple key (e.g. ``{(1, 2): 10}``) — the key is a struct rather
+          than a scalar, so when ``for k in d:`` is lowered to indexing the
+          synthesised keys list, the loop variable's runtime value is a
+          generic pointer.  Downstream destructuring (``u, v = k``) then fails
+          in ``converter_stmt.cpp`` with "Cannot unpack pointer".  Unrolling
+          inlines each tuple literal directly so the converter sees a struct.
         """
-        if not dict_node.keys or len(dict_node.keys) < 2:
+        if not dict_node.keys:
             return False
         key_types = [self._infer_dict_key_type(k) for k in dict_node.keys]
+        if "tuple" in key_types:
+            return True
+        if len(dict_node.keys) < 2:
+            return False
         return len(set(key_types)) > 1
 
     def _has_heterogeneous_values(self, dict_node):
@@ -2361,16 +2398,38 @@ class LoopMixin:
                 return "str"
         return "Any"
 
-    def _unroll_het_for(self, node, typed_elts):
+    def _unroll_het_for(self, node, typed_elts):  # pylint: disable=too-many-locals
         """Emit one typed assignment + one body copy per element.
 
         typed_elts — list of (type_str, ast_value_node) in iteration order.
 
-        The loop variable (node.target) is renamed to a unique per-iteration
-        symbol so that ESBMC never tries to hold two incompatible types in the
-        same IR symbol.
+        For a Name loop target the per-iteration symbol is renamed so ESBMC
+        never holds two incompatible types in the same IR symbol.  For a
+        Tuple/List loop target (e.g. ``for u, v in d:`` over a tuple-keyed
+        dict) we assign each key into the destructuring pattern directly —
+        the per-element types are uniform across iterations, so no rename
+        is needed and the converter handles the unpack through its normal
+        tuple-assignment path.
         """
-        target_name = node.target.id if isinstance(node.target, ast.Name) else "ESBMC_het_var"
+        target = node.target
+
+        if isinstance(target, (ast.Tuple, ast.List)):
+            result = []
+            for _type_str, value_node in typed_elts:
+                assign = ast.Assign(
+                    targets=[copy.deepcopy(target)],
+                    value=copy.deepcopy(value_node),
+                )
+                self.ensure_all_locations(assign, node)
+                ast.fix_missing_locations(assign)
+                result.append(assign)
+                for stmt in node.body:
+                    result.append(copy.deepcopy(stmt))
+            for stmt in result:
+                ast.fix_missing_locations(stmt)
+            return result
+
+        target_name = self._name_id_or_none(target) or "ESBMC_het_var"
 
         class _RenameVar(ast.NodeTransformer):
             """Replace every Load-context Name(old) with Name(new)."""
@@ -2424,6 +2483,8 @@ class LoopMixin:
                 return "str"
             if isinstance(key_node.value, int):
                 return "int"
+        if isinstance(key_node, ast.Tuple):
+            return "tuple"
         return "Any"
 
     def _infer_dict_value_annotation(self, value_node):

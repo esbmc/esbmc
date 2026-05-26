@@ -371,8 +371,7 @@ void goto_symext::symex_assign(
     is_ptr_havoc_lhs = lhs;
     expr2tc lhs_for_query = lhs;
     cur_state->rename(lhs_for_query);
-    cur_state->value_set.get_value_set(
-      lhs_for_query, is_ptr_havoc_pre_values);
+    cur_state->value_set.get_value_set(lhs_for_query, is_ptr_havoc_pre_values);
   }
 
   replace_nondet(lhs);
@@ -432,9 +431,8 @@ void goto_symext::symex_assign(
   if (!is_nil_expr(is_ptr_havoc_lhs) && !is_ptr_havoc_pre_values.empty())
   {
     expr2tc or_accuml;
-    auto add_disjunct = [&or_accuml](const expr2tc &eq) {
-      or_accuml = or_accuml ? or2tc(or_accuml, eq) : eq;
-    };
+    auto add_disjunct = [&or_accuml](const expr2tc &eq)
+    { or_accuml = or_accuml ? or2tc(or_accuml, eq) : eq; };
 
     bool aborted = false;
     for (const auto &v : is_ptr_havoc_pre_values)
@@ -1104,9 +1102,11 @@ void goto_symext::replace_nondet(expr2tc &expr)
   }
   else
   {
-    expr->Foreach_operand([this](expr2tc &e) {
-      if (!is_nil_expr(e))
-        replace_nondet(e);
-    });
+    expr->Foreach_operand(
+      [this](expr2tc &e)
+      {
+        if (!is_nil_expr(e))
+          replace_nondet(e);
+      });
   }
 }

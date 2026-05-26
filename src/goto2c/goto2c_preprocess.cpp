@@ -140,43 +140,45 @@ void goto2ct::sort_compound_types(namespacet &ns, std::list<typet> &types)
 void goto2ct::extract_symbol_tables()
 {
   // Going through the symbol table
-  ns.get_context().foreach_operand_in_order([this](const symbolt &s) {
-    // Skipping everything that appears in "esbmc_intrinsics.h"
-    // or with an empty location.
-    if (
-      s.location.file().as_string() == "esbmc_intrinsics.h" ||
-      s.location.as_string() == "")
-      return;
-
-    // Extracting the name of the function where this symbol is declared.
-    // The symbol will be considered to belong to global scope if
-    // the location function name is empty.
-    std::string sym_fun_name = s.location.function().as_string();
-
-    // This is a type definition
-    if (s.is_type)
+  ns.get_context().foreach_operand_in_order(
+    [this](const symbolt &s)
     {
-      if (sym_fun_name.empty())
-        global_types.push_back(s.get_type());
-      else
-        local_types[sym_fun_name].push_back(s.get_type());
-    }
-    // This is a function declaration
-    else if (s.get_type().id() == "code")
-      fun_decls.push_back(s);
-    // This is an extern variable
-    else if (s.is_extern)
-      extern_vars.push_back(s);
-    // This is a static variable
-    else if (s.static_lifetime)
-    {
-      // This is a global variable
-      if (sym_fun_name.empty())
-        global_vars.push_back(s);
-      else
-        local_static_vars[sym_fun_name].push_back(s);
-    }
-  });
+      // Skipping everything that appears in "esbmc_intrinsics.h"
+      // or with an empty location.
+      if (
+        s.location.file().as_string() == "esbmc_intrinsics.h" ||
+        s.location.as_string() == "")
+        return;
+
+      // Extracting the name of the function where this symbol is declared.
+      // The symbol will be considered to belong to global scope if
+      // the location function name is empty.
+      std::string sym_fun_name = s.location.function().as_string();
+
+      // This is a type definition
+      if (s.is_type)
+      {
+        if (sym_fun_name.empty())
+          global_types.push_back(s.get_type());
+        else
+          local_types[sym_fun_name].push_back(s.get_type());
+      }
+      // This is a function declaration
+      else if (s.get_type().id() == "code")
+        fun_decls.push_back(s);
+      // This is an extern variable
+      else if (s.is_extern)
+        extern_vars.push_back(s);
+      // This is a static variable
+      else if (s.static_lifetime)
+      {
+        // This is a global variable
+        if (sym_fun_name.empty())
+          global_vars.push_back(s);
+        else
+          local_static_vars[sym_fun_name].push_back(s);
+      }
+    });
 }
 
 // This methods tries to resolve one step in the chains of initializers.
@@ -349,7 +351,7 @@ void goto2ct::assign_scope_ids(goto_programt &goto_program)
         // to the list of scopes and clear the current scope.
         // Otherwise, just continue.
         // !!! Also probably need to check whether it == instructions.rend()
-        if (std::next(it)->type != DEAD && scope_syms_stack.back().size() > 0)
+        if (std::next(it)->type != DEAD)
         {
           scope_syms_stack.push_back({});
         }

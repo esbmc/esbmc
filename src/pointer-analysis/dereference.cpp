@@ -109,10 +109,12 @@ bool dereferencet::has_dereference(const expr2tc &expr) const
 
   // Check over each operand,
   bool result = false;
-  expr->foreach_operand([this, &result](const expr2tc &e) {
-    if (has_dereference(e))
-      result = true;
-  });
+  expr->foreach_operand(
+    [this, &result](const expr2tc &e)
+    {
+      if (has_dereference(e))
+        result = true;
+    });
 
   // If a derefing operand is found, return true.
   if (result == true)
@@ -189,11 +191,13 @@ void dereferencet::dereference_expr(expr2tc &expr, guard2tc &guard, modet mode)
   default:
   {
     // Recurse over the operands
-    expr->Foreach_operand([this, &guard, &mode](expr2tc &e) {
-      if (is_nil_expr(e))
-        return;
-      dereference_expr(e, guard, mode);
-    });
+    expr->Foreach_operand(
+      [this, &guard, &mode](expr2tc &e)
+      {
+        if (is_nil_expr(e))
+          return;
+        dereference_expr(e, guard, mode);
+      });
     break;
   }
   }
@@ -216,24 +220,26 @@ void dereferencet::dereference_guard_expr(
     // Take the current size of the guard, so that we can reset it later.
     guard2tc old_guards(guard);
 
-    expr->Foreach_operand([this, &guard, &expr](expr2tc &op) {
-      assert(is_bool_type(op));
-
-      // Handle any dereferences in this operand
-      if (has_dereference(op))
-        dereference_expr(op, guard, dereferencet::READ);
-
-      // Guard the next operand against this operand short circuiting us.
-      if (is_or2t(expr))
+    expr->Foreach_operand(
+      [this, &guard, &expr](expr2tc &op)
       {
-        expr2tc tmp = not2tc(op);
-        guard.add(tmp);
-      }
-      else
-      {
-        guard.add(op);
-      }
-    });
+        assert(is_bool_type(op));
+
+        // Handle any dereferences in this operand
+        if (has_dereference(op))
+          dereference_expr(op, guard, dereferencet::READ);
+
+        // Guard the next operand against this operand short circuiting us.
+        if (is_or2t(expr))
+        {
+          expr2tc tmp = not2tc(op);
+          guard.add(tmp);
+        }
+        else
+        {
+          guard.add(op);
+        }
+      });
 
     // Reset guard to where it was.
     guard = std::move(old_guards);
@@ -864,18 +870,21 @@ void dereferencet::deref_invalid_ptr(
 
 enum target_flags
 {
-  flag_src_scalar = 0,
-  flag_src_array = 1,
-  flag_src_struct = 2,
-  flag_src_union = 3,
+  // Each src/dst category and offset kind is a distinct bit so the case
+  // labels in build_reference_rec encode every combination uniquely, and
+  // never collapse to the same integer (which used to happen when several
+  // flags were defined as 0).
+  flag_src_scalar = 0x01,
+  flag_src_array = 0x02,
+  flag_src_struct = 0x04,
+  flag_src_union = 0x08,
 
-  flag_dst_scalar = 0,
-  flag_dst_array = 4,
-  flag_dst_struct = 8,
-  flag_dst_union = 0xC,
+  flag_dst_scalar = 0x10,
+  flag_dst_struct = 0x20,
+  flag_dst_union = 0x40,
 
-  flag_is_const_offs = 0x10,
-  flag_is_dyn_offs = 0,
+  flag_is_const_offs = 0x80,
+  flag_is_dyn_offs = 0x100,
 };
 
 /*
@@ -947,6 +956,8 @@ void dereferencet::build_reference_rec(
   int flags = 0;
   if (is_constant_int2t(offset))
     flags |= flag_is_const_offs;
+  else
+    flags |= flag_is_dyn_offs;
 
   // All accesses to code need no further construction
   if (is_code_type(value) || is_code_type(type))

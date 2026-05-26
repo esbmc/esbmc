@@ -360,7 +360,8 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       // Resolve `<base>.<attr>` after unwrapping Optional[T] / pointer-to-struct
       // / complex types. Returns nil if the attribute cannot be resolved.
       auto resolve_member_on_base =
-        [this](exprt base_expr, const std::string &attr_name) -> exprt {
+        [this](exprt base_expr, const std::string &attr_name) -> exprt
+      {
         typet base_type = base_expr.type();
         if (base_type.is_pointer())
           base_type = base_type.subtype();
@@ -536,8 +537,26 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         abort();
       }
 
-      // Handle module attribute access (e.g., math.inf)
-      if (is_imported_module(var_name))
+      // Handle module attribute access (e.g., math.inf) — unless the module
+      // name is shadowed by a local binding in the current scope (e.g. a
+      // parameter named `node` when `from node import Node` is in scope).
+      // Python's scoping rules give precedence to the local binding.
+      auto name_has_local_binding = [&](const std::string &name)
+      {
+        symbol_id sid = create_symbol_id();
+        sid.set_object(name);
+        if (find_symbol(sid.to_string()))
+          return true;
+        if (!current_func_name_.empty())
+        {
+          sid.set_function("");
+          if (find_symbol(sid.to_string()))
+            return true;
+        }
+        return false;
+      };
+
+      if (is_imported_module(var_name) && !name_has_local_binding(var_name))
       {
         std::string attr_name = element["attr"].get<std::string>();
         std::string module_path = imported_modules[var_name];
@@ -692,17 +711,19 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         symbolt *target_class_symbol = nullptr;
 
         // Search all class types in the symbol table to find one that has this attribute
-        symbol_table_.foreach_operand_in_order([&](const symbolt &s) {
-          if (target_class_symbol)
-            return; // Already found
-
-          if (s.id.as_string().find("tag-") == 0 && s.get_type().is_struct())
+        symbol_table_.foreach_operand_in_order(
+          [&](const symbolt &s)
           {
-            const struct_typet &struct_type = to_struct_type(s.get_type());
-            if (struct_type.has_component(attr_name))
-              target_class_symbol = const_cast<symbolt *>(&s);
-          }
-        });
+            if (target_class_symbol)
+              return; // Already found
+
+            if (s.id.as_string().find("tag-") == 0 && s.get_type().is_struct())
+            {
+              const struct_typet &struct_type = to_struct_type(s.get_type());
+              if (struct_type.has_component(attr_name))
+                target_class_symbol = const_cast<symbolt *>(&s);
+            }
+          });
 
         if (!target_class_symbol)
         {
@@ -754,16 +775,18 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       if (!class_symbol)
       {
         std::string fallback_class_id;
-        symbol_table_.foreach_operand_in_order([&](const symbolt &s) {
-          if (!fallback_class_id.empty())
-            return;
-          if (s.id.as_string().find("tag-") == 0 && s.get_type().is_struct())
+        symbol_table_.foreach_operand_in_order(
+          [&](const symbolt &s)
           {
-            const struct_typet &st = to_struct_type(s.get_type());
-            if (st.has_component(attr_name))
-              fallback_class_id = s.id.as_string();
-          }
-        });
+            if (!fallback_class_id.empty())
+              return;
+            if (s.id.as_string().find("tag-") == 0 && s.get_type().is_struct())
+            {
+              const struct_typet &st = to_struct_type(s.get_type());
+              if (st.has_component(attr_name))
+                fallback_class_id = s.id.as_string();
+            }
+          });
         if (!fallback_class_id.empty())
           class_symbol = symbol_table_.find_symbol(fallback_class_id);
       }
@@ -796,7 +819,8 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       // type, so own it locally and set it back at the end.
       typet class_symbol_type = class_symbol->get_type();
       struct_typet &class_type = static_cast<struct_typet &>(class_symbol_type);
-      auto build_member_expr_from_class = [&](const typet &attr_type) -> exprt {
+      auto build_member_expr_from_class = [&](const typet &attr_type) -> exprt
+      {
         typet clean_type = clean_attribute_type(attr_type);
         exprt base = symbol_expr(*symbol);
         typet base_type = base.type();
@@ -1151,7 +1175,8 @@ static exprt make_slice_struct_expr(
   // lowered to a check of those flags in converter_compare.cpp
   // (try_lower_slice_member_is_none). See github #4543.
   auto lower_int =
-    [&](const nlohmann::json *node, const typet &field_type) -> exprt {
+    [&](const nlohmann::json *node, const typet &field_type) -> exprt
+  {
     if (!node || node->is_null())
       return side_effect_expr_nondett(field_type);
     exprt value = conv.get_expr(*node);
@@ -1160,9 +1185,8 @@ static exprt make_slice_struct_expr(
     return value;
   };
 
-  auto present_flag = [](const nlohmann::json *node) {
-    return node && !node->is_null();
-  };
+  auto present_flag = [](const nlohmann::json *node)
+  { return node && !node->is_null(); };
 
   struct_exprt slice_expr(struct_type);
   for (const auto &component : struct_type.components())
