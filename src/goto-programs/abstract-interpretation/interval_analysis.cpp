@@ -382,8 +382,7 @@ void dump_intervals(
 {
   forall_goto_program_instructions (i_it, goto_function.body)
   {
-    [[maybe_unused]] auto print_vars = [&out, &i_it](const auto &map)
-    {
+    [[maybe_unused]] auto print_vars = [&out, &i_it](const auto &map) {
       for (const auto &interval : map)
       {
         // "state,var,min,max,bot,top";

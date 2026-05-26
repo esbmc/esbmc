@@ -646,7 +646,7 @@ public:
           ? std::shared_ptr<state_hashing_level2t>(
               new state_hashing_level2t(*this))
           : std::shared_ptr<ex_state_level2t>(new ex_state_level2t(*this)),
-        options) {};
+        options){};
 
   dfs_execution_statet(const dfs_execution_statet &ref) = default;
   std::shared_ptr<execution_statet> clone() const override;
