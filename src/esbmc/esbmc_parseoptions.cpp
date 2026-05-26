@@ -1886,9 +1886,6 @@ tvt esbmc_parseoptionst::is_inductive_step_violated(
   options.set_option("no-unwinding-assertions", true);
   options.set_option("partial-loops", true);
   options.set_option("unwind", integer2string(k_step));
-  // Clear any stale vacuous-UNSAT flag from a previous BMC iteration
-  // before running. bmc.cpp sets it when remaining_claims hits 0.
-  options.set_option("bmc-vacuous-unsat", false);
 
   bmct bmc(goto_functions, options, context);
 
@@ -1913,17 +1910,6 @@ tvt esbmc_parseoptionst::is_inductive_step_violated(
     break;
 
   case smt_convt::P_UNSATISFIABLE:
-    // Distinguish a real UNSAT (every termination claim was actually
-    // discharged) from a vacuous UNSAT (zero claims remained after
-    // simplification). Only the former is a non-termination witness;
-    // the latter says "the encoded slice carried no termination
-    // claim", which is inconclusive — typically the program's loops
-    // live in body.hide library helpers that the marker pass skips.
-    // Without this gate, programs like main() { memset(...); } get
-    // a wrong-false verdict because IS trivially returns UNSAT on
-    // zero VCCs.
-    if (options.get_bool_option("bmc-vacuous-unsat"))
-      return tvt(tvt::TV_UNKNOWN);
     log_result(
       "\nSolution found by the inductive step "
       "(k = {:d})",

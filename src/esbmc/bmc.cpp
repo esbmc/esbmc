@@ -1591,12 +1591,6 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
           options, empty_reached, empty_mul_reached, empty_pytest, empty_ctest);
       }
 
-      // Flag the UNSAT-by-vacuity case so callers that care (the
-      // termination inductive-step layer in particular) can downgrade
-      // the verdict to UNKNOWN. A real solver UNSAT on a non-empty
-      // claim set proves the property; UNSAT on zero claims proves
-      // nothing — there was simply nothing to falsify.
-      options.set_option("bmc-vacuous-unsat", true);
       return smt_convt::P_UNSATISFIABLE;
     }
 
