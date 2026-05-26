@@ -109,10 +109,24 @@ void inject_noop_cycle_assumes(
     if (!target_in_loop)
       continue;
 
-    // Walk from the IF's target to the back-edge via fall-through
-    // (i.e., the path control will take if the IF is taken). If we
-    // see any state-modifying instruction, this IF's taken path
-    // doesn't preserve state — not a no-op cycle.
+    // Walk from the IF's target toward the back-edge, following
+    // control flow. A genuine no-op cycle's taken path must reach the
+    // back-edge (loop_exit) while preserving state. Two ways the path
+    // can fail to be a no-op cycle:
+    //
+    //   1. It crosses a state-modifying instruction (ASSIGN / call) —
+    //      the cycle changes state, so it isn't a fixed point.
+    //
+    //   2. It takes an unconditional forward GOTO whose target lies
+    //      *past* the back-edge — that's an exit edge (e.g. a `break`
+    //      lowered to `GOTO loop_end`). Taking it leaves the loop, the
+    //      opposite of a no-op cycle. The earlier target_in_loop check
+    //      only confirms the IF's *immediate* target is physically in
+    //      range; it doesn't follow a subsequent jump out, which is
+    //      exactly the soft_float `if (m >= cap) break;` shape that
+    //      otherwise gets a contradictory ASSUME(m >= cap) injected
+    //      against the entry condition m < cap (vacuous IS-UNSAT,
+    //      spurious non-termination).
     bool noop = true;
     for (auto q = target; q != std::next(loop_exit); ++q)
     {
@@ -120,6 +134,27 @@ void inject_noop_cycle_assumes(
       {
         noop = false;
         break;
+      }
+      if (q->is_goto() && !q->is_backwards_goto() && q->targets.size() == 1)
+      {
+        // Does this forward GOTO jump past the back-edge (i.e. out of
+        // the loop)? Scan [std::next(q), loop_exit]: if the target is
+        // not found in that range, it lies beyond loop_exit — an exit.
+        auto gt = *q->targets.begin();
+        bool stays_in_loop = false;
+        for (auto r = std::next(q); r != std::next(loop_exit); ++r)
+        {
+          if (r == gt)
+          {
+            stays_in_loop = true;
+            break;
+          }
+        }
+        if (!stays_in_loop)
+        {
+          noop = false;
+          break;
+        }
       }
     }
     if (!noop)
