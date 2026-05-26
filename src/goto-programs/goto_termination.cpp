@@ -467,18 +467,33 @@ void build_abort_summary(
   }
 }
 
-/// Place an ASSERT(false) marker immediately before every direct
-/// FUNCTION_CALL to an Aborts callee (abort / exit / __assert_fail
-/// / __VERIFIER_error / user-level wrappers around them) that sits
-/// inside a loop body. Without this, programs whose only real loop
-/// exit is via an abort call produce a vacuous IS counterexample —
-/// the natural-exit marker placed by insert_markers_for_function is
-/// statically unreachable from the back-edge, so IS sees no marker
-/// at all and reports non-termination.
+/// Place termination markers immediately before two kinds of
+/// FUNCTION_CALL instructions inside a loop body:
+///
+///   * Direct calls to an Aborts callee (abort/exit/__assert_fail/
+///     __VERIFIER_error/user-level wrappers around them): emit
+///     ASSERT(false). The call unconditionally exits, so the marker
+///     fires unconditionally on the abort path.
+///
+///   * Calls to `__VERIFIER_assert(cond)`: emit ASSERT(cond). The
+///     SV-COMP wrapper aborts iff cond is false, so the marker fires
+///     exactly when the abort path would be taken. The call-site
+///     argument is already expressed in caller-local terms, so no
+///     parameter substitution is needed — we don't inspect the
+///     wrapper's body at all. The wrapper's SV-COMP definition is
+///     fixed; recognising it by name is sound across the entire
+///     benchmark set.
+///
+/// Without these markers, programs whose only real loop exit is via
+/// the call would produce a vacuous IS counterexample — the natural-
+/// exit marker placed by insert_markers_for_function lives past the
+/// loop's `IF !1 GOTO exit`, statically unreachable from the back
+/// edge. IS would see no marker on any unwinding and report non-
+/// termination.
 ///
 /// The original FUNCTION_CALL is left in place; the marker just
-/// precedes it. Marker is flagged inductive_step_instruction so
-/// BC/FC skip it, matching the natural-exit markers.
+/// precedes it. Markers are flagged inductive_step_instruction so
+/// BC/FC skip them, matching the natural-exit markers.
 void insert_abort_call_markers_for_function(
   const irep_idt &function_name,
   goto_functionst &goto_functions,
@@ -508,11 +523,18 @@ void insert_abort_call_markers_for_function(
     [](const loop_range &a, const loop_range &b)
     { return a.back->location_number > b.back->location_number; });
 
+  // Each mark records the call to precede and the guard expression to
+  // assert. A nil guard means "ASSERT(false)" (unconditional, for
+  // direct Aborts calls); any other guard becomes "ASSERT(guard)".
+  struct mark_pointt
+  {
+    goto_programt::targett at;
+    expr2tc guard;
+  };
+
   for (const auto &r : ranges)
   {
-    // Snapshot the call instructions to mark; inserting before each
-    // shifts the list but the snapshotted iterators stay valid.
-    std::vector<goto_programt::targett> marks;
+    std::vector<mark_pointt> marks;
     for (auto p = r.head; p != std::next(r.back); ++p)
     {
       if (!p->is_function_call())
@@ -521,20 +543,44 @@ void insert_abort_call_markers_for_function(
       if (!is_symbol2t(call.function))
         continue;
       const irep_idt &callee = to_symbol2t(call.function).thename;
+
       if (aborts.count(callee))
-        marks.push_back(p);
+      {
+        marks.push_back({p, expr2tc()}); // unconditional ASSERT(false)
+        continue;
+      }
+
+      // __VERIFIER_assert(cond): conditional marker ASSERT(cond).
+      // SV-COMP defines this wrapper as `if (!cond) abort();`. The
+      // call-site argument is the caller's expression for `cond` —
+      // no substitution needed. For integer cond (SV-COMP's typical
+      // `int cond`), coerce to bool via `cond != 0` so the assertion
+      // guard has bool type downstream in the solver.
+      const std::string &name = id2string(callee);
+      if (name == "__VERIFIER_assert" || name == "c:@F@__VERIFIER_assert")
+      {
+        if (call.operands.empty() || is_nil_expr(call.operands[0]))
+          continue;
+        expr2tc guard = call.operands[0];
+        if (!is_bool_type(guard->type))
+          guard = notequal2tc(guard, gen_zero(guard->type));
+        marks.push_back({p, guard});
+      }
     }
 
-    for (auto p : marks)
+    for (const auto &m : marks)
     {
       goto_programt::instructiont marker;
       marker.type = ASSERT;
-      marker.guard = gen_false_expr();
-      marker.location = p->location;
+      if (is_nil_expr(m.guard))
+        marker.guard = gen_false_expr();
+      else
+        marker.guard = m.guard;
+      marker.location = m.at->location;
       marker.location.comment("termination abort-call marker");
       marker.function = function_name;
       marker.inductive_step_instruction = true;
-      body.instructions.insert(p, marker);
+      body.instructions.insert(m.at, marker);
     }
   }
 }
