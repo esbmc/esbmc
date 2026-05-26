@@ -2142,7 +2142,19 @@ exprt string_handler::handle_str_join(const nlohmann::json &call_json)
         "NameError: name '" + var_name + "' is not defined");
 
     if (!var_decl.contains("value"))
-      throw std::runtime_error("join() requires a list");
+    {
+      // Variable is declared but its initialiser is opaque (e.g. an
+      // unannotated parameter, or a function call result we cannot
+      // fold). The legacy abort gave up the whole call; fall back to a
+      // sound nondet `char *` instead so GOTO conversion proceeds.
+      // Same pattern as the other str.*() handler fallbacks.
+      log_debug(
+        "python-string",
+        "join() variable '{}' has no foldable initialiser: nondet fallback",
+        var_name);
+      return build_nondet_string_fallback(
+        converter_.get_location_from_decl(call_json));
+    }
 
     list_node = &var_decl["value"];
   }
@@ -2233,7 +2245,18 @@ exprt string_handler::handle_str_join(const nlohmann::json &call_json)
   if (
     !list_node || !list_node->contains("_type") ||
     (*list_node)["_type"] != "List" || !list_node->contains("elts"))
-    throw std::runtime_error("join() argument must be a list of strings");
+  {
+    // Iterable arg isn't a literal `List` and couldn't be folded (e.g.
+    // a `sorted(...)`, list comprehension, or unannotated parameter).
+    // Fall back to a sound nondet `char *` instead of aborting GOTO
+    // conversion. Same pattern as PRs #4814 (splitlines), #4815
+    // (partition/format), #4818..#4826 (str.* runtime models).
+    log_debug(
+      "python-string",
+      "join() iterable arg not a foldable List literal: nondet fallback");
+    return build_nondet_string_fallback(
+      converter_.get_location_from_decl(call_json));
+  }
 
   // Get the list elements from the AST
   const auto &elements = (*list_node)["elts"];
