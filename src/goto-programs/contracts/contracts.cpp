@@ -149,12 +149,7 @@ symbolt *code_contractst::find_function_symbol(const std::string &function_name)
       candidate && candidate->get_type().is_code() &&
       id2string(candidate->name) == function_name)
     {
-      if (matched == nullptr)
-      {
-        matched = candidate;
-        matched_ids = id2string(it->first);
-      }
-      else
+      if (matched != nullptr)
       {
         matched_ids += ", " + id2string(it->first);
         log_error(
@@ -164,6 +159,8 @@ symbolt *code_contractst::find_function_symbol(const std::string &function_name)
           matched_ids);
         return nullptr;
       }
+      matched = candidate;
+      matched_ids = id2string(it->first);
     }
   }
   return matched;

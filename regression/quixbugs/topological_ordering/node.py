@@ -6,13 +6,3 @@ class Node:
         self.predecessors = predecessors
         self.incoming_nodes = incoming_nodes
         self.outgoing_nodes = outgoing_nodes
-
-    def successor(self):
-        return self.successor
-
-    def successors(self):
-        return self.successors
-
-    def predecessors(self):
-        return self.predecessors
-
