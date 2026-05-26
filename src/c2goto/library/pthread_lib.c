@@ -361,21 +361,19 @@ __ESBMC_HIDE:;
 int pthread_join_noswitch(pthread_t thread, void **retval)
 {
 __ESBMC_HIDE:;
-  pthread_testcancel();
   __ESBMC_atomic_begin();
-
-  // If the other thread hasn't ended, assume false, because further progress
-  // isn't going to be made. Wait for an interleaving where this is true
-  // instead. This function isn't designed for deadlock detection.
-  _Bool ended = __ESBMC_pthread_thread_ended[(int)thread];
-  __ESBMC_assume(ended);
-
-  // Fetch exit code
-  if (retval != NULL)
+  pthread_t self = __ESBMC_get_thread_id();
+  _Bool cancel = __ESBMC_pthread_cancel_requested[self] &&
+                 __ESBMC_pthread_cancelstate[self] == PTHREAD_CANCEL_ENABLE;
+  if (cancel)
+  {
+    __ESBMC_pthread_thread_ended[(int)thread] = 1;
+    pthread_exit(PTHREAD_CANCELED);
+  }
+  __ESBMC_assume(__ESBMC_pthread_thread_ended[(int)thread]);
+  if (retval)
     *retval = __ESBMC_pthread_end_values[(int)thread];
-
   __ESBMC_atomic_end();
-
   return 0;
 }
 

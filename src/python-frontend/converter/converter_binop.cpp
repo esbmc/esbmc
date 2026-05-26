@@ -701,26 +701,38 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     const bool lhs_invalid = lhs.type().is_empty() || lhs.type().is_nil();
     const bool rhs_invalid = rhs.type().is_empty() || rhs.type().is_nil();
     locationt loc = get_location_from_decl(element);
+
+    // Sound over-approximation when the comparison cannot be lowered to a
+    // typed binop: either an operand's type is unresolvable, or one side is
+    // a pointer-backed value (e.g. a list/dict variable that has been
+    // reassigned across incompatible types in the same scope) and the
+    // other isn't. Aborting here loses an entire verification run for what
+    // is often a frontend type-inference gap, not a real soundness issue;
+    // returning nondet bool lets symbolic execution explore both outcomes
+    // and keeps safety verification sound (we cannot conclude SAFE when
+    // the real comparison would fail). See #4807.
+    auto nondet_comparison = [&](const char *reason) {
+      log_debug(
+        "python-binop",
+        "{} at {}:{} -- falling back to nondet bool",
+        reason,
+        loc.is_nil() ? std::string("<unknown>") : loc.get_file().as_string(),
+        loc.is_nil() ? std::string("?") : loc.get_line().as_string());
+      side_effect_expr_nondett nondet(bool_type());
+      nondet.location() = loc;
+      return nondet;
+    };
+
     if (lhs_invalid || rhs_invalid)
-    {
-      std::ostringstream msg;
-      msg << "Unsupported comparison with unresolved operand type";
-      if (!loc.is_nil())
-        msg << " at " << loc.get_file() << ":" << loc.get_line();
-      throw std::runtime_error(msg.str());
-    }
+      return nondet_comparison(
+        "unsupported comparison with unresolved operand type");
 
     const bool lhs_ptr = lhs.type().is_pointer();
     const bool rhs_ptr = rhs.type().is_pointer();
     if (lhs_ptr != rhs_ptr)
-    {
-      std::ostringstream msg;
-      msg << "Unsupported comparison between pointer-backed and non-pointer "
-             "values";
-      if (!loc.is_nil())
-        msg << " at " << loc.get_file() << ":" << loc.get_line();
-      throw std::runtime_error(msg.str());
-    }
+      return nondet_comparison(
+        "unsupported comparison between pointer-backed and non-pointer "
+        "values");
   }
 
   // Build the binary expression

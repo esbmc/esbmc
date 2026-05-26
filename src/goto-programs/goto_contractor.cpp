@@ -784,7 +784,6 @@ ibex::Function *
 expr_to_ibex_parser::create_function_from_expr2t(const expr2tc &expr)
 {
   ibex::Function *f = nullptr;
-  ibex::Function *g, *h;
 
   if (is_comp_expr(expr))
   {
@@ -801,8 +800,10 @@ expr_to_ibex_parser::create_function_from_expr2t(const expr2tc &expr)
     if (!is_arith_expr(expr))
       return nullptr;
     const expr2tc &arith_base = get_base_object(expr);
-    g = create_function_from_expr2t(*arith_base->get_sub_expr(0));
-    h = create_function_from_expr2t(*arith_base->get_sub_expr(1));
+    ibex::Function *g =
+      create_function_from_expr2t(*arith_base->get_sub_expr(0));
+    ibex::Function *h =
+      create_function_from_expr2t(*arith_base->get_sub_expr(1));
     if (g == nullptr || h == nullptr)
       return nullptr;
 
@@ -827,7 +828,7 @@ expr_to_ibex_parser::create_function_from_expr2t(const expr2tc &expr)
   }
   case expr2t::expr_ids::neg_id:
   {
-    h = create_function_from_expr2t(to_neg2t(expr).value);
+    ibex::Function *h = create_function_from_expr2t(to_neg2t(expr).value);
     if (h == nullptr)
       return nullptr;
     f = new ibex::Function(*vars, -(*h)(*vars));

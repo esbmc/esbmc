@@ -18,6 +18,8 @@ Python code translation starts by parsing `.py` files into an Abstract Syntax Tr
 
 This approach's main advantage is that it relies on a native Python module, ensuring the parsed representation faithfully reflects the language.
 
+The parser is implemented as the `src/python-frontend/parser/` package. ESBMC invokes its `parser/__main__.py` entrypoint with a Python 3 interpreter; module discovery, cycle detection, and relative-import rewriting live in `parser/import_resolver.py`, which emits structured diagnostics on missing modules and cyclic imports.
+
 ## Type Annotation
 
 After generating the AST, the frontend traverses the JSON tree and inserts additional nodes carrying type information. [PEP 484](https://peps.python.org/pep-0484/) introduced an optional type system, allowing developers to annotate variables using the `var_name: type` syntax.

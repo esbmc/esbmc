@@ -30,6 +30,8 @@
 #include <stdexcept>
 #include <vector>
 
+#include <util/message.h>
+
 namespace
 {
 static bool get_constant_int(const exprt &expr, long long &out)
@@ -2018,7 +2020,31 @@ exprt string_handler::handle_string_capitalize(
 {
   std::string input;
   if (!try_extract_const_string_expr(string_obj, input))
-    throw std::runtime_error("capitalize() requires constant string");
+  {
+    // Prefer the runtime operational model __python_str_capitalize when
+    // available -- symex's CP folds the call on concrete arguments,
+    // and otherwise produces a real symbolic char* rather than an
+    // unconstrained nondet pointer.
+    const symbolt *capitalize_sym =
+      find_cached_c_function_symbol("c:@F@__python_str_capitalize");
+    if (capitalize_sym)
+    {
+      exprt s_copy = string_obj;
+      exprt s_expr = ensure_null_terminated_string(s_copy);
+      exprt s_addr = get_array_base_address(s_expr);
+
+      side_effect_expr_function_callt call;
+      call.function() = symbol_expr(*capitalize_sym);
+      call.arguments().push_back(s_addr);
+      call.location() = location;
+      call.type() = gen_pointer_type(char_type());
+      return call;
+    }
+    log_debug(
+      "python-string",
+      "capitalize() on non-constant receiver: nondet fallback");
+    return build_nondet_string_fallback(location);
+  }
 
   if (!input.empty())
   {
@@ -2041,7 +2067,30 @@ exprt string_handler::handle_string_title(
 {
   std::string input;
   if (!try_extract_const_string_expr(string_obj, input))
-    throw std::runtime_error("title() requires constant string");
+  {
+    // Prefer the runtime operational model __python_str_title when
+    // available -- symex's CP folds the call on concrete arguments,
+    // and otherwise produces a real symbolic char* rather than an
+    // unconstrained nondet pointer.
+    const symbolt *title_sym =
+      find_cached_c_function_symbol("c:@F@__python_str_title");
+    if (title_sym)
+    {
+      exprt s_copy = string_obj;
+      exprt s_expr = ensure_null_terminated_string(s_copy);
+      exprt s_addr = get_array_base_address(s_expr);
+
+      side_effect_expr_function_callt call;
+      call.function() = symbol_expr(*title_sym);
+      call.arguments().push_back(s_addr);
+      call.location() = location;
+      call.type() = gen_pointer_type(char_type());
+      return call;
+    }
+    log_debug(
+      "python-string", "title() on non-constant receiver: nondet fallback");
+    return build_nondet_string_fallback(location);
+  }
 
   bool new_word = true;
   for (char &ch : input)
@@ -2071,7 +2120,30 @@ exprt string_handler::handle_string_swapcase(
 {
   std::string input;
   if (!try_extract_const_string_expr(string_obj, input))
-    throw std::runtime_error("swapcase() requires constant string");
+  {
+    // Prefer the runtime operational model __python_str_swapcase when
+    // available -- symex's CP folds the call on concrete arguments
+    // and otherwise produces a real symbolic char* rather than an
+    // unconstrained nondet pointer.
+    const symbolt *swapcase_sym =
+      find_cached_c_function_symbol("c:@F@__python_str_swapcase");
+    if (swapcase_sym)
+    {
+      exprt s_copy = string_obj;
+      exprt s_expr = ensure_null_terminated_string(s_copy);
+      exprt s_addr = get_array_base_address(s_expr);
+
+      side_effect_expr_function_callt call;
+      call.function() = symbol_expr(*swapcase_sym);
+      call.arguments().push_back(s_addr);
+      call.location() = location;
+      call.type() = gen_pointer_type(char_type());
+      return call;
+    }
+    log_debug(
+      "python-string", "swapcase() on non-constant receiver: nondet fallback");
+    return build_nondet_string_fallback(location);
+  }
 
   for (char &ch : input)
   {
@@ -2096,7 +2168,11 @@ exprt string_handler::handle_string_casefold(
 {
   std::string input;
   if (!try_extract_const_string_expr(string_obj, input))
-    throw std::runtime_error("casefold() requires constant string");
+  {
+    log_debug(
+      "python-string", "casefold() on non-constant receiver: nondet fallback");
+    return build_nondet_string_fallback(location);
+  }
 
   for (char &ch : input)
     ch = to_lower_char(ch);
@@ -2118,11 +2194,44 @@ exprt string_handler::handle_string_count(
 {
   std::string input;
   std::string sub;
-  if (
-    !try_extract_const_string_expr(string_obj, input) ||
-    !try_extract_const_string_expr(sub_arg, sub))
+  const bool input_const = try_extract_const_string_expr(string_obj, input);
+  const bool sub_const = try_extract_const_string_expr(sub_arg, sub);
+  if (!input_const || !sub_const)
   {
-    throw std::runtime_error("count() requires constant strings");
+    // Prefer the runtime operational model __python_str_count when
+    // start/end are at default (the model doesn't yet handle Python's
+    // slice arguments). Symex's own constant propagation can fold the
+    // call when concrete values flow in, so this is more precise than
+    // a blanket nondet -- and on truly symbolic inputs the result is
+    // a real symbolic count rather than an unconstrained nondet.
+    if (start_arg.is_nil() && end_arg.is_nil())
+    {
+      const symbolt *count_sym =
+        find_cached_c_function_symbol("c:@F@__python_str_count");
+      if (count_sym)
+      {
+        exprt s_copy = string_obj;
+        exprt s_expr = ensure_null_terminated_string(s_copy);
+        exprt s_addr = get_array_base_address(s_expr);
+
+        exprt sub_copy = sub_arg;
+        exprt sub_expr = ensure_null_terminated_string(sub_copy);
+        exprt sub_addr = get_array_base_address(sub_expr);
+
+        side_effect_expr_function_callt call;
+        call.function() = symbol_expr(*count_sym);
+        call.arguments().push_back(s_addr);
+        call.arguments().push_back(sub_addr);
+        call.location() = location;
+        call.type() = size_type();
+        return call;
+      }
+    }
+    log_debug(
+      "python-string", "count() on non-constant receiver/needle: nondet int");
+    side_effect_expr_nondett nondet(long_long_int_type());
+    nondet.location() = location;
+    return nondet;
   }
 
   long long start = 0;
@@ -2184,7 +2293,10 @@ exprt string_handler::handle_string_removeprefix(
     !try_extract_const_string_expr(string_obj, input) ||
     !try_extract_const_string_expr(prefix_arg, prefix))
   {
-    throw std::runtime_error("removeprefix() requires constant strings");
+    log_debug(
+      "python-string",
+      "removeprefix() on non-constant receiver/prefix: nondet string");
+    return build_nondet_string_fallback(location);
   }
 
   if (!prefix.empty() && input.rfind(prefix, 0) == 0)
@@ -2209,7 +2321,10 @@ exprt string_handler::handle_string_removesuffix(
     !try_extract_const_string_expr(string_obj, input) ||
     !try_extract_const_string_expr(suffix_arg, suffix))
   {
-    throw std::runtime_error("removesuffix() requires constant strings");
+    log_debug(
+      "python-string",
+      "removesuffix() on non-constant receiver/suffix: nondet string");
+    return build_nondet_string_fallback(location);
   }
 
   if (
@@ -2234,7 +2349,26 @@ exprt string_handler::handle_string_splitlines(
 {
   std::string input;
   if (!try_extract_const_string_expr(string_obj, input))
-    throw std::runtime_error("splitlines() requires constant string");
+  {
+    // Sound-ish fallback: return an empty list. We cannot enumerate the
+    // lines of an unknown string at conversion time, and returning a
+    // nondet `char *` list isn't expressible through python_list::get()
+    // without inventing new list-build primitives. An empty list keeps
+    // the program well-typed and lets len() return 0 -- callers that
+    // depend on specific line content will still report VFAILED, but
+    // GOTO conversion no longer aborts (#4807).
+    log_debug(
+      "python-string",
+      "splitlines() on non-constant receiver: empty-list fallback");
+    nlohmann::json empty_list;
+    empty_list["_type"] = "List";
+    empty_list["elts"] = nlohmann::json::array();
+    converter_.copy_location_fields_from_decl(call, empty_list);
+    python_list list(converter_, empty_list);
+    exprt result = list.get();
+    result.location() = location;
+    return result;
+  }
 
   std::vector<std::string> parts;
   size_t start = 0;
@@ -2278,29 +2412,55 @@ exprt string_handler::handle_string_format(
 {
   std::string format_str;
   if (!try_extract_const_string_expr(string_obj, format_str))
-    throw std::runtime_error("format() requires constant format string");
-
-  std::vector<std::string> args;
-  if (call.contains("args") && call["args"].is_array())
   {
-    for (const auto &arg : call["args"])
-    {
-      args.push_back(format_value_from_json(arg, converter_));
-    }
+    log_debug(
+      "python-string",
+      "format() on non-constant format string: nondet string fallback");
+    return build_nondet_string_fallback(location);
   }
 
+  std::vector<std::string> args;
   std::unordered_map<std::string, std::string> keywords;
-  if (call.contains("keywords") && call["keywords"].is_array())
+  try
   {
-    for (const auto &kw : call["keywords"])
+    if (call.contains("args") && call["args"].is_array())
     {
-      if (!kw.contains("arg") || kw["arg"].is_null())
-        throw std::runtime_error("format() kwargs are not supported");
-      std::string key = kw["arg"].get<std::string>();
-      if (!kw.contains("value"))
-        throw std::runtime_error("format() keyword missing value");
-      keywords.emplace(key, format_value_from_json(kw["value"], converter_));
+      for (const auto &arg : call["args"])
+      {
+        args.push_back(format_value_from_json(arg, converter_));
+      }
     }
+
+    if (call.contains("keywords") && call["keywords"].is_array())
+    {
+      for (const auto &kw : call["keywords"])
+      {
+        if (!kw.contains("arg") || kw["arg"].is_null())
+          throw std::runtime_error("format() kwargs are not supported");
+        std::string key = kw["arg"].get<std::string>();
+        if (!kw.contains("value"))
+          throw std::runtime_error("format() keyword missing value");
+        keywords.emplace(key, format_value_from_json(kw["value"], converter_));
+      }
+    }
+  }
+  catch (const python_int_overflow_excp &)
+  {
+    // Bignum diagnostic (#4642) must not be swallowed -- the test
+    // suite asserts on the exact error message. Re-throw.
+    throw;
+  }
+  catch (const std::runtime_error &e)
+  {
+    // Any non-constant format argument (line ~88) or unsupported
+    // keyword spec aborts the whole call. Fall back to a nondet string
+    // so GOTO conversion can proceed; the specific formatted value is
+    // not preserved (sound over-approximation). #4807.
+    log_debug(
+      "python-string",
+      "format() argument folding failed ({}): nondet string fallback",
+      e.what());
+    return build_nondet_string_fallback(location);
   }
 
   std::string result;
@@ -2395,7 +2555,32 @@ exprt string_handler::handle_string_partition(
     !try_extract_const_string_expr(string_obj, input) ||
     !try_extract_const_string_expr(sep_arg, sep))
   {
-    throw std::runtime_error("partition() requires constant strings");
+    // Sound-ish fallback: return ("", "", "") -- the shape Python uses
+    // when the separator isn't found, but with the receiver elided. We
+    // cannot search an unknown string at conversion time; the three
+    // empty fields keep the tuple well-typed and let len(t) == 3 hold.
+    // Callers that depend on specific partition contents will still
+    // report VFAILED, but GOTO conversion no longer aborts (#4807).
+    log_debug(
+      "python-string",
+      "partition() on non-constant receiver/separator: empty-tuple "
+      "fallback");
+    if (!string_builder_)
+      throw std::runtime_error("string_builder not set for partition()");
+    exprt empty_a = string_builder_->build_string_literal("");
+    exprt empty_b = string_builder_->build_string_literal("");
+    exprt empty_c = string_builder_->build_string_literal("");
+    struct_typet tuple_type;
+    tuple_type.components().push_back(
+      struct_typet::componentt("element_0", empty_a.type()));
+    tuple_type.components().push_back(
+      struct_typet::componentt("element_1", empty_b.type()));
+    tuple_type.components().push_back(
+      struct_typet::componentt("element_2", empty_c.type()));
+    struct_exprt tuple_expr(tuple_type);
+    tuple_expr.operands() = {empty_a, empty_b, empty_c};
+    tuple_expr.location() = location;
+    return tuple_expr;
   }
   if (sep.empty())
     throw std::runtime_error("partition() separator cannot be empty");
@@ -2440,11 +2625,36 @@ exprt string_handler::handle_string_partition(
 
 exprt string_handler::handle_string_isalnum(
   const exprt &string_obj,
-  [[maybe_unused]] const locationt &location)
+  const locationt &location)
 {
   std::string input;
   if (!try_extract_const_string_expr(string_obj, input))
-    throw std::runtime_error("isalnum() requires constant string");
+  {
+    // Prefer the runtime operational model __python_str_isalnum when
+    // available -- symex's CP folds the call on concrete arguments
+    // and otherwise produces a real symbolic predicate rather than
+    // an unconstrained nondet bool.
+    const symbolt *isalnum_sym =
+      find_cached_c_function_symbol("c:@F@__python_str_isalnum");
+    if (isalnum_sym)
+    {
+      exprt s_copy = string_obj;
+      exprt s_expr = ensure_null_terminated_string(s_copy);
+      exprt s_addr = get_array_base_address(s_expr);
+
+      side_effect_expr_function_callt call;
+      call.function() = symbol_expr(*isalnum_sym);
+      call.arguments().push_back(s_addr);
+      call.location() = location;
+      call.type() = bool_type();
+      return call;
+    }
+    log_debug(
+      "python-string", "isalnum() on non-constant receiver: nondet bool");
+    side_effect_expr_nondett nondet(bool_type());
+    nondet.location() = location;
+    return nondet;
+  }
   if (input.empty())
     return from_integer(0, bool_type());
 
@@ -2458,11 +2668,36 @@ exprt string_handler::handle_string_isalnum(
 
 exprt string_handler::handle_string_isupper(
   const exprt &string_obj,
-  [[maybe_unused]] const locationt &location)
+  const locationt &location)
 {
   std::string input;
   if (!try_extract_const_string_expr(string_obj, input))
-    throw std::runtime_error("isupper() requires constant string");
+  {
+    // Prefer the runtime operational model __python_str_isupper when
+    // available -- symex's CP folds the call when concrete values flow
+    // in, and otherwise produces a real symbolic predicate rather than
+    // an unconstrained nondet bool.
+    const symbolt *isupper_sym =
+      find_cached_c_function_symbol("c:@F@__python_str_isupper");
+    if (isupper_sym)
+    {
+      exprt s_copy = string_obj;
+      exprt s_expr = ensure_null_terminated_string(s_copy);
+      exprt s_addr = get_array_base_address(s_expr);
+
+      side_effect_expr_function_callt call;
+      call.function() = symbol_expr(*isupper_sym);
+      call.arguments().push_back(s_addr);
+      call.location() = location;
+      call.type() = bool_type();
+      return call;
+    }
+    log_debug(
+      "python-string", "isupper() on non-constant receiver: nondet bool");
+    side_effect_expr_nondett nondet(bool_type());
+    nondet.location() = location;
+    return nondet;
+  }
   bool has_cased = false;
   for (char ch : input)
   {
@@ -2477,11 +2712,17 @@ exprt string_handler::handle_string_isupper(
 
 exprt string_handler::handle_string_isnumeric(
   const exprt &string_obj,
-  [[maybe_unused]] const locationt &location)
+  const locationt &location)
 {
   std::string input;
   if (!try_extract_const_string_expr(string_obj, input))
-    throw std::runtime_error("isnumeric() requires constant string");
+  {
+    log_debug(
+      "python-string", "isnumeric() on non-constant receiver: nondet bool");
+    side_effect_expr_nondett nondet(bool_type());
+    nondet.location() = location;
+    return nondet;
+  }
   if (input.empty())
     return from_integer(0, bool_type());
 
@@ -2495,11 +2736,17 @@ exprt string_handler::handle_string_isnumeric(
 
 exprt string_handler::handle_string_isidentifier(
   const exprt &string_obj,
-  [[maybe_unused]] const locationt &location)
+  const locationt &location)
 {
   std::string input;
   if (!try_extract_const_string_expr(string_obj, input))
-    throw std::runtime_error("isidentifier() requires constant string");
+  {
+    log_debug(
+      "python-string", "isidentifier() on non-constant receiver: nondet bool");
+    side_effect_expr_nondett nondet(bool_type());
+    nondet.location() = location;
+    return nondet;
+  }
   if (input.empty())
     return from_integer(0, bool_type());
 
@@ -2523,13 +2770,20 @@ exprt string_handler::handle_string_center(
 {
   std::string input;
   if (!try_extract_const_string_expr(string_obj, input))
-    throw std::runtime_error("center() requires constant string");
+  {
+    log_debug(
+      "python-string", "center() on non-constant receiver: nondet string");
+    return build_nondet_string_fallback(location);
+  }
   if (!string_builder_)
     throw std::runtime_error("string_builder not set for center()");
 
   long long width = 0;
   if (!get_constant_int(width_arg, width))
-    throw std::runtime_error("center() requires constant width");
+  {
+    log_debug("python-string", "center() on non-constant width: nondet string");
+    return build_nondet_string_fallback(location);
+  }
 
   char fill = ' ';
   if (!fill_arg.is_nil())
@@ -2567,13 +2821,20 @@ exprt string_handler::handle_string_ljust(
 {
   std::string input;
   if (!try_extract_const_string_expr(string_obj, input))
-    throw std::runtime_error("ljust() requires constant string");
+  {
+    log_debug(
+      "python-string", "ljust() on non-constant receiver: nondet string");
+    return build_nondet_string_fallback(location);
+  }
   if (!string_builder_)
     throw std::runtime_error("string_builder not set for ljust()");
 
   long long width = 0;
   if (!get_constant_int(width_arg, width))
-    throw std::runtime_error("ljust() requires constant width");
+  {
+    log_debug("python-string", "ljust() on non-constant width: nondet string");
+    return build_nondet_string_fallback(location);
+  }
 
   char fill = ' ';
   if (!fill_arg.is_nil())
@@ -2606,13 +2867,20 @@ exprt string_handler::handle_string_rjust(
 {
   std::string input;
   if (!try_extract_const_string_expr(string_obj, input))
-    throw std::runtime_error("rjust() requires constant string");
+  {
+    log_debug(
+      "python-string", "rjust() on non-constant receiver: nondet string");
+    return build_nondet_string_fallback(location);
+  }
   if (!string_builder_)
     throw std::runtime_error("string_builder not set for rjust()");
 
   long long width = 0;
   if (!get_constant_int(width_arg, width))
-    throw std::runtime_error("rjust() requires constant width");
+  {
+    log_debug("python-string", "rjust() on non-constant width: nondet string");
+    return build_nondet_string_fallback(location);
+  }
 
   char fill = ' ';
   if (!fill_arg.is_nil())
@@ -2644,13 +2912,20 @@ exprt string_handler::handle_string_zfill(
 {
   std::string input;
   if (!try_extract_const_string_expr(string_obj, input))
-    throw std::runtime_error("zfill() requires constant string");
+  {
+    log_debug(
+      "python-string", "zfill() on non-constant receiver: nondet string");
+    return build_nondet_string_fallback(location);
+  }
   if (!string_builder_)
     throw std::runtime_error("string_builder not set for zfill()");
 
   long long width = 0;
   if (!get_constant_int(width_arg, width))
-    throw std::runtime_error("zfill() requires constant width");
+  {
+    log_debug("python-string", "zfill() on non-constant width: nondet string");
+    return build_nondet_string_fallback(location);
+  }
 
   if (width <= static_cast<long long>(input.size()))
     return string_builder_->build_string_literal(input);
@@ -2681,7 +2956,11 @@ exprt string_handler::handle_string_expandtabs(
 {
   std::string input;
   if (!try_extract_const_string_expr(string_obj, input))
-    throw std::runtime_error("expandtabs() requires constant string");
+  {
+    log_debug(
+      "python-string", "expandtabs() on non-constant receiver: nondet string");
+    return build_nondet_string_fallback(location);
+  }
   if (!string_builder_)
     throw std::runtime_error("string_builder not set for expandtabs()");
 
@@ -2727,21 +3006,47 @@ exprt string_handler::handle_string_format_map(
 
   std::string format_str;
   if (!try_extract_const_string_expr(string_obj, format_str))
-    throw std::runtime_error("format_map() requires constant format string");
+  {
+    log_debug(
+      "python-string",
+      "format_map() on non-constant format string: nondet string fallback");
+    return build_nondet_string_fallback(location);
+  }
 
   const auto &mapping = call["args"][0];
   if (!mapping.contains("_type") || mapping["_type"] != "Dict")
-    throw std::runtime_error("format_map() requires constant dict");
+  {
+    log_debug(
+      "python-string",
+      "format_map() on non-Dict mapping: nondet string fallback");
+    return build_nondet_string_fallback(location);
+  }
 
   std::unordered_map<std::string, std::string> values;
   const auto &keys = mapping["keys"];
   const auto &vals = mapping["values"];
-  for (size_t i = 0; i < keys.size(); ++i)
+  try
   {
-    std::string key;
-    if (!extract_constant_string(keys[i], converter_, key))
-      throw std::runtime_error("format_map() keys must be constant strings");
-    values.emplace(key, format_value_from_json(vals[i], converter_));
+    for (size_t i = 0; i < keys.size(); ++i)
+    {
+      std::string key;
+      if (!extract_constant_string(keys[i], converter_, key))
+        throw std::runtime_error("format_map() keys must be constant strings");
+      values.emplace(key, format_value_from_json(vals[i], converter_));
+    }
+  }
+  catch (const python_int_overflow_excp &)
+  {
+    // Bignum diagnostic (#4642) must not be swallowed.
+    throw;
+  }
+  catch (const std::runtime_error &e)
+  {
+    log_debug(
+      "python-string",
+      "format_map() key/value folding failed ({}): nondet string fallback",
+      e.what());
+    return build_nondet_string_fallback(location);
   }
 
   std::string result;

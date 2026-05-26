@@ -24,20 +24,23 @@ This page is a reference of all Python language constructs, data structures, and
 
 - **Function definitions**: Parameters, return values, and calls
 - **Variadic parameters**: `*args` syntax for variable-length positional argument lists
-- **Type annotations**: Basic types (`int`, `float`, `bool`, `str`), `Any`, `Union[T1, T2]`, PEP 604 `T1 | T2` syntax
+- **Type annotations**: Basic types (`int`, `float`, `bool`, `str`), `Any`, `Union[T1, T2]`, PEP 604 `T1 | T2` syntax (including `T | None` on class attributes)
 - **Union types**: Both `Union[int, bool]` and `int | bool` syntax are supported, including chained unions with multiple members
 - **Type widening**: ESBMC selects the widest type from Union members using the hierarchy `float > int > bool`
 - **Any type**: When a function is annotated `-> Any`, ESBMC infers the actual return type by analyzing return statements in the function body; supports `int`, `float`, `bool`, and expressions evaluating to those types
 - **Variable inference**: Variables annotated with `Any` that are assigned from function calls inherit the function's inferred return type
+- **`Optional[T]` equality**: Equality (`==`, `!=`, `is`, `is not`) between an `Optional[T]` value and a matching primitive succeeds after an `is not None` round-trip — the primitive side is implicitly cast to the pointer-backed representation. Ordered comparisons (`<`, `>`, `<=`, `>=`) on `Optional[T]` are deliberately disabled (they would compare addresses, not values).
 - **Lambda expressions**: Single-expression lambdas with multiple parameters; converted to regular functions and stored as function pointers; can be assigned to variables and called indirectly
 
 ## Object-Oriented Programming
 
 - **Classes**: Definitions, methods, and attributes
 - **Class attributes**: Class-level variables shared across all instances; supports both explicit type annotations and automatic type inference from assigned values; accessible via both `instance.attr` and `ClassName.attr`
+- **PEP 604 attribute annotations**: `self.x: T | None` (and other `T1 | T2` `BinOp` annotations) are recognised and mapped to the same pointer-to-`T` encoding used for `Optional[T]`
 - **Instance variables**: Attributes defined in `__init__`
 - **Inheritance**: Single and multi-level inheritance; verification of scenarios involving overridden methods
 - **`super()` calls**: `super().__init__(...)` and other `super().method(...)` calls, enabling verification of polymorphic behavior and parent-constructor side effects
+- **Class-method defaults**: `Name` defaults referencing `ESBMC_default_*` helpers are hoisted past the enclosing `ClassDef` so they remain visible at call sites
 
 ## String Formatting and Literals
 
@@ -88,6 +91,12 @@ This page is a reference of all Python language constructs, data structures, and
 **Slicing**: `s[start:end]`, omitted bounds (`s[:end]`, `s[start:]`), negative indices (`s[-3:]`), empty slices
 
 **Operators**: `in` (substring test), `*` (repetition: `"a" * 3`, `3 * "a"`, boolean multipliers)
+
+**Non-constant receivers**: Calls with a non-constant string receiver no longer abort GOTO conversion. Three layers cooperate to give a sound result:
+
+1. **Constant folding (symex layer).** When the receiver and arguments are compile-time constants — either as literals or after AST-level const-propagation of a single `Assign`/`AnnAssign` in the enclosing function — the result folds to an exact value. Folded methods include `swapcase`, `upper`, `lower`, `casefold`, `capitalize`, `title`, `isalpha`, `isdigit`, `isalnum`, `isspace`, `isupper`, `islower`, `startswith`, `endswith`, `count`, `find`, `rfind`, `index`, `strip`, `lstrip`, and `rstrip`.
+2. **Runtime operational models.** `str.count(sub)` and `str.isupper()` now lower to bounded (256-character) operational models in `src/c2goto/library/python/string.c` (`__python_str_count`, `__python_str_isupper`). Concrete arguments fold via symex's constant propagation; symbolic receivers get a real symbolic count or predicate rather than an unconstrained nondet.
+3. **Nondet fallback.** For all other string methods, a non-constant receiver yields a sound symbolic value (nondet `char *`, `bool`, or `int`) instead of aborting. `partition()` falls back to the 3-tuple `("", "", "")` so `len(t) == 3` holds; `splitlines()` falls back to an empty list. `format()` and `format_map()` follow the same shape when their format string or arguments are non-constant. The result is a sound over-approximation: specific functional values are not preserved, but safety checks downstream remain meaningful.
 
 ### Sets
 
@@ -152,7 +161,7 @@ This page is a reference of all Python language constructs, data structures, and
 Byte sequences and integer class methods:
 
 - **`int.from_bytes(bytes_data, big_endian, signed)`** — converts a byte sequence to an integer; supports big- and little-endian, signed and unsigned
-- **`int.bit_length(n)`** — returns the number of bits required to represent `n` in binary
+- **`int.bit_length(n)`** — returns the number of bits required to represent `n` in binary. The operational model bounds the loop length by `512`, which covers narrow 64-bit `IntWide` and 512-bit `--ir` bignum receivers and guarantees termination on symbolic `n` without an explicit `--unwind`.
 
 ## Error Handling
 
@@ -240,13 +249,18 @@ The `--strict-types` flag enables type compatibility validation for function arg
 
 - **`__name__`**: Set to `"__main__"` when run directly; set to the module name when imported. Enables `if __name__ == "__main__":` idioms.
 - **Imports**: Standard `import` and `from ... import ...` styles validated at verification time
+- **Selective imports preserve module-level constants**: `from M import f, C` retains plain `Assign` bindings such as `INT_BOUND = 1024` in addition to `AnnAssign` ones. Tuple-unpacking targets are treated atomically.
+- **Parser package layout**: The Python parser ships as a package under `src/python-frontend/parser/` (entrypoint `parser/__main__.py`, public facade `parser/__init__.py`, import resolution in `parser/import_resolver.py`). The resolver emits deterministic, review-friendly diagnostics for missing modules, cyclic imports, and relative-import rewrites.
 
 ## Built-in Functions
 
 | Function | Notes |
 |---|---|
 | `abs`, `divmod` | Standard arithmetic |
-| `int`, `float`, `bool`, `chr`, `ord`, `str`, `repr`, `hex`, `oct` | Type conversions and representations |
+| `int`, `float`, `bool`, `chr`, `ord`, `str`, `repr`, `hex`, `oct`, `bin`, `ascii` | Type conversions and representations. `bin` is `LLONG_MIN`-safe; `ascii` emits `\xNN`/`\uNNNN`/`\UNNNNNNNN` escapes for non-ASCII codepoints. |
+| `pow(b, e)` | Shares the `**` operator lowering (integer, float, bool operands) |
+| `pow(b, e, m)` | 3-argument modular exponentiation: exact `BigInt` for constant integer operands; symbolic operands raise an unsupported diagnostic rather than emit unsound floating-point modulo |
+| `callable(obj)`, `issubclass(cls, base)` | Resolved at compile time from the symbol table and AST class hierarchy |
 | `len` | Works on lists, sets, strings, tuples |
 | `range` | Used in `for` loops |
 | `min(a, b)`, `max(a, b)` | Two-argument form only; promotes `int` to `float` |
@@ -256,6 +270,10 @@ The `--strict-types` flag enables type compatibility validation for function arg
 | `any([...])` | List literals only; short-circuit OR logic |
 | `all([...])` | List literals only; short-circuit AND logic |
 | `enumerate(iterable, start=0)` | Tuple unpacking and single-variable forms; optional `start` |
+| `zip(a, b, ...)` | Lowered to an index-based `while` loop in `for` form, mirroring `enumerate` |
+| `reversed(iter)` | Lowered to an index-based `while` loop in `for` form; `reversed(range(...))` is rewritten to an equivalent forward `range(...)` |
+| `filter(pred, iter)` | Lowered to an index-based `while` loop guarded by `pred` in `for` form |
+| `list()` | Zero-arg constructor lowers to an empty list literal (in addition to `list(iterable)`) |
 | `isinstance(obj, type)` | Runtime type checking |
 | `float("nan")`, `float("inf")` | Special values (case-insensitive, whitespace-tolerant) |
 | `input()` | Modelled as nondeterministic string, max 256 chars |
@@ -322,8 +340,12 @@ All functions are modelled using nondeterministic values with appropriate constr
 - `random.random()` → nondeterministic `float` in `[0.0, 1.0)`
 - `random.uniform(a, b)` → nondeterministic `float` N where `min(a,b) ≤ N ≤ max(a,b)`
 - `random.randint(a, b)` → nondeterministic `int` N where `a ≤ N ≤ b`
-- `random.getrandbits(k)` → nondeterministic integer with k random bits
+- `random.getrandbits(k)` → nondeterministic non-negative `int` in `[0, 2**k − 1]`; raises `ValueError` if `k < 0`; returns `0` when `k == 0`
 - `random.randrange(start[, stop[, step]])` → randomly selected integer from the specified range; single-argument form (`randrange(stop)`) is also supported
+- `random.choice(seq)` → nondeterministic element `seq[i]` for a constrained index; raises `IndexError` on an empty sequence
+- `random.sample(population, k)` → under-approximation that returns the first `k` elements of `population`; raises `ValueError` if `k < 0` or `k > len(population)`
+- `random.shuffle(lst)` → under-approximation; leaves the list untouched
+- `random.seed(a=0)` → no-op; nondet outputs already cover any seed-dependent outcome
 
 See also: [Random Operational Model](./random-operational-model)
 

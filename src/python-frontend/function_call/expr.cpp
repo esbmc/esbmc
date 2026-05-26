@@ -1751,12 +1751,19 @@ exprt function_call_expr::handle_list_append() const
     value_to_append = symbol_expr(tmp_var);
   }
 
+  // Treat a single-element char array (`char[1]`) as a `char *` for storage
+  // semantics — list elements of string type are stored as pointer values
+  // (see build_push_list_call). The in-place type rewrite is safe for a
+  // symbol-expr value (a real variable whose storage decays to char*), but
+  // would corrupt a constant char[1] expression: rewriting the type produces
+  // a malformed `constant{type=char *, op0=char '\0'}` that crashes
+  // migrate_expr at GOTO-program generation (#4807). Keep constants on the
+  // generic array path; build_push_list_call then takes their address.
   if (
-    value_to_append.type().is_array() &&
+    !value_to_append.is_constant() && value_to_append.type().is_array() &&
     value_to_append.type().subtype() == char_type())
   {
     const array_typet &array_type = to_array_type(value_to_append.type());
-    // Only convert single-element char arrays (string literals)
     if (array_type.size().is_constant())
     {
       const constant_exprt &size_const = to_constant_expr(array_type.size());
