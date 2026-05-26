@@ -311,8 +311,7 @@ void bmct::report_unknown()
   log_fail("\nVERIFICATION UNKNOWN");
 }
 
-smt_convt::resultt
-bmct::check_vacuity(symex_target_equationt &local_eq) const
+smt_convt::resultt bmct::check_vacuity(symex_target_equationt &local_eq) const
 {
   // Re-encode in vacuity mode: each kept assertion contributes its path
   // assumption to the OR'd disjunction instead of `not(assumpt -> claim)`.
@@ -1662,8 +1661,7 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
     // *other* claim has a reachable path.
     if (
       result == smt_convt::P_UNSATISFIABLE &&
-      options.get_bool_option("check-vacuity") &&
-      remaining_asserts > 0)
+      options.get_bool_option("check-vacuity") && remaining_asserts > 0)
     {
       log_status(
         "Probing {} claim(s) for vacuous discharge",
@@ -1890,7 +1888,8 @@ smt_convt::resultt bmct::multi_property_check(
                        &is,
                        &is_color,
                        &YELLOW,
-                       &runtime_solver](const size_t &i) {
+                       &runtime_solver](const size_t &i)
+  {
     //"multi-fail-fast n": stop after first n SATs found.
     if (is_fail_fast && fail_fast_cnt >= fail_fast_limit)
       return;
@@ -1967,9 +1966,9 @@ smt_convt::resultt bmct::multi_property_check(
     }
 
     // Store solver name initially but not again
-    std::call_once(summary.solver_name_flag, [&]() {
-      summary.solver_name = solver_ptr->solver_text();
-    });
+    std::call_once(
+      summary.solver_name_flag,
+      [&]() { summary.solver_name = solver_ptr->solver_text(); });
     // In coverage mode, only report instrumented coverage claims
     bool is_cov_silent =
       is_goto_cov && claim.claim_property != "instrumented assertion";
