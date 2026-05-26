@@ -523,7 +523,7 @@ public:
     return lhs.interval_left_shift(lhs, rhs);
   }
 
-  static interval_templatet<T> bitnot(const interval_templatet<T> &w)
+  static interval_templatet<T> bitnot([[maybe_unused]] const interval_templatet<T> &w)
   {
     interval_templatet<T> result;
     return result;
