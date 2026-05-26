@@ -30,7 +30,10 @@ import glob
 import base64
 import importlib
 import shutil
-import subprocess
+# Bandit B404: subprocess is needed to invoke mypy out-of-process. The
+# only call site is run_mypy_strict() below; arguments are not derived
+# from untrusted input and `shell=False` is used.
+import subprocess  # nosec B404
 import tempfile
 
 # parser.py now lives under python-frontend/parser/. Ensure the parent
@@ -103,7 +106,10 @@ def run_mypy_strict(filename):
         return 0, ""
 
     with tempfile.TemporaryDirectory(prefix="esbmc-mypy-cache-") as cache_dir:
-        result = subprocess.run(
+        # Bandit B603: argv is a fixed list — `mypy_path` comes from
+        # shutil.which (PATH lookup, not user input), `filename` is the
+        # caller's source path. `shell=False` is implicit (list argv).
+        result = subprocess.run(  # nosec B603
             [mypy_path, "--strict", "--cache-dir", cache_dir, filename],
             capture_output=True,
             text=True,
