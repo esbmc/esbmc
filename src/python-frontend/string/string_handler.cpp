@@ -298,71 +298,69 @@ static bool try_const_string_from_single_assignment(
   int assignment_count = 0;
 
   std::function<void(const nlohmann::json &)> walk =
-    [&](const nlohmann::json &body) {
-      for (const auto &stmt : body)
+    [&](const nlohmann::json &body)
+  {
+    for (const auto &stmt : body)
+    {
+      if (!stmt.contains("_type"))
+        continue;
+
+      const std::string &t = stmt["_type"].get<std::string>();
+
+      // Don't descend into nested function/class scopes -- those are
+      // separate symbol tables.
+      if (t == "FunctionDef" || t == "ClassDef" || t == "Lambda")
+        continue;
+
+      // Match `var_name = <expr>` and `var_name: T = <expr>`.
+      const nlohmann::json *assigned_value = nullptr;
+      if (
+        t == "Assign" && stmt.contains("targets") &&
+        stmt["targets"].is_array() && !stmt["targets"].empty())
       {
-        if (!stmt.contains("_type"))
-          continue;
-
-        const std::string &t = stmt["_type"].get<std::string>();
-
-        // Don't descend into nested function/class scopes -- those are
-        // separate symbol tables.
-        if (t == "FunctionDef" || t == "ClassDef" || t == "Lambda")
-          continue;
-
-        // Match `var_name = <expr>` and `var_name: T = <expr>`.
-        const nlohmann::json *assigned_value = nullptr;
+        const auto &tgt = stmt["targets"][0];
         if (
-          t == "Assign" && stmt.contains("targets") &&
-          stmt["targets"].is_array() && !stmt["targets"].empty())
-        {
-          const auto &tgt = stmt["targets"][0];
-          if (
-            tgt.contains("_type") && tgt["_type"] == "Name" &&
-            tgt.contains("id") && tgt["id"] == var_name &&
-            stmt.contains("value"))
-            assigned_value = &stmt["value"];
-        }
-        else if (
-          t == "AnnAssign" && stmt.contains("target") &&
-          stmt["target"].contains("_type") &&
-          stmt["target"]["_type"] == "Name" && stmt["target"].contains("id") &&
-          stmt["target"]["id"] == var_name && stmt.contains("value") &&
-          !stmt["value"].is_null())
-        {
+          tgt.contains("_type") && tgt["_type"] == "Name" &&
+          tgt.contains("id") && tgt["id"] == var_name && stmt.contains("value"))
           assigned_value = &stmt["value"];
-        }
-        // AugAssign (`var_name += ...`) is also a write -- count it so we
-        // bail if it appears, but don't capture its value as the constant.
-        else if (
-          t == "AugAssign" && stmt.contains("target") &&
-          stmt["target"].contains("_type") &&
-          stmt["target"]["_type"] == "Name" && stmt["target"].contains("id") &&
-          stmt["target"]["id"] == var_name)
-        {
-          ++assignment_count;
-          continue;
-        }
-
-        if (assigned_value != nullptr)
-        {
-          ++assignment_count;
-          if (first_const == nullptr)
-            first_const = assigned_value;
-          continue;
-        }
-
-        for (const char *key : {"body", "orelse", "finalbody"})
-          if (stmt.contains(key) && stmt[key].is_array())
-            walk(stmt[key]);
-
-        if (stmt.contains("handlers") && stmt["handlers"].is_array())
-          for (const auto &h : stmt["handlers"])
-            if (h.contains("body") && h["body"].is_array())
-              walk(h["body"]);
       }
-    };
+      else if (
+        t == "AnnAssign" && stmt.contains("target") &&
+        stmt["target"].contains("_type") && stmt["target"]["_type"] == "Name" &&
+        stmt["target"].contains("id") && stmt["target"]["id"] == var_name &&
+        stmt.contains("value") && !stmt["value"].is_null())
+      {
+        assigned_value = &stmt["value"];
+      }
+      // AugAssign (`var_name += ...`) is also a write -- count it so we
+      // bail if it appears, but don't capture its value as the constant.
+      else if (
+        t == "AugAssign" && stmt.contains("target") &&
+        stmt["target"].contains("_type") && stmt["target"]["_type"] == "Name" &&
+        stmt["target"].contains("id") && stmt["target"]["id"] == var_name)
+      {
+        ++assignment_count;
+        continue;
+      }
+
+      if (assigned_value != nullptr)
+      {
+        ++assignment_count;
+        if (first_const == nullptr)
+          first_const = assigned_value;
+        continue;
+      }
+
+      for (const char *key : {"body", "orelse", "finalbody"})
+        if (stmt.contains(key) && stmt[key].is_array())
+          walk(stmt[key]);
+
+      if (stmt.contains("handlers") && stmt["handlers"].is_array())
+        for (const auto &h : stmt["handlers"])
+          if (h.contains("body") && h["body"].is_array())
+            walk(h["body"]);
+    }
+  };
 
   walk(func_scope["body"]);
 
@@ -1215,7 +1213,8 @@ exprt string_handler::handle_string_membership(
   exprt rhs_str = ensure_null_terminated_string(rhs);
 
   // Obtain the actual array expression (handle both constants and symbols)
-  auto get_array_expr = [this](const exprt &e) -> const exprt * {
+  auto get_array_expr = [this](const exprt &e) -> const exprt *
+  {
     if (e.is_constant() && e.type().is_array())
       return &e;
     if (e.is_symbol())
@@ -1232,7 +1231,8 @@ exprt string_handler::handle_string_membership(
   const exprt *needle_array = get_array_expr(lhs_str);
   const exprt *haystack_array = get_array_expr(rhs_str);
   auto try_extract_constant_chars_from_ast =
-    [this](const nlohmann::json *node) -> std::optional<std::vector<BigInt>> {
+    [this](const nlohmann::json *node) -> std::optional<std::vector<BigInt>>
+  {
     if (node == nullptr)
       return std::nullopt;
     std::string text;
@@ -1258,7 +1258,8 @@ exprt string_handler::handle_string_membership(
   }
 
   const auto contains_embedded_null =
-    [](const exprt *array_expr) -> std::optional<bool> {
+    [](const exprt *array_expr) -> std::optional<bool>
+  {
     if (array_expr == nullptr || !array_expr->type().is_array())
       return std::nullopt;
 
@@ -1764,7 +1765,8 @@ exprt string_handler::try_len_fast_path_from_name_arg(
   }
 
   auto const_string_len_from_symbol =
-    [this](const std::string &name) -> std::optional<BigInt> {
+    [this](const std::string &name) -> std::optional<BigInt>
+  {
     if (name != "__name__")
       return std::nullopt;
 
@@ -1790,9 +1792,9 @@ exprt string_handler::try_len_fast_path_from_name_arg(
     return BigInt(utf8_codepoint_count(name_value));
   };
 
-  auto joinedstr_len =
-    [&const_string_len_from_symbol](
-      const nlohmann::json &joined) -> std::optional<BigInt> {
+  auto joinedstr_len = [&const_string_len_from_symbol](
+                         const nlohmann::json &joined) -> std::optional<BigInt>
+  {
     if (!joined.contains("values") || !joined["values"].is_array())
       return std::nullopt;
 
@@ -1884,7 +1886,8 @@ exprt string_handler::handle_string_attribute_call(
       : empty_json_array;
 
   std::optional<exprt> cached_receiver_expr;
-  auto get_receiver_expr = [&]() -> exprt {
+  auto get_receiver_expr = [&]() -> exprt
+  {
     if (!cached_receiver_expr.has_value())
       cached_receiver_expr = converter_.get_expr(receiver_json);
     return *cached_receiver_expr;
@@ -1901,13 +1904,15 @@ exprt string_handler::handle_string_attribute_call(
   }
 
   std::optional<locationt> cached_location;
-  auto get_location = [&]() -> locationt {
+  auto get_location = [&]() -> locationt
+  {
     if (!cached_location.has_value())
       cached_location = converter_.get_location_from_decl(call_json);
     return *cached_location;
   };
 
-  auto has_keyword_unpacking = [&]() -> bool {
+  auto has_keyword_unpacking = [&]() -> bool
+  {
     for (const auto &kw : keywords)
     {
       if (kw.contains("arg") && kw["arg"].is_null())
@@ -2142,7 +2147,19 @@ exprt string_handler::handle_str_join(const nlohmann::json &call_json)
         "NameError: name '" + var_name + "' is not defined");
 
     if (!var_decl.contains("value"))
-      throw std::runtime_error("join() requires a list");
+    {
+      // Variable is declared but its initialiser is opaque (e.g. an
+      // unannotated parameter, or a function call result we cannot
+      // fold). The legacy abort gave up the whole call; fall back to a
+      // sound nondet `char *` instead so GOTO conversion proceeds.
+      // Same pattern as the other str.*() handler fallbacks.
+      log_debug(
+        "python-string",
+        "join() variable '{}' has no foldable initialiser: nondet fallback",
+        var_name);
+      return build_nondet_string_fallback(
+        converter_.get_location_from_decl(call_json));
+    }
 
     list_node = &var_decl["value"];
   }
@@ -2233,7 +2250,18 @@ exprt string_handler::handle_str_join(const nlohmann::json &call_json)
   if (
     !list_node || !list_node->contains("_type") ||
     (*list_node)["_type"] != "List" || !list_node->contains("elts"))
-    throw std::runtime_error("join() argument must be a list of strings");
+  {
+    // Iterable arg isn't a literal `List` and couldn't be folded (e.g.
+    // a `sorted(...)`, list comprehension, or unannotated parameter).
+    // Fall back to a sound nondet `char *` instead of aborting GOTO
+    // conversion. Same pattern as PRs #4814 (splitlines), #4815
+    // (partition/format), #4818..#4826 (str.* runtime models).
+    log_debug(
+      "python-string",
+      "join() iterable arg not a foldable List literal: nondet fallback");
+    return build_nondet_string_fallback(
+      converter_.get_location_from_decl(call_json));
+  }
 
   // Get the list elements from the AST
   const auto &elements = (*list_node)["elts"];
@@ -2308,7 +2336,8 @@ exprt string_handler::handle_single_char_comparison(
   exprt &rhs)
 {
   // Dereference pointer to character if needed
-  auto maybe_dereference = [](const exprt &expr) -> exprt {
+  auto maybe_dereference = [](const exprt &expr) -> exprt
+  {
     if (
       expr.type().is_pointer() && (expr.type().subtype().is_signedbv() ||
                                    expr.type().subtype().is_unsignedbv()))
@@ -2321,7 +2350,8 @@ exprt string_handler::handle_single_char_comparison(
   };
 
   // Create comparison expression with location info
-  auto create_comparison = [&](const exprt &left, const exprt &right) -> exprt {
+  auto create_comparison = [&](const exprt &left, const exprt &right) -> exprt
+  {
     exprt comp_expr(converter_.get_op(op, bool_type()), bool_type());
     comp_expr.copy_to_operands(left, right);
 

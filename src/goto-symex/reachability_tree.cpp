@@ -163,7 +163,8 @@ bool reachability_treet::step_next_state()
 unsigned int
 reachability_treet::decide_ileave_direction(execution_statet &ex_state)
 {
-  auto is_thread_schedulable = [&](int tid) {
+  auto is_thread_schedulable = [&](int tid)
+  {
     return check_thread_viable(tid, true) && ex_state.dfs_explore_thread(tid);
   };
 
@@ -548,6 +549,13 @@ goto_symext::symex_resultt reachability_treet::get_next_formula()
            get_cur_state().can_execution_continue())
       get_cur_state().symex_step(*this);
 
+    if (por)
+    {
+      get_cur_state().calculate_mpor_constraints();
+      if (get_cur_state().is_transition_blocked_by_mpor())
+        break;
+    }
+
     if (state_hashing)
     {
       if (check_for_hash_collision())
@@ -558,14 +566,6 @@ goto_symext::symex_resultt reachability_treet::get_next_formula()
 
       update_hash_collision_set();
     }
-
-    if (por)
-    {
-      get_cur_state().calculate_mpor_constraints();
-      if (get_cur_state().is_transition_blocked_by_mpor())
-        break;
-    }
-
     next_thread_id = decide_ileave_direction(get_cur_state());
 
     if (

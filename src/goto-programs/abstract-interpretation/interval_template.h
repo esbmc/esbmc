@@ -360,7 +360,8 @@ public:
     result.lower = a0_b0;
     result.upper = a0_b0;
 
-    auto update_value = [&result](T value) {
+    auto update_value = [&result](T value)
+    {
       result.lower = std::min(value, *result.lower);
       result.upper = std::max(value, *result.upper);
     };
@@ -396,7 +397,8 @@ public:
     result.lower = a0_b0;
     result.upper = a0_b0;
 
-    auto update_value = [&result](T value) {
+    auto update_value = [&result](T value)
+    {
       result.lower = std::min(value, *result.lower);
       result.upper = std::max(value, *result.upper);
     };
@@ -523,7 +525,8 @@ public:
     return lhs.interval_left_shift(lhs, rhs);
   }
 
-  static interval_templatet<T> bitnot(const interval_templatet<T> &w)
+  static interval_templatet<T>
+  bitnot([[maybe_unused]] const interval_templatet<T> &w)
   {
     interval_templatet<T> result;
     return result;

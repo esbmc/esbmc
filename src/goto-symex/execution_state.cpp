@@ -804,8 +804,9 @@ unsigned int execution_statet::add_thread(const goto_programt *prog)
 
   // While we've recorded the new thread as starting in the designated program,
   // it might not run immediately, thus must have it's path preserved:
-  preserved_paths[thread_nr].push_back(std::make_pair(
-    prog->instructions.begin(), goto_statet(threads_state[thread_nr])));
+  preserved_paths[thread_nr].push_back(
+    std::make_pair(
+      prog->instructions.begin(), goto_statet(threads_state[thread_nr])));
 
   return threads_state.size() - 1; // thread ID, zero based
 }
@@ -883,17 +884,20 @@ void execution_statet::get_expr_globals(
     if (!symbol)
       return;
 
-    if (
-      name == "c:@__ESBMC_alloc" || name == "c:@__ESBMC_alloc_size" ||
-      name == "c:@__ESBMC_is_dynamic" ||
-      name == "c:@__ESBMC_blocked_threads_count" ||
-      name.find("c:pthread_lib") != std::string::npos ||
-      name == "c:@__ESBMC_rounding_mode" ||
-      name.find("c:@__ESBMC_pthread_thread") != std::string::npos)
+    auto is_internal_name = [](const std::string &n)
     {
-      return;
-    }
+      return n == "c:@__ESBMC_alloc" || n == "c:@__ESBMC_alloc_size" ||
+             n == "c:@__ESBMC_is_dynamic" ||
+             n == "c:@__ESBMC_blocked_threads_count" ||
+             n.find("c:pthread_lib") != std::string::npos ||
+             n == "c:@__ESBMC_rounding_mode";
+    };
 
+    // Resolve pointer parameters/locals BEFORE applying the internal-name
+    // filter. The pointer variable itself may live in pthread_lib (e.g. the
+    // `mutex` parameter of pthread_mutex_lock) and so match the filter, yet
+    // still point to a user global whose access must be recorded as an MPOR
+    // dependency.
     expr2tc p = expr;
     bool point_to_global = false;
     if (
@@ -919,6 +923,8 @@ void execution_statet::get_expr_globals(
           const symbolt *s = ns.lookup(n);
           if (!s)
             continue;
+          if (is_internal_name(n))
+            continue;
           point_to_global =
             s->static_lifetime || s->get_type().is_dynamic_set();
           p = to_object_descriptor2t(obj).object;
@@ -928,6 +934,11 @@ void execution_statet::get_expr_globals(
         }
       }
     }
+
+    // Drop the pointer symbol itself if it is an internal pthread_lib name,
+    // unless we've resolved it to a user global above.
+    if (is_internal_name(name) && !point_to_global)
+      return;
 
     // Rename to level1 to avoid shared varible mismatch in mpor.
     cur_state->top().level1.rename(p);
@@ -1003,9 +1014,8 @@ void execution_statet::get_expr_globals(
     }
   }
 
-  expr->foreach_operand([this, &globals_list, &ns](const expr2tc &e) {
-    get_expr_globals(ns, e, globals_list);
-  });
+  expr->foreach_operand([this, &globals_list, &ns](const expr2tc &e)
+                        { get_expr_globals(ns, e, globals_list); });
 }
 
 bool execution_statet::check_mpor_dependency(unsigned int j, unsigned int l)
@@ -1156,11 +1166,48 @@ bool execution_statet::has_cswitch_point_occured() const
   if (cswitch_forced)
     return true;
 
-  if (
-    thread_last_reads[active_thread].size() != 0 ||
-    thread_last_writes[active_thread].size() != 0)
-    return true;
+  // Mutex / condition-var / rwlock / barrier / spinlock accesses should
+  // contribute to MPOR dependency tracking (so lock/unlock pairs create
+  // dependency chains between threads), but must not by themselves force
+  // a context switch point here — they already drive scheduling through
+  // the pthread library's explicit switch mechanisms, and treating every
+  // lock access as a cswitch point blows up the DFS width.
+  auto is_pthread_sync_type = [](const type2tc &t)
+  {
+    if (is_nil_type(t))
+      return false;
+    if (is_struct_type(t))
+    {
+      const std::string &n = to_struct_type(t).name.as_string();
+      return n.find("pthread_mutex_t") != std::string::npos ||
+             n.find("pthread_cond_t") != std::string::npos ||
+             n.find("pthread_rwlock_t") != std::string::npos ||
+             n.find("pthread_barrier_t") != std::string::npos ||
+             n.find("pthread_spinlock_t") != std::string::npos;
+    }
+    if (is_union_type(t))
+    {
+      const std::string &n = to_union_type(t).name.as_string();
+      return n.find("pthread_mutex_t") != std::string::npos ||
+             n.find("pthread_cond_t") != std::string::npos ||
+             n.find("pthread_rwlock_t") != std::string::npos;
+    }
 
+    return false;
+  };
+
+  auto any_non_sync = [&](const std::set<expr2tc> &s)
+  {
+    for (const auto &e : s)
+      if (!is_pthread_sync_type(e->type))
+        return true;
+    return false;
+  };
+
+  if (
+    any_non_sync(thread_last_reads[active_thread]) ||
+    any_non_sync(thread_last_writes[active_thread]))
+    return true;
   return false;
 }
 
