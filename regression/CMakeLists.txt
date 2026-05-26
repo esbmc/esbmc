@@ -320,8 +320,10 @@ set(_slow_regression_tests
     # consteval+nondet fallback in PR #4811 they now reach symex and
     # need the extra budget to finish on slower CI runners.
     "regression/humaneval/humaneval_111"
+    "regression/humaneval/humaneval_129"
     "regression/humaneval/humaneval_153"
     "regression/humaneval/humaneval_161"
+    "regression/quixbugs/flatten_fail"
     "regression/quixbugs/next_palindrome"
     "regression/quixbugs/pascal"
     "regression/ai-generated-code/two_sum"
