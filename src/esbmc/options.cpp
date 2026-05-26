@@ -762,10 +762,6 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "Enable value-set analysis for pointers and add assumes to the "
      "program"},
-    {"no-add-symex-value-sets",
-     NULL,
-     "Opt out of the symex value-set analysis. It is enabled by default "
-     "for --k-induction and friends"},
     {"segfault-handler", NULL, "Print stacktrace on segmentation fault"}}},
   {"DEBUG options",
    {
