@@ -390,8 +390,7 @@ typet python_converter::infer_attr_type_from_usage(
       {
         auto [t, v] = tgt_val(stmt);
         if (
-          !t || !v || !t->is_object() ||
-          t->value("_type", "") != "Attribute" ||
+          !t || !v || !t->is_object() || t->value("_type", "") != "Attribute" ||
           t->value("attr", "") != attr_name || !t->contains("value") ||
           !(*t)["value"].is_object() ||
           (*t)["value"].value("_type", "") != "Name" ||
@@ -599,8 +598,9 @@ void python_converter::get_attributes_from_self(
             // attribute (linked-list / tree patterns).  Mark so the
             // usage-based fallback below can override it.
             const auto &ann = it->second;
-            if (ann.is_object() && ann.value("_type", "") == "Name" &&
-                ann.value("id", "") == "NoneType")
+            if (
+              ann.is_object() && ann.value("_type", "") == "Name" &&
+              ann.value("id", "") == "NoneType")
               from_param_default_none = true;
           }
         }
