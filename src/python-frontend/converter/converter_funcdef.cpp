@@ -357,8 +357,7 @@ static void collect_self_attr_stores_of_param(
       t.is_object() && t.value("_type", "") == "Attribute" &&
       t.contains("value") && t["value"].is_object() &&
       t["value"].value("_type", "") == "Name" && t["value"].contains("id") &&
-      t["value"]["id"] == "self" && t.contains("attr") &&
-      t["attr"].is_string())
+      t["value"]["id"] == "self" && t.contains("attr") && t["attr"].is_string())
       return t["attr"].get<std::string>();
     return "";
   };
@@ -373,8 +372,8 @@ static void collect_self_attr_stores_of_param(
 
     // self.attr = param  (plain assignment)
     if (
-      stype == "Assign" && stmt.contains("targets") &&
-      stmt.contains("value") && rhs_is_param(stmt["value"]))
+      stype == "Assign" && stmt.contains("targets") && stmt.contains("value") &&
+      rhs_is_param(stmt["value"]))
     {
       for (const auto &tgt : stmt["targets"])
       {
