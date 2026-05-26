@@ -59,7 +59,6 @@ protected:
 
   void assume_loop_entry_cond_before_loop(
     goto_programt::targett &loop_head,
-    goto_programt::targett &loop_exit,
     const guardst &guard);
 
   void adjust_loop_head_and_exit(

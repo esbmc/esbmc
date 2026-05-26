@@ -1494,13 +1494,16 @@ void python_converter::get_var_assign(
     }
 
     // Check for uninitialized usage
-    for (std::string &s : local_loads)
+    if (lhs_symbol)
     {
-      if (lhs_symbol->id.as_string() == s)
+      for (std::string &s : local_loads)
       {
-        throw std::runtime_error(
-          "Variable " + sid.get_object() + " in function " +
-          current_func_name_ + " is uninitialized.");
+        if (lhs_symbol->id.as_string() == s)
+        {
+          throw std::runtime_error(
+            "Variable " + sid.get_object() + " in function " +
+            current_func_name_ + " is uninitialized.");
+        }
       }
     }
 

@@ -170,28 +170,28 @@ void goto_coveraget::branch_function_coverage()
       if (filter(f_it->first, goto_program))
         continue;
 
-      bool flg = true;
+      auto in_verifying_files = [&](const goto_programt::instructiont &ins) {
+        return location_pool.count(
+                 get_filename_from_path(ins.location.file().as_string())) != 0;
+      };
+
+      // Add a false assert at the first instruction belonging to one of the
+      // files under verification, to check if the function is entered.
+      auto entry = std::find_if(
+        goto_program.instructions.begin(),
+        goto_program.instructions.end(),
+        in_verifying_files);
+      if (entry != goto_program.instructions.end())
+        insert_assert(
+          goto_program,
+          entry,
+          gen_false_expr(),
+          "function entry: " + id2string(f_it->first));
 
       Forall_goto_program_instructions (it, goto_program)
       {
-        std::string cur_filename =
-          get_filename_from_path(it->location.file().as_string());
-        // skip if it's not the verifying files
-        // probably a library
-        if (location_pool.count(cur_filename) == 0)
+        if (!in_verifying_files(*it))
           continue;
-
-        if (flg)
-        {
-          // add a false assert in the beginning
-          // to check if the function is entered.
-          insert_assert(
-            goto_program,
-            it,
-            gen_false_expr(),
-            "function entry: " + id2string(f_it->first));
-          flg = false;
-        }
 
         if (it->location.property().as_string() == "skipped")
           // this stands for the auxiliary condition/branch we added.
@@ -220,8 +220,6 @@ void goto_coveraget::branch_function_coverage()
           insert_assert(goto_program, it, gen_not_expr(it->guard));
         }
       }
-
-      flg = true;
     }
 
   // fix for branch coverage with kind/incr
