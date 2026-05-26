@@ -864,18 +864,21 @@ void dereferencet::deref_invalid_ptr(
 
 enum target_flags
 {
-  flag_src_scalar = 0,
-  flag_src_array = 1,
-  flag_src_struct = 2,
-  flag_src_union = 3,
+  // Each src/dst category and offset kind is a distinct bit so the case
+  // labels in build_reference_rec encode every combination uniquely, and
+  // never collapse to the same integer (which used to happen when several
+  // flags were defined as 0).
+  flag_src_scalar = 0x01,
+  flag_src_array = 0x02,
+  flag_src_struct = 0x04,
+  flag_src_union = 0x08,
 
-  flag_dst_scalar = 0,
-  flag_dst_array = 4,
-  flag_dst_struct = 8,
-  flag_dst_union = 0xC,
+  flag_dst_scalar = 0x10,
+  flag_dst_struct = 0x20,
+  flag_dst_union = 0x40,
 
-  flag_is_const_offs = 0x10,
-  flag_is_dyn_offs = 0,
+  flag_is_const_offs = 0x80,
+  flag_is_dyn_offs = 0x100,
 };
 
 /*
@@ -947,6 +950,8 @@ void dereferencet::build_reference_rec(
   int flags = 0;
   if (is_constant_int2t(offset))
     flags |= flag_is_const_offs;
+  else
+    flags |= flag_is_dyn_offs;
 
   // All accesses to code need no further construction
   if (is_code_type(value) || is_code_type(type))
