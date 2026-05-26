@@ -849,17 +849,20 @@ void execution_statet::get_expr_globals(
     if (!symbol)
       return;
 
-    if (
-      name == "c:@__ESBMC_alloc" || name == "c:@__ESBMC_alloc_size" ||
-      name == "c:@__ESBMC_is_dynamic" ||
-      name == "c:@__ESBMC_blocked_threads_count" ||
-      name.find("c:pthread_lib") != std::string::npos ||
-      name == "c:@__ESBMC_rounding_mode" ||
-      name.find("c:@__ESBMC_pthread_thread") != std::string::npos)
-    {
-      return;
-    }
+    auto is_internal_name = [](const std::string &n) {
+      return n == "c:@__ESBMC_alloc" || n == "c:@__ESBMC_alloc_size" ||
+             n == "c:@__ESBMC_is_dynamic" ||
+             n == "c:@__ESBMC_blocked_threads_count" ||
+             n.find("c:pthread_lib") != std::string::npos ||
+             n == "c:@__ESBMC_rounding_mode";
+    };
 
+    // Resolve pointer parameters/locals BEFORE applying the internal-name
+    // filter. The pointer variable itself may live in pthread_lib (e.g. the
+    // `mutex` parameter of pthread_mutex_lock) and so match the filter, yet
+    // still point to a user global whose access must be recorded as an MPOR
+    // dependency.
+    expr2tc p = expr;
     bool point_to_global = false;
     if (
       symbol->type.is_pointer() && symbol->name != "invalid_object" &&
@@ -884,7 +887,10 @@ void execution_statet::get_expr_globals(
           const symbolt *s = ns.lookup(n);
           if (!s)
             continue;
+          if (is_internal_name(n))
+            continue;
           point_to_global = s->static_lifetime || s->type.is_dynamic_set();
+          p = to_object_descriptor2t(obj).object;
           /* Stop when the global symbol is found */
           if (point_to_global)
             break;
@@ -892,12 +898,19 @@ void execution_statet::get_expr_globals(
       }
     }
 
+    // Drop the pointer symbol itself if it is an internal pthread_lib name,
+    // unless we've resolved it to a user global above.
+    if (is_internal_name(name) && !point_to_global)
+      return;
+
+    // Rename to level1 to avoid shared varible mismatch in mpor.
+    cur_state->top().level1.rename(p);
     if (
       symbol->static_lifetime || symbol->type.is_dynamic_set() ||
       point_to_global)
     {
       std::list<unsigned int> threadId_list;
-      auto it_find = art1->vars_map.find(expr);
+      auto it_find = art1->vars_map.find(p);
 
       // the expression was accessed in another interleaving
       if (it_find != art1->vars_map.end())
@@ -906,7 +919,7 @@ void execution_statet::get_expr_globals(
         threadId_list.push_back(get_active_state().top().level1.thread_id);
 
         art1->vars_map.insert(
-          std::pair<expr2tc, std::list<unsigned int>>(expr, threadId_list));
+          std::pair<expr2tc, std::list<unsigned int>>(p, threadId_list));
 
         std::list<unsigned int>::iterator it_list;
         for (it_list = threadId_list.begin(); it_list != threadId_list.end();
@@ -915,32 +928,32 @@ void execution_statet::get_expr_globals(
           // find if some thread access the same expression
           if (*it_list != get_active_state().top().level1.thread_id)
           {
-            globals_list.insert(expr);
-            art1->is_global.insert(expr);
+            globals_list.insert(p);
+            art1->is_global.insert(p);
           }
           // expression was not accessed by other thread
           else
           {
-            auto its_global = art1->is_global.find(expr);
+            auto its_global = art1->is_global.find(p);
             // expression was defined as global in another interleaving
             if (its_global != art1->is_global.end())
-              globals_list.insert(expr);
+              globals_list.insert(p);
           }
         }
         // first access of expression
       }
       else
       {
-        auto its_global = art1->is_global.find(expr);
+        auto its_global = art1->is_global.find(p);
         if (its_global != art1->is_global.end())
-          globals_list.insert(expr);
+          globals_list.insert(p);
         else
         {
           threadId_list.push_back(get_active_state().top().level1.thread_id);
           art1->vars_map.insert(
-            std::pair<expr2tc, std::list<unsigned int>>(expr, threadId_list));
-          globals_list.insert(expr);
-          art1->is_global.insert(expr);
+            std::pair<expr2tc, std::list<unsigned int>>(p, threadId_list));
+          globals_list.insert(p);
+          art1->is_global.insert(p);
         }
       }
     }
@@ -1103,11 +1116,46 @@ bool execution_statet::has_cswitch_point_occured() const
   if (cswitch_forced)
     return true;
 
-  if (
-    thread_last_reads[active_thread].size() != 0 ||
-    thread_last_writes[active_thread].size() != 0)
-    return true;
+  // Mutex / condition-var / rwlock / barrier / spinlock accesses should
+  // contribute to MPOR dependency tracking (so lock/unlock pairs create
+  // dependency chains between threads), but must not by themselves force
+  // a context switch point here — they already drive scheduling through
+  // the pthread library's explicit switch mechanisms, and treating every
+  // lock access as a cswitch point blows up the DFS width.
+  auto is_pthread_sync_type = [](const type2tc &t) {
+    if (is_nil_type(t))
+      return false;
+    if (is_struct_type(t))
+    {
+      const std::string &n = to_struct_type(t).name.as_string();
+      return n.find("pthread_mutex_t") != std::string::npos ||
+             n.find("pthread_cond_t") != std::string::npos ||
+             n.find("pthread_rwlock_t") != std::string::npos ||
+             n.find("pthread_barrier_t") != std::string::npos ||
+             n.find("pthread_spinlock_t") != std::string::npos;
+    }
+    if (is_union_type(t))
+    {
+      const std::string &n = to_union_type(t).name.as_string();
+      return n.find("pthread_mutex_t") != std::string::npos ||
+             n.find("pthread_cond_t") != std::string::npos ||
+             n.find("pthread_rwlock_t") != std::string::npos;
+    }
 
+    return false;
+  };
+
+  auto any_non_sync = [&](const std::set<expr2tc> &s) {
+    for (const auto &e : s)
+      if (!is_pthread_sync_type(e->type))
+        return true;
+    return false;
+  };
+
+  if (
+    any_non_sync(thread_last_reads[active_thread]) ||
+    any_non_sync(thread_last_writes[active_thread]))
+    return true;
   return false;
 }
 
