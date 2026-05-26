@@ -1,6 +1,7 @@
 #include <goto-programs/goto_k_induction.h>
 #include <goto-programs/remove_no_op.h>
 #include <util/c_types.h>
+#include <util/config.h>
 #include <util/expr_util.h>
 #include <util/i2string.h>
 #include <util/std_expr.h>
@@ -245,8 +246,21 @@ void goto_k_inductiont::make_nondet_assign(
 
   goto_programt dest;
   size_t inserted = 0;
+  const bool skip_pointer_havoc =
+    config.options.get_bool_option("add-symex-value-sets");
   for (auto const &lhs : loop_vars)
   {
+    // Under --add-symex-value-sets, leave pointer LHSs untouched: the
+    // value-set analysis pins them to the over-approximated object set
+    // via assume() in symex_dereference, and a nondet havoc here would
+    // override that pin with a fresh, unconstrained pointer — making
+    // the inductive step's post-loop reasoning lose track of which
+    // objects the pointer can alias (e.g. regression/incremental-smt/
+    // incremental-{18,24}, which rely on r1,r2 ∈ {&x,&y} surviving
+    // havoc, issue #4846).
+    if (skip_pointer_havoc && is_pointer_type(lhs))
+      continue;
+
     // Generate a nondeterministic value for the loop variable
     expr2tc rhs = gen_nondet(lhs->type);
 
