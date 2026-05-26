@@ -500,6 +500,21 @@ void insert_abort_call_markers_for_function(
   goto_functiont &goto_function,
   const abort_sett &aborts)
 {
+  // Conditional-abort wrappers: functions of shape
+  //   void name(T cond) { if (!cond) abort(); }
+  // SV-COMP and its derivative benchmarks ship several such wrappers
+  // under different names. We recognise them by name and emit
+  // ASSERT(cond) before each call. Both bare and clang-mangled forms
+  // are listed to match the convention in seed_abort_set.
+  const abort_sett conditional_abort_wrappers = {
+    "__VERIFIER_assert",
+    "c:@F@__VERIFIER_assert",
+    "assume_abort_if_not",
+    "c:@F@assume_abort_if_not",
+    "assert",
+    "c:@F@assert",
+  };
+
   goto_programt &body = goto_function.body;
   goto_loopst loops(function_name, goto_functions, goto_function);
   if (loops.get_loops().empty())
@@ -550,14 +565,16 @@ void insert_abort_call_markers_for_function(
         continue;
       }
 
-      // __VERIFIER_assert(cond): conditional marker ASSERT(cond).
-      // SV-COMP defines this wrapper as `if (!cond) abort();`. The
-      // call-site argument is the caller's expression for `cond` —
-      // no substitution needed. For integer cond (SV-COMP's typical
-      // `int cond`), coerce to bool via `cond != 0` so the assertion
-      // guard has bool type downstream in the solver.
-      const std::string &name = id2string(callee);
-      if (name == "__VERIFIER_assert" || name == "c:@F@__VERIFIER_assert")
+      // Conditional-abort wrappers: shape `void name(T cond) { if
+      // (!cond) abort(); }`. SV-COMP and its derivative benchmarks
+      // ship several such wrappers under different names — recognise
+      // them by name and emit ASSERT(cond) before each call. The
+      // call-site argument is already the caller's expression for
+      // cond, so no parameter substitution is needed. For integer
+      // cond (the typical signature in SV-COMP), coerce to bool via
+      // `cond != 0` so the assertion guard has bool type downstream
+      // in the solver.
+      if (conditional_abort_wrappers.count(callee))
       {
         if (call.operands.empty() || is_nil_expr(call.operands[0]))
           continue;
