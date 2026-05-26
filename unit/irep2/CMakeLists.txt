@@ -14,3 +14,14 @@ add_executable(guardbench guard.bench.cpp)
 target_include_directories(guardbench PRIVATE ${Boost_INCLUDE_DIRS})
 target_link_libraries(guardbench
   PRIVATE util_esbmc Catch2::Catch2 ${OS_INCLUDE_LIBS})
+
+# Memory-allocation microbenchmarks. Combines per-op latency
+# (Catch2 BENCHMARK), allocation count via global new/delete
+# override, and VmRSS/VmPeak readings from /proc/self/status. Run
+# with:
+#   ./unit/irep2/memorybench '[bench]'   # latency
+#   ./unit/irep2/memorybench '[probe]'   # alloc counts + RSS
+add_executable(memorybench memory.bench.cpp)
+target_include_directories(memorybench PRIVATE ${Boost_INCLUDE_DIRS})
+target_link_libraries(memorybench
+  PRIVATE util_esbmc Catch2::Catch2 ${OS_INCLUDE_LIBS})

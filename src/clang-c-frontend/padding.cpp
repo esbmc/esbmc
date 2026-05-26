@@ -225,7 +225,7 @@ static void add_padding(struct_typet &type, const namespacet &ns)
 
   for (struct_typet::componentst::iterator it = components.begin();
        it != components.end();
-       it++)
+       ++it)
   {
     const typet it_type = it->type();
     BigInt a = 1;
