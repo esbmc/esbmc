@@ -1591,6 +1591,12 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
           options, empty_reached, empty_mul_reached, empty_pytest, empty_ctest);
       }
 
+      // Flag the UNSAT-by-vacuity case so callers that care (the
+      // termination inductive-step layer in particular) can downgrade
+      // the verdict to UNKNOWN. A real solver UNSAT on a non-empty
+      // claim set proves the property; UNSAT on zero claims proves
+      // nothing — there was simply nothing to falsify.
+      options.set_option("bmc-vacuous-unsat", true);
       return smt_convt::P_UNSATISFIABLE;
     }
 
@@ -1821,7 +1827,8 @@ smt_convt::resultt bmct::multi_property_check(
                        &is,
                        &is_color,
                        &YELLOW,
-                       &runtime_solver](const size_t &i) {
+                       &runtime_solver](const size_t &i)
+  {
     //"multi-fail-fast n": stop after first n SATs found.
     if (is_fail_fast && fail_fast_cnt >= fail_fast_limit)
       return;
@@ -1898,9 +1905,9 @@ smt_convt::resultt bmct::multi_property_check(
     }
 
     // Store solver name initially but not again
-    std::call_once(summary.solver_name_flag, [&]() {
-      summary.solver_name = solver_ptr->solver_text();
-    });
+    std::call_once(
+      summary.solver_name_flag,
+      [&]() { summary.solver_name = solver_ptr->solver_text(); });
     // In coverage mode, only report instrumented coverage claims
     bool is_cov_silent =
       is_goto_cov && claim.claim_property != "instrumented assertion";
