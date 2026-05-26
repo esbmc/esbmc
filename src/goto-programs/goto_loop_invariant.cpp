@@ -66,7 +66,8 @@ static std::vector<expr2tc> extract_invariants_near(
 
   // Fold a LOOP_INVARIANT instruction's expression list into `invariants`.
   // Multiple sub-expressions are combined with &&.
-  auto collect = [&](const std::list<expr2tc> &lst) {
+  auto collect = [&](const std::list<expr2tc> &lst)
+  {
     if (lst.size() == 1)
     {
       invariants.push_back(lst.front());
@@ -86,7 +87,8 @@ static std::vector<expr2tc> extract_invariants_near(
   // These may legitimately appear between consecutive __ESBMC_loop_invariant()
   // calls.  FUNCTION_CALL instructions arise when remove_function_call emits a
   // DECL + FUNCTION_CALL pair for helper functions called inside an invariant.
-  auto is_compiler_temp = [](goto_programt::const_targett t) -> bool {
+  auto is_compiler_temp = [](goto_programt::const_targett t) -> bool
+  {
     if (t->is_decl() && is_code_decl2t(t->code))
       return id2string(to_code_decl2t(t->code).value).find('$') !=
              std::string::npos;
@@ -377,7 +379,8 @@ static void extract_and_remove_side_effects_impl(
     if (is_symbol2t(e))
       modified_in_loop.insert(to_symbol2t(e).get_symbol_name());
 
-  auto decl_modified_in_loop = [&modified_in_loop](const irep_idt &decl_val) {
+  auto decl_modified_in_loop = [&modified_in_loop](const irep_idt &decl_val)
+  {
     for (const auto &sym : modified_in_loop)
       if (symbol_name_matches(sym, decl_val, true))
         return true;

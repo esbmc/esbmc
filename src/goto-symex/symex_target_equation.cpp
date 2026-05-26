@@ -165,7 +165,8 @@ void symex_target_equationt::pre_register_addresses(
   // use happens to appear in the source.  Dynamic/automatic objects keep
   // their original lazy registration to avoid exposing later-allocated
   // memory to earlier casts.
-  std::function<void(const expr2tc &)> walk = [&](const expr2tc &e) {
+  std::function<void(const expr2tc &)> walk = [&](const expr2tc &e)
+  {
     if (!e)
       return;
     if (is_address_of2t(e))
@@ -481,9 +482,8 @@ void symex_target_equationt::replace_rec(
       e = step.rhs;
   }
 
-  e->Foreach_operand([&step, &keep_local, this](expr2tc &inner) {
-    replace_rec(step, inner, keep_local);
-  });
+  e->Foreach_operand([&step, &keep_local, this](expr2tc &inner)
+                     { replace_rec(step, inner, keep_local); });
 }
 
 void symex_target_equationt::reconstruct_symbolic_expression(
