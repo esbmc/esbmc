@@ -369,31 +369,28 @@ def _inside_loop_within_scope(node: ast.AST, parents: dict[int, ast.AST]) -> boo
     ``GeneratorExp``) — each re-evaluates the node per iteration, which
     the per-site converter state cannot represent.
     """
+    scope_boundaries = (
+        ast.FunctionDef,
+        ast.AsyncFunctionDef,
+        ast.Lambda,
+        ast.ClassDef,
+        ast.Module,
+    )
+    loop_ancestors = (
+        ast.For,
+        ast.AsyncFor,
+        ast.While,
+        ast.ListComp,
+        ast.SetComp,
+        ast.DictComp,
+        ast.GeneratorExp,
+    )
+
     cursor = parents.get(id(node))
     while cursor is not None:
-        if isinstance(
-                cursor,
-            (
-                ast.FunctionDef,
-                ast.AsyncFunctionDef,
-                ast.Lambda,
-                ast.ClassDef,
-                ast.Module,
-            ),
-        ):
+        if isinstance(cursor, scope_boundaries):
             return False
-        if isinstance(
-                cursor,
-            (
-                ast.For,
-                ast.AsyncFor,
-                ast.While,
-                ast.ListComp,
-                ast.SetComp,
-                ast.DictComp,
-                ast.GeneratorExp,
-            ),
-        ):
+        if isinstance(cursor, loop_ancestors):
             return True
         cursor = parents.get(id(cursor))
     return False
@@ -1293,14 +1290,13 @@ def lower_threading_thread_usage(tree: ast.Module, source_filename: str) -> None
     earliest_user_with_thread: int | None = None
     for idx, stmt in enumerate(tree.body):
         if isinstance(
-                stmt,
-            (
-                ast.Import,
-                ast.ImportFrom,
-                ast.ClassDef,
-                ast.FunctionDef,
-                ast.AsyncFunctionDef,
-            ),
+            stmt,(
+	        ast.Import,
+	        ast.ImportFrom,
+	        ast.ClassDef,
+	        ast.FunctionDef,
+	        ast.AsyncFunctionDef,
+	    ),
         ):
             insert_at = idx + 1
         if (isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))

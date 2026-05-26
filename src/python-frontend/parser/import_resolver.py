@@ -199,7 +199,12 @@ def import_module_by_name(
 
         normalized = _normalize_existing_path(path)
         if normalized is None:
-            _resolver_error(f"expected model file at '{path}'")
+            # Dotted model names can denote attributes/functions from a base
+            # model module (e.g. math.isnan), not real submodules on disk.
+            # Keep top-level model misses loud, but skip nested misses quietly
+            # so attribute-based model usage does not emit false path errors.
+            if "." not in module_name:
+                _resolver_error(f"expected model file at '{path}'")
             return None
         return normalized
 
@@ -232,8 +237,10 @@ def _collect_import_targets(
         return module_names, None
 
     module_name = node.module
-    if module_name:
-        import_aliases[module_name] = module_name
+    # `from pkg import X` does not bind `pkg` in local scope, so do not
+    # register `pkg` as an alias. Registering it would make expressions
+    # like `pkg.attr` inside function scopes collide with local variables
+    # named `pkg` (shadowing regressions such as import_shadowed_by_param).
     module_names = [module_name] if module_name else []
     imported_elements = None if any(a.name == '*' for a in node.names) else node.names
     return module_names, imported_elements

@@ -29,6 +29,7 @@ class ParserModuleDeps:
     rewrite_re: ModuleType
     threading_lowering: ModuleType
 
+
 _PARSER_SUBMODULES: Final[tuple[str, ...]] = (
     "constant_annotations",
     "json_emitter",
