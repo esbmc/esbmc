@@ -13,10 +13,12 @@
 #include <string>
 #include <unordered_set>
 #include <util/crypto_hash.h>
-#include <util/guard.h>
+#include <irep2/irep2_guard.h>
 #include <util/i2string.h>
 #include <irep2/irep2.h>
+#include <memory>
 #include <vector>
+#include <goto-symex/witnesses.h>
 
 class execution_statet; // forward decl
 
@@ -94,7 +96,7 @@ public:
     std::shared_ptr<renaming::level2t> level2_ptr;
     renaming::level2t &level2;
     value_sett value_set;
-    guardt guard;
+    guard2tc guard;
     unsigned int thread_id;
     variable_name_sett local_variables;
 
@@ -207,7 +209,7 @@ public:
     unsigned int va_index;
 
     /** Record the entry guard of the function */
-    guardt entry_guard;
+    guard2tc entry_guard;
 
     /** Record if the function body is hidden */
     bool hidden;
@@ -433,9 +435,9 @@ public:
   bool thread_ended;
 
   /** Current state guard of this thread. */
-  guardt guard;
+  guard2tc guard;
   /** Guard of global context. */
-  guardt global_guard;
+  guard2tc global_guard;
   /** Current program location of this thread. */
   symex_targett::sourcet source;
   /** Counter for how many times a particular variable has been declared:
@@ -468,6 +470,16 @@ public:
    *  realloc number is. No need for special consideration when merging states
    *  at phi nodes: the renumbering update itself is guarded at the SMT layer.*/
   std::map<expr2tc, unsigned> realloc_map;
+
+  // --- Violation-witness replay state ---
+
+  /// witness_segs[seg][wp]: all actionable waypoints
+  std::vector<std::vector<waypoint>> witness_segs;
+  size_t cur_seg;
+  size_t cur_wp;
+
+  /// Advance the cursor to the next waypoint.
+  void advance_witness_position();
 };
 
 #endif

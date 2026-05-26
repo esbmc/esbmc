@@ -131,16 +131,21 @@ public:
     {
       pointer = i.pointer;
       pos = i.pos;
+      it_str = i.it_str;
     }
 
     iterator()
     {
       pointer = NULL;
+      pos = 0;
+      it_str = NULL;
     }
 
     iterator(char *p_pointer)
     {
       pointer = p_pointer;
+      pos = 0;
+      it_str = p_pointer;
     }
 
     iterator &operator=(const const_iterator &right)
@@ -154,6 +159,7 @@ public:
     {
       this->pointer = right.pointer;
       this->pos = right.pos;
+      this->it_str = right.it_str;
       return *this;
     }
 
@@ -175,7 +181,8 @@ public:
       iterator buffer;
       buffer.pointer = pointer - sizeof(char) * n;
       buffer.pos = pos - n;
-      __ESBMC_assert(buffer.pos > 0, "underflow");
+      buffer.it_str = it_str;
+      __ESBMC_assert(buffer.pos >= 0, "underflow");
       return buffer;
     }
 
@@ -1031,11 +1038,7 @@ public:
 
   basic_string<CharT, Traits, Alloc>::iterator begin() const
   {
-    int i;
-    basic_string<CharT, Traits, Alloc>::iterator first(this->str);
-    first.pos = 0;
-    first.it_str = this->str;
-    return first;
+    return basic_string<CharT, Traits, Alloc>::iterator(this->str);
   }
 
   basic_string<CharT, Traits, Alloc>::iterator end() const
@@ -1068,21 +1071,18 @@ public:
   basic_string<CharT, Traits, Alloc> &
   append(InputIterator first, InputIterator last)
   {
-    __ESBMC_assert(
-      first != NULL, "The first parameter must be different than NULL");
-    __ESBMC_assert(
-      last != NULL, "The second parameter must be different than NULL");
     __ESBMC_assert(first >= 0, "The first parameter must be greater than zero");
     __ESBMC_assert(last >= 0, "The second parameter must be greater than zero");
     int rhsLen = first;
     char c = last;
     int totalLen = this->_size + rhsLen;
     basic_string<CharT, Traits, Alloc> temp(totalLen);
-    int i, j, k;
+    int i, j;
     for (i = 0; i < this->_size; i++)
-      temp[i] = this->str[i];
-    for (j = i, k = 0; j < temp._size; j++, k++)
+      temp.str[i] = this->str[i];
+    for (j = i; j < totalLen; j++)
       temp.str[j] = c;
+    temp.str[totalLen] = '\0';
     *this = temp;
     return *this;
   }
@@ -2672,34 +2672,15 @@ size_t basic_string<CharT, Traits, Alloc>::find_first_of(
   size_t pos) const
 {
 __ESBMC_HIDE:
-  __ESBMC_assert((pos < this->length()) && (pos >= 0), "overflow");
   __ESBMC_assert(s != NULL, "The parameter must be different than NULL");
-  size_t i, j;
-
-  int len = this->length();
-  int lim = pos;
-  char *s1 = new char[len + 1];
-  strcpy(s1, this->str);
-
-  int slen = strlen(s);
-  char *s2 = new char[slen + 1];
-  for (i = 0; i < slen; i++)
-  {
-    s2[i] = s[i];
-  }
-  s2[i] = '\0';
-
-  for (i = 0; i < len; i++)
-  {
-    for (j = 0; j < slen; j++)
-    {
-      if (s1[i] == s2[j])
-      {
+  size_t len = this->length();
+  size_t slen = strlen(s);
+  if (pos >= len || slen == 0)
+    return npos;
+  for (size_t i = pos; i < len; i++)
+    for (size_t j = 0; j < slen; j++)
+      if (this->str[i] == s[j])
         return i;
-      }
-    }
-  }
-  // Return npos if the character is not found
   return npos;
 }
 
@@ -2709,34 +2690,15 @@ size_t basic_string<CharT, Traits, Alloc>::find_first_of(
   size_t pos) const
 {
 __ESBMC_HIDE:
-  __ESBMC_assert((pos < this->length()) && (pos >= 0), "overflow");
   __ESBMC_assert(s.str != NULL, "The parameter must be different than NULL");
-  size_t i, j;
-
-  int len = this->length();
-  int lim = pos;
-  char *s1 = new char[len + 1];
-  strcpy(s1, this->str);
-
-  int slen = s.length();
-  char *s2 = new char[slen + 1];
-  for (i = 0; i < slen; i++)
-  {
-    s2[i] = s.str[i];
-  }
-  s2[i] = '\0';
-
-  for (i = 0; i < len; i++)
-  {
-    for (j = 0; j < slen; j++)
-    {
-      if (s1[i] == s2[j])
-      {
+  size_t len = this->length();
+  size_t slen = s.length();
+  if (pos >= len || slen == 0)
+    return npos;
+  for (size_t i = pos; i < len; i++)
+    for (size_t j = 0; j < slen; j++)
+      if (this->str[i] == s.str[j])
         return i;
-      }
-    }
-  }
-  // Return npos if the character is not found
   return npos;
 }
 
@@ -2745,22 +2707,12 @@ size_t
 basic_string<CharT, Traits, Alloc>::find_first_of(char c, size_t pos) const
 {
 __ESBMC_HIDE:
-  __ESBMC_assert((pos < this->length()) && (pos >= 0), "overflow");
-  size_t i, j;
-
-  int len = this->length();
-  int lim = pos;
-  char *s1 = new char[len + 1];
-  strcpy(s1, this->str);
-
-  for (i = 0; i < len; i++)
-  {
-    if (s1[i] == c)
-    {
+  size_t len = this->length();
+  if (pos >= len)
+    return npos;
+  for (size_t i = pos; i < len; i++)
+    if (this->str[i] == c)
       return i;
-    }
-  }
-  // Return npos if the character is not found
   return npos;
 }
 
@@ -2770,40 +2722,23 @@ size_t basic_string<CharT, Traits, Alloc>::find_first_not_of(
   size_t pos) const
 {
 __ESBMC_HIDE:
-  __ESBMC_assert((pos < this->length()) && (pos >= 0), "overflow");
   __ESBMC_assert(s.str != NULL, "The parameter must be different than NULL");
-  size_t i, j;
-  int number;
-
-  int len = this->length();
-  int lim = pos;
-  char *s1 = new char[len + 1];
-  strcpy(s1, this->str);
-
-  int slen = s.length();
-  char *s2 = new char[slen + 1];
-  for (i = 0; i < slen; i++)
+  size_t len = this->length();
+  size_t slen = s.length();
+  if (pos >= len)
+    return npos;
+  for (size_t i = pos; i < len; i++)
   {
-    s2[i] = s.str[i];
-  }
-  s2[i] = '\0';
-
-  for (i = 0; i < len; i++)
-  {
-    number = 0;
-    for (j = 0; j < slen; j++)
-    {
-      if (s1[i] == s2[j])
+    bool found = false;
+    for (size_t j = 0; j < slen; j++)
+      if (this->str[i] == s.str[j])
       {
-        number++;
+        found = true;
+        break;
       }
-    }
-    if (number == 0)
-    {
+    if (!found)
       return i;
-    }
   }
-  // Return npos if the character is not found
   return npos;
 }
 
@@ -2813,40 +2748,23 @@ size_t basic_string<CharT, Traits, Alloc>::find_first_not_of(
   size_t pos) const
 {
 __ESBMC_HIDE:
-  __ESBMC_assert((pos < this->length()) && (pos >= 0), "overflow");
   __ESBMC_assert(s != NULL, "The parameter must be different than NULL");
-  size_t i, j;
-  int number;
-
-  int len = this->length();
-  int lim = pos;
-  char *s1 = new char[len + 1];
-  strcpy(s1, this->str);
-
-  int slen = strlen(s);
-  char *s2 = new char[slen + 1];
-  for (i = 0; i < slen; i++)
+  size_t len = this->length();
+  size_t slen = strlen(s);
+  if (pos >= len)
+    return npos;
+  for (size_t i = pos; i < len; i++)
   {
-    s2[i] = s[i];
-  }
-  s2[i] = '\0';
-
-  for (i = 0; i < len; i++)
-  {
-    number = 0;
-    for (j = 0; j < slen; j++)
-    {
-      if (s1[i] == s2[j])
+    bool found = false;
+    for (size_t j = 0; j < slen; j++)
+      if (this->str[i] == s[j])
       {
-        number++;
+        found = true;
+        break;
       }
-    }
-    if (number == 0)
-    {
+    if (!found)
       return i;
-    }
   }
-  // Return npos if the character is not found
   return npos;
 }
 
@@ -2855,29 +2773,12 @@ size_t
 basic_string<CharT, Traits, Alloc>::find_first_not_of(char c, size_t pos) const
 {
 __ESBMC_HIDE:
-  __ESBMC_assert((pos < this->length()) && (pos >= 0), "overflow");
-  size_t i, j;
-  int number;
-
-  int len = this->length();
-  int lim = pos;
-  char *s1 = new char[len + 1];
-  strcpy(s1, this->str);
-
-  number = 0;
-
-  for (i = 0; i < len; i++)
-  {
-    if (s1[i] == c)
-    {
-      number++;
-    }
-  }
-  if (number == 0)
-  {
-    return i;
-  }
-  // Return npos if the character is not found
+  size_t len = this->length();
+  if (pos >= len)
+    return npos;
+  for (size_t i = pos; i < len; i++)
+    if (this->str[i] != c)
+      return i;
   return npos;
 }
 
@@ -2887,34 +2788,16 @@ size_t basic_string<CharT, Traits, Alloc>::find_last_of(
   size_t pos) const
 {
 __ESBMC_HIDE:
-  __ESBMC_assert((pos < this->length()) && (pos >= 0), "overflow");
   __ESBMC_assert(s.str != NULL, "The parameter must be different than NULL");
-  size_t i, j;
-
-  int len = this->length();
-  int lim = pos;
-  char *s1 = new char[len + 1];
-  strcpy(s1, this->str);
-
-  int slen = s.length();
-  char *s2 = new char[slen + 1];
-  for (i = 0; i < slen; i++)
-  {
-    s2[i] = s.str[i];
-  }
-  s2[i] = '\0';
-
-  for (i = len; i > 0; i--)
-  {
-    for (j = 0; j < slen; j++)
-    {
-      if (s1[i] == s2[j])
-      {
+  size_t len = this->length();
+  size_t slen = s.length();
+  if (len == 0 || slen == 0)
+    return npos;
+  size_t start = (pos >= len) ? len - 1 : pos;
+  for (size_t i = start + 1; i-- > 0;)
+    for (size_t j = 0; j < slen; j++)
+      if (this->str[i] == s.str[j])
         return i;
-      }
-    }
-  }
-  // Return npos if the character is not found
   return npos;
 }
 
@@ -2924,71 +2807,23 @@ size_t basic_string<CharT, Traits, Alloc>::find_last_of(
   size_t pos) const
 {
 __ESBMC_HIDE:
-  __ESBMC_assert((pos < this->length()) && (pos >= 0), "overflow");
   __ESBMC_assert(s != NULL, "The parameter must be different than NULL");
-  size_t i, j;
-
-  int len = this->length();
-  int lim = pos;
-  char *s1 = new char[len + 1];
-  strcpy(s1, this->str);
-
-  int slen = strlen(s);
-  char *s2 = new char[slen + 1];
-  for (i = 0; i < slen; i++)
-  {
-    s2[i] = s[i];
-  }
-  s2[i] = '\0';
-
-  for (i = len; i > 0; i--)
-  {
-    for (j = 0; j < slen; j++)
-    {
-      if (s1[i] == s2[j])
-      {
+  size_t len = this->length();
+  size_t slen = strlen(s);
+  if (len == 0 || slen == 0)
+    return npos;
+  size_t start = (pos >= len) ? len - 1 : pos;
+  for (size_t i = start + 1; i-- > 0;)
+    for (size_t j = 0; j < slen; j++)
+      if (this->str[i] == s[j])
         return i;
-      }
-    }
-  }
-  // Return npos if the character is not found
   return npos;
 }
 
 template <typename CharT, typename Traits, typename Alloc>
 size_t basic_string<CharT, Traits, Alloc>::find_last_of(char *s) const
 {
-  //__ESBMC_HIDE: __ESBMC_assert((pos < this->length()) && (pos >= 0),
-  //"overflow");
-  __ESBMC_assert(s != NULL, "The parameter must be different than NULL");
-  int pos = npos;
-  size_t i, j;
-
-  int len = this->length();
-  int lim = pos;
-  char *s1 = new char[len + 1];
-  strcpy(s1, this->str);
-
-  int slen = strlen(s);
-  char *s2 = new char[slen + 1];
-  for (i = 0; i < slen; i++)
-  {
-    s2[i] = s[i];
-  }
-  s2[i] = '\0';
-
-  for (i = len; i > 0; i--)
-  {
-    for (j = 0; j < slen; j++)
-    {
-      if (s1[i] == s2[j])
-      {
-        return i;
-      }
-    }
-  }
-  // Return npos if the character is not found
-  return npos;
+  return find_last_of(static_cast<const char *>(s), npos);
 }
 
 template <typename CharT, typename Traits, typename Alloc>
@@ -2996,22 +2831,14 @@ size_t
 basic_string<CharT, Traits, Alloc>::find_last_of(char c, size_t pos) const
 {
 __ESBMC_HIDE:
-  __ESBMC_assert((pos < this->length()) && (pos >= 0), "overflow");
-  size_t i, j;
-
-  int len = this->length();
-  int lim = pos;
-  char *s1 = new char[len + 1];
-  strcpy(s1, this->str);
-
-  for (i = len; i > 0; i--)
-  {
-    if (s1[i] == c)
-    {
+  size_t len = this->length();
+  if (len == 0)
+    return npos;
+  size_t start = (pos >= len) ? len - 1 : pos;
+  for (size_t i = start + 1; i-- > 0;)
+    if (this->str[i] == c)
       return i;
-    }
-  }
-  return npos; // Return npos when the character is not found
+  return npos;
 }
 
 template <typename CharT, typename Traits, typename Alloc>
@@ -3081,44 +2908,27 @@ basic_string<CharT, Traits, Alloc>::rfind(const char *s, size_t pos, size_t n)
   const
 {
 __ESBMC_HIDE:
-  __ESBMC_assert((pos < this->length()) && (pos >= 0), "overflow");
   __ESBMC_assert(s != NULL, "The parameter must be different than NULL");
-  size_t i, j, k;
-  int num = 0;
-  int lim = pos;
-
-  int len = this->length();
-  char *s1 = new char[len + 1];
-  strcpy(s1, this->str);
-
-  int slen = n;
-  char *s2 = new char[slen + 1];
-  for (i = 0; i < slen; i++)
+  size_t len = this->length();
+  if (n == 0)
+    return (pos < len) ? pos : len;
+  if (n > len)
+    return npos;
+  size_t max_start = len - n;
+  size_t start = (pos > max_start) ? max_start : pos;
+  for (size_t i = start + 1; i-- > 0;)
   {
-    s2[i] = s[i];
-  }
-  s2[i] = '\0';
-
-  for (i = len - 1; i >= lim; i--)
-  {
-    for (k = i, j = slen - 1; j >= 0; j--)
-    {
-      if (s1[k] != s2[j])
+    bool match = true;
+    for (size_t j = 0; j < n; j++)
+      if (this->str[i + j] != s[j])
       {
+        match = false;
         break;
       }
-      else
-      {
-        num++;
-        if (num == slen)
-        {
-          return k;
-        }
-        k--;
-      }
-    }
+    if (match)
+      return i;
   }
-  return -1;
+  return npos;
 }
 
 template <typename CharT, typename Traits, typename Alloc>
@@ -3126,40 +2936,8 @@ size_t
 basic_string<CharT, Traits, Alloc>::rfind(const char *s, size_t pos) const
 {
 __ESBMC_HIDE:
-  __ESBMC_assert((pos < this->length()) && (pos >= 0), "overflow");
   __ESBMC_assert(s != NULL, "The parameter must be different than NULL");
-  size_t i, j, k;
-  int num = 0;
-  int lim = pos;
-
-  int len = this->length();
-  char *s1 = new char[len + 1];
-  strcpy(s1, this->str);
-
-  int slen = strlen(s);
-  char *s2 = new char[slen + 1];
-  strcpy(s2, s);
-
-  for (i = len - 1; i >= lim; i--)
-  {
-    for (k = i, j = slen - 1; j >= 0; j--)
-    {
-      if (s1[k] != s2[j])
-      {
-        break;
-      }
-      else
-      {
-        num++;
-        if (num == slen)
-        {
-          return k;
-        }
-        k--;
-      }
-    }
-  }
-  return -1;
+  return rfind(s, pos, strlen(s));
 }
 
 template <typename CharT, typename Traits, typename Alloc>

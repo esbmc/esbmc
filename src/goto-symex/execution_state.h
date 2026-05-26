@@ -207,8 +207,10 @@ public:
    *  @param guard A guard for the assignment, true by default
    *  @param type Assignment type, visible by default
    */
-  void symex_assign(const expr2tc &code, const bool hidden, const guardt &guard)
-    override;
+  void symex_assign(
+    const expr2tc &code,
+    const bool hidden,
+    const guard2tc &guard) override;
 
   /**
    *  Symbolically assert something.
@@ -335,6 +337,16 @@ public:
    *  @return True if the current state prohibits context switches.
    */
   bool check_if_ileaves_blocked();
+
+  /**
+   *  True iff every thread in this schedule has reached a terminal state,
+   *  i.e. has either ended or has an empty call stack. This is the precondition
+   *  for treating the schedule's tail as program termination — only then is it
+   *  sound to fire end-of-program checks such as the memory-leak walker, since
+   *  a still-running thread may hold the only live reference to a dynamic
+   *  object via its stack frames.
+   */
+  bool all_threads_terminal() const;
 
   /**
    *  Create a new thread.
@@ -537,8 +549,9 @@ public:
   irep_idt guard_execution;
   /** Number of nondeterministic symbols in this state. */
   unsigned nondet_count;
-  /** Number of dynamic objects in this state. */
-  static unsigned dynamic_counter;
+  /** Number of dynamic objects in this state. thread_local so parallel
+   *  symex doesn't race on the counter. */
+  static thread_local unsigned dynamic_counter;
   /** Identifying number for this execution state. Used to distinguish runs
    *  in --schedule mode. */
   unsigned int node_id;
@@ -549,7 +562,7 @@ public:
   /** State guard prior to a GOTO instruction causing a cswitch. Any thread
    *  interleaved after a GOTO will be composed with this guard, rather than
    *  the guard from any of the branches of the GOTO itself. */
-  guardt pre_goto_guard;
+  guard2tc pre_goto_guard;
   /** TID of monitor thread, for monitor intrinsics. */
   unsigned int monitor_tid;
   /** Whether monitor_tid is set. */
@@ -603,7 +616,10 @@ protected:
   // Static stuff:
 
 public:
-  static unsigned int node_count;
+  // thread_local so parallel symex threads (--k-induction-parallel)
+  // don't race on this counter. Each thread's interleaving exploration
+  // numbers its own nodes; cross-thread numbering isn't meaningful.
+  static thread_local unsigned int node_count;
 
   friend void build_goto_symex_classes();
 };

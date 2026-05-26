@@ -29,17 +29,17 @@ void namespacet::follow_symbol(irept &irep) const
 
     if (symbol->is_type)
     {
-      if (symbol->type.is_nil())
+      if (symbol->get_type().is_nil())
         return;
 
-      irep = symbol->type;
+      irep = symbol->get_type();
     }
     else
     {
-      if (symbol->value.is_nil())
+      if (symbol->get_value().is_nil())
         return;
 
-      irep = symbol->value;
+      irep = symbol->get_value();
     }
   }
 }
@@ -59,9 +59,9 @@ const typet &namespacet::follow(const typet &src) const
   {
     assert(symbol);
     assert(symbol->is_type);
-    if (!symbol->type.is_symbol())
-      return symbol->type;
-    const symbolt *next = lookup(symbol->type);
+    if (!symbol->get_type().is_symbol())
+      return symbol->get_type();
+    const symbolt *next = lookup(symbol->get_type());
     assert(next != symbol && "cycle of length 1 in ns.follow()");
     symbol = next;
   }

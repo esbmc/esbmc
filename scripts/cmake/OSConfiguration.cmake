@@ -5,7 +5,7 @@
 #############################
 
 #[[
-The build system have flags based on the current system, this may 
+The build system have flags based on the current system, this may
 be for finding executables or custom links
 
 The global variables that all modules NEED to define are:

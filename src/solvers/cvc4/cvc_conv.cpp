@@ -1,4 +1,5 @@
 #include <util/c_types.h>
+#include <util/mp_arith.h>
 #include <cvc_conv.h>
 
 #define new_ast new_solver_ast<cvc_smt_ast>
@@ -731,32 +732,6 @@ smt_astt cvc_convt::mk_bvnot(smt_astt a)
     a->sort);
 }
 
-smt_astt cvc_convt::mk_bvnor(smt_astt a, smt_astt b)
-{
-  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
-  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
-  assert(a->sort->get_data_width() == b->sort->get_data_width());
-  return new_ast(
-    em.mkExpr(
-      CVC4::kind::BITVECTOR_NOR,
-      to_solver_smt_ast<cvc_smt_ast>(a)->a,
-      to_solver_smt_ast<cvc_smt_ast>(b)->a),
-    a->sort);
-}
-
-smt_astt cvc_convt::mk_bvnand(smt_astt a, smt_astt b)
-{
-  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
-  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
-  assert(a->sort->get_data_width() == b->sort->get_data_width());
-  return new_ast(
-    em.mkExpr(
-      CVC4::kind::BITVECTOR_NAND,
-      to_solver_smt_ast<cvc_smt_ast>(a)->a,
-      to_solver_smt_ast<cvc_smt_ast>(b)->a),
-    a->sort);
-}
-
 smt_astt cvc_convt::mk_bvxor(smt_astt a, smt_astt b)
 {
   assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
@@ -1003,10 +978,13 @@ smt_astt cvc_convt::mk_select(smt_astt a, smt_astt b)
 
 smt_astt cvc_convt::mk_smt_int(const BigInt &theint)
 {
-  // TODO: Is this correct? CVC4 doesn't have any call for
-  // em.mkConst(CVC4::Integer(...));
   smt_sortt s = mk_int_sort();
-  CVC4::Expr e = em.mkConst(CVC4::Rational(theint.to_int64()));
+  // BigInt::to_int64 silently truncates past 64 bits, so for values outside
+  // the int64 range build the Rational from a decimal string — the same
+  // arbitrary-precision overload mk_smt_real below uses. Issue #4642.
+  CVC4::Expr e = theint.is_int64()
+                   ? em.mkConst(CVC4::Rational(theint.to_int64()))
+                   : em.mkConst(CVC4::Rational(integer2string(theint, 10)));
   return new_ast(e, s);
 }
 

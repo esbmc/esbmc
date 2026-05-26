@@ -76,27 +76,48 @@ static std::string pick_default_solver()
   abort();
 }
 
+// Determine the solver the user explicitly asked for, returning "" if none.
+// Aborts if the user requested more than one solver flag simultaneously.
+static std::string resolve_user_solver_choice(const optionst &options)
+{
+  std::string solver_name;
+  for (const std::string &name : all_solvers)
+    if (options.get_bool_option(name))
+    {
+      if (!solver_name.empty())
+      {
+        log_error("Please only specify one solver");
+        abort();
+      }
+      solver_name = name;
+    }
+
+  if (solver_name.empty())
+    solver_name = options.get_option("default-solver");
+
+  return solver_name;
+}
+
+void check_solver_availability(const optionst &options)
+{
+  std::string solver_name = resolve_user_solver_choice(options);
+  // No explicit choice — pick_default_solver() will choose from what's built
+  // in when the solver is actually needed.
+  if (solver_name.empty())
+    return;
+  if (esbmc_solvers.count(solver_name))
+    return;
+  log_error(
+    "The {} solver has not been built into this version of ESBMC, sorry",
+    solver_name);
+  abort();
+}
+
 static solver_creator &
 pick_solver(std::string &solver_name, const optionst &options)
 {
   if (solver_name == "")
-  {
-    // Pick one based on options.
-    for (const std::string &name : all_solvers)
-      if (options.get_bool_option(name))
-      {
-        if (solver_name != "")
-        {
-          log_error("Please only specify one solver");
-          abort();
-        }
-
-        solver_name = name;
-      }
-  }
-
-  if (solver_name == "")
-    solver_name = options.get_option("default-solver");
+    solver_name = resolve_user_solver_choice(options);
 
   // Check for --ir option and default to Z3 for integer/real arithmetic
   if (solver_name == "" && options.get_bool_option("ir"))

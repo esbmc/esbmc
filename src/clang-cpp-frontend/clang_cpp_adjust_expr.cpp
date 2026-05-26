@@ -2,8 +2,9 @@
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
 #include <util/c_sizeof.h>
 #include <util/c_types.h>
-#include <util/destructor.h>
+#include <goto-programs/destructor.h>
 #include <util/expr_util.h>
+#include <util/message.h>
 
 clang_cpp_adjust::clang_cpp_adjust(contextt &_context)
   : clang_c_adjust(_context)
@@ -12,30 +13,32 @@ clang_cpp_adjust::clang_cpp_adjust(contextt &_context)
 
 void clang_cpp_adjust::gen_implicit_union_copy_move_constructor(symbolt &symbol)
 {
-  if (!symbol.type.is_code())
+  if (!symbol.get_type().is_code())
     return;
 
-  code_typet &ctor_type = to_code_type(symbol.type);
+  const code_typet &ctor_type = to_code_type(symbol.get_type());
 
   if (
     ctor_type.return_type().id() != "constructor" ||
     !ctor_type.return_type().get_bool("#implicit_union_copy_move_constructor"))
     return;
 
-  if (symbol.value.is_not_nil())
+  // Read-modify-set the value to mutate its body.
+  exprt value;
+  if (symbol.get_value().is_not_nil())
   {
-    code_blockt &ctor_body = to_code_block(to_code(symbol.value));
+    value = symbol.get_value();
+    const code_blockt &existing_body = to_code_block(to_code(value));
     assert(
-      ctor_body.operands().size() == 1 &&
-      ctor_body.op0().statement() ==
+      existing_body.operands().size() == 1 &&
+      existing_body.op0().statement() ==
         "throw_decl"); // just a sanity check that we don't accidentally change any clang generated body in the future
   }
   else
   {
-    code_blockt ctor_body;
-    symbol.value = ctor_body;
+    value = code_blockt();
   }
-  code_blockt &ctor_body = to_code_block(to_code(symbol.value));
+  code_blockt &ctor_body = to_code_block(to_code(value));
   /* https://en.cppreference.com/w/cpp/language/copy_constructor#Implicitly-defined_copy_constructor
    * > If the implicitly-declared copy constructor is not deleted, it is defined (that is, a function body is generated and compiled)
    * > by the compiler if odr-used or needed for constant evaluation(since C++11).
@@ -57,6 +60,8 @@ void clang_cpp_adjust::gen_implicit_union_copy_move_constructor(symbolt &symbol)
   copy_ctor_assign.location() = ctor_body.location();
   adjust_assign(copy_ctor_assign);
   ctor_body.operands().push_back(copy_ctor_assign);
+
+  symbol.set_value(std::move(value));
 }
 
 void clang_cpp_adjust::adjust_symbol(symbolt &symbol)
@@ -87,8 +92,8 @@ void clang_cpp_adjust::adjust_side_effect(side_effect_exprt &expr)
     // adjust side effect node to explicitly call class destructor
     // e.g. the adjustment here will add the following instruction in GOTO:
     // FUNCTION_CALL:  ~t2(&(*p))
-    code_function_callt destructor = get_destructor(ns, expr.type());
-    if (destructor.is_not_nil())
+    code_function_callt destructor;
+    if (get_destructor(ns, expr.type(), destructor))
     {
       exprt new_object("new_object", expr.type());
 
@@ -195,10 +200,21 @@ void clang_cpp_adjust::adjust_cpp_member(member_exprt &expr)
    *      * id: <setX_clang_ID>
    */
   const symbolt *comp_symb = ns.lookup(expr.component_name());
-  assert(comp_symb);
+  if (!comp_symb)
+  {
+    log_error(
+      "{}: unresolved C++ member component `{}` at {} (struct-op type "
+      "id `{}`, member type id `{}`)",
+      __func__,
+      expr.component_name(),
+      expr.location().as_string(),
+      expr.struct_op().type().id_string(),
+      expr.type().id_string());
+    abort();
+  }
   // compoment's type shall be the same as member_exprt's type
   // and both are of the type `code`
-  assert(comp_symb->type.is_code());
+  assert(comp_symb->get_type().is_code());
   exprt method_call = symbol_expr(*comp_symb);
   expr.swap(method_call);
 }
@@ -405,7 +421,7 @@ void clang_cpp_adjust::convert_exception_id(
     irep_idt identifier = type.identifier();
 
     // Check if base class exists
-    typet t = ns.lookup(identifier)->type;
+    typet t = ns.lookup(identifier)->get_type();
 
     // only get the base class when throwing
     if (t.id() == "struct" && !is_catch)

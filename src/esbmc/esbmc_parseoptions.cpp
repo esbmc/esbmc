@@ -18,6 +18,8 @@ extern "C"
 
 #include <esbmc/bmc.h>
 #include <esbmc/esbmc_parseoptions.h>
+#include <goto-symex/goto_symex.h>
+#include <solvers/solve.h>
 #include <cctype>
 #include <clang-c-frontend/clang_c_language.h>
 #include <util/config.h>
@@ -33,6 +35,7 @@ extern "C"
 #include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/goto_inline.h>
 #include <goto-programs/goto_k_induction.h>
+#include <goto-programs/goto_loop_simplify.h>
 #include <goto-programs/goto_loop_invariant.h>
 #include <goto-programs/abstract-interpretation/interval_analysis.h>
 #include <goto-programs/abstract-interpretation/gcse.h>
@@ -44,6 +47,8 @@ extern "C"
 #include <goto-programs/set_claims.h>
 #include <goto-programs/show_claims.h>
 #include <goto-programs/loop_unroll.h>
+#include <goto-programs/goto_check_uninit_vars.h>
+#include <goto-programs/goto_check_unchecked_return.h>
 #include <goto-programs/mark_decl_as_non_det.h>
 #include <goto-programs/assign_params_as_non_det.h>
 #include <goto2c/goto2c.h>
@@ -336,6 +341,29 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("int-encoding", true);
     options.set_option("ir-ieee", true);
   }
+
+  // --ir requests integer/real arithmetic encoding via the SMT Int sort.
+  // Bitwuzla and Boolector are bit-vector-only backends; pairing them with
+  // --ir silently produces wrong-answer behaviour at solve time. cvc4, cvc5,
+  // yices, and mathsat all support Int and are left alone.
+  if (cmdline.isset("ir") || cmdline.isset("ir-ieee"))
+  {
+    for (const char *s : {"bitwuzla", "boolector"})
+    {
+      if (cmdline.isset(s))
+      {
+        log_error(
+          "--{} requires a solver that supports integer/real arithmetic. "
+          "--{} only supports bit-vector arithmetic. Re-run without --{}, "
+          "or drop --{} (--ir defaults to Z3).",
+          cmdline.isset("ir-ieee") ? "ir-ieee" : "ir",
+          s,
+          s,
+          s);
+        exit(1);
+      }
+    }
+  }
   if (cmdline.isset("fixedbv"))
     options.set_option("fixedbv", true);
   else
@@ -422,8 +450,19 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
 
   if (cmdline.isset("validate-correctness-witness"))
   {
+    if (!cmdline.isset("witness"))
+    {
+      log_error(
+        "--validate-correctness-witness requires --witness <file.yaml>");
+      abort();
+    }
     const std::string witness = cmdline.getval("witness");
     const boost::filesystem::path wp(witness);
+    if (!boost::filesystem::exists(wp))
+    {
+      log_error("Witness file '{}' does not exist.", witness);
+      abort();
+    }
     if (wp.extension() != ".yaml" && wp.extension() != ".yml")
     {
       log_error(
@@ -432,6 +471,31 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
       abort();
     }
     options.set_option("validate-correctness-witness", true);
+    options.set_option("witness", witness);
+  }
+
+  if (cmdline.isset("validate-violation-witness"))
+  {
+    if (!cmdline.isset("witness"))
+    {
+      log_error("--validate-violation-witness requires --witness <file.yaml>");
+      abort();
+    }
+    const std::string witness = cmdline.getval("witness");
+    const boost::filesystem::path wp(witness);
+    if (!boost::filesystem::exists(wp))
+    {
+      log_error("Witness file '{}' does not exist.", witness);
+      abort();
+    }
+    if (wp.extension() != ".yaml" && wp.extension() != ".yml")
+    {
+      log_error(
+        "Witness file has extension {}, expected yaml or yml.",
+        wp.extension().string());
+      abort();
+    }
+    options.set_option("validate-violation-witness", true);
     options.set_option("witness", witness);
   }
 
@@ -649,6 +713,13 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("witness-output-graphml", filename + ".graphml");
   }
 
+  if (cmdline.isset("sarif-output"))
+    options.set_option("sarif-output", cmdline.getval("sarif-output"));
+
+  // Fail fast if the user explicitly requested an SMT solver that is not
+  // built into this ESBMC binary, before spending time parsing the program.
+  check_solver_availability(options);
+
   config.options = options;
 }
 
@@ -719,6 +790,20 @@ int esbmc_parseoptionst::doit()
     // Unroll intrinsic support
     goto_preprocess_algorithms.emplace_back(
       std::make_unique<apply_intrinsic_unroller>());
+
+    // Uninitialised-variable check (CWE-457) must run before
+    // mark_decl_as_non_det, which would otherwise overwrite every
+    // uninitialised DECL with a nondet ASSIGN and erase the property.
+    if (cmdline.isset("uninitialised-vars-check"))
+      goto_preprocess_algorithms.emplace_back(
+        std::make_unique<goto_check_uninit_vars>(context));
+
+    // Unchecked-return-value check (CWE-252). Runs as a preprocessing
+    // algorithm so the inserted ASSERTs participate in the same path-
+    // condition pruning as the rest of the goto-program.
+    if (cmdline.isset("unchecked-return-value-check"))
+      goto_preprocess_algorithms.emplace_back(
+        std::make_unique<goto_check_unchecked_return>(context));
 
     // Explicitly marking all declared variables as "nondet"
     goto_preprocess_algorithms.emplace_back(
@@ -1744,7 +1829,17 @@ tvt esbmc_parseoptionst::is_inductive_step_violated(
   bmct bmc(goto_functions, options, context);
 
   log_progress("Checking inductive step, k = {:d}", k_step);
-  switch (do_bmc(bmc))
+  int res = do_bmc(bmc);
+
+  // Symex may flip `disable-inductive-step` mid-run when it encounters
+  // a construct the IS cannot soundly handle (recursion, threads,
+  // function-pointer calls). In that case the BMC result is the
+  // outcome of an incomplete IS encoding — its UNSAT does not prove
+  // safety. Discard the result and report UNKNOWN.
+  if (options.get_bool_option("disable-inductive-step"))
+    return tvt(tvt::TV_UNKNOWN);
+
+  switch (res)
   {
   case smt_convt::P_SATISFIABLE:
     return tvt(tvt::TV_TRUE);
@@ -1785,9 +1880,20 @@ int esbmc_parseoptionst::do_bmc(bmct &bmc)
 {
   log_progress("Starting Bounded Model Checking");
 
-  smt_convt::resultt res = bmc.start_bmc();
-  if (res == smt_convt::P_ERROR)
-    abort();
+  smt_convt::resultt res;
+  try
+  {
+    res = bmc.start_bmc();
+  }
+  catch (const inductive_step_disabled_exceptiont &e)
+  {
+    // Symex hit an IS-unsound construct (recursion, threads,
+    // function-pointer call) and threw to short-circuit. Return
+    // P_ERROR so the strategy layer drops to TV_UNKNOWN; the caller
+    // also checks `disable-inductive-step` to suppress any verdict.
+    log_status("Inductive step aborted: {}", e.reason);
+    res = smt_convt::P_ERROR;
+  }
 
 #ifdef HAVE_SENDFILE_ESBMC
   if (bmc.options.get_bool_option("memstats"))
@@ -2233,14 +2339,28 @@ bool esbmc_parseoptionst::process_goto_program(
       }
     }
 
-    if (cmdline.isset("interval-analysis") || cmdline.isset("goto-contractor"))
-    {
-      interval_analysis(goto_functions, ns, options);
-    }
-
     bool is_k_induction = cmdline.isset("inductive-step") ||
                           cmdline.isset("k-induction") ||
                           cmdline.isset("k-induction-parallel");
+
+    if (cmdline.isset("interval-analysis") || cmdline.isset("goto-contractor"))
+    {
+      // Plain interval analysis without k-induction: run with LOOP_MODE so
+      // each loop gets a before-back-edge ASSUME(bounds) and an after-loop
+      // ASSUME(bounds). The default GUARD_INSTRUCTIONS_LOCAL emits bounds
+      // at every assume/assert/goto, which is more uniform but loses the
+      // per-loop framing.
+      //
+      // With k-induction, stay on GUARD_INSTRUCTIONS_LOCAL: instructions
+      // matching k-induction's later transformations rely on the
+      // per-instruction bounds being available everywhere, and the
+      // post-k-induction pass below adds the at-loop-head bounds that
+      // tighten the inductive hypothesis.
+      const auto mode =
+        is_k_induction ? INTERVAL_INSTRUMENTATION_MODE::GUARD_INSTRUCTIONS_LOCAL
+                       : INTERVAL_INSTRUMENTATION_MODE::LOOP_MODE;
+      interval_analysis(goto_functions, ns, options, mode);
+    }
 
     if (cmdline.isset("validate-correctness-witness"))
     {
@@ -2274,6 +2394,22 @@ bool esbmc_parseoptionst::process_goto_program(
       }
     }
 
+    // Pass B (post-k-induction loop bounds): when interval analysis ran
+    // earlier and k-induction has now finished inserting its nondet havoc
+    // before each loop head, recompute bounds with k-induction's preamble
+    // instructions treated as transparent, then insert an ASSUME(bounds)
+    // right before each loop's exit-test. The ASSUME is marked
+    // inductive_step_instruction = true so only the inductive step sees
+    // it; base case and forward condition skip it. This is the place where
+    // interval analysis actually strengthens the inductive hypothesis.
+    if (
+      (cmdline.isset("interval-analysis") ||
+       cmdline.isset("goto-contractor")) &&
+      is_k_induction)
+    {
+      instrument_loop_bounds_after_kind(goto_functions, ns, options);
+    }
+
     if (
       cmdline.isset("goto-contractor") ||
       cmdline.isset("goto-contractor-condition"))
@@ -2290,6 +2426,14 @@ bool esbmc_parseoptionst::process_goto_program(
     }
 
     goto_check(ns, options, goto_functions);
+
+    // Eliminate goto-level no-op loops (empty body, dead modified vars).
+    // Runs AFTER goto_check so that any check assertions inserted into a
+    // loop body (overflow, div-by-zero, bounds, ...) make body_is_safe
+    // refuse the erasure — preserving checks that would otherwise be
+    // silently dropped. Skipped under --termination / --unwinding-
+    // assertions because loop presence is observable in those modes.
+    goto_loop_simplify(goto_functions);
 
     if (options.get_bool_option("atomicity-check"))
       goto_atomicity_check(goto_functions, ns, context);
@@ -2898,7 +3042,7 @@ static void collect_symbol_names(
   if (is_symbol2t(e))
   {
     const symbol2t &thesym = to_symbol2t(e);
-    assert(thesym.rlevel == 0);
+    assert(thesym.rlevel == symbol_renaming_level::level0);
     std::string sym = thesym.get_symbol_name();
 
     used_syms.insert(sym);
@@ -2919,7 +3063,7 @@ expr2tc esbmc_parseoptionst::calculate_a_property_monitor(
   const symbolt *fn = context.find_symbol("c:@F@" + name + "_status");
   assert(fn);
 
-  const codet &fn_code = to_code(fn->value);
+  const codet &fn_code = to_code(fn->get_value());
   assert(fn_code.get_statement() == "block");
   assert(fn_code.operands().size() == 1);
 
@@ -3015,7 +3159,7 @@ static unsigned int calc_globals_used(const namespacet &ns, const expr2tc &expr)
 
   const symbolt *sym = ns.lookup(identifier);
   assert(sym);
-  if (sym->static_lifetime || sym->type.is_dynamic_set())
+  if (sym->static_lifetime || sym->get_type().is_dynamic_set())
     return 1;
 
   return 0;

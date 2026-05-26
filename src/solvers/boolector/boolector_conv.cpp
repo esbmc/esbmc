@@ -232,32 +232,6 @@ smt_astt boolector_convt::mk_bvnot(smt_astt a)
     boolector_not(btor, to_solver_smt_ast<btor_smt_ast>(a)->a), a->sort);
 }
 
-smt_astt boolector_convt::mk_bvnor(smt_astt a, smt_astt b)
-{
-  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
-  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
-  assert(a->sort->get_data_width() == b->sort->get_data_width());
-  return new_ast(
-    boolector_nor(
-      btor,
-      to_solver_smt_ast<btor_smt_ast>(a)->a,
-      to_solver_smt_ast<btor_smt_ast>(b)->a),
-    a->sort);
-}
-
-smt_astt boolector_convt::mk_bvnand(smt_astt a, smt_astt b)
-{
-  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
-  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
-  assert(a->sort->get_data_width() == b->sort->get_data_width());
-  return new_ast(
-    boolector_nand(
-      btor,
-      to_solver_smt_ast<btor_smt_ast>(a)->a,
-      to_solver_smt_ast<btor_smt_ast>(b)->a),
-    a->sort);
-}
-
 smt_astt boolector_convt::mk_bvxor(smt_astt a, smt_astt b)
 {
   assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
@@ -702,16 +676,14 @@ expr2tc boolector_convt::get_array_elem(
 smt_astt boolector_convt::overflow_arith(const expr2tc &expr)
 {
   const overflow2t &overflow = to_overflow2t(expr);
-  const arith_2ops &opers = static_cast<const arith_2ops &>(*overflow.operand);
+  const expr2tc &op1 = *overflow.operand->get_sub_expr(0);
+  const expr2tc &op2 = *overflow.operand->get_sub_expr(1);
 
-  const btor_smt_ast *side1 =
-    to_solver_smt_ast<btor_smt_ast>(convert_ast(opers.side_1));
-  const btor_smt_ast *side2 =
-    to_solver_smt_ast<btor_smt_ast>(convert_ast(opers.side_2));
+  const btor_smt_ast *side1 = to_solver_smt_ast<btor_smt_ast>(convert_ast(op1));
+  const btor_smt_ast *side2 = to_solver_smt_ast<btor_smt_ast>(convert_ast(op2));
 
   // Guess whether we're performing a signed or unsigned comparison.
-  bool is_signed =
-    (is_signedbv_type(opers.side_1) || is_signedbv_type(opers.side_2));
+  bool is_signed = (is_signedbv_type(op1) || is_signedbv_type(op2));
 
   BoolectorNode *res;
   if (is_add2t(overflow.operand))

@@ -316,8 +316,6 @@ public:
   virtual smt_astt mk_neg(smt_astt a);
   virtual smt_astt mk_bvneg(smt_astt a);
   virtual smt_astt mk_bvnot(smt_astt a);
-  virtual smt_astt mk_bvnor(smt_astt a, smt_astt b);
-  virtual smt_astt mk_bvnand(smt_astt a, smt_astt b);
   virtual smt_astt mk_bvxor(smt_astt a, smt_astt b);
   virtual smt_astt mk_bvor(smt_astt a, smt_astt b);
   virtual smt_astt mk_bvand(smt_astt a, smt_astt b);
@@ -435,6 +433,10 @@ public:
   smt_astt get_single_min_subnormal();
   // Returns SMT AST representing single precision maximum normal value (~3.4028234663852886e+38)
   smt_astt get_single_max_normal();
+  // Returns SMT AST for the integer-encoding sentinel for double +∞: max_normal+1
+  smt_astt get_double_inf_sentinel();
+  // Returns SMT AST for the integer-encoding sentinel for single +∞: max_normal+1
+  smt_astt get_single_inf_sentinel();
   // Returns SMT AST for the double precision relative error bound under
   // round-to-nearest: half machine epsilon = 2^-53 ~ 1.11e-16
   smt_astt get_double_eps_rel();
@@ -793,9 +795,6 @@ public:
   smt_astt
   round_fixedbv_to_int(smt_astt a, unsigned int width, unsigned int towidth);
 
-  /** Extract a type definition (i.e., a struct_union_data object) from a type.
-   * This method abstracts the fact that a pointer type is, in fact, a tuple. */
-  const struct_union_data &get_type_def(const type2tc &type) const;
   /** Prep call for creating a tuple array */
   smt_astt tuple_array_create_despatch(const expr2tc &expr, smt_sortt domain);
 

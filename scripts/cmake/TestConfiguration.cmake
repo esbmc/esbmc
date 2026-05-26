@@ -4,14 +4,14 @@
 
 # UNIT TEST with catch2
 
-Include(FetchContent)
+include(FetchContent)
 
-FetchContent_Declare(
+fetchcontent_declare(
   Catch2
   GIT_REPOSITORY https://github.com/catchorg/Catch2.git
   GIT_TAG        v2.13.7)
 
-FetchContent_MakeAvailable(Catch2)
+fetchcontent_makeavailable(Catch2)
 
 list(APPEND CMAKE_MODULE_PATH
      ${catch2_SOURCE_DIR}/contrib  # Catch2 v2.x
@@ -28,7 +28,7 @@ endif()
 # FUNCTIONS DEFINED
 
 # Adds a new Unit based test
-function (new_unit_test TARGET SRC LIBS)
+function(new_unit_test TARGET SRC LIBS)
   add_executable(${TARGET} ${SRC})
   target_include_directories(${TARGET} PRIVATE ${Boost_INCLUDE_DIRS})
   target_link_libraries(${TARGET} PRIVATE ${LIBS} ${UNIT_TEST_LIB} ${OS_INCLUDE_LIBS})
@@ -36,7 +36,7 @@ function (new_unit_test TARGET SRC LIBS)
 endfunction()
 
 # Add a new Fuzz based test
-function (new_fuzz_test TARGET SRC LIBS)
+function(new_fuzz_test TARGET SRC LIBS)
   if(NOT ENABLE_FUZZER)
     return()
   endif()
@@ -49,7 +49,7 @@ function (new_fuzz_test TARGET SRC LIBS)
 endfunction()
 
 # Add a new Fuzz based test (this will execute less runs)
-function (new_fast_fuzz_test TARGET SRC LIBS)
+function(new_fast_fuzz_test TARGET SRC LIBS)
   if(NOT ENABLE_FUZZER)
     return()
   endif()

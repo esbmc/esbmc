@@ -22,8 +22,7 @@
 #include <util/std_expr.h>
 #include <util/type_byte_size.h>
 
-// global data, horrible
-unsigned int dereferencet::invalid_counter = 0;
+thread_local unsigned int dereferencet::invalid_counter = 0;
 
 // Look for the base of an expression such as &a->b[1];, where all we're doing
 // is performing some pointer arithmetic, rather than actually performing some
@@ -139,7 +138,7 @@ const expr2tc &dereferencet::get_symbol(const expr2tc &expr)
 
 /************************* Expression decomposing code ************************/
 
-void dereferencet::dereference_expr(expr2tc &expr, guardt &guard, modet mode)
+void dereferencet::dereference_expr(expr2tc &expr, guard2tc &guard, modet mode)
 {
   if (!has_dereference(expr))
     return;
@@ -202,7 +201,7 @@ void dereferencet::dereference_expr(expr2tc &expr, guardt &guard, modet mode)
 
 void dereferencet::dereference_guard_expr(
   expr2tc &expr,
-  guardt &guard,
+  guard2tc &guard,
   modet mode)
 {
   if (is_and2t(expr) || is_or2t(expr))
@@ -215,7 +214,7 @@ void dereferencet::dereference_guard_expr(
     assert(is_bool_type(expr));
 
     // Take the current size of the guard, so that we can reset it later.
-    guardt old_guards(guard);
+    guard2tc old_guards(guard);
 
     expr->Foreach_operand([this, &guard, &expr](expr2tc &op) {
       assert(is_bool_type(op));
@@ -237,7 +236,7 @@ void dereferencet::dereference_guard_expr(
     });
 
     // Reset guard to where it was.
-    guard.swap(old_guards);
+    guard = std::move(old_guards);
     return;
   }
 
@@ -254,19 +253,19 @@ void dereferencet::dereference_guard_expr(
 
   if (o1)
   {
-    guardt old_guards(guard);
+    guard2tc old_guards(guard);
     guard.add(ifref.cond);
     dereference_expr(ifref.true_value, guard, mode);
-    guard.swap(old_guards);
+    guard = std::move(old_guards);
   }
 
   if (o2)
   {
-    guardt old_guards(guard);
+    guard2tc old_guards(guard);
     expr2tc tmp = not2tc(ifref.cond);
     guard.add(tmp);
     dereference_expr(ifref.false_value, guard, mode);
-    guard.swap(old_guards);
+    guard = std::move(old_guards);
   }
 
   return;
@@ -274,7 +273,7 @@ void dereferencet::dereference_guard_expr(
 
 void dereferencet::dereference_addrof_expr(
   expr2tc &expr,
-  guardt &guard,
+  guard2tc &guard,
   modet mode)
 {
   // Crazy combinations of & and * that don't actually lead to a deref:
@@ -338,9 +337,8 @@ static bool is_aligned_member(const expr2tc &expr)
     return false;
 
   const expr2tc &structure = to_member2t(expr).source_value;
-  auto *ty = static_cast<const struct_union_data *>(structure->type.get());
 
-  if (ty->packed)
+  if (struct_union_packed(structure->type))
   {
     /* Very (too?) conservative approach: all members of packed structures are to
      * be accessed in a known-unaligned way. Note, that's not true for GCC/Clang:
@@ -358,7 +356,7 @@ static bool is_aligned_member(const expr2tc &expr)
 
 expr2tc dereferencet::dereference_expr_nonscalar(
   expr2tc &expr,
-  guardt &guard,
+  guard2tc &guard,
   modet mode,
   const expr2tc &base)
 {
@@ -406,11 +404,10 @@ expr2tc dereferencet::dereference_expr_nonscalar(
       !options.get_bool_option("no-align-check") && !mode.unaligned &&
       !is_aligned_member(expr))
     {
-      auto *t = static_cast<const struct_union_data *>(structure->type.get());
       log_warning(
         "not checking alignment for access to packed {} {}",
         get_type_id(*structure->type),
-        t->name.as_string());
+        struct_union_name(structure->type).as_string());
       mode.unaligned = true;
     }
     return dereference_expr_nonscalar(structure, guard, mode, base);
@@ -450,7 +447,7 @@ expr2tc dereferencet::dereference_expr_nonscalar(
 expr2tc dereferencet::dereference(
   const expr2tc &orig_src,
   const type2tc &to_type,
-  const guardt &guard,
+  const guard2tc &guard,
   modet mode,
   const expr2tc &lexical_offset)
 {
@@ -504,7 +501,7 @@ expr2tc dereferencet::dereference(
 
     if (!dereference_type_compare(new_value, type))
     {
-      guardt new_guard(guard);
+      guard2tc new_guard(guard);
       new_guard.add(pointer_guard);
       bad_base_type_failure(
         new_guard, get_type_id(*type), get_type_id(*new_value->type));
@@ -543,7 +540,7 @@ expr2tc dereferencet::make_failed_symbol(const type2tc &out_type)
   symbolt symbol;
   symbol.id = "symex::invalid_object" + i2string(invalid_counter++);
   symbol.name = "invalid_object";
-  symbol.type = migrate_type_back(the_type);
+  set_symbol_type(symbol, the_type);
 
   // make it a lvalue, so we can assign to it
   symbol.lvalue = true;
@@ -616,7 +613,7 @@ void dereferencet::check_pointer_alignment(
   modet mode,
   const type2tc &type,
   const expr2tc &deref_expr,
-  const guardt &guard)
+  const guard2tc &guard)
 {
   // Caller has already declared the access is known-unaligned (e.g.
   // member of a __attribute__((packed)) struct accessed through a
@@ -666,7 +663,7 @@ expr2tc dereferencet::build_reference_to(
   modet mode,
   const expr2tc &deref_expr,
   const type2tc &type,
-  const guardt &guard,
+  const guard2tc &guard,
   const expr2tc &lexical_offset,
   expr2tc &pointer_guard)
 {
@@ -700,7 +697,7 @@ expr2tc dereferencet::build_reference_to(
 
     expr2tc pointer_guard = same_object2tc(deref_expr, null_ptr);
 
-    guardt tmp_guard(guard);
+    guard2tc tmp_guard(guard);
     tmp_guard.add(pointer_guard);
 
     dereference_failure("pointer dereference", "NULL pointer", tmp_guard);
@@ -721,7 +718,7 @@ expr2tc dereferencet::build_reference_to(
   type2tc ptr_type = pointer_type2tc(object->type);
   expr2tc obj_ptr = address_of2tc(ptr_type, object);
   pointer_guard = same_object2tc(deref_expr, obj_ptr);
-  guardt tmp_guard(guard);
+  guard2tc tmp_guard(guard);
   tmp_guard.add(pointer_guard);
 
   // Check that the object we're accessing is actually alive and valid for this
@@ -825,7 +822,7 @@ expr2tc dereferencet::build_reference_to(
 
 void dereferencet::deref_invalid_ptr(
   const expr2tc &deref_expr,
-  const guardt &guard,
+  const guard2tc &guard,
   modet mode)
 {
   if (is_internal(mode))
@@ -857,7 +854,7 @@ void dereferencet::deref_invalid_ptr(
 
   // produce new guard
 
-  guardt tmp_guard(guard);
+  guard2tc tmp_guard(guard);
   tmp_guard.add(validity_test);
 
   dereference_failure("pointer dereference", foo, tmp_guard);
@@ -867,18 +864,21 @@ void dereferencet::deref_invalid_ptr(
 
 enum target_flags
 {
-  flag_src_scalar = 0,
-  flag_src_array = 1,
-  flag_src_struct = 2,
-  flag_src_union = 3,
+  // Each src/dst category and offset kind is a distinct bit so the case
+  // labels in build_reference_rec encode every combination uniquely, and
+  // never collapse to the same integer (which used to happen when several
+  // flags were defined as 0).
+  flag_src_scalar = 0x01,
+  flag_src_array = 0x02,
+  flag_src_struct = 0x04,
+  flag_src_union = 0x08,
 
-  flag_dst_scalar = 0,
-  flag_dst_array = 4,
-  flag_dst_struct = 8,
-  flag_dst_union = 0xC,
+  flag_dst_scalar = 0x10,
+  flag_dst_struct = 0x20,
+  flag_dst_union = 0x40,
 
-  flag_is_const_offs = 0x10,
-  flag_is_dyn_offs = 0,
+  flag_is_const_offs = 0x80,
+  flag_is_dyn_offs = 0x100,
 };
 
 /*
@@ -943,13 +943,15 @@ void dereferencet::build_reference_rec(
   expr2tc &value,
   const expr2tc &offset,
   const type2tc &type,
-  const guardt &guard,
+  const guard2tc &guard,
   modet mode,
   unsigned long alignment)
 {
   int flags = 0;
   if (is_constant_int2t(offset))
     flags |= flag_is_const_offs;
+  else
+    flags |= flag_is_dyn_offs;
 
   // All accesses to code need no further construction
   if (is_code_type(value) || is_code_type(type))
@@ -1163,7 +1165,7 @@ void dereferencet::construct_from_array(
   expr2tc &value,
   const expr2tc &offset,
   const type2tc &type,
-  const guardt &guard,
+  const guard2tc &guard,
   modet mode,
   unsigned long alignment)
 {
@@ -1340,7 +1342,7 @@ void dereferencet::construct_from_const_struct_offset(
   expr2tc &value,
   const expr2tc &offset,
   const type2tc &type,
-  const guardt &guard,
+  const guard2tc &guard,
   modet mode)
 {
   assert(is_struct_type(value->type));
@@ -1450,7 +1452,7 @@ void dereferencet::construct_from_dyn_struct_offset(
   expr2tc &value,
   const expr2tc &offset,
   const type2tc &type,
-  const guardt &guard,
+  const guard2tc &guard,
   unsigned long alignment,
   modet mode,
   const expr2tc *failed_symbol)
@@ -1545,7 +1547,7 @@ void dereferencet::construct_from_dyn_struct_offset(
     else
     {
       // Try to resolve this recursively
-      guardt newguard(guard);
+      guard2tc newguard(guard);
       newguard.add(field_guard);
       build_reference_rec(field, new_offset, type, newguard, mode, alignment);
       extract_list.emplace_back(field_guard, field);
@@ -1612,7 +1614,7 @@ void dereferencet::construct_from_multidir_array(
   expr2tc &value,
   const expr2tc &offset,
   const type2tc &type,
-  const guardt &guard,
+  const guard2tc &guard,
   unsigned long alignment,
   modet mode)
 {
@@ -1648,7 +1650,7 @@ void dereferencet::construct_struct_ref_from_const_offset_array(
   expr2tc &value,
   const expr2tc &offset,
   const type2tc &type,
-  const guardt &guard,
+  const guard2tc &guard,
   modet mode,
   unsigned long alignment)
 {
@@ -1725,7 +1727,7 @@ void dereferencet::construct_struct_ref_from_const_offset(
   expr2tc &value,
   const expr2tc &offs,
   const type2tc &type,
-  const guardt &guard,
+  const guard2tc &guard,
   modet mode)
 {
   // Minimal effort: the moment that we can throw this object out due to an
@@ -1752,11 +1754,13 @@ void dereferencet::construct_struct_ref_from_const_offset(
     // (but compatible check already gets that;), arrays of structs; and other
     // crazy inside structs.
 
-    auto *data = static_cast<const struct_union_data *>(value->type.get());
+    const std::vector<type2tc> &members = struct_union_members(value->type);
+    const std::vector<irep_idt> &member_names =
+      struct_union_member_names(value->type);
     unsigned int i = 0;
-    for (auto const &it : data->members)
+    for (auto const &it : members)
     {
-      BigInt offs = member_offset_bits(value->type, data->member_names[i]);
+      BigInt offs = member_offset_bits(value->type, member_names[i]);
       BigInt size = type_byte_size_bits(it);
 
       // Zero-sized members span an empty range, so the normal range check
@@ -1776,7 +1780,7 @@ void dereferencet::construct_struct_ref_from_const_offset(
 
           // Both the member and the target are zero-sized. Access this member
           // only if its type matches; otherwise try the next member.
-          expr2tc member = member2tc(it, value, data->member_names[i]);
+          expr2tc member = member2tc(it, value, member_names[i]);
           if (!dereference_type_compare(member, type))
             goto cont;
           value = member;
@@ -1786,7 +1790,7 @@ void dereferencet::construct_struct_ref_from_const_offset(
         // Non-zero-sized substruct: recurse to continue the search.
         BigInt new_offs = intref.value - offs;
         expr2tc offs_expr = gen_ulong(new_offs);
-        value = member2tc(it, value, data->member_names[i]);
+        value = member2tc(it, value, member_names[i]);
         build_reference_rec(value, offs_expr, type, guard, mode);
         return;
       }
@@ -1810,7 +1814,7 @@ void dereferencet::construct_struct_ref_from_dyn_offset(
   expr2tc &value,
   const expr2tc &offs,
   const type2tc &type,
-  const guardt &guard,
+  const guard2tc &guard,
   modet mode)
 {
   if (
@@ -1862,7 +1866,7 @@ void dereferencet::construct_struct_ref_from_dyn_offset(
   }
 
   accuml = not2tc(accuml); // Creates a new 'not' expr. Doesn't copy construct.
-  guardt tmp_guard = guard;
+  guard2tc tmp_guard = guard;
   tmp_guard.add(accuml);
   bad_base_type_failure(tmp_guard, "legal dynamic offset", "illegal offset");
 }
@@ -2009,7 +2013,7 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
   {
     // This is a byte array. We can reconstruct a structure from this, if
     // we don't overflow bounds. Start by encoding an assertion.
-    guardt tmp;
+    guard2tc tmp;
     tmp.add(accuml_guard);
 
     // Only encode a bounds check if we're directly accessing an array symbol:
@@ -2072,7 +2076,7 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
 void dereferencet::dereference_failure(
   const std::string &error_class,
   const std::string &error_name,
-  const guardt &guard)
+  const guard2tc &guard)
 {
   // This just wraps dereference failure in a no-pointer-check check.
   if (!options.get_bool_option("no-pointer-check") && !block_assertions)
@@ -2085,7 +2089,7 @@ void dereferencet::dereference_failure(
 }
 
 void dereferencet::bad_base_type_failure(
-  const guardt &guard,
+  const guard2tc &guard,
   const std::string &wants,
   const std::string &have)
 {
@@ -2097,7 +2101,7 @@ void dereferencet::bad_base_type_failure(
 
 void dereferencet::alignment_failure(
   const std::string &error_name,
-  const guardt &guard)
+  const guard2tc &guard)
 {
   // This just wraps dereference failure in a no-pointer-check check.
   if (!options.get_bool_option("no-align-check"))
@@ -2204,7 +2208,7 @@ expr2tc dereferencet::stitch_together_from_byte_array(
 expr2tc dereferencet::stitch_together_from_byte_array(
   const type2tc &type,
   const expr2tc &byte_array,
-  expr2tc offset_bits)
+  const expr2tc &offset_bits)
 {
   /* TODO: check array bounds, (alignment?) */
   assert(is_array_type(byte_array));
@@ -2237,22 +2241,22 @@ expr2tc dereferencet::stitch_together_from_byte_array(
   unsigned int num_bytes =
     compute_num_bytes_to_extract(offset_bits, num_bits64);
 
-  offset_bits =
+  expr2tc bit_offset_in_byte =
     modulus2tc(offset_bits->type, offset_bits, gen_long(offset_bits->type, 8));
-  simplify(offset_bits);
+  simplify(bit_offset_in_byte);
 
   return bitcast2tc(
     type,
     extract_bits_from_byte_array(
       stitch_together_from_byte_array(
         num_bytes, extract_bytes(byte_array, num_bytes, offset_bytes)),
-      offset_bits,
+      bit_offset_in_byte,
       num_bits64));
 }
 
 void dereferencet::valid_check(
   const expr2tc &object,
-  const guardt &guard,
+  const guard2tc &guard,
   modet mode)
 {
   const expr2tc &symbol = get_symbol(object);
@@ -2293,7 +2297,7 @@ void dereferencet::valid_check(
       expr2tc valid_expr = valid_object2tc(addrof);
       expr2tc not_valid_expr = not2tc(valid_expr);
 
-      guardt tmp_guard(guard);
+      guard2tc tmp_guard(guard);
       tmp_guard.add(not_valid_expr);
 
       std::string foo = is_free(mode) ? "invalidated dynamic object freed"
@@ -2325,7 +2329,8 @@ void dereferencet::valid_check(
       }
 
       /* Writes to globals of const-qualified type are not allowed either. */
-      if (is_write(mode) && sym.static_lifetime && sym.type.cmt_constant())
+      if (
+        is_write(mode) && sym.static_lifetime && sym.get_type().cmt_constant())
       {
         dereference_failure(
           "pointer dereference",
@@ -2342,7 +2347,7 @@ void dereferencet::bounds_check(
   const expr2tc &expr,
   const expr2tc &offset,
   const type2tc &type,
-  const guardt &guard,
+  const guard2tc &guard,
   const expr2tc &deref)
 {
   if (options.get_bool_option("no-bounds-check"))
@@ -2383,7 +2388,7 @@ void dereferencet::bounds_check(
       pointer_capability2tc(ptraddr_type2(), deref), gen_zero(ptraddr_type2()));
     expr2tc cap = and2tc(is_zero, in_cheri_bounds);
 
-    guardt cap_guard(guard);
+    guard2tc cap_guard(guard);
     cap_guard.add(cap);
     dereference_failure(
       "capability bounds", "CHERI capability bounds violated", cap_guard);
@@ -2477,7 +2482,7 @@ void dereferencet::bounds_check(
 
   // Report these as assertions; they'll be simplified away if they're constant
 
-  guardt tmp_guard1(guard);
+  guard2tc tmp_guard1(guard);
   tmp_guard1.add(is_in_bounds);
   dereference_failure("array bounds", "array bounds violated", tmp_guard1);
 }
@@ -2486,7 +2491,7 @@ bool dereferencet::check_code_access(
   expr2tc &value,
   const expr2tc &offset,
   const type2tc &type,
-  const guardt &guard,
+  const guard2tc &guard,
   modet mode)
 {
   assert(is_code_type(value) || is_code_type(type));
@@ -2514,7 +2519,7 @@ bool dereferencet::check_code_access(
   // Only other constraint is that the offset has to be zero; there are no
   // other rules about what code objects look like.
   expr2tc neq = notequal2tc(offset, gen_zero(offset->type));
-  guardt tmp_guard = guard;
+  guard2tc tmp_guard = guard;
   tmp_guard.add(neq);
   dereference_failure(
     "Code separation", "Program code accessed with non-zero offset", tmp_guard);
@@ -2530,7 +2535,7 @@ void dereferencet::check_data_obj_access(
   const expr2tc &value,
   const expr2tc &offset,
   const type2tc &type,
-  const guardt &guard,
+  const guard2tc &guard,
   modet mode)
 {
   assert(!is_array_type(value));
@@ -2551,7 +2556,7 @@ void dereferencet::check_data_obj_access(
 
   if (!options.get_bool_option("no-bounds-check"))
   {
-    guardt tmp_guard = guard;
+    guard2tc tmp_guard = guard;
     tmp_guard.add(gt);
     dereference_failure(
       "pointer dereference", "Access to object out of bounds", tmp_guard);
@@ -2567,7 +2572,7 @@ void dereferencet::check_data_obj_access(
 void dereferencet::check_alignment(
   BigInt minwidth,
   const expr2tc &offset_bits,
-  const guardt &guard)
+  const guard2tc &guard)
 {
   if (options.get_bool_option("no-align-check"))
     return;
@@ -2605,14 +2610,14 @@ void dereferencet::check_alignment(
     neq = notequal2tc(anded, gen_zero(anded->type));
   }
 
-  guardt tmp_guard2 = guard;
+  guard2tc tmp_guard2 = guard;
   tmp_guard2.add(neq);
   alignment_failure(
     "Incorrect alignment when accessing data object", tmp_guard2);
 }
 
 unsigned int dereferencet::compute_num_bytes_to_extract(
-  const expr2tc offset,
+  const expr2tc &offset,
   unsigned long num_bits)
 {
   // We need to calculate the correct number of bytes to extract.
@@ -2687,6 +2692,10 @@ expr2tc dereferencet::extract_bits_from_byte_array(
   result = lshr2tc(value->type, value, shft_expr);
   result = typecast2tc(rtype, result);
   result = bitand2tc(rtype, result, mask_expr);
-  simplify(result);
+  // Don't simplify here: when the mask is the all-ones constant for rtype
+  // (always the case — mask = (1<<num_bits) - 1) the simplifier collapses
+  // the bitand wrapper and (for shft = 0) the inner lshr, leaving a shape
+  // symex_assign_bitfield can no longer recognise as a bitfield write.
+  // Read-side use simplifies again later through the normal pipeline.
   return result;
 }

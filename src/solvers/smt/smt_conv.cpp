@@ -44,17 +44,19 @@ unsigned int
 smt_convt::get_member_name_field(const type2tc &t, const irep_idt &name) const
 {
   unsigned int idx = 0;
-  const struct_union_data &data_ref = get_type_def(t);
+  // Pointer types lower to the synthetic pointer_struct tuple in SMT;
+  // for them the named lookup uses pointer_struct's member_names.
+  const std::vector<irep_idt> &names =
+    struct_union_member_names(is_pointer_type(t) ? pointer_struct : t);
 
-  for (auto const &it : data_ref.member_names)
+  for (const irep_idt &it : names)
   {
     if (it == name)
       break;
     idx++;
   }
   assert(
-    idx != data_ref.member_names.size() &&
-    "Member name of with expr not found in struct type");
+    idx != names.size() && "Member name of with expr not found in struct type");
 
   return idx;
 }
@@ -1302,6 +1304,23 @@ smt_astt smt_convt::get_single_max_normal()
   return mk_smt_real(val);
 }
 
+smt_astt smt_convt::get_double_inf_sentinel()
+{
+  // One above double max_normal: used to represent ±∞ in integer encoding.
+  // This value satisfies |x| > max_normal, so isinf/isfinite predicates fire.
+  static const std::string val =
+    integer2string((power(2, 53) - 1) * power(2, 971) + 1);
+  return mk_smt_real(val);
+}
+
+smt_astt smt_convt::get_single_inf_sentinel()
+{
+  // One above single max_normal: used to represent ±∞ in integer encoding.
+  static const std::string val =
+    integer2string((power(2, 24) - 1) * power(2, 104) + 1);
+  return mk_smt_real(val);
+}
+
 smt_astt smt_convt::get_double_eps_rel()
 {
   // Relative error bound for IEEE 754 double under round-to-nearest:
@@ -1364,22 +1383,33 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
         distribute_vector_operation(expr->expr_id, to_bitnot2t(expr).value));
     }
 
-    const ieee_arith_2ops *ops = dynamic_cast<const ieee_arith_2ops *>(&*expr);
-    if (ops)
+    switch (expr->expr_id)
     {
+    case expr2t::ieee_add_id:
+    case expr2t::ieee_sub_id:
+    case expr2t::ieee_mul_id:
+    case expr2t::ieee_div_id:
       return convert_ast(distribute_vector_operation(
-        ops->expr_id, ops->side_1, ops->side_2, ops->rounding_mode));
+        expr->expr_id,
+        *expr->get_sub_expr(1),   // side_1
+        *expr->get_sub_expr(2),   // side_2
+        *expr->get_sub_expr(0))); // rounding_mode
+    case expr2t::add_id:
+    case expr2t::sub_id:
+    case expr2t::mul_id:
+    case expr2t::div_id:
+    case expr2t::modulus_id:
+    case expr2t::bitand_id:
+    case expr2t::bitor_id:
+    case expr2t::bitxor_id:
+    case expr2t::shl_id:
+    case expr2t::ashr_id:
+    case expr2t::lshr_id:
+      return convert_ast(distribute_vector_operation(
+        expr->expr_id, *expr->get_sub_expr(0), *expr->get_sub_expr(1)));
+    default:
+      break;
     }
-    if (is_arith_expr(expr))
-    {
-      const arith_2ops &arith = dynamic_cast<const arith_2ops &>(*expr);
-      return convert_ast(
-        distribute_vector_operation(arith.expr_id, arith.side_1, arith.side_2));
-    }
-    const bit_2ops *bit = dynamic_cast<const bit_2ops *>(&*expr);
-    if (bit)
-      return convert_ast(
-        distribute_vector_operation(bit->expr_id, bit->side_1, bit->side_2));
   }
 
   std::vector<smt_astt> args;
@@ -1445,7 +1475,8 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     if (!cu.init_field.empty())
     {
       const union_type2t &ut = to_union_type(expr->type);
-      unsigned c = ut.get_component_number(cu.init_field);
+      unsigned c =
+        struct_union_get_component_number(expr->type, cu.init_field).value();
       /* Can only initialize unions by expressions of same type as init_field */
       assert(src_expr->type->type_id == ut.members[c]->type_id);
     }
@@ -1482,7 +1513,8 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
 
     expr2tc flat_expr = expr;
     if (
-      is_array_type(get_array_subtype(expr->type)) && is_constant_array2t(expr))
+      is_array_type(to_array_type(expr->type).subtype) &&
+      is_constant_array2t(expr))
       flat_expr = flatten_array_body(expr);
 
     if (is_struct_type(arr.subtype) || is_pointer_type(arr.subtype))
@@ -1915,10 +1947,12 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
         break;
       }
 
-      smt_astt max_val =
-        is_single ? get_single_max_normal() : get_double_max_normal();
+      // Use double_inf_sentinel for all precisions so that div-by-zero results
+      // are consistent with infinity constants (C's INFINITY is a float that
+      // gets cast to double, both must map to the same sentinel value).
+      smt_astt sentinel = get_double_inf_sentinel();
       smt_astt inf_result =
-        mk_ite(mk_lt(side1, zero), mk_sub(zero, max_val), max_val);
+        mk_ite(mk_lt(side1, zero), mk_sub(zero, sentinel), sentinel);
       smt_astt real_result = mk_div(side1, side2);
       const expr2tc &rounding_mode = to_ieee_div2t(expr).rounding_mode;
 
@@ -2097,12 +2131,14 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       smt_astt srcval = convert_ast(with.source_value);
 
 #ifndef NDEBUG
-      const struct_union_data &data = get_type_def(with.type);
-      assert(idx < data.members.size() && "Out of bounds with expression");
+      // Pointer with's lower into pointer_struct tuple updates.
+      const std::vector<type2tc> &members = struct_union_members(
+        is_pointer_type(with.type) ? pointer_struct : with.type);
+      assert(idx < members.size() && "Out of bounds with expression");
       // Base type eq examines pointer types to closely
       assert(
-        (base_type_eq(data.members[idx], with.update_value->type, ns) ||
-         (is_pointer_type(data.members[idx]) &&
+        (base_type_eq(members[idx], with.update_value->type, ns) ||
+         (is_pointer_type(members[idx]) &&
           is_pointer_type(with.update_value))) &&
         "Assigned tuple member has type mismatch");
 #endif
@@ -2114,8 +2150,9 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
       uint64_t bits = type_byte_size_bits(expr->type).to_uint64();
       const union_type2t &tu = to_union_type(expr->type);
       assert(is_constant_string2t(with.update_field));
-      unsigned c =
-        tu.get_component_number(to_constant_string2t(with.update_field).value);
+      unsigned c = struct_union_get_component_number(
+                     expr->type, to_constant_string2t(with.update_field).value)
+                     .value();
       uint64_t mem_bits = type_byte_size_bits(tu.members[c]).to_uint64();
       expr2tc upd = bitcast2tc(
         get_uint_type(mem_bits), typecast2tc(tu.members[c], with.update_value));
@@ -2426,12 +2463,43 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     }
     else
     {
-      expr2tc lt = lessthan2tc(abs.value, gen_zero(abs.value->type));
+      // Lower as `(x >= 0) ? x : -x`. The opposite-sense `(x < 0) ? -x : x`
+      // is logically equivalent but bitwuzla preprocesses the `>= 0` shape
+      // significantly faster. Fixes a 7x regression on
+      // sv-benchmarks/c/xcsp/AllInterval-017.
+      //
+      // The branch-free `bvsub(bvxor(x, ashr(x, w-1)), ashr(x, w-1))`
+      // form was tried (it's the canonical SMT-LIB abs encoding) and is
+      // ~8x slower on AllInterval-017 under bitwuzla — the ite form
+      // gives the solver a clean case-split that meshes with the
+      // surrounding all-distinct + abs-difference chain, while the xor
+      // form mixes the sign bit into bitvector arithmetic and seems to
+      // defeat term-graph sharing in this pattern.
+      expr2tc ge = greaterthanequal2tc(abs.value, gen_zero(abs.value->type));
       expr2tc neg = neg2tc(abs.value->type, abs.value);
-      expr2tc ite = if2tc(abs.type, lt, neg, abs.value);
+      expr2tc ite = if2tc(abs.type, ge, abs.value, neg);
 
       a = convert_ast(ite);
     }
+    break;
+  }
+  case expr2t::cmp_three_way_id:
+  {
+    // C++20 spaceship `a <=> b`. Lower to the equivalent ITE chain
+    // producing a comparison-category struct value:
+    //   side_1 <  side_2  ->  T{-1}    (less)
+    //   side_1 == side_2  ->  T{ 0}    (equivalent / equal)
+    //   else              ->  T{ 1}    (greater)
+    // Operands are captured once via the recursive convert_ast on the
+    // children — preserving the IR-level cmp_three_way2t up to here.
+    const cmp_three_way2t &cw = to_cmp_three_way2t(expr);
+
+    expr2tc lt = lessthan2tc(cw.side_1, cw.side_2);
+    expr2tc eq = equality2tc(cw.side_1, cw.side_2);
+    expr2tc inner = if2tc(
+      cw.type, eq, make_cmp_value(cw.type, 0), make_cmp_value(cw.type, 1));
+    expr2tc outer = if2tc(cw.type, lt, make_cmp_value(cw.type, -1), inner);
+    a = convert_ast(outer);
     break;
   }
   case expr2t::lessthan_id:
@@ -2592,16 +2660,6 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     a = mk_bvxor(args[0], args[1]);
     break;
   }
-  case expr2t::bitnand_id:
-  {
-    a = mk_bvnand(args[0], args[1]);
-    break;
-  }
-  case expr2t::bitnor_id:
-  {
-    a = mk_bvnor(args[0], args[1]);
-    break;
-  }
   case expr2t::bitnot_id:
   {
     a = mk_bvnot(args[0]);
@@ -2699,8 +2757,9 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
 
     // We only want expressions of typecast(address_of(symbol)) or address_of(symbol).
     {
-      if (is_typecast2t(symbol) && is_address_of2t(to_typecast2t(symbol).from))
-        symbol = to_address_of2t(to_typecast2t(symbol).from).ptr_obj;
+      if (const typecast2t *tc = try_to_typecast2t(symbol);
+          tc && is_address_of2t(tc->from))
+        symbol = to_address_of2t(tc->from).ptr_obj;
 
       else if (is_address_of2t(symbol))
         symbol = to_address_of2t(symbol).ptr_obj;
@@ -2957,10 +3016,22 @@ smt_astt smt_convt::convert_terminal(const expr2tc &expr)
     const constant_floatbv2t &thereal = to_constant_floatbv2t(expr);
     if (int_encoding)
     {
-      if (
-        thereal.value.is_zero() || thereal.value.is_NaN() ||
-        thereal.value.is_infinity())
+      if (thereal.value.is_zero() || thereal.value.is_NaN())
         return mk_smt_real("0");
+      if (thereal.value.is_infinity())
+      {
+        // Encode ±∞ as ±double_inf_sentinel (one above double max_normal) for
+        // all float widths. Using the double sentinel universally ensures that
+        // a float INFINITY constant typecast to double (C's INFINITY macro is
+        // float) produces the same value as a double IEEE_DIV(x,0) result.
+        // The double sentinel exceeds both single and double max_normal, so
+        // isinf/isfinite predicates work correctly for both precisions.
+        // NaN handling is deferred to the IEEE corner-case phase.
+        smt_astt sentinel = get_double_inf_sentinel();
+        if (thereal.value.get_sign())
+          return mk_sub(get_zero_real(), sentinel);
+        return sentinel;
+      }
       BigInt frac, exp;
       thereal.value.extract_base2(frac, exp);
       std::string result;
@@ -3781,9 +3852,10 @@ smt_astt smt_convt::convert_array_index(const expr2tc &expr)
   smt_astt a = convert_ast(src_value);
   a = a->select(this, newidx);
 
-  const type2tc &arrsubtype = is_vector_type(index.source_value->type)
-                                ? get_vector_subtype(index.source_value->type)
-                                : get_array_subtype(index.source_value->type);
+  const type2tc &arrsubtype =
+    is_vector_type(index.source_value->type)
+      ? to_vector_type(index.source_value->type).subtype
+      : to_array_type(index.source_value->type).subtype;
   if (is_bool_type(arrsubtype) && !array_api->supports_bools_in_arrays)
     return make_bit_bool(a);
 
@@ -4157,18 +4229,34 @@ expr2tc smt_convt::get(const expr2tc &expr)
 
   if (is_array_type(expr->type))
   {
-    expr2tc &arr_size = to_array_type(res->type).array_size;
-    if (!is_nil_expr(arr_size) && is_symbol2t(arr_size))
-      arr_size = get(arr_size);
+    // Resolve symbolic array_size fields to the concrete values the solver
+    // assigned them. Functional rewrite: build a new array_type if any size
+    // changed, then rebuild res with that type. Mirrors the original two-level
+    // walk (outer array + its immediate subtype if also array); preserves the
+    // historic behaviour of not recursing further.
+    auto resolve_size = [this](const expr2tc &s) {
+      if (!is_nil_expr(s) && is_symbol2t(s))
+        return get(s);
+      return s;
+    };
 
-    res->type->Foreach_subtype([this](type2tc &t) {
-      if (!is_array_type(t))
-        return;
-
-      expr2tc &arr_size = to_array_type(t).array_size;
-      if (!is_nil_expr(arr_size) && is_symbol2t(arr_size))
-        arr_size = get(arr_size);
-    });
+    const array_type2t &outer = to_array_type(res->type);
+    expr2tc new_outer_size = resolve_size(outer.array_size);
+    type2tc new_subtype = outer.subtype;
+    if (is_array_type(new_subtype))
+    {
+      const array_type2t &inner = to_array_type(new_subtype);
+      expr2tc new_inner_size = resolve_size(inner.array_size);
+      if (new_inner_size != inner.array_size)
+        new_subtype =
+          array_type2tc(inner.subtype, new_inner_size, inner.size_is_infinite);
+    }
+    if (new_outer_size != outer.array_size || new_subtype != outer.subtype)
+    {
+      type2tc new_type =
+        array_type2tc(new_subtype, new_outer_size, outer.size_is_infinite);
+      res = res->with_type(new_type);
+    }
   }
 
   // Recurse on operands
@@ -4555,24 +4643,17 @@ expr2tc smt_convt::get_array(const expr2tc &expr)
   return get_array(expr->type, array);
 }
 
-const struct_union_data &smt_convt::get_type_def(const type2tc &type) const
-{
-  return (is_pointer_type(type))
-           ? to_struct_type(pointer_struct)
-           : dynamic_cast<const struct_union_data &>(*type.get());
-}
-
 smt_astt smt_convt::array_create(const expr2tc &expr)
 {
   if (is_constant_array_of2t(expr))
     return convert_array_of_prep(expr);
   // Check size
   assert(is_constant_array2t(expr) || is_constant_vector2t(expr));
-  const array_data &data = static_cast<const array_data &>(*expr->type);
-  expr2tc size = data.array_size;
-  bool is_infinite = data.size_is_infinite;
-  const auto &members =
-    static_cast<const constant_datatype_data &>(*expr).datatype_members;
+  expr2tc size = array_or_vector_size(expr->type);
+  bool is_infinite = array_or_vector_size_is_infinite(expr->type);
+  const auto &members = is_constant_array2t(expr)
+                          ? to_constant_array2t(expr).datatype_members
+                          : to_constant_vector2t(expr).datatype_members;
 
   // Handle constant array expressions: these don't have tuple type and so
   // don't need funky handling, but we need to create a fresh new symbol and
@@ -4837,7 +4918,7 @@ smt_astt smt_ast::update(
   smt_convt *ctx,
   smt_astt value,
   unsigned int idx,
-  expr2tc idx_expr) const
+  const expr2tc &idx_expr) const
 {
   // If we're having an update applied to us, then the only valid situation
   // this can occur in is if we're an array.
@@ -5137,20 +5218,6 @@ smt_astt smt_convt::mk_bvneg(smt_astt a)
 smt_astt smt_convt::mk_bvnot(smt_astt a)
 {
   (void)a;
-  abort();
-}
-
-smt_astt smt_convt::mk_bvnor(smt_astt a, smt_astt b)
-{
-  (void)a;
-  (void)b;
-  abort();
-}
-
-smt_astt smt_convt::mk_bvnand(smt_astt a, smt_astt b)
-{
-  (void)a;
-  (void)b;
   abort();
 }
 

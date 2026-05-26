@@ -25,6 +25,7 @@
 #include <goto-symex/build_goto_trace.h>
 #include <goto-symex/goto_trace.h>
 #include <goto-symex/features.h>
+#include <goto-symex/sarif.h>
 #include <goto-symex/xml_goto_trace.h>
 #include <langapi/language_util.h>
 #include <langapi/languages.h>
@@ -67,7 +68,7 @@ bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
       !options.get_bool_option("ltl"))
       // Store the set between runs
       algorithms.emplace_back(
-        std::make_unique<assertion_cache>(config.ssa_caching_db));
+        std::make_unique<assertion_cache>(get_ssa_caching_db()));
 
     if (opts.get_bool_option("no-slice"))
       algorithms.emplace_back(std::make_unique<simple_slice>());
@@ -150,6 +151,9 @@ void bmct::error_trace(smt_convt &smt_conv, const symex_target_equationt &eq)
 
   if (witness_yaml_output != "")
     violation_yaml_goto_trace(options, ns, goto_trace);
+
+  if (!options.get_option("sarif-output").empty())
+    sarif_goto_trace(options, ns, goto_trace);
 
   if (options.get_bool_option("generate-testcase"))
   {
@@ -700,6 +704,17 @@ static nlohmann::json parse_claim_location(const std::string &loc)
   return j;
 }
 
+// Predicate used by both the final and the verbose k-path reporters.
+static bool is_kpath_maximal(const std::string &claim_sig)
+{
+  const auto &redundant = goto_coveraget::k_path_spanning_redundant;
+  // claim_sig = "msg\tloc"; loc has no tabs, so rfind is robust if a
+  // future emission path puts a tab in msg.
+  const auto tab = claim_sig.rfind('\t');
+  return redundant.count(
+           {claim_sig.substr(0, tab), claim_sig.substr(tab + 1)}) == 0;
+}
+
 void report_coverage(
   const optionst &options,
   std::unordered_set<std::string> &reached_claims,
@@ -929,17 +944,30 @@ void report_coverage(
   else if (is_k_path_cov)
   {
     const size_t total = goto_coveraget::total_kpath;
-    const size_t tracked_instance = reached_claims.size();
+    const size_t spanning = goto_coveraget::total_kpath_spanning;
+
+    // Phase-2 (issue #4335): both numerator and denominator must restrict
+    // to maximal goals under the atom-multiset subsumption order (Marré-
+    // Bertolino, IEEE TSE 2003). Filter reached_claims against
+    // k_path_spanning_redundant so a reached-but-subsumed goal does not
+    // inflate the numerator against the maximal-only denominator.
+    const size_t tracked_instance = std::count_if(
+      reached_claims.begin(), reached_claims.end(), is_kpath_maximal);
+
     log_success("\n[Coverage]\n");
     log_result("k-Path Witnesses : {}", total);
+    log_result("Spanning Set : {}", spanning);
     log_result("Reached : {}", tracked_instance);
 
+    // Listing shows every reached claim regardless of maximality so the
+    // user can see which subsumed goals were also reached — this is a
+    // diagnostic flag, not a coverage-formula display.
     if (options.get_bool_option("k-path-coverage-claims"))
       for (const auto &claim : reached_claims)
         log_status("  {}", prettify_solidity_expr(claim));
 
-    if (total != 0)
-      log_result("k-Path Coverage: {}%", tracked_instance * 100.0 / total);
+    if (spanning != 0)
+      log_result("k-Path Coverage: {}%", tracked_instance * 100.0 / spanning);
     else
       log_result("k-Path Coverage: N/A (no k-path goals)");
   }
@@ -986,6 +1014,18 @@ void report_coverage(
       claim_entry["column"] = loc["column"];
       claim_entry["function"] = loc["function"];
       claim_entry["status"] = covered ? "covered" : "uncovered";
+      // k-path Phase-2 (#4335): annotate each claim as feasible (a
+      // maximal element of the subsumption lattice and thus part of the
+      // spanning set) or spanning-set-redundant (subsumed by a stronger
+      // emitted goal — covering it adds no information beyond covering
+      // its subsumer).
+      if (is_k_path_cov)
+      {
+        const auto &redundant = goto_coveraget::k_path_spanning_redundant;
+        claim_entry["feasibility"] = redundant.count({claim_msg, claim_loc}) > 0
+                                       ? "spanning-set-redundant"
+                                       : "feasible";
+      }
       claims_json.push_back(claim_entry);
     }
 
@@ -994,6 +1034,23 @@ void report_coverage(
     for (const auto &c : claims_json)
       if (c["status"] == "covered")
         covered_count++;
+
+    // For k-path coverage, restrict the summary to maximal goals so the
+    // JSON percentage matches the terminal spanning-set-filtered output.
+    // Individual claims keep their `feasibility` annotation so consumers
+    // that want raw counts can still derive them from the `claims` array.
+    if (is_k_path_cov)
+    {
+      total = 0;
+      covered_count = 0;
+      for (const auto &c : claims_json)
+        if (c["feasibility"] == "feasible")
+        {
+          ++total;
+          if (c["status"] == "covered")
+            ++covered_count;
+        }
+    }
 
     json report;
     report["coverage_type"] = cov_type;
@@ -1038,6 +1095,7 @@ void bmct::report_coverage_verbose(
   const bool &is_cond_cov,
   const bool &is_branch_cov,
   const bool &is_branch_func_cov,
+  const bool &is_k_path_cov,
   const std::unordered_set<std::string> &reached_claims,
   const std::unordered_multiset<std::string> &reached_mul_claims)
 {
@@ -1123,6 +1181,22 @@ void bmct::report_coverage_verbose(
       else
         log_result("Branch Function Coverage: 0%");
     }
+    else if (is_k_path_cov)
+    {
+      // Match the final reporter's spanning-set formula so per-witness
+      // progress agrees with the final summary.
+      const size_t tracked_instance = std::count_if(
+        reached_claims.begin(), reached_claims.end(), is_kpath_maximal);
+
+      if (options.get_bool_option("k-path-coverage-claims"))
+        log_status("\n  {} : SATISFIED", prettify_solidity_expr(claim_sig));
+
+      // spanning >= 1 here: verbose only fires after a reached claim,
+      // which implies total_kpath >= 1 (Marré-Bertolino).
+      log_result(
+        "Current k-Path Coverage: {}%\n",
+        tracked_instance * 100.0 / goto_coveraget::total_kpath_spanning);
+    }
     else
     {
       log_error("Unsupported coverage metrics");
@@ -1161,10 +1235,17 @@ void bmct::report_result(smt_convt::resultt &res)
       // verdict is printed by do_bmc_strategy once the loop terminates.
       // Exception: assertion-coverage mode always reports success after
       // coverage analysis, regardless of any violations found.
+      //
+      // Also suppress when symex flipped `disable-inductive-step` mid-run
+      // (recursion, threads, function-pointer calls): the IS encoding is
+      // incomplete, so its UNSAT does not prove safety. is_inductive_step
+      // _violated checks the same flag and returns UNKNOWN, so reporting
+      // SUCCESSFUL here would contradict the strategy-level verdict.
       if (
-        !options.get_bool_option("kind-violation-found") ||
-        options.get_bool_option("assertion-coverage") ||
-        options.get_bool_option("assertion-coverage-claims"))
+        (!options.get_bool_option("kind-violation-found") ||
+         options.get_bool_option("assertion-coverage") ||
+         options.get_bool_option("assertion-coverage-claims")) &&
+        !(is && options.get_bool_option("disable-inductive-step")))
         report_success();
     }
     else
@@ -1234,7 +1315,7 @@ smt_convt::resultt bmct::run(std::shared_ptr<symex_target_equationt> &eq)
     // Clear the cache between thread interleavings to prevent
     // incorrect caching of assertions with different thread contexts
     if (!options.get_bool_option("no-cache-asserts"))
-      config.ssa_caching_db.clear();
+      get_ssa_caching_db().clear();
 
     fine_timet bmc_start = current_time();
     res = run_thread(eq);
@@ -1363,7 +1444,8 @@ void bmct::bidirectional_search(
         continue;
 
       expr2tc new_lhs = ssait.original_lhs;
-      renaming::renaming_levelt::get_original_name(new_lhs, symbol2t::level0);
+      renaming::renaming_levelt::get_original_name(
+        new_lhs, symbol_renaming_level::level0);
 
       if (all_loop_vars.find(new_lhs) == all_loop_vars.end())
         continue;
@@ -2077,6 +2159,7 @@ smt_convt::resultt bmct::multi_property_check(
           is_cond_cov,
           is_branch_cov,
           is_branch_func_cov,
+          is_k_path_cov,
           reached_claims,
           reached_mul_claims);
       else if (!is_cov_silent)

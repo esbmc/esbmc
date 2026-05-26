@@ -847,7 +847,7 @@ bool solidity_convertert::populate_auxiliary_vars()
     s.static_lifetime = true; // static
     symbolt &_sym = *move_symbol_to_context(s);
     solidity_gen_typecast(ns, string, ct);
-    _sym.value = string;
+    _sym.set_value(string);
   }
 
   /* populate _bind_cname_list
@@ -905,8 +905,11 @@ bool solidity_convertert::populate_auxiliary_vars()
     s.static_lifetime = true;
     s.lvalue = true;
     symbolt &sym = *move_symbol_to_context(s);
-    sym.value = gen_zero(get_complete_type(_t, ns), true);
-    sym.value.zero_initializer(true);
+    {
+      exprt _v = gen_zero(get_complete_type(_t, ns), true);
+      _v.zero_initializer(true);
+      sym.set_value(std::move(_v));
+    }
 
     // f: initialize_bind_list
     std::string fname, fid;
@@ -952,7 +955,7 @@ bool solidity_convertert::populate_auxiliary_vars()
       fbody.copy_to_operands(ass_expr);
       ++i;
     }
-    fsym.value = fbody;
+    fsym.set_value(fbody);
   }
 
   // pupulate a function call _sol_init_()
@@ -988,7 +991,7 @@ bool solidity_convertert::populate_auxiliary_vars()
   is_init_sym.lvalue = true;
   is_init_sym.file_local = true;
   is_init_sym.static_lifetime = true;
-  is_init_sym.value = false_exprt();
+  is_init_sym.set_value(false_exprt());
   symbolt &final_is_init_sym = *move_symbol_to_context(is_init_sym);
 
   // 2. add body
@@ -1064,7 +1067,7 @@ bool solidity_convertert::populate_auxiliary_vars()
   init_func_body.move_to_operands(if_expr);
 
   // assign body to function symbol
-  final_init_func_sym.value = init_func_body;
+  final_init_func_sym.set_value(init_func_body);
 
   // for mapping
   extract_new_contracts();

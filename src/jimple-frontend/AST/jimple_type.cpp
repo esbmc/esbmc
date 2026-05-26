@@ -25,7 +25,7 @@ typet jimple_type::get_base_type(const contextt &ctx) const
     auto symbol = ctx.find_symbol("tag-" + name);
     if (symbol == nullptr)
       throw "Type not found: " + name;
-    return pointer_typet(symbol->type);
+    return pointer_typet(symbol->get_type());
   }
 }
 

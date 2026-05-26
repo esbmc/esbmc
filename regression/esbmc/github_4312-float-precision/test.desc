@@ -1,6 +1,6 @@
 CORE
 main.c
---all-witnesses --max-witnesses 6 --floatbv --incremental-bmc
+--all-witnesses --max-witnesses 6 --floatbv --no-unwinding-assertions --unwind 1
 ^VERIFICATION FAILED$
 \[Counterexamples - 6 witnesses\]
 ^[^\n]*Inputs : \[0\] = -?\d\.\d{7,}e[+-]\d+f$

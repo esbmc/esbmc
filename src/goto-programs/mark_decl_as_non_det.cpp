@@ -1,7 +1,7 @@
 #include <goto-programs/mark_decl_as_non_det.h>
 #include <util/prefix.h>
 bool mark_decl_as_non_det::runOnFunction(
-  std::pair<const dstring, goto_functiont> &F)
+  std::pair<const irep_idt, goto_functiont> &F)
 {
   if (!F.second.body_available)
     return false; // Didn't changed anything
@@ -19,7 +19,7 @@ bool mark_decl_as_non_det::runOnFunction(
     // find_symbol should always work here
     assert(s);
     // Global variables and function declaration shouldn't reach here
-    assert(!s->static_lifetime || !s->type.is_code());
+    assert(!s->static_lifetime || !s->get_type().is_code());
 
     // Explicit initialization of return_values is not needed as it will always be
     // later initialized (e.g. return_value$foo = FOO()).
@@ -29,7 +29,7 @@ bool mark_decl_as_non_det::runOnFunction(
     if (has_prefix(s->name, "return_value$"))
       continue;
     // Is the value initialized?
-    if (s->value.is_nil())
+    if (s->get_value().is_nil())
     {
       // Initialize it with nondet then
       expr2tc new_value =
