@@ -326,6 +326,12 @@ set(_slow_regression_tests
     "regression/quixbugs/flatten_fail"
     "regression/quixbugs/next_palindrome"
     "regression/quixbugs/pascal"
+    # shortest_path_lengths(_fail) used to fast-fail because defaultdict
+    # with a lambda factory was unsupported; with #4765 the lambda factory
+    # is now honoured and ESBMC actually tries to verify the triple-nested
+    # Floyd-Warshall loop, which exceeds the 120s cap on slower runners.
+    "regression/quixbugs/shortest_path_lengths"
+    "regression/quixbugs/shortest_path_lengths_fail"
     "regression/ai-generated-code/two_sum"
 )
 math(EXPR ESBMC_REGRESS_CTEST_TIMEOUT_SLOW
