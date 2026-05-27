@@ -1,0 +1,53 @@
+---
+# Codacy project configuration. Documents and silences static-analyser
+# warnings that are intentional given ESBMC's design (operational models
+# for libc and Python stdlib, class methods named read(), etc.).
+#
+# Issues in scope here are confirmed false positives or by-design
+# behaviour the project deliberately keeps. Real issues are still
+# surfaced by these tools elsewhere in the tree.
+
+engines:
+
+  flawfinder:
+    enabled: true
+    exclude_paths:
+      # Operational models of the C standard library. Every signature
+      # here must match libc verbatim (strncpy, strncat, strlen, strcpy,
+      # getc, fgetc, getchar, read, etc.) — that is the whole point of
+      # the model. Flawfinder's CWE-120/CWE-126 warnings on these files
+      # are intentional and cannot be addressed by changing the signature
+      # without breaking what ESBMC verifies. See src/c2goto/CLAUDE.md.
+      - 'src/c2goto/headers/**'
+      - 'src/c2goto/library/**'
+
+      # SystemC communication model. sc_signal<T>::read() and
+      # sc_signal_port<T>::read() are class methods, not the POSIX read()
+      # syscall flawfinder pattern-matches against.
+      - 'src/cpp/library/systemc/communication/**'
+
+      # Core IR / parser / qualifier infrastructure. irept::read(),
+      # parsert::read(char&), and c_qualifierst::read(const typet&) are
+      # all class member functions — none of them touch a buffer.
+      # Flawfinder's name-based check produces only false positives on
+      # these files; renaming the API would churn thousands of call sites
+      # across every downstream fork. The wider files surrounding the
+      # call sites in src/util/c_expr2string.cpp,
+      # src/util/cpp_expr2string.cpp, and src/goto2c/expr2c.cpp are
+      # intentionally NOT excluded — those files contain code unrelated
+      # to the read() call and remain in scope for flawfinder.
+      - 'src/util/irep.h'
+      - 'src/util/irep.cpp'
+      - 'src/util/parser.h'
+      - 'src/util/c_qualifiers.h'
+      - 'src/util/c_qualifiers.cpp'
+
+  bandit:
+    enabled: true
+    exclude_paths:
+      # ESBMC operational models for the Python standard library. The
+      # `assert` statements in these files encode preconditions that
+      # ESBMC's Python frontend must verify; they are not user-facing
+      # Python code that runs under `python -O`, so Bandit B101 ("assert
+      # removed in optimised bytecode") does not apply.
+      - 'src/python-frontend/models/**'
