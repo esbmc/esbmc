@@ -108,8 +108,8 @@ void goto_loopst::collect_loop_symbols(
   if (is_nil_expr(expr))
     return;
 
-  expr->foreach_operand([this, &out](const expr2tc &e)
-                        { collect_loop_symbols(e, out); });
+  expr->foreach_operand(
+    [this, &out](const expr2tc &e) { collect_loop_symbols(e, out); });
 
   if (is_symbol2t(expr) && check_var_name(expr))
     out.insert(expr);
@@ -139,8 +139,9 @@ void goto_loopst::collect_lhs_symbols(
     return;
   }
 
-  expr->foreach_operand([this, &modified, &unmodified](const expr2tc &e)
-                        { collect_lhs_symbols(e, modified, unmodified); });
+  expr->foreach_operand([this, &modified, &unmodified](const expr2tc &e) {
+    collect_lhs_symbols(e, modified, unmodified);
+  });
 
   if (is_symbol2t(expr) && check_var_name(expr))
     modified.insert(expr);
@@ -302,8 +303,9 @@ void goto_loopst::add_loop_var(
     return;
   }
 
-  expr->foreach_operand([this, &loop, &is_modified](const expr2tc &e)
-                        { add_loop_var(loop, e, is_modified); });
+  expr->foreach_operand([this, &loop, &is_modified](const expr2tc &e) {
+    add_loop_var(loop, e, is_modified);
+  });
 
   if (is_symbol2t(expr) && check_var_name(expr))
   {

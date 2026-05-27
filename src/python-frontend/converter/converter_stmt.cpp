@@ -271,8 +271,9 @@ void python_converter::handle_assignment_type_adjustments(
   // For subscript targets (e.g. dp[i] = v).
   // The rhs writes an element, not the container.
   // Don't rewrite lhs_symbol's type.
-  auto is_subscript_target = [](const nlohmann::json &t)
-  { return t.is_object() && t.value("_type", "") == "Subscript"; };
+  auto is_subscript_target = [](const nlohmann::json &t) {
+    return t.is_object() && t.value("_type", "") == "Subscript";
+  };
   const bool target_is_subscript =
     (ast_node.contains("targets") && ast_node["targets"].is_array() &&
      !ast_node["targets"].empty() &&
@@ -340,8 +341,7 @@ void python_converter::handle_assignment_type_adjustments(
       !ast_node.value("_inferred_annotation", false) && has_annotation &&
       ast_node["annotation"].contains("id") &&
       ast_node["annotation"]["id"] == "Any" && lhs.type().is_pointer() &&
-      [this]()
-      {
+      [this]() {
         // Check if "from typing import Any" exists in the source file
         const auto &body = (*ast_json)["body"];
         for (const auto &stmt : body)
@@ -1639,8 +1639,7 @@ void python_converter::get_var_assign(
 
   if (has_value && rhs != exprt("_init_undefined"))
   {
-    auto try_follow_symbol_type = [this](const typet &type) -> typet
-    {
+    auto try_follow_symbol_type = [this](const typet &type) -> typet {
       if (type.id() != "symbol")
         return type;
 
@@ -1654,9 +1653,8 @@ void python_converter::get_var_assign(
       return ns.follow(type);
     };
 
-    auto is_list_model_type =
-      [this, &try_follow_symbol_type](const typet &in_type)
-    {
+    auto is_list_model_type = [this,
+                               &try_follow_symbol_type](const typet &in_type) {
       typet t = in_type;
       t = try_follow_symbol_type(t);
       if (t.is_pointer())
@@ -1668,9 +1666,8 @@ void python_converter::get_var_assign(
              std::string::npos;
     };
 
-    auto resolve_runtime_type =
-      [this, &try_follow_symbol_type](const exprt &expr)
-    {
+    auto resolve_runtime_type = [this,
+                                 &try_follow_symbol_type](const exprt &expr) {
       typet t = expr.type();
       if (expr.is_symbol())
       {
@@ -2288,8 +2285,7 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
   const bool pytest_generation_mode = is_pytest_generation_mode();
   const bool model_mode = is_model_file(ast_node["test"]);
   auto to_bool_condition =
-    [&](const exprt &value_expr, const nlohmann::json &value_node) -> exprt
-  {
+    [&](const exprt &value_expr, const nlohmann::json &value_node) -> exprt {
     if (value_expr.type().is_bool())
       return value_expr;
 
@@ -2405,8 +2401,7 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
   {
     locationt location = get_location_from_decl(call_node);
 
-    auto apply_wrapped_unary = [&](const exprt &base_expr) -> exprt
-    {
+    auto apply_wrapped_unary = [&](const exprt &base_expr) -> exprt {
       if (!is_wrapped_in_unary)
         return base_expr;
 
@@ -2976,8 +2971,7 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
       }
 
       // Attach assertion message if present
-      auto attach_assert_message = [&element](code_assertt &assert_code)
-      {
+      auto attach_assert_message = [&element](code_assertt &assert_code) {
         if (element.contains("msg") && !element["msg"].is_null())
         {
           std::string msg;

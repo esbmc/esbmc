@@ -29,14 +29,14 @@ void __ESBMC_set_thread_internal_data(
 #define __ESBMC_rwlock_writer(a) ((a)->__writer)
 
 /* Global tracking data. Should all initialize to 0 / false */
-__attribute__((
-  annotate("__ESBMC_inf_size"))) _Bool __ESBMC_pthread_thread_running[1];
+__attribute__((annotate("__ESBMC_inf_size")))
+_Bool __ESBMC_pthread_thread_running[1];
 
-__attribute__((
-  annotate("__ESBMC_inf_size"))) _Bool __ESBMC_pthread_thread_ended[1];
+__attribute__((annotate("__ESBMC_inf_size")))
+_Bool __ESBMC_pthread_thread_ended[1];
 
-__attribute__((
-  annotate("__ESBMC_inf_size"))) _Bool __ESBMC_pthread_thread_detach[1];
+__attribute__((annotate("__ESBMC_inf_size")))
+_Bool __ESBMC_pthread_thread_detach[1];
 
 __attribute__((
   annotate("__ESBMC_inf_size"))) void *__ESBMC_pthread_end_values[1];
@@ -55,8 +55,8 @@ unsigned short int __ESBMC_blocked_threads_count = 0;
  *   cancel_requested = false
  *   cancelstate      = PTHREAD_CANCEL_ENABLE  (0)
  *   canceltype       = PTHREAD_CANCEL_DEFERRED (0) */
-__attribute__((
-  annotate("__ESBMC_inf_size"))) _Bool __ESBMC_pthread_cancel_requested[1];
+__attribute__((annotate("__ESBMC_inf_size")))
+_Bool __ESBMC_pthread_cancel_requested[1];
 
 __attribute__((
   annotate("__ESBMC_inf_size"))) int __ESBMC_pthread_cancelstate[1];

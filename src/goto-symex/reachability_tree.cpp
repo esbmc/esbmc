@@ -163,8 +163,7 @@ bool reachability_treet::step_next_state()
 unsigned int
 reachability_treet::decide_ileave_direction(execution_statet &ex_state)
 {
-  auto is_thread_schedulable = [&](int tid)
-  {
+  auto is_thread_schedulable = [&](int tid) {
     return check_thread_viable(tid, true) && ex_state.dfs_explore_thread(tid);
   };
 

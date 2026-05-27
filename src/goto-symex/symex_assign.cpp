@@ -431,8 +431,9 @@ void goto_symext::symex_assign(
   if (!is_nil_expr(is_ptr_havoc_lhs) && !is_ptr_havoc_pre_values.empty())
   {
     expr2tc or_accuml;
-    auto add_disjunct = [&or_accuml](const expr2tc &eq)
-    { or_accuml = or_accuml ? or2tc(or_accuml, eq) : eq; };
+    auto add_disjunct = [&or_accuml](const expr2tc &eq) {
+      or_accuml = or_accuml ? or2tc(or_accuml, eq) : eq;
+    };
 
     bool aborted = false;
     for (const auto &v : is_ptr_havoc_pre_values)
@@ -1102,11 +1103,9 @@ void goto_symext::replace_nondet(expr2tc &expr)
   }
   else
   {
-    expr->Foreach_operand(
-      [this](expr2tc &e)
-      {
-        if (!is_nil_expr(e))
-          replace_nondet(e);
-      });
+    expr->Foreach_operand([this](expr2tc &e) {
+      if (!is_nil_expr(e))
+        replace_nondet(e);
+    });
   }
 }

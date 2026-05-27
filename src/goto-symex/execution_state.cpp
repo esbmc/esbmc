@@ -814,9 +814,8 @@ unsigned int execution_statet::add_thread(const goto_programt *prog)
 
   // While we've recorded the new thread as starting in the designated program,
   // it might not run immediately, thus must have it's path preserved:
-  preserved_paths[thread_nr].push_back(
-    std::make_pair(
-      prog->instructions.begin(), goto_statet(threads_state[thread_nr])));
+  preserved_paths[thread_nr].push_back(std::make_pair(
+    prog->instructions.begin(), goto_statet(threads_state[thread_nr])));
 
   return threads_state.size() - 1; // thread ID, zero based
 }
@@ -894,8 +893,7 @@ void execution_statet::get_expr_globals(
     if (!symbol)
       return;
 
-    auto is_internal_name = [](const std::string &n)
-    {
+    auto is_internal_name = [](const std::string &n) {
       return n == "c:@__ESBMC_alloc" || n == "c:@__ESBMC_alloc_size" ||
              n == "c:@__ESBMC_is_dynamic" ||
              n == "c:@__ESBMC_blocked_threads_count" ||
@@ -1024,8 +1022,9 @@ void execution_statet::get_expr_globals(
     }
   }
 
-  expr->foreach_operand([this, &globals_list, &ns](const expr2tc &e)
-                        { get_expr_globals(ns, e, globals_list); });
+  expr->foreach_operand([this, &globals_list, &ns](const expr2tc &e) {
+    get_expr_globals(ns, e, globals_list);
+  });
 }
 
 bool execution_statet::check_mpor_dependency(unsigned int j, unsigned int l)
@@ -1182,8 +1181,7 @@ bool execution_statet::has_cswitch_point_occured() const
   // a context switch point here — they already drive scheduling through
   // the pthread library's explicit switch mechanisms, and treating every
   // lock access as a cswitch point blows up the DFS width.
-  auto is_pthread_sync_type = [](const type2tc &t)
-  {
+  auto is_pthread_sync_type = [](const type2tc &t) {
     if (is_nil_type(t))
       return false;
     if (is_struct_type(t))
@@ -1206,8 +1204,7 @@ bool execution_statet::has_cswitch_point_occured() const
     return false;
   };
 
-  auto any_non_sync = [&](const std::set<expr2tc> &s)
-  {
+  auto any_non_sync = [&](const std::set<expr2tc> &s) {
     for (const auto &e : s)
       if (!is_pthread_sync_type(e->type))
         return true;
