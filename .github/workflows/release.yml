@@ -63,7 +63,7 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           name: 'ESBMC Weekly Pre-release'
-          body: 'This is an automated weekly pre-release of ESBMC. Please report any bugs to https://github.com/esbmc/esbmc/issues'
+          body: 'This is an automated weekly pre-release of ESBMC. Please report any bugs to our [Issues](https://github.com/esbmc/esbmc/issues) tracking page.'
           tag_name: weekly
           target_commitish: ${{ github.sha }}
           prerelease: true
