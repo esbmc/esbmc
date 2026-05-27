@@ -292,6 +292,39 @@ void instrument_loop_bounds_after_kind(
         get_symbols(body_it->code, symbols);
         get_symbols(body_it->guard, symbols);
       }
+
+      // Also collect the targets of k-induction's havoc block, which
+      // make_nondet_assign emits *before* loop_head (the back-edge
+      // target): a run of `x = NONDET()` inductive_step assigns, one
+      // per loop variable INCLUDING those modified only transitively
+      // through a callee (e.g. the eca state-machine globals
+      // a17/a28/... mutated inside calculate_output, never named
+      // textually in main's loop body). These are exactly the havoced
+      // variables whose post-havoc value we want to pin to their
+      // interval; the textual body scan above misses them because the
+      // call site only references the argument, not the callee-modified
+      // globals. Without bounding them the inductive step runs from an
+      // arbitrary state-machine configuration and finds spurious
+      // non-terminating / counterexample states.
+      //
+      // Walk backward from loop_head over the contiguous run of
+      // inductive_step nondet-assigns. Stop at the first instruction
+      // that isn't such an assign (or at the function start).
+      if (loop_head != f_it->second.body.instructions.begin())
+      {
+        goto_programt::instructionst::iterator pre_it = loop_head;
+        do
+        {
+          --pre_it;
+          if (!pre_it->inductive_step_instruction || !pre_it->is_assign())
+            break;
+          const code_assign2t &a = to_code_assign2t(pre_it->code);
+          if (
+            is_symbol2t(a.target) && is_sideeffect2t(a.source) &&
+            to_sideeffect2t(a.source).kind == sideeffect2t::allockind::nondet)
+            symbols.insert(a.target);
+        } while (pre_it != f_it->second.body.instructions.begin());
+      }
       if (symbols.empty())
         continue;
 
