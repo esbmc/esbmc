@@ -798,6 +798,32 @@ std::string python_annotation<Json>::get_type_from_binary_expr(
   const Json &lhs =
     stmt.contains("value") ? stmt["value"]["left"] : stmt["left"];
 
+  // True division (`/`) by a float literal yields float regardless of the
+  // LHS arithmetic operands, covering the `a * h / 2.0` shape that
+  // otherwise truncates the call-site return to long_long_int. Limited to
+  // a numeric LHS (Name/BinOp/UnaryOp/int-Constant) so a complex-typed
+  // dividend like `complex(6.0, 4.0) / 2.0` falls through to the LHS-type
+  // path below, which correctly preserves "complex".
+  if (
+    stmt.contains("value") && stmt["value"].contains("op") &&
+    stmt["value"]["op"].contains("_type") &&
+    stmt["value"]["op"]["_type"] == "Div")
+  {
+    const auto &rhs = stmt["value"]["right"];
+    bool rhs_is_float_literal = rhs.contains("_type") &&
+                                rhs["_type"] == "Constant" &&
+                                rhs.contains("value") &&
+                                rhs["value"].is_number_float();
+    bool lhs_is_numeric_shape =
+      lhs.contains("_type") &&
+      (lhs["_type"] == "Name" || lhs["_type"] == "BinOp" ||
+       lhs["_type"] == "UnaryOp" ||
+       (lhs["_type"] == "Constant" && lhs.contains("value") &&
+        (lhs["value"].is_number_integer() || lhs["value"].is_number_float())));
+    if (rhs_is_float_literal && lhs_is_numeric_shape)
+      return "float";
+  }
+
   if (lhs["_type"] == "BinOp")
     type = get_type_from_binary_expr(lhs, body);
   else if (lhs["_type"] == "List")
