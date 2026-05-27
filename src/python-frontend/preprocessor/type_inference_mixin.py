@@ -90,8 +90,7 @@ class TypeInferenceMixin:
         # fall through to "list" and lower the loop as a list iteration,
         # which trips an IndexError because the str length is shorter than
         # the list-style get_object_size bound.
-        if (isinstance(iterable, ast.Call)
-                and isinstance(iterable.func, ast.Name)
+        if (isinstance(iterable, ast.Call) and isinstance(iterable.func, ast.Name)
                 and iterable.func.id == "str"):
             return "str"
         return "list"
