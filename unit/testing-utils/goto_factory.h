@@ -45,7 +45,7 @@ public:
     goto_factory::Architecture arch = goto_factory::Architecture::BIT_16,
     const std::string &test_name = "test.c");
 
-  static cmdlinet get_default_cmdline(const std::string filename);
+  static cmdlinet get_default_cmdline(const std::string &filename);
   static optionst get_default_options(cmdlinet cmd);
 
 private:
