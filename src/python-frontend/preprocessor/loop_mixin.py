@@ -44,6 +44,15 @@ class LoopMixin:
             return node.id
         return None
 
+    @staticmethod
+    def _is_nullary_lambda(node: ast.AST) -> bool:
+        """Return True when node is an `ast.Lambda` taking no parameters."""
+        if not isinstance(node, ast.Lambda):
+            return False
+        args = node.args
+        return (not args.args and not args.posonlyargs and not args.kwonlyargs
+                and args.vararg is None and args.kwarg is None)
+
     def _pre_annotate_items_loop_vars(self, node):
         """Pre-populate variable_annotations for the loop variables of a dict.items() for loop.
 
@@ -2343,16 +2352,29 @@ class LoopMixin:
         return ast.Name(id="dict", ctx=ast.Load())
 
     def _has_heterogeneous_keys(self, dict_node):
-        """Return True if a dict literal has keys of more than one ESBMC-representable type.
+        """Return True if a dict literal needs per-key loop unrolling at iteration.
 
-        ESBMC stores list elements with a type-specific byte size.  When all
-        keys share the same type the retrieval is consistent; when they differ
-        (e.g. int=8 bytes vs str=strlen+1 bytes) reading with a single fixed
-        size causes an array-bounds violation.
+        Triggers on two cases:
+
+        * Mixed key types (e.g. ``{"a": 1, 2: "b"}``) — ESBMC stores keys in a
+          flat list with a type-specific byte size, so a single retrieval
+          stride cannot read both an ``int`` (8 bytes) and a ``str`` (variable
+          width) without tripping an array-bounds violation.
+
+        * Any tuple key (e.g. ``{(1, 2): 10}``) — the key is a struct rather
+          than a scalar, so when ``for k in d:`` is lowered to indexing the
+          synthesised keys list, the loop variable's runtime value is a
+          generic pointer.  Downstream destructuring (``u, v = k``) then fails
+          in ``converter_stmt.cpp`` with "Cannot unpack pointer".  Unrolling
+          inlines each tuple literal directly so the converter sees a struct.
         """
-        if not dict_node.keys or len(dict_node.keys) < 2:
+        if not dict_node.keys:
             return False
         key_types = [self._infer_dict_key_type(k) for k in dict_node.keys]
+        if "tuple" in key_types:
+            return True
+        if len(dict_node.keys) < 2:
+            return False
         return len(set(key_types)) > 1
 
     def _has_heterogeneous_values(self, dict_node):
@@ -2385,16 +2407,38 @@ class LoopMixin:
                 return "str"
         return "Any"
 
-    def _unroll_het_for(self, node, typed_elts):
+    def _unroll_het_for(self, node, typed_elts):  # pylint: disable=too-many-locals
         """Emit one typed assignment + one body copy per element.
 
         typed_elts — list of (type_str, ast_value_node) in iteration order.
 
-        The loop variable (node.target) is renamed to a unique per-iteration
-        symbol so that ESBMC never tries to hold two incompatible types in the
-        same IR symbol.
+        For a Name loop target the per-iteration symbol is renamed so ESBMC
+        never holds two incompatible types in the same IR symbol.  For a
+        Tuple/List loop target (e.g. ``for u, v in d:`` over a tuple-keyed
+        dict) we assign each key into the destructuring pattern directly —
+        the per-element types are uniform across iterations, so no rename
+        is needed and the converter handles the unpack through its normal
+        tuple-assignment path.
         """
-        target_name = node.target.id if isinstance(node.target, ast.Name) else "ESBMC_het_var"
+        target = node.target
+
+        if isinstance(target, (ast.Tuple, ast.List)):
+            result = []
+            for _type_str, value_node in typed_elts:
+                assign = ast.Assign(
+                    targets=[copy.deepcopy(target)],
+                    value=copy.deepcopy(value_node),
+                )
+                self.ensure_all_locations(assign, node)
+                ast.fix_missing_locations(assign)
+                result.append(assign)
+                for stmt in node.body:
+                    result.append(copy.deepcopy(stmt))
+            for stmt in result:
+                ast.fix_missing_locations(stmt)
+            return result
+
+        target_name = self._name_id_or_none(target) or "ESBMC_het_var"
 
         class _RenameVar(ast.NodeTransformer):
             """Replace every Load-context Name(old) with Name(new)."""
@@ -2448,6 +2492,8 @@ class LoopMixin:
                 return "str"
             if isinstance(key_node.value, int):
                 return "int"
+        if isinstance(key_node, ast.Tuple):
+            return "tuple"
         return "Any"
 
     def _infer_dict_value_annotation(self, value_node):
@@ -2591,6 +2637,15 @@ class LoopMixin:
             factory_value = ast.List(elts=[], ctx=ast.Load())
         elif isinstance(factory_node, ast.Name) and factory_node.id == "dict":
             factory_value = ast.Dict(keys=[], values=[])
+        elif self._is_nullary_lambda(factory_node):
+            # Nullary lambda factory: emit the body expression directly so it
+            # routes through the same dict-subscript-assignment path as a
+            # literal. The C++ frontend cannot currently invoke
+            # `(<lambda>)()` correctly — build_function_id only handles Name
+            # and Attribute func types and otherwise resolves to the
+            # enclosing function — so inlining the body avoids the misrouted
+            # call entirely and is semantically identical for a thunk.
+            factory_value = factory_node.body
         else:
             factory_value = ast.Call(func=factory_node, args=[], keywords=[])
         ast.copy_location(factory_value, template)

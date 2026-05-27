@@ -44,7 +44,7 @@ void goto_loopst::find_function_loops()
   for (goto_programt::instructionst::iterator it =
          goto_function.body.instructions.begin();
        it != goto_function.body.instructions.end();
-       it++)
+       ++it)
   {
     // We found a loop, let's record its instructions
     if (it->is_backwards_goto())

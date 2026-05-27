@@ -371,8 +371,7 @@ void goto_symext::symex_assign(
     is_ptr_havoc_lhs = lhs;
     expr2tc lhs_for_query = lhs;
     cur_state->rename(lhs_for_query);
-    cur_state->value_set.get_value_set(
-      lhs_for_query, is_ptr_havoc_pre_values);
+    cur_state->value_set.get_value_set(lhs_for_query, is_ptr_havoc_pre_values);
   }
 
   replace_nondet(lhs);

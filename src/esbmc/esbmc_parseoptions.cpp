@@ -152,6 +152,9 @@ static void segfault_handler(int sig)
   if (fd != -1)
   {
     dprintf(STDERR_FILENO, "\nMemory map:\n");
+    // Bounded read: `buffer` is a fixed-size stack array and the loop
+    // passes its exact size to read(2), so no overflow is possible.
+    // Loop terminates on EOF (rd == 0) or on a non-EINTR error.
     for (ssize_t rd; (rd = read(fd, buffer, sizeof(buffer))) > 0 ||
                      (rd == -1 && errno == EINTR);)
       rd = write(STDERR_FILENO, buffer, rd < 0 ? 0 : rd);
@@ -505,6 +508,21 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     cmdline.isset("loop-invariant") ||
     cmdline.isset("validate-correctness-witness"))
     options.set_option("k-induction", true);
+
+  // Default-enable the vacuity probe under --loop-invariant-check (the
+  // standalone Hoare-rewrite mode). A loop invariant that implies the guard
+  // makes the post-loop continuation unreachable; without this probe every
+  // downstream claim discharges as vacuously true.
+  //
+  // We deliberately do NOT default-enable for combined mode --loop-invariant:
+  // that runs k-induction phases (base case, forward condition, inductive
+  // step) whose UNSAT-on-internal-claims is the success signal, not vacuity.
+  // Users can opt in explicitly with --check-vacuity in those modes.
+  if (cmdline.isset("no-vacuity-check"))
+    options.set_option("check-vacuity", false);
+  else if (
+    cmdline.isset("check-vacuity") || cmdline.isset("loop-invariant-check"))
+    options.set_option("check-vacuity", true);
 
   // Check for conflicting strategies
   if (cmdline.isset("k-induction") && cmdline.isset("termination"))
@@ -1056,7 +1074,9 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       !(finished[BASE_CASE] && finished[FORWARD_CONDITION] &&
         finished[INDUCTIVE_STEP]))
     {
-      // Perform read and interpret the number of bytes read
+      // Bounded read: destination is a single resultt on the stack and
+      // the read length is its exact sizeof. Short reads (EOF, error,
+      // EAGAIN) are checked explicitly below.
       bool valid_read = true;
       int read_size = read(forward_pipe[0], &a_result, sizeof(resultt));
       if (read_size != sizeof(resultt))
@@ -1288,7 +1308,9 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
 
       // Check if the parent process is asking questions
 
-      // Perform read and interpret the number of bytes read
+      // Bounded read: destination is a single resultt on the stack and
+      // the read length is its exact sizeof. Short reads (EOF, error,
+      // EAGAIN) are checked explicitly below.
       struct resultt a_result;
       int read_size = read(backward_pipe[0], &a_result, sizeof(resultt));
       if (read_size != sizeof(resultt))
