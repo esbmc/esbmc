@@ -1,114 +1,46 @@
 #include <goto-programs/goto_k_induction.h>
+#include <goto-programs/goto_loops.h>
+#include <goto-programs/loopst.h>
 #include <goto-programs/remove_no_op.h>
+#include <irep2/irep2_expr.h>
+#include <irep2/irep2_guard.h>
 #include <util/c_types.h>
 #include <util/expr_util.h>
 #include <util/i2string.h>
 #include <util/std_expr.h>
+#include <unordered_map>
 
-void goto_k_induction(goto_functionst &goto_functions)
+namespace
 {
-  Forall_goto_functions (it, goto_functions)
-    if (it->second.body_available)
-      goto_k_inductiont(it->first, goto_functions, it->second);
+using guardst = std::unordered_map<unsigned, guard2tc>;
 
-  goto_functions.update();
-}
-
-void goto_termination(goto_functionst &goto_functions)
+/// Cached result of expanding a forward GOTO branch during the entry-
+/// condition collection. The boolean is the recursion's return value at
+/// this branch (`false_branch && true_branch`, i.e. true iff both
+/// subbranches reach the loop end); the guardst is the set of guards
+/// that should be merged into the caller's local guardst when this
+/// cache entry fires. Storing only the boolean (the legacy design)
+/// silently dropped these guards on every cache hit, weakening the
+/// entry-condition assume.
+struct branch_cache_entryt
 {
-  Forall_goto_functions (it, goto_functions)
-    if (it->second.body_available)
-      goto_k_inductiont(it->first, goto_functions, it->second);
-  goto_functions.update();
+  bool reaches;
+  guardst guards_to_merge;
+};
+using marked_branchst = std::unordered_map<unsigned, branch_cache_entryt>;
 
-  auto function = goto_functions.function_map.find("__ESBMC_main");
-
-  // Search for __ESBMC_main
-  auto it = function->second.body.instructions.begin();
-  while (it != function->second.body.instructions.end())
-  {
-    if (it->is_function_call())
-    {
-      auto const &call = to_code_function_call2t(it->code);
-      if (to_symbol2t(call.function).thename.as_string() == "c:@F@main")
-        break;
-    }
-    it++;
-  }
-  assert(it != function->second.body.instructions.end());
-
-  // Create assert(0) as termination marker.
-  // This assertion fails when reached, allowing reachability analysis
-  // to detect program termination vs. infinite execution
-  goto_programt dest;
-  goto_programt::targett t = dest.add_instruction(ASSERT);
-  // Always false - assertion always fails when reached
-  t->guard = gen_false_expr();
-  t->inductive_step_instruction = true;
-  t->inductive_assertion = false;
-  t->location.comment("termination");
-
-  // And add it one instruction after the call to main
-  it++;
-  function->second.body.insert_swap(it, dest);
-}
-
-void goto_k_inductiont::goto_k_induction()
-{
-  // Full unwind the program
-  for (auto &function_loop : function_loops)
-  {
-    if (function_loop.get_modified_loop_vars().empty())
-      continue;
-
-    // Start the loop conversion
-    convert_finite_loop(function_loop);
-  }
-}
-
-void goto_k_inductiont::convert_finite_loop(loopst &loop)
-{
-  // Get current loop head and loop exit
-  goto_programt::targett loop_head = loop.get_original_loop_head();
-  goto_programt::targett loop_exit = loop.get_original_loop_exit();
-
-  // The branch cache is loop-scoped: a cached `reaches` value is computed
-  // against this loop's `loop_exit`, and the cached guards were collected
-  // along this loop's recursive walk. Nested loops share the goto_k_inductiont
-  // instance (one per function), so without clearing here the outer loop's
-  // entries would be reused by the inner loop with a different `loop_exit`.
-  marked_branch.clear();
-
-  guardst guards;
-  get_entry_cond_rec(loop_head, loop_exit, guards);
-
-  // Remove loop conditions not related to the written variables
-  remove_unrelated_loop_cond(guards, loop);
-
-  // Order matters: the entry-cond ASSUME must constrain the state
-  // *after* the loop vars have been havoced, so we emit the NONDET
-  // havocs first and then place the ASSUME just before loop_head.
-  // make_nondet_assign also rewinds loop_head back onto the original
-  // loop head (post its advance-by-`inserted` step), so by the time
-  // assume_loop_entry_cond_before_loop runs the iterator is correct
-  // and the ASSUME ends up between the havocs and the IF.
-
-  // Create the nondet assignments on the beginning of the loop
-  make_nondet_assign(loop_head, loop);
-
-  // Assume the loop entry condition before going into the loop
-  assume_loop_entry_cond_before_loop(loop_head, guards);
-
-  // Check if the loop exit needs to be updated
-  // We must point to the assume that was inserted in the previous
-  // transformation
-  adjust_loop_head_and_exit(loop_head, loop_exit);
-}
-
-bool goto_k_inductiont::get_entry_cond_rec(
+/// Walk the loop body and collect, into @p guards, the conditions under
+/// which control flows from @p loop_head to @p loop_exit. Used by
+/// transform_loop to derive the entry condition of the loop (the
+/// conjunction of every IF-branch guard taken along a body-reaching
+/// path). @p cache is a loop-scoped memoisation table keyed on each
+/// IF's location_number; cleared by transform_loop at the start of
+/// every loop.
+bool get_entry_cond_rec(
   const goto_programt::targett &loop_head,
   const goto_programt::targett &loop_exit,
-  guardst &guards)
+  guardst &guards,
+  marked_branchst &cache)
 {
   // Let's walk the loop and collect the constraints to enter the
   // loop. This might be messy because of side-effects
@@ -124,8 +56,8 @@ bool goto_k_inductiont::get_entry_cond_rec(
   goto_programt::targett tmp_head = loop_head;
   for (; tmp_head != loop_exit; tmp_head++)
   {
-    auto it = marked_branch.find(tmp_head->location_number);
-    if (it != marked_branch.end())
+    auto it = cache.find(tmp_head->location_number);
+    if (it != cache.end())
     {
       // Re-inject the guards the first visit collected here. Storing
       // only `reaches` lost these guards on every cache hit and silently
@@ -170,7 +102,7 @@ bool goto_k_inductiont::get_entry_cond_rec(
       {
         true_branch_guard[branch_number].add(g);
         true_branch = get_entry_cond_rec(
-          tmp_head->targets.front(), loop_exit, true_branch_guard);
+          tmp_head->targets.front(), loop_exit, true_branch_guard, cache);
       }
 
       // Walk the false branch
@@ -181,8 +113,8 @@ bool goto_k_inductiont::get_entry_cond_rec(
         goto_programt::targett new_tmp_head = tmp_head;
         make_not(g);
         false_branch_guard[branch_number].add(g);
-        false_branch =
-          get_entry_cond_rec(++new_tmp_head, loop_exit, false_branch_guard);
+        false_branch = get_entry_cond_rec(
+          ++new_tmp_head, loop_exit, false_branch_guard, cache);
       }
 
       // Cache: store BOTH the recursion's reach-status at this branch
@@ -194,7 +126,7 @@ bool goto_k_inductiont::get_entry_cond_rec(
       // we can ignore them
       if (!(false_branch ^ true_branch))
       {
-        marked_branch[branch_number] = std::move(entry);
+        cache[branch_number] = std::move(entry);
         return false_branch && true_branch;
       }
 
@@ -204,7 +136,7 @@ bool goto_k_inductiont::get_entry_cond_rec(
       {
         guards.insert(true_branch_guard.begin(), true_branch_guard.end());
         entry.guards_to_merge = std::move(true_branch_guard);
-        marked_branch[branch_number] = std::move(entry);
+        cache[branch_number] = std::move(entry);
         return false;
       }
 
@@ -212,7 +144,7 @@ bool goto_k_inductiont::get_entry_cond_rec(
       {
         guards.insert(false_branch_guard.begin(), false_branch_guard.end());
         entry.guards_to_merge = std::move(false_branch_guard);
-        marked_branch[branch_number] = std::move(entry);
+        cache[branch_number] = std::move(entry);
         return false;
       }
     }
@@ -221,7 +153,8 @@ bool goto_k_inductiont::get_entry_cond_rec(
   return false;
 }
 
-void goto_k_inductiont::make_nondet_assign(
+void make_nondet_assign(
+  goto_functiont &goto_function,
   goto_programt::targett &loop_head,
   const loopst &loop)
 {
@@ -285,7 +218,7 @@ void goto_k_inductiont::make_nondet_assign(
   }
 }
 
-static bool contains_rec(const expr2tc &expr, const loopst::loop_varst &vars)
+bool contains_rec(const expr2tc &expr, const loopst::loop_varst &vars)
 {
   // Check this node first: if it's a tracked symbol, we're done.
   if (is_symbol2t(expr) && vars.find(expr) != vars.end())
@@ -301,9 +234,7 @@ static bool contains_rec(const expr2tc &expr, const loopst::loop_varst &vars)
   return res;
 }
 
-void goto_k_inductiont::remove_unrelated_loop_cond(
-  guardst &guards,
-  loopst &loop)
+void remove_unrelated_loop_cond(guardst &guards, const loopst &loop)
 {
   auto const &loop_vars = loop.get_modified_loop_vars();
   if (!loop_vars.size())
@@ -324,14 +255,15 @@ void goto_k_inductiont::remove_unrelated_loop_cond(
   }
 }
 
-void goto_k_inductiont::assume_loop_entry_cond_before_loop(
+void assume_loop_entry_cond_before_loop(
+  goto_functiont &goto_function,
   goto_programt::targett &loop_head,
   const guardst &guards)
 {
   // Combine all per-branch loop-entry guards into one ASSUME and
   // insert it via raw `insert(loop_head, ...)` immediately before the
   // loop_head IF. This runs *after* make_nondet_assign in
-  // convert_finite_loop, so the layout becomes
+  // transform_loop, so the layout becomes
   //
   //   NONDET havocs               [inductive_step]   <- make_nondet_assign
   //   ASSUME(entry_cond)          [inductive_step]   <- this insert
@@ -411,7 +343,7 @@ void goto_k_inductiont::assume_loop_entry_cond_before_loop(
   goto_function.body.instructions.insert(loop_head, instruction);
 }
 
-void goto_k_inductiont::adjust_loop_head_and_exit(
+void adjust_loop_head_and_exit(
   goto_programt::targett &loop_head,
   goto_programt::targett &loop_exit)
 {
@@ -433,15 +365,57 @@ void goto_k_inductiont::adjust_loop_head_and_exit(
   }
 }
 
-void goto_k_inductiont::assume_cond(
-  const expr2tc &cond,
-  goto_programt &dest,
-  const locationt &loc)
+/// Per-loop k-induction transformation: havoc each loop's modified
+/// variables and inject an ASSUME of the loop entry condition right
+/// before the loop head.
+void transform_loop(goto_functiont &goto_function, loopst &loop)
 {
-  goto_programt tmp_e;
-  goto_programt::targett e = tmp_e.add_instruction(ASSUME);
-  e->inductive_step_instruction = true;
-  e->guard = cond;
-  e->location = loc;
-  dest.destructive_append(tmp_e);
+  goto_programt::targett loop_head = loop.get_original_loop_head();
+  goto_programt::targett loop_exit = loop.get_original_loop_exit();
+
+  // Loop-scoped cache for get_entry_cond_rec. The cache key is the
+  // IF's location_number; nested loops in the same function don't
+  // reuse entries because we construct a fresh cache per call.
+  marked_branchst cache;
+  guardst guards;
+  get_entry_cond_rec(loop_head, loop_exit, guards, cache);
+
+  // Remove loop conditions not related to the written variables
+  remove_unrelated_loop_cond(guards, loop);
+
+  // Order matters: the entry-cond ASSUME must constrain the state
+  // *after* the loop vars have been havoced, so we emit the NONDET
+  // havocs first and then place the ASSUME just before loop_head.
+  // make_nondet_assign also rewinds loop_head back onto the original
+  // loop head (post its advance-by-`inserted` step), so by the time
+  // assume_loop_entry_cond_before_loop runs the iterator is correct
+  // and the ASSUME ends up between the havocs and the IF.
+
+  // Create the nondet assignments on the beginning of the loop
+  make_nondet_assign(goto_function, loop_head, loop);
+
+  // Assume the loop entry condition before going into the loop
+  assume_loop_entry_cond_before_loop(goto_function, loop_head, guards);
+
+  // Check if the loop exit needs to be updated. We must point to the
+  // assume that was inserted in the previous transformation
+  adjust_loop_head_and_exit(loop_head, loop_exit);
+}
+} // namespace
+
+void goto_k_induction(goto_functionst &goto_functions)
+{
+  Forall_goto_functions (it, goto_functions)
+  {
+    if (!it->second.body_available)
+      continue;
+    goto_loopst loops(it->first, goto_functions, it->second);
+    for (auto &loop : loops.get_loops())
+    {
+      if (loop.get_modified_loop_vars().empty())
+        continue;
+      transform_loop(it->second, loop);
+    }
+  }
+  goto_functions.update();
 }

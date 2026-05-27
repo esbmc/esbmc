@@ -474,6 +474,7 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
     if (inductive_step)
       throw inductive_step_disabled_exceptiont("function pointer call");
   }
+
   if (is_nil_expr(call.function))
   {
     log_error(

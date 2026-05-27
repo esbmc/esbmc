@@ -89,6 +89,11 @@ public:
   {
     return function_loops;
   }
+
+  function_loopst &get_loops()
+  {
+    return function_loops;
+  }
 };
 
 #endif /* GOTO_PROGRAMS_GOTO_LOOPS_H_ */

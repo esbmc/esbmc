@@ -35,6 +35,7 @@ extern "C"
 #include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/goto_inline.h>
 #include <goto-programs/goto_k_induction.h>
+#include <goto-programs/goto_termination.h>
 #include <goto-programs/goto_loop_simplify.h>
 #include <goto-programs/goto_loop_invariant.h>
 #include <goto-programs/abstract-interpretation/interval_analysis.h>
@@ -1646,14 +1647,73 @@ int esbmc_parseoptionst::do_bmc_strategy(
     // termination
     if (options.get_bool_option("termination"))
     {
+      // `assert(false)` was inserted after main() and every loop havoc'd
+      // by goto_termination. Property: "all executions terminate".
+      //
+      //   - Forward condition UNSAT at k:
+      //       All states up to depth k are reachable — loops have fully
+      //       unwound within k iters. Universal termination proven.
+      //       Property HOLDS → return 0.
+      //
+      //   - Inductive step UNSAT at k:
+      //       From no havoc'd iterate can the program reach end-of-main
+      //       within k iters. A non-terminating execution exists.
+      //       Property REFUTED → return 1.
+      //
+      // IS SAT is NOT a success condition: it only witnesses one
+      // terminating path from one havoc'd state, which doesn't prove
+      // all paths terminate.
+      //
+      // IS UNSAT is only sound when the k-induction havoc actually
+      // covered the loop variables. Under --add-symex-value-sets,
+      // loops that only modify pointers are SKIPPED by the havoc
+      // transform (see goto_k_induction.cpp:91-94), so the IS just
+      // runs the concrete initial state forward. IS UNSAT then means
+      // "loop hasn't exited within k iters from initial state" —
+      // which says nothing about non-termination; the loop may simply
+      // need more iters. Disable the IS non-termination signal in
+      // that mode and rely on FC alone.
+      //
+      // Skip IS for k = 1 (degenerates to a base-case check).
       if (does_forward_condition_hold(options, goto_functions, k_step)
             .is_false())
+      {
+        log_result(
+          "\nForward condition shows all executions terminate "
+          "(k = {:d})",
+          k_step);
         return 0;
+      }
 
-      /* Disable this for now as it is causing more than 100 errors on SV-COMP
-      if(!is_inductive_step_violated(options, goto_functions, k_step))
-        return false;
-      */
+      // IS UNSAT is only sound when k-induction actually havoc'd every
+      // loop the property depends on. goto_k_induction skips a loop
+      // when its modified set is empty — in that case
+      // disable-inductive-step gets set mid-symex by the function-
+      // pointer / recursion / concurrency hooks and the IS verdict is
+      // treated as inconclusive below. Pointer-modifying loops are
+      // now sound under --add-symex-value-sets thanks to the
+      // value-set assume in symex_dereference, so no extra structural
+      // gate is needed.
+      if (k_step > 1)
+      {
+        tvt is_res =
+          is_inductive_step_violated(options, goto_functions, k_step);
+        // Symex may have set disable-inductive-step mid-run (function
+        // pointers, recursion, concurrency). The IS UNSAT result is
+        // then a vacuous "0 VCCs to falsify" and not a real
+        // non-termination witness. Treat it as inconclusive.
+        if (
+          is_res.is_false() &&
+          !options.get_bool_option("disable-inductive-step"))
+        {
+          log_result(
+            "\nInductive step shows a non-terminating execution "
+            "(k = {:d})",
+            k_step);
+          return 1;
+        }
+        // IS SAT or UNKNOWN — inconclusive, try larger k.
+      }
     }
     // incremental-bmc
     if (options.get_bool_option("incremental-bmc"))
@@ -2376,22 +2436,30 @@ bool esbmc_parseoptionst::process_goto_program(
                           cmdline.isset("k-induction") ||
                           cmdline.isset("k-induction-parallel");
 
+    // --termination reuses k-induction's havoc machinery via
+    // goto_termination, so the post-havoc invariant injection applies
+    // to it too. Treat termination like k-induction for the purpose
+    // of interval-analysis pipeline gating.
+    bool wants_kind_pipeline =
+      is_k_induction || options.get_bool_option("termination");
+
     if (cmdline.isset("interval-analysis") || cmdline.isset("goto-contractor"))
     {
-      // Plain interval analysis without k-induction: run with LOOP_MODE so
-      // each loop gets a before-back-edge ASSUME(bounds) and an after-loop
-      // ASSUME(bounds). The default GUARD_INSTRUCTIONS_LOCAL emits bounds
-      // at every assume/assert/goto, which is more uniform but loses the
-      // per-loop framing.
+      // Plain interval analysis without k-induction-style havoc: run
+      // with LOOP_MODE so each loop gets a before-back-edge
+      // ASSUME(bounds) and an after-loop ASSUME(bounds). The default
+      // GUARD_INSTRUCTIONS_LOCAL emits bounds at every assume/assert/
+      // goto, which is more uniform but loses the per-loop framing.
       //
-      // With k-induction, stay on GUARD_INSTRUCTIONS_LOCAL: instructions
-      // matching k-induction's later transformations rely on the
-      // per-instruction bounds being available everywhere, and the
-      // post-k-induction pass below adds the at-loop-head bounds that
-      // tighten the inductive hypothesis.
+      // With k-induction (or termination), stay on
+      // GUARD_INSTRUCTIONS_LOCAL: instructions matching k-induction's
+      // later transformations rely on the per-instruction bounds being
+      // available everywhere, and the post-k-induction pass below adds
+      // the at-loop-head bounds that tighten the inductive hypothesis.
       const auto mode =
-        is_k_induction ? INTERVAL_INSTRUMENTATION_MODE::GUARD_INSTRUCTIONS_LOCAL
-                       : INTERVAL_INSTRUMENTATION_MODE::LOOP_MODE;
+        wants_kind_pipeline
+          ? INTERVAL_INSTRUMENTATION_MODE::GUARD_INSTRUCTIONS_LOCAL
+          : INTERVAL_INSTRUMENTATION_MODE::LOOP_MODE;
       interval_analysis(goto_functions, ns, options, mode);
     }
 
@@ -2427,18 +2495,33 @@ bool esbmc_parseoptionst::process_goto_program(
       }
     }
 
+    // --termination: reduce non-termination to a reachability safety
+    // property by inserting per-loop assert(false) markers and
+    // applying the k-induction havoc to every loop. Runs BEFORE
+    // instrument_loop_bounds_after_kind so the post-havoc invariant
+    // injection sees the transformed IR.
+    //
+    // Gated on options.get_bool_option, not cmdline.isset: when both
+    // --k-induction and --termination are passed, k-induction wins
+    // (line ~487 sets options.termination = false). cmdline.isset
+    // would still see the original CLI value, incorrectly firing
+    // goto_termination on k-induction-only runs.
+    if (options.get_bool_option("termination"))
+      goto_termination(goto_functions, options);
+
     // Pass B (post-k-induction loop bounds): when interval analysis ran
-    // earlier and k-induction has now finished inserting its nondet havoc
-    // before each loop head, recompute bounds with k-induction's preamble
-    // instructions treated as transparent, then insert an ASSUME(bounds)
-    // right before each loop's exit-test. The ASSUME is marked
-    // inductive_step_instruction = true so only the inductive step sees
-    // it; base case and forward condition skip it. This is the place where
-    // interval analysis actually strengthens the inductive hypothesis.
+    // earlier and k-induction (or --termination's equivalent havoc) has
+    // now finished inserting its nondet havoc before each loop head,
+    // recompute bounds with k-induction's preamble instructions treated
+    // as transparent, then insert an ASSUME(bounds) right before each
+    // loop's exit-test. The ASSUME is marked inductive_step_instruction
+    // = true so only the inductive step sees it; base case and forward
+    // condition skip it. This is the place where interval analysis
+    // actually strengthens the inductive hypothesis.
     if (
       (cmdline.isset("interval-analysis") ||
        cmdline.isset("goto-contractor")) &&
-      is_k_induction)
+      wants_kind_pipeline)
     {
       instrument_loop_bounds_after_kind(goto_functions, ns, options);
     }
@@ -2466,7 +2549,7 @@ bool esbmc_parseoptionst::process_goto_program(
     // refuse the erasure — preserving checks that would otherwise be
     // silently dropped. Skipped under --termination / --unwinding-
     // assertions because loop presence is observable in those modes.
-    goto_loop_simplify(goto_functions);
+    goto_loop_simplify(goto_functions, options);
 
     if (options.get_bool_option("atomicity-check"))
       goto_atomicity_check(goto_functions, ns, context);
@@ -2488,11 +2571,24 @@ bool esbmc_parseoptionst::process_goto_program(
     add_property_monitors(goto_functions, ns);
 
     // Once again, remove all unreachable and no-op code that could have been
-    // introduced by the above algorithms
-    if (!(cmdline.isset("no-remove-no-op")))
+    // introduced by the above algorithms.
+    //
+    // Skip these cleanups under --termination: goto_termination inserts
+    // per-loop ASSERT(false) markers preceded by GOTO orig_target. The
+    // GOTO is structurally a "GOTO to next instruction" no-op so
+    // remove_no_op would erase it, and ASSERT(false) is treated as
+    // having no fall-through successor by get_successors, so
+    // remove_unreachable would then strip every original instruction
+    // that was only reachable via the marker. Both transformations
+    // corrupt the termination CFG. The marker block is intentionally
+    // small and ignoring it costs nothing.
+    const bool skip_cleanup_for_termination =
+      options.get_bool_option("termination");
+    if (!(cmdline.isset("no-remove-no-op") || skip_cleanup_for_termination))
       remove_no_op(goto_functions);
 
-    if (!(cmdline.isset("no-remove-unreachable") || is_mul || is_coverage))
+    if (!(cmdline.isset("no-remove-unreachable") || is_mul || is_coverage ||
+          skip_cleanup_for_termination))
       remove_unreachable(goto_functions);
 
     goto_functions.update();
