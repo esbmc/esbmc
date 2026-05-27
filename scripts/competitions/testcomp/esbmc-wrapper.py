@@ -625,7 +625,10 @@ strategy = args.strategy
 
 if version:
     # Drop the leading "ESBMC " prefix from the version string.
-    result = subprocess.run(
+    # nosec B603 — argv is two literals (the hard-coded esbmc_path defined
+    # at module top and the constant string "--version"); no user input
+    # reaches this call.
+    result = subprocess.run(  # nosec B603
         [esbmc_path.strip(), "--version"],
         capture_output=True, text=True, check=True,
     )
