@@ -51,3 +51,20 @@ engines:
       # Python code that runs under `python -O`, so Bandit B101 ("assert
       # removed in optimised bytecode") does not apply.
       - 'src/python-frontend/models/**'
+
+  cppcheck:
+    enabled: true
+    exclude_paths:
+      # Regression test fixtures. Every C/C++ file under regression/ is
+      # an input that ESBMC parses and symbolically executes — none of
+      # it is compiled into the ESBMC binary or run on the host. The
+      # files are written to exercise specific frontend / operational-
+      # model paths (e.g. postfix `it++` on STL iterators goes through a
+      # different operator overload than prefix `++it`; `strcmp("a","a")`
+      # is the literal subject of github_1351; `std::string` pass-by-
+      # value mirrors the signatures of textbooks the fixtures are
+      # derived from). Rewriting these for host-side style would change
+      # what is being verified and silently weaken the test suite.
+      # Real cppcheck findings in src/, unit/, and scripts/ are still
+      # surfaced.
+      - 'regression/**'
