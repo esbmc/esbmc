@@ -42,16 +42,6 @@ void irep2_bad_expr_cast(unsigned actual, unsigned expected, const char *target)
     target));
 }
 
-void irep2_bad_family_cast(unsigned actual, const char *accessor)
-{
-  const char *actual_name =
-    (actual < expr2t::end_expr_id) ? expr_names[actual] : "<out-of-range>";
-  throw irep2_cast_error(fmt::format(
-    "irep2: {}() called on incompatible expr (expr_id = {})",
-    accessor,
-    actual_name));
-}
-
 /*************************** Base expr2t definitions **************************/
 
 expr2t::expr2t(const type2tc &_type, expr_ids id)

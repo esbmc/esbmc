@@ -50,6 +50,22 @@ void irep2_bad_type_cast(unsigned actual, unsigned expected, const char *target)
     target));
 }
 
+// Family accessors (struct_union_member_names, array_or_vector_subtype, ...)
+// reject types outside the family they serve. Every caller passes a
+// `type2t::type_id`, so format with the type-name table — defined here in
+// irep2_type.cpp so `type_names[]` is in scope. (Previously this lived in
+// irep2_expr.cpp and printed via expr_names[], so a rejected `symbol` type
+// (type_id 2) was mislabelled as "constant_floatbv" (expr_id 2).)
+void irep2_bad_family_cast(unsigned actual, const char *accessor)
+{
+  const char *actual_name =
+    (actual < type2t::end_type_id) ? type_names[actual] : "<out-of-range>";
+  throw irep2_cast_error(fmt::format(
+    "irep2: {}() called on incompatible type (type_id = {})",
+    accessor,
+    actual_name));
+}
+
 type2t::type2t(type_ids id) : type_id(id), crc_val(0)
 {
 }
