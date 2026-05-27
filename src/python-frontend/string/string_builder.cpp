@@ -598,3 +598,47 @@ exprt string_builder::build_runtime_str_conversion_call(
 
   return call;
 }
+
+exprt string_builder::build_runtime_str_join_call(
+  const exprt &separator,
+  const exprt &list_expr)
+{
+  const std::string fn_name = "__python_str_join";
+  const std::string func_symbol_id = "c:@F@" + fn_name;
+  const typet char_ptr = gen_pointer_type(char_type());
+  const typet list_ptr = get_type_handler().get_list_type();
+
+  symbolt *fn_symbol = get_symbol_table().find_symbol(func_symbol_id);
+  if (!fn_symbol)
+  {
+    symbolt new_symbol;
+    new_symbol.name = fn_name;
+    new_symbol.id = func_symbol_id;
+    new_symbol.mode = "C";
+    new_symbol.is_extern = true;
+
+    code_typet fn_type;
+    fn_type.return_type() = char_ptr;
+    fn_type.arguments().push_back(code_typet::argumentt(char_ptr));
+    fn_type.arguments().push_back(code_typet::argumentt(list_ptr));
+    new_symbol.set_type(fn_type);
+
+    get_symbol_table().add(new_symbol);
+    fn_symbol = get_symbol_table().find_symbol(func_symbol_id);
+  }
+
+  exprt sep_arg = str_handler_->get_array_base_address(separator);
+
+  exprt list_arg =
+    list_expr.type().is_pointer() ? list_expr : address_of_exprt(list_expr);
+  if (list_arg.type() != list_ptr)
+    list_arg = typecast_exprt(list_arg, list_ptr);
+
+  side_effect_expr_function_callt call;
+  call.function() = symbol_expr(*fn_symbol);
+  call.arguments().push_back(sep_arg);
+  call.arguments().push_back(list_arg);
+  call.type() = char_ptr;
+
+  return call;
+}

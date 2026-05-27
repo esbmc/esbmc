@@ -214,6 +214,7 @@ const static std::vector<std::string> python_c_models = {
   "__python_int",
   "__python_chr",
   "__python_str_concat",
+  "__python_str_join",
   "__python_str_repeat",
   "__python_str_slice",
   "__python_int_to_str",

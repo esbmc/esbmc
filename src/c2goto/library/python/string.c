@@ -1301,6 +1301,62 @@ __ESBMC_HIDE:;
   return buffer;
 }
 
+// Python str.join - concatenates the elements of `list` separated by `sep`.
+// Empty / NULL list returns "". NULL sep is treated as "". An element whose
+// `value` is NULL is silently skipped; CPython raises TypeError there, but the
+// rest of the str.* OM family takes the same lenient stance and well-typed
+// `List[str]` programs never hit this path. Mirrors the 511-byte fixed-buffer
+// pattern used by __python_str_concat: overflow is detected by checking that
+// the input was fully drained when an inner loop exits, not by inspecting the
+// final pos.
+char *__python_str_join(const char *sep, struct __ESBMC_PyListObj *list)
+{
+__ESBMC_HIDE:;
+  char *buffer = __ESBMC_alloca(512);
+  buffer[0] = '\0';
+
+  if (!list || list->size == 0)
+    return buffer;
+
+  if (!sep)
+    sep = "";
+
+  size_t pos = 0;
+  size_t i = 0;
+  while (i < list->size)
+  {
+    if (i > 0)
+    {
+      size_t j = 0;
+      while (pos < 511 && sep[j])
+      {
+        buffer[pos] = sep[j];
+        pos++;
+        j++;
+      }
+      __ESBMC_assert(sep[j] == '\0', "join: result exceeds 511 characters");
+    }
+
+    const char *s = (const char *)list->items[i].value;
+    if (s)
+    {
+      size_t k = 0;
+      while (pos < 511 && s[k])
+      {
+        buffer[pos] = s[k];
+        pos++;
+        k++;
+      }
+      __ESBMC_assert(s[k] == '\0', "join: result exceeds 511 characters");
+    }
+
+    i++;
+  }
+
+  buffer[pos] = '\0';
+  return buffer;
+}
+
 // Python string repetition - repeats a string count times
 char *__python_str_repeat(const char *s, long long count)
 {

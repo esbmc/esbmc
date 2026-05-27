@@ -2145,15 +2145,15 @@ exprt string_handler::handle_str_join(const nlohmann::json &call_json)
     {
       // Variable is declared but its initialiser is opaque (e.g. an
       // unannotated parameter, or a function call result we cannot
-      // fold). The legacy abort gave up the whole call; fall back to a
-      // sound nondet `char *` instead so GOTO conversion proceeds.
-      // Same pattern as the other str.*() handler fallbacks.
+      // fold). Dispatch to the runtime __python_str_join model with the
+      // resolved list variable; it returns "" for an empty list and joins
+      // element-by-element otherwise.
       log_debug(
         "python-string",
-        "join() variable '{}' has no foldable initialiser: nondet fallback",
+        "join() variable '{}' has no foldable initialiser: runtime dispatch",
         var_name);
-      return build_nondet_string_fallback(
-        converter_.get_location_from_decl(call_json));
+      exprt list_expr = converter_.get_expr(list_arg);
+      return string_builder_->build_runtime_str_join_call(separator, list_expr);
     }
 
     list_node = &var_decl["value"];
