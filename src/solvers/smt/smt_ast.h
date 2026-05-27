@@ -68,7 +68,7 @@ public:
     smt_convt *ctx,
     smt_astt value,
     unsigned int idx,
-    expr2tc idx_expr = expr2tc()) const;
+    const expr2tc &idx_expr = expr2tc()) const;
 
   /** Select a value from an array, for both normal arrays and tuple arrays.
    *  @param ctx SMT context to produce this in.

@@ -1,0 +1,1 @@
+assert issubclass(int, bool)

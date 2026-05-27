@@ -17,6 +17,20 @@
 class reachability_treet; // Forward dec
 class execution_statet;   // Forward dec
 
+// Thrown by symex when the inductive step encounters a construct it cannot
+// soundly encode (recursion, threads, function-pointer calls). The thrower
+// also sets `disable-inductive-step` so the strategy layer downgrades the
+// result to UNKNOWN; the throw short-circuits the rest of symex.
+class inductive_step_disabled_exceptiont
+{
+public:
+  explicit inductive_step_disabled_exceptiont(std::string r)
+    : reason(std::move(r))
+  {
+  }
+  std::string reason;
+};
+
 /**
  *  Primay symbolic execution class.
  *  Contains very little state data, instead implements a large number of
@@ -56,7 +70,7 @@ public:
   public:
     allocated_obj(
       const expr2tc &s,
-      const guardt &g,
+      const guard2tc &g,
       const bool a,
       const std::string n)
       : obj(s), alloc_guard(g), auto_deallocd(a), name(n)
@@ -65,7 +79,7 @@ public:
     /** Symbol identifying the pointer that was allocated. Must have ptr type */
     expr2tc obj;
     /** Guard when allocation occured. */
-    guardt alloc_guard;
+    guard2tc alloc_guard;
     /** Record if the object is automatically desallocated (allocated with alloca). */
     bool auto_deallocd;
     /** The object name */
@@ -117,7 +131,7 @@ public:
     return symbol2tc(
       get_bool_type(),
       id2string(guard_identifier_s),
-      symbol2t::level1,
+      symbol_renaming_level::level1,
       0,
       0,
       cur_state->top().level1.thread_id,
@@ -205,7 +219,7 @@ protected:
    *  example (ideally they should be intrinsics...), but also printf and
    *  variable declarations are handled here.
    */
-  void symex_other(const expr2tc code);
+  void symex_other(const expr2tc &code);
 
   /**
    *  Interpret an DECL instruction.
@@ -215,14 +229,14 @@ protected:
    *  variables (which is what entering a function and declaring variables
    *  does).
    */
-  void symex_decl(const expr2tc code);
+  void symex_decl(const expr2tc &code);
 
   /**
    *  Interpret an DEAD instruction.
    *  It calls free on alloca'd symbols and erase the symbols from the
    *  propagation map.
    */
-  void symex_dead(const expr2tc code);
+  void symex_dead(const expr2tc &code);
 
   /**
    *  Interpret an ASSUME instruction.
@@ -589,7 +603,7 @@ protected:
     const expr2tc &lhs,
     const expr2tc &result,
     const expr2tc &new_array,
-    const guardt &guard,
+    const guard2tc &guard,
     const expr2tc &realloc_size);
 
   /**
@@ -603,7 +617,7 @@ protected:
   void update_pointer_validity(
     const expr2tc &old_ptr,
     const expr2tc &alloc_fail,
-    const guardt &guard);
+    const guard2tc &guard);
 
   /**
    *  Model allocation failure behavior for realloc.
@@ -618,7 +632,7 @@ protected:
   expr2tc model_allocation_failure(
     const expr2tc &result,
     const expr2tc &old_ptr,
-    const guardt &guard);
+    const guard2tc &guard);
 
   /**
    *  Create result pointer from newly allocated array.
@@ -699,7 +713,7 @@ protected:
   bool handle_realloc_zero_size(
     const expr2tc &lhs,
     const sideeffect2t &code,
-    const guardt &guard,
+    const guard2tc &guard,
     const expr2tc &realloc_size);
 
   /**
@@ -721,7 +735,7 @@ protected:
     const type2tc &elem_type,
     const type2tc &new_elem_type,
     bool old_is_array,
-    const guardt &guard);
+    const guard2tc &guard);
 
   /**
    *  Copy memory content from old to new allocation.
@@ -743,7 +757,7 @@ protected:
     const expr2tc &new_elem_count,
     const type2tc &elem_type,
     bool old_is_array,
-    const guardt &guard);
+    const guard2tc &guard);
 
   /**
    *  Create a new dynamic memory symbol.
@@ -802,7 +816,7 @@ protected:
   void handle_sideeffect(
     const expr2tc &lhs,
     const sideeffect2t &effect,
-    const guardt &guard);
+    const guard2tc &guard);
 
   /**
    * Handle conditional expressions (if2t) in the symbolic execution.
@@ -816,7 +830,7 @@ protected:
   bool handle_conditional(
     const expr2tc &lhs,
     const if2t &if_effect,
-    const guardt &guard);
+    const guard2tc &guard);
 
   /**
    *  Make symbolic assignment.
@@ -833,7 +847,7 @@ protected:
   virtual void symex_assign(
     const expr2tc &code,
     const bool hidden = false,
-    const guardt &guard = guardt());
+    const guard2tc &guard = guard2tc());
 
   /** Recursively perform symex assign. @see symex_assign */
   void symex_assign_rec(
@@ -841,7 +855,7 @@ protected:
     const expr2tc &full_lhs,
     expr2tc &rhs,
     expr2tc full_rhs,
-    guardt &guard,
+    guard2tc &guard,
     const bool hidden);
 
   /**
@@ -858,7 +872,7 @@ protected:
     const expr2tc &full_lhs,
     expr2tc &rhs,
     expr2tc &full_rhs,
-    guardt &guard,
+    guard2tc &guard,
     const bool hidden);
 
   /**
@@ -884,7 +898,7 @@ protected:
     const expr2tc &full_lhs,
     expr2tc &rhs,
     expr2tc &full_rhs,
-    guardt &guard,
+    guard2tc &guard,
     const bool hidden);
 
   /**
@@ -900,7 +914,7 @@ protected:
     const expr2tc &full_lhs,
     expr2tc &rhs,
     expr2tc &full_rhs,
-    guardt &guard,
+    guard2tc &guard,
     const bool hidden);
 
   /**
@@ -921,7 +935,7 @@ protected:
     const expr2tc &full_lhs,
     expr2tc &rhs,
     expr2tc &full_rhs,
-    guardt &guard,
+    guard2tc &guard,
     const bool hidden);
 
   /**
@@ -937,7 +951,7 @@ protected:
     const expr2tc &full_lhs,
     expr2tc &rhs,
     expr2tc &full_rhs,
-    guardt &guard,
+    guard2tc &guard,
     const bool hidden);
 
   /**
@@ -955,7 +969,7 @@ protected:
     const expr2tc &full_lhs,
     expr2tc &rhs,
     expr2tc &full_rhs,
-    guardt &guard,
+    guard2tc &guard,
     const bool hidden);
 
   /**
@@ -972,7 +986,7 @@ protected:
     const expr2tc &full_lhs,
     expr2tc &rhs,
     expr2tc &full_rhs,
-    guardt &guard,
+    guard2tc &guard,
     const bool hidden);
 
   /**
@@ -989,7 +1003,7 @@ protected:
     const expr2tc &full_lhs,
     expr2tc &rhs,
     expr2tc &full_rhs,
-    guardt &guard,
+    guard2tc &guard,
     const bool hidden);
 
   /**
@@ -1007,7 +1021,7 @@ protected:
     const expr2tc &full_lhs,
     expr2tc &rhs,
     expr2tc &full_rhs,
-    guardt &guard,
+    guard2tc &guard,
     const bool hidden);
 
   /**
@@ -1026,7 +1040,7 @@ protected:
     const expr2tc &full_lhs,
     expr2tc &rhs,
     expr2tc &full_rhs,
-    guardt &guard,
+    guard2tc &guard,
     const bool hidden);
 
   /**
@@ -1044,41 +1058,41 @@ protected:
     const expr2tc &full_lhs,
     expr2tc &rhs,
     expr2tc &full_rhs,
-    guardt &guard,
+    guard2tc &guard,
     const bool hidden);
 
   /** Symbolic implementation of malloc. */
   expr2tc symex_malloc(
     const expr2tc &lhs,
     const sideeffect2t &code,
-    const guardt &guard);
+    const guard2tc &guard);
   /** Implementation of realloc. */
   void symex_realloc(
     const expr2tc &lhs,
     const sideeffect2t &code,
-    const guardt &guard);
+    const guard2tc &guard);
   /** Symbolic implementation of alloca. */
   expr2tc symex_alloca(
     const expr2tc &lhs,
     const sideeffect2t &code,
-    const guardt &guard);
+    const guard2tc &guard);
   /** Wrapper around for alloca and malloc. */
   expr2tc symex_mem(
     const bool is_malloc,
     const expr2tc &lhs,
     const sideeffect2t &code,
-    const guardt &guard);
+    const guard2tc &guard);
   /** Wrapper around for infinite array allocation. */
   expr2tc symex_mem_inf(
     const expr2tc &lhs,
     const type2tc &base_type,
-    const guardt &guard);
+    const guard2tc &guard);
 
   /** Pointer modelling update function */
   void track_new_pointer(
     const expr2tc &ptr_obj,
     const type2tc &new_type,
-    const guardt &guard,
+    const guard2tc &guard,
     const expr2tc &size = expr2tc());
   /** Symbolic implementation of free */
   void symex_free(const expr2tc &expr);
@@ -1088,7 +1102,7 @@ protected:
   void symex_cpp_new(
     const expr2tc &lhs,
     const sideeffect2t &code,
-    const guardt &guard);
+    const guard2tc &guard);
   /** Symbolic implementation of printf */
   void symex_printf(const expr2tc &lhs, expr2tc &code);
   /** Symbolic implementation of scanf and fscanf */
@@ -1097,7 +1111,7 @@ protected:
   void symex_va_arg(
     const expr2tc &lhs,
     const sideeffect2t &code,
-    const guardt &guard);
+    const guard2tc &guard);
 
   /**
    *  Replace nondet func calls with nondeterminism.
@@ -1246,6 +1260,10 @@ protected:
   /** Flag as to whether we're doing a k-induction inductive step.
    *  Corresponds to the option --inductive-step */
   bool inductive_step;
+  /** Cached from --validate-violation-witness; checked on every branch/intrinsic. */
+  bool validate_witness;
+  /** Pre-interned target waypoint line; empty when no target is present. */
+  irep_idt witness_target_line;
   /** Set of dereference state records; this field is used as a mailbox between
    *  the dereference code and the caller, who will inspect the contents after
    *  a call to dereference (in INTERNAL mode) completes. */
@@ -1274,9 +1292,9 @@ protected:
   void dereference_failure(
     const std::string &property,
     const std::string &msg,
-    const guardt &guard) override;
+    const guard2tc &guard) override;
 
-  void dereference_assume(const guardt &guard) override;
+  void dereference_assume(const guard2tc &guard) override;
 
   void
   get_value_set(const expr2tc &expr, value_setst::valuest &value_set) override;

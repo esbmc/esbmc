@@ -18,6 +18,8 @@ extern "C"
 
 #include <esbmc/bmc.h>
 #include <esbmc/esbmc_parseoptions.h>
+#include <goto-symex/goto_symex.h>
+#include <solvers/solve.h>
 #include <cctype>
 #include <clang-c-frontend/clang_c_language.h>
 #include <util/config.h>
@@ -33,6 +35,8 @@ extern "C"
 #include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/goto_inline.h>
 #include <goto-programs/goto_k_induction.h>
+#include <goto-programs/goto_termination.h>
+#include <goto-programs/goto_loop_simplify.h>
 #include <goto-programs/goto_loop_invariant.h>
 #include <goto-programs/abstract-interpretation/interval_analysis.h>
 #include <goto-programs/abstract-interpretation/gcse.h>
@@ -44,6 +48,8 @@ extern "C"
 #include <goto-programs/set_claims.h>
 #include <goto-programs/show_claims.h>
 #include <goto-programs/loop_unroll.h>
+#include <goto-programs/goto_check_uninit_vars.h>
+#include <goto-programs/goto_check_unchecked_return.h>
 #include <goto-programs/mark_decl_as_non_det.h>
 #include <goto-programs/assign_params_as_non_det.h>
 #include <goto2c/goto2c.h>
@@ -147,6 +153,9 @@ static void segfault_handler(int sig)
   if (fd != -1)
   {
     dprintf(STDERR_FILENO, "\nMemory map:\n");
+    // Bounded read: `buffer` is a fixed-size stack array and the loop
+    // passes its exact size to read(2), so no overflow is possible.
+    // Loop terminates on EOF (rd == 0) or on a non-EINTR error.
     for (ssize_t rd; (rd = read(fd, buffer, sizeof(buffer))) > 0 ||
                      (rd == -1 && errno == EINTR);)
       rd = write(STDERR_FILENO, buffer, rd < 0 ? 0 : rd);
@@ -336,6 +345,29 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("int-encoding", true);
     options.set_option("ir-ieee", true);
   }
+
+  // --ir requests integer/real arithmetic encoding via the SMT Int sort.
+  // Bitwuzla and Boolector are bit-vector-only backends; pairing them with
+  // --ir silently produces wrong-answer behaviour at solve time. cvc4, cvc5,
+  // yices, and mathsat all support Int and are left alone.
+  if (cmdline.isset("ir") || cmdline.isset("ir-ieee"))
+  {
+    for (const char *s : {"bitwuzla", "boolector"})
+    {
+      if (cmdline.isset(s))
+      {
+        log_error(
+          "--{} requires a solver that supports integer/real arithmetic. "
+          "--{} only supports bit-vector arithmetic. Re-run without --{}, "
+          "or drop --{} (--ir defaults to Z3).",
+          cmdline.isset("ir-ieee") ? "ir-ieee" : "ir",
+          s,
+          s,
+          s);
+        exit(1);
+      }
+    }
+  }
   if (cmdline.isset("fixedbv"))
     options.set_option("fixedbv", true);
   else
@@ -422,8 +454,19 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
 
   if (cmdline.isset("validate-correctness-witness"))
   {
+    if (!cmdline.isset("witness"))
+    {
+      log_error(
+        "--validate-correctness-witness requires --witness <file.yaml>");
+      abort();
+    }
     const std::string witness = cmdline.getval("witness");
     const boost::filesystem::path wp(witness);
+    if (!boost::filesystem::exists(wp))
+    {
+      log_error("Witness file '{}' does not exist.", witness);
+      abort();
+    }
     if (wp.extension() != ".yaml" && wp.extension() != ".yml")
     {
       log_error(
@@ -435,12 +478,63 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("witness", witness);
   }
 
+  if (cmdline.isset("validate-violation-witness"))
+  {
+    if (!cmdline.isset("witness"))
+    {
+      log_error("--validate-violation-witness requires --witness <file.yaml>");
+      abort();
+    }
+    const std::string witness = cmdline.getval("witness");
+    const boost::filesystem::path wp(witness);
+    if (!boost::filesystem::exists(wp))
+    {
+      log_error("Witness file '{}' does not exist.", witness);
+      abort();
+    }
+    if (wp.extension() != ".yaml" && wp.extension() != ".yml")
+    {
+      log_error(
+        "Witness file has extension {}, expected yaml or yml.",
+        wp.extension().string());
+      abort();
+    }
+    options.set_option("validate-violation-witness", true);
+    options.set_option("witness", witness);
+  }
+
   // --loop-invariant implicitly enables k-induction solving so that
   // do_bmc_strategy runs the full base/forward/inductive-step loop.
   if (
     cmdline.isset("loop-invariant") ||
     cmdline.isset("validate-correctness-witness"))
     options.set_option("k-induction", true);
+
+  // The IS pointer-invariant work (symex_assign / symex_dereference)
+  // only kicks in when --add-symex-value-sets is enabled, and the
+  // SV-COMP wrapper has been setting it for k-induction runs all
+  // along. Mirror that default for direct CLI users so they get the
+  // same IS encoding (and the same proofs of pointer-traversing
+  // loops) without needing to know about the flag.
+  if (
+    cmdline.isset("k-induction") || cmdline.isset("k-induction-parallel") ||
+    cmdline.isset("inductive-step"))
+    options.set_option("add-symex-value-sets", true);
+
+  // Default-enable the vacuity probe under --loop-invariant-check (the
+  // standalone Hoare-rewrite mode). A loop invariant that implies the guard
+  // makes the post-loop continuation unreachable; without this probe every
+  // downstream claim discharges as vacuously true.
+  //
+  // We deliberately do NOT default-enable for combined mode --loop-invariant:
+  // that runs k-induction phases (base case, forward condition, inductive
+  // step) whose UNSAT-on-internal-claims is the success signal, not vacuity.
+  // Users can opt in explicitly with --check-vacuity in those modes.
+  if (cmdline.isset("no-vacuity-check"))
+    options.set_option("check-vacuity", false);
+  else if (
+    cmdline.isset("check-vacuity") || cmdline.isset("loop-invariant-check"))
+    options.set_option("check-vacuity", true);
 
   // Check for conflicting strategies
   if (cmdline.isset("k-induction") && cmdline.isset("termination"))
@@ -649,6 +743,13 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("witness-output-graphml", filename + ".graphml");
   }
 
+  if (cmdline.isset("sarif-output"))
+    options.set_option("sarif-output", cmdline.getval("sarif-output"));
+
+  // Fail fast if the user explicitly requested an SMT solver that is not
+  // built into this ESBMC binary, before spending time parsing the program.
+  check_solver_availability(options);
+
   config.options = options;
 }
 
@@ -719,6 +820,20 @@ int esbmc_parseoptionst::doit()
     // Unroll intrinsic support
     goto_preprocess_algorithms.emplace_back(
       std::make_unique<apply_intrinsic_unroller>());
+
+    // Uninitialised-variable check (CWE-457) must run before
+    // mark_decl_as_non_det, which would otherwise overwrite every
+    // uninitialised DECL with a nondet ASSIGN and erase the property.
+    if (cmdline.isset("uninitialised-vars-check"))
+      goto_preprocess_algorithms.emplace_back(
+        std::make_unique<goto_check_uninit_vars>(context));
+
+    // Unchecked-return-value check (CWE-252). Runs as a preprocessing
+    // algorithm so the inserted ASSERTs participate in the same path-
+    // condition pruning as the rest of the goto-program.
+    if (cmdline.isset("unchecked-return-value-check"))
+      goto_preprocess_algorithms.emplace_back(
+        std::make_unique<goto_check_unchecked_return>(context));
 
     // Explicitly marking all declared variables as "nondet"
     goto_preprocess_algorithms.emplace_back(
@@ -971,7 +1086,9 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       !(finished[BASE_CASE] && finished[FORWARD_CONDITION] &&
         finished[INDUCTIVE_STEP]))
     {
-      // Perform read and interpret the number of bytes read
+      // Bounded read: destination is a single resultt on the stack and
+      // the read length is its exact sizeof. Short reads (EOF, error,
+      // EAGAIN) are checked explicitly below.
       bool valid_read = true;
       int read_size = read(forward_pipe[0], &a_result, sizeof(resultt));
       if (read_size != sizeof(resultt))
@@ -1203,7 +1320,9 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
 
       // Check if the parent process is asking questions
 
-      // Perform read and interpret the number of bytes read
+      // Bounded read: destination is a single resultt on the stack and
+      // the read length is its exact sizeof. Short reads (EOF, error,
+      // EAGAIN) are checked explicitly below.
       struct resultt a_result;
       int read_size = read(backward_pipe[0], &a_result, sizeof(resultt));
       if (read_size != sizeof(resultt))
@@ -1528,14 +1647,73 @@ int esbmc_parseoptionst::do_bmc_strategy(
     // termination
     if (options.get_bool_option("termination"))
     {
+      // `assert(false)` was inserted after main() and every loop havoc'd
+      // by goto_termination. Property: "all executions terminate".
+      //
+      //   - Forward condition UNSAT at k:
+      //       All states up to depth k are reachable — loops have fully
+      //       unwound within k iters. Universal termination proven.
+      //       Property HOLDS → return 0.
+      //
+      //   - Inductive step UNSAT at k:
+      //       From no havoc'd iterate can the program reach end-of-main
+      //       within k iters. A non-terminating execution exists.
+      //       Property REFUTED → return 1.
+      //
+      // IS SAT is NOT a success condition: it only witnesses one
+      // terminating path from one havoc'd state, which doesn't prove
+      // all paths terminate.
+      //
+      // IS UNSAT is only sound when the k-induction havoc actually
+      // covered the loop variables. Under --add-symex-value-sets,
+      // loops that only modify pointers are SKIPPED by the havoc
+      // transform (see goto_k_induction.cpp:91-94), so the IS just
+      // runs the concrete initial state forward. IS UNSAT then means
+      // "loop hasn't exited within k iters from initial state" —
+      // which says nothing about non-termination; the loop may simply
+      // need more iters. Disable the IS non-termination signal in
+      // that mode and rely on FC alone.
+      //
+      // Skip IS for k = 1 (degenerates to a base-case check).
       if (does_forward_condition_hold(options, goto_functions, k_step)
             .is_false())
+      {
+        log_result(
+          "\nForward condition shows all executions terminate "
+          "(k = {:d})",
+          k_step);
         return 0;
+      }
 
-      /* Disable this for now as it is causing more than 100 errors on SV-COMP
-      if(!is_inductive_step_violated(options, goto_functions, k_step))
-        return false;
-      */
+      // IS UNSAT is only sound when k-induction actually havoc'd every
+      // loop the property depends on. goto_k_induction skips a loop
+      // when its modified set is empty — in that case
+      // disable-inductive-step gets set mid-symex by the function-
+      // pointer / recursion / concurrency hooks and the IS verdict is
+      // treated as inconclusive below. Pointer-modifying loops are
+      // now sound under --add-symex-value-sets thanks to the
+      // value-set assume in symex_dereference, so no extra structural
+      // gate is needed.
+      if (k_step > 1)
+      {
+        tvt is_res =
+          is_inductive_step_violated(options, goto_functions, k_step);
+        // Symex may have set disable-inductive-step mid-run (function
+        // pointers, recursion, concurrency). The IS UNSAT result is
+        // then a vacuous "0 VCCs to falsify" and not a real
+        // non-termination witness. Treat it as inconclusive.
+        if (
+          is_res.is_false() &&
+          !options.get_bool_option("disable-inductive-step"))
+        {
+          log_result(
+            "\nInductive step shows a non-terminating execution "
+            "(k = {:d})",
+            k_step);
+          return 1;
+        }
+        // IS SAT or UNKNOWN — inconclusive, try larger k.
+      }
     }
     // incremental-bmc
     if (options.get_bool_option("incremental-bmc"))
@@ -1744,7 +1922,17 @@ tvt esbmc_parseoptionst::is_inductive_step_violated(
   bmct bmc(goto_functions, options, context);
 
   log_progress("Checking inductive step, k = {:d}", k_step);
-  switch (do_bmc(bmc))
+  int res = do_bmc(bmc);
+
+  // Symex may flip `disable-inductive-step` mid-run when it encounters
+  // a construct the IS cannot soundly handle (recursion, threads,
+  // function-pointer calls). In that case the BMC result is the
+  // outcome of an incomplete IS encoding — its UNSAT does not prove
+  // safety. Discard the result and report UNKNOWN.
+  if (options.get_bool_option("disable-inductive-step"))
+    return tvt(tvt::TV_UNKNOWN);
+
+  switch (res)
   {
   case smt_convt::P_SATISFIABLE:
     return tvt(tvt::TV_TRUE);
@@ -1785,9 +1973,20 @@ int esbmc_parseoptionst::do_bmc(bmct &bmc)
 {
   log_progress("Starting Bounded Model Checking");
 
-  smt_convt::resultt res = bmc.start_bmc();
-  if (res == smt_convt::P_ERROR)
-    abort();
+  smt_convt::resultt res;
+  try
+  {
+    res = bmc.start_bmc();
+  }
+  catch (const inductive_step_disabled_exceptiont &e)
+  {
+    // Symex hit an IS-unsound construct (recursion, threads,
+    // function-pointer call) and threw to short-circuit. Return
+    // P_ERROR so the strategy layer drops to TV_UNKNOWN; the caller
+    // also checks `disable-inductive-step` to suppress any verdict.
+    log_status("Inductive step aborted: {}", e.reason);
+    res = smt_convt::P_ERROR;
+  }
 
 #ifdef HAVE_SENDFILE_ESBMC
   if (bmc.options.get_bool_option("memstats"))
@@ -2233,14 +2432,36 @@ bool esbmc_parseoptionst::process_goto_program(
       }
     }
 
-    if (cmdline.isset("interval-analysis") || cmdline.isset("goto-contractor"))
-    {
-      interval_analysis(goto_functions, ns, options);
-    }
-
     bool is_k_induction = cmdline.isset("inductive-step") ||
                           cmdline.isset("k-induction") ||
                           cmdline.isset("k-induction-parallel");
+
+    // --termination reuses k-induction's havoc machinery via
+    // goto_termination, so the post-havoc invariant injection applies
+    // to it too. Treat termination like k-induction for the purpose
+    // of interval-analysis pipeline gating.
+    bool wants_kind_pipeline =
+      is_k_induction || options.get_bool_option("termination");
+
+    if (cmdline.isset("interval-analysis") || cmdline.isset("goto-contractor"))
+    {
+      // Plain interval analysis without k-induction-style havoc: run
+      // with LOOP_MODE so each loop gets a before-back-edge
+      // ASSUME(bounds) and an after-loop ASSUME(bounds). The default
+      // GUARD_INSTRUCTIONS_LOCAL emits bounds at every assume/assert/
+      // goto, which is more uniform but loses the per-loop framing.
+      //
+      // With k-induction (or termination), stay on
+      // GUARD_INSTRUCTIONS_LOCAL: instructions matching k-induction's
+      // later transformations rely on the per-instruction bounds being
+      // available everywhere, and the post-k-induction pass below adds
+      // the at-loop-head bounds that tighten the inductive hypothesis.
+      const auto mode =
+        wants_kind_pipeline
+          ? INTERVAL_INSTRUMENTATION_MODE::GUARD_INSTRUCTIONS_LOCAL
+          : INTERVAL_INSTRUMENTATION_MODE::LOOP_MODE;
+      interval_analysis(goto_functions, ns, options, mode);
+    }
 
     if (cmdline.isset("validate-correctness-witness"))
     {
@@ -2274,6 +2495,37 @@ bool esbmc_parseoptionst::process_goto_program(
       }
     }
 
+    // --termination: reduce non-termination to a reachability safety
+    // property by inserting per-loop assert(false) markers and
+    // applying the k-induction havoc to every loop. Runs BEFORE
+    // instrument_loop_bounds_after_kind so the post-havoc invariant
+    // injection sees the transformed IR.
+    //
+    // Gated on options.get_bool_option, not cmdline.isset: when both
+    // --k-induction and --termination are passed, k-induction wins
+    // (line ~487 sets options.termination = false). cmdline.isset
+    // would still see the original CLI value, incorrectly firing
+    // goto_termination on k-induction-only runs.
+    if (options.get_bool_option("termination"))
+      goto_termination(goto_functions, options);
+
+    // Pass B (post-k-induction loop bounds): when interval analysis ran
+    // earlier and k-induction (or --termination's equivalent havoc) has
+    // now finished inserting its nondet havoc before each loop head,
+    // recompute bounds with k-induction's preamble instructions treated
+    // as transparent, then insert an ASSUME(bounds) right before each
+    // loop's exit-test. The ASSUME is marked inductive_step_instruction
+    // = true so only the inductive step sees it; base case and forward
+    // condition skip it. This is the place where interval analysis
+    // actually strengthens the inductive hypothesis.
+    if (
+      (cmdline.isset("interval-analysis") ||
+       cmdline.isset("goto-contractor")) &&
+      wants_kind_pipeline)
+    {
+      instrument_loop_bounds_after_kind(goto_functions, ns, options);
+    }
+
     if (
       cmdline.isset("goto-contractor") ||
       cmdline.isset("goto-contractor-condition"))
@@ -2290,6 +2542,14 @@ bool esbmc_parseoptionst::process_goto_program(
     }
 
     goto_check(ns, options, goto_functions);
+
+    // Eliminate goto-level no-op loops (empty body, dead modified vars).
+    // Runs AFTER goto_check so that any check assertions inserted into a
+    // loop body (overflow, div-by-zero, bounds, ...) make body_is_safe
+    // refuse the erasure — preserving checks that would otherwise be
+    // silently dropped. Skipped under --termination / --unwinding-
+    // assertions because loop presence is observable in those modes.
+    goto_loop_simplify(goto_functions, options);
 
     if (options.get_bool_option("atomicity-check"))
       goto_atomicity_check(goto_functions, ns, context);
@@ -2311,11 +2571,24 @@ bool esbmc_parseoptionst::process_goto_program(
     add_property_monitors(goto_functions, ns);
 
     // Once again, remove all unreachable and no-op code that could have been
-    // introduced by the above algorithms
-    if (!(cmdline.isset("no-remove-no-op")))
+    // introduced by the above algorithms.
+    //
+    // Skip these cleanups under --termination: goto_termination inserts
+    // per-loop ASSERT(false) markers preceded by GOTO orig_target. The
+    // GOTO is structurally a "GOTO to next instruction" no-op so
+    // remove_no_op would erase it, and ASSERT(false) is treated as
+    // having no fall-through successor by get_successors, so
+    // remove_unreachable would then strip every original instruction
+    // that was only reachable via the marker. Both transformations
+    // corrupt the termination CFG. The marker block is intentionally
+    // small and ignoring it costs nothing.
+    const bool skip_cleanup_for_termination =
+      options.get_bool_option("termination");
+    if (!(cmdline.isset("no-remove-no-op") || skip_cleanup_for_termination))
       remove_no_op(goto_functions);
 
-    if (!(cmdline.isset("no-remove-unreachable") || is_mul || is_coverage))
+    if (!(cmdline.isset("no-remove-unreachable") || is_mul || is_coverage ||
+          skip_cleanup_for_termination))
       remove_unreachable(goto_functions);
 
     goto_functions.update();
@@ -2326,6 +2599,7 @@ bool esbmc_parseoptionst::process_goto_program(
     {
       log_status("Adding Data Race Checks");
       options.set_option("data-races-check", true);
+      options.set_option("no-por", true);
       add_race_assertions(context, goto_functions);
     }
 
@@ -2898,7 +3172,7 @@ static void collect_symbol_names(
   if (is_symbol2t(e))
   {
     const symbol2t &thesym = to_symbol2t(e);
-    assert(thesym.rlevel == 0);
+    assert(thesym.rlevel == symbol_renaming_level::level0);
     std::string sym = thesym.get_symbol_name();
 
     used_syms.insert(sym);
@@ -2919,7 +3193,7 @@ expr2tc esbmc_parseoptionst::calculate_a_property_monitor(
   const symbolt *fn = context.find_symbol("c:@F@" + name + "_status");
   assert(fn);
 
-  const codet &fn_code = to_code(fn->value);
+  const codet &fn_code = to_code(fn->get_value());
   assert(fn_code.get_statement() == "block");
   assert(fn_code.operands().size() == 1);
 
@@ -3015,7 +3289,7 @@ static unsigned int calc_globals_used(const namespacet &ns, const expr2tc &expr)
 
   const symbolt *sym = ns.lookup(identifier);
   assert(sym);
-  if (sym->static_lifetime || sym->type.is_dynamic_set())
+  if (sym->static_lifetime || sym->get_type().is_dynamic_set())
     return 1;
 
   return 0;

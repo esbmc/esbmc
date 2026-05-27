@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR:.*`args=` must be a tuple literal

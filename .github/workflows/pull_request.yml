@@ -2,18 +2,22 @@ name: PR
 
 on: [pull_request]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   # Check testing tool suite
   testing-tool:
     runs-on: ubuntu-slim
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
     - name: Runs testing tool unit test
       run: cd regression && python3 testing_tool_test.py
 
   build-ubuntu:
     uses: ./.github/workflows/build-unix.yml
-    name: static llvm-21 DebugOpt
+    name: static llvm-22 DebugOpt
     with:
       operating-system: ubuntu-24.04
       build-flags: '-b DebugOpt -e ON'
@@ -44,7 +48,7 @@ jobs:
       # added or changed files to the repository.
       contents: write
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         fetch-depth: 0
     - name: Install Dependencies
@@ -73,11 +77,36 @@ jobs:
     - name: Delete downloaded Clang 11
       run: rm -rf clang*
     # Commit all changed files back to the repository
-    - uses: stefanzweifel/git-auto-commit-action@v5
+    - uses: stefanzweifel/git-auto-commit-action@v7
       if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
     - name: Throws error if changes were made
       run: git diff --exit-code --ignore-cr-at-eol
       if: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
+
+
+  # Check CMake files with cmakelint
+  cmake-lint:
+    name: Check CMake style (cmakelint)
+    runs-on: ubuntu-slim
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.10'
+      - name: Install cmakelint
+        run: pip install cmakelint
+      - name: Run cmakelint on tracked CMake files
+        shell: bash
+        run: |
+          mapfile -t files < <(
+            git ls-files '*.cmake' 'CMakeLists.txt' '**/CMakeLists.txt' '**/*.cmake'
+          )
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "No CMake files to lint."
+            exit 0
+          fi
+          cmakelint --config=.cmakelintrc "${files[@]}"
 
 
   # Check project with YAPF
@@ -88,14 +117,14 @@ jobs:
         contents: write
       steps:
         - name: Checkout PR branch (not merge ref)
-          uses: actions/checkout@v4
+          uses: actions/checkout@v6
           with:
             ref: ${{ github.event.pull_request.head.sha }}
             fetch-depth: 0
             persist-credentials: true
 
         - name: Set up Python
-          uses: actions/setup-python@v5
+          uses: actions/setup-python@v6
           with:
             python-version: '3.10'
 
@@ -118,7 +147,7 @@ jobs:
             yapf --in-place "${files[@]}"
 
         - name: Auto-commit formatting changes
-          uses: stefanzweifel/git-auto-commit-action@v5
+          uses: stefanzweifel/git-auto-commit-action@v7
           if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
           with:
             commit_message: 'style(python): apply YAPF auto-formatting'
@@ -138,7 +167,7 @@ jobs:
     name: Build and upload coverage to Codecov
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Install dependencies and build with coverage
         env:
           LLVM_PROFILE_FILE: "/tmp/esbmc-coverage/coverage-%m.profraw"
@@ -163,12 +192,12 @@ jobs:
                '*/build/*' \
                --output-file coverage.info
       - name: Upload to Codecov
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v6
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage.info
       - name: Save coverage artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-report
           path: coverage.info

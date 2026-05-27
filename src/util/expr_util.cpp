@@ -248,7 +248,7 @@ void gen_or(exprt &expr)
 
 exprt symbol_expr(const symbolt &symbol)
 {
-  exprt tmp("symbol", symbol.type);
+  exprt tmp("symbol", symbol.get_type());
   tmp.identifier(symbol.id);
   tmp.name(symbol.name);
   return tmp;

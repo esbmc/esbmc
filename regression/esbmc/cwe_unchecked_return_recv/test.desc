@@ -1,0 +1,6 @@
+THOROUGH
+main.c
+--unchecked-return-value-check --incremental-bmc
+^VERIFICATION FAILED$
+^  unchecked return value of recv: n$
+^  CWE: CWE-252$

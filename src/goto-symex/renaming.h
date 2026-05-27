@@ -5,7 +5,7 @@
 #include <boost/functional/hash.hpp>
 #include <util/crypto_hash.h>
 #include <util/expr_util.h>
-#include <util/guard.h>
+#include <irep2/irep2_guard.h>
 #include <util/i2string.h>
 #include <irep2/irep2_expr.h>
 #include <util/std_expr.h>
@@ -115,7 +115,7 @@ public:
 
   void get_original_name(expr2tc &expr) const override
   {
-    renaming_levelt::get_original_name(expr, symbol2t::level0);
+    renaming_levelt::get_original_name(expr, symbol_renaming_level::level0);
   }
 
   unsigned int current_number(const irep_idt &name) const;
@@ -243,7 +243,7 @@ public:
 
   void get_original_name(expr2tc &expr) const override
   {
-    renaming_levelt::get_original_name(expr, symbol2t::level1);
+    renaming_levelt::get_original_name(expr, symbol_renaming_level::level1);
   }
 
   struct valuet

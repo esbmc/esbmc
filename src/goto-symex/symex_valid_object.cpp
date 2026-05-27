@@ -49,7 +49,7 @@ void goto_symext::replace_dynamic_allocation(expr2tc &expr)
         const symbolt &symbol = *ns.lookup(to_symbol2t(*identifier).thename);
 
         // dynamic?
-        if (symbol.type.dynamic())
+        if (symbol.get_type().dynamic())
         {
           // TODO
         }
@@ -90,7 +90,7 @@ bool goto_symext::is_valid_object(const symbolt &symbol)
     return true; // global
 
   // dynamic?
-  if (symbol.type.dynamic())
+  if (symbol.get_type().dynamic())
     return false;
 
 // current location?

@@ -78,10 +78,10 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
       new_guard_true = true;
   }
 
+  const not2t *old_not = try_to_not2t(old_guard);
   if (
     options.get_option("witness-output-yaml") != "" && forward &&
-    !is_constant(old_guard) &&
-    !(is_not2t(old_guard) && is_constant(to_not2t(old_guard).value)))
+    !is_constant(old_guard) && !(old_not && is_constant(old_not->value)))
   {
     // Normalize the branching condition so that cond=true always means
     // "the branch body was reached". For standard GOTOs (IF !cond GOTO skip)
@@ -105,6 +105,37 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
   // it is explored later, causing unsound pruning.  The domain is still updated
   // by process_instruction (ASSIGN / ASSUME / DEAD), which is sufficient for
   // tracking loop counters.
+
+  // Violation-witness: steer branch direction if the current waypoint is a
+  // branching at this location.  Skip backward GOTOs (loop back edges).
+  if (
+    validate_witness && forward &&
+    cur_state->cur_seg < cur_state->witness_segs.size())
+  {
+    const auto &seg = cur_state->witness_segs[cur_state->cur_seg];
+    if (cur_state->cur_wp < seg.size())
+    {
+      const waypoint &wp = seg[cur_state->cur_wp];
+      if (wp.type == waypoint::branching)
+      {
+        const auto &loc = cur_state->source.pc->location;
+        if (
+          !wp.line_id.empty() && wp.line_id == loc.get_line() &&
+          (wp.function_id.empty() || wp.function_id == loc.get_function()))
+        {
+          const bool is_avoid = (wp.action == waypoint::avoid);
+          bool direction_true = (wp.value == "true") ^ is_avoid;
+          bool goto_taken =
+            instruction.flipped_guard ? direction_true : !direction_true;
+          if (goto_taken)
+            new_guard_true = true;
+          else
+            new_guard_false = true;
+          cur_state->advance_witness_position();
+        }
+      }
+    }
+  }
 
   if (new_guard_false)
   {
@@ -215,9 +246,8 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
     // produce new guard symbol
     expr2tc guard_expr;
 
-    if (
-      is_symbol2t(new_guard) ||
-      (is_not2t(new_guard) && is_symbol2t(to_not2t(new_guard).value)))
+    const not2t *new_not = try_to_not2t(new_guard);
+    if (is_symbol2t(new_guard) || (new_not && is_symbol2t(new_not->value)))
     {
       guard_expr = new_guard;
     }
@@ -265,7 +295,7 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
   }
 }
 
-static inline guardt merge_state_guards(
+static inline guard2tc merge_state_guards(
   goto_symext::statet::merge_statet &merge_state,
   goto_symex_statet &state)
 {
@@ -319,7 +349,7 @@ void goto_symext::merge_gotos()
 
     // Merge guards. Don't write this to `state` yet because we might move
     // merge_state over it below.
-    guardt new_guard = merge_state_guards(merge_state, *cur_state);
+    guard2tc new_guard = merge_state_guards(merge_state, *cur_state);
 
     if (!merge_state.guard.is_false())
     {
@@ -375,7 +405,7 @@ void goto_symext::phi_function(const statet::merge_statet &merge_state)
 
   const auto &merge_variables = merge_state.level2.current_names;
 
-  guardt tmp_guard;
+  guard2tc tmp_guard;
   if (
     !variables.empty() && !cur_state->guard.is_false() &&
     !merge_state.guard.is_false())
@@ -409,7 +439,7 @@ void goto_symext::phi_function(const statet::merge_statet &merge_state)
     // changed!
     const symbolt &symbol = *ns.lookup(variable.base_name);
 
-    type2tc type = migrate_type(symbol.type);
+    type2tc type = migrate_symbol_type(symbol);
 
     expr2tc cur_state_rhs = symbol2tc(type, symbol.id);
     renaming::level2t::rename_to_record(cur_state_rhs, variable);

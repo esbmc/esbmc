@@ -20,5 +20,5 @@ public:
 protected:
   contextt &context;
   virtual bool
-  runOnFunction(std::pair<const dstring, goto_functiont> &F) override;
+  runOnFunction(std::pair<const irep_idt, goto_functiont> &F) override;
 };

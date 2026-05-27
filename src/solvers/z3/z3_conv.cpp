@@ -402,28 +402,6 @@ smt_astt z3_convt::mk_bvnot(smt_astt a)
   }
 }
 
-smt_astt z3_convt::mk_bvnor(smt_astt a, smt_astt b)
-{
-  assert(
-    (a->sort->id == SMT_SORT_INT) || (b->sort->id == SMT_SORT_INT) ||
-    (a->sort->get_data_width() == b->sort->get_data_width()));
-  return new_ast(
-    !(to_solver_smt_ast<z3_smt_ast>(a)->a |
-      to_solver_smt_ast<z3_smt_ast>(b)->a),
-    a->sort);
-}
-
-smt_astt z3_convt::mk_bvnand(smt_astt a, smt_astt b)
-{
-  assert(
-    (a->sort->id == SMT_SORT_INT) || (b->sort->id == SMT_SORT_INT) ||
-    (a->sort->get_data_width() == b->sort->get_data_width()));
-  return new_ast(
-    !(to_solver_smt_ast<z3_smt_ast>(a)->a &
-      to_solver_smt_ast<z3_smt_ast>(b)->a),
-    a->sort);
-}
-
 smt_astt z3_convt::mk_bvxor(smt_astt a, smt_astt b)
 {
   if (int_encoding)
@@ -870,10 +848,17 @@ smt_astt z3_convt::mk_ite(smt_astt cond, smt_astt t, smt_astt f)
 smt_astt z3_convt::mk_smt_int(const BigInt &theint)
 {
   smt_sortt s = mk_int_sort();
-  if (theint.is_negative())
+  // BigInt::to_int64 silently truncates past 64 bits, so for values outside
+  // the int64 range fall back to the string overload of z3::context::int_val.
+  // BigInt::is_uint64 is intentionally NOT used here even for in-range
+  // positives because it is a magnitude-only predicate (it ignores the sign),
+  // so a negative BigInt whose magnitude fits in uint64 would take the
+  // fast-path and silently flip sign. Issue #4642.
+  if (theint.is_int64())
     return new_ast(z3_ctx.int_val(theint.to_int64()), s);
 
-  return new_ast(z3_ctx.int_val(theint.to_uint64()), s);
+  std::string dec = integer2string(theint, 10);
+  return new_ast(z3_ctx.int_val(dec.c_str()), s);
 }
 
 smt_astt z3_convt::mk_smt_real(const std::string &str)
@@ -1002,21 +987,22 @@ smt_sortt z3_convt::mk_struct_sort(const type2tc &type)
     return mk_array_sort(d, subtypesort);
   }
 
-  const struct_type2t &strct = to_struct_type(type);
-  const std::size_t num_members = strct.members.size();
+  const type2tc &t = is_pointer_type(type) ? pointer_struct : type;
+  const std::vector<type2tc> &members = struct_union_members(t);
+  const std::vector<irep_idt> &mnames = struct_union_member_names(t);
+  const irep_idt &name = struct_union_name(t);
+  const std::size_t num_members = members.size();
 
   z3::array<Z3_symbol> member_names(num_members);
   z3::array<Z3_sort> member_sorts(num_members);
   for (std::size_t i = 0; i < num_members; ++i)
   {
-    member_names[i] =
-      z3_ctx.str_symbol(strct.member_names[i].as_string().c_str());
-    member_sorts[i] =
-      to_solver_smt_sort<z3::sort>(convert_sort(strct.members[i]))->s;
+    member_names[i] = z3_ctx.str_symbol(mnames[i].as_string().c_str());
+    member_sorts[i] = to_solver_smt_sort<z3::sort>(convert_sort(members[i]))->s;
   }
 
-  z3::symbol tuple_name = z3_ctx.str_symbol(
-    std::string("struct_type_" + strct.name.as_string()).c_str());
+  z3::symbol tuple_name =
+    z3_ctx.str_symbol(std::string("struct_type_" + name.as_string()).c_str());
 
   Z3_func_decl mk_tuple_decl;
   z3::array<Z3_func_decl> proj_decls(num_members);
@@ -1038,7 +1024,7 @@ smt_astt z3_smt_ast::update(
   smt_convt *conv,
   smt_astt value,
   unsigned int idx,
-  expr2tc idx_expr) const
+  const expr2tc &idx_expr) const
 {
   if (sort->id == SMT_SORT_ARRAY)
     return smt_ast::update(conv, value, idx, idx_expr);
@@ -1056,10 +1042,11 @@ smt_astt z3_smt_ast::project(smt_convt *conv, unsigned int elem) const
   z3_convt *z3_conv = static_cast<z3_convt *>(conv);
 
   assert(!is_nil_type(sort->get_tuple_type()));
-  const struct_union_data &data = conv->get_type_def(sort->get_tuple_type());
+  const std::vector<type2tc> &members =
+    struct_union_members(sort->get_tuple_type());
 
-  assert(elem < data.members.size());
-  const smt_sort *idx_sort = conv->convert_sort(data.members[elem]);
+  assert(elem < members.size());
+  const smt_sort *idx_sort = conv->convert_sort(members[elem]);
 
   z3::expr selected = z3_conv->mk_tuple_select(a, elem);
   return z3_conv->new_ast(selected, idx_sort);
@@ -1068,14 +1055,12 @@ smt_astt z3_smt_ast::project(smt_convt *conv, unsigned int elem) const
 smt_astt z3_convt::tuple_create(const expr2tc &structdef)
 {
   const constant_struct2t &strct = to_constant_struct2t(structdef);
-  const struct_union_data &type =
-    static_cast<const struct_union_data &>(*strct.type);
 
   // Converts a static struct - IE, one that hasn't had any "with"
   // operations applied to it, perhaps due to initialization or constant
   // propagation.
   const std::vector<expr2tc> &members = strct.datatype_members;
-  const std::vector<type2tc> &member_types = type.members;
+  const std::vector<type2tc> &member_types = struct_union_members(strct.type);
 
   // Populate tuple with members of that struct
   z3::expr_vector args(z3_ctx);
@@ -1176,7 +1161,8 @@ z3_convt::tuple_array_of(const expr2tc &init, unsigned long domain_width)
 
 expr2tc z3_convt::tuple_get(const type2tc &type, smt_astt sym)
 {
-  const struct_union_data &strct = get_type_def(type);
+  const type2tc &t = is_pointer_type(type) ? pointer_struct : type;
+  const std::vector<type2tc> &members = struct_union_members(t);
 
   if (is_pointer_type(type))
   {
@@ -1185,16 +1171,15 @@ expr2tc z3_convt::tuple_get(const type2tc &type, smt_astt sym)
 
     smt_astt object = new_ast(
       mk_tuple_select(to_solver_smt_ast<z3_smt_ast>(sym)->a, 0),
-      convert_sort(strct.members[0]));
+      convert_sort(members[0]));
 
     smt_astt offset = new_ast(
       mk_tuple_select(to_solver_smt_ast<z3_smt_ast>(sym)->a, 1),
-      convert_sort(strct.members[1]));
+      convert_sort(members[1]));
 
-    unsigned int num =
-      get_bv(object, is_signedbv_type(strct.members[0])).to_uint64();
+    unsigned int num = get_bv(object, is_signedbv_type(members[0])).to_uint64();
     unsigned int offs =
-      get_bv(offset, is_signedbv_type(strct.members[1])).to_uint64();
+      get_bv(offset, is_signedbv_type(members[1])).to_uint64();
     pointer_logict::pointert p(num, BigInt(offs));
     return pointer_logic.back().pointer_expr(p, type);
   }
@@ -1202,7 +1187,7 @@ expr2tc z3_convt::tuple_get(const type2tc &type, smt_astt sym)
   // Otherwise, run through all fields and dispatch to 'get_by_ast' again.
   std::vector<expr2tc> outmem;
   unsigned int i = 0;
-  for (auto const &it : strct.members)
+  for (auto const &it : members)
   {
     outmem.push_back(get_by_ast(
       it,
@@ -1217,7 +1202,9 @@ expr2tc z3_convt::tuple_get(const type2tc &type, smt_astt sym)
 
 expr2tc z3_convt::tuple_get(const expr2tc &expr)
 {
-  const struct_union_data &strct = get_type_def(expr->type);
+  const type2tc &t = is_pointer_type(expr->type) ? pointer_struct : expr->type;
+  const std::vector<type2tc> &members = struct_union_members(t);
+  const std::vector<irep_idt> &mnames = struct_union_member_names(t);
 
   if (is_pointer_type(expr->type))
   {
@@ -1228,16 +1215,15 @@ expr2tc z3_convt::tuple_get(const expr2tc &expr)
 
     smt_astt object = new_ast(
       mk_tuple_select(to_solver_smt_ast<z3_smt_ast>(sym)->a, 0),
-      convert_sort(strct.members[0]));
+      convert_sort(members[0]));
 
     smt_astt offset = new_ast(
       mk_tuple_select(to_solver_smt_ast<z3_smt_ast>(sym)->a, 1),
-      convert_sort(strct.members[1]));
+      convert_sort(members[1]));
 
-    unsigned int num =
-      get_bv(object, is_signedbv_type(strct.members[0])).to_uint64();
+    unsigned int num = get_bv(object, is_signedbv_type(members[0])).to_uint64();
     unsigned int offs =
-      get_bv(offset, is_signedbv_type(strct.members[1])).to_uint64();
+      get_bv(offset, is_signedbv_type(members[1])).to_uint64();
     pointer_logict::pointert p(num, BigInt(offs));
     return pointer_logic.back().pointer_expr(p, expr->type);
   }
@@ -1245,9 +1231,9 @@ expr2tc z3_convt::tuple_get(const expr2tc &expr)
   // Otherwise, run through all fields and dispatch to 'get' again.
   std::vector<expr2tc> outmem;
   unsigned int i = 0;
-  for (auto const &it : strct.members)
+  for (auto const &it : members)
   {
-    expr2tc memb = member2tc(it, expr, strct.member_names[i]);
+    expr2tc memb = member2tc(it, expr, mnames[i]);
     outmem.push_back(get(memb));
     i++;
   }

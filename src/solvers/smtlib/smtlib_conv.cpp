@@ -46,8 +46,6 @@ static const std::array smt_func_name_table = {
   "bvneg",                  /* SMT_FUNC_BVNEG, */
   "bvlshr",                 /* SMT_FUNC_BVLSHR, */
   "bvnot",                  /* SMT_FUNC_BVNOT, */
-  "bvnor",                  /* SMT_FUNC_BVNOR, */
-  "vnand",                  /* SMT_FUNC_BVNAND, */
   "bvxor",                  /* SMT_FUNC_BVXOR, */
   "bvor",                   /* SMT_FUNC_BVOR, */
   "bvand",                  /* SMT_FUNC_BVAND, */
@@ -1179,28 +1177,6 @@ smt_astt smtlib_convt::mk_bvnot(smt_astt a)
   assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
   smtlib_smt_ast *ast = new smtlib_smt_ast(this, a->sort, SMT_FUNC_BVNOT);
   ast->args.push_back(a);
-  return ast;
-}
-
-smt_astt smtlib_convt::mk_bvnor(smt_astt a, smt_astt b)
-{
-  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
-  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
-  assert(a->sort->get_data_width() == b->sort->get_data_width());
-  smtlib_smt_ast *ast = new smtlib_smt_ast(this, a->sort, SMT_FUNC_BVNOR);
-  ast->args.push_back(a);
-  ast->args.push_back(b);
-  return ast;
-}
-
-smt_astt smtlib_convt::mk_bvnand(smt_astt a, smt_astt b)
-{
-  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
-  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
-  assert(a->sort->get_data_width() == b->sort->get_data_width());
-  smtlib_smt_ast *ast = new smtlib_smt_ast(this, a->sort, SMT_FUNC_BVNAND);
-  ast->args.push_back(a);
-  ast->args.push_back(b);
   return ast;
 }
 

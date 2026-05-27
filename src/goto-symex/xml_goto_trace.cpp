@@ -78,8 +78,8 @@ void convert(const namespacet &ns, const goto_tracet &goto_trace, xmlt &xml)
         base_name = symbol->name;
         display_name = symbol->name;
         if (type_string == "")
-          type_string =
-            from_type(ns, identifier, symbol->type, presentationt::WITNESS);
+          type_string = from_type(
+            ns, identifier, symbol->get_type(), presentationt::WITNESS);
 
         xml_assignment.new_element("mode").data =
           xmlt::escape(id2string(symbol->mode));

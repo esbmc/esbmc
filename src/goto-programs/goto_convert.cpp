@@ -664,7 +664,7 @@ void goto_convertt::convert_decl(const codet &code, goto_programt &dest)
 
   // A static variable will be declared in the global scope and
   // a code type means a function declaration, we ignore both
-  if (s->static_lifetime || s->type.is_code())
+  if (s->static_lifetime || s->get_type().is_code())
     return; // this is a SKIP!
 
   // Check if is an VLA declaration and rewrite the declaration
@@ -673,7 +673,7 @@ void goto_convertt::convert_decl(const codet &code, goto_programt &dest)
   {
     // This means that it was a VLA declaration and we need to
     // to rewrite the symbol as well
-    s->type = var.type();
+    s->set_type(var.type());
   }
 
   exprt initializer = nil_exprt();
@@ -709,7 +709,7 @@ void goto_convertt::convert_decl(const codet &code, goto_programt &dest)
   // now create a 'dead' instruction -- will be added after the
   // destructor created below as unwind_destructor_stack pops off the
   // top of the destructor stack
-  const symbol_exprt symbol_expr(s->id, s->type);
+  const symbol_exprt symbol_expr(s->id, s->get_type());
 
   {
     code_deadt code_dead(symbol_expr);
@@ -718,7 +718,7 @@ void goto_convertt::convert_decl(const codet &code, goto_programt &dest)
 
   // do destructor
   code_function_callt destructor;
-  if (get_destructor(ns, s->type, destructor))
+  if (get_destructor(ns, s->get_type(), destructor))
   {
     // add "this"
     address_of_exprt this_expr(symbol_expr);
@@ -741,7 +741,7 @@ bool goto_convertt::is_atomic_symbol(const exprt &expr, const namespacet &ns)
   if (expr.id() != "symbol")
     return false;
   const symbolt *sym = ns.lookup(expr.identifier());
-  return sym && sym->type.get_bool("#atomic");
+  return sym && sym->get_type().get_bool("#atomic");
 }
 
 /// Returns true if @p expr contains a direct read of any C11 _Atomic variable

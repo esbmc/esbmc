@@ -118,7 +118,7 @@ program goto_factory::get_goto_functions_internal(
   return goto_factory::get_goto_functions(cmd, opts);
 }
 
-cmdlinet goto_factory::get_default_cmdline(const std::string filename)
+cmdlinet goto_factory::get_default_cmdline(const std::string &filename)
 {
   cmdlinet cmdline;
   cmdline.args.push_back(filename);

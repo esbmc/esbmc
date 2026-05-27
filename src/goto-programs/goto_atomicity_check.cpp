@@ -61,7 +61,7 @@ bool goto_atomicity_checkt::is_global(const irep_idt &id) const
   const symbolt *sym = ns.lookup(id);
   if (!sym)
     return false;
-  return sym->static_lifetime || sym->type.is_dynamic_set();
+  return sym->static_lifetime || sym->get_type().is_dynamic_set();
 }
 
 unsigned goto_atomicity_checkt::count_globals(const expr2tc &expr) const
