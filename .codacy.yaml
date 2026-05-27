@@ -52,6 +52,32 @@ engines:
       # removed in optimised bytecode") does not apply.
       - 'src/python-frontend/models/**'
 
+      # Regression test fixtures. Every .py file under regression/ is an
+      # input that ESBMC's Python frontend parses and symbolically
+      # executes — none of it is run as a host-side Python program, none
+      # is compiled to optimised bytecode (`python -O`), and none is
+      # exposed to network input. The `assert` statements ARE the
+      # verification properties: ESBMC lowers Python `ast.Assert` to a
+      # GOTO ASSERT directly (see src/python-frontend/python_converter
+      # .cpp), so rewriting them as `if not <cond>: raise AssertionError`
+      # would change the AST shape and silently weaken the suite. Same
+      # rationale as the cppcheck exclusion above. Likewise, idioms such
+      # as `popen("ls /tmp")` in regression/python/import-os/main.py and
+      # `rand.random()` in regression/python/div6_fail/main.py are
+      # fixtures exercising specific operational-model code paths in the
+      # frontend — their presence is the point. Real bandit issues in
+      # src/, unit/ (excluding pytest), and scripts/ are still surfaced.
+      - 'regression/**'
+
+      # Pytest property-based tests for the Python frontend. Pytest's
+      # assertion-rewriting machinery requires plain `assert` (Bandit
+      # B101 is incompatible with the pytest idiom), and these suites
+      # are never executed under `python -O`. They validate ESBMC's
+      # Decimal / dataclass / preprocessor models against CPython using
+      # hypothesis — see unit/python-frontend/test_decimal_model.py and
+      # siblings.
+      - 'unit/python-frontend/**'
+
   cppcheck:
     enabled: true
     exclude_paths:
