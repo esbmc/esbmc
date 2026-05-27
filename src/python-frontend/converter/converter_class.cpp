@@ -356,6 +356,107 @@ typet python_converter::infer_attr_type_from_usage(
       return unified;
   }
 
+  // Last fallback: when ``self.<attr> = <param>`` appears inside __init__ and
+  // no module-level reassignment to `<attr>` exists, the field's runtime
+  // type is determined by what callers pass for that parameter.  Find the
+  // parameter index in __init__'s signature, then unify the type of the
+  // matching positional argument across all module-level constructor calls
+  // ``Y = class_name(arg0, ..., argK, ...)``.  Handles linked-list /
+  // tree patterns where successor pointers are set at construction time
+  // (``n2 = Node(2, n1)``) rather than via post-init assignment.
+  if (!cls_node.is_null() && cls_node.contains("body"))
+  {
+    // 1. Locate __init__ and its parameter list.
+    const nlohmann::json *init_args = nullptr;
+    const nlohmann::json *init_body = nullptr;
+    for (const auto &m : cls_node.at("body"))
+    {
+      if (
+        m.is_object() && m.value("_type", "") == "FunctionDef" &&
+        m.value("name", "") == "__init__" && m.contains("args") &&
+        m["args"].is_object() && m["args"].contains("args") &&
+        m.contains("body"))
+      {
+        init_args = &m["args"]["args"];
+        init_body = &m["body"];
+        break;
+      }
+    }
+    if (init_args && init_body)
+    {
+      // 2. Find the parameter name on the RHS of ``self.<attr> = <name>``.
+      std::string param_name;
+      for (const auto &stmt : *init_body)
+      {
+        auto [t, v] = tgt_val(stmt);
+        if (
+          !t || !v || !t->is_object() || t->value("_type", "") != "Attribute" ||
+          t->value("attr", "") != attr_name || !t->contains("value") ||
+          !(*t)["value"].is_object() ||
+          (*t)["value"].value("_type", "") != "Name" ||
+          (*t)["value"].value("id", "") != "self")
+          continue;
+        if (
+          v->is_object() && v->value("_type", "") == "Name" &&
+          v->contains("id"))
+        {
+          param_name = (*v)["id"].get<std::string>();
+          break;
+        }
+      }
+      // 3. Map the parameter name to its positional index (skipping self).
+      int param_idx = -1;
+      if (!param_name.empty())
+      {
+        int idx = 0;
+        for (const auto &a : *init_args)
+        {
+          if (
+            a.is_object() && a.contains("arg") &&
+            a["arg"].get<std::string>() != "self")
+          {
+            if (a["arg"].get<std::string>() == param_name)
+            {
+              param_idx = idx;
+              break;
+            }
+            ++idx;
+          }
+        }
+      }
+      // 4. Scan module-level constructor calls and unify arg-K's type.
+      if (param_idx >= 0)
+      {
+        typet ctor_unified;
+        for (const auto &stmt : module_body)
+        {
+          auto [t, v] = tgt_val(stmt);
+          if (!v || !v->is_object() || v->value("_type", "") != "Call")
+            continue;
+          const auto &f = (*v)["func"];
+          if (
+            !f.is_object() || f.value("_type", "") != "Name" ||
+            f.value("id", "") != class_name)
+            continue;
+          if (!v->contains("args") || !(*v)["args"].is_array())
+            continue;
+          const auto &call_args = (*v)["args"];
+          if (param_idx >= static_cast<int>(call_args.size()))
+            continue;
+          typet arg_t = infer_rhs(call_args[param_idx]);
+          if (unset(arg_t))
+            continue;
+          if (unset(ctor_unified))
+            ctor_unified = arg_t;
+          else if (ctor_unified != arg_t)
+            return typet();
+        }
+        if (!unset(ctor_unified))
+          return ctor_unified;
+      }
+    }
+  }
+
   return typet();
 }
 
@@ -480,6 +581,7 @@ void python_converter::get_attributes_from_self(
         // / tree patterns like `self.next = None` in __init__ plus
         // `n1.next = n2` at module scope.
         typet resolved;
+        bool from_param_default_none = false;
         if (
           stmt.contains("value") && stmt["value"].is_object() &&
           stmt["value"].contains("id"))
@@ -487,7 +589,20 @@ void python_converter::get_attributes_from_self(
           const std::string param_name = stmt["value"]["id"].get<std::string>();
           auto it = param_annotations.find(param_name);
           if (it != param_annotations.end())
+          {
             resolved = get_type_from_annotation(it->second, stmt);
+            // When the param's own annotation is ``NoneType`` (the
+            // annotator's recovery from a ``param=None`` default), this
+            // resolves to a generic null pointer and discards the real
+            // type that may be available from module-level uses of the
+            // attribute (linked-list / tree patterns).  Mark so the
+            // usage-based fallback below can override it.
+            const auto &ann = it->second;
+            if (
+              ann.is_object() && ann.value("_type", "") == "Name" &&
+              ann.value("id", "") == "NoneType")
+              from_param_default_none = true;
+          }
         }
         // Default-constructed typet has an empty id; explicit error paths
         // in get_type_from_annotation may return an id_nil one instead.
@@ -495,8 +610,13 @@ void python_converter::get_attributes_from_self(
         auto unset = [](const typet &ty) {
           return ty.id().as_string().empty() || ty.is_nil();
         };
-        if (unset(resolved))
-          resolved = infer_attr_type_from_usage(current_class_name_, attr_name);
+        if (unset(resolved) || from_param_default_none)
+        {
+          typet from_usage =
+            infer_attr_type_from_usage(current_class_name_, attr_name);
+          if (!unset(from_usage))
+            resolved = from_usage;
+        }
         type = unset(resolved) ? any_type() : resolved;
       }
       else if (annotated_type == "tuple" || annotated_type == "Tuple")
