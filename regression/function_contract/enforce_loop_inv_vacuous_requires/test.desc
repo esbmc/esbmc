@@ -1,0 +1,6 @@
+CORE
+main.c
+--enforce-contract demo --loop-invariant-check --loop-frame-rule --unwind 2
+^WARNING: Vacuous discharge
+requires clause
+^VERIFICATION UNKNOWN$
