@@ -78,9 +78,8 @@ public:
   /// model. `separator` is decayed to `const char *` and `list_expr` is passed
   /// as `__ESBMC_PyListObj *` (taking the address if needed). Used by
   /// `handle_str_join` when compile-time folding of the iterable fails.
-  exprt build_runtime_str_join_call(
-    const exprt &separator,
-    const exprt &list_expr);
+  exprt
+  build_runtime_str_join_call(const exprt &separator, const exprt &list_expr);
 
 private:
   python_converter &converter_;
