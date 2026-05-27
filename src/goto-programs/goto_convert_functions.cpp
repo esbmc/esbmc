@@ -245,6 +245,55 @@ void goto_convert_functionst::collect_expr(
   }
 }
 
+// Read-only twin of rename_types: does this type subtree contain a
+// `symbol`-id node (other than the recursive `sname` self-reference)
+// that rename_types would rewrite? Walks with const accessors so it
+// never detaches.
+bool goto_convert_functionst::type_needs_rename(
+  const irept &type,
+  const irep_idt &sname) const
+{
+  if (type.id() == "pointer")
+    return false;
+
+  if (type.id() == "symbol")
+    // rename_types replaces every symbol type except the self-recursive
+    // sname guard. A non-sname symbol type is always rewritten.
+    return type.identifier() != sname;
+
+  return expr_needs_rename(type, sname);
+}
+
+// Read-only twin of rename_exprs.
+bool goto_convert_functionst::expr_needs_rename(
+  const irept &expr,
+  const irep_idt &sname) const
+{
+  if (expr.id() == "pointer")
+    return false;
+
+  forall_irep (it, expr.get_sub())
+    if (expr_needs_rename(*it, sname))
+      return true;
+
+  forall_named_irep (it, expr.get_named_sub())
+  {
+    if (denotes_thrashable_subtype(it->first))
+    {
+      if (type_needs_rename(it->second, sname))
+        return true;
+    }
+    else if (expr_needs_rename(it->second, sname))
+      return true;
+  }
+
+  forall_named_irep (it, expr.get_comments())
+    if (expr_needs_rename(it->second, sname))
+      return true;
+
+  return false;
+}
+
 void goto_convert_functionst::rename_types(
   irept &type,
   const symbolt &cur_name_sym,
@@ -324,23 +373,35 @@ void goto_convert_functionst::rename_exprs(
   if (expr.id() == "pointer")
     return;
 
+  // Walk children, but only descend mutably into a child that actually
+  // contains something to rename. The const probe (expr_needs_rename /
+  // type_needs_rename) reads without detaching; the mutable Forall_*
+  // path below detaches every node it touches (a COW deep-copy under
+  // sharing). On eca-rers-style inputs the expression trees are
+  // massively shared and carry few or no renamable type symbols, so
+  // gating each child on the probe prunes nearly all of the detaches
+  // that dominated peak memory. Each child is probed once, then walked
+  // mutably end-to-end, so the probe is not re-run as we recurse.
   Forall_irep (it, expr.get_sub())
-    rename_exprs(*it, cur_name_sym, sname);
+    if (expr_needs_rename(*it, sname))
+      rename_exprs(*it, cur_name_sym, sname);
 
   Forall_named_irep (it, expr.get_named_sub())
   {
     if (denotes_thrashable_subtype(it->first))
     {
-      rename_types(it->second, cur_name_sym, sname);
+      if (type_needs_rename(it->second, sname))
+        rename_types(it->second, cur_name_sym, sname);
     }
-    else
+    else if (expr_needs_rename(it->second, sname))
     {
       rename_exprs(it->second, cur_name_sym, sname);
     }
   }
 
   Forall_named_irep (it, expr.get_comments())
-    rename_exprs(it->second, cur_name_sym, sname);
+    if (expr_needs_rename(it->second, sname))
+      rename_exprs(it->second, cur_name_sym, sname);
 }
 
 void goto_convert_functionst::wallop_type(
@@ -423,6 +484,14 @@ void goto_convert_functionst::thrash_type_symbols()
     collect_type(s.get_type(), names);
   });
 
+  // No type symbols anywhere → nothing to thrash. The Clang C/C++
+  // frontends expand user types eagerly, so `names` is empty or holds
+  // only a handful of (self-referential) struct/union tags; bail out
+  // before the dependency computation and the whole-context rename
+  // walk when there's nothing to do.
+  if (names.empty())
+    return;
+
   // Try to compute their dependencies.
 
   typename_mapt typenames;
@@ -448,12 +517,23 @@ void goto_convert_functionst::thrash_type_symbols()
     wallop_type(it->first, typenames, it->first);
 
   // And now all the types have a fixed form, rename types in all existing code.
+  // Probe each symbol's type/value with the read-only checks first; only
+  // copy-out / rename / copy-back when there is actually a symbol type to
+  // rewrite. The copy-out itself (get_type/get_value return by value) plus
+  // the mutable rename walk are what detach the shared irep trees, so
+  // skipping them for symbols with nothing to rename is the bulk of the win.
   context.Foreach_operand([this](symbolt &s) {
-    typet t = s.get_type();
-    rename_types(t, s, s.id);
-    s.set_type(std::move(t));
-    exprt v = s.get_value();
-    rename_exprs(v, s, s.id);
-    s.set_value(std::move(v));
+    if (type_needs_rename(s.get_type(), s.id))
+    {
+      typet t = s.get_type();
+      rename_types(t, s, s.id);
+      s.set_type(std::move(t));
+    }
+    if (expr_needs_rename(s.get_value(), s.id))
+    {
+      exprt v = s.get_value();
+      rename_exprs(v, s, s.id);
+      s.set_value(std::move(v));
+    }
   });
 }
