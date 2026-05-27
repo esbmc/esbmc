@@ -121,6 +121,50 @@ class ExpressionRewriteMixin:
                     self.statements.extend(prefix)
                     return result
 
+            # sum(range(EXPR)) -> (EXPR * (EXPR - 1) // 2 if EXPR > 0 else 0).
+            # Without this, range(EXPR) creates a PyListObj with size=EXPR but
+            # unpopulated items; sum() then reads nondet via list[i], so
+            # `sum_to_n(1) = sum(range(2))` returns nondet instead of 1.
+            # Limited to single-argument range and single-argument sum.
+            # EXPR is evaluated multiple times in the rewritten tree; this
+            # matches the convention of the surrounding ListComp / genexpr
+            # rewrites and is safe for the side-effect-free expressions seen
+            # in practice (variables, integer arithmetic).
+            if (isinstance(node.func, ast.Name) and node.func.id == "sum"
+                    and len(node.args) == 1 and not node.keywords
+                    and isinstance(node.args[0], ast.Call)
+                    and isinstance(node.args[0].func, ast.Name)
+                    and node.args[0].func.id == "range"
+                    and len(node.args[0].args) == 1):
+                stop = node.args[0].args[0]
+                # Build: stop * (stop - 1) // 2
+                product = ast.BinOp(
+                    left=copy.deepcopy(stop),
+                    op=ast.Mult(),
+                    right=ast.BinOp(
+                        left=copy.deepcopy(stop),
+                        op=ast.Sub(),
+                        right=ast.Constant(value=1),
+                    ),
+                )
+                gauss = ast.BinOp(left=product, op=ast.FloorDiv(),
+                                  right=ast.Constant(value=2))
+                # Python: sum(range(n)) == 0 for n <= 0. Guard the formula so
+                # the rewrite is exact for the full integer domain, not just
+                # the positive case.
+                formula = ast.IfExp(
+                    test=ast.Compare(
+                        left=copy.deepcopy(stop),
+                        ops=[ast.Gt()],
+                        comparators=[ast.Constant(value=0)],
+                    ),
+                    body=gauss,
+                    orelse=ast.Constant(value=0),
+                )
+                ast.copy_location(formula, node)
+                ast.fix_missing_locations(formula)
+                return self.visit(formula)
+
             lowered_sorted = self.preprocessor._lower_sorted_with_key_call(node)
             if lowered_sorted is not None:
                 prefix, result = lowered_sorted
