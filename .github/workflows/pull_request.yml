@@ -39,14 +39,18 @@ jobs:
       build-flags: '-b DebugOpt -c 21'
       testing: true
 
-  # Check project with clang-format
+  # Check project with clang-format. This job no longer auto-commits fixes:
+  # it only *checks* that the lines changed in the PR are formatted, and on
+  # failure posts a comment explaining how to fix the already-committed lines
+  # (scripts/install-format-hook.sh --fix) and how to install the local
+  # pre-commit hook that prevents the failure next time.
   code-style:
     name: Check C/C++ code-style
     runs-on: ubuntu-slim
     permissions:
-      # Give the default GITHUB_TOKEN write permission to commit and push the
-      # added or changed files to the repository.
-      contents: write
+      # Read code; write only PR comments (no push / auto-commit).
+      contents: read
+      pull-requests: write
     steps:
     - uses: actions/checkout@v6
       with:
@@ -57,7 +61,8 @@ jobs:
       run: wget https://github.com/llvm/llvm-project/releases/download/llvmorg-11.0.0/clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz
     - name: Extract Clang 11
       run: tar xf clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz && mv clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04 clang
-    - name: Run clang-format on changed files
+    - name: Check formatting of changed lines
+      id: fmt
       shell: bash
       run: |
         mapfile -t files < <(
@@ -73,15 +78,89 @@ jobs:
           exit 0
         fi
 
-        ./clang/bin/clang-format -style=file -i -fallback-style=none "${files[@]}"
+        # Format only the lines that differ from the base branch (not whole
+        # files) and emit a diff instead of editing. A non-empty diff means
+        # the PR touched lines that are not clang-format-11-clean.
+        diff=$(python3 ./clang/bin/git-clang-format \
+          --binary ./clang/bin/clang-format \
+          --style file \
+          --extensions h,c,cpp,hpp,hh \
+          --diff \
+          "origin/${{ github.base_ref }}" -- "${files[@]}")
+
+        # git-clang-format prints these sentinels when nothing needs changing.
+        if [ -z "$diff" ] || \
+           [ "$diff" = "no modified files to format" ] || \
+           [ "$diff" = "clang-format did not modify any files" ]; then
+          echo "Changed lines are clang-format clean."
+          exit 0
+        fi
+
+        echo "::error::Changed lines are not clang-format-11 clean."
+        echo "$diff"
+        {
+          echo "diff<<DIFF_EOF"
+          echo "$diff"
+          echo "DIFF_EOF"
+        } >> "$GITHUB_OUTPUT"
+        exit 1
+    - name: Comment with fix instructions
+      if: ${{ failure() && steps.fmt.outcome == 'failure' && github.event.pull_request.head.repo.full_name == github.repository }}
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const marker = '<!-- esbmc-clang-format-check -->';
+          const diff = process.env.FMT_DIFF || '';
+          const truncated = diff.length > 60000
+            ? diff.slice(0, 60000) + '\n... (diff truncated) ...'
+            : diff;
+          const base = context.payload.pull_request.base.ref;
+          const body = [
+            marker,
+            '### Code style check failed',
+            '',
+            'Some lines changed in this PR are not formatted with **clang-format 11**.',
+            '',
+            '**Fix the lines already committed** — reformat the changed lines with the same clang-format 11 CI uses, then commit and push:',
+            '',
+            '```sh',
+            './scripts/install-format-hook.sh --fix origin/' + base,
+            'git add -u && git commit -m "apply clang-format" && git push',
+            '```',
+            '',
+            '**Avoid this next time** — install the pre-commit hook once; it formats changed lines automatically on every future commit:',
+            '',
+            '```sh',
+            './scripts/install-format-hook.sh',
+            '```',
+            '',
+            '<details><summary>Required formatting diff</summary>',
+            '',
+            '```diff',
+            truncated,
+            '```',
+            '',
+            '</details>',
+          ].join('\n');
+
+          const { owner, repo } = context.repo;
+          const issue_number = context.payload.pull_request.number;
+          const comments = await github.paginate(
+            github.rest.issues.listComments,
+            { owner, repo, issue_number });
+          const existing = comments.find(c => c.body && c.body.includes(marker));
+          if (existing) {
+            await github.rest.issues.updateComment(
+              { owner, repo, comment_id: existing.id, body });
+          } else {
+            await github.rest.issues.createComment(
+              { owner, repo, issue_number, body });
+          }
+      env:
+        FMT_DIFF: ${{ steps.fmt.outputs.diff }}
     - name: Delete downloaded Clang 11
+      if: always()
       run: rm -rf clang*
-    # Commit all changed files back to the repository
-    - uses: stefanzweifel/git-auto-commit-action@v7
-      if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
-    - name: Throws error if changes were made
-      run: git diff --exit-code --ignore-cr-at-eol
-      if: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
 
 
   # Check CMake files with cmakelint
