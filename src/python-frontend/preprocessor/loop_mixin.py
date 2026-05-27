@@ -2042,8 +2042,7 @@ class LoopMixin:
                         return True
             return False
 
-        need_staging = bool(target_names) and any(
-            value_reads_target(vn) for _, vn in leaf_pairs)
+        need_staging = bool(target_names) and any(value_reads_target(vn) for _, vn in leaf_pairs)
         if need_staging:
             base = self._next_unpack_tmp_id()
             staged_values = []
@@ -2063,8 +2062,7 @@ class LoopMixin:
 
         for (target_node, value_node), staged in zip(leaf_pairs, staged_values):
             target_copy = copy.deepcopy(target_node)
-            individual_assign = self._create_individual_assignment(target_copy, staged,
-                                                                   source_node)
+            individual_assign = self._create_individual_assignment(target_copy, staged, source_node)
             self._update_variable_types_simple(target_copy, value_node)
             assignments.append(individual_assign)
 
