@@ -1973,6 +1973,18 @@ class LoopMixin:
             target_node.end_col_offset = source_node.end_col_offset
         return target_node
 
+    def _next_unpack_tmp_id(self):
+        """Monotonic counter for staged-temp names emitted by tuple unpacking.
+
+        Avoids using `id(source_node)` (CPython object id), which gets recycled
+        after GC and yields non-stable names across runs. The counter lives on
+        the preprocessor instance so it persists across visits within a single
+        pass.
+        """
+        current = getattr(self, "_unpack_tmp_counter", 0)
+        self._unpack_tmp_counter = current + 1
+        return current
+
     def _create_individual_assignment(self, target, value, source_node):
         """Create a single assignment node with proper location info"""
         individual_assign = ast.Assign(targets=[target], value=value)
@@ -2015,12 +2027,45 @@ class LoopMixin:
             # Don't transform unsupported unpacking shapes - let converter handle it
             return source_node
 
-        for target_node, value_node in leaf_pairs:
+        # Python's `a, b = b, a % b` evaluates the RHS tuple first and then
+        # binds each target, so a swap like `a, b = b, a` works. Lowering to
+        # naive sequential `a = b; b = a % b` reads the *new* `a` in the
+        # second assignment and is wrong (e.g. gcd loop terminates after one
+        # iteration). Stage each RHS into a fresh temp before the binds, so
+        # later target writes don't observe earlier ones.
+        target_names = {tn.id for tn, _ in leaf_pairs if isinstance(tn, ast.Name)}
+
+        def value_reads_target(value_node):
+            for sub in ast.walk(value_node):
+                if isinstance(sub, ast.Name) and isinstance(sub.ctx, ast.Load):
+                    if sub.id in target_names:
+                        return True
+            return False
+
+        need_staging = bool(target_names) and any(
+            value_reads_target(vn) for _, vn in leaf_pairs)
+        if need_staging:
+            base = self._next_unpack_tmp_id()
+            staged_values = []
+            for i, (_, value_node) in enumerate(leaf_pairs):
+                tmp_name = f"ESBMC_unpack_tmp_{base}_{i}"
+                tmp_assign = self._create_individual_assignment(
+                    ast.Name(id=tmp_name, ctx=ast.Store()),
+                    copy.deepcopy(value_node),
+                    source_node,
+                )
+                assignments.append(tmp_assign)
+                staged_name = ast.Name(id=tmp_name, ctx=ast.Load())
+                self._copy_location_info(source_node, staged_name)
+                staged_values.append(staged_name)
+        else:
+            staged_values = [copy.deepcopy(vn) for _, vn in leaf_pairs]
+
+        for (target_node, value_node), staged in zip(leaf_pairs, staged_values):
             target_copy = copy.deepcopy(target_node)
-            value_copy = copy.deepcopy(value_node)
-            individual_assign = self._create_individual_assignment(target_copy, value_copy,
+            individual_assign = self._create_individual_assignment(target_copy, staged,
                                                                    source_node)
-            self._update_variable_types_simple(target_copy, value_copy)
+            self._update_variable_types_simple(target_copy, value_node)
             assignments.append(individual_assign)
 
         return assignments
