@@ -6,6 +6,7 @@
 #include <util/expr_util.h>
 #include <util/std_expr.h>
 #include <algorithm>
+#include <functional>
 #include <map>
 #include <unordered_set>
 #include <vector>
@@ -158,6 +159,53 @@ void inject_noop_cycle_assumes(
       }
     }
     if (!noop)
+      continue;
+
+    // The witness ASSUME(p->guard) is only sound if p->guard is a
+    // genuine fixed-point invariant of the cycle — i.e. its value is
+    // the same on entry to every iteration. If any variable in the
+    // guard is *reassigned* earlier in the same iteration (between the
+    // loop head and the IF), then the guard is recomputed each round
+    // and pinning it does not describe a real recurrent state. The
+    // canonical offender is `while (1) { x = nondet(); if (x == 0)
+    // return; }`: the `if (x != 0)` continue-branch looks like a
+    // no-op cycle, but x is freshly havoced every iteration, so
+    // ASSUME(x != 0) just pins the loop to the non-exiting branch and
+    // manufactures non-termination. Skip the witness in that case.
+    std::unordered_set<irep_idt, irep_id_hash> guard_syms;
+    {
+      std::function<void(const expr2tc &)> collect = [&](const expr2tc &e)
+      {
+        if (is_nil_expr(e))
+          return;
+        if (is_symbol2t(e))
+          guard_syms.insert(to_symbol2t(e).thename);
+        else
+          e->foreach_operand([&](const expr2tc &c) { collect(c); });
+      };
+      collect(p->guard);
+    }
+    bool guard_var_reassigned = false;
+    for (auto q = if_it; q != p && !guard_var_reassigned; ++q)
+    {
+      if (q->is_assign())
+      {
+        const code_assign2t &a = to_code_assign2t(q->code);
+        if (
+          is_symbol2t(a.target) &&
+          guard_syms.count(to_symbol2t(a.target).thename))
+          guard_var_reassigned = true;
+      }
+      else if (q->is_function_call())
+      {
+        const code_function_call2t &fc = to_code_function_call2t(q->code);
+        if (
+          !is_nil_expr(fc.ret) && is_symbol2t(fc.ret) &&
+          guard_syms.count(to_symbol2t(fc.ret).thename))
+          guard_var_reassigned = true;
+      }
+    }
+    if (guard_var_reassigned)
       continue;
 
     // p's guard is the IF's "taken" condition. Splice an ASSUME of
@@ -316,8 +364,23 @@ void insert_markers_for_function(
     // An exit edge is a GOTO whose target lies outside the loop range
     // (either before loop_head or strictly past loop_exit).
     std::vector<goto_programt::targett> exit_edges;
+    // Also collect RETURN instructions inside the loop range. A return
+    // leaves the *loop-owning* function, so it is a genuine loop exit
+    // (e.g. `while (1) { x = nondet(); if (x == 0) return 0; }` exits
+    // when x == 0). Because insert_markers_for_function processes one
+    // function at a time and only scans this loop's own body range, a
+    // RETURN found here always belongs to the loop-owning function — a
+    // return inside a callee invoked from the loop lives in a separate
+    // function body and is never seen here, so we never mistake a
+    // callee return for a loop exit.
+    std::vector<goto_programt::targett> return_exits;
     for (auto p = loop_head; p != std::next(loop_exit); ++p)
     {
+      if (p->is_return())
+      {
+        return_exits.push_back(p);
+        continue;
+      }
       if (!p->is_goto() || p->is_backwards_goto())
         continue;
       if (p->targets.size() != 1)
@@ -375,6 +438,25 @@ void insert_markers_for_function(
         e->targets.clear();
         e->targets.push_back(marker_it);
       }
+    }
+
+    // Return-exit markers: a RETURN inside the loop body leaves the
+    // loop-owning function, so place an ASSERT(false) immediately
+    // before each. The marker falls through to the RETURN, preserving
+    // semantics, and exposes the return path to IS — without it,
+    // `while (1) { ...; if (cond) return; }` shapes have no reachable
+    // marker on their real exit and IS reports spurious non-
+    // termination.
+    for (auto r : return_exits)
+    {
+      goto_programt::instructiont marker;
+      marker.type = ASSERT;
+      marker.guard = gen_false_expr();
+      marker.location = r->location;
+      marker.location.comment("termination per-loop marker");
+      marker.function = function_name;
+      marker.inductive_step_instruction = true;
+      body.instructions.insert(r, marker);
     }
 
     // Do-while fall-through: a conditional back-edge with a non-
