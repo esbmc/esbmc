@@ -1,4 +1,4 @@
-FUTURE
+CORE
 main.c
---loop-invariant-check 
-^VERIFICATION SUCCESSFUL$
+--loop-invariant-check
+^VERIFICATION FAILED$
