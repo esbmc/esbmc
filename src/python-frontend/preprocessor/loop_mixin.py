@@ -1710,8 +1710,14 @@ class LoopMixin:
 
     def _create_iter_assignment(self, node, annotation_id, iter_var_name, element_type):
         """Create assignment for iterator variable with proper type annotation."""
+        # str iterables (`for c in str(x)`, `for c in some_str_var`) must be
+        # annotated as str so the converter lowers loop bounds via strlen
+        # rather than the list-style get_object_size, which overshoots and
+        # trips IndexError.
+        if annotation_id == "str":
+            iter_annotation = ast.Name(id="str", ctx=ast.Load())
         # Create proper list[T] annotation instead of just 'list'
-        if element_type and element_type != "Any":
+        elif element_type and element_type != "Any":
             # Create Subscript: list[element_type]
             iter_annotation = ast.Subscript(
                 value=ast.Name(id="list", ctx=ast.Load()),
