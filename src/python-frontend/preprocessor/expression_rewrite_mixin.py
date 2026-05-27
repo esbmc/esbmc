@@ -130,11 +130,9 @@ class ExpressionRewriteMixin:
             # matches the convention of the surrounding ListComp / genexpr
             # rewrites and is safe for the side-effect-free expressions seen
             # in practice (variables, integer arithmetic).
-            if (isinstance(node.func, ast.Name) and node.func.id == "sum"
-                    and len(node.args) == 1 and not node.keywords
-                    and isinstance(node.args[0], ast.Call)
-                    and isinstance(node.args[0].func, ast.Name)
-                    and node.args[0].func.id == "range"
+            if (isinstance(node.func, ast.Name) and node.func.id == "sum" and len(node.args) == 1
+                    and not node.keywords and isinstance(node.args[0], ast.Call)
+                    and isinstance(node.args[0].func, ast.Name) and node.args[0].func.id == "range"
                     and len(node.args[0].args) == 1):
                 stop = node.args[0].args[0]
                 # Build: stop * (stop - 1) // 2
@@ -147,8 +145,7 @@ class ExpressionRewriteMixin:
                         right=ast.Constant(value=1),
                     ),
                 )
-                gauss = ast.BinOp(left=product, op=ast.FloorDiv(),
-                                  right=ast.Constant(value=2))
+                gauss = ast.BinOp(left=product, op=ast.FloorDiv(), right=ast.Constant(value=2))
                 # Python: sum(range(n)) == 0 for n <= 0. Guard the formula so
                 # the rewrite is exact for the full integer domain, not just
                 # the positive case.
