@@ -348,13 +348,11 @@ static void collect_self_attr_stores_of_param(
   if (!body.is_array())
     return;
 
-  auto rhs_is_param = [&](const nlohmann::json &v)
-  {
+  auto rhs_is_param = [&](const nlohmann::json &v) {
     return v.is_object() && v.value("_type", "") == "Name" &&
            v.contains("id") && v["id"] == param_name;
   };
-  auto extract_self_attr = [](const nlohmann::json &t) -> std::string
-  {
+  auto extract_self_attr = [](const nlohmann::json &t) -> std::string {
     if (
       t.is_object() && t.value("_type", "") == "Attribute" &&
       t.contains("value") && t["value"].is_object() &&

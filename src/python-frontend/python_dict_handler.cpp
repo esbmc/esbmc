@@ -1434,15 +1434,13 @@ typet python_dict_handler::resolve_expected_type_for_dict_subscript(
           // inside the containing statement, which can be arbitrarily deep
           // inside nested loops (e.g. quixbugs/shortest_path_lengths).
           std::function<void(const nlohmann::json &)> visit_stmt;
-          auto visit_body = [&](const nlohmann::json &body)
-          {
+          auto visit_body = [&](const nlohmann::json &body) {
             if (!body.is_array())
               return;
             for (const auto &s : body)
               visit_stmt(s);
           };
-          visit_stmt = [&](const nlohmann::json &stmt)
-          {
+          visit_stmt = [&](const nlohmann::json &stmt) {
             if (!stmt.is_object() || !stmt.contains("_type"))
               return;
             const std::string &kind = stmt["_type"].get<std::string>();

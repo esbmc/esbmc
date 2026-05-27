@@ -540,8 +540,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       // name is shadowed by a local binding in the current scope (e.g. a
       // parameter named `node` when `from node import Node` is in scope).
       // Python's scoping rules give precedence to the local binding.
-      auto name_resolves_to_symbol = [&](const std::string &name)
-      {
+      auto name_resolves_to_symbol = [&](const std::string &name) {
         symbol_id sid = create_symbol_id();
         sid.set_object(name);
         if (find_symbol(sid.to_string()))
