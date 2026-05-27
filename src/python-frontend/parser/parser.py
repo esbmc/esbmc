@@ -121,21 +121,20 @@ def emit_module_json(
 
 def main() -> int | None:
     """Run parser CLI orchestration with assembled dependencies."""
-    return cli_main(
-        deps=CliDeps(
-            run_mypy_strict=run_mypy_strict,
-            parse_file_canonicalised=parse_file_canonicalised,
-            generate_ast_json_fn=generate_ast_json,
-            annotate_constant_node=annotate_constant_node,
-            add_type_annotation=add_type_annotation,
-            import_resolver=import_resolver,
-            rewrite_re_match_attribute_calls=rewrite_re_match_attribute_calls,
-            threading_lowering=threading_lowering,
-            preprocessor_cls=Preprocessor,
-            snapshot_exports=snapshot_exports,
-            compute_range_seed=compute_range_seed,
-            propagate_range_aliases_across_modules=propagate_range_aliases,
-        ))
+    return cli_main(deps=CliDeps(
+        run_mypy_strict=run_mypy_strict,
+        parse_file_canonicalised=parse_file_canonicalised,
+        generate_ast_json_fn=generate_ast_json,
+        annotate_constant_node=annotate_constant_node,
+        add_type_annotation=add_type_annotation,
+        import_resolver=import_resolver,
+        rewrite_re_match_attribute_calls=rewrite_re_match_attribute_calls,
+        threading_lowering=threading_lowering,
+        preprocessor_cls=Preprocessor,
+        snapshot_exports=snapshot_exports,
+        compute_range_seed=compute_range_seed,
+        propagate_range_aliases_across_modules=propagate_range_aliases,
+    ))
 
 
 if __name__ == "__main__":

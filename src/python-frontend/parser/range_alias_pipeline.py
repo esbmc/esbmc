@@ -24,8 +24,7 @@ def parse_file_canonicalised(filename: str) -> tuple[ast.AST, Preprocessor]:
 
 
 def _snapshot_exports(
-    preprocessor: Preprocessor,
-) -> tuple[set[str], dict[str, str], set[str] | None]:
+    preprocessor: Preprocessor, ) -> tuple[set[str], dict[str, str], set[str] | None]:
     """Snapshot a Preprocessor's range-alias / wrapper export tables."""
     return (
         set(preprocessor.exported_range_aliases),
@@ -85,8 +84,7 @@ def _propagate_range_aliases_across_modules(parsed_trees: dict, import_resolver)
 
 
 def snapshot_exports(
-    preprocessor: Preprocessor,
-) -> tuple[set[str], dict[str, str], set[str] | None]:
+    preprocessor: Preprocessor, ) -> tuple[set[str], dict[str, str], set[str] | None]:
     """Public façade for exporter snapshotting."""
     return _snapshot_exports(preprocessor)
 

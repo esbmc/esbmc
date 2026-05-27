@@ -55,6 +55,7 @@ class ImportResolverLike(Protocol):
 
 class ThreadingLoweringLike(Protocol):
     """Structural type for threading validation/lowering entry points."""
+
     # pylint: disable=missing-function-docstring
 
     def reject_unsupported_threading_usage(self, tree: ast.AST, source_filename: str) -> None:

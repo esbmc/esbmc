@@ -774,6 +774,8 @@ def _thread_method_receiver(
     if isinstance(func.value, ast.Name) and func.value.id in thread_var_names:
         return func.value.id
     return None
+
+
 def _collect_thread_var_sites(
     tree: ast.Module,
     module_aliases: set[str],
@@ -1290,13 +1292,14 @@ def lower_threading_thread_usage(tree: ast.Module, source_filename: str) -> None
     earliest_user_with_thread: int | None = None
     for idx, stmt in enumerate(tree.body):
         if isinstance(
-            stmt,(
-	        ast.Import,
-	        ast.ImportFrom,
-	        ast.ClassDef,
-	        ast.FunctionDef,
-	        ast.AsyncFunctionDef,
-	    ),
+                stmt,
+            (
+                ast.Import,
+                ast.ImportFrom,
+                ast.ClassDef,
+                ast.FunctionDef,
+                ast.AsyncFunctionDef,
+            ),
         ):
             insert_at = idx + 1
         if (isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))

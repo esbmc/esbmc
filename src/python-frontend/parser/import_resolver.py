@@ -225,8 +225,7 @@ def import_module_by_name(
 
 
 def _collect_import_targets(
-    node: ast.Import | ast.ImportFrom,
-) -> tuple[list[str], list[ast.alias] | None]:
+    node: ast.Import | ast.ImportFrom, ) -> tuple[list[str], list[ast.alias] | None]:
     if isinstance(node, ast.Import):
         module_names: list[str] = []
         for alias_node in node.names:
@@ -450,8 +449,7 @@ def rewrite_relative_import(node: ast.ImportFrom, parent_module: str | None) -> 
     if lvl > len(parts):
         _resolver_warning(
             f"{parent_module} relative-import-level-too-high: level={lvl}, "
-            f"target={node.module or '<package>'}",
-        )
+            f"target={node.module or '<package>'}", )
     idx = len(parts) - lvl
     base = parent_module if idx <= 0 else ".".join(parts[:idx])
     node.module = f"{base}.{node.module}" if node.module else base
@@ -476,8 +474,7 @@ def _emit_submodule_asts(
                     tree = ast.parse(f.read())
             except (OSError, UnicodeDecodeError, SyntaxError) as exc:
                 _resolver_warning(
-                    f"{base_module}.{file} submodule-parse-failed: {full_path}: {exc}",
-                )
+                    f"{base_module}.{file} submodule-parse-failed: {full_path}: {exc}", )
                 continue
             generate_ast_json_fn(tree, full_path, None, f"{output_dir}/{base_module}")
 

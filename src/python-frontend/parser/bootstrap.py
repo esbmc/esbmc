@@ -70,10 +70,7 @@ def _import_with_fallback(package: str | None, module_name: str) -> ModuleType:
 @lru_cache(maxsize=2)
 def load_parser_module_deps(package: str | None) -> ParserModuleDeps:
     """Resolve parser submodules for package and script execution modes."""
-    modules = {
-        name: _import_with_fallback(package, name)
-        for name in _PARSER_SUBMODULES
-    }
+    modules = {name: _import_with_fallback(package, name) for name in _PARSER_SUBMODULES}
     return ParserModuleDeps(
         constant_annotations=modules["constant_annotations"],
         json_emitter=modules["json_emitter"],

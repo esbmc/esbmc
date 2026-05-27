@@ -21,6 +21,7 @@ __all__ = [
 
 class ImportResolverLike(Protocol):
     """Structural type for resolver functions consumed by JSON emission."""
+
     # pylint: disable=missing-function-docstring
 
     def filter_imports(self, tree: ast.Module) -> ast.Module:

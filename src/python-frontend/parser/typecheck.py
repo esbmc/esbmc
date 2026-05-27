@@ -18,8 +18,7 @@ def _run_mypy_module(filename: str, cache_dir: str) -> tuple[int, str] | None:
         return None
 
     report, errors, exit_status = mypy_api.run(  # pylint: disable=c-extension-no-member
-        ["--strict", "--cache-dir", cache_dir, filename]
-    )
+        ["--strict", "--cache-dir", cache_dir, filename])
     return int(exit_status), f"{report}{errors}"
 
 
