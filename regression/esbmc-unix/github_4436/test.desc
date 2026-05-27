@@ -1,0 +1,4 @@
+CORE
+main.c
+--bitwuzla
+^VERIFICATION SUCCESSFUL$
