@@ -334,6 +334,75 @@ static bool param_is_mutated_in_body(
   return false;
 }
 
+// Collect the names of `self.<attr>` slots that `param_name` is stored
+// into anywhere in `body` (recursive). When such an attribute is itself
+// pointer-typed (see get_attributes_from_self / GitHub #4831), the
+// parameter value used as the RHS must also be a pointer — otherwise the
+// field-store creates a pointer/struct mismatch when downstream code
+// reassigns the same attribute via a chained reference.
+static void collect_self_attr_stores_of_param(
+  const std::string &param_name,
+  const nlohmann::json &body,
+  std::vector<std::string> &out)
+{
+  if (!body.is_array())
+    return;
+
+  auto rhs_is_param = [&](const nlohmann::json &v)
+  {
+    return v.is_object() && v.value("_type", "") == "Name" &&
+           v.contains("id") && v["id"] == param_name;
+  };
+  auto extract_self_attr = [](const nlohmann::json &t) -> std::string
+  {
+    if (
+      t.is_object() && t.value("_type", "") == "Attribute" &&
+      t.contains("value") && t["value"].is_object() &&
+      t["value"].value("_type", "") == "Name" && t["value"].contains("id") &&
+      t["value"]["id"] == "self" && t.contains("attr") && t["attr"].is_string())
+      return t["attr"].get<std::string>();
+    return "";
+  };
+
+  for (const auto &stmt : body)
+  {
+    if (!stmt.is_object())
+      continue;
+
+    const std::string &stype =
+      stmt.contains("_type") ? stmt["_type"].get<std::string>() : "";
+
+    // self.attr = param  (plain assignment)
+    if (
+      stype == "Assign" && stmt.contains("targets") && stmt.contains("value") &&
+      rhs_is_param(stmt["value"]))
+    {
+      for (const auto &tgt : stmt["targets"])
+      {
+        const std::string name = extract_self_attr(tgt);
+        if (!name.empty())
+          out.push_back(name);
+      }
+    }
+    // self.attr: T = param  (annotated assignment)
+    else if (
+      stype == "AnnAssign" && stmt.contains("target") &&
+      stmt.contains("value") && rhs_is_param(stmt["value"]))
+    {
+      const std::string name = extract_self_attr(stmt["target"]);
+      if (!name.empty())
+        out.push_back(name);
+    }
+
+    // Recurse into nested blocks
+    for (const char *key : {"body", "orelse", "handlers", "finalbody"})
+    {
+      if (stmt.contains(key) && stmt[key].is_array())
+        collect_self_attr_stores_of_param(param_name, stmt[key], out);
+    }
+  }
+}
+
 static bool node_uses_param_as_list_like(
   const std::string &param_name,
   const nlohmann::json &node)
@@ -690,8 +759,35 @@ void python_converter::process_function_arguments(
       python_frontend::is_enum_class(class_name, *ast_json))
       continue;
 
-    // Check whether the function body mutates this parameter.
-    if (!param_is_mutated_in_body(param_name, body))
+    // Upgrade to pointer when (a) the function body mutates this parameter
+    // (param.attr = ...), or (b) the parameter is stored into a `self.attr`
+    // slot whose declared field type is itself a pointer — the field-store
+    // would otherwise create a struct/pointer mismatch. (See GitHub #4831.)
+    bool stored_to_ptr_attr = false;
+    if (!current_class_name_.empty())
+    {
+      std::vector<std::string> stored_attrs;
+      collect_self_attr_stores_of_param(param_name, body, stored_attrs);
+      if (!stored_attrs.empty())
+      {
+        const symbolt *cls_sym =
+          symbol_table_.find_symbol("tag-" + current_class_name_);
+        if (cls_sym && cls_sym->get_type().is_struct())
+        {
+          const struct_typet &cs = to_struct_type(cls_sym->get_type());
+          for (const std::string &a : stored_attrs)
+          {
+            if (cs.has_component(a) && cs.get_component(a).type().is_pointer())
+            {
+              stored_to_ptr_attr = true;
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    if (!param_is_mutated_in_body(param_name, body) && !stored_to_ptr_attr)
       continue;
 
     // Upgrade the parameter to a pointer and update the parameter symbol.

@@ -1,3 +1,5 @@
+"""Import resolution helpers for python-frontend parser orchestration."""
+
 from __future__ import annotations
 
 import ast
@@ -6,29 +8,45 @@ import os
 import sys
 from dataclasses import dataclass
 from types import ModuleType
-from typing import Any, Callable, TypeAlias, TypedDict
+from typing import Callable, TypeAlias, TypedDict
+
+__all__ = [
+    "ResolverCallbacks",
+    "detect_and_process_submodules",
+    "emit_module_json",
+    "filter_imports",
+    "is_imported_model",
+    "process_collected_imports",
+    "process_imports",
+    "reset_state",
+    "resolve_module_file",
+    "rewrite_relative_import",
+]
 
 
 class ModuleImportInfo(TypedDict):
+    """Per-module import aggregation used for deferred JSON emission."""
     import_all: bool
     specific_names: set[str]
 
 
-ParseFileCanonicalisedFn: TypeAlias = Callable[[str], tuple[ast.AST, Any]]
+ParseFileCanonicalisedFn: TypeAlias = Callable[[str], tuple[ast.AST, object]]
 RewriteRelativeImportFn: TypeAlias = Callable[[ast.ImportFrom, str | None], None]
-SnapshotExportsFn: TypeAlias = Callable[[Any], tuple[set[str], dict[str, str], list[str] | None]]
-PropagateRangeAliasesFn: TypeAlias = Callable[[dict[str, tuple[ast.AST, str, Any]]], None]
-GenerateAstJsonFn: TypeAlias = Callable[[ast.AST, str, Any, str, str | None], None]
+SnapshotExportsFn: TypeAlias = Callable[[object], tuple[set[str], dict[str, str], set[str] | None]]
+ParsedTreeState: TypeAlias = dict[str, tuple[ast.AST, str, object]]
+PropagateRangeAliasesFn: TypeAlias = Callable[[ParsedTreeState], None]
+GenerateAstJsonFn: TypeAlias = Callable[[ast.AST, str, object, str, str | None], None]
 
 import_aliases: dict[str, str] = {}
 module_imports: dict[str, ModuleImportInfo] = {}
-module_exports: dict[str, tuple[set[str], dict[str, str], list[str] | None]] = {}
+module_exports: dict[str, tuple[set[str], dict[str, str], set[str] | None]] = {}
 _reported_cycles: set[tuple[str, ...]] = set()
 _reported_resolution_failures: set[tuple[str, str, str]] = set()
 
 
 @dataclass(frozen=True)
 class ResolverCallbacks:
+    """Parser-owned callbacks injected into resolver fixed-point routines."""
     parse_file_canonicalised: ParseFileCanonicalisedFn
     rewrite_relative_import: RewriteRelativeImportFn
     snapshot_exports: SnapshotExportsFn
@@ -45,14 +63,12 @@ def reset_state() -> None:
     _reported_resolution_failures.clear()
 
 
-def _resolver_error(module_name: str, reason: str, detail: str | None = None) -> None:
-    message = f"ERROR: {detail}" if detail else f"ERROR: {module_name} ({reason})"
-    print(message)
+def _resolver_error(detail: str) -> None:
+    print(f"ERROR: {detail}")
 
 
-def _resolver_warning(module_name: str, reason: str, detail: str | None = None) -> None:
-    message = f"WARNING: {detail}" if detail else f"WARNING: {module_name} ({reason})"
-    print(message)
+def _resolver_warning(detail: str) -> None:
+    print(f"WARNING: {detail}")
 
 
 def _node_location(node: ast.AST) -> str:
@@ -80,7 +96,7 @@ def _warn_resolution_failure(module_name: str, node: ast.AST, reason: str) -> No
     if key in _reported_resolution_failures:
         return
     _reported_resolution_failures.add(key)
-    _resolver_warning(module_name, "resolution-failed", f"{reason} at {location}")
+    _resolver_warning(f"{module_name} resolution-failed: {reason} at {location}")
 
 
 def _is_imported_model(module_name: str) -> bool:
@@ -98,6 +114,11 @@ def _is_imported_model(module_name: str) -> bool:
         "threading",
     }
     return module_name in models
+
+
+def is_imported_model(module_name: str) -> bool:
+    """Public helper for parser-side checks against the modeled modules set."""
+    return _is_imported_model(module_name)
 
 
 def _is_unsupported_module(module_name: str) -> bool:
@@ -159,12 +180,9 @@ def import_module_by_name(
     module_name: str,
     output_dir: str,
 ) -> ModuleType | str | None:
+    """Resolve an import target to a module object or model-file path."""
     if _is_unsupported_module(module_name):
-        _resolver_error(
-            module_name,
-            "unsupported-module",
-            f"\"import {module_name}\" is not supported",
-        )
+        _resolver_error(f"\"import {module_name}\" is not supported")
         sys.exit(3)
 
     base_module = _base_module_name(module_name)
@@ -181,7 +199,12 @@ def import_module_by_name(
 
         normalized = _normalize_existing_path(path)
         if normalized is None:
-            _resolver_error(module_name, "model-not-found", f"expected model file at '{path}'")
+            # Dotted model names can denote attributes/functions from a base
+            # model module (e.g. math.isnan), not real submodules on disk.
+            # Keep top-level model misses loud, but skip nested misses quietly
+            # so attribute-based model usage does not emit false path errors.
+            if "." not in module_name:
+                _resolver_error(f"expected model file at '{path}'")
             return None
         return normalized
 
@@ -197,15 +220,8 @@ def import_module_by_name(
                 pass
 
         # Keep legacy error text: regression tests assert this exact line.
-        _resolver_error(module_name, "module-not-found", f"Module '{module_name}' not found.")
+        _resolver_error(f"Module '{module_name}' not found.")
         return None
-
-
-def expand_star_import(module) -> list[str] | None:
-    names = getattr(module, '__all__', None)
-    if names is None:
-        names = [n for n in dir(module) if not n.startswith('_')]
-    return names
 
 
 def _collect_import_targets(
@@ -220,14 +236,17 @@ def _collect_import_targets(
         return module_names, None
 
     module_name = node.module
-    if module_name:
-        import_aliases[module_name] = module_name
+    # `from pkg import X` does not bind `pkg` in local scope, so do not
+    # register `pkg` as an alias. Registering it would make expressions
+    # like `pkg.attr` inside function scopes collide with local variables
+    # named `pkg` (shadowing regressions such as import_shadowed_by_param).
     module_names = [module_name] if module_name else []
     imported_elements = None if any(a.name == '*' for a in node.names) else node.names
     return module_names, imported_elements
 
 
 def process_imports(node: ast.Import | ast.ImportFrom, output_dir: str) -> None:
+    """Collect import targets and attach best-effort resolution metadata."""
     module_names, imported_elements = _collect_import_targets(node)
     if not module_names:
         return
@@ -257,6 +276,7 @@ def process_imports(node: ast.Import | ast.ImportFrom, output_dir: str) -> None:
 
 
 def resolve_module_file(module_qualname: str, output_dir: str) -> str | None:
+    """Resolve a fully-qualified module name into an emit-able source file."""
     try:
         mod = import_module_by_name(module_qualname, output_dir)
     except SystemExit:
@@ -313,14 +333,15 @@ def _warn_if_cycle(import_graph: dict[str, set[str]], module_name: str) -> None:
         return
     _reported_cycles.add(cycle)
     readable = " -> ".join(cycle)
-    _resolver_warning(module_name, "cyclic-import", readable)
+    _resolver_warning(f"{module_name} cyclic-import: {readable}")
 
 
 def filter_imports(tree: ast.AST) -> ast.AST:
-    filtered_body = []
+    """Remove unsupported testing-framework imports from module top level."""
+    filtered_body: list[ast.stmt] = []
     for node in tree.body:
         if isinstance(node, ast.Import):
-            filtered_names = []
+            filtered_names: list[ast.alias] = []
             for alias in node.names:
                 base_module = _base_module_name(alias.name)
                 if not _is_testing_framework(base_module):
@@ -343,14 +364,14 @@ def filter_imports(tree: ast.AST) -> ast.AST:
     return tree
 
 
-def process_collected_imports(output_dir: str, callbacks: ResolverCallbacks):
+def process_collected_imports(output_dir: str, callbacks: ResolverCallbacks) -> None:
     """Emit collected imports after transitive discovery converges.
 
     Callback parameters wire parser-owned routines (parse, rewrite propagation,
     and AST emission) without coupling this module to parser internals.
     """
-    parsed_trees = {}
-    visited = set()
+    parsed_trees: ParsedTreeState = {}
+    visited: set[str] = set()
     import_graph: dict[str, set[str]] = {}
 
     while True:
@@ -361,12 +382,12 @@ def process_collected_imports(output_dir: str, callbacks: ResolverCallbacks):
             visited.add(module_name)
             filename = resolve_module_file(module_name, output_dir)
             if not filename:
-                _resolver_warning(module_name, "module-file-not-found")
+                _resolver_warning(f"{module_name} module-file-not-found")
                 continue
             try:
                 tree, preprocessor = callbacks.parse_file_canonicalised(filename)
             except (OSError, SyntaxError, UnicodeDecodeError) as exc:
-                _resolver_warning(module_name, "module-parse-failed", str(exc))
+                _resolver_warning(f"{module_name} module-parse-failed: {exc}")
                 continue
             parsed_trees[module_name] = (tree, filename, preprocessor)
             module_exports[module_name] = callbacks.snapshot_exports(preprocessor)
@@ -388,7 +409,7 @@ def process_collected_imports(output_dir: str, callbacks: ResolverCallbacks):
 
 
 def _emit_collected_import_json(
-    parsed_trees: dict[str, tuple[ast.AST, str, Any]],
+    parsed_trees: ParsedTreeState,
     output_dir: str,
     callbacks: ResolverCallbacks,
 ) -> None:
@@ -419,6 +440,7 @@ def _emit_collected_import_json(
 
 
 def rewrite_relative_import(node: ast.ImportFrom, parent_module: str | None) -> None:
+    """Rewrite relative imports to absolute module names for resolver passes."""
     lvl = getattr(node, "level", 0)
     if lvl <= 0 or not parent_module:
         return
@@ -426,10 +448,8 @@ def rewrite_relative_import(node: ast.ImportFrom, parent_module: str | None) -> 
     parts = parent_module.split(".")
     if lvl > len(parts):
         _resolver_warning(
-            parent_module,
-            "relative-import-level-too-high",
-            f"level={lvl}, target={node.module or '<package>'}",
-        )
+            f"{parent_module} relative-import-level-too-high: level={lvl}, "
+            f"target={node.module or '<package>'}", )
     idx = len(parts) - lvl
     base = parent_module if idx <= 0 else ".".join(parts[:idx])
     node.module = f"{base}.{node.module}" if node.module else base
@@ -454,10 +474,7 @@ def _emit_submodule_asts(
                     tree = ast.parse(f.read())
             except (OSError, UnicodeDecodeError, SyntaxError) as exc:
                 _resolver_warning(
-                    f"{base_module}.{file}",
-                    "submodule-parse-failed",
-                    f"{full_path}: {exc}",
-                )
+                    f"{base_module}.{file} submodule-parse-failed: {full_path}: {exc}", )
                 continue
             generate_ast_json_fn(tree, full_path, None, f"{output_dir}/{base_module}")
 
@@ -468,6 +485,7 @@ def detect_and_process_submodules(
     output_dir: str,
     generate_ast_json_fn: GenerateAstJsonFn,
 ) -> None:
+    """Emit AST JSON for discovered modeled submodules referenced via attributes."""
     if not isinstance(node, ast.Attribute):
         return
 
@@ -507,13 +525,14 @@ def emit_module_json(
     generate_ast_json_fn: GenerateAstJsonFn,
     parse_file_canonicalised_fn: ParseFileCanonicalisedFn,
 ) -> None:
+    """Parse and emit JSON for one module resolved by qualified name."""
     filename = resolve_module_file(module_qualname, output_dir)
     if not filename:
-        _resolver_warning(module_qualname, "module-file-not-found")
+        _resolver_warning(f"{module_qualname} module-file-not-found")
         return
     try:
         tree, _preprocessor = parse_file_canonicalised_fn(filename)
     except (OSError, SyntaxError, UnicodeDecodeError) as exc:
-        _resolver_warning(module_qualname, "module-parse-failed", str(exc))
+        _resolver_warning(f"{module_qualname} module-parse-failed: {exc}")
         return
     generate_ast_json_fn(tree, filename, None, output_dir, module_qualname=module_qualname)

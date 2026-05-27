@@ -84,6 +84,7 @@ ignored_dirs=(
   "github_4581"
   "github_4756"
   "github_4756_fail"
+  "github_4831"
   "github_4668"
   "github_4666_2d"
   "github_4666_shape"
