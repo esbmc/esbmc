@@ -591,12 +591,10 @@ void add_cprover_library(contextt &context, const languaget *language)
     abort();
 
   // Traverse symbols and get dependencies from both their nested types and values
-  new_ctx.foreach_operand(
-    [&symbol_deps](const symbolt &s)
-    {
-      generate_symbol_deps(s.id, s.get_value(), symbol_deps);
-      generate_symbol_deps(s.id, s.get_type(), symbol_deps);
-    });
+  new_ctx.foreach_operand([&symbol_deps](const symbolt &s) {
+    generate_symbol_deps(s.id, s.get_value(), symbol_deps);
+    generate_symbol_deps(s.id, s.get_type(), symbol_deps);
+  });
 
   // Add two hacks; we might use either pthread_mutex_lock or the checked
   // variant; so if one version is used, pull in the other too.
@@ -623,23 +621,21 @@ void add_cprover_library(contextt &context, const languaget *language)
   // Solidity: uses dedicated sol64 binary → ALL symbols in new_ctx, no whitelist.
   bool uses_whitelist = language && language->id() == "python";
 
-  new_ctx.foreach_operand(
-    [&context,
-     &store_ctx,
-     &symbol_deps,
-     &to_include,
-     &is_solidity,
-     &uses_whitelist](const symbolt &s)
+  new_ctx.foreach_operand([&context,
+                           &store_ctx,
+                           &symbol_deps,
+                           &to_include,
+                           &is_solidity,
+                           &uses_whitelist](const symbolt &s) {
+    const symbolt *symbol = context.find_symbol(s.id);
+    if (
+      (is_solidity || uses_whitelist) ||
+      (symbol != nullptr && symbol->get_value().is_nil()))
     {
-      const symbolt *symbol = context.find_symbol(s.id);
-      if (
-        (is_solidity || uses_whitelist) ||
-        (symbol != nullptr && symbol->get_value().is_nil()))
-      {
-        store_ctx.add(s);
-        ingest_symbol(s.id, symbol_deps, to_include);
-      }
-    });
+      store_ctx.add(s);
+      ingest_symbol(s.id, symbol_deps, to_include);
+    }
+  });
 
   /* Now iterate through the dependencies that we know we want to add (due to ingest_symbol filter)
    * These will be symbols that didn't make it into store_ctx
@@ -693,21 +689,19 @@ void add_cprover_library(contextt &context, const languaget *language)
   // library. Only when linking to the libc library, we know that all unresolved extern symbols (those whose
   // value is nil) will stay unresolved. A normal linker would reject such files, but we provide some compatibility with
   // those and initialize the extern variables to nondet.
-  context.Foreach_operand(
-    [&context](symbolt &s)
+  context.Foreach_operand([&context](symbolt &s) {
+    if (s.is_extern && !s.get_type().is_code())
     {
-      if (s.is_extern && !s.get_type().is_code())
-      {
-        log_debug(
-          "c2goto",
-          "extern variable with id {} not found, initializing value to "
-          "nondet! "
-          "This code would not compile with an actual compiler.",
-          s.id);
-        exprt value = exprt(
-          "sideeffect", get_complete_type(s.get_type(), namespacet{context}));
-        value.statement("nondet");
-        s.set_value(value);
-      }
-    });
+      log_debug(
+        "c2goto",
+        "extern variable with id {} not found, initializing value to "
+        "nondet! "
+        "This code would not compile with an actual compiler.",
+        s.id);
+      exprt value = exprt(
+        "sideeffect", get_complete_type(s.get_type(), namespacet{context}));
+      value.statement("nondet");
+      s.set_value(value);
+    }
+  });
 }

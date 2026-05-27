@@ -300,10 +300,9 @@ void insert_markers_for_function(
     infos.push_back(
       {loop.get_original_loop_head(), loop.get_original_loop_exit()});
   std::sort(
-    infos.begin(),
-    infos.end(),
-    [](const loop_info &a, const loop_info &b)
-    { return a.back->location_number > b.back->location_number; });
+    infos.begin(), infos.end(), [](const loop_info &a, const loop_info &b) {
+      return a.back->location_number > b.back->location_number;
+    });
 
   for (const auto &info : infos)
   {
@@ -568,10 +567,9 @@ void insert_abort_call_markers_for_function(
     ranges.push_back(
       {loop.get_original_loop_head(), loop.get_original_loop_exit()});
   std::sort(
-    ranges.begin(),
-    ranges.end(),
-    [](const loop_range &a, const loop_range &b)
-    { return a.back->location_number > b.back->location_number; });
+    ranges.begin(), ranges.end(), [](const loop_range &a, const loop_range &b) {
+      return a.back->location_number > b.back->location_number;
+    });
 
   // Each mark records the call to precede and the guard expression to
   // assert. A nil guard means "ASSERT(false)" (unconditional, for

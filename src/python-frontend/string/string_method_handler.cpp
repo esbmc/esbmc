@@ -1083,8 +1083,7 @@ exprt string_handler::handle_string_lstrip(
     {
       if (chars_arg.is_nil())
       {
-        auto is_whitespace = [](const exprt &ch) -> bool
-        {
+        auto is_whitespace = [](const exprt &ch) -> bool {
           BigInt char_val =
             binary2integer(ch.value().as_string(), ch.type().is_signedbv());
           char c = static_cast<char>(char_val.to_uint64());
@@ -1114,8 +1113,7 @@ exprt string_handler::handle_string_lstrip(
         std::vector<exprt> strip_set =
           string_builder_->extract_string_chars(chars_arg);
 
-        auto is_in_strip_set = [&strip_set](const exprt &ch) -> bool
-        {
+        auto is_in_strip_set = [&strip_set](const exprt &ch) -> bool {
           BigInt cv =
             binary2integer(ch.value().as_string(), ch.type().is_signedbv());
           char c = static_cast<char>(cv.to_uint64());
@@ -1277,8 +1275,7 @@ exprt string_handler::handle_string_strip(
     {
       if (chars_arg.is_nil())
       {
-        auto is_whitespace = [](const exprt &ch) -> bool
-        {
+        auto is_whitespace = [](const exprt &ch) -> bool {
           BigInt char_val =
             binary2integer(ch.value().as_string(), ch.type().is_signedbv());
           char c = static_cast<char>(char_val.to_uint64());
@@ -1311,8 +1308,7 @@ exprt string_handler::handle_string_strip(
         std::vector<exprt> strip_set =
           string_builder_->extract_string_chars(chars_arg);
 
-        auto is_in_strip_set = [&strip_set](const exprt &ch) -> bool
-        {
+        auto is_in_strip_set = [&strip_set](const exprt &ch) -> bool {
           BigInt cv =
             binary2integer(ch.value().as_string(), ch.type().is_signedbv());
           char c = static_cast<char>(cv.to_uint64());
@@ -1447,8 +1443,7 @@ exprt string_handler::handle_string_rstrip(
     {
       if (chars_arg.is_nil())
       {
-        auto is_whitespace = [](const exprt &ch) -> bool
-        {
+        auto is_whitespace = [](const exprt &ch) -> bool {
           BigInt char_val =
             binary2integer(ch.value().as_string(), ch.type().is_signedbv());
           char c = static_cast<char>(char_val.to_uint64());
@@ -1478,8 +1473,7 @@ exprt string_handler::handle_string_rstrip(
         std::vector<exprt> strip_set =
           string_builder_->extract_string_chars(chars_arg);
 
-        auto is_in_strip_set = [&strip_set](const exprt &ch) -> bool
-        {
+        auto is_in_strip_set = [&strip_set](const exprt &ch) -> bool {
           BigInt cv =
             binary2integer(ch.value().as_string(), ch.type().is_signedbv());
           char c = static_cast<char>(cv.to_uint64());
