@@ -9,6 +9,7 @@
 #include <goto-symex/symex_target.h>
 #include <list>
 #include <map>
+#include <memory>
 #include <solvers/smt/smt_conv.h>
 #include <util/config.h>
 #include <irep2/irep2.h>
@@ -155,13 +156,22 @@ public:
     expr2tc cond;
     std::string comment;
 
-    // for OUTPUT
-    std::string format_string;
-    std::list<expr2tc> output_args;
+    // OUTPUT-step payload. OUTPUT steps are rare (only printf-family
+    // side effects produce them), so the format string and argument
+    // lists live in a lazily-allocated side struct rather than inline
+    // on every SSA step. This keeps sizeof(SSA_stept) ~80 bytes smaller
+    // on the assignment/assume/assert steps that dominate large
+    // equations. Access through the output_* helpers below.
+    struct output_datat
+    {
+      std::string format_string;
+      std::list<expr2tc> output_args;
+      std::list<expr2tc> converted_output_args; // filled during conversion
+    };
+    std::unique_ptr<output_datat> output_data;
 
     // for conversion
     smt_astt guard_ast, cond_ast;
-    std::list<expr2tc> converted_output_args;
 
     // for slicing
     bool ignore;
@@ -174,6 +184,46 @@ public:
 
     SSA_stept() : ignore(false), hidden(false)
     {
+    }
+
+    // SSA_stept is copied wholesale (e.g. the per-claim local_eq in
+    // bmc.cpp), so the unique_ptr payload needs deep-copy semantics.
+    // Moves stay default (cheap pointer steal).
+    SSA_stept(const SSA_stept &o)
+      : source(o.source),
+        type(o.type),
+        stack_trace(o.stack_trace),
+        guard(o.guard),
+        lhs(o.lhs),
+        rhs(o.rhs),
+        original_lhs(o.original_lhs),
+        original_rhs(o.original_rhs),
+        cond(o.cond),
+        comment(o.comment),
+        output_data(
+          o.output_data ? std::make_unique<output_datat>(*o.output_data)
+                        : nullptr),
+        guard_ast(o.guard_ast),
+        cond_ast(o.cond_ast),
+        ignore(o.ignore),
+        hidden(o.hidden),
+        loop_number(o.loop_number)
+    {
+    }
+    SSA_stept &operator=(const SSA_stept &o)
+    {
+      if (this != &o)
+        *this = SSA_stept(o); // copy-and-move
+      return *this;
+    }
+    SSA_stept(SSA_stept &&) = default;
+    SSA_stept &operator=(SSA_stept &&) = default;
+
+    output_datat &output_payload()
+    {
+      if (!output_data)
+        output_data = std::make_unique<output_datat>();
+      return *output_data;
     }
 
     void output(const namespacet &ns, std::ostream &out) const;
