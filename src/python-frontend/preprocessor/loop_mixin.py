@@ -208,11 +208,100 @@ class LoopMixin:
         ast.fix_missing_locations(new_range)
         return new_range
 
-    def visit_For(self, node):  # pylint: disable=too-many-branches
+    def visit_For(self, node):
         """
         Transform for loops into while loops.
-        Handles range() calls, enumerate() calls, dict.items(), and general iterables.
+
+        Python's for-else (`else` runs when the loop completes without break)
+        is lowered here at the boundary so all sub-transformers can emit
+        their `while ... orelse=[]` shape uniformly without each having to
+        remember to preserve the original `orelse`.
         """
+        for_else_pre, for_else_post = self._lower_for_else(node)
+        result = self._visit_for_inner(node)
+        if not isinstance(result, list):
+            result = [result]
+        return for_else_pre + result + for_else_post
+
+    def _lower_for_else(self, node):
+        """Lower `for ... else: <orelse>` into a did-not-break flag.
+
+        Returns (pre_statements, post_statements) to bracket the result of
+        the for-to-while transform. Pre: init `flag = True`. Post: emit
+        `if flag: <orelse>`. Side effect: rewrites every reachable `break`
+        in the body to `flag = False; break`, and clears `node.orelse` so
+        downstream transformers see a plain for.
+
+        No-op when `node.orelse` is empty.
+        """
+        if not node.orelse:
+            return [], []
+        counter = getattr(self, "_for_else_counter", 0)
+        self._for_else_counter = counter + 1
+        flag_name = f"ESBMC_for_else_{counter}"
+        flag_init = ast.AnnAssign(
+            target=ast.Name(id=flag_name, ctx=ast.Store()),
+            annotation=ast.Name(id="bool", ctx=ast.Load()),
+            value=ast.Constant(value=True),
+            simple=1,
+        )
+        self._copy_location_info(node, flag_init)
+
+        # Rewrite Break in the body to set flag=False first. Walk only the
+        # current loop's body, not nested loops -- a Break inside a nested
+        # for-else belongs to the inner loop, not this one.
+        def rewrite_breaks(stmts):
+            new_stmts = []
+            for s in stmts:
+                if isinstance(s, ast.Break):
+                    set_flag = ast.Assign(
+                        targets=[ast.Name(id=flag_name, ctx=ast.Store())],
+                        value=ast.Constant(value=False),
+                    )
+                    self._copy_location_info(s, set_flag)
+                    new_stmts.append(set_flag)
+                    new_stmts.append(s)
+                    continue
+                if isinstance(s, (ast.For, ast.While, ast.AsyncFor)):
+                    # Don't descend; nested-loop breaks bind to the inner loop.
+                    new_stmts.append(s)
+                    continue
+                if isinstance(s, ast.If):
+                    s.body = rewrite_breaks(s.body)
+                    s.orelse = rewrite_breaks(s.orelse)
+                elif isinstance(s, ast.Try):
+                    s.body = rewrite_breaks(s.body)
+                    s.orelse = rewrite_breaks(s.orelse)
+                    for handler in s.handlers:
+                        handler.body = rewrite_breaks(handler.body)
+                    s.finalbody = rewrite_breaks(s.finalbody)
+                elif isinstance(s, (ast.With, ast.AsyncWith)):
+                    s.body = rewrite_breaks(s.body)
+                elif hasattr(ast, "Match") and isinstance(s, ast.Match):
+                    # Python 3.10+: `break` inside `match ... case: <body>`
+                    # binds to the enclosing loop. Patterns/guards are
+                    # expressions, not statements, so only case bodies need
+                    # descent.
+                    for case in s.cases:
+                        case.body = rewrite_breaks(case.body)
+                new_stmts.append(s)
+            return new_stmts
+
+        node.body = rewrite_breaks(node.body)
+
+        orelse_stmts = node.orelse
+        node.orelse = []
+
+        orelse_guard = ast.If(
+            test=ast.Name(id=flag_name, ctx=ast.Load()),
+            body=orelse_stmts,
+            orelse=[],
+        )
+        self._copy_location_info(node, orelse_guard)
+        return [flag_init], [orelse_guard]
+
+    def _visit_for_inner(self, node):  # pylint: disable=too-many-branches
+        """Inner dispatch for visit_For after for-else lowering."""
         # Rewrite reversed(range(...)) to an equivalent range(...) call so that
         # the normal range-loop path can handle it without any extra machinery.
         if self._is_reversed_range_call(node.iter):
