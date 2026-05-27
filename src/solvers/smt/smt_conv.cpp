@@ -204,8 +204,9 @@ static void replace_name_in_body(
       body = replacement;
     return;
   }
-  body->Foreach_operand([&lhs, &replacement](expr2tc &e)
-                        { replace_name_in_body(lhs, replacement, e); });
+  body->Foreach_operand([&lhs, &replacement](expr2tc &e) {
+    replace_name_in_body(lhs, replacement, e);
+  });
 }
 
 /** Recursively expand any symbol in @p e that is a key in @p defs, replacing
@@ -226,8 +227,8 @@ static void expand_quantifier_defs_in(
     }
     return;
   }
-  e->Foreach_operand([&defs](expr2tc &sub)
-                     { expand_quantifier_defs_in(sub, defs); });
+  e->Foreach_operand(
+    [&defs](expr2tc &sub) { expand_quantifier_defs_in(sub, defs); });
 }
 
 void smt_convt::pop_ctx()
@@ -447,8 +448,8 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   {
     // Convert all the arguments and store them in 'args'.
     args.reserve(expr->get_num_sub_exprs());
-    expr->foreach_operand([this, &args](const expr2tc &e)
-                          { args.push_back(convert_ast(e)); });
+    expr->foreach_operand(
+      [this, &args](const expr2tc &e) { args.push_back(convert_ast(e)); });
   }
   }
 
@@ -690,8 +691,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
            fbv_type.fraction == single_spec.f))
         {
           // Lookup with unconditional point-interval fallback.
-          auto get_iv = [this](smt_astt t) -> ra_interval_t
-          {
+          auto get_iv = [this](smt_astt t) -> ra_interval_t {
             auto it = ir_ra_interval_map.find(t);
             return it != ir_ra_interval_map.end() ? it->second
                                                   : ra_interval_t{t, t};
@@ -784,8 +784,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
            fbv_type.fraction == single_spec.f))
         {
           // Lookup with unconditional point-interval fallback.
-          auto get_iv = [this](smt_astt t) -> ra_interval_t
-          {
+          auto get_iv = [this](smt_astt t) -> ra_interval_t {
             auto it = ir_ra_interval_map.find(t);
             return it != ir_ra_interval_map.end() ? it->second
                                                   : ra_interval_t{t, t};
@@ -863,8 +862,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
           (fbv_type.exponent == single_spec.e &&
            fbv_type.fraction == single_spec.f))
         {
-          auto get_iv = [this](smt_astt t) -> ra_interval_t
-          {
+          auto get_iv = [this](smt_astt t) -> ra_interval_t {
             auto it = ir_ra_interval_map.find(t);
             return it != ir_ra_interval_map.end() ? it->second
                                                   : ra_interval_t{t, t};
@@ -990,8 +988,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
          smt_fp_rounding_utils::is_round_to_minus_inf(rounding_mode) ||
          smt_fp_rounding_utils::is_round_to_zero(rounding_mode)))
       {
-        auto get_iv = [this](smt_astt t) -> ra_interval_t
-        {
+        auto get_iv = [this](smt_astt t) -> ra_interval_t {
           auto it = ir_ra_interval_map.find(t);
           return it != ir_ra_interval_map.end() ? it->second
                                                 : ra_interval_t{t, t};
@@ -3028,8 +3025,7 @@ expr2tc smt_convt::get(const expr2tc &expr)
     // changed, then rebuild res with that type. Mirrors the original two-level
     // walk (outer array + its immediate subtype if also array); preserves the
     // historic behaviour of not recursing further.
-    auto resolve_size = [this](const expr2tc &s)
-    {
+    auto resolve_size = [this](const expr2tc &s) {
       if (!is_nil_expr(s) && is_symbol2t(s))
         return get(s);
       return s;
@@ -3058,22 +3054,20 @@ expr2tc smt_convt::get(const expr2tc &expr)
   bool have_all = true;
   bool has_null_operands = false;
 
-  res->Foreach_operand(
-    [this, &have_all, &has_null_operands](expr2tc &e)
+  res->Foreach_operand([this, &have_all, &has_null_operands](expr2tc &e) {
+    if (!e)
     {
-      if (!e)
-      {
-        has_null_operands = true;
-        have_all = false;
-        return;
-      }
+      has_null_operands = true;
+      have_all = false;
+      return;
+    }
 
-      expr2tc new_e = get(e);
-      if (new_e)
-        e = new_e;
-      else
-        have_all = false;
-    });
+    expr2tc new_e = get(e);
+    if (new_e)
+      e = new_e;
+    else
+      have_all = false;
+  });
 
   // If we have null operands, return early to avoid crashes in simplify()
   if (has_null_operands)
@@ -3198,8 +3192,7 @@ double smt_convt::convert_rational_to_double(
   // Populate the buffer with the decimal representation of `value`, growing the
   // buffer as needed. We keep the legacy fixed-size path to avoid extra
   // allocations on the common fast path.
-  auto ensure_string = [&](const BigInt &value, std::vector<char> &buffer)
-  {
+  auto ensure_string = [&](const BigInt &value, std::vector<char> &buffer) {
     while (true)
     {
       // 1) Try to reuse the current buffer (may already be large).
