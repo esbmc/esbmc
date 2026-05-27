@@ -7,6 +7,7 @@ add_library(smt
   smt_byteops.cpp
   smt_casts.cpp
   smt_conv.cpp
+  smt_fp_conv.cpp
   smt_memspace.cpp
   smt_overflow.cpp
   smt_bitcast.cpp
