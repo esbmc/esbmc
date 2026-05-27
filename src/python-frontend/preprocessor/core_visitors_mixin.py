@@ -178,6 +178,17 @@ class CoreVisitorsMixin:
                 dict_name, key_node, factory, node)
             node.value.slice = key_expr
             return init_stmts + [node]
+
+        # Generic defaultdict-read lowering: when the RHS is not a direct
+        # Subscript but contains defaultdict reads inside (e.g.,
+        # `d[k] = min(d[k1], d[k2])`), insert the missing-key checks for
+        # each contained read so the dict_handler value-type scan sees
+        # at least one `d[key] = factory()` assignment in the function
+        # body. Mirrors what visit_Return/visit_Assert already do.
+        if node.value is not None:
+            dd_inits, node.value = self._lower_defaultdict_reads_in_expr(node.value, node)
+            if dd_inits:
+                return dd_inits + [node]
         return node
 
     def _update_name_target_assignment_metadata(self, target_id, node):

@@ -44,6 +44,15 @@ class LoopMixin:
             return node.id
         return None
 
+    @staticmethod
+    def _is_nullary_lambda(node: ast.AST) -> bool:
+        """Return True when node is an `ast.Lambda` taking no parameters."""
+        if not isinstance(node, ast.Lambda):
+            return False
+        args = node.args
+        return (not args.args and not args.posonlyargs and not args.kwonlyargs
+                and args.vararg is None and args.kwarg is None)
+
     def _pre_annotate_items_loop_vars(self, node):
         """Pre-populate variable_annotations for the loop variables of a dict.items() for loop.
 
@@ -2628,6 +2637,15 @@ class LoopMixin:
             factory_value = ast.List(elts=[], ctx=ast.Load())
         elif isinstance(factory_node, ast.Name) and factory_node.id == "dict":
             factory_value = ast.Dict(keys=[], values=[])
+        elif self._is_nullary_lambda(factory_node):
+            # Nullary lambda factory: emit the body expression directly so it
+            # routes through the same dict-subscript-assignment path as a
+            # literal. The C++ frontend cannot currently invoke
+            # `(<lambda>)()` correctly — build_function_id only handles Name
+            # and Attribute func types and otherwise resolves to the
+            # enclosing function — so inlining the body avoids the misrouted
+            # call entirely and is semantically identical for a thunk.
+            factory_value = factory_node.body
         else:
             factory_value = ast.Call(func=factory_node, args=[], keywords=[])
         ast.copy_location(factory_value, template)

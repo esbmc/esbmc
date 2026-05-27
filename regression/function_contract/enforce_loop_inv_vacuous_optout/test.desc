@@ -1,0 +1,4 @@
+CORE
+main.c
+--enforce-contract demo --loop-invariant-check --loop-frame-rule --no-vacuity-check --unwind 2
+^VERIFICATION SUCCESSFUL$
