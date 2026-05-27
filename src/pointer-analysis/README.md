@@ -50,6 +50,89 @@ an `int`. Three types are in play:
 * the type of the pointer being dereferenced,
 * the type of the SMT primitive backing the pointed-to data object.
 
+## Architecture at a glance
+
+```text
+  goto program                                       SMT formula
+       |                                                  ^
+       |   (one of two value-set providers)               |
+       v                                                  |
+  +---------------------+                                 |
+  | value_setst         |  abstract interface             |
+  | (value_sets.h)      |  used by dereferencet           |
+  +---------------------+                                 |
+   ^                    ^                                 |
+   |                    |                                 |
+   |                    |                                 |
+  +-------------------+ +----------------------------+    |
+  | value_set_        | | goto_symex's callback impl |    |
+  | analysist         | | (uses live per-state       |    |
+  | (pre-symex        | |  value_sett)               |    |
+  |  fixpoint over    | +----------------------------+    |
+  |  value_set_       |          |                        |
+  |  domaint)         |          | get_value_set(...)     |
+  +-------------------+          v                        |
+            |              +-------------------+          |
+            |              | dereferencet      |          |
+            +------------->|                   |          |
+                           |  dereference_expr |  -> dispatch on expr_id
+                           |    |  |  |        |
+                           |    v  v  v        |
+                           |  guard / addrof / |
+                           |  nonscalar chain  |
+                           |    |              |
+                           |    v              |
+                           |  dereference()    |  -> per-candidate if-chain
+                           |    |              |
+                           |    v              |
+                           |  build_reference_to  -> alignment/bounds/valid
+                           |    |              |
+                           |    v              |
+                           |  build_reference_rec -> src/dst/offset switch
+                           |    |              |
+                           |    v              |
+                           |  construct_from_* / stitch_together_from_byte_array
+                           +-------------------+
+                                    |
+                                    v
+                          expr2tc fed to SMT backend
+```
+
+`value_setst` is the indirection that lets `dereferencet` consume points-to
+information without caring whether it came from the static analyser or from
+the live `value_sett` carried by a goto-symex state.
+
+## Key invariants
+
+These hold throughout the pipeline; the rest of the document assumes them.
+
+* **Bit-offset currency in the dereferencer.** Inside
+  `build_reference_to` / `build_reference_rec` the offset is in **bits**, not
+  bytes. The byte → bit conversion happens once at the top of
+  `build_reference_to` (`mul ... 8`); the lexical chain in
+  `dereference_expr_nonscalar` also accumulates bits via
+  `compute_pointer_offset_bits`.
+* **Word-aligned struct layout.** `type_byte_size` (in `util/`) word-aligns
+  every struct field and inserts trailing padding. A well-formed scalar
+  access therefore never straddles a field boundary in the SMT primitive;
+  anything that would surfaces as an alignment failure rather than silently
+  corrupt the encoding.
+* **Alignment lower bound on non-deterministic offsets.**
+  `value_sett::objectt::offset_alignment` is the minimum byte alignment of a
+  symbolic offset (1 if nothing better is known). The reference builders use
+  it to prune dispatch cases — most importantly, array-element accesses stay
+  on the clean per-element path instead of falling through to byte stitching.
+* **Failed symbols are well-typed.** When the dereferencer cannot produce a
+  sensible reference (unknown points-to, type mismatch, NULL in
+  read/write mode), it returns a fresh free symbol
+  `symex::invalid_object<N>` of the requested type. The SMT formula stays
+  well-formed; the corresponding `dereference_failure` assertion is what
+  the user is meant to notice.
+* **Thread-locality of identifier state.** `value_sett::object_numbering`,
+  `obj_numbering_refset`, and `dereferencet::invalid_counter` are
+  `thread_local` so parallel symex (`--k-induction-parallel`) does not race
+  on shared numbering or symbol names.
+
 ## Value sets (`value_set.{h,cpp}`)
 
 `value_sett` maps `(l1 identifier, suffix) → entryt`. An `entryt` holds an
@@ -332,6 +415,100 @@ constructor. Names are `symex::invalid_object<N>`, where `N` is drawn from a
 `thread_local` counter. The pre-existing `failed_symbol` machinery on
 pointer types (queried via `dereference_callbackt::has_failed_symbol`) is
 flagged as legacy in `dereference.h` and will be removed.
+
+## Example walkthrough
+
+Take the snippet from the intro:
+
+```c
+int foo, bar;
+char *baz = (nondet_bool()) ? (char *)&foo : (char *)&bar;
+unsigned int idx = nondet_uint();
+__ESBMC_assume(idx < sizeof(int));
+baz += idx;
+*baz = 1;
+```
+
+The discussion stops at the `expr2tc` tree handed to the SMT backend — the
+actual SMT lowering depends on the chosen solver theory (bitvector vs.
+floatbv, `concat`/`extract` vs. `select`/`store`) and is best inspected with
+`esbmc --show-vcc` against the program in question.
+
+### After `baz = (...) ? &foo : &bar`
+
+`value_sett::assign(baz, rhs)` walks the conditional and unions both arms.
+The resulting entry for `baz` (suffix empty, since `baz` itself is the
+pointer) has two object map keys, one for `foo` and one for `bar`. Both
+arms carry a constant zero offset:
+
+```text
+baz = { <foo, 0, 1, signedbv>, <bar, 0, 1, signedbv> }
+```
+
+`<obj, offset, alignment, type>` is the format `value_sett::output` prints
+under `--show-value-sets` (see `value_set.cpp:60-88`). `offset` is `*` when
+symbolic; `alignment` is the byte alignment lower bound from
+`objectt::offset_alignment`.
+
+### After `baz += idx`
+
+`baz += idx` is interpreted by `value_sett::get_value_set_rec` for the
+right-hand side; the `add` over a pointer with a non-constant operand
+collapses both entries' constant offsets into symbolic ones, with
+`offset_alignment` recomputed via `offset2align`. Since the base objects
+are `int` (4 bytes natural alignment) but the arithmetic is on a `char *`,
+the alignment lower bound drops to 1:
+
+```text
+baz = { <foo, *, 1, signedbv>, <bar, *, 1, signedbv> }
+```
+
+### Dispatch of `*baz = 1`
+
+`*baz` reaches `dereference_expr` with `expr_id == dereference_id`, which
+recurses into the operand under `READ` mode and then calls
+`dereference(baz, char, guard, WRITE, expr2tc())`. There is no lexical
+member/index chain, so `extra_offset` is nil.
+
+`dereference` queries the callback for the points-to set and iterates over
+the two candidates. For each, `build_reference_to`:
+
+1. runs `check_pointer_alignment` (passes — `char` requires no alignment);
+2. builds `same_object2tc(baz, &foo)` as the candidate pointer guard;
+3. computes the final offset: the value-set entry has `offset_is_set ==
+   false`, so the offset becomes `pointer_offset(baz)`, then × 8 for bits;
+4. calls `valid_check`, then `check_data_obj_access` (the destination is
+   an `int`-typed SMT primitive being written via a `char` projection);
+5. calls `build_reference_rec(foo, 8*pointer_offset(baz), char, guard,
+   WRITE, 8)`.
+
+In `build_reference_rec`, `value->type` is `int` (scalar), `type` is `char`
+(scalar), and the offset is not a `constant_int2t`, so the flags resolve to
+`flag_src_scalar | flag_dst_scalar | flag_is_dyn_offs`. That case dispatches
+to `construct_from_dyn_offset`, which goes through
+`stitch_together_from_byte_array`: the `int` primitive is decomposed into
+four byte expressions via `extract_bytes`, and the chosen byte is selected
+by the symbolic offset modulo the width. The resulting `expr2tc` is the
+projection of one byte out of `foo`.
+
+The same construction runs for `bar`. `dereference` chains the two results:
+
+```text
+if(same_object(baz, &bar),
+   <byte projection of bar via pointer_offset(baz)>,
+   <byte projection of foo via pointer_offset(baz)>)
+```
+
+For a write, the symex layer turns this rvalue selection into a
+`with`-style update on each candidate primitive, guarded by the same
+`same_object2tc` predicates plus the surrounding control-flow guard.
+
+### Assertions emitted along the way
+
+The `__ESBMC_assume(idx < sizeof(int))` keeps `pointer_offset(baz)` within
+range, so the `bounds_check` calls inside `build_reference_to` discharge
+trivially under the solver. Without the assumption, the same code path
+still runs but the bounds assertion becomes reachable and reportable.
 
 ## Files at a glance
 
