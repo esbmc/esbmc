@@ -174,8 +174,7 @@ void inject_noop_cycle_assumes(
     // manufactures non-termination. Skip the witness in that case.
     std::unordered_set<irep_idt, irep_id_hash> guard_syms;
     {
-      std::function<void(const expr2tc &)> collect = [&](const expr2tc &e)
-      {
+      std::function<void(const expr2tc &)> collect = [&](const expr2tc &e) {
         if (is_nil_expr(e))
           return;
         if (is_symbol2t(e))
