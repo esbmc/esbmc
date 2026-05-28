@@ -42,8 +42,8 @@ Json python_annotation<Json>::create_subscript_annotation(
   int base_end_col = col_offset + base_type.size();
   int slice_col = base_end_col + 1; // After '['
   int slice_end_col = slice_col + element_type.size();
-  int total_end_col = col_offset + base_type.size() + 1 +
-                      element_type.size() + 1; // type[element]
+  int total_end_col = col_offset + base_type.size() + 1 + element_type.size() +
+                      1; // type[element]
 
   // Check if this is a dict type with comma-separated types: dict[K, V]
   if (base_type == "dict" && element_type.find(',') != std::string::npos)
@@ -59,20 +59,27 @@ Json python_annotation<Json>::create_subscript_annotation(
     value_type.erase(0, value_type.find_first_not_of(" \t"));
     value_type.erase(value_type.find_last_not_of(" \t") + 1);
 
-    // Create Tuple slice with two Name elements
+    // Create Tuple slice with two elements. A key or value type that is
+    // itself a parameterized generic (e.g. dict[str, list[int]]) must be
+    // built recursively into a nested Subscript rather than a flat Name —
+    // see the list/set note below (#4830).
     int key_col = slice_col;
     int key_end_col = key_col + key_type.size();
     int value_col = key_end_col + 2; // After ", "
     int value_end_col = value_col + value_type.size();
 
+    auto build_elem = [&](const std::string &t, int col, int end_col) -> Json {
+      return t.find('[') != std::string::npos
+               ? create_annotation_from_type(t, lineno, col, end_lineno)
+               : create_name_annotation(t, lineno, col, end_lineno, end_col);
+    };
+
     Json tuple_slice = {
       {"_type", "Tuple"},
       {"elts",
        Json::array(
-         {create_name_annotation(
-            key_type, lineno, key_col, end_lineno, key_end_col),
-          create_name_annotation(
-            value_type, lineno, value_col, end_lineno, value_end_col)})},
+         {build_elem(key_type, key_col, key_end_col),
+          build_elem(value_type, value_col, value_end_col)})},
       {"ctx", {{"_type", "Load"}}},
       {"lineno", lineno},
       {"col_offset", slice_col},
@@ -92,15 +99,25 @@ Json python_annotation<Json>::create_subscript_annotation(
       {"end_col_offset", total_end_col}};
   }
 
-  // Default: single element type (for list[T], set[T], etc.)
+  // Default: single element type (for list[T], set[T], etc.).
+  // When the element type is itself a parameterized generic (e.g.
+  // list[list[int]] -> element "list[int]"), build the slice recursively so
+  // the result is a properly nested Subscript rather than a flat Name whose
+  // id literally contains brackets. Without this, downstream element-type
+  // resolution in the converter sees a malformed annotation and falls back
+  // to Any for the inner element, crashing on later arithmetic (#4830).
+  Json slice_node =
+    element_type.find('[') != std::string::npos
+      ? create_annotation_from_type(element_type, lineno, slice_col, end_lineno)
+      : create_name_annotation(
+          element_type, lineno, slice_col, end_lineno, slice_end_col);
+
   return {
     {"_type", "Subscript"},
     {"value",
      create_name_annotation(
        base_type, lineno, col_offset, end_lineno, base_end_col)},
-    {"slice",
-     create_name_annotation(
-       element_type, lineno, slice_col, end_lineno, slice_end_col)},
+    {"slice", slice_node},
     {"ctx", {{"_type", "Load"}}},
     {"lineno", lineno},
     {"col_offset", col_offset},
@@ -127,8 +144,7 @@ Json python_annotation<Json>::create_tuple_subscript_annotation(
   for (const std::string &t : elem_types)
   {
     int end_col = cur + t.size();
-    elts.push_back(
-      create_name_annotation(t, lineno, cur, end_lineno, end_col));
+    elts.push_back(create_name_annotation(t, lineno, cur, end_lineno, end_col));
     cur = end_col + 2; // ", "
   }
   int slice_end_col = cur - 2;
@@ -245,8 +261,7 @@ void python_annotation<Json>::update_assignment_node(
       ? element["end_col_offset"].template get<int>()
       : col_offset + inferred_type.size();
 
-  element["end_col_offset"] =
-    element_end_col_offset + inferred_type.size() + 1;
+  element["end_col_offset"] = element_end_col_offset + inferred_type.size() + 1;
   element["end_lineno"] = target_lineno;
   element["simple"] = 1;
 
@@ -264,11 +279,10 @@ void python_annotation<Json>::update_assignment_node(
       value["col_offset"] =
         value["col_offset"].template get<int>() + inferred_type.size() + 1;
     }
-    if (
-      value.contains("end_col_offset") && !value["end_col_offset"].is_null())
+    if (value.contains("end_col_offset") && !value["end_col_offset"].is_null())
     {
-      value["end_col_offset"] = value["end_col_offset"].template get<int>() +
-                                inferred_type.size() + 1;
+      value["end_col_offset"] =
+        value["end_col_offset"].template get<int>() + inferred_type.size() + 1;
     }
   };
 
