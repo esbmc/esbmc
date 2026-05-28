@@ -13,6 +13,7 @@
 #include <util/std_expr.h>
 
 #include <functional>
+#include <map>
 #include <memory>
 #include <unordered_map>
 #include <vector>
@@ -149,16 +150,42 @@ expr2tc subst(const expr2tc &e, const expr2tc &from, const expr2tc &to)
   return r;
 }
 
-/// Apply the loop body's assignments, in order, to expression @p e —
-/// yielding e evaluated in the post-iteration state. Each assignment
-/// lhs := rhs rewrites later references; we substitute sequentially so
-/// `x = x + 1; y = x` composes correctly.
+/// Simultaneously replace every variable that is a key of @p post by its
+/// mapped expression inside @p e, in a SINGLE traversal: a replacement is
+/// never re-scanned for further substitution. This gives parallel-
+/// assignment semantics, unlike repeated single substitutions which would
+/// let one mapping cascade into another.
+expr2tc subst_parallel(
+  const expr2tc &e,
+  const std::map<expr2tc, expr2tc> &post)
+{
+  if (is_nil_expr(e))
+    return e;
+  auto it = post.find(e);
+  if (it != post.end())
+    return it->second;
+  expr2tc r = e;
+  r->Foreach_operand([&](expr2tc &op) { op = subst_parallel(op, post); });
+  return r;
+}
+
+/// Build the loop body's transition as a parallel substitution and apply
+/// it to @p e, yielding e in the post-iteration state. Each assignment
+/// lhs := rhs is evaluated against the PRE-state: we process assignments
+/// in program order, resolving each rhs through the post-state values
+/// computed so far (so `t = x; y = t` sees t's pre-iteration definition),
+/// then substitute all resulting lhs ↦ value pairs into @p e at once.
+/// This is faithful to simultaneous body semantics, whereas substituting
+/// each assignment into @p e in sequence would let a later rhs read an
+/// earlier assignment's already-rewritten value — an unfaithful
+/// transition (e.g. `a = a - b; b = a` would collapse to `a - a`).
 expr2tc apply_body(const expr2tc &e, const std::vector<assignt> &body)
 {
-  expr2tc r = e;
+  // post[v] = value of v after the body, expressed in pre-state terms.
+  std::map<expr2tc, expr2tc> post;
   for (const auto &a : body)
-    r = subst(r, a.lhs, a.rhs);
-  return r;
+    post[a.lhs] = subst_parallel(a.rhs, post);
+  return subst_parallel(e, post);
 }
 
 /// True iff `formula` is UNSATISFIABLE under a fresh solver. A false
