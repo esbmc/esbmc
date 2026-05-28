@@ -712,7 +712,7 @@ unsigned int execution_statet::add_thread(const goto_programt *prog)
 
 void execution_statet::analyze_assign(const expr2tc &code)
 {
-  if (is_nil_expr(code))
+  if (is_nil_expr(code) || get_active_state().guard.is_false())
     return;
 
   std::set<expr2tc> global_reads, global_writes;
@@ -732,7 +732,7 @@ void execution_statet::analyze_assign(const expr2tc &code)
 
 void execution_statet::analyze_read(const expr2tc &code)
 {
-  if (is_nil_expr(code))
+  if (is_nil_expr(code) || get_active_state().guard.is_false())
     return;
 
   std::set<expr2tc> global_reads;
