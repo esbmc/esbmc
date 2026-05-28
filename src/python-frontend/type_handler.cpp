@@ -740,6 +740,13 @@ typet type_handler::get_typet(const nlohmann::json &elem) const
       return get_typet(elem["operand"]);
     }
 
+    // Handle Python AST BinOp node (e.g., 1 + 0, a * b). Reuse
+    // get_operand_type, which recursively resolves the operand types, then
+    // map the type name back to a typet. Without this, an expression-derived
+    // binding used as a list element aborted (issue #4909).
+    if (elem["_type"] == "BinOp")
+      return get_typet(get_operand_type(elem));
+
     // Handle Python AST List node
     if (elem["_type"] == "List" && elem.contains("elts"))
     {
@@ -801,8 +808,13 @@ typet type_handler::get_typet(const nlohmann::json &elem) const
 
     if (!var.empty() && var.contains("value") && !var["value"].is_null())
     {
+      // Resolve the type of the binding's right-hand side. Dispatch on the
+      // whole RHS node rather than assuming it is a Constant wrapper: a derived
+      // binding such as `X = Y` (alias) or `X = 1 + 0` (expression) has no
+      // nested "value" key, so the old `var["value"]["value"]` aborted. See
+      // issue #4909.
       if (var["value"]["_type"] != "Call")
-        return get_typet(var["value"]["value"]);
+        return get_typet(var["value"]);
 
       if (var["value"].contains("func"))
         return get_typet_from_call_func(var["value"]["func"]);
