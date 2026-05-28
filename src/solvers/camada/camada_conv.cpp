@@ -89,7 +89,8 @@ static void z3_error_handler(Z3_context c, Z3_error_code e)
 class esbmc_z3_solver : public camada::Z3Solver
 {
 public:
-  explicit esbmc_z3_solver(z3::context c) : camada::Z3Solver(std::move(c))
+  explicit esbmc_z3_solver(std::unique_ptr<z3::context> c)
+    : camada::Z3Solver(std::move(c))
   {
     setSolver(make_solver(camada::Z3Solver::context()));
   }
@@ -241,7 +242,7 @@ camada::SMTSolverRef create_esbmc_z3_solver(const optionst &options)
   const bool smtlib2_compliant = options.get_bool_option("smt-formula-only") ||
                                  options.get_bool_option("smt-formula-too");
 
-  z3::context context;
+  std::unique_ptr<z3::context> context;
   if (z3_debug || smtlib2_compliant)
   {
     z3::config cfg;
@@ -257,7 +258,11 @@ camada::SMTSolverRef create_esbmc_z3_solver(const optionst &options)
     if (smtlib2_compliant)
       cfg.set("smtlib2_compliant", "true");
 
-    context = z3::context(cfg);
+    context = std::make_unique<z3::context>(cfg);
+  }
+  else
+  {
+    context = std::make_unique<z3::context>();
   }
 
   auto solver = std::make_unique<esbmc_z3_solver>(std::move(context));
