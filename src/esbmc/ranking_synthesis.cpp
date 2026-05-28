@@ -51,6 +51,18 @@ struct ranking_loopt
   std::vector<std::vector<assignt>> paths;
 };
 
+// Forward declarations: subst_parallel and apply_body are used by the
+// loop recognizer (for dereference substitution and not yet measure
+// derivation respectively) but are defined further down alongside the
+// other transition-relation helpers. reaches_head is reused by the
+// dominance-aware prefix scan below.
+expr2tc subst_parallel(
+  const expr2tc &e, const std::map<expr2tc, expr2tc> &post);
+bool reaches_head(
+  goto_programt::const_targett start,
+  goto_programt::const_targett head,
+  goto_programt::const_targett end_it);
+
 /// Is @p e a relational comparison (>, >=, <, <=) — the guard shape we
 /// can derive a difference measure from?
 bool is_relational(const expr2tc &e)
@@ -66,9 +78,18 @@ bool is_relational(const expr2tc &e)
 /// from scalar (symbol/constant/arithmetic) expressions, so loops whose
 /// guard or transition touch memory are out of scope for this pass and
 /// must fall back to UNKNOWN rather than crash the solver.
-bool touches_memory(const expr2tc &e)
+///
+/// The optional @p exempt_derefs set lists `dereference2t` expressions
+/// that the caller has proven safe to treat as scalars (e.g. dereferences
+/// of loop-invariant pointers with distinct allocation provenance). A
+/// deref appearing structurally in @p exempt_derefs is NOT counted as a
+/// memory touch — but any other deref, index, or member access still is.
+bool touches_memory(
+  const expr2tc &e, const std::set<expr2tc> &exempt_derefs = {})
 {
   if (is_nil_expr(e))
+    return false;
+  if (is_dereference2t(e) && exempt_derefs.count(e))
     return false;
   if (
     is_dereference2t(e) || is_index2t(e) || is_member2t(e) ||
@@ -77,26 +98,201 @@ bool touches_memory(const expr2tc &e)
   bool found = false;
   e->foreach_operand([&](const expr2tc &op) {
     if (!found)
-      found = touches_memory(op);
+      found = touches_memory(op, exempt_derefs);
   });
   return found;
+}
+
+/// Collect every `dereference2t` subexpression appearing in @p e into
+/// @p out (keyed structurally). Other memory operations (index, member,
+/// byte ops) are not collected — the caller separately rejects loops
+/// that contain them. We only look at dereferences because the only
+/// memory-handling extension supported here is treating a loop-invariant
+/// `*p` as a scalar.
+void collect_derefs(const expr2tc &e, std::set<expr2tc> &out)
+{
+  if (is_nil_expr(e))
+    return;
+  if (is_dereference2t(e))
+  {
+    out.insert(e);
+    // Don't recurse into the pointer expression — we only care that the
+    // deref ITSELF can be treated as a scalar; the pointer being indexed
+    // is not part of the scalar arithmetic.
+    return;
+  }
+  e->foreach_operand([&](const expr2tc &op) { collect_derefs(op, out); });
+}
+
+/// Peel surrounding `typecast2t`s off @p e, returning the innermost
+/// non-typecast expression. Useful for inspecting an rhs like
+/// `(int*) malloc(...)` where the cast is incidental to the analysis.
+const expr2tc &peel_typecasts(const expr2tc &e)
+{
+  const expr2tc *cur = &e;
+  while (!is_nil_expr(*cur) && is_typecast2t(*cur))
+    cur = &to_typecast2t(*cur).from;
+  return *cur;
+}
+
+/// Walk the function prefix from entry to the loop @p head along the
+/// single dominator path and build a map from each symbol's name to the
+/// rhs of its (typecast-peeled) assignment on that path. The walk is the
+/// same single-path traversal collect_seeds uses: at each conditional IF
+/// we ask reaches_head whether the fall-through or the jump branch leads
+/// to the loop head; if exactly one does, we follow it. If both branches
+/// reach the head the prefix isn't a single dominator path (a merge of
+/// two assignments to the same pointer could give a non-dominating fact)
+/// and we bail. The has_invalid flag is set on any unsupported prefix
+/// instruction (FUNCTION_CALL, OTHER, RETURN, back-edge, multi-target
+/// GOTO, jump target reached from outside an accepted IF), at which point
+/// callers (notably the deref-substitution check) treat the prefix as
+/// unsafe and refuse the substitution.
+struct prefix_defst
+{
+  std::map<irep_idt, expr2tc> defs;
+  bool has_invalid = false;
+};
+prefix_defst scan_prefix_defs(
+  const goto_programt &body, goto_programt::const_targett head)
+{
+  prefix_defst out;
+  auto end_it = body.instructions.end();
+  std::set<unsigned> justified_targets;
+
+  for (auto it = body.instructions.begin(); it != head;)
+  {
+    if (it->is_target() && !justified_targets.count(it->location_number))
+    {
+      // Reached a merge point we didn't justify by an accepted IF jump:
+      // some other edge can land here, so the dominator-path assumption
+      // breaks.
+      out.has_invalid = true;
+      return out;
+    }
+    if (it->is_skip() || it->is_location() || it->type == DECL ||
+        it->type == DEAD)
+    {
+      ++it;
+      continue;
+    }
+    if (it->is_assign())
+    {
+      const code_assign2t &a = to_code_assign2t(it->code);
+      if (is_symbol2t(a.target))
+        out.defs[to_symbol2t(a.target).thename] = peel_typecasts(a.source);
+      ++it;
+      continue;
+    }
+    if (it->is_goto() && !is_true(it->guard) && !it->is_backwards_goto() &&
+        it->targets.size() == 1)
+    {
+      auto tgt = it->targets.front();
+      bool fall_reaches = reaches_head(std::next(it), head, end_it);
+      bool jump_reaches = reaches_head(tgt, head, end_it);
+      if (!fall_reaches && !jump_reaches)
+      {
+        out.has_invalid = true;
+        return out;
+      }
+      if (fall_reaches && !jump_reaches)
+      {
+        ++it; // follow fall-through
+        continue;
+      }
+      if (jump_reaches && !fall_reaches)
+      {
+        justified_targets.insert(tgt->location_number);
+        it = tgt; // follow the jump
+        continue;
+      }
+      // Both branches reach the head: a merge before the loop where two
+      // assignments could disagree on a tracked pointer's value. Bail.
+      out.has_invalid = true;
+      return out;
+    }
+    // FUNCTION_CALL, OTHER, RETURN, back-edge, multi-target GOTO, etc.:
+    // any of these may mutate memory or break the single-path walk in a
+    // way we don't track.
+    out.has_invalid = true;
+    return out;
+  }
+  return out;
+}
+
+/// Trace pointer @p p back through the prefix's symbol chain to its
+/// "memory-cell identity" — the address-of'd local's name, or the
+/// allocation sideeffect expression's address (uniquely identified by the
+/// expr2tc pointer value). Returns a string identifier if successful, or
+/// empty string if the chain doesn't reduce to a fresh allocation.
+/// Follows up to a small fixed depth so it stays linear.
+std::string pointer_cell_identity(
+  const irep_idt &p, const prefix_defst &defs)
+{
+  if (defs.has_invalid)
+    return {};
+  irep_idt cur = p;
+  for (int depth = 0; depth < 8; ++depth)
+  {
+    auto it = defs.defs.find(cur);
+    if (it == defs.defs.end())
+      return {};
+    const expr2tc &src = it->second; // typecast-peeled
+    if (is_sideeffect2t(src))
+    {
+      auto k = to_sideeffect2t(src).kind;
+      if (
+        k != sideeffect2t::allockind::malloc &&
+        k != sideeffect2t::allockind::realloc &&
+        k != sideeffect2t::allockind::alloca)
+        return {};
+      // The sideeffect's expression pointer is a unique id for the
+      // allocation site (no two prefix instructions share the same
+      // expr2tc object).
+      char buf[32];
+      std::snprintf(buf, sizeof(buf), "alloc:%p", (const void *)src.get());
+      return buf;
+    }
+    if (is_address_of2t(src))
+    {
+      const expr2tc &target = to_address_of2t(src).ptr_obj;
+      // Identity is the address-of'd object's printable form. For a plain
+      // local symbol that's its name; richer lvalues (a[i].f) are not
+      // pointer-disjoint in general — refuse them.
+      if (!is_symbol2t(target))
+        return {};
+      return "local:" + id2string(to_symbol2t(target).thename);
+    }
+    if (is_symbol2t(src))
+    {
+      cur = to_symbol2t(src).thename;
+      continue;
+    }
+    return {};
+  }
+  return {};
 }
 
 /// Collect straight-line assigns in [@p first, @p last). Returns false if
 /// any instruction is anything other than DECL/ASSIGN/skip/location/DEAD,
 /// or a memory-touching assign — the caller treats that as an unrecognized
-/// body shape. ASSIGNs are appended to @p out in program order.
+/// body shape. ASSIGNs are appended to @p out in program order. The
+/// @p exempt_derefs set lists dereferences already proven safe to treat as
+/// scalars (see compute_safe_derefs); they don't count as memory touches.
 bool collect_straight_line(
   goto_programt::const_targett first,
   goto_programt::const_targett last,
-  std::vector<assignt> &out)
+  std::vector<assignt> &out,
+  const std::set<expr2tc> &exempt_derefs = {})
 {
   for (auto it = first; it != last; ++it)
   {
     if (it->is_assign())
     {
       const code_assign2t &a = to_code_assign2t(it->code);
-      if (touches_memory(a.target) || touches_memory(a.source))
+      if (
+        touches_memory(a.target, exempt_derefs) ||
+        touches_memory(a.source, exempt_derefs))
         return false;
       out.push_back({a.target, a.source});
       continue;
@@ -107,6 +303,108 @@ bool collect_straight_line(
       continue;
     return false;
   }
+  return true;
+}
+
+/// Inspect every expression mentioned in the loop body (instructions
+/// (head, back)) plus the loop's guard; collect all dereference2t
+/// subexpressions; check that EVERY dereference is of the shape `*p`
+/// where p is a plain symbol with distinct-allocation provenance from
+/// the function prefix, and that p is not assigned anywhere in the loop
+/// body. On success, populate @p out_exempt with the set of safe
+/// dereferences and @p out_map with a substitution from each deref to a
+/// fresh free symbol of the appropriate scalar type — the rest of the
+/// pipeline runs on the scalar-substituted expressions and never sees a
+/// dereference. Returns true on success; on failure (any deref not safe)
+/// returns false with both outputs empty, and the caller proceeds with
+/// the original (memory-touching) rejection.
+///
+/// Soundness rationale: each loop-invariant pointer dereferences a fixed
+/// memory cell every iteration, so morally `*p` IS a scalar. Distinct
+/// allocations (malloc/realloc/alloca/address_of of distinct locals)
+/// cannot alias each other by C semantics, so substituting each `*p` with
+/// a DISTINCT fresh symbol is sound even when several derefs appear.
+bool compute_safe_derefs(
+  goto_programt::const_targett head,
+  goto_programt::const_targett back,
+  const expr2tc &guard,
+  const goto_programt &fn_body,
+  std::set<expr2tc> &out_exempt,
+  std::map<expr2tc, expr2tc> &out_map)
+{
+  out_exempt.clear();
+  out_map.clear();
+
+  // Walk every instruction in (head, back) and collect derefs from the
+  // expressions we'll later analyse (ASSIGN target/source, IF guard).
+  std::set<expr2tc> derefs;
+  collect_derefs(guard, derefs);
+  for (auto it = std::next(head); it != back; ++it)
+  {
+    if (it->is_assign())
+    {
+      const code_assign2t &a = to_code_assign2t(it->code);
+      collect_derefs(a.target, derefs);
+      collect_derefs(a.source, derefs);
+    }
+    else if (it->is_goto() && !is_nil_expr(it->guard))
+      collect_derefs(it->guard, derefs);
+  }
+  if (derefs.empty())
+    return true; // nothing to do; existing pipeline handles it
+
+  // Identify every body-assigned scalar symbol — pointers in this set
+  // are NOT loop-invariant, so their derefs are unsafe.
+  std::set<irep_idt> body_assigned;
+  for (auto it = std::next(head); it != back; ++it)
+  {
+    if (!it->is_assign())
+      continue;
+    const code_assign2t &a = to_code_assign2t(it->code);
+    if (is_symbol2t(a.target))
+      body_assigned.insert(to_symbol2t(a.target).thename);
+  }
+
+  // Validate each deref: pointer must be a plain symbol, loop-invariant,
+  // have distinct-allocation provenance in the prefix, AND its memory cell
+  // must be disjoint from every other dereffed pointer's cell. Two
+  // pointers reaching the same allocation (or both `&` of the same local)
+  // would alias at runtime, so substituting them by distinct fresh scalars
+  // would be unsound.
+  prefix_defst defs = scan_prefix_defs(fn_body, head);
+  std::set<std::string> seen_cells;
+  for (const expr2tc &d : derefs)
+  {
+    const dereference2t &deref = to_dereference2t(d);
+    if (!is_symbol2t(deref.value))
+      return false;
+    const irep_idt &p = to_symbol2t(deref.value).thename;
+    if (body_assigned.count(p))
+      return false;
+    std::string cell = pointer_cell_identity(p, defs);
+    if (cell.empty())
+      return false;
+    if (!seen_cells.insert(cell).second)
+      return false; // two pointers share this cell — aliasing risk
+  }
+
+  // Build the substitution: each unique deref maps to a fresh free symbol
+  // of the dereferenced type. The name is salted with the deref node's
+  // raw pointer value so collisions with program-defined symbols (or with
+  // synthetic symbols from other recognize_loop invocations) are
+  // essentially impossible — the prefix `$rank_deref$` is not a legal C
+  // identifier and the hex tail makes each fresh symbol unique.
+  for (const expr2tc &d : derefs)
+  {
+    const dereference2t &deref = to_dereference2t(d);
+    const irep_idt &p = to_symbol2t(deref.value).thename;
+    char buf[64];
+    std::snprintf(
+      buf, sizeof(buf), "$rank_deref$%p$", (const void *)d.get());
+    std::string sym_name = std::string(buf) + id2string(p);
+    out_map[d] = symbol2tc(d->type, sym_name);
+  }
+  out_exempt = std::move(derefs);
   return true;
 }
 
@@ -136,7 +434,8 @@ bool collect_straight_line(
 /// In all cases the loop head must be `IF !(a REL b) GOTO exit` with a
 /// relational guard over scalar BV operands, and the back-edge must be an
 /// unconditional GOTO to the head.
-bool recognize_loop(const loopst &loop, ranking_loopt &out)
+bool recognize_loop(
+  const loopst &loop, const goto_programt &fn_body, ranking_loopt &out)
 {
   out.head = loop.get_original_loop_head();
   out.back = loop.get_original_loop_exit();
@@ -149,9 +448,25 @@ bool recognize_loop(const loopst &loop, ranking_loopt &out)
   expr2tc pos_guard = out.head->guard;
   make_not(pos_guard);
   simplify(pos_guard);
-  if (!is_relational(pos_guard) || touches_memory(pos_guard))
+
+  // Compute safe dereferences: any *p where p is a loop-invariant pointer
+  // with distinct-allocation provenance from the function prefix. Each is
+  // substituted by a fresh scalar symbol, turning a pointer-as-scalar loop
+  // (e.g. `while (*p >= 0) (*p)--;` after `p = malloc(...)`) into the
+  // ordinary scalar shape the rest of the pipeline already handles. If the
+  // analysis fails for any deref, we treat the loop as memory-touching and
+  // fall back to UNKNOWN (the substitution either succeeds for all derefs
+  // or not at all — partial substitution would be unsound).
+  std::set<expr2tc> exempt_derefs;
+  std::map<expr2tc, expr2tc> deref_map;
+  if (!compute_safe_derefs(
+        out.head, out.back, pos_guard, fn_body, exempt_derefs, deref_map))
     return false;
-  out.guard = pos_guard;
+
+  if (!is_relational(pos_guard) || touches_memory(pos_guard, exempt_derefs))
+    return false;
+  out.guard =
+    deref_map.empty() ? pos_guard : subst_parallel(pos_guard, deref_map);
 
   if (!out.back->is_goto() || !out.back->is_backwards_goto())
     return false;
@@ -168,11 +483,23 @@ bool recognize_loop(const loopst &loop, ranking_loopt &out)
       has_internal_goto = true;
       break;
     }
+  auto rewrite = [&](std::vector<assignt> &path)
+  {
+    if (deref_map.empty())
+      return;
+    for (assignt &a : path)
+    {
+      a.lhs = subst_parallel(a.lhs, deref_map);
+      a.rhs = subst_parallel(a.rhs, deref_map);
+    }
+  };
+
   if (!has_internal_goto)
   {
     std::vector<assignt> path;
-    if (!collect_straight_line(body_begin, out.back, path))
+    if (!collect_straight_line(body_begin, out.back, path, exempt_derefs))
       return false;
+    rewrite(path);
     out.paths.push_back(std::move(path));
     return true;
   }
@@ -187,7 +514,9 @@ bool recognize_loop(const loopst &loop, ranking_loopt &out)
     if (it->is_assign())
     {
       const code_assign2t &a = to_code_assign2t(it->code);
-      if (touches_memory(a.target) || touches_memory(a.source))
+      if (
+        touches_memory(a.target, exempt_derefs) ||
+        touches_memory(a.source, exempt_derefs))
         return false;
       pre.push_back({a.target, a.source});
     }
@@ -209,7 +538,7 @@ bool recognize_loop(const loopst &loop, ranking_loopt &out)
   if (if_target->location_number <= it->location_number)
     return false; // not forward
   expr2tc if_cond = it->guard; // raw IF guard (the negated then-condition)
-  if (touches_memory(if_cond))
+  if (touches_memory(if_cond, exempt_derefs))
     return false;
   auto then_begin = std::next(it);
 
@@ -246,15 +575,15 @@ bool recognize_loop(const loopst &loop, ranking_loopt &out)
 
   // Collect the three straight-line spans.
   std::vector<assignt> then_arm, else_arm, post;
-  if (!collect_straight_line(then_begin, then_end, then_arm))
+  if (!collect_straight_line(then_begin, then_end, then_arm, exempt_derefs))
     return false;
   if (then_end != if_target)
   {
     // else_arm = [if_target .. merge_label)
-    if (!collect_straight_line(if_target, merge_label, else_arm))
+    if (!collect_straight_line(if_target, merge_label, else_arm, exempt_derefs))
       return false;
   }
-  if (!collect_straight_line(merge_label, out.back, post))
+  if (!collect_straight_line(merge_label, out.back, post, exempt_derefs))
     return false;
 
   // Build the two paths: pre + then + post, and pre + else + post.
@@ -271,8 +600,11 @@ bool recognize_loop(const loopst &loop, ranking_loopt &out)
     p.insert(p.end(), post.begin(), post.end());
     return p;
   };
-  out.paths.push_back(build(then_arm));
-  out.paths.push_back(build(else_arm));
+  std::vector<assignt> p1 = build(then_arm), p2 = build(else_arm);
+  rewrite(p1);
+  rewrite(p2);
+  out.paths.push_back(std::move(p1));
+  out.paths.push_back(std::move(p2));
   return true;
 }
 
@@ -1251,7 +1583,7 @@ tvt try_prove_termination_by_ranking(
     for (const auto &loop : loops.get_loops())
     {
       ranking_loopt rl;
-      if (!recognize_loop(loop, rl))
+      if (!recognize_loop(loop, f_it->second.body, rl))
         return tvt(tvt::TV_UNKNOWN);
       if (!prove_loop_terminates(rl, f_it->second.body, options, ns))
         return tvt(tvt::TV_UNKNOWN);
