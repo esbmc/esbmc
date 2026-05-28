@@ -552,14 +552,14 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
     }
 
     // Set up a merge of the current state into the target function.
-    statet::goto_state_listt &goto_state_list =
-      cur_state->top().goto_state_map[fit->second.body.instructions.begin()];
+    statet::merge_state_listt &merge_state_list =
+      cur_state->top().merge_state_map[fit->second.body.instructions.begin()];
 
     cur_state->top().cur_function_ptr_targets.emplace_back(
       fit->second.body.instructions.begin(), it.second);
 
-    goto_state_list.emplace_back(*cur_state);
-    statet::goto_statet &new_state = goto_state_list.back();
+    merge_state_list.emplace_back(*cur_state);
+    statet::merge_statet &new_state = merge_state_list.back();
     expr2tc guardexpr = it.first.as_expr();
     cur_state->rename(guardexpr);
     new_state.guard.add(guardexpr);
@@ -588,10 +588,10 @@ bool goto_symext::run_next_function_ptr_target(bool first)
   // unconditional.
   if (!first)
   {
-    statet::goto_state_listt &goto_state_list =
+    statet::merge_state_listt &merge_state_list =
       cur_state->top()
-        .goto_state_map[cur_state->top().function_ptr_combine_target];
-    goto_state_list.emplace_back(*cur_state);
+        .merge_state_map[cur_state->top().function_ptr_combine_target];
+    merge_state_list.emplace_back(*cur_state);
   }
 
   // Take one function ptr target out of the list and jump to it. A previously
@@ -713,10 +713,10 @@ void goto_symext::symex_return(const expr2tc &code)
   // goto to the end of the function
 
   // put into state-queue
-  statet::goto_state_listt &goto_state_list =
-    cur_state->top().goto_state_map[cur_state->top().end_of_function];
+  statet::merge_state_listt &merge_state_list =
+    cur_state->top().merge_state_map[cur_state->top().end_of_function];
 
-  goto_state_list.emplace_back(*cur_state);
+  merge_state_list.emplace_back(*cur_state);
 
   // check whether the stack limit and return
   // value optimization have been activated.

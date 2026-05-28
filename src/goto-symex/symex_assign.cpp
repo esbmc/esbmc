@@ -210,6 +210,11 @@ goto_symext &goto_symext::operator=(const goto_symext &sym)
   dynamic_memory = sym.dynamic_memory;
   interval_domain_state = sym.interval_domain_state;
 
+  stack_limit = sym.stack_limit;
+  no_return_value_opt = sym.no_return_value_opt;
+  validate_witness = sym.validate_witness;
+  witness_target_line = sym.witness_target_line;
+
   // Art ptr is shared
   art1 = sym.art1;
 
