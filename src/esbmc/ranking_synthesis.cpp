@@ -12,9 +12,11 @@
 #include <util/message.h>
 #include <util/std_expr.h>
 
+#include <algorithm>
 #include <functional>
 #include <map>
 #include <memory>
+#include <set>
 #include <unordered_map>
 #include <vector>
 
@@ -175,31 +177,46 @@ expr2tc subst_parallel(
 /// 32-bit, sums/differences of a few terms stay well inside int64, so this
 /// removes the modular-bitvector wraparound that a 32-bit add (e.g.
 /// d1 = d2 + 1 at INT_MAX) would otherwise introduce when reasoning about
-/// invariant bounds. Comparisons/boolean structure are preserved; only the
-/// integer arithmetic is widened. Non-integer or memory expressions are
-/// returned unchanged (callers only pass scalar integer expressions).
+/// invariant bounds. Returns nil if @p e contains a non-arithmetic node we
+/// can't faithfully widen (e.g. NONDET sideeffects, function-call results,
+/// or any other opaque construct), so the caller drops the atom rather
+/// than feed an unsound or solver-stalling expression to the solver.
 expr2tc widen_arith(const expr2tc &e)
 {
   if (is_nil_expr(e))
-    return e;
+    return expr2tc();
   type2tc wide = get_int_type(64);
   if (is_symbol2t(e) || is_constant_int2t(e))
     return typecast2tc(wide, e);
-  // Arithmetic nodes: rebuild in the wide type with widened operands, so
-  // the operation is performed in 64 bits (no 32-bit wraparound).
+  if (is_typecast2t(e))
+    return widen_arith(to_typecast2t(e).from);
+  auto rec2 = [&](const expr2tc &a, const expr2tc &b) -> std::pair<expr2tc, expr2tc>
+  {
+    return {widen_arith(a), widen_arith(b)};
+  };
   if (is_add2t(e))
-    return add2tc(
-      wide, widen_arith(to_add2t(e).side_1), widen_arith(to_add2t(e).side_2));
+  {
+    auto [l, r] = rec2(to_add2t(e).side_1, to_add2t(e).side_2);
+    return (is_nil_expr(l) || is_nil_expr(r)) ? expr2tc() : add2tc(wide, l, r);
+  }
   if (is_sub2t(e))
-    return sub2tc(
-      wide, widen_arith(to_sub2t(e).side_1), widen_arith(to_sub2t(e).side_2));
+  {
+    auto [l, r] = rec2(to_sub2t(e).side_1, to_sub2t(e).side_2);
+    return (is_nil_expr(l) || is_nil_expr(r)) ? expr2tc() : sub2tc(wide, l, r);
+  }
   if (is_mul2t(e))
-    return mul2tc(
-      wide, widen_arith(to_mul2t(e).side_1), widen_arith(to_mul2t(e).side_2));
+  {
+    auto [l, r] = rec2(to_mul2t(e).side_1, to_mul2t(e).side_2);
+    return (is_nil_expr(l) || is_nil_expr(r)) ? expr2tc() : mul2tc(wide, l, r);
+  }
   if (is_neg2t(e))
-    return neg2tc(wide, widen_arith(to_neg2t(e).value));
-  // Anything else (e.g. an existing cast): value-preserve into wide.
-  return typecast2tc(wide, e);
+  {
+    expr2tc v = widen_arith(to_neg2t(e).value);
+    return is_nil_expr(v) ? expr2tc() : neg2tc(wide, v);
+  }
+  // Anything else (NONDET sideeffect, function call, dereference, etc.):
+  // we cannot faithfully widen, so signal "skip this atom".
+  return expr2tc();
 }
 
 /// Build the loop body's transition as a parallel substitution and apply
@@ -300,51 +317,267 @@ expr2tc conjoin(const std::vector<expr2tc> &atoms)
   return r;
 }
 
-/// Collect a constant seed for each body-modified scalar variable from the
-/// loop's pre-header. The base case of an assumed invariant requires the
-/// seed to hold on EVERY first entry to the loop head, so we only trust a
-/// constant assignment that provably reaches the head with no intervening
-/// re-definition, branch merge, call, or aliasing write. We enforce this
-/// conservatively: the prefix from function entry up to the loop head must
-/// be a single straight-line block — only DECL/ASSIGN/skip/location, no
-/// GOTO/IF, no FUNCTION_CALL, no jump target landing inside it, and no
-/// assignment whose target or source touches memory (a pointer write could
-/// alias a tracked variable). If any of those appear we return an empty
-/// seed map (the loop gets no supporting invariant and falls back to the
-/// bare ranking check). Within a clean prefix, seed[v] is the value of the
-/// LAST `ASSIGN v = <int constant>` before the head.
-std::map<irep_idt, BigInt> collect_seeds(
-  const goto_programt &body,
-  goto_programt::const_targett head)
+/// Collect the symbol names referenced (free) in @p e.
+void collect_symbols(const expr2tc &e, std::set<irep_idt> &out)
 {
-  std::map<irep_idt, BigInt> seed;
-  for (auto it = body.instructions.begin(); it != head; ++it)
+  if (is_nil_expr(e))
+    return;
+  if (is_symbol2t(e))
   {
-    // A jump target inside the prefix means another edge reaches here, so
-    // a syntactically-preceding constant need not hold on that path.
-    if (it->is_target())
-      return {};
-    if (it->is_skip() || it->is_location() || it->type == DECL)
+    out.insert(to_symbol2t(e).thename);
+    return;
+  }
+  e->foreach_operand([&](const expr2tc &op) { collect_symbols(op, out); });
+}
+
+/// Flatten a conjunction `a && b && ...` into its individual atoms,
+/// dropping `true` operands. Anything not an `and` is returned as a single
+/// atom (the caller decides whether it's usable).
+void flatten_and(const expr2tc &e, std::vector<expr2tc> &out)
+{
+  if (is_nil_expr(e) || is_true(e))
+    return;
+  if (is_and2t(e))
+  {
+    flatten_and(to_and2t(e).side_1, out);
+    flatten_and(to_and2t(e).side_2, out);
+    return;
+  }
+  out.push_back(e);
+}
+
+/// Decompose a relational atom into one or two one-sided atoms suitable
+/// for the synthesizer's atom pool: `a == b` ↦ {a ≥ b, a ≤ b}; the four
+/// inequalities pass through. Returns false if the atom isn't a usable
+/// relational shape (or touches memory).
+bool decompose_relational(const expr2tc &e, std::vector<expr2tc> &out)
+{
+  if (is_nil_expr(e) || touches_memory(e))
+    return false;
+  if (is_relational(e))
+  {
+    out.push_back(e);
+    return true;
+  }
+  if (is_equality2t(e))
+  {
+    const equality2t &eq = to_equality2t(e);
+    if (!is_bv_type(eq.side_1->type) || !is_bv_type(eq.side_2->type))
+      return false;
+    out.push_back(greaterthanequal2tc(eq.side_1, eq.side_2));
+    out.push_back(lessthanequal2tc(eq.side_1, eq.side_2));
+    return true;
+  }
+  return false;
+}
+
+/// Seeds collected from the loop's pre-header, used as base-case facts.
+/// `constants[v]` is the value of the LAST `ASSIGN v = <int constant>`
+/// before the head from a dominating straight-line position; `path_atoms`
+/// are extra relational atoms that hold at loop entry because they come
+/// from `IF guard GOTO past_loop` instructions whose fall-through edge
+/// (which leads to the loop) implies `¬guard`, and whose free variables
+/// are not reassigned between the IF and the loop head.
+struct prefix_seedst
+{
+  std::map<irep_idt, BigInt> constants;
+  std::vector<expr2tc> path_atoms;
+};
+
+/// Walk forward from @p start (a candidate branch of an IF) following the
+/// single-successor edges that the prefix scanner accepts, and report
+/// whether the walk reaches @p head. The walk follows fall-through on
+/// straight-line instructions, follows unconditional GOTOs, and traverses
+/// conditional IFs by exploring both successors (bounded by the prefix
+/// span). Stops on RETURN/END_FUNCTION (the path exits) or on hitting
+/// @p head (success). Returns false on anything else (FUNCTION_CALL,
+/// memory-touching assign, back-edge, multi-target GOTO) — we treat those
+/// the same as exits since we wouldn't accept them anyway. The check is
+/// purely structural; we use it only to decide which IF branch carries
+/// the seed condition into the loop.
+bool reaches_head(
+  goto_programt::const_targett start,
+  goto_programt::const_targett head,
+  goto_programt::const_targett end_it)
+{
+  std::set<unsigned> visited;
+  std::vector<goto_programt::const_targett> stack;
+  stack.push_back(start);
+  while (!stack.empty())
+  {
+    auto it = stack.back();
+    stack.pop_back();
+    if (it == end_it)
       continue;
+    if (!visited.insert(it->location_number).second)
+      continue;
+    if (it == head)
+      return true;
+    if (it->is_skip() || it->is_location() || it->type == DECL)
+    {
+      stack.push_back(std::next(it));
+      continue;
+    }
     if (it->is_assign())
     {
       const code_assign2t &a = to_code_assign2t(it->code);
       if (touches_memory(a.target) || touches_memory(a.source))
-        return {}; // a pointer write here could alias a tracked variable
+        continue;
+      stack.push_back(std::next(it));
+      continue;
+    }
+    if (it->is_goto() && !it->is_backwards_goto() && it->targets.size() == 1)
+    {
+      stack.push_back(it->targets.front());
+      if (!is_true(it->guard))
+        stack.push_back(std::next(it));
+      continue;
+    }
+    // RETURN/END_FUNCTION/FUNCTION_CALL/anything else: path exits.
+  }
+  return false;
+}
+
+/// Collect seeds from the loop's pre-header. The base case of an assumed
+/// invariant requires every seed to hold on EVERY first entry to the loop
+/// head. We enforce this with a forward sweep from function entry to the
+/// head, allowing the following:
+///
+///  * DECL / ASSIGN / skip / location instructions (an assign updates the
+///    constant-seed map and invalidates any path atom mentioning the
+///    target's name).
+///  * Conditional IFs: for each IF we use a bounded forward reachability
+///    check from each branch (target and fall-through) to determine which
+///    one carries control to the loop head. If exactly one branch reaches
+///    the head, the corresponding condition (the IF's guard for the jump
+///    branch, its negation for the fall-through branch) holds on every
+///    path to the head and contributes a path atom. If neither branch
+///    reaches the head we bail (the loop must be unreachable from here);
+///    if both reach we get no path atom from this IF (the conditions on
+///    the two branches are disjunctive, so no useful fact holds on every
+///    path through them).
+///  * Targets that are reached only via a previously-traversed IF jump
+///    (i.e., we have already promoted that IF's seed): the target marks
+///    the merge point of the IF, control through it satisfies the seed.
+///
+/// Anything else (FUNCTION_CALL, back-edge, multi-target GOTO, memory-
+/// touching assign, jump targets reachable from an unanalysed edge) makes
+/// the prefix unsafe for syntactic seeding, and we return empty seeds so
+/// the loop falls back to the bare ranking check.
+prefix_seedst collect_seeds(
+  const goto_programt &body,
+  goto_programt::const_targett head)
+{
+  prefix_seedst seeds;
+  // Targets we've justified by an earlier accepted IF jump (so meeting one
+  // of them mid-sweep is not a soundness break).
+  std::set<unsigned> justified_targets;
+  // Pending IF-derived atoms: free-vars set so a later assign to one of
+  // those vars can invalidate the atom before it reaches the head.
+  struct pending_atom
+  {
+    expr2tc atom;
+    std::set<irep_idt> free_vars;
+  };
+  std::vector<pending_atom> pending;
+  auto end_it = body.instructions.end();
+
+  // We walk a single live path from entry to the loop head, advancing one
+  // instruction at a time except at conditional IFs where we may have to
+  // jump to the target if the fall-through doesn't lead to the head. The
+  // sweep terminates when @p it reaches @p head.
+  for (auto it = body.instructions.begin(); it != head;)
+  {
+    if (it->is_target() && !justified_targets.count(it->location_number))
+      return {};
+    if (it->is_skip() || it->is_location() || it->type == DECL)
+    {
+      ++it;
+      continue;
+    }
+    if (it->is_assign())
+    {
+      const code_assign2t &a = to_code_assign2t(it->code);
+      if (touches_memory(a.target) || touches_memory(a.source))
+        return {};
       if (!is_symbol2t(a.target))
         return {};
       const irep_idt &name = to_symbol2t(a.target).thename;
       if (is_constant_int2t(a.source))
-        seed[name] = to_constant_int2t(a.source).value; // last write wins
+        seeds.constants[name] = to_constant_int2t(a.source).value;
       else
-        seed.erase(name); // non-constant redefinition: no trusted seed
+        seeds.constants.erase(name);
+      pending.erase(
+        std::remove_if(
+          pending.begin(),
+          pending.end(),
+          [&](const pending_atom &p) { return p.free_vars.count(name); }),
+        pending.end());
+      ++it;
       continue;
     }
-    // GOTO / IF / FUNCTION_CALL / anything else: the prefix is not a clean
-    // straight-line dominator block, so we cannot trust syntactic seeds.
+    if (it->is_goto() && !is_true(it->guard) && !it->is_backwards_goto() &&
+        it->targets.size() == 1)
+    {
+      auto tgt = it->targets.front();
+      // Determine which branch carries control to the loop head.
+      bool fall_reaches = reaches_head(std::next(it), head, end_it);
+      bool jump_reaches = reaches_head(tgt, head, end_it);
+      if (!fall_reaches && !jump_reaches)
+        return {}; // loop head unreachable through this IF: bail
+      expr2tc seed_cond;
+      auto next = std::next(it);
+      if (fall_reaches && !jump_reaches)
+      {
+        // Only fall-through leads to the loop ⇒ ¬guard holds at the head.
+        // Continue the sweep at the next sequential instruction.
+        seed_cond = it->guard;
+        make_not(seed_cond);
+        simplify(seed_cond);
+      }
+      else if (jump_reaches && !fall_reaches)
+      {
+        // Only the jump leads to the loop ⇒ guard holds at the head.
+        // Skip the fall-through (it does not reach the head) and resume
+        // the sweep at the jump target, which is justified by this IF.
+        seed_cond = it->guard;
+        simplify(seed_cond);
+        justified_targets.insert(tgt->location_number);
+        next = tgt;
+      }
+      else
+      {
+        // Both branches reach the head: no useful seed (disjunctive). The
+        // sweep must cover both arms, but a linear walk can't — bail to
+        // stay sound. (Such shapes are rare and handled by future work.)
+        return {};
+      }
+      std::vector<expr2tc> conjuncts;
+      flatten_and(seed_cond, conjuncts);
+      for (const expr2tc &c : conjuncts)
+      {
+        std::vector<expr2tc> atoms;
+        if (!decompose_relational(c, atoms))
+          continue;
+        for (const expr2tc &a : atoms)
+        {
+          std::set<irep_idt> fv;
+          collect_symbols(a, fv);
+          if (fv.empty())
+            continue;
+          pending.push_back({a, std::move(fv)});
+        }
+      }
+      it = next;
+      continue;
+    }
+    // RETURN / END_FUNCTION / FUNCTION_CALL / multi-target GOTO / back-edge:
+    // we cannot continue safely.
     return {};
   }
-  return seed;
+  for (auto &p : pending)
+    seeds.path_atoms.push_back(std::move(p.atom));
+  return seeds;
 }
 
 /// Synthesize a supporting loop invariant as a conjunction of one-sided
@@ -361,40 +594,121 @@ expr2tc synthesize_invariant(
   optionst &options,
   const namespacet &ns)
 {
-  std::map<irep_idt, BigInt> seed = collect_seeds(body, rl.head);
-  if (seed.empty())
+  prefix_seedst seeds = collect_seeds(body, rl.head);
+  if (seeds.constants.empty() && seeds.path_atoms.empty())
     return gen_true_expr();
 
   // Build candidate atoms over the int64 domain so the body's arithmetic on
   // these bounds cannot wrap: a 32-bit increment like d1 = d2 + 1 wraps
   // under modular bitvector semantics at INT_MAX, which would spuriously
   // break an otherwise-inductive bound. Operands are at most 32-bit
-  // (checked), so widened values stay well inside int64. For each
-  // body-modified scalar variable with a constant seed c, both v >= c and
-  // v <= c hold at entry. We track each atom alongside its post-state image
-  // (the bound on v rewritten with v's widened post-iteration value) so the
+  // (checked), so widened values stay well inside int64. Each atom is
+  // tracked alongside its post-state image (the same atom with body-
+  // modified vars rewritten to their post-iteration value), so the
   // inductiveness check reasons entirely in the non-wrapping wide domain.
   struct cand
   {
-    expr2tc atom;  // bound on the (widened) variable, holds at entry
-    expr2tc prime; // same bound on the variable's widened post-state value
+    expr2tc atom;  // atom over the (widened) pre-state, holds at entry
+    expr2tc prime; // same atom over the widened post-state
   };
+  // Build the post-substitution map once (parallel post-state values of
+  // every body-modified scalar), to push through both constant- and path-
+  // condition atoms uniformly.
+  std::map<expr2tc, expr2tc> post;
+  for (const auto &a : rl.body)
+    post[a.lhs] = subst_parallel(a.rhs, post);
+
+  auto post_state_of = [&](const expr2tc &e)
+  { return widen_arith(subst_parallel(e, post)); };
+
   std::vector<cand> atoms;
+  // Constant-init seeds: for each body-modified scalar var that has a
+  // constant pre-loop assignment c, add both v >= c and v <= c. The
+  // fixpoint will drop whichever direction the body doesn't preserve.
   for (const auto &a : rl.body)
   {
     if (!is_symbol2t(a.lhs) || !is_bv_type(a.lhs->type))
       continue;
     if (a.lhs->type->get_width() > 32)
       continue;
-    auto s = seed.find(to_symbol2t(a.lhs).thename);
-    if (s == seed.end())
+    auto s = seeds.constants.find(to_symbol2t(a.lhs).thename);
+    if (s == seeds.constants.end())
       continue;
     type2tc wide = get_int_type(64);
     expr2tc c = constant_int2tc(wide, s->second);
-    expr2tc v = widen_arith(a.lhs);                       // (int64)v
-    expr2tc vp = widen_arith(apply_body(a.lhs, rl.body)); // (int64)post(v)
+    expr2tc v = widen_arith(a.lhs);
+    expr2tc vp = post_state_of(a.lhs);
+    // Skip the atom if either side cannot be faithfully widened (e.g. the
+    // body assigns from NONDET, so post(v) is a sideeffect we can't reason
+    // about with a constant bound).
+    if (is_nil_expr(v) || is_nil_expr(vp))
+      continue;
     atoms.push_back({greaterthanequal2tc(v, c), greaterthanequal2tc(vp, c)});
     atoms.push_back({lessthanequal2tc(v, c), lessthanequal2tc(vp, c)});
+  }
+  // Path-condition seeds: each atom comes from `IF guard GOTO past_loop`
+  // whose fall-through edge (reaching the head) implies `¬guard`, with the
+  // free variables proven not to be reassigned between the IF and the
+  // head. The atom holds at entry by construction; its post-state image
+  // gets the same widened-substitution treatment.
+  for (const expr2tc &a : seeds.path_atoms)
+  {
+    // Rebuild the atom with both sides widened, so the comparison happens
+    // in int64 (avoids spurious wrap when the post-state side has +1 etc).
+    if (!is_relational(a))
+      continue;
+    expr2tc lhs, rhs;
+    if (is_greaterthan2t(a))
+    {
+      lhs = to_greaterthan2t(a).side_1;
+      rhs = to_greaterthan2t(a).side_2;
+    }
+    else if (is_greaterthanequal2t(a))
+    {
+      lhs = to_greaterthanequal2t(a).side_1;
+      rhs = to_greaterthanequal2t(a).side_2;
+    }
+    else if (is_lessthan2t(a))
+    {
+      lhs = to_lessthan2t(a).side_1;
+      rhs = to_lessthan2t(a).side_2;
+    }
+    else
+    {
+      lhs = to_lessthanequal2t(a).side_1;
+      rhs = to_lessthanequal2t(a).side_2;
+    }
+    if (
+      !is_bv_type(lhs->type) || !is_bv_type(rhs->type) ||
+      lhs->type->get_width() > 32 || rhs->type->get_width() > 32)
+      continue;
+    expr2tc l = widen_arith(lhs), r = widen_arith(rhs);
+    expr2tc lp = post_state_of(lhs), rp = post_state_of(rhs);
+    // Skip if any side can't be faithfully widened (NONDET, opaque expr).
+    if (is_nil_expr(l) || is_nil_expr(r) || is_nil_expr(lp) || is_nil_expr(rp))
+      continue;
+    expr2tc pre, prime;
+    if (is_greaterthan2t(a))
+    {
+      pre = greaterthan2tc(l, r);
+      prime = greaterthan2tc(lp, rp);
+    }
+    else if (is_greaterthanequal2t(a))
+    {
+      pre = greaterthanequal2tc(l, r);
+      prime = greaterthanequal2tc(lp, rp);
+    }
+    else if (is_lessthan2t(a))
+    {
+      pre = lessthan2tc(l, r);
+      prime = lessthan2tc(lp, rp);
+    }
+    else
+    {
+      pre = lessthanequal2tc(l, r);
+      prime = lessthanequal2tc(lp, rp);
+    }
+    atoms.push_back({pre, prime});
   }
   if (atoms.empty())
     return gen_true_expr();
