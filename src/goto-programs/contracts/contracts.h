@@ -520,18 +520,12 @@ private:
   /// \param location Location information
   /// \param array_params Set of param IDs that need array allocation (ARRAY_ALLOC_ELEMS elements)
   /// \param skip_params Set of param IDs already allocated by __ESBMC_is_fresh
-  /// \param allocated_ptrs Optional output: pointer-typed lvalues that received
-  ///        a heap allocation. Stack-backed struct params are not appended.
-  ///        Callers use this to emit matching free() calls at wrapper exit so
-  ///        --memory-leak-check does not blame the user's function for
-  ///        wrapper-internal allocations (CWE-401).
   void add_pointer_validity_assumptions(
     goto_programt &wrapper,
     const symbolt &func,
     const locationt &location,
     const std::set<irep_idt> &array_params = {},
-    const std::set<irep_idt> &skip_params = {},
-    std::vector<expr2tc> *allocated_ptrs = nullptr);
+    const std::set<irep_idt> &skip_params = {});
 };
 
 #endif // ESBMC_CONTRACTS_H
