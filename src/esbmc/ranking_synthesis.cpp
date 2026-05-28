@@ -43,8 +43,12 @@ struct ranking_loopt
   // Guard, expressed positively (loop continues while this holds):
   // i.e. the negation of the IF guard. A relational compare a REL b.
   expr2tc guard;
-  // Straight-line body assignments, in program order.
-  std::vector<assignt> body;
+  // The body's set of straight-line execution paths. A non-branching body
+  // produces exactly one path (the assignment sequence). A body with a
+  // single `if (cond) ... else ...` produces two paths, one per arm. The
+  // ranking obligations and invariant inductiveness must hold on EVERY
+  // path; failure on any path falls back to UNKNOWN.
+  std::vector<std::vector<assignt>> paths;
 };
 
 /// Is @p e a relational comparison (>, >=, <, <=) — the guard shape we
@@ -78,31 +82,70 @@ bool touches_memory(const expr2tc &e)
   return found;
 }
 
+/// Collect straight-line assigns in [@p first, @p last). Returns false if
+/// any instruction is anything other than DECL/ASSIGN/skip/location/DEAD,
+/// or a memory-touching assign — the caller treats that as an unrecognized
+/// body shape. ASSIGNs are appended to @p out in program order.
+bool collect_straight_line(
+  goto_programt::const_targett first,
+  goto_programt::const_targett last,
+  std::vector<assignt> &out)
+{
+  for (auto it = first; it != last; ++it)
+  {
+    if (it->is_assign())
+    {
+      const code_assign2t &a = to_code_assign2t(it->code);
+      if (touches_memory(a.target) || touches_memory(a.source))
+        return false;
+      out.push_back({a.target, a.source});
+      continue;
+    }
+    if (
+      it->is_skip() || it->is_location() || it->type == DEAD ||
+      it->type == DECL)
+      continue;
+    return false;
+  }
+  return true;
+}
+
 /// Try to recognize the supported loop shape. Fills @p out and returns
 /// true on success. Returns false (caller treats as UNKNOWN) for any
-/// shape we don't handle yet:
-///   - loop_head must be `IF !(a REL b) GOTO exit` with a relational
-///     guard,
-///   - the body (instructions strictly between head and back-edge) must
-///     be straight-line ASSIGNs only — no further GOTO/IF, no
-///     FUNCTION_CALL, no nested back-edge,
-///   - the back-edge must be an unconditional GOTO to the head.
+/// shape we don't handle yet. Two body shapes are accepted:
+///
+///   (A) Straight-line. The instructions strictly between head and back-
+///       edge are scalar ASSIGNs only (one path).
+///
+///   (B) A single in-body `if/else` of straight-line arms. The instruction
+///       sequence between head and back-edge looks like
+///         <pre-assigns>
+///         IF !cond GOTO else_label
+///         <then-assigns>
+///         GOTO merge_label
+///         else_label:
+///         <else-assigns>
+///         merge_label:
+///         <post-assigns>
+///       (the `else` arm may be empty: then `IF !cond GOTO merge_label`
+///       and there is no inner GOTO/else_label). We yield two paths,
+///       <pre> ++ <then> ++ <post> and <pre> ++ <else> ++ <post>; the
+///       ranking obligations and invariant inductiveness must hold on
+///       both.
+///
+/// In all cases the loop head must be `IF !(a REL b) GOTO exit` with a
+/// relational guard over scalar BV operands, and the back-edge must be an
+/// unconditional GOTO to the head.
 bool recognize_loop(const loopst &loop, ranking_loopt &out)
 {
   out.head = loop.get_original_loop_head();
   out.back = loop.get_original_loop_exit();
 
-  // Head must be the loop-condition IF: a forward GOTO whose guard is
-  // the *negated* loop condition.
   if (!out.head->is_goto())
     return false;
   if (is_nil_expr(out.head->guard) || is_true(out.head->guard))
     return false;
 
-  // Positive loop guard = !(head guard). Must be a relational compare
-  // over scalar (non-memory) operands — a bare dereference/index/member
-  // can't be converted to SMT without symex's memory model, so we leave
-  // those loops to the existing machinery.
   expr2tc pos_guard = out.head->guard;
   make_not(pos_guard);
   simplify(pos_guard);
@@ -110,31 +153,126 @@ bool recognize_loop(const loopst &loop, ranking_loopt &out)
     return false;
   out.guard = pos_guard;
 
-  // Body: instructions strictly between head and back-edge. Only
-  // straight-line assigns over scalar lvalues allowed.
-  out.body.clear();
-  for (auto it = std::next(out.head); it != out.back; ++it)
+  if (!out.back->is_goto() || !out.back->is_backwards_goto())
+    return false;
+
+  out.paths.clear();
+
+  // Shape (A): straight-line body — no GOTO/IF instructions between head
+  // and back-edge.
+  auto body_begin = std::next(out.head);
+  bool has_internal_goto = false;
+  for (auto it = body_begin; it != out.back; ++it)
+    if (it->is_goto())
+    {
+      has_internal_goto = true;
+      break;
+    }
+  if (!has_internal_goto)
+  {
+    std::vector<assignt> path;
+    if (!collect_straight_line(body_begin, out.back, path))
+      return false;
+    out.paths.push_back(std::move(path));
+    return true;
+  }
+
+  // Shape (B): a single in-body if/else. Walk pre-assigns, find a
+  // conditional forward IF into the body, optionally split with an
+  // unconditional GOTO to the merge target.
+  std::vector<assignt> pre;
+  auto it = body_begin;
+  while (it != out.back && !it->is_goto())
   {
     if (it->is_assign())
     {
       const code_assign2t &a = to_code_assign2t(it->code);
       if (touches_memory(a.target) || touches_memory(a.source))
         return false;
-      out.body.push_back({a.target, a.source});
-      continue;
+      pre.push_back({a.target, a.source});
     }
-    // Skippable bookkeeping that doesn't affect the transition relation.
-    if (it->is_skip() || it->is_location() || it->type == DEAD)
-      continue;
-    // Anything else (GOTO, IF, FUNCTION_CALL, ASSUME/ASSERT, nested
-    // back-edge, ...) takes us outside the supported shape.
-    return false;
+    else if (
+      !it->is_skip() && !it->is_location() && it->type != DEAD &&
+      it->type != DECL)
+      return false;
+    ++it;
   }
+  if (it == out.back)
+    return false; // a GOTO must exist by has_internal_goto
 
-  // Back-edge must be an unconditional GOTO (the `GOTO loop_head`).
-  if (!out.back->is_goto() || !out.back->is_backwards_goto())
+  // The first GOTO must be a conditional forward IF (the if-condition).
+  if (
+    !it->is_goto() || is_true(it->guard) || it->is_backwards_goto() ||
+    it->targets.size() != 1)
+    return false;
+  auto if_target = it->targets.front();
+  if (if_target->location_number <= it->location_number)
+    return false; // not forward
+  expr2tc if_cond = it->guard; // raw IF guard (the negated then-condition)
+  if (touches_memory(if_cond))
+    return false;
+  auto then_begin = std::next(it);
+
+  // Find the unconditional GOTO that ends the then-arm. If we don't see
+  // one before the if_target, the else-arm is empty and the merge IS
+  // if_target. Otherwise the GOTO's target is the merge_label.
+  auto then_end = then_begin;
+  while (then_end != if_target && !then_end->is_goto())
+    ++then_end;
+  goto_programt::const_targett else_begin, merge_label;
+  if (then_end == if_target)
+  {
+    // No else branch: the IF jumps straight to the merge.
+    else_begin = if_target; // empty else
+    merge_label = if_target;
+  }
+  else
+  {
+    // then_end is the closing GOTO of the then-arm; its target is the
+    // merge label. The instructions [if_target .. merge_label) are the
+    // else-arm.
+    if (
+      !then_end->is_goto() || !is_true(then_end->guard) ||
+      then_end->is_backwards_goto() || then_end->targets.size() != 1)
+      return false;
+    merge_label = then_end->targets.front();
+    if (merge_label->location_number <= then_end->location_number)
+      return false;
+    else_begin = if_target;
+  }
+  if (merge_label == out.back || merge_label->location_number >
+                                   out.back->location_number)
+    return false; // merge must fall before the back-edge
+
+  // Collect the three straight-line spans.
+  std::vector<assignt> then_arm, else_arm, post;
+  if (!collect_straight_line(then_begin, then_end, then_arm))
+    return false;
+  if (then_end != if_target)
+  {
+    // else_arm = [if_target .. merge_label)
+    if (!collect_straight_line(if_target, merge_label, else_arm))
+      return false;
+  }
+  if (!collect_straight_line(merge_label, out.back, post))
     return false;
 
+  // Build the two paths: pre + then + post, and pre + else + post.
+  // The IF's raw guard `if_cond` is the NEGATION of the C-source `then`
+  // condition: `if (X) S` lowers to `IF !X GOTO else_label; S; ...`. So
+  // the THEN-arm runs when `!if_cond` holds and the ELSE-arm runs when
+  // `if_cond` holds. We don't currently use these path conditions in the
+  // obligations (we require decrease on every path unconditionally), but
+  // they could refine the invariant-inductiveness check in a future step.
+  auto build = [&](const std::vector<assignt> &mid)
+  {
+    std::vector<assignt> p = pre;
+    p.insert(p.end(), mid.begin(), mid.end());
+    p.insert(p.end(), post.begin(), post.end());
+    return p;
+  };
+  out.paths.push_back(build(then_arm));
+  out.paths.push_back(build(else_arm));
   return true;
 }
 
@@ -608,43 +746,70 @@ expr2tc synthesize_invariant(
   // inductiveness check reasons entirely in the non-wrapping wide domain.
   struct cand
   {
-    expr2tc atom;  // atom over the (widened) pre-state, holds at entry
-    expr2tc prime; // same atom over the widened post-state
+    expr2tc atom;                 // pre-state atom, holds at entry
+    std::vector<expr2tc> primes;  // post-state image per body path
   };
-  // Build the post-substitution map once (parallel post-state values of
-  // every body-modified scalar), to push through both constant- and path-
-  // condition atoms uniformly.
-  std::map<expr2tc, expr2tc> post;
-  for (const auto &a : rl.body)
-    post[a.lhs] = subst_parallel(a.rhs, post);
+  // Build one post-substitution map per body path: each `post[i][v]` is the
+  // value of `v` after path `i`, expressed in pre-state terms. The atom
+  // inductiveness check then needs the atom preserved by EVERY path.
+  std::vector<std::map<expr2tc, expr2tc>> path_posts(rl.paths.size());
+  for (size_t i = 0; i < rl.paths.size(); ++i)
+    for (const auto &a : rl.paths[i])
+      path_posts[i][a.lhs] = subst_parallel(a.rhs, path_posts[i]);
 
-  auto post_state_of = [&](const expr2tc &e)
-  { return widen_arith(subst_parallel(e, post)); };
+  auto post_state_of = [&](const expr2tc &e, size_t i)
+  { return widen_arith(subst_parallel(e, path_posts[i])); };
+
+  // Body-modified scalars are the union of lhs across all paths.
+  std::map<irep_idt, expr2tc> body_vars; // name -> exemplar lhs (for type)
+  for (const auto &path : rl.paths)
+    for (const auto &a : path)
+      if (
+        is_symbol2t(a.lhs) && is_bv_type(a.lhs->type) &&
+        a.lhs->type->get_width() <= 32)
+        body_vars.emplace(to_symbol2t(a.lhs).thename, a.lhs);
 
   std::vector<cand> atoms;
   // Constant-init seeds: for each body-modified scalar var that has a
   // constant pre-loop assignment c, add both v >= c and v <= c. The
-  // fixpoint will drop whichever direction the body doesn't preserve.
-  for (const auto &a : rl.body)
+  // fixpoint will drop whichever direction any path doesn't preserve.
+  for (const auto &kv : body_vars)
   {
-    if (!is_symbol2t(a.lhs) || !is_bv_type(a.lhs->type))
-      continue;
-    if (a.lhs->type->get_width() > 32)
-      continue;
-    auto s = seeds.constants.find(to_symbol2t(a.lhs).thename);
+    auto s = seeds.constants.find(kv.first);
     if (s == seeds.constants.end())
       continue;
     type2tc wide = get_int_type(64);
     expr2tc c = constant_int2tc(wide, s->second);
-    expr2tc v = widen_arith(a.lhs);
-    expr2tc vp = post_state_of(a.lhs);
-    // Skip the atom if either side cannot be faithfully widened (e.g. the
-    // body assigns from NONDET, so post(v) is a sideeffect we can't reason
-    // about with a constant bound).
-    if (is_nil_expr(v) || is_nil_expr(vp))
+    expr2tc v = widen_arith(kv.second);
+    if (is_nil_expr(v))
       continue;
-    atoms.push_back({greaterthanequal2tc(v, c), greaterthanequal2tc(vp, c)});
-    atoms.push_back({lessthanequal2tc(v, c), lessthanequal2tc(vp, c)});
+    // Build per-path widened post-state values; skip the atom if any path
+    // cannot be faithfully widened (NONDET body assignment, opaque expr).
+    std::vector<expr2tc> vps;
+    vps.reserve(rl.paths.size());
+    bool ok = true;
+    for (size_t i = 0; i < rl.paths.size(); ++i)
+    {
+      expr2tc vp = post_state_of(kv.second, i);
+      if (is_nil_expr(vp))
+      {
+        ok = false;
+        break;
+      }
+      vps.push_back(vp);
+    }
+    if (!ok)
+      continue;
+    cand ge, le;
+    ge.atom = greaterthanequal2tc(v, c);
+    le.atom = lessthanequal2tc(v, c);
+    for (const auto &vp : vps)
+    {
+      ge.primes.push_back(greaterthanequal2tc(vp, c));
+      le.primes.push_back(lessthanequal2tc(vp, c));
+    }
+    atoms.push_back(std::move(ge));
+    atoms.push_back(std::move(le));
   }
   // Path-condition seeds: each atom comes from `IF guard GOTO past_loop`
   // whose fall-through edge (reaching the head) implies `¬guard`, with the
@@ -683,41 +848,51 @@ expr2tc synthesize_invariant(
       lhs->type->get_width() > 32 || rhs->type->get_width() > 32)
       continue;
     expr2tc l = widen_arith(lhs), r = widen_arith(rhs);
-    expr2tc lp = post_state_of(lhs), rp = post_state_of(rhs);
-    // Skip if any side can't be faithfully widened (NONDET, opaque expr).
-    if (is_nil_expr(l) || is_nil_expr(r) || is_nil_expr(lp) || is_nil_expr(rp))
+    if (is_nil_expr(l) || is_nil_expr(r))
       continue;
-    expr2tc pre, prime;
-    if (is_greaterthan2t(a))
+    // Build per-path widened post-state images; skip the atom if any path
+    // cannot be faithfully widened.
+    std::vector<std::pair<expr2tc, expr2tc>> lr_per_path;
+    lr_per_path.reserve(rl.paths.size());
+    bool ok = true;
+    for (size_t i = 0; i < rl.paths.size(); ++i)
     {
-      pre = greaterthan2tc(l, r);
-      prime = greaterthan2tc(lp, rp);
+      expr2tc lp = post_state_of(lhs, i);
+      expr2tc rp = post_state_of(rhs, i);
+      if (is_nil_expr(lp) || is_nil_expr(rp))
+      {
+        ok = false;
+        break;
+      }
+      lr_per_path.emplace_back(lp, rp);
     }
-    else if (is_greaterthanequal2t(a))
+    if (!ok)
+      continue;
+    auto make_atom = [&](const expr2tc &x, const expr2tc &y) -> expr2tc
     {
-      pre = greaterthanequal2tc(l, r);
-      prime = greaterthanequal2tc(lp, rp);
-    }
-    else if (is_lessthan2t(a))
-    {
-      pre = lessthan2tc(l, r);
-      prime = lessthan2tc(lp, rp);
-    }
-    else
-    {
-      pre = lessthanequal2tc(l, r);
-      prime = lessthanequal2tc(lp, rp);
-    }
-    atoms.push_back({pre, prime});
+      if (is_greaterthan2t(a))
+        return greaterthan2tc(x, y);
+      if (is_greaterthanequal2t(a))
+        return greaterthanequal2tc(x, y);
+      if (is_lessthan2t(a))
+        return lessthan2tc(x, y);
+      return lessthanequal2tc(x, y);
+    };
+    cand c;
+    c.atom = make_atom(l, r);
+    for (const auto &lr : lr_per_path)
+      c.primes.push_back(make_atom(lr.first, lr.second));
+    atoms.push_back(std::move(c));
   }
   if (atoms.empty())
     return gen_true_expr();
 
-  // Fixpoint: drop atoms the body does not preserve under the guard and the
-  // other surviving atoms. An atom A survives iff
-  //   (∧ atoms) ∧ guard ∧ ¬A'   is UNSAT,
-  // where A' is the atom's post-state image. Atoms are only ever removed,
-  // so this terminates.
+  // Fixpoint: drop atoms not preserved by SOME body path under the guard
+  // and the other surviving atoms. An atom A survives iff for EVERY path,
+  //   (∧ atoms) ∧ guard ∧ ¬A'_path   is UNSAT,
+  // where A'_path is the atom's post-state image on that path. A single
+  // failing path drops the atom. Atoms are only ever removed, so this
+  // terminates.
   bool changed = true;
   while (changed && !atoms.empty())
   {
@@ -728,9 +903,18 @@ expr2tc synthesize_invariant(
     expr2tc inv = conjoin(cur);
     for (size_t i = 0; i < atoms.size(); ++i)
     {
-      expr2tc neg = atoms[i].prime;
-      make_not(neg);
-      if (!is_unsat(and2tc(and2tc(inv, rl.guard), neg), options, ns))
+      bool preserved = true;
+      for (const expr2tc &prime : atoms[i].primes)
+      {
+        expr2tc neg = prime;
+        make_not(neg);
+        if (!is_unsat(and2tc(and2tc(inv, rl.guard), neg), options, ns))
+        {
+          preserved = false;
+          break;
+        }
+      }
+      if (!preserved)
       {
         atoms.erase(atoms.begin() + i);
         changed = true;
@@ -756,9 +940,6 @@ bool prove_loop_terminates(
   if (!measure_from_guard(rl.guard, m, L))
     return false;
 
-  // m' = m after one loop body iteration.
-  expr2tc m_prime = apply_body(m, rl.body);
-
   // Supporting invariant: an inductive conjunction of constant bounds that
   // holds on entry. Sound to assume in the obligations below (it is true
   // every iteration). For loops that need no extra facts this is just true.
@@ -767,16 +948,24 @@ bool prove_loop_terminates(
   // Bounded-below obligation: inv ∧ guard ∧ (m < L) must be UNSAT, i.e.
   // under the invariant the guard implies m >= L (so the measure cannot
   // decrease past the floor without the guard becoming false → loop exits).
+  // This obligation doesn't depend on the body, so it's checked once.
   if (!is_unsat(and2tc(and2tc(inv, rl.guard), lessthan2tc(m, L)), options, ns))
     return false;
 
-  // Decrease obligation: inv ∧ guard ∧ ¬(m' < m) must be UNSAT, i.e. under
-  // the invariant and guard the measure strictly decreases every iteration.
-  if (!is_unsat(
-        and2tc(and2tc(inv, rl.guard), greaterthanequal2tc(m_prime, m)),
-        options,
-        ns))
-    return false;
+  // Decrease obligation: under the invariant and the guard, the measure
+  // strictly decreases on EVERY body path. For each path we build m'
+  // separately (via apply_body over that path's assignments) and require
+  // inv ∧ guard ∧ ¬(m' < m) UNSAT. If any path fails to decrease, the
+  // loop is not provably terminating by this rank.
+  for (const auto &path : rl.paths)
+  {
+    expr2tc m_prime = apply_body(m, path);
+    if (!is_unsat(
+          and2tc(and2tc(inv, rl.guard), greaterthanequal2tc(m_prime, m)),
+          options,
+          ns))
+      return false;
+  }
 
   log_debug(
     "termination",
