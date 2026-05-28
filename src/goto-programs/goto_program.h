@@ -88,8 +88,6 @@ public:
   class instructiont
   {
   public:
-    mutable std::mutex clear_claims_mutex;
-
     expr2tc code;
 
     //! function this belongs to
@@ -400,7 +398,6 @@ public:
         scope_id(other.scope_id),
         parent_scope_id(other.parent_scope_id)
     {
-      // instruction_mutex is not copied
     }
 
     instructiont &operator=(const instructiont &other)

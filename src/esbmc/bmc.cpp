@@ -46,6 +46,7 @@ std::unordered_set<std::string> goto_functionst::reached_claims;
 std::unordered_multiset<std::string> goto_functionst::reached_mul_claims;
 std::mutex goto_functionst::reached_claims_mutex;
 std::mutex goto_functionst::reached_mul_claims_mutex;
+std::mutex goto_functionst::clear_claims_mutex;
 
 bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
   : options(opts), context(_context), ns(context)
@@ -469,11 +470,11 @@ void bmct::clear_verified_claims_in_goto(
   const claim_slicer &claim,
   const bool &is_goto_cov)
 {
+  std::lock_guard lock(goto_functionst::clear_claims_mutex);
   for (auto &func : symex->goto_functions.function_map)
   {
     for (auto &instr : func.second.body.instructions)
     {
-      std::lock_guard lock(instr.clear_claims_mutex);
       if (!instr.is_assert())
         continue;
 
