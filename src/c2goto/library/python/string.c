@@ -1497,6 +1497,114 @@ __ESBMC_HIDE:;
   return buffer;
 }
 
+// Python bin(int) -> str. Matches the canonical "0b" prefix; emits "-0b…"
+// for negatives. Buffer holds the widest case: '-' + "0b" + 64 binary
+// digits + NUL = 68 bytes.
+char *__python_int_to_bin(long long v)
+{
+__ESBMC_HIDE:;
+  char *buffer = __ESBMC_alloca(68);
+
+  int negative = v < 0;
+  unsigned long long mag =
+    negative ? -(unsigned long long)v : (unsigned long long)v;
+
+  // Write binary digits right-to-left.
+  char digits[64];
+  size_t n = 0;
+  if (mag == 0)
+    digits[n++] = '0';
+  else
+    while (mag != 0)
+    {
+      digits[n++] = (char)('0' + (mag & 1U));
+      mag >>= 1U;
+    }
+
+  size_t pos = 0;
+  if (negative)
+    buffer[pos++] = '-';
+  buffer[pos++] = '0';
+  buffer[pos++] = 'b';
+
+  while (n > 0)
+    buffer[pos++] = digits[--n];
+
+  buffer[pos] = '\0';
+  return buffer;
+}
+
+// Python hex(int) -> str. "0x" prefix, lowercase digits (Python convention).
+// Buffer width: '-' + "0x" + 16 hex digits + NUL = 20 bytes.
+char *__python_int_to_hex(long long v)
+{
+__ESBMC_HIDE:;
+  char *buffer = __ESBMC_alloca(20);
+
+  int negative = v < 0;
+  unsigned long long mag =
+    negative ? -(unsigned long long)v : (unsigned long long)v;
+
+  char digits[16];
+  size_t n = 0;
+  if (mag == 0)
+    digits[n++] = '0';
+  else
+    while (mag != 0)
+    {
+      unsigned d = (unsigned)(mag & 0xFU);
+      digits[n++] = (char)(d < 10 ? '0' + d : 'a' + (d - 10));
+      mag >>= 4U;
+    }
+
+  size_t pos = 0;
+  if (negative)
+    buffer[pos++] = '-';
+  buffer[pos++] = '0';
+  buffer[pos++] = 'x';
+
+  while (n > 0)
+    buffer[pos++] = digits[--n];
+
+  buffer[pos] = '\0';
+  return buffer;
+}
+
+// Python oct(int) -> str. "0o" prefix. Buffer width: '-' + "0o" + 22 octal
+// digits + NUL = 26 bytes.
+char *__python_int_to_oct(long long v)
+{
+__ESBMC_HIDE:;
+  char *buffer = __ESBMC_alloca(26);
+
+  int negative = v < 0;
+  unsigned long long mag =
+    negative ? -(unsigned long long)v : (unsigned long long)v;
+
+  char digits[22];
+  size_t n = 0;
+  if (mag == 0)
+    digits[n++] = '0';
+  else
+    while (mag != 0)
+    {
+      digits[n++] = (char)('0' + (unsigned)(mag & 7U));
+      mag >>= 3U;
+    }
+
+  size_t pos = 0;
+  if (negative)
+    buffer[pos++] = '-';
+  buffer[pos++] = '0';
+  buffer[pos++] = 'o';
+
+  while (n > 0)
+    buffer[pos++] = digits[--n];
+
+  buffer[pos] = '\0';
+  return buffer;
+}
+
 // Python bool -> str. Returns "True" / "False" with the usual capitalisation.
 char *__python_bool_to_str(_Bool b)
 {
