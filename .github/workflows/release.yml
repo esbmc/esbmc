@@ -62,9 +62,9 @@ jobs:
       - name: Do the release
         uses: softprops/action-gh-release@v3
         with:
-          name: 'ESBMC nightly'
-          body: 'This is an automated nightly release of ESBMC.'
-          tag_name: nightly-${{ github.sha }}
+          name: 'ESBMC Weekly Pre-release'
+          body: 'This is an automated weekly pre-release of ESBMC. Please report any bugs to our [Issues](https://github.com/esbmc/esbmc/issues) tracking page.'
+          tag_name: weekly
           target_commitish: ${{ github.sha }}
           prerelease: true
           files: |
