@@ -4531,12 +4531,36 @@ void clang_c_convertert::set_location(
     return;
   }
 
-  location.set_line(PLoc.getLine());
-  location.set_file(PLoc.getFilename());
-  location.set_column(PLoc.getColumn());
+  const unsigned line = PLoc.getLine();
+  const unsigned column = PLoc.getColumn();
+  const char *filename = PLoc.getFilename();
 
+  // Hot path: consecutive AST nodes almost always share file+function (and
+  // often line+column for compiler-generated decls and macro expansions).
+  // Reuse the previous locationt's dt (irept assignment is a refcount bump)
+  // rather than building a fresh irep with 4 named_sub entries — that
+  // path dominated peak heap on large benchmarks (168 MB / 2M detatches
+  // on a 590 KB ECA program).
+  if (
+    last_loc_valid && line == last_loc_line && column == last_loc_column &&
+    last_loc_function == function_name && last_loc_filename == filename)
+  {
+    location = last_loc;
+    return;
+  }
+
+  location.set_line(line);
+  location.set_file(filename);
+  location.set_column(column);
   if (!function_name.empty())
     location.set_function(function_name);
+
+  last_loc = location;
+  last_loc_line = line;
+  last_loc_column = column;
+  last_loc_filename = filename;
+  last_loc_function = function_name;
+  last_loc_valid = true;
 }
 
 std::string clang_c_convertert::get_modulename_from_path(std::string path)
