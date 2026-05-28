@@ -794,6 +794,13 @@ public:
   /** Round a fixedbv to an integer. */
   smt_astt
   round_fixedbv_to_int(smt_astt a, unsigned int width, unsigned int towidth);
+  /** Round an SMT integer to the nearest representable float/double using
+   *  IEEE 754 round-to-nearest-even. Used for int->fp casts under --ir-ieee.
+   *  source_width is the bit-width of the source integer type. */
+  smt_astt round_int_to_fp(
+    smt_astt int_val,
+    const floatbv_type2t &fbv_type,
+    unsigned int source_width);
 
   /** Prep call for creating a tuple array */
   smt_astt tuple_array_create_despatch(const expr2tc &expr, smt_sortt domain);
