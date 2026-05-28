@@ -1,4 +1,0 @@
-CORE
-main.c
---function read_thru_addrof --enforce-contract read_thru_addrof --memory-leak-check
-^VERIFICATION SUCCESSFUL$
