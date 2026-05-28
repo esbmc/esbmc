@@ -169,6 +169,39 @@ expr2tc subst_parallel(
   return r;
 }
 
+/// Recompute a scalar integer expression in the int64 domain: cast every
+/// leaf (symbol / constant) to int64 and rebuild each arithmetic node so
+/// the operation itself is performed in 64 bits. With operands at most
+/// 32-bit, sums/differences of a few terms stay well inside int64, so this
+/// removes the modular-bitvector wraparound that a 32-bit add (e.g.
+/// d1 = d2 + 1 at INT_MAX) would otherwise introduce when reasoning about
+/// invariant bounds. Comparisons/boolean structure are preserved; only the
+/// integer arithmetic is widened. Non-integer or memory expressions are
+/// returned unchanged (callers only pass scalar integer expressions).
+expr2tc widen_arith(const expr2tc &e)
+{
+  if (is_nil_expr(e))
+    return e;
+  type2tc wide = get_int_type(64);
+  if (is_symbol2t(e) || is_constant_int2t(e))
+    return typecast2tc(wide, e);
+  // Arithmetic nodes: rebuild in the wide type with widened operands, so
+  // the operation is performed in 64 bits (no 32-bit wraparound).
+  if (is_add2t(e))
+    return add2tc(
+      wide, widen_arith(to_add2t(e).side_1), widen_arith(to_add2t(e).side_2));
+  if (is_sub2t(e))
+    return sub2tc(
+      wide, widen_arith(to_sub2t(e).side_1), widen_arith(to_sub2t(e).side_2));
+  if (is_mul2t(e))
+    return mul2tc(
+      wide, widen_arith(to_mul2t(e).side_1), widen_arith(to_mul2t(e).side_2));
+  if (is_neg2t(e))
+    return neg2tc(wide, widen_arith(to_neg2t(e).value));
+  // Anything else (e.g. an existing cast): value-preserve into wide.
+  return typecast2tc(wide, e);
+}
+
 /// Build the loop body's transition as a parallel substitution and apply
 /// it to @p e, yielding e in the post-iteration state. Each assignment
 /// lhs := rhs is evaluated against the PRE-state: we process assignments
@@ -256,8 +289,151 @@ bool measure_from_guard(const expr2tc &guard, expr2tc &m, expr2tc &L)
   return true;
 }
 
+/// Conjoin a list of atoms into a single expression (true if empty).
+expr2tc conjoin(const std::vector<expr2tc> &atoms)
+{
+  if (atoms.empty())
+    return gen_true_expr();
+  expr2tc r = atoms.front();
+  for (size_t i = 1; i < atoms.size(); ++i)
+    r = and2tc(r, atoms[i]);
+  return r;
+}
+
+/// Collect a constant seed for each body-modified scalar variable from the
+/// loop's pre-header. The base case of an assumed invariant requires the
+/// seed to hold on EVERY first entry to the loop head, so we only trust a
+/// constant assignment that provably reaches the head with no intervening
+/// re-definition, branch merge, call, or aliasing write. We enforce this
+/// conservatively: the prefix from function entry up to the loop head must
+/// be a single straight-line block — only DECL/ASSIGN/skip/location, no
+/// GOTO/IF, no FUNCTION_CALL, no jump target landing inside it, and no
+/// assignment whose target or source touches memory (a pointer write could
+/// alias a tracked variable). If any of those appear we return an empty
+/// seed map (the loop gets no supporting invariant and falls back to the
+/// bare ranking check). Within a clean prefix, seed[v] is the value of the
+/// LAST `ASSIGN v = <int constant>` before the head.
+std::map<irep_idt, BigInt> collect_seeds(
+  const goto_programt &body,
+  goto_programt::const_targett head)
+{
+  std::map<irep_idt, BigInt> seed;
+  for (auto it = body.instructions.begin(); it != head; ++it)
+  {
+    // A jump target inside the prefix means another edge reaches here, so
+    // a syntactically-preceding constant need not hold on that path.
+    if (it->is_target())
+      return {};
+    if (it->is_skip() || it->is_location() || it->type == DECL)
+      continue;
+    if (it->is_assign())
+    {
+      const code_assign2t &a = to_code_assign2t(it->code);
+      if (touches_memory(a.target) || touches_memory(a.source))
+        return {}; // a pointer write here could alias a tracked variable
+      if (!is_symbol2t(a.target))
+        return {};
+      const irep_idt &name = to_symbol2t(a.target).thename;
+      if (is_constant_int2t(a.source))
+        seed[name] = to_constant_int2t(a.source).value; // last write wins
+      else
+        seed.erase(name); // non-constant redefinition: no trusted seed
+      continue;
+    }
+    // GOTO / IF / FUNCTION_CALL / anything else: the prefix is not a clean
+    // straight-line dominator block, so we cannot trust syntactic seeds.
+    return {};
+  }
+  return seed;
+}
+
+/// Synthesize a supporting loop invariant as a conjunction of one-sided
+/// constant bound atoms (v >= c / v <= c) over body-modified variables.
+/// Each atom is seeded from a constant pre-header assignment (so it holds
+/// on loop entry — the base case) and kept only if it is inductive: under
+/// the current candidate conjunction and the guard, the body preserves it.
+/// We reach a fixpoint by repeatedly dropping non-preserved atoms (atoms
+/// are only ever removed, so this terminates); the survivors form an
+/// inductive invariant that is sound to assume in the ranking obligations.
+expr2tc synthesize_invariant(
+  const ranking_loopt &rl,
+  const goto_programt &body,
+  optionst &options,
+  const namespacet &ns)
+{
+  std::map<irep_idt, BigInt> seed = collect_seeds(body, rl.head);
+  if (seed.empty())
+    return gen_true_expr();
+
+  // Build candidate atoms over the int64 domain so the body's arithmetic on
+  // these bounds cannot wrap: a 32-bit increment like d1 = d2 + 1 wraps
+  // under modular bitvector semantics at INT_MAX, which would spuriously
+  // break an otherwise-inductive bound. Operands are at most 32-bit
+  // (checked), so widened values stay well inside int64. For each
+  // body-modified scalar variable with a constant seed c, both v >= c and
+  // v <= c hold at entry. We track each atom alongside its post-state image
+  // (the bound on v rewritten with v's widened post-iteration value) so the
+  // inductiveness check reasons entirely in the non-wrapping wide domain.
+  struct cand
+  {
+    expr2tc atom;  // bound on the (widened) variable, holds at entry
+    expr2tc prime; // same bound on the variable's widened post-state value
+  };
+  std::vector<cand> atoms;
+  for (const auto &a : rl.body)
+  {
+    if (!is_symbol2t(a.lhs) || !is_bv_type(a.lhs->type))
+      continue;
+    if (a.lhs->type->get_width() > 32)
+      continue;
+    auto s = seed.find(to_symbol2t(a.lhs).thename);
+    if (s == seed.end())
+      continue;
+    type2tc wide = get_int_type(64);
+    expr2tc c = constant_int2tc(wide, s->second);
+    expr2tc v = widen_arith(a.lhs);                       // (int64)v
+    expr2tc vp = widen_arith(apply_body(a.lhs, rl.body)); // (int64)post(v)
+    atoms.push_back({greaterthanequal2tc(v, c), greaterthanequal2tc(vp, c)});
+    atoms.push_back({lessthanequal2tc(v, c), lessthanequal2tc(vp, c)});
+  }
+  if (atoms.empty())
+    return gen_true_expr();
+
+  // Fixpoint: drop atoms the body does not preserve under the guard and the
+  // other surviving atoms. An atom A survives iff
+  //   (∧ atoms) ∧ guard ∧ ¬A'   is UNSAT,
+  // where A' is the atom's post-state image. Atoms are only ever removed,
+  // so this terminates.
+  bool changed = true;
+  while (changed && !atoms.empty())
+  {
+    changed = false;
+    std::vector<expr2tc> cur;
+    for (const auto &a : atoms)
+      cur.push_back(a.atom);
+    expr2tc inv = conjoin(cur);
+    for (size_t i = 0; i < atoms.size(); ++i)
+    {
+      expr2tc neg = atoms[i].prime;
+      make_not(neg);
+      if (!is_unsat(and2tc(and2tc(inv, rl.guard), neg), options, ns))
+      {
+        atoms.erase(atoms.begin() + i);
+        changed = true;
+        break; // restart with the weakened conjunction
+      }
+    }
+  }
+
+  std::vector<expr2tc> survivors;
+  for (const auto &a : atoms)
+    survivors.push_back(a.atom);
+  return conjoin(survivors);
+}
+
 bool prove_loop_terminates(
   const ranking_loopt &rl,
+  const goto_programt &body,
   optionst &options,
   const namespacet &ns)
 {
@@ -269,21 +445,30 @@ bool prove_loop_terminates(
   // m' = m after one loop body iteration.
   expr2tc m_prime = apply_body(m, rl.body);
 
-  // Bounded-below obligation: guard ∧ (m < L) must be UNSAT, i.e. the
-  // guard implies m >= L (so the measure cannot decrease past the
-  // floor without the guard becoming false → loop exits).
-  if (!is_unsat(and2tc(rl.guard, lessthan2tc(m, L)), options, ns))
+  // Supporting invariant: an inductive conjunction of constant bounds that
+  // holds on entry. Sound to assume in the obligations below (it is true
+  // every iteration). For loops that need no extra facts this is just true.
+  expr2tc inv = synthesize_invariant(rl, body, options, ns);
+
+  // Bounded-below obligation: inv ∧ guard ∧ (m < L) must be UNSAT, i.e.
+  // under the invariant the guard implies m >= L (so the measure cannot
+  // decrease past the floor without the guard becoming false → loop exits).
+  if (!is_unsat(and2tc(and2tc(inv, rl.guard), lessthan2tc(m, L)), options, ns))
     return false;
 
-  // Decrease obligation: guard ∧ ¬(m' < m) must be UNSAT, i.e. under
-  // the guard the measure strictly decreases every iteration.
-  if (!is_unsat(and2tc(rl.guard, greaterthanequal2tc(m_prime, m)), options, ns))
+  // Decrease obligation: inv ∧ guard ∧ ¬(m' < m) must be UNSAT, i.e. under
+  // the invariant and guard the measure strictly decreases every iteration.
+  if (!is_unsat(
+        and2tc(and2tc(inv, rl.guard), greaterthanequal2tc(m_prime, m)),
+        options,
+        ns))
     return false;
 
   log_debug(
     "termination",
-    "ranking function proved loop terminates: measure={}",
-    from_expr(ns, "", m));
+    "ranking function proved loop terminates: measure={} invariant={}",
+    from_expr(ns, "", m),
+    from_expr(ns, "", inv));
   return true;
 }
 
@@ -565,7 +750,7 @@ tvt try_prove_termination_by_ranking(
       ranking_loopt rl;
       if (!recognize_loop(loop, rl))
         return tvt(tvt::TV_UNKNOWN);
-      if (!prove_loop_terminates(rl, options, ns))
+      if (!prove_loop_terminates(rl, f_it->second.body, options, ns))
         return tvt(tvt::TV_UNKNOWN);
     }
   }
