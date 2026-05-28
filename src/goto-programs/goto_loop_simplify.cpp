@@ -578,22 +578,29 @@ bool simplify_function_once(goto_functiont &fn, const optionst &options)
     // in place. Mirrors goto_loopst::find_function_loops's rewrite,
     // which only fires when a loop-discovering pass is enabled
     // (interval-analysis, k-induction, loop-invariant, contractor).
-    // Doing it here makes the rewrite unconditional for plain BMC.
-    // symex_goto.cpp's self-loop handler stays as a defensive fallback
-    // for modes that skip this pass (--termination, --unwinding-
-    // assertions).
+    // symex_goto.cpp's self-loop handler stays as a defensive fallback.
     if (loop_head == loop_exit)
     {
+      // A bare self-loop has no body, so its guard's truth value never
+      // changes: `A: IF cond GOTO A` spins forever exactly when cond holds,
+      // and `A: GOTO A` always spins. We rewrite the head to an ASSUME
+      // (assume(false) unconditionally, assume(!cond) conditionally),
+      // killing the non-terminating path. This intentionally suppresses the
+      // back-edge unwinding-assertion signal (knowing a program merely needs
+      // more unwinding is rarely actionable), but under --termination the
+      // same rewrite would mask a real non-termination verdict, so skip it.
+      if (options.get_bool_option("termination"))
+        continue;
+
       if (is_true(it->guard))
       {
-        // Unconditional infinite loop: kill the path.
         it->make_assumption(gen_false_expr());
       }
       else
       {
-        // `IF cond GOTO self` exits exactly when !cond; the post-loop
-        // state is constrained by !cond. Copy the guard out before
-        // make_assumption (clear() runs first, resetting it).
+        // `IF cond GOTO self` exits exactly when !cond; constrain the
+        // post-state to !cond. Copy the guard out before make_assumption
+        // (clear() runs first, resetting it).
         expr2tc cond = it->guard;
         make_not(cond);
         it->make_assumption(cond);
@@ -726,43 +733,31 @@ void goto_loop_simplify(
   goto_functionst &goto_functions,
   const optionst &options)
 {
-  // Gated on the user explicitly opting out of the unwinding-
-  // assertion signal (--no-unwinding-assertions) or opting into the
-  // termination reduction (--termination). Outside these two modes
-  // the pass is a no-op.
+  // Enabled by default. Removing a loop we can prove has no observable
+  // effect (Path 1), whose exact post-state we can compute (Path 2), or
+  // that is a bare self-loop, removes the single biggest obstacle a BMC
+  // engine faces. The pass runs in every mode except the two where a loop
+  // rewrite is genuinely unsound or destroys a needed signal:
   //
-  // Why the gate matters: by default, ESBMC emits an unwinding
-  // assertion at every loop back-edge that fires when the loop
-  // hasn't fully unwound within --unwind k. That assertion is the
-  // user-visible non-termination signal at the chosen depth.
-  // Erasing or rewriting a loop in goto_loop_simplify would suppress
-  // that signal even when the loop body is otherwise side-effect-
-  // free, breaking the verification contract (cf. regression/
-  // bitwuzla/get_model_values, regression/parallel-solving/uthash-1).
+  //   - --termination: Path 1 and the self-loop rewrite are skipped. They
+  //     rewrite an infinite empty loop's head to assume(false), which would
+  //     mask the non-termination verdict (LTL(F end) violation) that is the
+  //     property under test. Path 2 still runs: it only matches
+  //     strictly-terminating, overflow-checked counter loops, so it can
+  //     never turn a non-terminating shape into a terminating one.
   //
-  // What each mode does:
-  //   --no-unwinding-assertions: Path 1 (erase dead loops with no
-  //     escaping side effects) and Path 2 (step recognition for
-  //     constant-bound counter loops) run. The self-loop and
-  //     constant-false-exit-guard rewrites stay off — symex's loop
-  //     handling already does the right thing in that mode.
+  //   - Coverage modes: skipped entirely — erasing loops drops branch
+  //     points the coverage instrumentation needs to count.
   //
-  //   --termination: Path 1 is skipped (it would erase non-terminating
-  //     `while (1) {}` to assume(false), masking the verdict). Path 2
-  //     runs — step recognition only matches strictly-terminating
-  //     counter loops with constant bounds and refuses the rewrite
-  //     when the post-value would overflow, so it cannot convert a
-  //     non-terminating shape into a terminating one. The
-  //     single-instruction self-loop rewrite also fires (gated inside
-  //     simplify_function_once).
-  //
-  // Coverage modes: also skipped — erasing loops drops branch points
-  // the coverage instrumentation needs to count.
-  if (
-    !options.get_bool_option("no-unwinding-assertions") &&
-    !options.get_bool_option("termination"))
-    return;
-
+  // We deliberately DO NOT gate on the unwinding-assertion signal. By
+  // default ESBMC emits an unwinding assertion at each loop back-edge that
+  // fails when the loop is not fully unwound within --unwind k; rewriting a
+  // loop away suppresses that failure. That is acceptable: an
+  // unwinding-assertion failure only tells the user to unwind more, which is
+  // rarely actionable, whereas removing the loop lets the program verify
+  // outright. (cf. regression/bitwuzla/get_model_values,
+  // regression/parallel-solving/uthash-1, whose expectations change
+  // accordingly.)
   if (
     options.get_bool_option("assertion-coverage") ||
     options.get_bool_option("assertion-coverage-claims") ||
