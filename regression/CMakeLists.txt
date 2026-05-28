@@ -326,16 +326,27 @@ set(_slow_regression_tests
     "regression/quixbugs/flatten_fail"
     "regression/quixbugs/next_palindrome"
     "regression/quixbugs/pascal"
-    # shortest_path_lengths(_fail) used to fast-fail because defaultdict
-    # with a lambda factory was unsupported; with #4765 the lambda factory
-    # is now honoured and ESBMC actually tries to verify the triple-nested
-    # Floyd-Warshall loop, which exceeds the 120s cap on slower runners.
-    "regression/quixbugs/shortest_path_lengths"
-    "regression/quixbugs/shortest_path_lengths_fail"
     "regression/ai-generated-code/two_sum"
 )
 math(EXPR ESBMC_REGRESS_CTEST_TIMEOUT_SLOW
      "${ESBMC_REGRESS_TIMEOUT_SLOW} + 30")
+
+# Tests that exceed even the 2x slow tier on Debug+Opt Linux runners.
+# shortest_path_lengths(_fail) used to fast-fail because defaultdict with
+# a lambda factory was unsupported; with #4765 the lambda factory is now
+# honoured and ESBMC actually verifies the triple-nested Floyd-Warshall
+# loop. Observed CI timings: shortest_path_lengths 244.8s (passed by
+# 0.2s under the 245s wall), shortest_path_lengths_fail 245.3s (flapped
+# over). Codecov config takes ~302s. Give 3x headroom so transient
+# scheduling jitter doesn't tip them over.
+math(EXPR ESBMC_REGRESS_TIMEOUT_VERY_SLOW "${ESBMC_REGRESS_TIMEOUT} * 3")
+math(EXPR ESBMC_REGRESS_CTEST_TIMEOUT_VERY_SLOW
+     "${ESBMC_REGRESS_TIMEOUT_VERY_SLOW} + 30")
+set(_very_slow_regression_tests
+    "regression/quixbugs/shortest_path_lengths"
+    "regression/quixbugs/shortest_path_lengths_fail"
+)
+
 foreach(_t IN LISTS _slow_regression_tests)
     if(TEST ${_t})
         # Three coupled budgets to keep aligned:
@@ -352,6 +363,14 @@ foreach(_t IN LISTS _slow_regression_tests)
         set_tests_properties(${_t} PROPERTIES
           TIMEOUT ${ESBMC_REGRESS_CTEST_TIMEOUT_SLOW}
           ENVIRONMENT "ESBMC_REGRESS_TIMEOUT=${ESBMC_REGRESS_TIMEOUT_SLOW};ESBMC_REGRESS_MEMORY_LIMIT=${ESBMC_REGRESS_MEMORY_LIMIT}"
+        )
+    endif()
+endforeach()
+foreach(_t IN LISTS _very_slow_regression_tests)
+    if(TEST ${_t})
+        set_tests_properties(${_t} PROPERTIES
+          TIMEOUT ${ESBMC_REGRESS_CTEST_TIMEOUT_VERY_SLOW}
+          ENVIRONMENT "ESBMC_REGRESS_TIMEOUT=${ESBMC_REGRESS_TIMEOUT_VERY_SLOW};ESBMC_REGRESS_MEMORY_LIMIT=${ESBMC_REGRESS_MEMORY_LIMIT}"
         )
     endif()
 endforeach()
