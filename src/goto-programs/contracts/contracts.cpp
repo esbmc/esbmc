@@ -1120,7 +1120,7 @@ goto_programt code_contractst::generate_checking_wrapper(
       location,
       array_param_ids,
       is_fresh_allocated_params,
-      &wrapper_heap_ptrs);
+      wrapper_heap_ptrs);
   }
 
   // 2. Extract and create snapshots for __ESBMC_old() expressions.
@@ -3685,7 +3685,7 @@ void code_contractst::add_pointer_validity_assumptions(
   const locationt &location,
   const std::set<irep_idt> &array_params,
   const std::set<irep_idt> &skip_params,
-  std::vector<expr2tc> *allocated_ptrs)
+  std::vector<expr2tc> &allocated_ptrs)
 {
   if (!func.get_type().is_code())
     return;
@@ -3724,37 +3724,9 @@ void code_contractst::add_pointer_validity_assumptions(
     {
       // Phase 2B: array params need ARRAY_ALLOC_ELEMS elements for nondet-witness
       // addressing. Use malloc so we can allocate a variable-length range.
-      expr2tc alloc_size =
-        constant_int2tc(size_type2(), BigInt(ARRAY_ALLOC_ELEMS));
-      expr2tc malloc_expr = sideeffect2tc(
-        pointer_type2tc(pointed_to_type),
-        expr2tc(),
-        alloc_size,
-        std::vector<expr2tc>(),
-        pointed_to_type,
-        sideeffect2t::allockind::malloc);
-
-      auto assign_inst = wrapper.add_instruction(ASSIGN);
-      assign_inst->code = code_assign2tc(p, malloc_expr);
-      assign_inst->location = location;
-      assign_inst->location.comment(
-        "harness: allocate array backing for pointer parameter");
-
-      expr2tc null_ptr = symbol2tc(param_type, "NULL");
-      expr2tc not_null = notequal2tc(p, null_ptr);
-      auto assume_inst = wrapper.add_instruction(ASSUME);
-      assume_inst->guard = not_null;
-      assume_inst->location = location;
-      assume_inst->location.comment(
-        "harness: pointer is non-null after allocation");
-
-      log_debug(
-        "contracts",
-        "add_pointer_validity_assumptions: malloc (array) for parameter {}",
-        id2string(param.get_identifier()));
-
-      if (allocated_ptrs)
-        allocated_ptrs->push_back(p);
+      emit_pointer_param_malloc(
+        wrapper, p, param_type, pointed_to_type, location, allocated_ptrs,
+        "array");
     }
     else
     {
@@ -3834,39 +3806,53 @@ void code_contractst::add_pointer_validity_assumptions(
         // access returns a consistent SMT variable.  (Single-element stack
         // allocation causes out-of-bounds reads to produce fresh nondets on
         // each access, making "return_value == arr[idx]" unprovable.)
-        expr2tc alloc_size =
-          constant_int2tc(size_type2(), BigInt(ARRAY_ALLOC_ELEMS));
-        expr2tc malloc_expr = sideeffect2tc(
-          pointer_type2tc(pointed_to_type),
-          expr2tc(),
-          alloc_size,
-          std::vector<expr2tc>(),
-          pointed_to_type,
-          sideeffect2t::allockind::malloc);
-
-        auto assign_inst = wrapper.add_instruction(ASSIGN);
-        assign_inst->code = code_assign2tc(p, malloc_expr);
-        assign_inst->location = location;
-        assign_inst->location.comment(
-          "harness: allocate primitive array backing for pointer parameter");
-
-        expr2tc null_ptr = symbol2tc(param_type, "NULL");
-        expr2tc not_null = notequal2tc(p, null_ptr);
-        auto assume_inst = wrapper.add_instruction(ASSUME);
-        assume_inst->guard = not_null;
-        assume_inst->location = location;
-        assume_inst->location.comment(
-          "harness: pointer is non-null after allocation");
-
-        log_debug(
-          "contracts",
-          "add_pointer_validity_assumptions: malloc (primitive) for parameter "
-          "{}",
-          id2string(param.get_identifier()));
-
-        if (allocated_ptrs)
-          allocated_ptrs->push_back(p);
+        emit_pointer_param_malloc(
+          wrapper, p, param_type, pointed_to_type, location, allocated_ptrs,
+          "primitive array");
       }
     }
   }
+}
+
+void code_contractst::emit_pointer_param_malloc(
+  goto_programt &wrapper,
+  const expr2tc &p,
+  const type2tc &param_type,
+  const type2tc &pointed_to_type,
+  const locationt &location,
+  std::vector<expr2tc> &allocated_ptrs,
+  const char *kind_label)
+{
+  expr2tc alloc_size =
+    constant_int2tc(size_type2(), BigInt(ARRAY_ALLOC_ELEMS));
+  expr2tc malloc_expr = sideeffect2tc(
+    pointer_type2tc(pointed_to_type),
+    expr2tc(),
+    alloc_size,
+    std::vector<expr2tc>(),
+    pointed_to_type,
+    sideeffect2t::allockind::malloc);
+
+  auto assign_inst = wrapper.add_instruction(ASSIGN);
+  assign_inst->code = code_assign2tc(p, malloc_expr);
+  assign_inst->location = location;
+  assign_inst->location.comment(
+    std::string("harness: allocate ") + kind_label +
+    " backing for pointer parameter");
+
+  expr2tc null_ptr = symbol2tc(param_type, "NULL");
+  expr2tc not_null = notequal2tc(p, null_ptr);
+  auto assume_inst = wrapper.add_instruction(ASSUME);
+  assume_inst->guard = not_null;
+  assume_inst->location = location;
+  assume_inst->location.comment(
+    "harness: pointer is non-null after allocation");
+
+  log_debug(
+    "contracts",
+    "add_pointer_validity_assumptions: malloc ({}) for parameter {}",
+    kind_label,
+    id2string(to_symbol2t(p).thename));
+
+  allocated_ptrs.push_back(p);
 }
