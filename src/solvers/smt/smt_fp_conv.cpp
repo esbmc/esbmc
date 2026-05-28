@@ -757,9 +757,31 @@ smt_astt smt_convt::apply_ieee754_semantics(
     // Check for overflow
     smt_astt overflows = mk_gt(abs_result, max_normal);
 
-    // Check for underflow to zero
-    smt_astt underflows_to_zero = mk_and(
-      mk_lt(abs_result, min_subnormal), mk_not(mk_eq(real_result, zero)));
+    // Check for underflow to zero.
+    // For nearest modes, values around the subnormal boundary should not be
+    // forced to zero too aggressively; use 0.5 * min_subnormal threshold.
+    smt_astt underflow_threshold = min_subnormal;
+    smt_astt half_min_subnormal = mk_div(min_subnormal, mk_smt_real("2.0"));
+    bool is_rne = smt_fp_rounding_utils::is_nearest_rounding_mode(rounding_mode);
+    bool is_rna = smt_fp_rounding_utils::is_round_to_away(rounding_mode);
+    smt_astt underflows_to_zero;
+    if (is_rne)
+    {
+      // ties-to-even: midpoint rounds to zero
+      underflows_to_zero = mk_and(
+        mk_le(abs_result, half_min_subnormal), mk_not(mk_eq(real_result, zero)));
+    }
+    else if (is_rna)
+    {
+      // ties-away: midpoint rounds away from zero
+      underflows_to_zero = mk_and(
+        mk_lt(abs_result, half_min_subnormal), mk_not(mk_eq(real_result, zero)));
+    }
+    else
+    {
+      underflows_to_zero = mk_and(
+        mk_lt(abs_result, underflow_threshold), mk_not(mk_eq(real_result, zero)));
+    }
 
     // If we have a special zero check (like for multiplication), use it
     if (operand_zero_check)
