@@ -935,6 +935,11 @@ void python_converter::get_function_definition(
   code_typet type;
   const nlohmann::json &return_node = function_node["returns"];
 
+  // Tracks annotations that already encode Optional (e.g. Optional[T] or
+  // T | None). When true, the later body_has_none_return pass must not
+  // re-wrap the return type as Optional<existing-type>.
+  bool annotation_is_optional = false;
+
   // Determine return type
   if (
     return_node.is_null() ||
@@ -985,6 +990,17 @@ void python_converter::get_function_definition(
     {
       type.return_type() =
         tuple_handler_->get_tuple_type_from_annotation(return_node);
+    }
+    else if (return_type == "Optional" && return_node["_type"] == "Subscript")
+    {
+      // Optional[T]: delegate to the annotation handler, which builds either
+      // an Optional<T> struct (for primitive T) or a T* pointer (for str /
+      // class T, where None is encoded as NULL). The previous fallthrough to
+      // get_typet("Optional") returned a bare pointer_type() (unsignedbv),
+      // which the later body_has_none_return pass then re-wrapped as
+      // Optional<unsignedbv> — a struct unrelated to the annotated T.
+      type.return_type() = get_type_from_annotation(return_node, function_node);
+      annotation_is_optional = true;
     }
     else
     {
@@ -1095,10 +1111,11 @@ void python_converter::get_function_definition(
   };
 
   bool already_optional =
-    type.return_type().is_struct() && to_struct_type(type.return_type())
-                                        .tag()
-                                        .as_string()
-                                        .starts_with("tag-Optional_");
+    annotation_is_optional ||
+    (type.return_type().is_struct() && to_struct_type(type.return_type())
+                                         .tag()
+                                         .as_string()
+                                         .starts_with("tag-Optional_"));
   if (!already_optional && body_has_none_return(function_node["body"]))
   {
     if (type.return_type().is_empty())

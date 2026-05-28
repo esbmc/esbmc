@@ -410,7 +410,15 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   }
 
   if (lhs.type() == none_type() || rhs.type() == none_type())
+  {
+    // A direct call like `f() is None` arrives as code_function_callt — a
+    // statement, not a value. Promote to side_effect_expr_function_callt so
+    // it carries the return type and downstream isnone simplification can
+    // type-check it as a pointer/struct rather than as empty code.
+    lhs = to_value_expr(lhs, ns);
+    rhs = to_value_expr(rhs, ns);
     return handle_none_comparison(op, lhs, rhs);
+  }
 
   // Handle exceptions
   if (lhs.statement() == "cpp-throw")
