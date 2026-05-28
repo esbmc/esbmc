@@ -565,9 +565,10 @@ exprt function_call_expr::handle_base_conversion(
       else
       {
         // Symbolic int — dispatch to the runtime OM matching this builtin.
-        const std::string fn_name = func_name == "bin"   ? "__python_int_to_bin"
-                                    : func_name == "hex" ? "__python_int_to_hex"
-                                                         : "__python_int_to_oct";
+        const std::string fn_name = func_name == "bin" ? "__python_int_to_bin"
+                                    : func_name == "hex"
+                                      ? "__python_int_to_hex"
+                                      : "__python_int_to_oct";
         return converter_.get_string_builder()
           .build_runtime_str_conversion_call(
             fn_name, long_long_int_type(), operand_expr);
