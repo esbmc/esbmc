@@ -4,9 +4,11 @@
 #include <python-frontend/string/string_builder.h>
 #include <python-frontend/string/string_handler.h>
 #include <python-frontend/type_handler.h>
+#include <python-frontend/type_utils.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
 #include <util/message.h>
+#include <util/simplify_expr.h>
 #include <util/std_expr.h>
 
 #include <algorithm>
@@ -538,8 +540,44 @@ exprt function_call_expr::handle_base_conversion(
   }
   else
   {
-    return converter_.get_exception_handler().gen_exception_raise(
-      "TypeError", func_name + "() argument must be an integer");
+    // Not an AST integer literal. Try evaluating the argument:
+    //   - If it constant-folds to an integer (e.g. `bin(round(3.0))` where
+    //     handle_round's compile-time numeric path produces a `Constant`),
+    //     drive the existing string-building path below.
+    //   - Otherwise the value is symbolic; lower to the matching runtime
+    //     operational model (__python_int_to_{bin,hex,oct}) so the result
+    //     depends on the actual runtime int rather than being unreachable.
+    try
+    {
+      exprt operand_expr = converter_.get_expr(arg);
+      if (!type_utils::is_integer_type(operand_expr.type()))
+        return converter_.get_exception_handler().gen_exception_raise(
+          "TypeError", func_name + "() argument must be an integer");
+
+      simplify(operand_expr);
+      BigInt extracted;
+      if (operand_expr.is_constant() && !to_integer(operand_expr, extracted))
+      {
+        int_value = static_cast<long long>(extracted.to_int64());
+        if (int_value < 0)
+          is_negative = true;
+      }
+      else
+      {
+        // Symbolic int — dispatch to the runtime OM matching this builtin.
+        const std::string fn_name = func_name == "bin"   ? "__python_int_to_bin"
+                                    : func_name == "hex" ? "__python_int_to_hex"
+                                                         : "__python_int_to_oct";
+        return converter_.get_string_builder()
+          .build_runtime_str_conversion_call(
+            fn_name, long_long_int_type(), operand_expr);
+      }
+    }
+    catch (const std::exception &)
+    {
+      return converter_.get_exception_handler().gen_exception_raise(
+        "TypeError", func_name + "() argument must be an integer");
+    }
   }
 
   std::string result_str;
