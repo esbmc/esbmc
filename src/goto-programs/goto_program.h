@@ -102,11 +102,23 @@ public:
     //! guard for gotos, assume, assert
     expr2tc guard;
 
-    //! loop invariant for loop_invariant instruction
-    std::list<expr2tc> loop_invariants;
+    //! Loop-contract payload (invariants + assigns-clause targets). Only
+    //! loop_invariant instructions ever carry it, so it lives in a lazily
+    //! allocated side struct rather than costing 48 bytes (two empty
+    //! std::lists) on every instruction in the program.
+    struct loop_contract_datat
+    {
+      std::list<expr2tc> invariants;
+      std::list<expr2tc> assigns_targets; // for frame rule enforcement
+    };
+    std::unique_ptr<loop_contract_datat> loop_contract_data;
 
-    //! loop assigns targets for frame rule enforcement
-    std::list<expr2tc> loop_assigns_targets;
+    loop_contract_datat &loop_contract_payload()
+    {
+      if (!loop_contract_data)
+        loop_contract_data = std::make_unique<loop_contract_datat>();
+      return *loop_contract_data;
+    }
 
     //! the target for gotos and for start_thread nodes
     typedef std::list<class instructiont>::iterator targett;
@@ -164,8 +176,7 @@ public:
       targets.clear();
       guard = gen_true_expr();
       code = expr2tc();
-      loop_invariants.clear();
-      loop_assigns_targets.clear();
+      loop_contract_data.reset();
       inductive_step_instruction = false;
       inductive_assertion = false;
       flipped_guard = false;
@@ -443,8 +454,7 @@ public:
       std::swap(instruction.type, type);
       instruction.guard.swap(guard);
       instruction.targets.swap(targets);
-      instruction.loop_invariants.swap(loop_invariants);
-      instruction.loop_assigns_targets.swap(loop_assigns_targets);
+      loop_contract_data.swap(instruction.loop_contract_data);
       instruction.function.swap(function);
       std::swap(
         inductive_step_instruction, instruction.inductive_step_instruction);
@@ -460,21 +470,23 @@ public:
     void add_loop_invariant(const expr2tc &invariant)
     {
       assert(is_loop_invariant());
-      loop_invariants.push_back(invariant);
+      loop_contract_payload().invariants.push_back(invariant);
     }
     std::list<expr2tc> get_loop_invariants() const
     {
-      return loop_invariants;
+      return loop_contract_data ? loop_contract_data->invariants
+                                : std::list<expr2tc>{};
     }
 
     void add_loop_assigns_target(const expr2tc &target)
     {
       assert(is_loop_invariant());
-      loop_assigns_targets.push_back(target);
+      loop_contract_payload().assigns_targets.push_back(target);
     }
     std::list<expr2tc> get_loop_assigns_targets() const
     {
-      return loop_assigns_targets;
+      return loop_contract_data ? loop_contract_data->assigns_targets
+                                : std::list<expr2tc>{};
     }
 
     //! A globally unique number to identify a program location.
