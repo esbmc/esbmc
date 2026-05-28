@@ -42,7 +42,8 @@ void symex_target_equationt::assignment(
   SSA_step.cond = equality2tc(lhs, rhs);
   SSA_step.type = goto_trace_stept::ASSIGNMENT;
   SSA_step.source = source;
-  SSA_step.stack_trace = stack_trace;
+  if (!stack_trace.empty())
+    SSA_step.stack_trace_payload() = std::move(stack_trace);
   SSA_step.loop_number = loop_number;
 
   if (debug_print)
@@ -125,7 +126,8 @@ void symex_target_equationt::assertion(
   SSA_step.type = goto_trace_stept::ASSERT;
   SSA_step.source = source;
   SSA_step.comment = msg;
-  SSA_step.stack_trace = stack_trace;
+  if (!stack_trace.empty())
+    SSA_step.stack_trace_payload() = std::move(stack_trace);
   SSA_step.loop_number = loop_number;
 
   if (debug_print)

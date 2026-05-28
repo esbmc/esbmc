@@ -78,7 +78,7 @@ void build_goto_trace(
     if (SSA_step.output_data)
       goto_trace_step.format_string = SSA_step.output_data->format_string;
 
-    goto_trace_step.stack_trace = SSA_step.stack_trace;
+    goto_trace_step.stack_trace = SSA_step.stack_trace();
 
     if (SSA_step.is_assignment())
     {
@@ -163,7 +163,7 @@ void build_successful_goto_trace(
       goto_trace_step.step_nr = step_nr++;
       if (SSA_step.output_data)
         goto_trace_step.format_string = SSA_step.output_data->format_string;
-      goto_trace_step.stack_trace = SSA_step.stack_trace;
+      goto_trace_step.stack_trace = SSA_step.stack_trace();
     }
   }
 }

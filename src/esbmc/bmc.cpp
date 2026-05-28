@@ -1418,7 +1418,7 @@ void bmct::bidirectional_search(
         return;
 
       // Save the location of the failed assertion
-      frames = ssait.stack_trace;
+      frames = ssait.stack_trace();
       assert_loop_number = ssait.loop_number;
 
       // We are not interested in instructions before the failed assertion yet
