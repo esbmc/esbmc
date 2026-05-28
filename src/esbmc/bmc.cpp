@@ -1715,8 +1715,11 @@ int bmct::ltl_run_thread(symex_target_equationt &equation) const
 {
   /* LTL checking - first check for whether we have a negative prefix, then
    * the indeterminate ones. */
-  using Type = std::pair<std::string_view, ltl_res>;
-  static constexpr std::array seq = {
+  // Keys are interned irep_idt, matching SSA_stept::comment, so the
+  // comparisons below are dstring identity checks with no per-step
+  // string materialisation.
+  using Type = std::pair<irep_idt, ltl_res>;
+  static const std::array seq = {
     Type{"LTL_BAD", ltl_res_bad},
     Type{"LTL_FAILING", ltl_res_failing},
     Type{"LTL_SUCCEEDING", ltl_res_succeeding},

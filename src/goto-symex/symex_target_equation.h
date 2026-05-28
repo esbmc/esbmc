@@ -152,9 +152,13 @@ public:
     expr2tc lhs, rhs;
     expr2tc original_lhs, original_rhs;
 
-    // for ASSUME/ASSERT
+    // for ASSUME/ASSERT. Interned: assertion messages are a small,
+    // highly repetitive set ("dereference failure", "array bounds
+    // violated", ...), so irep_idt both shrinks the inline footprint
+    // (4 bytes vs a 32-byte std::string) and dedups the payload across
+    // the many steps that share a message.
     expr2tc cond;
-    std::string comment;
+    irep_idt comment;
 
     // OUTPUT-step payload. OUTPUT steps are rare (only printf-family
     // side effects produce them), so the format string and argument
