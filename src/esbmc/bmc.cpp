@@ -19,7 +19,6 @@
 #include <regex>
 #include <ac_config.h>
 #include <esbmc/bmc.h>
-#include <esbmc/document_subgoals.h>
 #include <fstream>
 #include <goto-programs/goto_loops.h>
 #include <goto-symex/build_goto_trace.h>
@@ -1586,14 +1585,6 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
       solver_result.total_claims,
       remaining_asserts,
       BigInt(eq->SSA_steps.size()) - ignored);
-
-    if (options.get_bool_option("document-subgoals"))
-    {
-      std::ostringstream oss;
-      document_subgoals(*eq, oss);
-      log_status("{}", oss.str());
-      return smt_convt::P_SMTLIB;
-    }
 
     if (options.get_bool_option("show-vcc"))
     {

@@ -199,7 +199,6 @@ const struct group_opt_templ all_cmd_options[] = {
     {"show-loops", NULL, "Show the loops in the program"},
     {"show-claims", NULL, "Only show claims"},
     {"show-vcc", NULL, "Show the verification conditions"},
-    {"document-subgoals", NULL, "Generate subgoals documentation"},
     {"no-library", NULL, "Disable built-in abstract C library"},
     {"no-string-literal", NULL, "Ignore string literals (replace with NULL)"},
     {"binary", NULL, "Read goto program instead of source code"},
