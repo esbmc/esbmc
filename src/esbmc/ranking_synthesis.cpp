@@ -213,6 +213,16 @@ bool measure_from_guard(const expr2tc &guard, expr2tc &m, expr2tc &L)
   if (!is_bv_type(a->type) || !is_bv_type(b->type))
     return false;
 
+  // The measure is m = (int64)a - (int64)b. Value-preserving extension to
+  // int64 keeps each operand in its source range, so the subtraction cannot
+  // overflow as long as both fit comfortably below int64: 32-bit operands
+  // give a difference in [-(2^32-1), 2^32-1], far inside int64. A 64-bit
+  // operand, however, can produce a difference outside int64, which would
+  // wrap under modular bitvector subtraction and let a non-decreasing or
+  // unbounded measure spuriously satisfy the obligations. Refuse those.
+  if (a->type->get_width() > 32 || b->type->get_width() > 32)
+    return false;
+
   type2tc wide = get_int_type(64);
   m = sub2tc(wide, typecast2tc(wide, a), typecast2tc(wide, b));
   L = constant_int2tc(wide, bound);
