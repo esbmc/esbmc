@@ -960,6 +960,13 @@ goto_programt code_contractst::generate_checking_wrapper(
   };
   std::vector<is_fresh_info> is_fresh_calls;
 
+  // Pointer-typed lvalues that received a heap allocation in this wrapper
+  // (is_fresh requires-side mallocs and add_pointer_validity_assumptions
+  // mallocs). Each gets a matching free() before the wrapper returns so that
+  // --memory-leak-check does not blame the user's function for the
+  // wrapper-internal allocation (CWE-401, see GitHub issue #4908).
+  std::vector<expr2tc> wrapper_heap_ptrs;
+
   forall_goto_program_instructions (it, original_body)
   {
     if (it->is_function_call() && is_code_function_call2t(it->code))
@@ -1046,6 +1053,9 @@ goto_programt code_contractst::generate_checking_wrapper(
     assign_inst->location = location;
     assign_inst->location.comment("__ESBMC_is_fresh memory allocation");
 
+    // Remember the allocation so the wrapper can free it before returning.
+    wrapper_heap_ptrs.push_back(ptr_var);
+
     // Assume the pointer is non-null: __ESBMC_is_fresh guarantees a fresh,
     // valid memory block.  Without this, symex_mem's non-deterministic
     // malloc-failure path can produce NULL, causing later dereferences to fail.
@@ -1109,7 +1119,8 @@ goto_programt code_contractst::generate_checking_wrapper(
       original_func,
       location,
       array_param_ids,
-      is_fresh_allocated_params);
+      is_fresh_allocated_params,
+      &wrapper_heap_ptrs);
   }
 
   // 2. Extract and create snapshots for __ESBMC_old() expressions.
@@ -1433,6 +1444,20 @@ goto_programt code_contractst::generate_checking_wrapper(
     t->location = location;
     t->location.comment("contract ensures");
     t->location.property("contract ensures");
+  }
+
+  // 4b. Free every heap allocation the wrapper performed for the parameters
+  //     (is_fresh requires-side mallocs and add_pointer_validity_assumptions
+  //     mallocs). Must happen AFTER the ensures assertion — which may
+  //     dereference these buffers — and BEFORE the RETURN, so that
+  //     --memory-leak-check no longer attributes a CWE-401 forgotten-memory
+  //     leak to the user's function (issue #4908).
+  for (const expr2tc &ptr : wrapper_heap_ptrs)
+  {
+    goto_programt::targett free_inst = wrapper.add_instruction(OTHER);
+    free_inst->code = code_free2tc(ptr);
+    free_inst->location = location;
+    free_inst->location.comment("contract: free wrapper-allocated backing");
   }
 
   // 5. Return the value (if function has return type)
@@ -3659,7 +3684,8 @@ void code_contractst::add_pointer_validity_assumptions(
   const symbolt &func,
   const locationt &location,
   const std::set<irep_idt> &array_params,
-  const std::set<irep_idt> &skip_params)
+  const std::set<irep_idt> &skip_params,
+  std::vector<expr2tc> *allocated_ptrs)
 {
   if (!func.get_type().is_code())
     return;
@@ -3726,6 +3752,9 @@ void code_contractst::add_pointer_validity_assumptions(
         "contracts",
         "add_pointer_validity_assumptions: malloc (array) for parameter {}",
         id2string(param.get_identifier()));
+
+      if (allocated_ptrs)
+        allocated_ptrs->push_back(p);
     }
     else
     {
@@ -3834,6 +3863,9 @@ void code_contractst::add_pointer_validity_assumptions(
           "add_pointer_validity_assumptions: malloc (primitive) for parameter "
           "{}",
           id2string(param.get_identifier()));
+
+        if (allocated_ptrs)
+          allocated_ptrs->push_back(p);
       }
     }
   }
