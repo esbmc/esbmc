@@ -8,7 +8,11 @@ import sys
 import unittest
 from subprocess import Popen, PIPE, STDOUT
 import argparse
+import json
+import operator
 import re
+import shutil
+import tempfile
 import xml.etree.ElementTree as ET
 import time
 import shlex
@@ -43,6 +47,115 @@ SUPPORTED_TEST_MODES = ["CORE", "FUTURE", "THOROUGH", "KNOWNBUG", "ALL"]
 # match. Matching = test now passes -> exit 77, prompting reclassification.
 FAIL_MODES = ["KNOWNBUG", "FUTURE"]
 
+# CHECK_JSON directive: see regression/README.md for the format.
+CHECK_JSON_KEYWORD = "CHECK_JSON"
+_CHECK_JSON_OPS = {
+    "==": operator.eq,
+    "!=": operator.ne,
+    "<": operator.lt,
+    ">": operator.gt,
+    "<=": operator.le,
+    ">=": operator.ge,
+}
+
+
+def _is_check_json_line(stripped):
+    """True iff the first whitespace-delimited token is CHECK_JSON."""
+    head = stripped.split(maxsplit=1)
+    return bool(head) and head[0] == CHECK_JSON_KEYWORD
+
+
+def _parse_check_json(line):
+    """Parse one CHECK_JSON directive into (file, jsonpath, op, expected)."""
+    parts = line.split(None, 4)
+    if len(parts) != 5 or parts[0] != CHECK_JSON_KEYWORD:
+        raise ValueError(
+            f"CHECK_JSON expects: CHECK_JSON <file> <jsonpath> <op> <literal>; "
+            f"got: {line!r}"
+        )
+    _, file, jsonpath, op, literal = parts
+    if os.path.isabs(file):
+        raise ValueError(
+            f"CHECK_JSON file must be a relative path (resolved against ESBMC's "
+            f"working directory); got {file!r}"
+        )
+    if op not in _CHECK_JSON_OPS:
+        raise ValueError(
+            f"CHECK_JSON op must be one of {list(_CHECK_JSON_OPS)}; got {op!r}"
+        )
+    return (file, jsonpath, op, json.loads(literal))
+
+
+def _eval_jsonpath(root, path):
+    """Walk a restricted JSONPath ('$', '.field', '[N]') over a parsed value."""
+    if not path.startswith("$"):
+        raise ValueError(f"JSONPath must start with '$': {path!r}")
+    cur = root
+    i = 1
+    while i < len(path):
+        c = path[i]
+        if c == ".":
+            j = i + 1
+            while j < len(path) and path[j] not in ".[":
+                j += 1
+            cur = cur[path[i + 1:j]]
+            i = j
+        elif c == "[":
+            j = path.find("]", i)
+            if j == -1:
+                raise ValueError(f"JSONPath: unclosed '[' in {path!r}")
+            idx = path[i + 1:j]
+            if not idx.isdigit():
+                raise ValueError(
+                    f"JSONPath: array index must be a non-negative integer; "
+                    f"got {idx!r} in {path!r}"
+                )
+            cur = cur[int(idx)]
+            i = j + 1
+        else:
+            raise ValueError(f"JSONPath: unexpected {c!r} at {i} in {path!r}")
+    return cur
+
+
+def _run_check_json(check, base_dir):
+    """Return (passed, message). message is None on pass, diagnostic on fail."""
+    file, jsonpath, op, expected = check
+    path = os.path.join(base_dir, file)
+    if not os.path.isfile(path):
+        return False, f"CHECK_JSON file not found: {file}"
+    try:
+        with open(path) as f:
+            data = json.load(f)
+    except (OSError, json.JSONDecodeError) as exc:
+        return False, f"CHECK_JSON read/parse failed for {file}: {exc}"
+    try:
+        actual = _eval_jsonpath(data, jsonpath)
+    except (KeyError, IndexError, TypeError, ValueError) as exc:
+        return False, f"CHECK_JSON path {jsonpath} on {file}: {exc}"
+    # JSON distinguishes booleans from numbers
+    # Python's bool-is-int coercion would otherwise mask the schema divergence this catches.
+    if isinstance(actual, bool) != isinstance(expected, bool):
+        return (
+            False,
+            f"CHECK_JSON {file} {jsonpath}: type mismatch "
+            f"({type(actual).__name__} vs {type(expected).__name__}); "
+            f"actual={actual!r}, expected={expected!r}",
+        )
+    try:
+        result = _CHECK_JSON_OPS[op](actual, expected)
+    except TypeError as exc:
+        return (
+            False,
+            f"CHECK_JSON {file} {jsonpath}: cannot apply {op!r} to "
+            f"{actual!r} and {expected!r}: {exc}",
+        )
+    if not result:
+        return (
+            False,
+            f"CHECK_JSON {file} {jsonpath} = {actual!r}; expected {op} {expected!r}",
+        )
+    return True, None
+
 # Bring up a single benchmark
 BENCHMARK_BRINGUP = False
 
@@ -68,11 +181,20 @@ class TestCase:
             # Third line - Arguments of executable
             self.test_args = fp.readline().strip()
 
-            # Fourth line and beyond
-            # Regex of expected output
+            # Line 4+: stdout/stderr regexes and optional CHECK_JSON lines.
             self.test_regex = []
+            self.check_json = []
             for line in fp:
-                self.test_regex.append(line.strip())
+                stripped = line.strip()
+                if _is_check_json_line(stripped):
+                    try:
+                        self.check_json.append(_parse_check_json(stripped))
+                    except ValueError as exc:
+                        raise ValueError(
+                            f"{self.test_dir}/test.desc: {exc}"
+                        ) from exc
+                else:
+                    self.test_regex.append(stripped)
 
     def generate_run_argument_list(self, *tool):
         """Generates run command list to be used in Popen"""
@@ -110,6 +232,7 @@ class TestCase:
         self.test_args = None
         self.test_file = None
         self.test_mode = "CORE"
+        self.check_json = []
         self._initialize_test_case()
 
     def save_test(self):
@@ -122,6 +245,11 @@ class TestCase:
             f.write(f"{self.test_args}\n")
             for re in self.test_regex:
                 f.write(f"{re}\n")
+            for file, jsonpath, op, expected in self.check_json:
+                f.write(
+                    f"{CHECK_JSON_KEYWORD} {file} {jsonpath} {op} "
+                    f"{json.dumps(expected)}\n"
+                )
 
     """Ignore regex and only check for crashes"""
     RUN_ONLY = False
@@ -150,8 +278,8 @@ class Executor:
         self.tool = shlex.split(tool)
         self.timeout = RegressionBase.TIMEOUT
 
-    def run(self, test_case: TestCase):
-        """Execute the test case with `executable`"""
+    def run(self, test_case: TestCase, cwd=None):
+        """Execute the test case. `cwd` isolates ESBMC's output files."""
         cmd = test_case.generate_run_argument_list(*self.tool)
         preexec = _prepare_child if os.name == "posix" else None
 
@@ -161,6 +289,7 @@ class Executor:
             stderr=PIPE,
             preexec_fn=preexec,
             env=dict(os.environ, ESBMC_CONFIG_FILE=""),
+            cwd=cwd,
         ) as proc:
             try:
                 stdout, stderr = proc.communicate(timeout=self.timeout)
@@ -229,76 +358,95 @@ def _add_test(test_case, executor):
     """This method returns a function that defines a test"""
 
     def test(self):
-        stdout, stderr, rc = executor.run(test_case)
+        # Per-test cwd so parallel CHECK_JSON tests don't race on output files.
+        tmp_dir = (
+            tempfile.mkdtemp(prefix="esbmc-regress-")
+            if test_case.check_json else None
+        )
+        try:
+            stdout, stderr, rc = executor.run(test_case, cwd=tmp_dir)
 
-        if stdout is None:
-            # Timeout: ESBMC didn't finish within ESBMC_REGRESS_TIMEOUT.
-            # For KNOWNBUG tests, "doesn't produce the expected output
-            # within the budget" is exactly the bug being tracked, so
-            # treat a timeout as satisfying the KNOWNBUG expectation
-            # rather than as a hard failure that breaks CI.
-            if test_case.test_mode in FAIL_MODES:
-                print(
-                    "TIMEOUT after limit {}s -- accepted under {}".format(
-                        executor.timeout or "none", test_case.test_mode
+            if stdout is None:
+                # Timeout: ESBMC didn't finish within ESBMC_REGRESS_TIMEOUT.
+                # For KNOWNBUG tests, "doesn't produce the expected output
+                # within the budget" is exactly the bug being tracked, so
+                # treat a timeout as satisfying the KNOWNBUG expectation
+                # rather than as a hard failure that breaks CI.
+                if test_case.test_mode in FAIL_MODES:
+                    print(
+                        "TIMEOUT after limit {}s -- accepted under {}".format(
+                            executor.timeout or "none", test_case.test_mode
+                        )
                     )
-                )
+                    return
+                timeout_message = "\nTIMEOUT TEST: {} (limit {}s)".format(
+                    test_case.test_dir, executor.timeout or "none")
+                if stderr:
+                    timeout_message += "\n" + stderr.decode(errors="replace")
+                self.fail(timeout_message)
+
+            if TestCase.RUN_ONLY:
+                if rc != 0:
+                    self.fail(f"Wrong output for process. Bombed out with exit code {rc}")
                 return
-            timeout_message = "\nTIMEOUT TEST: {} (limit {}s)".format(
-                test_case.test_dir, executor.timeout or "none")
-            if stderr:
-                timeout_message += "\n" + stderr.decode(errors="replace")
-            self.fail(timeout_message)
 
-        if TestCase.RUN_ONLY:
-            if rc != 0:
-                self.fail(f"Wrong output for process. Bombed out with exit code {rc}")
-            return
-
-        output_to_validate = stdout.decode(errors="replace") + stderr.decode(errors="replace")
-        error_message_prefix = (
-            "\nTEST: "
-            + str(test_case.test_dir)
-            + "\nEXPECTED TO FIND: "
-            + str(test_case.test_regex)
-            + "\n\nPROGRAM OUTPUT\n"
-        )
-        error_message = (
-            output_to_validate
-            + "\n\nARGUMENTS: "
-            + str(test_case.generate_run_argument_list(*executor.tool))
-        )
-
-        if BENCHMARK_BRINGUP:
-            if os.environ.get("LOG_DIR") is None:
-                raise RuntimeError("environment variable LOG_DIR is not defined")
-            assert os.path.isdir(os.environ["LOG_DIR"])
-            destination = os.environ["LOG_DIR"] + "/" + test_case.name
-            f = open(destination, "a")
-            f.write("ESBMC args: " + test_case.test_args + "\n\n")
-            f.write(output_to_validate)
-            f.close()
-
-        matches_regex = True
-        for regex in test_case.test_regex:
-            match_regex = re.compile(regex, re.MULTILINE)
-            if not match_regex.search(output_to_validate.replace("\r", "")):
-                matches_regex = False
-
-        if (test_case.test_mode in FAIL_MODES) and matches_regex:
-            rel_path = os.path.relpath(test_case.test_dir, os.path.dirname(__file__))
-            print(
-                f"\033[33mERROR: Test '{rel_path}' passed but is marked as {test_case.test_mode}. Consider reclassifying it as CORE.\033[0m"
+            output_to_validate = stdout.decode(errors="replace") + stderr.decode(errors="replace")
+            error_message_prefix = (
+                "\nTEST: "
+                + str(test_case.test_dir)
+                + "\nEXPECTED TO FIND: "
+                + str(test_case.test_regex)
+                + "\n\nPROGRAM OUTPUT\n"
             )
-            sys.exit(77)
-        elif (test_case.test_mode not in FAIL_MODES) and (not matches_regex):
-            if RegressionBase.FAIL_WITH_WORD is not None:
-                match_regex = re.compile(RegressionBase.FAIL_WITH_WORD, re.MULTILINE)
-                if match_regex.search(output_to_validate):
-                    test_case.mark_test_as_knownbug(RegressionBase.FAIL_WITH_WORD)
-                    self.fail(error_message_prefix + error_message)
-            else:
+            error_message = (
+                output_to_validate
+                + "\n\nARGUMENTS: "
+                + str(test_case.generate_run_argument_list(*executor.tool))
+            )
+
+            if BENCHMARK_BRINGUP:
+                if os.environ.get("LOG_DIR") is None:
+                    raise RuntimeError("environment variable LOG_DIR is not defined")
+                assert os.path.isdir(os.environ["LOG_DIR"])
+                destination = os.environ["LOG_DIR"] + "/" + test_case.name
+                f = open(destination, "a")
+                f.write("ESBMC args: " + test_case.test_args + "\n\n")
+                f.write(output_to_validate)
+                f.close()
+
+            matches_regex = True
+            for regex in test_case.test_regex:
+                match_regex = re.compile(regex, re.MULTILINE)
+                if not match_regex.search(output_to_validate.replace("\r", "")):
+                    matches_regex = False
+
+            check_failures = []
+            for check in test_case.check_json:
+                passed, msg = _run_check_json(check, tmp_dir)
+                if not passed:
+                    check_failures.append(msg)
+            all_checks_pass = matches_regex and not check_failures
+
+            if (test_case.test_mode in FAIL_MODES) and all_checks_pass:
+                rel_path = os.path.relpath(test_case.test_dir, os.path.dirname(__file__))
+                print(
+                    f"\033[33mERROR: Test '{rel_path}' passed but is marked as {test_case.test_mode}. Consider reclassifying it as CORE.\033[0m"
+                )
+                sys.exit(77)
+            elif (test_case.test_mode not in FAIL_MODES) and (not all_checks_pass):
+                if check_failures:
+                    error_message = "\n".join(check_failures) + "\n\n" + error_message
+                if RegressionBase.FAIL_WITH_WORD is not None:
+                    match_regex = re.compile(RegressionBase.FAIL_WITH_WORD, re.MULTILINE)
+                    if match_regex.search(output_to_validate):
+                        error_message = (
+                            f"Output matched FAIL_WITH_WORD marker "
+                            f"{RegressionBase.FAIL_WITH_WORD!r}\n" + error_message
+                        )
                 self.fail(error_message_prefix + error_message)
+        finally:
+            if tmp_dir is not None:
+                shutil.rmtree(tmp_dir, ignore_errors=True)
 
     return test
 
