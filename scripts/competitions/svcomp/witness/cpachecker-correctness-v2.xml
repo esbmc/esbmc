@@ -110,6 +110,10 @@
       <includesfile>$HOME/sv-benchmarks/c/SoftwareSystems-Intel-TDX-Module.set</includesfile>
       <propertyfile>$HOME/sv-benchmarks/c/properties/unreach-call.prp</propertyfile>
     </tasks>
+    <tasks name="ReachSafety-CorrectnessWitnesses">
+      <includesfile>$HOME/sv-benchmarks/c/CorrectnessWitnesses.set</includesfile>
+      <propertyfile>$HOME/sv-benchmarks/c/properties/unreach-call.prp</propertyfile>
+    </tasks>
 </rundefinition>
 
 <rundefinition name="SV-COMP26_no-data-race">

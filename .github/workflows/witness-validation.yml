@@ -64,6 +64,8 @@ on:
           - ReachSafety-Combinations
           - ReachSafety-Hardware
           - ReachSafety-Hardness
+          - ReachSafety-CorrectnessWitnesses
+          - ReachSafety-ViolationWitnesses
           - ConcurrencySafety-Main
           - SoftwareSystems-AWS-C-Common-ReachSafety
           - SoftwareSystems-DeviceDriversLinux64-ReachSafety
@@ -71,6 +73,7 @@ on:
           - SoftwareSystems-Other-ReachSafety
           - SoftwareSystems-uthash-ReachSafety
           - SoftwareSystems-Intel-TDX-Module-ReachSafety
+          - Termination-ViolationWitnesses
           - NoDataRace-Main
           - MemSafety-MemCleanup
           - SoftwareSystems-uthash-MemCleanup
@@ -136,6 +139,10 @@ jobs:
           rm -rf ./esbmc-output $HOME/esbmc-output
           unzip -q output.zip
           mv esbmc-output $HOME/esbmc-output
+
+      - name: Run WitnessMap
+        if: ${{ inputs.mode == 'Task' && (inputs.task == 'ReachSafety-CorrectnessWitnesses' || inputs.task == 'ReachSafety-ViolationWitnesses' || inputs.task == 'Termination-ViolationWitnesses') }}
+        run: ./esbmc-src/scripts/witnessmap.sh
 
       - name: Download ESBMC binary (from benchexec run)
         if: ${{ inputs.validator == 'ESBMC' && inputs.esbmc_source == 'Download from benchexec run' }}
