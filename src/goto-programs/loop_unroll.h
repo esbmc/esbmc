@@ -3,6 +3,7 @@
 
 #include <util/algorithms.h>
 #include <util/message.h>
+#include <unordered_set>
 
 /**
  * @brief This is the base class that unroll
@@ -99,8 +100,13 @@ private:
  * DECL i
  * i = 0
  * 1: ...
- * 
+ *
  * We want to automatically set the next loop unwinding to 4.
+ *
+ * The intrinsic is bound to the loop whose head immediately follows it,
+ * skipping over the loop preamble (variable declarations, initialisers and
+ * condition side-effects such as `while (int v = f())`). Any __ESBMC_unroll
+ * call that is not directly followed by a loop is reported as misplaced.
  */
 class apply_intrinsic_unroller : public goto_functions_algorithm
 {
@@ -109,8 +115,19 @@ public:
   {
   }
 
+  bool run(goto_functionst &goto_functions) override;
+
 protected:
   bool runOnLoop(loopst &loop, goto_programt &goto_program) override;
+
+private:
+  /// Bind the __ESBMC_unroll call at `call` to `loop` and record it as
+  /// matched. Returns true on success.
+  bool apply_unroll(goto_programt::targett call, loopst &loop);
+
+  /// __ESBMC_unroll calls that were successfully bound to a loop. Used after
+  /// the loop walk to warn about the ones that were left unmatched.
+  std::unordered_set<const goto_programt::instructiont *> matched_calls;
 };
 
 #endif
