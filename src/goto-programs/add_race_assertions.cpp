@@ -114,9 +114,8 @@ void w_guardst::add_initialization(goto_programt &goto_program)
 // and typecast selectors (`&s.f` -> s, `&a[k]` -> a, `&(T)x` -> x); a
 // dereference under address-of (`&*p`) yields no new escapee because it just
 // re-forms an existing pointer.
-static void collect_address_taken(
-  const expr2tc &expr,
-  rw_sett::shared_localst &out)
+static void
+collect_address_taken(const expr2tc &expr, rw_sett::shared_localst &out)
 {
   if (is_nil_expr(expr))
     return;
