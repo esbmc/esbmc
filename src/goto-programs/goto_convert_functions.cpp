@@ -67,14 +67,18 @@ void goto_convert_functionst::add_return(
   t->make_return();
   t->location = location;
 
-  const typet rt = migrate_type_back(to_code_type(f.type).ret_type);
-  const typet &thetype = (rt.id() == "symbol") ? ns.follow(rt) : rt;
-  exprt rhs = exprt("sideeffect", thetype);
-  rhs.statement("nondet");
-
-  expr2tc tmp_expr;
-  migrate_expr(rhs, tmp_expr);
-  t->code = code_return2tc(tmp_expr);
+  // Build a nondet side-effect of the function's return type directly on
+  // the irep2 side. Followed through symbol-typed aliases as the legacy
+  // path did.
+  type2tc ret_type = ns.follow(to_code_type(f.type).ret_type);
+  expr2tc nondet = sideeffect2tc(
+    ret_type,
+    expr2tc(),
+    expr2tc(),
+    std::vector<expr2tc>(),
+    type2tc(),
+    sideeffect2t::allockind::nondet);
+  t->code = code_return2tc(nondet);
 }
 
 void goto_convert_functionst::convert_function(symbolt &symbol)
