@@ -740,6 +740,19 @@ typet type_handler::get_typet(const nlohmann::json &elem) const
       return get_typet(elem["operand"]);
     }
 
+    // Handle Python AST BinOp node (e.g., 1 + 0): the result type follows the
+    // operands, promoting to float when either side is float (#4909).
+    if (
+      elem["_type"] == "BinOp" && elem.contains("left") &&
+      elem.contains("right"))
+    {
+      typet lhs_type = get_typet(elem["left"]);
+      typet rhs_type = get_typet(elem["right"]);
+      if (lhs_type.is_floatbv() || rhs_type.is_floatbv())
+        return double_type();
+      return lhs_type;
+    }
+
     // Handle Python AST List node
     if (elem["_type"] == "List" && elem.contains("elts"))
     {
@@ -796,20 +809,37 @@ typet type_handler::get_typet(const nlohmann::json &elem) const
 
   if (elem["_type"] == "Name")
   {
-    const nlohmann::json &var = json_utils::find_var_decl(
-      elem["id"], converter_.current_function_name(), converter_.ast());
-
-    if (!var.empty() && var.contains("value") && !var["value"].is_null())
+    // Resolve the type from the variable's RHS. The RHS is not always a
+    // Constant (which carries a nested "value"): it can be an alias (Name),
+    // an expression (BinOp), etc. Reading var["value"]["value"] asserted in
+    // nlohmann::json for those shapes (#4909). Walk alias chains
+    // (x = y = ... = literal) iteratively, guarding against cyclic aliases
+    // (a = b; b = a) so resolution cannot recurse without bound.
+    nlohmann::json node = elem;
+    std::set<std::string> seen;
+    while (node.is_object() && node.contains("_type") &&
+           node["_type"] == "Name")
     {
-      if (var["value"]["_type"] != "Call")
-        return get_typet(var["value"]["value"]);
+      const std::string id = node["id"].get<std::string>();
+      if (!seen.insert(id).second)
+        return empty_typet(); // cyclic alias
 
-      if (var["value"].contains("func"))
-        return get_typet_from_call_func(var["value"]["func"]);
+      const nlohmann::json &var = json_utils::find_var_decl(
+        id, converter_.current_function_name(), converter_.ast());
 
-      throw std::runtime_error("Invalid type");
+      if (var.empty() || !var.contains("value") || var["value"].is_null())
+        return empty_typet();
+
+      if (var["value"]["_type"] == "Call")
+      {
+        if (var["value"].contains("func"))
+          return get_typet_from_call_func(var["value"]["func"]);
+        throw std::runtime_error("Invalid type");
+      }
+
+      node = var["value"];
     }
-    return empty_typet();
+    return get_typet(node);
   }
 
   if (elem["_type"] == "Call")
