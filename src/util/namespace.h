@@ -3,6 +3,7 @@
 
 #include <util/context.h>
 #include <irep2/irep2.h>
+#include <irep2/irep2_type.h>
 #include <util/migrate.h>
 
 class namespacet
@@ -19,10 +20,25 @@ public:
   const typet &follow(const typet &src) const;
   const type2tc follow(const type2tc &src) const
   {
-    typet back = migrate_type_back(src);
-    typet followed = follow(back);
-    type2tc tmp = migrate_type(followed);
-    return tmp;
+    // Native IREP2 symbol-type resolution, mirroring follow(typet) without
+    // the back-migrate -> follow(typet) -> forward-migrate detour (hot path).
+    if (!is_symbol_type(src))
+      return src;
+
+    const symbolt *symbol = lookup(to_symbol_type(src).symbol_name);
+
+    // let's hope it's not cyclic...
+    while (true)
+    {
+      assert(symbol);
+      assert(symbol->is_type);
+      type2tc t = migrate_symbol_type(*symbol);
+      if (!is_symbol_type(t))
+        return t;
+      const symbolt *next = lookup(to_symbol_type(t).symbol_name);
+      assert(next != symbol && "cycle of length 1 in ns.follow()");
+      symbol = next;
+    }
   }
 
   namespacet() = delete;
