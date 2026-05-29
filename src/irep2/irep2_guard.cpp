@@ -2,7 +2,6 @@
 #include <unordered_set>
 #include <irep2/irep2_guard.h>
 #include <irep2/irep2_utils.h>
-#include <util/std_expr.h>
 
 expr2tc guard2tc::as_expr() const
 {
