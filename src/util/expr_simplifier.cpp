@@ -3109,7 +3109,7 @@ expr2tc typecast2t::do_simplify() const
       if (is_fixedbv_type(type))
       {
         fixedbvt fbv;
-        fbv.spec = to_fixedbv_type(migrate_type_back(type));
+        fbv.spec = fixedbv_spect(to_fixedbv_type(type));
         fbv.from_integer(to_constant_bool2t(simp).value);
         return constant_fixedbv2tc(fbv);
       }
@@ -3126,7 +3126,7 @@ expr2tc typecast2t::do_simplify() const
 
         // Bool -> float: convert the bool's integer value (0 or 1) into
         // a float of the destination type.
-        fpbv.spec = ieee_float_spect(to_floatbv_type(migrate_type_back(type)));
+        fpbv.spec = ieee_float_spect(to_floatbv_type(type));
         fpbv.from_integer(BigInt(to_constant_bool2t(simp).value));
 
         return constant_floatbv2tc(fpbv);
@@ -3139,21 +3139,17 @@ expr2tc typecast2t::do_simplify() const
 
       if (is_bv_type(type))
       {
-        // If we are typecasting from integer to a smaller integer,
-        // this will return the number with the smaller size
-        exprt number = from_integer(theint.value, migrate_type_back(type));
-
-        BigInt new_number;
-        if (to_integer(number, new_number))
-          return expr2tc();
-
-        return constant_int2tc(type, new_number);
+        // Typecasting an integer constant to a (possibly smaller) integer
+        // type: from_integer(BigInt, type2tc) truncates/sign-extends to the
+        // destination width via the same binary round-trip the legacy
+        // from_integer + to_integer pair performed.
+        return from_integer(theint.value, type);
       }
 
       if (is_fixedbv_type(type))
       {
         fixedbvt fbv;
-        fbv.spec = to_fixedbv_type(migrate_type_back(type));
+        fbv.spec = fixedbv_spect(to_fixedbv_type(type));
         fbv.from_integer(theint.value);
         return constant_fixedbv2tc(fbv);
       }
@@ -3174,7 +3170,7 @@ expr2tc typecast2t::do_simplify() const
         BigInt rm_value = to_constant_int2t(rounding_mode).value;
         fpbv.rounding_mode = ieee_floatt::rounding_modet(rm_value.to_int64());
 
-        fpbv.spec = to_floatbv_type(migrate_type_back(type));
+        fpbv.spec = ieee_float_spect(to_floatbv_type(type));
         fpbv.from_integer(to_constant_int2t(simp).value);
 
         return constant_floatbv2tc(fpbv);
@@ -3190,7 +3186,7 @@ expr2tc typecast2t::do_simplify() const
 
       if (is_fixedbv_type(type))
       {
-        fbv.round(to_fixedbv_type(migrate_type_back(type)));
+        fbv.round(fixedbv_spect(to_fixedbv_type(type)));
         return constant_fixedbv2tc(fbv);
       }
 
@@ -3216,7 +3212,7 @@ expr2tc typecast2t::do_simplify() const
 
       if (is_floatbv_type(type))
       {
-        fpbv.change_spec(to_floatbv_type(migrate_type_back(type)));
+        fpbv.change_spec(ieee_float_spect(to_floatbv_type(type)));
         return constant_floatbv2tc(fpbv);
       }
 
@@ -5150,7 +5146,7 @@ static expr2tc simplify_floatbv_2ops(
   {
     const BigInt rm_value = to_constant_int2t(rounding_mode).value;
     const auto rm = ieee_floatt::rounding_modet(rm_value.to_int64());
-    const auto target_spec = to_floatbv_type(migrate_type_back(type));
+    const ieee_float_spect target_spec(to_floatbv_type(type));
 
     auto coerce_to_float_constant = [&](expr2tc &side) {
       if (is_constant_floatbv2t(side))
