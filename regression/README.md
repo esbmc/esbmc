@@ -15,3 +15,28 @@ We also provide a script to validate the Python regression suite. You can run th
 `./scripts/check_python_tests.sh`
 
 See ctest documentation for the list of available commands.
+
+A `test.desc` file may also contain `CHECK_JSON` lines, after the stdout/stderr regexes, that assert on the contents of JSON files ESBMC emits (typically `cov-report.json` from `--cov-report-json`). Stdout regexes alone cannot prove the file's contents agree with what the terminal reported. Each line has the form `CHECK_JSON <file> <jsonpath> <op> <literal>`, where:
+
+- `<file>`. Path of the JSON file relative to ESBMC's working directory.
+- `<jsonpath>`. Restricted subset of JSONPath using `$`, `.field`, `[index]`, for example `$.summary.covered` or `$.claims[0].status`. No filter expressions are supported.
+- `<op>`. One of `==`, `!=`, `<`, `>`, `<=`, `>=`.
+- `<literal>`. A JSON literal: number, `"string"`, `true`, `false`, or `null`.
+
+When any `CHECK_JSON` directive is present the runner executes ESBMC in a fresh temporary directory so parallel tests cannot clobber each other's output files. The test passes only if every regex matches and every `CHECK_JSON` passes.
+
+For example, `regression/goto-coverage/k_path_cov_json_1/test.desc` is:
+
+```
+CORE
+main.c
+--k-path-coverage=3 --cov-report-json
+^k-Path Coverage: 12\.5%$
+^Coverage report written to cov-report\.json$
+^VERIFICATION FAILED$
+CHECK_JSON cov-report.json $.coverage_type == "k-path"
+CHECK_JSON cov-report.json $.summary.total == 8
+CHECK_JSON cov-report.json $.summary.covered == 1
+CHECK_JSON cov-report.json $.summary.percentage == 12.5
+CHECK_JSON cov-report.json $.claims[13].status == "covered"
+```
