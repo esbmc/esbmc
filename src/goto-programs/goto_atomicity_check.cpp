@@ -86,8 +86,7 @@ bool goto_atomicity_checkt::collect_globals(
     return false;
 
   auto snapshot = [&](const expr2tc &global_expr) {
-    typet old_type = migrate_type_back(global_expr->type);
-    symbolt &tmp = tmp_sym.new_symbol(context, old_type, "tmp$");
+    symbolt &tmp = tmp_sym.new_symbol(context, global_expr->type, "tmp$");
     tmp.static_lifetime = true;
 
     type2tc sym_type = global_expr->type;
