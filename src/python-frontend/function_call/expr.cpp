@@ -657,12 +657,26 @@ exprt function_call_expr::build_constant_from_arg() const
       exprt expr = converter_.get_expr(arg);
       if (type_utils::is_string_type(expr.type()))
       {
-        std::string var_name = arg["id"].get<std::string>();
-        std::string m = "float() conversion may fail - variable " + var_name +
-                        " may contain non-float string";
+        // Runtime string -> float. float("10") must succeed, but float() of an
+        // arbitrary string may raise ValueError. Gate the conversion on a
+        // runtime validity check so a concrete valid literal folds away while a
+        // genuinely non-float string still raises a reachable ValueError (the
+        // same exception path used by the string-literal case above).
+        auto &sh = converter_.get_string_handler();
+        auto loc = converter_.get_location_from_decl(call_);
 
-        return converter_.get_exception_handler().gen_exception_raise(
-          "ValueError", m);
+        exprt valid = sh.handle_string_is_float(expr, loc);
+        exprt raise = converter_.get_exception_handler().gen_exception_raise(
+          "ValueError", "could not convert string to float");
+        codet throw_code("expression");
+        throw_code.operands().push_back(raise);
+        code_ifthenelset guard;
+        guard.cond() = not_exprt(valid);
+        guard.then_case() = throw_code;
+        guard.location() = loc;
+        converter_.add_instruction(guard);
+
+        return sh.handle_string_to_float(expr, loc);
       }
       // Numeric variable: emit a proper typecast to avoid mislabeled IR
       typet float_t = type_handler_.get_typet("float", 0);
