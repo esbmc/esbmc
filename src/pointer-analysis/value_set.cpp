@@ -9,7 +9,6 @@
 #include <util/expr_util.h>
 #include <util/i2string.h>
 #include <irep2/irep2.h>
-#include <util/migrate.h>
 #include <util/message.h>
 #include <util/message/format.h>
 #include <util/prefix.h>
@@ -575,10 +574,6 @@ void value_sett::get_value_set_rec(
     if (sym.thename == "NULL" && is_pointer_type(expr))
     {
       const pointer_type2t &ptr_ref = to_pointer_type(expr->type);
-      typet subtype = migrate_type_back(ptr_ref.subtype);
-      if (subtype.id() == "symbol")
-        subtype = ns.follow(subtype);
-
       expr2tc tmp = null_object2tc(ptr_ref.subtype);
       insert(dest, tmp, BigInt(0));
       return;
@@ -1399,11 +1394,9 @@ void value_sett::do_function_call(
   const symbolt &symbol,
   const std::vector<expr2tc> &arguments)
 {
-  const code_typet &type = to_code_type(symbol.get_type());
-
-  type2tc tmp_migrated_type = migrate_type(type);
-  const code_type2t &migrated_type =
-    dynamic_cast<const code_type2t &>(*tmp_migrated_type.get());
+  // The symbol stores its type as IREP2 natively (Part I); read it directly
+  // rather than back-migrating the legacy cache and re-migrating it.
+  const code_type2t &migrated_type = to_code_type(symbol.get_type2());
 
   const std::vector<type2tc> &argument_types = migrated_type.arguments;
   const std::vector<irep_idt> &argument_names = migrated_type.argument_names;

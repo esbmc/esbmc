@@ -52,10 +52,23 @@ class CoreVisitorsMixin:
     }
 
     def _invalidate_list_literals_for_assign_targets(self, targets):
-        for target in targets:
-            if (isinstance(target, ast.Subscript) and isinstance(target.value, ast.Name)
-                    and target.value.id in self.list_literal_values):
+
+        def invalidate(target):
+            # Recurse into tuple/list unpacking targets so a subscript store
+            # nested in a swap (a[i], a[j] = a[j], a[i]) still invalidates the
+            # literal const-fold for its container; otherwise later reads fold
+            # to the stale original element (#4792).
+            if isinstance(target, (ast.Tuple, ast.List)):
+                for elt in target.elts:
+                    invalidate(elt)
+            elif isinstance(target, ast.Starred):
+                invalidate(target.value)
+            elif (isinstance(target, ast.Subscript) and isinstance(target.value, ast.Name)
+                  and target.value.id in self.list_literal_values):
                 self.list_literal_values.pop(target.value.id, None)
+
+        for target in targets:
+            invalidate(target)
 
     def _maybe_record_type_alias_assign(self, node):
         if (len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)

@@ -3781,19 +3781,21 @@ expr2tc smt_convt::get_by_value(const type2tc &type, BigInt value)
 
   case type2t::fixedbv_id:
   {
-    fixedbvt fbv(constant_exprt(
-      integer2binary(value, type->get_width()),
-      integer2string(value),
-      migrate_type_back(type)));
+    // Build the fixedbv from its spec + raw bit pattern directly, mirroring
+    // fixedbvt::from_expr (spec from the type, v = the value's signed binary
+    // round-trip) without staging a legacy constant_exprt / type back-migration.
+    fixedbvt fbv(fixedbv_spect(to_fixedbv_type(type)));
+    fbv.set_value(
+      binary2integer(integer2binary(value, type->get_width()), true));
     return constant_fixedbv2tc(fbv);
   }
 
   case type2t::floatbv_id:
   {
-    ieee_floatt f(constant_exprt(
-      integer2binary(value, type->get_width()),
-      integer2string(value),
-      migrate_type_back(type)));
+    // Likewise mirror ieee_floatt::from_expr: spec from the type, then unpack
+    // the raw IEEE bit pattern (the value's unsigned binary round-trip).
+    ieee_floatt f(ieee_float_spect(to_floatbv_type(type)));
+    f.unpack(binary2integer(integer2binary(value, type->get_width()), false));
     return constant_floatbv2tc(f);
   }
 

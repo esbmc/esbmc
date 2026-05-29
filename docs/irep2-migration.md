@@ -569,6 +569,54 @@ assumed):
 - `migrate_census` counts call sites, not dead paths — pair with the
   C-Dead proof on every deletion.
 
+### 8.1 Environment caveat — non-deterministic operational-model goto
+
+**`diff_goto_baseline` is only reliable *within a single build*, not
+across rebuilds.** ESBMC's bundled C operational models
+(`src/c2goto/library/*` → FLAIL-mangled `clib*.goto`) and Python models
+(`src/python-frontend/models/*`) are regenerated on *every* build, and
+that generation is **non-deterministic**: regenerating `clib*.goto` with
+the *same* `esbmc` binary yields different SHA-256 digests
+(empirically confirmed on the Phase 2.1 work, 2026-05-29). The
+nondeterminism surfaces in the `--goto-functions-only` dump as
+per-run-varying synthesized names — e.g. nested-function filenames
+(`esbmc-nested.<hex>-<hex>.c`), unpack temporaries
+(`ESBMC_unpack_temp_<address>`), and the `esbmc-python-astgen-<hex>`
+temp-dir path encoded as a `__file__` char array.
+
+Consequence: for *any* source change that triggers a rebuild (all of
+them), `diff_goto_baseline` against a baseline captured on a different
+build reports spurious diffs in every test whose dump surfaces an
+affected library/model function — independent of whether the source
+change altered behaviour. A "clean" diff can be luck (this build's model
+bake happened to match the baseline's) and a "dirty" diff can be pure
+build noise. The Phase 2.1 dead-code commits each showed this: build *N*
+produced ~69 differing tests vs the baseline, build *N+1* (no source
+change to the affected paths) produced ~2, and running one binary twice
+reproduced every residual diff — proving the differences were model
+nondeterminism, not the patch.
+
+**Recommended gate for rebuild-triggering changes — deterministic
+regression-verdict comparison.** Verdicts (and counterexample
+reachability) are *unaffected* by model symbol-naming nondeterminism, so:
+1. On a **clean baseline build** (e.g. `master`), capture the pass/fail
+   set over a stratified `regression/{esbmc,floats,esbmc-cpp,python}`
+   subset.
+2. On the **post-change build**, confirm the pass/fail set is
+   **identical** (same failures, which on a given host are the
+   pre-existing platform/solver-specific ones).
+A behaviour-preserving change leaves the set unchanged.
+
+Use `diff_goto_baseline` only (a) *within one build* — run the same
+binary twice; any difference is runtime nondeterminism, isolating it from
+build-level model nondeterminism — or (b) after extending `irep2_canon`
+(`scripts/irep2-migration/lib.sh`) to mask the nondeterministic loci
+above. Note also that `irep2_canon`'s temp-dir rules cover
+`/var/folders/.../T/esbmc…` and `/tmp/esbmc…` but **not** a
+`$TMPDIR`-nested layout such as `/tmp/<dir>/esbmc.<hex>/headers/…`; add a
+rule for the host's actual `$TMPDIR` shape before trusting a cross-build
+diff there.
+
 ## 9. Assumptions, dependencies, and open design questions
 
 **Assumptions** (each must hold or the affected phase pauses):
