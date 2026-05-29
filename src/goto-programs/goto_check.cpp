@@ -1,6 +1,7 @@
 #include <goto-programs/goto_check.h>
 #include <cctype>
 #include <util/c_expr2string.h>
+#include <langapi/language_util.h>
 #include <util/arith_tools.h>
 #include <util/array_name.h>
 #include <util/base_type.h>
@@ -464,13 +465,18 @@ void goto_checkt::input_overflow_check(
     if (arg_name.empty())
     {
       expr2tc deref = get_base_object(func_call.operands[i]);
-      exprt ptr = migrate_expr_back(deref);
 
       // not the format we expected
-      if (!ptr.type().is_pointer())
+      if (!is_pointer_type(deref))
         return;
 
-      arg_name = ptr.operands()[0].identifier();
+      // we expect an address_of(symbol) underneath
+      if (!is_address_of2t(deref))
+        return;
+      const expr2tc &target = to_address_of2t(deref).ptr_obj;
+      if (!is_symbol2t(target))
+        return;
+      arg_name = to_symbol2t(target).thename;
     }
     arg_names.push_back(arg_name);
   }
@@ -587,8 +593,7 @@ void goto_checkt::input_overflow_check(
     t->location.user_provided(true);
     t->location.property("overflow");
     t->location.comment(
-      "buffer overflow on " +
-      c_expr2string(migrate_expr_back(func_call.function), ns));
+      "buffer overflow on " + from_expr(ns, "", func_call.function));
   }
 }
 
