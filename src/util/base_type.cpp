@@ -95,13 +95,6 @@ void base_type(expr2tc &expr, const namespacet &ns)
   expr->Foreach_operand([&ns](expr2tc &e) { base_type(e, ns); });
 }
 
-void base_type(exprt &expr, const namespacet &ns)
-{
-  base_type(expr.type(), ns);
-
-  Forall_operands (it, expr)
-    base_type(*it, ns);
-}
 
 bool base_type_eqt::base_type_eq_rec(const type2tc &type1, const type2tc &type2)
 {
@@ -366,24 +359,6 @@ bool base_type_eqt::base_type_eq_rec(const expr2tc &expr1, const expr2tc &expr2)
   return true;
 }
 
-bool base_type_eqt::base_type_eq_rec(const exprt &expr1, const exprt &expr2)
-{
-  if (expr1.id() != expr2.id())
-    return false;
-
-  if (!base_type_eq(expr1.type(), expr2.type()))
-    return false;
-
-  if (expr1.operands().size() != expr2.operands().size())
-    return false;
-
-  for (unsigned i = 0; i < expr1.operands().size(); i++)
-    if (!base_type_eq(expr1.operands()[i], expr2.operands()[i]))
-      return false;
-
-  return true;
-}
-
 bool base_type_eq(
   const type2tc &type1,
   const type2tc &type2,
@@ -403,12 +378,6 @@ bool base_type_eq(
   const expr2tc &expr1,
   const expr2tc &expr2,
   const namespacet &ns)
-{
-  base_type_eqt base_type_eq(ns);
-  return base_type_eq.base_type_eq(expr1, expr2);
-}
-
-bool base_type_eq(const exprt &expr1, const exprt &expr2, const namespacet &ns)
 {
   base_type_eqt base_type_eq(ns);
   return base_type_eq.base_type_eq(expr1, expr2);
