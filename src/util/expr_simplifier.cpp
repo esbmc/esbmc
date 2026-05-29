@@ -3225,11 +3225,7 @@ expr2tc typecast2t::do_simplify() const
     // Bool type -> turn into inequality with zero. Building notequal directly
     // avoids constructing an intermediate `not(equality(...))` that the not2t
     // simplifier would immediately collapse.
-    exprt zero = gen_zero(migrate_type_back(simp->type));
-
-    expr2tc zero2;
-    migrate_expr(zero, zero2);
-
+    expr2tc zero2 = gen_zero(simp->type);
     return notequal2tc(simp, zero2);
   }
   else if (is_pointer_type(type) && is_pointer_type(simp))
