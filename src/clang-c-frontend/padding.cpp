@@ -7,7 +7,6 @@
 
 #include <util/arith_tools.h>
 #include <util/config.h>
-#include <util/simplify_expr.h>
 #include <util/type_byte_size.h>
 
 static std::size_t ext_int_representation_bytes(const typet &type)
