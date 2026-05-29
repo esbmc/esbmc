@@ -342,6 +342,14 @@ set(_slow_regression_tests
     # marked FUTURE (BMC scalability); the larger inner timeout lets
     # testing_tool record the FUTURE verdict instead of ctest hard-killing it.
     "regression/python-intensive/problem1_fail"
+    # github_4435 was a soundness false alarm on the SV-COMP libvsync
+    # bounded_mpmc_check_full benchmark; the underlying deref unit
+    # mismatch is fixed by PR #4939, but the full benchmark
+    # (6055-line preprocessed libvsync) does not converge under
+    # `--unlimited-k-steps` on CI runners. Marked FUTURE (BMC scalability);
+    # the larger inner timeout lets testing_tool record the FUTURE
+    # verdict instead of ctest hard-killing the run.
+    "regression/esbmc-unix/github_4435"
 )
 math(EXPR ESBMC_REGRESS_CTEST_TIMEOUT_SLOW
      "${ESBMC_REGRESS_TIMEOUT_SLOW} + 30")
