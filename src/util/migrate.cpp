@@ -7,7 +7,6 @@
 #include <util/migrate.h>
 #include <util/namespace.h>
 #include <util/prefix.h>
-#include <util/simplify_expr.h>
 #include <util/string_constant.h>
 #include <util/type_byte_size.h>
 
@@ -150,8 +149,8 @@ static type2tc migrate_type0(const typet &type)
     else
     {
       exprt sz = static_cast<const exprt &>(type.find(typet::a_size));
-      simplify(sz);
       migrate_expr(sz, size);
+      simplify(size);
       size = fixup_containerof_in_sizeof(size);
     }
 
@@ -169,8 +168,8 @@ static type2tc migrate_type0(const typet &type)
       "https://clang.llvm.org/docs/"
       "LanguageExtensions.html#vectors-and-extended-vectors");
     exprt sz = static_cast<const exprt &>(type.find(typet::a_size));
-    simplify(sz);
     migrate_expr(sz, size);
+    simplify(size);
     size = fixup_containerof_in_sizeof(size);
     return vector_type2tc(subtype, size);
   }

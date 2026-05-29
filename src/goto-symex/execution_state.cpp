@@ -13,7 +13,6 @@
 #include <irep2/irep2.h>
 #include <util/migrate.h>
 #include <util/std_expr.h>
-#include <util/string2array.h>
 #include <vector>
 #include <util/yaml_parser.h>
 

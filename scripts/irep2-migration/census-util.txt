@@ -1,0 +1,34 @@
+# src/util migrate_* call-site scoreboard (IREP2 migration Part II)
+#
+# Regenerate with: scripts/irep2-migration/migrate_census.sh src/util
+#
+# History:
+#   Part II start (commit 6c4d610694): TOTAL 192.
+#   Phase 2.1 (dead-code hygiene): no migrate-site change -> 192.
+#   Phase 2.2 (retire legacy simplifier): +1 -> 193. Commit 10 adds one
+#     migrate_expr_back in c_typecast.cpp to fold typecast-of-constant via
+#     the IREP2 simplifier instead of the deleted simplify_exprt. This is a
+#     deliberate, TEMPORARY +1 at the frontend-blocked do_typecast(exprt&)
+#     overload (DUAL_API_THEN_DROP), reclaimed when that overload is dropped
+#     with the frontends. It buys deletion of ~2964 lines of legacy
+#     simplifier (simplify_expr.{cpp,h}, simplify_expr_class.h,
+#     simplify_utils.{cpp,h}), so the secondary metric (util IREP2 share)
+#     rises sharply. The free simplify(exprt&) seam is fully gone.
+#
+# Primary metric (docs/irep2-migration.md Part II §10): TOTAL call sites.
+# FWD is (all - back) by the script's regex and can read negative; compare
+# per-file BACK and whole-file TOTAL. The back-arm COUNT cannot shrink.
+#
+FILE                                                          FWD   BACK  TOTAL
+----                                                          ---   ----  -----
+src/util/migrate.cpp                                          -80    258    178
+src/util/symbol.cpp                                            -1      7      6
+src/util/migrate.h                                             -1      3      2
+src/util/symbol.h                                              -1      3      2
+src/util/c_sizeof.cpp                                           0      1      1
+src/util/c_typecast.cpp                                         0      1      1
+src/util/expr_simplifier.cpp                                   -8      9      1
+src/util/namespace.h                                            0      1      1
+src/util/string2array.cpp                                       0      1      1
+----                                                          ---   ----  -----
+TOTAL                                                         -91    284    193
