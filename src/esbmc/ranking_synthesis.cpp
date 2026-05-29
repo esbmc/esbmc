@@ -44,11 +44,20 @@ struct ranking_loopt
   // i.e. the negation of the IF guard. A relational compare a REL b.
   expr2tc guard;
   // The body's set of straight-line execution paths. A non-branching body
-  // produces exactly one path (the assignment sequence). A body with a
-  // single `if (cond) ... else ...` produces two paths, one per arm. The
-  // ranking obligations and invariant inductiveness must hold on EVERY
-  // path; failure on any path falls back to UNKNOWN.
-  std::vector<std::vector<assignt>> paths;
+  // produces exactly one path (the assignment sequence). A body with N
+  // sequential `if (cond)`/`if (cond) else` blocks produces up to 2^N
+  // paths (capped). The ranking obligations and invariant inductiveness
+  // must hold on EVERY feasible path; failure on any feasible path falls
+  // back to UNKNOWN. Each path also carries its path condition (the
+  // conjunction of branch selectors that this path requires), so when an
+  // infeasible-under-the-supporting-invariant path appears its obligation
+  // is vacuously discharged rather than forcing UNKNOWN.
+  struct loop_patht
+  {
+    std::vector<assignt> assigns;
+    expr2tc cond; // path condition, defaults to true
+  };
+  std::vector<loop_patht> paths;
 };
 
 // Forward declarations: subst_parallel and apply_body are used by the
@@ -62,6 +71,8 @@ bool reaches_head(
   goto_programt::const_targett start,
   goto_programt::const_targett head,
   goto_programt::const_targett end_it);
+void flatten_and(const expr2tc &e, std::vector<expr2tc> &out);
+expr2tc apply_body(const expr2tc &e, const std::vector<assignt> &body);
 
 /// Is @p e a relational comparison (>, >=, <, <=) — the guard shape we
 /// can derive a difference measure from?
@@ -99,6 +110,28 @@ bool touches_memory(
   e->foreach_operand([&](const expr2tc &op) {
     if (!found)
       found = touches_memory(op, exempt_derefs);
+  });
+  return found;
+}
+
+/// True if @p e contains any `sideeffect2t` subexpression (e.g. a NONDET
+/// call result, a malloc, a function-call result). Such expressions are
+/// opaque to our solver layer — bv-encoding a free sideeffect either
+/// stalls or behaves nondeterministically depending on the backend — so
+/// callers that need to feed expressions to the solver must reject them.
+/// Used by the path-condition builder after apply_body substitution may
+/// have inlined a `temp = NONDET(...)` prefix assignment into the IF
+/// guard.
+bool contains_sideeffect(const expr2tc &e)
+{
+  if (is_nil_expr(e))
+    return false;
+  if (is_sideeffect2t(e))
+    return true;
+  bool found = false;
+  e->foreach_operand([&](const expr2tc &op) {
+    if (!found)
+      found = contains_sideeffect(op);
   });
   return found;
 }
@@ -463,7 +496,13 @@ bool recognize_loop(
         out.head, out.back, pos_guard, fn_body, exempt_derefs, deref_map))
     return false;
 
-  if (!is_relational(pos_guard) || touches_memory(pos_guard, exempt_derefs))
+  // The guard is either a relational atom or a top-level conjunction of
+  // relational atoms. We require at least one usable relational atom (so
+  // measure_candidates_from_guard yields >= 1 candidate). Disjunctive
+  // guards (`||` at the top level) are not handled and will fail here.
+  if (touches_memory(pos_guard, exempt_derefs))
+    return false;
+  if (!is_relational(pos_guard) && !is_and2t(pos_guard))
     return false;
   out.guard =
     deref_map.empty() ? pos_guard : subst_parallel(pos_guard, deref_map);
@@ -500,111 +539,199 @@ bool recognize_loop(
     if (!collect_straight_line(body_begin, out.back, path, exempt_derefs))
       return false;
     rewrite(path);
-    out.paths.push_back(std::move(path));
+    ranking_loopt::loop_patht p;
+    p.assigns = std::move(path);
+    p.cond = gen_true_expr();
+    out.paths.push_back(std::move(p));
     return true;
   }
 
-  // Shape (B): a single in-body if/else. Walk pre-assigns, find a
-  // conditional forward IF into the body, optionally split with an
-  // unconditional GOTO to the merge target.
-  std::vector<assignt> pre;
-  auto it = body_begin;
-  while (it != out.back && !it->is_goto())
+  // Shape (B): a sequence of straight-line spans and if/else blocks at
+  // top level. Parse the body into a list of "blocks", each either one
+  // straight-line span or one if/else pair, then enumerate paths as the
+  // cartesian product. Refuse if the projected path count would exceed a
+  // small cap (the solver pays per-path obligations, and the underlying
+  // invariant inductiveness check pays per-path-per-atom).
+  struct block_t
   {
+    bool is_span; // span vs. if/else
+    std::vector<assignt> span;
+    std::vector<assignt> then_arm, else_arm; // if !is_span
+    expr2tc if_cond; // raw IF guard (NEGATION of the C-source if-condition):
+      // then-arm runs when !if_cond holds, else-arm when if_cond holds.
+  };
+  std::vector<block_t> blocks;
+  static constexpr size_t kMaxPaths = 16;
+
+  // const iterator so we can assign jump targets (which are const_targett)
+  // back into it when we skip past an if/else block.
+  goto_programt::const_targett it = body_begin;
+  goto_programt::const_targett back_it = out.back;
+  while (it != back_it)
+  {
+    // Skip skip/location/DECL/DEAD that aren't significant.
+    if (
+      it->is_skip() || it->is_location() || it->type == DEAD ||
+      it->type == DECL)
+    {
+      ++it;
+      continue;
+    }
     if (it->is_assign())
     {
-      const code_assign2t &a = to_code_assign2t(it->code);
-      if (
-        touches_memory(a.target, exempt_derefs) ||
-        touches_memory(a.source, exempt_derefs))
+      // Greedily collect a straight-line span up to the next GOTO or end.
+      auto span_begin = it;
+      while (it != out.back && !it->is_goto() &&
+             (it->is_assign() || it->is_skip() || it->is_location() ||
+              it->type == DEAD || it->type == DECL))
+        ++it;
+      block_t b;
+      b.is_span = true;
+      if (!collect_straight_line(span_begin, it, b.span, exempt_derefs))
         return false;
-      pre.push_back({a.target, a.source});
+      blocks.push_back(std::move(b));
+      continue;
     }
-    else if (
-      !it->is_skip() && !it->is_location() && it->type != DEAD &&
-      it->type != DECL)
-      return false;
-    ++it;
-  }
-  if (it == out.back)
-    return false; // a GOTO must exist by has_internal_goto
-
-  // The first GOTO must be a conditional forward IF (the if-condition).
-  if (
-    !it->is_goto() || is_true(it->guard) || it->is_backwards_goto() ||
-    it->targets.size() != 1)
-    return false;
-  auto if_target = it->targets.front();
-  if (if_target->location_number <= it->location_number)
-    return false; // not forward
-  expr2tc if_cond = it->guard; // raw IF guard (the negated then-condition)
-  if (touches_memory(if_cond, exempt_derefs))
-    return false;
-  auto then_begin = std::next(it);
-
-  // Find the unconditional GOTO that ends the then-arm. If we don't see
-  // one before the if_target, the else-arm is empty and the merge IS
-  // if_target. Otherwise the GOTO's target is the merge_label.
-  auto then_end = then_begin;
-  while (then_end != if_target && !then_end->is_goto())
-    ++then_end;
-  goto_programt::const_targett else_begin, merge_label;
-  if (then_end == if_target)
-  {
-    // No else branch: the IF jumps straight to the merge.
-    else_begin = if_target; // empty else
-    merge_label = if_target;
-  }
-  else
-  {
-    // then_end is the closing GOTO of the then-arm; its target is the
-    // merge label. The instructions [if_target .. merge_label) are the
-    // else-arm.
     if (
-      !then_end->is_goto() || !is_true(then_end->guard) ||
-      then_end->is_backwards_goto() || then_end->targets.size() != 1)
-      return false;
-    merge_label = then_end->targets.front();
-    if (merge_label->location_number <= then_end->location_number)
-      return false;
-    else_begin = if_target;
-  }
-  if (merge_label == out.back || merge_label->location_number >
-                                   out.back->location_number)
-    return false; // merge must fall before the back-edge
-
-  // Collect the three straight-line spans.
-  std::vector<assignt> then_arm, else_arm, post;
-  if (!collect_straight_line(then_begin, then_end, then_arm, exempt_derefs))
+      it->is_goto() && !is_true(it->guard) && !it->is_backwards_goto() &&
+      it->targets.size() == 1)
+    {
+      // An if/else block. Same layout as before: IF !cond GOTO else_label;
+      // <then>; [GOTO merge; else_label: <else>;] merge_label: ...
+      auto if_target = it->targets.front();
+      if (if_target->location_number <= it->location_number)
+        return false; // not forward
+      if (touches_memory(it->guard, exempt_derefs))
+        return false;
+      auto then_begin = std::next(it);
+      auto then_end = then_begin;
+      while (then_end != if_target && !then_end->is_goto())
+        ++then_end;
+      goto_programt::const_targett merge_label;
+      if (then_end == if_target)
+        merge_label = if_target; // no else
+      else
+      {
+        if (
+          !then_end->is_goto() || !is_true(then_end->guard) ||
+          then_end->is_backwards_goto() || then_end->targets.size() != 1)
+          return false;
+        merge_label = then_end->targets.front();
+        if (merge_label->location_number <= then_end->location_number)
+          return false;
+      }
+      // The merge must not lie PAST the back-edge (that would be outside
+      // the loop body). The merge IS the back-edge in the no-post-assigns
+      // case (e.g. `while (G) { if (X) S1 else S2 }` with nothing after
+      // the if/else); that's accepted — the outer while loop simply has
+      // no post-arm.
+      if (merge_label->location_number > out.back->location_number)
+        return false;
+      block_t b;
+      b.is_span = false;
+      b.if_cond = it->guard;
+      if (!collect_straight_line(
+            then_begin, then_end, b.then_arm, exempt_derefs))
+        return false;
+      if (
+        then_end != if_target &&
+        !collect_straight_line(
+          if_target, merge_label, b.else_arm, exempt_derefs))
+        return false;
+      blocks.push_back(std::move(b));
+      it = merge_label;
+      continue;
+    }
+    // Any other instruction shape (backwards/multi-target GOTO, RETURN,
+    // FUNCTION_CALL, OTHER, etc.) — not handled.
     return false;
-  if (then_end != if_target)
-  {
-    // else_arm = [if_target .. merge_label)
-    if (!collect_straight_line(if_target, merge_label, else_arm, exempt_derefs))
-      return false;
   }
-  if (!collect_straight_line(merge_label, out.back, post, exempt_derefs))
-    return false;
 
-  // Build the two paths: pre + then + post, and pre + else + post.
-  // The IF's raw guard `if_cond` is the NEGATION of the C-source `then`
-  // condition: `if (X) S` lowers to `IF !X GOTO else_label; S; ...`. So
-  // the THEN-arm runs when `!if_cond` holds and the ELSE-arm runs when
-  // `if_cond` holds. We don't currently use these path conditions in the
-  // obligations (we require decrease on every path unconditionally), but
-  // they could refine the invariant-inductiveness check in a future step.
-  auto build = [&](const std::vector<assignt> &mid)
+  // Bound the projected number of paths up front. Each if/else doubles the
+  // count; spans don't. Refusing high path counts protects the solver from
+  // a body with many branches that would explode obligation work.
+  size_t n_paths = 1;
+  for (const block_t &b : blocks)
+    if (!b.is_span)
+    {
+      if (n_paths > kMaxPaths / 2)
+        return false;
+      n_paths *= 2;
+    }
+
+  // Enumerate paths by binary mask over the if/else blocks. Mask bit i is
+  // 0 for "take the i-th if/else's THEN arm", 1 for "take the ELSE arm".
+  // The path is the concatenation of every span and the chosen arm of
+  // every if/else, in program order.
+  size_t n_ifs = 0;
+  std::vector<size_t> if_indices; // indices into blocks of the if/else blocks
+  for (size_t i = 0; i < blocks.size(); ++i)
+    if (!blocks[i].is_span)
+    {
+      if_indices.push_back(i);
+      ++n_ifs;
+    }
+  for (size_t mask = 0; mask < (size_t(1) << n_ifs); ++mask)
   {
-    std::vector<assignt> p = pre;
-    p.insert(p.end(), mid.begin(), mid.end());
-    p.insert(p.end(), post.begin(), post.end());
-    return p;
-  };
-  std::vector<assignt> p1 = build(then_arm), p2 = build(else_arm);
-  rewrite(p1);
-  rewrite(p2);
-  out.paths.push_back(std::move(p1));
-  out.paths.push_back(std::move(p2));
+    std::vector<assignt> path;
+    std::vector<expr2tc> cond_atoms;
+    for (size_t i = 0; i < blocks.size(); ++i)
+    {
+      const block_t &b = blocks[i];
+      if (b.is_span)
+      {
+        path.insert(path.end(), b.span.begin(), b.span.end());
+        continue;
+      }
+      // Find which bit in mask corresponds to this if/else.
+      size_t which =
+        std::find(if_indices.begin(), if_indices.end(), i) - if_indices.begin();
+      bool take_else = (mask >> which) & 1;
+      const std::vector<assignt> &arm = take_else ? b.else_arm : b.then_arm;
+      // Path-condition atom for this IF — evaluated at the point the IF
+      // executes, which is AFTER the assignments accumulated in `path` so
+      // far. Substitute those assignments into the raw IF guard via
+      // apply_body, turning a post-prior-block-state expression into a
+      // pre-iteration-state expression that conjoins correctly with the
+      // rest of the path's pre-state path condition. Without this
+      // substitution, an earlier `y = y - 1` followed by `if (y > 0)`
+      // would record `y > 0` (pre-state) when the IF actually sees
+      // `(y-1) > 0` (i.e. pre-state `y > 1`) — a feasible runtime path
+      // might then be reported as infeasible and a non-decreasing
+      // obligation discharged vacuously (potential wrong-true).
+      if (!is_nil_expr(b.if_cond))
+      {
+        expr2tc atom = apply_body(b.if_cond, path);
+        if (!take_else)
+          make_not(atom);
+        simplify(atom);
+        if (deref_map.size())
+          atom = subst_parallel(atom, deref_map);
+        // Skip the atom if substitution inlined an opaque sideeffect
+        // (e.g. a temporary `temp = NONDET(...)` assignment in a prior
+        // block was inlined into the IF guard). The solver can stall on
+        // such expressions; conservatively treating the path-condition
+        // as `true` is sound (it just makes the obligation harder to
+        // discharge, never easier — never vacuously discharging).
+        if (!contains_sideeffect(atom))
+          cond_atoms.push_back(atom);
+      }
+      path.insert(path.end(), arm.begin(), arm.end());
+    }
+    rewrite(path);
+    ranking_loopt::loop_patht p;
+    p.assigns = std::move(path);
+    if (cond_atoms.empty())
+      p.cond = gen_true_expr();
+    else
+    {
+      expr2tc c = cond_atoms.front();
+      for (size_t k = 1; k < cond_atoms.size(); ++k)
+        c = and2tc(c, cond_atoms[k]);
+      p.cond = c;
+    }
+    out.paths.push_back(std::move(p));
+  }
   return true;
 }
 
@@ -726,32 +853,36 @@ bool is_unsat(const expr2tc &formula, optionst &options, const namespacet &ns)
 /// would be UB and make the proof unsound. Returns false if the guard
 /// is not relational or its operands are not integer-typed (the
 /// difference/widening is only defined for integers).
-bool measure_from_guard(const expr2tc &guard, expr2tc &m, expr2tc &L)
+/// Build a single candidate (m, L) from one relational atom @p atom.
+/// Returns false if the atom is not relational or its operands are not
+/// scalar BV of width <= 32. The measure is m = (int64)a - (int64)b with
+/// L = 0 or 1 depending on strict/non-strict.
+bool measure_from_relational(const expr2tc &atom, expr2tc &m, expr2tc &L)
 {
   expr2tc a, b;
   BigInt bound;
-  if (is_greaterthan2t(guard))
+  if (is_greaterthan2t(atom))
   {
-    a = to_greaterthan2t(guard).side_1;
-    b = to_greaterthan2t(guard).side_2;
+    a = to_greaterthan2t(atom).side_1;
+    b = to_greaterthan2t(atom).side_2;
     bound = 1;
   }
-  else if (is_greaterthanequal2t(guard))
+  else if (is_greaterthanequal2t(atom))
   {
-    a = to_greaterthanequal2t(guard).side_1;
-    b = to_greaterthanequal2t(guard).side_2;
+    a = to_greaterthanequal2t(atom).side_1;
+    b = to_greaterthanequal2t(atom).side_2;
     bound = 0;
   }
-  else if (is_lessthan2t(guard))
+  else if (is_lessthan2t(atom))
   {
-    a = to_lessthan2t(guard).side_2;
-    b = to_lessthan2t(guard).side_1;
+    a = to_lessthan2t(atom).side_2;
+    b = to_lessthan2t(atom).side_1;
     bound = 1;
   }
-  else if (is_lessthanequal2t(guard))
+  else if (is_lessthanequal2t(atom))
   {
-    a = to_lessthanequal2t(guard).side_2;
-    b = to_lessthanequal2t(guard).side_1;
+    a = to_lessthanequal2t(atom).side_2;
+    b = to_lessthanequal2t(atom).side_1;
     bound = 0;
   }
   else
@@ -762,11 +893,10 @@ bool measure_from_guard(const expr2tc &guard, expr2tc &m, expr2tc &L)
 
   // The measure is m = (int64)a - (int64)b. Value-preserving extension to
   // int64 keeps each operand in its source range, so the subtraction cannot
-  // overflow as long as both fit comfortably below int64: 32-bit operands
-  // give a difference in [-(2^32-1), 2^32-1], far inside int64. A 64-bit
-  // operand, however, can produce a difference outside int64, which would
-  // wrap under modular bitvector subtraction and let a non-decreasing or
-  // unbounded measure spuriously satisfy the obligations. Refuse those.
+  // overflow as long as both fit comfortably below int64. A 64-bit operand
+  // can produce a difference outside int64, which would wrap under modular
+  // bitvector subtraction and let a non-decreasing or unbounded measure
+  // spuriously satisfy the obligations. Refuse those.
   if (a->type->get_width() > 32 || b->type->get_width() > 32)
     return false;
 
@@ -774,6 +904,32 @@ bool measure_from_guard(const expr2tc &guard, expr2tc &m, expr2tc &L)
   m = sub2tc(wide, typecast2tc(wide, a), typecast2tc(wide, b));
   L = constant_int2tc(wide, bound);
   return true;
+}
+
+/// Build ranking candidates from a loop guard. A single relational atom
+/// yields one candidate. A top-level `&&` conjunction yields one
+/// candidate per relational conjunct (any conjunct whose decrease and
+/// boundedness obligations BOTH discharge proves the loop terminates --
+/// the guard `g1 && g2` is false as soon as either conjunct becomes
+/// false, so making either rank-derived measure decrease to its floor is
+/// enough). Returns false if the guard yields no usable candidate.
+///
+/// Disjunctive (||) guards are out of scope by design (full-correctness
+/// would need per-disjunct path-split obligations rivalling the cstr*
+/// pointer-stride work in complexity); they fall through here.
+bool measure_candidates_from_guard(
+  const expr2tc &guard,
+  std::vector<std::pair<expr2tc, expr2tc>> &out)
+{
+  std::vector<expr2tc> atoms;
+  flatten_and(guard, atoms);
+  for (const expr2tc &atom : atoms)
+  {
+    expr2tc m, L;
+    if (measure_from_relational(atom, m, L))
+      out.push_back({m, L});
+  }
+  return !out.empty();
 }
 
 /// Conjoin a list of atoms into a single expression (true if empty).
@@ -1086,20 +1242,36 @@ expr2tc synthesize_invariant(
   // inductiveness check then needs the atom preserved by EVERY path.
   std::vector<std::map<expr2tc, expr2tc>> path_posts(rl.paths.size());
   for (size_t i = 0; i < rl.paths.size(); ++i)
-    for (const auto &a : rl.paths[i])
+    for (const auto &a : rl.paths[i].assigns)
       path_posts[i][a.lhs] = subst_parallel(a.rhs, path_posts[i]);
 
   auto post_state_of = [&](const expr2tc &e, size_t i)
   { return widen_arith(subst_parallel(e, path_posts[i])); };
 
-  // Body-modified scalars are the union of lhs across all paths.
-  std::map<irep_idt, expr2tc> body_vars; // name -> exemplar lhs (for type)
-  for (const auto &path : rl.paths)
-    for (const auto &a : path)
-      if (
-        is_symbol2t(a.lhs) && is_bv_type(a.lhs->type) &&
-        a.lhs->type->get_width() <= 32)
-        body_vars.emplace(to_symbol2t(a.lhs).thename, a.lhs);
+  // Atoms are built for every scalar variable that could matter to the
+  // proof: the union of body-modified lhs symbols AND any symbol that
+  // appears in a path condition. The latter is essential because a
+  // bound on a never-written variable can still rule out an infeasible
+  // path's obligation (e.g. `debug = 0` in the prefix lets the path
+  // through `if (debug != 0)` be discharged vacuously).
+  std::map<irep_idt, expr2tc> body_vars;
+  auto register_symbol = [&](const expr2tc &e) {
+    if (is_symbol2t(e) && is_bv_type(e->type) && e->type->get_width() <= 32)
+      body_vars.emplace(to_symbol2t(e).thename, e);
+  };
+  std::function<void(const expr2tc &)> collect_path_symbols =
+    [&](const expr2tc &e) {
+      if (is_nil_expr(e))
+        return;
+      register_symbol(e);
+      e->foreach_operand(collect_path_symbols);
+    };
+  for (const auto &p : rl.paths)
+  {
+    for (const auto &a : p.assigns)
+      register_symbol(a.lhs);
+    collect_path_symbols(p.cond);
+  }
 
   std::vector<cand> atoms;
   // Constant-init seeds: for each body-modified scalar var that has a
@@ -1236,11 +1408,14 @@ expr2tc synthesize_invariant(
     for (size_t i = 0; i < atoms.size(); ++i)
     {
       bool preserved = true;
-      for (const expr2tc &prime : atoms[i].primes)
+      for (size_t pi = 0; pi < atoms[i].primes.size(); ++pi)
       {
-        expr2tc neg = prime;
+        // Path infeasible under the invariant ⇒ preservation vacuous.
+        expr2tc neg = atoms[i].primes[pi];
         make_not(neg);
-        if (!is_unsat(and2tc(and2tc(inv, rl.guard), neg), options, ns))
+        expr2tc check = and2tc(and2tc(inv, rl.guard), rl.paths[pi].cond);
+        check = and2tc(check, neg);
+        if (!is_unsat(check, options, ns))
         {
           preserved = false;
           break;
@@ -1267,9 +1442,14 @@ bool prove_loop_terminates(
   optionst &options,
   const namespacet &ns)
 {
-  // Candidate measure m and guard-implied lower bound L from the guard.
-  expr2tc m, L;
-  if (!measure_from_guard(rl.guard, m, L))
+  // Candidate measures. A simple relational guard yields one candidate; a
+  // top-level conjunction yields one per relational conjunct. Termination
+  // is proved if ANY candidate satisfies both the bounded-below and the
+  // strict-decrease obligations under the synthesized invariant (since
+  // the loop guard `g1 && g2 && ...` becomes false as soon as ANY
+  // conjunct does, having one rank reach its floor suffices).
+  std::vector<std::pair<expr2tc, expr2tc>> candidates;
+  if (!measure_candidates_from_guard(rl.guard, candidates))
     return false;
 
   // Supporting invariant: an inductive conjunction of constant bounds that
@@ -1277,34 +1457,42 @@ bool prove_loop_terminates(
   // every iteration). For loops that need no extra facts this is just true.
   expr2tc inv = synthesize_invariant(rl, body, options, ns);
 
-  // Bounded-below obligation: inv ∧ guard ∧ (m < L) must be UNSAT, i.e.
-  // under the invariant the guard implies m >= L (so the measure cannot
-  // decrease past the floor without the guard becoming false → loop exits).
-  // This obligation doesn't depend on the body, so it's checked once.
-  if (!is_unsat(and2tc(and2tc(inv, rl.guard), lessthan2tc(m, L)), options, ns))
-    return false;
-
-  // Decrease obligation: under the invariant and the guard, the measure
-  // strictly decreases on EVERY body path. For each path we build m'
-  // separately (via apply_body over that path's assignments) and require
-  // inv ∧ guard ∧ ¬(m' < m) UNSAT. If any path fails to decrease, the
-  // loop is not provably terminating by this rank.
-  for (const auto &path : rl.paths)
+  for (const auto &cand : candidates)
   {
-    expr2tc m_prime = apply_body(m, path);
-    if (!is_unsat(
-          and2tc(and2tc(inv, rl.guard), greaterthanequal2tc(m_prime, m)),
-          options,
-          ns))
-      return false;
-  }
+    const expr2tc &m = cand.first;
+    const expr2tc &L = cand.second;
 
-  log_debug(
-    "termination",
-    "ranking function proved loop terminates: measure={} invariant={}",
-    from_expr(ns, "", m),
-    from_expr(ns, "", inv));
-  return true;
+    // Bounded-below obligation: inv ∧ guard ∧ (m < L) must be UNSAT.
+    if (!is_unsat(
+          and2tc(and2tc(inv, rl.guard), lessthan2tc(m, L)), options, ns))
+      continue;
+
+    // Decrease obligation: m strictly decreases on every feasible body
+    // path. A path whose condition is infeasible under the invariant has
+    // the obligation discharged vacuously.
+    bool decreases = true;
+    for (const auto &p : rl.paths)
+    {
+      expr2tc m_prime = apply_body(m, p.assigns);
+      expr2tc obligation = and2tc(and2tc(inv, rl.guard), p.cond);
+      obligation = and2tc(obligation, greaterthanequal2tc(m_prime, m));
+      if (!is_unsat(obligation, options, ns))
+      {
+        decreases = false;
+        break;
+      }
+    }
+    if (!decreases)
+      continue;
+
+    log_debug(
+      "termination",
+      "ranking function proved loop terminates: measure={} invariant={}",
+      from_expr(ns, "", m),
+      from_expr(ns, "", inv));
+    return true;
+  }
+  return false;
 }
 
 /// Classification of the program's recursion structure.
@@ -1471,7 +1659,7 @@ bool prove_self_recursion_terminates(
       expr2tc m, L;
       bool got = false;
       for (const auto &g : active_guards)
-        if (!touches_memory(g) && measure_from_guard(g, m, L))
+        if (!touches_memory(g) && measure_from_relational(g, m, L))
         {
           got = true;
           break;
