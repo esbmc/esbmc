@@ -327,6 +327,21 @@ set(_slow_regression_tests
     "regression/quixbugs/next_palindrome"
     "regression/quixbugs/pascal"
     "regression/ai-generated-code/two_sum"
+    # knapsack(_fail) used to fast-fail with "max() arguments must be of
+    # comparable types" because the nested-list element of a defaultdict was
+    # mistyped. With the call-site nested-generic inference in #4830 the
+    # frontend now resolves the element types and ESBMC reaches the real
+    # (defaultdict + nested loop) symex, which does not converge under
+    # --incremental-bmc. These remain KNOWNBUG; the larger inner timeout lets
+    # testing_tool record the KNOWNBUG verdict instead of ctest hard-killing
+    # the run (see shortest_path_lengths note below; #4927).
+    "regression/quixbugs/knapsack"
+    "regression/quixbugs/knapsack_fail"
+    # problem1_fail runs the real DP body (nested loops + dp[-1] + max over a
+    # defaultdict-free list). It does not converge under --unwind 9, so it is
+    # marked FUTURE (BMC scalability); the larger inner timeout lets
+    # testing_tool record the FUTURE verdict instead of ctest hard-killing it.
+    "regression/python-intensive/problem1_fail"
 )
 math(EXPR ESBMC_REGRESS_CTEST_TIMEOUT_SLOW
      "${ESBMC_REGRESS_TIMEOUT_SLOW} + 30")

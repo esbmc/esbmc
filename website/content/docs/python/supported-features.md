@@ -7,10 +7,11 @@ This page is a reference of all Python language constructs, data structures, and
 
 ## Basic Constructs
 
-- **Control flow**: `if`/`elif`/`else`, `for` (with `range()`), `while`
+- **Control flow**: `if`/`elif`/`else`, `for` (with `range()`), `while`, `for ... else` (the `else` clause runs when the loop completes without `break`)
 - **Arithmetic**: `+`, `-`, `*`, `/`, `//`, `%`, `**`
 - **Logical operations**: `and`, `or`, `not`
 - **Identity comparisons**: `is`, `is not` (including `x is None`, `x is not None`)
+- **Tuple-unpacking assignment**: `a, b = b, a` and cross-binding forms like `a, b = b, a % b` evaluate the entire right-hand side before binding any target (Python's parallel-assignment semantics), so swaps and idioms such as the Euclidean-GCD loop `while b: a, b = b, a % b` are lowered correctly. The simple non-cross-binding shape (`x, y = 1, 2`) uses direct assignment.
 - **None handling**: Proper type distinction from `int`, `bool`, `str`, etc.; correctly falsy in boolean contexts (`None and True` → `None`, `None or 1` → `1`)
 - **Global variables**: The `global` keyword for accessing and modifying global scope from within functions
 - **Context managers**: `with` and `async with` statements via preprocessor desugaring into explicit `__enter__`/`__exit__` calls:
@@ -30,6 +31,7 @@ This page is a reference of all Python language constructs, data structures, and
 - **Any type**: When a function is annotated `-> Any`, ESBMC infers the actual return type by analyzing return statements in the function body; supports `int`, `float`, `bool`, and expressions evaluating to those types
 - **Variable inference**: Variables annotated with `Any` that are assigned from function calls inherit the function's inferred return type
 - **`Optional[T]` equality**: Equality (`==`, `!=`, `is`, `is not`) between an `Optional[T]` value and a matching primitive succeeds after an `is not None` round-trip — the primitive side is implicitly cast to the pointer-backed representation. Ordered comparisons (`<`, `>`, `<=`, `>=`) on `Optional[T]` are deliberately disabled (they would compare addresses, not values).
+- **`Optional[T]` return type**: A function annotated `-> Optional[T]` (the `typing.Optional` subscript form) lowers to a `T*` pointer with `None` encoded as `NULL`, so a body that returns `None` on some path verifies correctly. `None` comparisons (`is`, `is not`, `==`, `!=`) applied directly to such a call — `f() is None`, `f() == None` — are evaluated against the function's return type rather than collapsed to a constant. (The dedicated `Optional<T>` struct representation is used for the PEP 604 `T | None` annotation with primitive `T`, not for the `Optional[T]` subscript form.)
 - **Lambda expressions**: Single-expression lambdas with multiple parameters; converted to regular functions and stored as function pointers; can be assigned to variables and called indirectly
 
 ## Object-Oriented Programming
@@ -38,6 +40,8 @@ This page is a reference of all Python language constructs, data structures, and
 - **Class attributes**: Class-level variables shared across all instances; supports both explicit type annotations and automatic type inference from assigned values; accessible via both `instance.attr` and `ClassName.attr`
 - **PEP 604 attribute annotations**: `self.x: T | None` (and other `T1 | T2` `BinOp` annotations) are recognised and mapped to the same pointer-to-`T` encoding used for `Optional[T]`
 - **Instance variables**: Attributes defined in `__init__`
+- **Object reference semantics**: When an instance attribute is assigned an aliased class-instance reference (e.g. `self.head = head` from a constructor parameter), the field is stored as a reference, so mutating the object through one binding is visible through the attribute (and vice versa). This makes linked-list, queue, and tree patterns that reassign such attributes through chained references (`curr = q.head; curr = curr.nxt; q.head = curr`) verify correctly. A fresh-constructor RHS (`self.a: A = A()`) is still constructed in place by value.
+- **Self-referential instance attributes**: When an attribute set in `__init__` from a `param=None`-defaulted parameter (e.g. `self.successor = successor`) is populated at construction time (`Node(2, a)`), its field type is recovered by unifying the matching positional constructor argument across module-level `ClassName(...)` calls — enabling linked-list / tree patterns and multi-level attribute chains such as `c.successor.successor`. Recovery is limited to the module being processed (see [Limitations — Class Attributes](./limitations#class-attributes)).
 - **Inheritance**: Single and multi-level inheritance; verification of scenarios involving overridden methods
 - **`super()` calls**: `super().__init__(...)` and other `super().method(...)` calls, enabling verification of polymorphic behavior and parent-constructor side effects
 - **Class-method defaults**: `Name` defaults referencing `ESBMC_default_*` helpers are hoisted past the enclosing `ClassDef` so they remain visible at call sites
@@ -95,8 +99,8 @@ This page is a reference of all Python language constructs, data structures, and
 **Non-constant receivers**: Calls with a non-constant string receiver no longer abort GOTO conversion. Three layers cooperate to give a sound result:
 
 1. **Constant folding (symex layer).** When the receiver and arguments are compile-time constants — either as literals or after AST-level const-propagation of a single `Assign`/`AnnAssign` in the enclosing function — the result folds to an exact value. Folded methods include `swapcase`, `upper`, `lower`, `casefold`, `capitalize`, `title`, `isalpha`, `isdigit`, `isalnum`, `isspace`, `isupper`, `islower`, `startswith`, `endswith`, `count`, `find`, `rfind`, `index`, `strip`, `lstrip`, and `rstrip`.
-2. **Runtime operational models.** `str.count(sub)` and `str.isupper()` now lower to bounded (256-character) operational models in `src/c2goto/library/python/string.c` (`__python_str_count`, `__python_str_isupper`). Concrete arguments fold via symex's constant propagation; symbolic receivers get a real symbolic count or predicate rather than an unconstrained nondet.
-3. **Nondet fallback.** For all other string methods, a non-constant receiver yields a sound symbolic value (nondet `char *`, `bool`, or `int`) instead of aborting. `partition()` falls back to the 3-tuple `("", "", "")` so `len(t) == 3` holds; `splitlines()` falls back to an empty list. `format()` and `format_map()` follow the same shape when their format string or arguments are non-constant. The result is a sound over-approximation: specific functional values are not preserved, but safety checks downstream remain meaningful.
+2. **Runtime operational models.** A growing set of `str` methods lower to bounded operational models in `src/c2goto/library/python/string.c` rather than a bare nondet. These include the case transforms `lower()`, `upper()`, `swapcase()`, `capitalize()`, `title()` (`__python_str_lower`/`_upper`/`_swapcase`/`_capitalize`/`_title`), the predicates `isupper()`, `islower()`, `isalpha()`, `isdigit()`, `isalnum()`, `isspace()`, the counter `count(sub)`, and the searches `find()`/`rfind()`. Concrete arguments fold via symex's constant propagation; symbolic receivers get a real symbolic count, predicate, or returned string rather than an unconstrained nondet. The string-returning models cap the receiver at ~255 characters (a 256-byte buffer): an over-length receiver trips an explicit assertion (e.g. `String too long for swapcase() - exceeds 255 characters`), except `upper()`, which truncates at the buffer bound. `str.join(iterable)` also lowers to a runtime model (`__python_str_join`, 511-character result bound) when its iterable is a variable whose initialiser cannot be folded (e.g. a `List[str]` parameter): an empty list yields `""` and a non-empty list is concatenated element-by-element with the separator.
+3. **Nondet fallback.** For all other string methods, a non-constant receiver yields a sound symbolic value (nondet `char *`, `bool`, or `int`) instead of aborting. `partition()` falls back to the 3-tuple `("", "", "")` so `len(t) == 3` holds; `splitlines()` falls back to an empty list. `format()` and `format_map()` follow the same shape when their format string or arguments are non-constant. `join()` falls back to a nondet `char *` when its iterable argument is not a literal list that can be folded at conversion time (e.g. `sorted(...)`, a list comprehension, or a function-call result), so such calls convert instead of aborting. The result is a sound over-approximation: specific functional values are not preserved, but safety checks downstream remain meaningful.
 
 ### Sets
 
@@ -127,7 +131,7 @@ This page is a reference of all Python language constructs, data structures, and
 - **Membership**: `"a" in d`, `"a" not in d`
 - **Deletion**: `del d["a"]`; raises `KeyError` if absent
 - **Equality**: `d1 == d2` (order-independent)
-- **Iteration**: `for` loops over `d.keys()`, `d.values()`, `d.items()`
+- **Iteration**: `for` loops over `d.keys()`, `d.values()`, `d.items()`, and directly over the dict (`for k in d:`). For a **local dict literal** with tuple keys, the destructuring form `for u, v in d:` is also supported — each key is unrolled as a tuple literal so it unpacks correctly.
 - **`update(other)`**: Merge another dict
 - **`get(key[, default])`**: Return value or default; returns `Optional[T]` when no default is provided
 - **`setdefault(key[, default])`**: Insert key with default if absent, then return value; supports `int`, `float`, `bool`, `str`
@@ -249,6 +253,7 @@ The `--strict-types` flag enables type compatibility validation for function arg
 
 - **`__name__`**: Set to `"__main__"` when run directly; set to the module name when imported. Enables `if __name__ == "__main__":` idioms.
 - **Imports**: Standard `import` and `from ... import ...` styles validated at verification time
+- **Local bindings shadow imported modules**: When a name is both an imported module and a local binding (e.g. a parameter `node` while `from node import Node` is in scope), attribute access such as `node.value` resolves to the local binding, following Python's LEGB rule, rather than to a module member.
 - **Selective imports preserve module-level constants**: `from M import f, C` retains plain `Assign` bindings such as `INT_BOUND = 1024` in addition to `AnnAssign` ones. Tuple-unpacking targets are treated atomically.
 - **Parser package layout**: The Python parser ships as a package under `src/python-frontend/parser/` (entrypoint `parser/__main__.py`, public facade `parser/__init__.py`, import resolution in `parser/import_resolver.py`). The resolver emits deterministic, review-friendly diagnostics for missing modules, cyclic imports, and relative-import rewrites.
 
@@ -257,7 +262,7 @@ The `--strict-types` flag enables type compatibility validation for function arg
 | Function | Notes |
 |---|---|
 | `abs`, `divmod` | Standard arithmetic |
-| `int`, `float`, `bool`, `chr`, `ord`, `str`, `repr`, `hex`, `oct`, `bin`, `ascii` | Type conversions and representations. `bin` is `LLONG_MIN`-safe; `ascii` emits `\xNN`/`\uNNNN`/`\UNNNNNNNN` escapes for non-ASCII codepoints. |
+| `int`, `float`, `bool`, `chr`, `ord`, `str`, `repr`, `hex`, `oct`, `bin`, `ascii` | Type conversions and representations. `bin`, `hex`, and `oct` accept non-literal integer arguments: a compile-time-foldable expression (e.g. `bin(round(3.0))`) folds to the exact literal, while a genuinely symbolic operand (a function parameter or variable) lowers to a runtime operational model (`__python_int_to_{bin,hex,oct}`) producing the correctly prefixed string (`0b`/`0x`/`0o`, a leading `-` for negatives, lowercase hex digits); a non-integer argument still raises `TypeError`. `bin` is `LLONG_MIN`-safe; `ascii` emits `\xNN`/`\uNNNN`/`\UNNNNNNNN` escapes for non-ASCII codepoints. |
 | `pow(b, e)` | Shares the `**` operator lowering (integer, float, bool operands) |
 | `pow(b, e, m)` | 3-argument modular exponentiation: exact `BigInt` for constant integer operands; symbolic operands raise an unsupported diagnostic rather than emit unsound floating-point modulo |
 | `callable(obj)`, `issubclass(cls, base)` | Resolved at compile time from the symbol table and AST class hierarchy |
@@ -266,6 +271,7 @@ The `--strict-types` flag enables type compatibility validation for function arg
 | `min(a, b)`, `max(a, b)` | Two-argument form only; promotes `int` to `float` |
 | `min([...])`, `max([...])` | Single-list form; supports `int`, `float`, and `str` element types |
 | `sum([...])` | Sum of list elements; supports `int` and `float` |
+| `sum(range(EXPR))` | Single-arg `sum` of a single-arg `range` is rewritten to the Gauss closed form `EXPR * (EXPR - 1) // 2 if EXPR > 0 else 0`, yielding an exact value (and `0` for `EXPR <= 0`) instead of a nondet result |
 | `sorted(iterable)` | Returns a new sorted list; supports `int`, `float`, and `str` elements |
 | `any([...])` | List literals only; short-circuit OR logic |
 | `all([...])` | List literals only; short-circuit AND logic |
@@ -351,7 +357,7 @@ See also: [Random Operational Model](./random-operational-model)
 
 ## Collections Module (`collections`)
 
-- **`defaultdict(default_factory)`**: Dict subclass that returns a default value for missing keys; modelled as a plain `dict` with a nondeterministic default
+- **`defaultdict(default_factory)`**: Dict subclass that returns a default value for missing keys; modelled as a plain `dict` with a nondeterministic default. When the dict has no value annotation, the value type is inferred from the factory or from a subscript assignment in the enclosing function: built-in type factories (`defaultdict(int)`, `float`, `bool`, `str`), nullary `lambda` factories whose body is a constant or a built-in constructor call (`defaultdict(lambda: float('inf'))`), and constant literal assignments (`d[k] = 5`, `0.0`, `True`, `"x"`) all map to the matching value type, so `min`/`max`/comparisons over `d[k]` no longer fall back to `char *`
 - **`Counter`**: Mapping of elements to integer counts; supports `__getitem__`, `__setitem__`, `values()`, and boolean truthiness
 
 ## Datetime Module (`datetime`)
