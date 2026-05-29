@@ -269,3 +269,360 @@ The migration is **done**. Future incremental work — eliminating
 `c_expr2string`'s legacy dependency, or revisiting one of the
 explicit non-goals above — should live under its own focused tracking
 issue, not under the umbrella that closed with this retrospective.
+
+---
+
+# Part II — `util/` analysis & helper migration (forward plan)
+
+> **Status: planning.** Part I above is a closed retrospective of the
+> symbol-table boundary (B1–B6). This part is the *focused follow-on*
+> that the retrospective anticipated ("future incremental work … should
+> live under its own focused tracking issue"). It is a plan, not a
+> record: nothing here has landed yet. Tracking issue: **to be filed**.
+
+## 1. Scope and relationship to Part I
+
+Part I drained the legacy IR out of the **symbol table** — the
+pipeline's central data structure — and the analysis passes that orbit
+it (`rw_set`, `goto_functiont::type`). The deep verifier core
+(`goto-symex`, `solvers`, `pointer-analysis`) was already IREP2.
+
+What Part I left untouched is the **`src/util/` analysis-and-helper
+layer**: the simplifiers, type/cast builders, equality engines,
+pretty-printers, expression helpers and the legacy representation
+itself. The retrospective's own surface-ratio table put `util/` at
+**35 % IREP2 / 65 % legacy** at close — the lowest share of any tree
+outside the frontends. This part audits that residual surface and lays
+out what can be migrated, what must be retained, and in what order.
+
+The hard constraint is unchanged and non-negotiable: **ESBMC is a
+verifier; every step must be behaviour-preserving** — differential
+goto-binary diff zero, dual-solver verdict agreement, no on-disk format
+change. A migration that is merely "cleaner" but shifts a single verdict
+is a regression.
+
+## 2. How this plan was derived (reproducibility)
+
+Every classification below is grounded in the code at the commit this
+document lands on, not in recollection. The method, re-runnable by any
+reviewer:
+
+- **Caller graph** — `grep -rln '#include.*<util/NAME.h>' src` per
+  header, bucketed into *frontends* (`clang-c`, `clang-cpp`, `python`,
+  `solidity`, `jimple` — the declared permanent legacy boundary),
+  *gotoPrograms*, *core* (`goto-symex` ∪ `solvers` ∪
+  `pointer-analysis`, already IREP2), *util*, *tests*, *other*.
+- **IR per symbol** — read each file; a function is legacy if it
+  takes/returns `exprt`/`typet`/`codet`/`irept`, IREP2 if
+  `expr2tc`/`type2tc`.
+- **irep2 equivalent exists?** — grep `src/irep2/irep2_utils.{h,cpp}`,
+  `irep2_expr.h`, `irep2_type.h`, `c_types.h` for a twin.
+- **Adversarial verification** — every load-bearing count below was
+  re-checked by an independent pass instructed to *refute* it; the
+  numbers here are the post-correction figures.
+
+Counts are a snapshot; re-run `scripts/irep2-migration/migrate_census.sh
+src/util` and the per-header `grep` before acting on any single phase.
+
+## 3. The five migration tiers
+
+Each `util/` component is assigned exactly one disposition:
+
+| Tier | Meaning | Action |
+|------|---------|--------|
+| **ALREADY_IREP2** | Operates on `expr2tc`/`type2tc` today. | None. Confirm census shows no stray `migrate_*_back`. |
+| **RETIRE_DEAD** | Legacy code with a complete IREP2 replacement and few/zero live callers. | Redirect stragglers, then delete (C-Dead proof). |
+| **DUAL_API_THEN_DROP** | Already exposes both legacy and IREP2 overloads; core uses IREP2, frontends/stragglers use legacy. | Add an equivalence test, migrate non-frontend callers, drop the legacy overload. |
+| **MIGRATE_CALLERS_FIRST** | Legacy and load-bearing; cannot move until its callers (mostly frontends) move. | Gate, don't migrate. Blocked on the frontend boundary. |
+| **RETAIN_BOUNDARY** | *Is* the legacy representation, the on-disk format, or the migrate seam. | Keep permanently; validate it is **not** accidentally changed. |
+
+## 4. Component inventory and classification
+
+All file paths are under `src/util/` unless noted. Caller buckets are
+*external* includers (the file's own `.cpp` excluded).
+
+| Cluster | Files | Tier | Caller split (front / goto / core / util / other) | IREP2 equivalent | Disposition |
+|---------|-------|------|---|---|---|
+| **Legacy simplifier** | `simplify_expr.{cpp,h}`, `simplify_expr_class.h`, `simplify_utils.{cpp,h}` | **RETIRE_DEAD** | free `simplify(exprt&)`: **6 sites / 3 files**; `simplify_exprt` class: **1** (`c_typecast.cpp:919`) | `expr2t::simplify` / `simplify(expr2tc&)` (`irep2_utils.h:265`), 81 `do_simplify` overrides, 134 unit cases | Redirect 7 sites, delete 5 files |
+| **IREP2 simplifier** | `expr_simplifier.cpp`, `expr_reassociate.{cpp,h}` | **ALREADY_IREP2** | — | self | Keep; only Class-B census cleanup (§7, Phase 2.3) |
+| **base_type / type_eq** | `base_type.{cpp,h}`, `type_eq.{cpp,h}` | **DUAL_API_THEN_DROP** (+ `type_eq` RETIRE_DEAD) | legacy `base_type_eq(typet,…)`: **9 live**; `base_type_eq(exprt,exprt)` & `base_type(exprt&)`: **0**; `type_eq()`: **0** | `base_type_eqt::base_type_eq(type2tc/expr2tc)` already the core path | Drop 0-caller overloads + `type_eq` now; drop legacy `typet` overload after c_link/c_typecast/goto2c move |
+| **C type/cast builders** | `c_types.{cpp,h}`, `c_typecast.{cpp,h}`, `c_sizeof.{cpp,h}`, `arith_tools.{cpp,h}` | **DUAL_API_THEN_DROP** | `c_typecast` non-frontend callers: **1** (`interval_domain.cpp`, already IREP2 overload) | `*_type2`/`get_*_type` siblings in `c_types.h`; `c_sizeof` legacy is a migrate shim | Add 13 missing `*_type2` siblings; migrate goto/symex `size_type`/`bool_type`/`char_type`; drop legacy after frontends |
+| **Legacy expr helpers** | `expr_util.{cpp,h}` | **MIGRATE_CALLERS_FIRST** (dead helpers RETIRE_DEAD) | **103** includers (54 front / 28 core / 15 goto / 3 util / 3 other) | twins in `irep2_utils.h` (`gen_zero`, `gen_one`, `make_not`, `conjunction`/`disjunction`, `gen_true_expr`) | Delete dead helpers now; rest blocked on frontends |
+| **Legacy printers** | `c_expr2string.{cpp,h}`, `cpp_expr2string.{cpp,h}`, `type2name.{cpp,h}` | **MIGRATE_CALLERS_FIRST** | **8** includers (4 front / 2 goto / 1 util / 1 other) | **none** — `expr2t::pretty` is an s-expr debug dump, not C syntax | Long-horizon: write IREP2-native C printer (Phase 2.7, own issue) |
+| **String constants** | `string_constant.{cpp,h}`, `string2array.{cpp,h}`, `array2string.{cpp,h}` | **MIGRATE_CALLERS_FIRST** | `string2array`: **1** (`c_typecast.cpp:750`); `array2string`: **1** (`io.cpp:233`) | `constant_string2t` (has `to_array`/`at`); **lacks `mb_value()`** | Port `mb_value` onto `constant_string2t`; rewrite `get_string_constant` on `expr2tc` |
+| **Legacy std subclasses** | `std_expr.h`, `std_types.{cpp,h}`, `std_code.{cpp,h}` | **MIGRATE_CALLERS_FIRST** | **161** external includers (79 front / 24 goto / 28 core* / 24 util / 6 other) | full `*2t` family in `irep2_{type,expr}.h` | Remove the **7** core migrate-seam round-trips; bulk blocked on frontends |
+| **Misc symbol helpers** | `replace_symbol.{cpp,h}`, `fix_symbol.{cpp,h}`, `symbolic_types.*`, `python_types.*`, `namespace.*` | **MIGRATE_CALLERS_FIRST** | `replace_symbolt`: 1 non-util (`goto_convert.cpp:794`); `fix_symbolt`: 1 (`c_link.cpp`) | `namespacet` already has `follow(type2tc)`; no IREP2 symbol-substitution | Pre-seam legacy; retain until goto-convert/c-link move |
+| **IREP2-native leaves** | `goto_expr_factory.*`, `fallible_calls.*`, `format_constant.*`, `array_name.*`, `type_byte_size.*` | **ALREADY_IREP2** | — | self | None (drop one dead `array_name` include) |
+| **IR core + serialization** | `irep.{cpp,h}`, `irep_serialization.*`, `symbol_serialization.*`, `xml_irep.*` | **RETAIN_BOUNDARY** | on-disk + witness contract | none, by design | Never migrate; prove unchanged |
+| **Migration seam** | `migrate.{cpp,h}` | **RETAIN_BOUNDARY** | `migrate_expr_back`: **109/109** kinds; `migrate_type_back`: **15/15** | — | Keep total; success = fewer *call sites*, not fewer arms |
+
+\* Of the 28 `std_*` core includers, only **7** `.cpp` files genuinely
+construct a legacy subclass (`memory_alloc`, `reachability_tree`,
+`symex_main`, `value_set`, `value_set_analysis`, `symex_catch`,
+`smt_conv`), and all use it as transient scratch at the migrate seam.
+
+### Two corrections worth flagging (adversarial pass)
+
+- The frontends are **not** entirely upstream of the migrate seam:
+  `clang_c_adjust_expr.cpp:1311-1318` itself calls `migrate_type` +
+  `migrate_expr_back` to synthesize a nondet side-effect. The seam is
+  therefore *not* monotonically shrinkable to zero by util work alone.
+- `irep2/irep2.h:44` directly `#include`s `util/irep.h`, and
+  `irep2/irep2_type.h:6` includes `util/type.h` (the latter **vestigial**
+  — `typet` is referenced 0× across `src/irep2/`). So legacy `irept`
+  is a *compile-time* dependency of the IREP2 headers via the migration
+  layer; `irep.{cpp,h}` cannot be deleted while `migrate.{h,cpp}` lives.
+
+## 5. IREP2 equivalents and API gaps
+
+The target surface is largely already present: `c_types.h` carries a
+`*_type2`/`get_*_type` sibling for every C-type builder;
+`irep2_type.h` macro-generates the `*_type2tc` factories;
+`irep2_expr.h` has the typed constant factories
+(`constant_int2tc`, `constant_bool2tc`, `constant_array_of2tc`, …);
+`irep2_utils.h` has `gen_zero`/`gen_one`/`gen_true_expr`/`gen_false_expr`/
+`make_not`/`conjunction`/`disjunction`/`gen_nondet` and a rich
+`is_constant*` family.
+
+**Confirmed gaps that must be built before specific callers can move:**
+
+| Gap | Needed by | Effort |
+|-----|-----------|--------|
+| `to_integer(expr2tc, BigInt&)` — guarded fold-or-fail (constant, typecast-of-constant) | legacy-simplifier callers, `str_conv` | small; new helper |
+| `from_double(double, const type2tc&)` → `constant_floatbv2tc` | `arith_tools` legacy retirement | trivial port of existing legacy body |
+| `mb_value()` / `convert_mb` / `convert_utf8` on `constant_string2t` | `get_string_constant` (Phase 2.6) | medium; carry decoder over **verbatim** (endianness/surrogate hazards) |
+| `expr_has_floatbv(expr2tc)` | misc | one-liner from existing predicates |
+| value-returning `negate(const expr2tc&)` (wraps in-place `make_not`) | callers without an lvalue | trivial |
+| `symbol2tc`-from-`symbolt` convenience | the ~60 `symbol_expr(symbolt)` sites | trivial; smooths migration |
+| 13 missing `*_type2` C-type siblings (`enum`, `wchar`, `char16/32`, `half_float`, `uint256`, short/char variants, …) | goto/symex legacy `c_types` callers | small each |
+
+**Intentional non-gaps** (no IREP2 analogue *by design*): `gen_unary`/
+`gen_binary` (string-id generic builders — IREP2 is statically typed;
+rewrite to typed factories per site), `make_binary` (n-ary rebalance —
+IREP2 nodes are already binary), `make_next_state` (IREP2 models
+renaming via `symbol2t` `rlevel`/`level*_num` fields). These have **zero
+external callers** today and are dead-code retirements, not ports.
+
+## 6. Phased, commit-sized decomposition
+
+Ordered lowest-risk / unblocking-first. Each numbered item is one
+reviewable commit; each phase is independently shippable. **Apply and
+test one commit at a time** (incremental patch testing); do not batch.
+
+### Phase 2.0 — Baseline & harness (no behaviour change)
+1. Snapshot `migrate_census.sh src/util` into the tree as the `util`
+   scoreboard; record the golden `capture_goto_baseline.sh` over a
+   representative corpus (`regression/esbmc`, `regression/python`,
+   `regression/esbmc-cpp`, `regression/floats`).
+2. Add the **missing DUAL_API equivalence-test harness** (validation
+   gap, §8): a unit pattern asserting `legacy_overload(migrate_back(x))
+   == irep2_overload(x)`, modelled on `base_type.test.cpp`.
+
+### Phase 2.1 — Dead-include & dead-code hygiene (RETIRE_DEAD)
+3. Drop stale includes (no symbol used): `c_expr2string.h` in
+   `document_subgoals.cpp`; `c_typecast.h` + `array_name.h` in
+   `dereference.cpp`; `string_constant.h`/`string2array.h` in
+   `pytest.cpp` + `execution_state.cpp`; `xml_irep.h`/`xml.h` in
+   `show_claims.cpp` + `loop_numbers.cpp`; `simplify_expr.h` in
+   `padding.cpp`, `clang-c-frontend/typecast.cpp`,
+   `solidity-frontend/typecast.cpp`.
+4. Delete dead `expr_util` helpers `gen_implies`, `make_next_state`,
+   `make_binary`; inline `gen_unary` into its sole caller `gen_not`.
+5. Delete dead `type_eq.{cpp,h}` and its CMake entry.
+6. Drop the zero-caller legacy `base_type_eq(exprt,exprt)`,
+   `base_type(exprt&)`, and matching `base_type_eqt` members.
+
+*Each deletion is a branch removal → C-Dead Mode C proof (or cited
+zero-caller grep as implicit discharge) + `diff_goto_baseline` exit 0.*
+
+### Phase 2.2 — Retire the legacy CBMC simplifier (RETIRE_DEAD)
+7. Redirect `migrate.cpp:153,172` to migrate-then-`simplify(expr2tc&)`.
+8. Redirect `builtin_functions.cpp:119,354,409` likewise.
+9. Redirect `str_conv.cpp:557` — **gated** on the per-rule parity
+   check (§9 open question): its downstream branches on whether the
+   result folded to a constant.
+10. Redirect `c_typecast.cpp:919` `simplify_typecast` →
+    `typecast2t::do_simplify`, preserving the `#c_sizeof_type` attribute.
+11. Delete `simplify_expr.{cpp,h}`, `simplify_expr_class.h`,
+    `simplify_utils.{cpp,h}`; drop from `CMakeLists.txt`.
+
+### Phase 2.3 — Class-B migrate round-trip elimination (perf, util-internal)
+12. `expr_simplifier.cpp`: replace the **9** `migrate_type_back`
+    round-trips with `fixedbv_spect(fixedbv_type2t)`,
+    `ieee_float_spect(floatbv_type2t)`, `from_integer(BigInt,type2tc)`
+    (and build the 1 missing helper for the residual site). Must produce
+    **bit-identical** float/fixedbv specs — high blast radius.
+13. `namespace`: add a native `follow(type2tc)` that avoids the
+    `migrate_type_back → follow → migrate_type` detour (hot path).
+14. `c_sizeof`: retire the legacy `typet` overload **iff** its last
+    legacy caller is gone (open question §9).
+
+### Phase 2.4 — Core migrate-seam round-trip elimination (perf + surface)
+15. `value_set::do_function_call` / `value_set_analysist`: compute on
+    `code_type2t.arguments` / `struct_union_members` directly.
+16. `memory_alloc.cpp`: build the dynamic type as `array_type2t`
+    directly instead of staging `array_typet` + `constant_exprt`.
+17. `smt_conv.cpp`: build fixedbv/floatbv constants from `type2tc`
+    width/value (needs IREP2-native `fixedbvt`/`ieee_floatt` builders).
+18. `symex_catch.cpp`: replace `to_struct_type(get_type())` base-class
+    walk — **gated** on whether the `bases` sub-irep survives
+    `migrate_type` (open question §9); if it does not, this site stays.
+19. Prune now-incidental `std_*` includes from `irep2/*`.
+
+### Phase 2.5 — DUAL_API_THEN_DROP: drop legacy overloads
+20. Migrate `goto2c/expr2c.cpp:314` free `base_type(typet&)` to the
+    `type2tc` overload (or keep `typet` locally and convert).
+21. Migrate `c_link.cpp` (3 sites) and `c_typecast.cpp:691` from
+    `symbolt::get_type()`/`typet` to `get_type2()`/`type2tc` — re-verify
+    incomplete-type and link-merge behaviour (the two `base_type_eq`
+    paths differ on `incomplete_struct`/`incomplete_array`/`subtype`).
+22. Add the 13 missing `*_type2` C-type siblings; migrate goto/symex
+    legacy `size_type`/`bool_type`/`char_type` sites onto them.
+23. Remove the vestigial `util/type.h` include from `irep2_type.h`.
+24. After the above + frontends, drop the remaining legacy `typet`
+    `base_type_eq` / `c_typecast` / `arith_tools` overloads.
+
+### Phase 2.6 — String-constant decoder un-trapping
+25. Port `mb_value`/`convert_mb`/`convert_utf8` onto `constant_string2t`
+    (legacy `mb_value` delegates during transition).
+26. Rewrite `get_string_constant` (`builtin_functions.cpp`) on `expr2tc`.
+27. Inline `string2array` into `c_typecast`'s sole call site (already a
+    thin IREP2 wrapper); give `array2string` an IREP2 form or build
+    `constant_string2t` directly in `io.cpp`.
+
+### Phase 2.7 — IREP2-native C/C++ pretty-printer (long-horizon, own issue)
+28. New `expr2tc`/`type2tc` C-syntax walker behind the existing
+    `from_expr(expr2tc)`/`from_type(type2tc)` overloads
+    (`langapi/language_util.h`), initially delegating to the legacy path
+    for golden-output baselining.
+29. Port `c_expr2string`'s ~159 cases case-by-case, gated by
+    golden-output regression diffing against the legacy printer.
+30. Re-point the IREP2 overloads at the native printer, removing the
+    `migrate_*_back` hop; keep legacy `c_expr2string` for the frontend
+    `from_expr(exprt)` path and `goto2c` (compilable-C emitter).
+
+**Phase 2.7 is high-risk and explicitly its own tracking issue** —
+counterexample/witness text is user- and CI-visible and matched by
+`test.desc` regexes; SV-COMP/GraphML witness parity must hold.
+
+## 7. Risk register
+
+| # | Area | Risk | Severity | Mitigation |
+|---|------|------|----------|------------|
+| R1 | correctness | Redirecting a caller from legacy `simplify(exprt&)` to `simplify(expr2tc&)` assumes per-rule parity; `str_conv` branches on whether the result became constant. | high | Per-rule diff before Phase 2.2 commit 9; equivalence unit test. |
+| R2 | correctness | The two `base_type_eq` overloads differ on `incomplete_struct`/`incomplete_array`/`subtype` ids; `is_subclass_of(type2tc)` deliberately **transposes** args (`base_type.cpp:434-442`) and `dereference`/`smt_casts` rely on the inversion. | high | DUAL_API equivalence test; preserve the inversion verbatim; per-caller re-verify. |
+| R3 | correctness | `from_integer(BigInt,type2tc)` truncates out-of-range values via a binary round-trip; the legacy `typet` overload stores without explicit wrap. | med | Confirm no legacy caller depends on un-truncated behaviour before swapping. |
+| R4 | correctness | Class-B float/fixedbv spec rebuild (Phase 2.3) must be **bit-identical**; the simplifier touches every solver path. | med (high blast radius) | Constant-fold equivalence test; dual-solver regression. |
+| R5 | correctness | Core seam round-trips (Phase 2.4) rely on `get_type()`'s lazy cache; the `bases` sub-irep walked in `symex_catch` may have **no** IREP2 representation. | med | Gate commit 18 on a `migrate_type` faithfulness check for `bases`. |
+| R6 | serialization | `irep_serialization`/`symbol_serialization` define the on-disk format; any `irept`-layout / `full_hash` / S·N·C-tag change breaks old binaries. | high | RETAIN_BOUNDARY; goto-binary round-trip regression; **never edit**. |
+| R7 | compatibility | A new IREP2 C printer (2.7) must reproduce `c_expr2string`'s exact text; witness/CI output is regex-matched. | high | Golden-output diff gate per case; keep legacy printer for frontends. |
+| R8 | compatibility | `irep2.h` depends on `util/irep.h`; `exprt`/`typet`/`codet`/`locationt` derive from `irept`. The legacy core cannot be deleted while the seam or frontends exist. | high | Scope excludes the IR core; documented as RETAIN_BOUNDARY. |
+| R9 | correctness | IREP2 `c_typecast`/`follow_with_qualifiers` **drops** C qualifiers (`const`/`volatile`/`restrict`) (TODO `c_typecast.cpp:300`); migrating frontends onto it silently loses const-correctness diagnostics. | med | Restore qualifier handling before any frontend redirect; out of util scope. |
+| R10 | correctness | `mb_value` (multibyte/UTF-8/wide, endianness, locale) is the trickiest logic in the tree and lives only on the legacy class. | med | Carry the decoder over **verbatim**; property-test against CPython where the Python frontend exercises it. |
+| R11 | performance | Reordering "simplify-then-migrate" to "migrate-then-simplify" (2.2) and seam removals (2.3/2.4) change when allocation cost is paid on hot goto-convert/symex paths. | low (net win) | Census + spot benchmark; the seam removals are net performance *gains*. |
+| R12 | correctness | Name-identical legacy/IREP2 overloads (`gen_zero`, `to_struct_type`, `base_type_eq`) resolve by argument type; a mechanical migration can silently bind the wrong overload (both compile). | med | Per-site verify the resolved overload; lean on `-Werror` + unit equivalence tests. |
+
+## 8. Validation, regression & equivalence-checking requirements
+
+Reuse the established Part I gate verbatim; **per-tier additions**:
+
+**Universal PR gate** (the `scripts/irep2-migration/` checklist):
+1. `migrate_census.sh <target>` **strictly decreases** in the touched
+   region, increases nowhere.
+2. `diff_goto_baseline.sh <corpus>` exits **0** (canonical
+   `--goto-functions-only` dump bit-for-bit identical after
+   `irep2_canon`).
+3. Regression verdicts **and counterexamples** agree under **both
+   Bitwuzla and Z3** (dual-solver mandatory).
+4. Affected unit suites green: `ctest -R migratetest|symboltest|
+   base_typetest|simplify2ttest`; full unit run `ctest -LE regression`.
+5. Run the affected regression corpus on an **asserts-enabled build** so
+   the `NDEBUG` migrate cross-check (`migrate.cpp:380-424`) stays live —
+   it is disabled under `NDEBUG`. For Python-touching changes also run
+   `scripts/check_python_tests.sh`.
+
+**Per tier:**
+- **RETIRE_DEAD / drop step** — the C-Dead **Mode C** proof
+  (`__ESBMC_unreachable()` + `--enable-unreachability-intrinsic`, dual
+  solver) that the removed path is unreachable pre-patch, *or* cite an
+  existing reproducer as implicit discharge. The census is necessary but
+  **not sufficient** to prove deadness.
+- **DUAL_API_THEN_DROP** — **before** dropping a legacy overload, add a
+  unit equivalence test asserting `legacy(migrate_back(x)) == irep2(x)`
+  over the kinds the overload handles (this harness does **not exist
+  today** — Phase 2.0 builds it). Keep it as the durable Phase-2
+  contract regression.
+- **MIGRATE_CALLERS_FIRST** — gating only. The `NDEBUG` cross-check +
+  `diff_goto_baseline` remain the equivalence guarantee that the legacy
+  form flowing through the boundary is still faithfully convertible.
+- **RETAIN_BOUNDARY** — inverse validation: prove it is *not* changed.
+  Goto-binary serialise/deserialise round-trip + the full goto-binary
+  regression suite; old binaries must still load.
+
+**Known validation gaps** (must be closed as part of the plan, not
+assumed):
+- No API-level legacy-vs-IREP2 equivalence test exists for DUAL_API
+  files — Phase 2.0 adds the pattern.
+- `diff_goto_baseline` only catches drift **visible in the goto dump**;
+  a change whose only effect is in later symex/solver encoding relies on
+  full dual-solver verdict+counterexample agreement instead.
+- `migrate_census` counts call sites, not dead paths — pair with the
+  C-Dead proof on every deletion.
+
+## 9. Assumptions, dependencies, and open design questions
+
+**Assumptions** (each must hold or the affected phase pauses):
+- The frontends remain a **permanent legacy boundary** (Part I, B1).
+  Every MIGRATE_CALLERS_FIRST item is blocked on this not changing.
+- The goto-binary on-disk format **does not change** (Part I, B4).
+- The IREP2 simplifier is a behavioural **superset** of the legacy one
+  for the 7 redirected sites — *unverified*; see Q1.
+
+**Dependencies:**
+- Phase 2.7 depends on a decision about witness-text parity (Q4) and on
+  `goto2c` keeping a compilable-C emitter (it may need a distinct
+  emitter, not the shared printer).
+- Phase 2.4 commit 17 depends on IREP2-native `fixedbvt`/`ieee_floatt`
+  builders that take `type2tc` + value without `constant_exprt`.
+- Phase 2.5 depends on the frontends (for the *final* legacy-overload
+  drop) and on the `c_typecast` qualifier TODO (R9).
+
+**Open questions** (resolve before the cited commit):
+- **Q1** — Is the IREP2 simplifier a strict superset of `simplify_exprt`
+  for typecast-to-bool folding, redundant-typecast elimination,
+  if-branch and alloc-size constant folding? (blocks 2.2 commit 9)
+- **Q2** — Does legacy `simplify_typecast` (`simpl_const_objects=false`)
+  perform normalization `typecast2t::do_simplify` does not? (blocks 2.2
+  commit 10)
+- **Q3** — Does the `bases` sub-irep walked in `symex_catch`
+  (`st.find("bases")`) survive `migrate_type` into a faithful
+  `struct_type2t`, or is base-class info legacy-only? (blocks 2.4
+  commit 18)
+- **Q4** — Does SV-COMP/GraphML witness generation regex-match the exact
+  `c_expr2string` text, or only structural fields? (sets the parity bar
+  for 2.7)
+- **Q5** — Do legacy `gen_zero`'s `complex`/`c_enum` branches (the IREP2
+  twin aborts on them) get exercised by any frontend before a redirect?
+- **Q6** — Is the legacy `c_sizeof(typet)` overload dead, or
+  frontend-only? (decides 2.3 commit 14)
+
+## 10. Success metrics and exit criteria
+
+- **Primary metric:** `migrate_census.sh src/util` total
+  (`migrate_*` + `migrate_*_back` call sites) strictly decreasing
+  PR-over-PR. Note the **arm count cannot shrink** — all 109 `expr2t` /
+  15 `type2t` back-arms stay live, pinned by `symbolt`'s lazy legacy
+  cache and the `migrate.test.cpp` totality invariant; the metric is
+  *call sites*, not coverage.
+- **Secondary:** the `util/` IREP2 share (the Part I surface-ratio
+  census) rising from 35 %.
+- **Exit (this plan):** every RETIRE_DEAD and DUAL_API_THEN_DROP item
+  discharged; Class-A/B split documented in `migrate.h`; the residual
+  legacy surface is exactly the **RETAIN_BOUNDARY** set (IR core,
+  on-disk format, migrate seam) plus the **MIGRATE_CALLERS_FIRST** set
+  pinned by the frontend boundary. Phase 2.7 (the C printer) and any
+  frontend migration are explicitly **out of scope** and carry their own
+  tracking issues.
+
+The bar is Part I's bar: **behaviour-preserving at every step**, proven,
+not assumed.

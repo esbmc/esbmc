@@ -280,7 +280,13 @@ code_blockt clang_c_adjust::instantiate_gcc_polymorphic_builtin(
     has_prefix(identifier.as_string(), "c:@F@__sync_fetch_and_or") ||
     has_prefix(identifier.as_string(), "c:@F@__sync_fetch_and_and") ||
     has_prefix(identifier.as_string(), "c:@F@__sync_fetch_and_xor") ||
-    has_prefix(identifier.as_string(), "c:@F@__sync_fetch_and_nand"))
+    has_prefix(identifier.as_string(), "c:@F@__sync_fetch_and_nand") ||
+    has_prefix(identifier.as_string(), "c:@F@__atomic_fetch_add") ||
+    has_prefix(identifier.as_string(), "c:@F@__atomic_fetch_sub") ||
+    has_prefix(identifier.as_string(), "c:@F@__atomic_fetch_or") ||
+    has_prefix(identifier.as_string(), "c:@F@__atomic_fetch_and") ||
+    has_prefix(identifier.as_string(), "c:@F@__atomic_fetch_xor") ||
+    has_prefix(identifier.as_string(), "c:@F@__atomic_fetch_nand"))
   {
     const typet &type = code_type.return_type();
 
@@ -321,13 +327,13 @@ code_blockt clang_c_adjust::instantiate_gcc_polymorphic_builtin(
       has_prefix(identifier.as_string(), "c:@F@__sync_fetch_and_or") ||
       has_prefix(identifier.as_string(), "c:@F@__atomic_fetch_or"))
     {
-      new_expr = exprt("or", type);
+      new_expr = exprt("bitor", type);
     }
     else if (
       has_prefix(identifier.as_string(), "c:@F@__sync_fetch_and_and") ||
       has_prefix(identifier.as_string(), "c:@F@__atomic_fetch_and"))
     {
-      new_expr = exprt("and", type);
+      new_expr = exprt("bitand", type);
     }
     else if (
       has_prefix(identifier.as_string(), "c:@F@__sync_fetch_and_xor") ||

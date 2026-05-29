@@ -1819,10 +1819,25 @@ exprt python_list::handle_index_access(
   // Handle negative indices
   if (slice_node.contains("op") && slice_node["op"]["_type"] == "USub")
   {
+    // Both compile-time branches below assume the negated operand is a
+    // constant literal (a[-1]). For a non-constant operand (a[-i]) the value
+    // is only known at runtime, so leave pos_expr (= -i) and index untouched:
+    // build_list_at_call normalizes the negative index at runtime via
+    // __ESBMC_list_size, and the element-type lookup falls back to element 0,
+    // which is correct for the homogeneous lists ESBMC models (#4926).
+    const bool operand_is_constant =
+      slice_node.contains("operand") &&
+      slice_node["operand"]["_type"] == "Constant" &&
+      slice_node["operand"].contains("value");
+
+    if (!operand_is_constant)
+    {
+      // Nothing to do: runtime normalization handles a[-i].
+    }
     // For char* (string parameters), skip compile-time normalization: the size
     // is not known statically, so normalization happens at runtime in the
     // char* indexing block below.
-    if (
+    else if (
       !array.type().is_pointer() &&
       (list_node.is_null() || list_node["value"]["_type"] != "List"))
     {
