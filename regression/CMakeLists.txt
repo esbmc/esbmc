@@ -342,6 +342,14 @@ set(_slow_regression_tests
     # marked FUTURE (BMC scalability); the larger inner timeout lets
     # testing_tool record the FUTURE verdict instead of ctest hard-killing it.
     "regression/python-intensive/problem1_fail"
+    # next_permutation(_fail) used to fast-crash with "Tuple unpacking only
+    # supports simple names, not Subscript". With subscript-target unpacking
+    # support (#4792) the swap converts and ESBMC reaches the real nested-loop
+    # symex (plus reversed()/slice-assign), which does not converge. These stay
+    # KNOWNBUG; the larger inner timeout lets testing_tool record the KNOWNBUG
+    # verdict instead of ctest hard-killing the run.
+    "regression/quixbugs/next_permutation"
+    "regression/quixbugs/next_permutation_fail"
 )
 math(EXPR ESBMC_REGRESS_CTEST_TIMEOUT_SLOW
      "${ESBMC_REGRESS_TIMEOUT_SLOW} + 30")
