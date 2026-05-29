@@ -1109,7 +1109,7 @@ bool solidity_convertert::get_tuple_expr(
     exprt inits;
     inits = gen_zero(arr_type);
     set_sol_type(inits.type(), SolidityGrammar::SolType::ARRAY_LITERAL);
-    inits.type().set("#sol_array_size", size.cformat().as_string());
+    set_sol_array_size(inits.type(), size.cformat().as_string());
 
     // populate array
     int i = 0;

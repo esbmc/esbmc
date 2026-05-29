@@ -302,7 +302,7 @@ bool solidity_convertert::get_type_description(
             integer2binary(z_ext_value, bv_width(int_type())),
             integer2string(z_ext_value),
             int_type()));
-        new_type.set("#sol_array_size", outer_size_str);
+        set_sol_array_size(new_type, outer_size_str);
         set_sol_type(new_type, SolidityGrammar::SolType::ARRAY);
       }
     }
@@ -349,7 +349,7 @@ bool solidity_convertert::get_type_description(
           integer2binary(z_ext_value, bv_width(int_type())),
           integer2string(z_ext_value),
           int_type()));
-      new_type.set("#sol_array_size", the_size);
+      set_sol_array_size(new_type, the_size);
       set_sol_type(new_type, SolidityGrammar::SolType::ARRAY_LITERAL);
     }
     else
@@ -1064,7 +1064,7 @@ bool solidity_convertert::get_array_pointer_type(
             decl["typeName"]["length"]["referencedDeclaration"], length))
         return true;
     }
-    new_type.set("#sol_array_size", length);
+    set_sol_array_size(new_type, length);
     set_sol_type(new_type, SolidityGrammar::SolType::ARRAY);
   }
   else
@@ -1141,8 +1141,7 @@ void solidity_convertert::convert_type_expr(
       src_type.get("#sol_bytesn_size") != dest_type.get("#sol_bytesn_size"))
       // including unset situation
       not_same_type = true;
-    else if (
-      src_type.get("#sol_array_size") != dest_type.get("#sol_array_size"))
+    else if (get_sol_array_size(src_type) != get_sol_array_size(dest_type))
       not_same_type = true;
   }
 
@@ -1478,7 +1477,7 @@ void solidity_convertert::convert_type_expr(
       // the goal is to convert the rhs constant array to a static global var
 
       // get rhs constant array size
-      const std::string src_size = src_type.get("#sol_array_size").as_string();
+      const std::string src_size = get_sol_array_size(src_type);
       if (src_size.empty())
       {
         // e.g. a = new uint[](len);
@@ -1490,7 +1489,7 @@ void solidity_convertert::convert_type_expr(
       unsigned z_src_size = std::stoul(src_size, nullptr);
 
       // get lhs array size
-      std::string dest_size = dest_type.get("#sol_array_size").as_string();
+      std::string dest_size = get_sol_array_size(dest_type);
       if (dest_size.empty())
       {
         if (dest_sol_type == SolidityGrammar::SolType::ARRAY)
@@ -1518,7 +1517,7 @@ void solidity_convertert::convert_type_expr(
         // - dest_type: uint*
         array_typet arr_t = array_typet(dest_type.subtype(), dest_array_size);
         set_sol_type(arr_t, SolidityGrammar::SolType::ARRAY);
-        arr_t.set("#sol_array_size", src_size);
+        set_sol_array_size(arr_t, src_size);
         exprt new_arr = exprt(irept::id_array, arr_t);
 
         exprt arr_comp;
@@ -1574,7 +1573,7 @@ void solidity_convertert::convert_type_expr(
 
           // update "#sol_array_size"
           assert(!dest_size.empty());
-          src_expr.type().set("#sol_array_size", dest_size);
+          set_sol_array_size(src_expr.type(), dest_size);
         }
       }
 
