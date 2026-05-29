@@ -593,9 +593,18 @@ bool dereferencet::dereference_type_compare(
 
   if (is_struct_type(ot_base) && is_struct_type(dt_base))
   {
-    typet tmp_ot_base = migrate_type_back(ot_base);
-    typet tmp_dt_base = migrate_type_back(dt_base);
-    if (to_struct_type(tmp_dt_base).is_prefix_of(to_struct_type(tmp_ot_base)))
+    // Inline irep2 prefix check: dt_base is a prefix of ot_base iff every
+    // member of dt_base matches the leading members of ot_base by both
+    // type and name.
+    const struct_type2t &dt_struct = to_struct_type(dt_base);
+    const struct_type2t &ot_struct = to_struct_type(ot_base);
+    bool is_prefix = ot_struct.members.size() >= dt_struct.members.size();
+    for (size_t i = 0; is_prefix && i < dt_struct.members.size(); ++i)
+      if (
+        dt_struct.members[i] != ot_struct.members[i] ||
+        dt_struct.member_names[i] != ot_struct.member_names[i])
+        is_prefix = false;
+    if (is_prefix)
     {
       object = typecast2tc(dereference_type, object);
       return true; // ok, dt is a prefix of ot

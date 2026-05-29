@@ -21,7 +21,7 @@ bool goto_program_dereferencet::has_failed_symbol(
       to_symbol2t(expr).thename == "INVALID")
       return false;
 
-    const symbolt &ptr_symbol = *ns.lookup(migrate_expr_back(expr));
+    const symbolt &ptr_symbol = *ns.lookup(to_symbol2t(expr).thename);
 
     const irep_idt &failed_symbol = ptr_symbol.get_type().failed_symbol();
 
