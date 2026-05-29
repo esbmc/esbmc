@@ -377,8 +377,7 @@ smt_astt smt_convt::apply_ieee754_semantics(
   if (this->options.get_bool_option("ir-ieee"))
   {
     auto weak_enclosure_return =
-      [this, &real_result, &fbv_type](const char *reason) -> smt_astt
-    {
+      [this, &real_result, &fbv_type](const char *reason) -> smt_astt {
       log_warning(
         "using weak IEEE754 enclosure ({}), exp={}, frac={}",
         reason,
@@ -394,8 +393,7 @@ smt_astt smt_convt::apply_ieee754_semantics(
     };
 
     auto select_nearest_eps =
-      [this, &fbv_type](smt_astt &eps_rel, smt_astt &eps_abs) -> bool
-    {
+      [this, &fbv_type](smt_astt &eps_rel, smt_astt &eps_abs) -> bool {
       const auto double_spec = ieee_float_spect::double_precision();
       const auto single_spec = ieee_float_spect::single_precision();
       if (
@@ -417,15 +415,13 @@ smt_astt smt_convt::apply_ieee754_semantics(
       return false;
     };
 
-    auto abs_real = [this](smt_astt r) -> smt_astt
-    {
+    auto abs_real = [this](smt_astt r) -> smt_astt {
       smt_astt zero = mk_smt_real("0.0");
       return mk_ite(mk_lt(r, zero), mk_sub(zero, r), r);
     };
 
     auto select_directed_eps =
-      [this, &fbv_type](smt_astt &eps_rel_dir, smt_astt &eps_abs) -> bool
-    {
+      [this, &fbv_type](smt_astt &eps_rel_dir, smt_astt &eps_abs) -> bool {
       const auto double_spec = ieee_float_spect::double_precision();
       const auto single_spec = ieee_float_spect::single_precision();
       if (
@@ -762,25 +758,29 @@ smt_astt smt_convt::apply_ieee754_semantics(
     // forced to zero too aggressively; use 0.5 * min_subnormal threshold.
     smt_astt underflow_threshold = min_subnormal;
     smt_astt half_min_subnormal = mk_div(min_subnormal, mk_smt_real("2.0"));
-    bool is_rne = smt_fp_rounding_utils::is_nearest_rounding_mode(rounding_mode);
+    bool is_rne =
+      smt_fp_rounding_utils::is_nearest_rounding_mode(rounding_mode);
     bool is_rna = smt_fp_rounding_utils::is_round_to_away(rounding_mode);
     smt_astt underflows_to_zero;
     if (is_rne)
     {
       // ties-to-even: midpoint rounds to zero
       underflows_to_zero = mk_and(
-        mk_le(abs_result, half_min_subnormal), mk_not(mk_eq(real_result, zero)));
+        mk_le(abs_result, half_min_subnormal),
+        mk_not(mk_eq(real_result, zero)));
     }
     else if (is_rna)
     {
       // ties-away: midpoint rounds away from zero
       underflows_to_zero = mk_and(
-        mk_lt(abs_result, half_min_subnormal), mk_not(mk_eq(real_result, zero)));
+        mk_lt(abs_result, half_min_subnormal),
+        mk_not(mk_eq(real_result, zero)));
     }
     else
     {
       underflows_to_zero = mk_and(
-        mk_lt(abs_result, underflow_threshold), mk_not(mk_eq(real_result, zero)));
+        mk_lt(abs_result, underflow_threshold),
+        mk_not(mk_eq(real_result, zero)));
     }
 
     // If we have a special zero check (like for multiplication), use it
@@ -1122,8 +1122,9 @@ smt_astt smt_convt::convert_rounding_mode(const expr2tc &expr)
 
   const auto width = symbol->sort->get_data_width();
 
-  auto is_mode = [this, &symbol, width](int value) -> smt_astt
-  { return mk_eq(symbol, mk_smt_bv(BigInt(value), width)); };
+  auto is_mode = [this, &symbol, width](int value) -> smt_astt {
+    return mk_eq(symbol, mk_smt_bv(BigInt(value), width));
+  };
 
   smt_astt is_0 = is_mode(ieee_floatt::ROUND_TO_EVEN);
   smt_astt is_1 = is_mode(ieee_floatt::ROUND_TO_AWAY);
