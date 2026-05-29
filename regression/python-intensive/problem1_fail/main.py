@@ -1,11 +1,9 @@
+# Fast deterministic fail test (#4777). The function is a stub returning 3,
+# but the longest subsequence of [1, 2, 3] summing to target 2 is [2]
+# (length 1). Asserting the correct answer makes the stubbed implementation
+# fail verification deterministically and quickly.
 def lengthOfLongestSubsequence(nums: list[int], target: int) -> int:
-    # dp=[-1]*(target+1)
-    # dp[0]=0
-    # for a in nums:
-    #     for i in range(target-a,-1,-1):
-    #         if dp[i]==-1:continue
-    #         dp[i+a]=max(dp[i+a],dp[i]+1)
-    # return dp[-1]
     return 3
 
-assert lengthOfLongestSubsequence([1, 2, 3], 2) == 3
+
+assert lengthOfLongestSubsequence([1, 2, 3], 2) == 1
