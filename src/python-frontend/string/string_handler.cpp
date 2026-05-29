@@ -1558,6 +1558,55 @@ exprt string_handler::handle_int_conversion_with_base(
   return handle_string_to_int(arg, base_expr, location);
 }
 
+exprt string_handler::handle_string_to_float(
+  const exprt &string_obj,
+  const locationt &location)
+{
+  // Ensure we have a null-terminated string and take its base address.
+  exprt string_copy = string_obj;
+  exprt str_expr = ensure_null_terminated_string(string_copy);
+  exprt str_addr = get_array_base_address(str_expr);
+
+  symbolt *float_symbol =
+    find_cached_c_function_symbol("c:@F@__python_str_to_float");
+  if (!float_symbol)
+    throw std::runtime_error(
+      "__python_str_to_float function not found in symbol table");
+
+  // Call __python_str_to_float(str)
+  side_effect_expr_function_callt float_call;
+  float_call.function() = symbol_expr(*float_symbol);
+  float_call.arguments().push_back(str_addr);
+  float_call.location() = location;
+  float_call.type() = double_type();
+
+  return float_call;
+}
+
+exprt string_handler::handle_string_is_float(
+  const exprt &string_obj,
+  const locationt &location)
+{
+  exprt string_copy = string_obj;
+  exprt str_expr = ensure_null_terminated_string(string_copy);
+  exprt str_addr = get_array_base_address(str_expr);
+
+  symbolt *check_symbol =
+    find_cached_c_function_symbol("c:@F@__python_str_is_float");
+  if (!check_symbol)
+    throw std::runtime_error(
+      "__python_str_is_float function not found in symbol table");
+
+  // Call __python_str_is_float(str)
+  side_effect_expr_function_callt check_call;
+  check_call.function() = symbol_expr(*check_symbol);
+  check_call.arguments().push_back(str_addr);
+  check_call.location() = location;
+  check_call.type() = bool_type();
+
+  return check_call;
+}
+
 exprt string_handler::handle_chr_conversion(
   const exprt &codepoint_arg,
   const locationt &location)

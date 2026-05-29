@@ -212,6 +212,8 @@ const static std::vector<std::string> python_c_models = {
   "__python_str_count",
   "__ESBMC_create_inf_obj",
   "__python_int",
+  "__python_str_to_float",
+  "__python_str_is_float",
   "__python_chr",
   "__python_str_concat",
   "__python_str_join",
