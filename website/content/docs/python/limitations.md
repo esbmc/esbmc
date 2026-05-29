@@ -7,9 +7,10 @@ weight: 4
 
 ## Control Flow and Loops
 
-- `for` loops support direct iteration over `range()`, lists, strings, tuples, and generators (functions using `yield` and generator expressions).
+- `for` loops support direct iteration over `range()`, lists, strings (including the result of a `str(...)` call, e.g. `for digit in str(n)`), tuples, and generators (functions using `yield` and generator expressions).
+- `for ... else` is supported: the `else` clause is lowered into a did-not-break flag, so it runs only when the loop completes without `break` (a `break` inside a nested loop stays bound to that inner loop). `while ... else` is not yet supported.
 - List, set, and generator comprehensions are supported. Dictionary comprehensions are accepted by the parser but produce a dictionary whose subsequent key lookups raise `KeyError`.
-- Iteration over dictionaries via `d.keys()`, `d.values()`, and `d.items()` is supported inside `for` loops (see [Supported Features — Dictionaries](./supported-features#dictionaries)).
+- Iteration over dictionaries via `d.keys()`, `d.values()`, and `d.items()` is supported inside `for` loops (see [Supported Features — Dictionaries](./supported-features#dictionaries)). The destructuring form `for u, v in d:` over a dict with tuple keys is supported only for **local dict literals**; the same form over a dict received as a function parameter is not yet handled.
 
 ## Lists
 
@@ -51,7 +52,7 @@ weight: 4
 
 ## Strings
 
-- Most `str.*()` methods now degrade to a sound nondeterministic over-approximation when the receiver is not a compile-time constant (see [Supported Features — Strings](./supported-features#strings)). Only `str.count` and `str.isupper` have precise runtime operational models (bounded to a 256-character receiver). Other methods (`swapcase`, `upper`, `lower`, `casefold`, `capitalize`, `title`, `isalnum`, `isnumeric`, `isidentifier`, `removeprefix`, `removesuffix`, `center`, `ljust`, `rjust`, `zfill`, `expandtabs`, `partition`, `format`, `format_map`, `splitlines`, etc.) return a nondet value of the appropriate shape, so assertions on their specific functional result will report `VERIFICATION FAILED` on symbolic input.
+- Most `str.*()` methods now degrade to a sound nondeterministic over-approximation when the receiver is not a compile-time constant (see [Supported Features — Strings](./supported-features#strings)). A growing set have precise runtime operational models: the case transforms `swapcase`, `upper`, `lower`, `capitalize`, `title` (which cap the receiver at ~255 characters, asserting on longer input — `upper` truncates instead); the predicates `isupper`, `islower`, `isalpha`, `isdigit`, `isalnum`, `isspace`; `count`; and `find`/`rfind`. `str.join` likewise has a precise model (bounded to a 511-character result) when its iterable is a variable whose initialiser cannot be folded (e.g. a `List[str]` parameter), but falls back to a nondet `char *` when the iterable is a non-foldable expression such as `sorted(...)`, a comprehension, or a function-call result. Other methods (`casefold`, `isnumeric`, `isidentifier`, `removeprefix`, `removesuffix`, `center`, `ljust`, `rjust`, `zfill`, `expandtabs`, `partition`, `format`, `format_map`, `splitlines`, etc.) return a nondet value of the appropriate shape, so assertions on their specific functional result will report `VERIFICATION FAILED` on symbolic input.
 - `partition()` on a non-constant receiver returns `("", "", "")` — the same shape Python uses when the separator is not found.
 - `splitlines()` on a non-constant receiver returns an empty list.
 
@@ -80,7 +81,7 @@ weight: 4
 
 ## Collections Module
 
-- `defaultdict`: subscript access/assignment and the common type-factory form (`defaultdict(list)`, with `.append()` on the materialised list) are supported. The `__missing__` hook and other methods are not.
+- `defaultdict`: subscript access/assignment and the common type-factory forms are supported — `defaultdict(list)` (with `.append()` on the materialised list), the built-in scalar factories `defaultdict(int)` / `float` / `bool` / `str`, and nullary `lambda` factories whose body is a constant or built-in constructor (e.g. `defaultdict(lambda: float('inf'))`). On an unannotated dict the value type is also inferred from a constant literal subscript assignment (`d[k] = 5`). The `__missing__` hook and other methods are not.
 - `Counter`: only `__getitem__`, `__setitem__`, `values()`, and truthiness are supported. `most_common()` accepts the call but its result is unusable in any subsequent expression — comparisons trip a frontend "Unsupported comparison" error ([#4665](https://github.com/esbmc/esbmc/issues/4665)). `elements()`, `subtract()`, and arithmetic operators are not supported.
 - `Counter.update(...)` / `dict.update(...)` accept only the single-positional-argument form; the keyword-argument form (`c.update(a=1)`) is rejected at parse time even though it is valid CPython.
 - `OrderedDict` and `deque` support construction and basic indexing / append / `__setitem__`. `namedtuple`, `ChainMap`, and other `collections` types are not supported.
@@ -120,6 +121,7 @@ weight: 4
 ## Class Attributes
 
 - Type inference for class attributes requires values with clear, determinable types; complex expressions may require explicit type annotations.
+- Recovering a self-referential attribute's type from constructor arguments (the linked-list / tree pattern, e.g. `self.successor = successor` set via `Node(2, a)`) is scoped to the module currently being processed. When the class is imported from another module (`from node import Node`), the module-level instances in the importing file are not visible while `__init__` is processed, so the type is not recovered.
 
 ## Missing Return Detection
 
