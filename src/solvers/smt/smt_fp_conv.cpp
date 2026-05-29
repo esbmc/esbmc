@@ -376,6 +376,73 @@ smt_astt smt_convt::apply_ieee754_semantics(
 {
   if (this->options.get_bool_option("ir-ieee"))
   {
+    auto weak_enclosure_return =
+      [this, &real_result, &fbv_type](const char *reason) -> smt_astt {
+      log_warning(
+        "using weak IEEE754 enclosure ({}), exp={}, frac={}",
+        reason,
+        fbv_type.exponent,
+        fbv_type.fraction);
+      smt_sortt rs = mk_real_sort();
+      smt_astt ra_lo = mk_fresh(rs, "ra_lo_weak::", nullptr);
+      smt_astt ra_hi = mk_fresh(rs, "ra_hi_weak::", nullptr);
+      assert_ast(mk_le(ra_lo, real_result));
+      assert_ast(mk_le(real_result, ra_hi));
+      assert_ast(mk_le(ra_lo, ra_hi));
+      return real_result;
+    };
+
+    auto select_nearest_eps =
+      [this, &fbv_type](smt_astt &eps_rel, smt_astt &eps_abs) -> bool {
+      const auto double_spec = ieee_float_spect::double_precision();
+      const auto single_spec = ieee_float_spect::single_precision();
+      if (
+        fbv_type.exponent == double_spec.e &&
+        fbv_type.fraction == double_spec.f)
+      {
+        eps_rel = get_double_eps_rel();       // 2^-53
+        eps_abs = get_double_min_subnormal(); // 2^-1074
+        return true;
+      }
+      if (
+        fbv_type.exponent == single_spec.e &&
+        fbv_type.fraction == single_spec.f)
+      {
+        eps_rel = get_single_eps_rel();       // 2^-24
+        eps_abs = get_single_min_subnormal(); // 2^-149
+        return true;
+      }
+      return false;
+    };
+
+    auto abs_real = [this](smt_astt r) -> smt_astt {
+      smt_astt zero = mk_smt_real("0.0");
+      return mk_ite(mk_lt(r, zero), mk_sub(zero, r), r);
+    };
+
+    auto select_directed_eps =
+      [this, &fbv_type](smt_astt &eps_rel_dir, smt_astt &eps_abs) -> bool {
+      const auto double_spec = ieee_float_spect::double_precision();
+      const auto single_spec = ieee_float_spect::single_precision();
+      if (
+        fbv_type.exponent == double_spec.e &&
+        fbv_type.fraction == double_spec.f)
+      {
+        eps_rel_dir = get_double_eps_up();    // 2^-52
+        eps_abs = get_double_min_subnormal(); // 2^-1074
+        return true;
+      }
+      if (
+        fbv_type.exponent == single_spec.e &&
+        fbv_type.fraction == single_spec.f)
+      {
+        eps_rel_dir = get_single_eps_up();    // 2^-23
+        eps_abs = get_single_min_subnormal(); // 2^-149
+        return true;
+      }
+      return false;
+    };
+
     if (smt_fp_rounding_utils::is_nearest_rounding_mode(rounding_mode))
     {
       // Tight path: rounding mode is concrete round-to-nearest.
@@ -395,44 +462,16 @@ smt_astt smt_convt::apply_ieee754_semantics(
       //
       // TODO: extend to non-standard FP formats beyond single and double.
 
-      unsigned int fraction_bits = fbv_type.fraction;
-      unsigned int exponent_bits = fbv_type.exponent;
-
-      auto double_spec = ieee_float_spect::double_precision();
-      auto single_spec = ieee_float_spect::single_precision();
-
       smt_astt eps_rel, eps_abs;
-
-      if (exponent_bits == double_spec.e && fraction_bits == double_spec.f)
-      {
-        eps_rel = get_double_eps_rel(); // 2^-53
-        eps_abs =
-          get_double_min_subnormal(); // 2^-1074 (covers underflow region)
-      }
-      else if (exponent_bits == single_spec.e && fraction_bits == single_spec.f)
-      {
-        eps_rel = get_single_eps_rel();       // 2^-24
-        eps_abs = get_single_min_subnormal(); // 2^-149
-      }
-      else
+      if (!select_nearest_eps(eps_rel, eps_abs))
       {
         // TODO: theorem-driven bounds for non-standard formats are not yet
         // implemented; fall back to unconstrained enclosure (sound but weak).
-        smt_sortt rs = mk_real_sort();
-        smt_astt ra_lo = mk_fresh(rs, "ra_lo_weak::", nullptr);
-        smt_astt ra_hi = mk_fresh(rs, "ra_hi_weak::", nullptr);
-        assert_ast(mk_le(ra_lo, real_result));
-        assert_ast(mk_le(real_result, ra_hi));
-        assert_ast(mk_le(ra_lo, ra_hi));
-        return real_result;
+        return weak_enclosure_return("nearest: unsupported fp format");
       }
 
       smt_sortt rs = mk_real_sort();
-      smt_astt zero = mk_smt_real("0.0");
-
-      // |r| = r >= 0 ? r : -r
-      smt_astt abs_r = mk_ite(
-        mk_lt(real_result, zero), mk_sub(zero, real_result), real_result);
+      smt_astt abs_r = abs_real(real_result);
 
       // B(r) = eps_rel * |r| + eps_abs
       smt_astt bound = mk_add(mk_mul(eps_rel, abs_r), eps_abs);
@@ -471,39 +510,16 @@ smt_astt smt_convt::apply_ieee754_semantics(
       // where B_dir(r) = eps_rel_dir * |r| + eps_abs
       //   eps_rel_dir = 2^-52 (double) or 2^-23 (single) -- the full machine epsilon
 
-      unsigned int fraction_bits = fbv_type.fraction;
-      unsigned int exponent_bits = fbv_type.exponent;
-
-      auto double_spec = ieee_float_spect::double_precision();
-      auto single_spec = ieee_float_spect::single_precision();
-
       smt_sortt rs = mk_real_sort();
       smt_astt eps_up, eps_abs;
-
-      if (exponent_bits == double_spec.e && fraction_bits == double_spec.f)
-      {
-        eps_up = get_double_eps_up();
-        eps_abs = get_double_min_subnormal();
-      }
-      else if (exponent_bits == single_spec.e && fraction_bits == single_spec.f)
-      {
-        eps_up = get_single_eps_up();
-        eps_abs = get_single_min_subnormal();
-      }
-      else
+      if (!select_directed_eps(eps_up, eps_abs))
       {
         // Unsupported format: fall back to unconstrained weak enclosure.
-        smt_astt ra_lo = mk_fresh(rs, "ra_lo_weak::", nullptr);
-        smt_astt ra_hi = mk_fresh(rs, "ra_hi_weak::", nullptr);
-        assert_ast(mk_le(ra_lo, real_result));
-        assert_ast(mk_le(real_result, ra_hi));
-        assert_ast(mk_le(ra_lo, ra_hi));
-        return real_result;
+        return weak_enclosure_return(
+          "round-to-plus-inf: unsupported fp format");
       }
 
-      smt_astt zero = mk_smt_real("0.0");
-      smt_astt abs_r = mk_ite(
-        mk_lt(real_result, zero), mk_sub(zero, real_result), real_result);
+      smt_astt abs_r = abs_real(real_result);
 
       // B_dir(r) = eps_rel_dir * |r| + eps_abs
       smt_astt b_dir = mk_add(mk_mul(eps_up, abs_r), eps_abs);
@@ -539,39 +555,16 @@ smt_astt smt_convt::apply_ieee754_semantics(
       //   This is the directed-mode error constant, the same value used for
       //   ROUND_TO_PLUS_INF; the bound shape is the mirror image.
 
-      unsigned int fraction_bits = fbv_type.fraction;
-      unsigned int exponent_bits = fbv_type.exponent;
-
-      auto double_spec = ieee_float_spect::double_precision();
-      auto single_spec = ieee_float_spect::single_precision();
-
       smt_sortt rs = mk_real_sort();
       smt_astt eps_rel_dir, eps_abs;
-
-      if (exponent_bits == double_spec.e && fraction_bits == double_spec.f)
-      {
-        eps_rel_dir = get_double_eps_up(); // 2^-52, same value as RUP
-        eps_abs = get_double_min_subnormal();
-      }
-      else if (exponent_bits == single_spec.e && fraction_bits == single_spec.f)
-      {
-        eps_rel_dir = get_single_eps_up(); // 2^-23, same value as RUP
-        eps_abs = get_single_min_subnormal();
-      }
-      else
+      if (!select_directed_eps(eps_rel_dir, eps_abs))
       {
         // Unsupported format: fall back to unconstrained weak enclosure.
-        smt_astt ra_lo = mk_fresh(rs, "ra_lo_weak::", nullptr);
-        smt_astt ra_hi = mk_fresh(rs, "ra_hi_weak::", nullptr);
-        assert_ast(mk_le(ra_lo, real_result));
-        assert_ast(mk_le(real_result, ra_hi));
-        assert_ast(mk_le(ra_lo, ra_hi));
-        return real_result;
+        return weak_enclosure_return(
+          "round-to-minus-inf: unsupported fp format");
       }
 
-      smt_astt zero = mk_smt_real("0.0");
-      smt_astt abs_r = mk_ite(
-        mk_lt(real_result, zero), mk_sub(zero, real_result), real_result);
+      smt_astt abs_r = abs_real(real_result);
 
       // B_dir(r) = eps_rel_dir * |r| + eps_abs
       smt_astt b_dir = mk_add(mk_mul(eps_rel_dir, abs_r), eps_abs);
@@ -612,40 +605,17 @@ smt_astt smt_convt::apply_ieee754_semantics(
       // where B_dir(r) = eps_rel_dir * |r| + eps_abs
       //   eps_rel_dir = 2^-52 (double) or 2^-23 (single) -- full machine epsilon
 
-      unsigned int fraction_bits = fbv_type.fraction;
-      unsigned int exponent_bits = fbv_type.exponent;
-
-      auto double_spec = ieee_float_spect::double_precision();
-      auto single_spec = ieee_float_spect::single_precision();
-
       smt_sortt rs = mk_real_sort();
       smt_astt eps_rel_dir, eps_abs;
-
-      if (exponent_bits == double_spec.e && fraction_bits == double_spec.f)
-      {
-        eps_rel_dir = get_double_eps_up(); // 2^-52, same value as RUP/RDN
-        eps_abs = get_double_min_subnormal();
-      }
-      else if (exponent_bits == single_spec.e && fraction_bits == single_spec.f)
-      {
-        eps_rel_dir = get_single_eps_up(); // 2^-23, same value as RUP/RDN
-        eps_abs = get_single_min_subnormal();
-      }
-      else
+      if (!select_directed_eps(eps_rel_dir, eps_abs))
       {
         // Unsupported format: fall back to unconstrained weak enclosure.
-        smt_astt ra_lo = mk_fresh(rs, "ra_lo_weak::", nullptr);
-        smt_astt ra_hi = mk_fresh(rs, "ra_hi_weak::", nullptr);
-        assert_ast(mk_le(ra_lo, real_result));
-        assert_ast(mk_le(real_result, ra_hi));
-        assert_ast(mk_le(ra_lo, ra_hi));
-        return real_result;
+        return weak_enclosure_return("round-to-zero: unsupported fp format");
       }
 
-      smt_astt zero = mk_smt_real("0.0");
-      smt_astt abs_r = mk_ite(
-        mk_lt(real_result, zero), mk_sub(zero, real_result), real_result);
+      smt_astt abs_r = abs_real(real_result);
 
+      smt_astt zero = mk_smt_real("0.0");
       // B_dir(r) = eps_rel_dir * |r| + eps_abs
       smt_astt b_dir = mk_add(mk_mul(eps_rel_dir, abs_r), eps_abs);
 
@@ -699,39 +669,15 @@ smt_astt smt_convt::apply_ieee754_semantics(
       // path (5551115123125783 for double, 5960464477539063 for single).
       // This is expected and correct -- the bound is identical.
 
-      unsigned int fraction_bits = fbv_type.fraction;
-      unsigned int exponent_bits = fbv_type.exponent;
-
-      auto double_spec = ieee_float_spect::double_precision();
-      auto single_spec = ieee_float_spect::single_precision();
-
       smt_sortt rs = mk_real_sort();
       smt_astt eps_rel, eps_abs;
-
-      if (exponent_bits == double_spec.e && fraction_bits == double_spec.f)
-      {
-        eps_rel = get_double_eps_rel(); // 2^-53, same as ROUND_TO_EVEN
-        eps_abs = get_double_min_subnormal();
-      }
-      else if (exponent_bits == single_spec.e && fraction_bits == single_spec.f)
-      {
-        eps_rel = get_single_eps_rel(); // 2^-24, same as ROUND_TO_EVEN
-        eps_abs = get_single_min_subnormal();
-      }
-      else
+      if (!select_nearest_eps(eps_rel, eps_abs))
       {
         // Unsupported format: fall back to unconstrained weak enclosure.
-        smt_astt ra_lo = mk_fresh(rs, "ra_lo_weak::", nullptr);
-        smt_astt ra_hi = mk_fresh(rs, "ra_hi_weak::", nullptr);
-        assert_ast(mk_le(ra_lo, real_result));
-        assert_ast(mk_le(real_result, ra_hi));
-        assert_ast(mk_le(ra_lo, ra_hi));
-        return real_result;
+        return weak_enclosure_return("round-to-away: unsupported fp format");
       }
 
-      smt_astt zero = mk_smt_real("0.0");
-      smt_astt abs_r = mk_ite(
-        mk_lt(real_result, zero), mk_sub(zero, real_result), real_result);
+      smt_astt abs_r = abs_real(real_result);
 
       // B(r) = eps_rel * |r| + eps_abs
       smt_astt bound = mk_add(mk_mul(eps_rel, abs_r), eps_abs);
@@ -761,13 +707,7 @@ smt_astt smt_convt::apply_ieee754_semantics(
     else
     {
       // weak fallback: symbolic or unrecognised rounding mode
-      smt_sortt rs = mk_real_sort();
-      smt_astt ra_lo = mk_fresh(rs, "ra_lo_weak::", nullptr);
-      smt_astt ra_hi = mk_fresh(rs, "ra_hi_weak::", nullptr);
-      assert_ast(mk_le(ra_lo, real_result));
-      assert_ast(mk_le(real_result, ra_hi));
-      assert_ast(mk_le(ra_lo, ra_hi));
-      return real_result;
+      return weak_enclosure_return("unrecognized symbolic rounding mode");
     }
   }
   else
@@ -783,30 +723,16 @@ smt_astt smt_convt::apply_ieee754_semantics(
     // IEEE 754 double precision (64-bit): 11 exponent bits, 52 fraction bits
     if (exponent_bits == double_spec.e && fraction_bits == double_spec.f)
     {
-      // Exact rationals: 1/2^1022, 1/2^1074, (2^53-1)*2^971
-      static const std::string dbl_min_normal =
-        "1/" + integer2string(power(2, 1022));
-      static const std::string dbl_min_subnormal =
-        "1/" + integer2string(power(2, 1074));
-      static const std::string dbl_max_normal =
-        integer2string((power(2, 53) - 1) * power(2, 971));
-      min_normal = mk_smt_real(dbl_min_normal);
-      min_subnormal = mk_smt_real(dbl_min_subnormal);
-      max_normal = mk_smt_real(dbl_max_normal);
+      min_normal = get_double_min_normal();
+      min_subnormal = get_double_min_subnormal();
+      max_normal = get_double_max_normal();
     }
     // IEEE 754 single precision (32-bit): 8 exponent bits, 23 fraction bits
     else if (exponent_bits == single_spec.e && fraction_bits == single_spec.f)
     {
-      // Exact rationals: 1/2^126, 1/2^149, (2^24-1)*2^104
-      static const std::string sgl_min_normal =
-        "1/" + integer2string(power(2, 126));
-      static const std::string sgl_min_subnormal =
-        "1/" + integer2string(power(2, 149));
-      static const std::string sgl_max_normal =
-        integer2string((power(2, 24) - 1) * power(2, 104));
-      min_normal = mk_smt_real(sgl_min_normal);
-      min_subnormal = mk_smt_real(sgl_min_subnormal);
-      max_normal = mk_smt_real(sgl_max_normal);
+      min_normal = get_single_min_normal();
+      min_subnormal = get_single_min_subnormal();
+      max_normal = get_single_max_normal();
     }
     // Unsupported format - return original result
     else
@@ -827,9 +753,35 @@ smt_astt smt_convt::apply_ieee754_semantics(
     // Check for overflow
     smt_astt overflows = mk_gt(abs_result, max_normal);
 
-    // Check for underflow to zero
-    smt_astt underflows_to_zero = mk_and(
-      mk_lt(abs_result, min_subnormal), mk_not(mk_eq(real_result, zero)));
+    // Check for underflow to zero.
+    // For nearest modes, values around the subnormal boundary should not be
+    // forced to zero too aggressively; use 0.5 * min_subnormal threshold.
+    smt_astt underflow_threshold = min_subnormal;
+    smt_astt half_min_subnormal = mk_div(min_subnormal, mk_smt_real("2.0"));
+    bool is_rne =
+      smt_fp_rounding_utils::is_nearest_rounding_mode(rounding_mode);
+    bool is_rna = smt_fp_rounding_utils::is_round_to_away(rounding_mode);
+    smt_astt underflows_to_zero;
+    if (is_rne)
+    {
+      // ties-to-even: midpoint rounds to zero
+      underflows_to_zero = mk_and(
+        mk_le(abs_result, half_min_subnormal),
+        mk_not(mk_eq(real_result, zero)));
+    }
+    else if (is_rna)
+    {
+      // ties-away: midpoint rounds away from zero
+      underflows_to_zero = mk_and(
+        mk_lt(abs_result, half_min_subnormal),
+        mk_not(mk_eq(real_result, zero)));
+    }
+    else
+    {
+      underflows_to_zero = mk_and(
+        mk_lt(abs_result, underflow_threshold),
+        mk_not(mk_eq(real_result, zero)));
+    }
 
     // If we have a special zero check (like for multiplication), use it
     if (operand_zero_check)
@@ -1130,35 +1082,71 @@ smt_astt smt_convt::convert_rounding_mode(const expr2tc &expr)
   // Easy case, we know the rounding mode
   if (is_constant_int2t(expr))
   {
-    ieee_floatt::rounding_modet rm = static_cast<ieee_floatt::rounding_modet>(
-      to_constant_int2t(expr).value.to_int64());
-    return fp_api->mk_smt_fpbv_rm(rm);
+    const int64_t raw_rm = to_constant_int2t(expr).value.to_int64();
+    switch (raw_rm)
+    {
+    case ieee_floatt::ROUND_TO_EVEN:
+      return fp_api->mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_EVEN);
+    case ieee_floatt::ROUND_TO_AWAY:
+      return fp_api->mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_AWAY);
+    case ieee_floatt::ROUND_TO_PLUS_INF:
+      return fp_api->mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_PLUS_INF);
+    case ieee_floatt::ROUND_TO_MINUS_INF:
+      return fp_api->mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_MINUS_INF);
+    case ieee_floatt::ROUND_TO_ZERO:
+      return fp_api->mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_ZERO);
+    default:
+      // Preserve the historical fallback behavior of this conversion path.
+      log_warning(
+        "unsupported constant rounding mode value {}: falling back to "
+        "ROUND_TO_ZERO",
+        raw_rm);
+      return fp_api->mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_ZERO);
+    }
   }
 
   assert(is_symbol2t(expr));
-  // 0 is round to Nearest/even
-  // 2 is round to +oo
-  // 3 is round to -oo
-  // 4 is round to zero
+  // Symbolic values follow ieee_floatt::rounding_modet encoding:
+  // ROUND_TO_EVEN=0, ROUND_TO_AWAY=1, ROUND_TO_PLUS_INF=2,
+  // ROUND_TO_MINUS_INF=3, ROUND_TO_ZERO=4.
 
   smt_astt symbol = convert_ast(expr);
+  if (symbol->sort->id != SMT_SORT_BV)
+  {
+    log_warning(
+      "unsupported symbolic rounding mode sort {}: falling back to "
+      "ROUND_TO_ZERO",
+      static_cast<int>(symbol->sort->id));
+    return fp_api->mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_ZERO);
+  }
 
-  smt_astt is_0 =
-    mk_eq(symbol, mk_smt_bv(BigInt(0), symbol->sort->get_data_width()));
+  const auto width = symbol->sort->get_data_width();
 
-  smt_astt is_2 =
-    mk_eq(symbol, mk_smt_bv(BigInt(2), symbol->sort->get_data_width()));
+  auto is_mode = [this, &symbol, width](int value) -> smt_astt {
+    return mk_eq(symbol, mk_smt_bv(BigInt(value), width));
+  };
 
-  smt_astt is_3 =
-    mk_eq(symbol, mk_smt_bv(BigInt(3), symbol->sort->get_data_width()));
+  smt_astt is_0 = is_mode(ieee_floatt::ROUND_TO_EVEN);
+  smt_astt is_1 = is_mode(ieee_floatt::ROUND_TO_AWAY);
+  smt_astt is_2 = is_mode(ieee_floatt::ROUND_TO_PLUS_INF);
+  smt_astt is_3 = is_mode(ieee_floatt::ROUND_TO_MINUS_INF);
+  smt_astt is_4 = is_mode(ieee_floatt::ROUND_TO_ZERO);
 
   smt_astt ne = fp_api->mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_EVEN);
+  smt_astt na = fp_api->mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_AWAY);
   smt_astt mi = fp_api->mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_MINUS_INF);
   smt_astt pi = fp_api->mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_PLUS_INF);
   smt_astt ze = fp_api->mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_ZERO);
 
-  smt_astt ite2 = mk_ite(is_3, mi, ze);
-  smt_astt ite1 = mk_ite(is_2, pi, ite2);
+  // Keep an explicit map for all supported modes:
+  // 0 -> nearest-even, 1 -> nearest-away, 2 -> +inf, 3 -> -inf, 4 -> zero.
+  // Any other symbolic value conservatively falls back to ROUND_TO_ZERO, which
+  // matches the previous behavior of this conversion path.
+  smt_astt ite4 = ze;
+  ite4 = mk_ite(is_4, ze, ite4);
+  smt_astt ite3 = mk_ite(is_3, mi, ite4);
+  smt_astt ite2 = mk_ite(is_2, pi, ite3);
+  smt_astt ite1 = mk_ite(is_1, na, ite2);
   smt_astt ite0 = mk_ite(is_0, ne, ite1);
 
   return ite0;
