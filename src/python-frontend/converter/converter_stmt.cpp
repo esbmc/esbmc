@@ -814,6 +814,37 @@ bool python_converter::handle_unpacking_assignment(
   if (target_type != "Tuple" && target_type != "List")
     return false;
 
+  // Targets that write through an lvalue (a[i], obj.attr) need the normal
+  // single-assignment store semantics (e.g. invalidating literal const-folding
+  // so later reads see the write). When such a target is present and the RHS
+  // is a tuple/list literal of matching arity, desugar into temp-mediated
+  // single assignments so the swap a[i], a[j] = a[j], a[i] is sound (#4792).
+  {
+    const auto &targets = target["elts"];
+    const auto &value = ast_node["value"];
+    bool has_lvalue_target = false;
+    bool only_name_or_lvalue = true;
+    for (const auto &t : targets)
+    {
+      const auto &tt = t["_type"];
+      if (tt == "Subscript" || tt == "Attribute")
+        has_lvalue_target = true;
+      else if (tt != "Name")
+        only_name_or_lvalue = false; // Starred etc. — leave to existing paths
+    }
+    const bool rhs_is_literal_seq =
+      value.is_object() && value.contains("_type") &&
+      (value["_type"] == "Tuple" || value["_type"] == "List") &&
+      value.contains("elts") && value["elts"].is_array();
+    if (
+      has_lvalue_target && only_name_or_lvalue && rhs_is_literal_seq &&
+      value["elts"].size() == targets.size())
+    {
+      desugar_unpacking_with_lvalue_targets(ast_node, target, target_block);
+      return true;
+    }
+  }
+
   // Get RHS
   is_converting_rhs = true;
   exprt rhs = get_expr(ast_node["value"]);
@@ -864,6 +895,66 @@ bool python_converter::handle_unpacking_assignment(
   throw std::runtime_error(
     "Cannot unpack " + rhs.type().id_string() +
     " - only tuples and arrays can be unpacked");
+}
+
+void python_converter::desugar_unpacking_with_lvalue_targets(
+  const nlohmann::json &ast_node,
+  const nlohmann::json &target,
+  codet &target_block)
+{
+  const auto &targets = target["elts"];
+  const auto &values = ast_node["value"]["elts"];
+  const size_t n = targets.size();
+
+  // Per-statement-stable temp prefix; reusing the same names across repeated
+  // evaluations of the statement (loops, repeated calls) is fine — they are
+  // simply reassigned, like other frontend temporaries.
+  const std::string prefix =
+    "__ESBMC_unpack_" + std::to_string(reinterpret_cast<uintptr_t>(&ast_node)) +
+    "_";
+
+  // Build a Name AST node, cloning location fields from a nearby node.
+  auto make_name =
+    [&](const std::string &id, const nlohmann::json &loc_src, const char *ctx) {
+      nlohmann::json node;
+      node["_type"] = "Name";
+      node["id"] = id;
+      node["ctx"] = {{"_type", ctx}};
+      copy_location_fields_from_decl(loc_src, node);
+      return node;
+    };
+
+  // Build an `Assign` AST node for `tgt = val`.
+  auto make_assign = [&](const nlohmann::json &tgt, const nlohmann::json &val) {
+    nlohmann::json node;
+    node["_type"] = "Assign";
+    node["targets"] = nlohmann::json::array({tgt});
+    node["value"] = val;
+    copy_location_fields_from_decl(ast_node, node);
+    return node;
+  };
+
+  // Phase 1: evaluate every RHS element into its own temporary. Python
+  // evaluates the entire RHS before any assignment, so this snapshots the
+  // values before the (possibly aliasing) stores below.
+  std::vector<nlohmann::json> temps;
+  temps.reserve(n);
+  for (size_t i = 0; i < n; i++)
+  {
+    nlohmann::json tmp_tgt =
+      make_name(prefix + std::to_string(i), values[i], "Store");
+    nlohmann::json assign = make_assign(tmp_tgt, values[i]);
+    get_var_assign(assign, target_block);
+    temps.push_back(make_name(prefix + std::to_string(i), targets[i], "Load"));
+  }
+
+  // Phase 2: store each target from its snapshot temp via the normal
+  // single-assignment path.
+  for (size_t i = 0; i < n; i++)
+  {
+    nlohmann::json assign = make_assign(targets[i], temps[i]);
+    get_var_assign(assign, target_block);
+  }
 }
 
 symbolt *python_converter::create_symbol_for_unannotated_assign(
