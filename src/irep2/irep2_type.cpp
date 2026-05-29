@@ -9,7 +9,6 @@
 #include <util/message.h>
 #include <util/message/format.h>
 #include <util/migrate.h>
-#include <util/std_types.h>
 
 /*************************** Base type2t definitions **************************/
 

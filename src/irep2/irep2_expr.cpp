@@ -8,7 +8,6 @@
 #include <irep2/irep2_dispatch.h>
 #include <util/message/format.h>
 #include <util/migrate.h>
-#include <util/std_types.h>
 
 // Pretty names indexed by expr2t::expr_ids. Driven by expr_kinds.inc;
 // adding a new expression kind there automatically populates this
