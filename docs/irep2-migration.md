@@ -674,3 +674,109 @@ diff there.
 
 The bar is Part I's bar: **behaviour-preserving at every step**, proven,
 not assumed.
+
+## 11. Outcome — Phase 2 concluded at the frontend boundary
+
+> **Status: concluded.** Sections 1–10 above were the forward plan;
+> this records what actually landed and where the focused follow-on
+> stopped. The non-frontend `util/` → IREP2 surface is drained; the
+> residual is exactly the **RETAIN_BOUNDARY** + **MIGRATE_CALLERS_FIRST**
+> sets the plan anticipated, pinned by the permanent frontend boundary.
+
+### What landed
+
+| PR | Phase | Outcome |
+|----|-------|---------|
+| [#4935](https://github.com/esbmc/esbmc/pull/4935) | 2.0 + 2.1 | Census scoreboard (`scripts/irep2-migration/census-util.txt`); RETIRE_DEAD hygiene — dropped stale includes, dead `expr_util` helpers, `type_eq.{cpp,h}`, the zero-caller `exprt` `base_type`/`base_type_eq` overloads. |
+| [#4938](https://github.com/esbmc/esbmc/pull/4938) | 2.2 | Retired the legacy CBMC simplifier (`simplify_expr.{cpp,h}`, `simplify_expr_class.h`, `simplify_utils.{cpp,h}`, ~2964 lines); built `to_integer(expr2tc)`; redirected all 7 caller sites to the IREP2 simplifier (Q1/Q2 resolved). |
+| [#4941](https://github.com/esbmc/esbmc/pull/4941) | 2.3 | Replaced 8/9 `expr_simplifier` `migrate_type_back` round-trips with native `fixedbv_spect`/`ieee_float_spect`/`from_integer(type2tc)`; native `namespacet::follow(type2tc)`. |
+| [#4944](https://github.com/esbmc/esbmc/pull/4944) | 2.4 | Core migrate-seam round-trips removed: `value_set::do_function_call` reads `get_type2()`; `smt_conv::get_by_value` builds model fixedbv/floatbv natively; pruned stale `std_*` includes from `irep2/`. |
+| [#4946](https://github.com/esbmc/esbmc/pull/4946) | post-2.4 | Eliminated further migrate-back sites across goto-programs / pointer-analysis (goto_check, goto_inline, dereference, goto_convert_functions, …). |
+| [#4947](https://github.com/esbmc/esbmc/pull/4947) | 2.5 | Dropped the vestigial `util/type.h` include from `irep2_type.h`; documented the frontend boundary as reached. |
+
+### Resolved open questions and per-commit blockers
+
+The plan's gated items resolved against the tree as follows; these stay
+on the legacy side because the IREP2 side genuinely cannot represent them
+or the callers are frontend-pinned:
+
+- **Q1 / Q2** (simplifier parity, Phase 2.2) — **resolved, redirected.**
+  `typecast2t::do_simplify` folds typecast-of-constant identically; the
+  one live `simplify_typecast` site is guarded by `op0().is_constant()`,
+  so only constant folding matters.
+- **Q3** (`bases` sub-irep, Phase 2.4 commit 18) — **resolved: stays.**
+  `struct_type2t` has no `bases` field and `migrate_type` never copies
+  it; C++ base-class metadata is legacy-only, so `symex_catch`'s
+  base-class walk keeps reading the legacy `get_type().find("bases")`.
+- **Q5** (`gen_zero` complex, Phase 2.3 residual) — `gen_zero(type2tc)`
+  `abort()`s on `complex`, but the complex-to-bool cast does not reach
+  the `typecast2t::do_simplify` bool branch (the clang frontend lowers it
+  to part-wise comparisons first), so [#4946](https://github.com/esbmc/esbmc/pull/4946)
+  safely migrated the site. The `gen_zero(type2tc)` complex gap remains a
+  latent defensive hole, not an active bug.
+- **Q6** (legacy `c_sizeof(typet)`, Phase 2.5 commit 14) — **frontend-only,
+  not dead.** Its 3 callers are 2 frontends + `goto2c`; cannot drop.
+- **Phase 2.4 commit 16** (`memory_alloc` → `array_type2t` directly) —
+  **blocked.** `array_type2t` has no `dynamic`/`alignment` field, and
+  `symex_valid_object` reads `symbol.get_type().dynamic()` for
+  dynamic-memory valid-object checks; building the type directly would
+  drop that flag. Kept the legacy `array_typet` construction.
+- **Phase 2.5 commits 20/21/22/24** — **frontend-gated / risky / premature.**
+  The DUAL_API overload drop (24) is "after frontends"; the `c_link`
+  `base_type_eq` migration (21) is risky (R2 — `typet`/`type2tc` paths
+  differ on incomplete-struct/array/subtype, and `c_link` link-merges
+  incomplete types); the missing `*_type2` siblings (22) have only
+  frontend callers.
+- **Phase 2.6** (string-constant decoder) — **pinned.** `mb_value`'s only
+  callers are legacy goto-convert (`get_string_constant`) and the python
+  frontend (`python_set`); `get_string_constant`'s callers pass legacy
+  `exprt::operandst`. The one non-frontend opportunity (`array2string` at
+  `io.cpp`) is a single small printf-`%s` round-trip, left for a future
+  focused change.
+- **Phase 2.7** (IREP2-native C printer) — out of scope, its own issue.
+
+### Methodology note
+
+The differential goto-baseline harness (`scripts/irep2-migration/`) proved
+**unreliable across rebuilds** in some environments: ESBMC re-bakes its
+bundled operational-model goto non-deterministically per build (§8.1).
+Every Phase 2 PR was therefore gated on **deterministic regression-verdict
+equivalence against clean `master`** over a stratified corpus, plus the
+affected unit suites and per-change targeted oracles — not on the goto
+diff. See §8.1 for the full rationale.
+
+### Surface ratio at the Phase 2 close (`src/util`)
+
+Measured by IREP2- vs legacy-IR type-name **line mentions** over `src/util`
+(`git grep -P '\b[A-Za-z_]+2tc?\b'` for the `*2t`/`*2tc` family vs
+`git grep -P '\b([A-Za-z_]*(exprt|typet|codet)|irept)\b'` for the legacy
+family):
+
+| `src/util` | IREP2 lines | legacy lines | IREP2 share |
+|------------|------------:|-------------:|------------:|
+| Part II baseline (`6c4d610694`) | 2845 | 2584 | **52 %** |
+| Phase 2 close (post-#4947)      | 2858 | 2301 | **55 %** |
+
+So legacy IR type-name mentions in `util/` fell by ~283 lines (the IREP2
+share rising 52 % → 55 %). The bigger story is the **whole legacy units
+deleted**: `simplify_expr.{cpp,h}` + `simplify_expr_class.h` +
+`simplify_utils.{cpp,h}` (~2964 lines), `type_eq.{cpp,h}`, the dead
+`expr_util` helpers, and the zero-caller `exprt` `base_type` overloads.
+The residual legacy in `util/` is the frontend-pinned helper layer
+(`c_types`/`c_typecast`/`std_*` builders, `c_expr2string`/`type2name`),
+the `migrate_*` seam, and the IR core — i.e. exactly the RETAIN_BOUNDARY +
+MIGRATE_CALLERS_FIRST sets.
+
+*(This line-mention metric is reproducible but distinct from — and not
+directly comparable to — Part I's narrower per-type "Surface ratio at the
+close" table, which reported `util/` at 35 %.)*
+
+### Bottom line
+
+The clean, non-frontend `util/` → IREP2 migration is **complete**. The
+remaining legacy surface is the deliberately-retained boundary: the IR
+core and on-disk goto-binary format (`RETAIN_BOUNDARY`), the `migrate_*`
+seam (kept with its cross-check), and the frontend-pinned helper layer
+(`MIGRATE_CALLERS_FIRST`). Further progress requires migrating the
+frontends themselves — the permanent boundary Part I declared out of
+scope — and so belongs to its own, much larger tracking effort.
