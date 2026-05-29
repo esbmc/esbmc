@@ -3,6 +3,7 @@
 <benchmark tool="witnessmap" timelimit="15 min" hardtimelimit="16 min" memlimit="3 GB" cpuCores="1">
 <require cpuModel="Intel Xeon E3-1230 v5 @ 3.40 GHz"/>
 
+  <option name="--output">.</option>
   <resultfiles>**/witness.*</resultfiles>
 
 <rundefinition name="SV-COMP26_unreach-call">
