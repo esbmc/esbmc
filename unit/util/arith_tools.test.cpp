@@ -75,7 +75,7 @@ TEST_CASE(
   "to_integer(expr2tc) agrees with the legacy to_integer on constants",
   "[util][arith]")
 {
-  for (const BigInt value : {BigInt(0), BigInt(1), BigInt(255), BigInt(-128)})
+  for (const BigInt &value : {BigInt(0), BigInt(1), BigInt(255), BigInt(-128)})
   {
     const typet lt = signedbv_typet(32);
     exprt legacy = from_integer(value, lt);
