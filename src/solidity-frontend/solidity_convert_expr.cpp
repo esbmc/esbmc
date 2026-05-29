@@ -861,8 +861,8 @@ bool solidity_convertert::get_literal_expr(
     std::string expected_size;
     if (is_static)
     {
-      assert(!byte_t.get("#sol_bytesn_size").empty());
-      expected_size = byte_t.get("#sol_bytesn_size").as_string();
+      assert(has_sol_bytesn_size(byte_t));
+      expected_size = get_sol_bytesn_size(byte_t);
     }
 
     if (type_name == SolidityGrammar::ElementaryTypeNameT::INT_LITERAL)
@@ -906,7 +906,7 @@ bool solidity_convertert::get_literal_expr(
           byte_t,
           location,
           call);
-        assert(!byte_t.get("#sol_bytesn_size").empty());
+        assert(has_sol_bytesn_size(byte_t));
         exprt len = from_integer(std::stoul(expected_size), uint_type());
         call.arguments().push_back(len);
       }
@@ -917,7 +917,7 @@ bool solidity_convertert::get_literal_expr(
         return true;
       }
       set_sol_type(call.type(), SolidityGrammar::SolType::BYTES_STATIC);
-      call.type().set("#sol_bytesn_size", expected_size);
+      set_sol_bytesn_size(call.type(), expected_size);
       new_expr = make_aux_var(call, location);
       return false;
     }
@@ -934,7 +934,7 @@ bool solidity_convertert::get_literal_expr(
       // add padding
       if (is_static && is_hex_string)
       {
-        assert(!byte_t.get("#sol_bytesn_size").empty());
+        assert(has_sol_bytesn_size(byte_t));
         size_t actual_len = val_str.length() / 2;
         size_t expected_len = std::stoul(expected_size);
 
@@ -985,7 +985,7 @@ bool solidity_convertert::get_literal_expr(
       else
       {
         set_sol_type(str_call.type(), SolidityGrammar::SolType::BYTES_STATIC);
-        str_call.type().set("#sol_bytesn_size", byte_t.get("#sol_bytesn_size"));
+        set_sol_bytesn_size(str_call.type(), get_sol_bytesn_size(byte_t));
       }
       new_expr = make_aux_var(str_call, location);
       return false;
@@ -2002,7 +2002,7 @@ bool solidity_convertert::get_index_access_expr(
   {
     bool is_bytes_set = is_mapping_set_lvalue(expr); // set vs get
     typet result_type = byte_static_t;
-    result_type.set("#sol_bytesn_size", 1);
+    set_sol_bytesn_size(result_type, 1);
 
     std::string aux_name, aux_id;
     get_aux_var(aux_name, aux_id);

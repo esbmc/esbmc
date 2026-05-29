@@ -701,9 +701,8 @@ bool solidity_convertert::get_var_decl(
       t,
       location_begin,
       call);
-    assert(!t.get("#sol_bytesn_size").empty());
-    exprt len = from_integer(
-      std::stoul(t.get("#sol_bytesn_size").as_string()), uint_type());
+    assert(has_sol_bytesn_size(t));
+    exprt len = from_integer(std::stoul(get_sol_bytesn_size(t)), uint_type());
     call.arguments().push_back(len);
     added_symbol.set_value(call);
     decl.operands().push_back(call);
