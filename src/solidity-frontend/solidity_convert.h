@@ -111,6 +111,21 @@ public:
     return !t.get("#sol_bytesn_size").empty();
   }
 
+  // Set/get/test the Solidity contract name carried on a typet via the
+  // #sol_contract irep attribute (the declaring contract of a contract type).
+  static void set_sol_contract(typet &t, const irep_idt &cname)
+  {
+    t.set("#sol_contract", cname);
+  }
+  static std::string get_sol_contract(const typet &t)
+  {
+    return t.get("#sol_contract").as_string();
+  }
+  static bool has_sol_contract(const typet &t)
+  {
+    return !t.get("#sol_contract").empty();
+  }
+
   // json nodes that always empty
   // used as the return value for find_constructor_ref when
   // dealing with the implicit constructor call
