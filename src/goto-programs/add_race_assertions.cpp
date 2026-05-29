@@ -109,10 +109,54 @@ void w_guardst::add_initialization(goto_programt &goto_program)
   }
 }
 
+// Collect the root symbol of every object whose address is taken in `expr`,
+// recording it in `out`. The root is obtained by walking through member, index
+// and typecast selectors (`&s.f` -> s, `&a[k]` -> a, `&(T)x` -> x); a
+// dereference under address-of (`&*p`) yields no new escapee because it just
+// re-forms an existing pointer.
+static void collect_address_taken(
+  const expr2tc &expr,
+  rw_sett::shared_localst &out)
+{
+  if (is_nil_expr(expr))
+    return;
+
+  if (is_address_of2t(expr))
+  {
+    expr2tc obj = to_address_of2t(expr).ptr_obj;
+    while (is_member2t(obj) || is_index2t(obj) || is_typecast2t(obj))
+    {
+      if (is_member2t(obj))
+        obj = to_member2t(obj).source_value;
+      else if (is_index2t(obj))
+        obj = to_index2t(obj).source_value;
+      else
+        obj = to_typecast2t(obj).from;
+    }
+    if (is_symbol2t(obj))
+      out.insert(to_symbol2t(obj).thename);
+  }
+
+  expr->foreach_operand(
+    [&out](const expr2tc &op) { collect_address_taken(op, out); });
+}
+
+static void collect_address_taken(
+  const goto_programt &goto_program,
+  rw_sett::shared_localst &out)
+{
+  forall_goto_program_instructions (i_it, goto_program)
+  {
+    collect_address_taken(i_it->code, out);
+    collect_address_taken(i_it->guard, out);
+  }
+}
+
 void add_race_assertions(
   contextt &context,
   goto_programt &goto_program,
-  w_guardst &w_guards)
+  w_guardst &w_guards,
+  const rw_sett::shared_localst &shared_locals)
 {
   namespacet ns(context);
 
@@ -136,7 +180,7 @@ void add_race_assertions(
         (instruction.is_goto() || instruction.is_assert()) ? instruction.guard
                                                            : instruction.code;
 
-      rw_sett rw_set(ns, i_it, rw_expr);
+      rw_sett rw_set(ns, i_it, rw_expr, &shared_locals);
 
       if (rw_set.entries.empty())
         continue;
@@ -262,7 +306,10 @@ void add_race_assertions(contextt &context, goto_programt &goto_program)
 {
   w_guardst w_guards(context);
 
-  add_race_assertions(context, goto_program, w_guards);
+  rw_sett::shared_localst shared_locals;
+  collect_address_taken(goto_program, shared_locals);
+
+  add_race_assertions(context, goto_program, w_guards, shared_locals);
 
   w_guards.add_initialization(goto_program);
   goto_program.update();
@@ -272,9 +319,17 @@ void add_race_assertions(contextt &context, goto_functionst &goto_functions)
 {
   w_guardst w_guards(context);
 
+  // An escape analysis must see the whole program: a local declared in one
+  // function may have its address taken there and be dereferenced in another
+  // thread's entry function. Collect address-taken locals across every body
+  // before instrumenting any of them.
+  rw_sett::shared_localst shared_locals;
+  forall_goto_functions (f_it, goto_functions)
+    collect_address_taken(f_it->second.body, shared_locals);
+
   Forall_goto_functions (f_it, goto_functions)
     if (f_it->first != goto_functions.main_id())
-      add_race_assertions(context, f_it->second.body, w_guards);
+      add_race_assertions(context, f_it->second.body, w_guards, shared_locals);
 
   // get "main"
   goto_functionst::function_mapt::iterator m_it =

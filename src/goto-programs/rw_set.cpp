@@ -45,6 +45,17 @@ void rw_sett::compute(const expr2tc &expr)
             read_rec(arg);
         }
     }
+    else if (is_dereference2t(code.function))
+    {
+      // Indirect call through a function pointer (e.g. `(*fp)()`): the call
+      // reads the pointer object itself to obtain the target address. Register
+      // that read so a concurrent unsynchronised write to the pointer is
+      // detected as a data race (issue #4425). Read the pointer expression
+      // (the dereference's operand), not the pointee, which is code and never
+      // racing data; reading the operand directly keeps the race object keyed
+      // on the pointer's address (&fp) rather than the function's address.
+      read_rec(to_dereference2t(code.function).value);
+    }
   }
   else if (
     instruction.is_goto() || instruction.is_assert() || instruction.is_assume())
@@ -87,8 +98,14 @@ void rw_sett::read_write_rec(
     // sets file_local=false on them so this filter recognises them
     // as race-eligible shared state.
     const bool python_global = symbol->mode == "Python" && !symbol->file_local;
+    // A non-static local whose address is taken may alias a pointer passed to
+    // another thread (e.g. via pthread_create), so a direct access to it by
+    // name is still race-relevant even though it is not a global (issue #4424).
+    const bool address_escaped =
+      shared_locals && shared_locals->count(symbol_expr.thename);
     if (
-      (!symbol->static_lifetime && !dereferenced && !python_global) ||
+      (!symbol->static_lifetime && !dereferenced && !python_global &&
+       !address_escaped) ||
       symbol->is_thread_local)
     {
       return; // ignore for now
