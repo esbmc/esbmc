@@ -132,6 +132,15 @@ def _run_check_json(check, base_dir):
         actual = _eval_jsonpath(data, jsonpath)
     except (KeyError, IndexError, TypeError, ValueError) as exc:
         return False, f"CHECK_JSON path {jsonpath} on {file}: {exc}"
+    # JSON distinguishes booleans from numbers
+    # Python's bool-is-int coercion would otherwise mask the schema divergence this catches.
+    if isinstance(actual, bool) != isinstance(expected, bool):
+        return (
+            False,
+            f"CHECK_JSON {file} {jsonpath}: type mismatch "
+            f"({type(actual).__name__} vs {type(expected).__name__}); "
+            f"actual={actual!r}, expected={expected!r}",
+        )
     try:
         result = _CHECK_JSON_OPS[op](actual, expected)
     except TypeError as exc:
