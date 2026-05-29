@@ -588,8 +588,15 @@ void goto_convertt::do_function_call_symbol(
   }
 
   // If the symbol is not nil, i.e., the user defined the expected behavior of
-  // the builtin function, we should honor the user function and call it
-  if (symbol->get_value().is_not_nil() && symbol->get_value().has_operands())
+  // the builtin function, we should honor the user function and call it.
+  // Exception: in SV-COMP builds, reach_error/__VERIFIER_error always expand
+  // to ASSERT false even when the benchmark defines a body for them.
+  if (
+    symbol->get_value().is_not_nil() && symbol->get_value().has_operands()
+#if ESBMC_SVCOMP
+    && symbol->name != "reach_error" && symbol->name != "__VERIFIER_error"
+#endif
+  )
   {
     // insert function call
     code_function_callt function_call;
