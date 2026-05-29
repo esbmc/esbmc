@@ -73,6 +73,7 @@ smt_convt::smt_convt(const namespacet &_ns, const optionst &_options)
   : ctx_level(0), boolean_sort(nullptr), ns(_ns), options(_options)
 {
   int_encoding = options.get_bool_option("int-encoding");
+  ir_ieee = options.get_bool_option("ir-ieee");
   tuple_api = nullptr;
   array_api = nullptr;
   fp_api = nullptr;
@@ -2349,23 +2350,23 @@ smt_astt smt_convt::round_int_to_fp(
   // matching k (the correct binade) determines the final value.
   for (unsigned int k = 1; k <= max_k; k++)
   {
-    BigInt lo     = power(BigInt(2), BigInt(S - 1 + k)); // lower bound of binade
-    BigInt ulp    = power(BigInt(2), BigInt(k));          // unit of least precision
-    BigInt half_u = power(BigInt(2), BigInt(k - 1));      // ulp / 2
+    BigInt lo = power(BigInt(2), BigInt(S - 1 + k)); // lower bound of binade
+    BigInt ulp = power(BigInt(2), BigInt(k));        // unit of least precision
+    BigInt half_u = power(BigInt(2), BigInt(k - 1)); // ulp / 2
 
-    smt_astt lo_expr   = mk_smt_int(lo);
-    smt_astt ulp_expr  = mk_smt_int(ulp);
+    smt_astt lo_expr = mk_smt_int(lo);
+    smt_astt ulp_expr = mk_smt_int(ulp);
     smt_astt half_expr = mk_smt_int(half_u);
 
     smt_astt remainder = mk_mod(abs_val, ulp_expr);
-    smt_astt floor_val = mk_sub(abs_val, remainder);         // round down
-    smt_astt ceil_val  = mk_add(floor_val, ulp_expr);        // round up
+    smt_astt floor_val = mk_sub(abs_val, remainder); // round down
+    smt_astt ceil_val = mk_add(floor_val, ulp_expr); // round up
 
     // Tie-breaking: when remainder == ulp/2, choose the even neighbour
     // (the one whose index floor_val/ulp is even).
-    smt_astt quotient   = mk_div(floor_val, ulp_expr);
+    smt_astt quotient = mk_div(floor_val, ulp_expr);
     smt_astt floor_even = mk_eq(mk_mod(quotient, two), zero_i);
-    smt_astt tie_val    = mk_ite(floor_even, floor_val, ceil_val);
+    smt_astt tie_val = mk_ite(floor_even, floor_val, ceil_val);
 
     smt_astt quantized = mk_ite(
       mk_eq(remainder, zero_i),

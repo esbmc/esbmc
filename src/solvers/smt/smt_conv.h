@@ -906,6 +906,8 @@ public:
   smt_sortt boolean_sort;
   /** Whether we are encoding expressions in integer mode or not. */
   bool int_encoding;
+  /** Whether --ir-ieee mode is active (integer encoding with IEEE float semantics). */
+  bool ir_ieee;
   /** A namespace containing all the types in the program. Used to resolve the
    *  rare case where we're doing some pointer arithmetic and need to have the
    *  concrete type of a pointer. */
