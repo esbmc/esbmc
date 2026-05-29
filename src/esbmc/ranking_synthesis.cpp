@@ -888,16 +888,37 @@ bool measure_from_relational(const expr2tc &atom, expr2tc &m, expr2tc &L)
   else
     return false;
 
+  // Peel typecasts on each side -- the frontend often promotes one side
+  // to a wider type for the comparison (e.g. `(int64)x > -2147483648`),
+  // and the width guard below should reflect the SOURCE operand's width,
+  // not the promoted comparison type. We re-widen ourselves below; the
+  // intermediate cast is incidental.
+  a = peel_typecasts(a);
+  b = peel_typecasts(b);
+
   if (!is_bv_type(a->type) || !is_bv_type(b->type))
     return false;
 
   // The measure is m = (int64)a - (int64)b. Value-preserving extension to
   // int64 keeps each operand in its source range, so the subtraction cannot
-  // overflow as long as both fit comfortably below int64. A 64-bit operand
-  // can produce a difference outside int64, which would wrap under modular
-  // bitvector subtraction and let a non-decreasing or unbounded measure
-  // spuriously satisfy the obligations. Refuse those.
-  if (a->type->get_width() > 32 || b->type->get_width() > 32)
+  // overflow as long as both fit comfortably below int64: 32-bit source
+  // operands give a difference in [-(2^32-1), 2^32-1], far inside int64. A
+  // 64-bit source operand can produce a difference outside int64, which
+  // would wrap and spuriously discharge -- refuse, UNLESS the wide side is
+  // a constant whose value fits in int32 (a common frontend pattern: a
+  // literal like `-2147483648` is parsed as `-(2147483648L)` because the
+  // unsuffixed literal doesn't fit in int; the negation lands at the int
+  // limit but the value is still within int32).
+  auto wide_side_is_int32_constant = [](const expr2tc &e) -> bool {
+    if (e->type->get_width() <= 32)
+      return true;
+    if (!is_constant_int2t(e))
+      return false;
+    const BigInt &v = to_constant_int2t(e).value;
+    BigInt lo(-2147483648LL), hi(2147483647LL);
+    return v >= lo && v <= hi;
+  };
+  if (!wide_side_is_int32_constant(a) || !wide_side_is_int32_constant(b))
     return false;
 
   type2tc wide = get_int_type(64);
