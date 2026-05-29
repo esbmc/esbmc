@@ -327,6 +327,11 @@ set(_slow_regression_tests
     "regression/quixbugs/next_palindrome"
     "regression/quixbugs/pascal"
     "regression/ai-generated-code/two_sum"
+    # problem1_fail runs the real DP body (nested loops + dp[-1] + max over a
+    # defaultdict-free list). It does not converge under --unwind 9, so it is
+    # marked FUTURE (BMC scalability); the larger inner timeout lets
+    # testing_tool record the FUTURE verdict instead of ctest hard-killing it.
+    "regression/python-intensive/problem1_fail"
 )
 math(EXPR ESBMC_REGRESS_CTEST_TIMEOUT_SLOW
      "${ESBMC_REGRESS_TIMEOUT_SLOW} + 30")
