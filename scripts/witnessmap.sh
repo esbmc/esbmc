@@ -20,5 +20,5 @@ setup () {
 setup
 cd "$HOME/witnessmap-action"
 echo "Running WitnessMap (full)"
-$BENCHEXEC_BIN $BENCHEXEC_COMMON_FLAGS witnessmap-v2.xml
+"$BENCHEXEC_BIN" $BENCHEXEC_COMMON_FLAGS witnessmap-v2.xml
 rm -rf "$HOME/witnessmap-action"
