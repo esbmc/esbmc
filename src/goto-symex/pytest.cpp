@@ -6,7 +6,6 @@
 #include <util/c_types.h>
 #include <util/message.h>
 #include <util/config.h>
-#include <util/string_constant.h>
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <fstream>
 #include <sstream>

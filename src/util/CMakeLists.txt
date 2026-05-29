@@ -31,7 +31,7 @@ add_library(util_esbmc xml_irep.cpp xml.cpp
         simplify_expr.cpp expr_simplifier.cpp expr_reassociate.cpp
         simplify_utils.cpp string2array.cpp array2string.cpp time_stopping.cpp symbol.cpp
         symbol_generator.cpp symbolic_types.cpp
-        type_eq.cpp array_name.cpp union_find.cpp
+        array_name.cpp union_find.cpp
         std_types.cpp std_code.cpp format_constant.cpp
         irep_serialization.cpp symbol_serialization.cpp fixedbv.cpp
         signal_catcher.cpp migrate.cpp show_symbol_table.cpp
