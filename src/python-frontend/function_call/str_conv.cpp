@@ -1,5 +1,6 @@
 #include <python-frontend/function_call/expr.h>
 #include <python-frontend/json_utils.h>
+#include <irep2/irep2_utils.h>
 #include <python-frontend/python_exception_handler.h>
 #include <python-frontend/string/string_builder.h>
 #include <python-frontend/string/string_handler.h>
@@ -8,7 +9,7 @@
 #include <util/arith_tools.h>
 #include <util/c_types.h>
 #include <util/message.h>
-#include <util/simplify_expr.h>
+#include <util/migrate.h>
 #include <util/std_expr.h>
 
 #include <algorithm>
@@ -554,9 +555,11 @@ exprt function_call_expr::handle_base_conversion(
         return converter_.get_exception_handler().gen_exception_raise(
           "TypeError", func_name + "() argument must be an integer");
 
-      simplify(operand_expr);
+      expr2tc operand2;
+      migrate_expr(operand_expr, operand2);
+      simplify(operand2);
       BigInt extracted;
-      if (operand_expr.is_constant() && !to_integer(operand_expr, extracted))
+      if (!to_integer(operand2, extracted))
       {
         int_value = static_cast<long long>(extracted.to_int64());
         if (int_value < 0)
@@ -565,6 +568,9 @@ exprt function_call_expr::handle_base_conversion(
       else
       {
         // Symbolic int — dispatch to the runtime OM matching this builtin.
+        // Feed the simplified operand, migrated back to the legacy exprt the
+        // string builder expects.
+        operand_expr = migrate_expr_back(operand2);
         const std::string fn_name = func_name == "bin" ? "__python_int_to_bin"
                                     : func_name == "hex"
                                       ? "__python_int_to_hex"
