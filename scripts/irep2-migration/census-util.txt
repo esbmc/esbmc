@@ -1,0 +1,26 @@
+# src/util migrate_* call-site scoreboard (IREP2 migration Part II)
+#
+# Baseline snapshot captured at commit 6c4d610694 (branch feat/util-irep2-phase-2.0-2.1).
+# Regenerate with: scripts/irep2-migration/migrate_census.sh src/util
+#
+# Primary success metric (docs/irep2-migration.md Part II §10): the TOTAL
+# call-site count below must strictly DECREASE PR-over-PR and increase
+# nowhere. The back-arm COUNT cannot shrink (all 109 expr2t / 15 type2t
+# back-arms stay live, pinned by symbolt's lazy legacy cache); the metric
+# is call SITES, not coverage. FWD is computed as (all - back) by the
+# script's regex and can read negative where a file has more _back than
+# bare forward calls -- this is an artifact of the established Part I tool,
+# preserved unchanged; compare the per-file BACK and whole-file TOTAL.
+#
+FILE                                                          FWD   BACK  TOTAL
+----                                                          ---   ----  -----
+src/util/migrate.cpp                                          -80    258    178
+src/util/symbol.cpp                                            -1      7      6
+src/util/migrate.h                                             -1      3      2
+src/util/symbol.h                                              -1      3      2
+src/util/c_sizeof.cpp                                           0      1      1
+src/util/expr_simplifier.cpp                                   -8      9      1
+src/util/namespace.h                                            0      1      1
+src/util/string2array.cpp                                       0      1      1
+----                                                          ---   ----  -----
+TOTAL                                                         -91    283    192
