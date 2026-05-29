@@ -3,7 +3,7 @@
 # validity guard (__python_str_is_float) on the invalid path.
 
 
-def to_float(value):
+def to_float(value: str) -> float:
     return float(value)
 
 
