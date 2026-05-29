@@ -1230,7 +1230,13 @@ __ESBMC_HIDE:;
     i++;
   }
 
+  // Accumulate integer and fractional digits into a single mantissa and divide
+  // by 10^(fractional digit count) exactly once at the end. A single rounding
+  // step matches std::strtod for short decimal literals, so float("0.3") on a
+  // variable agrees with the compile-time strtod path; the alternative of
+  // accumulating with a repeatedly-scaled 0.1 weight compounds rounding error.
   double value = 0.0;
+  double divisor = 1.0;
   _Bool any_digit = 0;
 
   while (i < len && s[i] >= '0' && s[i] <= '9')
@@ -1243,11 +1249,10 @@ __ESBMC_HIDE:;
   if (i < len && s[i] == '.')
   {
     i++;
-    double scale = 0.1;
     while (i < len && s[i] >= '0' && s[i] <= '9')
     {
-      value += (double)(s[i] - '0') * scale;
-      scale *= 0.1;
+      value = value * 10.0 + (double)(s[i] - '0');
+      divisor *= 10.0;
       any_digit = 1;
       i++;
     }
@@ -1263,7 +1268,7 @@ __ESBMC_HIDE:;
   if (i != len)
     return 0;
 
-  *out = (double)sign * value;
+  *out = (double)sign * (value / divisor);
   return 1;
 }
 

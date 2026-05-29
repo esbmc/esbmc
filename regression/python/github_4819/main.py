@@ -17,5 +17,9 @@ if __name__ == "__main__":
     assert to_float("10") == 10.0
     assert to_float("-5") == -5.0
     assert to_float("2.5") == 2.5
+    # Parsing a variable must agree bit-for-bit with the literal/strtod path,
+    # including fractional values that are not exactly representable.
+    assert to_float("0.3") == 0.3
+    assert to_float("12.34") == 12.34
     assert closest_integer("10") == 10
     print("ok")
