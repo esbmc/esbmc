@@ -73,6 +73,7 @@ smt_convt::smt_convt(const namespacet &_ns, const optionst &_options)
   : ctx_level(0), boolean_sort(nullptr), ns(_ns), options(_options)
 {
   int_encoding = options.get_bool_option("int-encoding");
+  ir_ieee = options.get_bool_option("ir-ieee");
   tuple_api = nullptr;
   array_api = nullptr;
   fp_api = nullptr;
@@ -2311,6 +2312,75 @@ smt_astt smt_convt::round_real_to_int(smt_astt a)
 
   // Switch on whether it's > or < 0.
   return mk_ite(is_lt_zero, selected, as_int);
+}
+
+smt_astt smt_convt::round_int_to_fp(
+  smt_astt int_val,
+  const floatbv_type2t &fbv_type,
+  unsigned int source_width)
+{
+  // IEEE 754 round-to-nearest-even for integer-to-float casts under
+  // --ir-ieee.  Integers with |i| < 2^S are exactly representable (S is the
+  // total significand width).  For larger values, we compute the RNE-rounded
+  // result exactly using SMT integer div/mod, building a cascaded ITE over
+  // binade ranges [2^(S-1+k), 2^(S+k)) for k = 1..max_k.
+  const unsigned int S = fbv_type.fraction + 1;
+
+  // All source values fit within the significand: exact lift suffices.
+  if (source_width <= S)
+    return mk_int2real(int_val);
+
+  // max_k: the highest binade index we need to cover.
+  // For a W-bit source the maximum |i| is 2^(W-1) (signed, from INT_MIN) or
+  // 2^W - 1 (unsigned), both of which sit in binade k = W - S.
+  const unsigned int max_k = source_width - S;
+
+  smt_astt zero_i = mk_smt_int(BigInt(0));
+  smt_astt is_neg = mk_lt(int_val, zero_i);
+  smt_astt abs_val = mk_ite(is_neg, mk_neg(int_val), int_val);
+
+  // Base: exact conversion for values below the precision threshold.
+  smt_astt result_abs = abs_val;
+
+  smt_astt two = mk_smt_int(BigInt(2));
+
+  // Build ITEs from k = 1 up to max_k.  Each step wraps the previous result:
+  //   result_abs = ite(abs_val >= lo_k, quantized_k, result_abs)
+  // When expanded, the outermost true condition dominates, so the highest
+  // matching k (the correct binade) determines the final value.
+  for (unsigned int k = 1; k <= max_k; k++)
+  {
+    BigInt lo = power(BigInt(2), BigInt(S - 1 + k)); // lower bound of binade
+    BigInt ulp = power(BigInt(2), BigInt(k));        // unit of least precision
+    BigInt half_u = power(BigInt(2), BigInt(k - 1)); // ulp / 2
+
+    smt_astt lo_expr = mk_smt_int(lo);
+    smt_astt ulp_expr = mk_smt_int(ulp);
+    smt_astt half_expr = mk_smt_int(half_u);
+
+    smt_astt remainder = mk_mod(abs_val, ulp_expr);
+    smt_astt floor_val = mk_sub(abs_val, remainder); // round down
+    smt_astt ceil_val = mk_add(floor_val, ulp_expr); // round up
+
+    // Tie-breaking: when remainder == ulp/2, choose the even neighbour
+    // (the one whose index floor_val/ulp is even).
+    smt_astt quotient = mk_div(floor_val, ulp_expr);
+    smt_astt floor_even = mk_eq(mk_mod(quotient, two), zero_i);
+    smt_astt tie_val = mk_ite(floor_even, floor_val, ceil_val);
+
+    smt_astt quantized = mk_ite(
+      mk_eq(remainder, zero_i),
+      abs_val, // exactly on a representable value
+      mk_ite(
+        mk_lt(remainder, half_expr),
+        floor_val, // closer to floor
+        mk_ite(mk_gt(remainder, half_expr), ceil_val, tie_val)));
+
+    result_abs = mk_ite(mk_le(lo_expr, abs_val), quantized, result_abs);
+  }
+
+  smt_astt signed_result = mk_ite(is_neg, mk_neg(result_abs), result_abs);
+  return mk_int2real(signed_result);
 }
 
 smt_astt smt_convt::round_fixedbv_to_int(
