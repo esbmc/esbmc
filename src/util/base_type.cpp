@@ -95,7 +95,6 @@ void base_type(expr2tc &expr, const namespacet &ns)
   expr->Foreach_operand([&ns](expr2tc &e) { base_type(e, ns); });
 }
 
-
 bool base_type_eqt::base_type_eq_rec(const type2tc &type1, const type2tc &type2)
 {
   if (type1 == type2)
