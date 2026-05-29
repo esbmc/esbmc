@@ -1224,6 +1224,22 @@ void dereferencet::construct_from_array(
   {
     // Dyn offset -- is alignment guarantee strong enough?
     is_correctly_aligned = (alignment >= subtype_size);
+    // Special case for pointer-typed array elements: `alignment` is in
+    // BYTES (value_set.h:139) while `subtype_size` is in BITS (set from
+    // type_byte_size_bits above). For an array of pointers reached
+    // through a struct-member pointer dereference, the unit mismatch
+    // wrongly forced the byte-extract branch, which hides the pointer
+    // RHS from value_sett::assign and breaks the downstream deref of
+    // the loaded pointer (issue #4435). Pointer subtypes are always
+    // accessed atomically, so a byte-equal-or-larger natural alignment
+    // makes the direct index2tc encoding sound. Keep the original
+    // comparison for non-pointer subtypes so over-approximated
+    // alignments on int / short / char arrays still trigger
+    // check_alignment (e.g. regression/esbmc/align-deref_fail).
+    if (
+      !is_correctly_aligned && is_pointer_type(arr_subtype) &&
+      alignment * 8 >= subtype_size)
+      is_correctly_aligned = true;
     overflows_boundaries = !is_correctly_aligned || deref_size > subtype_size;
   }
 
