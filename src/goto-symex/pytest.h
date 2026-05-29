@@ -54,6 +54,9 @@ private:
   /// Build comma-separated parameter list string
   static std::string build_param_list(const std::vector<std::string> &params);
 
+  /// Dedup key for a test-case row
+  static std::string fingerprint(const std::vector<std::string> &test_case);
+
   /// Write test data in parametrize format
   void write_test_data(
     std::ofstream &file,
