@@ -44,6 +44,15 @@ class LoopMixin:
             return node.id
         return None
 
+    @staticmethod
+    def _is_nullary_lambda(node: ast.AST) -> bool:
+        """Return True when node is an `ast.Lambda` taking no parameters."""
+        if not isinstance(node, ast.Lambda):
+            return False
+        args = node.args
+        return (not args.args and not args.posonlyargs and not args.kwonlyargs
+                and args.vararg is None and args.kwarg is None)
+
     def _pre_annotate_items_loop_vars(self, node):
         """Pre-populate variable_annotations for the loop variables of a dict.items() for loop.
 
@@ -199,11 +208,100 @@ class LoopMixin:
         ast.fix_missing_locations(new_range)
         return new_range
 
-    def visit_For(self, node):  # pylint: disable=too-many-branches
+    def visit_For(self, node):
         """
         Transform for loops into while loops.
-        Handles range() calls, enumerate() calls, dict.items(), and general iterables.
+
+        Python's for-else (`else` runs when the loop completes without break)
+        is lowered here at the boundary so all sub-transformers can emit
+        their `while ... orelse=[]` shape uniformly without each having to
+        remember to preserve the original `orelse`.
         """
+        for_else_pre, for_else_post = self._lower_for_else(node)
+        result = self._visit_for_inner(node)
+        if not isinstance(result, list):
+            result = [result]
+        return for_else_pre + result + for_else_post
+
+    def _lower_for_else(self, node):
+        """Lower `for ... else: <orelse>` into a did-not-break flag.
+
+        Returns (pre_statements, post_statements) to bracket the result of
+        the for-to-while transform. Pre: init `flag = True`. Post: emit
+        `if flag: <orelse>`. Side effect: rewrites every reachable `break`
+        in the body to `flag = False; break`, and clears `node.orelse` so
+        downstream transformers see a plain for.
+
+        No-op when `node.orelse` is empty.
+        """
+        if not node.orelse:
+            return [], []
+        counter = getattr(self, "_for_else_counter", 0)
+        self._for_else_counter = counter + 1
+        flag_name = f"ESBMC_for_else_{counter}"
+        flag_init = ast.AnnAssign(
+            target=ast.Name(id=flag_name, ctx=ast.Store()),
+            annotation=ast.Name(id="bool", ctx=ast.Load()),
+            value=ast.Constant(value=True),
+            simple=1,
+        )
+        self._copy_location_info(node, flag_init)
+
+        # Rewrite Break in the body to set flag=False first. Walk only the
+        # current loop's body, not nested loops -- a Break inside a nested
+        # for-else belongs to the inner loop, not this one.
+        def rewrite_breaks(stmts):
+            new_stmts = []
+            for s in stmts:
+                if isinstance(s, ast.Break):
+                    set_flag = ast.Assign(
+                        targets=[ast.Name(id=flag_name, ctx=ast.Store())],
+                        value=ast.Constant(value=False),
+                    )
+                    self._copy_location_info(s, set_flag)
+                    new_stmts.append(set_flag)
+                    new_stmts.append(s)
+                    continue
+                if isinstance(s, (ast.For, ast.While, ast.AsyncFor)):
+                    # Don't descend; nested-loop breaks bind to the inner loop.
+                    new_stmts.append(s)
+                    continue
+                if isinstance(s, ast.If):
+                    s.body = rewrite_breaks(s.body)
+                    s.orelse = rewrite_breaks(s.orelse)
+                elif isinstance(s, ast.Try):
+                    s.body = rewrite_breaks(s.body)
+                    s.orelse = rewrite_breaks(s.orelse)
+                    for handler in s.handlers:
+                        handler.body = rewrite_breaks(handler.body)
+                    s.finalbody = rewrite_breaks(s.finalbody)
+                elif isinstance(s, (ast.With, ast.AsyncWith)):
+                    s.body = rewrite_breaks(s.body)
+                elif hasattr(ast, "Match") and isinstance(s, ast.Match):
+                    # Python 3.10+: `break` inside `match ... case: <body>`
+                    # binds to the enclosing loop. Patterns/guards are
+                    # expressions, not statements, so only case bodies need
+                    # descent.
+                    for case in s.cases:
+                        case.body = rewrite_breaks(case.body)
+                new_stmts.append(s)
+            return new_stmts
+
+        node.body = rewrite_breaks(node.body)
+
+        orelse_stmts = node.orelse
+        node.orelse = []
+
+        orelse_guard = ast.If(
+            test=ast.Name(id=flag_name, ctx=ast.Load()),
+            body=orelse_stmts,
+            orelse=[],
+        )
+        self._copy_location_info(node, orelse_guard)
+        return [flag_init], [orelse_guard]
+
+    def _visit_for_inner(self, node):  # pylint: disable=too-many-branches
+        """Inner dispatch for visit_For after for-else lowering."""
         # Rewrite reversed(range(...)) to an equivalent range(...) call so that
         # the normal range-loop path can handle it without any extra machinery.
         if self._is_reversed_range_call(node.iter):
@@ -262,6 +360,18 @@ class LoopMixin:
             # Handle dict.items() for loops
             self.is_range_loop = False
             return self._transform_items_for(node)
+        # zip(), reversed(<non-range>), and filter() for-loop iteration.
+        # reversed(range(...)) was already rewritten to range(...) above, so
+        # _is_reversed_call here only matches reversed() over other sequences.
+        if self._is_zip_call(node.iter):
+            self.is_range_loop = False
+            return self._transform_zip_for(node)
+        if self._is_reversed_call(node.iter):
+            self.is_range_loop = False
+            return self._transform_reversed_for(node)
+        if self._is_filter_call(node.iter):
+            self.is_range_loop = False
+            return self._transform_filter_for(node)
         list_literal = self.list_literal_values.get(node.iter.id) if isinstance(
             node.iter, ast.Name) else None
         if (list_literal is not None
@@ -1107,12 +1217,8 @@ class LoopMixin:
         target = node.target
         body = []
         if isinstance(target, (ast.Tuple, ast.List)) and len(target.elts) == 2:
-            key_var_name = target.elts[0].id
-            val_var_name = target.elts[1].id
-            body.append(
-                self._create_var_subscript_assign(node, key_var_name, keys_var, index_var, key_ann))
-            body.append(
-                self._create_var_subscript_assign(node, val_var_name, vals_var, index_var, val_ann))
+            self._emit_items_unpack(node, body, target.elts[0], keys_var, index_var, key_ann)
+            self._emit_items_unpack(node, body, target.elts[1], vals_var, index_var, val_ann)
         else:
             # Single variable: d.items() yields (key, value) tuples per Python semantics.
             single_var = self._name_id_or_none(target) or "ESBMC_loop_var"
@@ -1321,6 +1427,34 @@ class LoopMixin:
         self.ensure_all_locations(assign, node)
         return assign
 
+    def _emit_items_unpack(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+            self, node, body, target_elt, list_var, index_var, elem_ann):
+        """Append the assignment that binds the i-th key/value of d.items() to ``target_elt``.
+
+        Simple Name target — emits ``name: elem_ann = list_var[index_var]``.
+        Tuple/List target (nested unpacking, e.g. ``for (u, v), w in d.items():``) —
+        emits a destructuring Assign ``target_elt = list_var[index_var]`` so the
+        converter's normal tuple-unpacking-from-subscript path handles it.
+        """
+        name = self._name_id_or_none(target_elt)
+        if name is not None:
+            body.append(self._create_var_subscript_assign(node, name, list_var, index_var,
+                                                          elem_ann))
+            return
+
+        subscript = ast.Subscript(
+            value=ast.Name(id=list_var, ctx=ast.Load()),
+            slice=ast.Name(id=index_var, ctx=ast.Load()),
+            ctx=ast.Load(),
+        )
+        self.ensure_all_locations(subscript, node)
+        unpack = ast.Assign(
+            targets=[target_elt],
+            value=subscript,
+        )
+        self.ensure_all_locations(unpack, node)
+        body.append(unpack)
+
     def _create_dict_size_assertion(self, node, keys_var, length_var):
         """Create dict-size check to detect mutation during iteration."""
         size_call = ast.Call(
@@ -1338,6 +1472,257 @@ class LoopMixin:
         )
         self.ensure_all_locations(assert_stmt, node)
         return assert_stmt
+
+    @staticmethod
+    def _is_zip_call(it):
+        """Return True if `it` is a zip(...) call with at least one argument."""
+        return (isinstance(it, ast.Call) and isinstance(it.func, ast.Name) and it.func.id == "zip"
+                and len(it.args) >= 1 and not it.keywords)
+
+    @staticmethod
+    def _is_filter_call(it):
+        """Return True if `it` is a filter(func, iterable) call."""
+        return (isinstance(it, ast.Call) and isinstance(it.func, ast.Name)
+                and it.func.id == "filter" and len(it.args) == 2 and not it.keywords)
+
+    @staticmethod
+    def _is_reversed_call(it):
+        """Return True if `it` is a reversed(seq) call (seq is not range())."""
+        return (isinstance(it, ast.Call) and isinstance(it.func, ast.Name)
+                and it.func.id == "reversed" and len(it.args) == 1 and not it.keywords)
+
+    def _materialize_for_iter(self, node, seq, loop_id, suffix=""):
+        """Bind `seq` to an iterable variable usable by index-based iteration.
+
+        A bare Name is used directly (preserving its type annotation); any other
+        expression is copied into a fresh annotated ESBMC_iter variable. Returns
+        (iter_var_name, setup_statements, element_type).
+        """
+        annotation_id = self._get_iterable_type_annotation(seq)
+        element_type = self._get_element_type_from_container(annotation_id, seq)
+        if isinstance(seq, ast.Name):
+            return seq.id, [], element_type
+        iter_var_name = f"ESBMC_iter_{loop_id}{suffix}"
+        saved = node.iter
+        node.iter = seq
+        iter_assign = self._create_iter_assignment(node, annotation_id, iter_var_name, element_type)
+        node.iter = saved
+        return iter_var_name, [iter_assign], element_type
+
+    def _make_target_assign(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+            self, node, target, iter_var_name, index_var, element_type):
+        """Build `target = iter_var[index]` plus any tuple/list unpacking assigns."""
+        current = ast.Subscript(
+            value=ast.Name(id=iter_var_name, ctx=ast.Load()),
+            slice=ast.Name(id=index_var, ctx=ast.Load()),
+            ctx=ast.Load(),
+        )
+        self.ensure_all_locations(current, node)
+        name = self._name_id_or_none(target) or "ESBMC_loop_var"
+        ann = ast.Name(id=(element_type if element_type and element_type != "Any" else "Any"),
+                       ctx=ast.Load())
+        assign = ast.AnnAssign(target=ast.Name(id=name, ctx=ast.Store()),
+                               annotation=ann,
+                               value=current,
+                               simple=1)
+        self.ensure_all_locations(assign, node)
+        out = [assign]
+        if isinstance(target, (ast.Tuple, ast.List)):
+            for i, elt in enumerate(target.elts):
+                if not isinstance(elt, ast.Name):
+                    continue
+                unpack = ast.Assign(
+                    targets=[ast.Name(id=elt.id, ctx=ast.Store())],
+                    value=ast.Subscript(value=ast.Name(id=name, ctx=ast.Load()),
+                                        slice=ast.Constant(value=i),
+                                        ctx=ast.Load()),
+                )
+                self.ensure_all_locations(unpack, node)
+                out.append(unpack)
+        return out
+
+    def _make_index_step(self, node, index_var, step):
+        """Build `index = index +/- |step|` as an annotated int assignment."""
+        op = ast.Add() if step >= 0 else ast.Sub()
+        inc = ast.AnnAssign(
+            target=self.create_name_node(index_var, ast.Store(), node),
+            annotation=self.create_name_node("int", ast.Load(), node),
+            value=ast.BinOp(left=self.create_name_node(index_var, ast.Load(), node),
+                            op=op,
+                            right=self.create_constant_node(abs(step), node)),
+            simple=1,
+        )
+        self.ensure_all_locations(inc, node)
+        return inc
+
+    def _transform_reversed_for(self, node):
+        """for x in reversed(seq): -> backward index-based while loop over seq."""
+        loop_id = self.iterable_loop_counter
+        self.iterable_loop_counter += 1
+        seq = node.iter.args[0]
+        index_var = f"ESBMC_index_{loop_id}"
+        length_var = f"ESBMC_length_{loop_id}"
+
+        iter_var_name, setup, element_type = self._materialize_for_iter(node, seq, loop_id)
+        setup.append(self._create_length_assignment(node, iter_var_name, length_var))
+
+        # ESBMC_index = ESBMC_length - 1
+        index_assign = ast.AnnAssign(
+            target=self.create_name_node(index_var, ast.Store(), node),
+            annotation=self.create_name_node("int", ast.Load(), node),
+            value=ast.BinOp(left=self.create_name_node(length_var, ast.Load(), node),
+                            op=ast.Sub(),
+                            right=self.create_constant_node(1, node)),
+            simple=1,
+        )
+        self.ensure_all_locations(index_assign, node)
+        setup.append(index_assign)
+
+        # while ESBMC_index >= 0:
+        while_cond = ast.Compare(left=self.create_name_node(index_var, ast.Load(), node),
+                                 ops=[ast.GtE()],
+                                 comparators=[self.create_constant_node(0, node)])
+        self.ensure_all_locations(while_cond, node)
+
+        body = self._make_target_assign(node, node.target, iter_var_name, index_var, element_type)
+        body.append(self._make_index_step(node, index_var, -1))
+        body.extend(node.body)
+
+        while_stmt = ast.While(test=while_cond, body=body, orelse=[])
+        result = setup + [while_stmt]
+        for stmt in result:
+            self.ensure_all_locations(stmt, node)
+            ast.fix_missing_locations(stmt)
+        return result
+
+    def _transform_filter_for(self, node):  # pylint: disable=too-many-locals
+        """for x in filter(func, seq): -> while loop over seq guarded by func(x).
+
+        filter(None, seq) keeps truthy elements.
+        """
+        loop_id = self.iterable_loop_counter
+        self.iterable_loop_counter += 1
+        func = node.iter.args[0]
+        seq = node.iter.args[1]
+        index_var = f"ESBMC_index_{loop_id}"
+        length_var = f"ESBMC_length_{loop_id}"
+
+        iter_var_name, setup, element_type = self._materialize_for_iter(node, seq, loop_id)
+        setup.append(self._create_index_assignment(node, index_var))
+        setup.append(self._create_length_assignment(node, iter_var_name, length_var))
+        while_cond = self._create_while_condition(node, index_var, length_var)
+
+        body = self._make_target_assign(node, node.target, iter_var_name, index_var, element_type)
+        body.append(self._make_index_step(node, index_var, 1))
+
+        name = self._name_id_or_none(node.target) or "ESBMC_loop_var"
+        if isinstance(func, ast.Constant) and func.value is None:
+            pred = ast.Name(id=name, ctx=ast.Load())
+        else:
+            pred = ast.Call(func=copy.deepcopy(func),
+                            args=[ast.Name(id=name, ctx=ast.Load())],
+                            keywords=[])
+        self.ensure_all_locations(pred, node)
+        guard = ast.If(test=pred, body=list(node.body), orelse=[])
+        self.ensure_all_locations(guard, node)
+        body.append(guard)
+
+        while_stmt = ast.While(test=while_cond, body=body, orelse=[])
+        result = setup + [while_stmt]
+        for stmt in result:
+            self.ensure_all_locations(stmt, node)
+            ast.fix_missing_locations(stmt)
+        return result
+
+    def _transform_zip_for(self, node):  # pylint: disable=too-many-locals
+        """for a, b, ... in zip(s0, s1, ...): -> parallel index-based while loop.
+
+        Iterates up to the shortest sequence (Python's zip semantics).
+        """
+        loop_id = self.iterable_loop_counter
+        self.iterable_loop_counter += 1
+        seqs = node.iter.args
+        index_var = f"ESBMC_index_{loop_id}"
+        length_var = f"ESBMC_length_{loop_id}"
+
+        iter_names = []
+        elem_types = []
+        setup = []
+        for i, seq in enumerate(seqs):
+            nm, st, et = self._materialize_for_iter(node, seq, loop_id, suffix=f"_{i}")
+            iter_names.append(nm)
+            elem_types.append(et)
+            setup.extend(st)
+
+        # ESBMC_length = min(len(iter0), len(iter1), ...)
+        def len_call(nm):
+            call = ast.Call(func=self.create_name_node("len", ast.Load(), node),
+                            args=[self.create_name_node(nm, ast.Load(), node)],
+                            keywords=[])
+            self.ensure_all_locations(call, node)
+            return call
+
+        length_expr = len_call(iter_names[0])
+        for nm in iter_names[1:]:
+            length_expr = ast.Call(func=self.create_name_node("min", ast.Load(), node),
+                                   args=[length_expr, len_call(nm)],
+                                   keywords=[])
+            self.ensure_all_locations(length_expr, node)
+
+        length_assign = ast.AnnAssign(
+            target=self.create_name_node(length_var, ast.Store(), node),
+            annotation=self.create_name_node("int", ast.Load(), node),
+            value=length_expr,
+            simple=1,
+        )
+        self.ensure_all_locations(length_assign, node)
+        setup.append(self._create_index_assignment(node, index_var))
+        setup.append(length_assign)
+
+        while_cond = self._create_while_condition(node, index_var, length_var)
+
+        body = []
+        target = node.target
+        targets = target.elts if isinstance(target, (ast.Tuple, ast.List)) else None
+        if targets is not None and len(targets) == len(iter_names):
+            for tgt, nm, et in zip(targets, iter_names, elem_types):
+                if not isinstance(tgt, ast.Name):
+                    continue
+                cur = ast.Subscript(value=ast.Name(id=nm, ctx=ast.Load()),
+                                    slice=ast.Name(id=index_var, ctx=ast.Load()),
+                                    ctx=ast.Load())
+                ann = ast.Name(id=(et if et and et != "Any" else "Any"), ctx=ast.Load())
+                assign = ast.AnnAssign(target=ast.Name(id=tgt.id, ctx=ast.Store()),
+                                       annotation=ann,
+                                       value=cur,
+                                       simple=1)
+                self.ensure_all_locations(assign, node)
+                body.append(assign)
+        else:
+            # Single target variable receives a tuple of the parallel elements.
+            name = self._name_id_or_none(target) or "ESBMC_loop_var"
+            elts = [
+                ast.Subscript(value=ast.Name(id=nm, ctx=ast.Load()),
+                              slice=ast.Name(id=index_var, ctx=ast.Load()),
+                              ctx=ast.Load()) for nm in iter_names
+            ]
+            tup = ast.Tuple(elts=elts, ctx=ast.Load())
+            assign = ast.AnnAssign(target=ast.Name(id=name, ctx=ast.Store()),
+                                   annotation=ast.Name(id="tuple", ctx=ast.Load()),
+                                   value=tup,
+                                   simple=1)
+            self.ensure_all_locations(assign, node)
+            body.append(assign)
+
+        body.append(self._make_index_step(node, index_var, 1))
+        body.extend(node.body)
+
+        while_stmt = ast.While(test=while_cond, body=body, orelse=[])
+        result = setup + [while_stmt]
+        for stmt in result:
+            self.ensure_all_locations(stmt, node)
+            ast.fix_missing_locations(stmt)
+        return result
 
     def _transform_iterable_for(self, node):  # pylint: disable=too-many-locals
         """
@@ -1414,8 +1799,14 @@ class LoopMixin:
 
     def _create_iter_assignment(self, node, annotation_id, iter_var_name, element_type):
         """Create assignment for iterator variable with proper type annotation."""
+        # str iterables (`for c in str(x)`, `for c in some_str_var`) must be
+        # annotated as str so the converter lowers loop bounds via strlen
+        # rather than the list-style get_object_size, which overshoots and
+        # trips IndexError.
+        if annotation_id == "str":
+            iter_annotation = ast.Name(id="str", ctx=ast.Load())
         # Create proper list[T] annotation instead of just 'list'
-        if element_type and element_type != "Any":
+        elif element_type and element_type != "Any":
             # Create Subscript: list[element_type]
             iter_annotation = ast.Subscript(
                 value=ast.Name(id="list", ctx=ast.Load()),
@@ -1671,6 +2062,18 @@ class LoopMixin:
             target_node.end_col_offset = source_node.end_col_offset
         return target_node
 
+    def _next_unpack_tmp_id(self):
+        """Monotonic counter for staged-temp names emitted by tuple unpacking.
+
+        Avoids using `id(source_node)` (CPython object id), which gets recycled
+        after GC and yields non-stable names across runs. The counter lives on
+        the preprocessor instance so it persists across visits within a single
+        pass.
+        """
+        current = getattr(self, "_unpack_tmp_counter", 0)
+        self._unpack_tmp_counter = current + 1
+        return current
+
     def _create_individual_assignment(self, target, value, source_node):
         """Create a single assignment node with proper location info"""
         individual_assign = ast.Assign(targets=[target], value=value)
@@ -1713,12 +2116,43 @@ class LoopMixin:
             # Don't transform unsupported unpacking shapes - let converter handle it
             return source_node
 
-        for target_node, value_node in leaf_pairs:
+        # Python's `a, b = b, a % b` evaluates the RHS tuple first and then
+        # binds each target, so a swap like `a, b = b, a` works. Lowering to
+        # naive sequential `a = b; b = a % b` reads the *new* `a` in the
+        # second assignment and is wrong (e.g. gcd loop terminates after one
+        # iteration). Stage each RHS into a fresh temp before the binds, so
+        # later target writes don't observe earlier ones.
+        target_names = {tn.id for tn, _ in leaf_pairs if isinstance(tn, ast.Name)}
+
+        def value_reads_target(value_node):
+            for sub in ast.walk(value_node):
+                if isinstance(sub, ast.Name) and isinstance(sub.ctx, ast.Load):
+                    if sub.id in target_names:
+                        return True
+            return False
+
+        need_staging = bool(target_names) and any(value_reads_target(vn) for _, vn in leaf_pairs)
+        if need_staging:
+            base = self._next_unpack_tmp_id()
+            staged_values = []
+            for i, (_, value_node) in enumerate(leaf_pairs):
+                tmp_name = f"ESBMC_unpack_tmp_{base}_{i}"
+                tmp_assign = self._create_individual_assignment(
+                    ast.Name(id=tmp_name, ctx=ast.Store()),
+                    copy.deepcopy(value_node),
+                    source_node,
+                )
+                assignments.append(tmp_assign)
+                staged_name = ast.Name(id=tmp_name, ctx=ast.Load())
+                self._copy_location_info(source_node, staged_name)
+                staged_values.append(staged_name)
+        else:
+            staged_values = [copy.deepcopy(vn) for _, vn in leaf_pairs]
+
+        for (target_node, value_node), staged in zip(leaf_pairs, staged_values):
             target_copy = copy.deepcopy(target_node)
-            value_copy = copy.deepcopy(value_node)
-            individual_assign = self._create_individual_assignment(target_copy, value_copy,
-                                                                   source_node)
-            self._update_variable_types_simple(target_copy, value_copy)
+            individual_assign = self._create_individual_assignment(target_copy, staged, source_node)
+            self._update_variable_types_simple(target_copy, value_node)
             assignments.append(individual_assign)
 
         return assignments
@@ -2056,16 +2490,29 @@ class LoopMixin:
         return ast.Name(id="dict", ctx=ast.Load())
 
     def _has_heterogeneous_keys(self, dict_node):
-        """Return True if a dict literal has keys of more than one ESBMC-representable type.
+        """Return True if a dict literal needs per-key loop unrolling at iteration.
 
-        ESBMC stores list elements with a type-specific byte size.  When all
-        keys share the same type the retrieval is consistent; when they differ
-        (e.g. int=8 bytes vs str=strlen+1 bytes) reading with a single fixed
-        size causes an array-bounds violation.
+        Triggers on two cases:
+
+        * Mixed key types (e.g. ``{"a": 1, 2: "b"}``) — ESBMC stores keys in a
+          flat list with a type-specific byte size, so a single retrieval
+          stride cannot read both an ``int`` (8 bytes) and a ``str`` (variable
+          width) without tripping an array-bounds violation.
+
+        * Any tuple key (e.g. ``{(1, 2): 10}``) — the key is a struct rather
+          than a scalar, so when ``for k in d:`` is lowered to indexing the
+          synthesised keys list, the loop variable's runtime value is a
+          generic pointer.  Downstream destructuring (``u, v = k``) then fails
+          in ``converter_stmt.cpp`` with "Cannot unpack pointer".  Unrolling
+          inlines each tuple literal directly so the converter sees a struct.
         """
-        if not dict_node.keys or len(dict_node.keys) < 2:
+        if not dict_node.keys:
             return False
         key_types = [self._infer_dict_key_type(k) for k in dict_node.keys]
+        if "tuple" in key_types:
+            return True
+        if len(dict_node.keys) < 2:
+            return False
         return len(set(key_types)) > 1
 
     def _has_heterogeneous_values(self, dict_node):
@@ -2098,16 +2545,38 @@ class LoopMixin:
                 return "str"
         return "Any"
 
-    def _unroll_het_for(self, node, typed_elts):
+    def _unroll_het_for(self, node, typed_elts):  # pylint: disable=too-many-locals
         """Emit one typed assignment + one body copy per element.
 
         typed_elts — list of (type_str, ast_value_node) in iteration order.
 
-        The loop variable (node.target) is renamed to a unique per-iteration
-        symbol so that ESBMC never tries to hold two incompatible types in the
-        same IR symbol.
+        For a Name loop target the per-iteration symbol is renamed so ESBMC
+        never holds two incompatible types in the same IR symbol.  For a
+        Tuple/List loop target (e.g. ``for u, v in d:`` over a tuple-keyed
+        dict) we assign each key into the destructuring pattern directly —
+        the per-element types are uniform across iterations, so no rename
+        is needed and the converter handles the unpack through its normal
+        tuple-assignment path.
         """
-        target_name = node.target.id if isinstance(node.target, ast.Name) else "ESBMC_het_var"
+        target = node.target
+
+        if isinstance(target, (ast.Tuple, ast.List)):
+            result = []
+            for _type_str, value_node in typed_elts:
+                assign = ast.Assign(
+                    targets=[copy.deepcopy(target)],
+                    value=copy.deepcopy(value_node),
+                )
+                self.ensure_all_locations(assign, node)
+                ast.fix_missing_locations(assign)
+                result.append(assign)
+                for stmt in node.body:
+                    result.append(copy.deepcopy(stmt))
+            for stmt in result:
+                ast.fix_missing_locations(stmt)
+            return result
+
+        target_name = self._name_id_or_none(target) or "ESBMC_het_var"
 
         class _RenameVar(ast.NodeTransformer):
             """Replace every Load-context Name(old) with Name(new)."""
@@ -2161,6 +2630,8 @@ class LoopMixin:
                 return "str"
             if isinstance(key_node.value, int):
                 return "int"
+        if isinstance(key_node, ast.Tuple):
+            return "tuple"
         return "Any"
 
     def _infer_dict_value_annotation(self, value_node):
@@ -2304,6 +2775,15 @@ class LoopMixin:
             factory_value = ast.List(elts=[], ctx=ast.Load())
         elif isinstance(factory_node, ast.Name) and factory_node.id == "dict":
             factory_value = ast.Dict(keys=[], values=[])
+        elif self._is_nullary_lambda(factory_node):
+            # Nullary lambda factory: emit the body expression directly so it
+            # routes through the same dict-subscript-assignment path as a
+            # literal. The C++ frontend cannot currently invoke
+            # `(<lambda>)()` correctly — build_function_id only handles Name
+            # and Attribute func types and otherwise resolves to the
+            # enclosing function — so inlining the body avoids the misrouted
+            # call entirely and is semantically identical for a thunk.
+            factory_value = factory_node.body
         else:
             factory_value = ast.Call(func=factory_node, args=[], keywords=[])
         ast.copy_location(factory_value, template)

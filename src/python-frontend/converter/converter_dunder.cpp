@@ -109,7 +109,7 @@ static typet resolve_operand_type(
   {
     const symbolt *sym = symbol_table.find_symbol(operand.identifier());
     if (sym)
-      t = sym->type;
+      t = sym->get_type();
   }
   if (t.id() == "symbol")
     t = ns.follow(t);
@@ -168,7 +168,7 @@ exprt python_converter::dispatch_dunder_operator(
         symbolt *method = find_dunder_method(class_name, dunder);
         if (method)
         {
-          const code_typet &method_type = to_code_type(method->type);
+          const code_typet &method_type = to_code_type(method->get_type());
           if (is_other_param_compatible(method_type, rhs_type, ns))
           {
             side_effect_expr_function_callt call;
@@ -199,7 +199,7 @@ exprt python_converter::dispatch_dunder_operator(
         symbolt *method = find_dunder_method(class_name, rdunder);
         if (method)
         {
-          const code_typet &method_type = to_code_type(method->type);
+          const code_typet &method_type = to_code_type(method->get_type());
           if (is_other_param_compatible(method_type, lhs_type, ns))
           {
             side_effect_expr_function_callt call;
@@ -228,7 +228,7 @@ exprt python_converter::dispatch_unary_dunder_operator(
   {
     const symbolt *sym = symbol_table_.find_symbol(operand.identifier());
     if (sym)
-      operand_type = sym->type;
+      operand_type = sym->get_type();
   }
   if (operand_type.id() == "symbol")
     operand_type = ns.follow(operand_type);
@@ -263,7 +263,7 @@ exprt python_converter::dispatch_unary_dunder_operator(
   if (!method)
     return nil_exprt();
 
-  const code_typet &method_type = to_code_type(method->type);
+  const code_typet &method_type = to_code_type(method->get_type());
   side_effect_expr_function_callt call;
   call.function() = symbol_expr(*method);
   call.type() = method_type.return_type();

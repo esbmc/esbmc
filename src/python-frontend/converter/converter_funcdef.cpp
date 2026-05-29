@@ -100,7 +100,7 @@ symbolt python_converter::create_return_temp_variable(
   symbolt temp_symbol;
   temp_symbol.id = temp_sid.to_string();
   temp_symbol.name = temp_sid.to_string();
-  temp_symbol.type = return_type;
+  temp_symbol.set_type(return_type);
   temp_symbol.lvalue = true;
   temp_symbol.static_lifetime = false;
   temp_symbol.location = location;
@@ -201,12 +201,20 @@ python_converter::infer_types_from_returns(const nlohmann::json &function_body)
             flags.has_none = true;
           else
           {
+            // A string/object/array return literal in an Any-typed function
+            // cannot be folded into the numeric TypeFlags hierarchy. Don't
+            // abort the whole conversion (issue #2848): skip this return so
+            // any numeric sibling return still drives the inferred type, and
+            // an all-non-numeric body falls back to the caller's default.
             std::string type_name = constant_val.is_string()   ? "string"
                                     : constant_val.is_object() ? "object"
                                     : constant_val.is_array()  ? "array"
                                                                : "unknown";
-            throw std::runtime_error(
-              "Unsupported return type '" + type_name + "' detected");
+            log_debug(
+              "python",
+              "infer_types_from_returns: ignoring unsupported return literal "
+              "of type '{}' for Any inference",
+              type_name);
           }
         }
         else if (val["_type"] == "BinOp" || val["_type"] == "UnaryOp")
@@ -324,6 +332,73 @@ static bool param_is_mutated_in_body(
     }
   }
   return false;
+}
+
+// Collect the names of `self.<attr>` slots that `param_name` is stored
+// into anywhere in `body` (recursive). When such an attribute is itself
+// pointer-typed (see get_attributes_from_self / GitHub #4831), the
+// parameter value used as the RHS must also be a pointer — otherwise the
+// field-store creates a pointer/struct mismatch when downstream code
+// reassigns the same attribute via a chained reference.
+static void collect_self_attr_stores_of_param(
+  const std::string &param_name,
+  const nlohmann::json &body,
+  std::vector<std::string> &out)
+{
+  if (!body.is_array())
+    return;
+
+  auto rhs_is_param = [&](const nlohmann::json &v) {
+    return v.is_object() && v.value("_type", "") == "Name" &&
+           v.contains("id") && v["id"] == param_name;
+  };
+  auto extract_self_attr = [](const nlohmann::json &t) -> std::string {
+    if (
+      t.is_object() && t.value("_type", "") == "Attribute" &&
+      t.contains("value") && t["value"].is_object() &&
+      t["value"].value("_type", "") == "Name" && t["value"].contains("id") &&
+      t["value"]["id"] == "self" && t.contains("attr") && t["attr"].is_string())
+      return t["attr"].get<std::string>();
+    return "";
+  };
+
+  for (const auto &stmt : body)
+  {
+    if (!stmt.is_object())
+      continue;
+
+    const std::string &stype =
+      stmt.contains("_type") ? stmt["_type"].get<std::string>() : "";
+
+    // self.attr = param  (plain assignment)
+    if (
+      stype == "Assign" && stmt.contains("targets") && stmt.contains("value") &&
+      rhs_is_param(stmt["value"]))
+    {
+      for (const auto &tgt : stmt["targets"])
+      {
+        const std::string name = extract_self_attr(tgt);
+        if (!name.empty())
+          out.push_back(name);
+      }
+    }
+    // self.attr: T = param  (annotated assignment)
+    else if (
+      stype == "AnnAssign" && stmt.contains("target") &&
+      stmt.contains("value") && rhs_is_param(stmt["value"]))
+    {
+      const std::string name = extract_self_attr(stmt["target"]);
+      if (!name.empty())
+        out.push_back(name);
+    }
+
+    // Recurse into nested blocks
+    for (const char *key : {"body", "orelse", "handlers", "finalbody"})
+    {
+      if (stmt.contains(key) && stmt[key].is_array())
+        collect_self_attr_stores_of_param(param_name, stmt[key], out);
+    }
+  }
 }
 
 static bool node_uses_param_as_list_like(
@@ -601,7 +676,7 @@ void python_converter::process_function_arguments(
               {
                 symbolt *param_sym = symbol_table_.find_symbol(param_id);
                 if (param_sym)
-                  param_sym->type = default_expr.type();
+                  param_sym->set_type(default_expr.type());
               }
             }
           }
@@ -658,7 +733,7 @@ void python_converter::process_function_arguments(
       {
         symbolt *param_sym = symbol_table_.find_symbol(param_id);
         if (param_sym)
-          param_sym->type = list_t;
+          param_sym->set_type(list_t);
       }
     }
   }
@@ -682,8 +757,35 @@ void python_converter::process_function_arguments(
       python_frontend::is_enum_class(class_name, *ast_json))
       continue;
 
-    // Check whether the function body mutates this parameter.
-    if (!param_is_mutated_in_body(param_name, body))
+    // Upgrade to pointer when (a) the function body mutates this parameter
+    // (param.attr = ...), or (b) the parameter is stored into a `self.attr`
+    // slot whose declared field type is itself a pointer — the field-store
+    // would otherwise create a struct/pointer mismatch. (See GitHub #4831.)
+    bool stored_to_ptr_attr = false;
+    if (!current_class_name_.empty())
+    {
+      std::vector<std::string> stored_attrs;
+      collect_self_attr_stores_of_param(param_name, body, stored_attrs);
+      if (!stored_attrs.empty())
+      {
+        const symbolt *cls_sym =
+          symbol_table_.find_symbol("tag-" + current_class_name_);
+        if (cls_sym && cls_sym->get_type().is_struct())
+        {
+          const struct_typet &cs = to_struct_type(cls_sym->get_type());
+          for (const std::string &a : stored_attrs)
+          {
+            if (cs.has_component(a) && cs.get_component(a).type().is_pointer())
+            {
+              stored_to_ptr_attr = true;
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    if (!param_is_mutated_in_body(param_name, body) && !stored_to_ptr_attr)
       continue;
 
     // Upgrade the parameter to a pointer and update the parameter symbol.
@@ -694,7 +796,7 @@ void python_converter::process_function_arguments(
     {
       symbolt *param_sym = symbol_table_.find_symbol(param_id);
       if (param_sym)
-        param_sym->type = ptr_type;
+        param_sym->set_type(ptr_type);
     }
   }
 }
@@ -758,9 +860,35 @@ typet python_converter::infer_return_type_from_body(const nlohmann::json &body)
         ret_val["id"] == "self" && !current_class_name_.empty())
         return type_handler_.get_typet(current_class_name_);
 
-      // If returning a tuple, infer its type
+      // If returning a tuple, infer its type. This routine runs twice:
+      // once before function body conversion (so return statements can
+      // be typed in the right context), and once afterwards.
+      // tuple_handler evaluates each element via get_expr, which aborts
+      // on a Name that refers to a function-local variable not yet
+      // declared in the symbol table. Restrict the pre-body call to
+      // tuples whose elements are all Constants (or otherwise
+      // resolvable without symbol lookup); for tuples containing
+      // locals, leave the return type empty and let the post-body
+      // second pass infer it. See #4807.
       if (ret_val["_type"] == "Tuple")
-        return tuple_handler_->get_tuple_expr(ret_val).type();
+      {
+        bool all_constant = true;
+        if (ret_val.contains("elts") && ret_val["elts"].is_array())
+        {
+          for (const auto &elt : ret_val["elts"])
+          {
+            if (!elt.contains("_type") || elt["_type"] != "Constant")
+            {
+              all_constant = false;
+              break;
+            }
+          }
+        }
+        if (all_constant)
+          return tuple_handler_->get_tuple_expr(ret_val).type();
+        // Fall through -- post-body inference will pick up the real
+        // type once the local symbols have been declared.
+      }
 
       // Constant returns (including strings)
       if (ret_val["_type"] == "Constant" && ret_val.contains("value"))
@@ -807,6 +935,11 @@ void python_converter::get_function_definition(
   code_typet type;
   const nlohmann::json &return_node = function_node["returns"];
 
+  // Tracks annotations that already encode Optional (e.g. Optional[T] or
+  // T | None). When true, the later body_has_none_return pass must not
+  // re-wrap the return type as Optional<existing-type>.
+  bool annotation_is_optional = false;
+
   // Determine return type
   if (
     return_node.is_null() ||
@@ -846,7 +979,7 @@ void python_converter::get_function_definition(
     {
       type.return_type() = dict_handler_->get_dict_struct_type();
     }
-    else if (return_type == "str")
+    else if (return_type == "str" || return_type == "string")
     {
       // String return types should be pointers, not arrays
       type.return_type() = gen_pointer_type(char_type());
@@ -857,6 +990,17 @@ void python_converter::get_function_definition(
     {
       type.return_type() =
         tuple_handler_->get_tuple_type_from_annotation(return_node);
+    }
+    else if (return_type == "Optional" && return_node["_type"] == "Subscript")
+    {
+      // Optional[T]: delegate to the annotation handler, which builds either
+      // an Optional<T> struct (for primitive T) or a T* pointer (for str /
+      // class T, where None is encoded as NULL). The previous fallthrough to
+      // get_typet("Optional") returned a bare pointer_type() (unsignedbv),
+      // which the later body_has_none_return pass then re-wrapped as
+      // Optional<unsignedbv> — a struct unrelated to the annotated T.
+      type.return_type() = get_type_from_annotation(return_node, function_node);
+      annotation_is_optional = true;
     }
     else
     {
@@ -883,7 +1027,7 @@ void python_converter::get_function_definition(
   {
     std::string type_string =
       type_utils::remove_quotes(return_node["value"].get<std::string>());
-    if (type_string == "str")
+    if (type_string == "str" || type_string == "string")
       type.return_type() = gen_pointer_type(char_type());
     else
       type.return_type() = type_handler_.get_typet(type_string);
@@ -967,10 +1111,11 @@ void python_converter::get_function_definition(
   };
 
   bool already_optional =
-    type.return_type().is_struct() && to_struct_type(type.return_type())
-                                        .tag()
-                                        .as_string()
-                                        .starts_with("tag-Optional_");
+    annotation_is_optional ||
+    (type.return_type().is_struct() && to_struct_type(type.return_type())
+                                         .tag()
+                                         .as_string()
+                                         .starts_with("tag-Optional_"));
   if (!already_optional && body_has_none_return(function_node["body"]))
   {
     if (type.return_type().is_empty())
@@ -986,7 +1131,7 @@ void python_converter::get_function_definition(
         typet optional_type = type_handler_.build_optional_type(value_type);
         type.return_type() = optional_type;
         current_element_type = optional_type;
-        added_symbol->type = type;
+        added_symbol->set_type(type);
       }
     }
     else
@@ -997,7 +1142,7 @@ void python_converter::get_function_definition(
         type_handler_.build_optional_type(type.return_type());
       type.return_type() = optional_type;
       current_element_type = optional_type;
-      added_symbol->type = type;
+      added_symbol->set_type(type);
     }
   }
 
@@ -1010,7 +1155,7 @@ void python_converter::get_function_definition(
     {
       type.return_type() = inferred_type;
       current_element_type = inferred_type;
-      added_symbol->type = type;
+      added_symbol->set_type(type);
     }
   }
 
@@ -1031,7 +1176,7 @@ void python_converter::get_function_definition(
     if (!inferred_type.is_empty())
     {
       type.return_type() = inferred_type;
-      added_symbol->type = type; // Update the symbol's type
+      added_symbol->set_type(type); // Update the symbol's type
     }
   }
 
@@ -1055,7 +1200,7 @@ void python_converter::get_function_definition(
           if (!ret_type.is_empty())
           {
             type.return_type() = ret_type;
-            added_symbol->type = type;
+            added_symbol->set_type(type);
             break;
           }
         }
@@ -1081,7 +1226,7 @@ void python_converter::get_function_definition(
   // Validate return paths
   validate_return_paths(function_node, type, function_body);
 
-  added_symbol->value = function_body;
+  added_symbol->set_value(function_body);
 
   scope_stack_.pop_back();
 

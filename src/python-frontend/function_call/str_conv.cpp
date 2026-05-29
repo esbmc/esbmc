@@ -1,12 +1,15 @@
 #include <python-frontend/function_call/expr.h>
 #include <python-frontend/json_utils.h>
+#include <irep2/irep2_utils.h>
 #include <python-frontend/python_exception_handler.h>
 #include <python-frontend/string/string_builder.h>
 #include <python-frontend/string/string_handler.h>
 #include <python-frontend/type_handler.h>
+#include <python-frontend/type_utils.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
 #include <util/message.h>
+#include <util/migrate.h>
 #include <util/std_expr.h>
 
 #include <algorithm>
@@ -190,7 +193,7 @@ exprt function_call_expr::handle_chr(nlohmann::json &arg) const
         var_expr, loc);
     }
 
-    exprt val = sym->value;
+    exprt val = sym->get_value();
 
     if (!val.is_constant())
       val = converter_.get_resolved_value(val);
@@ -299,7 +302,7 @@ exprt function_call_expr::handle_ord(nlohmann::json &arg) const
         "NameError", "variable '" + var_name + "' is not defined");
     }
 
-    typet operand_type = sym->value.type();
+    typet operand_type = sym->get_value().type();
     std::string py_type = type_handler_.type_to_string(operand_type);
 
     if (operand_type != char_type() && py_type != "str")
@@ -310,7 +313,7 @@ exprt function_call_expr::handle_ord(nlohmann::json &arg) const
     }
 
     // For runtime variables (mutable), try to extract constant value if available
-    if (sym->lvalue && !sym->value.is_nil())
+    if (sym->lvalue && !sym->get_value().is_nil())
     {
       auto value_opt = extract_string_from_symbol(sym);
       if (value_opt)
@@ -336,7 +339,7 @@ exprt function_call_expr::handle_ord(nlohmann::json &arg) const
     }
 
     // Use runtime conversion for variables without constant value or failed extraction
-    if (sym->value.is_nil() || sym->lvalue)
+    if (sym->get_value().is_nil() || sym->lvalue)
     {
       exprt var_expr = converter_.get_expr(arg);
 
@@ -538,20 +541,88 @@ exprt function_call_expr::handle_base_conversion(
   }
   else
   {
-    return converter_.get_exception_handler().gen_exception_raise(
-      "TypeError", func_name + "() argument must be an integer");
+    // Not an AST integer literal. Try evaluating the argument:
+    //   - If it constant-folds to an integer (e.g. `bin(round(3.0))` where
+    //     handle_round's compile-time numeric path produces a `Constant`),
+    //     drive the existing string-building path below.
+    //   - Otherwise the value is symbolic; lower to the matching runtime
+    //     operational model (__python_int_to_{bin,hex,oct}) so the result
+    //     depends on the actual runtime int rather than being unreachable.
+    try
+    {
+      exprt operand_expr = converter_.get_expr(arg);
+      if (!type_utils::is_integer_type(operand_expr.type()))
+        return converter_.get_exception_handler().gen_exception_raise(
+          "TypeError", func_name + "() argument must be an integer");
+
+      expr2tc operand2;
+      migrate_expr(operand_expr, operand2);
+      simplify(operand2);
+      BigInt extracted;
+      if (!to_integer(operand2, extracted))
+      {
+        int_value = static_cast<long long>(extracted.to_int64());
+        if (int_value < 0)
+          is_negative = true;
+      }
+      else
+      {
+        // Symbolic int — dispatch to the runtime OM matching this builtin.
+        // Feed the simplified operand, migrated back to the legacy exprt the
+        // string builder expects.
+        operand_expr = migrate_expr_back(operand2);
+        const std::string fn_name = func_name == "bin" ? "__python_int_to_bin"
+                                    : func_name == "hex"
+                                      ? "__python_int_to_hex"
+                                      : "__python_int_to_oct";
+        return converter_.get_string_builder()
+          .build_runtime_str_conversion_call(
+            fn_name, long_long_int_type(), operand_expr);
+      }
+    }
+    catch (const std::exception &)
+    {
+      return converter_.get_exception_handler().gen_exception_raise(
+        "TypeError", func_name + "() argument must be an integer");
+    }
   }
 
-  // Convert to string with appropriate base and prefix
-  std::ostringstream oss;
-  oss << (is_negative ? "-" + prefix : prefix) << base_formatter;
+  std::string result_str;
+  if (func_name == "bin")
+  {
+    // C++ iostreams have no binary formatter, so build the digits manually.
+    // Compute the magnitude via unsigned modular negation (well-defined for
+    // LLONG_MIN, unlike std::llabs). Key off int_value's own sign: the USub
+    // branch above stores a positive magnitude with is_negative set, while the
+    // direct-integer branch leaves int_value signed.
+    unsigned long long mag =
+      (int_value < 0) ? (0ULL - static_cast<unsigned long long>(int_value))
+                      : static_cast<unsigned long long>(int_value);
+    std::string digits;
+    if (mag == 0)
+      digits = "0";
+    else
+      while (mag != 0)
+      {
+        digits.push_back(static_cast<char>('0' + (mag & 1U)));
+        mag >>= 1U;
+      }
+    std::reverse(digits.begin(), digits.end());
+    result_str = (is_negative ? "-" + prefix : prefix) + digits;
+  }
+  else
+  {
+    // Convert to string with appropriate base and prefix
+    std::ostringstream oss;
+    oss << (is_negative ? "-" + prefix : prefix) << base_formatter;
 
-  // For hex, also apply nouppercase
-  if (func_name == "hex")
-    oss << std::nouppercase;
+    // For hex, also apply nouppercase
+    if (func_name == "hex")
+      oss << std::nouppercase;
 
-  oss << std::llabs(int_value);
-  const std::string result_str = oss.str();
+    oss << std::llabs(int_value);
+    result_str = oss.str();
+  }
 
   // Create string type and return character array expression
   typet t = type_handler_.get_typet("str", result_str.size() + 1);
@@ -569,11 +640,149 @@ exprt function_call_expr::handle_oct(nlohmann::json &arg) const
   return handle_base_conversion(arg, "oct", "0o", std::oct);
 }
 
+exprt function_call_expr::handle_ascii() const
+{
+  const auto &args = call_["args"];
+  if (args.size() != 1)
+    return converter_.get_exception_handler().gen_exception_raise(
+      "TypeError", "ascii() takes exactly one argument");
+
+  const auto &arg = args[0];
+
+  // String constant: produce the quoted, ASCII-escaped repr form. This is the
+  // only case where ascii() differs from str(): non-printable and non-ASCII
+  // code points are rendered as \xNN / \uNNNN / \UNNNNNNNN escapes.
+  if (
+    arg["_type"] == "Constant" && arg.contains("value") &&
+    arg["value"].is_string())
+  {
+    const std::string s = arg["value"].get<std::string>();
+
+    // CPython prefers single quotes, switching to double quotes only when the
+    // string contains ' but not ".
+    const char quote =
+      (s.find('\'') != std::string::npos && s.find('"') == std::string::npos)
+        ? '"'
+        : '\'';
+
+    // cp is a Unicode code point (<= 0x10FFFF), so an unsigned int holds it
+    // and the widest escape is \U + 8 hex digits; using %08x (not %08lx) keeps
+    // the output within buf and avoids GCC's -Wformat-truncation.
+    auto append_escape = [](std::string &out, unsigned cp) {
+      char buf[12];
+      if (cp <= 0xff)
+        std::snprintf(buf, sizeof(buf), "\\x%02x", cp);
+      else if (cp <= 0xffff)
+        std::snprintf(buf, sizeof(buf), "\\u%04x", cp);
+      else
+        std::snprintf(buf, sizeof(buf), "\\U%08x", cp);
+      out += buf;
+    };
+
+    std::string out;
+    out.push_back(quote);
+    for (size_t i = 0; i < s.size();)
+    {
+      const unsigned char c = static_cast<unsigned char>(s[i]);
+      if (c == static_cast<unsigned char>(quote) || c == '\\')
+      {
+        out.push_back('\\');
+        out.push_back(static_cast<char>(c));
+        ++i;
+      }
+      else if (c == '\n')
+      {
+        out += "\\n";
+        ++i;
+      }
+      else if (c == '\r')
+      {
+        out += "\\r";
+        ++i;
+      }
+      else if (c == '\t')
+      {
+        out += "\\t";
+        ++i;
+      }
+      else if (c < 0x20 || c == 0x7f)
+      {
+        append_escape(out, c);
+        ++i;
+      }
+      else if (c < 0x80)
+      {
+        out.push_back(static_cast<char>(c));
+        ++i;
+      }
+      else
+      {
+        // Decode one UTF-8 sequence to a code point, then escape it.
+        unsigned cp = 0;
+        int extra = 0;
+        if ((c & 0xe0) == 0xc0)
+        {
+          cp = c & 0x1f;
+          extra = 1;
+        }
+        else if ((c & 0xf0) == 0xe0)
+        {
+          cp = c & 0x0f;
+          extra = 2;
+        }
+        else if ((c & 0xf8) == 0xf0)
+        {
+          cp = c & 0x07;
+          extra = 3;
+        }
+        else
+        {
+          // Invalid lead byte: escape the raw byte.
+          append_escape(out, c);
+          ++i;
+          continue;
+        }
+        if (i + extra >= s.size())
+        {
+          append_escape(out, c);
+          ++i;
+          continue;
+        }
+        for (int k = 1; k <= extra; ++k)
+          cp = (cp << 6) | (static_cast<unsigned char>(s[i + k]) & 0x3f);
+        append_escape(out, cp);
+        i += extra + 1;
+      }
+    }
+    out.push_back(quote);
+    return converter_.get_string_builder().build_string_literal(out);
+  }
+
+  // Non-string argument: ascii(x) == repr(x), which for numbers and bools is
+  // identical to str(x). Reuse the existing str conversion machinery.
+  exprt value_expr = converter_.get_expr(arg);
+  if (!value_expr.is_nil() && value_expr.statement() != "cpp-throw")
+  {
+    const typet &vt = value_expr.type();
+    if (vt.is_bool() || type_utils::is_integer_type(vt) || vt.is_floatbv())
+      return converter_.get_string_handler().convert_to_string(value_expr);
+  }
+  return converter_.get_exception_handler().gen_exception_raise(
+    "TypeError", "ascii() argument type not supported");
+}
+
+exprt function_call_expr::handle_bin(nlohmann::json &arg) const
+{
+  // The formatter is unused for binary (handled manually in
+  // handle_base_conversion); std::dec is passed only to satisfy the signature.
+  return handle_base_conversion(arg, "bin", "0b", std::dec);
+}
+
 /// Extracts the character string represented by a symbol's constant value.
 std::optional<std::string>
 function_call_expr::extract_string_from_symbol(const symbolt *sym) const
 {
-  const exprt &val = sym->value;
+  const exprt &val = sym->get_value();
   std::string result;
 
   if (val.id() == "if" && val.operands().size() == 3)
@@ -581,13 +790,13 @@ function_call_expr::extract_string_from_symbol(const symbolt *sym) const
     const exprt &cond = val.operands()[0];
 
     symbolt true_sym;
-    true_sym.value = val.operands()[1];
-    true_sym.type = true_sym.value.type();
+    true_sym.set_value(val.operands()[1]);
+    true_sym.set_type(true_sym.get_value().type());
     auto true_text = extract_string_from_symbol(&true_sym);
 
     symbolt false_sym;
-    false_sym.value = val.operands()[2];
-    false_sym.type = false_sym.value.type();
+    false_sym.set_value(val.operands()[2]);
+    false_sym.set_type(false_sym.get_value().type());
     auto false_text = extract_string_from_symbol(&false_sym);
 
     if (cond.is_true())

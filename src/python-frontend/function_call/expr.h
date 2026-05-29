@@ -163,6 +163,19 @@ private:
 
   exprt handle_hasattr() const;
 
+  /*
+   * Handles issubclass(cls, classinfo): resolves the class hierarchy from the
+   * AST at compile time. classinfo may be a single class or a tuple of classes.
+   */
+  exprt handle_issubclass() const;
+
+  /*
+   * Handles callable(obj): statically decides whether obj is callable
+   * (functions, classes, builtin type constructors, lambdas, or instances of
+   * a class defining __call__).
+   */
+  exprt handle_callable() const;
+
   exprt handle_type_call() const;
 
   /*
@@ -228,6 +241,18 @@ private:
    * following the Python 3 built-in `oct()` function semantics.
    */
   exprt handle_oct(nlohmann::json &arg) const;
+
+  /*
+   * Handles binary string arguments (e.g., bin(5) -> "0b101"), following
+   * the Python 3 built-in `bin()` semantics for positive and negative ints.
+   */
+  exprt handle_bin(nlohmann::json &arg) const;
+
+  /*
+   * Handles ascii(obj): like repr(obj) but escapes non-ASCII code points as
+   * \xNN / \uNNNN / \UNNNNNNNN, following Python 3 `ascii()` semantics.
+   */
+  exprt handle_ascii() const;
 
   /*
    * Handles ord(str) conversions by extracting the Unicode code point
@@ -375,6 +400,13 @@ private:
    * Handles divmod() built-in function calls.
    */
   exprt handle_divmod() const;
+
+  /**
+   * Handles pow() built-in function calls.
+   * pow(base, exp)      == base ** exp
+   * pow(base, exp, mod) == (base ** exp) % mod  (integer operands only)
+   */
+  exprt handle_pow() const;
 
   // Handler function type for dispatch table
   using HandlerFunction = std::function<exprt()>;

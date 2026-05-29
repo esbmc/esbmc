@@ -2,6 +2,7 @@
 #define GOTO_PROGRAMS_GOTO_LOOP_SIMPLIFY_H_
 
 #include <goto-programs/goto_functions.h>
+#include <util/options.h>
 
 /// Detect and remove no-op loops at goto-program level, before symex.
 ///
@@ -17,8 +18,20 @@
 ///
 /// Iterates to a fixed point so nested no-op loops collapse outward.
 ///
-/// Skipped under --termination or --unwinding-assertions, where loop
-/// presence is itself observable.
-void goto_loop_simplify(goto_functionst &goto_functions);
+/// Enabled by default. Skipped only where a loop rewrite is unsound or
+/// destroys a needed signal:
+///   - --termination: dead-loop erasure (Path 1) and the self-loop rewrite
+///     are skipped — rewriting an infinite empty loop to assume(false) would
+///     mask the non-termination verdict under test. Constant-bound counter
+///     step recognition (Path 2) still runs (it only matches strictly-
+///     terminating, overflow-checked loops).
+///   - Coverage modes: skipped entirely (erasing loops drops branch points
+///     the instrumentation needs).
+/// The unwinding-assertion signal is intentionally not preserved: removing a
+/// loop suppresses the "needs more unwinding" failure, which is preferable to
+/// leaving the loop unverifiable.
+void goto_loop_simplify(
+  goto_functionst &goto_functions,
+  const optionst &options);
 
 #endif

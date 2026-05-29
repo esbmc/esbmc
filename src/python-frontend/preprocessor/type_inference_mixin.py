@@ -85,6 +85,14 @@ class TypeInferenceMixin:
             if known_type and known_type != "Any":
                 return known_type
             return "list"
+        # `for c in str(x)` / `for c in str(abs(x))` etc. The iterable is the
+        # str(...) call whose return type is `str`; without this branch we
+        # fall through to "list" and lower the loop as a list iteration,
+        # which trips an IndexError because the str length is shorter than
+        # the list-style get_object_size bound.
+        if (isinstance(iterable, ast.Call) and isinstance(iterable.func, ast.Name)
+                and iterable.func.id == "str"):
+            return "str"
         return "list"
 
     def _get_element_type_from_container(self, container_type, iterable_node=None):  # pylint: disable=too-many-branches,too-many-nested-blocks

@@ -14,14 +14,14 @@ public:
   {
     irep_idt object;
     bool r, w, deref;
-    exprt guard;
-    exprt original_expr;
+    guard2tc guard;
+    expr2tc original_expr;
 
-    entryt() : r(false), w(false), guard(true_exprt())
+    entryt() : r(false), w(false), deref(false)
     {
     }
 
-    const exprt &get_guard() const
+    const guard2tc &get_guard() const
     {
       return guard;
     }
@@ -43,7 +43,7 @@ public:
   typedef std::unordered_map<irep_idt, entryt, irep_id_hash> entriest;
   entriest entries;
 
-  void compute(const exprt &expr);
+  void compute(const expr2tc &expr);
 
   rw_sett(const namespacet &_ns, goto_programt::const_targett _target)
     : ns(_ns), target(_target)
@@ -53,19 +53,21 @@ public:
   rw_sett(
     const namespacet &_ns,
     goto_programt::const_targett _target,
-    const exprt &expr)
+    const expr2tc &expr)
     : ns(_ns), target(_target)
   {
     compute(expr);
   }
 
-  void read_rec(const exprt &expr)
+  void read_rec(const expr2tc &expr)
   {
-    read_write_rec(expr, true, false, "", guard2tc(), nil_exprt());
+    read_write_rec(expr, true, false, "", guard2tc(), expr2tc());
   }
 
-  void
-  read_rec(const exprt &expr, const guard2tc &guard, const exprt &original_expr)
+  void read_rec(
+    const expr2tc &expr,
+    const guard2tc &guard,
+    const expr2tc &original_expr)
   {
     read_write_rec(expr, true, false, "", guard, original_expr);
   }
@@ -74,15 +76,15 @@ protected:
   const namespacet &ns;
   const goto_programt::const_targett target;
 
-  void assign(const exprt &lhs, const exprt &rhs);
+  void assign(const expr2tc &lhs, const expr2tc &rhs);
 
   void read_write_rec(
-    const exprt &expr,
+    const expr2tc &expr,
     bool r,
     bool w,
     const std::string &suffix,
     const guard2tc &guard,
-    const exprt &original_expr,
+    const expr2tc &original_expr,
     bool dereferenced = false);
 };
 

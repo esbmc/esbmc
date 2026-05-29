@@ -41,8 +41,7 @@ void goto_symext::intrinsic_switch_to(
 void goto_symext::intrinsic_switch_from(reachability_treet &art)
 {
   // Mark switching back to this thread as already having been explored
-  art.get_cur_state()
-    .DFS_traversed[art.get_cur_state().get_active_state_number()] = true;
+  art.mark_active_thread_explored();
 
   // And force a context switch.
   art.get_cur_state().force_cswitch();
@@ -134,6 +133,10 @@ void goto_symext::intrinsic_spawn_thread(
 
     // Disable inductive step on multi threaded code
     options.set_option("disable-inductive-step", true);
+
+    // See the recursion site for the rationale.
+    if (inductive_step)
+      throw inductive_step_disabled_exceptiont("concurrency");
   }
 
   // As an argument, we expect the address of a symbol.

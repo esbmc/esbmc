@@ -52,10 +52,23 @@ class CoreVisitorsMixin:
     }
 
     def _invalidate_list_literals_for_assign_targets(self, targets):
-        for target in targets:
-            if (isinstance(target, ast.Subscript) and isinstance(target.value, ast.Name)
-                    and target.value.id in self.list_literal_values):
+
+        def invalidate(target):
+            # Recurse into tuple/list unpacking targets so a subscript store
+            # nested in a swap (a[i], a[j] = a[j], a[i]) still invalidates the
+            # literal const-fold for its container; otherwise later reads fold
+            # to the stale original element (#4792).
+            if isinstance(target, (ast.Tuple, ast.List)):
+                for elt in target.elts:
+                    invalidate(elt)
+            elif isinstance(target, ast.Starred):
+                invalidate(target.value)
+            elif (isinstance(target, ast.Subscript) and isinstance(target.value, ast.Name)
+                  and target.value.id in self.list_literal_values):
                 self.list_literal_values.pop(target.value.id, None)
+
+        for target in targets:
+            invalidate(target)
 
     def _maybe_record_type_alias_assign(self, node):
         if (len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)
@@ -178,6 +191,17 @@ class CoreVisitorsMixin:
                 dict_name, key_node, factory, node)
             node.value.slice = key_expr
             return init_stmts + [node]
+
+        # Generic defaultdict-read lowering: when the RHS is not a direct
+        # Subscript but contains defaultdict reads inside (e.g.,
+        # `d[k] = min(d[k1], d[k2])`), insert the missing-key checks for
+        # each contained read so the dict_handler value-type scan sees
+        # at least one `d[key] = factory()` assignment in the function
+        # body. Mirrors what visit_Return/visit_Assert already do.
+        if node.value is not None:
+            dd_inits, node.value = self._lower_defaultdict_reads_in_expr(node.value, node)
+            if dd_inits:
+                return dd_inits + [node]
         return node
 
     def _update_name_target_assignment_metadata(self, target_id, node):
@@ -562,6 +586,7 @@ class CoreVisitorsMixin:
 
     def _store_function_defaults(self, node, qualified_name):
         return_nodes = []
+        is_method = "." in qualified_name
         for i in range(1, len(node.args.defaults) + 1):
             arg_index = len(node.args.args) - i
             if arg_index < 0:
@@ -574,7 +599,10 @@ class CoreVisitorsMixin:
                 assignment_node, target_var = self.generate_variable_copy(
                     qualified_name, node.args.args[-i], default_node)
                 self.functionDefaults[(qualified_name, arg_name)] = target_var
-                return_nodes.append(assignment_node)
+                if is_method:
+                    self._pending_method_default_inits.append(assignment_node)
+                else:
+                    return_nodes.append(assignment_node)
             else:
                 self.functionDefaults[(qualified_name, arg_name)] = default_node
         for i, default in enumerate(node.args.kw_defaults):
@@ -587,7 +615,10 @@ class CoreVisitorsMixin:
                 assignment_node, target_var = self.generate_variable_copy(
                     qualified_name, node.args.kwonlyargs[i], default)
                 self.functionDefaults[(qualified_name, kwarg_name)] = target_var
-                return_nodes.append(assignment_node)
+                if is_method:
+                    self._pending_method_default_inits.append(assignment_node)
+                else:
+                    return_nodes.append(assignment_node)
             else:
                 self.functionDefaults[(qualified_name, kwarg_name)] = default
         return return_nodes

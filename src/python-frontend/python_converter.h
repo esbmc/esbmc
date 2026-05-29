@@ -666,6 +666,19 @@ private:
     const nlohmann::json &target,
     codet &target_block);
 
+  /**
+   * Desugar a tuple/list unpacking whose targets include lvalues (a[i],
+   * obj.attr) into temp-mediated single assignments routed through the normal
+   * single-assignment path. Evaluates every RHS element into a temporary
+   * first (Python evaluates the whole RHS before assigning), then stores each
+   * target, so the swap a[i], a[j] = a[j], a[i] is handled soundly (#4792).
+   * Requires the RHS to be a Tuple/List literal of matching arity.
+   */
+  void desugar_unpacking_with_lvalue_targets(
+    const nlohmann::json &ast_node,
+    const nlohmann::json &target,
+    codet &target_block);
+
   // =========================================================================
   // Symbol creation helper methods
   // =========================================================================

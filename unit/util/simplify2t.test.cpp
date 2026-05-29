@@ -12,7 +12,6 @@
 #include <irep2/irep2_utils.h>
 #include <util/c_types.h>
 #include <util/config.h>
-#include <util/simplify_expr.h>
 
 namespace
 {

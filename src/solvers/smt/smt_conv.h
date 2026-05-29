@@ -433,6 +433,10 @@ public:
   smt_astt get_single_min_subnormal();
   // Returns SMT AST representing single precision maximum normal value (~3.4028234663852886e+38)
   smt_astt get_single_max_normal();
+  // Returns SMT AST for the integer-encoding sentinel for double +∞: max_normal+1
+  smt_astt get_double_inf_sentinel();
+  // Returns SMT AST for the integer-encoding sentinel for single +∞: max_normal+1
+  smt_astt get_single_inf_sentinel();
   // Returns SMT AST for the double precision relative error bound under
   // round-to-nearest: half machine epsilon = 2^-53 ~ 1.11e-16
   smt_astt get_double_eps_rel();

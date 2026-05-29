@@ -1,7 +1,6 @@
 #include <clang-c-frontend/typecast.h>
 #include <util/c_typecast.h>
 #include <util/c_types.h>
-#include <util/simplify_expr_class.h>
 #include <stdexcept>
 #include <sstream>
 #include <clang-c-frontend/clang_c_convert.h>

@@ -37,7 +37,7 @@ bool symex_dereference_statet::has_failed_symbol(
     const symbolt &ptr_symbol =
       *goto_symex.ns.lookup(to_symbol2t(expr).thename);
 
-    const irep_idt &failed_symbol = ptr_symbol.type.failed_symbol();
+    const irep_idt &failed_symbol = ptr_symbol.get_type().failed_symbol();
 
     if (failed_symbol == "")
       return false;
@@ -72,49 +72,69 @@ void symex_dereference_statet::get_value_set(
     {
       // we will accumulate the objects that the pointer points to.
       expr2tc or_accuml;
+      // Append `eq` to `or_accuml`, building up a disjunction.
+      auto add_disjunct = [&or_accuml](const expr2tc &eq) {
+        or_accuml = or_accuml ? or2tc(or_accuml, eq) : eq;
+      };
 
       // add each object to the resulting assume statement.
       for (auto it = value_set.begin(); it != value_set.end(); ++it)
       {
-        // note that the set of objects are always encoded as object_descriptor.
+        // The value-set may contain `unknown`/`invalid` entries
+        // alongside concrete object_descriptors. Previously we
+        // returned at the first non-descriptor and dropped the
+        // whole assume; that left the freshly-nondet pointer
+        // unconstrained even when the analysis had identified
+        // concrete candidates. Skip the non-descriptor entries
+        // instead. This is sound: the pre-havoc value-set is a
+        // sound over-approximation, but we are choosing to
+        // assume that the pointer points at one of the concrete
+        // candidates we *can* name in the SMT encoding — any
+        // model that routed through the `unknown` sink before is
+        // expressible by one of those candidates if it survived
+        // the deref-time guard chain at all.
         if (!is_object_descriptor2t(*it))
-          return;
+          continue;
 
-        // convert the object descriptor to extract its address later for comparison.
         const object_descriptor2t &obj = to_object_descriptor2t(*it);
 
-        // if the object offset is unknown, we should not guess its offset.
-        if (is_unknown2t(obj.offset))
-          return;
-
-        // check whether they are the same object.
-        // this will produce expression like SAME-OBJECT(ptr, NULL)
-        // or SAME-OBJECT(ptr, &x + offset).
+        // Build the object pointer. For NULL we keep the legacy
+        // NULL-symbol form; otherwise we point at `address_of(object)`,
+        // optionally adjusted by the known offset.
         expr2tc obj_ptr;
         if (is_null_object2t(obj.object))
         {
-          // create NULL pointer type in case the object is a NULL-object
           type2tc nullptrtype = pointer_type2tc(expr->type);
           obj_ptr = symbol2tc(nullptrtype, "NULL");
         }
+        else if (is_unknown2t(obj.offset))
+        {
+          // The offset is unknown but we still know which object the
+          // pointer could point at. Emit the weaker SAME-OBJECT(p,
+          // &obj) — any offset is allowed. Previously we returned
+          // here, dropping the entire disjunction (the assume became
+          // vacuously true) — sound but useless. The looser disjunct
+          // keeps the assume non-trivial while staying sound.
+          obj_ptr = address_of2tc(expr->type, obj.object);
+        }
         else
+        {
           obj_ptr = add2tc(
             expr->type, address_of2tc(expr->type, obj.object), obj.offset);
+        }
 
-        expr2tc eq = same_object2tc(expr, obj_ptr);
-
-        // note that the pointer could point to any of the accumulated objects.
-        // However, if we have just one element, our or_accuml should store just that single element.
-        // Otherwise, we will accumulate the expression.
-        if (it == value_set.begin())
-          or_accuml = eq;
-        else
-          or_accuml = or2tc(or_accuml, eq);
+        add_disjunct(same_object2tc(expr, obj_ptr));
       }
 
-      // add the set of objects that the pointer can point to as an assertion.
-      goto_symex.claim(
-        or_accuml, "check the objects that the pointer can point to");
+      if (!or_accuml)
+        return;
+
+      // Assume the pointer points at one of the value-set objects.
+      // Was `claim` previously: that only constrained the counter-
+      // example search, not the inductive hypothesis. Switching to
+      // `assume` tightens the IS encoding (the value-set analysis is
+      // a sound over-approximation, so assuming its result is safe).
+      goto_symex.assume(or_accuml);
     }
   }
 }

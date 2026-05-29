@@ -34,6 +34,9 @@ esbmc main.py --unwind 10
 | `--multi-property` | Continue verification after the first failure, reporting all violated properties |
 | `--strict-types` | Enable strict type checking for function arguments at verification time |
 | `--branch-coverage` | Instrument branch-coverage properties (useful with `--generate-pytest-testcase`) |
+| `--k-path-coverage[=N]` | Instrument k-path coverage with prefix length `N` (see [Coverage](../coverage#k-path-coverage)). Use with `--generate-pytest-testcase` for higher-coverage test discovery. |
+| `--k-path-witness-depth=D` | Cap post-simplification guard depth for k-path witnesses (default 8). |
+| `--k-path-max-goals=M` | Per-function goal cap for k-path coverage (default 10000). |
 | `--generate-pytest-testcase` | Generate pytest test cases from counterexamples (see [Pytest Test Generation](./pytest-testgen)) |
 
 ## Writing Verification Harnesses
@@ -221,7 +224,54 @@ VERIFICATION FAILED
 
 ---
 
-### Example 5: Missing Return Statement Detection
+### Example 5: New Built-ins (`pow`, `zip`, `reversed`, `filter`, `callable`, `issubclass`)
+
+The following snippet exercises the builtins added by the Python frontend's recent expansion (PR #4711). Three-argument `pow` performs exact `BigInt` modular exponentiation for constant integer operands; `zip`, `reversed`, and `filter` are lowered to index-based loops in `for` form; `callable` and `issubclass` resolve at compile time.
+
+```python
+# Modular exponentiation: exact BigInt for constant integer args
+assert pow(2, 10, 1000) == 24
+assert pow(7, 30, 13) == 12
+
+# zip / reversed / filter in for-loops
+a = [1, 2, 3]
+b = [10, 20, 30]
+total = 0
+for x, y in zip(a, b):
+    total += x * y
+assert total == 1 * 10 + 2 * 20 + 3 * 30
+
+seen = []
+for x in reversed([1, 2, 3]):
+    seen.append(x)
+assert seen == [3, 2, 1]
+
+def is_even(n: int) -> bool:
+    return n % 2 == 0
+
+evens = []
+for x in filter(is_even, [1, 2, 3, 4]):
+    evens.append(x)
+assert evens == [2, 4]
+
+# callable / issubclass
+class Animal: pass
+class Dog(Animal): pass
+assert issubclass(Dog, Animal)
+assert callable(len)
+```
+
+```bash
+esbmc main.py
+```
+
+```
+VERIFICATION SUCCESSFUL
+```
+
+---
+
+### Example 6: Missing Return Statement Detection
 
 ```python
 def calculate_grade(score: int) -> str:

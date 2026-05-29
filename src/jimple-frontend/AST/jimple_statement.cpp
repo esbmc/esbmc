@@ -221,7 +221,7 @@ exprt jimple_assignment_field::to_exprt(
     // 1. Look over the local scope
   auto symbol_name = get_symbol_name(class_name, function_name, variable);
   symbolt &s = *ctx.find_symbol(symbol_name);
-  member_exprt op(symbol_expr(s), "tag-" + field, s.type);
+  member_exprt op(symbol_expr(s), "tag-" + field, s.get_type());
   exprt &base = op.struct_op();
   if(base.type().is_pointer())
   {

@@ -1,0 +1,45 @@
+name: Cancel CI on merged PR
+
+# When a PR is merged, GitHub does not cancel the CI runs that are still
+# in progress or queued for that PR's head branch. Those runs are now
+# pointless (the code has already landed on master, which triggers its own
+# CI), so they only waste runner time. This workflow cancels them.
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  actions: write
+
+jobs:
+  cancel:
+    # Only act when the PR actually landed, not when it was closed unmerged.
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-slim
+    steps:
+      - name: Cancel in-progress and queued runs for the merged PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Match on the PR's head commit, not the branch name: this is the
+          # only identifier that is unique to this PR and that is recorded the
+          # same way for both same-repo and forked-PR runs. Branch-name
+          # matching misses forks and can collide with shared bot branches.
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          REPO: ${{ github.repository }}
+          SELF_RUN_ID: ${{ github.run_id }}
+        run: |
+          for status in queued waiting in_progress; do
+            gh run list \
+              --repo "$REPO" \
+              --status "$status" \
+              --limit 100 \
+              --json databaseId,headSha \
+              --jq ".[] | select(.headSha == \"$HEAD_SHA\") | .databaseId" \
+            | while read -r run_id; do
+                [ "$run_id" = "$SELF_RUN_ID" ] && continue
+                echo "Cancelling run $run_id ($status)"
+                gh run cancel "$run_id" --repo "$REPO" || true
+              done
+          done
+          echo "Done cancelling runs for $HEAD_SHA"

@@ -7,7 +7,6 @@
 
 #include <util/arith_tools.h>
 #include <util/config.h>
-#include <util/simplify_expr.h>
 #include <util/type_byte_size.h>
 
 static std::size_t ext_int_representation_bytes(const typet &type)
@@ -162,7 +161,7 @@ static void add_padding(struct_typet &type, const namespacet &ns)
 
     for (struct_typet::componentst::iterator it = components.begin();
          it != components.end();
-         it++)
+         ++it)
     {
       bool is_bitfield = it->type().get_bool("#bitfield");
       bool is_extint = it->type().get_bool("#extint");
@@ -225,7 +224,7 @@ static void add_padding(struct_typet &type, const namespacet &ns)
 
   for (struct_typet::componentst::iterator it = components.begin();
        it != components.end();
-       it++)
+       ++it)
   {
     const typet it_type = it->type();
     BigInt a = 1;
@@ -390,7 +389,7 @@ static void add_padding(union_typet &type, const namespacet &ns)
 void add_padding(typet &type, const namespacet &ns)
 {
   if (type.is_symbol())
-    return add_padding(const_cast<typet &>(ns.lookup(type)->type), ns);
+    return add_padding(const_cast<typet &>(ns.lookup(type)->get_type()), ns);
 
   /* Only structs and unions get padded, all other types are fine */
   if (type.is_struct())

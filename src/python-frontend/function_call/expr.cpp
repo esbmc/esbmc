@@ -482,7 +482,7 @@ exprt function_call_expr::build_constant_from_arg() const
     if (first_arg["_type"] == "Name")
     {
       const symbolt *sym = lookup_python_symbol(first_arg["id"]);
-      if (sym && sym->value.is_constant())
+      if (sym && sym->get_value().is_constant())
       {
         if (base_expr.is_nil())
         {
@@ -648,8 +648,8 @@ exprt function_call_expr::build_constant_from_arg() const
   {
     const symbolt *sym = lookup_python_symbol(arg["id"]);
     if (
-      sym && sym->value.is_constant() &&
-      type_utils::is_string_type(sym->value.type()))
+      sym && sym->get_value().is_constant() &&
+      type_utils::is_string_type(sym->get_value().type()))
       return handle_str_symbol_to_float(sym);
     else
     {
@@ -698,6 +698,10 @@ exprt function_call_expr::build_constant_from_arg() const
   // Handle oct: Handles octal string arguments
   else if (func_name == "oct")
     return handle_oct(arg);
+
+  // Handle bin: Handles binary string arguments
+  else if (func_name == "bin")
+    return handle_bin(arg);
 
   // Handle abs: Returns the absolute value of an integer or float literal
   else if (func_name == "abs")
@@ -868,7 +872,7 @@ function_call_expr::get_object_list_symbol(std::string &display_name) const
     // a list, since list_type_map keys list-of-list types.  For non-list bases
     // (e.g. dicts whose value is a list) we fall through to the get_expr
     // dispatch below, which can also resolve dict-subscript receivers.
-    if (base_sym->type == list_type)
+    if (base_sym->get_type() == list_type)
     {
       // Constant index: resolve directly from list_type_map.
       if (
@@ -899,7 +903,7 @@ function_call_expr::get_object_list_symbol(std::string &display_name) const
       {
         const symbolt *sym =
           converter_.find_symbol(subscript_expr.identifier().as_string());
-        if (sym && sym->type == list_type)
+        if (sym && sym->get_type() == list_type)
         {
           const std::string idx_str = slice_node.contains("id")
                                         ? slice_node["id"].get<std::string>()
@@ -957,7 +961,7 @@ function_call_expr::get_object_list_symbol(std::string &display_name) const
     {
       const symbolt *sym =
         converter_.find_symbol(attr_expr.identifier().as_string());
-      if (sym && sym->type == list_type)
+      if (sym && sym->get_type() == list_type)
         return sym;
     }
 
@@ -1018,7 +1022,7 @@ function_call_expr::get_object_list_symbol(std::string &display_name) const
 // function is a no-op.
 void function_call_expr::materialize_list_symbol(const symbolt *sym) const
 {
-  if (!sym || sym->value.is_nil())
+  if (!sym || sym->get_value().is_nil())
     return;
   // Only emit a declaration for temp symbols produced by
   // get_object_list_symbol() from non-named receivers.  These are identified
@@ -1032,7 +1036,7 @@ void function_call_expr::materialize_list_symbol(const symbolt *sym) const
     name.find("$dict_list$") == std::string::npos)
     return;
   code_declt decl(symbol_expr(*sym));
-  decl.copy_to_operands(sym->value);
+  decl.copy_to_operands(sym->get_value());
   decl.location() = sym->location;
   converter_.current_block->copy_to_operands(decl);
 }
@@ -1085,7 +1089,7 @@ exprt to_value_expr(const exprt &arg, const namespacet &ns)
   {
     const symbolt *sym = ns.lookup(to_symbol_expr(func_expr));
     if (sym)
-      func_call.type() = to_code_type(sym->type).return_type();
+      func_call.type() = to_code_type(sym->get_type()).return_type();
   }
   if (func_call.type().is_nil() || func_call.type().id() == "empty")
     func_call.type() = arg.type();
@@ -1301,7 +1305,7 @@ bool function_call_expr::is_dict_method_call() const
     std::string dummy;
     const symbolt *sym = get_object_list_symbol(dummy);
     const typet list_type = type_handler_.get_list_type();
-    return sym == nullptr || sym->type != list_type;
+    return sym == nullptr || sym->get_type() != list_type;
   }
 
   return true;
@@ -1621,7 +1625,7 @@ bool function_call_expr::is_list_method_call() const
     std::string dummy;
     const symbolt *sym = get_object_list_symbol(dummy);
     const typet list_type = type_handler_.get_list_type();
-    return sym != nullptr && sym->type == list_type;
+    return sym != nullptr && sym->get_type() == list_type;
   }
 
   // "copy" is shared between list and dict. Treat as list.copy() only when
@@ -1640,7 +1644,7 @@ bool function_call_expr::is_list_method_call() const
     std::string dummy;
     const symbolt *sym = get_object_list_symbol(dummy);
     const typet list_type = type_handler_.get_list_type();
-    return sym != nullptr && sym->type == list_type;
+    return sym != nullptr && sym->get_type() == list_type;
   }
 
   return true;
@@ -1747,12 +1751,19 @@ exprt function_call_expr::handle_list_append() const
     value_to_append = symbol_expr(tmp_var);
   }
 
+  // Treat a single-element char array (`char[1]`) as a `char *` for storage
+  // semantics — list elements of string type are stored as pointer values
+  // (see build_push_list_call). The in-place type rewrite is safe for a
+  // symbol-expr value (a real variable whose storage decays to char*), but
+  // would corrupt a constant char[1] expression: rewriting the type produces
+  // a malformed `constant{type=char *, op0=char '\0'}` that crashes
+  // migrate_expr at GOTO-program generation (#4807). Keep constants on the
+  // generic array path; build_push_list_call then takes their address.
   if (
-    value_to_append.type().is_array() &&
+    !value_to_append.is_constant() && value_to_append.type().is_array() &&
     value_to_append.type().subtype() == char_type())
   {
     const array_typet &array_type = to_array_type(value_to_append.type());
-    // Only convert single-element char arrays (string literals)
     if (array_type.size().is_constant())
     {
       const constant_exprt &size_const = to_constant_expr(array_type.size());
@@ -2060,7 +2071,8 @@ function_call_expr::get_dispatch_table()
              side_effect_expr_function_callt model_call;
              model_call.function() = symbol_expr(*model_sym);
              model_call.arguments() = {z};
-             model_call.type() = to_code_type(model_sym->type).return_type();
+             model_call.type() =
+               to_code_type(model_sym->get_type()).return_type();
              model_call.location() = converter_.get_location_from_decl(call_);
              return model_call;
            }
@@ -2126,7 +2138,7 @@ function_call_expr::get_dispatch_table()
        side_effect_expr_function_callt model_call;
        model_call.function() = symbol_expr(*model_symbol);
        model_call.arguments() = {z};
-       model_call.type() = to_code_type(model_symbol->type).return_type();
+       model_call.type() = to_code_type(model_symbol->get_type()).return_type();
        model_call.location() = converter_.get_location_from_decl(call_);
 
        exprt zr = member_exprt(z, "real", double_type());
@@ -2555,6 +2567,38 @@ function_call_expr::get_dispatch_table()
      [this]() { return handle_divmod(); },
      "divmod"},
 
+    // pow() builtin (2- and 3-argument forms)
+    {[this]() {
+       return function_id_.get_function() == "pow" &&
+              function_id_.get_prefix() == "py:";
+     },
+     [this]() { return handle_pow(); },
+     "pow() builtin"},
+
+    // issubclass() builtin
+    {[this]() {
+       return function_id_.get_function() == "issubclass" &&
+              function_id_.get_prefix() == "py:";
+     },
+     [this]() { return handle_issubclass(); },
+     "issubclass() builtin"},
+
+    // callable() builtin
+    {[this]() {
+       return function_id_.get_function() == "callable" &&
+              function_id_.get_prefix() == "py:";
+     },
+     [this]() { return handle_callable(); },
+     "callable() builtin"},
+
+    // ascii() builtin
+    {[this]() {
+       return function_id_.get_function() == "ascii" &&
+              function_id_.get_prefix() == "py:";
+     },
+     [this]() { return handle_ascii(); },
+     "ascii() builtin"},
+
     // round() builtin function
     {[this]() {
        const std::string &func_name = function_id_.get_function();
@@ -2702,14 +2746,16 @@ exprt function_call_expr::handle_general_function_call()
 
             const symbolt *elem_sym = converter_.find_symbol(elem_id);
             if (
-              !elem_sym || !elem_sym->value.is_constant() ||
-              !(elem_sym->type.is_signedbv() || elem_sym->type.is_unsignedbv()))
+              !elem_sym || !elem_sym->get_value().is_constant() ||
+              !(elem_sym->get_type().is_signedbv() ||
+                elem_sym->get_type().is_unsignedbv()))
             {
               all_constant_ints = false;
               break;
             }
 
-            BigInt key = binary2integer(elem_sym->value.value().c_str(), true);
+            BigInt key =
+              binary2integer(elem_sym->get_value().value().c_str(), true);
             elems.push_back({key, i});
           }
 
@@ -2852,35 +2898,37 @@ exprt function_call_expr::handle_general_function_call()
     symbol_id var_sid = converter_.create_symbol_id();
     var_sid.set_object(func_name);
     symbolt *var_symbol = symbol_table.find_symbol(var_sid.to_string());
-    if (var_symbol && !var_symbol->type.is_code())
+    if (var_symbol && !var_symbol->get_type().is_code())
     {
       side_effect_expr_function_callt call;
       call.location() = converter_.get_location_from_decl(call_);
       exprt func_expr = symbol_expr(*var_symbol);
       if (
-        !var_symbol->type.is_pointer() || !var_symbol->type.subtype().is_code())
+        !var_symbol->get_type().is_pointer() ||
+        !var_symbol->get_type().subtype().is_code())
         func_expr = typecast_exprt(func_expr, gen_pointer_type(code_typet()));
       call.function() = func_expr;
 
       bool resolved = false;
       if (
-        var_symbol->value.is_address_of() &&
-        !var_symbol->value.operands().empty() &&
-        var_symbol->value.op0().is_symbol())
+        var_symbol->get_value().is_address_of() &&
+        !var_symbol->get_value().operands().empty() &&
+        var_symbol->get_value().op0().is_symbol())
       {
         const symbolt *target_symbol =
-          symbol_table.find_symbol(var_symbol->value.op0().identifier());
-        if (target_symbol && target_symbol->type.is_code())
+          symbol_table.find_symbol(var_symbol->get_value().op0().identifier());
+        if (target_symbol && target_symbol->get_type().is_code())
         {
-          call.type() = to_code_type(target_symbol->type).return_type();
+          call.type() = to_code_type(target_symbol->get_type()).return_type();
           resolved = true;
         }
       }
       if (
-        !resolved && var_symbol->type.is_pointer() &&
-        var_symbol->type.subtype().is_code())
+        !resolved && var_symbol->get_type().is_pointer() &&
+        var_symbol->get_type().subtype().is_code())
       {
-        call.type() = to_code_type(var_symbol->type.subtype()).return_type();
+        call.type() =
+          to_code_type(var_symbol->get_type().subtype()).return_type();
         resolved = true;
       }
       if (!resolved)
@@ -3254,7 +3302,8 @@ exprt function_call_expr::handle_general_function_call()
   code_function_callt call;
   call.location() = location;
   call.function() = symbol_expr(*func_symbol);
-  const typet &return_type = to_code_type(func_symbol->type).return_type();
+  const typet &return_type =
+    to_code_type(func_symbol->get_type()).return_type();
   call.type() = return_type;
 
   auto bind_instance_receiver = [&](exprt receiver) -> exprt {
@@ -3407,7 +3456,7 @@ exprt function_call_expr::handle_general_function_call()
   {
     // Check if this is an instance method being called through the class
     // e.g., MyClass.method(instance) where the first param should be 'self'
-    const code_typet &func_type = to_code_type(func_symbol->type);
+    const code_typet &func_type = to_code_type(func_symbol->get_type());
     bool first_param_is_self = false;
 
     if (!func_type.arguments().empty())
@@ -3454,7 +3503,7 @@ exprt function_call_expr::handle_general_function_call()
   }
 
   // Get function type and parameters for Optional wrapping
-  const code_typet &func_type = to_code_type(func_symbol->type);
+  const code_typet &func_type = to_code_type(func_symbol->get_type());
   const auto &params = func_type.arguments();
 
   size_t arg_index = 0;
@@ -3676,7 +3725,7 @@ exprt function_call_expr::handle_general_function_call()
           converter_.ns.lookup(to_symbol_expr(func_expr));
         if (func_symbol != nullptr)
         {
-          const code_typet &func_type = to_code_type(func_symbol->type);
+          const code_typet &func_type = to_code_type(func_symbol->get_type());
           return_type = func_type.return_type();
 
           // Special handling for constructors
@@ -3716,7 +3765,7 @@ exprt function_call_expr::handle_general_function_call()
     {
       // Update list element type mapping for function parameters
       const code_typet &type =
-        static_cast<const code_typet &>(func_symbol->type);
+        static_cast<const code_typet &>(func_symbol->get_type());
       const std::string &arg_id =
         type.arguments().at(0).identifier().as_string();
 
@@ -4047,7 +4096,7 @@ function_call_expr::find_possible_class_types(const symbolt *obj_symbol) const
 
   try
   {
-    typet obj_type = obj_symbol->type;
+    typet obj_type = obj_symbol->get_type();
     if (obj_type.is_pointer())
       obj_type = obj_type.subtype();
     if (obj_type.id() == "symbol")
@@ -4359,7 +4408,7 @@ exprt function_call_expr::check_argument_types(
   if (!config.options.get_bool_option("strict-types"))
     return nil_exprt();
 
-  const code_typet &func_type = to_code_type(func_symbol->type);
+  const code_typet &func_type = to_code_type(func_symbol->get_type());
   const auto &params = func_type.arguments();
 
   // Determine parameter offset based on actual function signature

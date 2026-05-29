@@ -495,7 +495,7 @@ void goto_checkt::input_overflow_check(
       return;
 
     const symbolt &arg = *ns.lookup(arg_names.at(i));
-    const irep_idt type_id = arg.type.id();
+    const irep_idt type_id = arg.get_type().id();
     std::string width;
 
     // if no length limits, then we treat it as a buffer overflow
@@ -510,13 +510,13 @@ void goto_checkt::input_overflow_check(
 
     if (type_id == "array")
     {
-      width = to_array_type(arg.type).size().cformat().as_string();
+      width = to_array_type(arg.get_type()).size().cformat().as_string();
       input_overflow_check_arr(
         string2integer(width), string2integer(limits.at(i)), buf_overflow);
     }
     else if (type_id == "unsignedbv" || type_id == "signedbv")
     {
-      width = arg.type.width().as_string();
+      width = arg.get_type().width().as_string();
       input_overflow_check_int(
         string2integer(width), string2integer(limits.at(i)), buf_overflow);
     }
@@ -528,8 +528,8 @@ void goto_checkt::input_overflow_check(
     else if (type_id == "pointer")
     {
       // remove typecast
-      assert(arg.value.is_typecast());
-      const exprt out_operands = to_typecast_expr(arg.value).op();
+      assert(arg.get_value().is_typecast());
+      const exprt out_operands = to_typecast_expr(arg.get_value()).op();
       const exprt::operandst operands = out_operands.op1().operands();
 
       if (!operands[0].has_operands())
@@ -839,7 +839,7 @@ typet goto_checkt::resolve_python_effective_type(
     {
       const symbolt *type_symbol = ns.lookup(pointed);
       if (type_symbol != nullptr)
-        pointed = type_symbol->type;
+        pointed = type_symbol->get_type();
     }
 
     if (pointed.id() == "struct")
@@ -850,7 +850,7 @@ typet goto_checkt::resolve_python_effective_type(
   {
     const symbolt *type_symbol = ns.lookup(effective);
     if (type_symbol != nullptr)
-      effective = type_symbol->type;
+      effective = type_symbol->get_type();
   }
 
   return effective;
@@ -870,7 +870,7 @@ expr2tc goto_checkt::build_python_type_operand(const typet &type) const
     const symbolt *symbol = ns.lookup(followed);
     if (symbol == nullptr)
       return expr2tc();
-    type2tc symbol_type = migrate_type(symbol->type);
+    type2tc symbol_type = migrate_symbol_type(*symbol);
     return symbol2tc(symbol_type, symbol->id);
   }
 

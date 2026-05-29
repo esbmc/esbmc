@@ -277,8 +277,10 @@ private:
   /** The callback object to funnel all interactions with the context through.*/
   dereference_callbackt &dereference_callback;
   /** The number of failed symbols that we've generated (they're numbered
-   *  individually. */
-  static unsigned invalid_counter;
+   *  individually. thread_local so parallel symex threads
+   *  (--k-induction-parallel) don't race when minting unique
+   *  `symex::invalid_objectN` names. */
+  static thread_local unsigned invalid_counter;
   /** Whether or not we're operating in a big endian environment. Value for this
    *  is taken from config.ansi_c.endianness. */
   bool is_big_endian;

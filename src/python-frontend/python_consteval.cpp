@@ -1,5 +1,6 @@
 #include <python-frontend/python_consteval.h>
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 
 static double round_ties_to_even_consteval(const double value)
@@ -918,6 +919,248 @@ python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
           return PyConstValue::make_int(static_cast<long long>(i));
       }
       return std::nullopt;
+    }
+
+    // String methods on a STRING receiver: fold pure, ASCII-only operations
+    // at conversion time. This lets handle_string_<method> see a constant
+    // receiver downstream, avoiding `<method>() requires constant string`
+    // errors for code like `flip_case(s)` whose body is `return s.swapcase()`.
+    if (
+      node["func"]["_type"] == "Attribute" && node["func"].contains("attr") &&
+      node["func"].contains("value"))
+    {
+      auto recv = eval_expr(node["func"]["value"], env);
+      if (recv && recv->kind == PyConstValue::STRING)
+      {
+        const std::string &s = recv->string_val;
+        const std::string &m = node["func"]["attr"].get<std::string>();
+        const auto &args_arr = node["args"];
+
+        auto unary = [&](auto &&op) -> std::optional<PyConstValue> {
+          if (!args_arr.empty())
+            return std::nullopt;
+          return op(s);
+        };
+
+        if (m == "swapcase")
+          return unary([](const std::string &x) {
+            std::string out(x);
+            for (char &c : out)
+            {
+              auto uc = static_cast<unsigned char>(c);
+              if (std::islower(uc))
+                c = static_cast<char>(std::toupper(uc));
+              else if (std::isupper(uc))
+                c = static_cast<char>(std::tolower(uc));
+            }
+            return PyConstValue::make_string(out);
+          });
+
+        if (m == "upper")
+          return unary([](const std::string &x) {
+            std::string out(x);
+            for (char &c : out)
+              c =
+                static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+            return PyConstValue::make_string(out);
+          });
+
+        if (m == "lower" || m == "casefold")
+          return unary([](const std::string &x) {
+            std::string out(x);
+            for (char &c : out)
+              c =
+                static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+            return PyConstValue::make_string(out);
+          });
+
+        if (m == "capitalize")
+          return unary([](const std::string &x) {
+            std::string out(x);
+            for (size_t i = 0; i < out.size(); ++i)
+            {
+              auto uc = static_cast<unsigned char>(out[i]);
+              out[i] =
+                static_cast<char>(i == 0 ? std::toupper(uc) : std::tolower(uc));
+            }
+            return PyConstValue::make_string(out);
+          });
+
+        if (m == "title")
+          return unary([](const std::string &x) {
+            std::string out(x);
+            bool new_word = true;
+            for (char &c : out)
+            {
+              auto uc = static_cast<unsigned char>(c);
+              if (std::isalpha(uc))
+              {
+                c = static_cast<char>(
+                  new_word ? std::toupper(uc) : std::tolower(uc));
+                new_word = false;
+              }
+              else
+                new_word = !std::isalnum(uc);
+            }
+            return PyConstValue::make_string(out);
+          });
+
+        // is*() predicates — Python returns False on the empty string, and
+        // require *all* chars to satisfy the predicate. `isupper`/`islower`
+        // additionally require at least one cased character.
+        auto pred_all =
+          [&](auto &&char_ok, bool empty_ok) -> std::optional<PyConstValue> {
+          if (!args_arr.empty())
+            return std::nullopt;
+          if (s.empty())
+            return PyConstValue::make_bool(empty_ok);
+          for (char c : s)
+            if (!char_ok(static_cast<unsigned char>(c)))
+              return PyConstValue::make_bool(false);
+          return PyConstValue::make_bool(true);
+        };
+
+        if (m == "isalpha")
+          return pred_all(
+            [](unsigned char c) { return std::isalpha(c) != 0; }, false);
+        if (m == "isdigit")
+          return pred_all(
+            [](unsigned char c) { return std::isdigit(c) != 0; }, false);
+        if (m == "isalnum")
+          return pred_all(
+            [](unsigned char c) { return std::isalnum(c) != 0; }, false);
+        if (m == "isspace")
+          return pred_all(
+            [](unsigned char c) { return std::isspace(c) != 0; }, false);
+        if (m == "isupper" || m == "islower")
+        {
+          if (!args_arr.empty())
+            return std::nullopt;
+          bool seen_cased = false;
+          for (char c : s)
+          {
+            auto uc = static_cast<unsigned char>(c);
+            if (std::isupper(uc))
+            {
+              if (m == "islower")
+                return PyConstValue::make_bool(false);
+              seen_cased = true;
+            }
+            else if (std::islower(uc))
+            {
+              if (m == "isupper")
+                return PyConstValue::make_bool(false);
+              seen_cased = true;
+            }
+          }
+          return PyConstValue::make_bool(seen_cased);
+        }
+
+        if (m == "startswith" || m == "endswith")
+        {
+          if (args_arr.size() != 1)
+            return std::nullopt;
+          auto sub = eval_expr(args_arr[0], env);
+          if (!sub || sub->kind != PyConstValue::STRING)
+            return std::nullopt;
+          const std::string &needle = sub->string_val;
+          if (needle.size() > s.size())
+            return PyConstValue::make_bool(false);
+          bool ok =
+            (m == "startswith")
+              ? s.compare(0, needle.size(), needle) == 0
+              : s.compare(s.size() - needle.size(), needle.size(), needle) == 0;
+          return PyConstValue::make_bool(ok);
+        }
+
+        if (m == "count")
+        {
+          if (args_arr.empty() || args_arr.size() > 3)
+            return std::nullopt;
+          auto sub = eval_expr(args_arr[0], env);
+          if (!sub || sub->kind != PyConstValue::STRING)
+            return std::nullopt;
+          const std::string &needle = sub->string_val;
+          long long start = 0;
+          long long end = static_cast<long long>(s.size());
+          if (args_arr.size() >= 2)
+          {
+            auto a = eval_expr(args_arr[1], env);
+            if (!a || a->kind != PyConstValue::INT)
+              return std::nullopt;
+            start = a->int_val;
+          }
+          if (args_arr.size() == 3)
+          {
+            auto a = eval_expr(args_arr[2], env);
+            if (!a || a->kind != PyConstValue::INT)
+              return std::nullopt;
+            end = a->int_val;
+          }
+          auto sz = static_cast<long long>(s.size());
+          if (start < 0)
+            start += sz;
+          if (end < 0)
+            end += sz;
+          start = std::max<long long>(0, std::min(start, sz));
+          end = std::max<long long>(0, std::min(end, sz));
+          if (end < start)
+            end = start;
+          long long c = 0;
+          if (needle.empty())
+            return PyConstValue::make_int(end - start + 1);
+          size_t pos = static_cast<size_t>(start);
+          auto limit = static_cast<size_t>(end);
+          while (pos + needle.size() <= limit)
+          {
+            if (s.compare(pos, needle.size(), needle) == 0)
+            {
+              ++c;
+              pos += needle.size();
+            }
+            else
+              ++pos;
+          }
+          return PyConstValue::make_int(c);
+        }
+
+        if (m == "find" || m == "rfind" || m == "index")
+        {
+          if (args_arr.size() != 1)
+            return std::nullopt;
+          auto sub = eval_expr(args_arr[0], env);
+          if (!sub || sub->kind != PyConstValue::STRING)
+            return std::nullopt;
+          const std::string &needle = sub->string_val;
+          size_t pos = (m == "rfind") ? s.rfind(needle) : s.find(needle);
+          if (pos == std::string::npos)
+          {
+            if (m == "index")
+              return std::nullopt; // would raise ValueError — leave to BMC
+            return PyConstValue::make_int(-1);
+          }
+          return PyConstValue::make_int(static_cast<long long>(pos));
+        }
+
+        if (m == "strip" || m == "lstrip" || m == "rstrip")
+        {
+          if (!args_arr.empty())
+            return std::nullopt;
+          size_t lo = 0;
+          size_t hi = s.size();
+          if (m != "rstrip")
+            while (lo < hi && std::isspace(static_cast<unsigned char>(s[lo])))
+              ++lo;
+          if (m != "lstrip")
+            while (hi > lo &&
+                   std::isspace(static_cast<unsigned char>(s[hi - 1])))
+              --hi;
+          return PyConstValue::make_string(s.substr(lo, hi - lo));
+        }
+
+        // Unsupported str method — fall through to the normal codegen path.
+        return std::nullopt;
+      }
     }
 
     // Only support simple function calls (Name), not other methods

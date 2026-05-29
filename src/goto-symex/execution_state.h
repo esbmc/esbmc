@@ -10,6 +10,8 @@
 
 #include <list>
 #include <map>
+#include <memory>
+#include <optional>
 #include <set>
 #include <irep2/irep2.h>
 #include <util/message.h>
@@ -18,28 +20,26 @@
 class reachability_treet;
 
 /**
- *  Class representing a global state of variables and threads.
- *  This is made up of two parts: first a "level 2" state and value_set pair
- *  of objects, recording the SSA numbers of variables assigned to, and
- *  what particular pointers can possibly point at (the value set). Then,
- *  there's a vector of goto_symex_statet's recording a set of threads and
- *  their state (call stack, program counter).
+ *  Thread-aware symex state explored by reachability_treet.
  *
- *  We also contain a few things that technically should be in
- *  reachability_treet, such as DFS_traversed recording what context switches
- *  have been taken.
+ *  Holds the global SSA renaming state (level 2) and value set, plus a
+ *  vector of per-thread goto_symex_statet recording each thread's call
+ *  stack, program counter, and local guard. reachability_treet drives this
+ *  object one instruction at a time via symex_step; threading-specific
+ *  instructions (thread spawn, atomic begin/end, yield, monitor) are
+ *  handled here while the rest fall through to goto_symext::symex_step.
  *
- *  A large amount of functionality is implemented by extending goto_symext.
- *  The idea is that reachability_treet symex_step's this object until we
- *  notify it about a context switch point. We catch some threading-specific
- *  instructions in execution_statet::symex_step, and pass the rest to
- *  goto_symext::symex_step. And rather than spraying hooks over goto_symext to
- *  detect context switch points, we override a few virtual functions and pass
- *  the operations being observed back up to reachability_treet.
+ *  Context switches are not detected by ad-hoc hooks. Instead, every
+ *  symex_step records the executed transition into last_transition
+ *  (thread id, optional parent guard, optional branch_resultt). When the
+ *  scheduler later decides to switch threads, preserve_last_paths reads
+ *  last_transition to know which deferred-merge snapshots to carry across
+ *  the switch — including a direct iterator to the branch sibling pushed
+ *  by goto_symext::symex_goto via the record_branch_sibling hook.
  *
- *  Some circumstances require goto_symext fetching data from execution_statet,
- *  such as fetching our thread number or suchlike, or creating a new thread.
- *  These are handled through intrinsic function calls.
+ *  goto_symext occasionally needs data only execution_statet has (current
+ *  thread id, the ability to spawn a new thread); those flow back through
+ *  __ESBMC_* intrinsic calls dispatched in symex_step.
  */
 
 class execution_statet : public goto_symext
@@ -47,7 +47,43 @@ class execution_statet : public goto_symext
 public:
   class ex_state_level2t; // Forward dec
   // Convenience typedef
-  typedef goto_symex_statet::goto_statet goto_statet;
+  typedef goto_symex_statet::merge_statet merge_statet;
+
+  struct branch_resultt
+  {
+    /** Instruction at which the sibling path will be merged in. */
+    goto_programt::const_targett target;
+    /** Direct reference to the sibling merge_statet in
+     *  cur_state->top().merge_state_map[target]. std::list iterators
+     *  don't invalidate on inserts/erases of other nodes.
+     *
+     *  WARNING: this iterator is bound to the merge_state_map of the
+     *  execution_statet that *recorded* it. When the reachability tree
+     *  clones an execution_statet via create_next_state(), the clone
+     *  rebuilds its own threads_state / merge_state_maps but the
+     *  defaulted operator= still copies this iterator unchanged. On
+     *  the clone, sibling therefore points into the **parent**'s
+     *  merge_state_map.
+     *
+     *  This is currently sound because (a) the parent's exploration
+     *  frame stays alive in exploration_frames until backtrack and
+     *  (b) the only consumer (preserve_last_paths, called once from
+     *  update_after_switch_point) runs before anything mutates the
+     *  parent's merge_state_map. If you add code that mutates the
+     *  parent's merge_state_map between clone and preserve, or that
+     *  consumes this iterator later than the very next switch, the
+     *  iterator dereference will read corrupted data — fix by
+     *  snapshotting the {guard, num_instructions, value_set} at record
+     *  time instead of storing the iterator. */
+    goto_symex_statet::merge_state_listt::iterator sibling;
+  };
+
+  struct transition_resultt
+  {
+    unsigned int thread_id = 0;
+    std::optional<guard2tc> parent_guard;
+    std::optional<branch_resultt> branch;
+  };
 
 public:
   /**
@@ -78,7 +114,12 @@ public:
    *  Does what you might expect, but also updates any ex_state_level2t objects
    *  in the new execution_statet to point at the right object. */
   execution_statet(const execution_statet &ex);
-  execution_statet &operator=(const execution_statet &ex);
+  /** Public assignment is deleted: a standalone `a = b` would not be
+   *  correct here (it would leave the base goto_symext slice, threads_state,
+   *  cur_state, and state_level2 as `a`'s old objects). Cloning happens
+   *  via the copy constructor, which uses copy_derived_from internally to
+   *  populate execution_statet's own fields without re-copying the base. */
+  execution_statet &operator=(const execution_statet &ex) = delete;
 
   /**
    *  Default destructor.
@@ -135,20 +176,13 @@ public:
   }
 
   /** Get the number of context switches performed by this ex_state */
-  int get_context_switch()
+  int get_context_switch() const
   {
     return CS_number;
   }
 
-  /** Reset record of what context switches were taken from this ex_state */
-  void resetDFS_traversed()
-  {
-    for (unsigned int i = 0; i < threads_state.size(); i++)
-      DFS_traversed.at(i) = false;
-  }
-
   /** Fetch the thread ID of the current active thread */
-  unsigned int get_active_state_number()
+  unsigned int get_active_state_number() const
   {
     return active_thread;
   }
@@ -194,7 +228,9 @@ public:
    *  Take one instruction and interpret it. Can result in any action, such as
    *  a thread ending, causing a context switch, a function call being taken,
    *  a thread being created, and so forth.
-   *  @param art reachability_treet we're operating with (defunct?)
+   *  @param art reachability_treet driving the exploration; forwarded to
+   *             goto_symext::symex_step so threading intrinsics can call
+   *             back into it.
    */
   void symex_step(reachability_treet &art) override;
 
@@ -276,7 +312,7 @@ public:
    *  @see atomic_numbers
    *  @return Atomic number count for current thread state.
    */
-  unsigned int get_active_atomic_number();
+  unsigned int get_active_atomic_number() const;
 
   /** Increase current threads atomic number count */
   void increment_active_atomic_number();
@@ -317,17 +353,6 @@ public:
    *  conditions on all the previous switches that have happened.
    */
   void execute_guard();
-
-  /**
-   *  Attempt to explore a thread.
-   *  Checks the current DFS state to see whether this thread has already been
-   *  explored, or whether there are other reasons to not explore it. If it's
-   *  explorable, we return true, *and* mark it as explored in DFS_traversed
-   *  @see DFS_traversed.
-   *  @param tid Thread ID we wish to explore.
-   *  @return True if the desired thread is explorable now.
-   */
-  bool dfs_explore_thread(unsigned int tid);
 
   /**
    *  Test to see if interleavings are blocked by the current state.
@@ -372,9 +397,13 @@ public:
    */
   void update_after_switch_point();
 
-  void preserve_last_paths();
+  void preserve_last_paths(const transition_resultt &transition);
   void cull_all_paths();
   void restore_last_paths();
+
+  void record_branch_sibling(
+    goto_programt::const_targett target,
+    statet::merge_state_listt::iterator sibling) override;
 
   /**
    *  Analyze the contents of an assignment for threading.
@@ -425,14 +454,6 @@ public:
    *  and is read-only. */
   bool is_transition_blocked_by_mpor() const
   {
-    /** Tong: according to Mpor rules, it schedule the transitions in increasing order of thread ids,
-     *  and for two independent transitions t1, t2 and tid(t1) < tid (t2), we only allow t2 schedule before t1 when:
-     *  there is a dependency chain ftom t2 to t1, or there exists a transition t3, where tid(t3) < tid(t1), and t2 <x t3 <x t1 along computation x,
-     *  and there is a dependency chain from t2 to t3.
-     *  Based on these, we do not rule out the main thread because there is no tid(t) < 0 and thread 0 should always be scheduled.
-     */
-    if (active_thread == 0)
-      return false;
     return mpor_says_no;
   }
 
@@ -508,27 +529,22 @@ public:
   void analyze_args(const expr2tc &expr) override;
 
 public:
-  /** Pointer to reachability_treet that owns this ex_state */
-  reachability_treet *owning_rt;
   /** Stack of thread states. The index into this vector is the thread ID of
-   *  the goto_symex_statet at that location */
+   *  the goto_symex_statet at that location. The reachability_treet that
+   *  owns this state is reachable via the inherited goto_symext::art1. */
   std::vector<goto_symex_statet> threads_state;
   /** Preserved paths. After switching out of a thread, only the paths active
    *  at the time the switch occurred are allowed to live, and are stored
-   *  here. Format is: for each thread, a list of paths, which are made up
-   *  of an insn number where the path merges and it's goto_statet when we
-   *  switched away. Preserved paths can only be in the top() frame.  */
-  std::vector<std::list<std::pair<goto_programt::const_targett, goto_statet>>>
+   *  here. Format is: for each thread, a list of paths made from the
+   *  instruction where the path merges and the merge_statet snapshot captured
+   *  when we switched away. Preserved paths can only be in the top() frame. */
+  std::vector<std::list<std::pair<goto_programt::const_targett, merge_statet>>>
     preserved_paths;
   /** Atomic section count. Every time an atomic begin is executed, the
    *  atomic_number corresponding to the thread is incremented, allowing nested
    *  atomic begins and ends. A nonzero atomic number for a thread means that
    *  interleavings are disabled currently. */
   std::vector<unsigned int> atomic_numbers;
-  /** Record of which context switches have been taken from this state.
-   *  Every time a context switch is taken, the bool in this vector is set to
-   *  true at the corresponding thread IDs index. */
-  std::vector<bool> DFS_traversed;
   /** Storage for threading libraries thread start data. See version history
    *  of when this was introduced to fully understand why; essentially this
    *  is a workaround to prevent too much nondeterminism entering into the
@@ -536,8 +552,8 @@ public:
   std::vector<expr2tc> thread_start_data;
   /** Last active thread's ID. */
   unsigned int last_active_thread;
-  /** Last executed insn -- sometimes necessary for analysis. */
-  const goto_programt::instructiont *last_insn;
+  /** Explicit result of the last symbolic transition taken. */
+  transition_resultt last_transition;
   /** Global L2 state of this execution_statet. It's also copied as a reference
    *  into each threads own state. */
   std::shared_ptr<ex_state_level2t> state_level2;
@@ -549,8 +565,9 @@ public:
   irep_idt guard_execution;
   /** Number of nondeterministic symbols in this state. */
   unsigned nondet_count;
-  /** Number of dynamic objects in this state. */
-  static unsigned dynamic_counter;
+  /** Number of dynamic objects in this state. thread_local so parallel
+   *  symex doesn't race on the counter. */
+  static thread_local unsigned dynamic_counter;
   /** Identifying number for this execution state. Used to distinguish runs
    *  in --schedule mode. */
   unsigned int node_id;
@@ -558,10 +575,6 @@ public:
    *  Means that there is no path from here on where any assertion may
    *  become satisfiable. */
   bool interleaving_unviable;
-  /** State guard prior to a GOTO instruction causing a cswitch. Any thread
-   *  interleaved after a GOTO will be composed with this guard, rather than
-   *  the guard from any of the branches of the GOTO itself. */
-  guard2tc pre_goto_guard;
   /** TID of monitor thread, for monitor intrinsics. */
   unsigned int monitor_tid;
   /** Whether monitor_tid is set. */
@@ -570,8 +583,6 @@ public:
   unsigned int monitor_from_tid;
   /** Whether monitor_from_tid is set */
   bool mon_from_tid;
-  /** Have we warned of an ended monitor thread already?. */
-  bool mon_thread_warning;
   /** Minimum number of threads to exist to consider a context switch.
    *  In certain special cases, such as LTL checking, various pieces of
    *  code and information are bunged into separate threads which aren't
@@ -612,10 +623,21 @@ protected:
    *  switching? */
   bool smt_thread_guard;
 
+  /** Copy execution_statet's own scheduling fields from `ex`. The base
+   *  goto_symext slice is left untouched (the copy constructor's
+   *  initialiser list handles it once). state_level2 and threads_state
+   *  are also left untouched: state_level2 is cloned in the initialiser
+   *  list, and threads_state is rebuilt by the copy constructor body
+   *  against that clone. */
+  void copy_derived_from(const execution_statet &ex);
+
   // Static stuff:
 
 public:
-  static unsigned int node_count;
+  // thread_local so parallel symex threads (--k-induction-parallel)
+  // don't race on this counter. Each thread's interleaving exploration
+  // numbers its own nodes; cross-thread numbering isn't meaningful.
+  static thread_local unsigned int node_count;
 
   friend void build_goto_symex_classes();
 };

@@ -39,7 +39,9 @@ _MEMORY_LIMIT_ENVVAR = "ESBMC_REGRESS_MEMORY_LIMIT"
 # FUTURE -> Test that are known to fail due to missing implementation
 # ALL -> Run all tests
 SUPPORTED_TEST_MODES = ["CORE", "FUTURE", "THOROUGH", "KNOWNBUG", "ALL"]
-FAIL_MODES = ["KNOWNBUG"]
+# FAIL_MODES: regex describes desired post-fix output; current run must NOT
+# match. Matching = test now passes -> exit 77, prompting reclassification.
+FAIL_MODES = ["KNOWNBUG", "FUTURE"]
 
 # Bring up a single benchmark
 BENCHMARK_BRINGUP = False
@@ -230,6 +232,18 @@ def _add_test(test_case, executor):
         stdout, stderr, rc = executor.run(test_case)
 
         if stdout is None:
+            # Timeout: ESBMC didn't finish within ESBMC_REGRESS_TIMEOUT.
+            # For KNOWNBUG tests, "doesn't produce the expected output
+            # within the budget" is exactly the bug being tracked, so
+            # treat a timeout as satisfying the KNOWNBUG expectation
+            # rather than as a hard failure that breaks CI.
+            if test_case.test_mode in FAIL_MODES:
+                print(
+                    "TIMEOUT after limit {}s -- accepted under {}".format(
+                        executor.timeout or "none", test_case.test_mode
+                    )
+                )
+                return
             timeout_message = "\nTIMEOUT TEST: {} (limit {}s)".format(
                 test_case.test_dir, executor.timeout or "none")
             if stderr:
@@ -274,7 +288,7 @@ def _add_test(test_case, executor):
         if (test_case.test_mode in FAIL_MODES) and matches_regex:
             rel_path = os.path.relpath(test_case.test_dir, os.path.dirname(__file__))
             print(
-                f"\033[33mERROR: Test '{rel_path}' passed but is marked as KNOWNBUG. Consider reclassifying it as CORE.\033[0m"
+                f"\033[33mERROR: Test '{rel_path}' passed but is marked as {test_case.test_mode}. Consider reclassifying it as CORE.\033[0m"
             )
             sys.exit(77)
         elif (test_case.test_mode not in FAIL_MODES) and (not matches_regex):

@@ -92,7 +92,7 @@ cpp_expr2stringt::convert_struct(const exprt &src, unsigned &precedence)
       dest += tmp;
     }
 
-    o_it++;
+    ++o_it;
   }
 
   dest += " }";
@@ -185,13 +185,14 @@ std::string cpp_expr2stringt::convert_rec(
     }
 
     if (
-      symbol->type.id() == "struct" || symbol->type.id() == "incomplete_struct")
+      symbol->get_type().id() == "struct" ||
+      symbol->get_type().id() == "incomplete_struct")
     {
       std::string dest = new_qualifiers.as_string();
 
-      if (symbol->type.get_bool("#class"))
+      if (symbol->get_type().get_bool("#class"))
         dest += "class";
-      else if (symbol->type.get_bool("#interface"))
+      else if (symbol->get_type().get_bool("#interface"))
         dest += "__interface"; // MS-specific
       else
         dest += "struct";
@@ -200,7 +201,7 @@ std::string cpp_expr2stringt::convert_rec(
       dest += d;
       return dest;
     }
-    if (symbol->type.id() == "c_enum")
+    if (symbol->get_type().id() == "c_enum")
     {
       std::string dest = new_qualifiers.as_string();
 

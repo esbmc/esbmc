@@ -2,7 +2,6 @@
 #include <goto-programs/loopst.h>
 #include <irep2/irep2_utils.h>
 #include <util/arith_tools.h>
-#include <util/config.h>
 #include <unordered_set>
 
 namespace
@@ -396,6 +395,15 @@ bool parse_init(
       return false;
     if (it->is_location() || it->is_skip() || it->is_decl() || it->type == DEAD)
       continue;
+    // Skip instrumentation that only the inductive step sees (e.g.
+    // the NONDET havoc and entry-cond ASSUME goto_termination /
+    // goto_k_induction insert just before loop_head). The original
+    // pre-loop init ASSIGN lies further back in the instruction
+    // stream; the inductive_step_instruction markers are transparent
+    // to base case / forward condition by construction, so the
+    // rewrite they're not part of remains sound.
+    if (it->inductive_step_instruction)
+      continue;
     if (!it->is_assign())
       return false;
     const code_assign2t &a = to_code_assign2t(it->code);
@@ -547,7 +555,7 @@ bool try_step_recognition(
 
 /// One pass over a function. Returns true iff any loop was erased (so
 /// the caller can iterate to fixpoint).
-bool simplify_function_once(goto_functiont &fn)
+bool simplify_function_once(goto_functiont &fn, const optionst &options)
 {
   if (!fn.body_available)
     return false;
@@ -570,22 +578,29 @@ bool simplify_function_once(goto_functiont &fn)
     // in place. Mirrors goto_loopst::find_function_loops's rewrite,
     // which only fires when a loop-discovering pass is enabled
     // (interval-analysis, k-induction, loop-invariant, contractor).
-    // Doing it here makes the rewrite unconditional for plain BMC.
-    // symex_goto.cpp's self-loop handler stays as a defensive fallback
-    // for modes that skip this pass (--termination, --unwinding-
-    // assertions).
+    // symex_goto.cpp's self-loop handler stays as a defensive fallback.
     if (loop_head == loop_exit)
     {
+      // A bare self-loop has no body, so its guard's truth value never
+      // changes: `A: IF cond GOTO A` spins forever exactly when cond holds,
+      // and `A: GOTO A` always spins. We rewrite the head to an ASSUME
+      // (assume(false) unconditionally, assume(!cond) conditionally),
+      // killing the non-terminating path. This intentionally suppresses the
+      // back-edge unwinding-assertion signal (knowing a program merely needs
+      // more unwinding is rarely actionable), but under --termination the
+      // same rewrite would mask a real non-termination verdict, so skip it.
+      if (options.get_bool_option("termination"))
+        continue;
+
       if (is_true(it->guard))
       {
-        // Unconditional infinite loop: kill the path.
         it->make_assumption(gen_false_expr());
       }
       else
       {
-        // `IF cond GOTO self` exits exactly when !cond; the post-loop
-        // state is constrained by !cond. Copy the guard out before
-        // make_assumption (clear() runs first, resetting it).
+        // `IF cond GOTO self` exits exactly when !cond; constrain the
+        // post-state to !cond. Copy the guard out before make_assumption
+        // (clear() runs first, resetting it).
         expr2tc cond = it->guard;
         make_not(cond);
         it->make_assumption(cond);
@@ -640,34 +655,7 @@ bool simplify_function_once(goto_functiont &fn)
       is_dowhile = true;
     }
 
-    // Under --termination: only the empty-body `while (1) {}` /
-    // `for (;;) {}` shape is sound to collapse — the body cannot
-    // contain a break/return/goto-out or a reachable assert, so the
-    // rewrite to assume(false) faithfully models the unreachable
-    // post-loop state. body_is_safe rejects anything beyond
-    // LOCATION/SKIP/DECL/DEAD and non-pointer ASSIGNs; we additionally
-    // require modified.empty() so even the trivial ASSIGNs are absent.
-    // The previous "fire on any constant-false guard" version produced
-    // ~880 incorrect-true verdicts on SV-COMP's Termination-* tracks
-    // by collapsing loops whose bodies had reachable internal exits.
-    if (config.options.get_bool_option("termination"))
-    {
-      expr2tc exit_guard_simp = exit_guard;
-      simplify(exit_guard_simp);
-      if (is_false(exit_guard_simp))
-      {
-        name_set modified;
-        if (
-          body_is_safe(body_first, loop_exit, loop_head, modified) &&
-          modified.empty())
-        {
-          loop_head->make_assumption(gen_false_expr());
-          erase_loop(std::next(loop_head), loop_exit);
-          changed = true;
-        }
-      }
-      continue;
-    }
+    const bool termination_mode = options.get_bool_option("termination");
 
     // Refuse if loop_head has any incoming GOTO other than the
     // back-edge. An external `goto L; … L: while(...)` would land on
@@ -689,8 +677,15 @@ bool simplify_function_once(goto_functiont &fn)
     // are NOT erased here: the loop's termination and post-state are
     // both observable, and a syntactic "vars die" check proves
     // neither. Counter patterns get the precise rewrite via Path 2.
+    //
+    // Under --termination: skip Path 1. It rewrites the head to
+    // `assume(exit_guard)`, which for `while (1) {}` becomes
+    // `assume(false)` — killing the path at depth 0 and letting FC
+    // close UNSAT vacuously. SV-COMP requires non-terminating
+    // programs to report failure (LTL(F end) violation), so this
+    // erasure would silently mask the non-termination.
     if (
-      modified.empty() && !is_dowhile &&
+      !termination_mode && modified.empty() && !is_dowhile &&
       modified_vars_die_immediately(
         after_loop, body.instructions.end(), modified))
     {
@@ -708,6 +703,14 @@ bool simplify_function_once(goto_functiont &fn)
     //
     // Interval analysis has already run, so symbolic bounds proven to
     // be singletons are now constant_int2t.
+    //
+    // Safe under --termination because the recognition pattern only
+    // matches strictly-terminating counter loops with constant
+    // bounds, and try_step_recognition refuses the rewrite when the
+    // computed post-value would overflow the induction variable's
+    // type. A non-terminating loop cannot match the recognition
+    // template, so the rewrite never converts a non-terminating
+    // shape into a terminating one.
     if (try_step_recognition(
           body, loop_head, loop_exit, body_first, exit_guard, is_dowhile))
     {
@@ -719,66 +722,59 @@ bool simplify_function_once(goto_functiont &fn)
   return changed;
 }
 
-void simplify_function(goto_functiont &fn)
+void simplify_function(goto_functiont &fn, const optionst &options)
 {
-  while (simplify_function_once(fn))
+  while (simplify_function_once(fn, options))
     ;
 }
 } // namespace
 
-void goto_loop_simplify(goto_functionst &goto_functions)
+void goto_loop_simplify(
+  goto_functionst &goto_functions,
+  const optionst &options)
 {
-  // Gated on the user explicitly opting out of the unwinding-
-  // assertion signal (--no-unwinding-assertions) or opting into the
-  // termination reduction (--termination). Outside these two modes
-  // the pass is a no-op.
+  // Enabled by default. Removing a loop we can prove has no observable
+  // effect (Path 1), whose exact post-state we can compute (Path 2), or
+  // that is a bare self-loop, removes the single biggest obstacle a BMC
+  // engine faces. The pass runs in every mode except the two where a loop
+  // rewrite is genuinely unsound or destroys a needed signal:
   //
-  // Why the gate matters: by default, ESBMC emits an unwinding
-  // assertion at every loop back-edge that fires when the loop
-  // hasn't fully unwound within --unwind k. That assertion is the
-  // user-visible non-termination signal at the chosen depth.
-  // Erasing or rewriting a loop in goto_loop_simplify would suppress
-  // that signal even when the loop body is otherwise side-effect-
-  // free, breaking the verification contract (cf. regression/
-  // bitwuzla/get_model_values, regression/parallel-solving/uthash-1).
+  //   - --termination: Path 1 and the self-loop rewrite are skipped. They
+  //     rewrite an infinite empty loop's head to assume(false), which would
+  //     mask the non-termination verdict (LTL(F end) violation) that is the
+  //     property under test. Path 2 still runs: it only matches
+  //     strictly-terminating, overflow-checked counter loops, so it can
+  //     never turn a non-terminating shape into a terminating one.
   //
-  // What each mode does:
-  //   --no-unwinding-assertions: Path 1 (erase dead loops with no
-  //     escaping side effects) and Path 2 (step recognition for
-  //     constant-bound counter loops) run. The self-loop and
-  //     constant-false-exit-guard rewrites stay off — symex's loop
-  //     handling already does the right thing in that mode.
+  //   - Coverage modes: skipped entirely — erasing loops drops branch
+  //     points the coverage instrumentation needs to count.
   //
-  //   --termination: only the constant-false-exit-guard rewrite (and
-  //     the single-instruction self-loop rewrite) fire — both gated
-  //     inside simplify_function_once. Path 1 and Path 2 are skipped
-  //     because they would discard loops whose presence is observable
-  //     under the termination reduction.
-  //
-  // Coverage modes: also skipped — erasing loops drops branch points
-  // the coverage instrumentation needs to count.
+  // We deliberately DO NOT gate on the unwinding-assertion signal. By
+  // default ESBMC emits an unwinding assertion at each loop back-edge that
+  // fails when the loop is not fully unwound within --unwind k; rewriting a
+  // loop away suppresses that failure. That is acceptable: an
+  // unwinding-assertion failure only tells the user to unwind more, which is
+  // rarely actionable, whereas removing the loop lets the program verify
+  // outright. (cf. regression/bitwuzla/get_model_values,
+  // regression/parallel-solving/uthash-1, whose expectations change
+  // accordingly.)
   if (
-    !config.options.get_bool_option("no-unwinding-assertions") &&
-    !config.options.get_bool_option("termination"))
-    return;
-
-  if (
-    config.options.get_bool_option("assertion-coverage") ||
-    config.options.get_bool_option("assertion-coverage-claims") ||
-    config.options.get_bool_option("branch-coverage") ||
-    config.options.get_bool_option("branch-coverage-claims") ||
-    config.options.get_bool_option("branch-function-coverage") ||
-    config.options.get_bool_option("branch-function-coverage-claims") ||
-    config.options.get_bool_option("condition-coverage") ||
-    config.options.get_bool_option("condition-coverage-claims") ||
-    config.options.get_bool_option("condition-coverage-rm") ||
-    config.options.get_bool_option("condition-coverage-claims-rm") ||
-    config.options.get_bool_option("k-path-coverage") ||
-    config.options.get_bool_option("k-path-coverage-claims"))
+    options.get_bool_option("assertion-coverage") ||
+    options.get_bool_option("assertion-coverage-claims") ||
+    options.get_bool_option("branch-coverage") ||
+    options.get_bool_option("branch-coverage-claims") ||
+    options.get_bool_option("branch-function-coverage") ||
+    options.get_bool_option("branch-function-coverage-claims") ||
+    options.get_bool_option("condition-coverage") ||
+    options.get_bool_option("condition-coverage-claims") ||
+    options.get_bool_option("condition-coverage-rm") ||
+    options.get_bool_option("condition-coverage-claims-rm") ||
+    options.get_bool_option("k-path-coverage") ||
+    options.get_bool_option("k-path-coverage-claims"))
     return;
 
   Forall_goto_functions (it, goto_functions)
-    simplify_function(it->second);
+    simplify_function(it->second, options);
 
   goto_functions.update();
 }

@@ -90,7 +90,7 @@ sexpr *smtlib_output = NULL;
 
 /* Rules */
 
-response: TOK_START_GEN gen_response
+response: TOK_START_GEN gen_response { yychar = YYEOF; $$ = $2; smtlib_output = $2; }
           | TOK_START_INFO get_info_response
           {
             yychar = YYEOF;
@@ -103,16 +103,16 @@ response: TOK_START_GEN gen_response
             $$ = $2;
             smtlib_output = $2;
           }
-          | TOK_START_ASSERTS get_assertions_response
-          | TOK_START_UNSATS get_unsat_core_response
+          | TOK_START_ASSERTS get_assertions_response { $$ = nullptr; }
+          | TOK_START_UNSATS get_unsat_core_response { $$ = nullptr; }
           | TOK_START_VALUE get_value_response
           {
             yychar = YYEOF;
             $$ = $2;
             smtlib_output = $2;
           }
-          | TOK_START_ASSIGN get_assignment_response
-          | TOK_START_OPTION get_option_response
+          | TOK_START_ASSIGN get_assignment_response { $$ = nullptr; }
+          | TOK_START_OPTION get_option_response { $$ = nullptr; }
           | TOK_START_INFO gen_response { yychar = YYEOF; smtlib_output = $2; }
           | TOK_START_SAT gen_response { yychar = YYEOF; smtlib_output = $2; }
           | TOK_START_ASSERTS gen_response {yychar = YYEOF; smtlib_output = $2;}
@@ -340,7 +340,7 @@ sortvar_list: sorted_var | sortvar_list sorted_var
 
 term_list: term | term_list term
 
-term_list_empt: { $$ = new sexpr(); } | term | term_list term
+term_list_empt: { $$ = new sexpr(); } | term | term_list term { $$ = $2; }
 
 term: spec_constant
        | qual_identifier

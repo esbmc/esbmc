@@ -17,7 +17,7 @@ set(ESBMC_VERSION "${ESBMC_VERSION_MAJOR}.${ESBMC_VERSION_MINOR}.${ESBMC_VERSION
 # Solver subdirectories append to this during configuration.
 set(ESBMC_AVAILABLE_SOLVERS "")
 
-set(MAX_SUPPORTED_LLVM_VERSION_MAJOR 21)
+set(MAX_SUPPORTED_LLVM_VERSION_MAJOR 22)
 
 #################################
 # Configuration                 #

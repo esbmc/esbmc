@@ -268,7 +268,7 @@ The in-tree exemplar is the `--ir-ieee` real-arithmetic FP mode
   the pointer/memory model.
 - `src/solvers/smt/smt_conv.{h,cpp}` — encoding flag, any new
   `smt_func_kind` entries, and the encoding hook itself.
-- `src/util/simplify_expr.cpp` — simplification rules for new operators,
+- `src/util/expr_simplifier.cpp` — simplification rules for new operators,
   if any.
 - Each affected backend — typically `bitwuzla/`, `boolector/`, and the
   text backend `smtlib/smtlib_conv.cpp`.

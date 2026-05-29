@@ -13,12 +13,11 @@
 #include <irep2/irep2.h>
 #include <util/migrate.h>
 #include <util/std_expr.h>
-#include <util/string2array.h>
 #include <vector>
 #include <util/yaml_parser.h>
 
-unsigned int execution_statet::node_count = 0;
-unsigned int execution_statet::dynamic_counter = 0;
+thread_local unsigned int execution_statet::node_count = 0;
+thread_local unsigned int execution_statet::dynamic_counter = 0;
 
 execution_statet::execution_statet(
   const goto_functionst &goto_functions,
@@ -29,11 +28,10 @@ execution_statet::execution_statet(
   std::shared_ptr<ex_state_level2t> l2init,
   optionst &options)
   : goto_symext(ns, context, goto_functions, std::move(_target), options),
-    owning_rt(art),
     state_level2(std::move(l2init)),
     global_value_set(ns)
 {
-  art1 = owning_rt;
+  art1 = art;
   CS_number = 0;
   node_id = 0;
   tid_is_set = false;
@@ -90,15 +88,6 @@ execution_statet::execution_statet(
 
   atomic_numbers.push_back(0);
 
-  if (DFS_traversed.size() <= state.source.thread_nr)
-  {
-    DFS_traversed.push_back(false);
-  }
-  else
-  {
-    DFS_traversed[state.source.thread_nr] = false;
-  }
-
   thread_start_data.emplace_back();
 
   // Initial mpor tracking.
@@ -112,58 +101,53 @@ execution_statet::execution_statet(
   cswitch_forced = false;
   active_thread = 0;
   last_active_thread = 0;
-  last_insn = nullptr;
   node_count = 0;
   nondet_count = 0;
-  DFS_traversed.reserve(1);
-  DFS_traversed[0] = false;
-  mon_thread_warning = false;
 
   thread_cswitch_threshold = (options.get_bool_option("ltl")) ? 3 : 2;
 }
 
 execution_statet::execution_statet(const execution_statet &ex)
   : goto_symext(ex),
-    owning_rt(ex.owning_rt),
     state_level2(
       std::dynamic_pointer_cast<ex_state_level2t>(ex.state_level2->clone())),
     global_value_set(ex.global_value_set)
 {
-  *this = ex;
+  // The base slice is already copied by goto_symext(ex) in the
+  // initialiser list; state_level2 / global_value_set are cloned there
+  // too. copy_derived_from populates execution_statet's own fields
+  // without touching the base, state_level2, threads_state, or
+  // global_value_set.
+  copy_derived_from(ex);
 
-  // Regenerate threads state using new objects state_level2 ref
+  // Regenerate threads state using the cloned level2/value_set so each
+  // goto_symex_statet refers to the new instance, not the source's.
   threads_state.clear();
-  std::vector<goto_symex_statet>::const_iterator it;
-  for (it = ex.threads_state.begin(); it != ex.threads_state.end(); ++it)
-  {
-    goto_symex_statet state(*it, *state_level2, global_value_set);
-    threads_state.push_back(state);
-  }
+  for (const auto &t : ex.threads_state)
+    threads_state.emplace_back(t, *state_level2, global_value_set);
 
   // Reassign which state is currently being worked on.
   cur_state = &threads_state[active_thread];
 }
 
-execution_statet &execution_statet::operator=(const execution_statet &ex)
+void execution_statet::copy_derived_from(const execution_statet &ex)
 {
-  // Don't copy level2, copy cons it in execution_statet(ref)
-  //state_level2 = ex.state_level2;
+  // Only execution_statet's own scheduling fields are touched here. The
+  // goto_symext base, state_level2, threads_state, and global_value_set
+  // are deliberately omitted: the copy constructor handles them via its
+  // initialiser list (base + state_level2 clone + global_value_set) and
+  // body (threads_state rebuilt against the cloned level2).
 
-  threads_state = ex.threads_state;
   preserved_paths = ex.preserved_paths;
   atomic_numbers = ex.atomic_numbers;
-  DFS_traversed = ex.DFS_traversed;
   thread_start_data = ex.thread_start_data;
   last_active_thread = ex.last_active_thread;
-  last_insn = ex.last_insn;
+  last_transition = ex.last_transition;
   active_thread = ex.active_thread;
   guard_execution = ex.guard_execution;
   nondet_count = ex.nondet_count;
   node_id = ex.node_id;
-  global_value_set = ex.global_value_set;
   interleaving_unviable = ex.interleaving_unviable;
-  pre_goto_guard = ex.pre_goto_guard;
-  mon_thread_warning = ex.mon_thread_warning;
 
   monitor_tid = ex.monitor_tid;
   tid_is_set = ex.tid_is_set;
@@ -173,10 +157,6 @@ execution_statet &execution_statet::operator=(const execution_statet &ex)
   symex_trace = ex.symex_trace;
   smt_during_symex = ex.smt_during_symex;
   smt_thread_guard = ex.smt_thread_guard;
-  stack_limit = ex.stack_limit;
-  no_return_value_opt = ex.no_return_value_opt;
-  validate_witness = ex.validate_witness;
-  witness_target_line = ex.witness_target_line;
 
   CS_number = ex.CS_number;
 
@@ -186,40 +166,15 @@ execution_statet &execution_statet::operator=(const execution_statet &ex)
   mpor_says_no = ex.mpor_says_no;
   cswitch_forced = ex.cswitch_forced;
 
-  // Vastly irritatingly, we have to iterate through existing level2t objects
-  // updating their ex_state references. There isn't an elegant way of updating
-  // them, it seems, while keeping the symex stuff ignorant of ex_state.
-  // Oooooo, so this is where auto types would be useful...
-  for (auto &it : threads_state)
-  {
-    for (goto_symex_statet::call_stackt::iterator it2 = it.call_stack.begin();
-         it2 != it.call_stack.end();
-         ++it2)
-    {
-      for (auto &it3 : it2->goto_state_map)
-      {
-        for (goto_symex_statet::goto_state_listt::iterator it4 =
-               it3.second.begin();
-             it4 != it3.second.begin();
-             ++it4)
-        {
-          ex_state_level2t &l2 = dynamic_cast<ex_state_level2t &>(it4->level2);
-          l2.owner = this;
-        }
-      }
-    }
-  }
-
   state_level2->owner = this;
-
-  return *this;
 }
 
 void execution_statet::symex_step(reachability_treet &art)
 {
   statet &state = get_active_state();
   const goto_programt::instructiont &instruction = *state.source.pc;
-  last_insn = &instruction;
+  last_transition = transition_resultt();
+  last_transition.thread_id = active_thread;
 
   merge_gotos();
 
@@ -236,10 +191,13 @@ void execution_statet::symex_step(reachability_treet &art)
     (base_case || forward_condition) && instruction.inductive_step_instruction)
   {
     // This assertion will prevent us of having weird side-effects (issue #538)
-    // e.g. having inductive step instructions in a incremental strategy
+    // e.g. having inductive step instructions in a incremental strategy.
+    // --termination also legitimately produces inductive-step instructions
+    // (the post-main assert(false) marker inserted by goto_termination).
     assert(
-      k_induction &&
-      "Inductive step instructions should be set only for k-induction");
+      (k_induction || options.get_bool_option("termination")) &&
+      "Inductive step instructions should be set only for k-induction "
+      "or termination");
     cur_state->source.pc++;
     return;
   }
@@ -267,19 +225,26 @@ void execution_statet::symex_step(reachability_treet &art)
     if (instruction.function == "__ESBMC_main")
     {
       end_thread();
-      owning_rt->main_thread_ended = true;
+      art1->main_thread_ended = true;
     }
     else if (
       (instruction.function == "c:@F@main" ||
        instruction.function == "c:@F@main#") &&
       !options.get_bool_option("deadlock-check") &&
-      !options.get_bool_option("memory-leak-check"))
+      !options.get_bool_option("memory-leak-check") &&
+      !options.get_bool_option("termination"))
     {
       // check whether we reached the end of the main function and
       // whether we are not checking for (local and global) deadlocks and memory leaks.
       // We should end the main thread to avoid exploring further interleavings
       // TODO: once we support at_exit, we should check this code
       // TODO: we should support verifying memory leaks in multi-threaded C programs.
+      //
+      // Skipped under --termination: the strategy inserts an
+      // `assert(false)` after the main() call in __ESBMC_main to
+      // detect terminating paths. The assume(false) here would kill
+      // the path before reaching that marker; the assertion would
+      // never become a VCC.
       assume(gen_false_expr());
       end_thread();
       interleaving_unviable = true;
@@ -321,8 +286,6 @@ void execution_statet::symex_assign(
   const bool hidden,
   const guard2tc &guard)
 {
-  pre_goto_guard = guard2tc();
-
   goto_symext::symex_assign(code, hidden, guard);
 
   if (threads_state.size() >= thread_cswitch_threshold)
@@ -331,8 +294,6 @@ void execution_statet::symex_assign(
 
 void execution_statet::claim(const expr2tc &expr, const std::string &msg)
 {
-  pre_goto_guard = guard2tc();
-
   goto_symext::claim(expr, msg);
 
   if (threads_state.size() >= thread_cswitch_threshold)
@@ -341,7 +302,7 @@ void execution_statet::claim(const expr2tc &expr, const std::string &msg)
 
 void execution_statet::symex_goto(const expr2tc &old_guard)
 {
-  pre_goto_guard = threads_state[active_thread].guard;
+  last_transition.parent_guard = threads_state[active_thread].guard;
 
   goto_symext::symex_goto(old_guard);
 
@@ -349,10 +310,15 @@ void execution_statet::symex_goto(const expr2tc &old_guard)
     analyze_read(old_guard);
 }
 
+void execution_statet::record_branch_sibling(
+  goto_programt::const_targett target,
+  statet::merge_state_listt::iterator sibling)
+{
+  last_transition.branch = branch_resultt{target, sibling};
+}
+
 void execution_statet::assume(const expr2tc &assumption)
 {
-  pre_goto_guard = guard2tc();
-
   goto_symext::assume(assumption);
 
   if (threads_state.size() >= thread_cswitch_threshold)
@@ -379,7 +345,7 @@ const goto_symex_statet &execution_statet::get_active_state() const
   return threads_state.at(active_thread);
 }
 
-unsigned int execution_statet::get_active_atomic_number()
+unsigned int execution_statet::get_active_atomic_number() const
 {
   return atomic_numbers.at(active_thread);
 }
@@ -413,38 +379,22 @@ void execution_statet::switch_to_thread(unsigned int i)
   cur_state = &threads_state[active_thread];
 }
 
-bool execution_statet::dfs_explore_thread(unsigned int tid)
-{
-  if (DFS_traversed.at(tid))
-    return false;
-
-  if (threads_state.at(tid).call_stack.empty())
-    return false;
-
-  if (threads_state.at(tid).thread_ended)
-    return false;
-
-  DFS_traversed.at(tid) = true;
-  return true;
-}
-
 bool execution_statet::check_if_ileaves_blocked()
 {
-  if (owning_rt->get_CS_bound() != -1 && CS_number >= owning_rt->get_CS_bound())
+  if (art1->get_CS_bound() != -1 && CS_number >= art1->get_CS_bound())
     return true;
 
   if (get_active_atomic_number() > 0)
     return true;
 
-  if (owning_rt->directed_interleavings)
+  if (art1->directed_interleavings)
     // Don't generate interleavings automatically - instead, the user will
     // inserts intrinsics identifying where they want interleavings to occur,
     // and to what thread.
     return true;
 
   if (
-    owning_rt->main_thread_ended &&
-    !options.get_bool_option("deadlock-check") &&
+    art1->main_thread_ended && !options.get_bool_option("deadlock-check") &&
     !options.get_bool_option("data-races-check"))
     // Don't generate further interleavings since __ESBMC_main thread has ended.
     return true;
@@ -475,7 +425,6 @@ void execution_statet::end_thread()
 void execution_statet::update_after_switch_point()
 {
   execute_guard();
-  resetDFS_traversed();
 
   // MPOR records the variables accessed in last transition taken; we're
   // starting a new transition, so for the current thread, clear records.
@@ -491,95 +440,54 @@ void execution_statet::update_after_switch_point()
   // need to be preserved in at least one interleaving.
   if (last_active_thread != active_thread)
   {
-    preserve_last_paths();
+    preserve_last_paths(last_transition);
     cull_all_paths();
     restore_last_paths();
   }
 }
 
-void execution_statet::preserve_last_paths()
+void execution_statet::preserve_last_paths(const transition_resultt &transition)
 {
   // If the thread terminated, there are no paths to preserve: this is the final
   // switching away.
   if (threads_state[last_active_thread].thread_ended)
     return;
 
-  // Examine the current execution state and the last insn, deciding which paths
-  // are going to be preserved after this context switch. The current
-  // instruction and guard are guaranteed (unless the guard is false), but if
-  // we switched on a GOTO instruction, we may have forked. In that case we
-  // need to find the branch that was generated there.
+  // Examine the current execution state and the explicit result of the last
+  // transition, deciding which paths are going to be preserved after this
+  // context switch. The current instruction and guard are guaranteed (unless
+  // the guard is false), and any branch path generated by the transition has
+  // already been recorded by the GOTO symex step.
 
   auto &pp = preserved_paths[last_active_thread];
   auto &ls = threads_state[last_active_thread];
   assert(pp.size() == 0 && "Unmerged preserved paths in ex_state");
-  assert(last_insn != nullptr && "Last insn unset in preserve_last_paths");
+  assert(
+    transition.thread_id == last_active_thread &&
+    "Preserving paths for the wrong transition thread");
 
   // Add the current path to the set of paths to be preserved. Don't do this
   // if the current guard is false, though.
   if (!ls.guard.is_false() || !is_cur_state_guard_false(ls.guard.as_expr()))
-    pp.push_back(std::make_pair(ls.source.pc, goto_statet(ls)));
+    pp.push_back(std::make_pair(ls.source.pc, merge_statet(ls)));
 
-  // Now then -- was it a goto? And did we actually branch to it? Detect this
-  // by examining how the guard has changed: if there's no change, then the
-  // GOTO condition must have evaluated to false.
-  bool no_branch = (pre_goto_guard == ls.guard);
-  if (last_insn->type == GOTO && !no_branch)
+  if (transition.branch)
   {
-    // We know where it branched to: fetch a reference to the list of all states
-    // to be merged in there
-    assert(last_insn->targets.size() == 1);
-    auto target_insn_it = *last_insn->targets.begin();
-    auto it = ls.top().goto_state_map.find(target_insn_it);
+    // The GOTO that produced this transition pushed a sibling merge_statet
+    // onto ls.top().merge_state_map[transition.branch->target]. We captured
+    // an iterator to it at the time, so no further scan or guard matching
+    // is needed.
+    //
+    // Sanity: the map entry for the recorded target must still exist.
+    // See branch_resultt::sibling docs for why the iterator can survive
+    // the clone but stays load-bearing: this assertion does NOT catch
+    // a dangling iterator, only the easier case where the list entry
+    // itself disappeared.
     assert(
-      it != ls.top().goto_state_map.end() &&
-      "Nonexistant preserved-path target?");
-    auto &statelist = it->second;
-
-    // There may be multiple paths in the map to be merged at that location,
-    // for example if it's the loop end. Detect two circumstances: first where
-    // the guard of the to-be-merged state is identical to the pre-goto guard,
-    // meaning that the GOTO we executed had an unconditionally-true guard.
-    // Second where the current-path guard plus the to-be-merged guard is equal
-    // to the pre-goto guard: in that case, these can only be the two descendant
-    // paths from the pre-goto state.
-    const goto_statet *tomerge = nullptr;
-    for (const goto_statet &gs : statelist)
-    {
-      bool merge = false;
-
-      if (gs.guard == pre_goto_guard)
-      {
-        merge = true;
-      }
-      else
-      {
-        guard2tc tmp(ls.guard);
-        tmp |= gs.guard;
-
-        expr2tc foo = tmp.as_expr();
-        expr2tc bar = pre_goto_guard.as_expr();
-        do_simplify(foo);
-        do_simplify(bar);
-
-        if (foo == bar)
-          merge = true;
-      }
-
-      // Select merging this goto_statet with a sanity check
-      if (merge)
-      {
-        assert(tomerge == nullptr && "Multiple branching to-preserve paths?");
-        tomerge = &gs;
-      }
-    }
-
-    // We _must_ have found a path to merge, or the current-state guard would
-    // have matched pre_goto_guard earlier
-    assert(tomerge != nullptr);
-
-    // Alas, copies.
-    pp.emplace_back(std::make_pair(target_insn_it, goto_statet(*tomerge)));
+      ls.top().merge_state_map.count(transition.branch->target) &&
+      "preserved branch target missing from merge_state_map");
+    pp.emplace_back(
+      transition.branch->target, merge_statet(*transition.branch->sibling));
   }
 
   // We must have picked up at least one path to merge
@@ -593,9 +501,14 @@ void execution_statet::preserve_last_paths()
     // class, but that code is way too fragile. Instead, continue with an ended
     // thread that infects all other threads with it's false guard until we
     // complete.
-    // It's unclear how to distinguish this case from an error in this code
-    // here.
-    // XXX methodise this
+    // We can't tell the assume(0) case apart from an internal logic bug that
+    // also produced an empty preserved-paths list. Log so traces are
+    // greppable; the normal path is a legitimate assume(0).
+    log_debug(
+      "symex",
+      "preserve_last_paths: no paths preserved for thread {}, ending it "
+      "(usually assume(0); investigate if you don't expect one here)",
+      last_active_thread);
     threads_state[last_active_thread].thread_ended = true;
     atomic_numbers[last_active_thread] = 0;
   }
@@ -620,13 +533,13 @@ void execution_statet::cull_all_paths()
   // back in at some point in the future.
   for (auto &frame : cur_state->call_stack)
   {
-    frame.goto_state_map.clear();
+    frame.merge_state_map.clear();
   }
 }
 
 void execution_statet::restore_last_paths()
 {
-  // For each preserved path: create a fresh new goto_statet with data values
+  // For each preserved path: create a fresh new merge_statet with data values
   // created from the present values of l2-renaming and value set, as we
   // (presumably) switch back in from a different thread. Then schedule the
   // states to be merged in at their original locations.
@@ -643,16 +556,19 @@ void execution_statet::restore_last_paths()
     // if we have more than one state at a given location to merge.
     if (
       options.get_bool_option("no-goto-merge") &&
-      cur_state->top().goto_state_map[loc].size() != 0)
+      cur_state->top().merge_state_map[loc].size() != 0)
     {
       log_error(
         "There are goto statements that shouldn't be merged at this point");
       abort();
     }
-    // Create a fresh new goto_statet to be merged in at the target insn
-    cur_state->top().goto_state_map[loc].emplace_back(*cur_state);
-    // Get ref to it
-    auto &new_gs = *cur_state->top().goto_state_map[loc].begin();
+    // Create a fresh new merge_statet to be merged in at the target insn.
+    // Capture the inserted element directly: if the list already has older
+    // entries at this location (a different preserved path joining at the
+    // same instruction), reading .begin() would alias the wrong entry and
+    // corrupt it via the writes below.
+    auto &new_gs =
+      cur_state->top().merge_state_map[loc].emplace_back(*cur_state);
 
     // Proceed to fill new_gs with old data. Ideally this would be a method...
     new_gs.num_instructions = gs.num_instructions;
@@ -701,24 +617,16 @@ void execution_statet::execute_guard()
   expr2tc guard_expr = get_guard_identifier();
   expr2tc parent_guard;
 
-  // Check if the `pre_goto_guard` condition is false.
-  if (pre_goto_guard.is_false())
+  // Preserve the existing false-guard handling for context switches taken
+  // immediately after a branch, but keep the branch parent state explicit.
+  if (last_transition.parent_guard && last_transition.parent_guard->is_false())
   {
-    // If `pre_goto_guard` is false, create a temporary guard (`tmp`)
-    // that combines `pre_goto_guard` with the guard of the last active thread.
-    guard2tc tmp = pre_goto_guard;
-
-    // Use the OR operator to merge `pre_goto_guard` with the guard of the
-    // last active thread, stored in `threads_state[last_active_thread].guard`.
+    guard2tc tmp = *last_transition.parent_guard;
     tmp |= threads_state[last_active_thread].guard;
-
-    // Assign the resulting combined expression to `parent_guard`.
     parent_guard = tmp.as_expr();
   }
   else
   {
-    // If `pre_goto_guard` is not false, assign the guard of the last active thread
-    // directly to `parent_guard` without any modifications.
     parent_guard = threads_state[last_active_thread].guard.as_expr();
   }
 
@@ -773,15 +681,6 @@ unsigned int execution_statet::add_thread(const goto_programt *prog)
   preserved_paths.emplace_back();
   atomic_numbers.push_back(0);
 
-  if (DFS_traversed.size() <= new_state.source.thread_nr)
-  {
-    DFS_traversed.push_back(false);
-  }
-  else
-  {
-    DFS_traversed[new_state.source.thread_nr] = false;
-  }
-
   thread_start_data.emplace_back();
 
   // We invalidated all threads_state refs, so reset cur_state ptr.
@@ -805,14 +704,14 @@ unsigned int execution_statet::add_thread(const goto_programt *prog)
   // While we've recorded the new thread as starting in the designated program,
   // it might not run immediately, thus must have it's path preserved:
   preserved_paths[thread_nr].push_back(std::make_pair(
-    prog->instructions.begin(), goto_statet(threads_state[thread_nr])));
+    prog->instructions.begin(), merge_statet(threads_state[thread_nr])));
 
   return threads_state.size() - 1; // thread ID, zero based
 }
 
 void execution_statet::analyze_assign(const expr2tc &code)
 {
-  if (is_nil_expr(code))
+  if (is_nil_expr(code) || get_active_state().guard.is_false())
     return;
 
   std::set<expr2tc> global_reads, global_writes;
@@ -832,7 +731,7 @@ void execution_statet::analyze_assign(const expr2tc &code)
 
 void execution_statet::analyze_read(const expr2tc &code)
 {
-  if (is_nil_expr(code))
+  if (is_nil_expr(code) || get_active_state().guard.is_false())
     return;
 
   std::set<expr2tc> global_reads;
@@ -883,21 +782,23 @@ void execution_statet::get_expr_globals(
     if (!symbol)
       return;
 
-    if (
-      name == "c:@__ESBMC_alloc" || name == "c:@__ESBMC_alloc_size" ||
-      name == "c:@__ESBMC_is_dynamic" ||
-      name == "c:@__ESBMC_blocked_threads_count" ||
-      name.find("c:pthread_lib") != std::string::npos ||
-      name == "c:@__ESBMC_rounding_mode" ||
-      name.find("c:@__ESBMC_pthread_thread") != std::string::npos)
-    {
-      return;
-    }
+    auto is_internal_name = [](const std::string &n) {
+      return n == "c:@__ESBMC_alloc" || n == "c:@__ESBMC_alloc_size" ||
+             n == "c:@__ESBMC_is_dynamic" ||
+             n == "c:@__ESBMC_blocked_threads_count" ||
+             n.find("c:pthread_lib") != std::string::npos ||
+             n == "c:@__ESBMC_rounding_mode";
+    };
 
+    // Resolve pointer parameters/locals BEFORE applying the internal-name
+    // filter. The pointer variable itself may live in pthread_lib (e.g. the
+    // `mutex` parameter of pthread_mutex_lock) and so match the filter, yet
+    // still point to a user global whose access must be recorded as an MPOR
+    // dependency.
     expr2tc p = expr;
     bool point_to_global = false;
     if (
-      symbol->type.is_pointer() && symbol->name != "invalid_object" &&
+      symbol->get_type().is_pointer() && symbol->name != "invalid_object" &&
       !symbol->static_lifetime)
     {
       expr2tc tmp = expr;
@@ -919,7 +820,10 @@ void execution_statet::get_expr_globals(
           const symbolt *s = ns.lookup(n);
           if (!s)
             continue;
-          point_to_global = s->static_lifetime || s->type.is_dynamic_set();
+          if (is_internal_name(n))
+            continue;
+          point_to_global =
+            s->static_lifetime || s->get_type().is_dynamic_set();
           p = to_object_descriptor2t(obj).object;
           /* Stop when the global symbol is found */
           if (point_to_global)
@@ -927,6 +831,11 @@ void execution_statet::get_expr_globals(
         }
       }
     }
+
+    // Drop the pointer symbol itself if it is an internal pthread_lib name,
+    // unless we've resolved it to a user global above.
+    if (is_internal_name(name) && !point_to_global)
+      return;
 
     // Rename to level1 to avoid shared varible mismatch in mpor.
     cur_state->top().level1.rename(p);
@@ -942,7 +851,7 @@ void execution_statet::get_expr_globals(
     // assertion-based race tests like increment_race flip to FAILED.
     const bool python_global = symbol->mode == "Python" && !symbol->file_local;
     if (
-      symbol->static_lifetime || symbol->type.is_dynamic_set() ||
+      symbol->static_lifetime || symbol->get_type().is_dynamic_set() ||
       point_to_global || python_global)
     {
       std::list<unsigned int> threadId_list;
@@ -1155,11 +1064,46 @@ bool execution_statet::has_cswitch_point_occured() const
   if (cswitch_forced)
     return true;
 
-  if (
-    thread_last_reads[active_thread].size() != 0 ||
-    thread_last_writes[active_thread].size() != 0)
-    return true;
+  // Mutex / condition-var / rwlock / barrier / spinlock accesses should
+  // contribute to MPOR dependency tracking (so lock/unlock pairs create
+  // dependency chains between threads), but must not by themselves force
+  // a context switch point here — they already drive scheduling through
+  // the pthread library's explicit switch mechanisms, and treating every
+  // lock access as a cswitch point blows up the DFS width.
+  auto is_pthread_sync_type = [](const type2tc &t) {
+    if (is_nil_type(t))
+      return false;
+    if (is_struct_type(t))
+    {
+      const std::string &n = to_struct_type(t).name.as_string();
+      return n.find("pthread_mutex_t") != std::string::npos ||
+             n.find("pthread_cond_t") != std::string::npos ||
+             n.find("pthread_rwlock_t") != std::string::npos ||
+             n.find("pthread_barrier_t") != std::string::npos ||
+             n.find("pthread_spinlock_t") != std::string::npos;
+    }
+    if (is_union_type(t))
+    {
+      const std::string &n = to_union_type(t).name.as_string();
+      return n.find("pthread_mutex_t") != std::string::npos ||
+             n.find("pthread_cond_t") != std::string::npos ||
+             n.find("pthread_rwlock_t") != std::string::npos;
+    }
 
+    return false;
+  };
+
+  auto any_non_sync = [&](const std::set<expr2tc> &s) {
+    for (const auto &e : s)
+      if (!is_pthread_sync_type(e->type))
+        return true;
+    return false;
+  };
+
+  if (
+    any_non_sync(thread_last_reads[active_thread]) ||
+    any_non_sync(thread_last_writes[active_thread]))
+    return true;
   return false;
 }
 
@@ -1231,13 +1175,15 @@ void execution_statet::switch_to_monitor()
 {
   if (threads_state[monitor_tid].thread_ended)
   {
-    if (!mon_thread_warning)
+    // Warn at most once per process: the message is informational and not
+    // tied to which execution_statet noticed the ended monitor.
+    static bool warned = false;
+    if (!warned)
     {
       log_error(
         "Switching to ended monitor; you need to increase its "
         "context or prefix bound");
-
-      mon_thread_warning = true;
+      warned = true;
     }
 
     return;

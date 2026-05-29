@@ -72,10 +72,10 @@ std::vector<exprt> string_builder::extract_string_chars(
     symbolt *symbol =
       get_symbol_table().find_symbol(expr.identifier().as_string());
 
-    if (symbol && symbol->value.type().is_array())
+    if (symbol && symbol->get_value().type().is_array())
     {
       // Extract from the symbol's stored value
-      const exprt &value = symbol->value;
+      const exprt &value = symbol->get_value();
       for (size_t i = 0; i < value.operands().size(); ++i)
       {
         const exprt &ch = value.operands()[i];
@@ -251,9 +251,10 @@ exprt string_builder::concatenate_strings(
     symbolt *lhs_sym =
       converter_.find_symbol(to_symbol_expr(lhs).get_identifier().as_string());
     if (
-      lhs_sym && lhs_sym->value.is_not_nil() &&
-      lhs_sym->value.type().is_array() && lhs_sym->value.is_constant())
-      resolved_lhs = lhs_sym->value;
+      lhs_sym && lhs_sym->get_value().is_not_nil() &&
+      lhs_sym->get_value().type().is_array() &&
+      lhs_sym->get_value().is_constant())
+      resolved_lhs = lhs_sym->get_value();
   }
 
   if (rhs.is_symbol())
@@ -261,9 +262,10 @@ exprt string_builder::concatenate_strings(
     symbolt *rhs_sym =
       converter_.find_symbol(to_symbol_expr(rhs).get_identifier().as_string());
     if (
-      rhs_sym && rhs_sym->value.is_not_nil() &&
-      rhs_sym->value.type().is_array() && rhs_sym->value.is_constant())
-      resolved_rhs = rhs_sym->value;
+      rhs_sym && rhs_sym->get_value().is_not_nil() &&
+      rhs_sym->get_value().type().is_array() &&
+      rhs_sym->get_value().is_constant())
+      resolved_rhs = rhs_sym->get_value();
   }
 
   // Check if either operand contains non-deterministic/symbolic values
@@ -314,12 +316,12 @@ exprt string_builder::handle_string_repetition(exprt &lhs, exprt &rhs)
       {
         symbolt *sym = converter_.find_symbol(
           to_symbol_expr(e).get_identifier().as_string());
-        if (sym && sym->value.is_constant())
+        if (sym && sym->get_value().is_constant())
         {
-          if (sym->value.type().is_bool())
-            return sym->value.is_true() ? 1 : 0;
+          if (sym->get_value().type().is_bool())
+            return sym->get_value().is_true() ? 1 : 0;
           BigInt val;
-          if (!to_integer(sym->value, val))
+          if (!to_integer(sym->get_value(), val))
             return val.to_int64();
         }
       }
@@ -339,10 +341,10 @@ exprt string_builder::handle_string_repetition(exprt &lhs, exprt &rhs)
     {
       symbolt *sym =
         converter_.find_symbol(to_symbol_expr(e).get_identifier().as_string());
-      if (sym && sym->value.is_constant())
+      if (sym && sym->get_value().is_constant())
       {
         BigInt val;
-        if (!to_integer(sym->value, val) && val.is_int64())
+        if (!to_integer(sym->get_value(), val) && val.is_int64())
           return val.to_int64();
       }
     }
@@ -390,7 +392,7 @@ exprt string_builder::handle_string_repetition(exprt &lhs, exprt &rhs)
       repeat_type.arguments().push_back(arg1);
       repeat_type.arguments().push_back(arg2);
 
-      new_symbol.type = repeat_type;
+      new_symbol.set_type(repeat_type);
       get_symbol_table().add(new_symbol);
       repeat_symbol = get_symbol_table().find_symbol(func_symbol_id);
     }
@@ -544,7 +546,7 @@ exprt string_builder::concatenate_strings_via_c_function(
     concat_type.arguments().push_back(arg1);
     concat_type.arguments().push_back(arg2);
 
-    new_symbol.type = concat_type;
+    new_symbol.set_type(concat_type);
 
     get_symbol_table().add(new_symbol);
     concat_symbol = get_symbol_table().find_symbol(func_symbol_id);
@@ -579,7 +581,7 @@ exprt string_builder::build_runtime_str_conversion_call(
     code_typet fn_type;
     fn_type.return_type() = gen_pointer_type(char_type());
     fn_type.arguments().push_back(code_typet::argumentt(arg_type));
-    new_symbol.type = fn_type;
+    new_symbol.set_type(fn_type);
 
     get_symbol_table().add(new_symbol);
     fn_symbol = get_symbol_table().find_symbol(func_symbol_id);
@@ -593,6 +595,50 @@ exprt string_builder::build_runtime_str_conversion_call(
   call.function() = symbol_expr(*fn_symbol);
   call.arguments().push_back(arg_expr);
   call.type() = gen_pointer_type(char_type());
+
+  return call;
+}
+
+exprt string_builder::build_runtime_str_join_call(
+  const exprt &separator,
+  const exprt &list_expr)
+{
+  const std::string fn_name = "__python_str_join";
+  const std::string func_symbol_id = "c:@F@" + fn_name;
+  const typet char_ptr = gen_pointer_type(char_type());
+  const typet list_ptr = get_type_handler().get_list_type();
+
+  symbolt *fn_symbol = get_symbol_table().find_symbol(func_symbol_id);
+  if (!fn_symbol)
+  {
+    symbolt new_symbol;
+    new_symbol.name = fn_name;
+    new_symbol.id = func_symbol_id;
+    new_symbol.mode = "C";
+    new_symbol.is_extern = true;
+
+    code_typet fn_type;
+    fn_type.return_type() = char_ptr;
+    fn_type.arguments().push_back(code_typet::argumentt(char_ptr));
+    fn_type.arguments().push_back(code_typet::argumentt(list_ptr));
+    new_symbol.set_type(fn_type);
+
+    get_symbol_table().add(new_symbol);
+    fn_symbol = get_symbol_table().find_symbol(func_symbol_id);
+  }
+
+  exprt sep_arg = str_handler_->get_array_base_address(separator);
+
+  exprt list_arg =
+    list_expr.type().is_pointer() ? list_expr : address_of_exprt(list_expr);
+  if (list_arg.type() != list_ptr)
+    list_arg = typecast_exprt(list_arg, list_ptr);
+
+  side_effect_expr_function_callt call;
+  call.function() = symbol_expr(*fn_symbol);
+  call.arguments().push_back(sep_arg);
+  call.arguments().push_back(list_arg);
+  call.type() = char_ptr;
 
   return call;
 }

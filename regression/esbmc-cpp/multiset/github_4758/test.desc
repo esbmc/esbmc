@@ -1,0 +1,4 @@
+CORE
+main.cpp
+--incremental-bmc --std c++14
+^VERIFICATION SUCCESSFUL$

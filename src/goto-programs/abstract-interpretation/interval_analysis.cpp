@@ -175,16 +175,189 @@ void instrument_loops(
       for (auto v : l.get_unmodified_loop_vars())
         symbols.insert(v);
 
-      // TODO: Instrument before-loop
-      // Assumption during the loop
+      // The before-loop ASSUME is handled by instrument_loop_bounds_after_kind
+      // when k-induction is active (it needs to fire AFTER k-induction's
+      // havoc, not before). For non-k-induction modes, the loop_head's
+      // forward dataflow already constrains the program; emitting a
+      // pre-loop assume there would be redundant.
+
+      // Assume #1: just before the back-edge (last body instruction).
+      // Tightens the values flowing back into the next iteration's
+      // loop_head. instrument_symbol_constraints advances `it` past the
+      // (now shifted) back-edge to the first after-loop instruction.
       auto it = l.get_original_loop_exit();
       instrument_symbol_constraints(
         interval_analysis, symbols, it, f_it->second);
-      // it was incremented, we are now in the next instruction
+      // Assume #2: at the first after-loop instruction. Tightens
+      // downstream code that uses the loop's modified vars.
       instrument_symbol_constraints(
         interval_analysis, symbols, it, f_it->second);
     }
   }
+}
+
+/// Find the first instruction at or after \p loop_head that was NOT inserted
+/// by k-induction's preamble (havoc + entry-condition assume). For loops
+/// whose loop_head pointed at an IF before k-induction ran, this returns
+/// the (now shifted) IF; for do-while loops it returns the first real body
+/// instruction. Stops at \p loop_exit defensively — every preamble
+/// instruction is inside the discovered loop, so we should never reach
+/// the back-edge while skipping.
+static goto_programt::targett skip_inductive_preamble(
+  goto_programt::targett loop_head,
+  goto_programt::targett loop_exit)
+{
+  goto_programt::targett it = loop_head;
+  while (it != loop_exit && it->inductive_step_instruction)
+    ++it;
+  return it;
+}
+
+/// RAII guard for the thread_local skip_inductive_step_instructions flag.
+/// Saves the prior value and restores it on scope exit, so an exception
+/// during the recomputed fixpoint or instrumentation cannot leave the flag
+/// stuck and a nested call cannot prematurely clear an outer scope's true.
+namespace
+{
+struct scoped_skip_inductive
+{
+  const bool prev;
+  scoped_skip_inductive()
+    : prev(interval_domaint::skip_inductive_step_instructions)
+  {
+    interval_domaint::skip_inductive_step_instructions = true;
+  }
+  ~scoped_skip_inductive()
+  {
+    interval_domaint::skip_inductive_step_instructions = prev;
+  }
+};
+} // namespace
+
+void instrument_loop_bounds_after_kind(
+  goto_functionst &goto_functions,
+  const namespacet &ns,
+  const optionst &options)
+{
+  // Recompute the interval fixpoint on the post-k-induction goto-graph.
+  // The transparency flag makes the havoc'd assignments and entry-condition
+  // assumes no-ops in the transformer, so the state at each loop head
+  // matches what it was in the *original* program (before k-induction).
+  interval_domaint::set_options(options);
+  scoped_skip_inductive _skip_guard;
+
+  ait<interval_domaint> interval_analysis;
+  interval_analysis(goto_functions, ns);
+
+  Forall_goto_functions (f_it, goto_functions)
+  {
+    if (!f_it->second.body_available)
+      continue;
+
+    // Walk instructions and find each backwards-GOTO directly, rather than
+    // using goto_loopst — the modified-vars analysis it performs is not
+    // needed here, and rebuilding it on the post-k-induction graph would
+    // misclassify k-induction's inserted assigns.
+    for (goto_programt::instructionst::iterator b_it =
+           f_it->second.body.instructions.begin();
+         b_it != f_it->second.body.instructions.end();
+         ++b_it)
+    {
+      if (!b_it->is_backwards_goto())
+        continue;
+      if (b_it->targets.size() != 1)
+        continue;
+
+      goto_programt::targett loop_head = *b_it->targets.begin();
+      if (loop_head == b_it)
+        continue; // self-loop; already collapsed by goto_loops
+
+      goto_programt::targett insert_pos =
+        skip_inductive_preamble(loop_head, b_it);
+      if (insert_pos == b_it)
+        continue; // every body instruction is inductive-step — degenerate
+
+      // Collect the variables we want to bound: union of modified and
+      // referenced symbols in the loop body. Reuse goto_loopst's logic
+      // by rebuilding the loop snapshot — but skip its modified-vars
+      // walk and instead gather symbols directly from the body
+      // instructions we'll bound.
+      std::unordered_set<expr2tc, irep2_hash> symbols;
+      for (goto_programt::instructionst::iterator body_it = insert_pos;
+           body_it != b_it;
+           ++body_it)
+      {
+        if (body_it->inductive_step_instruction)
+          continue;
+        get_symbols(body_it->code, symbols);
+        get_symbols(body_it->guard, symbols);
+      }
+
+      // Also collect the targets of k-induction's havoc block, which
+      // make_nondet_assign emits *before* loop_head (the back-edge
+      // target): a run of `x = NONDET()` inductive_step assigns, one
+      // per loop variable INCLUDING those modified only transitively
+      // through a callee (e.g. the eca state-machine globals
+      // a17/a28/... mutated inside calculate_output, never named
+      // textually in main's loop body). These are exactly the havoced
+      // variables whose post-havoc value we want to pin to their
+      // interval; the textual body scan above misses them because the
+      // call site only references the argument, not the callee-modified
+      // globals. Without bounding them the inductive step runs from an
+      // arbitrary state-machine configuration and finds spurious
+      // non-terminating / counterexample states.
+      //
+      // Walk backward from loop_head over the contiguous run of
+      // inductive_step nondet-assigns. Stop at the first instruction
+      // that isn't such an assign (or at the function start).
+      if (loop_head != f_it->second.body.instructions.begin())
+      {
+        goto_programt::instructionst::iterator pre_it = loop_head;
+        do
+        {
+          --pre_it;
+          if (!pre_it->inductive_step_instruction || !pre_it->is_assign())
+            break;
+          const code_assign2t &a = to_code_assign2t(pre_it->code);
+          if (
+            is_symbol2t(a.target) && is_sideeffect2t(a.source) &&
+            to_sideeffect2t(a.source).kind == sideeffect2t::allockind::nondet)
+            symbols.insert(a.target);
+        } while (pre_it != f_it->second.body.instructions.begin());
+      }
+      if (symbols.empty())
+        continue;
+
+      // Build the bounds expression at the insert position from the
+      // (transparency-aware) interval domain state.
+      std::vector<expr2tc> symbol_constraints;
+      auto state_iterator = interval_analysis.state_map.find(insert_pos);
+      if (state_iterator == interval_analysis.state_map.end())
+        continue;
+      const interval_domaint &d = state_iterator->second;
+      for (const auto &symbol_expr : symbols)
+      {
+        expr2tc tmp = d.make_expression(symbol_expr);
+        if (!is_true(tmp))
+          symbol_constraints.push_back(tmp);
+      }
+      if (symbol_constraints.empty())
+        continue;
+
+      // Insert via insert_swap so any incoming jumps to insert_pos (e.g.
+      // the back-edge after k-induction's chain of insert_swaps) are
+      // preserved — they will now land on the ASSUME and fall through to
+      // the original instruction.
+      goto_programt::instructiont instruction;
+      instruction.make_assumption(conjunction(symbol_constraints));
+      instruction.inductive_step_instruction = true;
+      instruction.location = insert_pos->location;
+      instruction.function = insert_pos->function;
+      f_it->second.body.insert_swap(insert_pos, instruction);
+    }
+  }
+
+  goto_functions.update();
 }
 
 void instrument_intervals(
@@ -238,11 +411,11 @@ void instrument_intervals(
 void dump_intervals(
   std::ostringstream &out,
   const goto_functiont &goto_function,
-  const ait<interval_domaint> &interval_analysis)
+  [[maybe_unused]] const ait<interval_domaint> &interval_analysis)
 {
   forall_goto_program_instructions (i_it, goto_function.body)
   {
-    auto print_vars = [&out, &i_it](const auto &map) {
+    [[maybe_unused]] auto print_vars = [&out, &i_it](const auto &map) {
       for (const auto &interval : map)
       {
         // "state,var,min,max,bot,top";

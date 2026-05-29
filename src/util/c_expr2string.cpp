@@ -1725,7 +1725,9 @@ std::string c_expr2stringt::convert_code_decl(const codet &src, unsigned indent)
     else if (symbol->is_extern)
       dest += "extern ";
 
-    if (symbol->type.is_code() && to_code_type(symbol->type).get_inlined())
+    if (
+      symbol->get_type().is_code() &&
+      to_code_type(symbol->get_type()).get_inlined())
       dest += "inline ";
   }
 

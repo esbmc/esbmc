@@ -291,7 +291,7 @@ exprt python_converter::handle_membership_operator(
   {
     const symbolt *sym = symbol_table_.find_symbol(rhs.identifier());
     if (sym)
-      rhs_resolved_type = sym->type;
+      rhs_resolved_type = sym->get_type();
   }
 
   if (rhs_resolved_type.id() == "symbol")
@@ -410,7 +410,15 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   }
 
   if (lhs.type() == none_type() || rhs.type() == none_type())
+  {
+    // A direct call like `f() is None` arrives as code_function_callt — a
+    // statement, not a value. Promote to side_effect_expr_function_callt so
+    // it carries the return type and downstream isnone simplification can
+    // type-check it as a pointer/struct rather than as empty code.
+    lhs = to_value_expr(lhs, ns);
+    rhs = to_value_expr(rhs, ns);
     return handle_none_comparison(op, lhs, rhs);
+  }
 
   // Handle exceptions
   if (lhs.statement() == "cpp-throw")
@@ -485,6 +493,12 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     dict_handler_->is_dict_type(lhs.type()) &&
     dict_handler_->is_dict_type(rhs.type()) && (op == "Eq" || op == "NotEq"))
   {
+    // Fold literal-vs-literal dict equality at conversion time. Skipping the
+    // O(n^2) __ESBMC_dict_eq runtime model here is the dominant win under
+    // --incremental-bmc, where each k iteration would otherwise re-symbolise
+    // the comparison from scratch (issue #4623).
+    if (auto folded = dict_handler_->try_constant_fold_eq(left, right))
+      return gen_boolean(op == "NotEq" ? !*folded : *folded);
     return dict_handler_->compare(lhs, rhs, op);
   }
 
@@ -653,6 +667,34 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
       else
         cast_to_void_ptr(lhs, rhs.type()); // cast integer to void*
     }
+
+    // Optional[T] is lowered to T* (see converter_types.cpp:457) and a
+    // non-None T value is round-tripped through (T*) at the call site
+    // (e.g. foo(5) -> y = (int*)5). Make equality with a matching primitive
+    // work by casting the primitive side to the pointer type, so the
+    // resulting comparison matches the round-tripped address. Skip ordered
+    // comparisons: they would silently compare addresses, not values.
+    auto is_primitive_ptr = [](const exprt &e) {
+      if (!e.type().is_pointer())
+        return false;
+      const typet &sub = e.type().subtype();
+      return sub.is_signedbv() || sub.is_unsignedbv() || sub.is_floatbv();
+    };
+    auto is_primitive = [](const exprt &e) {
+      return e.type().is_signedbv() || e.type().is_unsignedbv() ||
+             e.type().is_floatbv();
+    };
+    if (op == "Eq" || op == "NotEq" || op == "Is" || op == "IsNot")
+    {
+      if (
+        is_primitive_ptr(lhs) && is_primitive(rhs) &&
+        lhs.type().subtype() == rhs.type())
+        cast_to_void_ptr(rhs, lhs.type());
+      else if (
+        is_primitive_ptr(rhs) && is_primitive(lhs) &&
+        rhs.type().subtype() == lhs.type())
+        cast_to_void_ptr(lhs, rhs.type());
+    }
   }
 
   // Handle special mathematical operations
@@ -667,26 +709,38 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     const bool lhs_invalid = lhs.type().is_empty() || lhs.type().is_nil();
     const bool rhs_invalid = rhs.type().is_empty() || rhs.type().is_nil();
     locationt loc = get_location_from_decl(element);
+
+    // Sound over-approximation when the comparison cannot be lowered to a
+    // typed binop: either an operand's type is unresolvable, or one side is
+    // a pointer-backed value (e.g. a list/dict variable that has been
+    // reassigned across incompatible types in the same scope) and the
+    // other isn't. Aborting here loses an entire verification run for what
+    // is often a frontend type-inference gap, not a real soundness issue;
+    // returning nondet bool lets symbolic execution explore both outcomes
+    // and keeps safety verification sound (we cannot conclude SAFE when
+    // the real comparison would fail). See #4807.
+    auto nondet_comparison = [&](const char *reason) {
+      log_debug(
+        "python-binop",
+        "{} at {}:{} -- falling back to nondet bool",
+        reason,
+        loc.is_nil() ? std::string("<unknown>") : loc.get_file().as_string(),
+        loc.is_nil() ? std::string("?") : loc.get_line().as_string());
+      side_effect_expr_nondett nondet(bool_type());
+      nondet.location() = loc;
+      return nondet;
+    };
+
     if (lhs_invalid || rhs_invalid)
-    {
-      std::ostringstream msg;
-      msg << "Unsupported comparison with unresolved operand type";
-      if (!loc.is_nil())
-        msg << " at " << loc.get_file() << ":" << loc.get_line();
-      throw std::runtime_error(msg.str());
-    }
+      return nondet_comparison(
+        "unsupported comparison with unresolved operand type");
 
     const bool lhs_ptr = lhs.type().is_pointer();
     const bool rhs_ptr = rhs.type().is_pointer();
     if (lhs_ptr != rhs_ptr)
-    {
-      std::ostringstream msg;
-      msg << "Unsupported comparison between pointer-backed and non-pointer "
-             "values";
-      if (!loc.is_nil())
-        msg << " at " << loc.get_file() << ":" << loc.get_line();
-      throw std::runtime_error(msg.str());
-    }
+      return nondet_comparison(
+        "unsupported comparison between pointer-backed and non-pointer "
+        "values");
   }
 
   // Build the binary expression

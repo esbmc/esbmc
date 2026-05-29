@@ -26,6 +26,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <functional>
 #include <optional>
 #include <stdexcept>
 
@@ -263,9 +264,10 @@ exprt function_call_expr::handle_isinstance() const
     }
 
     const symbolt *var_symbol = converter_.ns.lookup(lookup_name);
-    if (var_symbol && var_symbol->value.is_constant())
+    if (var_symbol && var_symbol->get_value().is_constant())
     {
-      const constant_exprt &const_val = to_constant_expr(var_symbol->value);
+      const constant_exprt &const_val =
+        to_constant_expr(var_symbol->get_value());
       std::string value_str = const_val.get_value().as_string();
       // Check if this constant value is a type name
       if (type_utils::is_type_identifier(value_str))
@@ -500,6 +502,195 @@ exprt function_call_expr::handle_divmod() const
   exprt divisor = converter_.get_expr(args[1]);
 
   return converter_.get_math_handler().handle_divmod(dividend, divisor, call_);
+}
+
+exprt function_call_expr::handle_issubclass() const
+{
+  const auto &args = call_["args"];
+  if (args.size() != 2)
+    return converter_.get_exception_handler().gen_exception_raise(
+      "TypeError", "issubclass() takes exactly 2 arguments");
+
+  // arg 1 must be a class, i.e. a Name referring to a class or builtin type.
+  if (args[0]["_type"] != "Name")
+    return converter_.get_exception_handler().gen_exception_raise(
+      "TypeError", "issubclass() arg 1 must be a class");
+  const std::string cls = args[0]["id"].get<std::string>();
+
+  // arg 2 is a single class or a tuple of classes.
+  std::vector<std::string> targets;
+  const auto &info = args[1];
+  auto add_name = [&targets](const nlohmann::json &n) {
+    if (n["_type"] == "Name")
+      targets.push_back(n["id"].get<std::string>());
+  };
+  if (info["_type"] == "Tuple")
+    for (const auto &e : info["elts"])
+      add_name(e);
+  else
+    add_name(info);
+
+  if (targets.empty())
+    return converter_.get_exception_handler().gen_exception_raise(
+      "TypeError", "issubclass() arg 2 must be a class or tuple of classes");
+
+  // Collect the ancestors of `cls` by walking the AST class hierarchy.
+  // Every class is implicitly a subclass of object; bool subclasses int.
+  const auto &ast = converter_.ast();
+  std::vector<std::string> ancestors;
+  std::vector<std::string> work{cls};
+  auto seen = [&ancestors](const std::string &c) {
+    return std::find(ancestors.begin(), ancestors.end(), c) != ancestors.end();
+  };
+  while (!work.empty())
+  {
+    std::string c = work.back();
+    work.pop_back();
+    if (seen(c))
+      continue;
+    ancestors.push_back(c);
+
+    if (c == "bool")
+      work.push_back("int");
+
+    const auto cls_node = json_utils::find_class(ast["body"], c);
+    if (!cls_node.empty() && cls_node.contains("bases"))
+      for (const auto &b : cls_node["bases"])
+        if (b["_type"] == "Name")
+          work.push_back(b["id"].get<std::string>());
+  }
+
+  for (const std::string &t : targets)
+    if (t == "object" || seen(t))
+      return true_exprt();
+  return false_exprt();
+}
+
+exprt function_call_expr::handle_callable() const
+{
+  const auto &args = call_["args"];
+  if (args.size() != 1)
+    return converter_.get_exception_handler().gen_exception_raise(
+      "TypeError", "callable() takes exactly one argument");
+
+  const auto &arg = args[0];
+  const std::string node_type = arg["_type"];
+
+  // Lambdas are callable.
+  if (node_type == "Lambda")
+    return true_exprt();
+
+  // Literal containers and constants are never callable.
+  if (
+    node_type == "Constant" || node_type == "List" || node_type == "Tuple" ||
+    node_type == "Dict" || node_type == "Set")
+    return false_exprt();
+
+  if (node_type == "Name")
+  {
+    const std::string name = arg["id"].get<std::string>();
+    const auto &ast = converter_.ast();
+
+    // Builtin type constructors / builtin functions, user classes, and
+    // user functions are all callable.
+    if (
+      type_utils::is_builtin_type(name) || json_utils::is_class(name, ast) ||
+      json_utils::search_function_in_ast(ast, name))
+      return true_exprt();
+
+    // Otherwise it is an ordinary variable: callable iff its class defines
+    // __call__.
+    const std::string var_type = type_handler_.get_var_type(name);
+    if (
+      !var_type.empty() && json_utils::is_class(var_type, ast) &&
+      method_exists_in_class_hierarchy(var_type, "__call__"))
+      return true_exprt();
+    return false_exprt();
+  }
+
+  // Conservative default for forms we do not statically resolve.
+  return false_exprt();
+}
+
+exprt function_call_expr::handle_pow() const
+{
+  const auto &args = call_["args"];
+
+  if (args.size() != 2 && args.size() != 3)
+    return converter_.get_exception_handler().gen_exception_raise(
+      "TypeError", "pow() takes 2 or 3 arguments");
+
+  exprt base = converter_.get_expr(args[0]);
+  exprt exp = converter_.get_expr(args[1]);
+
+  if (args.size() == 2)
+    // pow(base, exp) shares the exact lowering of the ** operator, so integer,
+    // float, and negative-exponent cases behave identically to base ** exp.
+    return converter_.get_math_handler().handle_power(base, exp);
+
+  // 3-argument form: pow(base, exp, mod) == (base ** exp) % mod. CPython
+  // requires all three operands to be integers.
+  exprt mod = converter_.get_expr(args[2]);
+  if (
+    base.type().is_floatbv() || exp.type().is_floatbv() ||
+    mod.type().is_floatbv())
+    return converter_.get_exception_handler().gen_exception_raise(
+      "TypeError",
+      "pow() 3rd argument not allowed unless all arguments are integers");
+
+  // Modular exponentiation must be exact: the floating-point modulo used by
+  // the % operator loses precision once base**exp exceeds 2^53, which would be
+  // unsound for the large operands typical of modular arithmetic. We therefore
+  // evaluate the constant-operand case exactly with BigInt and reject the
+  // symbolic case rather than emit an unsound encoding.
+  // Resolve an operand to an integer constant, folding a leading unary minus
+  // (a negated literal such as -2 is a unary-minus expression, not a constant).
+  std::function<std::optional<BigInt>(const exprt &)> as_int =
+    [&](const exprt &e) -> std::optional<BigInt> {
+    if (e.is_constant() && type_utils::is_integer_type(e.type()))
+      return binary2integer(
+        to_constant_expr(e).get_value().as_string(), e.type().is_signedbv());
+    if ((e.id() == "unary-" || e.id() == "-") && e.operands().size() == 1)
+      if (auto v = as_int(e.operands()[0]))
+        return -*v;
+    return std::nullopt;
+  };
+  std::optional<BigInt> bb = as_int(base), eb = as_int(exp), mb = as_int(mod);
+  if (!bb || !eb || !mb)
+    return converter_.get_exception_handler().gen_exception_raise(
+      "NotImplementedError",
+      "pow() with three arguments is only supported for constant integer "
+      "operands");
+  BigInt b = *bb;
+  BigInt e = *eb;
+  BigInt m = *mb;
+
+  if (m == 0)
+    return converter_.get_exception_handler().gen_exception_raise(
+      "ValueError", "pow() 3rd argument cannot be 0");
+  if (e < 0)
+    // CPython computes a modular inverse here, which ESBMC does not model.
+    return converter_.get_exception_handler().gen_exception_raise(
+      "NotImplementedError",
+      "pow() with a negative exponent and a modulus is not supported");
+
+  // Right-to-left binary modular exponentiation over BigInt (exact).
+  BigInt result = BigInt(1) % m;
+  BigInt acc = b % m;
+  BigInt rem = e;
+  while (rem > 0)
+  {
+    if (rem % 2 != 0)
+      result = (result * acc) % m;
+    rem /= 2;
+    acc = (acc * acc) % m;
+  }
+  // Python's result follows the sign of the modulus (floored modulo); adjust
+  // the truncated BigInt remainder when the signs differ.
+  if (result != 0 && (result < 0) != (m < 0))
+    result += m;
+
+  return from_integer(result, base.type());
 }
 
 exprt function_call_expr::handle_abs(nlohmann::json &arg) const
@@ -928,8 +1119,9 @@ exprt function_call_expr::handle_complex() const
       const symbolt *sym = lookup_python_symbol((*real_json)["id"]);
       if (sym)
       {
-        const typet &symbol_type =
-          sym->value.type().is_not_nil() ? sym->value.type() : sym->type;
+        const typet &symbol_type = sym->get_value().type().is_not_nil()
+                                     ? sym->get_value().type()
+                                     : sym->get_type();
         if (
           symbol_type.is_array() && symbol_type.subtype().is_unsignedbv() &&
           to_unsignedbv_type(symbol_type.subtype()).get_width() == 8)
@@ -973,19 +1165,19 @@ exprt function_call_expr::handle_complex() const
 
           // Handle runtime conditionals that select between two string literals:
           // if cond then "a" else "b" -> if cond then complex(a) else complex(b).
-          const exprt &sym_val = sym->value;
+          const exprt &sym_val = sym->get_value();
           if (sym_val.id() == "if" && sym_val.operands().size() == 3)
           {
             const exprt &cond = sym_val.operands()[0];
 
             symbolt true_sym;
-            true_sym.value = sym_val.operands()[1];
-            true_sym.type = true_sym.value.type();
+            true_sym.set_value(sym_val.operands()[1]);
+            true_sym.set_type(true_sym.get_value().type());
             auto true_text = extract_string_from_symbol(&true_sym);
 
             symbolt false_sym;
-            false_sym.value = sym_val.operands()[2];
-            false_sym.type = false_sym.value.type();
+            false_sym.set_value(sym_val.operands()[2]);
+            false_sym.set_type(false_sym.get_value().type());
             auto false_text = extract_string_from_symbol(&false_sym);
 
             auto parse_complex_text =

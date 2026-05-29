@@ -48,6 +48,13 @@ bool goto_symext::get_unwind_recursion(
 
       // Disable inductive step on recursion
       options.set_option("disable-inductive-step", true);
+
+      // If we're actually running the inductive step right now, abort
+      // symex: the IS encoding would be unsound, and finishing it just
+      // wastes time and risks producing a contradictory verdict before
+      // the strategy layer can downgrade the result to UNKNOWN.
+      if (inductive_step)
+        throw inductive_step_disabled_exceptiont("recursion");
     }
 
     const symbolt &symbol = *ns.lookup(identifier);
@@ -159,7 +166,7 @@ unsigned goto_symext::argument_assignments(
             const symbol_type2t &sym_type = to_symbol_type(ptr_subtype);
             symbolt const *sym = ns.lookup(sym_type.symbol_name);
             if (sym)
-              ptr_subtype = migrate_type(sym->type);
+              ptr_subtype = migrate_symbol_type(*sym);
             else
               break;
           }
@@ -224,7 +231,7 @@ unsigned goto_symext::argument_assignments(
       symbolt symbol;
       symbol.id = identifier;
       symbol.name = "va_arg" + std::to_string(va_count);
-      symbol.type = migrate_type_back((*it1)->type);
+      set_symbol_type(symbol, (*it1)->type);
 
       if (new_context.move(symbol))
       {
@@ -387,11 +394,9 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
   frame.calling_location = cur_state->source;
   frame.entry_guard = cur_state->guard;
 
-  // assign arguments
-  type2tc tmp_type = migrate_type(goto_function.type);
-
-  frame.va_index =
-    argument_assignments(identifier, to_code_type(tmp_type), arguments);
+  // assign arguments (goto_function.type is already IREP2)
+  frame.va_index = argument_assignments(
+    identifier, to_code_type(goto_function.type), arguments);
 
   frame.end_of_function = --goto_function.body.instructions.end();
   frame.return_value = ret_value;
@@ -456,6 +461,20 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
   // address_of a symbol, or a set of if ireps. For symbols we'll invoke
   // symex_function_call_symbol, when dealing with if's we need to fork and
   // merge.
+  if (
+    (k_induction || inductive_step) &&
+    !options.get_bool_option("disable-inductive-step"))
+  {
+    log_warning(
+      "k-induction does not support function pointer calls yet. "
+      "Disabling inductive step");
+    options.set_option("disable-inductive-step", true);
+
+    // See the recursion site for the rationale.
+    if (inductive_step)
+      throw inductive_step_disabled_exceptiont("function pointer call");
+  }
+
   if (is_nil_expr(call.function))
   {
     log_error(
@@ -533,14 +552,14 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
     }
 
     // Set up a merge of the current state into the target function.
-    statet::goto_state_listt &goto_state_list =
-      cur_state->top().goto_state_map[fit->second.body.instructions.begin()];
+    statet::merge_state_listt &merge_state_list =
+      cur_state->top().merge_state_map[fit->second.body.instructions.begin()];
 
     cur_state->top().cur_function_ptr_targets.emplace_back(
       fit->second.body.instructions.begin(), it.second);
 
-    goto_state_list.emplace_back(*cur_state);
-    statet::goto_statet &new_state = goto_state_list.back();
+    merge_state_list.emplace_back(*cur_state);
+    statet::merge_statet &new_state = merge_state_list.back();
     expr2tc guardexpr = it.first.as_expr();
     cur_state->rename(guardexpr);
     new_state.guard.add(guardexpr);
@@ -569,10 +588,10 @@ bool goto_symext::run_next_function_ptr_target(bool first)
   // unconditional.
   if (!first)
   {
-    statet::goto_state_listt &goto_state_list =
+    statet::merge_state_listt &merge_state_list =
       cur_state->top()
-        .goto_state_map[cur_state->top().function_ptr_combine_target];
-    goto_state_list.emplace_back(*cur_state);
+        .merge_state_map[cur_state->top().function_ptr_combine_target];
+    merge_state_list.emplace_back(*cur_state);
   }
 
   // Take one function ptr target out of the list and jump to it. A previously
@@ -694,10 +713,10 @@ void goto_symext::symex_return(const expr2tc &code)
   // goto to the end of the function
 
   // put into state-queue
-  statet::goto_state_listt &goto_state_list =
-    cur_state->top().goto_state_map[cur_state->top().end_of_function];
+  statet::merge_state_listt &merge_state_list =
+    cur_state->top().merge_state_map[cur_state->top().end_of_function];
 
-  goto_state_list.emplace_back(*cur_state);
+  merge_state_list.emplace_back(*cur_state);
 
   // check whether the stack limit and return
   // value optimization have been activated.

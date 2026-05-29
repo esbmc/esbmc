@@ -14,11 +14,24 @@
 #include <util/message.h>
 #include <util/message/format.h>
 #include <util/prefix.h>
-#include <util/simplify_expr.h>
 #include <util/std_code.h>
 #include <util/std_expr.h>
 #include <util/string_constant.h>
 #include <util/type_byte_size.h>
+
+// Simplify a legacy exprt via the IREP2 simplifier. The legacy CBMC
+// simplifier (util/simplify_expr) is being retired (docs/irep2-migration.md
+// Part II Phase 2.2); these alloc-size sites still operate on exprt, so they
+// round-trip through migrate. Behaviour-equivalent for the constant /
+// typecast-of-constant folds these sites need (typecast2t::do_simplify folds
+// (size_t)C to a constant exactly as the legacy simplifier did).
+static void simplify_via_irep2(exprt &e)
+{
+  expr2tc tmp;
+  migrate_expr(e, tmp);
+  simplify(tmp);
+  e = migrate_expr_back(tmp);
+}
 
 static void get_string_constant(const exprt &expr, std::string &the_string)
 {
@@ -116,7 +129,7 @@ void goto_convertt::get_alloc_size(typet &alloc_type, exprt &alloc_size)
   if (alloc_size.type() != size_type())
   {
     alloc_size.make_typecast(size_type());
-    simplify(alloc_size);
+    simplify_via_irep2(alloc_size);
   }
 }
 
@@ -351,7 +364,7 @@ void goto_convertt::do_realloc(
 
   // Use conditional expression: (ptr == NULL) ? malloc(size) : realloc(ptr, size)
   if_exprt conditional_expr(is_null, malloc_expr, realloc_expr);
-  simplify(conditional_expr);
+  simplify_via_irep2(conditional_expr);
 
   goto_programt::targett t_n = dest.add_instruction(ASSIGN);
 
@@ -406,7 +419,7 @@ void goto_convertt::do_cpp_new(
   if (alloc_size.type() != size_type())
   {
     alloc_size.make_typecast(size_type());
-    simplify(alloc_size);
+    simplify_via_irep2(alloc_size);
   }
 
   exprt new_expr("sideeffect", rhs.type());
@@ -568,7 +581,7 @@ void goto_convertt::do_function_call_symbol(
     abort();
   }
 
-  if (!symbol->type.is_code())
+  if (!symbol->get_type().is_code())
   {
     log_error(
       "Function `{}' type mismatch: expected code", id2string(identifier));
@@ -576,7 +589,7 @@ void goto_convertt::do_function_call_symbol(
 
   // If the symbol is not nil, i.e., the user defined the expected behavior of
   // the builtin function, we should honor the user function and call it
-  if (symbol->value.is_not_nil() && symbol->value.has_operands())
+  if (symbol->get_value().is_not_nil() && symbol->get_value().has_operands())
   {
     // insert function call
     code_function_callt function_call;
@@ -1406,9 +1419,9 @@ void goto_convertt::do_function_call_symbol(
   {
     symbolt new_symbol;
     new_symbol.name = "__ESBMC_unexpected";
-    new_symbol.type = arguments[0].type();
+    new_symbol.set_type(arguments[0].type());
     new_symbol.id = "c:@F@" + id2string(new_symbol.name);
-    new_symbol.value = arguments[0].op0().op0();
+    new_symbol.set_value(arguments[0].op0().op0());
     new_name(new_symbol);
     return;
   }

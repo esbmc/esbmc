@@ -59,9 +59,39 @@ assert x >= 0 and x < 10
 assert y % 2 == 0 and y >= 0 and y < 20
 ```
 
+### `random.choice(seq)`
+
+Returns a nondeterministic element `seq[i]` for an index constrained to `[0, len(seq) - 1]`. Raises `IndexError` on an empty sequence (matching CPython).
+
+```python
+import random
+xs = [10, 20, 30]
+v: int = random.choice(xs)
+assert v == 10 or v == 20 or v == 30   # always holds
+```
+
+### `random.sample(population, k)`
+
+Under-approximation: returns the first `k` elements of `population` as a fresh list. Raises `ValueError` when `k < 0` or `k > len(population)`. A precise model would pick `k` distinct nondeterministic indices; that is out of scope for the current stub.
+
+```python
+import random
+xs = [1, 2, 3, 4]
+s = random.sample(xs, 2)
+assert len(s) == 2                     # always holds
+```
+
+### `random.shuffle(lst)`
+
+Under-approximation: leaves `lst` untouched. A precise model would express the permutation symbolically; the current stub keeps the operation a no-op so callers that only rely on length / membership remain sound. Properties that depend on a specific reshuffled order cannot be verified.
+
+### `random.seed(a=0)`
+
+No-op stub. Because the nondeterminism of `nondet_int` / `nondet_float` already ranges over every seed-dependent outcome, seeding the model has no observable effect under verification.
+
 ## Unsupported Functions
 
-`random.choice()`, `random.shuffle()`, `random.sample()`, `random.seed()`, and other functions not listed above are not yet modelled.
+Functions outside the list above (e.g. `triangular`, `gauss`, `betavariate`, …) are not yet modelled.
 
 ## Modelling Approach
 

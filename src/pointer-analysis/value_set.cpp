@@ -17,8 +17,8 @@
 #include <util/std_expr.h>
 #include <util/type_byte_size.h>
 
-object_numberingt value_sett::object_numbering;
-object_number_numberingt value_sett::obj_numbering_refset;
+thread_local object_numberingt value_sett::object_numbering;
+thread_local object_number_numberingt value_sett::obj_numbering_refset;
 
 void value_sett::output(std::ostream &out) const
 {
@@ -857,7 +857,7 @@ void value_sett::get_reference_set_rec(const expr2tc &expr, object_mapt &dest)
     {
       const symbolt *sym = ns.lookup(to_symbol2t(expr).thename);
       assert(sym);
-      const irept &a = sym->type.find("alignment");
+      const irept &a = sym->get_type().find("alignment");
       if (a.is_not_nil())
       {
         assert(a.is_constant());
@@ -1107,61 +1107,63 @@ void value_sett::assign(
 
   if (is_struct_type(lhs_type) || is_union_type(lhs_type))
   {
-    if (lhs_type->type_id == rhs->type->type_id)
+    /* Types do not agree (different kind, or same kind but structurally
+     * incompatible). The latter happens when a single translation unit ends
+     * up with two declarations of the same struct tag that differ in members
+     * - e.g. glibc's `struct tm` (with `__tm_gmtoff`/`__tm_zone`) versus
+     * ESBMC's operational `time.h` (`tm_gmtoff`/`tm_zone`) - or for
+     * dereferences like:
+     *
+     *   struct S { int x; } a;
+     *   int b;
+     *   a = *(struct S *)&b;
+     *
+     * which build_reference_to() reports as a dereference_failure. For
+     * value-set tracking we simply drop the assignment.
+     */
+    if (lhs_type->type_id != rhs->type->type_id)
+      return;
+    const bool rhs_concrete = !is_unknown2t(rhs) && !is_invalid2t(rhs);
+    if (
+      rhs_concrete && !base_type_eq(rhs->type, lhs_type, ns) &&
+      !is_subclass_of(lhs_type, rhs->type, ns))
+      return;
+
+    // Assign the values of all members of the rhs thing to the lhs. It's
+    // sort-of-valid for the right hand side to be a superclass of the subclass,
+    // in which case there are some fields not common between them, so we
+    // iterate over the superclasses members.
+    const std::vector<type2tc> &members = struct_union_members(rhs->type);
+    const std::vector<irep_idt> &member_names =
+      struct_union_member_names(rhs->type);
+
+    for (size_t i = 0; i < members.size(); i++)
     {
-      /* either both union or both struct */
-      assert(lhs_type->type_id == rhs->type->type_id);
+      const type2tc &subtype = members[i];
+      const irep_idt &name = member_names[i];
 
-      // Assign the values of all members of the rhs thing to the lhs. It's
-      // sort-of-valid for the right hand side to be a superclass of the subclass,
-      // in which case there are some fields not common between them, so we
-      // iterate over the superclasses members.
-      const std::vector<type2tc> &members = struct_union_members(rhs->type);
-      const std::vector<irep_idt> &member_names =
-        struct_union_member_names(rhs->type);
+      // ignore methods
+      if (is_code_type(subtype))
+        continue;
 
-      for (size_t i = 0; i < members.size(); i++)
+      expr2tc lhs_member = member2tc(subtype, lhs, name);
+
+      expr2tc rhs_member;
+      if (is_unknown2t(rhs))
       {
-        const type2tc &subtype = members[i];
-        const irep_idt &name = member_names[i];
-
-        // ignore methods
-        if (is_code_type(subtype))
-          continue;
-
-        expr2tc lhs_member = member2tc(subtype, lhs, name);
-
-        expr2tc rhs_member;
-        if (is_unknown2t(rhs))
-        {
-          rhs_member = unknown2tc(subtype);
-        }
-        else if (is_invalid2t(rhs))
-        {
-          rhs_member = invalid2tc(subtype);
-        }
-        else
-        {
-          assert(
-            base_type_eq(rhs->type, lhs_type, ns) ||
-            is_subclass_of(lhs_type, rhs->type, ns));
-          expr2tc rhs_member = make_member(rhs, name);
-
-          // XXX -- shouldn't this be one level of indentation up?
-          assign(lhs_member, rhs_member, add_to_sets);
-        }
+        rhs_member = unknown2tc(subtype);
       }
-    }
-    else
-    {
-      /* types do not agree, this can happen during dereferences like this:
-       *   struct S { int x; } a;
-       *   int b;
-       *   a = *(struct S *)&b;
-       * and is caught as a dereference_failure by build_reference_to().
-       *
-       * Thus, we ignore this value-set assignment request here.
-       */
+      else if (is_invalid2t(rhs))
+      {
+        rhs_member = invalid2tc(subtype);
+      }
+      else
+      {
+        expr2tc rhs_member = make_member(rhs, name);
+
+        // XXX -- shouldn't this be one level of indentation up?
+        assign(lhs_member, rhs_member, add_to_sets);
+      }
     }
     return;
   }
@@ -1397,7 +1399,7 @@ void value_sett::do_function_call(
   const symbolt &symbol,
   const std::vector<expr2tc> &arguments)
 {
-  const code_typet &type = to_code_type(symbol.type);
+  const code_typet &type = to_code_type(symbol.get_type());
 
   type2tc tmp_migrated_type = migrate_type(type);
   const code_type2t &migrated_type =
