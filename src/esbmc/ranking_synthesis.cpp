@@ -285,7 +285,8 @@ std::string pointer_cell_identity(const irep_idt &p, const prefix_defst &defs)
       // allocation site (no two prefix instructions share the same
       // expr2tc object).
       char buf[32];
-      std::snprintf(buf, sizeof(buf), "alloc:%p", (const void *)src.get());
+      std::snprintf(
+        buf, sizeof(buf), "alloc:%p", static_cast<const void *>(src.get()));
       return buf;
     }
     if (is_address_of2t(src))
@@ -434,7 +435,8 @@ bool compute_safe_derefs(
     const dereference2t &deref = to_dereference2t(d);
     const irep_idt &p = to_symbol2t(deref.value).thename;
     char buf[64];
-    std::snprintf(buf, sizeof(buf), "$rank_deref$%p$", (const void *)d.get());
+    std::snprintf(
+      buf, sizeof(buf), "$rank_deref$%p$", static_cast<const void *>(d.get()));
     std::string sym_name = std::string(buf) + id2string(p);
     out_map[d] = symbol2tc(d->type, sym_name);
   }
