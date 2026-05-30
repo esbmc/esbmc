@@ -482,7 +482,16 @@ exprt function_call_expr::build_constant_from_arg() const
     if (first_arg["_type"] == "Name")
     {
       const symbolt *sym = lookup_python_symbol(first_arg["id"]);
-      if (sym && sym->get_value().is_constant())
+      // The compile-time fast path below decodes the symbol's stored value as
+      // a string; it is only valid for constant *string* symbols. For numeric
+      // symbols (int/float/bool) extract_string_from_symbol misreads the value
+      // — an int 65 decodes to the character 'A' (rejected as non-digit) and a
+      // float yields no string at all — so int(x) wrongly folds to 0. Route
+      // numeric symbols through the general numeric conversion instead, which
+      // truncates floats toward zero and treats ints as identity. (GitHub #4770)
+      if (
+        sym && sym->get_value().is_constant() &&
+        type_utils::is_string_type(sym->get_type()))
       {
         if (base_expr.is_nil())
         {
