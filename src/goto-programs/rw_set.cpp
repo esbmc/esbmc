@@ -150,8 +150,14 @@ void rw_sett::read_write_rec(
     // sets file_local=false on them so this filter recognises them
     // as race-eligible shared state.
     const bool python_global = symbol->mode == "Python" && !symbol->file_local;
+    // A non-static local whose address is taken may alias a pointer passed to
+    // another thread (e.g. via pthread_create), so a direct access to it by
+    // name is still race-relevant even though it is not a global (issue #4424).
+    const bool address_escaped =
+      shared_locals && shared_locals->count(symbol_expr.thename);
     if (
-      (!symbol->static_lifetime && !dereferenced && !python_global) ||
+      (!symbol->static_lifetime && !dereferenced && !python_global &&
+       !address_escaped) ||
       symbol->is_thread_local)
     {
       return; // ignore for now
