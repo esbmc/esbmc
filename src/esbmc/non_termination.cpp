@@ -12,6 +12,7 @@
 #include <map>
 #include <memory>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace
@@ -351,6 +352,27 @@ bool recognize_eca_main_loop(
   return true;
 }
 
+/// Collect the thename of every scalar storage symbol written by any
+/// ASSIGN in @p fn into @p out. Used by the soundness pass to identify
+/// which globals the callee can mutate across iterations — those are
+/// left existentially free in the SMT formula (their reachable set
+/// over-approximates), while globals NEVER written are pinned to
+/// their initial values (sound: their reachable set IS the singleton
+/// initial value).
+void collect_writes(
+  const goto_functiont &fn,
+  std::unordered_set<irep_idt, irep_id_hash> &out)
+{
+  for (const auto &instr : fn.body.instructions)
+  {
+    if (!instr.is_assign())
+      continue;
+    const code_assign2t &a = to_code_assign2t(instr.code);
+    if (is_symbol2t(a.target))
+      out.insert(to_symbol2t(a.target).thename);
+  }
+}
+
 /// Replace every leaf `symbol2t` named @p from_name in @p e by a copy
 /// of @p to. Used to substitute a callee's formal parameter symbol
 /// with the caller's actual-argument symbol so the SMT formula treats
@@ -437,22 +459,36 @@ harvest_initial_state(const goto_functionst &goto_functions)
 /// Concretely:
 ///   input == v1 ∨ ... ∨ input == vn         (caller's input constraint)
 ///   ∧  state_i == init_i for every state symbol with a known initialiser
+///                       AND not modified by any branch of the callee
 ///   ∧  ¬cond_1 ∧ ... ∧ ¬cond_N               (no branch fires)
 ///
 /// Each `cond_i` has its callee formal parameter substituted by the
 /// caller's actual `input_arg` symbol, so all references to "the
 /// input" denote the same SMT variable.
 ///
+/// Globals the callee MIGHT modify are left existentially free in the
+/// SMT formula — sound because the reachable set of values is at
+/// least as wide as their initial value (the demon may have stepped
+/// the loop through writing branches in earlier iterations), so any
+/// satisfying assignment over reachable states is still a valid
+/// non-termination witness from the LASSO closure of that reachable
+/// set. Globals NEVER written by the callee, on the other hand, are
+/// pinned to their initial value (the reachable set IS the singleton
+/// initial value), preventing the wrong-false where the SMT would
+/// otherwise pick an unreachable value to falsify a state-dependent
+/// guard (e.g. the Codex `a == 1` exploit).
+///
 /// SAT means there's a state + input combination, consistent with the
-/// program's initial state, under which the updater falls through to
-/// its trailing `return -2` without firing any branch — a real
-/// non-terminating execution of the main loop.
+/// reachable-state over-approximation, under which the updater falls
+/// through to its trailing `return -2` without firing any branch — a
+/// real non-terminating execution of the main loop.
 bool check_period_1_fixpoint(
   const expr2tc &input_arg,
   const irep_idt &callee_formal_name,
   const std::vector<BigInt> &valid_inputs,
   const std::vector<expr2tc> &branch_conds,
   const std::unordered_map<irep_idt, BigInt, irep_id_hash> &initial_state,
+  const std::unordered_set<irep_idt, irep_id_hash> &callee_writes,
   optionst &options,
   const namespacet &ns)
 {
@@ -474,9 +510,9 @@ bool check_period_1_fixpoint(
         ? c
         : substitute_symbol(c, callee_formal_name, input_arg));
   // Collect all free symbols appearing in the (rewritten) branch
-  // conditions and conjoin known initialisers for any that match.
-  // The caller's input symbol is *deliberately* excluded — its values
-  // are constrained by `input_constraint`, not by an initial value.
+  // conditions and conjoin known initialisers ONLY for symbols the
+  // callee never writes. The caller's input symbol is *deliberately*
+  // excluded — its values are constrained by `input_constraint`.
   std::unordered_map<irep_idt, expr2tc, irep_id_hash> free_syms;
   for (const expr2tc &c : rewritten)
     collect_free_symbols(c, free_syms);
@@ -485,6 +521,8 @@ bool check_period_1_fixpoint(
   {
     if (is_symbol2t(input_arg) && kv.first == to_symbol2t(input_arg).thename)
       continue;
+    if (callee_writes.count(kv.first))
+      continue; // mutable across iterations — leave free
     auto init = initial_state.find(kv.first);
     if (init == initial_state.end())
       continue;
@@ -545,12 +583,15 @@ tvt try_prove_non_termination_by_recurrent_set(
       std::vector<expr2tc> branch_conds;
       if (!collect_callee_branch_guards(callee_it->second, branch_conds))
         continue;
+      std::unordered_set<irep_idt, irep_id_hash> callee_writes;
+      collect_writes(callee_it->second, callee_writes);
       if (check_period_1_fixpoint(
             input_arg,
             callee_formal_name,
             valid_inputs,
             branch_conds,
             initial_state,
+            callee_writes,
             options,
             ns))
         return tvt(tvt::TV_FALSE);
