@@ -464,8 +464,9 @@ void goto_checkt::input_overflow_check(
     // `&arr[i]` is lowered to pointer arithmetic `arr + i` (an add2t),
     // which get_base_object does not peel.  Descend into the pointer-typed
     // operand to recover the underlying buffer symbol.
-    if ((is_add2t(base_expr) || is_sub2t(base_expr)) &&
-        is_pointer_type(base_expr))
+    if (
+      (is_add2t(base_expr) || is_sub2t(base_expr)) &&
+      is_pointer_type(base_expr))
     {
       const expr2tc &lhs = *base_expr->get_sub_expr(0);
       const expr2tc &rhs = *base_expr->get_sub_expr(1);
