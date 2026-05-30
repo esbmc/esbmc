@@ -914,7 +914,7 @@ bool solidity_convertert::get_elementary_type_name(
   case SolidityGrammar::ElementaryTypeNameT::BYTES32:
   {
     new_type = byte_static_t;
-    new_type.set("#sol_bytesn_size", bytesn_type_name_to_size(type));
+    set_sol_bytesn_size(new_type, bytesn_type_name_to_size(type));
     break;
   }
   case SolidityGrammar::ElementaryTypeNameT::BYTES:
@@ -1137,8 +1137,7 @@ void solidity_convertert::convert_type_expr(
   {
     if (src_sol_type != dest_sol_type)
       not_same_type = true;
-    else if (
-      src_type.get("#sol_bytesn_size") != dest_type.get("#sol_bytesn_size"))
+    else if (get_sol_bytesn_size(src_type) != get_sol_bytesn_size(dest_type))
       // including unset situation
       not_same_type = true;
     else if (get_sol_array_size(src_type) != get_sol_array_size(dest_type))
@@ -1300,10 +1299,9 @@ void solidity_convertert::convert_type_expr(
 
         // e.g. bytes3(0x1234); "BYTES3" => 3
         exprt len_expr;
-        if (!dest_type.get("#sol_bytesn_size").empty())
+        if (has_sol_bytesn_size(dest_type))
           len_expr = from_integer(
-            std::stoul(dest_type.get("#sol_bytesn_size").as_string()),
-            size_type());
+            std::stoul(get_sol_bytesn_size(dest_type)), size_type());
         else
         {
           log_error("got unexpected bytes typecast");

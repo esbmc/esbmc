@@ -90,6 +90,27 @@ public:
     return !t.get("#sol_array_size").empty();
   }
 
+  // Set/get/test the Solidity fixed-bytes (bytesN) width carried on a typet
+  // via the #sol_bytesn_size irep attribute, stored in its decimal form. Two
+  // setter overloads mirror irept::set: integral widths use the long form,
+  // already-stringified widths (copied between types) use the irep_idt form.
+  static void set_sol_bytesn_size(typet &t, long size)
+  {
+    t.set("#sol_bytesn_size", size);
+  }
+  static void set_sol_bytesn_size(typet &t, const irep_idt &size)
+  {
+    t.set("#sol_bytesn_size", size);
+  }
+  static std::string get_sol_bytesn_size(const typet &t)
+  {
+    return t.get("#sol_bytesn_size").as_string();
+  }
+  static bool has_sol_bytesn_size(const typet &t)
+  {
+    return !t.get("#sol_bytesn_size").empty();
+  }
+
   // json nodes that always empty
   // used as the return value for find_constructor_ref when
   // dealing with the implicit constructor call
