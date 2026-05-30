@@ -500,7 +500,7 @@ bool bitblast_convt::process_clause(const bvt &bv, bvt &dest)
 
   dest.reserve(bv.size());
 
-  for (bvt::const_iterator it = bv.begin(); it != bv.end(); it++)
+  for (bvt::const_iterator it = bv.begin(); it != bv.end(); ++it)
   {
     literalt l = *it;
 
@@ -527,7 +527,7 @@ void bitblast_convt::eliminate_duplicates(const bvt &bv, bvt &dest)
 
   dest.reserve(bv.size());
 
-  for (bvt::const_iterator it = bv.begin(); it != bv.end(); it++)
+  for (bvt::const_iterator it = bv.begin(); it != bv.end(); ++it)
   {
     if (s.insert(*it).second)
       dest.push_back(*it);
