@@ -93,6 +93,19 @@ void rw_sett::compute(const expr2tc &expr)
   {
     const code_function_call2t &code = to_code_function_call2t(expr);
     read_write_rec(code.ret, false, true, "", guard2tc(), expr2tc());
+    // An indirect call resolves its target by reading a function pointer (the
+    // call target is a dereference such as `*fp`, not a function symbol). If
+    // that pointer is shared, the read can race with a concurrent write, e.g.
+    // `fp = f2` under a different lock (issue #4425). A direct call instead
+    // names a function symbol (code, not data) and is handled below.
+    if (is_dereference2t(code.function))
+      // Read the pointer VALUE that selects the target, keyed on the pointer
+      // object itself (&fp) so it aliases a concurrent write `fp = ...`.
+      // Reading the dereference would key on the pointee `&(*fp)` and miss it.
+      // For `(*tbl[i])()` this keys on the array object `tbl`.
+      read_rec(to_dereference2t(code.function).value);
+    else if (!is_symbol2t(code.function))
+      read_rec(code.function);
     // For function calls, we first check to see if the function has a body
     // available, and if so, we skip it because we also check inside the
     // function. If not, we need to check these args.
