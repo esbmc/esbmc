@@ -305,7 +305,7 @@ void solidity_convertert::get_builtin_symbol(
   get_default_symbol(sym, "C++", t, name, id, l);
   {
     typet st = sym.get_type();
-    st.set("#sol_state_var", "1");
+    set_sol_state_var(st, true);
     sym.set_type(std::move(st));
   }
   sym.file_local = true;
