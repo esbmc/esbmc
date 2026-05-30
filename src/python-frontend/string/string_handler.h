@@ -709,6 +709,29 @@ public:
     const locationt &location);
 
   /**
+   * Convert a runtime string expression to a double via the
+   * __python_str_to_float operational model. Handles both char arrays and char
+   * pointers (function parameters). The caller is responsible for gating the
+   * conversion on handle_string_is_float() and raising ValueError on the
+   * invalid path.
+   * @param string_obj The string argument to convert
+   * @param location Source location for error reporting
+   * @return Expression representing the float (double) result
+   */
+  exprt
+  handle_string_to_float(const exprt &string_obj, const locationt &location);
+
+  /**
+   * Build a call to the __python_str_is_float operational model, returning a
+   * bool that is true iff the runtime string is a valid Python float literal.
+   * @param string_obj The string argument to validate
+   * @param location Source location for error reporting
+   * @return Boolean expression (the validity predicate)
+   */
+  exprt
+  handle_string_is_float(const exprt &string_obj, const locationt &location);
+
+  /**
    * Handle chr() builtin function
    * Converts a Unicode code point to its string representation
    * Supports chr(i) where i is an integer in range [0, 0x10FFFF]

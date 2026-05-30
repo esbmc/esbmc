@@ -7,6 +7,7 @@
 typedef void *(*__ESBMC_thread_start_func_type)(void *);
 void __ESBMC_terminate_thread(void);
 unsigned int __ESBMC_spawn_thread(void (*)(void));
+void __ESBMC_init_thread_local(void);
 
 struct __pthread_start_data
 {
@@ -189,6 +190,12 @@ __ESBMC_HIDE:;
 void pthread_trampoline(void)
 {
 __ESBMC_HIDE:;
+  // Seed each TLS (`__thread`) global to its static initializer in this
+  // thread's renaming scope; without this, the per-thread SSA chain
+  // (renaming.cpp) starts unconstrained and the first read in the
+  // worker function would resolve to nondet (#4434, #4433).
+  __ESBMC_init_thread_local();
+
   pthread_t threadid = __ESBMC_get_thread_id();
   struct __pthread_start_data startdata =
     __ESBMC_get_thread_internal_data(threadid);
