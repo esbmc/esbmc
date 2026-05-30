@@ -1,4 +1,7 @@
 import numpy as np
+
 a = np.array([[1, 2], [3, 4]])
-x = a[0, 1]
-assert x == 2
+r = a[(1,)]
+
+assert r[0] == 3
+assert r[1] == 4
