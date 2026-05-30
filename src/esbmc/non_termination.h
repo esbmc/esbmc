@@ -6,37 +6,32 @@
 #include <util/options.h>
 #include <util/threeval.h>
 
-/// Recurrent-set non-termination check (Gupta-Henzinger-Majumdar-
-/// Rybalchenko-Xu, POPL 2008).
+/// Non-termination check entry point.
 ///
-/// For each `while(1)`-shaped loop in the program, look for an
-/// inductive recurrent set R: a state predicate such that
-///   (1) the initial state satisfies R,
-///   (2) R is closed under one body iteration: there exists an input
-///       choice such that body(R, input) ⊆ R, and
-///   (3) R is disjoint from any exit path the body can take (calls to
-///       exit/abort/__VERIFIER_error, returns from main, etc.).
+/// Currently a no-op stub that always returns TV_UNKNOWN. The slot is
+/// wired into the termination driver in esbmc_parseoptions.cpp so a
+/// future recurrent-set / lasso detector can drop in without changing
+/// the driver.
 ///
-/// If such an R exists, the loop has an infinite execution (the demon
-/// always picks the input that keeps state in R), so the program is
-/// non-terminating.
+/// A previous prototype (trivial-recurrent-set detector at the GOTO
+/// level — find a non-exiting path through a `while(1)` body that
+/// writes no live-across-iterations symbol) was measured on the
+/// SV-COMP termination set and net-lost: zero hits on eca-rers2012
+/// (every update path modifies state) and net -188 raw on the
+/// ldv-linux-3.4-simple "infinite_withcheck_stateful" cluster, because
+/// structurally-identical loops in that cluster carry opposite
+/// expected_verdict labels. See the implementation file for the full
+/// post-mortem.
 ///
-/// Returns:
+/// Contract:
 ///   * TV_FALSE — proved non-terminating (caller reports VERIFICATION
 ///                FAILED for the termination property).
-///   * TV_UNKNOWN — could not prove non-termination (caller falls back
-///                  to the existing forward-condition / inductive-step
-///                  machinery).
+///   * TV_UNKNOWN — could not prove non-termination; the verdict is
+///                  delegated to the ranking-function pass and
+///                  k-induction.
 ///
-/// Never returns TV_TRUE — this checker only refutes termination, it
-/// does not certify it. The corresponding certifier lives in
-/// ranking_synthesis.cpp.
-///
-/// MVP scope (this commit): only the eca-rers2012 finite-state-machine
-/// shape — a `while(1)` whose body reads an input, validates it, calls
-/// a single update function, and back-edges. The recurrent-set
-/// predicate is restricted to a conjunction of equalities over global
-/// state variables, seeded from their constant initialisations.
+/// Never returns TV_TRUE — this slot is for refutation only. The
+/// corresponding certifier lives in ranking_synthesis.cpp.
 tvt try_prove_non_termination_by_recurrent_set(
   goto_functionst &goto_functions,
   optionst &options,
