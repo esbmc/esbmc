@@ -117,7 +117,7 @@ void xmlt::do_indent(std::ostream &out, unsigned indent)
 xmlt::elementst::const_iterator xmlt::find(const std::string &name) const
 {
   for (elementst::const_iterator it = elements.begin(); it != elements.end();
-       it++)
+       ++it)
     if (it->name == name)
       return it;
 
@@ -126,7 +126,7 @@ xmlt::elementst::const_iterator xmlt::find(const std::string &name) const
 
 xmlt::elementst::iterator xmlt::find(const std::string &name)
 {
-  for (elementst::iterator it = elements.begin(); it != elements.end(); it++)
+  for (elementst::iterator it = elements.begin(); it != elements.end(); ++it)
     if (it->name == name)
       return it;
 
@@ -158,12 +158,12 @@ std::string xmlt::unescape(const std::string &str)
 
   result.reserve(str.size());
 
-  for (std::string::const_iterator it = str.begin(); it != str.end(); it++)
+  for (std::string::const_iterator it = str.begin(); it != str.end(); ++it)
   {
     if (*it == '&')
     {
       std::string tmp;
-      it++;
+      ++it;
 
       while (it != str.end() && *it != ';')
         tmp += *it++;
