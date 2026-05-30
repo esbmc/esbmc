@@ -16,6 +16,7 @@
 #include <util/message.h>
 #include <util/python_types.h>
 #include <util/std_code.h>
+#include <util/std_expr.h>
 #include <algorithm>
 #include <cctype>
 #include <sstream>
@@ -800,6 +801,98 @@ exprt python_converter::handle_array_operations(
     return gen_boolean(op == "Eq");
   }
 
+  auto is_numeric_type = [](const typet &t) {
+    return t.is_signedbv() || t.is_unsignedbv() || t.is_floatbv();
+  };
+
+  auto is_char_array = [](const typet &t) {
+    if (!t.is_array())
+      return false;
+    const typet &elt = t.subtype();
+    return elt == char_type() ||
+           (elt.is_signedbv() && to_signedbv_type(elt).get_width() == 8) ||
+           (elt.is_unsignedbv() && to_unsignedbv_type(elt).get_width() == 8);
+  };
+
+  auto build_scalar_broadcast =
+    [&](exprt &array_expr, exprt &scalar_expr) -> exprt {
+    const typet &array_type = array_expr.type();
+    if (!array_type.is_array())
+      return nil_exprt();
+
+    const typet &elem_type = array_type.subtype();
+    if (!is_numeric_type(elem_type))
+      return nil_exprt();
+
+    if (!is_numeric_type(scalar_expr.type()))
+      return nil_exprt();
+
+    const exprt &size_expr = to_array_type(array_type).size();
+    if (!size_expr.is_constant())
+      return nil_exprt();
+
+    const BigInt size_big =
+      binary2integer(to_constant_expr(size_expr).value().c_str(), true);
+    if (size_big < 0)
+      return nil_exprt();
+
+    const long long array_size = size_big.to_int64();
+    if (array_size < 0)
+      return nil_exprt();
+
+    exprt casted_scalar = scalar_expr.type() == elem_type
+                            ? scalar_expr
+                            : typecast_exprt(scalar_expr, elem_type);
+
+    exprt result_array = array_expr;
+
+    for (long long i = 0; i < array_size; ++i)
+    {
+      exprt index = from_integer(i, size_type());
+      index_exprt array_item(array_expr, index, elem_type);
+      exprt bin_elem(python_frontend::map_operator(op, elem_type), elem_type);
+      bin_elem.copy_to_operands(array_item, casted_scalar);
+      result_array = with_exprt(result_array, index, bin_elem);
+    }
+
+    return result_array;
+  };
+
+  // Safe NumPy subset for direct binary operators:
+  // elementwise scalar broadcasting for numeric arrays in Add/Mult.
+  if ((op == "Add" || op == "Mult"))
+  {
+    const bool lhs_numeric_array = lhs.type().is_array() &&
+                                   is_numeric_type(lhs.type().subtype()) &&
+                                   !is_char_array(lhs.type());
+    const bool rhs_numeric_array = rhs.type().is_array() &&
+                                   is_numeric_type(rhs.type().subtype()) &&
+                                   !is_char_array(rhs.type());
+
+    if (lhs_numeric_array && !rhs.type().is_array())
+    {
+      exprt lowered = build_scalar_broadcast(lhs, rhs);
+      if (!lowered.is_nil())
+        return lowered;
+    }
+
+    // Keep unsupported combinations explicit and deterministic, avoiding
+    // follow-up type errors far from the arithmetic site.
+    if (
+      op == "Mult" &&
+      (rhs_numeric_array || (lhs_numeric_array && rhs.type().is_array()) ||
+       lhs.type().is_array() || rhs.type().is_array()))
+    {
+      std::ostringstream msg;
+      msg << "TypeError: arithmetic on numeric arrays is not supported "
+             "(numpy broadcasting is not modelled)";
+      const locationt loc = get_location_from_decl(element);
+      if (!loc.is_nil())
+        msg << " at " << loc.get_file() << ":" << loc.get_line();
+      throw std::runtime_error(msg.str());
+    }
+  }
+
   // Handle string concatenation -- only valid for char-arrays. Numeric
   // arrays (e.g. ``np.array([1, 2, 3])``, modelled as ``long int [N]``)
   // reaching this path via ``a + n`` previously got force-cast to char*
@@ -808,16 +901,8 @@ exprt python_converter::handle_array_operations(
   // explicitly: broadcasting is unsupported.
   if (op == "Add")
   {
-    auto is_char_subtype = [](const typet &t) {
-      if (!t.is_array())
-        return false;
-      const typet &elt = t.subtype();
-      return elt == char_type() ||
-             (elt.is_signedbv() && to_signedbv_type(elt).get_width() == 8) ||
-             (elt.is_unsignedbv() && to_unsignedbv_type(elt).get_width() == 8);
-    };
-    const bool lhs_char = is_char_subtype(lhs.type());
-    const bool rhs_char = is_char_subtype(rhs.type());
+    const bool lhs_char = is_char_array(lhs.type());
+    const bool rhs_char = is_char_array(rhs.type());
     if (!lhs_char && !rhs_char)
     {
       std::ostringstream msg;

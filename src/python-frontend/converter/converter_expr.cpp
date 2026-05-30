@@ -42,6 +42,44 @@ static bool contains_cpp_throw(const exprt &expr)
   return false;
 }
 
+static exprt build_shape_tuple_expr(
+  python_converter &converter,
+  const std::vector<exprt> &dims)
+{
+  std::vector<typet> element_types(dims.size(), int_type());
+  struct_typet tuple_type =
+    converter.get_tuple_handler().create_tuple_struct_type(element_types);
+  struct_exprt tuple_expr(tuple_type);
+  tuple_expr.operands() = dims;
+  return tuple_expr;
+}
+
+static nlohmann::json normalize_bool_index_node(const nlohmann::json &node)
+{
+  if (
+    node.contains("_type") && node["_type"] == "Constant" &&
+    node.contains("value") && node["value"].is_boolean())
+  {
+    nlohmann::json converted = node;
+    converted["value"] = node["value"].get<bool>() ? 1 : 0;
+    return converted;
+  }
+  return node;
+}
+
+static void throw_numpy_multidim_index_error(
+  python_converter &converter,
+  const nlohmann::json &element)
+{
+  std::ostringstream msg;
+  msg << "TypeError: multi-dimensional indexing (a[i, j, ...]) is not "
+         "supported; numpy arrays are modelled as 1D lists";
+  const locationt loc = converter.get_location_from_decl(element);
+  if (!loc.is_nil())
+    msg << " at " << loc.get_file() << ":" << loc.get_line();
+  throw std::runtime_error(msg.str());
+}
+
 static ExpressionType get_expression_type(const nlohmann::json &element)
 {
   // Return UNKNOWN if the expected "_type" field is missing
@@ -413,6 +451,46 @@ exprt python_converter::get_expr(const nlohmann::json &element)
             return result;
         }
 
+        // NumPy baseline support: expose `.shape` for modelled arrays/lists.
+        // - C arrays: shape is extracted from nested array dimensions.
+        // - ESBMC runtime list model: shape is a 1D tuple (len(list),).
+        if (attr_name == "shape")
+        {
+          if (base_type.is_array())
+          {
+            std::vector<int> dims =
+              type_handler_.get_array_type_shape(base_type);
+            std::vector<exprt> dim_exprs;
+            dim_exprs.reserve(dims.size());
+            for (int dim : dims)
+              dim_exprs.push_back(from_integer(dim, int_type()));
+            return build_shape_tuple_expr(*this, dim_exprs);
+          }
+
+          const typet list_type = type_handler_.get_list_type();
+          if (
+            base_type == list_type || (base_expr.type().is_pointer() &&
+                                       base_expr.type().subtype() == list_type))
+          {
+            const symbolt *size_func =
+              symbol_table_.find_symbol("c:@F@__ESBMC_list_size");
+            if (!size_func)
+              throw std::runtime_error(
+                "__ESBMC_list_size not found for list shape access");
+
+            side_effect_expr_function_callt size_call;
+            size_call.function() = symbol_expr(*size_func);
+            size_call.type() = size_type();
+            if (base_expr.type().is_pointer())
+              size_call.arguments().push_back(base_expr);
+            else
+              size_call.arguments().push_back(address_of_exprt(base_expr));
+
+            exprt list_len = typecast_exprt(size_call, int_type());
+            return build_shape_tuple_expr(*this, {list_len});
+          }
+        }
+
         if (base_type.is_struct())
         {
           const struct_typet &struct_type = to_struct_type(base_type);
@@ -698,6 +776,48 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     if (!is_class_attr && element["_type"] == "Attribute")
     {
       const std::string &attr_name = element["attr"].get<std::string>();
+
+      if (attr_name == "shape")
+      {
+        typet sym_type = symbol->get_type();
+        if (sym_type.is_pointer())
+          sym_type = sym_type.subtype();
+        if (sym_type.id() == "symbol")
+          sym_type = ns.follow(sym_type);
+
+        if (sym_type.is_array())
+        {
+          std::vector<int> dims = type_handler_.get_array_type_shape(sym_type);
+          std::vector<exprt> dim_exprs;
+          dim_exprs.reserve(dims.size());
+          for (int dim : dims)
+            dim_exprs.push_back(from_integer(dim, int_type()));
+          expr = build_shape_tuple_expr(*this, dim_exprs);
+          break;
+        }
+
+        const typet list_type = type_handler_.get_list_type();
+        if (
+          sym_type == list_type || (symbol->get_type().is_pointer() &&
+                                    symbol->get_type().subtype() == list_type))
+        {
+          const symbolt *size_func =
+            symbol_table_.find_symbol("c:@F@__ESBMC_list_size");
+          if (!size_func)
+            throw std::runtime_error(
+              "__ESBMC_list_size not found for list shape access");
+
+          side_effect_expr_function_callt size_call;
+          size_call.function() = symbol_expr(*size_func);
+          size_call.type() = size_type();
+          size_call.arguments().push_back(
+            expr.type().is_pointer() ? expr : address_of_exprt(expr));
+
+          exprt list_len = typecast_exprt(size_call, int_type());
+          expr = build_shape_tuple_expr(*this, {list_len});
+          break;
+        }
+      }
 
       // Delegate complex attribute access (.real, .imag) to the handler.
       if (is_complex_type(symbol->get_type()))
@@ -1067,6 +1187,40 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       break;
     }
 
+    // Multi-dimensional indexing ``a[i, j]`` -- accept the 2D subset by
+    // lowering to chained indexing: `a[i][j]`. Keep rejecting all other tuple
+    // index arities with an explicit Python-level TypeError.
+    if (slice.contains("_type") && slice["_type"] == "Tuple")
+    {
+      if (
+        slice.contains("elts") && slice["elts"].is_array() &&
+        slice["elts"].size() == 2)
+      {
+        const auto &row_idx_raw = slice["elts"][0];
+        const auto &col_idx_raw = slice["elts"][1];
+        const nlohmann::json row_idx = normalize_bool_index_node(row_idx_raw);
+        const nlohmann::json col_idx = normalize_bool_index_node(col_idx_raw);
+        const bool has_slice_dim =
+          (row_idx.contains("_type") && row_idx["_type"] == "Slice") ||
+          (col_idx.contains("_type") && col_idx["_type"] == "Slice");
+        if (has_slice_dim)
+          throw_numpy_multidim_index_error(*this, element);
+
+        python_list list(*this, element);
+        exprt row = list.index(array, row_idx);
+        if (contains_cpp_throw(row))
+        {
+          expr = row;
+          break;
+        }
+
+        expr = list.index(row, col_idx);
+        break;
+      }
+
+      throw_numpy_multidim_index_error(*this, element);
+    }
+
     // Handle object subscripting through __getitem__:
     //   obj[key] -> obj.__getitem__(key)
     if (has_dunder_method(element["value"], "__getitem__"))
@@ -1077,23 +1231,6 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         build_dunder_call(element["value"], "__getitem__", args, element);
       expr = get_function_call(call_node);
       break;
-    }
-
-    // Multi-dimensional indexing ``a[i, j]`` -- the slice AST is a Tuple of
-    // index expressions. This is the canonical numpy 2D-indexing form. The
-    // frontend models numpy arrays as plain 1D Python lists, so the operation
-    // is unsupported; rejecting it explicitly produces a clean Python-level
-    // error rather than tripping `Unexpected type in int/ptr typecast` deep
-    // inside the SMT encoder when the resulting expression is consumed.
-    if (slice.contains("_type") && slice["_type"] == "Tuple")
-    {
-      std::ostringstream msg;
-      msg << "TypeError: multi-dimensional indexing (a[i, j, ...]) is not "
-             "supported; numpy arrays are modelled as 1D lists";
-      const locationt loc = get_location_from_decl(element);
-      if (!loc.is_nil())
-        msg << " at " << loc.get_file() << ":" << loc.get_line();
-      throw std::runtime_error(msg.str());
     }
 
     // Reject subscripting scalar numeric / boolean values up front. CPython
@@ -1127,7 +1264,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
 
     // Handle regular array/list subscripting
     python_list list(*this, element);
-    expr = list.index(array, slice);
+    expr = list.index(array, normalize_bool_index_node(slice));
     break;
   }
   case ExpressionType::FSTRING:
