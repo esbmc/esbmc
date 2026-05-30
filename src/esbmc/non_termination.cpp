@@ -5,10 +5,13 @@
 #include <solvers/solve.h>
 #include <solvers/smt/smt_conv.h>
 #include <irep2/irep2_expr.h>
+#include <irep2/irep2_type.h>
 #include <util/c_types.h>
 #include <util/std_expr.h>
 
+#include <map>
 #include <memory>
+#include <unordered_map>
 #include <vector>
 
 namespace
@@ -140,6 +143,8 @@ bool collect_callee_branch_guards(
       if (touches_memory_or_sideeffect(it->guard))
         return false;
       auto tgt = it->targets.front();
+      if (tgt == end)
+        return false; // pathological: jump target is past end-of-function
       if (tgt->location_number <= it->location_number)
         return false;
       // The IF guard is `!cond` (THEN-arm runs when cond is true). We
@@ -346,19 +351,111 @@ bool recognize_eca_main_loop(
   return true;
 }
 
-/// Build the SMT formula `input ∈ valid_inputs ∧ ¬cond_1 ∧ ... ∧
-/// ¬cond_N` and ask the solver if it's satisfiable. SAT means there's
-/// a state + input combination under which `calculate_output` falls
-/// through to its trailing `return -2` without firing any branch,
-/// leaving the state unchanged — a period-1 fixpoint of the main loop.
+/// Replace every leaf `symbol2t` named @p from_name in @p e by a copy
+/// of @p to. Used to substitute a callee's formal parameter symbol
+/// with the caller's actual-argument symbol so the SMT formula treats
+/// them as the same SMT variable.
+expr2tc substitute_symbol(
+  const expr2tc &e,
+  const irep_idt &from_name,
+  const expr2tc &to)
+{
+  if (is_nil_expr(e))
+    return e;
+  if (is_symbol2t(e) && to_symbol2t(e).thename == from_name)
+    return to;
+  expr2tc out = e;
+  bool changed = false;
+  std::vector<expr2tc> new_ops;
+  e->foreach_operand([&](const expr2tc &op) {
+    expr2tc no = substitute_symbol(op, from_name, to);
+    if (no.get() != op.get())
+      changed = true;
+    new_ops.push_back(no);
+  });
+  if (!changed)
+    return e;
+  size_t i = 0;
+  out.get()->Foreach_operand([&](expr2tc &op) { op = new_ops[i++]; });
+  return out;
+}
+
+/// Walk @p e collecting the thename of every `symbol2t` leaf into
+/// @p out (deduplicated by name). Used to gather the free state
+/// symbols the SMT formula will mention, so we can constrain those
+/// that have known initialisers to their initial values.
+void collect_free_symbols(
+  const expr2tc &e,
+  std::unordered_map<irep_idt, expr2tc, irep_id_hash> &out)
+{
+  if (is_nil_expr(e))
+    return;
+  if (is_symbol2t(e))
+  {
+    out.emplace(to_symbol2t(e).thename, e);
+    return;
+  }
+  e->foreach_operand([&](const expr2tc &op) { collect_free_symbols(op, out); });
+}
+
+/// Harvest constant initial values for globals from `__ESBMC_main`,
+/// the synthetic entry point ESBMC inserts before calling C's `main`.
+/// `__ESBMC_main` is loop-free and consists of a flat sequence of
+/// `ASSIGN global = constant` instructions for every static-lifetime
+/// scalar with an initialiser. We take the LATEST written constant
+/// value per symbol (so a chain `x = 0; x = 5;` records x → 5, which
+/// is the state at the point `main` begins executing).
+///
+/// Symbols with non-constant initialisers (e.g. derived from other
+/// globals, or written by helper-call results) are NOT recorded — the
+/// SMT formula will leave them existentially free, which is sound but
+/// less precise. This is fine for eca-rers2012, where every state
+/// variable has a literal initialiser in the source.
+std::unordered_map<irep_idt, BigInt, irep_id_hash>
+harvest_initial_state(const goto_functionst &goto_functions)
+{
+  std::unordered_map<irep_idt, BigInt, irep_id_hash> out;
+  auto it = goto_functions.function_map.find("__ESBMC_main");
+  if (it == goto_functions.function_map.end())
+    return out;
+  if (!it->second.body_available)
+    return out;
+  for (const auto &instr : it->second.body.instructions)
+  {
+    if (!instr.is_assign())
+      continue;
+    const code_assign2t &a = to_code_assign2t(instr.code);
+    if (!is_symbol2t(a.target) || !is_constant_int2t(a.source))
+      continue;
+    out[to_symbol2t(a.target).thename] = to_constant_int2t(a.source).value;
+  }
+  return out;
+}
+
+/// Build the SMT formula and ask whether a period-1 fixpoint exists.
+///
+/// Concretely:
+///   input == v1 ∨ ... ∨ input == vn         (caller's input constraint)
+///   ∧  state_i == init_i for every state symbol with a known initialiser
+///   ∧  ¬cond_1 ∧ ... ∧ ¬cond_N               (no branch fires)
+///
+/// Each `cond_i` has its callee formal parameter substituted by the
+/// caller's actual `input_arg` symbol, so all references to "the
+/// input" denote the same SMT variable.
+///
+/// SAT means there's a state + input combination, consistent with the
+/// program's initial state, under which the updater falls through to
+/// its trailing `return -2` without firing any branch — a real
+/// non-terminating execution of the main loop.
 bool check_period_1_fixpoint(
   const expr2tc &input_arg,
+  const irep_idt &callee_formal_name,
   const std::vector<BigInt> &valid_inputs,
   const std::vector<expr2tc> &branch_conds,
+  const std::unordered_map<irep_idt, BigInt, irep_id_hash> &initial_state,
   optionst &options,
   const namespacet &ns)
 {
-  // input ∈ {v1, ..., vn}  ⇔  input == v1 ∨ ... ∨ input == vn
   expr2tc input_constraint;
   for (const BigInt &v : valid_inputs)
   {
@@ -366,8 +463,36 @@ bool check_period_1_fixpoint(
     input_constraint =
       is_nil_expr(input_constraint) ? atom : or2tc(input_constraint, atom);
   }
-  expr2tc formula = input_constraint;
+  // Substitute the callee's formal parameter with the caller's actual
+  // input symbol in every branch guard so the SMT formula treats them
+  // as the same variable rather than two unrelated free variables.
+  std::vector<expr2tc> rewritten;
+  rewritten.reserve(branch_conds.size());
   for (const expr2tc &c : branch_conds)
+    rewritten.push_back(
+      callee_formal_name.empty()
+        ? c
+        : substitute_symbol(c, callee_formal_name, input_arg));
+  // Collect all free symbols appearing in the (rewritten) branch
+  // conditions and conjoin known initialisers for any that match.
+  // The caller's input symbol is *deliberately* excluded — its values
+  // are constrained by `input_constraint`, not by an initial value.
+  std::unordered_map<irep_idt, expr2tc, irep_id_hash> free_syms;
+  for (const expr2tc &c : rewritten)
+    collect_free_symbols(c, free_syms);
+  expr2tc formula = input_constraint;
+  for (const auto &kv : free_syms)
+  {
+    if (is_symbol2t(input_arg) && kv.first == to_symbol2t(input_arg).thename)
+      continue;
+    auto init = initial_state.find(kv.first);
+    if (init == initial_state.end())
+      continue;
+    expr2tc eq =
+      equality2tc(kv.second, constant_int2tc(kv.second->type, init->second));
+    formula = and2tc(formula, eq);
+  }
+  for (const expr2tc &c : rewritten)
     formula = and2tc(formula, not2tc(c));
   return is_sat(formula, options, ns);
 }
@@ -387,7 +512,10 @@ tvt try_prove_non_termination_by_recurrent_set(
   // its trailing `return -2` with state unchanged, and the demon can
   // pick that (s, i) forever. We discharge the existence question via
   // a single SMT SAT query — no symex required, just the IF guards
-  // harvested from the goto program.
+  // harvested from the goto program, with the callee's formal input
+  // substituted by the caller's actual input and globals constrained
+  // to their initialisers harvested from `__ESBMC_main`.
+  const auto initial_state = harvest_initial_state(goto_functions);
   Forall_goto_functions (f_it, goto_functions)
   {
     if (!f_it->second.body_available || f_it->second.body.hide)
@@ -405,11 +533,26 @@ tvt try_prove_non_termination_by_recurrent_set(
         continue;
       if (!callee_it->second.body_available || callee_it->second.body.hide)
         continue;
+      // Identify the callee's single formal parameter so we can
+      // substitute its symbol with the caller's actual input.
+      irep_idt callee_formal_name;
+      if (is_code_type(callee_it->second.type))
+      {
+        const code_type2t &ct = to_code_type(callee_it->second.type);
+        if (ct.argument_names.size() == 1)
+          callee_formal_name = ct.argument_names[0];
+      }
       std::vector<expr2tc> branch_conds;
       if (!collect_callee_branch_guards(callee_it->second, branch_conds))
         continue;
       if (check_period_1_fixpoint(
-            input_arg, valid_inputs, branch_conds, options, ns))
+            input_arg,
+            callee_formal_name,
+            valid_inputs,
+            branch_conds,
+            initial_state,
+            options,
+            ns))
         return tvt(tvt::TV_FALSE);
     }
   }
