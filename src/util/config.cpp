@@ -43,7 +43,7 @@ namespace
 {
 struct eregex : std::regex
 {
-  eregex(std::string pat)
+  explicit eregex(std::string pat)
     : std::regex(std::move(pat), std::regex_constants::extended)
   {
   }
