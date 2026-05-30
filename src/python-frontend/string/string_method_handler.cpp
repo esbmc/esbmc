@@ -1019,8 +1019,7 @@ exprt string_handler::handle_char_isspace(
   const locationt &location)
 {
   // For single characters, use the standard C isspace() function
-  std::string func_symbol_id = ensure_string_function_symbol(
-    "isspace", int_type(), {int_type()}, location);
+  std::string func_symbol_id = ensure_string_function_symbol("isspace");
 
   // Convert char to int for isspace
   exprt char_as_int = char_expr;
@@ -1135,19 +1134,11 @@ exprt string_handler::handle_string_lstrip(
     }
   }
 
-  // If chars_arg is empty, strip whitespace (default behavior)
-  std::vector<typet> arg_types = {pointer_typet(char_type())};
-
   if (chars_arg.is_not_nil())
   {
     // With chars argument: __python_str_lstrip_chars(str, chars)
-    arg_types.push_back(pointer_typet(char_type()));
-
-    std::string func_symbol_id = ensure_string_function_symbol(
-      "__python_str_lstrip_chars",
-      pointer_typet(char_type()),
-      arg_types,
-      location);
+    std::string func_symbol_id =
+      ensure_string_function_symbol("__python_str_lstrip_chars");
 
     // Convert arguments to pointers if needed
     exprt str_ptr = str_expr;
@@ -1196,11 +1187,8 @@ exprt string_handler::handle_string_lstrip(
   else
   {
     // Without chars argument: __python_str_lstrip(str) - default whitespace
-    std::string func_symbol_id = ensure_string_function_symbol(
-      "__python_str_lstrip",
-      pointer_typet(char_type()),
-      {pointer_typet(char_type())},
-      location);
+    std::string func_symbol_id =
+      ensure_string_function_symbol("__python_str_lstrip");
 
     // Get the string pointer
     exprt str_ptr = str_expr;
@@ -1336,11 +1324,8 @@ exprt string_handler::handle_string_strip(
   // If chars_arg is provided, use __python_str_strip_chars
   if (chars_arg.is_not_nil())
   {
-    std::string func_symbol_id = ensure_string_function_symbol(
-      "__python_str_strip_chars",
-      pointer_typet(char_type()),
-      {pointer_typet(char_type()), pointer_typet(char_type())},
-      location);
+    std::string func_symbol_id =
+      ensure_string_function_symbol("__python_str_strip_chars");
 
     exprt str_ptr = str_expr;
     if (str_expr.type().is_array())
@@ -1372,11 +1357,8 @@ exprt string_handler::handle_string_strip(
   }
 
   // Default behavior: strip whitespace
-  std::string func_symbol_id = ensure_string_function_symbol(
-    "__python_str_strip",
-    pointer_typet(char_type()),
-    {pointer_typet(char_type())},
-    location);
+  std::string func_symbol_id =
+    ensure_string_function_symbol("__python_str_strip");
 
   exprt str_ptr = str_expr;
 
@@ -1498,11 +1480,8 @@ exprt string_handler::handle_string_rstrip(
   // If chars_arg is provided, use __python_str_rstrip_chars
   if (chars_arg.is_not_nil())
   {
-    std::string func_symbol_id = ensure_string_function_symbol(
-      "__python_str_rstrip_chars",
-      pointer_typet(char_type()),
-      {pointer_typet(char_type()), pointer_typet(char_type())},
-      location);
+    std::string func_symbol_id =
+      ensure_string_function_symbol("__python_str_rstrip_chars");
 
     exprt str_ptr = str_expr;
     if (str_expr.type().is_array())
@@ -1533,11 +1512,8 @@ exprt string_handler::handle_string_rstrip(
     return call;
   }
 
-  std::string func_symbol_id = ensure_string_function_symbol(
-    "__python_str_rstrip",
-    pointer_typet(char_type()),
-    {pointer_typet(char_type())},
-    location);
+  std::string func_symbol_id =
+    ensure_string_function_symbol("__python_str_rstrip");
 
   exprt str_ptr = str_expr;
 
@@ -1996,14 +1972,8 @@ exprt string_handler::handle_string_replace(
   exprt new_addr =
     new_expr.type().is_pointer() ? new_expr : get_array_base_address(new_expr);
 
-  std::string func_symbol_id = ensure_string_function_symbol(
-    "__python_str_replace",
-    pointer_typet(char_type()),
-    {pointer_typet(char_type()),
-     pointer_typet(char_type()),
-     pointer_typet(char_type()),
-     int_type()},
-    location);
+  std::string func_symbol_id =
+    ensure_string_function_symbol("__python_str_replace");
 
   side_effect_expr_function_callt replace_call;
   replace_call.function() = symbol_exprt(func_symbol_id, code_typet());

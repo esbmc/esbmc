@@ -785,18 +785,18 @@ private:
     const locationt &location);
 
   /**
-   * @brief Find or create a function symbol for string operations
-   * @param function_name Name of the function
-   * @param return_type Return type of function
-   * @param arg_types Argument types
-   * @param location Source location
+   * @brief Resolve an operational-model function symbol, or fail loudly.
+   *
+   * Returns the fully-qualified symbol id (e.g. `c:@F@name`) of a runtime
+   * operational-model function that must already be linked from the model
+   * library. Throws std::runtime_error if the model is not registered, so a
+   * missing model fails loudly instead of decaying to an unconstrained nondet
+   * value.
+   *
+   * @param function_name Bare model name, e.g. "__python_str_replace"
    * @return Function identifier
    */
-  std::string ensure_string_function_symbol(
-    const std::string &function_name,
-    const typet &return_type,
-    const std::vector<typet> &arg_types,
-    const locationt &location);
+  std::string ensure_string_function_symbol(const std::string &function_name);
 
   symbolt *find_cached_symbol(const std::string &symbol_id);
   symbolt *find_cached_c_function_symbol(const std::string &symbol_id);

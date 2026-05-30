@@ -301,6 +301,24 @@ endfunction()
 
 message(STATUS "Multiarch flags for c2goto: ${multiarch_flags}. You may want to override C2GOTO_SYSROOT")
 mangle_clib(mangled_files ${inputs})
+
+# Auto-generate the Python operational-model allowlist from the model sources so
+# new models register automatically (scripts/gen_python_c_models.py). The header
+# is consumed by cprover_library.cpp under #ifdef ENABLE_PYTHON_FRONTEND.
+if(ENABLE_PYTHON_FRONTEND)
+  find_package(Python REQUIRED COMPONENTS Interpreter)
+  file(GLOB_RECURSE python_model_sources CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/library/python/*.c")
+  set(python_c_models_header ${CMAKE_CURRENT_BINARY_DIR}/python_c_models_generated.h)
+  add_custom_command(OUTPUT ${python_c_models_header}
+    COMMAND ${Python_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/gen_python_c_models.py
+            -o ${python_c_models_header} ${python_model_sources}
+    DEPENDS ${CMAKE_SOURCE_DIR}/scripts/gen_python_c_models.py ${python_model_sources}
+    COMMENT "Generating Python C-model allowlist ${python_c_models_header}"
+    VERBATIM)
+  add_custom_target(gen_python_c_models DEPENDS ${python_c_models_header})
+endif()
+
 add_library(clibs ${mangled_files} cprover_library.cpp cprover_libc_sources.cpp)
 target_include_directories(clibs
     PRIVATE ${Boost_INCLUDE_DIRS}
@@ -308,6 +326,9 @@ target_include_directories(clibs
     PRIVATE ${CMAKE_CURRENT_BINARY_DIR}
 )
 target_link_libraries(clibs c2gotoheaders fmt::fmt filesystem)
+if(ENABLE_PYTHON_FRONTEND)
+  add_dependencies(clibs gen_python_c_models)
+endif()
 
 set(private_headers
   "${CMAKE_CURRENT_BINARY_DIR}/libc.h"
