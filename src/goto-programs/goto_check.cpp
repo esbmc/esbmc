@@ -454,30 +454,28 @@ void goto_checkt::input_overflow_check(
   for (long unsigned int i = fmt_idx + 1; i <= number_of_format_args + fmt_idx;
        i++)
   {
-    const expr2tc &base_expr = get_base_object(func_call.operands[i]);
+    expr2tc base_expr = get_base_object(func_call.operands[i]);
     irep_idt arg_name;
-    if (is_symbol2t(base_expr))
-      arg_name = to_symbol2t(base_expr).thename;
 
     // e.g
     // int *arr = (int*) malloc(10 * sizeof(int));
     // scanf("%13d",&arr[0]);  --> overflow
-    if (arg_name.empty())
+    //
+    // `&arr[i]` is lowered to pointer arithmetic `arr + i` (an add2t),
+    // which get_base_object does not peel.  Descend into the pointer-typed
+    // operand to recover the underlying buffer symbol.
+    if (
+      (is_add2t(base_expr) || is_sub2t(base_expr)) &&
+      is_pointer_type(base_expr))
     {
-      expr2tc deref = get_base_object(func_call.operands[i]);
-
-      // not the format we expected
-      if (!is_pointer_type(deref))
-        return;
-
-      // we expect an address_of(symbol) underneath
-      if (!is_address_of2t(deref))
-        return;
-      const expr2tc &target = to_address_of2t(deref).ptr_obj;
-      if (!is_symbol2t(target))
-        return;
-      arg_name = to_symbol2t(target).thename;
+      const expr2tc &lhs = *base_expr->get_sub_expr(0);
+      const expr2tc &rhs = *base_expr->get_sub_expr(1);
+      base_expr = get_base_object(is_pointer_type(lhs) ? lhs : rhs);
     }
+
+    if (is_symbol2t(base_expr))
+      arg_name = to_symbol2t(base_expr).thename;
+
     arg_names.push_back(arg_name);
   }
 

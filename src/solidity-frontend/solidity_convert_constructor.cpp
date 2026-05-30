@@ -473,7 +473,7 @@ bool solidity_convertert::move_initializer_to_ctor(
         "\t@@@ initializing symbol {} in the constructor",
         comp.name().as_string());
 
-      bool is_state = comp.type().get("#sol_state_var") == "1";
+      bool is_state = get_sol_state_var(comp.type());
       if (!is_state)
       {
         // auxiliary local variable we created

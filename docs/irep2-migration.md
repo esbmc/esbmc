@@ -1349,3 +1349,128 @@ the solver.
   `#sol_tuple_id` ever read, or purely set-only (dead)? §4 shows several
   with 0 read sites; confirm per-attribute before deleting vs relocating.
   (blocks 3.1 commit 8)
+
+## 14. Outcome — Phase 3.1 concluded; the chokepoint milestone and the value-carried-metadata wall
+
+> **Status: concluded.** Sections 1–13 above were the forward plan. This
+> records what landed, the resolution of the gating open questions (Q-S1,
+> Q-S2), and why the off-IR companion step is deferred. The
+> attribute-access **encapsulation chokepoints are the sound milestone**;
+> moving the metadata off the IR hits a fundamental "metadata must travel
+> with the value" constraint that re-validates B1.
+
+### What landed — the attribute-chokepoint pass
+
+Every **Solidity-specific `#sol_*` type attribute** is now written and
+read through a single typed accessor on `solidity_convertert`
+(`set_`/`get_`/`has_sol_*`), instead of scattered raw `irept::set`/
+`get("#…")` calls.
+
+| PR | Attribute(s) | sites funnelled |
+|----|------|---|
+| [#4951](https://github.com/esbmc/esbmc/pull/4951) | `#sol_array_size` | 8 set / 13 read |
+| [#4952](https://github.com/esbmc/esbmc/pull/4952) | `#sol_bytesn_size` | 5 set / 12 read |
+| [#4953](https://github.com/esbmc/esbmc/pull/4953) | `#sol_contract` | 1 set / 6 read |
+| [#4958](https://github.com/esbmc/esbmc/pull/4958) | `#sol_mapping_array`, `#sol_dynarray_state`, `#sol_state_var`, `#sol_name` | 7 set / 15 read |
+| [#4959](https://github.com/esbmc/esbmc/pull/4959) | `#sol_data_loc` | 3 set / 0 read |
+
+(`#sol_type` was already encapsulated pre-plan via `get_sol_type` /
+`set_sol_type`.) After the pass, raw `"#sol` access outside the accessor
+bodies is gone; the Solidity type-metadata surface sits behind ~10 typed
+seams that a future migration can repoint **in one place each**, rather
+than at the dozens of scattered call sites that existed before. Every PR
+was a behaviour-preserving mechanical no-op (same key, same value,
+same storage); verdict validation ran on Linux CI, since the
+`esbmc-solidity` suite cannot run on macOS (the `sol64` operational models
+are stubbed empty there — `_BitInt(256)` is unavailable on Apple's aarch64
+target).
+
+`#member_name` was **deliberately excluded** — see Q-S2.
+
+### Q-S1 resolved — the reads are value-carried, not symbol-reachable
+
+The plan gated the off-IR companion (a `symbol-id → sol_typeinfo`
+side-table) on Q-S1. The audit settles it, and the answer kills the
+side-table design.
+
+Reproducible census
+(`grep -hoE 'get_sol_type\([^)]*\)' src/solidity-frontend`): of the ~43
+`get_sol_type` read sites, **~40 read off a transient `typet` value or an
+expression's `.type()`** — local `t` / `val_t` / `base_t` / `rt`,
+`comp.type()`, `lhs.type()` / `rhs.type()`, `type.return_type()` — with
+**no associated symbol at read time**. The canonical shape
+(`solidity_convert_decl.cpp`):
+
+```cpp
+typet t;
+get_type_description(ast_node, …, t);           // builds t, tags it via set_sol_type
+bool is_contract = get_sol_type(t) == CONTRACT; // reads it back off the local t — before any symbol exists
+```
+
+There is **no stable key** to look these up by: `typet` is a value with no
+identity (copies compare equal but are distinct objects), and the
+originating solc JSON node is gone at most read sites. So a side-table
+keyed by symbol id — or by anything else — cannot serve them. **The
+classification must travel with the type value.**
+
+### Q-S2 resolved — `#member_name` is a shared clang-cpp convention, not Solidity-private
+
+`#member_name` is set by the Solidity frontend on struct-component types,
+but it is **read outside the frontend** by
+`clang-cpp-frontend/clang_cpp_adjust_code_gen.cpp` (constructor namespace
+lookup / name mangling — `clang_cpp_adjust` runs over Solidity output too)
+and referenced by the python frontend. It is therefore *not* a
+Solidity-local attribute and cannot be moved off the IR by frontend work;
+the shared adjust pass reads it straight from the node. Left on the IR,
+out of scope. This also answers Q-S2 in the affirmative for at least one
+attribute: a shared post-converter pass *does* consume an IR attribute the
+Solidity frontend writes.
+
+### The design implication — only a value-bundled wrapper can move it off-IR
+
+| Mechanism | Carries classification with the value? | Verdict |
+|---|---|---|
+| Side-table (symbol- or otherwise-keyed) | no — transient / expr types have no key | **not viable** (Q-S1) |
+| Value-bundled wrapper `struct { type2tc ir; sol_typeinfo info; }` as the frontend's internal type, lowered to plain `type2tc` at the symbol / expr boundary | yes | **works, with a caveat** |
+| Extend `type2t` with a generic attribute map | yes | **rejected** (§5.1) — reinstates the string-keyed escape hatch IREP2 exists to abolish |
+
+The only off-IR-capable option is the wrapper. But the wrapper
+**re-implements `irept`'s value-traveling attribute flexibility on top of
+`type2tc`** — out of band, yet functionally the very thing the migration
+set out to remove. It would buy typed-construction safety inside the
+converter, but not the determinism / closed-type-system benefit that
+justified migrating in the first place; that benefit is already realised
+in the verifier core, which never sees these attributes (they are dropped
+at the `migrate_type` seam, harmlessly, because nothing downstream reads
+them).
+
+### Why Phase 3.1 stops at the chokepoints
+
+This **re-validates B1** (Part I: "frontends stay legacy"). The Solidity
+frontend depends on rich, *value-traveling* type metadata — precisely what
+IREP2's closed type system is designed not to carry. Bridging it requires
+either the wrapper (high cost; recreates attribute flexibility; no
+verifier-core soundness gain) or extending `type2t` (rejected). The
+cost/benefit of the off-IR / `type2tc` step is therefore poor, and —
+consistent with this document's governing rule that **verification
+correctness outranks implementation convenience** — pushing it through
+would trade the migration's own rationale for churn.
+
+The encapsulation pass is the milestone: a genuine hardening (no scattered
+raw irep attribute access; one typed seam per attribute) that leaves the
+frontend in the cleanest state it has been on this axis, with a single
+repoint-point per attribute should a future wrapper-based effort be taken
+up under its own tracking issue. Q-S3–Q-S6 are moot — they gated phases
+3.3–3.4, which are not entered.
+
+### Bottom line
+
+Phase 3.1's **attribute-access encapsulation is complete and is the
+stopping point.** Moving Solidity type metadata off the IR is blocked not
+by effort but by an architectural mismatch: the metadata is read off
+transient type *values*, so it must travel with the value — which only a
+`type2tc`-wrapping companion can do, and that companion re-introduces the
+attribute flexibility IREP2 removed, for no verifier-core benefit. The
+frontend → `type2tc` migration therefore remains, as in B1, **out of
+scope**; the durable boundary stays the `migrate_*` seam at goto-convert,
+and the Solidity frontend stays legacy by design.

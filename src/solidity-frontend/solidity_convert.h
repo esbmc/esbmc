@@ -126,6 +126,58 @@ public:
     return !t.get("#sol_contract").empty();
   }
 
+  // Set/get the Solidity "mapping-backed array" flag carried on a typet via
+  // the #sol_mapping_array irep attribute.
+  static void set_sol_mapping_array(typet &t, bool v)
+  {
+    t.set("#sol_mapping_array", v);
+  }
+  static bool get_sol_mapping_array(const typet &t)
+  {
+    return t.get_bool("#sol_mapping_array");
+  }
+
+  // Set/get the Solidity "state-variable dynamic array" flag carried on a
+  // typet via the #sol_dynarray_state irep attribute.
+  static void set_sol_dynarray_state(typet &t, bool v)
+  {
+    t.set("#sol_dynarray_state", v);
+  }
+  static bool get_sol_dynarray_state(const typet &t)
+  {
+    return t.get_bool("#sol_dynarray_state");
+  }
+
+  // Set/get the Solidity "state variable" flag carried on a typet via the
+  // #sol_state_var irep attribute (stored as "1"/"0").
+  static void set_sol_state_var(typet &t, bool v)
+  {
+    t.set("#sol_state_var", v ? "1" : "0");
+  }
+  static bool get_sol_state_var(const typet &t)
+  {
+    return t.get("#sol_state_var") == "1";
+  }
+
+  // Set/get the Solidity builtin name carried on a typet via the #sol_name
+  // irep attribute.
+  static void set_sol_name(typet &t, const irep_idt &name)
+  {
+    t.set("#sol_name", name);
+  }
+  static std::string get_sol_name(const typet &t)
+  {
+    return t.get("#sol_name").as_string();
+  }
+
+  // Set the Solidity data location ("memory"/"storage"/"calldata") carried on
+  // a typet via the #sol_data_loc irep attribute. Set-only today (no readers);
+  // wrapped to keep every Solidity type-attribute write behind one seam.
+  static void set_sol_data_loc(typet &t, const irep_idt &loc)
+  {
+    t.set("#sol_data_loc", loc);
+  }
+
   // json nodes that always empty
   // used as the return value for find_constructor_ref when
   // dealing with the implicit constructor call
