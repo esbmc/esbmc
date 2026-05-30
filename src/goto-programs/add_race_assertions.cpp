@@ -177,12 +177,50 @@ void add_race_assertions(
 
   bool is_atomic = false;
 
+  // In data-races-check-only mode every interleaving point is derived from a
+  // yield() call, and add_race_assertions only emits those around *non-atomic*
+  // shared accesses (the branch below is guarded by !is_atomic). A thread that
+  // executes back-to-back atomic regions therefore has no interleaving point
+  // between them, so a data race that can only be exposed by another thread
+  // interleaving *between* two atomic regions of the same thread is never
+  // explored -> false negative (VERIFICATION SUCCESSFUL on a racy program).
+  // Track whether the current atomic region touched shared state and, if so,
+  // emit a yield() at its boundary (the ATOMIC_END handling below) so those
+  // interleavings are generated. See https://github.com/esbmc/esbmc/issues/4423
+  const bool races_only =
+    config.options.get_bool_option("data-races-check-only");
+  bool atomic_region_touched_shared = false;
+
   Forall_goto_program_instructions (i_it, goto_program)
   {
     goto_programt::instructiont &instruction = *i_it;
 
     if (instruction.is_atomic_begin())
+    {
       is_atomic = true;
+      atomic_region_touched_shared = false;
+    }
+
+    // Accesses inside an atomic region are not individually instrumented, but
+    // we still need to know whether the region touched shared state so a
+    // context-switch point can be created at its boundary (see note above).
+    if (
+      races_only && is_atomic && !atomic_region_touched_shared &&
+      (instruction.is_assign() || instruction.is_other() ||
+       instruction.is_return() || instruction.is_goto() ||
+       instruction.is_assert() || instruction.is_function_call() ||
+       instruction.is_assume()))
+    {
+      const expr2tc &probe_expr =
+        (instruction.is_goto() || instruction.is_assert()) ? instruction.guard
+                                                           : instruction.code;
+      if (!is_nil_expr(probe_expr))
+      {
+        rw_sett probe(ns, i_it, probe_expr);
+        if (!probe.entries.empty())
+          atomic_region_touched_shared = true;
+      }
+    }
 
     if (
       (instruction.is_assign() || instruction.is_other() ||
@@ -272,7 +310,7 @@ void add_race_assertions(
         i_it = ++t;
       }
 
-      if (config.options.get_bool_option("data-races-check-only"))
+      if (races_only)
       {
         goto_programt::targett t = goto_program.insert(i_it);
         t->type = FUNCTION_CALL;
@@ -311,7 +349,30 @@ void add_race_assertions(
     }
 
     if (instruction.is_atomic_end())
+    {
       is_atomic = false;
+
+      // Emit an interleaving point right after an atomic region that accessed
+      // shared state, so other threads may interleave between consecutive
+      // atomic regions. Restricted to regions that touched shared state to
+      // avoid growing the interleaving space for purely thread-local atomics.
+      // See https://github.com/esbmc/esbmc/issues/4423
+      if (races_only && atomic_region_touched_shared)
+      {
+        atomic_region_touched_shared = false;
+
+        goto_programt::targett after = i_it;
+        ++after;
+        goto_programt::targett t = goto_program.insert(after);
+        t->type = FUNCTION_CALL;
+        code_function_callt call;
+        call.function() =
+          symbol_expr(*context.find_symbol("c:@F@__ESBMC_yield"));
+        migrate_expr(call, t->code);
+        t->location = instruction.location;
+        i_it = t; // loop's ++ advances past the inserted yield
+      }
+    }
   }
 
   remove_no_op(goto_program);
