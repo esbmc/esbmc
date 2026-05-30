@@ -1587,6 +1587,80 @@ bool prove_loop_terminates(
       from_expr(ns, "", inv));
     return true;
   }
+
+  // 2-D lexicographic fallback. For each ordered pair (m1, m2) of
+  // candidate measures (m1 != m2), prove that on every body path
+  //   m1' < m1   OR   (m1' == m1 AND m2' < m2)
+  // and that the lexicographic floor (m1 < L1) OR (m1 == L1 AND m2 < L2)
+  // makes the guard unsatisfiable. This catches two-counter loops
+  // common in termination-crafted (c.03: `while (x < y && z < INT_MAX)
+  // { if (x < z) x++; else z++; }` — neither x nor z decreases on every
+  // path, but (y - x, INT_MAX - z) decreases lex on both).
+  //
+  // We iterate ordered pairs (i != j) so both directions are tried:
+  // either m1 = guard_atom_i / m2 = guard_atom_j, or the swap. With
+  // few candidates (typically 2–3 per guard conjunction) the search
+  // is cheap — at most ~6 pair attempts per loop, each costing one
+  // bounded-below SAT and `|paths|` decrease checks. A pathological
+  // guard with many && conjuncts (or many disequalities each
+  // doubled into two direction candidates) could push the pair
+  // count quadratically, so cap the candidate pool the lex pass
+  // considers at a small constant — beyond that we bail to UNKNOWN
+  // rather than burn solver time exploring an exponential of pairs
+  // the user is unlikely to have written by hand.
+  static constexpr size_t kMaxLexCandidates = 8;
+  if (candidates.size() >= 2 && candidates.size() <= kMaxLexCandidates)
+  {
+    for (size_t i = 0; i < candidates.size(); ++i)
+    {
+      for (size_t j = 0; j < candidates.size(); ++j)
+      {
+        if (i == j)
+          continue;
+        const expr2tc &m1 = candidates[i].first;
+        const expr2tc &L1 = candidates[i].second;
+        const expr2tc &m2 = candidates[j].first;
+        const expr2tc &L2 = candidates[j].second;
+
+        // Lex floor: guard must be unsatisfiable when m1 has reached
+        // L1 and (if m1 == L1) m2 has reached L2.
+        expr2tc floor = or2tc(
+          lessthan2tc(m1, L1),
+          and2tc(equality2tc(m1, L1), lessthan2tc(m2, L2)));
+        if (!is_unsat(and2tc(and2tc(inv, rl.guard), floor), options, ns))
+          continue;
+
+        bool decreases = true;
+        for (const auto &p : rl.paths)
+        {
+          expr2tc m1p = apply_body(m1, p.assigns);
+          expr2tc m2p = apply_body(m2, p.assigns);
+          // Lex-decrease: m1' < m1, or m1' == m1 and m2' < m2.
+          expr2tc decr = or2tc(
+            lessthan2tc(m1p, m1),
+            and2tc(equality2tc(m1p, m1), lessthan2tc(m2p, m2)));
+          expr2tc obligation = and2tc(and2tc(inv, rl.guard), p.cond);
+          obligation = and2tc(obligation, not2tc(decr));
+          if (!is_unsat(obligation, options, ns))
+          {
+            decreases = false;
+            break;
+          }
+        }
+        if (!decreases)
+          continue;
+
+        log_debug(
+          "termination",
+          "ranking proved (lex 2D): m1={} m2={} invariant={}",
+          from_expr(ns, "", m1),
+          from_expr(ns, "", m2),
+          from_expr(ns, "", inv));
+        return true;
+      }
+    }
+  }
+
   return false;
 }
 
