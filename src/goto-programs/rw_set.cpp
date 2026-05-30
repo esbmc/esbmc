@@ -5,6 +5,69 @@
 #include <util/namespace.h>
 #include <util/std_expr.h>
 
+// Follow pointer arithmetic and typecasts down to the root pointer/array/object
+// symbol of an address expression (`A + i` -> A, `(T *)p` -> p), or return null
+// when the base is not a plain symbol.
+static const symbolt *root_object_symbol(const expr2tc &e, const namespacet &ns)
+{
+  expr2tc cur = e;
+  while (!is_nil_expr(cur))
+  {
+    if (is_symbol2t(cur))
+      return ns.lookup(to_symbol2t(cur).thename);
+    if (is_typecast2t(cur))
+      cur = to_typecast2t(cur).from;
+    else if (is_add2t(cur))
+      // pointer +/- integer offset: keep following the pointer-typed operand
+      cur = is_pointer_type(to_add2t(cur).side_1->type) ? to_add2t(cur).side_1
+                                                        : to_add2t(cur).side_2;
+    else if (is_sub2t(cur))
+      cur = to_sub2t(cur).side_1;
+    else
+      break;
+  }
+  return nullptr;
+}
+
+// C11 §5.1.2.4p4: concurrent accesses to _Atomic objects are not data races.
+// irep2 has no atomic-type node (see the FIXME in clang_c_convert's Atomic
+// case), so the `#atomic` flag survives only on the *legacy symbol type*. The
+// per-symbol check in read_write_rec therefore misses an access that reaches an
+// atomic element through a non-atomic pointer/array — e.g. `A[i]` with
+// `_Atomic int *A`, where neither the pointer A nor the index i is itself
+// atomic. Recover the flag from the base symbol's pointee/element type so such
+// accesses are correctly excluded from race checking (issue #4431).
+static bool accesses_atomic_object(const expr2tc &access, const namespacet &ns)
+{
+  if (is_nil_expr(access))
+    return false;
+
+  if (is_symbol2t(access))
+  {
+    const symbolt *s = ns.lookup(to_symbol2t(access).thename);
+    return s && s->get_type().get_bool("#atomic");
+  }
+
+  if (is_dereference2t(access) || is_index2t(access))
+  {
+    const expr2tc &base = is_dereference2t(access)
+                            ? to_dereference2t(access).value
+                            : to_index2t(access).source_value;
+    const symbolt *s = root_object_symbol(base, ns);
+    if (!s)
+      return false;
+    const typet &t = s->get_type();
+    if (t.is_pointer() || t.is_array())
+      return t.subtype().get_bool("#atomic");
+    return t.get_bool("#atomic");
+  }
+
+  if (is_member2t(access))
+    return accesses_atomic_object(to_member2t(access).source_value, ns);
+
+  return false;
+}
+
 void rw_sett::compute(const expr2tc &expr)
 {
   if (is_nil_expr(expr))
@@ -113,6 +176,14 @@ void rw_sett::read_write_rec(
     // C11 _Atomic variables are never involved in data races
     // (§5.1.2.4p4: concurrent accesses to atomic objects are not races).
     if (symbol->get_type().get_bool("#atomic"))
+      return;
+
+    // The check above only sees this symbol's own type. When the access
+    // reaches an atomic element through a non-atomic pointer/array (e.g.
+    // `A[i]` with `_Atomic int *A`), the atomic object is named by
+    // original_expr, not by this symbol; suppress those too (issue #4431).
+    if (
+      !is_nil_expr(original_expr) && accesses_atomic_object(original_expr, ns))
       return;
 
     irep_idt object = id2string(symbol_expr.thename) + suffix;
