@@ -1779,6 +1779,33 @@ tvt try_prove_termination_by_ranking(
   // Every loop in every function with a body must be proven terminating
   // for the program to be declared terminating. A single loop we cannot
   // handle makes the whole check inconclusive.
+  //
+  // Bare unconditional self-loops (`A: goto A;`) are intentionally NOT
+  // added to goto_loopst's loop list when --termination is on (see
+  // goto_loops.cpp ~line 60, gated against the assume(false) rewrite
+  // that would otherwise erase them). They are nevertheless real
+  // non-terminating constructs, so we walk every function's
+  // instructions directly and refuse to certify termination if any are
+  // present — the verdict belongs to the non-termination pass /
+  // k-induction's forward condition, not to us.
+  Forall_goto_functions (f_it, goto_functions)
+  {
+    if (!f_it->second.body_available || f_it->second.body.hide)
+      continue;
+    for (const auto &instr : f_it->second.body.instructions)
+    {
+      if (!instr.is_backwards_goto() || instr.targets.size() != 1)
+        continue;
+      auto tgt = instr.targets.front();
+      // Bare self-loop: `1: GOTO 1` (target == this instruction itself).
+      // Use location_number for identity since goto_programt iterators
+      // are unstable across some passes; identical location_number on a
+      // backwards goto's target is the definition the frontend uses.
+      if (tgt->location_number == instr.location_number)
+        return tvt(tvt::TV_UNKNOWN);
+    }
+  }
+
   Forall_goto_functions (f_it, goto_functions)
   {
     if (!f_it->second.body_available)
