@@ -681,8 +681,7 @@ class CoreVisitorsMixin:
         correctly-typed dict-keys list path. Only fires for names reliably known
         to be dicts. (GitHub #4790)
         """
-        if not (isinstance(node.func, ast.Name)
-                and node.func.id in ("list", "sorted")):
+        if not (isinstance(node.func, ast.Name) and node.func.id in ("list", "sorted")):
             return None
         if not node.args or (node.keywords and node.func.id == "list"):
             return None
@@ -690,13 +689,11 @@ class CoreVisitorsMixin:
         if not (isinstance(first, ast.Name) and self._is_known_dict_name(first.id)):
             return None
 
-        keys_call = ast.Call(
-            func=ast.Attribute(
-                value=ast.Name(id=first.id, ctx=ast.Load()),
-                attr="keys",
-                ctx=ast.Load()),
-            args=[],
-            keywords=[])
+        keys_call = ast.Call(func=ast.Attribute(value=ast.Name(id=first.id, ctx=ast.Load()),
+                                                attr="keys",
+                                                ctx=ast.Load()),
+                             args=[],
+                             keywords=[])
         ast.copy_location(keys_call, node)
         ast.fix_missing_locations(keys_call)
 
@@ -763,8 +760,7 @@ class CoreVisitorsMixin:
             qualified_name = self._build_qualified_function_name(node)
 
             self.functionParams[qualified_name] = [i.arg for i in node.args.args]
-            self.functionKwonlyParams[qualified_name] = [
-                i.arg for i in node.args.kwonlyargs]
+            self.functionKwonlyParams[qualified_name] = [i.arg for i in node.args.kwonlyargs]
 
             if len(node.args.defaults) < 1 and len(node.args.kw_defaults) < 1:
                 self.generic_visit(node)
