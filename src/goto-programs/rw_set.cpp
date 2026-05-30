@@ -93,19 +93,34 @@ void rw_sett::compute(const expr2tc &expr)
   {
     const code_function_call2t &code = to_code_function_call2t(expr);
     read_write_rec(code.ret, false, true, "", guard2tc(), expr2tc());
-    // An indirect call resolves its target by reading a function pointer (the
-    // call target is a dereference such as `*fp`, not a function symbol). If
-    // that pointer is shared, the read can race with a concurrent write, e.g.
-    // `fp = f2` under a different lock (issue #4425). A direct call instead
-    // names a function symbol (code, not data) and is handled below.
+    // An indirect call through a global function pointer reads that pointer to
+    // resolve its target (the call target is `*fp`, not a function symbol). If
+    // the pointer is shared, the read can race with a concurrent write, e.g.
+    // `fp = f2` under a different lock (issue #4425). Record that read, keyed
+    // on the pointer object itself (&fp) so it aliases the write `fp = ...` --
+    // reading the dereference would key on the pointee `&(*fp)` and miss it.
+    //
+    // Restrict this to a plain pointer *variable* (`*fp`, or a cast of one such
+    // as `*(fn_t)fp`, where fp is a symbol). Function pointers reached through
+    // an aggregate (`*s.fp`, `*tbl[i]`) are in practice internal dispatch
+    // tables -- e.g. the CUDA kernel-launch structs `dev_*.func` in
+    // call_kernel.h, or the pthread cleanup stack -- written before the threads
+    // that read them are even spawned, so they never race. Recording those
+    // reads only inserts spurious yield() interleaving points that dilute
+    // context-bounded search and hide real races; this mirrors the restriction
+    // collect_thread_escaped_locals applies to address-taken locals for the
+    // same reason. A direct call names a function symbol (code, not data) and
+    // is left to the body-less-call branch below.
     if (is_dereference2t(code.function))
-      // Read the pointer VALUE that selects the target, keyed on the pointer
-      // object itself (&fp) so it aliases a concurrent write `fp = ...`.
-      // Reading the dereference would key on the pointee `&(*fp)` and miss it.
-      // For `(*tbl[i])()` this keys on the array object `tbl`.
-      read_rec(to_dereference2t(code.function).value);
-    else if (!is_symbol2t(code.function))
-      read_rec(code.function);
+    {
+      // Peel casts so a cast-wrapped pointer variable is still recognised, but
+      // stop at the first aggregate/computed node so dispatch tables stay out.
+      expr2tc target = to_dereference2t(code.function).value;
+      while (is_typecast2t(target))
+        target = to_typecast2t(target).from;
+      if (is_symbol2t(target))
+        read_rec(target);
+    }
     // For function calls, we first check to see if the function has a body
     // available, and if so, we skip it because we also check inside the
     // function. If not, we need to check these args.

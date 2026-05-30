@@ -10,9 +10,13 @@
 //                       respective true/false guards)
 //   - is_address_of2t : taking an address does NOT register an access
 //   - is_code_assign2t: rhs read + lhs write via compute()
+//   - indirect call    : *fp() records a read of the plain pointer fp
+//                        (issue #4425) but *s.func() through an aggregate
+//                        records nothing (CUDA/pthread dispatch dilution guard)
 // Companion regression in regression/esbmc/github_4715_rwset[_fail]/
 // covers the end-to-end behaviour via --data-races-check on the
-// index/member/if paths.
+// index/member/if paths; regression/esbmc-unix/github_4425_funptr_*
+// covers the indirect-call path.
 
 #define CATCH_CONFIG_MAIN
 #include <catch2/catch.hpp>
@@ -56,12 +60,22 @@ contextt &rwset_test_context()
       std::vector<irep_idt>{"x", "y"},
       std::vector<irep_idt>{"x", "y"},
       "s");
+    // A function-pointer global `fp` and a struct `s_fp` holding a
+    // function-pointer member `func`, for the indirect-call tests below.
+    type2tc fptr_t = pointer_type2tc(int32);
+    type2tc fpstruct_t = struct_type2tc(
+      std::vector<type2tc>{fptr_t},
+      std::vector<irep_idt>{"func"},
+      std::vector<irep_idt>{"func"},
+      "s_fp");
 
     add_global(ctx, "x", int32);
     add_global(ctx, "y", int32);
     add_global(ctx, "arr", arr_t);
     add_global(ctx, "g_struct", struct_t);
     add_global(ctx, "cond", get_bool_type());
+    add_global(ctx, "fp", fptr_t);
+    add_global(ctx, "s_fp", fpstruct_t);
 
     initialised = true;
   }
@@ -226,4 +240,72 @@ TEST_CASE(
   REQUIRE_FALSE(rw.entries["y"].w);
   REQUIRE(rw.entries["x"].w);
   REQUIRE_FALSE(rw.entries["x"].r);
+}
+
+TEST_CASE(
+  "rw_set: indirect call through a plain function-pointer symbol records the "
+  "pointer read",
+  "[core][goto-programs][rw_set][b5-phase2]")
+{
+  // *fp(): the call target is dereference(fp). compute() records a read of the
+  // pointer fp itself (keyed on &fp, not the pointee) so it can race with a
+  // concurrent `fp = ...` under a different lock (issue #4425).
+  expr2tc deref = dereference2tc(get_int_type(32), sym("fp"));
+  expr2tc call =
+    code_function_call2tc(expr2tc(), deref, std::vector<expr2tc>{});
+
+  rw_sett rw = make_rw_set();
+  rw.compute(call);
+
+  REQUIRE(rw.entries.size() == 1);
+  auto it = rw.entries.find("fp");
+  REQUIRE(it != rw.entries.end());
+  REQUIRE(it->second.r);
+  REQUIRE_FALSE(it->second.w);
+}
+
+TEST_CASE(
+  "rw_set: indirect call through a cast of a function-pointer symbol still "
+  "records the pointer read",
+  "[core][goto-programs][rw_set][b5-phase2]")
+{
+  // *(T)fp(): the call target is dereference(typecast(fp)). compute() peels the
+  // cast and still records the read of the underlying pointer symbol fp.
+  expr2tc cast = typecast2tc(pointer_type2tc(get_int_type(32)), sym("fp"));
+  expr2tc deref = dereference2tc(get_int_type(32), cast);
+  expr2tc call =
+    code_function_call2tc(expr2tc(), deref, std::vector<expr2tc>{});
+
+  rw_sett rw = make_rw_set();
+  rw.compute(call);
+
+  REQUIRE(rw.entries.size() == 1);
+  auto it = rw.entries.find("fp");
+  REQUIRE(it != rw.entries.end());
+  REQUIRE(it->second.r);
+  REQUIRE_FALSE(it->second.w);
+}
+
+TEST_CASE(
+  "rw_set: indirect call through an aggregate function pointer records nothing",
+  "[core][goto-programs][rw_set][b5-phase2]")
+{
+  // *s_fp.func(): the call target reaches the function pointer through a struct
+  // member. The indirect-call read is restricted to a plain pointer variable,
+  // so this records NOTHING. Recording it would flood CUDA kernel-dispatch
+  // structs (dev_*.func in call_kernel.h) and the pthread cleanup stack with
+  // spurious yield() interleaving points, diluting context-bounded search and
+  // hiding real races (the 8 CUDA THOROUGH benchmarks regressed exactly this
+  // way on x86_64). The body-less-call arg walk does not fire either, since the
+  // target is a dereference, not a function symbol.
+  expr2tc func_ptr =
+    member2tc(pointer_type2tc(get_int_type(32)), sym("s_fp"), irep_idt("func"));
+  expr2tc deref = dereference2tc(get_int_type(32), func_ptr);
+  expr2tc call =
+    code_function_call2tc(expr2tc(), deref, std::vector<expr2tc>{});
+
+  rw_sett rw = make_rw_set();
+  rw.compute(call);
+
+  REQUIRE(rw.entries.empty());
 }
