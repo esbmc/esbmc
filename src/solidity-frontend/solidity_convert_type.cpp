@@ -436,7 +436,7 @@ bool solidity_convertert::get_type_description(
 
     new_type = pointer_typet(symbol_typet(id));
     set_sol_type(new_type, SolidityGrammar::SolType::CONTRACT);
-    new_type.set("#sol_contract", cname);
+    set_sol_contract(new_type, cname);
     break;
   }
   case SolidityGrammar::TypeNameT::TypeConversionName:
@@ -1436,7 +1436,7 @@ void solidity_convertert::convert_type_expr(
       exprt original_addr = src_expr;
 
       exprt c_ins;
-      std::string _cname = dest_type.get("#sol_contract").as_string();
+      std::string _cname = get_sol_contract(dest_type);
       get_static_contract_instance_ref(_cname, c_ins);
 
       // Propagate the cast address into the singleton's $address member

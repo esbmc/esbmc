@@ -1686,7 +1686,7 @@ bool solidity_convertert::get_contract_member_call_expr(
   {
     if (get_var_decl_ref(base_expr_json, true, base))
       return true;
-    base_cname = base.type().get("#sol_contract").as_string();
+    base_cname = get_sol_contract(base.type());
     assert(!base_cname.empty());
   }
 
