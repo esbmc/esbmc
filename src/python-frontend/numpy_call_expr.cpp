@@ -774,8 +774,9 @@ exprt numpy_call_expr::create_expr_from_call()
         // this frontend path; reject explicitly instead of allowing internal
         // backend failures.
         if (
-          lhs.contains("elts") && rhs.contains("elts") && lhs["elts"].is_array() &&
-          rhs["elts"].is_array() && lhs["elts"].empty() && rhs["elts"].empty())
+          lhs.contains("elts") && rhs.contains("elts") &&
+          lhs["elts"].is_array() && rhs["elts"].is_array() &&
+          lhs["elts"].empty() && rhs["elts"].empty())
         {
           throw std::runtime_error(
             "TypeError: numpy operation on two empty arrays is not supported "
