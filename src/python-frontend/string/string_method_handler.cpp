@@ -2010,9 +2010,10 @@ exprt string_handler::handle_string_capitalize(
       call.type() = gen_pointer_type(char_type());
       return call;
     }
-    log_debug(
-      "python-string",
-      "capitalize() on non-constant receiver: nondet fallback");
+    log_warning(
+      "str.capitalize(): runtime model __python_str_capitalize not in the "
+      "symbol table -- falling back to nondet. Define it under "
+      "src/c2goto/library/python/ and rebuild (Python frontend must be on).");
     return build_nondet_string_fallback(location);
   }
 
@@ -2057,8 +2058,10 @@ exprt string_handler::handle_string_title(
       call.type() = gen_pointer_type(char_type());
       return call;
     }
-    log_debug(
-      "python-string", "title() on non-constant receiver: nondet fallback");
+    log_warning(
+      "str.title(): runtime model __python_str_title not in the symbol "
+      "table -- falling back to nondet. Define it under "
+      "src/c2goto/library/python/ and rebuild (Python frontend must be on).");
     return build_nondet_string_fallback(location);
   }
 
@@ -2110,8 +2113,10 @@ exprt string_handler::handle_string_swapcase(
       call.type() = gen_pointer_type(char_type());
       return call;
     }
-    log_debug(
-      "python-string", "swapcase() on non-constant receiver: nondet fallback");
+    log_warning(
+      "str.swapcase(): runtime model __python_str_swapcase not in the symbol "
+      "table -- falling back to nondet. Define it under "
+      "src/c2goto/library/python/ and rebuild (Python frontend must be on).");
     return build_nondet_string_fallback(location);
   }
 
@@ -2196,6 +2201,16 @@ exprt string_handler::handle_string_count(
         call.type() = size_type();
         return call;
       }
+      // The default-range path tried the named model and missed: a silent
+      // degradation worth surfacing (#4827). __python_str_count is normally
+      // auto-registered from library/python/string.c by gen_python_c_models.py,
+      // so a miss means the model is absent or the build lacked the Python
+      // frontend. The outer log_debug still covers the start/end path, where
+      // no model is attempted.
+      log_warning(
+        "str.count(): runtime model __python_str_count not in the symbol "
+        "table -- falling back to nondet. Define it under "
+        "src/c2goto/library/python/ and rebuild (Python frontend must be on).");
     }
     log_debug(
       "python-string", "count() on non-constant receiver/needle: nondet int");
@@ -2619,8 +2634,10 @@ exprt string_handler::handle_string_isalnum(
       call.type() = bool_type();
       return call;
     }
-    log_debug(
-      "python-string", "isalnum() on non-constant receiver: nondet bool");
+    log_warning(
+      "str.isalnum(): runtime model __python_str_isalnum not in the symbol "
+      "table -- falling back to nondet. Define it under "
+      "src/c2goto/library/python/ and rebuild (Python frontend must be on).");
     side_effect_expr_nondett nondet(bool_type());
     nondet.location() = location;
     return nondet;
@@ -2662,8 +2679,10 @@ exprt string_handler::handle_string_isupper(
       call.type() = bool_type();
       return call;
     }
-    log_debug(
-      "python-string", "isupper() on non-constant receiver: nondet bool");
+    log_warning(
+      "str.isupper(): runtime model __python_str_isupper not in the symbol "
+      "table -- falling back to nondet. Define it under "
+      "src/c2goto/library/python/ and rebuild (Python frontend must be on).");
     side_effect_expr_nondett nondet(bool_type());
     nondet.location() = location;
     return nondet;
