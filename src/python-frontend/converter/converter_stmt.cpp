@@ -19,6 +19,7 @@
 #include <python-frontend/type_utils.h>
 #include <util/arith_tools.h>
 #include <util/base_type.h>
+#include <util/bitvector.h>
 #include <util/c_typecast.h>
 #include <util/c_types.h>
 #include <util/encoding.h>
@@ -34,6 +35,46 @@
 #include <stdexcept>
 
 using namespace json_utils;
+
+namespace
+{
+// Straight-line dynamic-retyping classification (#4770, #4774). A Python str is
+// a char array or char* ; a numeric scalar is a Python int (>=16-bit bitvector,
+// excluding the 8-bit char that backs a 1-character string), float, or bool.
+bool is_py_string_type(const typet &t)
+{
+  return (t.is_array() || t.is_pointer()) && t.subtype() == char_type();
+}
+
+bool is_py_numeric_scalar_type(const typet &t)
+{
+  if (t.is_floatbv() || t.is_bool())
+    return true;
+  if (t.is_signedbv() || t.is_unsignedbv())
+    return bv_width(t) >= 16;
+  return false;
+}
+
+// True when reassigning a value of type rhs to a variable currently typed lhs
+// crosses the numeric<->string boundary, which a single GOTO symbol cannot
+// represent in place.
+bool is_incompatible_scalar_string_retype(const typet &lhs, const typet &rhs)
+{
+  return (is_py_numeric_scalar_type(lhs) && is_py_string_type(rhs)) ||
+         (is_py_string_type(lhs) && is_py_numeric_scalar_type(rhs));
+}
+
+// RAII bump of the get_block() nesting depth. Depth 1 is an unconditional
+// top-level (module/imported-module) statement; anything deeper is nested in a
+// function or a conditionally-executed body, where straight-line retyping is
+// unsound (see #4770/#4774).
+struct block_nesting_guard
+{
+  unsigned &depth;
+  explicit block_nesting_guard(unsigned &d) : depth(d) { ++depth; }
+  ~block_nesting_guard() { --depth; }
+};
+} // namespace
 
 void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
 {
@@ -1795,6 +1836,83 @@ void python_converter::get_var_assign(
       return;
     }
 
+    // Straight-line dynamic retyping (#4770, #4774). A variable whose current
+    // static type is a numeric scalar is being reassigned a string value (or
+    // vice versa). The GOTO IR binds one type per symbol, so the new value
+    // cannot be stored in the old slot. At block_nesting_ == 1 (an
+    // unconditional top-level statement) there is no control-flow join that
+    // could leave the runtime type ambiguous, so we model the rebinding
+    // soundly: mint a fresh symbol of the new type, declare it, and redirect
+    // later loads of the name to it via retype_aliases_. We then fall through
+    // to the normal assignment path with the new, correctly typed symbol,
+    // reusing its function-call/type-adjustment handling. Deeper statements
+    // (function bodies, conditional bodies) are left to the existing fallback.
+    // Class bodies are also converted at nesting 1 (via python_class_builder)
+    // but their attribute symbols are managed separately, so exclude them: only
+    // module/imported-module top-level statements qualify.
+    if (
+      block_nesting_ == 1 && current_class_name_.empty() && lhs_symbol &&
+      lhs.is_symbol())
+    {
+      // The LHS lookup above returns the ORIGINAL symbol. If this variable was
+      // already retyped, its live value lives in the alias target; resolve to
+      // it so a further retype is detected against the current type and a
+      // same-type write lands in the live slot (mirrors the load redirect in
+      // converter_expr). The alias is always keyed by the original id, which is
+      // what loads resolve before redirecting.
+      const std::string orig_id = lhs_symbol->id.as_string();
+      auto existing = retype_aliases_.find(orig_id);
+      if (existing != retype_aliases_.end())
+      {
+        if (symbolt *live = symbol_table_.find_symbol(existing->second))
+        {
+          lhs_symbol = live;
+          lhs = symbol_expr(*live);
+          current_lhs = &lhs;
+        }
+      }
+
+      if (is_incompatible_scalar_string_retype(lhs.type(), rhs.type()))
+      {
+        std::string new_id;
+        unsigned gen = 1;
+        do
+        {
+          new_id = orig_id + "$ret" + std::to_string(gen++);
+        } while (symbol_table_.find_symbol(new_id) != nullptr);
+
+        const std::string module_name = location_begin.get_file().as_string();
+        symbolt new_symbol = create_symbol(
+          module_name,
+          lhs_symbol->name.as_string(),
+          new_id,
+          location_begin,
+          rhs.type());
+        new_symbol.lvalue = true;
+        new_symbol.file_local = lhs_symbol->file_local;
+        new_symbol.is_extern = false;
+
+        symbolt *new_symbol_ptr =
+          symbol_table_.move_symbol_to_context(new_symbol);
+
+        // Locals need a declaration; module globals are not declared (matching
+        // the symbol-creation path above).
+        if (!current_func_name_.empty() && !is_global_variable(sid))
+        {
+          code_declt decl(symbol_expr(*new_symbol_ptr));
+          decl.location() = location_begin;
+          target_block.copy_to_operands(decl);
+        }
+
+        retype_aliases_[orig_id] = new_id;
+        lhs_symbol = new_symbol_ptr;
+        lhs = symbol_expr(*new_symbol_ptr);
+        current_lhs = &lhs;
+        // Fall through: the normal assignment handling below now stores rhs
+        // into the new, type-matched symbol.
+      }
+    }
+
     // Python dynamic typing: if a variable already has a numeric type (e.g.
     // double from float()) and is being reassigned to a pointer/string type
     // (e.g. char* from chr()), the GOTO IR cannot represent this type change
@@ -2961,6 +3079,12 @@ void python_converter::get_return_statements(
 
 exprt python_converter::get_block(const nlohmann::json &ast_block)
 {
+  // Track block nesting so straight-line retyping (#4770/#4774) only fires for
+  // unconditional top-level statements (depth 1). Every nested body -- function
+  // bodies, if/while/for bodies, try/except handlers -- is converted through a
+  // deeper get_block(), so this single guard covers them all.
+  block_nesting_guard nesting_guard(block_nesting_);
+
   code_blockt block, *old_block = current_block;
   current_block = &block;
 
