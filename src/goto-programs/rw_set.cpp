@@ -45,17 +45,6 @@ void rw_sett::compute(const expr2tc &expr)
             read_rec(arg);
         }
     }
-    else if (is_dereference2t(code.function))
-    {
-      // Indirect call through a function pointer (e.g. `(*fp)()`): the call
-      // reads the pointer object itself to obtain the target address. Register
-      // that read so a concurrent unsynchronised write to the pointer is
-      // detected as a data race (issue #4425). Read the pointer expression
-      // (the dereference's operand), not the pointee, which is code and never
-      // racing data; reading the operand directly keeps the race object keyed
-      // on the pointer's address (&fp) rather than the function's address.
-      read_rec(to_dereference2t(code.function).value);
-    }
   }
   else if (
     instruction.is_goto() || instruction.is_assert() || instruction.is_assume())

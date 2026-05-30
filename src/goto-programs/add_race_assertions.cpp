@@ -140,14 +140,30 @@ collect_address_taken(const expr2tc &expr, rw_sett::shared_localst &out)
     [&out](const expr2tc &op) { collect_address_taken(op, out); });
 }
 
-static void collect_address_taken(
+// A stack local becomes shared between threads when its address is handed to a
+// newly spawned thread, i.e. passed as an argument to pthread_create. Only such
+// locals need to stay race-eligible when accessed directly by name (issue
+// #4424). Collecting *every* address-taken local instead floods large/CUDA
+// kernels with race guards, and because each guard inserts yield()
+// context-switch points it dilutes context-bounded search and can hide real
+// races. Restrict the escape set to the arguments of pthread_create calls.
+static void collect_thread_escaped_locals(
   const goto_programt &goto_program,
   rw_sett::shared_localst &out)
 {
   forall_goto_program_instructions (i_it, goto_program)
   {
-    collect_address_taken(i_it->code, out);
-    collect_address_taken(i_it->guard, out);
+    if (!i_it->is_function_call())
+      continue;
+    const code_function_call2t &call = to_code_function_call2t(i_it->code);
+    if (!is_symbol2t(call.function))
+      continue;
+    if (
+      id2string(to_symbol2t(call.function).thename).find("pthread_create") ==
+      std::string::npos)
+      continue;
+    for (const expr2tc &arg : call.operands)
+      collect_address_taken(arg, out);
   }
 }
 
@@ -306,7 +322,7 @@ void add_race_assertions(contextt &context, goto_programt &goto_program)
   w_guardst w_guards(context);
 
   rw_sett::shared_localst shared_locals;
-  collect_address_taken(goto_program, shared_locals);
+  collect_thread_escaped_locals(goto_program, shared_locals);
 
   add_race_assertions(context, goto_program, w_guards, shared_locals);
 
@@ -324,7 +340,7 @@ void add_race_assertions(contextt &context, goto_functionst &goto_functions)
   // before instrumenting any of them.
   rw_sett::shared_localst shared_locals;
   forall_goto_functions (f_it, goto_functions)
-    collect_address_taken(f_it->second.body, shared_locals);
+    collect_thread_escaped_locals(f_it->second.body, shared_locals);
 
   Forall_goto_functions (f_it, goto_functions)
     if (f_it->first != goto_functions.main_id())
