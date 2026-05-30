@@ -2063,10 +2063,13 @@ across the seam that drops a shared-pass-read attribute.
 
 ## 13. Open questions (resolve before the cited commit)
 
-- **Q-P1** — Do any Python `test.desc` regexes match counterexample
-  *values* (not just verdict/function-name/line/coverage)? Sample-grep
-  `regression/python/**/test.desc` before 4.4; if so, symbol-naming
-  stability becomes a hard 4.4 gate (sets the RP10 bar).
+- **Q-P1 — RESOLVED (§15.6): the symbol-naming gate is real but narrow.**
+  Of 3503 expected-output lines across 3660 Python `test.desc` files,
+  **exactly one** regex matches pretty-printed IR expression text
+  (`bounds-checking_fail`: `index < l->size`, `--ir`); **none** match
+  concrete counterexample variable values. Plus a coverage-count family (39
+  lines) and a frontend-diagnostic family (46 lines) that must be held
+  invariant. So Phase 4.4's RP10 bar is cheap to gate. See §15.6.
 - **Q-P2 — RESOLVED (§15): not dead, do not delete.** `#cformat` is shared
   irep infrastructure (`irept::a_cformat`, `irep.cpp:507`;
   `constant_exprt`'s ctor sets it, `std_expr.h:1095-1099`) read by the
@@ -2226,12 +2229,51 @@ as a legacy `codet` (`set_statement("while")`, `code_blockt` body;
 structured `codet("while"/"ifthenelse")` + `code_blockt` shells with
 IREP2-lowered operands — P1 confirmed, body shape fixed.
 
-### 15.5 Still open (need code or a design call): Q-P1, Q-P4, Q-P5
+### 15.5 Still open (need code or a design call): Q-P4, Q-P5
 
-`Q-P1` (do `test.desc` regexes match counterexample *values*) needs a
-sample-grep over `regression/python/**/test.desc` and is best done as the
-first step of Phase 4.4. `Q-P4` (`mb_value` on `constant_string2t`) is the
-still-unfinished Part II 2.6 item and gates the 4.4 string work. `Q-P5`
-(`complex` `struct_type2t` round-trip fidelity) needs the unit round-trip
-built in Phase 4.0/4.3. These remain open by design — they require building
-something, not just auditing.
+`Q-P4` (`mb_value` on `constant_string2t`) is the still-unfinished Part II
+2.6 item and gates the 4.4 string work. `Q-P5` (`complex` `struct_type2t`
+round-trip fidelity) needs the unit round-trip built in Phase 4.0/4.3. These
+remain open by design — they require building something, not just auditing.
+(`Q-P1` is now resolved by audit — §15.6.)
+
+### 15.6 Q-P1 — the Phase 4.4 symbol-naming / pretty-print gate is narrow
+
+Audit of the matched-output regexes (line 4+) of **all 3660** Python
+`test.desc` files (`regression/python` 3557, `python-intensive` 90,
+`python-coverage` 13). Re-run:
+
+```sh
+find regression/python regression/python-intensive regression/python-coverage \
+  -name test.desc | while read f; do awk 'NR>=4' "$f"; done > /tmp/qp1.txt
+grep -c .                            /tmp/qp1.txt   # 3503 expected-output lines
+grep -cE '^\^?VERIFICATION (SUCCESSFUL|FAILED)\$?$' /tmp/qp1.txt   # 3344 pure verdict
+# the ONLY pretty-printed member/pointer expression in the whole suite:
+grep -rhE '\->|\(\*|\.size' regression/python*/*/test.desc | grep -vE 'VERIFICATION|Coverage|Properties'
+#   ^\s*index\s*<\s*l->size\s*$
+```
+
+Classification of the 3503 lines:
+
+| Family | Count | Migration sensitivity |
+|---|---:|---|
+| Pure verdict (`VERIFICATION SUCCESSFUL/FAILED`) | 3344 | none |
+| + standard checker markers (`Violated property`, `dereference failure`, `data race`, …) | ~20 more | none — checker message strings, symbol-independent |
+| Coverage / property **counts** (`Properties: N verified`, `Branch Coverage: 100%`, `Reached : N`, `Total Asserts: N`) | 39 | safe **iff** the migration does not change the number of properties/branches/asserts (Phase 4.1/4.4 must not) |
+| Frontend **diagnostics** (`TypeError: foo() missing … 'x'`, `ERROR: Variable x … uninitialized`, `Unsupported …`) | 46 | embed **Python source identifiers**, which the migration preserves (it changes IR construction, not the frontend's source-named diagnostic text) |
+| Source-derived assertion/property text (`x is equal to y` = the `assert` message; `step != 0` = source var) | 2 | safe — Python source literal / source name, not IR pretty-print |
+| **Pretty-printed IR expression** (`index < l->size`) | **1** | **the one genuine RP10 gate** — IR-pretty-printer output for the list-bounds guard under `--ir`; depends on member-access construction + symbol naming staying byte-identical |
+| Concrete counterexample **variable values** (`State N`, `var = value`) | **0** | not a gate — no Python test pins trace values |
+
+**Conclusion.** Symbol-naming / pretty-print stability is a **real but
+narrow** Phase 4.4 gate. There is exactly **one** canonical guard test —
+`regression/python/bounds-checking_fail` (`index < l->size`, `--ir`, the
+native list-bounds path) — that pins pretty-printed IR expression text; keep
+its matched line byte-identical when `python_list.cpp`'s index/bounds
+construction moves to `index2t`/`member2t`. Trace-value stability is **not**
+required (0 tests). The coverage-count (39) and frontend-diagnostic (46)
+families are covered by the §10 "matched-text identical" gate as long as it
+captures matched lines (not just the verdict) and the property/branch/assert
+counts are held invariant — both already mandated by §10. This makes RP10
+cheap to discharge: one targeted bounds test plus the existing matched-text
+gate, rather than a diffuse symbol-naming audit.
