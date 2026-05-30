@@ -35,7 +35,7 @@ int reachability_treet::get_ileave_direction_from_user() const
     {
       exit(1);
     }
-    else if (input.size() <= 0)
+    else if (input.empty())
     {
       ;
     }

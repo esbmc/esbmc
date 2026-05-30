@@ -168,6 +168,11 @@ std::string xmlt::unescape(const std::string &str)
       while (it != str.end() && *it != ';')
         tmp += *it++;
 
+      // No terminating ';' before end of input: stop without letting the
+      // outer loop's it++ advance past end() (which would be UB).
+      if (it == str.end())
+        break;
+
       if (tmp == "gt")
         result += '>';
       else if (tmp == "lt")

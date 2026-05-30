@@ -149,6 +149,10 @@ symbolt *code_contractst::find_function_symbol(const std::string &function_name)
       candidate && candidate->get_type().is_code() &&
       id2string(candidate->name) == function_name)
     {
+      // matched is set on a previous loop iteration when a second overload
+      // with the same short name is found; cppcheck's per-statement flow
+      // analysis cannot see the cross-iteration assignment below.
+      // cppcheck-suppress knownConditionTrueFalse
       if (matched != nullptr)
       {
         matched_ids += ", " + id2string(it->first);

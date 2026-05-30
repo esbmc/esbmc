@@ -316,6 +316,7 @@ smt_sort *bitblast_convt::mk_sort(smt_sort_kind k, ...)
     abort();
   }
 
+  va_end(ap);
   return s;
 }
 
@@ -467,7 +468,7 @@ expr2tc bitblast_convt::get_bv(const type2tc &t, smt_astt a)
   uint64_t accuml = 0;
   for (unsigned int i = 0; i < sz; i++)
   {
-    uint64_t mask = 1 << i;
+    uint64_t mask = UINT64_C(1) << i;
     tvt t = sat_api->l_get(mast->bv[i]);
     if (t.is_true())
     {

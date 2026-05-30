@@ -207,7 +207,6 @@ for dir in */; do
   if [[ "$dir" == *fail* ]]; then
     if [ $result -eq 0 ]; then
       echo "❌ $dir: expected to fail, but executed successfully (exit 0)"
-      all_passed=false
       failed_tests+=("$dir")
     else
       echo "✅ $dir: failed as expected (exit $result)"
@@ -217,7 +216,6 @@ for dir in */; do
       echo "✅ $dir: executed successfully (exit 0)"
     else
       echo "❌ $dir: expected to succeed, but failed (exit $result)"
-      all_passed=false
       failed_tests+=("$dir")
     fi
   fi

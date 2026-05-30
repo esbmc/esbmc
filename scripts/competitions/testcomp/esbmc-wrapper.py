@@ -297,8 +297,8 @@ class TestCompMetadataGenerator(object):
         ET.SubElement(root, 'specification').text = property_file_content.strip()
         properties = {'sourcecodelang', 'sourcecodelang', 'producer',
                       'programfile', 'programhash', 'architecture', 'creationtime'}
-        for property in properties:
-            ET.SubElement(root, property).text = self.metadata[property]
+        for prop in properties:
+            ET.SubElement(root, prop).text = self.metadata[prop]
         
         output = __testSuiteDir__ + "/metadata.xml"
         ET.ElementTree(root).write(output)
