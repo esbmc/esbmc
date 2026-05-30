@@ -196,8 +196,7 @@ static std::vector<std::string> make_python_c_models()
 #endif
   return models;
 }
-const static std::vector<std::string> python_c_models =
-  make_python_c_models();
+const static std::vector<std::string> python_c_models = make_python_c_models();
 
 // Solidity operational model functions
 const static std::vector<std::string> solidity_c_models = {
