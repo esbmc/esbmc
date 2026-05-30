@@ -858,7 +858,7 @@ Re-run before acting on any phase; counts are a snapshot.
 
 The symbol table is the pivot (Part I, B2). `symbolt` stores
 `type2tc`/`expr2tc` as the source of truth with **lazy legacy caches**
-(`symbol.h:71-85`). The two setters behave asymmetrically:
+(`symbol.h:89-99`). The two setters behave asymmetrically:
 
 - `set_type(const typet&)` / `set_value(const exprt&)` store the **legacy**
   form and invalidate the IREP2 side (`symbol.cpp:36-41`). *No eager
@@ -907,7 +907,7 @@ solc JSON ──► solidity_convertert ──► symbolt (LEGACY valid)
 Each is verified; the re-check command is given.
 
 **F1 — Symbol table is IREP2-source-of-truth with lazy legacy caches.**
-`symbol.h:71-85`, `symbol.cpp:36-55,82-141`. A frontend *may* legally
+`symbol.h:89-99`, `symbol.cpp:36-55,82-141`. A frontend *may* legally
 call `set_type(type2tc)` / `set_value(expr2tc)`. Re-check:
 `sed -n '60,160p' src/util/symbol.cpp`.
 
@@ -1474,3 +1474,630 @@ attribute flexibility IREP2 removed, for no verifier-core benefit. The
 frontend → `type2tc` migration therefore remains, as in B1, **out of
 scope**; the durable boundary stays the `migrate_*` seam at goto-convert,
 and the Solidity frontend stays legacy by design.
+
+---
+
+# Part IV — Python frontend → IREP2 (forward plan)
+
+> **Status: planning.** Parts I–III are closed records (Part III concluded
+> at the attribute-encapsulation milestone and *re-validated B1* for
+> Solidity). This part is a *forward plan* for a second frontend — Python —
+> that again deliberately reopens boundary B1 ("Frontend → goto input",
+> *Deferred indefinitely* in Part I) **for the Python frontend only**.
+> Nothing here has landed. Tracking issue: **to be filed.** Do **not** open
+> it under the Part I umbrella issue, which closed declaring B1 out of
+> scope; this plan changes that scope for one frontend, deliberately and
+> with evidence.
+
+This part is written so an engineer who has **never touched the Python
+frontend** can execute it. Every load-bearing claim carries a `file:line`
+anchor or a re-verification command; run the command before acting, because
+the Python frontend is the **highest-churn tree in the repository** (every
+file in §3's inventory was modified within the last three weeks of this
+writing) and counts *will* drift.
+
+## 1. Scope, motivation, and the non-negotiable constraint
+
+`src/python-frontend/` is ~55 kLOC and growing (the converter alone —
+`converter/*.cpp` — is ~440 kB; `python_list.cpp` is 4904 lines,
+`python_dict_handler.cpp` 3302). It is **100 % legacy IR today**: a census
+(`git grep -P '\b([A-Za-z_]*(exprt|typet|codet)|irept)\b' -- src/python-frontend`
+vs the `*2tc` family) returns **4615 legacy mentions to 6 IREP2** — the
+lowest IREP2 share of any frontend after Solidity. The converter builds
+`exprt`/`typet`/`codet`, writes them into `symbolt` through the **legacy**
+setters, and never calls `get_type2()`/`set_type(type2tc)`.
+
+Why Python is a defensible second pilot *after* the Solidity result:
+
+- Unlike Solidity, the Python frontend carries **almost no Solidity-style
+  value-traveling irep metadata**. The entire `#`-attribute surface is
+  three keys — `#cpp_type`, `#cformat`, `#member_name` — versus Solidity's
+  ≥20 `#sol_*` (Part III §4 F4). Python type classification lives in the
+  **JSON AST annotations** (`python_annotation`), is consumed at
+  construction time, and is *not* re-read off irep nodes. So the central
+  Solidity soundness hazard (RS1: silent attribute drop at `migrate_type`)
+  is structurally far smaller here — see F-P4.
+- The frontend does **not** invoke `c_link` (confirmed:
+  `grep -rn c_link src/python-frontend` → empty). One of the two shared
+  legacy post-passes that pinned Solidity (Part III F3/P2) is simply
+  absent. Only `clang_cpp_adjust` runs over Python output
+  (`python_language.cpp:245`).
+- It builds expressions through **typed factories**, not raw irep surgery:
+  `grep -c 'move_to_operands\|copy_to_operands\|\.operands()' src/python-frontend`
+  → **0**. There is no `.id()`/`.find()` string-tree manipulation to
+  untangle first. This makes mechanical factory-for-factory substitution
+  (`symbol_exprt`→`symbol2tc`, etc.) tractable in a way Solidity's
+  `solidity_convert_call.cpp` (98 `move_to_operands`) was not.
+
+**Counterweight — why this is harder than Solidity in other dimensions
+(read before committing to the project):**
+
+- **Scale and churn.** Solidity is ~23.5 kLOC and quiescent; Python is
+  ~55 kLOC and changes daily. A long-running migration branch will face
+  constant merge conflict against a moving target. This is the single
+  biggest *project-management* risk and it is not technical (§9 RP1).
+- **The same hard pins survive.** P1 (function bodies are legacy `codet`;
+  IREP2 has no structured control-flow code kinds — Part III F2) and the
+  shared-pass pin P2 both still apply. Python emits `code_ifthenelset`,
+  `code_breakt`, `code_continuet`, `code_labelt` (re-verify:
+  `grep -roE 'code_[a-z]+t' src/python-frontend/converter | sort -u`) —
+  all structured forms `goto_convert` must lower. The frontend therefore
+  **cannot** emit IREP2 bodies; bodies stay legacy `codet` exactly as for
+  every other frontend.
+- **`#cpp_type` and `#member_name` are read by the *shared* pass.**
+  `clang_cpp_adjust_expr.cpp:464` does `type.get("#cpp_type")`, and
+  `#member_name` is the shared clang-cpp struct-component convention
+  (Part III Q-S2). Neither can be moved off the IR by frontend-only work —
+  the post-converter adjust pass reads them straight off the legacy node.
+  This is the Python analogue of the wall Part III hit (§14, and F-P5).
+
+**The constraint is Part I's constraint, restated and non-negotiable:**
+ESBMC is a verifier; **every step must be behaviour-preserving** —
+identical pass/fail verdicts, identical counterexample-visible text where
+`test.desc` matches it, dual-solver agreement, no on-disk goto-binary
+format change. A step that is merely "more IREP2" but shifts one Python
+verdict is a regression, not progress. Where this plan and implementation
+convenience conflict, **correctness wins** — the user has made this the
+governing rule.
+
+## 2. How this plan was derived (reproducibility)
+
+Same method as Part II §2 / Part III §2, re-run against the Python tree.
+Each command is re-runnable; counts are a snapshot at the commit this
+document lands on.
+
+- **IR census** —
+  `git grep -P '\b([A-Za-z_]*(exprt|typet|codet)|irept)\b' -- src/python-frontend | wc -l`
+  (legacy) vs `git grep -P '\b[A-Za-z_]+2tc?\b' -- src/python-frontend | wc -l`
+  (IREP2).
+- **Builder-idiom census** — per-idiom counts via
+  `grep -rE '<idiom>' src/python-frontend | wc -l` for `symbol_expr(`,
+  `side_effect_expr_function_callt`, `member_exprt`, `index_exprt`,
+  `address_of_exprt`, `typecast_exprt`, `constant_exprt`, `code_*t`,
+  `set_type(`, `set_value(`. Snapshot below (F-P3).
+- **Attribute census** —
+  `grep -rhoE '\.(set|get)\("#[a-zA-Z_0-9]+"' src/python-frontend | sort | uniq -c`.
+- **Seam trace** — read `symbol.{h,cpp}`, `migrate.{h,cpp}`,
+  `python_language.cpp`, `clang_cpp_adjust*.cpp`,
+  `goto_convert_functions.cpp` to fix where legacy becomes IREP2.
+- **Shared-pass read trace** —
+  `grep -rn '#cpp_type\|#cformat\|#member_name' src/clang-cpp-frontend src/goto-programs`
+  to find which Python-written attributes are consumed *outside* the
+  frontend.
+- **IREP2 API audit** — read `irep2_expr.h`, `irep2_type.h`,
+  `expr_kinds.inc`, `type_kinds.inc`, `c_types.h` for available factories
+  and gaps.
+- **Adversarial re-check** — every load-bearing fact in §4 must be
+  re-derived by an independent pass instructed to refute it before it is
+  acted on; the figures below are the post-correction ones at writing time.
+
+## 3. Current Python frontend architecture and the legacy→IREP2 seam
+
+The Python pipeline is **JSON-mediated**, which is the defining structural
+difference from the clang frontends (no in-memory compiler AST objects flow
+through it):
+
+```
+file.py
+  │  python_languaget::parse  (python_language.cpp:80)
+  ▼  spawns `python3 parser/__main__.py`  (ast2json) — EXTERNAL process
+JSON AST (nlohmann::json `ast`)
+  │  python_annotation<json>::add_type_annotation  (python_language.cpp:206)
+  ▼  decorates the JSON with inferred types — classification lives HERE,
+     in JSON, never on an irep node
+annotated JSON AST
+  │  python_languaget::typecheck  (python_language.cpp:228)
+  │    add_cprover_library(context)         ← C operational models loaded
+  │    python_converter::convert()          ← JSON → legacy symbolt table
+  ▼
+symbolt table (LEGACY-valid: set_type(typet)/set_value(exprt))
+  │  clang_cpp_adjust adjuster(context); adjuster.adjust()  (python_language.cpp:245)
+  ▼    reads get_value()/get_type() as LEGACY, mutates in place, writes
+       LEGACY back; reads `#cpp_type` (clang_cpp_adjust_expr.cpp:464)
+  │  (NO c_link — unlike Solidity / C)
+  ▼
+goto_convert: to_code(symbol.get_value())  ← LEGACY codet body
+  goto_convert_rec lowers structured CF (if/while/break/continue/label)
+  migrate_expr / migrate_symbol_type per instruction  ──► IREP2 (permanent)
+```
+
+The pivot is the symbol table (Part I, B2): `symbolt` stores
+`type2tc`/`expr2tc` as source of truth with **lazy legacy caches**
+(`symbol.h:89-99`). The Python converter writes the **legacy** side
+exclusively — `create_symbol` does `symbol.set_type(type)` on a `typet`
+(`converter/converter_util.cpp:21-37`) — so a Python symbol enters the
+table legacy-valid / IREP2-invalid, and stays legacy until `goto_convert`'s
+`migrate_*` seam converts it for good. This is identical in shape to the
+Solidity seam (Part III §3) **minus the `c_link` stage**.
+
+### 3.1 Operational-model surface (the Python-specific complication)
+
+Python's library semantics are supplied by **two** model layers, both of
+which the converter targets with `code_function_callt` (135 call sites):
+
+1. **C operational models** — `src/c2goto/library/python/` (`list.c`,
+   `dict`-via-`list.c`, `string.c`, `slice.c`, `math.c`, `linalg.c`,
+   `umath.c`, `python_types.h`). FLAIL-mangled into `clib*.goto`, loaded by
+   `add_cprover_library`. These are **C** → they cross the `migrate_*` seam
+   exactly like any C library and are **unaffected** by frontend IR choice.
+2. **Python-level models** — `src/python-frontend/models/*.py` (`builtins`,
+   `numpy`, `dataclasses`, `decimal`, `collections`, `heapq`, `threading`,
+   `re`, `os`, …). These are **Python source** re-parsed through the same
+   frontend; they exercise *every* converter path the user program does.
+
+Consequence for validation (§10): the model `.py` files are part of the
+input corpus, not external dependencies — any converter change is exercised
+against them automatically, but a regression in them is a regression in
+*all* programs that import the model.
+
+## 4. Architectural findings that bound this plan
+
+Each is verified; the re-check command is given. Findings are numbered
+`F-Pn` to distinguish from Solidity's `Fn`.
+
+**F-P1 — Symbol table is IREP2-source-of-truth with lazy legacy caches; the
+converter uses the legacy setters only.** `symbol.h:89-99`,
+`converter/converter_util.cpp:21-37`. A frontend *may* legally call
+`set_type(type2tc)`/`set_value(expr2tc)`; the Python converter never does.
+Re-check: `grep -rn 'set_type(\|set_value(' src/python-frontend | grep -c 2tc`
+→ **0**.
+
+**F-P2 — Function bodies are hard-pinned to legacy `codet`; IREP2 has no
+structured control flow (PIN P1).** Identical to Part III F2. The converter
+emits `code_ifthenelset`, `code_breakt`, `code_continuet`, `code_labelt`,
+plus `code_block`/`code_decl`/`code_assign`/`code_function_call`/
+`code_return`. Lowering structured CF to goto is `goto_convert`'s job, below
+the frontend boundary. Re-check:
+`grep -roE 'code_[a-z]+t' src/python-frontend/converter | sort -u` and
+`grep -E 'IREP2_EXPR\(code_' src/irep2/expr_kinds.inc`.
+→ **Consequence (PIN P1):** the frontend cannot hand IREP2 bodies to
+`goto_convert`. Bodies stay legacy `codet`. Out of scope here.
+
+**F-P3 — Construction is via typed factories, not raw irep surgery (this is
+*good* — it makes substitution mechanical).** Snapshot builder census
+(re-run the per-idiom `grep -c`):
+
+| Idiom | sites | IREP2 target |
+|---|---:|---|
+| `symbol_expr(` (converter helper wrapping `symbol_exprt`) | ~844 | `symbol2tc` + a `symbol2tc`-from-`symbolt` helper |
+| `typecast_exprt` | 127 | `typecast2t` |
+| `member_exprt` | 120 | `member2t` |
+| `code_declt` | 144 | stays legacy `codet` body (P1); operand → `expr2tc` |
+| `code_function_callt` | 135 | `code_function_call2t` (statement) / stays in body |
+| `side_effect_expr_function_callt` | 107 | `sideeffect2t(...function_call)` (`irep2_expr.h:1749`) |
+| `code_assignt` | 107 | stays legacy body; operands → `expr2tc` |
+| `address_of_exprt` | 85 | `address_of2t` |
+| `code_blockt` | 75 | stays legacy body (P1) |
+| `constant_exprt` | 42 | typed `constant_int2tc`/`constant_floatbv2tc`/… |
+| `dereference_exprt` | 37 | `dereference2t` |
+| `code_ifthenelset` | 23 | stays legacy body (P1) |
+| `index_exprt` | 21 | `index2t` |
+| **`move_to_operands` / `.operands()` direct surgery** | **0** | — none to untangle |
+
+The "stays legacy body" rows are the P1 boundary; the rest are
+expression-operand construction that *can* move to `expr2tc` internally and
+be lowered with one `migrate_expr_back` at the body seam (the Part III §5
+target shape).
+
+**F-P4 — The attribute surface is tiny, and the central Solidity hazard
+(silent classification drop) does NOT exist for Python.** Full census:
+
+| Attribute | Sites | Carries | Read where? | Migrates? |
+|---|---|---|---|---|
+| `#cpp_type` | 5 set / 1 read in-frontend | C-backend float/char width hint | **shared `clang_cpp_adjust_expr.cpp:464`** | dropped by `migrate_type`, but **read pre-migration** |
+| `#cformat` | 3 set | numpy literal-format hint | local (numpy fold) | dropped; set-only-ish |
+| `#member_name` | 1 set / removed in 1 | struct-component tag | **shared clang-cpp** (Part III Q-S2) | dropped; read pre-migration |
+
+Crucially: **Python does not tag types with a `#py_type` classification the
+way Solidity tags `#sol_type`.** The type class is resolved from the JSON
+annotation into a *plain* C-like `typet` at construction
+(`type_handler::get_typet`), so when a Python type crosses the
+`migrate_type` seam there is **nothing semantic to drop** — it is already a
+`signedbv`/`floatbv`/`struct`/`array`/`pointer`. Re-check:
+`grep -rn 'get("#py\|set("#py\|#python_type' src/python-frontend` → empty.
+→ **Consequence:** the Solidity "de-attribute first" phase (Part III 3.1)
+is **mostly unnecessary** for Python. The residual `#cpp_type`/`#member_name`
+are shared-pass-read and therefore *cannot* be moved by frontend work
+anyway (F-P5) — they are pinned, not migrated.
+
+**F-P5 — `#cpp_type` and `#member_name` are consumed by the shared
+`clang_cpp_adjust` pass (PIN P2).** `clang_cpp_adjust_expr.cpp:464` reads
+`#cpp_type`; `#member_name` is the shared struct-component convention.
+Re-check: `grep -rn '#cpp_type\|#member_name' src/clang-cpp-frontend`.
+→ **Consequence (PIN P2):** even a fully IREP2-internal converter must emit
+legacy `typet` carrying these two attributes *at the symbol/adjust
+boundary*, because adjust reads them off the legacy node before
+`migrate_*`. They define part of the legacy seam and stay there by design,
+exactly as Solidity's `#member_name` did (Part III §14).
+
+**F-P6 — No `c_link`; one fewer shared legacy pass than Solidity/C.**
+`grep -rn c_link src/python-frontend` → empty. The only post-converter
+shared pass is `clang_cpp_adjust`. This *narrows* P2 relative to Solidity
+but does not remove it.
+
+**F-P7 — Python integer semantics are an existing approximation, orthogonal
+to IR representation.** `type_handler.cpp:43-51`: default lowering is
+`long_long_int_type()` (64-bit, two's complement); `--ir`/bignum mode uses
+`signedbv_typet(512)` (`kPythonBignumWidth`). True Python arbitrary
+precision is **not** modelled (FIXME `type_handler.cpp:471`). This is a
+pre-existing soundness gap (§14 SM1) that the migration must **preserve
+exactly, not fix** — changing the width during an IR migration would
+conflate two effects and is forbidden by the behaviour-preserving rule.
+
+**F-P8 — The IREP2 construction API is largely present; the gaps overlap
+Part II/III's and are enumerable (§6).**
+
+## 5. Target end-state: "IREP2-internal, legacy-at-the-seam" (same as Part III §5)
+
+Given P1 + P2, the **achievable, sound** frontend-scoped target is *not*
+"the converter emits IREP2 end-to-end." It is:
+
+> The converter constructs **types and the expression operands of
+> statements** using IREP2 typed factories internally, lowering to legacy
+> `typet`/`exprt`/`codet` at **one documented seam** — the
+> `symbolt`/`clang_cpp_adjust`/body boundary — where the legacy form must
+> still carry `#cpp_type`/`#member_name` (F-P5). Structured control-flow
+> statements and the function-body `codet` handed to `goto_convert` remain
+> legacy by design (P1). The externally observable bytes reaching
+> `clang_cpp_adjust` are **bit-identical** to today.
+
+```
+              ┌───────────────── frontend scope ─────────────────┐
+JSON (typed) ─► type_handler builds type2tc  ─┐
+                converters build expr2tc      ─┤ lower at ONE seam
+                                               │  (migrate_*_back +
+                                               │   re-attach #cpp_type/
+                                               │   #member_name)
+              └───────────────────────────────┴──────────────────┘
+                                               ▼
+        symbolt (legacy) ─► clang_cpp_adjust (P2) ─► goto_convert ─► IREP2
+```
+
+This buys the IREP2 compile-time-typing soundness benefit *inside the
+converter* (a mis-built node fails to compile, not at symex) and leaves
+behaviour bit-identical. It is the same deliverable Part III defined for
+Solidity — and, per the Part III §14 outcome, the engineer **must
+internalize up front** that the deeper boundary (P1/P2) does not move, and
+that the honest end state may again be "encapsulate and IREP2-internalize
+the construction, with the frontend staying legacy at the seam by design."
+
+> **Rejected alternative — extend `type2t`/`expr2t` with a generic
+> attribute map** to carry `#cpp_type`/`#cformat`. This re-introduces the
+> string-keyed escape hatch IREP2 was built to abolish (Part I §"Why this
+> mattered"; Part III §5.1). Do not. `#cpp_type` stays on the legacy seam
+> node instead.
+
+## 6. IREP2 API gaps to close before migrating construction
+
+From the F-P8 audit and reusing Part II §5 / Part III §6. Build each (with
+round-trip unit tests) **before** the phase that needs it; each is small.
+
+| Gap | Needed by | Disposition |
+|---|---|---|
+| `symbol2tc`-from-`symbolt` convenience | the ~844 `symbol_expr(symbolt)` sites | Trivial helper (Part II §5, Part III §6 list the same gap — build once, shared). |
+| Expression-context function call | the 107 `side_effect_expr_function_callt` sites | `sideeffect2t(..., sideeffect_allockind::function_call)` (`irep2_expr.h:1749`). |
+| `from_double(double, type2tc)` → `constant_floatbv2tc` | float-literal construction (`convert_float_literal.cpp`) | Part II §5 gap; trivial port. |
+| `#cpp_type` re-attachment helper at the seam | float/char-typed symbols (F-P5) | New seam helper: build `type2tc`, lower to `typet`, `set("#cpp_type", …)`. Keep the legacy hint on the seam node. |
+| `mb_value` on `constant_string2t` | `str` / `bytes` literals | Part II Phase 2.6 / R10 gap (unfinished). Either port the decoder **verbatim** or keep string-literal lowering legacy at the seam. Gated by Q-P4. |
+| 256/512-bit integer types | `--ir` bignum mode (`signedbv_typet(512)`) | `signedbv_type2tc(512)` already works; verify BigInt/SMT width under overflow checks. No new factory. |
+| Structured control-flow code kinds | function bodies | **Out of scope (P1).** Bodies stay legacy `codet`. |
+
+## 7. Phased, commit-sized decomposition
+
+Ordered soundness-first / lowest-risk-first. Each numbered item is **one
+reviewable commit**; **apply and test one at a time** (incremental patch
+testing); do not batch. Every commit is gated by §10. Because the tree
+moves fast (§1, RP1), keep each phase short-lived and rebase frequently.
+
+### Phase 4.0 — Baseline & harness (no behaviour change)
+1. Capture the golden **verdict + matched-text** set over a stratified
+   `regression/python` subset (the suite has **3558 test dirs** — full runs
+   exceed the 5-minute cap; §10) on clean `master`, on an **asserts-enabled
+   build** (keeps the `migrate.cpp` symbol cross-check live). Record
+   pre-existing failures (platform/solver/`ast2json` baseline — note the
+   `ast2json` dependency, AGENTS.md "Testing").
+2. Add an IREP2-construction equivalence harness under
+   `unit/python-frontend/` (extend the existing CMake target there): assert
+   that, for a corpus of representative nodes, the `type2tc` a migrated
+   builder produces back-migrates (`migrate_type_back`) to a `typet`
+   **equal** to the one the legacy builder produces today (modulo the
+   `#cpp_type`/`#member_name` re-attachment, which the harness checks
+   explicitly). This is the durable contract regression for Phases 4.2–4.3.
+
+### Phase 4.1 — Attribute-access encapsulation (mirror Part III's milestone)
+*This is the cheap, high-value, low-risk hardening — do it first even if no
+further phase is taken up.*
+3. Funnel the three `#`-attribute keys through typed accessors on
+   `python_converter` / `type_handler` (`set_/get_cpp_type`,
+   `set_/get_cformat`, `set_/get_member_name`), replacing the scattered raw
+   `.set("#…")`/`.get("#…")` calls (5 + 3 + 1 sites). Behaviour-preserving
+   mechanical no-op (same key, same value, same storage). Document that
+   `#cpp_type` and `#member_name` are **shared-pass-read (F-P5) and stay on
+   the legacy seam node** — they are *not* migration targets. This gives a
+   single repoint-point per attribute and matches the Solidity §14 outcome.
+
+### Phase 4.2 — Enabling infrastructure (§6 gaps, dead-but-tested)
+4. Land the `symbol2tc`-from-`symbolt` helper and the
+   `sideeffect2t(function_call)` wrapper with round-trip unit tests **and no
+   converter call-site changes** (the Part I V-track lesson: ship tested
+   infrastructure separately so the wiring PR has zero coverage-axis risk).
+5. Resolve the string/`bytes` decoder question (Q-P4): port `mb_value` onto
+   `constant_string2t` verbatim (R10) *or* decide string-literal lowering
+   stays legacy at the seam. Land with property tests against the existing
+   CPython oracle (`unit/python-frontend/`, AGENTS.md "Hypothesis tests").
+
+### Phase 4.3 — Migrate **type** construction to `type2tc` (internal)
+6. Rewrite `type_handler`'s builders (`get_typet`, `python_int_typet`,
+   `build_array`, the elementary/struct/array/pointer paths) to produce
+   `type2tc`, threading any `#cpp_type` need into the seam helper, and
+   back-migrating to `typet` only at `create_symbol`/`add_symbol`. **One
+   builder family per commit** (elementary → array → struct/class →
+   pointer/function). Preserve `python_int_typet`'s width logic byte-for-
+   byte (F-P7 / SM1). `code_type2t` requires `args.size() ==
+   argument_names.size()` (`irep2_type.h:240`) — supply synthesized names.
+
+### Phase 4.4 — Migrate **expression** construction to `expr2tc` (internal)
+7. Rewrite the expression converters to build `expr2tc` via typed factories
+   instead of `symbol_expr`/`typecast_exprt`/`member_exprt`/`index_exprt`/
+   `address_of_exprt`/`dereference_exprt`/`constant_exprt`/
+   `side_effect_expr_function_callt`. Split by file/handler — one commit
+   each, roughly in dependency order: `converter_symbols.cpp` (symbol refs)
+   → `converter_expr.cpp` → `converter_unop.cpp`/`converter_binop.cpp`/
+   `converter_compare.cpp` → `converter_funcall.cpp` → the big handlers
+   (`python_list.cpp`, `python_dict_handler.cpp`, `python_set.cpp`,
+   `python_math.cpp`, `numpy_call_expr.cpp`, `string/*`). Back-migrate to
+   `exprt` only where the result is stitched into a legacy `codet` body
+   (Phase 4.5). **This is the bulk of the work and the highest churn-
+   collision risk** — keep commits small and land them fast.
+
+### Phase 4.5 — The body boundary (what stays legacy, made explicit)
+8. Localize the legacy hand-off: statement assembly (`converter_stmt.cpp`)
+   keeps emitting structured legacy `codet` (P1), but each statement's
+   *operands* are now IREP2, lowered through a single documented
+   `migrate_expr_back` helper at the point the statement is built.
+   `complex`/`#cpp_type`-typed and struct-component (`#member_name`)
+   operands re-attach their seam attributes here (F-P5). Document this as
+   the durable Python frontend boundary — the analogue of Part I's
+   `migrate_expr`-at-goto-convert seam and Part III §3.5.
+
+### Phase 4.6 — Tighten & census
+9. Retire now-dead legacy includes/helpers; snapshot the Python IREP2-share
+   census and record it as Part IV's outcome section (mirror Part II §11 /
+   Part III §14). Reassess whether to proceed past the seam or, as Solidity
+   did, declare the encapsulated + IREP2-internal converter the stopping
+   point.
+
+### Out of scope — separate tracking issues (the deep pins, shared with Part III)
+- **IREP2-native goto-convert input** (structured CF code kinds + IREP2
+  `goto_convert_rec`). Removes P1. Affects every frontend.
+- **IREP2-native `clang_cpp_adjust`** (or a Python-specific adjust that does
+  not round-trip legacy and reads `#cpp_type` natively). Removes P2.
+- **IREP2-native C printer for Python counterexamples** (Part II Phase 2.7).
+  Witness/`test.desc` text-parity bar.
+
+## 7.1 Acceptance criteria per phase
+
+| Phase | Done when |
+|---|---|
+| 4.0 | Golden verdict+text set captured on asserts build over the stratified subset; `ast2json` baseline recorded; equivalence harness compiles and passes against legacy builders. |
+| 4.1 | `grep -rE '\.(set\|get)\("#' src/python-frontend` returns only the typed-accessor bodies; each attribute has one repoint seam; suite verdict+text unchanged on both solvers. |
+| 4.2 | New factories/helpers have round-trip unit tests; **no converter call site changed**; suite unchanged. |
+| 4.3 | Type builders return `type2tc`; back-migration confined to symbol store + seam helper; `python_int_typet` width identical (unit-pinned); suite verdict+text unchanged on both solvers; asserts-build cross-check silent. |
+| 4.4 | Expression converters build `expr2tc`; legacy `symbol_expr`/`*_exprt`/`side_effect_expr_function_callt` count in `src/python-frontend` strictly decreasing PR-over-PR; suite unchanged. |
+| 4.5 | Exactly one documented `migrate_expr_back` hand-off feeds legacy `codet` bodies; `#cpp_type`/`#member_name` re-attached at the seam; structured CF still lowered by `goto_convert`; suite unchanged. |
+| 4.6 | Census recorded; dead legacy retired with C-Dead discharge; suite unchanged; go/stop decision documented. |
+
+The bar for **every** phase: identical pass/fail set and identical matched
+output text under **both Bitwuzla and Z3**, on an asserts-enabled build,
+over the stratified `regression/python` corpus (full suite at phase
+boundaries, respecting the 5-minute cap by narrowing per commit).
+
+## 8. Dependencies and prerequisites
+
+- **4.1 is independent and unblocking** — do it first; it is the milestone
+  even if the project stops there (Part III §14 precedent).
+- **4.2 blocks 4.3/4.4** (factories must exist and be tested first — the
+  V-track lesson: land dead-but-tested infrastructure as its own PR).
+- **4.3 blocks 4.4** (expressions carry their `type2tc`; types must be
+  buildable first).
+- **4.4's string/`bytes` work depends on Q-P4** (`mb_value`).
+- **4.5 depends on P1 staying pinned.** If the out-of-scope IREP2
+  goto-convert ever lands, 4.5's hand-off is where it connects.
+- The whole plan depends on the **goto-binary on-disk format not changing**
+  (Part I, B4), on the **JSON AST contract** (§11), and on the **`#cpp_type`
+  / `#member_name` shared-pass reads remaining satisfied** at the seam
+  (F-P5).
+
+## 9. Risk register (Python-specific; extends Part II §7 / Part III §9)
+
+| # | Area | Risk | Sev | Mitigation |
+|---|---|---|---|---|
+| RP1 | **process** | The Python frontend is the highest-churn tree in the repo; a multi-week migration branch will conflict continuously against a moving target. | **high** | Small, fast-landing commits; rebase daily; never let a phase branch live > a few days; coordinate a soft freeze on the touched files per phase. |
+| RP2 | soundness | `#cpp_type` is read by the **shared** `clang_cpp_adjust` (F-P5); an IREP2-internal type built without re-attaching it at the seam silently changes adjust's behaviour for float/char symbols → wrong cast/width. | **critical** | Seam helper re-attaches `#cpp_type`; unit test round-trips a `#cpp_type`-tagged type and asserts the legacy node still carries it; `convert_float_literal`/`type_handler:564` paths covered. |
+| RP3 | soundness | `#member_name` (shared clang-cpp struct-component convention) lost at the seam → constructor namespace lookup / mangling misfires (Part III Q-S2). | **critical** | Same as RP2: re-attach at the seam; never migrate it off the IR; covered by class/struct regression tests. |
+| RP4 | soundness | `python_int_typet` width logic (64-bit default vs 512-bit `--ir`; F-P7/SM1) altered during migration flips overflow/wrap verdicts. | high | Pin the width in a unit test **before** Phase 4.3; assert byte-identical `typet` pre/post; keep `--overflow-check` Python tests green on both modes. |
+| RP5 | soundness | Operational-model `.py` files (§3.1) are themselves converter input; a converter regression breaks *every* program importing that model, not just one test. | high | The model `.py` corpus is in the regression set; run `numpy`/`dataclasses`/`decimal`/`collections` tests every commit, not just at phase close. |
+| RP6 | correctness | `code_type2t` arity assertion (`args.size()==names.size()`, `irep2_type.h:240`) — Python builds function types without parameter names in places. | med | Supply synthesized names in 4.3; asserts build catches it. |
+| RP7 | soundness | `complex` is modelled as a `struct` with `#member_name`-tagged components and a cached static `struct_typet` (`type_handler.h:18-34`); IREP2-building it must reproduce the exact tag/component layout or `migrate_type` produces a different `struct_type2t`. | high | Unit-pin the `complex` struct layout; the existing `unit/python-frontend/complex_type_test.cpp` is the oracle — extend it for the IREP2 path. |
+| RP8 | soundness | `str`/`bytes` decode (`mb_value`, UTF-8/wide/endianness) lives only on the legacy class (Part II R10) and is the trickiest logic; an IREP2 port can diverge. | med | Carry the decoder **verbatim**; property-test against CPython (AGENTS.md "Hypothesis tests"); or keep literal lowering legacy at the seam (Q-P4). |
+| RP9 | soundness | Name-identical legacy/IREP2 overloads (`gen_zero`, `member`, `symbol_expr` vs `symbol2tc`) — both compile, wrong one binds (Part II R12). | med | Per-site review; `-Werror`; unit equivalence tests. |
+| RP10 | compatibility | Counterexample text: Python `test.desc` regexes match function names, line numbers, sometimes coverage counts. A construction change that alters symbol naming or pretty-printed types breaks them. | high | §10 captures matched text, not just verdict; keep the legacy C printer (Part II 2.7 out of scope). |
+| RP11 | scope-creep | The "real" migration tempts touching P1 (goto-convert) / P2 (adjust); doing so blows blast radius across all frontends. | med | P1/P2 are separate tracking issues; Part IV stops at the body seam (4.5). |
+| RP12 | environment | Python tests require `ast2json` and spawn an external `python3`; a stale/absent interpreter masquerades as a verdict regression. | med | Pin the baseline `ast2json`/interpreter; run inside the project venv (AGENTS.md); treat parse failures as infra, not migration, regressions. |
+
+## 10. Validation, regression & equivalence strategy
+
+Reuse the Part II universal gate, specialized for Python. The suite is
+`regression/python` (**3558 test dirs**) plus `regression/python-coverage`
+and `regression/python-intensive`; label `python` (registered when
+`-DENABLE_PYTHON_FRONTEND=On`). Per AGENTS.md, Python tests need `ast2json`
+in the invoked `python3`, and each test spawns the external parser.
+
+**Per-phase gate (all must hold, both Bitwuzla and Z3):**
+1. **Verdict set identical** to the 4.0 baseline. Verdicts are immune to
+   the model-naming nondeterminism that makes `diff_goto_baseline`
+   unreliable across rebuilds (Part II §8.1), so this is the primary oracle.
+   *Do not rely on `diff_goto_baseline` here* — the Python operational-model
+   bake is one of the documented nondeterministic loci (§8.1 names
+   `esbmc-python-astgen-<hex>` temp paths explicitly).
+2. **Matched-text identical.** Capture and diff the `test.desc`-matched
+   lines (function names, line numbers, coverage counts), not just the
+   verdict. Backstop for RP10.
+3. **Asserts-enabled build** so the `migrate.cpp` symbol round-trip
+   cross-check stays live across the corpus — the strongest evidence the
+   converter's new output is still losslessly convertible.
+4. **Affected unit suites** green, including the new
+   `unit/python-frontend/` IREP2-construction equivalence tests and the
+   extended `complex_type_test.cpp` (RP7).
+5. **Run subset first, full last.** Stratified CORE subset on every commit;
+   `python-intensive` / full 3558 at phase boundaries only. Respect the
+   project 5-minute full-suite cap — narrow scope per commit (the full suite
+   far exceeds it; pick a representative stratum covering int/float/str/
+   list/dict/set/class/complex/numpy/overflow). Clean
+   `/tmp/esbmc-headers-*` after runs (AGENTS.md "/tmp disk space").
+
+**Phase-4.3-specific equivalence test (the load-bearing one):** for a
+representative corpus of annotated JSON type nodes, assert
+`migrate_type_back(build_type2tc(node)) == legacy_build_typet(node)`
+**including** the `#cpp_type`/`#member_name` re-attachment, for every node.
+This pins RP2/RP3/RP4/RP7 by construction.
+
+## 11. Backward-compatibility considerations
+
+- **Goto-binary on-disk format: unchanged** (Part I, B4 / RETAIN_BOUNDARY).
+  Old `.goto` binaries must still load; the Python path produces the same
+  serialized IR.
+- **JSON AST contract: unchanged.** The frontend still spawns
+  `parser/__main__.py` (ast2json) and consumes the same JSON shape; the
+  `python_annotation` pass is untouched. Do **not** change the parser as
+  part of this migration (it would conflate ast2json drift with refactor
+  effects — the analogue of Part III's "do not regenerate `.solast`").
+- **CLI surface unchanged:** `--python`, `--function`, `--ir` (bignum),
+  `--deadlock-check`, `--parse-tree-only` (`python_language.cpp`).
+- **Operational models (C `c2goto/library/python/*` and Python
+  `models/*.py`): unchanged.** The converter still emits the same calls into
+  them; model-selection logic must pick the same model (this is what the
+  verdict gate enforces).
+- **`#cpp_type` / `#member_name` seam contract: preserved** (F-P5/RP2/RP3) —
+  the legacy node handed to `clang_cpp_adjust` still carries them.
+- **Counterexample / diagnostic text: preserved** where `test.desc` matches
+  it (RP10). The legacy C printer stays (Part II 2.7 out of scope).
+
+## 12. Success metrics and exit criteria
+
+- **Primary (this plan):** the legacy-builder census in
+  `src/python-frontend` (`symbol_expr`, `*_exprt`,
+  `side_effect_expr_function_callt`, `constant_exprt`, non-CF `code_*t`
+  *operands*) strictly decreasing PR-over-PR; the Python IREP2-share rising
+  from <1 % (Part I surface table) — measured by the §2 census.
+- **Secondary (soundness milestone, Phase 4.1):** raw
+  `.set("#…")`/`.get("#…")` access outside the typed accessors reaches
+  empty; the three attributes sit behind one repoint seam each.
+- **Exit (this plan):** the converter builds types and statement-operand
+  expressions in IREP2 internally, and hands off to
+  `clang_cpp_adjust`/`goto_convert` through **one documented legacy seam
+  (4.5)** that re-attaches `#cpp_type`/`#member_name`. Function-body
+  control-flow lowering (P1), the shared `clang_cpp_adjust` pass (P2), the
+  bignum int approximation (SM1, deliberately unchanged), and the Python C
+  printer remain legacy under their own tracking issues. Verdict+text parity
+  holds across the stratified suite on both solvers.
+
+The bar is Part I's bar: **behaviour-preserving at every step, proven, not
+assumed.** As Part III found for Solidity, the honest end state may be the
+encapsulated, IREP2-internal converter with a legacy seam — that is genuine
+forward progress, not a half-migration, and is preferable to forcing a node
+across the seam that drops a shared-pass-read attribute.
+
+## 13. Open questions (resolve before the cited commit)
+
+- **Q-P1** — Do any Python `test.desc` regexes match counterexample
+  *values* (not just verdict/function-name/line/coverage)? Sample-grep
+  `regression/python/**/test.desc` before 4.4; if so, symbol-naming
+  stability becomes a hard 4.4 gate (sets the RP10 bar).
+- **Q-P2** — Is `#cformat` ever read after the numpy fold that sets it, or
+  is it set-only/dead? `grep -rn 'get("#cformat"' src` (writing-time census
+  shows 0 reads). If dead, delete in 4.1 instead of encapsulating. (blocks
+  4.1 disposition of `#cformat`)
+- **Q-P3** — Besides `clang_cpp_adjust_expr.cpp:464` (`#cpp_type`), does any
+  other shared pass (`goto_convert`, `goto_check`, the cprover library
+  glue) read a Python-written attribute off the legacy node? Full grep
+  `src/{goto-programs,goto-symex}` for the three keys. (re-scopes P2 /
+  blocks 4.5 seam contract)
+- **Q-P4** — Can `constant_string2t` carry the `mb_value` decode Python
+  `str`/`bytes` literals need (Part II R10/2.6 — still open), or must
+  literal lowering stay legacy at the seam? (blocks 4.4 string work)
+- **Q-P5** — Does the cached static `complex` `struct_typet`
+  (`type_handler.h:18`) survive `migrate_type` into a byte-identical
+  `struct_type2t` (tag, component order, `#member_name`)? Build a unit
+  round-trip before 4.3. (blocks 4.3 complex path / RP7)
+- **Q-P6** — How are Python `while`/`for` loops lowered? The converter
+  census shows `code_ifthenelset`/`break`/`continue`/`label` but **zero**
+  `code_whilet`/`code_fort` (re-check
+  `grep -rn 'codet("while"\|code_whilet\|code_fort' src/python-frontend/converter`).
+  Confirm the actual loop-lowering shape so Phase 4.5 documents the exact
+  legacy body the seam produces. (blocks 4.5)
+
+## 14. Semantic-mismatch & potential-unsoundness catalogue (Python-specific)
+
+The user asked explicitly for the places where semantic mismatch,
+unsupported features, or verification unsoundness could be **introduced** by
+this migration, versus those that **pre-exist** and must be preserved
+unchanged. The distinction is critical: the migration's job is to preserve,
+not to fix — fixing a semantic gap during an IR migration conflates two
+effects and violates the behaviour-preserving rule.
+
+**Pre-existing (must be preserved byte-for-byte, NOT fixed here):**
+- **SM1 — Python `int` is not arbitrary-precision.** Default lowering is
+  64-bit `long_long_int_type`; `--ir` widens to 512-bit `signedbv`
+  (`type_handler.cpp:43-51,471` FIXME). Genuine `int` overflow semantics are
+  approximated. Preserve the exact width selection (F-P7/RP4).
+- **SM2 — `str` is a C `char` array/pointer**, not a Unicode-aware Python
+  `str`; multibyte decode via `mb_value` (RP8). Preserve the decoder
+  verbatim.
+- **SM3 — Operational-model fidelity.** `list`/`dict`/`set`/`numpy` semantics
+  are whatever the C and `.py` models implement; the migration must call the
+  *same* model with the *same* arguments (RP5).
+
+**Could be INTRODUCED by this migration (the watch-list):**
+- **U1 — Dropped seam attribute (RP2/RP3).** `#cpp_type`/`#member_name` not
+  re-attached at the 4.5 seam → shared `clang_cpp_adjust` takes a different
+  path silently. Highest-severity new hazard; the §10 round-trip test pins
+  it.
+- **U2 — `complex` struct layout drift (RP7).** An IREP2-built `complex`
+  whose component order/tag differs from the cached `struct_typet` →
+  `member`-access mismatch in the operational model.
+- **U3 — Width/signedness drift in `type2tc` construction.** A
+  `signedbv_type2tc` built with the wrong width (especially the 512-bit
+  bignum path) flips overflow/comparison verdicts (RP4).
+- **U4 — Overload misbinding (RP9).** A `gen_zero`/`member`/`symbol_expr`
+  site silently binding the wrong (legacy vs IREP2) overload, both
+  compiling, one wrong.
+- **U5 — `code_type2t` arity assert (RP6)** turning a previously-accepted
+  unnamed-parameter function type into a hard frontend abort — a
+  *behaviour* change (crash vs verdict) even though it surfaces a latent
+  inconsistency. Supply names; do not let it change which programs verify.
+
+Each U-item maps to a §9 risk and a §10 gate; none may be left to symex to
+catch. The governing rule stands: **for a verifier, a silently-dropped
+attribute or a width drift is a wrong verdict, and a wrong verdict is the
+only outcome this project exists to prevent.**
