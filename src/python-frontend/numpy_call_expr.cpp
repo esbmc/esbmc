@@ -948,20 +948,20 @@ exprt numpy_call_expr::get()
             if (is_unsigned)
             {
               exprt folded = from_integer(BigInt(wrapped_bits), t);
-              folded.set("#cformat", std::to_string(wrapped_bits));
+              folded.cformat(std::to_string(wrapped_bits));
               return folded;
             }
             else
             {
               exprt folded = from_integer(BigInt(wrapped_signed), t);
-              folded.set("#cformat", std::to_string(wrapped_signed));
+              folded.cformat(std::to_string(wrapped_signed));
               return folded;
             }
           }
           else
           {
             exprt folded = from_double(final_value, t);
-            folded.set("#cformat", std::to_string(final_value));
+            folded.cformat(std::to_string(final_value));
             return folded;
           }
         }
@@ -1010,8 +1010,7 @@ exprt numpy_call_expr::get()
           auto length = value_str.length();
           expr.value(value_str.substr(length - dtype_size));
           value_str = expr.value().as_string();
-          expr.set(
-            "#cformat", std::to_string(std::stoll(value_str, nullptr, 2)));
+          expr.cformat(std::to_string(std::stoll(value_str, nullptr, 2)));
         }
       }
     }
