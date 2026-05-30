@@ -170,6 +170,14 @@ public:
     return t.get("#sol_name").as_string();
   }
 
+  // Set the Solidity data location ("memory"/"storage"/"calldata") carried on
+  // a typet via the #sol_data_loc irep attribute. Set-only today (no readers);
+  // wrapped to keep every Solidity type-attribute write behind one seam.
+  static void set_sol_data_loc(typet &t, const irep_idt &loc)
+  {
+    t.set("#sol_data_loc", loc);
+  }
+
   // json nodes that always empty
   // used as the return value for find_constructor_ref when
   // dealing with the implicit constructor call
