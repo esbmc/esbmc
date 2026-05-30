@@ -82,6 +82,15 @@ bool is_relational(const expr2tc &e)
          is_lessthanequal2t(e);
 }
 
+/// True iff @p e is a disequality `a != b`. Treated as a "guard shape"
+/// for the certifier: while `a != b` holds, the loop runs; either `a -
+/// b` or `b - a` must strictly decrease toward 0 — we emit BOTH
+/// candidates and prove termination if EITHER discharges.
+bool is_disequality(const expr2tc &e)
+{
+  return is_notequal2t(e);
+}
+
 /// True if @p e contains a memory-dependent subexpression (dereference,
 /// array index, struct/union member, byte op). Such expressions can't
 /// be handed to the solver directly — they need symex's dereferencing
@@ -507,7 +516,9 @@ bool recognize_loop(
   // guards (`||` at the top level) are not handled and will fail here.
   if (touches_memory(pos_guard, exempt_derefs))
     return false;
-  if (!is_relational(pos_guard) && !is_and2t(pos_guard))
+  if (
+    !is_relational(pos_guard) && !is_disequality(pos_guard) &&
+    !is_and2t(pos_guard))
     return false;
   out.guard =
     deref_map.empty() ? pos_guard : subst_parallel(pos_guard, deref_map);
@@ -855,6 +866,46 @@ bool is_unsat(const expr2tc &formula, optionst &options, const namespacet &ns)
 /// would be UB and make the proof unsound. Returns false if the guard
 /// is not relational or its operands are not integer-typed (the
 /// difference/widening is only defined for integers).
+/// Build the widened-int64 difference `(int64)a - (int64)b` if both
+/// operands are scalar BV that we can safely lift without wraparound.
+/// Returns true on success and writes the lifted expression to @p out;
+/// returns false (and leaves @p out untouched) if either operand is
+/// not a BV or a 64-bit non-constant operand could produce a
+/// difference outside int64. Used both by `measure_from_relational`
+/// (which produces a single candidate from a `<`/`<=`/`>`/`>=` atom)
+/// and by `measure_from_disequality` (which produces two candidates
+/// from a `!=` atom — one for each potential direction).
+bool make_widened_difference(
+  const expr2tc &a_in,
+  const expr2tc &b_in,
+  expr2tc &out)
+{
+  expr2tc a = peel_typecasts(a_in);
+  expr2tc b = peel_typecasts(b_in);
+
+  if (!is_bv_type(a->type) || !is_bv_type(b->type))
+    return false;
+
+  // 32-bit source operands give a difference in [-(2^32-1), 2^32-1],
+  // far inside int64. A 64-bit source operand could overflow int64 —
+  // refuse unless the wide side is a constant fitting in int32.
+  auto wide_side_is_int32_constant = [](const expr2tc &e) -> bool {
+    if (e->type->get_width() <= 32)
+      return true;
+    if (!is_constant_int2t(e))
+      return false;
+    const BigInt &v = to_constant_int2t(e).value;
+    BigInt lo(-2147483648LL), hi(2147483647LL);
+    return v >= lo && v <= hi;
+  };
+  if (!wide_side_is_int32_constant(a) || !wide_side_is_int32_constant(b))
+    return false;
+
+  type2tc wide = get_int_type(64);
+  out = sub2tc(wide, typecast2tc(wide, a), typecast2tc(wide, b));
+  return true;
+}
+
 /// Build a single candidate (m, L) from one relational atom @p atom.
 /// Returns false if the atom is not relational or its operands are not
 /// scalar BV of width <= 32. The measure is m = (int64)a - (int64)b with
@@ -890,42 +941,38 @@ bool measure_from_relational(const expr2tc &atom, expr2tc &m, expr2tc &L)
   else
     return false;
 
-  // Peel typecasts on each side -- the frontend often promotes one side
-  // to a wider type for the comparison (e.g. `(int64)x > -2147483648`),
-  // and the width guard below should reflect the SOURCE operand's width,
-  // not the promoted comparison type. We re-widen ourselves below; the
-  // intermediate cast is incidental.
-  a = peel_typecasts(a);
-  b = peel_typecasts(b);
-
-  if (!is_bv_type(a->type) || !is_bv_type(b->type))
+  if (!make_widened_difference(a, b, m))
     return false;
-
-  // The measure is m = (int64)a - (int64)b. Value-preserving extension to
-  // int64 keeps each operand in its source range, so the subtraction cannot
-  // overflow as long as both fit comfortably below int64: 32-bit source
-  // operands give a difference in [-(2^32-1), 2^32-1], far inside int64. A
-  // 64-bit source operand can produce a difference outside int64, which
-  // would wrap and spuriously discharge -- refuse, UNLESS the wide side is
-  // a constant whose value fits in int32 (a common frontend pattern: a
-  // literal like `-2147483648` is parsed as `-(2147483648L)` because the
-  // unsuffixed literal doesn't fit in int; the negation lands at the int
-  // limit but the value is still within int32).
-  auto wide_side_is_int32_constant = [](const expr2tc &e) -> bool {
-    if (e->type->get_width() <= 32)
-      return true;
-    if (!is_constant_int2t(e))
-      return false;
-    const BigInt &v = to_constant_int2t(e).value;
-    BigInt lo(-2147483648LL), hi(2147483647LL);
-    return v >= lo && v <= hi;
-  };
-  if (!wide_side_is_int32_constant(a) || !wide_side_is_int32_constant(b))
-    return false;
-
   type2tc wide = get_int_type(64);
-  m = sub2tc(wide, typecast2tc(wide, a), typecast2tc(wide, b));
   L = constant_int2tc(wide, bound);
+  return true;
+}
+
+/// Build TWO candidates (m, L) from a disequality atom `a != b`. The
+/// guard `a != b` holds iff `a > b` OR `a < b`; we don't know which,
+/// so we emit both `(a-b, 1)` and `(b-a, 1)`. The candidate-discharge
+/// loop tries each independently; whichever direction admits a strict
+/// decrease + bounded-below proof yields termination.
+///
+/// Returns false if the operands are not scalar BV of width <= 32, or
+/// the lifted differences would overflow int64 (see
+/// `make_widened_difference`).
+bool measure_from_disequality(
+  const expr2tc &atom,
+  std::vector<std::pair<expr2tc, expr2tc>> &out)
+{
+  if (!is_notequal2t(atom))
+    return false;
+  const notequal2t &neq = to_notequal2t(atom);
+  expr2tc m_ab, m_ba;
+  if (!make_widened_difference(neq.side_1, neq.side_2, m_ab))
+    return false;
+  if (!make_widened_difference(neq.side_2, neq.side_1, m_ba))
+    return false;
+  type2tc wide = get_int_type(64);
+  expr2tc L = constant_int2tc(wide, BigInt(1));
+  out.push_back({m_ab, L});
+  out.push_back({m_ba, L});
   return true;
 }
 
@@ -950,7 +997,12 @@ bool measure_candidates_from_guard(
   {
     expr2tc m, L;
     if (measure_from_relational(atom, m, L))
+    {
       out.push_back({m, L});
+      continue;
+    }
+    // Disequality `a != b` yields two direction candidates.
+    measure_from_disequality(atom, out);
   }
   return !out.empty();
 }
@@ -1410,6 +1462,26 @@ expr2tc synthesize_invariant(
     for (const auto &lr : lr_per_path)
       c.primes.push_back(make_atom(lr.first, lr.second));
     atoms.push_back(std::move(c));
+    // If the source atom is strict (`>` or `<`), also try its non-strict
+    // counterpart (`>=` / `<=`). The strict one implies the non-strict
+    // one, so the non-strict version holds at loop entry; and the non-
+    // strict version is typically what's inductive across a decrementing
+    // body (`while (x != 0) x = x - 1;` with seed `x > 0` keeps `x >= 0`
+    // — `x > 0` itself fails inductiveness when x reaches 1). The
+    // fixpoint loop drops whichever variant doesn't survive.
+    if (is_greaterthan2t(a) || is_lessthan2t(a))
+    {
+      auto make_relaxed = [&](const expr2tc &x, const expr2tc &y) -> expr2tc {
+        if (is_greaterthan2t(a))
+          return greaterthanequal2tc(x, y);
+        return lessthanequal2tc(x, y);
+      };
+      cand rc;
+      rc.atom = make_relaxed(l, r);
+      for (const auto &lr : lr_per_path)
+        rc.primes.push_back(make_relaxed(lr.first, lr.second));
+      atoms.push_back(std::move(rc));
+    }
   }
   if (atoms.empty())
     return gen_true_expr();
