@@ -1,4 +1,5 @@
 #!/bin/sh
+# shellcheck disable=SC2086
 
 BENCHEXEC_BIN=/usr/bin/benchexec
 BENCHEXEC_COMMON_FLAGS="-o $HOME/esbmc-output/ --read-only-dir / --overlay-dir /home/benchexec --container"
