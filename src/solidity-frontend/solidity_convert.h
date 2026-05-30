@@ -74,6 +74,22 @@ public:
     return SolidityGrammar::str_to_sol_type(t.get("#sol_type").as_string());
   }
 
+  // Set/get/test the Solidity array length carried on a typet via the
+  // #sol_array_size irep attribute. The size is stored in its decimal
+  // string form; an absent attribute reads back as the empty string.
+  static void set_sol_array_size(typet &t, const std::string &size)
+  {
+    t.set("#sol_array_size", size);
+  }
+  static std::string get_sol_array_size(const typet &t)
+  {
+    return t.get("#sol_array_size").as_string();
+  }
+  static bool has_sol_array_size(const typet &t)
+  {
+    return !t.get("#sol_array_size").empty();
+  }
+
   // json nodes that always empty
   // used as the return value for find_constructor_ref when
   // dealing with the implicit constructor call

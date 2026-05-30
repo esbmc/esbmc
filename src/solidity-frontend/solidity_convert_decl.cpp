@@ -462,10 +462,10 @@ bool solidity_convertert::get_var_decl(
 
     // get size
     std::string arr_size = "0";
-    if (!t.get("#sol_array_size").empty())
-      arr_size = t.get("#sol_array_size").as_string();
-    else if (t.has_subtype() && !t.subtype().get("#sol_array_size").empty())
-      arr_size = t.subtype().get("#sol_array_size").as_string();
+    if (has_sol_array_size(t))
+      arr_size = get_sol_array_size(t);
+    else if (t.has_subtype() && has_sol_array_size(t.subtype()))
+      arr_size = get_sol_array_size(t.subtype());
     else
     {
       log_error("cannot get the size of fixed array");
@@ -492,7 +492,7 @@ bool solidity_convertert::get_var_decl(
       acpy_call.arguments().push_back(size_of_expr);
       // typecast
       solidity_gen_typecast(ns, acpy_call, t);
-      acpy_call.type().set("#sol_array_size", arr_size);
+      set_sol_array_size(acpy_call.type(), arr_size);
       // set as rvalue
       added_symbol.set_value(acpy_call);
       decl.operands().push_back(acpy_call);

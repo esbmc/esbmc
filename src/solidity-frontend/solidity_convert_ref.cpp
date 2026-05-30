@@ -508,7 +508,7 @@ bool solidity_convertert::get_sol_builtin_ref(
           else
           {
             // static array:  uint[2] arr; arr.length = 2;
-            std::string arr_size = base_t.get("#sol_array_size").as_string();
+            std::string arr_size = get_sol_array_size(base_t);
             assert(!arr_size.empty());
             new_expr = constant_exprt(
               integer2binary(string2integer(arr_size), bv_width(uint_type())),
