@@ -65,8 +65,8 @@ struct ranking_loopt
 // derivation respectively) but are defined further down alongside the
 // other transition-relation helpers. reaches_head is reused by the
 // dominance-aware prefix scan below.
-expr2tc subst_parallel(
-  const expr2tc &e, const std::map<expr2tc, expr2tc> &post);
+expr2tc
+subst_parallel(const expr2tc &e, const std::map<expr2tc, expr2tc> &post);
 bool reaches_head(
   goto_programt::const_targett start,
   goto_programt::const_targett head,
@@ -78,8 +78,8 @@ expr2tc apply_body(const expr2tc &e, const std::vector<assignt> &body);
 /// can derive a difference measure from?
 bool is_relational(const expr2tc &e)
 {
-  return is_greaterthan2t(e) || is_greaterthanequal2t(e) ||
-         is_lessthan2t(e) || is_lessthanequal2t(e);
+  return is_greaterthan2t(e) || is_greaterthanequal2t(e) || is_lessthan2t(e) ||
+         is_lessthanequal2t(e);
 }
 
 /// True if @p e contains a memory-dependent subexpression (dereference,
@@ -96,7 +96,8 @@ bool is_relational(const expr2tc &e)
 /// deref appearing structurally in @p exempt_derefs is NOT counted as a
 /// memory touch — but any other deref, index, or member access still is.
 bool touches_memory(
-  const expr2tc &e, const std::set<expr2tc> &exempt_derefs = {})
+  const expr2tc &e,
+  const std::set<expr2tc> &exempt_derefs = {})
 {
   if (is_nil_expr(e))
     return false;
@@ -186,8 +187,8 @@ struct prefix_defst
   std::map<irep_idt, expr2tc> defs;
   bool has_invalid = false;
 };
-prefix_defst scan_prefix_defs(
-  const goto_programt &body, goto_programt::const_targett head)
+prefix_defst
+scan_prefix_defs(const goto_programt &body, goto_programt::const_targett head)
 {
   prefix_defst out;
   auto end_it = body.instructions.end();
@@ -203,8 +204,9 @@ prefix_defst scan_prefix_defs(
       out.has_invalid = true;
       return out;
     }
-    if (it->is_skip() || it->is_location() || it->type == DECL ||
-        it->type == DEAD)
+    if (
+      it->is_skip() || it->is_location() || it->type == DECL ||
+      it->type == DEAD)
     {
       ++it;
       continue;
@@ -217,8 +219,9 @@ prefix_defst scan_prefix_defs(
       ++it;
       continue;
     }
-    if (it->is_goto() && !is_true(it->guard) && !it->is_backwards_goto() &&
-        it->targets.size() == 1)
+    if (
+      it->is_goto() && !is_true(it->guard) && !it->is_backwards_goto() &&
+      it->targets.size() == 1)
     {
       auto tgt = it->targets.front();
       bool fall_reaches = reaches_head(std::next(it), head, end_it);
@@ -259,8 +262,7 @@ prefix_defst scan_prefix_defs(
 /// expr2tc pointer value). Returns a string identifier if successful, or
 /// empty string if the chain doesn't reduce to a fresh allocation.
 /// Follows up to a small fixed depth so it stays linear.
-std::string pointer_cell_identity(
-  const irep_idt &p, const prefix_defst &defs)
+std::string pointer_cell_identity(const irep_idt &p, const prefix_defst &defs)
 {
   if (defs.has_invalid)
     return {};
@@ -432,8 +434,7 @@ bool compute_safe_derefs(
     const dereference2t &deref = to_dereference2t(d);
     const irep_idt &p = to_symbol2t(deref.value).thename;
     char buf[64];
-    std::snprintf(
-      buf, sizeof(buf), "$rank_deref$%p$", (const void *)d.get());
+    std::snprintf(buf, sizeof(buf), "$rank_deref$%p$", (const void *)d.get());
     std::string sym_name = std::string(buf) + id2string(p);
     out_map[d] = symbol2tc(d->type, sym_name);
   }
@@ -468,7 +469,9 @@ bool compute_safe_derefs(
 /// relational guard over scalar BV operands, and the back-edge must be an
 /// unconditional GOTO to the head.
 bool recognize_loop(
-  const loopst &loop, const goto_programt &fn_body, ranking_loopt &out)
+  const loopst &loop,
+  const goto_programt &fn_body,
+  ranking_loopt &out)
 {
   out.head = loop.get_original_loop_head();
   out.back = loop.get_original_loop_exit();
@@ -522,8 +525,7 @@ bool recognize_loop(
       has_internal_goto = true;
       break;
     }
-  auto rewrite = [&](std::vector<assignt> &path)
-  {
+  auto rewrite = [&](std::vector<assignt> &path) {
     if (deref_map.empty())
       return;
     for (assignt &a : path)
@@ -754,9 +756,7 @@ expr2tc subst(const expr2tc &e, const expr2tc &from, const expr2tc &to)
 /// never re-scanned for further substitution. This gives parallel-
 /// assignment semantics, unlike repeated single substitutions which would
 /// let one mapping cascade into another.
-expr2tc subst_parallel(
-  const expr2tc &e,
-  const std::map<expr2tc, expr2tc> &post)
+expr2tc subst_parallel(const expr2tc &e, const std::map<expr2tc, expr2tc> &post)
 {
   if (is_nil_expr(e))
     return e;
@@ -787,8 +787,8 @@ expr2tc widen_arith(const expr2tc &e)
     return typecast2tc(wide, e);
   if (is_typecast2t(e))
     return widen_arith(to_typecast2t(e).from);
-  auto rec2 = [&](const expr2tc &a, const expr2tc &b) -> std::pair<expr2tc, expr2tc>
-  {
+  auto rec2 =
+    [&](const expr2tc &a, const expr2tc &b) -> std::pair<expr2tc, expr2tc> {
     return {widen_arith(a), widen_arith(b)};
   };
   if (is_add2t(e))
@@ -1111,9 +1111,8 @@ bool reaches_head(
 /// touching assign, jump targets reachable from an unanalysed edge) makes
 /// the prefix unsafe for syntactic seeding, and we return empty seeds so
 /// the loop falls back to the bare ranking check.
-prefix_seedst collect_seeds(
-  const goto_programt &body,
-  goto_programt::const_targett head)
+prefix_seedst
+collect_seeds(const goto_programt &body, goto_programt::const_targett head)
 {
   prefix_seedst seeds;
   // Targets we've justified by an earlier accepted IF jump (so meeting one
@@ -1163,8 +1162,9 @@ prefix_seedst collect_seeds(
       ++it;
       continue;
     }
-    if (it->is_goto() && !is_true(it->guard) && !it->is_backwards_goto() &&
-        it->targets.size() == 1)
+    if (
+      it->is_goto() && !is_true(it->guard) && !it->is_backwards_goto() &&
+      it->targets.size() == 1)
     {
       auto tgt = it->targets.front();
       // Determine which branch carries control to the loop head.
@@ -1255,8 +1255,8 @@ expr2tc synthesize_invariant(
   // inductiveness check reasons entirely in the non-wrapping wide domain.
   struct cand
   {
-    expr2tc atom;                 // pre-state atom, holds at entry
-    std::vector<expr2tc> primes;  // post-state image per body path
+    expr2tc atom;                // pre-state atom, holds at entry
+    std::vector<expr2tc> primes; // post-state image per body path
   };
   // Build one post-substitution map per body path: each `post[i][v]` is the
   // value of `v` after path `i`, expressed in pre-state terms. The atom
@@ -1266,8 +1266,9 @@ expr2tc synthesize_invariant(
     for (const auto &a : rl.paths[i].assigns)
       path_posts[i][a.lhs] = subst_parallel(a.rhs, path_posts[i]);
 
-  auto post_state_of = [&](const expr2tc &e, size_t i)
-  { return widen_arith(subst_parallel(e, path_posts[i])); };
+  auto post_state_of = [&](const expr2tc &e, size_t i) {
+    return widen_arith(subst_parallel(e, path_posts[i]));
+  };
 
   // Atoms are built for every scalar variable that could matter to the
   // proof: the union of body-modified lhs symbols AND any symbol that
@@ -1393,8 +1394,7 @@ expr2tc synthesize_invariant(
     }
     if (!ok)
       continue;
-    auto make_atom = [&](const expr2tc &x, const expr2tc &y) -> expr2tc
-    {
+    auto make_atom = [&](const expr2tc &x, const expr2tc &y) -> expr2tc {
       if (is_greaterthan2t(a))
         return greaterthan2tc(x, y);
       if (is_greaterthanequal2t(a))
@@ -1519,12 +1519,12 @@ bool prove_loop_terminates(
 /// Classification of the program's recursion structure.
 enum class recursiont
 {
-  none,          // no call-graph cycles — pure loop program
-  self_only,     // every cycle is a direct self-loop (f calls f); each
-                 // such f is in @ref self_recursive. Tractable: try to
-                 // prove each by a ranking function over its parameters.
-  unsupported,   // mutual recursion (cycle spanning >1 function) or a
-                 // function-pointer call — out of scope, force UNKNOWN.
+  none,        // no call-graph cycles — pure loop program
+  self_only,   // every cycle is a direct self-loop (f calls f); each
+               // such f is in @ref self_recursive. Tractable: try to
+               // prove each by a ranking function over its parameters.
+  unsupported, // mutual recursion (cycle spanning >1 function) or a
+               // function-pointer call — out of scope, force UNKNOWN.
 };
 
 struct recursion_infot
@@ -1697,8 +1697,7 @@ bool prove_self_recursion_terminates(
           return false;
         // The formal appears in m as a symbol named like the parameter;
         // build that symbol from the function type's arg name + type.
-        expr2tc formal_sym =
-          symbol2tc(ft.arguments[i], formals[i]);
+        expr2tc formal_sym = symbol2tc(ft.arguments[i], formals[i]);
         m_args = subst(m_args, formal_sym, call.operands[i]);
       }
 
@@ -1773,8 +1772,7 @@ tvt try_prove_termination_by_ranking(
     auto f_it = goto_functions.function_map.find(fname);
     if (
       f_it == goto_functions.function_map.end() ||
-      !prove_self_recursion_terminates(
-        fname, f_it->second, options, ns))
+      !prove_self_recursion_terminates(fname, f_it->second, options, ns))
       return tvt(tvt::TV_UNKNOWN);
   }
 

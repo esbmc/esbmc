@@ -2552,8 +2552,7 @@ bool esbmc_parseoptionst::process_goto_program(
       // machinery. Never returns TV_FALSE, so it can only upgrade an
       // UNKNOWN to a proof, never produce a wrong verdict.
       bool ranking_proved =
-        try_prove_termination_by_ranking(goto_functions, options, ns)
-          .is_true();
+        try_prove_termination_by_ranking(goto_functions, options, ns).is_true();
       options.set_option("termination-ranking-proved", ranking_proved);
 
       // Only run the marker/havoc transform when the ranking check did
