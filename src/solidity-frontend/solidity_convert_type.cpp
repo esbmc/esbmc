@@ -413,7 +413,7 @@ bool solidity_convertert::get_type_description(
         new_type = array_typet();
         new_type.size(exprt("infinity"));
         new_type.subtype() = sub_type;
-        new_type.set("#sol_mapping_array", true);
+        set_sol_mapping_array(new_type, true);
         set_sol_type(new_type, SolidityGrammar::SolType::DYNARRAY);
       }
       else
@@ -1045,7 +1045,7 @@ bool solidity_convertert::get_array_pointer_type(
     new_type = array_typet();
     new_type.size(exprt("infinity"));
     new_type.subtype() = base_type;
-    new_type.set("#sol_mapping_array", true);
+    set_sol_mapping_array(new_type, true);
     set_sol_type(new_type, SolidityGrammar::SolType::DYNARRAY);
     return false;
   }

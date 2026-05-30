@@ -1354,7 +1354,7 @@ bool solidity_convertert::get_call_expr(
     if (new_expr.is_member() && new_expr.component_name() == "length")
       return false;
 
-    std::string sol_name = new_expr.type().get("#sol_name").as_string();
+    std::string sol_name = get_sol_name(new_expr.type());
     if (sol_name == "revert")
     {
       // Special case: revert
@@ -2124,7 +2124,7 @@ bool solidity_convertert::get_index_access_expr(
   // them.  This ensures the result carries the inner mapping's element type
   // so that subsequent m[k] indexing works correctly.
   if (
-    array.type().is_array() && array.type().get_bool("#sol_mapping_array") &&
+    array.type().is_array() && get_sol_mapping_array(array.type()) &&
     array.type().has_subtype())
   {
     new_expr = index_exprt(array, pos, array.type().subtype());
@@ -2713,7 +2713,7 @@ bool solidity_convertert::get_binary_operator_expr(
     else if (
       (rt_sol == SolidityGrammar::SolType::ARRAY ||
        rt_sol == SolidityGrammar::SolType::ARRAY_LITERAL) &&
-      lhs.is_symbol() && lt.get_bool("#sol_dynarray_state"))
+      lhs.is_symbol() && get_sol_dynarray_state(lt))
     {
       // Dynarray state var: element-wise assignment from array literal
       // e.g. items = [1,2,3] → items[0]=1; items[1]=2; items[2]=3; items_len=3
@@ -2791,7 +2791,7 @@ bool solidity_convertert::get_binary_operator_expr(
     }
     else if (
       rt_sol == SolidityGrammar::SolType::DYNARRAY && lhs.is_symbol() &&
-      lt.get_bool("#sol_dynarray_state"))
+      get_sol_dynarray_state(lt))
     {
       // Dynarray state var: skip arrcpy, just note the assignment is handled
       // by the caller's existing mechanism (element-wise via loops would be
@@ -2832,7 +2832,7 @@ bool solidity_convertert::get_binary_operator_expr(
     }
     else if (
       rt_sol == SolidityGrammar::SolType::ARRAY_CALLOC && lhs.is_symbol() &&
-      lt.get_bool("#sol_dynarray_state"))
+      get_sol_dynarray_state(lt))
     {
       // Dynarray state var: `items = new uint[](n)` → just set length = n
       exprt size_expr;
