@@ -1,5 +1,6 @@
 #include "irep2/irep2_utils.h"
 #include <goto-programs/goto_loops.h>
+#include <util/config.h>
 #include <util/expr_util.h>
 
 bool check_var_name(const expr2tc &expr)
@@ -58,8 +59,18 @@ void goto_loopst::find_function_loops()
       // Convert it into: assume(!g);
       if (loop_head->location_number == loop_exit->location_number)
       {
-        simplify(loop_head->guard);
-        it->make_assumption(not2tc(loop_head->guard));
+        // For `A: goto A;` (unconditional self-loop) this rewrite produces
+        // assume(false), which erases an infinite empty loop. That is fine for
+        // reachability, but under --termination it masks the very
+        // non-termination the property checks (the loop never exits, so the
+        // program does not terminate). Leave the self-loop in place so the
+        // termination analysis / forward condition can observe it. Mirrors the
+        // identical guard in goto_loop_simplify.cpp. See issue #4426.
+        if (!config.options.get_bool_option("termination"))
+        {
+          simplify(loop_head->guard);
+          it->make_assumption(not2tc(loop_head->guard));
+        }
         continue;
       }
       create_function_loop(loop_head, loop_exit);
