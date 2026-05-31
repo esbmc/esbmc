@@ -191,6 +191,13 @@ void add_race_assertions(
     config.options.get_bool_option("data-races-check-only");
   bool atomic_region_touched_shared = false;
 
+  // Write flags of the shared writes performed inside the atomic region
+  // currently being processed. They are set just before each in-region write
+  // but reset only *after* the region's boundary yield (see ATOMIC_END
+  // handling below), so the flag stays observable for one interleaving point.
+  // See https://github.com/esbmc/esbmc/issues/4975
+  std::list<expr2tc> atomic_write_guards;
+
   Forall_goto_program_instructions (i_it, goto_program)
   {
     goto_programt::instructiont &instruction = *i_it;
@@ -199,6 +206,7 @@ void add_race_assertions(
     {
       is_atomic = true;
       atomic_region_touched_shared = false;
+      atomic_write_guards.clear();
     }
 
     // Accesses inside an atomic region are not individually instrumented, but
@@ -219,6 +227,64 @@ void add_race_assertions(
         rw_sett probe(ns, i_it, probe_expr);
         if (!probe.entries.empty())
           atomic_region_touched_shared = true;
+      }
+    }
+
+    // A shared write that occurs *inside* an atomic region (e.g. the body of a
+    // __VERIFIER_atomic_* function) is otherwise emitted as a bare assignment:
+    // its write flag is never set, so a concurrent *non-atomic* access to the
+    // same object in another thread can never observe a writer and the race is
+    // missed -> false negative (VERIFICATION SUCCESSFUL on a racy program).
+    // See https://github.com/esbmc/esbmc/issues/4975
+    //
+    // Set the write flag right before the in-region write; the matching reset
+    // is deferred until after the atomic-region boundary yield (emitted at
+    // ATOMIC_END below), so the flag stays observable across that single
+    // interleaving point, mirroring the non-atomic instrumentation. No
+    // assertion is added inside the atomic region on purpose: two
+    // mutually-exclusive atomic writers must never race with each other, and a
+    // check here would turn that race-free pattern into a spurious violation.
+    if (races_only && is_atomic && instruction.is_assign())
+    {
+      rw_sett rw_set(ns, i_it, instruction.code, &shared_locals);
+
+      bool has_write = false;
+      forall_rw_set_entries(e_it, rw_set) if (e_it->second.w)
+      {
+        has_write = true;
+        break;
+      }
+
+      if (has_write)
+      {
+        atomic_region_touched_shared = true;
+
+        goto_programt::instructiont original_instruction;
+        original_instruction.swap(instruction);
+
+        instruction.make_skip();
+        i_it++;
+
+        // set the write flag(s) immediately before the original write -- set
+        forall_rw_set_entries(e_it, rw_set) if (e_it->second.w)
+        {
+          const expr2tc guard_expr = w_guards.get_w_guard_expr(e_it->second);
+
+          goto_programt::targett t = goto_program.insert(i_it);
+          t->type = ASSIGN;
+          t->code =
+            code_assign2tc(guard_expr, e_it->second.get_guard().as_expr());
+          t->location = original_instruction.location;
+          i_it = ++t;
+
+          // remember it so the reset can be emitted after the boundary yield
+          atomic_write_guards.push_back(guard_expr);
+        }
+
+        // re-insert the original write
+        goto_programt::targett t = goto_program.insert(i_it);
+        *t = original_instruction;
+        i_it = t; // loop's ++ advances past the original write
       }
     }
 
@@ -371,7 +437,23 @@ void add_race_assertions(
         migrate_expr(call, t->code);
         t->location = instruction.location;
         i_it = t; // loop's ++ advances past the inserted yield
+
+        // Reset the write flags of shared writes performed inside this atomic
+        // region, *after* the boundary yield: the flag therefore stayed
+        // observable for exactly one interleaving point (issue #4975). The
+        // resets are inserted before `after` so they land right after the
+        // yield, in order.
+        for (const expr2tc &guard_expr : atomic_write_guards)
+        {
+          goto_programt::targett r = goto_program.insert(after);
+          r->type = ASSIGN;
+          r->code = code_assign2tc(guard_expr, gen_false_expr());
+          r->location = instruction.location;
+          i_it = r;
+        }
       }
+
+      atomic_write_guards.clear();
     }
   }
 
