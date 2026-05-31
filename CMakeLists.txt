@@ -110,6 +110,8 @@ include(SetupLocalLLVM)
 
 include(ExternalDependencies)
 
+include(SetupMimalloc)
+
 # Optimization
 include(OptimizationCCache)
 include(WError)

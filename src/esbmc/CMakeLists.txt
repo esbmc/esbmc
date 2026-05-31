@@ -52,5 +52,12 @@ target_link_libraries(esbmc ${OLD_FRONTEND_TARGETS} ${SOLIDITY_FRONTEND_TARGETS}
                             clangcfrontend clangcppfrontend symex langapi
                             solvers clibs gotoalgorithms cache ${Boost_LIBRARIES} goto2c ${OS_INCLUDE_LIBS}
                             nlohmann_json::nlohmann_json)
+# mimalloc (when ENABLE_MIMALLOC resolved to a target): MI_OVERRIDE makes it
+# replace the global allocator for the whole executable, speeding the
+# allocation-heavy symex path. Link last so its malloc/operator new override
+# wins. MIMALLOC_TARGET is empty if mimalloc was requested but unavailable.
+if(MIMALLOC_TARGET)
+  target_link_libraries(esbmc ${MIMALLOC_TARGET})
+endif()
 target_link_directories(esbmc PUBLIC "${CVC_LINK_DIR}")
 install(TARGETS esbmc DESTINATION bin)
