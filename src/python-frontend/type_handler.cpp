@@ -560,7 +560,7 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   {
     if (type_size == 1)
     {
-      typet type = char_type(); // 8-bit char
+      typet type = char_type();               // 8-bit char
       type_utils::set_cpp_type(type, "char"); // For C backend compatibility
       return type;
     }
