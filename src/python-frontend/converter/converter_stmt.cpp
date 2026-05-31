@@ -2500,7 +2500,33 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
   const bool pytest_generation_mode = is_pytest_generation_mode();
   const bool model_mode = is_model_file(ast_node["test"]);
   auto to_bool_condition =
-    [&](const exprt &value_expr, const nlohmann::json &value_node) -> exprt {
+    [&](const exprt &value_expr_in, const nlohmann::json &value_node) -> exprt {
+    exprt value_expr = value_expr_in;
+
+    // A non-folded call (e.g. to a multi-return function) arrives here as a
+    // code_function_callt — a *statement*, not a value. Used directly as a
+    // boolean-operator operand it is wrapped in an assignment / condition and
+    // survives into the SSA as a code_function_call2t whose operands the SMT
+    // encoder then dereferences, segfaulting on a null operand (GitHub #4998).
+    // Normalise it to a value-producing side-effect call, which goto-conversion
+    // correctly hoists into a function-call instruction.
+    if (value_expr.is_function_call())
+    {
+      const code_function_callt &code =
+        to_code_function_call(to_code(value_expr));
+      typet return_type = code.type();
+      // A void/None-returning call has an empty type; fall back to int so the
+      // downstream bool typecast is well-defined (mirrors get_logical_operator_expr).
+      if (return_type.is_empty() || return_type.id() == typet::t_empty)
+        return_type = type_handler_.get_typet("int", 0);
+      side_effect_expr_function_callt side_effect;
+      side_effect.function() = code.function();
+      side_effect.arguments() = code.arguments();
+      side_effect.type() = return_type;
+      side_effect.location() = code.location();
+      value_expr = side_effect;
+    }
+
     if (value_expr.type().is_bool())
       return value_expr;
 
