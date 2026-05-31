@@ -3,7 +3,10 @@
 
 #include <python-frontend/type_handler.h>
 #include <python-frontend/type_utils.h>
+#include <python-frontend/python_converter.h>
+#include <python-frontend/global_scope.h>
 #include <util/config.h>
+#include <util/context.h>
 #include <util/migrate.h>
 #include <util/c_types.h>
 #include <util/python_types.h>
@@ -173,4 +176,44 @@ TEST_CASE(
   REQUIRE(type_utils::get_cpp_type(back).empty());
   REQUIRE(
     type_utils::get_cpp_type(tagged) == "char"); // unchanged on the seam node
+}
+
+TEST_CASE(
+  "Phase 4.3: elementary get_typet outputs are byte-identical (IREP2-internal)",
+  "[python-frontend][irep2][phase4.3]")
+{
+  cmdlinet cmdline;
+  REQUIRE_FALSE(config.set(cmdline));
+
+  contextt context;
+  global_scope gs;
+  const nlohmann::json ast = {
+    {"_type", "Module"},
+    {"body", nlohmann::json::array()},
+    {"filename", "test.py"},
+    {"type_ignores", nlohmann::json::array()}};
+  python_converter converter(context, &ast, gs);
+  const type_handler &th = converter.get_type_handler();
+
+  // The elementary family now builds type2tc internally and lowers at the
+  // seam; the legacy typet reaching create_symbol must be byte-identical to the
+  // direct legacy builder it replaced.
+  REQUIRE(th.get_typet(std::string("int")) == long_long_int_type());
+  REQUIRE(
+    th.get_typet(std::string("GeneralizedIndex")) == long_long_int_type());
+  REQUIRE(th.get_typet(std::string("uint")) == long_long_uint_type());
+  REQUIRE(th.get_typet(std::string("uint64")) == long_long_uint_type());
+  REQUIRE(th.get_typet(std::string("Epoch")) == long_long_uint_type());
+  REQUIRE(th.get_typet(std::string("bool")) == bool_type());
+  REQUIRE(th.get_typet(std::string("uint256")) == uint256_type());
+  REQUIRE(th.get_typet(std::string("BLSFieldElement")) == uint256_type());
+
+  // str/size==1: an 8-bit char carrying #cpp_type "char", re-attached at the
+  // seam (F-P5) since IREP2 cannot carry it. Both the bit-vector and the
+  // re-attached hint must match the legacy builder byte-for-byte.
+  typet expected_char = char_type();
+  type_utils::set_cpp_type(expected_char, "char");
+  const typet got_char = th.get_typet(std::string("str"), 1);
+  REQUIRE(got_char == expected_char);
+  REQUIRE(type_utils::get_cpp_type(got_char) == "char");
 }

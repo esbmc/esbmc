@@ -9,7 +9,9 @@
 #include <util/context.h>
 #include <util/c_types.h>
 #include <util/message.h>
+#include <util/migrate.h>
 #include <util/python_types.h>
+#include <irep2/irep2_utils.h>
 
 #include <regex>
 
@@ -35,6 +37,19 @@ constexpr unsigned kPythonBitLengthCap = 512;
 static_assert(
   kPythonBignumWidth <= kPythonBitLengthCap,
   "bit_length OM cap (models/int.py) must cover the full Python int width");
+
+// Phase 4.3 seam (Part IV §5/§6): lower an internally-built IREP2 type to the
+// legacy `typet` the symbol table and shared downstream passes consume,
+// re-attaching the `#cpp_type` hint IREP2 cannot carry (F-P5). The elementary
+// builders construct `type2tc` via typed factories and pass through here, so
+// the legacy bytes reaching `create_symbol` stay byte-identical to before.
+typet lower_to_seam(const type2tc &t, const irep_idt &cpp_type = irep_idt())
+{
+  typet legacy = migrate_type_back(t);
+  if (!cpp_type.empty())
+    type_utils::set_cpp_type(legacy, cpp_type);
+  return legacy;
+}
 } // namespace
 
 unsigned type_handler::python_int_width()
@@ -468,7 +483,8 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   // int — arbitrarily large integers
   // We approximate using 64-bit signed integer here.
   if (ast_type == "int" || ast_type == "GeneralizedIndex")
-    return long_long_int_type(); // FIXME: Support bignum for true Python semantics
+    // FIXME: Support bignum for true Python semantics
+    return lower_to_seam(signedbv_type2tc(config.ansi_c.long_long_int_width));
 
   // Internal alias for operational models that need a width-polymorphic
   // signed integer parameter — accepts both narrow and wide Python int
@@ -484,11 +500,11 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   if (
     ast_type == "uint" || ast_type == "uint64" || ast_type == "Epoch" ||
     ast_type == "Slot")
-    return long_long_uint_type();
+    return lower_to_seam(unsignedbv_type2tc(config.ansi_c.long_long_int_width));
 
   // bool — represents True/False
   if (ast_type == "bool")
-    return bool_type();
+    return lower_to_seam(get_bool_type());
 
   // slice — Python's slice() builtin, modelled as __ESBMC_PySliceObj.
   // Only resolve to the slice struct if the operational model is loaded;
@@ -522,7 +538,7 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
 
   // Custom large unsigned integer types (used in Ethereum, BLS, etc.)
   if (ast_type == "uint256" || ast_type == "BLSFieldElement")
-    return uint256_type();
+    return lower_to_seam(unsignedbv_type2tc(256));
 
   // bytes — immutable sequences of bytes
   // Here modeled as array of signed integers (8-bit).
@@ -560,9 +576,12 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   {
     if (type_size == 1)
     {
-      typet type = char_type();               // 8-bit char
-      type_utils::set_cpp_type(type, "char"); // For C backend compatibility
-      return type;
+      // 8-bit char built IREP2-internal; #cpp_type "char" is re-attached at the
+      // seam for C-backend compatibility (F-P5 — IREP2 cannot carry it).
+      const type2tc char_t = config.ansi_c.char_is_unsigned
+                               ? unsignedbv_type2tc(config.ansi_c.char_width)
+                               : signedbv_type2tc(config.ansi_c.char_width);
+      return lower_to_seam(char_t, "char");
     }
     return build_array(char_type(), type_size); // Array of characters
   }
