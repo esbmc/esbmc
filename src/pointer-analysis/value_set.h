@@ -463,8 +463,7 @@ public:
       values.erase(id);
       return;
     }
-    std::string index = id2string(id) + suffix;
-    values.erase(index);
+    values.erase(concat_key(id, suffix));
   }
 
   /** Look up the value set for the given variable name and suffix. */
@@ -489,12 +488,23 @@ public:
       return r.first->second;
     }
 
-    std::string index = id2string(e.identifier) + e.suffix;
-
-    std::pair<valuest::iterator, bool> r =
-      values.insert(std::pair<irep_idt, entryt>(index, e));
+    std::pair<valuest::iterator, bool> r = values.insert(
+      std::pair<irep_idt, entryt>(concat_key(e.identifier, e.suffix), e));
 
     return r.first->second;
+  }
+
+  /** Compose the `identifier + suffix` map key into a single pre-sized
+   *  buffer, avoiding the temporary that `id2string(id) + suffix` allocates
+   *  for the (less common) array/struct-member pointer case. */
+  static std::string
+  concat_key(const std::string &id, const std::string &suffix)
+  {
+    std::string key;
+    key.reserve(id.size() + suffix.size());
+    key = id;
+    key += suffix;
+    return key;
   }
 
   /** Add a value set for each variable in the given list. */

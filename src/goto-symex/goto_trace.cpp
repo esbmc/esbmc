@@ -543,7 +543,12 @@ void appendInfo(
   {
     if (!dest.empty())
       dest += " ";
-    dest += label + " " + id2string(value);
+    // Append in place rather than `label + " " + id2string(value)`, which
+    // builds two throwaway temporaries per trace label (this scales with
+    // counterexample size).
+    dest += label;
+    dest += ' ';
+    dest += value;
   }
 }
 
