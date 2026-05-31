@@ -58,6 +58,13 @@ struct ranking_loopt
     expr2tc cond; // path condition, defaults to true
   };
   std::vector<loop_patht> paths;
+  // Predicates from ASSUME instructions encountered while parsing the
+  // body. These hold at the loop head on every iteration (an ASSUME
+  // that didn't hold would have killed the path symex-side, so any
+  // execution reaching back to the head satisfies them). Treated as
+  // additional invariant facts conjoined into `inv` during the
+  // discharge of ranking obligations.
+  std::vector<expr2tc> body_assumes;
 };
 
 // Forward declarations: subst_parallel and apply_body are used by the
@@ -223,7 +230,11 @@ bool is_termination_irrelevant_call(const goto_programt::instructiont &instr)
     "c:@F@__assert_fail",
     "c:@F@reach_error",
     "c:@F@abort",
-    "c:@F@exit"};
+    "c:@F@exit",
+    // SV-COMP's "assume(p) or terminate" pattern. The body either
+    // satisfies `p` (loop continues) or aborts (program terminates).
+    // Either way the loop's termination property is unaffected.
+    "c:@F@assume_abort_if_not"};
   for (const char *nm : allowlist)
     if (fname == nm)
       return true;
@@ -466,7 +477,8 @@ bool collect_straight_line(
   goto_programt::const_targett last,
   std::vector<assignt> &out,
   const std::set<expr2tc> &exempt_derefs = {},
-  const goto_functionst *goto_functions = nullptr)
+  const goto_functionst *goto_functions = nullptr,
+  std::vector<expr2tc> *out_assumes = nullptr)
 {
   for (auto it = first; it != last; ++it)
   {
@@ -484,6 +496,21 @@ bool collect_straight_line(
       it->is_skip() || it->is_location() || it->type == DEAD ||
       it->type == DECL)
       continue;
+    // ASSUME instruction. The predicate holds at this body point on
+    // every path that reaches here; in a single-pass straight-line
+    // body, that's equivalent to holding at the loop head every
+    // iteration. Record it for the caller to conjoin into the
+    // invariant during the proof discharge. Memory-touching or
+    // sideeffect predicates are skipped (we can't lower them safely).
+    if (it->is_assume())
+    {
+      if (
+        out_assumes != nullptr && !is_nil_expr(it->guard) &&
+        !is_true(it->guard) && !touches_memory(it->guard, exempt_derefs) &&
+        !contains_sideeffect(it->guard))
+        out_assumes->push_back(it->guard);
+      continue;
+    }
     // FUNCTION_CALL to a termination-irrelevant helper (assert, assume,
     // abort, exit, ...) — skip; see `is_termination_irrelevant_call`.
     if (is_termination_irrelevant_call(*it))
@@ -704,7 +731,12 @@ bool recognize_loop(
   {
     std::vector<assignt> path;
     if (!collect_straight_line(
-          body_begin, out.back, path, exempt_derefs, goto_functions))
+          body_begin,
+          out.back,
+          path,
+          exempt_derefs,
+          goto_functions,
+          &out.body_assumes))
       return false;
     rewrite(path);
     ranking_loopt::loop_patht p;
@@ -752,7 +784,7 @@ bool recognize_loop(
     }
     if (
       it->is_assign() || is_termination_irrelevant_call(*it) ||
-      it->is_function_call())
+      it->is_function_call() || it->is_assume())
     {
       // Greedily collect a straight-line span up to the next GOTO or end.
       // Termination-irrelevant FUNCTION_CALLs (assert/assume/abort/...)
@@ -760,16 +792,23 @@ bool recognize_loop(
       // over them. Other FUNCTION_CALLs join the span tentatively: if
       // they're pure helpers, try_inline_pure_helper will expand them;
       // otherwise collect_straight_line returns false and we bail at
-      // the call site below.
+      // the call site below. ASSUMEs join the span as path filters
+      // recorded into `out.body_assumes`.
       auto span_begin = it;
       while (it != out.back && !it->is_goto() &&
              (it->is_assign() || it->is_skip() || it->is_location() ||
-              it->type == DEAD || it->type == DECL || it->is_function_call()))
+              it->type == DEAD || it->type == DECL || it->is_function_call() ||
+              it->is_assume()))
         ++it;
       block_t b;
       b.is_span = true;
       if (!collect_straight_line(
-            span_begin, it, b.span, exempt_derefs, goto_functions))
+            span_begin,
+            it,
+            b.span,
+            exempt_derefs,
+            goto_functions,
+            &out.body_assumes))
         return false;
       blocks.push_back(std::move(b));
       continue;
@@ -823,7 +862,12 @@ bool recognize_loop(
         b.if_cond = it->guard;
         b.then_returns = true;
         if (!collect_straight_line(
-              cont_begin, cont_end, b.else_arm, exempt_derefs, goto_functions))
+              cont_begin,
+              cont_end,
+              b.else_arm,
+              exempt_derefs,
+              goto_functions,
+              &out.body_assumes))
           return false;
         blocks.push_back(std::move(b));
         it = cont_end;
@@ -854,12 +898,21 @@ bool recognize_loop(
       b.is_span = false;
       b.if_cond = it->guard;
       if (!collect_straight_line(
-            then_begin, then_end, b.then_arm, exempt_derefs, goto_functions))
+            then_begin,
+            then_end,
+            b.then_arm,
+            exempt_derefs,
+            goto_functions,
+            &out.body_assumes))
         return false;
       if (
-        then_end != if_target &&
-        !collect_straight_line(
-          if_target, merge_label, b.else_arm, exempt_derefs, goto_functions))
+        then_end != if_target && !collect_straight_line(
+                                   if_target,
+                                   merge_label,
+                                   b.else_arm,
+                                   exempt_derefs,
+                                   goto_functions,
+                                   &out.body_assumes))
         return false;
       blocks.push_back(std::move(b));
       it = merge_label;
@@ -1779,6 +1832,16 @@ bool prove_loop_terminates(
   // holds on entry. Sound to assume in the obligations below (it is true
   // every iteration). For loops that need no extra facts this is just true.
   expr2tc inv = synthesize_invariant(rl, body, options, ns);
+
+  // Body ASSUMEs hold at the loop head on every iteration (otherwise
+  // the path would have been killed by symex). Conjoin them into the
+  // invariant so they're available for the bounded-below and
+  // decrease obligations. Sound because the obligations check
+  // `inv ∧ guard ∧ ...`; strengthening inv with a true fact preserves
+  // the UNSAT verdict and may discharge obligations the bare guard
+  // couldn't.
+  for (const expr2tc &ba : rl.body_assumes)
+    inv = and2tc(inv, ba);
 
   for (const auto &cand : candidates)
   {
