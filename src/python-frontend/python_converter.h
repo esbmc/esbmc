@@ -1056,6 +1056,23 @@ private:
   /// (e.g. $input_str$N or a variable aliasing it) to its $input_len$N symbol ID
   std::unordered_map<std::string, std::string> input_str_to_len_sym_;
 
+  /// Straight-line dynamic-retyping support (#4770, #4774). Maps the original
+  /// (first-typed) symbol ID of a variable to the symbol that currently holds
+  /// its value after an incompatible numeric<->string reassignment. Loads of
+  /// the variable (and the LHS of a later reassignment) are redirected through
+  /// this map so they observe the new type. Only populated for retypes at
+  /// block_nesting_ == 1 (an unconditional top-level statement), where there is
+  /// no control-flow join that could make the runtime type ambiguous.
+  std::unordered_map<std::string, std::string> retype_aliases_;
+
+  /// Nesting depth of get_block() invocations. The module/imported-module body
+  /// is depth 1; every nested body (function, if/while/for, try/except) is
+  /// deeper because those bodies are converted through get_block() too. Gates
+  /// straight-line retyping to depth 1 only: a retype inside any nested or
+  /// conditionally-executed body cannot be modelled by a single static type,
+  /// so it is left to the existing fallback instead of being renamed.
+  unsigned block_nesting_ = 0;
+
   function_call_cache function_call_cache_;
 
   std::vector<std::string> global_declarations;

@@ -661,6 +661,20 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       }
     }
 
+    // Straight-line dynamic retyping (#4770, #4774): if this variable was
+    // reassigned across the numeric<->string boundary, get_var_assign minted a
+    // fresh symbol of the new type and recorded it here. Redirect the load to
+    // that symbol so it observes the variable's current type and value.
+    if (!is_class_attr)
+    {
+      auto alias = retype_aliases_.find(symbol->id.as_string());
+      if (alias != retype_aliases_.end())
+      {
+        if (symbolt *retyped = symbol_table_.find_symbol(alias->second))
+          symbol = retyped;
+      }
+    }
+
     expr = symbol_expr(*symbol);
 
     // If the looked-up symbol is an enum class attribute with int type,
