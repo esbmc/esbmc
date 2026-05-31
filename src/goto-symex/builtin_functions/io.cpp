@@ -48,7 +48,8 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
   irep_idt fmt;
   size_t idx;
   const expr2tc &base_expr = get_base_object(new_rhs.operands[fmt_idx]);
-  if (is_constant_string2t(base_expr))
+  const bool format_is_constant = is_constant_string2t(base_expr);
+  if (format_is_constant)
   {
     fmt = to_constant_string2t(base_expr).value;
     idx = fmt_idx + 1;
@@ -56,6 +57,8 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
   else
   {
     // e.g.   int x = 1; printf(x); // output ""
+    // The format string is not known at compile time, so the output length
+    // cannot be bounded; the return value is handled as unbounded below.
     fmt = "";
     idx = fmt_idx;
   }
@@ -241,8 +244,21 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
     printf_formatter(fmt.as_string(), args);
     printf_formatter.as_string(); // populate min_outlen / max_outlen
 
-    // 4. do assign: constant when fully determined, bounded nondet otherwise
-    if (printf_formatter.min_outlen == printf_formatter.max_outlen)
+    // 4. do assign. The return value is the number of characters that would be
+    //    written. We can pin it to an exact constant only when the format
+    //    string is a compile-time constant AND every conversion was soundly
+    //    bounded; we can bound it to [min,max] when those hold but some
+    //    argument is nondet; otherwise there is no sound upper bound and we
+    //    fall back to an unconstrained nondet (>= 0) — the same
+    //    over-approximation ESBMC uses for a function with no operational
+    //    model. Tightening further would be unsound: a non-constant format
+    //    string or a non-literal %s can produce an arbitrarily long string,
+    //    and under-approximating the length would mask real overflows on the
+    //    returned value (see GitHub #4976-#4979).
+    const bool sound_bound = format_is_constant && printf_formatter.bounded;
+    if (
+      sound_bound &&
+      printf_formatter.min_outlen == printf_formatter.max_outlen)
     {
       symex_assign(code_assign2tc(
         lhs,
@@ -258,12 +274,19 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
         type2tc(),
         sideeffect2t::allockind::nondet);
       replace_nondet(nondet);
-      expr2tc lo =
-        constant_int2tc(int_type2(), BigInt(printf_formatter.min_outlen));
-      expr2tc hi =
-        constant_int2tc(int_type2(), BigInt(printf_formatter.max_outlen));
-      assume(
-        and2tc(greaterthanequal2tc(nondet, lo), lessthanequal2tc(nondet, hi)));
+      // The character count is never negative.
+      expr2tc lo = constant_int2tc(int_type2(), BigInt(0));
+      if (sound_bound)
+      {
+        lo = constant_int2tc(int_type2(), BigInt(printf_formatter.min_outlen));
+        expr2tc hi =
+          constant_int2tc(int_type2(), BigInt(printf_formatter.max_outlen));
+        assume(and2tc(
+          greaterthanequal2tc(nondet, lo), lessthanequal2tc(nondet, hi)));
+      }
+      else
+        // No sound upper bound: constrain only to the non-negative range.
+        assume(greaterthanequal2tc(nondet, lo));
       symex_assign(code_assign2tc(lhs, nondet));
     }
   }
