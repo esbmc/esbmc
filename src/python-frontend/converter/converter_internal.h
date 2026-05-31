@@ -114,7 +114,7 @@ inline struct_typet::componentt build_component(
   // Add metadata used internally by ESBMC for member-to-class tagging.
   // The key "#member_name" is used by the type system; the value
   // "tag-<class_name>" helps associate this member with its parent class.
-  component.type().set("#member_name", "tag-" + class_name);
+  type_utils::set_member_name(component.type(), "tag-" + class_name);
 
   // Set the member visibility to public by default.
   component.set_access("public");

@@ -93,7 +93,7 @@ python_converter::create_normalized_self_key(const std::string &class_tag)
 typet python_converter::clean_attribute_type(const typet &attr_type)
 {
   typet clean_type = attr_type;
-  clean_type.remove("#member_name");
+  type_utils::remove_member_name(clean_type);
   clean_type.remove("#location");
   clean_type.remove("#identifier");
   return clean_type;
