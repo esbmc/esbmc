@@ -188,6 +188,45 @@ TEST_CASE("guard2tc set ops keep cached base in sync", "[probe]")
   REQUIRE(independent_left.guard_list == independent_right.guard_list);
 }
 
+// Regression: with the immer-backed guard_seq, conjunct lists longer than
+// the trie branch factor (32) span interior nodes. Exercise prefix/suffix
+// slicing in -= / |= at that scale to lock in that the slices stay
+// index-consistent with the cached and-chain past the node boundary.
+TEST_CASE("guard2tc set ops across immer interior nodes", "[probe]")
+{
+  config.ansi_c.word_size = 32;
+
+  // g1 = 100 shared conjuncts ("s0..s99") + 40 unique ("a0..a39"); the
+  // shared part is a genuine pointer-prefix (g1 grown by copying base).
+  guard2tc base = build_guard(100, "s");
+  guard2tc g1 = base;
+  for (unsigned i = 0; i < 40; ++i)
+    g1.add(sym("a" + std::to_string(i)));
+
+  // g1 -= base must yield exactly the 40-element suffix, in order.
+  guard2tc diff = g1;
+  diff -= base;
+  REQUIRE(diff.guard_list.size() == 40);
+  for (unsigned i = 0; i < 40; ++i)
+    REQUIRE(diff.guard_list[i] == sym("a" + std::to_string(i)));
+  require_guard_invariant(diff);
+
+  // g1 |= base: base is a prefix of g1, so the union reduces to base.
+  guard2tc disj = g1;
+  disj |= base;
+  REQUIRE(disj.guard_list.size() == 100);
+  require_guard_invariant(disj);
+
+  // Two long guards sharing a 100-prefix then diverging by 40 each: |=
+  // factors the common prefix and ORs the residuals. Result keeps the
+  // 100 shared conjuncts and stays internally consistent.
+  auto [a, b] = build_overlapping(100, 40);
+  guard2tc u = a;
+  u |= b;
+  REQUIRE(u.guard_list.size() >= 100);
+  require_guard_invariant(u);
+}
+
 TEST_CASE("guard2tc microbench: incremental construction", "[bench]")
 {
   config.ansi_c.word_size = 32;

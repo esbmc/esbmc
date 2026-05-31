@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <unordered_set>
+#include <vector>
 #include <irep2/irep2_guard.h>
 #include <irep2/irep2_utils.h>
 
@@ -218,16 +219,16 @@ void guard2tc::build_guard_expr()
     return;
   }
 
+  // Iterate (O(N)) rather than index (immer operator[] is O(log N)).
   auto it = guard_list.begin();
   expr2tc arg1 = *it++;
-  expr2tc arg2 = *it++;
-  expr2tc res = and2tc(arg1, arg2);
-  while (it != guard_list.end())
-    res = and2tc(res, *it++);
+  expr2tc res = and2tc(arg1, *it++);
+  for (const auto end = guard_list.end(); it != end; ++it)
+    res = and2tc(res, *it);
   expr2tc::operator=(res);
 }
 
-void guard2tc::set_guard_list_and_rebuild(std::vector<expr2tc> &&new_guard_list)
+void guard2tc::set_guard_list_and_rebuild(guard_seq &&new_guard_list)
 {
   clear();
   guard_list = std::move(new_guard_list);
@@ -235,7 +236,7 @@ void guard2tc::set_guard_list_and_rebuild(std::vector<expr2tc> &&new_guard_list)
 }
 
 void guard2tc::set_guard_list_and_base(
-  std::vector<expr2tc> &&new_guard_list,
+  guard_seq &&new_guard_list,
   const expr2tc &base)
 {
   clear();
@@ -245,12 +246,8 @@ void guard2tc::set_guard_list_and_base(
 
 void guard2tc::append(const guard2tc &other)
 {
-  // Reserve up-front so the per-add() push_back doesn't trigger a
-  // geometric reallocation in the middle of the loop. The bound is
-  // exact when `other` has no nested and2ts and no true/false
-  // sentinels — those cases would push less. Caller must not pass
-  // *this as `other`; vector growth would invalidate the range-for.
-  guard_list.reserve(guard_list.size() + other.guard_list.size());
+  // Caller must not pass *this as `other`: add() mutates guard_list while
+  // we iterate it.
   for (const auto &c : other.guard_list)
     add(c);
 }
@@ -277,41 +274,44 @@ guard2tc &operator-=(guard2tc &g1, const guard2tc &g2)
 
     if (prefix_size == g2.guard_list.size())
     {
-      std::vector<expr2tc> diff(
-        g1.guard_list.begin() + prefix_size, g1.guard_list.end());
-      g1.set_guard_list_and_rebuild(std::move(diff));
+      // g2 is a pointer-prefix of g1: the difference is g1's shared suffix.
+      g1.set_guard_list_and_rebuild(g1.guard_list.suffix(prefix_size));
       return g1;
     }
 
+    // Walk the divergent suffixes with offset iterators over the existing
+    // lists: immer iterators are random-access, so begin()+prefix_size is one
+    // O(log N) seek then O(1) per step — no new tree root allocated (unlike a
+    // suffix()/drop() slice), and no O(N log N) per-element operator[].
+    const auto g1_end = g1.guard_list.end();
+    const auto g2_begin = g2.guard_list.begin() + prefix_size;
+    const auto g2_end = g2.guard_list.end();
+
     std::unordered_set<const expr2t *> g2_suffix;
     g2_suffix.reserve(g2.guard_list.size() - prefix_size);
-    for (auto it = g2.guard_list.begin() + prefix_size;
-         it != g2.guard_list.end();
-         ++it)
+    for (auto it = g2_begin; it != g2_end; ++it)
       g2_suffix.insert(expr_ptr(*it));
 
     std::unordered_set<expr2tc, irep2_hash> g2_suffix_exprs;
     bool built_g2_suffix_exprs = false;
 
-    std::vector<expr2tc> diff;
-    diff.reserve(g1.guard_list.size() - prefix_size);
-    for (auto it = g1.guard_list.begin() + prefix_size;
-         it != g1.guard_list.end();
-         ++it)
+    guard_seq diff;
+    for (auto it = g1.guard_list.begin() + prefix_size; it != g1_end; ++it)
     {
-      if (g2_suffix.find(expr_ptr(*it)) != g2_suffix.end())
+      const expr2tc &c = *it;
+      if (g2_suffix.find(expr_ptr(c)) != g2_suffix.end())
         continue;
 
       if (!built_g2_suffix_exprs)
       {
         g2_suffix_exprs.reserve(g2.guard_list.size() - prefix_size);
-        g2_suffix_exprs.insert(
-          g2.guard_list.begin() + prefix_size, g2.guard_list.end());
+        for (auto jt = g2_begin; jt != g2_end; ++jt)
+          g2_suffix_exprs.insert(*jt);
         built_g2_suffix_exprs = true;
       }
 
-      if (g2_suffix_exprs.find(*it) == g2_suffix_exprs.end())
-        diff.push_back(*it);
+      if (g2_suffix_exprs.find(c) == g2_suffix_exprs.end())
+        diff.push_back(c);
     }
 
     g1.set_guard_list_and_rebuild(std::move(diff));
@@ -337,9 +337,9 @@ guard2tc &operator-=(guard2tc &g1, const guard2tc &g2)
       return g1;
     }
 
-    std::vector<expr2tc> diff(
-      g1.guard_list.begin() + g2.guard_list.size(), g1.guard_list.end());
-    g1.set_guard_list_and_rebuild(std::move(diff));
+    // g2's conjuncts occupy g1's first |g2| positions: the shared suffix
+    // is the difference.
+    g1.set_guard_list_and_rebuild(g1.guard_list.suffix(g2.guard_list.size()));
     return g1;
   }
 
@@ -357,8 +357,7 @@ guard2tc &operator-=(guard2tc &g1, const guard2tc &g2)
   std::unordered_set<expr2tc, irep2_hash> g2_set(
     g2.guard_list.begin(), g2.guard_list.end());
 
-  std::vector<expr2tc> diff;
-  diff.reserve(g1.guard_list.size());
+  guard_seq diff;
   for (const auto &c : g1.guard_list)
     if (g2_set.find(c) == g2_set.end())
       diff.push_back(c);
@@ -394,7 +393,7 @@ guard2tc &operator|=(guard2tc &g1, const guard2tc &g2)
     // — install it directly instead of rebuilding the and-chain from the
     // copied list (mirrors the set_guard_list_and_base path below).
     assert(guard_list_prefix_matches(g2, g1));
-    std::vector<expr2tc> prefix_list(g2.guard_list);
+    guard_seq prefix_list(g2.guard_list);
     g1.set_guard_list_and_base(std::move(prefix_list), prefix_expr);
     return g1;
   }
@@ -411,47 +410,50 @@ guard2tc &operator|=(guard2tc &g1, const guard2tc &g2)
 
       if (prefix_size == g2.guard_list.size())
       {
-        std::vector<expr2tc> prefix_list(
-          g1.guard_list.begin(), g1.guard_list.begin() + prefix_size);
-        g1.set_guard_list_and_base(std::move(prefix_list), prefix_expr);
+        // g2 is a pointer-prefix of g1: keep g1's shared prefix and the
+        // cached base prefix_expr that cached_prefix_expr_at just walked to.
+        g1.set_guard_list_and_base(
+          g1.guard_list.prefix(prefix_size), prefix_expr);
         return g1;
       }
 
+      // Offset iterators over the existing lists (random-access immer
+      // iterators, one O(log N) seek then O(1)/step) — no slice root
+      // allocated, no O(N log N) operator[]. Consumed before g1.guard_list
+      // is reassigned below.
+      const auto g1_suffix_begin = g1.guard_list.begin() + prefix_size;
+      const auto g1_end = g1.guard_list.end();
+      const auto g2_suffix_begin = g2.guard_list.begin() + prefix_size;
+      const auto g2_end = g2.guard_list.end();
+
       std::unordered_set<const expr2t *> g2_suffix;
       g2_suffix.reserve(g2.guard_list.size() - prefix_size);
-      for (auto it = g2.guard_list.begin() + prefix_size;
-           it != g2.guard_list.end();
-           ++it)
+      for (auto it = g2_suffix_begin; it != g2_end; ++it)
         g2_suffix.insert(expr_ptr(*it));
 
+      // Working sets over the divergent suffix (size Δ), built as plain
+      // vectors so the hash-set bookkeeping stays simple.
       std::vector<expr2tc> common_suffix;
       std::vector<expr2tc> new_g1_list;
-      common_suffix.reserve(g1.guard_list.size() - prefix_size);
-      new_g1_list.reserve(g1.guard_list.size() - prefix_size);
-      for (auto it = g1.guard_list.begin() + prefix_size;
-           it != g1.guard_list.end();
-           ++it)
+      for (auto it = g1_suffix_begin; it != g1_end; ++it)
       {
-        if (g2_suffix.erase(expr_ptr(*it)))
-          common_suffix.push_back(*it);
+        const expr2tc &c = *it;
+        if (g2_suffix.erase(expr_ptr(c)))
+          common_suffix.push_back(c);
         else
-          new_g1_list.push_back(*it);
+          new_g1_list.push_back(c);
       }
 
       if (new_g1_list.empty())
         return g1;
 
       std::vector<expr2tc> new_g2_list;
-      new_g2_list.reserve(g2_suffix.size());
-      for (auto it = g2.guard_list.begin() + prefix_size;
-           it != g2.guard_list.end();
-           ++it)
+      for (auto it = g2_suffix_begin; it != g2_end; ++it)
         if (g2_suffix.count(expr_ptr(*it)))
           new_g2_list.push_back(*it);
 
-      std::vector<expr2tc> merged_list(
-        g1.guard_list.begin(), g1.guard_list.begin() + prefix_size);
-      g1.set_guard_list_and_base(std::move(merged_list), prefix_expr);
+      g1.set_guard_list_and_base(
+        g1.guard_list.prefix(prefix_size), prefix_expr);
       for (const auto &c : common_suffix)
         g1.add(c);
 
@@ -459,12 +461,12 @@ guard2tc &operator|=(guard2tc &g1, const guard2tc &g2)
         return g1;
 
       guard2tc new_g1;
-      new_g1.guard_list.swap(new_g1_list);
-      new_g1.build_guard_expr();
+      for (const auto &c : new_g1_list)
+        new_g1.add(c);
 
       guard2tc new_g2;
-      new_g2.guard_list.swap(new_g2_list);
-      new_g2.build_guard_expr();
+      for (const auto &c : new_g2_list)
+        new_g2.add(c);
 
       expr2tc or_expr = or2tc(new_g1.as_expr(), new_g2.as_expr());
       if (new_g1.is_single_symbol() && new_g2.is_single_symbol())
@@ -482,10 +484,6 @@ guard2tc &operator|=(guard2tc &g1, const guard2tc &g2)
   guard2tc common;
   guard2tc new_g1;
   guard2tc new_g2;
-  common.guard_list.reserve(
-    std::min(g1.guard_list.size(), g2.guard_list.size()));
-  new_g1.guard_list.reserve(g1.guard_list.size());
-  new_g2.guard_list.reserve(g2.guard_list.size());
 
   if (g2.guard_list.size() <= g1.guard_list.size())
   {
