@@ -1830,7 +1830,7 @@ round-trip unit tests) **before** the phase that needs it; each is small.
 | Expression-context function call | the 107 `side_effect_expr_function_callt` sites | `sideeffect2t(..., sideeffect_allockind::function_call)` (`irep2_expr.h:1749`). |
 | `from_double(double, type2tc)` → `constant_floatbv2tc` | float-literal construction (`convert_float_literal.cpp`) | Part II §5 gap; trivial port. |
 | `#cpp_type` re-attachment helper at the seam | float/char-typed symbols (F-P5) | New seam helper: build `type2tc`, lower to `typet`, `set("#cpp_type", …)`. Keep the legacy hint on the seam node. |
-| `mb_value` on `constant_string2t` | `str` / `bytes` literals | Part II Phase 2.6 / R10 gap (unfinished). Either port the decoder **verbatim** or keep string-literal lowering legacy at the seam. Gated by Q-P4. |
+| `mb_value` on `constant_string2t` | `str` / `bytes` literals | **Q-P4 RESOLVED (§13): not needed.** String-literal lowering stays legacy at the seam; `mb_value()` keeps being read off the legacy `string_constantt`, so the R10 verbatim port is not required for the Python migration. |
 | 256/512-bit integer types | `--ir` bignum mode (`signedbv_typet(512)`) | `signedbv_type2tc(512)` already works; verify BigInt/SMT width under overflow checks. No new factory. |
 | Structured control-flow code kinds | function bodies | **Out of scope (P1).** Bodies stay legacy `codet`. |
 
@@ -2084,13 +2084,27 @@ across the seam that drops a shared-pass-read attribute.
   the F-P5 / 4.5 seam contract. (No reads found in `goto-symex`; the
   `goto-programs`/`util`/`goto2c` readers are the pretty-printer + emitter
   paths, which is why the legacy C printer staying is a hard dependency.)
-- **Q-P4** — Can `constant_string2t` carry the `mb_value` decode Python
-  `str`/`bytes` literals need (Part II R10/2.6 — still open), or must
-  literal lowering stay legacy at the seam? (blocks 4.4 string work)
-- **Q-P5** — Does the cached static `complex` `struct_typet`
-  (`type_handler.h:18`) survive `migrate_type` into a byte-identical
-  `struct_type2t` (tag, component order, `#member_name`)? Build a unit
-  round-trip before 4.3. (blocks 4.3 complex path / RP7)
+- **Q-P4 — RESOLVED: string-literal lowering stays legacy at the seam; do
+  not port `mb_value`.** The Python frontend builds **legacy
+  `string_constantt`** for `str`/`bytes` literals (`converter_stmt.cpp:3031`,
+  `exception_utils.cpp:26`, `python_exception_handler.cpp:142-153`) and reads
+  `mb_value()` in **exactly one** place, on a legacy node it just built
+  (`python_set.cpp:107`). The `string2array`/`array2string` decode paths have
+  **no** Python-frontend callers (§4: their only callers are
+  `c_typecast.cpp:750` / `io.cpp:233`). Since Phase 4.5 keeps the statement
+  body legacy `codet` anyway, string literals naturally live at that seam and
+  `mb_value()` keeps being read off the legacy class — so the R10/Part-II-2.6
+  verbatim port is **not** needed for the Python migration and is avoided
+  (RP8 sidestepped). Re-open only if a later phase migrates string-literal
+  *construction* itself past the seam.
+- **Q-P5 — RESOLVED (Phase 4.0 harness, #4992): the `complex` struct
+  round-trips faithfully.** `unit/python-frontend/irep2_type_roundtrip_test.cpp`
+  pins that `get_complex_struct_type()` survives `migrate_type` /
+  `migrate_type_back`: `is_complex_type` still holds, the tag stays `complex`,
+  and both components round-trip in order (`real`, `imag`, each
+  `double_type()`). The same harness records the F-P5 corollary — the
+  round-trip **drops `#cpp_type`** — confirming RP7's re-attach-at-the-seam
+  requirement for Phase 4.5. (was: blocks 4.3 complex path / RP7)
 - **Q-P6 — RESOLVED (§15): For→While in the Python preprocessor; While is a
   generic `codet("while")`.** `for` is rewritten to `while` (with for-else
   lowering, `break` rewriting, and known-list-literal unrolling) at the
@@ -2229,13 +2243,20 @@ as a legacy `codet` (`set_statement("while")`, `code_blockt` body;
 structured `codet("while"/"ifthenelse")` + `code_blockt` shells with
 IREP2-lowered operands — P1 confirmed, body shape fixed.
 
-### 15.5 Still open (need code or a design call): Q-P4, Q-P5
+### 15.5 All Part IV open questions now resolved
 
-`Q-P4` (`mb_value` on `constant_string2t`) is the still-unfinished Part II
-2.6 item and gates the 4.4 string work. `Q-P5` (`complex` `struct_type2t`
-round-trip fidelity) needs the unit round-trip built in Phase 4.0/4.3. These
-remain open by design — they require building something, not just auditing.
-(`Q-P1` is now resolved by audit — §15.6.)
+`Q-P1` resolved by audit (§15.6). `Q-P4` and `Q-P5`, which required building
+something rather than just auditing, are now closed too:
+
+- **`Q-P5`** (`complex` `struct_type2t` round-trip fidelity) is resolved by
+  the **Phase 4.0 harness** (`unit/python-frontend/irep2_type_roundtrip_test.cpp`,
+  #4992): the complex struct round-trips tag + components faithfully, and the
+  harness additionally pins that the round-trip drops `#cpp_type` (F-P5 →
+  re-attach at the 4.5 seam). See §13 Q-P5.
+- **`Q-P4`** (`mb_value`) is resolved by decision: the Python frontend builds
+  legacy `string_constantt` and reads `mb_value()` only on a legacy node
+  (`python_set.cpp:107`); string-literal lowering stays legacy at the seam, so
+  no verbatim R10 decoder port is needed. See §13 Q-P4.
 
 ### 15.6 Q-P1 — the Phase 4.4 symbol-naming / pretty-print gate is narrow
 

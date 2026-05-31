@@ -23,6 +23,7 @@
 #include <util/migrate.h>
 #include <util/namespace.h>
 #include <util/context.h>
+#include <util/expr_util.h>
 
 namespace
 {
@@ -212,4 +213,65 @@ TEST_CASE(
   expr2tc base = symbol2tc(get_int_type(32), "x");
   type2tc cap_t = unsignedbv_type2tc(64);
   require_expr_roundtrip(pointer_capability2tc(cap_t, base));
+}
+
+// Phase 4.2 construction helpers (util/migrate.h): symbol_expr2tc and
+// side_effect_function_call2tc. The contract is that each is a faithful
+// drop-in for the legacy constructor it replaces -- it produces the same IREP2
+// node migrate_expr would yield from the legacy form -- and round-trips
+// losslessly. No frontend call site is wired to them yet (Phase 4.3/4.4).
+
+TEST_CASE(
+  "symbol_expr2tc is a drop-in for the migrated legacy symbol_expr",
+  "[migrate][phase4.2]")
+{
+  use_test_ns();
+  const symbolt *sym = test_context().find_symbol("x");
+  REQUIRE(sym != nullptr);
+
+  const expr2tc via_helper = symbol_expr2tc(*sym);
+  REQUIRE(is_symbol2t(via_helper));
+  REQUIRE(via_helper->type == migrate_symbol_type(*sym));
+
+  // Equal to migrating the legacy symbol_expr(sym): the helper is what the
+  // ~844 symbol_expr(symbolt) sites migrate to.
+  expr2tc via_legacy;
+  migrate_expr(symbol_expr(*sym), via_legacy);
+  REQUIRE(via_helper == via_legacy);
+
+  require_expr_roundtrip(via_helper);
+}
+
+TEST_CASE(
+  "side_effect_function_call2tc builds a function_call side-effect",
+  "[migrate][phase4.2]")
+{
+  use_test_ns();
+  const type2tc ret = get_int_type(32);
+  const symbolt *xsym = test_context().find_symbol("x");
+  const expr2tc fn = symbol_expr2tc(*xsym); // callee reference
+  const std::vector<expr2tc> args{
+    constant_int2tc(get_int_type(32), BigInt(7)),
+    constant_int2tc(get_int_type(32), BigInt(9))};
+
+  // Canonical IREP2 form: what migrate_expr yields from a real legacy
+  // side_effect_expr_function_callt. The helper must reproduce it exactly.
+  side_effect_expr_function_callt legacy(migrate_type_back(ret));
+  legacy.function() = symbol_expr(*xsym);
+  legacy.arguments().push_back(migrate_expr_back(args[0]));
+  legacy.arguments().push_back(migrate_expr_back(args[1]));
+  expr2tc via_legacy;
+  migrate_expr(legacy, via_legacy);
+
+  const expr2tc via_helper = side_effect_function_call2tc(ret, fn, args);
+  REQUIRE(is_sideeffect2t(via_helper));
+
+  const sideeffect2t &se = to_sideeffect2t(via_helper);
+  REQUIRE(se.kind == sideeffect2t::allockind::function_call);
+  REQUIRE(se.operand == fn);
+  REQUIRE(se.arguments == args);
+  REQUIRE(via_helper->type == ret);
+
+  REQUIRE(via_helper == via_legacy); // faithful drop-in
+  require_expr_roundtrip(via_helper);
 }
