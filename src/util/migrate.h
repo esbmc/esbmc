@@ -45,4 +45,28 @@ void set_symbol_type(symbolt &sym, const type2tc &t);
 typet migrate_type_back(const type2tc &ref);
 exprt migrate_expr_back(const expr2tc &ref);
 
+// --- Phase 4.2 construction helpers (Part IV §6: "build once, shared") -------
+// IREP2 replacements for the two legacy expression constructors the frontends
+// lean on most, so frontend code can build IREP2 nodes directly instead of
+// `symbol_expr(symbolt)` / `side_effect_expr_function_callt`. These are pure
+// construction helpers with round-trip unit tests; no call site is rewired
+// here -- the wiring is Phase 4.3/4.4 work, shipped separately so this
+// infrastructure carries zero coverage-axis risk (the V-track lesson).
+
+// IREP2 form of `symbol_expr(const symbolt&)`: a level-0 `symbol2t` carrying the
+// symbol's IREP2 type (read via migrate_symbol_type, the B2 source of truth)
+// and its identifier. The legacy node also stores a cosmetic display name;
+// IREP2 symbols carry only the identifier, so it is neither represented nor
+// needed (`migrate_expr` drops it on the same path).
+expr2tc symbol_expr2tc(const symbolt &sym);
+
+// IREP2 form of `side_effect_expr_function_callt`: an expression-context call
+// `function(arguments...)` evaluating to `return_type`, i.e. a `sideeffect2t`
+// with allockind::function_call. Mirrors migrate.cpp's function_call lowering
+// (operand = callee, arguments = args, no size/alloctype).
+expr2tc side_effect_function_call2tc(
+  const type2tc &return_type,
+  const expr2tc &function,
+  const std::vector<expr2tc> &arguments);
+
 #endif /* _ESBMC_UTIL_MIGRATE_H_ */

@@ -430,6 +430,33 @@ void set_symbol_type(symbolt &sym, const type2tc &t)
   sym.set_type(t);
 }
 
+expr2tc symbol_expr2tc(const symbolt &sym)
+{
+  // IREP2 form of symbol_expr(sym): a level-0 symbol2t carrying the symbol's
+  // IREP2 type (B2 source of truth) and identifier. The legacy display name is
+  // not represented in IREP2 (and migrate_expr drops it on the same path).
+  return symbol2tc(migrate_symbol_type(sym), sym.id);
+}
+
+expr2tc side_effect_function_call2tc(
+  const type2tc &return_type,
+  const expr2tc &function,
+  const std::vector<expr2tc> &arguments)
+{
+  // Mirrors migrate_expr's lowering of side_effect_expr_function_callt:
+  // operand = callee, arguments = args, nil size, and an *empty* (not nil)
+  // alloctype -- the legacy node carries no #type, and migrate_type of the
+  // resulting empty typet is the empty type, so the empty type is the canonical
+  // round-trip-stable form here (a nil alloctype would canonicalise to empty).
+  return sideeffect2tc(
+    return_type,
+    function,
+    expr2tc(),
+    arguments,
+    get_empty_type(),
+    sideeffect2t::allockind::function_call);
+}
+
 static const typet &decide_on_expr_type(const exprt &side1, const exprt &side2)
 {
   // For some arithmetic expr, decide on the result of operating on them.
