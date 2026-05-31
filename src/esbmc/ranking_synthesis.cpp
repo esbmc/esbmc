@@ -1889,6 +1889,86 @@ bool prove_loop_terminates(
     }
   }
 
+  // 3-D lexicographic fallback. For each ordered triple (m1, m2, m3)
+  // of distinct candidates, prove that on every body path
+  //   m1' < m1
+  //   OR (m1' == m1 AND m2' < m2)
+  //   OR (m1' == m1 AND m2' == m2 AND m3' < m3)
+  // and that the lex floor `(m1 < L1) || (m1 == L1 && m2 < L2) ||
+  // (m1 == L1 && m2 == L2 && m3 < L3)` makes the guard UNSAT. Catches
+  // 3-counter loops like loops/trex03-1.c:
+  //   while (x1>0 && x2>0 && x3>0)
+  //     if (c1) x1--; else if (c2) x2--; else x3--;
+  // where each path decrements exactly one counter — no single
+  // measure and no 2-tuple suffices. With the same `kMaxLexCandidates`
+  // cap (8) the triple count is bounded at 8*7*6 = 336; each triple
+  // costs 1 floor SMT call plus |paths| decrease checks.
+  if (candidates.size() >= 3 && candidates.size() <= kMaxLexCandidates)
+  {
+    for (size_t i = 0; i < candidates.size(); ++i)
+    {
+      for (size_t j = 0; j < candidates.size(); ++j)
+      {
+        if (j == i)
+          continue;
+        for (size_t k = 0; k < candidates.size(); ++k)
+        {
+          if (k == i || k == j)
+            continue;
+          const expr2tc &m1 = candidates[i].first;
+          const expr2tc &L1 = candidates[i].second;
+          const expr2tc &m2 = candidates[j].first;
+          const expr2tc &L2 = candidates[j].second;
+          const expr2tc &m3 = candidates[k].first;
+          const expr2tc &L3 = candidates[k].second;
+
+          expr2tc floor = or2tc(
+            lessthan2tc(m1, L1),
+            or2tc(
+              and2tc(equality2tc(m1, L1), lessthan2tc(m2, L2)),
+              and2tc(
+                equality2tc(m1, L1),
+                and2tc(equality2tc(m2, L2), lessthan2tc(m3, L3)))));
+          if (!is_unsat(and2tc(and2tc(inv, rl.guard), floor), options, ns))
+            continue;
+
+          bool decreases = true;
+          for (const auto &p : rl.paths)
+          {
+            expr2tc m1p = apply_body(m1, p.assigns);
+            expr2tc m2p = apply_body(m2, p.assigns);
+            expr2tc m3p = apply_body(m3, p.assigns);
+            expr2tc decr = or2tc(
+              lessthan2tc(m1p, m1),
+              or2tc(
+                and2tc(equality2tc(m1p, m1), lessthan2tc(m2p, m2)),
+                and2tc(
+                  equality2tc(m1p, m1),
+                  and2tc(equality2tc(m2p, m2), lessthan2tc(m3p, m3)))));
+            expr2tc obligation = and2tc(and2tc(inv, rl.guard), p.cond);
+            obligation = and2tc(obligation, not2tc(decr));
+            if (!is_unsat(obligation, options, ns))
+            {
+              decreases = false;
+              break;
+            }
+          }
+          if (!decreases)
+            continue;
+
+          log_debug(
+            "termination",
+            "ranking proved (lex 3D): m1={} m2={} m3={} invariant={}",
+            from_expr(ns, "", m1),
+            from_expr(ns, "", m2),
+            from_expr(ns, "", m3),
+            from_expr(ns, "", inv));
+          return true;
+        }
+      }
+    }
+  }
+
   return false;
 }
 
