@@ -461,15 +461,7 @@ void goto_symext::phi_function(const statet::merge_statet &merge_state)
     else
     {
       rhs = if2tc(type, tmp_guard.as_expr(), merge_state_rhs, cur_state_rhs);
-      // Node-local peephole only (if(c,x,x)->x, constant-condition fold)
-      // instead of the full recursive simplify(): the operands here are
-      // already canonical — two freshly renamed symbols and the guard diff
-      // (built from already-simplified conjuncts) — so recursing into them
-      // just re-walks the deep guard and-chain. Measured 94% of those
-      // recursive simplifies changed nothing; do_simplify() captures the
-      // productive folds without the per-phi-variable guard re-walk.
-      if (expr2tc folded = rhs->do_simplify(); !is_nil_expr(folded))
-        rhs = folded;
+      simplify(rhs);
     }
 
     expr2tc lhs;
