@@ -381,18 +381,15 @@ typet type_handler::get_canonical_string_type(const typet &t) const
 /// It is typically used to model Python sequences like strings and byte arrays
 typet type_handler::build_array(const typet &sub_type, const size_t size) const
 {
-  // Use BigInt to ensure correctness for large sizes, though typical sizes are small.
-  const BigInt big_size = BigInt(size);
-  const typet size_t_type = size_type(); // An unsignedbv of platform word width
-
-  // Construct a constant expression for the array size.
-  constant_exprt array_size_expr(
-    integer2binary(big_size, bv_width(size_t_type)), // Binary representation
-    integer2string(big_size), // Decimal string for display
-    size_t_type);             // Size type
-
-  // Return the full array type
-  return array_typet(sub_type, array_size_expr);
+  // Phase 4.3 (Part IV §5): build the array type IREP2-internal and lower it
+  // back to the legacy `typet` at the seam. The element type arrives as a
+  // legacy `typet` (from the elementary builders / callers), so migrate it in;
+  // the size is a constant of the platform word-width unsignedbv (`size_type`),
+  // matching the legacy `constant_exprt` byte-for-byte after back-migration.
+  const type2tc subtype = migrate_type(sub_type);
+  const type2tc size_t_type = migrate_type(size_type());
+  const expr2tc array_size = constant_int2tc(size_t_type, BigInt(size));
+  return lower_to_seam(array_type2tc(subtype, array_size, false));
 }
 
 std::vector<int> type_handler::get_array_type_shape(const typet &type) const
@@ -1025,7 +1022,13 @@ typet type_handler::get_list_type(const nlohmann::json &list_value) const
       typet list_type = (left_expr.is_symbol()) ? left_expr.type().subtype()
                                                 : right_expr.type().subtype();
       exprt size = (left_expr.is_symbol()) ? right_expr : left_expr;
-      return array_typet(list_type, size);
+      // Phase 4.3 (Part IV §5): build the array type IREP2-internal and lower
+      // at the seam. Unlike build_array the size here is a runtime expression
+      // (e.g. `x = [0] * n`), so it is migrated in rather than a constant.
+      expr2tc array_size;
+      migrate_expr(size, array_size);
+      return lower_to_seam(
+        array_type2tc(migrate_type(list_type), array_size, false));
     }
   }
 

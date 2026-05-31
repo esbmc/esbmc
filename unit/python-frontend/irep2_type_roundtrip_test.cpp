@@ -242,3 +242,39 @@ TEST_CASE(
   // result matches in both floatbv and fixedbv modes.
   REQUIRE(th.get_typet(std::string("float")) == double_type());
 }
+
+TEST_CASE(
+  "Phase 4.3: build_array output is byte-identical (IREP2-internal)",
+  "[python-frontend][irep2][phase4.3]")
+{
+  cmdlinet cmdline;
+  REQUIRE_FALSE(config.set(cmdline));
+
+  contextt context;
+  global_scope gs;
+  const nlohmann::json ast = {
+    {"_type", "Module"},
+    {"body", nlohmann::json::array()},
+    {"filename", "test.py"},
+    {"type_ignores", nlohmann::json::array()}};
+  python_converter converter(context, &ast, gs);
+  const type_handler &th = converter.get_type_handler();
+
+  // build_array now constructs array_type2tc internally (element type migrated
+  // in, size a platform word-width unsignedbv constant) and lowers at the seam.
+  // The legacy array_typet reaching create_symbol must be byte-identical to the
+  // direct array_typet(sub_type, constant_exprt) builder it replaced — for both
+  // the char backing of str/bytes/type and the int backing of bytearrays.
+  auto legacy_array = [](const typet &sub, size_t n) {
+    return array_typet(sub, from_integer(n, size_type()));
+  };
+
+  REQUIRE(th.build_array(char_type(), 0) == legacy_array(char_type(), 0));
+  REQUIRE(th.build_array(char_type(), 10) == legacy_array(char_type(), 10));
+  REQUIRE(
+    th.build_array(long_long_int_type(), 4) ==
+    legacy_array(long_long_int_type(), 4));
+  // A large size exercises the BigInt size path.
+  REQUIRE(
+    th.build_array(char_type(), 100000) == legacy_array(char_type(), 100000));
+}
