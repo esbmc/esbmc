@@ -2631,6 +2631,19 @@ std::string python_annotation<Json>::infer_from_return_statements(
 {
   for (const Json &stmt : body)
   {
+    // A nested function or class owns its own `return` statements: Python
+    // scopes them to the nested definition, so they must not leak into the
+    // enclosing function's inferred return type. Without this guard, an
+    // unannotated function whose body declares a nested helper that returns a
+    // different type (e.g. a `check()` returning bool) would wrongly inherit
+    // that type, mis-categorising the enclosing return and breaking downstream
+    // type-dependent logic such as the cross-type `==` fold (GitHub #4807).
+    const std::string &stmt_type = stmt["_type"];
+    if (
+      stmt_type == "FunctionDef" || stmt_type == "AsyncFunctionDef" ||
+      stmt_type == "ClassDef")
+      continue;
+
     // Found a return statement
     if (stmt["_type"] == "Return" && !stmt["value"].is_null())
     {
