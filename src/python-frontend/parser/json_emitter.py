@@ -48,24 +48,23 @@ class EmitPipelineDeps:
 
 
 def get_referenced_names(node: ast.AST) -> set[str]:
-    """Find function/class names referenced in a function or class definition."""
-    referenced = set()
+    """Collect every name *read* inside a definition (``Load`` context).
 
-    for child in ast.walk(node):
-        if isinstance(child, ast.Call):
-            if isinstance(child.func, ast.Name):
-                referenced.add(child.func.id)
-        elif isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            if child.returns and isinstance(child.returns, ast.Name):
-                referenced.add(child.returns.id)
-            for arg in child.args.args:
-                if arg.annotation and isinstance(arg.annotation, ast.Name):
-                    referenced.add(arg.annotation.id)
-        elif isinstance(child, ast.AnnAssign):
-            if isinstance(child.annotation, ast.Name):
-                referenced.add(child.annotation.id)
-
-    return referenced
+    This subsumes call targets (``C()``), type annotations (``-> Node``,
+    ``x: Tile``), and — crucially — bare reads of module-level globals such as
+    a method that reads a module constant. Capturing the last case lets a
+    named import (``from mod import C``) carry along the globals ``C``'s methods
+    reference, instead of dropping them and failing name resolution at the use
+    site (GitHub #4984). Local stores and parameters are in ``Store``/``Param``
+    context and are intentionally excluded; only top-level definitions whose
+    names match are ever retained by ``_filter_nodes_for_import``, so any
+    incidental over-collection is sound (it can only keep a real sibling
+    global, never drop one)."""
+    return {
+        child.id
+        for child in ast.walk(node)
+        if isinstance(child, ast.Name) and isinstance(child.ctx, ast.Load)
+    }
 
 
 def _assign_target_names(target: ast.expr) -> Iterable[str]:
@@ -78,29 +77,50 @@ def _assign_target_names(target: ast.expr) -> Iterable[str]:
         yield from _assign_target_names(target.value)
 
 
+def _node_bound_names(node: ast.stmt) -> set[str]:
+    """Top-level binding names introduced by ``node`` (empty for non-bindings)."""
+    if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+        return {node.name}
+    if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+        return {node.target.id}
+    if isinstance(node, ast.Assign):
+        return {n for tgt in node.targets for n in _assign_target_names(tgt)}
+    return set()
+
+
 def _filter_nodes_for_import(tree: ast.Module, elements_to_import) -> list[ast.stmt]:
-    """Return the subset of ``tree.body`` selected by ``elements_to_import``."""
+    """Return the subset of ``tree.body`` selected by ``elements_to_import``.
+
+    Beyond the explicitly imported names, retain every top-level definition or
+    global *transitively* referenced by them, computed as a fixpoint over
+    ``get_referenced_names``. An imported class whose method reads a module
+    global — or calls a sibling helper that itself reads one — keeps that
+    global in the emitted body, matching CPython's rule that the global resolves
+    against its defining module at call time (GitHub #4984). The closure only
+    ever adds nodes, so it cannot drop anything the previous one-hop scan kept."""
     if not elements_to_import:
         return []
 
-    explicitly_imported = {elem_info.name for elem_info in elements_to_import}
-    referenced_names = set()
-    for node in tree.body:
-        if isinstance(node, (ast.ClassDef, ast.FunctionDef)) and node.name in explicitly_imported:
-            referenced_names.update(get_referenced_names(node))
+    required = {elem_info.name for elem_info in elements_to_import}
+    worklist = list(required)
+    while worklist:
+        name = worklist.pop()
+        for node in tree.body:
+            if name not in _node_bound_names(node):
+                continue
+            for ref in get_referenced_names(node):
+                if ref not in required:
+                    required.add(ref)
+                    worklist.append(ref)
 
     filtered_nodes = []
     for node in tree.body:
-        if isinstance(node, (ast.ClassDef, ast.FunctionDef)):
+        if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
             if (node.name in ("ESBMC_range_has_next_", "ESBMC_range_next_")
-                    or node.name in explicitly_imported or node.name in referenced_names):
+                    or node.name in required):
                 filtered_nodes.append(node)
-        elif (isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name)
-              and node.target.id in explicitly_imported):
-            filtered_nodes.append(node)
-        elif isinstance(node, ast.Assign):
-            bound = {n for tgt in node.targets for n in _assign_target_names(tgt)}
-            if bound & explicitly_imported:
+        elif isinstance(node, (ast.AnnAssign, ast.Assign)):
+            if _node_bound_names(node) & required:
                 filtered_nodes.append(node)
         elif isinstance(node, (ast.Import, ast.ImportFrom)):
             filtered_nodes.append(node)
