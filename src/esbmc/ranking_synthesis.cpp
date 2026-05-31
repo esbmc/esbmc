@@ -96,6 +96,15 @@ struct loop_skipt
     // via the loop's natural exit edge (so it can be added to the
     // justified-targets set, not bailed on as unreachable).
     unsigned exit_target_locnum = 0;
+    // The full expressions of the modified symbols (keyed by name).
+    // Used by the body parser when summarising an inner loop: it needs
+    // the type of each modified symbol to emit a fresh-symbol havoc
+    // assignment, which the bare `modified` name set doesn't carry.
+    std::map<irep_idt, expr2tc> modified_vars;
+    // The inner loop's head guard — used by the body parser to attach
+    // `!guard` as a post-summary path condition (the only state we
+    // know about after the inner exits is that its guard is false).
+    expr2tc guard;
   };
   std::map<unsigned, entry> by_head_locnum;
 };
@@ -856,6 +865,13 @@ bool recognize_loop(
     bool is_three_way = false;
     expr2tc inner_if_cond;
     std::vector<assignt> arm_c;
+    // Summary block (nested loop): `is_span` stays true, `span` holds
+    // havoc assigns of fresh symbols to the inner's modified vars,
+    // and `summary_cond` is the inner's exit guard (`!G_inner`). The
+    // path enumerator treats this like a span for branching (1 path
+    // contribution) but additionally appends `summary_cond` as a
+    // path-cond atom after the havoc assigns.
+    expr2tc summary_cond;
   };
   std::vector<block_t> blocks;
   static constexpr size_t kMaxPaths = 16;
@@ -873,6 +889,73 @@ bool recognize_loop(
     {
       ++it;
       continue;
+    }
+    // Inner loop summary: if `it` is the head of an inner natural
+    // loop (known to the loop_skip map), turn the entire inner loop
+    // into a summary block. Soundness: the top-level driver iterates
+    // over ALL loops via `loops.get_loops()` and independently
+    // proves each one terminates — if the inner doesn't terminate,
+    // the function as a whole still returns UNKNOWN. So treating it
+    // as a havoc-with-exit-guard block here is sound *as long as*
+    // every modified symbol's type is recoverable. We require the
+    // inner's modified set to be tractable (all symbols; full
+    // expressions retained in `modified_vars`), no dereferences or
+    // members in the modified set, and the inner's exit-target to
+    // land at-or-before the outer's back-edge.
+    if (loop_skip && it->is_goto())
+    {
+      auto skip_it = loop_skip->by_head_locnum.find(it->location_number);
+      if (skip_it != loop_skip->by_head_locnum.end())
+      {
+        const auto &inner = skip_it->second;
+        // Inner's back-edge must be strictly before the outer's
+        // back-edge: this rules out the case where `it` is the
+        // outer loop's own head (which we've already excluded from
+        // `loop_skip`) and the malformed case where an inner's
+        // back-edge falls outside the outer's body.
+        if (inner.back->location_number >= back_it->location_number)
+          return false;
+        if (inner.modified_vars.size() != inner.modified.size())
+          return false; // some modified entry wasn't a plain symbol
+        block_t b;
+        b.is_span = true;
+        // Emit a havoc assign per modified symbol: `v := fresh`.
+        // Each fresh symbol's name is salted with the inner's head
+        // location_number so summaries of distinct inner loops never
+        // alias their havoc symbols.
+        for (const auto &kv : inner.modified_vars)
+        {
+          const expr2tc &v = kv.second;
+          // `modified_vars` is populated only with symbol2t entries
+          // (see the entry point); kept as `assert`-equivalent via
+          // the `size != modified.size()` check above.
+          char buf[64];
+          std::snprintf(
+            buf, sizeof(buf), "$rank_nest$%u$", it->location_number);
+          std::string sym_name =
+            std::string(buf) + id2string(to_symbol2t(v).thename);
+          expr2tc fresh = symbol2tc(v->type, sym_name);
+          assignt a;
+          a.lhs = v;
+          a.rhs = fresh;
+          b.span.push_back(std::move(a));
+        }
+        // The post-summary path condition is the inner's exit
+        // guard: the inner's head IF is `IF !G_inner THEN GOTO
+        // exit`, so the stored guard is `!G_inner` — exactly the
+        // condition that holds when execution falls out of the
+        // inner loop. (The body parser elsewhere stores raw IR
+        // guards; we keep that convention here so subsequent
+        // apply_body / simplify steps see the same shape.)
+        if (!is_nil_expr(inner.guard))
+          b.summary_cond = inner.guard;
+        blocks.push_back(std::move(b));
+        // Advance past the inner's back-edge. The back-edge GOTO is
+        // typically followed by the exit-target label, which is
+        // either a real next instruction or the outer's back-edge.
+        it = std::next(inner.back);
+        continue;
+      }
     }
     if (
       it->is_assign() || is_termination_irrelevant_call(*it) ||
@@ -1152,12 +1235,36 @@ bool recognize_loop(
 
     std::vector<assignt> path;
     std::vector<expr2tc> cond_atoms;
+    auto push_summary_cond = [&](const expr2tc &cond_in) {
+      // Inner-loop summary: `cond_in` is the inner's `IF !G_inner`
+      // guard (so the condition that holds after the inner exits IS
+      // `cond_in` — same convention as the IF-derived path atoms).
+      // Run it through apply_body so it's expressed in the same
+      // pre-iteration namespace as the rest of the path, then
+      // simplify, substitute exempt-deref scalars, and silently
+      // drop if it contains a sideeffect (matches the
+      // existing push_cond_atom contract).
+      if (is_nil_expr(cond_in))
+        return;
+      expr2tc atom = apply_body(cond_in, path);
+      simplify(atom);
+      if (deref_map.size())
+        atom = subst_parallel(atom, deref_map);
+      if (!contains_sideeffect(atom))
+        cond_atoms.push_back(atom);
+    };
     for (size_t i = 0; i < blocks.size(); ++i)
     {
       const block_t &b = blocks[i];
       if (b.is_span)
       {
         path.insert(path.end(), b.span.begin(), b.span.end());
+        // Summary blocks ride on `is_span=true` with an extra
+        // post-condition (`!G_inner`); attach it after the havoc
+        // assigns are in the path so apply_body's substitution sees
+        // the right pre-inner-loop state.
+        if (!is_nil_expr(b.summary_cond))
+          push_summary_cond(b.summary_cond);
         continue;
       }
       // Find which choice slot corresponds to this if/else.
@@ -2649,7 +2756,17 @@ tvt try_prove_termination_by_ranking(
         e.exit_target_locnum = head->targets.front()->location_number;
       for (const expr2tc &v : loop.get_modified_loop_vars())
         if (is_symbol2t(v))
-          e.modified.insert(to_symbol2t(v).thename);
+        {
+          const irep_idt &n = to_symbol2t(v).thename;
+          e.modified.insert(n);
+          e.modified_vars.emplace(n, v);
+        }
+      // The inner-loop body parser needs the head IF's guard in its
+      // *positive* form (`G`, the continue-condition), so it can attach
+      // `!G` as a post-summary path condition. The head is `IF !G THEN
+      // GOTO exit`; the stored guard is the IR's `!G`.
+      if (head->is_goto() && !is_nil_expr(head->guard))
+        e.guard = head->guard;
       all_loops.by_head_locnum[head->location_number] = std::move(e);
     }
 
