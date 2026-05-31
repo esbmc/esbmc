@@ -32,9 +32,10 @@ def deque(iterable: list[int] = None, maxlen: int = -1) -> list[int]:
 
     Approximation: deque is treated as a list backing store, exposing the
     same `append` / `pop` / `__len__` / subscript surface that the
-    frontend already supports for lists. `appendleft` / `popleft` /
-    `extendleft` and the `maxlen` rollover are NOT modelled; programs
-    relying on the FIFO end will need a richer model.
+    frontend already supports for lists. The FIFO front operations
+    `popleft()` and `appendleft(x)` are modelled as `pop(0)` / `insert(0, x)`
+    in the list-method handler. `extendleft` and the `maxlen` rollover are
+    still NOT modelled.
     """
     if iterable is None:
         return []

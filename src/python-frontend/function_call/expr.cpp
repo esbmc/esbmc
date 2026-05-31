@@ -1230,6 +1230,65 @@ exprt function_call_expr::handle_list_pop() const
   return list_helper.build_pop_list_call(*list_symbol, index_expr, call_);
 }
 
+exprt function_call_expr::handle_list_popleft() const
+{
+  // collections.deque.popleft(): remove and return the front element.
+  // deque is modelled as a list, so this is pop(0).
+  if (!call_["args"].empty())
+    throw std::runtime_error("popleft() takes no arguments");
+
+  std::string list_display_name;
+  const symbolt *list_symbol = get_object_list_symbol(list_display_name);
+  materialize_list_symbol(list_symbol);
+  if (!list_symbol)
+    throw std::runtime_error("List variable not found: " + list_display_name);
+
+  // build_pop_list_call infers the popped element's compile-time type from the
+  // back of the type map (it was written for pop()); for a homogeneous deque
+  // — the FIFO use case (e.g. breadth_first_search) — front and back share a
+  // type, so this is exact. A heterogeneous deque could mis-type the front
+  // element; that richer case is left to a future index-aware type map.
+  python_list list_helper(converter_, call_);
+  return list_helper.build_pop_list_call(
+    *list_symbol, from_integer(0, signedbv_typet(64)), call_);
+}
+
+exprt function_call_expr::handle_list_appendleft() const
+{
+  // collections.deque.appendleft(x): prepend x. deque is modelled as a list,
+  // so this is insert(0, x).
+  const auto &args = call_["args"];
+  if (args.size() != 1)
+    throw std::runtime_error("appendleft() takes exactly one argument");
+
+  std::string list_display_name;
+  const symbolt *list_symbol = get_object_list_symbol(list_display_name);
+  materialize_list_symbol(list_symbol);
+  if (!list_symbol)
+    throw std::runtime_error("List variable not found: " + list_display_name);
+
+  exprt index_expr = from_integer(0, signedbv_typet(64));
+  exprt value_to_insert = converter_.get_expr(args[0]);
+
+  if (value_to_insert.is_constant())
+  {
+    symbolt &insert_value_symbol = converter_.create_tmp_symbol(
+      call_, "insert_value", size_type(), gen_zero(size_type()));
+    code_declt insert_value(symbol_expr(insert_value_symbol));
+    insert_value.copy_to_operands(value_to_insert);
+    converter_.current_block->copy_to_operands(insert_value);
+  }
+
+  python_list list(converter_, nlohmann::json());
+  list.add_type_info(
+    list_symbol->id.as_string(),
+    value_to_insert.identifier().as_string(),
+    value_to_insert.type());
+
+  return list.build_insert_list_call(
+    *list_symbol, index_expr, call_, value_to_insert);
+}
+
 bool function_call_expr::is_tuple_method_call() const
 {
   if (call_["func"]["_type"] != "Attribute")
@@ -1628,7 +1687,9 @@ bool function_call_expr::is_list_method_call() const
     method_name != "append" && method_name != "pop" &&
     method_name != "insert" && method_name != "remove" &&
     method_name != "clear" && method_name != "extend" &&
-    method_name != "copy" && method_name != "sort" && method_name != "reverse")
+    method_name != "copy" && method_name != "sort" &&
+    method_name != "reverse" && method_name != "popleft" &&
+    method_name != "appendleft")
     return false;
 
   // "pop" is shared between list and dict. Disambiguate using the actual
@@ -1687,6 +1748,10 @@ exprt function_call_expr::handle_list_method() const
     return handle_list_clear();
   if (method_name == "pop")
     return handle_list_pop();
+  if (method_name == "popleft")
+    return handle_list_popleft();
+  if (method_name == "appendleft")
+    return handle_list_appendleft();
   if (method_name == "copy")
     return handle_list_copy();
   if (method_name == "remove")
