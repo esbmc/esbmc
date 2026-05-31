@@ -939,6 +939,22 @@ inline bool is_nil_expr(const expr2tc &exp)
   return exp.get() == nullptr;
 }
 
+/** Node-identity test: true iff `a` and `b` refer to the very same
+ *  hash-consed node. This is *not* a value comparison — use `operator==`
+ *  for structural equality, which additionally walks the trees when the
+ *  pointers differ (two distinct nodes can still be structurally equal if
+ *  hash-consing did not unify them). `same_pointer` is the O(1) identity
+ *  check; reach for it only when you specifically want "is this literally
+ *  the same object", e.g. fast-path short-circuits over hash-consed
+ *  conjuncts. The underlying pointer is already public via get(); this
+ *  just names the comparison so call sites stop hand-rolling
+ *  `a.get() == b.get()`. */
+template <class T>
+inline bool same_pointer(const irep_container<T> &a, const irep_container<T> &b)
+{
+  return a.get() == b.get();
+}
+
 inline bool is_nil_type(const type2tc &t)
 {
   return t.get() == nullptr;

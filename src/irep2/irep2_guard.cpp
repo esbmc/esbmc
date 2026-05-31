@@ -5,12 +5,9 @@
 
 namespace
 {
-bool same_cached_expr(const guard2tc &g1, const guard2tc &g2)
-{
-  return static_cast<const expr2tc &>(g1).get() ==
-         static_cast<const expr2tc &>(g2).get();
-}
-
+// Raw node pointer, used as the key type for the unordered_set<const
+// expr2t *> membership probes (where a bare pointer key is what's wanted).
+// Identity *comparisons* use the shared same_pointer() (irep2.h) instead.
 const expr2t *expr_ptr(const expr2tc &expr)
 {
   return expr.get();
@@ -21,8 +18,8 @@ std::size_t common_pointer_prefix_size(const guard2tc &g1, const guard2tc &g2)
   std::size_t prefix_size = 0;
   const std::size_t min_size =
     std::min(g1.guard_list.size(), g2.guard_list.size());
-  while (prefix_size < min_size && expr_ptr(g1.guard_list[prefix_size]) ==
-                                     expr_ptr(g2.guard_list[prefix_size]))
+  while (prefix_size < min_size &&
+         same_pointer(g1.guard_list[prefix_size], g2.guard_list[prefix_size]))
     ++prefix_size;
   return prefix_size;
 }
@@ -42,7 +39,7 @@ bool guard_list_prefix_matches(const guard2tc &prefix, const guard2tc &guard)
   if (prefix.guard_list.size() > guard.guard_list.size())
     return false;
   for (std::size_t i = 0; i < prefix.guard_list.size(); ++i)
-    if (expr_ptr(prefix.guard_list[i]) != expr_ptr(guard.guard_list[i]))
+    if (!same_pointer(prefix.guard_list[i], guard.guard_list[i]))
       return false;
   return true;
 }
@@ -63,7 +60,7 @@ bool cached_prefix_expr(
 
   if (prefix_size == guard_size)
   {
-    if (!same_cached_expr(prefix, guard))
+    if (!same_pointer(prefix, guard))
       return false;
     prefix_expr = prefix;
     assert(!is_nil_expr(prefix_expr));
@@ -78,9 +75,7 @@ bool cached_prefix_expr(
     cur = to_and2t(cur).side_1;
   }
 
-  if (
-    static_cast<const expr2tc &>(cur).get() !=
-    static_cast<const expr2tc &>(prefix).get())
+  if (!same_pointer(cur, prefix))
     return false;
 
   prefix_expr = cur;
@@ -259,8 +254,8 @@ guard2tc &operator-=(guard2tc &g1, const guard2tc &g2)
   std::size_t prefix_size = 0;
   const std::size_t min_size =
     std::min(g1.guard_list.size(), g2.guard_list.size());
-  while (prefix_size < min_size && expr_ptr(g1.guard_list[prefix_size]) ==
-                                     expr_ptr(g2.guard_list[prefix_size]))
+  while (prefix_size < min_size &&
+         same_pointer(g1.guard_list[prefix_size], g2.guard_list[prefix_size]))
     ++prefix_size;
 
   if (prefix_size != 0)
@@ -599,9 +594,7 @@ bool operator==(const guard2tc &g1, const guard2tc &g2)
   // Both nil also matches (two empty/true guards). The cached chain
   // is deterministic in guard_list, so shared base ⇒ matching list
   // under our mutator invariants.
-  if (
-    static_cast<const expr2tc &>(g1).get() ==
-    static_cast<const expr2tc &>(g2).get())
+  if (same_pointer(g1, g2))
     return true;
 
   // Fast inequality: if both guards have a cached crc and they differ,
