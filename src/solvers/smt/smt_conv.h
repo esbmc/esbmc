@@ -292,6 +292,34 @@ public:
    *  @return A three-valued return val, of the assignment to a. */
   virtual tvt l_get(smt_astt a);
 
+  /** Model-value cache.
+   *
+   *  Each l_get() bottoms out in the backend's get_value(), which for
+   *  some solvers (notably Bitwuzla) re-runs preprocessing over the
+   *  queried term on every call — O(formula) per query. Trace
+   *  construction queries the same guard ASTs thousands of times, so
+   *  caching the result collapses that to one query per distinct AST.
+   *
+   *  The cache is only valid while the solver model is stable (between
+   *  a SAT result and the next dec_solve / context change). It is
+   *  therefore opt-in: a caller that knows the model is fixed for a
+   *  scope wraps that scope in a model_cache_scopet, which activates
+   *  the cache on entry and flushes + deactivates it on exit. Outside
+   *  such a scope l_get() is uncached, so no staleness is possible. */
+  struct model_cache_scopet
+  {
+    smt_convt &conv;
+    explicit model_cache_scopet(smt_convt &c) : conv(c)
+    {
+      conv.l_get_cache_active = true;
+    }
+    ~model_cache_scopet()
+    {
+      conv.l_get_cache.clear();
+      conv.l_get_cache_active = false;
+    }
+  };
+
   /** @} */
 
   /** @{
@@ -893,6 +921,13 @@ public:
   std::mutex smt_cache_mutex;
   /** A cache of converted type2tc's to smt sorts */
   smt_sort_cachet sort_cache;
+
+  /** Model-value cache for l_get(). Active only within a
+   *  model_cache_scopet; see the doc on l_get() above. Keyed by the
+   *  boolean smt_ast pointer (solver ASTs are hash-consed, so identical
+   *  pointer ⇒ identical term ⇒ identical model value). */
+  std::unordered_map<smt_astt, tvt> l_get_cache;
+  bool l_get_cache_active = false;
   /** Pointer_logict object, which contains some code for formatting how
    *  pointers are displayed in counter-examples. This is a list so that we
    *  can push and pop data when context push/pop operations occur. */
