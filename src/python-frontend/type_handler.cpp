@@ -475,7 +475,7 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   // as per Python documentation. This ensures proper precision, range, and
   // compatibility with Python's numeric type promotion (int -> float -> complex).
   if (ast_type == "float")
-    return double_type();
+    return lower_to_seam(double_type2());
 
   // int — arbitrarily large integers
   // We approximate using 64-bit signed integer here.
@@ -705,7 +705,7 @@ typet type_handler::get_typet_from_call_func(const nlohmann::json &func) const
     if (func_name == "randint" || func_name == "randrange")
       return long_long_int_type();
     if (func_name == "random" || func_name == "uniform")
-      return double_type();
+      return lower_to_seam(double_type2());
     if (type_utils::is_builtin_type(func_name))
       return get_typet(func_name);
   }
@@ -733,7 +733,7 @@ typet type_handler::get_typet(const nlohmann::json &elem) const
   else if (elem.is_boolean())
     return bool_type();
   else if (elem.is_number_float())
-    return double_type();
+    return lower_to_seam(double_type2());
   else if (elem.is_string())
   {
     size_t str_size = elem.get<std::string>().size();

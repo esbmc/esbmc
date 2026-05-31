@@ -219,6 +219,31 @@ TEST_CASE(
 }
 
 TEST_CASE(
+  "Phase 4.3: float get_typet output is byte-identical (IREP2-internal)",
+  "[python-frontend][irep2][phase4.3]")
+{
+  cmdlinet cmdline;
+  REQUIRE_FALSE(config.set(cmdline));
+
+  contextt context;
+  global_scope gs;
+  const nlohmann::json ast = {
+    {"_type", "Module"},
+    {"body", nlohmann::json::array()},
+    {"filename", "test.py"},
+    {"type_ignores", nlohmann::json::array()}};
+  python_converter converter(context, &ast, gs);
+  const type_handler &th = converter.get_type_handler();
+
+  // The float family now builds double_type2() internally and lowers at the
+  // seam; the legacy typet reaching create_symbol must be byte-identical to the
+  // double_type() builder it replaced. double_type2() honours the same
+  // use_fixed_for_float config branch as double_type() (c_types.cpp), so the
+  // result matches in both floatbv and fixedbv modes.
+  REQUIRE(th.get_typet(std::string("float")) == double_type());
+}
+
+TEST_CASE(
   "Phase 4.3: build_array output is byte-identical (IREP2-internal)",
   "[python-frontend][irep2][phase4.3]")
 {
