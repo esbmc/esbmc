@@ -26,8 +26,10 @@ re-reproduce ~60 KNOWNBUG tests to know where the real, *sound* wins are.
 | Issue | PR | Title | Status |
 |---|---|---|---|
 | [#4984](https://github.com/esbmc/esbmc/issues/4984) | [#4993](https://github.com/esbmc/esbmc/pull/4993) | `[python]` carry referenced module globals through named imports | merged |
-| [#4807](https://github.com/esbmc/esbmc/issues/4807) | [#4996](https://github.com/esbmc/esbmc/pull/4996) | `[python]` scope return-type inference to the enclosing function | merged — flips `humaneval_127` (C1) to `CORE` |
-| [#4807](https://github.com/esbmc/esbmc/issues/4807) | _branch `feat/list-filter-rewrite`_ | `[python]` desugar `list(filter(pred, seq))` to a comprehension (plan §6 item 4) | validated, pending PR |
+| [#4807](https://github.com/esbmc/esbmc/issues/4807) | [#4996](https://github.com/esbmc/esbmc/pull/4996) | `[python]` scope return-type inference to the enclosing function | merged — flips `humaneval_127` to `CORE` |
+| [#4807](https://github.com/esbmc/esbmc/issues/4807) | [#5005](https://github.com/esbmc/esbmc/pull/5005) | `[python]` desugar `list(filter(pred, seq))` to a comprehension | open — flips `humaneval_136` to `CORE` |
+| [#4566](https://github.com/esbmc/esbmc/issues/4566) | [#5006](https://github.com/esbmc/esbmc/pull/5006) | `[python]` add `queue.Queue`/`LifoQueue` model; fix dict-method shadowing | open |
+| [#4778](https://github.com/esbmc/esbmc/issues/4778) | [#5008](https://github.com/esbmc/esbmc/pull/5008) | `[python]` model `deque.popleft`/`appendleft`; fix aliased model imports | open — `breadth_first_search` now converts |
 
 ### #4984 — `from mod import C` drops module globals used by C's methods
 - **Root cause:** `_filter_nodes_for_import` in
@@ -50,40 +52,29 @@ re-reproduce ~60 KNOWNBUG tests to know where the real, *sound* wins are.
   at-risk surface; the change is inert for single-file/no-import programs).
   CPython sanity (`check_python_tests.sh`) ✓, pylint 10/10 ✓, code-review clean.
 
-### `list(filter(...))` — eager-filter materialisation (plan §6 item 4)
-- **Root cause:** the preprocessor (`expression_rewrite_mixin.py`) already
-  desugars `list(map(f, xs))` to a comprehension and handles the
-  `for x in filter(...)` statement form (`loop_mixin._transform_filter_for`),
-  but `list(filter(pred, xs))` had no rewrite — it reached the converter as a
-  call to the unmodelled `filter` builtin and verification stopped with
-  `Unsupported function 'filter' is reached`.
-- **Fix:** add a `list(filter(pred, seq))` → `[x for x in seq if pred(x)]`
-  rewrite next to the `map` rewrite, the exact CPython desugaring. Three handled
-  predicate forms: a one-arg `lambda` (its param becomes the comprehension
-  target, its body the `if` guard), a named callable (`pred(t)` guard over a
-  fresh `ESBMC_filter_elt_N` target), and `filter(None, seq)` (the element's own
-  truthiness is the guard). Any other shape (wrong arity, keywords) falls through
-  to `generic_visit`, preserving the honest `Unsupported` diagnostic — the safe
-  direction for a verifier. The rewrite only ever **adds** an `if`-guarded
-  comprehension; it never fabricates elements (the negative test pins this).
-- **Validation:** 2 new regression tests — `list_filter` (lambda + named-callable
-  + `filter(None,…)`, exact element/length assertions → SUCCESSFUL) and
-  `list_filter_fail` (over-long expected length → FAILED, guards against a
-  nondet/fabricated list). Existing `filter_loop{,_fail}`, `github_4294_filter`,
-  and the map/listcomp suite still pass. CPython sanity
-  (`check_python_tests.sh list_filter`) ✓, pylint clean (no new categories;
-  E-level 10/10), code-review clean.
-- **Benchmark flip:** re-tags `humaneval_136` (`largest_smallest_integers`, two
-  `list(filter(lambda…))` calls) from `KNOWNBUG` to `CORE` — now
-  `VERIFICATION SUCCESSFUL`, verified non-vacuous (wrong expected tuple → FAILED)
-  and CPython-consistent. Does **not** flip humaneval 108/145/151 — those also
-  need `str(int)` in a comprehension and `sorted(key=)` (see §5 C2); 108 is the
-  only remaining KNOWNBUG that uses `filter`.
-- **Note — `reversed(list)` is no longer a gap:** the §5 quixbugs note that
-  `reversed()` on a list is unmodelled is **stale** for the `for x in reversed(seq)`
-  form, which now lowers correctly (`loop_mixin._transform_reversed_for`,
-  verified non-vacuously). `next_permutation` remains blocked by slice-assignment
-  + list `==`, not by `reversed`.
+### FIFO + builtins batch (§6 item 4) — PRs #5005 / #5006 / #5008
+Three focused, independently-validated PRs that discharge most of §6 item 4. Each
+ships its own SUCCESSFUL + FAILED regression pair, CPython sanity, and code review.
+
+- **#5005 — `list(filter(pred, seq))` → `[x for x in seq if pred(x)]`** in the
+  preprocessor (`expression_rewrite_mixin.py`), mirroring the existing
+  `list(map(...))` rewrite. Handles lambda / named-callable / `filter(None,…)`;
+  unsupported shapes fall through to the honest `Unsupported` diagnostic. **Flips
+  `humaneval_136`** (`largest_smallest_integers`) to `CORE`. Tests:
+  `regression/python/list_filter{,_fail}`.
+- **#5006 — `queue.Queue` (FIFO) + `queue.LifoQueue` (LIFO) model** backed by the
+  list model (`models/queue.py`, registered in `import_resolver.py`). Surfaced and
+  fixed a general **dict-method dispatch bug**: `is_dict_method_call()` hijacked any
+  `get`/`keys`/`values`/`items`/`pop`/`setdefault`/`update` call on a class instance
+  (e.g. `queue.Queue().get()`); `receiver_is_non_dict_object()` now defers when the
+  receiver is a non-dict struct (dicts carry the `__python_dict__` tag). Tests:
+  `regression/python/queue_fifo{,_fail}`.
+- **#5008 — `collections.deque.popleft`/`appendleft`** (mapped to `pop(0)`/`insert(0,x)`
+  in the list-method handler, since deque is modelled as a list) **+ aliased
+  model-import resolution** (`from collections import deque as Queue` now binds, via
+  `resolved_name` in `find_in_import`). `breadth_first_search` now **converts and
+  runs** — its remaining blocker is the string-OM `__memcpy_impl` unwinding
+  (§5 Cluster 3), not the frontend. Tests: `regression/python/deque_popleft{,_fail}`.
 
 ---
 
@@ -128,7 +119,7 @@ for a safe point fix.
 | #4653 | OM rework to unblock `--ir-gated` bignum | depends on #4642 IR work. |
 | #4579 | model CPython GIL-aware thread scheduling | concurrency-semantics design effort. |
 | #4584 | insert interleaving points at module-global accesses in Thread bodies | symex scheduling change; couples with #4579. |
-| #4566 | `concurrency_fail`: needs `threading.Thread` + `queue.Queue` | blocked on the threading/Queue model (#4579/#4584). |
+| #4566 | `concurrency_fail`: needs `threading.Thread` + `queue.Queue` | `queue.Queue` now modelled (#5006); still blocked on the threading model (#4579/#4584). |
 | #3067 | refactor class handling into a dedicated class | pure refactor, no behavior change. |
 | #2848 | type inference for `typing.Any` at symex level | inference design. |
 | #3541 | math dataset/benchmark suite | infra, not a bug. |
@@ -154,15 +145,21 @@ assertion/segfault needing care, or the intentional limitation above.
   loops / SMT explosion (5418 VCCs). Not a frontend bug.
 - **Cluster 3 — segfault in `__memcpy_impl` (string.c:278) during unwind (2):**
   `topological_ordering(_fail)`. Backend robustness bug; deep.
-- **Cluster 4 — `NameError: name 'Queue' is not defined` (2):**
-  `breadth_first_search(_fail)`. `queue.Queue`/FIFO unmodelled.
+- **Cluster 4 — `breadth_first_search(_fail)` (2): FRONTEND FIXED (#5008).**
+  The blocker was **`collections.deque`** (`from collections import deque as Queue`),
+  not `queue.Queue` as originally labelled: deque's `popleft` was unmodelled and the
+  `as Queue` alias gave `NameError`. Both fixed in #5008, so BFS now **converts and
+  runs**; its remaining blocker is the string-OM `__memcpy_impl` unwinding
+  (string.c:278) — the same Cluster 3 backend issue (node string names copied), not a
+  frontend gap.
 - **Singletons:** `detect_cycle` (`Cannot resolve nested attribute` — §3);
   `depth_first_search` (internal assert `is_array_type` in `object_size.cpp:179`);
   `reverse_linked_list` (bitwuzla `mk_eq` width-mismatch assert);
   `shortest_paths(_fail)` (`Only simple targets are supported in DictComp` —
   tuple target in a dict comprehension; also `float('inf')`+dict semantics);
-  `next_permutation` (`reversed()` on a list unmodelled — only `reversed(range)`
-  is lowered — plus slice-assignment + list `==`);
+  `next_permutation` (slice-assignment + list `==`; note `reversed(list)` in a
+  `for` loop already lowers via `_transform_reversed_for`, so the earlier
+  "`reversed` unmodelled" note was stale);
   `wrap` (unwinding assertion: `--unwind 200` too low for the string loop);
   `bitcount_fail` (k-induction UNKNOWN);
   `rpn_eval`/`rpn_eval_fail` — **`rpn_eval_fail/main.py` is invalid Python**
@@ -174,9 +171,8 @@ assertion/segfault needing care, or the intentional limitation above.
 ### humaneval (#4807 umbrella, 30 still failing)
 
 - **C1 — `assertion 0` on computed string/list `== literal` (4):** 62, 103, 119,
-  125. (`127` fixed by #4807 / PR #4996 — return-type inference is now scoped to
-  the enclosing function; it is `CORE`/SUCCESSFUL on `master`.) Likely a
-  string/list-equality modeling issue (soundness-relevant),
+  125. (`127` fixed by #4807 / PR #4996 — return-type inference now scoped to the
+  enclosing function.) Likely a string/list-equality modeling issue (soundness-relevant),
   but intertwined with string concat, comprehensions, and per-function logic.
   Deep solver/model change — not safe to rush.
 - **C2 — `TypeError: str() expects a string argument` (3):** 108, 145, 151.
@@ -189,8 +185,8 @@ assertion/segfault needing care, or the intentional limitation above.
   nondet (soundness), but tests also use slice-assignment, `zip`, `extend`,
   extended slices.
 - **C6 — scalar return mismatches (≈4, distinct causes):** 59, 78, 95, 137 (+86).
-- **Singletons:** 123 (sorted mixed types), ~~136 (`filter()`)~~ **fixed** —
-  `list(filter(lambda…))` now lowers to a comprehension (§1), re-tagged `CORE`;
+- **Singletons:** 123 (sorted mixed types), ~~136 (`filter()`)~~ **fixed (#5005)** —
+  `list(filter(lambda…))` now lowers to a comprehension, re-tagged `CORE`;
   148 (tuple slice
   non-const lower), 158 (list-OM empty type), 162 (`hashlib` unmodelled),
   2-1 (numpy `fmod`), 91 (`split` maxsplit), and three internal C++ asserts —
@@ -223,17 +219,30 @@ Ordered by leverage × soundness-confidence.
    element type of `for u, v in <dict/sequence of tuples>` and `u, v = edge` so
    the unpack resolves to a tuple/array.
 4. **Generally-useful builtins, each with its own regression pair.** Status:
-   - `filter` — **done.** `for x in filter(...)` (`filter_loop`) and
-     `list(filter(...))` (`list_filter`, this plan) both lower to comprehensions.
-   - `reversed(list)` — **done** for the `for x in reversed(seq)` form
-     (`_transform_reversed_for`); `list(reversed(seq))` not yet exercised.
-   - `str(int)` — **partial.** `str(<int literal/var>)` works; the open gap is
-     `str(n)` inside a comprehension after a tuple-unpack reassignment
-     (`n, neg = -1*n, -1`), which currently aborts in the converter with an
-     internal `assert_arith_2ops_consistency` (irep2_expr.cpp) rather than the
-     `TypeError: str() expects a string argument` seen for the whole-function
-     conversion. Entangled with tuple-unpack type tracking; not a one-line fix.
-   - `queue.Queue` / FIFO — **not started** (blocks BFS quixbugs + #4566).
+   - `filter` — **done (#5005).** `for x in filter(...)` (`filter_loop`) and
+     `list(filter(...))` both lower to comprehensions.
+   - `reversed(list)` — **done.** `for x in reversed(seq)` lowers via
+     `_transform_reversed_for` (the earlier "unmodelled" note was stale).
+   - `queue.Queue` / `LifoQueue` — **done (#5006).**
+   - `collections.deque` FIFO front (`popleft`/`appendleft`) + aliased model
+     imports — **done (#5008).**
+   - `str(int)` — **partial.** `str(<int literal/var>)` works; `str(n)` inside a
+     comprehension after a tuple-unpack reassign (`n, neg = -1*n, -1`) still aborts
+     in the converter (`assert_arith_2ops_consistency`, irep2_expr.cpp). Entangled
+     with tuple-unpack typing; blocks humaneval 108/145/151 together with
+     `sorted(key=)`. Not a one-line fix.
+
+### New follow-ups surfaced by the FIFO/builtins batch
+- **Aliased imports of CLASSES** (`from collections import Counter as C` → `C()`
+  "Unsupported function 'C'"). #5008 fixed aliased *free-function* imports; class
+  instantiation resolves via a separate path that does not consult `find_in_import`'s
+  function/object probes. Contained, generally-useful.
+- **`collections.deque` gaps remaining:** `extendleft`, `maxlen` rollover, and
+  heterogeneous-deque element typing (the `popleft` element-type inference is exact
+  only for a homogeneous deque — see the note in `handle_list_popleft`).
+- **`__memcpy_impl` unwinding (string.c:278)** — the residual blocker for
+  `breadth_first_search` and `topological_ordering` (§5 Cluster 3). Backend/string-OM
+  robustness; deep.
 
 **Do NOT** machine-fix the scalability/timeout tests (quixbugs Cluster 2,
 humaneval C3) by loosening unwinding — `--no-unwinding-assertions` paired with a
