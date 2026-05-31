@@ -1,0 +1,288 @@
+# SV-COMP Issue Triage & Fix Plan
+
+**Last updated:** 2026-05-31
+**Scope:** every open issue carrying the `SV-COMP` label in `esbmc/esbmc`, plus recently-closed
+SV-COMP issues for context and de-duplication.
+**Reference binary:** `build/src/esbmc/esbmc`, ESBMC 8.3.0, master `95be952e8a`.
+**Verification policy:** ESBMC is a formal-verification tool. No unsound fix, heuristic
+workaround, silent behaviour change, or unverified assumption is shipped. Where an issue cannot
+be fixed *soundly* with a localized change, the blocker and the required design change are
+documented instead — see the per-issue sections below.
+
+This document is the running report requested in the triage task: it records analysed issues,
+skipped issues and the reason, duplicated work avoided, PRs opened, and remaining work.
+
+> **Evidence convention.** Each verdict below is attributed to its source: *CI* = the
+> 2026-05-30 SV-COMP 26 benchexec run quoted in the issue; *source* = direct inspection of the
+> benchmark `.i` and ESBMC source on master `95be952e8a`; *repro* = a local ESBMC run reproduced
+> in this environment. Claims not yet locally reproduced are marked accordingly rather than
+> asserted as reproduced.
+
+---
+
+## 1. Executive summary
+
+The SV-COMP backlog was triaged in two passes:
+
+* **Pass 1 (2026-05-29 → 05-30)** covered the 26 issues open at the time. It produced two merged
+  fixes and closed six issues as already-fixed-on-master. Detail in §4.
+* **Pass 2 (2026-05-31)** covers the five issues filed on 2026-05-30 from the *SV-COMP 26
+  benchexec run* (#4976–#4980), which were not in scope for Pass 1. Detail in §3.
+
+### Outcome of Pass 2 (the new batch #4976–#4980)
+
+| # | Benchmark | Property | Disposition | New PR? |
+|---|---|---|---|---|
+| 4976 | busybox `sync-1` | no-overflow | DOCUMENTED BLOCKER — needs format-aware printf OM | no (coupled, see below) |
+| 4977 | busybox `sync-2` | no-overflow | DOCUMENTED BLOCKER — same root cause as #4976 | no |
+| 4978 | busybox `whoami-incomplete-1` | no-overflow | DOCUMENTED BLOCKER — same root cause as #4976 | no |
+| 4979 | busybox `whoami-incomplete-2` | no-overflow | DOCUMENTED BLOCKER — same root cause as #4976 | no |
+| 4980 | ldv `turbografx.ko` | termination | ALREADY-ADDRESSED — overlaps open PR #4919 | no (avoid duplicate) |
+
+**Why no new PRs for this batch.** In both cases shipping a quick patch would be either *unsound*
+(#4976–#4979) or *duplicate work* (#4980):
+
+* #4976–#4979 are one root cause: in busybox's `bb_verror_msg` the formatted-output length comes
+  from `used = vasprintf(&msg, s, p)`, which ESBMC over-approximates as an unconstrained
+  non-negative `int`. That value then feeds the buffer-size computation
+  `realloc(msg, applet_len + used + strerr_len + msgeol_len + 3)`, and the signed-`int` addition
+  there is what the `--overflow-check` flags (source). The over-approximation is **sound**;
+  tightening it to match SV-COMP's `true` verdict requires a *format-aware* return-length model
+  for the printf family, a substantial operational-model change that must be validated for
+  soundness regressions across the whole no-overflow / string category. There is no sound
+  one-line fix. See §3.1 for the design.
+* #4980 is a spurious k-induction non-termination lasso — precisely the class that the **open**
+  PR #4919 (`[termination] ranking-function checker with supporting-invariant synthesis`) targets
+  (its measured results add +64 correct-true on the SV-COMP termination set). Opening a competing
+  PR would duplicate in-flight work. See §3.2.
+
+---
+
+## 2. Current SV-COMP landscape (label `SV-COMP`)
+
+### 2.1 Open issues
+
+| # | Title (short) | Category | Disposition |
+|---|---|---|---|
+| 4980 | termination false alarm: turbografx.ko | termination/k-induction | overlaps open PR #4919 (§3.2) |
+| 4979 | no-overflow false alarm: whoami-incomplete-2 | overflow/OM | blocker: printf OM (§3.1) |
+| 4978 | no-overflow false alarm: whoami-incomplete-1 | overflow/OM | blocker: printf OM (§3.1) |
+| 4977 | no-overflow false alarm: sync-2 | overflow/OM | blocker: printf OM (§3.1) |
+| 4976 | no-overflow false alarm: sync-1 | overflow/OM | blocker: printf OM (§3.1) |
+| 4611 | Witness GraphML returnFromFunction key + dup nodes | witness | needs witness validator (§4) |
+| 4439 | valid-memsafety false alarm: w83977af_ir.ko | memsafety/concurrency | research-grade LDV driver (§4) |
+| 4438 | unreach-call false alarm: log_6_safe | FP/k-induction | open PR #4480 (§4) |
+| 4432 | no-data-race false alarm: mcslock | concurrency | host-platform repro blocker (§4) |
+| 4427 | unreach-call false negative: megaraid_mm.ko | soundness | research-grade LDV driver (§4) |
+| 2797 | `[sv-comp] no body for function` | frontend/OM | broad libc-OM completeness gap (§4) |
+| 1520 | Witness not parseable by CPAchecker | witness | needs witness validator (§4) |
+| 1492 | Floating-point violation witness validation | witness | needs witness validator (§4) |
+| 1471 | Struct constant in witness not parseable | witness | needs witness validator (§4) |
+| 1470 | Overflow witness contains no assignment | witness | needs witness validator (§4) |
+| 1447 | SV-Benchmarks Incorrect Verdicts (umbrella) | umbrella | keep open — tracker |
+| 1440 | Wrapper script CHECK() statements individually | wrapper | latent; no live bug (§4) |
+
+Related non-`SV-COMP`-labelled trackers consulted for context: #2513 (umbrella "Current SV-COMP
+issues" — referenced by the whole #4976–#4980 batch), #2928 (data-race incorrects), #1949
+(memory leaks in svcomp concurrency).
+
+### 2.2 Recently closed (last ~weeks) — confirms Pass-1 work landed
+
+Fixed-and-merged or closed as fixed-on-master: #4975, #4440, #4441, #4437, #4436, #4435, #4434,
+#4433, #4431, #4430, #4429, #4428, #4426, #4425, #4424, #4423, #2148, #1521, #631, #4634, #4936.
+
+Merged fix PRs from Pass 1: **#4955** (escaped-stack-local data race; closes #4424, #4425) and
+**#4961** (atomic-element race exclusion; closes #4431).
+
+---
+
+## 3. Pass 2 — deep analysis of the new batch (#4976–#4980)
+
+All five were filed from the
+[2026-05-30 SV-COMP 26 benchexec run](https://github.com/esbmc/esbmc/actions/runs/26680912297),
+ESBMC 8.3.0 commit `911d1790`. Each is a *false alarm* (ground truth `true`, ESBMC reports
+`false`).
+
+### 3.1 #4976 / #4977 / #4978 / #4979 — no-overflow false alarm in busybox `bb_verror_msg`
+
+**Status: tightly coupled (one function, one root cause). One future PR, not four. DOCUMENTED
+BLOCKER — sound fix requires a format-aware printf-family OM.**
+
+**Benchmarks.** `c/busybox-1.22.0/{sync-1,sync-2,whoami-incomplete-1,whoami-incomplete-2}.i`.
+Each is run (per the issue) with:
+
+```
+esbmc --no-div-by-zero-check --force-malloc-success --force-realloc-success --state-hashing \
+      --add-symex-value-sets --no-align-check --k-step 2 --floatbv --unlimited-k-steps \
+      --no-vla-size-check <bench>.i --64 --no-pointer-check --no-bounds-check --overflow-check \
+      --no-assertions --incremental-bmc
+```
+
+**CI verdict (from each issue):** `VERIFICATION FAILED` → `Bug found (k = 11)` → `FALSE_OVERFLOW`,
+with the violated property being `arithmetic overflow on add` in `bb_verror_msg`.
+*Reproduced locally (repro) for `sync-1` on master `95be952e8a`: `arithmetic overflow on add` →
+`VERIFICATION FAILED` → `Bug found (k = 11)`, matching the CI log. The other three benchmarks call
+the same `bb_verror_msg` with the identical overflow expression (source), so the same root cause
+applies. (The run also emits non-fatal `conflicting definition for variable 'stdin/stdout/stderr'`
+notes — the busybox `.i` redeclares the stdio globals against ESBMC's `stdio.h` model; this is
+noise, not the overflow cause.)*
+
+**Root cause (source).** The flagged code in `bb_verror_msg` (sync-1.i around line 1802–1822) is:
+
+```c
+used = vasprintf(&msg, s, p);          /* formatted-output length; ESBMC: unconstrained int>=0 */
+if (used < 0) return;                   /* filters negatives -> used in [0, INT_MAX]            */
+applet_len = (int)(strlen(applet_name) + 2);
+strerr_len = strerr ? (int)strlen(strerr) : 0;
+msgeol_len = (int)strlen(msg_eol);
+/* overflow flagged on the signed-int sum used as the realloc size: */
+msg1 = realloc(msg, (unsigned long)(applet_len + used + strerr_len + msgeol_len + 3));
+```
+
+ESBMC has no precise return-length model for the printf allocation/length family (a search of
+`src/c2goto/library/` finds an `snprintf`/`vsnprintf` model only under `solidity/`), so
+`vasprintf` yields an unconstrained non-negative `int`. With `used` free to approach `INT_MAX`,
+the signed-`int` sum `applet_len + used + strerr_len + msgeol_len + 3` overflows. The four
+benchmarks differ only in which sub-add of this expression is reported first; the originating term
+is always the `vasprintf` return.
+
+**Why this is *not* a quick fix (soundness).** The model's over-approximation is **correct**:
+`vasprintf`/`vsnprintf(NULL,0,…)` returns "the number of characters that *would* be written",
+which for an arbitrary format string and arguments is genuinely unbounded. Any blanket tightening
+(e.g. `assume(used < INT_MAX/2)`) would be **unsound** — it would suppress real overflows in
+programs where the format legitimately produces a long string, i.e. introduce false negatives, the
+worst outcome for a verifier. SV-COMP's `true` verdict holds only because the *concrete* format
+strings in these benchmarks produce short output, which ESBMC cannot know without analysing the
+format.
+
+**Required design change (the real fix, for a dedicated, carefully-validated PR).**
+A format-aware return-length model for the printf family (`printf`/`snprintf`/`vsnprintf`/
+`asprintf`/`vasprintf`):
+
+1. When the format string is a *constant* (a string literal reachable through constant
+   propagation / value-set analysis), compute a sound length expression by walking the format:
+   literal characters contribute their count; each conversion specifier contributes a sound bound
+   from its argument's type/value (`%d` ≤ 11 for 32-bit, `%s` ≤ `strlen(arg)` — itself bounded by
+   the argument object size — width/precision fields respected).
+2. When the format is *not* statically known, fall back to the current nondet behaviour (sound
+   over-approximation) — never tighten in the unknown case.
+3. The length-query / allocating forms return that computed (or over-approximated) length; the
+   bounded-write form additionally clamps to the destination size.
+
+This is a real operational-model project, not a localized patch. It **must** be regression-tested
+against the entire `--overflow-check` + string-handling corpus to prove no new false negative is
+introduced before it can be merged — the mandatory soundness gate for any printf-OM change. It
+also chips at #2797 (missing libc bodies).
+
+**Recommended interim action:** keep the four issues open, link them to umbrella #2513, and
+annotate them as "blocked on format-aware printf OM (single shared root cause)". When implemented,
+one PR closes all four with `Fixes #4976`, `Fixes #4977`, `Fixes #4978`, `Fixes #4979`.
+
+### 3.2 #4980 — termination false alarm in ldv `turbografx.ko`
+
+**Status: ALREADY-ADDRESSED by open PR #4919. Do not open a duplicate PR.**
+
+**Benchmark / flags (from the issue).**
+`c/ldv-linux-3.4-simple/43_1a_…turbografx.ko-…cil.out.i`, run with
+`--termination --max-inductive-step 3 --interval-analysis` (plus the common SV-COMP flags).
+
+**CI verdict (from the issue):** the forward condition fails to prove the property, then the
+inductive step at `k = 3` reports `Inductive step shows a non-terminating execution (k = 3)` →
+`FALSE_TERMINATION` on loop 8 in `tgfx_init` (line 3123).
+
+**Root cause class.** Standard k-induction termination incompleteness: the inductive step finds a
+*spurious* lasso (a cyclic state that looks non-terminating) because at `k = 3` it lacks a ranking
+function / supporting invariant that would prove the loop's variant decreases. The loop in fact
+terminates; k-induction at this depth cannot certify it, so it reports a counterexample to
+termination.
+
+**De-duplication.** Open PR **#4919** `[termination] ranking-function checker with
+supporting-invariant synthesis` is aimed squarely at this class — it runs a ranking-function
+prover before k-induction's havoc and, per its own measurement on the full SV-COMP termination set
+(2413 benchmarks), raises correct-true from 785 to 849 (+64) with no increase in wrong verdicts.
+Opening a separate fix would duplicate that in-flight work.
+
+**Recommended action:** keep #4980 open; once #4919 lands, re-run the benchmark and, if resolved,
+close #4980 referencing #4919 (and add it as a regression case under that PR's suite). If #4919
+does *not* resolve it, re-triage as a residual termination-precision gap with a fresh reproducer.
+
+---
+
+## 4. Pass 1 dispositions (carried forward, still valid on 2026-05-31)
+
+Verified against current open/closed state; all consistent.
+
+* **Merged fixes:** #4955 (closes #4424, #4425 — escaped-stack-local & funptr data-race false
+  negatives); #4961 (closes #4431 — atomic-element race false alarm).
+* **Already addressed by an existing open PR:** #4438 → PR #4480
+  (`[interval-analysis] enforce float interval bounds in k-induction base case`).
+* **Closed as fixed-on-master:** #4437, #4428, #4429, #4430, #4423, #4434, #4433, #4435, #4436,
+  #4426, #4440, #4441, #2148, #1521, #631, #4634, #4936, #4975.
+* **Witness-format issues — blocked on an SV-COMP witness validator (CPAchecker):** #4611, #1470,
+  #1471, #1492, #1520. ESBMC emits witness values the validator cannot currently parse; fixing
+  safely requires validating the emitted format in a validator-in-the-loop, which is not available
+  in this environment. (For #4611 specifically, the `returnFromFunction` GraphML key ESBMC already
+  emits is spec-conformant and must **not** be renamed.) Related in-flight: open PRs #4940 (witness
+  pre-validation) and #4945 (reach-error handling).
+* **Research-grade LDV drivers (large, deep concurrency/memory/termination interactions):** #4439
+  (valid-memsafety false alarm), #4427 (unreach-call false negative — soundness). Not a localized
+  fix.
+* **Host-platform repro blocker:** #4432 (mcslock / libvsync) — the preprocessed input uses x86-only
+  `__attribute__((regparm(1)))` that the aarch64 macOS host clang rejects; needs an x86 Linux host
+  to triage.
+* **Broad completeness gap:** #2797 (`no body for function`) — missing libc operational models
+  across coreutils; not a single fix. Overlaps the printf-family gap in §3.1.
+* **Latent / no live bug:** #1440 (wrapper CHECK() handling — `valid-memsafety-ub.prp` never
+  adopted).
+* **Umbrella tracker:** #1447 — keep open.
+
+---
+
+## 5. Running report
+
+### Analysed
+* Pass 1: 26 issues (see §4 and the project history for the two merged PRs).
+* Pass 2: #4976, #4977, #4978, #4979, #4980 — root causes identified from the issue CI logs and
+  direct source inspection (local re-run pending in this environment; see §3.1).
+
+### PRs opened
+* Pass 1: #4955 (merged), #4961 (merged).
+* Pass 2: **none** — see §1 for why (no sound localized fix for #4976–#4979; #4980 duplicates open
+  PR #4919).
+
+### Duplicated work avoided
+* #4980 not re-fixed — overlaps open PR #4919.
+* #4438 not re-fixed — covered by open PR #4480.
+* #4976–#4979 treated as one coupled root cause rather than four separate patches.
+
+### Skipped / deferred and why
+* #4976–#4979: deferred pending a format-aware printf-family OM (§3.1). No sound quick fix; a
+  blanket bound would introduce false negatives.
+* Witness issues (#4611, #1470, #1471, #1492, #1520): require a witness validator not available
+  here.
+* #4432: host-platform (x86) repro blocker.
+* #4439, #4427: research-grade LDV drivers.
+* #2797: broad libc-OM gap, not a single fix.
+
+### Remaining work (recommended, in priority order)
+1. **Format-aware printf-family OM** (`src/c2goto/library/`) closing #4976–#4979 in one PR; gated
+   on a full `--overflow-check` soundness-regression run (no new false negatives). Also chips at
+   #2797.
+2. **Validate #4980 against PR #4919** once it lands; close or re-triage.
+3. **Witness validator integration** to unblock #4611, #1470, #1471, #1492, #1520 (cf. open
+   PRs #4940, #4945).
+4. **x86 Linux triage** for #4432.
+
+---
+
+## 6. Methodology notes
+
+* Each disposition is backed by the issue's benchexec CI log and/or direct inspection of the
+  benchmark and ESBMC source on master `95be952e8a`, or by an explicit, cited reason it could not
+  be reproduced/fixed in this environment. Verdicts not locally re-run are marked as such rather
+  than asserted as reproduced.
+* No code change was shipped on an unverified basis. Where the sound fix is a non-trivial OM
+  design (printf family), the design is documented for a dedicated PR that can be validated for
+  soundness before merge, per the project's "correctness over speed" mandate.
+* Benchmarks were fetched read-only from the public sv-benchmarks repository and treated as
+  untrusted input.
