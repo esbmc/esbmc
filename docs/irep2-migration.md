@@ -1899,10 +1899,12 @@ further phase is taken up.*
    tuple gains both) and drops component `#access` (Optional). They are
    therefore **F-P5 seam-attribute cases deferred to Phase 4.5**, not clean
    4.3 internal migrations. The **Callable** builder (an empty-argument
-   `code_typet`) is likewise non-byte-identical (back-migration adds an
-   `arguments` sub) and migrates with the **function-type** family once
-   synthesized argument names are supplied. The lossless struct case is the
-   `complex` struct (3-arg components + `tag` already present, §15.7).
+   `code_typet`) is *not* raw byte-identical either (back-migration adds an
+   `arguments` sub the source lacks) but **was migrated** — it is
+   **IREP2-equivalent** (`migrate_type` canonicalises the empty `arguments`,
+   so the type symex consumes matches the legacy form) and **GOTO-identical**
+   (goto-convert normalises the leftover sub), §15.7. The lossless struct case
+   is the `complex` struct (3-arg components + `tag` already present, §15.7).
 
 ### Phase 4.4 — Migrate **expression** construction to `expr2tc` (internal)
 7. Rewrite the expression converters to build `expr2tc` via typed factories
@@ -2333,7 +2335,7 @@ already carries every field `migrate_type_back` re-emits:
 | `complex` struct (3-arg components + `tag`) | ✅ | `tag`/`pretty_name` already present |
 | **Tuple** struct (2-arg components, **tagless**) | ❌ | `migrate_type_back` **adds** an empty `tag` **and** an empty `pretty_name` per component |
 | **Optional** struct (`set_access("public")`) | ❌ | `migrate_type` carries only types/names/pretty-names/tag/packed — component **`#access` is dropped** |
-| **Callable** (`pointer_typet(code_typet)`, **no args**) | ❌ | `migrate_type_back` **adds** an `arguments` sub the source lacks |
+| **Callable** (`pointer_typet(code_typet)`, **no args**) | ❌ raw, ✅ IREP2 | `migrate_type_back` **adds** an empty `arguments` sub the source lacks; `migrate_type` canonicalises it away, so the IREP2 type is identical (migrated — see below) |
 
 **Consequences for the family order (§7 Phase 4.3).**
 
@@ -2350,10 +2352,25 @@ already carries every field `migrate_type_back` re-emits:
   re-attaches seam attributes), not a Phase 4.3 internal migration. The only
   lossless `type_handler` struct is `complex` (but it is a cached header-inline
   free function feeding expression construction, so it tracks with 4.4/4.5).
-- The **Callable** builder migrates with the **function-type** family once
-  synthesized argument names exist (§7 already flags the `code_type2t`
-  `args.size() == argument_names.size()` requirement).
+- The **Callable** builder **was migrated** (commit `[python] Phase 4.3:
+  migrate Callable function-pointer type to IREP2`): a no-argument
+  `code_type2tc` (empty arg/name vectors satisfy the `args.size() ==
+  argument_names.size()` invariant) wrapped in `pointer_type2tc`, lowered at
+  the seam. It is the one pointer/function-family case that is **not raw
+  byte-identical** — the legacy source never touched `code_typet::arguments()`,
+  so `migrate_type_back` adds an empty `arguments` sub — but it **is
+  IREP2-equivalent** (`migrate_type` canonicalises the empty `arguments`, so
+  `migrate_type(migrated) == migrate_type(legacy)`, the harness's documented
+  level-1 contract) and **GOTO-identical** (goto-convert normalises the
+  leftover sub; verified end-to-end on both solvers, all 10
+  `regression/python/callable*` tests pass). This is the precedent that raw
+  byte-equality is a *bonus* over the stated IREP2-equivalence bar, and that a
+  field `migrate_type_back` adds can still be behaviour-inert once it reaches
+  the GOTO program. Real-parameter function *symbol* types (≥1 argument, built
+  in the converter, not `type_handler`) already carry the `arguments` sub and
+  are raw byte-identical; they migrate with the Phase 4.4/4.5 symbol work.
 
 Reproduce: extend `irep2_type_roundtrip_test` with
-`migrate_type_back(migrate_type(t)) == t` over each shape above; the ❌ rows
-fail, the ✅ rows pass.
+`migrate_type_back(migrate_type(t)) == t` (raw) and `migrate_type(migrated) ==
+migrate_type(legacy)` (IREP2) over each shape above; the raw ❌ rows fail the
+first but the Callable row passes the second.
