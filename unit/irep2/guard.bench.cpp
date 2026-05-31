@@ -27,6 +27,23 @@ guard2tc build_guard(unsigned n, const std::string &prefix = "g")
   return g;
 }
 
+expr2tc expected_guard_expr(const guard2tc &g)
+{
+  if (g.guard_list.empty())
+    return gen_true_expr();
+
+  auto it = g.guard_list.begin();
+  expr2tc res = *it++;
+  while (it != g.guard_list.end())
+    res = and2tc(res, *it++);
+  return res;
+}
+
+void require_guard_invariant(const guard2tc &g)
+{
+  REQUIRE(g.as_expr() == expected_guard_expr(g));
+}
+
 // Build two guards that share `shared` leading conjuncts then diverge.
 // Used to exercise operator|='s set-intersection/difference factoring.
 std::pair<guard2tc, guard2tc>
@@ -132,6 +149,43 @@ TEST_CASE("guard2tc set-op ordering", "[probe]")
   guard2tc subsumed = extended;
   subsumed |= prefix;
   REQUIRE(subsumed.guard_list.size() == 2);
+}
+
+TEST_CASE("guard2tc set ops keep cached base in sync", "[probe]")
+{
+  config.ansi_c.word_size = 32;
+
+  guard2tc base;
+  base.add(sym("a"));
+  base.add(sym("b"));
+
+  guard2tc left = base;
+  left.add(sym("left"));
+  guard2tc right = base;
+  right.add(sym("right"));
+
+  guard2tc disj = left;
+  disj |= right;
+  require_guard_invariant(disj);
+  REQUIRE(disj.as_expr() == expected_guard_expr(disj));
+
+  guard2tc diff = left;
+  diff -= base;
+  require_guard_invariant(diff);
+  REQUIRE(diff.guard_list.size() == 1);
+  REQUIRE(diff.guard_list.front() == sym("left"));
+
+  guard2tc independent_left;
+  independent_left.add(sym("a"));
+  independent_left.add(sym("b"));
+  independent_left.add(sym("left"));
+  guard2tc independent_right;
+  independent_right.add(sym("a"));
+  independent_right.add(sym("b"));
+
+  independent_left |= independent_right;
+  require_guard_invariant(independent_left);
+  REQUIRE(independent_left.guard_list == independent_right.guard_list);
 }
 
 TEST_CASE("guard2tc microbench: incremental construction", "[bench]")

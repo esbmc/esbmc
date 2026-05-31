@@ -73,6 +73,7 @@ private:
    *  after operator-= / operator|= installs a fresh list. Asserts that
    *  the base is nil (callers reset it first). */
   void build_guard_expr();
+  void set_guard_list_and_rebuild(std::vector<expr2tc> &&new_guard_list);
 
   friend guard2tc &operator-=(guard2tc &g1, const guard2tc &g2);
   friend guard2tc &operator|=(guard2tc &g1, const guard2tc &g2);

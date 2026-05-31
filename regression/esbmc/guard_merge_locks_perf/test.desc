@@ -1,0 +1,5 @@
+CORE
+main.c
+--unwind 40
+unwinding assertion loop 3
+^VERIFICATION FAILED$

@@ -3,6 +3,125 @@
 #include <irep2/irep2_guard.h>
 #include <irep2/irep2_utils.h>
 
+namespace
+{
+bool same_cached_expr(const guard2tc &g1, const guard2tc &g2)
+{
+  return static_cast<const expr2tc &>(g1).get() ==
+         static_cast<const expr2tc &>(g2).get();
+}
+
+const expr2t *expr_ptr(const expr2tc &expr)
+{
+  return expr.get();
+}
+
+std::size_t common_pointer_prefix_size(const guard2tc &g1, const guard2tc &g2)
+{
+  std::size_t prefix_size = 0;
+  const std::size_t min_size =
+    std::min(g1.guard_list.size(), g2.guard_list.size());
+  while (prefix_size < min_size && expr_ptr(g1.guard_list[prefix_size]) ==
+                                     expr_ptr(g2.guard_list[prefix_size]))
+    ++prefix_size;
+  return prefix_size;
+}
+
+#ifndef NDEBUG
+// cached_prefix_expr decides the prefix relationship from the cached
+// and-chain base alone (a pointer walk down side_1). That is sound only
+// because build_guard_expr produces a canonical left-leaning chain, so
+// base equality implies the flattened conjunct sequences match
+// element-wise. This predicate makes that implicit invariant explicit:
+// callers that slice guard_list at prefix.size() on the strength of a
+// cached_prefix_expr hit assert it, turning a hypothetical hash-cons
+// aliasing corruption into a loud test failure instead of a silently
+// wrong path condition. Debug-only; compiled out of release builds.
+bool guard_list_prefix_matches(const guard2tc &prefix, const guard2tc &guard)
+{
+  if (prefix.guard_list.size() > guard.guard_list.size())
+    return false;
+  for (std::size_t i = 0; i < prefix.guard_list.size(); ++i)
+    if (expr_ptr(prefix.guard_list[i]) != expr_ptr(guard.guard_list[i]))
+      return false;
+  return true;
+}
+#endif
+
+bool cached_prefix_expr(
+  const guard2tc &prefix,
+  const guard2tc &guard,
+  expr2tc &prefix_expr)
+{
+  const std::size_t prefix_size = prefix.guard_list.size();
+  const std::size_t guard_size = guard.guard_list.size();
+  if (prefix_size > guard_size)
+    return false;
+
+  if (prefix_size == 0)
+    return true;
+
+  if (prefix_size == guard_size)
+  {
+    if (!same_cached_expr(prefix, guard))
+      return false;
+    prefix_expr = prefix;
+    assert(!is_nil_expr(prefix_expr));
+    return true;
+  }
+
+  expr2tc cur = guard;
+  for (std::size_t i = guard_size - prefix_size; i != 0; --i)
+  {
+    if (!is_and2t(cur))
+      return false;
+    cur = to_and2t(cur).side_1;
+  }
+
+  if (
+    static_cast<const expr2tc &>(cur).get() !=
+    static_cast<const expr2tc &>(prefix).get())
+    return false;
+
+  prefix_expr = cur;
+  assert(!is_nil_expr(prefix_expr));
+  return true;
+}
+
+bool cached_prefix_expr_at(
+  const guard2tc &guard,
+  const std::size_t prefix_size,
+  expr2tc &prefix_expr)
+{
+  const std::size_t guard_size = guard.guard_list.size();
+  if (prefix_size > guard_size)
+    return false;
+
+  if (prefix_size == 0)
+  {
+    prefix_expr = expr2tc();
+    return true;
+  }
+
+  if (prefix_size == guard_size)
+  {
+    prefix_expr = guard;
+    return true;
+  }
+
+  expr2tc cur = guard;
+  for (std::size_t i = guard_size - prefix_size; i != 0; --i)
+  {
+    if (!is_and2t(cur))
+      return false;
+    cur = to_and2t(cur).side_1;
+  }
+
+  prefix_expr = cur;
+  return true;
+}
+} // namespace
+
 expr2tc guard2tc::as_expr() const
 {
   // Mutators maintain the expr2tc base so it already matches the
@@ -113,6 +232,13 @@ void guard2tc::build_guard_expr()
   expr2tc::operator=(res);
 }
 
+void guard2tc::set_guard_list_and_rebuild(std::vector<expr2tc> &&new_guard_list)
+{
+  clear();
+  guard_list = std::move(new_guard_list);
+  build_guard_expr();
+}
+
 void guard2tc::append(const guard2tc &other)
 {
   // Reserve up-front so the per-add() push_back doesn't trigger a
@@ -127,6 +253,98 @@ void guard2tc::append(const guard2tc &other)
 
 guard2tc &operator-=(guard2tc &g1, const guard2tc &g2)
 {
+  if (g1.is_true() || g2.is_true())
+    return g1;
+
+  std::size_t prefix_size = 0;
+  const std::size_t min_size =
+    std::min(g1.guard_list.size(), g2.guard_list.size());
+  while (prefix_size < min_size && expr_ptr(g1.guard_list[prefix_size]) ==
+                                     expr_ptr(g2.guard_list[prefix_size]))
+    ++prefix_size;
+
+  if (prefix_size != 0)
+  {
+    if (prefix_size == g1.guard_list.size())
+    {
+      g1.make_true();
+      return g1;
+    }
+
+    if (prefix_size == g2.guard_list.size())
+    {
+      std::vector<expr2tc> diff(
+        g1.guard_list.begin() + prefix_size, g1.guard_list.end());
+      g1.set_guard_list_and_rebuild(std::move(diff));
+      return g1;
+    }
+
+    std::unordered_set<const expr2t *> g2_suffix;
+    g2_suffix.reserve(g2.guard_list.size() - prefix_size);
+    for (auto it = g2.guard_list.begin() + prefix_size;
+         it != g2.guard_list.end();
+         ++it)
+      g2_suffix.insert(expr_ptr(*it));
+
+    std::unordered_set<expr2tc, irep2_hash> g2_suffix_exprs;
+    bool built_g2_suffix_exprs = false;
+
+    std::vector<expr2tc> diff;
+    diff.reserve(g1.guard_list.size() - prefix_size);
+    for (auto it = g1.guard_list.begin() + prefix_size;
+         it != g1.guard_list.end();
+         ++it)
+    {
+      if (g2_suffix.find(expr_ptr(*it)) != g2_suffix.end())
+        continue;
+
+      if (!built_g2_suffix_exprs)
+      {
+        g2_suffix_exprs.reserve(g2.guard_list.size() - prefix_size);
+        g2_suffix_exprs.insert(
+          g2.guard_list.begin() + prefix_size, g2.guard_list.end());
+        built_g2_suffix_exprs = true;
+      }
+
+      if (g2_suffix_exprs.find(*it) == g2_suffix_exprs.end())
+        diff.push_back(*it);
+    }
+
+    g1.set_guard_list_and_rebuild(std::move(diff));
+    return g1;
+  }
+
+  // Hot symex phi path: tmp_guard is commonly a guard that was copied
+  // from cur_state->guard and then extended by one branch conjunct. The
+  // cached and-chain preserves that copy/append relation structurally:
+  //   extended.base == and2tc(prefix.base, new_conjunct)
+  // Detect it before the hash-set fallback so g1 -= prefix builds only
+  // the small suffix instead of scanning and rebuilding the whole guard.
+  expr2tc prefix_expr;
+  if (cached_prefix_expr(g2, g1, prefix_expr))
+  {
+    // g2 is a cached prefix of g1: its conjuncts occupy g1.guard_list's
+    // first |g2| positions, so the difference is g1's suffix.
+    assert(guard_list_prefix_matches(g2, g1));
+
+    if (g1.guard_list.size() == g2.guard_list.size())
+    {
+      g1.make_true();
+      return g1;
+    }
+
+    std::vector<expr2tc> diff(
+      g1.guard_list.begin() + g2.guard_list.size(), g1.guard_list.end());
+    g1.set_guard_list_and_rebuild(std::move(diff));
+    return g1;
+  }
+
+  if (cached_prefix_expr(g1, g2, prefix_expr))
+  {
+    g1.make_true();
+    return g1;
+  }
+
   // Set difference by hashed membership: result is conjuncts in g1
   // not in g2. Order-independent, so it stays correct regardless of
   // how the two guards' lists were built up (which std::set_difference
@@ -141,9 +359,7 @@ guard2tc &operator-=(guard2tc &g1, const guard2tc &g2)
     if (g2_set.find(c) == g2_set.end())
       diff.push_back(c);
 
-  g1.clear();
-  g1.guard_list.swap(diff);
-  g1.build_guard_expr();
+  g1.set_guard_list_and_rebuild(std::move(diff));
   return g1;
 }
 
@@ -158,51 +374,203 @@ guard2tc &operator|=(guard2tc &g1, const guard2tc &g2)
     return g1;
   }
 
-  // g1 || g2 == common && (g1' || g2'), where
-  //   common = g1 ∩ g2  (as conjunct sets),
-  //   g1'    = g1 \ common,
-  //   g2'    = g2 \ common.
-  // Hash-set membership rather than std::set_* because guard_list is
-  // in insertion order, not sorted. Build g2_set once, then mutate it
-  // as we scan g1: `erase(c)` returns 1 iff c is in common, in which
-  // case the matched entry is removed from g2_set so what remains is
-  // exactly g2's residual set. One set construction covers all three
-  // outputs (common, new_g1, new_g2).
-  std::unordered_set<expr2tc, irep2_hash> g2_set(
-    g2.guard_list.begin(), g2.guard_list.end());
+  // Fast structural subsumption before the set-algebra fallback. Guards
+  // grown by copy-then-add share the old cached and-chain as the left
+  // operand of the new chain, so ordered prefix cases can be detected by
+  // walking only the appended suffix.
+  expr2tc prefix_expr;
+  if (cached_prefix_expr(g1, g2, prefix_expr))
+    return g1;
 
+  if (cached_prefix_expr(g2, g1, prefix_expr))
+  {
+    // g2 ⊆ g1 (g2 is a cached prefix), so g1 ⇒ g2 and g1 || g2 ≡ g2.
+    assert(guard_list_prefix_matches(g2, g1));
+    std::vector<expr2tc> prefix_list(g2.guard_list);
+    g1.set_guard_list_and_rebuild(std::move(prefix_list));
+    return g1;
+  }
+
+  std::size_t prefix_size = common_pointer_prefix_size(g1, g2);
+
+  if (prefix_size != 0)
+  {
+    expr2tc prefix_expr;
+    if (cached_prefix_expr_at(g1, prefix_size, prefix_expr))
+    {
+      if (prefix_size == g1.guard_list.size())
+        return g1;
+
+      if (prefix_size == g2.guard_list.size())
+      {
+        std::vector<expr2tc> prefix_list(
+          g1.guard_list.begin(), g1.guard_list.begin() + prefix_size);
+        g1.set_guard_list_and_rebuild(std::move(prefix_list));
+        return g1;
+      }
+
+      std::unordered_set<const expr2t *> g2_suffix;
+      g2_suffix.reserve(g2.guard_list.size() - prefix_size);
+      for (auto it = g2.guard_list.begin() + prefix_size;
+           it != g2.guard_list.end();
+           ++it)
+        g2_suffix.insert(expr_ptr(*it));
+
+      std::vector<expr2tc> common_suffix;
+      std::vector<expr2tc> new_g1_list;
+      common_suffix.reserve(g1.guard_list.size() - prefix_size);
+      new_g1_list.reserve(g1.guard_list.size() - prefix_size);
+      for (auto it = g1.guard_list.begin() + prefix_size;
+           it != g1.guard_list.end();
+           ++it)
+      {
+        if (g2_suffix.erase(expr_ptr(*it)))
+          common_suffix.push_back(*it);
+        else
+          new_g1_list.push_back(*it);
+      }
+
+      if (new_g1_list.empty())
+        return g1;
+
+      std::vector<expr2tc> new_g2_list;
+      new_g2_list.reserve(g2_suffix.size());
+      for (auto it = g2.guard_list.begin() + prefix_size;
+           it != g2.guard_list.end();
+           ++it)
+        if (g2_suffix.count(expr_ptr(*it)))
+          new_g2_list.push_back(*it);
+
+      std::vector<expr2tc> merged_list(
+        g1.guard_list.begin(), g1.guard_list.begin() + prefix_size);
+      g1.set_guard_list_and_rebuild(std::move(merged_list));
+      for (const auto &c : common_suffix)
+        g1.add(c);
+
+      if (new_g2_list.empty())
+        return g1;
+
+      guard2tc new_g1;
+      new_g1.guard_list.swap(new_g1_list);
+      new_g1.build_guard_expr();
+
+      guard2tc new_g2;
+      new_g2.guard_list.swap(new_g2_list);
+      new_g2.build_guard_expr();
+
+      expr2tc or_expr = or2tc(new_g1.as_expr(), new_g2.as_expr());
+      if (new_g1.is_single_symbol() && new_g2.is_single_symbol())
+        simplify(or_expr);
+
+      g1.add(or_expr);
+      return g1;
+    }
+  }
+
+  // g1 || g2 == common && (g1' || g2'), where common is the conjunct
+  // intersection and g1'/g2' are the residuals. Guard conjuncts are
+  // hash-consed, so pointer identity is the cheap membership key here:
+  // it avoids re-hashing long expression trees on every loop-back merge.
   guard2tc common;
   guard2tc new_g1;
-  common.guard_list.reserve(std::min(g1.guard_list.size(), g2_set.size()));
-  new_g1.guard_list.reserve(g1.guard_list.size());
-  for (const auto &c : g1.guard_list)
-  {
-    if (g2_set.erase(c))
-      common.guard_list.push_back(c);
-    else
-      new_g1.guard_list.push_back(c);
-  }
-  common.build_guard_expr();
-  new_g1.build_guard_expr();
-
   guard2tc new_g2;
-  new_g2.guard_list.reserve(g2_set.size());
-  for (const auto &c : g2.guard_list)
-    if (g2_set.count(c))
-      new_g2.guard_list.push_back(c);
-  new_g2.build_guard_expr();
+  common.guard_list.reserve(
+    std::min(g1.guard_list.size(), g2.guard_list.size()));
+  new_g1.guard_list.reserve(g1.guard_list.size());
+  new_g2.guard_list.reserve(g2.guard_list.size());
+
+  if (g2.guard_list.size() <= g1.guard_list.size())
+  {
+    std::unordered_set<const expr2t *> g2_remaining;
+    g2_remaining.reserve(g2.guard_list.size());
+    for (const auto &c : g2.guard_list)
+      g2_remaining.insert(expr_ptr(c));
+
+    for (const auto &c : g1.guard_list)
+    {
+      if (g2_remaining.erase(expr_ptr(c)))
+        common.guard_list.push_back(c);
+      else
+        new_g1.guard_list.push_back(c);
+    }
+
+    for (const auto &c : g2.guard_list)
+      if (g2_remaining.count(expr_ptr(c)))
+        new_g2.guard_list.push_back(c);
+  }
+  else
+  {
+    std::unordered_set<const expr2t *> g1_remaining;
+    g1_remaining.reserve(g1.guard_list.size());
+    for (const auto &c : g1.guard_list)
+      g1_remaining.insert(expr_ptr(c));
+
+    for (const auto &c : g2.guard_list)
+      if (!g1_remaining.erase(expr_ptr(c)))
+        new_g2.guard_list.push_back(c);
+
+    for (const auto &c : g1.guard_list)
+    {
+      if (g1_remaining.count(expr_ptr(c)))
+        new_g1.guard_list.push_back(c);
+      else
+        common.guard_list.push_back(c);
+    }
+  }
+
+  if (common.is_true())
+  {
+    // Pointer identity is the fast path for symex guards, but preserve the
+    // historical set semantics for independently-created equal expressions.
+    std::unordered_set<expr2tc, irep2_hash> g2_set(
+      g2.guard_list.begin(), g2.guard_list.end());
+
+    new_g1.guard_list.clear();
+    new_g2.guard_list.clear();
+    for (const auto &c : g1.guard_list)
+    {
+      if (g2_set.erase(c))
+        common.guard_list.push_back(c);
+      else
+        new_g1.guard_list.push_back(c);
+    }
+
+    for (const auto &c : g2.guard_list)
+      if (g2_set.count(c))
+        new_g2.guard_list.push_back(c);
+  }
 
   // If either residual is empty, that side equals `common` itself, so
   // the disjunction reduces to `common || (common && other) ≡ common`.
   // Skip the or2tc construction and chain-extend entirely. Covers the
   // pathological case where one guard is a prefix of the other (a
   // common pattern at branch joins where one side adds extra
-  // conjuncts), and the identical-set case.
-  if (new_g1.is_true() || new_g2.is_true())
+  // conjuncts), and the identical-set case. This is the hot path at
+  // loop-back merges: one guard is the other plus a fresh branch
+  // conjunct, so exactly one residual is empty.
+  //
+  // The whole point of this branch is to avoid an O(N) rebuild. When
+  // `common` has the same conjuncts as `g1` (i.e. nothing went into
+  // new_g1), g1's cached and-chain is already correct — keep it instead
+  // of rebuilding common's chain from scratch. That turns the dominant
+  // merge case from O(N) to O(1) on the base, which is what makes deep
+  // unwinding scale linearly rather than quadratically.
+  if (new_g1.is_true())
+    return g1; // common == g1, base unchanged
+
+  if (new_g2.is_true())
   {
+    // common == g2; g1 must drop the conjuncts that were unique to it.
+    // common is a strict subset of g1, so its chain is shorter — build
+    // it once and install.
+    common.build_guard_expr();
     g1 = std::move(common);
     return g1;
   }
+
+  common.build_guard_expr();
+  new_g1.build_guard_expr();
+  new_g2.build_guard_expr();
 
   // When both residuals are atomic, the OR may simplify trivially
   // (e.g. `a || !a` → true); ask the simplifier.
