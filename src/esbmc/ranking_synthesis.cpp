@@ -64,7 +64,8 @@ struct ranking_loopt
 // loop recognizer (for dereference substitution and not yet measure
 // derivation respectively) but are defined further down alongside the
 // other transition-relation helpers. reaches_head is reused by the
-// dominance-aware prefix scan below.
+// dominance-aware prefix scan below. touches_memory is used by
+// try_inline_pure_helper before its definition.
 expr2tc
 subst_parallel(const expr2tc &e, const std::map<expr2tc, expr2tc> &post);
 bool reaches_head(
@@ -73,6 +74,9 @@ bool reaches_head(
   goto_programt::const_targett end_it);
 void flatten_and(const expr2tc &e, std::vector<expr2tc> &out);
 expr2tc apply_body(const expr2tc &e, const std::vector<assignt> &body);
+bool touches_memory(
+  const expr2tc &e,
+  const std::set<expr2tc> &exempt_derefs = {});
 
 /// Is @p e a relational comparison (>, >=, <, <=) — the guard shape we
 /// can derive a difference measure from?
@@ -89,6 +93,102 @@ bool is_relational(const expr2tc &e)
 bool is_disequality(const expr2tc &e)
 {
   return is_notequal2t(e);
+}
+
+/// Try to expand a `FUNCTION_CALL` to a "pure helper" into the
+/// equivalent sequence of `assignt` entries by walking the callee's
+/// straight-line body. On success, returns true and appends the
+/// expanded assigns to @p out; on any disqualifying shape returns
+/// false (the caller treats the call as a rejection).
+///
+/// Purity criteria — the callee must be:
+///   * Body-available, non-hidden, non-recursive.
+///   * Straight-line: no internal GOTO, no inner function call (other
+///     than nondet helpers, which are handled through the assignment
+///     hoisting the frontend does), no RETURN before END_FUNCTION.
+///   * Composed of at most kMaxInlineAssigns ASSIGN/DECL/DEAD/SKIP/
+///     LOCATION/END_FUNCTION instructions.
+///   * All ASSIGNs targeting scalars or exempt dereferences (memory
+///     stores are filtered by the same `touches_memory` check used
+///     elsewhere).
+///
+/// The caller's actual arguments are substituted for the callee's
+/// formal parameters via a prefix of synthesized assigns: each formal
+/// `f_i` gets `f_i = actual_i` prepended before the body. The call's
+/// own lhs (if any) is ignored — pure helpers that compute a value
+/// would need a synthesised return-value scratch, which we don't
+/// build in this MVP. Helpers used for their side effects only (the
+/// common SV-COMP pattern: `foo(); bar();` where foo mutates a
+/// global) are the target.
+bool try_inline_pure_helper(
+  const goto_programt::instructiont &call_instr,
+  const goto_functionst &goto_functions,
+  const std::set<expr2tc> &exempt_derefs,
+  std::vector<assignt> &out)
+{
+  static constexpr size_t kMaxInlineAssigns = 16;
+
+  const code_function_call2t &c = to_code_function_call2t(call_instr.code);
+  if (!is_symbol2t(c.function))
+    return false;
+  irep_idt callee_name = to_symbol2t(c.function).thename;
+  auto it = goto_functions.function_map.find(callee_name);
+  if (it == goto_functions.function_map.end())
+    return false;
+  const goto_functiont &callee = it->second;
+  if (!callee.body_available || callee.body.hide)
+    return false;
+
+  // Walk the callee body, collecting ASSIGNs. Accept a trailing RETURN
+  // (its value is discarded — pure helpers are absorbed for their
+  // side effects, not their return value), but reject anything else
+  // (GOTO/inner FUNCTION_CALL/ASSERT/ASSUME/OTHER/THROW).
+  std::vector<assignt> body_assigns;
+  for (const auto &cins : callee.body.instructions)
+  {
+    if (
+      cins.is_skip() || cins.is_location() || cins.type == DEAD ||
+      cins.type == DECL || cins.type == END_FUNCTION || cins.is_return())
+      continue;
+    if (!cins.is_assign())
+      return false;
+    const code_assign2t &ca = to_code_assign2t(cins.code);
+    if (
+      touches_memory(ca.target, exempt_derefs) ||
+      touches_memory(ca.source, exempt_derefs))
+      return false;
+    body_assigns.push_back({ca.target, ca.source});
+    if (body_assigns.size() > kMaxInlineAssigns)
+      return false;
+  }
+  if (body_assigns.empty())
+    return true; // pure no-op helper (e.g. an empty `void` body)
+
+  // Prepend formal := actual assigns. The callee's `code_type2t::
+  // argument_names` lists the formal parameter symbol ids; the caller
+  // provides matching positional actuals in `c.operands`. Skip any
+  // formal whose name is empty (rare; means the frontend dropped the
+  // name, in which case we can't bind it safely — bail).
+  if (!is_code_type(callee.type))
+    return false;
+  const code_type2t &ct = to_code_type(callee.type);
+  if (ct.argument_names.size() != c.operands.size())
+    return false;
+  for (size_t i = 0; i < ct.argument_names.size(); ++i)
+  {
+    const irep_idt &formal_name = ct.argument_names[i];
+    if (formal_name == irep_idt())
+      return false;
+    expr2tc lhs = symbol2tc(ct.arguments[i], formal_name);
+    expr2tc rhs = c.operands[i];
+    if (
+      touches_memory(lhs, exempt_derefs) || touches_memory(rhs, exempt_derefs))
+      return false;
+    out.push_back({lhs, rhs});
+  }
+  for (const auto &ba : body_assigns)
+    out.push_back(ba);
+  return true;
 }
 
 /// True iff @p instr is a `FUNCTION_CALL` to a helper that has no effect
@@ -143,9 +243,7 @@ bool is_termination_irrelevant_call(const goto_programt::instructiont &instr)
 /// of loop-invariant pointers with distinct allocation provenance). A
 /// deref appearing structurally in @p exempt_derefs is NOT counted as a
 /// memory touch — but any other deref, index, or member access still is.
-bool touches_memory(
-  const expr2tc &e,
-  const std::set<expr2tc> &exempt_derefs = {})
+bool touches_memory(const expr2tc &e, const std::set<expr2tc> &exempt_derefs)
 {
   if (is_nil_expr(e))
     return false;
@@ -367,7 +465,8 @@ bool collect_straight_line(
   goto_programt::const_targett first,
   goto_programt::const_targett last,
   std::vector<assignt> &out,
-  const std::set<expr2tc> &exempt_derefs = {})
+  const std::set<expr2tc> &exempt_derefs = {},
+  const goto_functionst *goto_functions = nullptr)
 {
   for (auto it = first; it != last; ++it)
   {
@@ -389,6 +488,15 @@ bool collect_straight_line(
     // abort, exit, ...) — skip; see `is_termination_irrelevant_call`.
     if (is_termination_irrelevant_call(*it))
       continue;
+    // FUNCTION_CALL to a pure helper (straight-line body, no calls of
+    // its own, no memory writes) — inline the callee body's assigns
+    // here, after prepending formal := actual binding assigns. See
+    // `try_inline_pure_helper`.
+    if (it->is_function_call() && goto_functions != nullptr)
+    {
+      if (try_inline_pure_helper(*it, *goto_functions, exempt_derefs, out))
+        continue;
+    }
     return false;
   }
   return true;
@@ -525,7 +633,8 @@ bool compute_safe_derefs(
 bool recognize_loop(
   const loopst &loop,
   const goto_programt &fn_body,
-  ranking_loopt &out)
+  ranking_loopt &out,
+  const goto_functionst *goto_functions = nullptr)
 {
   out.head = loop.get_original_loop_head();
   out.back = loop.get_original_loop_exit();
@@ -594,7 +703,8 @@ bool recognize_loop(
   if (!has_internal_goto)
   {
     std::vector<assignt> path;
-    if (!collect_straight_line(body_begin, out.back, path, exempt_derefs))
+    if (!collect_straight_line(
+          body_begin, out.back, path, exempt_derefs, goto_functions))
       return false;
     rewrite(path);
     ranking_loopt::loop_patht p;
@@ -635,21 +745,26 @@ bool recognize_loop(
       ++it;
       continue;
     }
-    if (it->is_assign() || is_termination_irrelevant_call(*it))
+    if (
+      it->is_assign() || is_termination_irrelevant_call(*it) ||
+      it->is_function_call())
     {
       // Greedily collect a straight-line span up to the next GOTO or end.
       // Termination-irrelevant FUNCTION_CALLs (assert/assume/abort/...)
       // count as part of the span — collect_straight_line will skip
-      // over them and they vanish from the path's assigns.
+      // over them. Other FUNCTION_CALLs join the span tentatively: if
+      // they're pure helpers, try_inline_pure_helper will expand them;
+      // otherwise collect_straight_line returns false and we bail at
+      // the call site below.
       auto span_begin = it;
       while (it != out.back && !it->is_goto() &&
              (it->is_assign() || it->is_skip() || it->is_location() ||
-              it->type == DEAD || it->type == DECL ||
-              is_termination_irrelevant_call(*it)))
+              it->type == DEAD || it->type == DECL || it->is_function_call()))
         ++it;
       block_t b;
       b.is_span = true;
-      if (!collect_straight_line(span_begin, it, b.span, exempt_derefs))
+      if (!collect_straight_line(
+            span_begin, it, b.span, exempt_derefs, goto_functions))
         return false;
       blocks.push_back(std::move(b));
       continue;
@@ -693,12 +808,12 @@ bool recognize_loop(
       b.is_span = false;
       b.if_cond = it->guard;
       if (!collect_straight_line(
-            then_begin, then_end, b.then_arm, exempt_derefs))
+            then_begin, then_end, b.then_arm, exempt_derefs, goto_functions))
         return false;
       if (
         then_end != if_target &&
         !collect_straight_line(
-          if_target, merge_label, b.else_arm, exempt_derefs))
+          if_target, merge_label, b.else_arm, exempt_derefs, goto_functions))
         return false;
       blocks.push_back(std::move(b));
       it = merge_label;
@@ -2012,7 +2127,7 @@ tvt try_prove_termination_by_ranking(
     for (const auto &loop : loops.get_loops())
     {
       ranking_loopt rl;
-      if (!recognize_loop(loop, f_it->second.body, rl))
+      if (!recognize_loop(loop, f_it->second.body, rl, &goto_functions))
         return tvt(tvt::TV_UNKNOWN);
       if (!prove_loop_terminates(rl, f_it->second.body, options, ns))
         return tvt(tvt::TV_UNKNOWN);
