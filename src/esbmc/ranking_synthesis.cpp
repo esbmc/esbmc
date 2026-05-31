@@ -67,6 +67,39 @@ struct ranking_loopt
   std::vector<expr2tc> body_assumes;
 };
 
+/// A table of "other loops in this function" plus their modified sets.
+/// The prefix walkers (`scan_prefix_defs`, `reaches_head`,
+/// `collect_seeds`) use it to skip past loops that lie strictly inside
+/// the dominator prefix: a backwards-goto belonging to such a loop is
+/// not the dominator path breaking, it's just the inner control flow
+/// of a loop we already passed. Walkers step the iterator past the
+/// loop's back-edge instead of bailing, and invalidate any tracked
+/// fact (constant assign, pending path atom) referencing a variable
+/// the skipped loop modifies.
+///
+/// The map is keyed by the loop's HEAD location number — the back-edge
+/// instruction's target. When a walker encounters a forward-then-
+/// backwards-goto pair entering a loop, it looks up the head and uses
+/// the entry to find the corresponding back-edge iterator and the
+/// modified-symbol set. The CURRENTLY-analysed loop is excluded by the
+/// caller before passing the map in (we don't want to skip ourselves).
+struct loop_skipt
+{
+  struct entry
+  {
+    goto_programt::const_targett back; // the back-edge GOTO
+    std::set<irep_idt> modified;       // symbols any path writes
+    // The location_number of the loop's exit target (where the loop's
+    // head IF jumps when the guard fails). When the prefix walker
+    // skips over the loop and lands at `back+1`, it's typically right
+    // on this label; the walker needs to know the target is reached
+    // via the loop's natural exit edge (so it can be added to the
+    // justified-targets set, not bailed on as unreachable).
+    unsigned exit_target_locnum = 0;
+  };
+  std::map<unsigned, entry> by_head_locnum;
+};
+
 // Forward declarations: subst_parallel and apply_body are used by the
 // loop recognizer (for dereference substitution and not yet measure
 // derivation respectively) but are defined further down alongside the
@@ -78,7 +111,8 @@ subst_parallel(const expr2tc &e, const std::map<expr2tc, expr2tc> &post);
 bool reaches_head(
   goto_programt::const_targett start,
   goto_programt::const_targett head,
-  goto_programt::const_targett end_it);
+  goto_programt::const_targett end_it,
+  const loop_skipt *skip = nullptr);
 void flatten_and(const expr2tc &e, std::vector<expr2tc> &out);
 expr2tc apply_body(const expr2tc &e, const std::vector<assignt> &body);
 bool touches_memory(
@@ -344,8 +378,10 @@ struct prefix_defst
   std::map<irep_idt, expr2tc> defs;
   bool has_invalid = false;
 };
-prefix_defst
-scan_prefix_defs(const goto_programt &body, goto_programt::const_targett head)
+prefix_defst scan_prefix_defs(
+  const goto_programt &body,
+  goto_programt::const_targett head,
+  const loop_skipt *skip = nullptr)
 {
   prefix_defst out;
   auto end_it = body.instructions.end();
@@ -353,6 +389,28 @@ scan_prefix_defs(const goto_programt &body, goto_programt::const_targett head)
 
   for (auto it = body.instructions.begin(); it != head;)
   {
+    // If we hit the head of an earlier loop in the function, skip past
+    // its back-edge instead of treating the loop body as part of the
+    // dominator prefix. The loop's body is not on the dominator path
+    // from function entry to the analysed loop's head — only the
+    // loop's entry and exit are. The loop's modified set invalidates
+    // any tracked defs for variables it could have written.
+    if (skip)
+    {
+      auto skip_it = skip->by_head_locnum.find(it->location_number);
+      if (skip_it != skip->by_head_locnum.end())
+      {
+        for (const irep_idt &n : skip_it->second.modified)
+          out.defs.erase(n);
+        // The loop's exit-target label is the natural landing point
+        // after the loop exits; mark it as justified so the walker
+        // doesn't bail when it lands there.
+        if (skip_it->second.exit_target_locnum != 0)
+          justified_targets.insert(skip_it->second.exit_target_locnum);
+        it = std::next(skip_it->second.back);
+        continue;
+      }
+    }
     if (it->is_target() && !justified_targets.count(it->location_number))
     {
       // Reached a merge point we didn't justify by an accepted IF jump:
@@ -364,6 +422,20 @@ scan_prefix_defs(const goto_programt &body, goto_programt::const_targett head)
     if (
       it->is_skip() || it->is_location() || it->type == DECL ||
       it->type == DEAD)
+    {
+      ++it;
+      continue;
+    }
+    // Termination markers ASSERT(0) and the assume-abort-marker-style
+    // FUNCTION_CALL helpers inserted by goto_termination behave like
+    // SKIP for the dominator-prefix walk: an aborting execution
+    // terminates, so they cannot mutate state visible at the head.
+    if (it->is_assert())
+    {
+      ++it;
+      continue;
+    }
+    if (it->is_function_call() && is_termination_irrelevant_call(*it))
     {
       ++it;
       continue;
@@ -381,8 +453,8 @@ scan_prefix_defs(const goto_programt &body, goto_programt::const_targett head)
       it->targets.size() == 1)
     {
       auto tgt = it->targets.front();
-      bool fall_reaches = reaches_head(std::next(it), head, end_it);
-      bool jump_reaches = reaches_head(tgt, head, end_it);
+      bool fall_reaches = reaches_head(std::next(it), head, end_it, skip);
+      bool jump_reaches = reaches_head(tgt, head, end_it, skip);
       if (!fall_reaches && !jump_reaches)
       {
         out.has_invalid = true;
@@ -553,7 +625,8 @@ bool compute_safe_derefs(
   const expr2tc &guard,
   const goto_programt &fn_body,
   std::set<expr2tc> &out_exempt,
-  std::map<expr2tc, expr2tc> &out_map)
+  std::map<expr2tc, expr2tc> &out_map,
+  const loop_skipt *loop_skip = nullptr)
 {
   out_exempt.clear();
   out_map.clear();
@@ -594,7 +667,7 @@ bool compute_safe_derefs(
   // pointers reaching the same allocation (or both `&` of the same local)
   // would alias at runtime, so substituting them by distinct fresh scalars
   // would be unsound.
-  prefix_defst defs = scan_prefix_defs(fn_body, head);
+  prefix_defst defs = scan_prefix_defs(fn_body, head, loop_skip);
   std::set<std::string> seen_cells;
   for (const expr2tc &d : derefs)
   {
@@ -661,7 +734,8 @@ bool recognize_loop(
   const loopst &loop,
   const goto_programt &fn_body,
   ranking_loopt &out,
-  const goto_functionst *goto_functions = nullptr)
+  const goto_functionst *goto_functions = nullptr,
+  const loop_skipt *loop_skip = nullptr)
 {
   out.head = loop.get_original_loop_head();
   out.back = loop.get_original_loop_exit();
@@ -686,7 +760,13 @@ bool recognize_loop(
   std::set<expr2tc> exempt_derefs;
   std::map<expr2tc, expr2tc> deref_map;
   if (!compute_safe_derefs(
-        out.head, out.back, pos_guard, fn_body, exempt_derefs, deref_map))
+        out.head,
+        out.back,
+        pos_guard,
+        fn_body,
+        exempt_derefs,
+        deref_map,
+        loop_skip))
     return false;
 
   // The guard is either a relational atom or a top-level conjunction of
@@ -1505,7 +1585,8 @@ struct prefix_seedst
 bool reaches_head(
   goto_programt::const_targett start,
   goto_programt::const_targett head,
-  goto_programt::const_targett end_it)
+  goto_programt::const_targett end_it,
+  const loop_skipt *skip)
 {
   std::set<unsigned> visited;
   std::vector<goto_programt::const_targett> stack;
@@ -1532,6 +1613,20 @@ bool reaches_head(
         continue;
       stack.push_back(std::next(it));
       continue;
+    }
+    // If we hit an earlier loop's head, skip past its back-edge — the
+    // loop's body is not on the dominator path from `start` to the
+    // analysed loop's head; only the loop's entry and exit are. Walking
+    // its body would loop indefinitely or follow inner edges that
+    // aren't relevant to dominator reachability.
+    if (skip)
+    {
+      auto skip_it = skip->by_head_locnum.find(it->location_number);
+      if (skip_it != skip->by_head_locnum.end())
+      {
+        stack.push_back(std::next(skip_it->second.back));
+        continue;
+      }
     }
     if (it->is_goto() && !it->is_backwards_goto() && it->targets.size() == 1)
     {
@@ -1571,8 +1666,10 @@ bool reaches_head(
 /// touching assign, jump targets reachable from an unanalysed edge) makes
 /// the prefix unsafe for syntactic seeding, and we return empty seeds so
 /// the loop falls back to the bare ranking check.
-prefix_seedst
-collect_seeds(const goto_programt &body, goto_programt::const_targett head)
+prefix_seedst collect_seeds(
+  const goto_programt &body,
+  goto_programt::const_targett head,
+  const loop_skipt *loop_skip = nullptr)
 {
   prefix_seedst seeds;
   // Targets we've justified by an earlier accepted IF jump (so meeting one
@@ -1588,12 +1685,42 @@ collect_seeds(const goto_programt &body, goto_programt::const_targett head)
   std::vector<pending_atom> pending;
   auto end_it = body.instructions.end();
 
+  auto invalidate_pending_by = [&](const std::set<irep_idt> &names) {
+    pending.erase(
+      std::remove_if(
+        pending.begin(),
+        pending.end(),
+        [&](const pending_atom &p) {
+          for (const irep_idt &n : names)
+            if (p.free_vars.count(n))
+              return true;
+          return false;
+        }),
+      pending.end());
+    for (const irep_idt &n : names)
+      seeds.constants.erase(n);
+  };
+
   // We walk a single live path from entry to the loop head, advancing one
   // instruction at a time except at conditional IFs where we may have to
   // jump to the target if the fall-through doesn't lead to the head. The
   // sweep terminates when @p it reaches @p head.
   for (auto it = body.instructions.begin(); it != head;)
   {
+    // Skip past earlier loops the function's goto_loopst already told us
+    // about. The loop's body is not on the dominator path; only its
+    // entry and exit are. Variables the loop modifies invalidate both
+    // pending atoms and constant seeds referencing them.
+    if (loop_skip)
+    {
+      auto skip_it = loop_skip->by_head_locnum.find(it->location_number);
+      if (skip_it != loop_skip->by_head_locnum.end())
+      {
+        invalidate_pending_by(skip_it->second.modified);
+        it = std::next(skip_it->second.back);
+        continue;
+      }
+    }
     if (it->is_target() && !justified_targets.count(it->location_number))
       return {};
     if (it->is_skip() || it->is_location() || it->type == DECL)
@@ -1628,8 +1755,8 @@ collect_seeds(const goto_programt &body, goto_programt::const_targett head)
     {
       auto tgt = it->targets.front();
       // Determine which branch carries control to the loop head.
-      bool fall_reaches = reaches_head(std::next(it), head, end_it);
-      bool jump_reaches = reaches_head(tgt, head, end_it);
+      bool fall_reaches = reaches_head(std::next(it), head, end_it, loop_skip);
+      bool jump_reaches = reaches_head(tgt, head, end_it, loop_skip);
       if (!fall_reaches && !jump_reaches)
         return {}; // loop head unreachable through this IF: bail
       expr2tc seed_cond;
@@ -1699,9 +1826,10 @@ expr2tc synthesize_invariant(
   const ranking_loopt &rl,
   const goto_programt &body,
   optionst &options,
-  const namespacet &ns)
+  const namespacet &ns,
+  const loop_skipt *loop_skip = nullptr)
 {
-  prefix_seedst seeds = collect_seeds(body, rl.head);
+  prefix_seedst seeds = collect_seeds(body, rl.head, loop_skip);
   if (seeds.constants.empty() && seeds.path_atoms.empty())
     return gen_true_expr();
 
@@ -1950,7 +2078,8 @@ bool prove_loop_terminates(
   const ranking_loopt &rl,
   const goto_programt &body,
   optionst &options,
-  const namespacet &ns)
+  const namespacet &ns,
+  const loop_skipt *loop_skip = nullptr)
 {
   // Candidate measures. A simple relational guard yields one candidate; a
   // top-level conjunction yields one per relational conjunct. Termination
@@ -1965,7 +2094,7 @@ bool prove_loop_terminates(
   // Supporting invariant: an inductive conjunction of constant bounds that
   // holds on entry. Sound to assume in the obligations below (it is true
   // every iteration). For loops that need no extra facts this is just true.
-  expr2tc inv = synthesize_invariant(rl, body, options, ns);
+  expr2tc inv = synthesize_invariant(rl, body, options, ns, loop_skip);
 
   // Body ASSUMEs hold at the loop head on every iteration (otherwise
   // the path would have been killed by symex). Conjoin them into the
@@ -2493,12 +2622,50 @@ tvt try_prove_termination_by_ranking(
       continue; // library helpers: handled by the existing machinery
 
     goto_loopst loops(f_it->first, goto_functions, f_it->second);
+
+    // Pre-build the per-loop skip map: for each loop, an entry mapping
+    // its head's location number to its back-edge iterator and the
+    // names of every symbol it modifies. When we analyse a particular
+    // loop, we'll pass a filtered view that excludes that loop itself
+    // (the analysed loop must NOT be in its own skip map — that would
+    // make the entry walker step right over the loop and return empty
+    // seeds).
+    // Pre-build the per-loop skip map: for each loop, an entry mapping
+    // its head's location number to its back-edge iterator, the
+    // names of every symbol it modifies, and its natural exit-target's
+    // location number. When we analyse a particular loop, we'll pass
+    // a filtered view that excludes that loop itself (the analysed
+    // loop must NOT be in its own skip map — otherwise the prefix
+    // walker would step right past the loop we're trying to analyse).
+    loop_skipt all_loops;
     for (const auto &loop : loops.get_loops())
     {
+      auto head = loop.get_original_loop_head();
+      auto back = loop.get_original_loop_exit();
+      loop_skipt::entry e;
+      e.back = back;
+      if (
+        head->is_goto() && !head->targets.empty() && !head->is_backwards_goto())
+        e.exit_target_locnum = head->targets.front()->location_number;
+      for (const expr2tc &v : loop.get_modified_loop_vars())
+        if (is_symbol2t(v))
+          e.modified.insert(to_symbol2t(v).thename);
+      all_loops.by_head_locnum[head->location_number] = std::move(e);
+    }
+
+    for (const auto &loop : loops.get_loops())
+    {
+      // Skip map for this loop: every OTHER loop in the function.
+      loop_skipt skip;
+      auto cur_head = loop.get_original_loop_head();
+      for (const auto &kv : all_loops.by_head_locnum)
+        if (kv.first != cur_head->location_number)
+          skip.by_head_locnum.insert(kv);
+
       ranking_loopt rl;
-      if (!recognize_loop(loop, f_it->second.body, rl, &goto_functions))
+      if (!recognize_loop(loop, f_it->second.body, rl, &goto_functions, &skip))
         return tvt(tvt::TV_UNKNOWN);
-      if (!prove_loop_terminates(rl, f_it->second.body, options, ns))
+      if (!prove_loop_terminates(rl, f_it->second.body, options, ns, &skip))
         return tvt(tvt::TV_UNKNOWN);
     }
   }
