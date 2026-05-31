@@ -389,9 +389,13 @@ guard2tc &operator|=(guard2tc &g1, const guard2tc &g2)
   if (cached_prefix_expr(g2, g1, prefix_expr))
   {
     // g2 ⊆ g1 (g2 is a cached prefix), so g1 ⇒ g2 and g1 || g2 ≡ g2.
+    // cached_prefix_expr already walked g1's chain to the node spanning
+    // g2's conjuncts, so prefix_expr *is* the correct base for the result
+    // — install it directly instead of rebuilding the and-chain from the
+    // copied list (mirrors the set_guard_list_and_base path below).
     assert(guard_list_prefix_matches(g2, g1));
     std::vector<expr2tc> prefix_list(g2.guard_list);
-    g1.set_guard_list_and_rebuild(std::move(prefix_list));
+    g1.set_guard_list_and_base(std::move(prefix_list), prefix_expr);
     return g1;
   }
 
