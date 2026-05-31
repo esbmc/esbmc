@@ -1187,10 +1187,20 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       break;
     }
 
-    // Multi-dimensional indexing ``a[i, j]`` -- accept the 2D subset by
-    // lowering to chained indexing: `a[i][j]`. Keep rejecting all other tuple
-    // index arities with an explicit Python-level TypeError.
-    if (slice.contains("_type") && slice["_type"] == "Tuple")
+    const typet list_type = type_handler_.get_list_type();
+    const bool array_is_runtime_list =
+      array_type == list_type ||
+      (array_type.is_pointer() && ns.follow(array_type.subtype()) == list_type);
+    const bool array_is_builtin_array = array_type.is_array();
+    const bool tuple_index_targets_list_model =
+      array_is_runtime_list || array_is_builtin_array;
+
+    // Multi-dimensional indexing ``a[i, j]`` for list/array-backed models:
+    // accept the 2D scalar subset by lowering to chained indexing: `a[i][j]`.
+    // Keep rejecting all other tuple index arities for this model.
+    if (
+      tuple_index_targets_list_model && slice.contains("_type") &&
+      slice["_type"] == "Tuple")
     {
       if (
         slice.contains("elts") && slice["elts"].is_array() &&

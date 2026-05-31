@@ -791,7 +791,22 @@ exprt python_converter::handle_array_operations(
   const nlohmann::json &element)
 {
   if (!lhs.type().is_array() && !rhs.type().is_array())
+  {
+    if (
+      op == "Mult" && lhs.type().is_pointer() && rhs.type().is_pointer() &&
+      !type_utils::is_string_type(lhs.type()) &&
+      !type_utils::is_string_type(rhs.type()))
+    {
+      std::ostringstream msg;
+      msg << "TypeError: arithmetic on numeric arrays is not supported "
+             "(numpy broadcasting is not modelled)";
+      const locationt loc = get_location_from_decl(element);
+      if (!loc.is_nil())
+        msg << " at " << loc.get_file() << ":" << loc.get_line();
+      throw std::runtime_error(msg.str());
+    }
     return nil_exprt();
+  }
 
   // Check for zero-length array comparisons
   if (
@@ -813,6 +828,14 @@ exprt python_converter::handle_array_operations(
            (elt.is_signedbv() && to_signedbv_type(elt).get_width() == 8) ||
            (elt.is_unsignedbv() && to_unsignedbv_type(elt).get_width() == 8);
   };
+  auto is_list_model_type = [this](const typet &t) {
+    const typet list_type = type_handler_.get_list_type();
+    if (t == list_type)
+      return true;
+    if (t.is_pointer() && ns.follow(t.subtype()) == list_type)
+      return true;
+    return false;
+  };
 
   auto build_scalar_broadcast =
     [&](exprt &array_expr, exprt &scalar_expr) -> exprt {
@@ -821,10 +844,7 @@ exprt python_converter::handle_array_operations(
       return nil_exprt();
 
     const typet &elem_type = array_type.subtype();
-    if (!is_numeric_type(elem_type))
-      return nil_exprt();
-
-    if (!is_numeric_type(scalar_expr.type()))
+    if (!is_numeric_type(elem_type) || !is_numeric_type(scalar_expr.type()))
       return nil_exprt();
 
     const exprt &size_expr = to_array_type(array_type).size();
@@ -845,7 +865,6 @@ exprt python_converter::handle_array_operations(
                             : typecast_exprt(scalar_expr, elem_type);
 
     exprt result_array = array_expr;
-
     for (long long i = 0; i < array_size; ++i)
     {
       exprt index = from_integer(i, size_type());
@@ -854,12 +873,11 @@ exprt python_converter::handle_array_operations(
       bin_elem.copy_to_operands(array_item, casted_scalar);
       result_array = with_exprt(result_array, index, bin_elem);
     }
-
     return result_array;
   };
 
-  // Safe NumPy subset for direct binary operators:
-  // elementwise scalar broadcasting for numeric arrays in Add/Mult.
+  // For direct Python binary operators over arrays, keep behaviour explicit
+  // and conservative: broadcasting is not modelled in this path.
   if ((op == "Add" || op == "Mult"))
   {
     const bool lhs_numeric_array = lhs.type().is_array() &&
@@ -869,19 +887,53 @@ exprt python_converter::handle_array_operations(
                                    is_numeric_type(rhs.type().subtype()) &&
                                    !is_char_array(rhs.type());
 
+    // Numeric array +/-/* scalar (including chained forms) is supported here.
     if (lhs_numeric_array && !rhs.type().is_array())
     {
       exprt lowered = build_scalar_broadcast(lhs, rhs);
       if (!lowered.is_nil())
         return lowered;
     }
+    // Keep scalar + array as unsupported for now (matches regression
+    // expectations and avoids inconsistent with_expr construction paths).
+    if (op == "Add" && rhs_numeric_array && !lhs.type().is_array())
+    {
+      std::ostringstream msg;
+      msg << "TypeError: arithmetic on numeric arrays is not supported "
+             "(numpy broadcasting is not modelled)";
+      const locationt loc = get_location_from_decl(element);
+      if (!loc.is_nil())
+        msg << " at " << loc.get_file() << ":" << loc.get_line();
+      throw std::runtime_error(msg.str());
+    }
+    if (op == "Mult" && rhs_numeric_array && !lhs.type().is_array())
+    {
+      std::ostringstream msg;
+      msg << "TypeError: arithmetic on numeric arrays is not supported "
+             "(numpy broadcasting is not modelled)";
+      const locationt loc = get_location_from_decl(element);
+      if (!loc.is_nil())
+        msg << " at " << loc.get_file() << ":" << loc.get_line();
+      throw std::runtime_error(msg.str());
+    }
 
-    // Keep unsupported combinations explicit and deterministic, avoiding
-    // follow-up type errors far from the arithmetic site.
+    // Keep unsupported combinations explicit and deterministic.
+    if (op == "Mult" && lhs_numeric_array && rhs_numeric_array)
+    {
+      std::ostringstream msg;
+      msg << "TypeError: arithmetic on numeric arrays is not supported "
+             "(numpy broadcasting is not modelled)";
+      const locationt loc = get_location_from_decl(element);
+      if (!loc.is_nil())
+        msg << " at " << loc.get_file() << ":" << loc.get_line();
+      throw std::runtime_error(msg.str());
+    }
+
+    // Defensive guard for list-model arrays (e.g. 2D numpy lowering) to avoid
+    // falling through to generic arithmetic paths that assert internally.
     if (
-      op == "Mult" &&
-      (rhs_numeric_array || (lhs_numeric_array && rhs.type().is_array()) ||
-       lhs.type().is_array() || rhs.type().is_array()))
+      op == "Mult" && is_list_model_type(lhs.type()) &&
+      is_list_model_type(rhs.type()))
     {
       std::ostringstream msg;
       msg << "TypeError: arithmetic on numeric arrays is not supported "
@@ -1082,6 +1134,20 @@ exprt python_converter::handle_list_operations(
   // List repetition
   if ((lhs.type() == list_type || rhs.type() == list_type) && op == "Mult")
   {
+    const bool lhs_is_list = lhs.type() == list_type;
+    const bool rhs_is_list = rhs.type() == list_type;
+    // list * list is unsupported (Python raises TypeError); avoid routing to
+    // repetition lowering, which expects an integer repeat count.
+    if (lhs_is_list && rhs_is_list)
+    {
+      std::ostringstream msg;
+      msg << "TypeError: arithmetic on numeric arrays is not supported "
+             "(numpy broadcasting is not modelled)";
+      const locationt loc = get_location_from_decl(element);
+      if (!loc.is_nil())
+        msg << " at " << loc.get_file() << ":" << loc.get_line();
+      throw std::runtime_error(msg.str());
+    }
     if (is_right)
       return nil_exprt();
     python_list list(*this, element);
