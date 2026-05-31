@@ -147,8 +147,7 @@ class ExpressionRewriteMixin:
                 listcomp = ast.ListComp(
                     elt=elt,
                     generators=[
-                        ast.comprehension(target=target, iter=iterable_expr, ifs=[test],
-                                          is_async=0)
+                        ast.comprehension(target=target, iter=iterable_expr, ifs=[test], is_async=0)
                     ],
                 )
                 ast.copy_location(listcomp, node)
