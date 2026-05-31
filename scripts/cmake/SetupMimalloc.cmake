@@ -15,6 +15,20 @@ if(NOT ENABLE_MIMALLOC)
    return()
 endif()
 
+# Linux only. Static mimalloc with MI_OVERRIDE cannot reliably intercept every
+# allocation on macOS (the system zone allocator and libc++/dyld/Obj-C runtime
+# allocate before mimalloc's constructors run); a later free() of one of those
+# pointers trips "mi_free: pointer does not point to a valid heap space" and
+# aborts. The measured symex win (~13%) is a Linux result anyway, so confine
+# the override to Linux and leave other platforms on the system allocator.
+if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
+   message(STATUS
+      "[mimalloc] disabled on ${CMAKE_SYSTEM_NAME}: static MI_OVERRIDE is only "
+      "sound on Linux. Using the system allocator.")
+   set(ENABLE_MIMALLOC OFF)
+   return()
+endif()
+
 if(DOWNLOAD_DEPENDENCIES)
    include(FetchContent)
    # mimalloc build knobs: only the static lib, no tests/objects, and
