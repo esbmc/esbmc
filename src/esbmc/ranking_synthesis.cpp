@@ -764,6 +764,18 @@ bool recognize_loop(
     // `if_cond` (since the THEN side exits and contributes no
     // ranking obligation).
     bool then_returns = false;
+    // For `if (c1) S1 else if (c2) S2 else S3` (nested else-if chain
+    // with a common merge target). When `is_three_way` is true the
+    // block has three arms taken under three disjoint path
+    // conditions:
+    //   Path A: !if_cond  holds                          -> then_arm
+    //   Path B: if_cond  ∧ !inner_if_cond  holds          -> else_arm
+    //   Path C: if_cond  ∧  inner_if_cond  holds          -> arm_c
+    // `if_cond` is the outer IF's guard; `inner_if_cond` is the inner
+    // IF's guard.
+    bool is_three_way = false;
+    expr2tc inner_if_cond;
+    std::vector<assignt> arm_c;
   };
   std::vector<block_t> blocks;
   static constexpr size_t kMaxPaths = 16;
@@ -894,6 +906,83 @@ bool recognize_loop(
       // no post-arm.
       if (merge_label->location_number > out.back->location_number)
         return false;
+
+      // Detect the `if (c1) S1 else if (c2) S2 else S3` shape. When
+      // the ELSE-arm begins (after skip/location/decl) with another
+      // IF that targets a label whose merge converges with the outer
+      // IF's merge, treat the whole thing as a 3-way block.
+      if (then_end != if_target)
+      {
+        auto inner_it = if_target;
+        while (inner_it != merge_label &&
+               (inner_it->is_skip() || inner_it->is_location() ||
+                inner_it->type == DEAD || inner_it->type == DECL))
+          ++inner_it;
+        if (
+          inner_it != merge_label && inner_it->is_goto() &&
+          !is_true(inner_it->guard) && !inner_it->is_backwards_goto() &&
+          inner_it->targets.size() == 1 &&
+          !touches_memory(inner_it->guard, exempt_derefs))
+        {
+          auto inner_target = inner_it->targets.front();
+          if (
+            inner_target->location_number > inner_it->location_number &&
+            inner_target->location_number <= merge_label->location_number)
+          {
+            // Inner then-arm runs from after the inner IF up to its
+            // own GOTO (which must jump to the outer's merge_label).
+            auto inner_then_begin = std::next(inner_it);
+            auto inner_then_end = inner_then_begin;
+            while (inner_then_end != inner_target &&
+                   !inner_then_end->is_goto() && !inner_then_end->is_return())
+              ++inner_then_end;
+            // The inner's then-arm should end with `GOTO merge_label`
+            // and the inner's else-arm should run from inner_target
+            // to merge_label.
+            if (
+              inner_then_end != inner_target && inner_then_end->is_goto() &&
+              is_true(inner_then_end->guard) &&
+              !inner_then_end->is_backwards_goto() &&
+              inner_then_end->targets.size() == 1 &&
+              inner_then_end->targets.front() == merge_label)
+            {
+              block_t b;
+              b.is_span = false;
+              b.is_three_way = true;
+              b.if_cond = it->guard;
+              b.inner_if_cond = inner_it->guard;
+              if (!collect_straight_line(
+                    then_begin,
+                    then_end,
+                    b.then_arm,
+                    exempt_derefs,
+                    goto_functions,
+                    &out.body_assumes))
+                return false;
+              if (!collect_straight_line(
+                    inner_then_begin,
+                    inner_then_end,
+                    b.else_arm,
+                    exempt_derefs,
+                    goto_functions,
+                    &out.body_assumes))
+                return false;
+              if (!collect_straight_line(
+                    inner_target,
+                    merge_label,
+                    b.arm_c,
+                    exempt_derefs,
+                    goto_functions,
+                    &out.body_assumes))
+                return false;
+              blocks.push_back(std::move(b));
+              it = merge_label;
+              continue;
+            }
+          }
+        }
+      }
+
       block_t b;
       b.is_span = false;
       b.if_cond = it->guard;
@@ -923,50 +1012,62 @@ bool recognize_loop(
     return false;
   }
 
-  // Bound the projected number of paths up front. Each if/else doubles the
-  // count; spans don't. Refusing high path counts protects the solver from
-  // a body with many branches that would explode obligation work.
+  // Bound the projected number of paths up front. Each if/else doubles
+  // the count; a three-way block triples it; spans don't. Refusing high
+  // path counts protects the solver from a body with many branches that
+  // would explode obligation work.
   size_t n_paths = 1;
   for (const block_t &b : blocks)
     if (!b.is_span)
     {
-      if (n_paths > kMaxPaths / 2)
+      size_t arms = b.is_three_way ? 3 : 2;
+      if (n_paths > kMaxPaths / arms)
         return false;
-      n_paths *= 2;
+      n_paths *= arms;
     }
 
-  // Enumerate paths by binary mask over the if/else blocks. Mask bit i is
-  // 0 for "take the i-th if/else's THEN arm", 1 for "take the ELSE arm".
-  // The path is the concatenation of every span and the chosen arm of
-  // every if/else, in program order.
-  size_t n_ifs = 0;
-  std::vector<size_t> if_indices; // indices into blocks of the if/else blocks
+  // Enumerate paths by iterating a mixed-base counter over the if/else
+  // blocks. Each two-arm block contributes a digit in {0,1} (0 = then,
+  // 1 = else); each three-way block contributes a digit in {0,1,2}
+  // (0 = then-arm, 1 = else-arm, 2 = arm_c). The path is the
+  // concatenation of every span and the chosen arm of every if/else,
+  // in program order.
+  std::vector<size_t> if_indices; // indices into blocks of the non-span ones
   for (size_t i = 0; i < blocks.size(); ++i)
     if (!blocks[i].is_span)
-    {
       if_indices.push_back(i);
-      ++n_ifs;
-    }
-  for (size_t mask = 0; mask < (size_t(1) << n_ifs); ++mask)
+  for (size_t path_idx = 0; path_idx < n_paths; ++path_idx)
   {
-    // Skip mask permutations that pick a THEN arm whose body is a
+    // Decompose path_idx into a digit per if-block.
+    std::vector<size_t> choices(if_indices.size(), 0);
+    {
+      size_t rem = path_idx;
+      for (size_t k = 0; k < if_indices.size(); ++k)
+      {
+        size_t arms = blocks[if_indices[k]].is_three_way ? 3 : 2;
+        choices[k] = rem % arms;
+        rem /= arms;
+      }
+    }
+
+    // Skip permutations that pick a THEN arm whose body is a
     // loop-exiting RETURN. Those arms don't contribute a path; the
     // only live arm is the else (continue) side.
-    bool skip_this_mask = false;
-    for (size_t idx : if_indices)
+    bool skip_this_path = false;
+    for (size_t k = 0; k < if_indices.size(); ++k)
     {
-      if (!blocks[idx].then_returns)
+      const block_t &b = blocks[if_indices[k]];
+      if (!b.then_returns)
         continue;
-      size_t which = std::find(if_indices.begin(), if_indices.end(), idx) -
-                     if_indices.begin();
-      bool take_else = (mask >> which) & 1;
-      if (!take_else)
+      // For a then_returns block, only arm index 1 (the continue/else
+      // side) is live; 0 (then) is dead.
+      if (choices[k] == 0)
       {
-        skip_this_mask = true;
+        skip_this_path = true;
         break;
       }
     }
-    if (skip_this_mask)
+    if (skip_this_path)
       continue;
 
     std::vector<assignt> path;
@@ -979,40 +1080,64 @@ bool recognize_loop(
         path.insert(path.end(), b.span.begin(), b.span.end());
         continue;
       }
-      // Find which bit in mask corresponds to this if/else.
+      // Find which choice slot corresponds to this if/else.
       size_t which =
         std::find(if_indices.begin(), if_indices.end(), i) - if_indices.begin();
-      bool take_else = (mask >> which) & 1;
-      const std::vector<assignt> &arm = take_else ? b.else_arm : b.then_arm;
-      // Path-condition atom for this IF — evaluated at the point the IF
-      // executes, which is AFTER the assignments accumulated in `path` so
-      // far. Substitute those assignments into the raw IF guard via
-      // apply_body, turning a post-prior-block-state expression into a
-      // pre-iteration-state expression that conjoins correctly with the
-      // rest of the path's pre-state path condition. Without this
-      // substitution, an earlier `y = y - 1` followed by `if (y > 0)`
-      // would record `y > 0` (pre-state) when the IF actually sees
-      // `(y-1) > 0` (i.e. pre-state `y > 1`) — a feasible runtime path
-      // might then be reported as infeasible and a non-decreasing
-      // obligation discharged vacuously (potential wrong-true).
-      if (!is_nil_expr(b.if_cond))
+      size_t choice = choices[which];
+      const std::vector<assignt> *arm = nullptr;
+      if (b.is_three_way)
       {
-        expr2tc atom = apply_body(b.if_cond, path);
-        if (!take_else)
+        if (choice == 0)
+          arm = &b.then_arm;
+        else if (choice == 1)
+          arm = &b.else_arm;
+        else
+          arm = &b.arm_c;
+      }
+      else
+      {
+        arm = (choice == 1) ? &b.else_arm : &b.then_arm;
+      }
+
+      // Path-condition atoms. For a two-arm block, conjoin `if_cond`
+      // (else) or `!if_cond` (then). For a three-way block:
+      //   choice 0 (then_arm):       !if_cond
+      //   choice 1 (else_arm):        if_cond ∧ !inner_if_cond
+      //   choice 2 (arm_c):           if_cond ∧  inner_if_cond
+      // Each atom is substituted via apply_body so it's expressed in
+      // pre-iteration state (see the deeper comment below).
+      auto push_cond_atom = [&](const expr2tc &cond_in, bool negate) {
+        if (is_nil_expr(cond_in))
+          return;
+        expr2tc atom = apply_body(cond_in, path);
+        if (negate)
           make_not(atom);
         simplify(atom);
         if (deref_map.size())
           atom = subst_parallel(atom, deref_map);
-        // Skip the atom if substitution inlined an opaque sideeffect
-        // (e.g. a temporary `temp = NONDET(...)` assignment in a prior
-        // block was inlined into the IF guard). The solver can stall on
-        // such expressions; conservatively treating the path-condition
-        // as `true` is sound (it just makes the obligation harder to
-        // discharge, never easier — never vacuously discharging).
         if (!contains_sideeffect(atom))
           cond_atoms.push_back(atom);
+      };
+
+      if (b.is_three_way)
+      {
+        if (choice == 0)
+          push_cond_atom(b.if_cond, true); // !if_cond
+        else
+        {
+          push_cond_atom(b.if_cond, false); // if_cond
+          if (choice == 1)
+            push_cond_atom(b.inner_if_cond, true); // !inner
+          else
+            push_cond_atom(b.inner_if_cond, false); // inner
+        }
       }
-      path.insert(path.end(), arm.begin(), arm.end());
+      else
+      {
+        bool take_else = (choice == 1);
+        push_cond_atom(b.if_cond, !take_else);
+      }
+      path.insert(path.end(), arm->begin(), arm->end());
     }
     rewrite(path);
     ranking_loopt::loop_patht p;
