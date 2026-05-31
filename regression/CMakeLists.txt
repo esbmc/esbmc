@@ -358,16 +358,6 @@ set(_slow_regression_tests
     # the larger inner timeout lets testing_tool record the FUTURE
     # verdict instead of ctest hard-killing the run.
     "regression/esbmc-unix/github_4435"
-    # github_1456 (#1456) is the array-index data-race canary: two threads
-    # writing distinct elements a[0]/a[1] under --data-races-check must stay
-    # SUCCESSFUL. With POR disabled in races mode it deliberately explores the
-    # full ~24300-interleaving fan-out that #1456 was about, so it is symex- and
-    # interleaving-bound (trivial solving). On the Debug+Opt Linux runner that
-    # path runs with assertions enabled and tips just over the 120s cap
-    # (locally ~20s under RelWithDebInfo); #2863 already moved it to THOROUGH.
-    # Keep the full exploration as the regression signal and give it the 2x
-    # budget so DebugOpt jitter doesn't flap it.
-    "regression/esbmc-unix/github_1456"
 )
 math(EXPR ESBMC_REGRESS_CTEST_TIMEOUT_SLOW
      "${ESBMC_REGRESS_TIMEOUT_SLOW} + 30")
