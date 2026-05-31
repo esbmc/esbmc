@@ -33,10 +33,10 @@ The SV-COMP backlog was triaged in two passes:
 
 | # | Benchmark | Property | Disposition | New PR? |
 |---|---|---|---|---|
-| 4976 | busybox `sync-1` | no-overflow | DOCUMENTED BLOCKER — needs format-aware printf OM | no (coupled, see below) |
-| 4977 | busybox `sync-2` | no-overflow | DOCUMENTED BLOCKER — same root cause as #4976 | no |
-| 4978 | busybox `whoami-incomplete-1` | no-overflow | DOCUMENTED BLOCKER — same root cause as #4976 | no |
-| 4979 | busybox `whoami-incomplete-2` | no-overflow | DOCUMENTED BLOCKER — same root cause as #4976 | no |
+| 4976 | busybox `sync-1` | no-overflow | PRECISION LIMITATION — printf-layer fix is unsound; sound fix needs a `va_list`-modeling OM | no (coupled, see below) |
+| 4977 | busybox `sync-2` | no-overflow | PRECISION LIMITATION — same root cause as #4976 | no |
+| 4978 | busybox `whoami-incomplete-1` | no-overflow | PRECISION LIMITATION — same root cause as #4976 | no |
+| 4979 | busybox `whoami-incomplete-2` | no-overflow | PRECISION LIMITATION — same root cause as #4976 | no |
 | 4980 | ldv `turbografx.ko` | termination | ALREADY-ADDRESSED — overlaps open PR #4919 | no (avoid duplicate) |
 
 **Why no new PRs for this batch.** In both cases shipping a quick patch would be either *unsound*
@@ -46,11 +46,13 @@ The SV-COMP backlog was triaged in two passes:
   from `used = vasprintf(&msg, s, p)`, which ESBMC over-approximates as an unconstrained
   non-negative `int`. That value then feeds the buffer-size computation
   `realloc(msg, applet_len + used + strerr_len + msgeol_len + 3)`, and the signed-`int` addition
-  there is what the `--overflow-check` flags (source). The over-approximation is **sound**;
-  tightening it to match SV-COMP's `true` verdict requires a *format-aware* return-length model
-  for the printf family, a substantial operational-model change that must be validated for
-  soundness regressions across the whole no-overflow / string category. There is no sound
-  one-line fix. See §3.1 for the design.
+  there is what the `--overflow-check` flags (source). The over-approximation is **sound**. The
+  natural printf-model-layer fix — routing `vasprintf` through ESBMC's existing format-aware
+  `symex_printf` — was implemented and *measured to be unsound*: it hides a genuine overflow
+  (false negative). The only sound bound on the return is `INT_MAX`, which does not remove the
+  false positive. Therefore the current unconstrained-nondet behaviour is correct, and
+  #4976–#4979 are a **precision/incompleteness limitation, not a soundness bug.** A sound fix
+  needs a dedicated `va_list`-modeling operational model. See §3.1.
 * #4980 is a spurious k-induction non-termination lasso — precisely the class that the **open**
   PR #4919 (`[termination] ranking-function checker with supporting-invariant synthesis`) targets
   (its measured results add +64 correct-true on the SV-COMP termination set). Opening a competing
@@ -65,10 +67,10 @@ The SV-COMP backlog was triaged in two passes:
 | # | Title (short) | Category | Disposition |
 |---|---|---|---|
 | 4980 | termination false alarm: turbografx.ko | termination/k-induction | overlaps open PR #4919 (§3.2) |
-| 4979 | no-overflow false alarm: whoami-incomplete-2 | overflow/OM | blocker: printf OM (§3.1) |
-| 4978 | no-overflow false alarm: whoami-incomplete-1 | overflow/OM | blocker: printf OM (§3.1) |
-| 4977 | no-overflow false alarm: sync-2 | overflow/OM | blocker: printf OM (§3.1) |
-| 4976 | no-overflow false alarm: sync-1 | overflow/OM | blocker: printf OM (§3.1) |
+| 4979 | no-overflow false alarm: whoami-incomplete-2 | overflow/OM | precision limit; printf-layer fix unsound (§3.1) |
+| 4978 | no-overflow false alarm: whoami-incomplete-1 | overflow/OM | precision limit; printf-layer fix unsound (§3.1) |
+| 4977 | no-overflow false alarm: sync-2 | overflow/OM | precision limit; printf-layer fix unsound (§3.1) |
+| 4976 | no-overflow false alarm: sync-1 | overflow/OM | precision limit; printf-layer fix unsound (§3.1) |
 | 4611 | Witness GraphML returnFromFunction key + dup nodes | witness | needs witness validator (§4) |
 | 4439 | valid-memsafety false alarm: w83977af_ir.ko | memsafety/concurrency | research-grade LDV driver (§4) |
 | 4438 | unreach-call false alarm: log_6_safe | FP/k-induction | open PR #4480 (§4) |
@@ -105,8 +107,9 @@ ESBMC 8.3.0 commit `911d1790`. Each is a *false alarm* (ground truth `true`, ESB
 
 ### 3.1 #4976 / #4977 / #4978 / #4979 — no-overflow false alarm in busybox `bb_verror_msg`
 
-**Status: tightly coupled (one function, one root cause). One future PR, not four. DOCUMENTED
-BLOCKER — sound fix requires a format-aware printf-family OM.**
+**Status: tightly coupled (one function, one root cause). One future PR, not four. PRECISION /
+INCOMPLETENESS LIMITATION — the printf-model-layer fix was measured to be unsound; a sound fix
+requires a `va_list`-modeling `(v)asprintf` OM.**
 
 **Benchmarks.** `c/busybox-1.22.0/{sync-1,sync-2,whoami-incomplete-1,whoami-incomplete-2}.i`.
 Each is run (per the issue) with:
@@ -146,37 +149,31 @@ the signed-`int` sum `applet_len + used + strerr_len + msgeol_len + 3` overflows
 benchmarks differ only in which sub-add of this expression is reported first; the originating term
 is always the `vasprintf` return.
 
-**Why this is *not* a quick fix (soundness).** The model's over-approximation is **correct**:
-`vasprintf`/`vsnprintf(NULL,0,…)` returns "the number of characters that *would* be written",
-which for an arbitrary format string and arguments is genuinely unbounded. Any blanket tightening
-(e.g. `assume(used < INT_MAX/2)`) would be **unsound** — it would suppress real overflows in
-programs where the format legitimately produces a long string, i.e. introduce false negatives, the
-worst outcome for a verifier. SV-COMP's `true` verdict holds only because the *concrete* format
-strings in these benchmarks produce short output, which ESBMC cannot know without analysing the
-format.
+**Empirical result — a printf-model-layer fix is UNSOUND.** The natural fix — routing
+`vasprintf`/`asprintf` through ESBMC's existing format-aware model `symex_printf` (which already
+bounds the return of `printf`/`sprintf`/`snprintf`) — was implemented and measured. It turns a
+*genuine* overflow from `VERIFICATION FAILED` into `VERIFICATION SUCCESSFUL` — a false negative.
+Three independent reasons, all confirmed in the source:
 
-**Required design change (the real fix, for a dedicated, carefully-validated PR).**
-A format-aware return-length model for the printf family (`printf`/`snprintf`/`vsnprintf`/
-`asprintf`/`vasprintf`):
+1. **Symbolic format ⇒ clamp to 0.** `src/goto-symex/builtin_functions/io.cpp:50–61` sets
+   `fmt = ""` when the format argument is not a `constant_string2t`; `io.cpp:245–249` then returns
+   the constant `0`. In `bb_verror_msg` the format is the runtime parameter `s`, so the modeled
+   return becomes 0 — far below the true output length.
+2. **`%s` is not bounded by object size** (`src/goto-symex/printf_formatter.cpp`): a non-literal
+   `%s` argument contributes 0, not `strlen`/allocation-size.
+3. **The `v*` variants pass their arguments via a `va_list`** (`used = vasprintf(&msg, s, p)`) that
+   `symex_printf` cannot see at all.
 
-1. When the format string is a *constant* (a string literal reachable through constant
-   propagation / value-set analysis), compute a sound length expression by walking the format:
-   literal characters contribute their count; each conversion specifier contributes a sound bound
-   from its argument's type/value (`%d` ≤ 11 for 32-bit, `%s` ≤ `strlen(arg)` — itself bounded by
-   the argument object size — width/precision fields respected).
-2. When the format is *not* statically known, fall back to the current nondet behaviour (sound
-   over-approximation) — never tighten in the unknown case.
-3. The length-query / allocating forms return that computed (or over-approximated) length; the
-   bounded-write form additionally clamps to the destination size.
+The only *sound* upper bound on `vasprintf`'s return is `INT_MAX`, which does not remove the false
+positive. Therefore the current unconstrained-nondet behaviour is the correct, sound one, and
+**#4976–#4979 are a precision/incompleteness limitation, not a soundness bug.** This supersedes the
+earlier "format-aware printf OM" recommendation in this section.
 
-This is a real operational-model project, not a localized patch. It **must** be regression-tested
-against the entire `--overflow-check` + string-handling corpus to prove no new false negative is
-introduced before it can be merged — the mandatory soundness gate for any printf-OM change. It
-also chips at #2797 (missing libc bodies).
-
-**Recommended interim action:** keep the four issues open, link them to umbrella #2513, and
-annotate them as "blocked on format-aware printf OM (single shared root cause)". When implemented,
-one PR closes all four with `Fixes #4976`, `Fixes #4977`, `Fixes #4978`, `Fixes #4979`.
+**What a sound fix would require.** A dedicated operational model for the
+`(v)asprintf`/`(v)sprintf`/`(v)snprintf` family in `src/c2goto/library/` that models the `va_list`
+contents and derives a return-length bound from the actual arguments — a substantially larger,
+research-grade effort that still cannot tighten a symbolic format string. Until then, keep
+#4976–#4979 open under umbrella #2513, classified as a known precision limitation.
 
 ### 3.2 #4980 — termination false alarm in ldv `turbografx.ko`
 
@@ -256,8 +253,8 @@ Verified against current open/closed state; all consistent.
 * #4976–#4979 treated as one coupled root cause rather than four separate patches.
 
 ### Skipped / deferred and why
-* #4976–#4979: deferred pending a format-aware printf-family OM (§3.1). No sound quick fix; a
-  blanket bound would introduce false negatives.
+* #4976–#4979: precision/incompleteness limitation (§3.1). The printf-model-layer fix was measured
+  to be unsound (false negative); a sound fix needs a `va_list`-modeling `(v)asprintf` OM.
 * Witness issues (#4611, #1470, #1471, #1492, #1520): require a witness validator not available
   here.
 * #4432: host-platform (x86) repro blocker.
@@ -265,9 +262,9 @@ Verified against current open/closed state; all consistent.
 * #2797: broad libc-OM gap, not a single fix.
 
 ### Remaining work (recommended, in priority order)
-1. **Format-aware printf-family OM** (`src/c2goto/library/`) closing #4976–#4979 in one PR; gated
-   on a full `--overflow-check` soundness-regression run (no new false negatives). Also chips at
-   #2797.
+1. **#4976–#4979** — precision limitation; a sound fix needs a `va_list`-modeling `(v)asprintf`
+   operational model in `src/c2goto/library/` (the printf-model-layer fix was measured to be
+   unsound). Lower priority.
 2. **Validate #4980 against PR #4919** once it lands; close or re-triage.
 3. **Witness validator integration** to unblock #4611, #1470, #1471, #1492, #1520 (cf. open
    PRs #4940, #4945).
