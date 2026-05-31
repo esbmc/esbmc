@@ -74,6 +74,9 @@ private:
    *  the base is nil (callers reset it first). */
   void build_guard_expr();
   void set_guard_list_and_rebuild(std::vector<expr2tc> &&new_guard_list);
+  void set_guard_list_and_base(
+    std::vector<expr2tc> &&new_guard_list,
+    const expr2tc &base);
 
   friend guard2tc &operator-=(guard2tc &g1, const guard2tc &g2);
   friend guard2tc &operator|=(guard2tc &g1, const guard2tc &g2);

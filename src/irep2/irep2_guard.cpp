@@ -234,6 +234,15 @@ void guard2tc::set_guard_list_and_rebuild(std::vector<expr2tc> &&new_guard_list)
   build_guard_expr();
 }
 
+void guard2tc::set_guard_list_and_base(
+  std::vector<expr2tc> &&new_guard_list,
+  const expr2tc &base)
+{
+  clear();
+  guard_list = std::move(new_guard_list);
+  expr2tc::operator=(base);
+}
+
 void guard2tc::append(const guard2tc &other)
 {
   // Reserve up-front so the per-add() push_back doesn't trigger a
@@ -400,7 +409,7 @@ guard2tc &operator|=(guard2tc &g1, const guard2tc &g2)
       {
         std::vector<expr2tc> prefix_list(
           g1.guard_list.begin(), g1.guard_list.begin() + prefix_size);
-        g1.set_guard_list_and_rebuild(std::move(prefix_list));
+        g1.set_guard_list_and_base(std::move(prefix_list), prefix_expr);
         return g1;
       }
 
@@ -438,7 +447,7 @@ guard2tc &operator|=(guard2tc &g1, const guard2tc &g2)
 
       std::vector<expr2tc> merged_list(
         g1.guard_list.begin(), g1.guard_list.begin() + prefix_size);
-      g1.set_guard_list_and_rebuild(std::move(merged_list));
+      g1.set_guard_list_and_base(std::move(merged_list), prefix_expr);
       for (const auto &c : common_suffix)
         g1.add(c);
 
