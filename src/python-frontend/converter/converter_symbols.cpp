@@ -199,7 +199,7 @@ python_converter::find_imported_symbol(const std::string &symbol_id) const
       {
         const std::size_t at = imported_symbol.rfind('@');
         if (at != std::string::npos)
-          imported_symbol = imported_symbol.substr(0, at + 1) + resolved_name;
+          imported_symbol.replace(at + 1, std::string::npos, resolved_name);
       }
 
       if (
