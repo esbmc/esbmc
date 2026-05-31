@@ -727,6 +727,11 @@ bool recognize_loop(
     std::vector<assignt> then_arm, else_arm; // if !is_span
     expr2tc if_cond; // raw IF guard (NEGATION of the C-source if-condition):
       // then-arm runs when !if_cond holds, else-arm when if_cond holds.
+    // Set when the THEN arm is an early-return out of the loop. The
+    // path enumerator emits only the else-arm path with conjunct
+    // `if_cond` (since the THEN side exits and contributes no
+    // ranking obligation).
+    bool then_returns = false;
   };
   std::vector<block_t> blocks;
   static constexpr size_t kMaxPaths = 16;
@@ -782,8 +787,49 @@ bool recognize_loop(
         return false;
       auto then_begin = std::next(it);
       auto then_end = then_begin;
-      while (then_end != if_target && !then_end->is_goto())
+      while (then_end != if_target && !then_end->is_goto() &&
+             !then_end->is_return())
         ++then_end;
+
+      // Inner-if-return shape: the THEN arm reaches a RETURN before
+      // crossing `if_target`. The RETURN exits the loop, so no path
+      // is generated for the THEN side. We model this as a span whose
+      // path is the rest of the body starting at `if_target` (i.e.
+      // the else-arm-as-loop-continuation), with the IF's guard as
+      // the path's continue-condition. Body picks up at `if_target`.
+      if (then_end != if_target && then_end->is_return())
+      {
+        // The continue side starts at `if_target` (the IF jump target,
+        // which is the label past the early return). Collect everything
+        // from `if_target` up to the *next* GOTO/RETURN/end (the body
+        // will normally fall through to either the back-edge GOTO or
+        // another in-body IF). Cap the continue span at the next
+        // control transfer — the outer Shape B loop picks up from
+        // there.
+        auto cont_begin = if_target;
+        auto cont_end = cont_begin;
+        while (cont_end != out.back && !cont_end->is_goto() &&
+               !cont_end->is_return() && !cont_end->is_function_call())
+          ++cont_end;
+        // Build a block whose path condition is `if_cond` (taking the
+        // jump = entering the continue arm) and whose assigns are the
+        // continue arm's. Represent it as an if/else block with
+        // empty then-arm and the continue assigns in else-arm — the
+        // existing enumeration will then only generate the
+        // take_else=true path (we mark `then_returns` so the
+        // enumeration skips the dead side).
+        block_t b;
+        b.is_span = false;
+        b.if_cond = it->guard;
+        b.then_returns = true;
+        if (!collect_straight_line(
+              cont_begin, cont_end, b.else_arm, exempt_derefs, goto_functions))
+          return false;
+        blocks.push_back(std::move(b));
+        it = cont_end;
+        continue;
+      }
+
       goto_programt::const_targett merge_label;
       if (then_end == if_target)
         merge_label = if_target; // no else
@@ -850,6 +896,26 @@ bool recognize_loop(
     }
   for (size_t mask = 0; mask < (size_t(1) << n_ifs); ++mask)
   {
+    // Skip mask permutations that pick a THEN arm whose body is a
+    // loop-exiting RETURN. Those arms don't contribute a path; the
+    // only live arm is the else (continue) side.
+    bool skip_this_mask = false;
+    for (size_t idx : if_indices)
+    {
+      if (!blocks[idx].then_returns)
+        continue;
+      size_t which = std::find(if_indices.begin(), if_indices.end(), idx) -
+                     if_indices.begin();
+      bool take_else = (mask >> which) & 1;
+      if (!take_else)
+      {
+        skip_this_mask = true;
+        break;
+      }
+    }
+    if (skip_this_mask)
+      continue;
+
     std::vector<assignt> path;
     std::vector<expr2tc> cond_atoms;
     for (size_t i = 0; i < blocks.size(); ++i)
