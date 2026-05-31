@@ -112,6 +112,49 @@ class ExpressionRewriteMixin:
                 ast.fix_missing_locations(listcomp)
                 return self.visit(listcomp)
 
+            # list(filter(pred, seq)) -> [x for x in seq if pred(x)], the exact
+            # CPython desugaring (filter keeps the elements for which pred is
+            # truthy, in order). filter(None, seq) keeps the truthy elements,
+            # so the guard is the element itself. The for-loop form is handled
+            # separately by loop_mixin._transform_filter_for.
+            is_list_filter_call = (isinstance(node.func, ast.Name) and node.func.id == "list"
+                                   and len(node.args) == 1 and not node.keywords
+                                   and isinstance(node.args[0], ast.Call)
+                                   and isinstance(node.args[0].func, ast.Name)
+                                   and node.args[0].func.id == "filter"
+                                   and len(node.args[0].args) == 2)
+            if is_list_filter_call:
+                filter_call = node.args[0]
+                func_expr = filter_call.args[0]
+                iterable_expr = filter_call.args[1]
+                if isinstance(func_expr, ast.Lambda) and len(func_expr.args.args) == 1:
+                    param = func_expr.args.args[0]
+                    target = ast.Name(id=param.arg, ctx=ast.Store())
+                    elt = ast.Name(id=param.arg, ctx=ast.Load())
+                    test = func_expr.body
+                else:
+                    tmp_id = f"ESBMC_filter_elt_{self.preprocessor.listcomp_counter}"
+                    target = ast.Name(id=tmp_id, ctx=ast.Store())
+                    elt = ast.Name(id=tmp_id, ctx=ast.Load())
+                    if isinstance(func_expr, ast.Constant) and func_expr.value is None:
+                        test = ast.Name(id=tmp_id, ctx=ast.Load())
+                    else:
+                        test = ast.Call(
+                            func=func_expr,
+                            args=[ast.Name(id=tmp_id, ctx=ast.Load())],
+                            keywords=[],
+                        )
+                listcomp = ast.ListComp(
+                    elt=elt,
+                    generators=[
+                        ast.comprehension(target=target, iter=iterable_expr, ifs=[test],
+                                          is_async=0)
+                    ],
+                )
+                ast.copy_location(listcomp, node)
+                ast.fix_missing_locations(listcomp)
+                return self.visit(listcomp)
+
             if (isinstance(node.func, ast.Name) and node.func.id == "list" and len(node.args) == 1
                     and not node.keywords and isinstance(node.args[0], ast.Call)
                     and isinstance(node.args[0].func, ast.Name)

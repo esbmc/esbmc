@@ -25,7 +25,9 @@ re-reproduce ~60 KNOWNBUG tests to know where the real, *sound* wins are.
 
 | Issue | PR | Title | Status |
 |---|---|---|---|
-| [#4984](https://github.com/esbmc/esbmc/issues/4984) | [#4993](https://github.com/esbmc/esbmc/pull/4993) | `[python]` carry referenced module globals through named imports | opened, fully validated |
+| [#4984](https://github.com/esbmc/esbmc/issues/4984) | [#4993](https://github.com/esbmc/esbmc/pull/4993) | `[python]` carry referenced module globals through named imports | merged |
+| [#4807](https://github.com/esbmc/esbmc/issues/4807) | [#4996](https://github.com/esbmc/esbmc/pull/4996) | `[python]` scope return-type inference to the enclosing function | merged — flips `humaneval_127` (C1) to `CORE` |
+| [#4807](https://github.com/esbmc/esbmc/issues/4807) | _branch `feat/list-filter-rewrite`_ | `[python]` desugar `list(filter(pred, seq))` to a comprehension (plan §6 item 4) | validated, pending PR |
 
 ### #4984 — `from mod import C` drops module globals used by C's methods
 - **Root cause:** `_filter_nodes_for_import` in
@@ -47,6 +49,41 @@ re-reproduce ~60 KNOWNBUG tests to know where the real, *sound* wins are.
   the closure). All 94 multi-file Python import regression tests pass (the full
   at-risk surface; the change is inert for single-file/no-import programs).
   CPython sanity (`check_python_tests.sh`) ✓, pylint 10/10 ✓, code-review clean.
+
+### `list(filter(...))` — eager-filter materialisation (plan §6 item 4)
+- **Root cause:** the preprocessor (`expression_rewrite_mixin.py`) already
+  desugars `list(map(f, xs))` to a comprehension and handles the
+  `for x in filter(...)` statement form (`loop_mixin._transform_filter_for`),
+  but `list(filter(pred, xs))` had no rewrite — it reached the converter as a
+  call to the unmodelled `filter` builtin and verification stopped with
+  `Unsupported function 'filter' is reached`.
+- **Fix:** add a `list(filter(pred, seq))` → `[x for x in seq if pred(x)]`
+  rewrite next to the `map` rewrite, the exact CPython desugaring. Three handled
+  predicate forms: a one-arg `lambda` (its param becomes the comprehension
+  target, its body the `if` guard), a named callable (`pred(t)` guard over a
+  fresh `ESBMC_filter_elt_N` target), and `filter(None, seq)` (the element's own
+  truthiness is the guard). Any other shape (wrong arity, keywords) falls through
+  to `generic_visit`, preserving the honest `Unsupported` diagnostic — the safe
+  direction for a verifier. The rewrite only ever **adds** an `if`-guarded
+  comprehension; it never fabricates elements (the negative test pins this).
+- **Validation:** 2 new regression tests — `list_filter` (lambda + named-callable
+  + `filter(None,…)`, exact element/length assertions → SUCCESSFUL) and
+  `list_filter_fail` (over-long expected length → FAILED, guards against a
+  nondet/fabricated list). Existing `filter_loop{,_fail}`, `github_4294_filter`,
+  and the map/listcomp suite still pass. CPython sanity
+  (`check_python_tests.sh list_filter`) ✓, pylint clean (no new categories;
+  E-level 10/10), code-review clean.
+- **Benchmark flip:** re-tags `humaneval_136` (`largest_smallest_integers`, two
+  `list(filter(lambda…))` calls) from `KNOWNBUG` to `CORE` — now
+  `VERIFICATION SUCCESSFUL`, verified non-vacuous (wrong expected tuple → FAILED)
+  and CPython-consistent. Does **not** flip humaneval 108/145/151 — those also
+  need `str(int)` in a comprehension and `sorted(key=)` (see §5 C2); 108 is the
+  only remaining KNOWNBUG that uses `filter`.
+- **Note — `reversed(list)` is no longer a gap:** the §5 quixbugs note that
+  `reversed()` on a list is unmodelled is **stale** for the `for x in reversed(seq)`
+  form, which now lowers correctly (`loop_mixin._transform_reversed_for`,
+  verified non-vacuously). `next_permutation` remains blocked by slice-assignment
+  + list `==`, not by `reversed`.
 
 ---
 
@@ -136,8 +173,10 @@ assertion/segfault needing care, or the intentional limitation above.
 
 ### humaneval (#4807 umbrella, 30 still failing)
 
-- **C1 — `assertion 0` on computed string/list `== literal` (5):** 62, 103, 119,
-  125, 127. Likely a string/list-equality modeling issue (soundness-relevant),
+- **C1 — `assertion 0` on computed string/list `== literal` (4):** 62, 103, 119,
+  125. (`127` fixed by #4807 / PR #4996 — return-type inference is now scoped to
+  the enclosing function; it is `CORE`/SUCCESSFUL on `master`.) Likely a
+  string/list-equality modeling issue (soundness-relevant),
   but intertwined with string concat, comprehensions, and per-function logic.
   Deep solver/model change — not safe to rush.
 - **C2 — `TypeError: str() expects a string argument` (3):** 108, 145, 151.
@@ -150,7 +189,9 @@ assertion/segfault needing care, or the intentional limitation above.
   nondet (soundness), but tests also use slice-assignment, `zip`, `extend`,
   extended slices.
 - **C6 — scalar return mismatches (≈4, distinct causes):** 59, 78, 95, 137 (+86).
-- **Singletons:** 123 (sorted mixed types), 136 (`filter()`), 148 (tuple slice
+- **Singletons:** 123 (sorted mixed types), ~~136 (`filter()`)~~ **fixed** —
+  `list(filter(lambda…))` now lowers to a comprehension (§1), re-tagged `CORE`;
+  148 (tuple slice
   non-const lower), 158 (list-OM empty type), 162 (`hashlib` unmodelled),
   2-1 (numpy `fmod`), 91 (`split` maxsplit), and three internal C++ asserts —
   29 (`to_array_type`), 39 (`get_significand_width`), 90 (`member2t`).
@@ -181,8 +222,18 @@ Ordered by leverage × soundness-confidence.
 3. **Tuple-unpack-from-iteration type inference (quixbugs Cluster 1).** Infer the
    element type of `for u, v in <dict/sequence of tuples>` and `u, v = edge` so
    the unpack resolves to a tuple/array.
-4. **Generally-useful builtins, each with its own regression pair:** `str(int)`,
-   general `reversed(list)`, `filter`, `queue.Queue` / FIFO.
+4. **Generally-useful builtins, each with its own regression pair.** Status:
+   - `filter` — **done.** `for x in filter(...)` (`filter_loop`) and
+     `list(filter(...))` (`list_filter`, this plan) both lower to comprehensions.
+   - `reversed(list)` — **done** for the `for x in reversed(seq)` form
+     (`_transform_reversed_for`); `list(reversed(seq))` not yet exercised.
+   - `str(int)` — **partial.** `str(<int literal/var>)` works; the open gap is
+     `str(n)` inside a comprehension after a tuple-unpack reassignment
+     (`n, neg = -1*n, -1`), which currently aborts in the converter with an
+     internal `assert_arith_2ops_consistency` (irep2_expr.cpp) rather than the
+     `TypeError: str() expects a string argument` seen for the whole-function
+     conversion. Entangled with tuple-unpack type tracking; not a one-line fix.
+   - `queue.Queue` / FIFO — **not started** (blocks BFS quixbugs + #4566).
 
 **Do NOT** machine-fix the scalability/timeout tests (quixbugs Cluster 2,
 humaneval C3) by loosening unwinding — `--no-unwinding-assertions` paired with a
