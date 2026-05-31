@@ -326,3 +326,45 @@ TEST_CASE(
     lowered_ptr(symbol_type2tc("tag-struct __ESBMC_PyListObj")) ==
     pointer_typet(symbol_typet("tag-struct __ESBMC_PyListObj")));
 }
+
+TEST_CASE(
+  "Phase 4.3: Callable function-pointer is IREP2-equivalent to legacy",
+  "[python-frontend][irep2][phase4.3]")
+{
+  cmdlinet cmdline;
+  REQUIRE_FALSE(config.set(cmdline));
+
+  contextt context;
+  global_scope gs;
+  const nlohmann::json ast = {
+    {"_type", "Module"},
+    {"body", nlohmann::json::array()},
+    {"filename", "test.py"},
+    {"type_ignores", nlohmann::json::array()}};
+  python_converter converter(context, &ast, gs);
+  const type_handler &th = converter.get_type_handler();
+
+  // Callable builds a pointer to a generic no-argument code type via
+  // code_type2tc + lower_to_seam. This is the one pointer/function-family case
+  // that is *not* raw byte-identical to the legacy pointer_typet(code_typet):
+  // the legacy source never touches code_typet::arguments(), so it has no
+  // `arguments` sub, whereas migrate_type_back always writes an (empty) one.
+  //
+  // The contract that matters is the harness's level-(1) IREP2 contract (see
+  // file header): migrate_type canonicalises the empty arguments list, so the
+  // IREP2 type symex consumes is *identical* to the legacy form's. The leftover
+  // empty `arguments` sub on the lowered typet is normalised by goto-convert
+  // (verified GOTO-identical end-to-end), so behaviour is unchanged.
+  code_typet legacy_code;
+  legacy_code.return_type() = empty_typet();
+  const typet legacy = pointer_typet(legacy_code);
+  const typet migrated = th.get_typet(std::string("Callable"));
+
+  // (1) Identical IREP2 representation — the type that reaches symex.
+  REQUIRE(migrate_type(migrated) == migrate_type(legacy));
+
+  // (2) IREP2-round-trip stable (the lossless-cache contract).
+  REQUIRE(
+    migrate_type(migrate_type_back(migrate_type(migrated))) ==
+    migrate_type(migrated));
+}

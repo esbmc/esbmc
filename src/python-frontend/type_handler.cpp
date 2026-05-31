@@ -464,16 +464,18 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
     return lower_to_seam(unsignedbv_type2tc(config.ansi_c.pointer_width()));
 
   // Callable: represents function/callable types
-  // Return a pointer to a generic code type (function pointer). Left legacy in
-  // the Phase 4.3 pointer-family slice: an empty-argument code_typet does not
-  // round-trip byte-identically through code_type2t (migrate_type_back emits an
-  // `arguments` sub the source lacks), so it migrates with the function-type
-  // family once synthesized argument names are supplied (Part IV §7, 4.3).
+  // Return a pointer to a generic no-argument code type (function pointer),
+  // built IREP2-internal and lowered at the seam (Phase 4.3, Part IV §5). Empty
+  // argument/name vectors satisfy code_type2t's args.size()==argument_names
+  // .size() invariant (irep2_type.h).
   if (ast_type == "Callable")
   {
-    code_typet code_type;
-    code_type.return_type() = empty_typet();
-    return pointer_typet(code_type);
+    const type2tc code_t = code_type2tc(
+      std::vector<type2tc>{},
+      get_empty_type(),
+      std::vector<irep_idt>{},
+      /*ellipsis=*/false);
+    return lower_to_seam(pointer_type2tc(code_t));
   }
 
   // Python float type: IEEE 754 double-precision mapping
