@@ -1,8 +1,12 @@
-# Known limitation of the usage-site scanner: instance variables created
-# inside function bodies are not tracked, so `<var>.attr = <other>`
-# assignments happening inside a function don't refine the attribute's
-# inferred type. The fix would need scope-aware tracking of local
-# instance variables.
+# The usage-site scanner now tracks instance attributes written through a
+# function-local variable (see github_4117_func_local_attr), so `.next`'s
+# type resolves here too. This case remains KNOWNBUG for a SEPARATE reason:
+# `setup()` returns `n1`, whose `.next` points to the function-local `n2`;
+# ESBMC stack-allocates Python objects, so the returned reference to `n2` is
+# reported as a use-after-free ("accessed expired variable pointer 'n2'").
+# CPython heap-allocates objects, so this is safe at runtime. Flipping this
+# test additionally needs object-lifetime (heap) modeling for objects that
+# escape their defining function — orthogonal to class tracking.
 
 class Node:
     def __init__(self, v):
