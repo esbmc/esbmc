@@ -77,6 +77,13 @@ TEST_CASE(
     code_typet code_type; // Callable
     code_type.return_type() = empty_typet();
     require_irep2_stable(pointer_typet(code_type));
+
+    // Pointer-to-value and pointer-to-symbol: the shapes the list/annotation
+    // builders emit, migrated in Phase 4.3 to pointer_type2tc + lower_to_seam.
+    require_irep2_stable(pointer_typet(long_long_int_type()));
+    require_irep2_stable(pointer_typet(empty_typet()));
+    require_irep2_stable(
+      pointer_typet(symbol_typet("tag-struct __ESBMC_PyListObj")));
   }
 
   SECTION("array kinds (str / bytes / type)")
@@ -277,4 +284,45 @@ TEST_CASE(
   // A large size exercises the BigInt size path.
   REQUIRE(
     th.build_array(char_type(), 100000) == legacy_array(char_type(), 100000));
+}
+
+TEST_CASE(
+  "Phase 4.3: pointer-family builders are byte-identical (IREP2-internal)",
+  "[python-frontend][irep2][phase4.3]")
+{
+  cmdlinet cmdline;
+  REQUIRE_FALSE(config.set(cmdline));
+
+  contextt context;
+  global_scope gs;
+  const nlohmann::json ast = {
+    {"_type", "Module"},
+    {"body", nlohmann::json::array()},
+    {"filename", "test.py"},
+    {"type_ignores", nlohmann::json::array()}};
+  python_converter converter(context, &ast, gs);
+  const type_handler &th = converter.get_type_handler();
+
+  // NoneType / Optional: get_typet now builds the pointer-width unsigned integer
+  // IREP2-internal (unsignedbv_type2tc) and lowers at the seam. The legacy
+  // result must be byte-identical to the pointer_type() helper it replaced.
+  REQUIRE(th.get_typet(std::string("NoneType")) == pointer_type());
+  REQUIRE(th.get_typet(std::string("Optional")) == pointer_type());
+
+  // The list/annotation pointer sites (get_list_type) build pointer_type2tc and
+  // lower at the seam, but require a populated symbol table to reach directly;
+  // the full regression suite exercises them. Here we pin the *pattern* those
+  // sites use is byte-identical to the pointer_typet constructor it replaced:
+  // pointer-to-value (migrated subtype) and pointer-to-symbol (native subtype).
+  auto lowered_ptr = [](const type2tc &sub) {
+    return migrate_type_back(pointer_type2tc(sub));
+  };
+  REQUIRE(
+    lowered_ptr(migrate_type(long_long_int_type())) ==
+    pointer_typet(long_long_int_type()));
+  REQUIRE(
+    lowered_ptr(migrate_type(empty_typet())) == pointer_typet(empty_typet()));
+  REQUIRE(
+    lowered_ptr(symbol_type2tc("tag-struct __ESBMC_PyListObj")) ==
+    pointer_typet(symbol_typet("tag-struct __ESBMC_PyListObj")));
 }
