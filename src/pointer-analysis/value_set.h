@@ -458,6 +458,11 @@ public:
   /** Delete the value set for the given variable name and suffix. */
   void del_var(const std::string &id, const std::string &suffix)
   {
+    if (suffix.empty())
+    {
+      values.erase(id);
+      return;
+    }
     std::string index = id2string(id) + suffix;
     values.erase(index);
   }
@@ -472,6 +477,18 @@ public:
    *  given entryt. */
   entryt &get_entry(const entryt &e)
   {
+    // The map key is `identifier + suffix`. The suffix is empty on the
+    // overwhelming majority of calls (every plain l1 variable; suffixes
+    // only appear for array/struct-member pointer tracking), so avoid
+    // building the concatenated temporary string in that case and key
+    // directly off the identifier.
+    if (e.suffix.empty())
+    {
+      std::pair<valuest::iterator, bool> r =
+        values.insert(std::pair<irep_idt, entryt>(e.identifier, e));
+      return r.first->second;
+    }
+
     std::string index = id2string(e.identifier) + e.suffix;
 
     std::pair<valuest::iterator, bool> r =
