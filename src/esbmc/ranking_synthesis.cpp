@@ -1913,6 +1913,15 @@ expr2tc synthesize_invariant(
       {
         // Path infeasible under the invariant ⇒ preservation vacuous.
         expr2tc neg = atoms[i].primes[pi];
+        // If the prime atom got an inlined sideeffect (e.g. body
+        // does `*y = NONDET()` and the atom references *y), feeding
+        // it to the SMT layer crashes the cache lookup. Conservatively
+        // drop the atom — same effect as it being non-preserved.
+        if (contains_sideeffect(neg))
+        {
+          preserved = false;
+          break;
+        }
         make_not(neg);
         expr2tc check = and2tc(and2tc(inv, rl.guard), rl.paths[pi].cond);
         check = and2tc(check, neg);
@@ -1985,6 +1994,16 @@ bool prove_loop_terminates(
     for (const auto &p : rl.paths)
     {
       expr2tc m_prime = apply_body(m, p.assigns);
+      // If apply_body inlined a NONDET / malloc / function-call result
+      // (e.g. body has `*y = NONDET()` and m mentions `*y`), the SMT
+      // solver crashes on the resulting sideeffect2t — bail this
+      // candidate. Sound: failing to discharge a candidate is the same
+      // as the candidate not strictly decreasing.
+      if (contains_sideeffect(m_prime))
+      {
+        decreases = false;
+        break;
+      }
       expr2tc obligation = and2tc(and2tc(inv, rl.guard), p.cond);
       obligation = and2tc(obligation, greaterthanequal2tc(m_prime, m));
       if (!is_unsat(obligation, options, ns))
@@ -2051,6 +2070,13 @@ bool prove_loop_terminates(
         {
           expr2tc m1p = apply_body(m1, p.assigns);
           expr2tc m2p = apply_body(m2, p.assigns);
+          // See the single-measure pass for why we filter sideeffects
+          // out of the post-state measure before handing it to SMT.
+          if (contains_sideeffect(m1p) || contains_sideeffect(m2p))
+          {
+            decreases = false;
+            break;
+          }
           // Lex-decrease: m1' < m1, or m1' == m1 and m2' < m2.
           expr2tc decr = or2tc(
             lessthan2tc(m1p, m1),
@@ -2126,6 +2152,15 @@ bool prove_loop_terminates(
             expr2tc m1p = apply_body(m1, p.assigns);
             expr2tc m2p = apply_body(m2, p.assigns);
             expr2tc m3p = apply_body(m3, p.assigns);
+            // See the single-measure pass — sideeffects in the
+            // post-state measure crash convert_ast.
+            if (
+              contains_sideeffect(m1p) || contains_sideeffect(m2p) ||
+              contains_sideeffect(m3p))
+            {
+              decreases = false;
+              break;
+            }
             expr2tc decr = or2tc(
               lessthan2tc(m1p, m1),
               or2tc(
