@@ -71,8 +71,14 @@ bool is_incompatible_scalar_string_retype(const typet &lhs, const typet &rhs)
 struct block_nesting_guard
 {
   unsigned &depth;
-  explicit block_nesting_guard(unsigned &d) : depth(d) { ++depth; }
-  ~block_nesting_guard() { --depth; }
+  explicit block_nesting_guard(unsigned &d) : depth(d)
+  {
+    ++depth;
+  }
+  ~block_nesting_guard()
+  {
+    --depth;
+  }
 };
 } // namespace
 
