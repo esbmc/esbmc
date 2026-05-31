@@ -91,6 +91,45 @@ bool is_disequality(const expr2tc &e)
   return is_notequal2t(e);
 }
 
+/// True iff @p instr is a `FUNCTION_CALL` to a helper that has no effect
+/// on whether the loop terminates. The SV-COMP convention has these
+/// helpers either no-op the property entirely (`__VERIFIER_assume` is
+/// `assume(c)` — a path filter that doesn't change state or whether the
+/// loop runs forever) or end the program via abort if the predicate
+/// fails (`__VERIFIER_assert`, `assert`, `reach_error`, `__assert_fail`,
+/// `abort`, `exit`). An execution that aborts is *terminating*, so for
+/// the termination property these are equivalent to a no-op: they
+/// neither preserve nor invent infinite executions, and their
+/// counterfactual (where the assert didn't fire) is the path the
+/// certifier already analyses.
+///
+/// We let these survive `collect_straight_line` / Shape B's span
+/// collector so loop bodies of the form `foo(); __VERIFIER_assert(P);
+/// bar();` are recognized — without this filter the certifier rejects
+/// every such loop and the user has to manually strip the assertions
+/// before analysis.
+bool is_termination_irrelevant_call(const goto_programt::instructiont &instr)
+{
+  if (!instr.is_function_call())
+    return false;
+  const code_function_call2t &c = to_code_function_call2t(instr.code);
+  if (!is_symbol2t(c.function))
+    return false;
+  irep_idt fname = to_symbol2t(c.function).thename;
+  static const char *allowlist[] = {
+    "c:@F@__VERIFIER_assert",
+    "c:@F@__VERIFIER_assume",
+    "c:@F@assert",
+    "c:@F@__assert_fail",
+    "c:@F@reach_error",
+    "c:@F@abort",
+    "c:@F@exit"};
+  for (const char *nm : allowlist)
+    if (fname == nm)
+      return true;
+  return false;
+}
+
 /// True if @p e contains a memory-dependent subexpression (dereference,
 /// array index, struct/union member, byte op). Such expressions can't
 /// be handed to the solver directly — they need symex's dereferencing
@@ -346,6 +385,10 @@ bool collect_straight_line(
       it->is_skip() || it->is_location() || it->type == DEAD ||
       it->type == DECL)
       continue;
+    // FUNCTION_CALL to a termination-irrelevant helper (assert, assume,
+    // abort, exit, ...) — skip; see `is_termination_irrelevant_call`.
+    if (is_termination_irrelevant_call(*it))
+      continue;
     return false;
   }
   return true;
@@ -592,13 +635,17 @@ bool recognize_loop(
       ++it;
       continue;
     }
-    if (it->is_assign())
+    if (it->is_assign() || is_termination_irrelevant_call(*it))
     {
       // Greedily collect a straight-line span up to the next GOTO or end.
+      // Termination-irrelevant FUNCTION_CALLs (assert/assume/abort/...)
+      // count as part of the span — collect_straight_line will skip
+      // over them and they vanish from the path's assigns.
       auto span_begin = it;
       while (it != out.back && !it->is_goto() &&
              (it->is_assign() || it->is_skip() || it->is_location() ||
-              it->type == DEAD || it->type == DECL))
+              it->type == DEAD || it->type == DECL ||
+              is_termination_irrelevant_call(*it)))
         ++it;
       block_t b;
       b.is_span = true;
