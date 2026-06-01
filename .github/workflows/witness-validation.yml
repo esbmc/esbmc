@@ -140,10 +140,6 @@ jobs:
           unzip -q output.zip
           mv esbmc-output $HOME/esbmc-output
 
-      - name: Run WitnessMap
-        if: ${{ inputs.mode == 'Task' && (inputs.task == 'ReachSafety-CorrectnessWitnesses' || inputs.task == 'ReachSafety-ViolationWitnesses' || inputs.task == 'Termination-ViolationWitnesses') }}
-        run: ./esbmc-src/scripts/witnessmap.sh
-
       - name: Download ESBMC binary (from benchexec run)
         if: ${{ inputs.validator == 'ESBMC' && inputs.esbmc_source == 'Download from benchexec run' }}
         uses: actions/download-artifact@v8
