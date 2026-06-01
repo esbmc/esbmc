@@ -108,32 +108,66 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
 
   // Violation-witness: steer branch direction if the current waypoint is a
   // branching at this location.  Skip backward GOTOs (loop back edges).
+  //
+  // 'follow' waypoints are consumed once (advance after match).
+  // 'avoid' waypoints are persistent: the constraint applies at every
+  // encounter of the same branch (e.g. every loop iteration).
+  //
+  // Scan forward from cur_wp through the segment:
+  //   - 'avoid' that does NOT match current location: skip (avoids are
+  //     persistent but don't block later waypoints from being found).
+  //   - 'avoid' that DOES match: apply the constraint, do NOT advance cur_wp.
+  //   - 'follow' that does NOT match: stop scanning (follows are ordered).
+  //   - 'follow' that DOES match: apply and advance cur_wp past it.
   if (
     validate_witness && forward &&
     cur_state->cur_seg < cur_state->witness_segs.size())
   {
     const auto &seg = cur_state->witness_segs[cur_state->cur_seg];
-    if (cur_state->cur_wp < seg.size())
+    const auto &loc = cur_state->source.pc->location;
+
+    for (size_t wp_idx = cur_state->cur_wp; wp_idx < seg.size(); ++wp_idx)
     {
-      const waypoint &wp = seg[cur_state->cur_wp];
-      if (wp.type == waypoint::branching)
+      const waypoint &wp = seg[wp_idx];
+      if (wp.type != waypoint::branching)
+        continue;
+
+      const bool loc_matches =
+        !wp.line_id.empty() && wp.line_id == loc.get_line() &&
+        (wp.function_id.empty() ||
+         wp.function_id == loc.get_function());
+
+      if (loc_matches)
       {
-        const auto &loc = cur_state->source.pc->location;
-        if (
-          !wp.line_id.empty() && wp.line_id == loc.get_line() &&
-          (wp.function_id.empty() || wp.function_id == loc.get_function()))
+        const bool is_avoid = (wp.action == waypoint::avoid);
+        bool direction_true = (wp.value == "true") ^ is_avoid;
+        bool goto_taken =
+          instruction.flipped_guard ? direction_true : !direction_true;
+        // The witness direction overrides any prior guard simplification.
+        // do_simplify may have already set new_guard_false/true based on
+        // symbolic evaluation, but the witness must take priority.
+        if (goto_taken)
         {
-          const bool is_avoid = (wp.action == waypoint::avoid);
-          bool direction_true = (wp.value == "true") ^ is_avoid;
-          bool goto_taken =
-            instruction.flipped_guard ? direction_true : !direction_true;
-          if (goto_taken)
-            new_guard_true = true;
-          else
-            new_guard_false = true;
+          new_guard_true = true;
+          new_guard_false = false;
+        }
+        else
+        {
+          new_guard_false = true;
+          new_guard_true = false;
+        }
+        if (!is_avoid)
+        {
+          cur_state->cur_wp = wp_idx;
           cur_state->advance_witness_position();
         }
+        break;
       }
+
+      // Location does not match: only skip past 'avoid' entries; a 'follow'
+      // that hasn't been satisfied yet cannot be bypassed.
+      if (wp.action != waypoint::avoid)
+        break;
     }
   }
 
