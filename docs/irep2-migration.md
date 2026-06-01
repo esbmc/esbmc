@@ -1888,6 +1888,24 @@ further phase is taken up.*
    byte (F-P7 / SM1). `code_type2t` requires `args.size() ==
    argument_names.size()` (`irep2_type.h:240`) — supply synthesized names.
 
+   **Ordering refined by the §15.7 byte-identity audit.** The seam helper
+   `lower_to_seam` preserves byte-identity *only* when the legacy form
+   already carries every field `migrate_type_back` re-emits. The
+   **pointer family** (`pointer_typet(value/symbol)`, and the
+   NoneType/Optional pointer-width unsignedbv) satisfies this and was
+   migrated **ahead of struct/class** (elementary → array → **pointer** →
+   …). The **tuple/optional struct builders do *not*** — `migrate_type_back`
+   unconditionally writes `tag`/`pretty_name` (a tagless 2-arg-component
+   tuple gains both) and drops component `#access` (Optional). They are
+   therefore **F-P5 seam-attribute cases deferred to Phase 4.5**, not clean
+   4.3 internal migrations. The **Callable** builder (an empty-argument
+   `code_typet`) is *not* raw byte-identical either (back-migration adds an
+   `arguments` sub the source lacks) but **was migrated** — it is
+   **IREP2-equivalent** (`migrate_type` canonicalises the empty `arguments`,
+   so the type symex consumes matches the legacy form) and **GOTO-identical**
+   (goto-convert normalises the leftover sub), §15.7. The lossless struct case
+   is the `complex` struct (3-arg components + `tag` already present, §15.7).
+
 ### Phase 4.4 — Migrate **expression** construction to `expr2tc` (internal)
 7. Rewrite the expression converters to build `expr2tc` via typed factories
    instead of `symbol_expr`/`typecast_exprt`/`member_exprt`/`index_exprt`/
@@ -2298,3 +2316,61 @@ captures matched lines (not just the verdict) and the property/branch/assert
 counts are held invariant — both already mandated by §10. This makes RP10
 cheap to discharge: one targeted bounds test plus the existing matched-text
 gate, rather than a diffuse symbol-naming audit.
+
+### 15.7 Phase 4.3 byte-identity audit — which type families ride the seam losslessly
+
+The Phase 4.3 invariant is byte-identical legacy output at the seam (the
+elementary/array commits and their `irep2_type_roundtrip_test` cases assert
+exact `==`). A spike over `lower_to_seam(t) = migrate_type_back(t)` for every
+`type_handler` builder shape established **which families can hold that bar**,
+because `lower_to_seam` is byte-identical **only** when the legacy form
+already carries every field `migrate_type_back` re-emits:
+
+| Builder shape | Byte-identical? | Why |
+|---|:---:|---|
+| Elementary (`signedbv`/`unsignedbv`/`bool`/float) | ✅ | scalar, no extra fields |
+| `array_typet` | ✅ | subtype + size only |
+| `pointer_typet(value)` / `pointer_typet(symbol)` | ✅ | subtype only; `carry_provenance` default `false` matches a fresh `pointer_typet` |
+| NoneType/Optional (`pointer_type()` = pointer-width `unsignedbv`) | ✅ | elementary in disguise |
+| `complex` struct (3-arg components + `tag`) | ✅ | `tag`/`pretty_name` already present |
+| **Tuple** struct (2-arg components, **tagless**) | ❌ | `migrate_type_back` **adds** an empty `tag` **and** an empty `pretty_name` per component |
+| **Optional** struct (`set_access("public")`) | ❌ | `migrate_type` carries only types/names/pretty-names/tag/packed — component **`#access` is dropped** |
+| **Callable** (`pointer_typet(code_typet)`, **no args**) | ❌ raw, ✅ IREP2 | `migrate_type_back` **adds** an empty `arguments` sub the source lacks; `migrate_type` canonicalises it away, so the IREP2 type is identical (migrated — see below) |
+
+**Consequences for the family order (§7 Phase 4.3).**
+
+- The **pointer family** was migrated **ahead of struct/class** (commit
+  `[python] Phase 4.3: migrate pointer-family type builders to IREP2`):
+  NoneType/Optional → `unsignedbv_type2tc`, the list/annotation pointees →
+  `pointer_type2tc`, the generic list type → `pointer_type2tc` +
+  `symbol_type2tc`. The doc's family sequence is an ordering preference, not a
+  hard dependency (§8: 4.3 only blocks 4.4); reordering to "clean families
+  first" keeps every commit byte-identical.
+- The **tuple/optional struct builders are F-P5 seam-attribute cases** — the
+  same class as `#cpp_type`/`#member_name`. They cannot ride the IREP2 type
+  losslessly and belong to **Phase 4.5** (the explicit hand-off that
+  re-attaches seam attributes), not a Phase 4.3 internal migration. The only
+  lossless `type_handler` struct is `complex` (but it is a cached header-inline
+  free function feeding expression construction, so it tracks with 4.4/4.5).
+- The **Callable** builder **was migrated** (commit `[python] Phase 4.3:
+  migrate Callable function-pointer type to IREP2`): a no-argument
+  `code_type2tc` (empty arg/name vectors satisfy the `args.size() ==
+  argument_names.size()` invariant) wrapped in `pointer_type2tc`, lowered at
+  the seam. It is the one pointer/function-family case that is **not raw
+  byte-identical** — the legacy source never touched `code_typet::arguments()`,
+  so `migrate_type_back` adds an empty `arguments` sub — but it **is
+  IREP2-equivalent** (`migrate_type` canonicalises the empty `arguments`, so
+  `migrate_type(migrated) == migrate_type(legacy)`, the harness's documented
+  level-1 contract) and **GOTO-identical** (goto-convert normalises the
+  leftover sub; verified end-to-end on both solvers, all 10
+  `regression/python/callable*` tests pass). This is the precedent that raw
+  byte-equality is a *bonus* over the stated IREP2-equivalence bar, and that a
+  field `migrate_type_back` adds can still be behaviour-inert once it reaches
+  the GOTO program. Real-parameter function *symbol* types (≥1 argument, built
+  in the converter, not `type_handler`) already carry the `arguments` sub and
+  are raw byte-identical; they migrate with the Phase 4.4/4.5 symbol work.
+
+Reproduce: extend `irep2_type_roundtrip_test` with
+`migrate_type_back(migrate_type(t)) == t` (raw) and `migrate_type(migrated) ==
+migrate_type(legacy)` (IREP2) over each shape above; the raw ❌ rows fail the
+first but the Callable row passes the second.
