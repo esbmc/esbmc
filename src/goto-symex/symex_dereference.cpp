@@ -80,21 +80,9 @@ void symex_dereference_statet::get_value_set(
       // add each object to the resulting assume statement.
       for (auto it = value_set.begin(); it != value_set.end(); ++it)
       {
-        // The value-set may contain `unknown`/`invalid` entries
-        // alongside concrete object_descriptors. Previously we
-        // returned at the first non-descriptor and dropped the
-        // whole assume; that left the freshly-nondet pointer
-        // unconstrained even when the analysis had identified
-        // concrete candidates. Skip the non-descriptor entries
-        // instead. This is sound: the pre-havoc value-set is a
-        // sound over-approximation, but we are choosing to
-        // assume that the pointer points at one of the concrete
-        // candidates we *can* name in the SMT encoding — any
-        // model that routed through the `unknown` sink before is
-        // expressible by one of those candidates if it survived
-        // the deref-time guard chain at all.
+        // note that the set of objects are always encoded as object_descriptor.
         if (!is_object_descriptor2t(*it))
-          continue;
+          return;
 
         const object_descriptor2t &obj = to_object_descriptor2t(*it);
 
