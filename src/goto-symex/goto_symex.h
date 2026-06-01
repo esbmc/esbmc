@@ -7,12 +7,15 @@
 #include <goto-symex/symex_target.h>
 #include <map>
 #include <optional>
+#include <unordered_map>
 #include <pointer-analysis/dereference.h>
 #include <stack>
 #include <util/i2string.h>
 #include <irep2/irep2.h>
 #include <util/options.h>
 #include <util/std_types.h>
+
+class value_set_analysist;
 
 class reachability_treet; // Forward dec
 class execution_statet;   // Forward dec
@@ -1173,6 +1176,18 @@ protected:
    *  --no-interval-symex-guard); assertion pruning via --interval-symex-assert
    *  discharges claims proven TRUE. */
   std::optional<interval_domaint> interval_domain_state;
+  /** Per-function value-set fixpoints (goto-program-level), built lazily by
+   *  symex_assign on first IS pointer-havoc per function. Each entry is the
+   *  worklist fixpoint over the function's CFG, which closes loop back-edges
+   *  and yields a sound over-approximation of every reachable state at each
+   *  instruction in that function — the closure the symex-prefix value-set
+   *  lacks. The cache is shared across clones (shared_ptr aliasing through
+   *  operator=) so reachability-tree exploration reuses analyses. Null
+   *  entries mark functions where VSA construction failed (sound fallback:
+   *  the strengthening is skipped for that function). */
+  std::shared_ptr<
+    std::unordered_map<irep_idt, std::shared_ptr<value_set_analysist>>>
+    pre_symex_vsa_by_function;
   /** Whether constant propagation is to be enabled. */
   bool constant_propagation;
   /** Namespace we're working in. */
