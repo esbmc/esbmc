@@ -569,6 +569,183 @@ std::string pointer_cell_identity(const irep_idt &p, const prefix_defst &defs)
   return {};
 }
 
+/// Attempt to emit an inner-loop summary as a flat assigns sequence,
+/// for use inside Shape B branch arms (where the arm's contents are
+/// otherwise restricted to straight-line assigns).
+///
+/// Returns true iff @p it points at the head of a loop whose head
+/// location number is in @p skip's by_head_locnum map AND that loop
+/// matches the conservative monotone-counter shape (see the longer
+/// comment in recognize_loop's body parser). On true, @p out_assigns
+/// is filled with the refined `pre_sym := v` capture + `v := ite(...)`
+/// post-update ASSIGNs, and @p out_advance is set to one past the
+/// inner's back-edge — the caller advances its iterator there.
+///
+/// All-or-nothing: any check that fails returns false WITHOUT
+/// modifying @p out_assigns, so the caller can cleanly fall back to
+/// today's behaviour (reject the arm as unrecognized). We refuse to
+/// emit the pure-havoc fallback here: a Shape B arm has no place to
+/// carry the `!G_inner` post-condition that pure havoc relies on, so
+/// emitting just the havoc assigns would be unsound.
+bool try_emit_inner_summary_assigns(
+  goto_programt::const_targett it,
+  const loop_skipt *skip,
+  const std::map<expr2tc, expr2tc> &deref_map,
+  std::vector<assignt> &out_assigns,
+  goto_programt::const_targett &out_advance)
+{
+  if (!skip || !it->is_goto())
+    return false;
+  auto skip_it = skip->by_head_locnum.find(it->location_number);
+  if (skip_it == skip->by_head_locnum.end())
+    return false;
+  const auto &inner = skip_it->second;
+
+  // 1. Match `c > 0` (positive form) or `c <= 0` (stored form).
+  if (is_nil_expr(inner.guard))
+    return false;
+  expr2tc anchor_orig;
+  {
+    expr2tc g = inner.guard;
+    if (is_not2t(g))
+    {
+      expr2tc pos = to_not2t(g).value;
+      if (is_greaterthan2t(pos))
+      {
+        const greaterthan2t &gt = to_greaterthan2t(pos);
+        if (
+          is_constant_int2t(gt.side_2) &&
+          to_constant_int2t(gt.side_2).value == 0)
+          anchor_orig = gt.side_1;
+      }
+    }
+    else if (is_lessthanequal2t(g))
+    {
+      const lessthanequal2t &le = to_lessthanequal2t(g);
+      if (
+        is_constant_int2t(le.side_2) && to_constant_int2t(le.side_2).value == 0)
+        anchor_orig = le.side_1;
+    }
+  }
+  if (is_nil_expr(anchor_orig))
+    return false;
+
+  // 2. Walk body, collect per-scalar ±1 steps.
+  std::map<irep_idt, int> steps;
+  std::map<irep_idt, expr2tc> var_orig;
+  for (auto bp = std::next(it); bp != inner.back; ++bp)
+  {
+    if (
+      bp->is_skip() || bp->is_location() || bp->type == DEAD ||
+      bp->type == DECL)
+      continue;
+    if (!bp->is_assign())
+      return false;
+    const code_assign2t &a = to_code_assign2t(bp->code);
+    expr2tc lhs_s =
+      deref_map.empty() ? a.target : subst_parallel(a.target, deref_map);
+    expr2tc rhs_s =
+      deref_map.empty() ? a.source : subst_parallel(a.source, deref_map);
+    if (!is_symbol2t(lhs_s))
+      return false;
+    const irep_idt &lname = to_symbol2t(lhs_s).thename;
+    int step = 0;
+    if (is_add2t(rhs_s))
+    {
+      const add2t &ad = to_add2t(rhs_s);
+      if (
+        is_symbol2t(ad.side_1) && to_symbol2t(ad.side_1).thename == lname &&
+        is_constant_int2t(ad.side_2) && to_constant_int2t(ad.side_2).value == 1)
+        step = 1;
+      else if (
+        is_symbol2t(ad.side_2) && to_symbol2t(ad.side_2).thename == lname &&
+        is_constant_int2t(ad.side_1) && to_constant_int2t(ad.side_1).value == 1)
+        step = 1;
+    }
+    else if (is_sub2t(rhs_s))
+    {
+      const sub2t &sb = to_sub2t(rhs_s);
+      if (
+        is_symbol2t(sb.side_1) && to_symbol2t(sb.side_1).thename == lname &&
+        is_constant_int2t(sb.side_2) && to_constant_int2t(sb.side_2).value == 1)
+        step = -1;
+    }
+    if (step == 0)
+      return false;
+    if (steps.count(lname))
+      return false;
+    steps[lname] = step;
+    var_orig[lname] = a.target;
+  }
+  if (steps.empty())
+    return false;
+
+  // 3. Anchor must be modified with step -1.
+  expr2tc anchor_rewritten =
+    deref_map.empty() ? anchor_orig : subst_parallel(anchor_orig, deref_map);
+  if (!is_symbol2t(anchor_rewritten))
+    return false;
+  const irep_idt &anchor_name = to_symbol2t(anchor_rewritten).thename;
+  auto anchor_step_it = steps.find(anchor_name);
+  if (anchor_step_it == steps.end() || anchor_step_it->second != -1)
+    return false;
+
+  // 4. Build refined assigns.
+  char salt[64];
+  std::snprintf(salt, sizeof(salt), "$rank_nest_pre$%u$", it->location_number);
+  expr2tc anchor_orig_lhs = var_orig[anchor_name];
+  expr2tc anchor_s = deref_map.empty()
+                       ? anchor_orig_lhs
+                       : subst_parallel(anchor_orig_lhs, deref_map);
+  type2tc anchor_t = anchor_s->type;
+
+  std::vector<assignt> assigns;
+  std::map<irep_idt, expr2tc> pre_map;
+  for (const auto &kv : steps)
+  {
+    const irep_idt &name = kv.first;
+    expr2tc v_orig_lhs = var_orig[name];
+    expr2tc v_s =
+      deref_map.empty() ? v_orig_lhs : subst_parallel(v_orig_lhs, deref_map);
+    std::string pre_name = std::string(salt) + id2string(name);
+    expr2tc pre_sym = symbol2tc(v_s->type, pre_name);
+    pre_map[name] = pre_sym;
+    assignt seed;
+    seed.lhs = pre_sym;
+    seed.rhs = v_orig_lhs;
+    assigns.push_back(std::move(seed));
+  }
+  expr2tc anchor_pre = pre_map[anchor_name];
+  expr2tc zero_t = constant_int2tc(anchor_t, BigInt(0));
+  expr2tc pos_pre = greaterthan2tc(anchor_pre, zero_t);
+  for (const auto &kv : steps)
+  {
+    const irep_idt &name = kv.first;
+    int k = kv.second;
+    expr2tc v_orig_lhs = var_orig[name];
+    expr2tc v_s =
+      deref_map.empty() ? v_orig_lhs : subst_parallel(v_orig_lhs, deref_map);
+    expr2tc v_pre = pre_map[name];
+    expr2tc anchor_cast = (anchor_t == v_s->type)
+                            ? anchor_pre
+                            : expr2tc(typecast2tc(v_s->type, anchor_pre));
+    expr2tc rhs_post;
+    if (k == 1)
+      rhs_post = add2tc(v_s->type, v_pre, anchor_cast);
+    else
+      rhs_post = sub2tc(v_s->type, v_pre, anchor_cast);
+    expr2tc rhs_ite = if2tc(v_s->type, pos_pre, rhs_post, v_pre);
+    assignt up;
+    up.lhs = v_orig_lhs;
+    up.rhs = rhs_ite;
+    assigns.push_back(std::move(up));
+  }
+
+  out_assigns = std::move(assigns);
+  out_advance = std::next(inner.back);
+  return true;
+}
+
 /// Collect straight-line assigns in [@p first, @p last). Returns false if
 /// any instruction is anything other than DECL/ASSIGN/skip/location/DEAD,
 /// or a memory-touching assign — the caller treats that as an unrecognized
@@ -581,10 +758,31 @@ bool collect_straight_line(
   std::vector<assignt> &out,
   const std::set<expr2tc> &exempt_derefs = {},
   const goto_functionst *goto_functions = nullptr,
-  std::vector<expr2tc> *out_assumes = nullptr)
+  std::vector<expr2tc> *out_assumes = nullptr,
+  const loop_skipt *loop_skip = nullptr,
+  const std::map<expr2tc, expr2tc> *deref_map = nullptr)
 {
-  for (auto it = first; it != last; ++it)
+  for (auto it = first; it != last;)
   {
+    // Inline-summary a strict-monotone inner loop encountered inside
+    // this arm — Shape B IF/else with an inner loop in one or both
+    // branches (e.g. b.18-alloca). Only the refined monotone-counter
+    // shape is acceptable here; the pure-havoc fallback needs a
+    // path-cond that a flat arm-assigns vector can't carry, so we
+    // reject and let the outer parser bail.
+    if (loop_skip && deref_map && it->is_goto())
+    {
+      std::vector<assignt> summary_assigns;
+      goto_programt::const_targett advance_to;
+      if (try_emit_inner_summary_assigns(
+            it, loop_skip, *deref_map, summary_assigns, advance_to))
+      {
+        for (assignt &a : summary_assigns)
+          out.push_back(std::move(a));
+        it = advance_to;
+        continue;
+      }
+    }
     if (it->is_assign())
     {
       const code_assign2t &a = to_code_assign2t(it->code);
@@ -593,12 +791,16 @@ bool collect_straight_line(
         touches_memory(a.source, exempt_derefs))
         return false;
       out.push_back({a.target, a.source});
+      ++it;
       continue;
     }
     if (
       it->is_skip() || it->is_location() || it->type == DEAD ||
       it->type == DECL)
+    {
+      ++it;
       continue;
+    }
     // ASSUME instruction. The predicate holds at this body point on
     // every path that reaches here; in a single-pass straight-line
     // body, that's equivalent to holding at the loop head every
@@ -612,12 +814,16 @@ bool collect_straight_line(
         !is_true(it->guard) && !touches_memory(it->guard, exempt_derefs) &&
         !contains_sideeffect(it->guard))
         out_assumes->push_back(it->guard);
+      ++it;
       continue;
     }
     // FUNCTION_CALL to a termination-irrelevant helper (assert, assume,
     // abort, exit, ...) — skip; see `is_termination_irrelevant_call`.
     if (is_termination_irrelevant_call(*it))
+    {
+      ++it;
       continue;
+    }
     // FUNCTION_CALL to a pure helper (straight-line body, no calls of
     // its own, no memory writes) — inline the callee body's assigns
     // here, after prepending formal := actual binding assigns. See
@@ -625,7 +831,10 @@ bool collect_straight_line(
     if (it->is_function_call() && goto_functions != nullptr)
     {
       if (try_inline_pure_helper(*it, *goto_functions, exempt_derefs, out))
+      {
+        ++it;
         continue;
+      }
     }
     return false;
   }
@@ -1256,9 +1465,33 @@ bool recognize_loop(
         return false;
       auto then_begin = std::next(it);
       auto then_end = then_begin;
-      while (then_end != if_target && !then_end->is_goto() &&
-             !then_end->is_return())
+      // Helper: are we at an inner-loop head we'd summarise inline?
+      // Skip past its back-edge if so, so the arm-end scan doesn't
+      // stop on the inner's head IF (a forward GOTO from the parser's
+      // POV) and chop the arm in half.
+      auto try_skip_inner = [&](goto_programt::const_targett &p) -> bool {
+        if (!loop_skip || !p->is_goto())
+          return false;
+        auto sit = loop_skip->by_head_locnum.find(p->location_number);
+        if (sit == loop_skip->by_head_locnum.end())
+          return false;
+        // Inner's back-edge must lie strictly inside the outer body
+        // (between p and out.back). If it doesn't, the loop isn't
+        // really nested here — bail and let the surrounding logic
+        // decide.
+        if (sit->second.back->location_number >= out.back->location_number)
+          return false;
+        p = std::next(sit->second.back);
+        return true;
+      };
+      while (then_end != if_target && !then_end->is_return())
+      {
+        if (try_skip_inner(then_end))
+          continue;
+        if (then_end->is_goto())
+          break;
         ++then_end;
+      }
 
       // Inner-if-return shape: the THEN arm reaches a RETURN before
       // crossing `if_target`. The RETURN exits the loop, so no path
@@ -1297,7 +1530,9 @@ bool recognize_loop(
               b.else_arm,
               exempt_derefs,
               goto_functions,
-              &out.body_assumes))
+              &out.body_assumes,
+              loop_skip,
+              &deref_map))
           return false;
         blocks.push_back(std::move(b));
         it = cont_end;
@@ -1375,7 +1610,9 @@ bool recognize_loop(
                     b.then_arm,
                     exempt_derefs,
                     goto_functions,
-                    &out.body_assumes))
+                    &out.body_assumes,
+                    loop_skip,
+                    &deref_map))
                 return false;
               if (!collect_straight_line(
                     inner_then_begin,
@@ -1383,7 +1620,9 @@ bool recognize_loop(
                     b.else_arm,
                     exempt_derefs,
                     goto_functions,
-                    &out.body_assumes))
+                    &out.body_assumes,
+                    loop_skip,
+                    &deref_map))
                 return false;
               if (!collect_straight_line(
                     inner_target,
@@ -1391,7 +1630,9 @@ bool recognize_loop(
                     b.arm_c,
                     exempt_derefs,
                     goto_functions,
-                    &out.body_assumes))
+                    &out.body_assumes,
+                    loop_skip,
+                    &deref_map))
                 return false;
               blocks.push_back(std::move(b));
               it = merge_label;
@@ -1410,7 +1651,9 @@ bool recognize_loop(
             b.then_arm,
             exempt_derefs,
             goto_functions,
-            &out.body_assumes))
+            &out.body_assumes,
+            loop_skip,
+            &deref_map))
         return false;
       if (
         then_end != if_target && !collect_straight_line(
@@ -1419,7 +1662,9 @@ bool recognize_loop(
                                    b.else_arm,
                                    exempt_derefs,
                                    goto_functions,
-                                   &out.body_assumes))
+                                   &out.body_assumes,
+                                   loop_skip,
+                                   &deref_map))
         return false;
       blocks.push_back(std::move(b));
       it = merge_label;
