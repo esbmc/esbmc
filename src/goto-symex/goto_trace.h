@@ -124,15 +124,24 @@ bool input_file_check(const locationt &l);
 
 void show_simplified_location(std::ostream &out, const locationt &location);
 
+/// Emit a GraphML violation witness for @p goto_trace.
+/// When @p output_path_override is non-empty it overrides the path read
+/// from `options["witness-output-graphml"]`. Used by --all-witnesses to
+/// fan out per-witness filenames safely under --parallel-solving without
+/// mutating the shared options object.
 void violation_graphml_goto_trace(
   optionst &options,
   const namespacet &ns,
-  const goto_tracet &goto_trace);
+  const goto_tracet &goto_trace,
+  const std::string &output_path_override = "");
 
+/// Emit a YAML violation witness for @p goto_trace; analogous to
+/// violation_graphml_goto_trace.
 void violation_yaml_goto_trace(
   optionst &options,
   const namespacet &ns,
-  const goto_tracet &goto_trace);
+  const goto_tracet &goto_trace,
+  const std::string &output_path_override = "");
 
 void correctness_graphml_goto_trace(
   optionst &options,

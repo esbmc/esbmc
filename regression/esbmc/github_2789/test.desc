@@ -1,0 +1,4 @@
+CORE
+main.c
+--overflow-check --no-unwinding-assertions --unwind 1
+^VERIFICATION FAILED$

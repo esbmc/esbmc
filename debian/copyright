@@ -8,7 +8,7 @@ Copyright: 2001-2011 Daniel Kroening, Edmund Clarke,
             Computer Science Department, Oxford University;
             Computer Systems Institute, ETH Zurich;
             Computer Science Department, Carnegie Mellon University
-           2008-2025 ESBMC Development Team
+           2008-2026 ESBMC Development Team
 License: Apache-2.0 and BSD-4-Clause
 Comment:
  ESBMC is based on CBMC (BSD-4-Clause). ESBMC-specific modifications are
@@ -22,14 +22,16 @@ Files: regression/humaneval/*
 Copyright: Various HumanEval benchmark contributors
 License: MIT
 
-Files: src/python-frontend/parser.py
-Copyright: 2008-2025 ESBMC Development Team
-           2013-2025 Laurent Peuch <cortex@worlddomination.be>
-License: Apache-2.0 and BSD-3-Clause
+Files: src/python-frontend/parser/*
+Copyright: 2008-2026 ESBMC Development Team
+License: Apache-2.0
+
+Files: src/python-frontend/libs/ast2json/*
+Copyright: 2013-2025 Laurent Peuch <cortex@worlddomination.be>
+License: BSD-3-Clause
 Comment:
- The _ast_node_to_dict and _ast_get_value functions are derived from the
- ast2json library (https://github.com/Psycojoker/ast2json) by Laurent Peuch,
- redistributed under BSD-3-Clause. All other code in this file is Apache-2.0.
+ Derived from the ast2json library (https://github.com/Psycojoker/ast2json)
+ by Laurent Peuch, redistributed under BSD-3-Clause.
 
 Files: debian/*
 Copyright: 2024-2026 Weiqi Wang <lukewang19@icloud.com>

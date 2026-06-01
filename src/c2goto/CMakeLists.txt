@@ -53,7 +53,7 @@ function(foreach_in_cross_product fn)
   foreach_in_cross_product_rec(${fn} "" "" ${ARGN})
 endfunction()
 
-if (ESBMC_BUNDLE_LIBC)
+if(ESBMC_BUNDLE_LIBC)
 
   set(archs --64)
   if(ENABLE_BUNDLE_LIBC_32BIT)
@@ -84,23 +84,23 @@ if (ESBMC_BUNDLE_LIBC)
 
   foreach_in_cross_product(clib_join_argv cherimodes floats archs)
 
-  set (clib64_config clib64.c --64 --fixedbv -D__ESBMC_FIXEDBV)
-  set (clib64f_config clib64_fp.c --64 --floatbv)
-  set (inputs clib64_config clib64f_config)
+  set(clib64_config clib64.c --64 --fixedbv -D__ESBMC_FIXEDBV)
+  set(clib64f_config clib64_fp.c --64 --floatbv)
+  set(inputs clib64_config clib64f_config)
   if(ENABLE_BUNDLE_LIBC_32BIT)
-    set (clib32_config clib32.c --32 --fixedbv -D__ESBMC_FIXEDBV)
-    set (clib32f_config clib32_fp.c --32 --floatbv)
-    set (inputs clib32_config
+    set(clib32_config clib32.c --32 --fixedbv -D__ESBMC_FIXEDBV)
+    set(clib32f_config clib32_fp.c --32 --floatbv)
+    set(inputs clib32_config
       clib64_config
       clib32f_config
       clib64f_config)
   endif()
 
   if(ESBMC_CHERI_HYBRID_SYSROOT)
-    set (clib32_cherih_config clib32_cherih.c --32 --fixedbv -D__ESBMC_FIXEDBV --cheri hybrid --sysroot "${ESBMC_CHERI_HYBRID_SYSROOT}")
-    set (clib64_cherih_config clib64_cherih.c --64 --fixedbv -D__ESBMC_FIXEDBV --cheri hybrid --sysroot "${ESBMC_CHERI_HYBRID_SYSROOT}")
-    set (clib32f_cherih_config clib32_fp_cherih.c --32 --floatbv --cheri hybrid --sysroot "${ESBMC_CHERI_HYBRID_SYSROOT}")
-    set (clib64f_cherih_config clib64_fp_cherih.c --64 --floatbv --cheri hybrid --sysroot "${ESBMC_CHERI_HYBRID_SYSROOT}")
+    set(clib32_cherih_config clib32_cherih.c --32 --fixedbv -D__ESBMC_FIXEDBV --cheri hybrid --sysroot "${ESBMC_CHERI_HYBRID_SYSROOT}")
+    set(clib64_cherih_config clib64_cherih.c --64 --fixedbv -D__ESBMC_FIXEDBV --cheri hybrid --sysroot "${ESBMC_CHERI_HYBRID_SYSROOT}")
+    set(clib32f_cherih_config clib32_fp_cherih.c --32 --floatbv --cheri hybrid --sysroot "${ESBMC_CHERI_HYBRID_SYSROOT}")
+    set(clib64f_cherih_config clib64_fp_cherih.c --64 --floatbv --cheri hybrid --sysroot "${ESBMC_CHERI_HYBRID_SYSROOT}")
     list(APPEND inputs
               #clib32_cherih_config
               clib64_cherih_config
@@ -109,10 +109,10 @@ if (ESBMC_BUNDLE_LIBC)
   endif()
 
   if(ESBMC_CHERI_PURECAP_SYSROOT)
-    set (clib32_cherip_config clib32_cherip.c --32 --fixedbv -D__ESBMC_FIXEDBV --cheri purecap --sysroot "${ESBMC_CHERI_PURECAP_SYSROOT}")
-    set (clib64_cherip_config clib64_cherip.c --64 --fixedbv -D__ESBMC_FIXEDBV --cheri purecap --sysroot "${ESBMC_CHERI_PURECAP_SYSROOT}")
-    set (clib32f_cherip_config clib32_fp_cherip.c --32 --floatbv --cheri purecap --sysroot "${ESBMC_CHERI_PURECAP_SYSROOT}")
-    set (clib64f_cherip_config clib64_fp_cherip.c --64 --floatbv --cheri purecap --sysroot "${ESBMC_CHERI_PURECAP_SYSROOT}")
+    set(clib32_cherip_config clib32_cherip.c --32 --fixedbv -D__ESBMC_FIXEDBV --cheri purecap --sysroot "${ESBMC_CHERI_PURECAP_SYSROOT}")
+    set(clib64_cherip_config clib64_cherip.c --64 --fixedbv -D__ESBMC_FIXEDBV --cheri purecap --sysroot "${ESBMC_CHERI_PURECAP_SYSROOT}")
+    set(clib32f_cherip_config clib32_fp_cherip.c --32 --floatbv --cheri purecap --sysroot "${ESBMC_CHERI_PURECAP_SYSROOT}")
+    set(clib64f_cherip_config clib64_fp_cherip.c --64 --floatbv --cheri purecap --sysroot "${ESBMC_CHERI_PURECAP_SYSROOT}")
     list(APPEND inputs
               #clib32_cherip_config
               clib64_cherip_config
@@ -141,9 +141,17 @@ function(mangle_clib output)
     set(c2goto_python_files "")
   endif()
 
+  # Extract C models for Solidity
+  if(ENABLE_SOLIDITY_FRONTEND)
+    file(GLOB_RECURSE c2goto_solidity_files CONFIGURE_DEPENDS
+      "${CMAKE_CURRENT_SOURCE_DIR}/library/solidity/*.c")
+  else()
+    set(c2goto_solidity_files "")
+  endif()
+
   # For each config, generate clib*.c and clib*.goto file in the current binary directory
   foreach(in_f ${ARGN})
-    set (in_f "${${in_f}}")
+    set(in_f "${${in_f}}")
     list(GET in_f 0 out_name)
     list(SUBLIST in_f 1 -1 in_flags)
     file(RELATIVE_PATH out_file ${CMAKE_CURRENT_SOURCE_DIR}
@@ -161,6 +169,9 @@ function(mangle_clib output)
     if(ENABLE_PYTHON_FRONTEND)
       list(APPEND inputs_c ${c2goto_python_files})
     endif()
+
+    # Solidity models are built as a separate goto binary (sol64.goto),
+    # NOT mixed into clib64, for faster runtime loading.
 
     if(ESBMC_CHERI_CLANG)
       list(APPEND in_flags -I "${cheri_compressed_cap_SOURCE_DIR}")
@@ -220,6 +231,68 @@ function(mangle_clib output)
       ${CMAKE_CURRENT_BINARY_DIR}/libpython.h)
   endif()
 
+  if(ENABLE_SOLIDITY_FRONTEND)
+    mangle(${CMAKE_CURRENT_BINARY_DIR}/libsolidity.c
+           ${CMAKE_CURRENT_SOURCE_DIR}/library/solidity
+           WILDCARD *.c
+           SINGLE
+           PREFIX esbmc_solidity_
+           MACRO ESBMC_FLAIL
+           ACC_HEADERS_INTO ${CMAKE_CURRENT_BINARY_DIR}/libsolidity.h)
+
+    # Build a separate goto binary for Solidity operational models (sol64.goto)
+    # This is loaded at runtime instead of the full clib64.goto for performance.
+    set(sol64_goto "${CMAKE_CURRENT_BINARY_DIR}/sol64.goto")
+    set(sol64_c "${CMAKE_CURRENT_BINARY_DIR}/sol64.c")
+    if(APPLE)
+      # Apple Clang does not support _BitInt > 128, so c2goto cannot compile
+      # solidity_types.h on macOS. Emit an empty stub so the link succeeds;
+      # runtime verification of Solidity contracts is unavailable on macOS.
+      file(WRITE ${sol64_c}
+        "/* Auto-generated stub: sol64 unavailable on macOS (_BitInt>128). */\n"
+        "#include <stdint.h>\n"
+        "const uint8_t sol64_buf[1] = {0};\n"
+        "const unsigned int sol64_buf_size = 0;\n")
+    else()
+      # Amalgamate all solidity .c files into one TU. Passing the originals
+      # separately makes c2goto invoke clang::ASTImporter to merge them, which
+      # on LLVM 16 (Windows) cannot import _BitInt(N)-using decls and emits
+      # "UnsupportedConstruct" until the whole step aborts. A single TU avoids
+      # the importer entirely.
+      set(sol64_unified_c "${CMAKE_CURRENT_BINARY_DIR}/sol64_unified.c")
+      set(sol64_unified_body
+        "/* Auto-generated by CMake: amalgamation of solidity *.c models. */\n")
+      foreach(_f ${c2goto_solidity_files})
+        string(APPEND sol64_unified_body "#include \"${_f}\"\n")
+      endforeach()
+      file(WRITE ${sol64_unified_c} "${sol64_unified_body}")
+
+      add_custom_command(OUTPUT ${sol64_goto}
+        COMMAND c2goto ${multiarch_flags} ${OS_C2GOTO_FLAGS}
+                ${sol64_unified_c} --64 --fixedbv -D__ESBMC_FIXEDBV
+                --output ${sol64_goto}
+        DEPENDS c2goto ${c2goto_solidity_files} ${c2goto_header_files}
+                ${sol64_unified_c}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+        COMMENT "Generating Solidity model ${sol64_goto}"
+        VERBATIM
+      )
+      add_custom_command(OUTPUT ${sol64_c}
+        COMMAND ${Python_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/flail.py
+                -o ${sol64_c} ${sol64_goto}
+        DEPENDS ${sol64_goto} ${CMAKE_SOURCE_DIR}/scripts/flail.py
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+        COMMENT "Converting Solidity model ${sol64_goto} to data"
+        VERBATIM
+      )
+    endif()
+
+    list(APPEND result
+      ${CMAKE_CURRENT_BINARY_DIR}/libsolidity.c
+      ${CMAKE_CURRENT_BINARY_DIR}/libsolidity.h
+      ${sol64_c})
+  endif()
+
 
   list(APPEND result ${CMAKE_CURRENT_BINARY_DIR}/libc.c
                      ${CMAKE_CURRENT_BINARY_DIR}/libm.c)
@@ -228,6 +301,24 @@ endfunction()
 
 message(STATUS "Multiarch flags for c2goto: ${multiarch_flags}. You may want to override C2GOTO_SYSROOT")
 mangle_clib(mangled_files ${inputs})
+
+# Auto-generate the Python operational-model allowlist from the model sources so
+# new models register automatically (scripts/gen_python_c_models.py). The header
+# is consumed by cprover_library.cpp under #ifdef ENABLE_PYTHON_FRONTEND.
+if(ENABLE_PYTHON_FRONTEND)
+  find_package(Python REQUIRED COMPONENTS Interpreter)
+  file(GLOB_RECURSE python_model_sources CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/library/python/*.c")
+  set(python_c_models_header ${CMAKE_CURRENT_BINARY_DIR}/python_c_models_generated.h)
+  add_custom_command(OUTPUT ${python_c_models_header}
+    COMMAND ${Python_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/gen_python_c_models.py
+            -o ${python_c_models_header} ${python_model_sources}
+    DEPENDS ${CMAKE_SOURCE_DIR}/scripts/gen_python_c_models.py ${python_model_sources}
+    COMMENT "Generating Python C-model allowlist ${python_c_models_header}"
+    VERBATIM)
+  add_custom_target(gen_python_c_models DEPENDS ${python_c_models_header})
+endif()
+
 add_library(clibs ${mangled_files} cprover_library.cpp cprover_libc_sources.cpp)
 target_include_directories(clibs
     PRIVATE ${Boost_INCLUDE_DIRS}
@@ -235,6 +326,9 @@ target_include_directories(clibs
     PRIVATE ${CMAKE_CURRENT_BINARY_DIR}
 )
 target_link_libraries(clibs c2gotoheaders fmt::fmt filesystem)
+if(ENABLE_PYTHON_FRONTEND)
+  add_dependencies(clibs gen_python_c_models)
+endif()
 
 set(private_headers
   "${CMAKE_CURRENT_BINARY_DIR}/libc.h"
@@ -243,6 +337,10 @@ set(private_headers
 
 if(ENABLE_PYTHON_FRONTEND)
   list(APPEND private_headers "${CMAKE_CURRENT_BINARY_DIR}/libpython.h")
+endif()
+
+if(ENABLE_SOLIDITY_FRONTEND)
+  list(APPEND private_headers "${CMAKE_CURRENT_BINARY_DIR}/libsolidity.h")
 endif()
 
 set_target_properties(clibs PROPERTIES PRIVATE_HEADER "${private_headers}")

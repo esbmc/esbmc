@@ -482,6 +482,10 @@ bool goto_convertt::rewrite_vla_decl_size(exprt &size, goto_programt &dest)
   if (size.is_constant())
     return false;
 
+  // Infinite size (e.g. Solidity mappings) is not a VLA
+  if (size.id() == "infinity")
+    return false;
+
   // We have to replace the symbol by a temporary, because it might
   // change its value in the future
   // Don't create a symbol for temporary symbols
@@ -660,7 +664,7 @@ void goto_convertt::convert_decl(const codet &code, goto_programt &dest)
 
   // A static variable will be declared in the global scope and
   // a code type means a function declaration, we ignore both
-  if (s->static_lifetime || s->type.is_code())
+  if (s->static_lifetime || s->get_type().is_code())
     return; // this is a SKIP!
 
   // Check if is an VLA declaration and rewrite the declaration
@@ -669,7 +673,7 @@ void goto_convertt::convert_decl(const codet &code, goto_programt &dest)
   {
     // This means that it was a VLA declaration and we need to
     // to rewrite the symbol as well
-    s->type = var.type();
+    s->set_type(var.type());
   }
 
   exprt initializer = nil_exprt();
@@ -705,7 +709,7 @@ void goto_convertt::convert_decl(const codet &code, goto_programt &dest)
   // now create a 'dead' instruction -- will be added after the
   // destructor created below as unwind_destructor_stack pops off the
   // top of the destructor stack
-  const symbol_exprt symbol_expr(s->id, s->type);
+  const symbol_exprt symbol_expr(s->id, s->get_type());
 
   {
     code_deadt code_dead(symbol_expr);
@@ -714,7 +718,7 @@ void goto_convertt::convert_decl(const codet &code, goto_programt &dest)
 
   // do destructor
   code_function_callt destructor;
-  if (get_destructor(ns, s->type, destructor))
+  if (get_destructor(ns, s->get_type(), destructor))
   {
     // add "this"
     address_of_exprt this_expr(symbol_expr);
@@ -737,7 +741,7 @@ bool goto_convertt::is_atomic_symbol(const exprt &expr, const namespacet &ns)
   if (expr.id() != "symbol")
     return false;
   const symbolt *sym = ns.lookup(expr.identifier());
-  return sym && sym->type.get_bool("#atomic");
+  return sym && sym->get_type().get_bool("#atomic");
 }
 
 /// Returns true if @p expr contains a direct read of any C11 _Atomic variable
@@ -1471,7 +1475,11 @@ void goto_convertt::convert_atomic_begin(const codet &code, goto_programt &dest)
     abort();
   }
 
-  copy(code, ATOMIC_BEGIN, dest);
+  // ATOMIC_BEGIN/END are pure type markers; the instruction's code field
+  // is irrelevant. Emit directly to avoid the migrate_expr round-trip that
+  // copy() would do for the empty codet.
+  goto_programt::targett t = dest.add_instruction(ATOMIC_BEGIN);
+  t->location = code.location();
 }
 
 void goto_convertt::convert_atomic_end(const codet &code, goto_programt &dest)
@@ -1482,7 +1490,8 @@ void goto_convertt::convert_atomic_end(const codet &code, goto_programt &dest)
     abort();
   }
 
-  copy(code, ATOMIC_END, dest);
+  goto_programt::targett t = dest.add_instruction(ATOMIC_END);
+  t->location = code.location();
 }
 
 /// if(guard) true_case; else false_case;

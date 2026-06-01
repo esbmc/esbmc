@@ -1,12 +1,3 @@
-/* Byte order includes, for context switch checkpoint files */
-#ifndef _WIN32
-#  include <arpa/inet.h>
-#  include <netinet/in.h>
-#else
-#  include <winsock2.h>
-#  undef small // mingw workaround
-#endif
-
 #include <goto-symex/goto_symex.h>
 #include <goto-symex/reachability_tree.h>
 #include <util/config.h>
@@ -29,7 +20,7 @@ reachability_treet::reachability_treet(
 {
   // Put a few useful symbols in the symbol table.
   symbolt sym;
-  sym.type = bool_typet();
+  sym.set_type(bool_typet());
   sym.id = "execution_statet::\\guard_exec";
   sym.name = "execution_statet::\\guard_exec";
   context.move(sym);
@@ -50,7 +41,7 @@ void reachability_treet::setup_for_new_explore()
 {
   std::shared_ptr<symex_targett> targ;
 
-  execution_states.clear();
+  exploration_frames.clear();
 
   has_complete_formula = false;
 
@@ -78,24 +69,68 @@ void reachability_treet::setup_for_new_explore()
     schedule_target = nullptr;
   }
 
-  execution_states.emplace_back(s);
-  cur_state_it = execution_states.begin();
+  exploration_framet frame;
+  frame.state = std::shared_ptr<execution_statet>(s);
+  frame.scheduler.reset(s->threads_state.size());
+  exploration_frames.push_back(frame);
+  cur_frame_it = exploration_frames.begin();
   targ->push_ctx(); // Start with a depth of 1.
 }
 
 execution_statet &reachability_treet::get_cur_state()
 {
-  return **cur_state_it;
+  return *cur_frame_it->state;
 }
 
 const execution_statet &reachability_treet::get_cur_state() const
 {
-  return **cur_state_it;
+  return *cur_frame_it->state;
 }
 
 bool reachability_treet::has_more_states()
 {
-  return execution_states.size() > 0;
+  return !exploration_frames.empty();
+}
+
+void reachability_treet::scheduler_framet::ensure_thread_count(
+  unsigned int count)
+{
+  if (explored_threads.size() < count)
+    explored_threads.resize(count, false);
+}
+
+void reachability_treet::scheduler_framet::reset(unsigned int count)
+{
+  explored_threads.assign(count, false);
+}
+
+void reachability_treet::scheduler_framet::mark_all_explored(unsigned int count)
+{
+  ensure_thread_count(count);
+  std::fill(explored_threads.begin(), explored_threads.end(), true);
+}
+
+bool reachability_treet::scheduler_framet::is_explored(unsigned int tid) const
+{
+  return tid < explored_threads.size() && explored_threads[tid];
+}
+
+void reachability_treet::scheduler_framet::mark_explored(unsigned int tid)
+{
+  ensure_thread_count(tid + 1);
+  explored_threads[tid] = true;
+}
+
+reachability_treet::scheduler_framet &
+reachability_treet::get_cur_scheduler_frame()
+{
+  return cur_frame_it->scheduler;
+}
+
+const reachability_treet::scheduler_framet &
+reachability_treet::get_cur_scheduler_frame() const
+{
+  return cur_frame_it->scheduler;
 }
 
 int reachability_treet::get_CS_bound() const
@@ -117,8 +152,8 @@ bool reachability_treet::check_for_hash_collision() const
 
 void reachability_treet::post_hash_collision_cleanup()
 {
-  for (auto &&it : get_cur_state().DFS_traversed)
-    it = true;
+  get_cur_scheduler_frame().mark_all_explored(
+    get_cur_state().threads_state.size());
 }
 
 void reachability_treet::update_hash_collision_set()
@@ -137,7 +172,7 @@ void reachability_treet::create_next_state()
   if (next_thread_id != ex_state.threads_state.size())
   {
     auto new_state = ex_state.clone();
-    execution_states.push_back(new_state);
+    exploration_frames.push_back({new_state, scheduler_framet{}});
 
     /* Make it active, make it follow on from previous state... */
     if (new_state->get_active_state_number() != next_thread_id)
@@ -145,6 +180,7 @@ void reachability_treet::create_next_state()
 
     new_state->switch_to_thread(next_thread_id);
     new_state->update_after_switch_point();
+    exploration_frames.back().scheduler.reset(new_state->threads_state.size());
   }
 }
 
@@ -164,12 +200,13 @@ unsigned int
 reachability_treet::decide_ileave_direction(execution_statet &ex_state)
 {
   auto is_thread_schedulable = [&](int tid) {
-    return check_thread_viable(tid, true) && ex_state.dfs_explore_thread(tid);
+    return check_thread_viable(tid, true) && dfs_explore_thread(tid);
   };
 
   signed int tid = 0, user_tid = 0;
 
   // Get thread ID from user if interactive mode is enabled
+  get_cur_scheduler_frame().ensure_thread_count(ex_state.threads_state.size());
   tid = get_cur_state().active_thread + 1;
   if (interactive_ileaves)
   {
@@ -215,18 +252,18 @@ bool reachability_treet::is_has_complete_formula()
 
 void reachability_treet::switch_to_next_execution_state()
 {
-  std::list<std::shared_ptr<execution_statet>>::iterator it = cur_state_it;
+  auto it = cur_frame_it;
   ++it;
 
-  if (it != execution_states.end())
+  if (it != exploration_frames.end())
   {
-    cur_state_it++;
+    cur_frame_it++;
   }
   else
   {
     if (step_next_state())
     {
-      cur_state_it++;
+      cur_frame_it++;
     }
     else
     {
@@ -235,6 +272,27 @@ void reachability_treet::switch_to_next_execution_state()
       has_complete_formula = true;
     }
   }
+}
+
+void reachability_treet::drain_to_unexplored(bool add_leak_checks)
+{
+  while (exploration_frames.size() > 0 && !step_next_state())
+  {
+    // Only fire the leak walker on the final frame when every thread has
+    // reached a terminal state — otherwise a still-running spawned thread
+    // may hold the only live reference to a dynamic object via its stack
+    // frame, which the globals-rooted reachability constraint misses and
+    // spuriously reports as forgotten. See #4634.
+    if (
+      add_leak_checks && exploration_frames.size() == 1 &&
+      cur_frame_it->state->all_threads_terminal())
+      cur_frame_it->state->add_memory_leak_checks();
+
+    erase_current_frame();
+  }
+
+  if (exploration_frames.size() > 0)
+    cur_frame_it++;
 }
 
 bool reachability_treet::reset_to_unexplored_state()
@@ -247,246 +305,48 @@ bool reachability_treet::reset_to_unexplored_state()
   // the last on the list. If we can, it's an unexplored state, if we can't,
   // all depths from the current execution state are explored, so delete it.
 
-  auto it = cur_state_it--;
-  execution_states.erase(it);
+  erase_current_frame();
+  drain_to_unexplored(/*add_leak_checks=*/false);
 
-  while (execution_states.size() > 0 && !step_next_state())
-  {
-    it = cur_state_it--;
-    execution_states.erase(it);
-  }
-
-  if (execution_states.size() > 0)
-    cur_state_it++;
-
-  if (execution_states.size() && !smt_during_symex)
+  if (exploration_frames.size() && !smt_during_symex)
   {
     // When backtracking, erase all the assertions from the equation before
     // continuing forwards. They've all already been checked, in the trace we
     // just backtracked from. Thus there's no point in checking them again.
     symex_target_equationt *eq =
-      static_cast<symex_target_equationt *>((*cur_state_it)->target.get());
+      static_cast<symex_target_equationt *>(cur_frame_it->state->target.get());
     unsigned int num_asserts = eq->clear_assertions();
 
     // Remove them from the count of remaining assertions to check. This allows
     // for more traces to be discarded because they do not contain any
     // unchecked assertions.
-    (*cur_state_it)->total_claims -= num_asserts;
-    (*cur_state_it)->remaining_claims -= num_asserts;
+    cur_frame_it->state->total_claims -= num_asserts;
+    cur_frame_it->state->remaining_claims -= num_asserts;
   }
 
-  return execution_states.size();
+  return exploration_frames.size();
 }
 
 void reachability_treet::go_next_state()
 {
-  std::list<std::shared_ptr<execution_statet>>::iterator it = cur_state_it;
+  auto it = cur_frame_it;
   it++;
-  if (it != execution_states.end())
-    cur_state_it++;
+  if (it != exploration_frames.end())
+    cur_frame_it++;
   else
-  {
-    while (execution_states.size() > 0 && !step_next_state())
-    {
-      it = cur_state_it;
-      cur_state_it--;
-
-      // For the last one:
-      if (execution_states.size() == 1)
-        (*it)->add_memory_leak_checks();
-
-      execution_states.erase(it);
-    }
-
-    if (execution_states.size() > 0)
-      cur_state_it++;
-  }
-}
-
-reachability_treet::dfs_position::dfs_position(const reachability_treet &rt)
-{
-  std::list<std::shared_ptr<execution_statet>>::const_iterator it;
-
-  // Iterate through each position in the DFS tree recording data into this
-  // object.
-  for (it = rt.execution_states.begin(); it != rt.execution_states.end(); ++it)
-  {
-    reachability_treet::dfs_position::dfs_state state;
-    auto ex = *it;
-    state.location_number = ex->get_active_state().source.pc->location_number;
-    state.num_threads = ex->threads_state.size();
-    state.explored = ex->DFS_traversed;
-
-    // The thread taken in this DFS path isn't decided at this execution state,
-    // instead it's whatever thread is active in the /next/ state. So, take the
-    // currently active thread no and assign it to the previous dfs state
-    // we recorded.
-    if (states.size() > 0)
-      states.back().cur_thread = ex->get_active_state_number();
-
-    states.push_back(state);
-  }
-
-  // The final execution state in a DFS is a dummy, there are no paths from it,
-  // so assign a dummy cur_thread value.
-  states.back().cur_thread = 0;
-
-  checksum = 0; // Use this in the future.
-  ileaves = 0;  // Can use this depending on a future refactor.
-}
-
-reachability_treet::dfs_position::dfs_position(const std::string &&filename)
-{
-  read_from_file(std::move(filename));
-}
-
-const uint32_t reachability_treet::dfs_position::file_magic =
-  0x4543484B; //'ECHK'
-
-bool reachability_treet::dfs_position::write_to_file(
-  const std::string &&filename) const
-{
-  uint8_t buffer[8192];
-  reachability_treet::dfs_position::file_hdr hdr;
-  reachability_treet::dfs_position::file_entry entry;
-  std::vector<bool>::const_iterator ex_it;
-  std::vector<reachability_treet::dfs_position::dfs_state>::const_iterator it;
-  FILE *f;
-  unsigned int i;
-
-  f = fopen(filename.c_str(), "wb");
-  if (f == nullptr)
-  {
-    log_error("Couldn't open checkpoint output file");
-    return true;
-  }
-
-  hdr.magic = htonl(file_magic);
-  hdr.checksum = 0;
-  hdr.num_states = htonl(states.size());
-  hdr.num_ileaves = 0;
-
-  if (fwrite(&hdr, sizeof(hdr), 1, f) != 1)
-    goto fail;
-
-  for (it = states.begin(); it != states.end(); ++it)
-  {
-    entry.location_number = htonl(it->location_number);
-    entry.num_threads = htons(it->num_threads);
-    entry.cur_thread = htons(it->cur_thread);
-
-    if (fwrite(&entry, sizeof(entry), 1, f) != 1)
-      goto fail;
-
-    assert(it->explored.size() < 65536);
-    assert(it->explored.size() == ntohs(entry.num_threads));
-
-    i = 0;
-    memset(buffer, 0, sizeof(buffer));
-    for (ex_it = it->explored.begin(); ex_it != it->explored.end(); ++ex_it)
-    {
-      if (*ex_it)
-      {
-        buffer[i >> 3] |= (1 << i & 7);
-      }
-      i++;
-    }
-
-    // Round up
-    i += 7;
-    i >>= 3;
-
-    assert(i != 0); // Always at least one thread in _existence_.
-    if (fwrite(buffer, i, 1, f) != 1)
-      goto fail;
-  }
-
-  fclose(f);
-  return false;
-
-fail:
-  log_error("Write error writing checkpoint file");
-  fclose(f);
-  return true;
-}
-
-bool reachability_treet::dfs_position::read_from_file(
-  const std::string &&filename)
-{
-  reachability_treet::dfs_position::file_hdr hdr;
-  reachability_treet::dfs_position::file_entry entry;
-  FILE *f;
-  unsigned int i, j;
-  char c;
-
-  f = fopen(filename.c_str(), "rb");
-  if (f == nullptr)
-  {
-    log_error("Couldn't open checkpoint input file");
-    return true;
-  }
-
-  if (fread(&hdr, sizeof(hdr), 1, f) != 1)
-    goto fail;
-
-  if (hdr.magic != htonl(file_magic))
-  {
-    log_error("Magic number indicates that this isn't a checkpoint file");
-    fclose(f);
-    return true;
-  }
-
-  for (i = 0; i < ntohl(hdr.num_states); ++i)
-  {
-    reachability_treet::dfs_position::dfs_state state;
-    if (fread(&entry, sizeof(entry), 1, f) != 1)
-      goto fail;
-
-    state.location_number = ntohl(entry.location_number);
-    state.num_threads = ntohs(entry.num_threads);
-    state.cur_thread = ntohs(entry.cur_thread);
-
-    assert(state.num_threads < 65536);
-    if (state.cur_thread >= state.num_threads)
-    {
-      log_error("Inconsistent checkpoint data");
-      fclose(f);
-      return true;
-    }
-
-    for (j = 0; j < state.num_threads; ++j)
-    {
-      if (j % 8 == 0)
-      {
-        if (fread(&c, sizeof(c), 1, f) != 1)
-          goto fail;
-      }
-
-      state.explored.push_back(c & (1 << (j & 7)));
-    }
-
-    states.push_back(state);
-  }
-
-  fclose(f);
-  return false;
-
-fail:
-  log_error("Read error on checkpoint file");
-  fclose(f);
-  return true;
+    drain_to_unexplored(/*add_leak_checks=*/true);
 }
 
 void reachability_treet::print_ileave_trace() const
 {
-  std::list<std::shared_ptr<execution_statet>>::const_iterator it;
   int i = 0;
 
   log_status("Context switch trace for interleaving:");
-  for (it = execution_states.begin(); it != execution_states.end(); ++it, ++i)
+  for (const auto &frame : exploration_frames)
   {
     log_status("Context switch point {}", i);
-    (*it)->print_stack_traces(4);
+    frame.state->print_stack_traces(4);
+    ++i;
   }
 }
 
@@ -494,7 +354,7 @@ bool reachability_treet::check_thread_viable(unsigned int tid, bool quiet) const
 {
   const execution_statet &ex = get_cur_state();
 
-  if (ex.DFS_traversed.at(tid) == true)
+  if (get_cur_scheduler_frame().is_explored(tid))
   {
     if (!quiet)
       log_status("Thread unschedulable as it's already been explored");
@@ -533,9 +393,46 @@ bool reachability_treet::check_thread_viable(unsigned int tid, bool quiet) const
   return true;
 }
 
+void reachability_treet::mark_active_thread_explored()
+{
+  get_cur_scheduler_frame().mark_explored(get_cur_state().active_thread);
+}
+
+bool reachability_treet::dfs_explore_thread(unsigned int tid)
+{
+  scheduler_framet &frame = get_cur_scheduler_frame();
+  if (frame.is_explored(tid))
+    return false;
+
+  if (get_cur_state().threads_state.at(tid).call_stack.empty())
+    return false;
+
+  if (get_cur_state().threads_state.at(tid).thread_ended)
+    return false;
+
+  frame.mark_explored(tid);
+  return true;
+}
+
+void reachability_treet::erase_current_frame()
+{
+  if (exploration_frames.empty())
+    return;
+
+  if (cur_frame_it == exploration_frames.begin())
+  {
+    cur_frame_it = exploration_frames.erase(cur_frame_it);
+    return;
+  }
+
+  auto prev = std::prev(cur_frame_it);
+  exploration_frames.erase(cur_frame_it);
+  cur_frame_it = prev;
+}
+
 goto_symext::symex_resultt reachability_treet::get_next_formula()
 {
-  assert(execution_states.size() > 0 && "Must setup RT before exploring");
+  assert(!exploration_frames.empty() && "Must setup RT before exploring");
 
   while (!is_has_complete_formula())
   {
@@ -543,6 +440,13 @@ goto_symext::symex_resultt reachability_treet::get_next_formula()
             get_cur_state().check_if_ileaves_blocked()) &&
            get_cur_state().can_execution_continue())
       get_cur_state().symex_step(*this);
+
+    if (por)
+    {
+      get_cur_state().calculate_mpor_constraints();
+      if (get_cur_state().is_transition_blocked_by_mpor())
+        break;
+    }
 
     if (state_hashing)
     {
@@ -554,14 +458,6 @@ goto_symext::symex_resultt reachability_treet::get_next_formula()
 
       update_hash_collision_set();
     }
-
-    if (por)
-    {
-      get_cur_state().calculate_mpor_constraints();
-      if (get_cur_state().is_transition_blocked_by_mpor())
-        break;
-    }
-
     next_thread_id = decide_ileave_direction(get_cur_state());
 
     if (
@@ -573,7 +469,15 @@ goto_symext::symex_resultt reachability_treet::get_next_formula()
     switch_to_next_execution_state();
   }
 
-  (*cur_state_it)->add_memory_leak_checks();
+  // Only fire the leak walker on schedules whose tail is a genuine program
+  // termination — every thread terminal. Otherwise a still-running spawned
+  // thread may hold the only live reference to a dynamic object via its
+  // stack frame; the leak walker's reachability constraint is rooted at
+  // globals only, so it would spuriously report that object forgotten. The
+  // DFS will produce the all-threads-terminal sibling schedule separately,
+  // and the check fires correctly there. See #4634.
+  if (cur_frame_it->state->all_threads_terminal())
+    cur_frame_it->state->add_memory_leak_checks();
 
   has_complete_formula = false;
 
@@ -587,10 +491,8 @@ bool reachability_treet::setup_next_formula()
 
 goto_symext::symex_resultt reachability_treet::generate_schedule_formula()
 {
-  int total_states = 0;
   while (has_more_states())
   {
-    total_states++;
     while ((!get_cur_state().has_cswitch_point_occured() ||
             get_cur_state().check_if_ileaves_blocked()) &&
            get_cur_state().can_execution_continue())
@@ -622,74 +524,4 @@ goto_symext::symex_resultt reachability_treet::generate_schedule_formula()
     schedule_total_claims,
     schedule_remaining_claims,
     schedule_simplified_claims);
-}
-
-bool reachability_treet::restore_from_dfs_state(void *)
-{
-  abort();
-#if 0
-  std::vector<reachability_treet::dfs_position::dfs_state>::const_iterator it;
-  unsigned int i;
-
-  const reachability_treet::dfs_position *foo = (const reachability_treet::dfs_position*)_dfs;
-  const reachability_treet::dfs_position &dfs = *foo;
-  // Symex repeatedly until context switch points. At each point, verify that it
-  // happened where we expected it to, and then switch to the correct thread for
-  // the history we've been provided with.
-  for (it = dfs.states.begin(), i = 0; it != dfs.states.end(); it++, i++) {
-
-    at_end_of_run = false;
-
-    while (!is_at_end_of_run()) {
-      // Restore the DFS exploration space so that when an interleaving occurs
-      // we take the option leading to the thread we desire to run. This
-      // assumes that the DFS exploration path algorithm never changes.
-      // Has to occur here; between generating new threads, ESBMC messes with
-      // the dfs state.
-      for (unsigned int dfspos = 0; dfspos < get_cur_state().DFS_traversed.size();
-           dfspos++)
-        get_cur_state().DFS_traversed[dfspos] = true;
-      get_cur_state().DFS_traversed[it->cur_thread] = false;
-
-      get_cur_state().symex_step(*this);
-    }
-
-    create_next_state();
-
-    get_cur_state().DFS_traversed = it->explored;
-
-    if (get_cur_state().threads_state.size() != it->num_threads)
-{
-log_error("Unexpected number of threads when reexploring checkpoint");
-abort();
-}
-
-    switch_to_next_execution_state();
-
-    // check we're on the right thread; except on the last run, where there are
-    // no more threads to be run.
-    if (i + 1 < dfs.states.size())
-      assert(get_cur_state().get_active_state_number() == it->cur_thread);
-
-#  if 0
-    if (get_cur_state().get_active_state().source.pc->location_number !=
-        it->location_number) {
-log_error("Interleave at unexpected location when restoring checkpoint").
-abort();
-}
-#  endif
-  }
-#endif
-  return false;
-}
-
-void reachability_treet::save_checkpoint(const std::string &&) const
-{
-#if 0
-  reachability_treet::dfs_position pos(*this);
-  if (pos.write_to_file(fname))
-    log_error("Couldn't save checkpoint; continuing");
-#endif
-
-  abort();
 }

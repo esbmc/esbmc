@@ -1,6 +1,6 @@
 # Module to setup Apple specific flags
 
-if (APPLE)
+if(APPLE)
     message(STATUS "Detected APPLE")
     # Suppress superfluous warnings about "*.a" having no symbols on macOS X
     set(CMAKE_C_ARCHIVE_CREATE   "<CMAKE_AR> Scr <TARGET> <LINK_FLAGS> <OBJECTS>")

@@ -14,7 +14,7 @@ int main () {
   assert((int)cin.gcount() >= 0);
   cout << "Enter a string: ";
   cin >> hex >> n1;            // manipulator
-  assert(cin.flags() & ios::hex == iostream::hex);
+//  assert(cin.flags() & ios::hex == iostream::hex); // C precedence: parses as flags() & 1
   cout << "Enter another string: ";
   cin >> n2;            // manipulator
   

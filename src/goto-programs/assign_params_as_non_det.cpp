@@ -8,7 +8,7 @@ symbolt *assign_params_as_non_det::get_default_symbol(
 {
   symbolt symbol;
   symbol.location = std::move(location);
-  symbol.type = std::move(type);
+  symbol.set_type(std::move(type));
   symbol.name = name;
   symbol.id = id;
 
@@ -24,7 +24,7 @@ symbolt *assign_params_as_non_det::get_default_symbol(
 /// Build an irep2 symbol expression referring to @p sym.
 static expr2tc sym_to_expr2tc(const symbolt &sym)
 {
-  return symbol2tc(migrate_type(sym.type), sym.id);
+  return symbol2tc(migrate_symbol_type(sym), sym.id);
 }
 
 /// Append @p instr (with location and function copied from @p it) before @p it
@@ -46,15 +46,15 @@ static void insert_before(
 }
 
 bool assign_params_as_non_det::runOnFunction(
-  std::pair<const dstring, goto_functiont> &F)
+  std::pair<const irep_idt, goto_functiont> &F)
 {
   const symbolt *fn_sym = context.find_symbol(F.first);
   if (fn_sym == nullptr)
     return false; // Not exist
 
-  if (!fn_sym->type.is_code())
+  if (!fn_sym->get_type().is_code())
     return false; // Not expected
-  const code_typet t = to_code_type(fn_sym->type);
+  const code_typet t = to_code_type(fn_sym->get_type());
 
   if (fn_sym->name.as_string() != target_function)
     return false; // Not target function
@@ -112,9 +112,9 @@ bool assign_params_as_non_det::runOnFunction(
       goto_program, it, code_assign2tc(lhs, gen_nondet(l_t)), ASSIGN, l);
 
     // resolve named subtypes for the temp object's symbol
-    typet obj_typet = lhs_sym->type.subtype();
+    typet obj_typet = lhs_sym->get_type().subtype();
     if (obj_typet.is_symbol())
-      obj_typet = context.find_symbol(obj_typet.identifier())->type;
+      obj_typet = context.find_symbol(obj_typet.identifier())->get_type();
 
     symbolt *obj_sym = get_default_symbol(
       obj_typet,
@@ -132,7 +132,7 @@ bool assign_params_as_non_det::runOnFunction(
     insert_before(
       goto_program,
       it,
-      code_decl2tc(migrate_type(flag_sym->type), flag_sym->id),
+      code_decl2tc(migrate_symbol_type(*flag_sym), flag_sym->id),
       DECL,
       l);
 
@@ -149,7 +149,7 @@ bool assign_params_as_non_det::runOnFunction(
     insert_before(
       goto_program,
       it,
-      code_decl2tc(migrate_type(obj_sym->type), obj_sym->id),
+      code_decl2tc(migrate_symbol_type(*obj_sym), obj_sym->id),
       DECL,
       l);
 

@@ -22,11 +22,11 @@ void show_symbol_table_plain(const namespacet &ns, std::ostream &out)
     std::unique_ptr<languaget> p = language_from_symbol(s);
     std::string type_str, value_str;
 
-    if (s.type.is_not_nil())
-      p->from_type(s.type, type_str, ns);
+    if (s.get_type().is_not_nil())
+      p->from_type(s.get_type(), type_str, ns);
 
-    if (s.value.is_not_nil())
-      p->from_expr(s.value, value_str, ns);
+    if (s.get_value().is_not_nil())
+      p->from_expr(s.get_value(), value_str, ns);
 
     out << "Symbol......: " << s.id << "\n";
     out << "Module......: " << s.module << "\n";

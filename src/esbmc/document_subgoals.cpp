@@ -1,4 +1,3 @@
-#include <util/c_expr2string.h>
 #include <esbmc/document_subgoals.h>
 #include <fstream>
 #include <util/i2string.h>
@@ -16,7 +15,7 @@ void strip_space(std::list<linet> &lines)
   unsigned strip = 50;
 
   for (std::list<linet>::const_iterator it = lines.begin(); it != lines.end();
-       it++)
+       ++it)
   {
     for (unsigned j = 0; j < strip && j < it->text.size(); j++)
       if (it->text[j] != ' ')
@@ -160,7 +159,7 @@ void get_code(const irept &location, std::string &dest)
 
   for (std::list<linet>::iterator it = lines.end(); it != lines.begin();)
   {
-    it--;
+    --it;
 
     if (is_empty_str(it->text))
       it = lines.erase(it);
@@ -214,7 +213,7 @@ void document_subgoals(
     }
 
   for (claim_sett::const_iterator it = claim_set.begin(); it != claim_set.end();
-       it++)
+       ++it)
   {
     std::string code;
     const irept &location = it->first;

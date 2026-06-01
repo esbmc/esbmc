@@ -1,3 +1,8 @@
+# pylint: disable=unused-argument,unnecessary-pass
+# These intrinsic stubs are intercepted by ESBMC's Python converter and
+# replaced with symbolic operations. Argument names are part of the API
+# contract; the `pass` body is required so the converter sees a parsed
+# function definition.
 """
 ESBMC Python intrinsic stubs.
 
@@ -49,4 +54,9 @@ def assume(cond: bool) -> None:
 
 def __ESBMC_assert(cond: bool, msg: str) -> None:
     """ESBMC intrinsic: verification assertion"""
+    pass
+
+
+def __ESBMC_unreachable() -> None:
+    """ESBMC intrinsic: marks unreachable code; verification fails if reached."""
     pass

@@ -3,8 +3,6 @@
 #include <util/message.h>
 #include <util/message/format.h>
 #include <util/usr_utils.h>
-#include <util/xml.h>
-#include <util/xml_irep.h>
 
 void show_loop_numbers(
   const goto_programt &goto_program,

@@ -146,15 +146,14 @@ symbolt *code_contractst::find_function_symbol(const std::string &function_name)
   {
     symbolt *candidate = context.find_symbol(it->first);
     if (
-      candidate && candidate->type.is_code() &&
+      candidate && candidate->get_type().is_code() &&
       id2string(candidate->name) == function_name)
     {
-      if (matched == nullptr)
-      {
-        matched = candidate;
-        matched_ids = id2string(it->first);
-      }
-      else
+      // matched is set on a previous loop iteration when a second overload
+      // with the same short name is found; cppcheck's per-statement flow
+      // analysis cannot see the cross-iteration assignment below.
+      // cppcheck-suppress knownConditionTrueFalse
+      if (matched != nullptr)
       {
         matched_ids += ", " + id2string(it->first);
         log_error(
@@ -164,6 +163,8 @@ symbolt *code_contractst::find_function_symbol(const std::string &function_name)
           matched_ids);
         return nullptr;
       }
+      matched = candidate;
+      matched_ids = id2string(it->first);
     }
   }
   return matched;
@@ -354,7 +355,8 @@ static expr2tc inline_temporary_variables(
         // Special case: if RHS is an old_snapshot sideeffect, DON'T inline further
         if (
           is_sideeffect2t(assign.value) &&
-          to_sideeffect2t(assign.value).kind == sideeffect2t::old_snapshot)
+          to_sideeffect2t(assign.value).kind ==
+            sideeffect2t::allockind::old_snapshot)
         {
           return expr;
         }
@@ -389,7 +391,7 @@ static expr2tc inline_temporary_variables(
         // Skip NONDET (initialization)
         if (
           is_sideeffect2t(assign.value) &&
-          to_sideeffect2t(assign.value).kind == sideeffect2t::nondet)
+          to_sideeffect2t(assign.value).kind == sideeffect2t::allockind::nondet)
         {
           continue;
         }
@@ -410,7 +412,8 @@ static expr2tc inline_temporary_variables(
         // Special case: if RHS is an old_snapshot sideeffect, DON'T inline further
         if (
           is_sideeffect2t(assign.value) &&
-          to_sideeffect2t(assign.value).kind == sideeffect2t::old_snapshot)
+          to_sideeffect2t(assign.value).kind ==
+            sideeffect2t::allockind::old_snapshot)
         {
           return expr;
         }
@@ -488,20 +491,20 @@ expr2tc code_contractst::extract_requires_clause(const symbolt &contract_symbol)
 {
   // Extract from contract symbol's value field
   // The value field should contain a struct with requires/ensures expressions
-  if (contract_symbol.value.is_nil())
+  if (contract_symbol.get_value().is_nil())
     return gen_true_expr();
 
   // For now, return the entire value as requires
   // TODO: Parse structured contract data if needed
   expr2tc req;
-  migrate_expr(contract_symbol.value, req);
+  migrate_symbol_value(contract_symbol, req);
   return req;
 }
 
 expr2tc code_contractst::extract_ensures_clause(const symbolt &contract_symbol)
 {
   // Extract from contract symbol's value field
-  if (contract_symbol.value.is_nil())
+  if (contract_symbol.get_value().is_nil())
     return gen_true_expr();
 
   // TODO: Implement proper separation of requires and ensures from contract symbol
@@ -583,7 +586,8 @@ code_contractst::extract_assigns_from_body(const goto_programt &function_body)
       // Check if RHS is a sideeffect with assigns_target
       if (
         is_sideeffect2t(assign.source) &&
-        to_sideeffect2t(assign.source).kind == sideeffect2t::assigns_target)
+        to_sideeffect2t(assign.source).kind ==
+          sideeffect2t::allockind::assigns_target)
       {
         const sideeffect2t &se = to_sideeffect2t(assign.source);
         expr2tc target_expr = se.operand;
@@ -649,10 +653,10 @@ void code_contractst::havoc_function_parameters(
   goto_programt &dest,
   const locationt &location)
 {
-  if (!original_func.type.is_code())
+  if (!original_func.get_type().is_code())
     return;
 
-  const code_typet &code_type = to_code_type(original_func.type);
+  const code_typet &code_type = to_code_type(original_func.get_type());
   const code_typet::argumentst &params = code_type.arguments();
 
   for (const auto &param : params)
@@ -683,7 +687,7 @@ void code_contractst::havoc_static_globals(
   // Iterate over all symbols in context to find static lifetime globals
   ns.get_context().foreach_operand([&dest, &location](const symbolt &s) {
     // Skip functions, types, and non-lvalue symbols
-    if (s.type.is_code() || s.is_type || !s.lvalue)
+    if (s.get_type().is_code() || s.is_type || !s.lvalue)
       return;
 
     // Only process static lifetime variables (globals and static locals)
@@ -692,11 +696,11 @@ void code_contractst::havoc_static_globals(
 
     // Skip internal ESBMC symbols
     std::string sym_name = id2string(s.name);
-    if (sym_name.find("__ESBMC_") == 0)
+    if (sym_name.starts_with("__ESBMC_"))
       return;
 
     // Build LHS symbol expression
-    type2tc global_type = migrate_type(s.type);
+    type2tc global_type = migrate_symbol_type(s);
     expr2tc lhs = symbol2tc(global_type, s.id);
 
     // Do not assign nondeterministic values to pointers when value-set based
@@ -912,8 +916,8 @@ void code_contractst::enforce_contracts(
     // Create new function entry
     goto_functiont new_func;
     new_func.body = wrapper;
-    if (func_sym->type.is_code())
-      new_func.type = to_code_type(func_sym->type);
+    if (func_sym->get_type().is_code())
+      new_func.type = migrate_symbol_type(*func_sym);
     new_func.body_available = true;
     new_func.update_instructions_function(original_id);
 
@@ -960,6 +964,13 @@ goto_programt code_contractst::generate_checking_wrapper(
   };
   std::vector<is_fresh_info> is_fresh_calls;
 
+  // Pointer-typed lvalues that received a heap allocation in this wrapper
+  // (is_fresh requires-side mallocs and add_pointer_validity_assumptions
+  // mallocs). Each gets a matching free() before the wrapper returns so that
+  // --memory-leak-check does not blame the user's function for the
+  // wrapper-internal allocation (CWE-401, see GitHub issue #4908).
+  std::vector<expr2tc> wrapper_heap_ptrs;
+
   forall_goto_program_instructions (it, original_body)
   {
     if (it->is_function_call() && is_code_function_call2t(it->code))
@@ -999,23 +1010,35 @@ goto_programt code_contractst::generate_checking_wrapper(
       stripped = to_typecast2t(stripped).from;
 
     // Determine the lvalue to assign the malloc result to.
+    //
+    // __ESBMC_is_fresh(EXPR, n) means "EXPR points to a fresh n-byte
+    // allocation".  The malloc result therefore goes INTO EXPR — EXPR is
+    // already the pointer-typed lvalue we want to write.  Two equivalent
+    // surface forms appear in practice:
+    //
+    //   __ESBMC_is_fresh(p,  n)   — bare pointer (the canonical form per
+    //                                docs/function-contracts.md);
+    //                                stripped is the pointer expression p.
+    //   __ESBMC_is_fresh(&p, n)   — address-of-variable form;
+    //                                stripped is &p, so the lvalue is *(&p) = p.
+    //
+    // Both forms must end up assigning the malloc result to p itself, never
+    // to *p.  Earlier revisions had a "fallback" else branch that emitted
+    // *p = malloc(...), which dereferenced an uninitialised p and tripped
+    // alignment / pointer-validity checks before the body even ran.
     expr2tc ptr_var;
     if (is_address_of2t(stripped))
     {
-      // &var → ptr_var = var (the pointer variable itself, e.g. hdr_len)
+      // &var → assign to var (peel the address-of).
       ptr_var = to_address_of2t(stripped).ptr_obj;
     }
     else
     {
-      // Fallback: dereference the (possibly stripped) pointer.
-      expr2tc ptr_to_deref =
-        is_pointer_type(stripped->type) ? stripped : info.ptr_arg;
+      // Bare pointer expression — assign directly to it.
       assert(
-        is_pointer_type(ptr_to_deref->type) && "ptr_arg must be pointer type");
-      type2tc inner_type = to_pointer_type(ptr_to_deref->type).subtype;
-      if (is_empty_type(inner_type))
-        inner_type = pointer_type2tc(get_empty_type());
-      ptr_var = dereference2tc(inner_type, ptr_to_deref);
+        is_pointer_type(stripped->type) &&
+        "__ESBMC_is_fresh first argument must be pointer-typed");
+      ptr_var = stripped;
     }
 
     // Use u8 as the alloc element type so that size_expr (in bytes) equals
@@ -1027,12 +1050,15 @@ goto_programt code_contractst::generate_checking_wrapper(
       info.size_expr,
       std::vector<expr2tc>(),
       char_type,
-      sideeffect2t::malloc);
+      sideeffect2t::allockind::malloc);
 
     goto_programt::targett assign_inst = wrapper.add_instruction(ASSIGN);
     assign_inst->code = code_assign2tc(ptr_var, malloc_expr);
     assign_inst->location = location;
     assign_inst->location.comment("__ESBMC_is_fresh memory allocation");
+
+    // Remember the allocation so the wrapper can free it before returning.
+    wrapper_heap_ptrs.push_back(ptr_var);
 
     // Assume the pointer is non-null: __ESBMC_is_fresh guarantees a fresh,
     // valid memory block.  Without this, symex_mem's non-deterministic
@@ -1048,6 +1074,9 @@ goto_programt code_contractst::generate_checking_wrapper(
   // Collect the set of params already allocated by __ESBMC_is_fresh so that
   // add_pointer_validity_assumptions can skip them (avoids overwriting a
   // correctly-sized is_fresh allocation with a single-element malloc).
+  // Both surface forms must be recognised: __ESBMC_is_fresh(&p, n) yields
+  // an address_of2t over symbol p; __ESBMC_is_fresh(p, n) yields the
+  // bare symbol expression p.
   std::set<irep_idt> is_fresh_allocated_params;
   for (const auto &info : is_fresh_calls)
   {
@@ -1059,6 +1088,10 @@ goto_programt code_contractst::generate_checking_wrapper(
       const expr2tc &obj = to_address_of2t(stripped).ptr_obj;
       if (is_symbol2t(obj))
         is_fresh_allocated_params.insert(to_symbol2t(obj).thename);
+    }
+    else if (is_symbol2t(stripped))
+    {
+      is_fresh_allocated_params.insert(to_symbol2t(stripped).thename);
     }
   }
 
@@ -1090,7 +1123,8 @@ goto_programt code_contractst::generate_checking_wrapper(
       original_func,
       location,
       array_param_ids,
-      is_fresh_allocated_params);
+      is_fresh_allocated_params,
+      &wrapper_heap_ptrs);
   }
 
   // 2. Extract and create snapshots for __ESBMC_old() expressions.
@@ -1204,9 +1238,9 @@ goto_programt code_contractst::generate_checking_wrapper(
   // 2. Declare return value variable (if function has return type)
   expr2tc ret_val;
   type2tc ret_type;
-  if (original_func.type.is_code())
+  if (original_func.get_type().is_code())
   {
-    const code_typet &code_type = to_code_type(original_func.type);
+    const code_typet &code_type = to_code_type(original_func.get_type());
     typet return_type_irep1 = code_type.return_type();
     log_debug(
       "contracts",
@@ -1260,7 +1294,7 @@ goto_programt code_contractst::generate_checking_wrapper(
       symbolt ret_val_symbol;
       ret_val_symbol.name = ret_val_id;
       ret_val_symbol.id = ret_val_id;
-      ret_val_symbol.type = return_type_irep1;
+      ret_val_symbol.set_type(return_type_irep1);
       ret_val_symbol.lvalue = true;
       ret_val_symbol.static_lifetime = false;
       ret_val_symbol.location = location;
@@ -1270,8 +1304,8 @@ goto_programt code_contractst::generate_checking_wrapper(
         "contracts",
         "generate_checking_wrapper: creating return_value symbol with type "
         "id={}, is_symbol={}",
-        ret_val_symbol.type.id().as_string(),
-        ret_val_symbol.type.id() == "symbol");
+        ret_val_symbol.get_type().id().as_string(),
+        ret_val_symbol.get_type().id() == "symbol");
 
       // Add symbol to context
       symbolt *added_symbol = context.move_symbol_to_context(ret_val_symbol);
@@ -1312,11 +1346,11 @@ goto_programt code_contractst::generate_checking_wrapper(
   }
 
   // 3. Call original function
-  if (original_func.type.is_code())
+  if (original_func.get_type().is_code())
   {
-    const code_typet &code_type = to_code_type(original_func.type);
+    const code_typet &code_type = to_code_type(original_func.get_type());
     // Convert function type to irep2
-    type2tc func_type = migrate_type(original_func.type);
+    type2tc func_type = migrate_symbol_type(original_func);
 
     // Build parameter list
     std::vector<expr2tc> arguments;
@@ -1414,6 +1448,20 @@ goto_programt code_contractst::generate_checking_wrapper(
     t->location = location;
     t->location.comment("contract ensures");
     t->location.property("contract ensures");
+  }
+
+  // 4b. Free every heap allocation the wrapper performed for the parameters
+  //     (is_fresh requires-side mallocs and add_pointer_validity_assumptions
+  //     mallocs). Must happen AFTER the ensures assertion — which may
+  //     dereference these buffers — and BEFORE the RETURN, so that
+  //     --memory-leak-check no longer attributes a CWE-401 forgotten-memory
+  //     leak to the user's function (issue #4908).
+  for (const expr2tc &ptr : wrapper_heap_ptrs)
+  {
+    goto_programt::targett free_inst = wrapper.add_instruction(OTHER);
+    free_inst->code = code_free2tc(ptr);
+    free_inst->location = location;
+    free_inst->location.comment("contract: free wrapper-allocated backing");
   }
 
   // 5. Return the value (if function has return type)
@@ -1705,7 +1753,7 @@ expr2tc code_contractst::extract_struct_members_to_temps(
         symbolt temp_symbol;
         temp_symbol.name = temp_id;
         temp_symbol.id = temp_id;
-        temp_symbol.type = migrate_type_back(member.type);
+        set_symbol_type(temp_symbol, member.type);
         temp_symbol.lvalue = true;
         temp_symbol.static_lifetime = false;
         temp_symbol.location = location;
@@ -1846,7 +1894,7 @@ bool code_contractst::is_old_call(const expr2tc &expr) const
   if (is_sideeffect2t(expr))
   {
     const sideeffect2t &se = to_sideeffect2t(expr);
-    return se.kind == sideeffect2t::old_snapshot;
+    return se.kind == sideeffect2t::allockind::old_snapshot;
   }
 
   return false;
@@ -1865,13 +1913,13 @@ expr2tc code_contractst::create_snapshot_variable(
   // Note: symbolt uses IRep1 (typet) while we work with IRep2 (type2tc).
   // This is ESBMC's architecture: Symbol Table is IRep1-based for global state,
   // while modern code (GOTO programs, contracts) uses IRep2 for local logic.
-  // Migration is needed at the boundary when adding symbols to context.
-  // If ESBMC migrates Symbol Table to IRep2, update this to use expr->type directly.
+  // Set the symbol's IREP2 type directly via the migrate-layer chokepoint;
+  // set_symbol_type stores the cache authoritatively and derives the legacy
+  // field via migrate_type_back exactly once (esbmc/esbmc#4715, B2 S4b).
   symbolt snapshot_symbol;
   snapshot_symbol.name = snapshot_name;
   snapshot_symbol.id = snapshot_name;
-  snapshot_symbol.type =
-    migrate_type_back(expr->type); // IRep2 → IRep1 conversion
+  set_symbol_type(snapshot_symbol, expr->type);
   snapshot_symbol.lvalue = true;
   snapshot_symbol.static_lifetime = false;
   snapshot_symbol.file_local = false;
@@ -2004,7 +2052,7 @@ code_contractst::collect_old_snapshots_from_body(
       if (is_sideeffect2t(assign.source))
       {
         const sideeffect2t &se = to_sideeffect2t(assign.source);
-        if (se.kind == sideeffect2t::old_snapshot)
+        if (se.kind == sideeffect2t::allockind::old_snapshot)
         {
           // Found an old_snapshot assignment!
           // The operand is the original expression, the target is the temp variable
@@ -2075,10 +2123,10 @@ code_contractst::materialize_ptr_field_snapshots(
 
   if (classified.ptr_field_targets.empty())
     return result;
-  if (!original_func.type.is_code())
+  if (!original_func.get_type().is_code())
     return result;
 
-  const code_typet &code_type = to_code_type(original_func.type);
+  const code_typet &code_type = to_code_type(original_func.get_type());
   const code_typet::argumentst &params = code_type.arguments();
 
   for (const auto &[ptr_name, assigned_fields] : classified.ptr_field_targets)
@@ -2120,7 +2168,7 @@ code_contractst::materialize_ptr_field_snapshots(
         symbolt snap_sym_obj;
         snap_sym_obj.name = snap_name;
         snap_sym_obj.id = snap_name;
-        snap_sym_obj.type = migrate_type_back(ftype);
+        set_symbol_type(snap_sym_obj, ftype);
         snap_sym_obj.lvalue = true;
         snap_sym_obj.static_lifetime = false;
         snap_sym_obj.file_local = false;
@@ -2196,10 +2244,10 @@ code_contractst::materialize_ptr_deref_snapshots(
   // If assigns_targets is empty there is no clause → function may modify anything.
   if (assigns_targets.empty())
     return result;
-  if (!original_func.type.is_code())
+  if (!original_func.get_type().is_code())
     return result;
 
-  const code_typet &code_type = to_code_type(original_func.type);
+  const code_typet &code_type = to_code_type(original_func.get_type());
   const code_typet::argumentst &params = code_type.arguments();
 
   for (const auto &param : params)
@@ -2306,7 +2354,7 @@ code_contractst::materialize_ptr_deref_snapshots(
         symbolt snap_obj;
         snap_obj.name = snap_name;
         snap_obj.id = snap_name;
-        snap_obj.type = migrate_type_back(ftype);
+        set_symbol_type(snap_obj, ftype);
         snap_obj.lvalue = true;
         snap_obj.static_lifetime = false;
         snap_obj.file_local = false;
@@ -2344,7 +2392,7 @@ code_contractst::materialize_ptr_deref_snapshots(
       symbolt snap_obj;
       snap_obj.name = snap_name;
       snap_obj.id = snap_name;
-      snap_obj.type = migrate_type_back(pointee);
+      set_symbol_type(snap_obj, pointee);
       snap_obj.lvalue = true;
       snap_obj.static_lifetime = false;
       snap_obj.file_local = false;
@@ -2476,7 +2524,7 @@ code_contractst::materialize_arr_elem_snapshots(
     symbolt j_obj;
     j_obj.name = j_sym_name;
     j_obj.id = j_sym_name;
-    j_obj.type = migrate_type_back(j_type);
+    set_symbol_type(j_obj, j_type);
     j_obj.lvalue = true;
     j_obj.static_lifetime = false;
     j_obj.file_local = false;
@@ -2515,7 +2563,7 @@ code_contractst::materialize_arr_elem_snapshots(
     symbolt snap_obj;
     snap_obj.name = snap_sym_name;
     snap_obj.id = snap_sym_name;
-    snap_obj.type = migrate_type_back(elem_type);
+    set_symbol_type(snap_obj, elem_type);
     snap_obj.lvalue = true;
     snap_obj.static_lifetime = false;
     snap_obj.file_local = false;
@@ -2666,9 +2714,9 @@ code_contractst::materialize_old_snapshots_at_callsite(
     expr2tc temp_var = old_snapshots[i].snapshot_var; // temp var from body
 
     // Apply the same parameter substitution used for requires/ensures
-    if (function_symbol.type.is_code())
+    if (function_symbol.get_type().is_code())
     {
-      const code_typet &code_type = to_code_type(function_symbol.type);
+      const code_typet &code_type = to_code_type(function_symbol.get_type());
       const code_typet::argumentst &params = code_type.arguments();
 
       for (size_t j = 0; j < params.size() && j < actual_args.size(); ++j)
@@ -3121,7 +3169,8 @@ bool code_contractst::has_contracts(const goto_programt &function_body) const
       const code_assign2t &assign = to_code_assign2t(it->code);
       if (
         is_sideeffect2t(assign.source) &&
-        to_sideeffect2t(assign.source).kind == sideeffect2t::assigns_target)
+        to_sideeffect2t(assign.source).kind ==
+          sideeffect2t::allockind::assigns_target)
       {
         return true;
       }
@@ -3167,7 +3216,7 @@ bool code_contractst::is_annotated_contract_function(
 {
   // Check if function type has #annotated_contract attribute set
   // This is set in clang_c_convert.cpp when parsing __attribute__((annotate("__ESBMC_contract")))
-  return func_sym.type.get_bool("#annotated_contract");
+  return func_sym.get_type().get_bool("#annotated_contract");
 }
 
 void code_contractst::replace_calls(const std::set<std::string> &to_replace)
@@ -3347,9 +3396,9 @@ void code_contractst::generate_replacement_at_call(
   }
 
   // Replace function parameters with actual arguments in contract clauses
-  if (function_symbol.type.is_code())
+  if (function_symbol.get_type().is_code())
   {
-    const code_typet &code_type = to_code_type(function_symbol.type);
+    const code_typet &code_type = to_code_type(function_symbol.get_type());
     const code_typet::argumentst &params = code_type.arguments();
 
     // Build parameter-to-argument mapping
@@ -3428,9 +3477,9 @@ void code_contractst::generate_replacement_at_call(
       // Substitute function parameters with actual call arguments
       expr2tc instantiated_target = target_expr;
 
-      if (function_symbol.type.is_code())
+      if (function_symbol.get_type().is_code())
       {
-        const code_typet &code_type = to_code_type(function_symbol.type);
+        const code_typet &code_type = to_code_type(function_symbol.get_type());
         const code_typet::argumentst &params = code_type.arguments();
 
         for (size_t i = 0; i < params.size() && i < actual_args.size(); ++i)
@@ -3511,9 +3560,9 @@ void code_contractst::generate_replacement_at_call(
   //   call site:  int x = 41;  increment(&x);
   // Without this havoc the ASSUME would be  ASSUME(41 == 41+1 = 42), i.e.
   // FALSE, making all subsequent assertions vacuously VERIFICATION SUCCESSFUL.
-  if (!has_empty_assigns && function_symbol.type.is_code())
+  if (!has_empty_assigns && function_symbol.get_type().is_code())
   {
-    const code_typet &code_type = to_code_type(function_symbol.type);
+    const code_typet &code_type = to_code_type(function_symbol.get_type());
     const code_typet::argumentst &params = code_type.arguments();
 
     for (size_t i = 0; i < params.size() && i < actual_args.size(); ++i)
@@ -3639,12 +3688,13 @@ void code_contractst::add_pointer_validity_assumptions(
   const symbolt &func,
   const locationt &location,
   const std::set<irep_idt> &array_params,
-  const std::set<irep_idt> &skip_params)
+  const std::set<irep_idt> &skip_params,
+  std::vector<expr2tc> *allocated_ptrs)
 {
-  if (!func.type.is_code())
+  if (!func.get_type().is_code())
     return;
 
-  const code_typet &code_type = to_code_type(func.type);
+  const code_typet &code_type = to_code_type(func.get_type());
   const code_typet::argumentst &params = code_type.arguments();
 
   for (const auto &param : params)
@@ -3686,7 +3736,7 @@ void code_contractst::add_pointer_validity_assumptions(
         alloc_size,
         std::vector<expr2tc>(),
         pointed_to_type,
-        sideeffect2t::malloc);
+        sideeffect2t::allockind::malloc);
 
       auto assign_inst = wrapper.add_instruction(ASSIGN);
       assign_inst->code = code_assign2tc(p, malloc_expr);
@@ -3706,6 +3756,9 @@ void code_contractst::add_pointer_validity_assumptions(
         "contracts",
         "add_pointer_validity_assumptions: malloc (array) for parameter {}",
         id2string(param.get_identifier()));
+
+      if (allocated_ptrs)
+        allocated_ptrs->push_back(p);
     }
     else
     {
@@ -3737,7 +3790,7 @@ void code_contractst::add_pointer_validity_assumptions(
         symbolt harness_sym;
         harness_sym.name = harness_var_name;
         harness_sym.id = harness_var_name;
-        harness_sym.type = migrate_type_back(resolved_type);
+        set_symbol_type(harness_sym, resolved_type);
         harness_sym.lvalue = true;
         harness_sym.static_lifetime = false;
         harness_sym.location = location;
@@ -3793,7 +3846,7 @@ void code_contractst::add_pointer_validity_assumptions(
           alloc_size,
           std::vector<expr2tc>(),
           pointed_to_type,
-          sideeffect2t::malloc);
+          sideeffect2t::allockind::malloc);
 
         auto assign_inst = wrapper.add_instruction(ASSIGN);
         assign_inst->code = code_assign2tc(p, malloc_expr);
@@ -3814,6 +3867,9 @@ void code_contractst::add_pointer_validity_assumptions(
           "add_pointer_validity_assumptions: malloc (primitive) for parameter "
           "{}",
           id2string(param.get_identifier()));
+
+        if (allocated_ptrs)
+          allocated_ptrs->push_back(p);
       }
     }
   }

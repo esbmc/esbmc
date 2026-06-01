@@ -16,6 +16,7 @@
 #endif
 
 #include <fmt/format.h>
+#include <regex>
 #include <ac_config.h>
 #include <esbmc/bmc.h>
 #include <esbmc/document_subgoals.h>
@@ -24,6 +25,7 @@
 #include <goto-symex/build_goto_trace.h>
 #include <goto-symex/goto_trace.h>
 #include <goto-symex/features.h>
+#include <goto-symex/sarif.h>
 #include <goto-symex/xml_goto_trace.h>
 #include <langapi/language_util.h>
 #include <langapi/languages.h>
@@ -44,6 +46,7 @@ std::unordered_set<std::string> goto_functionst::reached_claims;
 std::unordered_multiset<std::string> goto_functionst::reached_mul_claims;
 std::mutex goto_functionst::reached_claims_mutex;
 std::mutex goto_functionst::reached_mul_claims_mutex;
+std::mutex goto_functionst::clear_claims_mutex;
 
 bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
   : options(opts), context(_context), ns(context)
@@ -66,7 +69,7 @@ bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
       !options.get_bool_option("ltl"))
       // Store the set between runs
       algorithms.emplace_back(
-        std::make_unique<assertion_cache>(config.ssa_caching_db));
+        std::make_unique<assertion_cache>(get_ssa_caching_db()));
 
     if (opts.get_bool_option("no-slice"))
       algorithms.emplace_back(std::make_unique<simple_slice>());
@@ -149,6 +152,9 @@ void bmct::error_trace(smt_convt &smt_conv, const symex_target_equationt &eq)
 
   if (witness_yaml_output != "")
     violation_yaml_goto_trace(options, ns, goto_trace);
+
+  if (!options.get_option("sarif-output").empty())
+    sarif_goto_trace(options, ns, goto_trace);
 
   if (options.get_bool_option("generate-testcase"))
   {
@@ -301,6 +307,33 @@ void bmct::report_failure()
   log_fail("\nVERIFICATION FAILED");
 }
 
+void bmct::report_unknown()
+{
+  log_fail("\nVERIFICATION UNKNOWN");
+}
+
+smt_convt::resultt bmct::check_vacuity(symex_target_equationt &local_eq) const
+{
+  // Re-encode in vacuity mode: each kept assertion contributes its path
+  // assumption to the OR'd disjunction instead of `not(assumpt -> claim)`.
+  // The result is UNSAT iff the path to every kept claim is unreachable.
+  std::unique_ptr<smt_convt> solver(create_solver("", ns, options));
+  local_eq.convert(*solver, /*vacuity_mode=*/true);
+  return solver->dec_solve();
+}
+
+// True when a discharged claim is a candidate for vacuity probing. Skips
+// the loop-invariant pass's own synthetic sanity assertions: each is
+// sequenced under an ASSUME(false) terminator, so any claim appearing
+// after the first loop's inductive step would always probe vacuous. The
+// probe targets user-facing claims (contract ensures, user assertions),
+// not internal pass scaffolding.
+static bool is_vacuity_probe_candidate(const std::string &claim_property)
+{
+  return claim_property != "invariant-base-case" &&
+         claim_property != "invariant-inductive-step";
+}
+
 void bmct::show_program(const symex_target_equationt &eq)
 {
   unsigned int count = 1;
@@ -437,11 +470,11 @@ void bmct::clear_verified_claims_in_goto(
   const claim_slicer &claim,
   const bool &is_goto_cov)
 {
+  std::lock_guard lock(goto_functionst::clear_claims_mutex);
   for (auto &func : symex->goto_functions.function_map)
   {
     for (auto &instr : func.second.body.instructions)
     {
-      std::lock_guard lock(instr.clear_claims_mutex);
       if (!instr.is_assert())
         continue;
 
@@ -465,10 +498,8 @@ void bmct::clear_verified_claims_in_goto(
 
 void bmct::report_multi_property_trace(
   const smt_convt::resultt &res,
-  smt_convt *&solver,
-  const symex_target_equationt &local_eq,
-  const std::atomic<size_t> ce_counter,
-  const goto_tracet &goto_trace,
+  const std::vector<witness_recordt> &witnesses,
+  enumeration_stop_reasont stop_reason,
   const std::string &msg)
 {
   if (options.get_bool_option("result-only"))
@@ -477,51 +508,187 @@ void bmct::report_multi_property_trace(
   switch (res)
   {
   case smt_convt::P_UNSATISFIABLE:
-    // UNSAT means that the property was correct up to K
     log_success("Claim '{}' holds up to the current K", msg);
-    break;
+    return;
 
   case smt_convt::P_SATISFIABLE:
-  {
-    std::string output_file = options.get_option("cex-output");
-    if (output_file != "")
-    {
-      std::ofstream out(fmt::format("{}-{}", ce_counter.load(), output_file));
-      show_goto_trace(out, ns, goto_trace);
-    }
-
-    std::string witness_graphml_output =
-      options.get_option("witness-output-graphml");
-    std::string witness_yaml_output = options.get_option("witness-output-yaml");
-    if (!witness_graphml_output.empty())
-      violation_graphml_goto_trace(options, ns, goto_trace);
-
-    if (!witness_yaml_output.empty())
-      violation_yaml_goto_trace(options, ns, goto_trace);
-
-    if (options.get_bool_option("generate-testcase"))
-    {
-      generate_testcase_metadata();
-      generate_testcase(
-        "testcase-" + std::to_string(ce_counter) + ".xml", local_eq, *solver);
-    }
-    if (options.get_bool_option("generate-html-report"))
-      generate_html_report(std::to_string(ce_counter), ns, goto_trace, options);
-
-    if (options.get_bool_option("generate-json-report"))
-      generate_json_report(std::to_string(ce_counter), ns, goto_trace);
-
-    std::ostringstream oss;
-    log_fail("\n[Counterexample]\n");
-    show_goto_trace(oss, ns, goto_trace);
-    log_result("{}", oss.str());
     break;
-  }
 
   default:
     log_fail("Claim '{}' could not be solved", msg);
+    return;
+  }
+
+  // Single-witness textual output: keep the existing "[Counterexample]" form.
+  // This preserves the look of every existing failing test in regression/.
+  // Skip this path when --all-witnesses was requested (stop_reason != Disabled)
+  // so the structured footer is still emitted at N=1 — otherwise a CapHit
+  // with cap=1 would silently look identical to a real "only-one-witness"
+  // result.
+  if (
+    witnesses.size() <= 1 && stop_reason == enumeration_stop_reasont::Disabled)
+  {
+    std::ostringstream oss;
+    log_fail("\n[Counterexample]\n");
+    if (!witnesses.empty())
+      show_goto_trace(oss, ns, witnesses.front().trace);
+    log_result("{}", oss.str());
+    return;
+  }
+
+  // Multi-witness rendering: structured per-witness blocks, then a footer.
+  // Goal: highlight the *inputs* (the part that varies across witnesses) and
+  // avoid dumping N copies of nearly-identical traces. The full trace for
+  // each witness is still emitted unless --compact-trace is on, but they
+  // are clearly separated and labelled.
+  std::ostringstream oss;
+  // ASCII-only header: en-dash and similar non-ASCII glyphs get
+  // mojibake'd on Windows' default cp1252 console, breaking regression
+  // matching and reader output. The box-drawing glyphs further down
+  // are cosmetic and only appear at N>1; ASCII-fallback there is
+  // tracked separately (#4311).
+  oss << "\n[Counterexamples - " << witnesses.size() << " witnesses]\n\n";
+  for (size_t i = 0; i < witnesses.size(); ++i)
+  {
+    const witness_recordt &w = witnesses[i];
+    oss << "  ┌─ Witness " << (i + 1) << " of " << witnesses.size()
+        << " ─────────────────────────────\n";
+    oss << "  │  Inputs : ";
+    if (w.nondet_inputs.empty())
+    {
+      oss << "(none)\n";
+    }
+    else
+    {
+      for (size_t k = 0; k < w.nondet_inputs.size(); ++k)
+      {
+        if (k)
+          oss << ", ";
+        // Use WITNESS presentation to render bit-distinct floats with
+        // round-trippable precision; otherwise the default HUMAN flags
+        // collapse e.g. several near-MAX floats to the same string.
+        oss << "[" << k << "] = "
+            << from_expr(
+                 ns, "", w.nondet_inputs[k].value_expr, presentationt::WITNESS);
+      }
+      oss << "\n";
+    }
+    oss << "  │  Trace  :\n";
+    {
+      std::ostringstream tr;
+      show_goto_trace(tr, ns, w.trace);
+      // Indent the trace under the box.
+      std::string s = tr.str();
+      std::string indented;
+      indented.reserve(s.size() + 8);
+      indented += "  │    ";
+      for (char c : s)
+      {
+        indented += c;
+        if (c == '\n')
+          indented += "  │    ";
+      }
+      oss << indented << "\n";
+    }
+    oss << "  └──────────────────────────────────────────────\n\n";
+  }
+
+  oss << "Summary: " << witnesses.size()
+      << " distinct input tuples violate this property (enumeration stopped: ";
+  switch (stop_reason)
+  {
+  case enumeration_stop_reasont::Unsat:
+    oss << "UNSAT after " << witnesses.size() << " witnesses";
+    break;
+  case enumeration_stop_reasont::CapHit:
+    oss << "--max-witnesses cap reached";
+    break;
+  case enumeration_stop_reasont::NoInputs:
+    oss << "no enumerable nondet inputs — more witnesses may exist";
+    break;
+  case enumeration_stop_reasont::Error:
+    oss << "solver returned error/unknown — more witnesses may exist";
+    break;
+  case enumeration_stop_reasont::Disabled:
+    oss << "single-witness mode";
     break;
   }
+  oss << ")\n";
+
+  log_fail("\n[Counterexample]\n");
+  log_result("{}", oss.str());
+}
+
+// Prettify C-level expression strings for Solidity coverage reports.
+// Strips C casts, maps internal names to Solidity names, etc.
+static std::string prettify_solidity_expr(const std::string &expr)
+{
+  if (config.language.lid != language_idt::SOLIDITY)
+    return expr;
+
+  std::string s = expr;
+
+  // Remove C-style casts: (signed int), (unsigned int), (signed long int), etc.
+  // Also handles _ExtInt(N) casts like (unsigned _ExtInt(256))
+  static const std::regex cast_re(
+    R"(\((?:signed|unsigned)\s+(?:_ExtInt\(\d+\)|(?:long\s+)?(?:long\s+)?int)\))");
+  s = std::regex_replace(s, cast_re, "");
+
+  // Remove this-> prefix (Solidity state variables)
+  static const std::regex this_re(R"(this->)");
+  s = std::regex_replace(s, this_re, "");
+
+  // Map internal Solidity global variable names to their Solidity equivalents
+  static const std::vector<std::pair<std::regex, std::string>> name_map = {
+    {std::regex(R"(\bmsg_sender\b)"), "msg.sender"},
+    {std::regex(R"(\bmsg_value\b)"), "msg.value"},
+    {std::regex(R"(\bmsg_sig\b)"), "msg.sig"},
+    {std::regex(R"(\bmsg_data\b)"), "msg.data"},
+    {std::regex(R"(\btx_origin\b)"), "tx.origin"},
+    {std::regex(R"(\btx_gasprice\b)"), "tx.gasprice"},
+    {std::regex(R"(\bblock_number\b)"), "block.number"},
+    {std::regex(R"(\bblock_timestamp\b)"), "block.timestamp"},
+    {std::regex(R"(\bblock_coinbase\b)"), "block.coinbase"},
+    {std::regex(R"(\bblock_difficulty\b)"), "block.difficulty"},
+    {std::regex(R"(\bblock_gaslimit\b)"), "block.gaslimit"},
+    {std::regex(R"(\bblock_chainid\b)"), "block.chainid"},
+    {std::regex(R"(\bblock_basefee\b)"), "block.basefee"},
+    {std::regex(R"(\bblock_blobbasefee\b)"), "block.blobbasefee"},
+    {std::regex(R"(\bblock_prevrandao\b)"), "block.prevrandao"},
+  };
+  for (const auto &[re, repl] : name_map)
+    s = std::regex_replace(s, re, repl);
+
+  // Remove redundant parentheses left by cast removal, e.g. ((x)) -> (x)
+  // Iteratively reduce until stable (handles nested cases)
+  static const std::regex double_paren(R"(\((\([^()]*\))\))");
+  std::string prev;
+  do
+  {
+    prev = s;
+    s = std::regex_replace(s, double_paren, "$1");
+  } while (s != prev);
+
+  // Remove parens in array index: [(...)] -> [...]
+  static const std::regex bracket_paren(R"(\[\(([^()]*)\)\])");
+  s = std::regex_replace(s, bracket_paren, "[$1]");
+
+  // Prettify Solidity internal symbol IDs: sol:@C@Contract@F@func#N -> func
+  // Appears in "function entry: sol:@C@..." messages
+  static const std::regex sol_id_re(R"(sol:@C@\w+@F@(\w+)#\d*)");
+  s = std::regex_replace(s, sol_id_re, "$1");
+
+  // Clean up extra spaces from removed casts
+  static const std::regex multi_space(R"(  +)");
+  s = std::regex_replace(s, multi_space, " ");
+
+  // Remove leading/trailing whitespace
+  auto start = s.find_first_not_of(' ');
+  auto end = s.find_last_not_of(' ');
+  if (start != std::string::npos)
+    s = s.substr(start, end - start + 1);
+
+  return s;
 }
 
 // Parse location string "file X line Y column Z function F" into components
@@ -565,6 +732,17 @@ static nlohmann::json parse_claim_location(const std::string &loc)
   return j;
 }
 
+// Predicate used by both the final and the verbose k-path reporters.
+static bool is_kpath_maximal(const std::string &claim_sig)
+{
+  const auto &redundant = goto_coveraget::k_path_spanning_redundant;
+  // claim_sig = "msg\tloc"; loc has no tabs, so rfind is robust if a
+  // future emission path puts a tab in msg.
+  const auto tab = claim_sig.rfind('\t');
+  return redundant.count(
+           {claim_sig.substr(0, tab), claim_sig.substr(tab + 1)}) == 0;
+}
+
 void report_coverage(
   const optionst &options,
   std::unordered_set<std::string> &reached_claims,
@@ -583,6 +761,12 @@ void report_coverage(
   bool is_branch_func_cov =
     options.get_bool_option("branch-function-coverage") ||
     options.get_bool_option("branch-function-coverage-claims");
+  // `k-path-coverage` itself stores the CLI integer N; the dedicated
+  // boolean enable flag is set by parseoptions when either CLI flag is
+  // present. This avoids `get_bool_option("k-path-coverage")` returning 0
+  // (false) for valid invocations like `--k-path-coverage` (no value) or
+  // `--k-path-coverage=0` (rejected at parse time, but defensive here).
+  bool is_k_path_cov = options.get_bool_option("k-path-coverage-enabled");
 
   if (is_assert_cov)
   {
@@ -590,20 +774,17 @@ void report_coverage(
     const int tracked_instance = reached_mul_claims.size();
     const int total_instance = goto_coveraget::total_assert_ins;
 
-    if (total)
-    {
-      log_success("\n[Coverage]\n");
-      // The total assertion instances include the assert inside the source file, the unwinding asserts, the claims inserted during the goto-check and so on.
-      log_result("Total Asserts: {}", total);
-      if (total_instance >= tracked_instance)
-        log_result("Total Assertion Instances: {}", total_instance);
-      else
-        // this could be
-        // 1. the loop is too large that we cannot goto-unwind it
-        // 2. the loop is somewhat non-deterministic that we cannot run goto-unwind
-        log_result("Total Assertion Instances: unknown / non-deterministic");
-      log_result("Reached Assertion Instances: {}", tracked_instance);
-    }
+    log_success("\n[Coverage]\n");
+    // The total assertion instances include the assert inside the source file, the unwinding asserts, the claims inserted during the goto-check and so on.
+    log_result("Total Asserts: {}", total);
+    if (total_instance >= tracked_instance)
+      log_result("Total Assertion Instances: {}", total_instance);
+    else
+      // this could be
+      // 1. the loop is too large that we cannot goto-unwind it
+      // 2. the loop is somewhat non-deterministic that we cannot run goto-unwind
+      log_result("Total Assertion Instances: unknown / non-deterministic");
+    log_result("Reached Assertion Instances: {}", tracked_instance);
 
     // show claims
     if (options.get_bool_option("assertion-coverage-claims"))
@@ -611,7 +792,7 @@ void report_coverage(
       // reached claims:
       for (const auto &claim : reached_mul_claims)
       {
-        log_status("  {}", claim);
+        log_status("  {}", prettify_solidity_expr(claim));
       }
     }
 
@@ -648,18 +829,20 @@ void report_coverage(
       options.get_bool_option("condition-coverage-claims") ||
       options.get_bool_option("condition-coverage-claims-rm");
 
-    // reached claims:
+    // Local copy: the JSON writer downstream reads the original
+    // reached_claims; mutating it here would mark every claim uncovered.
+    auto reached_claims_local = reached_claims;
     auto total_cond_assert_cpy = total_cond_assert;
     for (const auto &claim_pair : total_cond_assert)
     {
       std::string claim_msg = claim_pair.first;
       std::string claim_loc = claim_pair.second;
       std::string claim_sig = claim_msg + "\t" + claim_loc;
-      if (reached_claims.count(claim_sig))
+      if (reached_claims_local.count(claim_sig))
       {
         // show sat claims
         if (cond_show_claims)
-          log_status("  {} : SATISFIED", claim_sig);
+          log_status("  {} : SATISFIED", prettify_solidity_expr(claim_sig));
 
         // update counter +=2
         // as we handle ass and !ass at the same time
@@ -669,7 +852,7 @@ void report_coverage(
         ++sat_instance;
 
         // prevent double count
-        reached_claims.erase(claim_sig);
+        reached_claims_local.erase(claim_sig);
         total_cond_assert_cpy.erase(claim_pair);
 
         // reversal: obtain !ass
@@ -681,23 +864,24 @@ void report_coverage(
           claim_msg = "!(" + claim_msg + ")";
         std::string r_claim_sig = claim_msg + "\t" + claim_loc;
 
-        if (reached_claims.count(r_claim_sig))
+        if (reached_claims_local.count(r_claim_sig))
         {
           ++sat_instance;
           if (cond_show_claims)
-            log_result("  {} : SATISFIED", r_claim_sig);
+            log_result("  {} : SATISFIED", prettify_solidity_expr(r_claim_sig));
         }
         else
         {
           ++unsat_instance;
           if (cond_show_claims)
-            log_result("  {} : UNSATISFIED", r_claim_sig);
+            log_result(
+              "  {} : UNSATISFIED", prettify_solidity_expr(r_claim_sig));
         }
 
         // prevent double count
         // e.g if( a ==0 && a == 0)
         // we only count a==0 and !(a==0) once
-        reached_claims.erase(r_claim_sig);
+        reached_claims_local.erase(r_claim_sig);
         std::pair<std::string, std::string> _pair =
           std::make_pair(claim_msg, claim_loc);
         total_cond_assert_cpy.erase(_pair);
@@ -717,7 +901,7 @@ void report_coverage(
         std::string claim_msg = claim_pair.first;
         std::string claim_loc = claim_pair.second;
         std::string claim_sig = claim_msg + "\t" + claim_loc;
-        log_result("  {}", claim_sig);
+        log_result("  {}", prettify_solidity_expr(claim_sig));
       }
     }
 
@@ -743,26 +927,22 @@ void report_coverage(
     // this also included the non-unwinding-assertions
     // which is not what we want
     const size_t tracked_instance = reached_claims.size();
-    if (total)
-    {
-      log_success("\n[Coverage]\n");
-      // The total assertion instances include the assert inside the source file, the unwinding asserts, the claims inserted during the goto-check and so on.
-      log_result("Branches : {}", total);
-      log_result("Reached : {}", tracked_instance);
-    }
+    log_success("\n[Coverage]\n");
+    log_result("Branches : {}", total);
+    log_result("Reached : {}", tracked_instance);
 
     // show claims
     if (options.get_bool_option("branch-coverage-claims"))
     {
       // reached claims:
       for (const auto &claim : reached_claims)
-        log_status("  {}", claim);
+        log_status("  {}", prettify_solidity_expr(claim));
     }
 
     if (total != 0)
       log_result("Branch Coverage: {}%", tracked_instance * 100.0 / total);
     else
-      log_result("Branch Coverage: 0%");
+      log_result("Branch Coverage: N/A (no branches)");
   }
 
   else if (is_branch_func_cov)
@@ -773,26 +953,53 @@ void report_coverage(
     // this also included the non-unwinding-assertions
     // which is not what we want
     const size_t tracked_instance = reached_claims.size();
-    if (total)
-    {
-      log_success("\n[Coverage]\n");
-      // The total assertion instances include the assert inside the source file, the unwinding asserts, the claims inserted during the goto-check and so on.
-      log_result("Function Entry Points & Branches : {}", total);
-      log_result("Reached : {}", tracked_instance);
-    }
+    log_success("\n[Coverage]\n");
+    log_result("Function Entry Points & Branches : {}", total);
+    log_result("Reached : {}", tracked_instance);
 
     // show claims
     if (options.get_bool_option("branch-function-coverage-claims"))
     {
       // reached claims:
       for (const auto &claim : reached_claims)
-        log_status("  {}", claim);
+        log_status("  {}", prettify_solidity_expr(claim));
     }
 
     if (total != 0)
       log_result("Branch Coverage: {}%", tracked_instance * 100.0 / total);
     else
-      log_result("Branch Coverage: 0%");
+      log_result("Branch Coverage: N/A (no branches)");
+  }
+
+  else if (is_k_path_cov)
+  {
+    const size_t total = goto_coveraget::total_kpath;
+    const size_t spanning = goto_coveraget::total_kpath_spanning;
+
+    // Phase-2 (issue #4335): both numerator and denominator must restrict
+    // to maximal goals under the atom-multiset subsumption order (Marré-
+    // Bertolino, IEEE TSE 2003). Filter reached_claims against
+    // k_path_spanning_redundant so a reached-but-subsumed goal does not
+    // inflate the numerator against the maximal-only denominator.
+    const size_t tracked_instance = std::count_if(
+      reached_claims.begin(), reached_claims.end(), is_kpath_maximal);
+
+    log_success("\n[Coverage]\n");
+    log_result("k-Path Witnesses : {}", total);
+    log_result("Spanning Set : {}", spanning);
+    log_result("Reached : {}", tracked_instance);
+
+    // Listing shows every reached claim regardless of maximality so the
+    // user can see which subsumed goals were also reached — this is a
+    // diagnostic flag, not a coverage-formula display.
+    if (options.get_bool_option("k-path-coverage-claims"))
+      for (const auto &claim : reached_claims)
+        log_status("  {}", prettify_solidity_expr(claim));
+
+    if (spanning != 0)
+      log_result("k-Path Coverage: {}%", tracked_instance * 100.0 / spanning);
+    else
+      log_result("k-Path Coverage: N/A (no k-path goals)");
   }
 
   // Generate JSON coverage report
@@ -805,6 +1012,8 @@ void report_coverage(
       cov_type = "branch";
     else if (is_branch_func_cov)
       cov_type = "branch-function";
+    else if (is_k_path_cov)
+      cov_type = "k-path";
     else if (is_cond_cov)
       cov_type = "condition";
     else if (is_assert_cov)
@@ -829,12 +1038,24 @@ void report_coverage(
         source_files.insert(file);
 
       json claim_entry;
-      claim_entry["condition"] = claim_msg;
+      claim_entry["condition"] = prettify_solidity_expr(claim_msg);
       claim_entry["file"] = loc["file"];
       claim_entry["line"] = loc["line"];
       claim_entry["column"] = loc["column"];
       claim_entry["function"] = loc["function"];
       claim_entry["status"] = covered ? "covered" : "uncovered";
+      // k-path Phase-2 (#4335): annotate each claim as feasible (a
+      // maximal element of the subsumption lattice and thus part of the
+      // spanning set) or spanning-set-redundant (subsumed by a stronger
+      // emitted goal — covering it adds no information beyond covering
+      // its subsumer).
+      if (is_k_path_cov)
+      {
+        const auto &redundant = goto_coveraget::k_path_spanning_redundant;
+        claim_entry["feasibility"] = redundant.count({claim_msg, claim_loc}) > 0
+                                       ? "spanning-set-redundant"
+                                       : "feasible";
+      }
       claims_json.push_back(claim_entry);
     }
 
@@ -843,6 +1064,23 @@ void report_coverage(
     for (const auto &c : claims_json)
       if (c["status"] == "covered")
         covered_count++;
+
+    // For k-path coverage, restrict the summary to maximal goals so the
+    // JSON percentage matches the terminal spanning-set-filtered output.
+    // Individual claims keep their `feasibility` annotation so consumers
+    // that want raw counts can still derive them from the `claims` array.
+    if (is_k_path_cov)
+    {
+      total = 0;
+      covered_count = 0;
+      for (const auto &c : claims_json)
+        if (c["feasibility"] == "feasible")
+        {
+          ++total;
+          if (c["status"] == "covered")
+            ++covered_count;
+        }
+    }
 
     json report;
     report["coverage_type"] = cov_type;
@@ -887,6 +1125,7 @@ void bmct::report_coverage_verbose(
   const bool &is_cond_cov,
   const bool &is_branch_cov,
   const bool &is_branch_func_cov,
+  const bool &is_k_path_cov,
   const std::unordered_set<std::string> &reached_claims,
   const std::unordered_multiset<std::string> &reached_mul_claims)
 {
@@ -906,7 +1145,7 @@ void bmct::report_coverage_verbose(
         options.get_bool_option("condition-coverage-claims-rm"))
       {
         // show claims
-        log_status("\n  {} : SATISFIED", claim_sig);
+        log_status("\n  {} : SATISFIED", prettify_solidity_expr(claim_sig));
       }
 
       // show coverage data
@@ -925,7 +1164,7 @@ void bmct::report_coverage_verbose(
       if (options.get_bool_option("assertion-coverage-claims"))
       {
         for (const auto &claim : reached_mul_claims)
-          log_status("  {}", claim);
+          log_status("  {}", prettify_solidity_expr(claim));
       }
       if (total_instance != 0)
       {
@@ -946,7 +1185,7 @@ void bmct::report_coverage_verbose(
       {
         // reached claims:
         for (const auto &claim : reached_claims)
-          log_status("  {}", claim);
+          log_status("  {}", prettify_solidity_expr(claim));
       }
 
       if (totals != 0)
@@ -963,7 +1202,7 @@ void bmct::report_coverage_verbose(
       {
         // reached claims:
         for (const auto &claim : reached_claims)
-          log_status("  {}", claim);
+          log_status("  {}", prettify_solidity_expr(claim));
       }
 
       if (totals != 0)
@@ -971,6 +1210,22 @@ void bmct::report_coverage_verbose(
           "Branch Function Coverage: {}%", tracked_instance * 100.0 / totals);
       else
         log_result("Branch Function Coverage: 0%");
+    }
+    else if (is_k_path_cov)
+    {
+      // Match the final reporter's spanning-set formula so per-witness
+      // progress agrees with the final summary.
+      const size_t tracked_instance = std::count_if(
+        reached_claims.begin(), reached_claims.end(), is_kpath_maximal);
+
+      if (options.get_bool_option("k-path-coverage-claims"))
+        log_status("\n  {} : SATISFIED", prettify_solidity_expr(claim_sig));
+
+      // spanning >= 1 here: verbose only fires after a reached claim,
+      // which implies total_kpath >= 1 (Marré-Bertolino).
+      log_result(
+        "Current k-Path Coverage: {}%\n",
+        tracked_instance * 100.0 / goto_coveraget::total_kpath_spanning);
     }
     else
     {
@@ -1010,11 +1265,23 @@ void bmct::report_result(smt_convt::resultt &res)
       // verdict is printed by do_bmc_strategy once the loop terminates.
       // Exception: assertion-coverage mode always reports success after
       // coverage analysis, regardless of any violations found.
+      //
+      // Also suppress when symex flipped `disable-inductive-step` mid-run
+      // (recursion, threads, function-pointer calls): the IS encoding is
+      // incomplete, so its UNSAT does not prove safety. is_inductive_step
+      // _violated checks the same flag and returns UNKNOWN, so reporting
+      // SUCCESSFUL here would contradict the strategy-level verdict.
       if (
-        !options.get_bool_option("kind-violation-found") ||
-        options.get_bool_option("assertion-coverage") ||
-        options.get_bool_option("assertion-coverage-claims"))
-        report_success();
+        (!options.get_bool_option("kind-violation-found") ||
+         options.get_bool_option("assertion-coverage") ||
+         options.get_bool_option("assertion-coverage-claims")) &&
+        !(is && options.get_bool_option("disable-inductive-step")))
+      {
+        if (vacuity_detected)
+          report_unknown();
+        else
+          report_success();
+      }
     }
     else
     {
@@ -1083,7 +1350,7 @@ smt_convt::resultt bmct::run(std::shared_ptr<symex_target_equationt> &eq)
     // Clear the cache between thread interleavings to prevent
     // incorrect caching of assertions with different thread contexts
     if (!options.get_bool_option("no-cache-asserts"))
-      config.ssa_caching_db.clear();
+      get_ssa_caching_db().clear();
 
     fine_timet bmc_start = current_time();
     res = run_thread(eq);
@@ -1212,7 +1479,8 @@ void bmct::bidirectional_search(
         continue;
 
       expr2tc new_lhs = ssait.original_lhs;
-      renaming::renaming_levelt::get_original_name(new_lhs, symbol2t::level0);
+      renaming::renaming_levelt::get_original_name(
+        new_lhs, symbol_renaming_level::level0);
 
       if (all_loop_vars.find(new_lhs) == all_loop_vars.end())
         continue;
@@ -1346,6 +1614,18 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
         return smt_convt::P_SMTLIB;
       }
 
+      // In coverage mode, still print the coverage summary even when all
+      // claims are simplified away (e.g., straight-line code with 0 branches).
+      if (options.get_bool_option("multi-property"))
+      {
+        std::unordered_set<std::string> empty_reached;
+        std::unordered_multiset<std::string> empty_mul_reached;
+        pytest_generator empty_pytest;
+        ctest_generator empty_ctest;
+        report_coverage(
+          options, empty_reached, empty_mul_reached, empty_pytest, empty_ctest);
+      }
+
       return smt_convt::P_UNSATISFIABLE;
     }
 
@@ -1377,7 +1657,42 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
       return multi_property_check(
         *eq, solver_result.remaining_claims, *runtime_solver);
 
-    return run_decision_procedure(*runtime_solver, *eq);
+    smt_convt::resultt result = run_decision_procedure(*runtime_solver, *eq);
+
+    // Per-claim vacuity probe in single-property mode: a whole-equation
+    // reachability check would silently miss a vacuous claim whenever some
+    // *other* claim has a reachable path.
+    if (
+      result == smt_convt::P_UNSATISFIABLE &&
+      options.get_bool_option("check-vacuity") && remaining_asserts > 0)
+    {
+      log_status(
+        "Probing {} claim(s) for vacuous discharge",
+        remaining_asserts.to_int64());
+
+      for (size_t i = 1; i <= remaining_asserts.to_uint64(); i++)
+      {
+        symex_target_equationt vac_eq = *eq;
+        claim_slicer keeper(
+          i, /*show_slice_info=*/false, /*is_goto_cov=*/false, ns);
+        keeper.run(vac_eq.SSA_steps);
+
+        if (!is_vacuity_probe_candidate(keeper.claim_property))
+          continue;
+
+        if (check_vacuity(vac_eq) == smt_convt::P_UNSATISFIABLE)
+        {
+          log_warning(
+            "Vacuous discharge: claim '{}' has unsatisfiable path "
+            "assumptions; possible causes include an over-constrained loop "
+            "invariant, requires clause, or upstream assume.",
+            keeper.claim_cstr);
+          vacuity_detected = true;
+        }
+      }
+    }
+
+    return result;
   }
 
   catch (std::string &error_str)
@@ -1503,6 +1818,11 @@ smt_convt::resultt bmct::multi_property_check(
   bool is_branch_func_cov =
     options.get_bool_option("branch-function-coverage") ||
     options.get_bool_option("branch-function-coverage-claims");
+  // "k-Path Cov" — keyed off the dedicated boolean (see line ~717
+  // comment); needed in the is_goto_cov disjunction so the
+  // claim_slicer reads the witness comment, matching the form stored
+  // in goto_coveraget::all_claims.
+  bool is_k_path_cov = options.get_bool_option("k-path-coverage-enabled");
 
   // is_vb: enable verbose output coverage info if the option "--verbosity coverage:N" is set, where N should larger than 0
   // By enabling this, we will output the coverage information when handling each instrumentation assertion.
@@ -1561,6 +1881,7 @@ smt_convt::resultt bmct::multi_property_check(
                        &is_vb,
                        &is_branch_cov,
                        &is_branch_func_cov,
+                       &is_k_path_cov,
                        &is_keep_verified,
                        &is_fail_fast,
                        &fail_fast_limit,
@@ -1578,9 +1899,18 @@ smt_convt::resultt bmct::multi_property_check(
     // Since this is just a copy, we probably don't need a lock
     symex_target_equationt local_eq = eq;
 
-    // Set up the current claim and disable slice info output
-    bool is_goto_cov =
-      is_assert_cov || is_cond_cov || is_branch_cov || is_branch_func_cov;
+    // Set up the current claim and disable slice info output.
+    // `is_goto_cov` flips claim_slicer's `claim_msg` source: in goto-cov
+    // modes the slicer reads the comment (the original witness/guard
+    // text we stored in insert_assert); otherwise it reads the negated
+    // assertion expression. k-path goals are stored the same way as
+    // branch / condition goals, so they must be in this disjunction —
+    // otherwise the claim_sig built at line ~1751 disagrees with the
+    // form in goto_coveraget::all_claims and every JSON entry shows up
+    // as uncovered even when reached_claims has the matching reached
+    // signature (PR #4330 review).
+    bool is_goto_cov = is_assert_cov || is_cond_cov || is_branch_cov ||
+                       is_branch_func_cov || is_k_path_cov;
     claim_slicer claim(i, false, is_goto_cov, ns);
     claim.run(local_eq.SSA_steps);
 
@@ -1648,7 +1978,7 @@ smt_convt::resultt bmct::multi_property_check(
     if (!is_cov_silent)
       log_status(
         "Solving claim '{}' with solver {}",
-        claim.claim_cstr,
+        prettify_solidity_expr(claim.claim_cstr),
         solver_ptr->solver_text());
 
     // Save current instance with timing
@@ -1656,6 +1986,19 @@ smt_convt::resultt bmct::multi_property_check(
     smt_convt::resultt solver_result =
       run_decision_procedure(*solver_ptr, local_eq);
     fine_timet solve_stop = current_time();
+
+    // After UNSAT, probe whether the path to the kept claim is reachable.
+    // UNSAT in vacuity mode means the discharge was vacuous -> UNKNOWN.
+    bool is_vacuous = false;
+    if (
+      solver_result == smt_convt::P_UNSATISFIABLE &&
+      options.get_bool_option("check-vacuity") &&
+      is_vacuity_probe_candidate(claim.claim_property))
+    {
+      is_vacuous = (check_vacuity(local_eq) == smt_convt::P_UNSATISFIABLE);
+      if (is_vacuous)
+        vacuity_detected = true;
+    }
 
     // Show colored result after solving
     const std::string GREEN = is_color ? "\033[32m" : "";
@@ -1666,17 +2009,38 @@ smt_convt::resultt bmct::multi_property_check(
     {
       if (solver_result == smt_convt::P_UNSATISFIABLE)
       {
-        // Claim passed - show in green
-        log_status("{}✓ PASSED{}: '{}'", GREEN, RESET, claim.claim_cstr);
+        if (is_vacuous)
+          log_status(
+            "{}? UNKNOWN{}: '{}' (vacuous discharge: path assumptions are "
+            "unsatisfiable; possible causes include an over-constrained "
+            "loop invariant, requires clause, or upstream assume)",
+            YELLOW,
+            RESET,
+            prettify_solidity_expr(claim.claim_cstr));
+        else
+          // Claim passed - show in green
+          log_status(
+            "{}✓ PASSED{}: '{}'",
+            GREEN,
+            RESET,
+            prettify_solidity_expr(claim.claim_cstr));
       }
       else if (solver_result == smt_convt::P_SATISFIABLE)
       {
         if (is)
           // Inductive step could not prove this claim - show in yellow
-          log_status("{}? UNKNOWN{}: '{}'", YELLOW, RESET, claim.claim_cstr);
+          log_status(
+            "{}? UNKNOWN{}: '{}'",
+            YELLOW,
+            RESET,
+            prettify_solidity_expr(claim.claim_cstr));
         else
           // Claim failed (counterexample found) - show in red
-          log_status("{}✗ FAILED{}: '{}'", RED, RESET, claim.claim_cstr);
+          log_status(
+            "{}✗ FAILED{}: '{}'",
+            RED,
+            RESET,
+            prettify_solidity_expr(claim.claim_cstr));
       }
     }
 
@@ -1699,7 +2063,12 @@ smt_convt::resultt bmct::multi_property_check(
         summary.failed_properties++;
     }
     else if (solver_result == smt_convt::P_UNSATISFIABLE)
-      summary.passed_properties++;
+    {
+      if (is_vacuous)
+        summary.unknown_properties++;
+      else
+        summary.passed_properties++;
+    }
 
     // If an assertion instance is verified to be violated
     if (solver_result == smt_convt::P_SATISFIABLE)
@@ -1719,18 +2088,151 @@ smt_convt::resultt bmct::multi_property_check(
         !options.get_bool_option("compact-trace"))
         is_compact_trace = false;
 
-      goto_tracet goto_trace;
-      build_goto_trace(local_eq, *solver_ptr, goto_trace, is_compact_trace);
+      // --all-witnesses: re-solve with blocking clauses on the nondet input
+      // tuple to enumerate further violating inputs at the current k.
+      // No re-encoding: we only push extra assertions onto the live solver.
+      const bool enumerate = options.get_bool_option("all-witnesses");
+      size_t max_w = 1;
+      if (enumerate)
+      {
+        const std::string mw = options.get_option("max-witnesses");
+        const int mw_val = mw.empty() ? 16 : std::stoi(mw);
+        // 0 means unlimited (only meaningful with --all-witnesses).
+        max_w = (mw_val == 0) ? SIZE_MAX : (size_t)mw_val;
+      }
 
-      // Collect pytest test data if requested (for coverage mode)
-      if (options.get_bool_option("generate-pytest-testcase"))
-        pytest_gen.collect(local_eq, *solver_ptr);
+      std::vector<witness_recordt> witnesses;
+      enumeration_stop_reasont stop_reason =
+        enumerate ? enumeration_stop_reasont::Unsat
+                  : enumeration_stop_reasont::Disabled;
 
-      // Collect ctest test data if requested (for coverage mode)
-      if (options.get_bool_option("generate-ctest-testcase"))
-        ctest_gen.collect(local_eq, *solver_ptr, ns);
+      // Cache option lookups so the per-witness loop body is cheap.
+      const std::string cex_output = options.get_option("cex-output");
+      const std::string graphml_path =
+        options.get_option("witness-output-graphml");
+      const std::string yaml_path = options.get_option("witness-output-yaml");
+      const bool want_graphml = !graphml_path.empty();
+      const bool want_yaml = !yaml_path.empty();
+      const bool want_testcase = options.get_bool_option("generate-testcase");
+      const bool want_html = options.get_bool_option("generate-html-report");
+      const bool want_json = options.get_bool_option("generate-json-report");
+      const bool want_pytest =
+        options.get_bool_option("generate-pytest-testcase");
+      const bool want_ctest =
+        options.get_bool_option("generate-ctest-testcase");
 
-      // Store claim signature
+      // Emit testcase metadata once per claim (not once per witness).
+      if (want_testcase)
+        generate_testcase_metadata();
+
+      // Drive enumeration with a separate variable so the original SAT
+      // outcome stays in `solver_result` for downstream bookkeeping
+      // (final_result, fail-fast counter, claim cleanup).
+      smt_convt::resultt enum_result = solver_result;
+      bool ctx_pushed = false;
+      while (enum_result == smt_convt::P_SATISFIABLE)
+      {
+        witness_recordt w;
+        build_goto_trace(local_eq, *solver_ptr, w.trace, is_compact_trace);
+        // Collecting nondet values walks every SSA step and queries the
+        // solver model per nondet symbol — non-trivial on coverage runs
+        // with many claims and large arrays. Skip it when we don't need
+        // it: the values are only consumed by `make_blocking_expr` (only
+        // when enumerating) and by the multi-witness pretty-printer
+        // (only when --all-witnesses is set, i.e. enumerate==true).
+        // The legacy single-witness renderer does not use them.
+        if (enumerate)
+          w.nondet_inputs = collect_nondet_values(local_eq, *solver_ptr);
+        w.ce_index = ce_counter++;
+
+        // Emit machine-readable artifacts NOW, while this witness's solver
+        // model is still live. After the next dec_solve(), the model is
+        // either gone (UNSAT) or replaced by the next witness's values.
+        if (!cex_output.empty())
+        {
+          std::ofstream out(fmt::format("{}-{}", w.ce_index, cex_output));
+          show_goto_trace(out, ns, w.trace);
+        }
+        // For graphml/yaml the writer reads the path from `options`;
+        // override per-witness so multiple witnesses don't overwrite the
+        // same file (and so it's safe under --parallel-solving).
+        if (want_graphml)
+          violation_graphml_goto_trace(
+            options,
+            ns,
+            w.trace,
+            fmt::format("{}-{}", w.ce_index, graphml_path));
+        if (want_yaml)
+          violation_yaml_goto_trace(
+            options, ns, w.trace, fmt::format("{}-{}", w.ce_index, yaml_path));
+        if (want_testcase)
+          generate_testcase(
+            "testcase-" + std::to_string(w.ce_index) + ".xml",
+            local_eq,
+            *solver_ptr);
+        if (want_html)
+          generate_html_report(
+            std::to_string(w.ce_index), ns, w.trace, options);
+        if (want_json)
+          generate_json_report(std::to_string(w.ce_index), ns, w.trace);
+        if (want_pytest)
+          pytest_gen.collect(local_eq, *solver_ptr);
+        if (want_ctest)
+          ctest_gen.collect(local_eq, *solver_ptr, ns);
+
+        witnesses.push_back(std::move(w));
+
+        if (!enumerate)
+          break;
+        if (witnesses.size() >= max_w)
+        {
+          stop_reason = enumeration_stop_reasont::CapHit;
+          break;
+        }
+
+        // If this witness has no nondet inputs we can't enumerate further —
+        // there's nothing meaningful to block. Mark the reason so the user
+        // doesn't read "UNSAT" as "exhaustive".
+        if (witnesses.back().nondet_inputs.empty())
+        {
+          stop_reason = enumeration_stop_reasont::NoInputs;
+          break;
+        }
+
+        // Open a single SMT context frame the first time we add a blocking
+        // clause. Every subsequent blocking clause goes into the same frame;
+        // the matching pop_ctx() after the loop drops them all in one shot.
+        // This keeps the feature safe under --smt-during-symex, where
+        // solver_ptr aliases the shared runtime_solver: blocking clauses
+        // asserted while enumerating claim A cannot leak into claim B.
+        // (Push must come *after* the first model read — bitwuzla and other
+        // backends invalidate the current model on push.)
+        if (!ctx_pushed)
+        {
+          solver_ptr->push_ctx();
+          ctx_pushed = true;
+        }
+
+        // Block this input tuple and re-solve on the same instance.
+        expr2tc block = make_blocking_expr(witnesses.back().nondet_inputs);
+        solver_ptr->assert_expr(block);
+        enum_result = solver_ptr->dec_solve();
+      }
+
+      // dec_solve() can return P_ERROR / P_SMTLIB; in that case the witness
+      // set is *not* exhaustive — flag it explicitly.
+      if (
+        stop_reason == enumeration_stop_reasont::Unsat &&
+        enum_result != smt_convt::P_UNSATISFIABLE &&
+        enum_result != smt_convt::P_SATISFIABLE)
+        stop_reason = enumeration_stop_reasont::Error;
+
+      // Drop every blocking clause we asserted; the next claim's solve
+      // sees the solver in its pre-enumeration state.
+      if (ctx_pushed)
+        solver_ptr->pop_ctx();
+
+      // Store claim signature (once — multiple witnesses are still one claim)
       if (is_assert_cov)
       {
         std::lock_guard lock(reached_mul_claims_mutex);
@@ -1745,10 +2247,6 @@ smt_convt::resultt bmct::multi_property_check(
           reached_claims.emplace(claim.claim_cstr);
       }
 
-      // update cex number
-      size_t previous_ce_counter;
-      previous_ce_counter = ce_counter++;
-
       // for verbose output of cond coverage
       if (is_vb)
         report_coverage_verbose(
@@ -1758,17 +2256,13 @@ smt_convt::resultt bmct::multi_property_check(
           is_cond_cov,
           is_branch_cov,
           is_branch_func_cov,
+          is_k_path_cov,
           reached_claims,
           reached_mul_claims);
       else if (!is_cov_silent)
       {
         report_multi_property_trace(
-          solver_result,
-          solver_ptr,
-          local_eq,
-          previous_ce_counter,
-          goto_trace,
-          claim.claim_msg);
+          smt_convt::P_SATISFIABLE, witnesses, stop_reason, claim.claim_msg);
       }
 
       {

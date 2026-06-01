@@ -56,7 +56,7 @@ function(add_esbmc_regression_test folder modes test)
 endfunction()
 
 function(add_esbmc_regression folder modes)
-    SUBDIRLIST(SUBDIRS ${CMAKE_CURRENT_SOURCE_DIR}/${regression})
+    subdirlist(SUBDIRS ${CMAKE_CURRENT_SOURCE_DIR}/${regression})
     if(${folder} STREQUAL "quixbugs")
         list(REMOVE_ITEM SUBDIRS bucketsort)
     endif()
@@ -198,6 +198,7 @@ if(APPLE)
                     ${REGRESSIONS_CPP11}
                     ${REGRESSIONS_CPP14}
                     ${REGRESSIONS_CPP17}
+                    ${REGRESSIONS_CPP20}
                     extensions
                     ${REGRESSIONS_CHERI}
                     ${REGRESSIONS_PYTHON}
@@ -303,4 +304,104 @@ foreach(regression IN LISTS REGRESSIONS)
       set(MODES CORE)
     endif()
     add_esbmc_regression("${regression}" "${MODES}")
+endforeach()
+
+# Tests that legitimately run close to the per-test TIMEOUT on CI's Linux
+# runners (locally ~20-30s; CI ~75-110s; CI cap 120s, leaving no headroom).
+# Double their TIMEOUT relative to the global cap so transient CI slowness
+# doesn't flap them, while keeping the rest of the suite's fail-fast budget
+# unchanged.
+math(EXPR ESBMC_REGRESS_TIMEOUT_SLOW "${ESBMC_REGRESS_TIMEOUT} * 2")
+set(_slow_regression_tests
+    "regression/humaneval/humaneval_34"
+    "regression/humaneval/humaneval_54"
+    # humaneval_111 / _153 / _161 used to fast-crash with
+    # "X() requires constant string" during conversion; with the
+    # consteval+nondet fallback in PR #4811 they now reach symex and
+    # need the extra budget to finish on slower CI runners.
+    "regression/humaneval/humaneval_111"
+    "regression/humaneval/humaneval_129"
+    "regression/humaneval/humaneval_153"
+    "regression/humaneval/humaneval_161"
+    "regression/quixbugs/flatten_fail"
+    "regression/quixbugs/next_palindrome"
+    "regression/quixbugs/pascal"
+    "regression/ai-generated-code/two_sum"
+    # knapsack(_fail) used to fast-fail with "max() arguments must be of
+    # comparable types" because the nested-list element of a defaultdict was
+    # mistyped. With the call-site nested-generic inference in #4830 the
+    # frontend now resolves the element types and ESBMC reaches the real
+    # (defaultdict + nested loop) symex, which does not converge under
+    # --incremental-bmc. These remain KNOWNBUG; the larger inner timeout lets
+    # testing_tool record the KNOWNBUG verdict instead of ctest hard-killing
+    # the run (see shortest_path_lengths note below; #4927).
+    "regression/quixbugs/knapsack"
+    "regression/quixbugs/knapsack_fail"
+    # problem1_fail runs the real DP body (nested loops + dp[-1] + max over a
+    # defaultdict-free list). It does not converge under --unwind 9, so it is
+    # marked FUTURE (BMC scalability); the larger inner timeout lets
+    # testing_tool record the FUTURE verdict instead of ctest hard-killing it.
+    "regression/python-intensive/problem1_fail"
+    # next_permutation(_fail) used to fast-crash with "Tuple unpacking only
+    # supports simple names, not Subscript". With subscript-target unpacking
+    # support (#4792) the swap converts and ESBMC reaches the real nested-loop
+    # symex (plus reversed()/slice-assign), which does not converge. These stay
+    # KNOWNBUG; the larger inner timeout lets testing_tool record the KNOWNBUG
+    # verdict instead of ctest hard-killing the run.
+    "regression/quixbugs/next_permutation"
+    "regression/quixbugs/next_permutation_fail"
+    # github_4435 was a soundness false alarm on the SV-COMP libvsync
+    # bounded_mpmc_check_full benchmark; the underlying deref unit
+    # mismatch is fixed by PR #4939, but the full benchmark
+    # (6055-line preprocessed libvsync) does not converge under
+    # `--unlimited-k-steps` on CI runners. Marked FUTURE (BMC scalability);
+    # the larger inner timeout lets testing_tool record the FUTURE
+    # verdict instead of ctest hard-killing the run.
+    "regression/esbmc-unix/github_4435"
+)
+math(EXPR ESBMC_REGRESS_CTEST_TIMEOUT_SLOW
+     "${ESBMC_REGRESS_TIMEOUT_SLOW} + 30")
+
+# Tests that exceed even the 2x slow tier on Debug+Opt Linux runners.
+# shortest_path_lengths(_fail) used to fast-fail because defaultdict with
+# a lambda factory was unsupported; with #4765 the lambda factory is now
+# honoured and ESBMC actually verifies the triple-nested Floyd-Warshall
+# loop. Observed CI timings: shortest_path_lengths 244.8s (passed by
+# 0.2s under the 245s wall), shortest_path_lengths_fail 245.3s (flapped
+# over). Codecov config takes ~302s. Give 3x headroom so transient
+# scheduling jitter doesn't tip them over.
+math(EXPR ESBMC_REGRESS_TIMEOUT_VERY_SLOW "${ESBMC_REGRESS_TIMEOUT} * 3")
+math(EXPR ESBMC_REGRESS_CTEST_TIMEOUT_VERY_SLOW
+     "${ESBMC_REGRESS_TIMEOUT_VERY_SLOW} + 30")
+set(_very_slow_regression_tests
+    "regression/quixbugs/shortest_path_lengths"
+    "regression/quixbugs/shortest_path_lengths_fail"
+)
+
+foreach(_t IN LISTS _slow_regression_tests)
+    if(TEST ${_t})
+        # Three coupled budgets to keep aligned:
+        #  - ctest TIMEOUT (outer): hard kill -- if it fires first the
+        #    test is reported FAILED by ctest, the testing_tool's
+        #    KNOWNBUG regex check never runs, and the build fails.
+        #  - ESBMC_REGRESS_TIMEOUT env (inner): testing_tool's own
+        #    timeout. When it fires, testing_tool gracefully terminates
+        #    the ESBMC subprocess and continues to do its regex check
+        #    against partial output, so a KNOWNBUG test correctly
+        #    decides "no SUCCESSFUL printed -> KNOWNBUG satisfied".
+        # The outer must comfortably exceed the inner so testing_tool
+        # wins the race (kill + grace + regex check time).
+        set_tests_properties(${_t} PROPERTIES
+          TIMEOUT ${ESBMC_REGRESS_CTEST_TIMEOUT_SLOW}
+          ENVIRONMENT "ESBMC_REGRESS_TIMEOUT=${ESBMC_REGRESS_TIMEOUT_SLOW};ESBMC_REGRESS_MEMORY_LIMIT=${ESBMC_REGRESS_MEMORY_LIMIT}"
+        )
+    endif()
+endforeach()
+foreach(_t IN LISTS _very_slow_regression_tests)
+    if(TEST ${_t})
+        set_tests_properties(${_t} PROPERTIES
+          TIMEOUT ${ESBMC_REGRESS_CTEST_TIMEOUT_VERY_SLOW}
+          ENVIRONMENT "ESBMC_REGRESS_TIMEOUT=${ESBMC_REGRESS_TIMEOUT_VERY_SLOW};ESBMC_REGRESS_MEMORY_LIMIT=${ESBMC_REGRESS_MEMORY_LIMIT}"
+        )
+    endif()
 endforeach()

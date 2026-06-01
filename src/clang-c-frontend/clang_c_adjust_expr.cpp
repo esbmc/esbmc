@@ -34,7 +34,11 @@ bool clang_c_adjust::adjust()
   {
     symbolt &symbol = **it;
     if (symbol.is_type)
-      adjust_type(symbol.type);
+    {
+      typet t = symbol.get_type();
+      adjust_type(t);
+      symbol.set_type(std::move(t));
+    }
   }
 
   Forall_symbol_list(it, symbol_list)
@@ -51,13 +55,23 @@ bool clang_c_adjust::adjust()
 
 void clang_c_adjust::adjust_symbol(symbolt &symbol)
 {
-  if (!symbol.value.is_nil())
-    adjust_expr(symbol.value);
+  if (!symbol.get_value().is_nil())
+  {
+    exprt v = symbol.get_value();
+    adjust_expr(v);
+    symbol.set_value(std::move(v));
+  }
 
-  if (symbol.type.is_code() && has_prefix(symbol.id.as_string(), "c:@F@main"))
+  if (
+    symbol.get_type().is_code() &&
+    has_prefix(symbol.id.as_string(), "c:@F@main"))
     adjust_argc_argv(symbol);
 
-  adjust_type(symbol.type);
+  {
+    typet t = symbol.get_type();
+    adjust_type(t);
+    symbol.set_type(std::move(t));
+  }
 }
 
 void clang_c_adjust::adjust_expr(exprt &expr)
@@ -140,15 +154,18 @@ void clang_c_adjust::adjust_expr(exprt &expr)
     const typet &t = ns.follow(expr.type());
     /* can't be an initializer of an incomplete type, it's not allowed by C */
     assert(!t.incomplete());
-    /* adjust_type() above may have added padding members.
-     * Adjust the init expression accordingly. */
     const struct_union_typet::componentst &new_comp =
       to_struct_union_type(t).components();
     exprt::operandst &ops = expr.operands();
+    /* Only insert padding operands if the expression doesn't already have
+     * them.  The Solidity frontend creates struct expressions via
+     * gen_zero(get_complete_type()), which resolves padding before this
+     * pass, whereas the C frontend relies on this pass to add them. */
+    const bool already_padded = (ops.size() == new_comp.size());
     for (size_t i = 0; i < new_comp.size(); i++)
     {
       const struct_union_typet::componentt &c = new_comp[i];
-      if (c.get_is_padding())
+      if (c.get_is_padding() && !already_padded)
       {
         // TODO: should we initialize pads with nondet values?
         ops.insert(ops.begin() + i, gen_zero(c.type()));
@@ -204,7 +221,7 @@ void clang_c_adjust::adjust_symbol(exprt &expr)
 
   if (symbol.is_macro)
   {
-    expr = symbol.value;
+    expr = symbol.get_value();
 
     // put it back
     expr.location() = location;
@@ -476,6 +493,33 @@ void clang_c_adjust::adjust_index(index_exprt &index)
     index.move_to_operands(addition);
     index.id("dereference");
   }
+  else if (!final_array_type.is_array() && !final_array_type.is_vector())
+  {
+    // The base isn't array, vector, or pointer — typically a struct that
+    // appears in array context because two TUs declared the same external
+    // symbol with conflicting types (e.g. `extern int JJ[]` in one TU,
+    // `struct complete JJ` in another). After AST merging the symbol's
+    // type follows the more-complete declaration but the indexing
+    // reference in the other TU's body is still typed as the array's
+    // element type. Rewrite `base[i]` as `*((T*)&base + i)` where `T` is
+    // the index expression's declared element type so the byte-level
+    // access reaches dereferencet's well-tested path.
+    typet elem_type = index.type();
+    typet ptr_type = pointer_typet(elem_type);
+
+    exprt addr_of("address_of", pointer_typet(array_expr.type()));
+    addr_of.move_to_operands(array_expr);
+
+    exprt cast = addr_of;
+    gen_typecast(ns, cast, ptr_type);
+
+    exprt addition("+", ptr_type);
+    addition.copy_to_operands(cast, index_expr);
+
+    index.operands().clear();
+    index.move_to_operands(addition);
+    index.id("dereference");
+  }
 }
 
 void clang_c_adjust::adjust_expr_rel(exprt &expr)
@@ -614,7 +658,7 @@ void clang_c_adjust::adjust_sizeof(exprt &expr)
   typet type;
   if (expr.operands().size() == 0)
   {
-    type = ((typet &)expr.c_sizeof_type());
+    type = static_cast<const typet &>(expr.c_sizeof_type());
     adjust_type(type);
   }
   else if (expr.operands().size() == 1)
@@ -668,7 +712,7 @@ void clang_c_adjust::adjust_type(typet &type)
 
     if (symbol.is_macro)
     {
-      type = symbol.type; // overwrite
+      type = symbol.get_type(); // overwrite
       adjust_type(type);
     }
   }
@@ -795,7 +839,7 @@ void clang_c_adjust::adjust_side_effect_function_call(
           param_symbol.id = id2string(identifier_with_type) + "::" + base_name;
           param_symbol.name = base_name;
           param_symbol.location = f_op.location();
-          param_symbol.type = arguments[i].type();
+          param_symbol.set_type(arguments[i].type());
           param_symbol.lvalue = true;
           param_symbol.is_parameter = true;
           param_symbol.file_local = true;
@@ -810,10 +854,10 @@ void clang_c_adjust::adjust_side_effect_function_call(
         new_symbol.id = identifier_with_type;
         new_symbol.name = f_op.name();
         new_symbol.location = expr.location();
-        new_symbol.type = poly.type();
+        new_symbol.set_type(poly.type());
         code_blockt implementation =
           instantiate_gcc_polymorphic_builtin(identifier, to_symbol_expr(poly));
-        new_symbol.value = implementation;
+        new_symbol.set_value(implementation);
 
         context.add(new_symbol);
       }
@@ -849,11 +893,15 @@ void clang_c_adjust::adjust_side_effect_function_call(
         new_symbol.id = identifier;
         new_symbol.name = f_op.name();
         new_symbol.location = expr.location();
-        new_symbol.type = f_op.type();
+        new_symbol.set_type(f_op.type());
         new_symbol.mode = "C";
 
         // Adjust type
-        to_code_type(new_symbol.type).make_ellipsis();
+        {
+          typet t = new_symbol.get_type();
+          to_code_type(t).make_ellipsis();
+          new_symbol.set_type(std::move(t));
+        }
         to_code_type(f_op.type()).make_ellipsis();
         context.add(new_symbol);
       }
@@ -1266,7 +1314,7 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
         expr2tc(),
         std::vector<expr2tc>(),
         type2tc(),
-        sideeffect2t::nondet);
+        sideeffect2t::allockind::nondet);
       exprt new_expr = migrate_expr_back(nondet);
       expr.swap(new_expr);
     }
@@ -1358,7 +1406,7 @@ void clang_c_adjust::adjust_expr_binary_boolean(exprt &expr)
 void clang_c_adjust::adjust_argc_argv(const symbolt &main_symbol)
 {
   const code_typet::argumentst &arguments =
-    to_code_type(main_symbol.type).arguments();
+    to_code_type(main_symbol.get_type()).arguments();
 
   if (arguments.size() == 0)
     return;
@@ -1372,7 +1420,7 @@ void clang_c_adjust::adjust_argc_argv(const symbolt &main_symbol)
   symbolt argc_symbol;
   argc_symbol.name = "argc";
   argc_symbol.id = "argc'";
-  argc_symbol.type = op0.type();
+  argc_symbol.set_type(op0.type());
   argc_symbol.static_lifetime = true;
   argc_symbol.lvalue = true;
 
@@ -1381,15 +1429,15 @@ void clang_c_adjust::adjust_argc_argv(const symbolt &main_symbol)
 
   // need to add one to the size -- the array is terminated
   // with NULL
-  exprt one_expr = from_integer(1, argc_new_symbol->type);
+  exprt one_expr = from_integer(1, argc_new_symbol->get_type());
 
-  exprt size_expr("+", argc_new_symbol->type);
+  exprt size_expr("+", argc_new_symbol->get_type());
   size_expr.copy_to_operands(symbol_expr(*argc_new_symbol), one_expr);
 
   symbolt argv_symbol;
   argv_symbol.name = "argv";
   argv_symbol.id = "argv'";
-  argv_symbol.type = array_typet(op1.type().subtype(), size_expr);
+  argv_symbol.set_type(array_typet(op1.type().subtype(), size_expr));
   argv_symbol.static_lifetime = true;
   argv_symbol.lvalue = true;
 
@@ -1403,7 +1451,7 @@ void clang_c_adjust::adjust_argc_argv(const symbolt &main_symbol)
     symbolt envp_size_symbol;
     envp_size_symbol.name = "envp_size";
     envp_size_symbol.id = "envp_size'";
-    envp_size_symbol.type = op0.type(); // same type as argc!
+    envp_size_symbol.set_type(op0.type()); // same type as argc!
     envp_size_symbol.static_lifetime = true;
 
     symbolt *envp_new_size_symbol;
@@ -1412,10 +1460,11 @@ void clang_c_adjust::adjust_argc_argv(const symbolt &main_symbol)
     symbolt envp_symbol;
     envp_symbol.name = "envp";
     envp_symbol.id = "envp'";
-    envp_symbol.type = op2.type();
+    envp_symbol.set_type(op2.type());
     envp_symbol.static_lifetime = true;
     exprt size_expr = symbol_expr(*envp_new_size_symbol);
-    envp_symbol.type = array_typet(envp_symbol.type.subtype(), size_expr);
+    envp_symbol.set_type(
+      array_typet(envp_symbol.get_type().subtype(), size_expr));
 
     symbolt *envp_new_symbol;
     context.move(envp_symbol, envp_new_symbol);
@@ -1468,7 +1517,7 @@ void clang_c_adjust::adjust_builtin_va_arg(exprt &expr)
   symbolt symbol;
   symbol.name = "__ESBMC_va_arg";
   symbol.id = "__ESBMC_va_arg";
-  symbol.type = symbol_type;
+  symbol.set_type(symbol_type);
 
   context.move(symbol);
 }

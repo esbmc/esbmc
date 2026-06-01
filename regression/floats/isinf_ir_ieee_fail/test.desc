@@ -1,0 +1,4 @@
+CORE
+main.c
+--ir-ieee --z3 --32
+^VERIFICATION FAILED$

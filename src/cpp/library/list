@@ -1168,6 +1168,9 @@ public:
     this->_size = 0;
   }
 
+  typedef iterator const_iterator;
+  typedef reverse_iterator const_reverse_iterator;
+
   iterator begin()
   {
     iterator it;
@@ -1180,6 +1183,20 @@ public:
     iterator it;
     this->_list[this->_size] = value_type();
     it.it = &(this->_list[this->_size]);
+    it.pos = this->_size;
+    return it;
+  }
+  const_iterator begin() const
+  {
+    const_iterator it;
+    it.it = const_cast<value_type *>(&(this->_list[0]));
+    it.pos = 0;
+    return it;
+  }
+  const_iterator end() const
+  {
+    const_iterator it;
+    it.it = const_cast<value_type *>(&(this->_list[this->_size]));
     it.pos = this->_size;
     return it;
   }

@@ -47,7 +47,8 @@ enum class ExpressionType
   LIST,
   UNKNOWN,
   FSTRING,
-  TUPLE
+  TUPLE,
+  SLICE
 };
 
 struct TypeFlags
@@ -65,12 +66,12 @@ public:
   {
     return (
       name == "int" || name == "float" || name == "bool" || name == "str" ||
-      name == "chr" || name == "hex" || name == "oct" || name == "ord" ||
-      name == "tuple" || name == "list" || name == "dict" || name == "set" ||
-      name == "frozenset" || name == "bytes" || name == "set" ||
+      name == "chr" || name == "hex" || name == "oct" || name == "bin" ||
+      name == "ord" || name == "tuple" || name == "list" || name == "dict" ||
+      name == "set" || name == "frozenset" || name == "bytes" ||
       name == "bytearray" || name == "range" || name == "complex" ||
       name == "type" || name == "object" || name == "abs" || name == "None" ||
-      name == "divmod");
+      name == "divmod" || name == "slice");
   }
 
   static bool is_consensus_type(const std::string &name)
@@ -161,10 +162,38 @@ public:
       op == "GtE" || op == "And" || op == "Or");
   }
 
+  // Encapsulated accessors for the irep string attributes the Python
+  // frontend attaches to legacy typet nodes. These attributes are read by
+  // shared/downstream passes — "#cpp_type" by clang_cpp_adjust, the C/C++
+  // pretty-printers and goto2c; "#member_name" by the shared clang-cpp pass
+  // — so they must stay on the legacy node at the migrate seam. Funnelling
+  // every raw .set/.get("#…") through one seam each is the Phase 4.1
+  // hardening step of the IREP2 migration (docs/irep2-migration.md Part IV,
+  // F-P5 / §15). Keep the keys and values byte-identical: this is a
+  // behaviour-preserving relocation, not a semantic change.
+  static void set_cpp_type(typet &t, const irep_idt &value)
+  {
+    t.set("#cpp_type", value);
+  }
+
+  static irep_idt get_cpp_type(const typet &t)
+  {
+    return t.get("#cpp_type");
+  }
+
+  static void set_member_name(typet &t, const irep_idt &value)
+  {
+    t.set("#member_name", value);
+  }
+
+  static void remove_member_name(typet &t)
+  {
+    t.remove("#member_name");
+  }
+
   static bool is_char_type(const typet &t)
   {
-    return (t.is_signedbv() || t.is_unsignedbv()) &&
-           t.get("#cpp_type") == "char";
+    return (t.is_signedbv() || t.is_unsignedbv()) && get_cpp_type(t) == "char";
   }
 
   static bool is_float_vs_char(const exprt &a, const exprt &b)

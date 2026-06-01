@@ -97,6 +97,15 @@ public:
   bool is_constructor_call(const nlohmann::json &json) const;
 
   /*
+   * True iff `t`'s storage has no pointer fields (primitives, char arrays,
+   * or structs whose components are recursively pointer-free). Used to gate
+   * uint64 fast paths in the list operational model — a struct payload with
+   * a pointer field cannot be reinterpreted as a uint64 array under
+   * ESBMC's byte-encoding.
+   */
+  bool is_pointer_free(const typet &t) const;
+
+  /*
    * Converts a typet to its string representation.
    * @param t The typet to convert.
    * @return A string containing the type name.
@@ -135,6 +144,20 @@ public:
    * @return The corresponding typet.
    */
   typet get_typet(const std::string &ast_type, size_t type_size = 0) const;
+
+  /**
+   * Lowering for Python `int` — arbitrarily large in the language spec.
+   * Default (bitvector backends): int64 approximation via long_long_int_type().
+   * Under --ir (int-encoding=true): a wide signed bitvector. SMT layer strips
+   * the width at conversion time, giving true unbounded semantics; the width
+   * exists only to keep the IR self-consistent and to size constant-fold
+   * intermediate values. See issue #4642.
+   */
+  static typet python_int_typet();
+
+  /// Bit width of python_int_typet() — exposed for callsites that need to
+  /// compute representable ranges (e.g. constant-fold exponent caps).
+  static unsigned python_int_width();
 
   /*
    * Creates a typet directly from a JSON value.
@@ -175,6 +198,15 @@ public:
   typet get_dict_type(const nlohmann::json &dict_value) const;
 
   typet get_tuple_type(const nlohmann::json &tuple_node) const;
+
+  /**
+   * @brief Returns the registered struct type used for Python slice objects.
+   *
+   * The struct is defined in `c2goto/library/python/python_types.h` as
+   * `__ESBMC_PySliceObj`. The frontend constructs values of this type when
+   * lowering `Slice` AST nodes and the `slice()` builtin.
+   */
+  typet get_slice_type() const;
 
   /*
    * Determines the type of an operand in binary operations.

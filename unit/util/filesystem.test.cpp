@@ -62,3 +62,27 @@ TEST_CASE("tmp file is file and should be removed", "[core][util][filesystem]")
   }
   REQUIRE(!boost::filesystem::exists(path));
 }
+
+TEST_CASE(
+  "tmp_path destructor tolerates an already-removed path",
+  "[core][util][filesystem]")
+{
+  // create_tmp_dir() also registers the path with register_tmp_for_cleanup(),
+  // so cleanup_registered_tmps() (run from the signal handler before exit()
+  // triggers static/RAII destructors) can remove the directory before the
+  // tmp_path destructor runs. Pre-fix, the destructor asserted removed >= 1
+  // and aborted (SIGABRT) on SIGTERM/SIGINT, e.g. a benchexec timeout. The
+  // destructor must instead tolerate the directory already being gone.
+  const char *format = "esbmc-test-%%%%";
+  std::string path;
+  {
+    auto dir = file_operations::create_tmp_dir(format);
+    path = dir.path();
+    REQUIRE(boost::filesystem::is_directory(path));
+    // Simulate the registered-cleanup / signal-handler removing it first.
+    boost::filesystem::remove_all(path);
+    REQUIRE(!boost::filesystem::exists(path));
+    // dir's destructor runs at end of scope: must not abort.
+  }
+  REQUIRE(!boost::filesystem::exists(path));
+}

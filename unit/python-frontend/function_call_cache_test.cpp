@@ -1,6 +1,6 @@
 #define CATCH_CONFIG_MAIN
 #include <catch2/catch.hpp>
-#include <python-frontend/function_call_cache.h>
+#include <python-frontend/function_call/cache.h>
 
 TEST_CASE("function_call_cache API correctness", "[python-frontend][cache]")
 {

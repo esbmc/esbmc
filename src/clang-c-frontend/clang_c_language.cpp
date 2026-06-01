@@ -18,6 +18,7 @@ CC_DIAGNOSTIC_POP()
 
 #include <util/filesystem.h>
 #include <clang-c-frontend/nested_func_transform.h>
+#include <util/yaml_parser.h>
 
 #include <ac_config.h>
 
@@ -260,6 +261,10 @@ void clang_c_languaget::build_compiler_args(
   // of __leaf__ attributes that we don't care about
   compiler_args.emplace_back("-Wno-unknown-attributes");
 
+  // Suppress incompatible-pointer-types universally; became a hard error in
+  // LLVM 22 and trips on system headers across all platforms.
+  compiler_args.emplace_back("-Wno-incompatible-pointer-types");
+
   /* put custom options at the end of the cmdline such that they can override
    * whatever defaults we put in before. */
   compiler_args.insert(
@@ -286,6 +291,18 @@ void clang_c_languaget::force_file_type(std::vector<std::string> &compiler_args)
     compiler_args.emplace_back("-std=" + cstd);
 }
 
+// Writes the injected source to a temp file and returns it.
+static std::optional<file_operations::tmp_file>
+write_witness_tmp(const std::string &content)
+{
+  auto tmp = file_operations::create_tmp_file("esbmc-witness.%%%%-%%%%.c");
+  if (!tmp.file())
+    return std::nullopt;
+  std::fwrite(content.c_str(), 1, content.size(), tmp.file());
+  std::fflush(tmp.file());
+  return tmp;
+}
+
 bool clang_c_languaget::parse(const std::string &path)
 {
   // preprocessing
@@ -301,9 +318,38 @@ bool clang_c_languaget::parse(const std::string &path)
   const std::string &actual_path =
     nested_transformed ? nested_transformed->path() : path;
 
+  // Inject witness intrinsic calls so that Clang parses them naturally.
+  // #line directives after each injection preserve original line numbers.
+  std::optional<file_operations::tmp_file> witness_injected;
+  if (config.options.get_bool_option("validate-correctness-witness"))
+  {
+    const std::string witness_path = config.options.get_option("witness");
+    auto invariants = yaml_parser::read_invariants(witness_path);
+    if (!invariants.empty())
+    {
+      std::string content =
+        yaml_parser::build_injected_source(actual_path, path, invariants);
+      if (content.empty())
+        log_warning("Failed to build injected source for '{}'", path);
+      else
+        witness_injected = write_witness_tmp(content);
+    }
+  }
+  else if (config.options.get_bool_option("validate-violation-witness"))
+  {
+    const std::string witness_path = config.options.get_option("witness");
+    auto waypoints = yaml_parser::get_waypoints(witness_path);
+    std::string content =
+      yaml_parser::build_violation_witness_source(actual_path, path, waypoints);
+    if (!content.empty())
+      witness_injected = write_witness_tmp(content);
+  }
+  const std::string &compile_path =
+    witness_injected ? witness_injected->path() : actual_path;
+
   // Get compiler arguments and add the file path
   std::vector<std::string> new_compiler_args = compiler_args("clang-tool");
-  new_compiler_args.push_back(actual_path);
+  new_compiler_args.push_back(compile_path);
 
   if (FILE *f = messaget::state.target("clang", VerbosityLevel::Debug))
   {
@@ -331,8 +377,35 @@ bool clang_c_languaget::parse(const std::string &path)
   return false;
 }
 
+void clang_c_languaget::set_language_version()
+{
+  const auto &ls =
+    clang::LangStandard::getLangStandardForKind(AST->getLangOpts().LangStd);
+#if LLVM_VERSION_MAJOR >= 19
+  if (ls.isC2y())
+    config.language.c_std = c_stdt::c26;
+  else if (ls.isC23())
+    config.language.c_std = c_stdt::c23;
+#elif LLVM_VERSION_MAJOR >= 17
+  if (ls.isC23())
+    config.language.c_std = c_stdt::c23;
+#else
+  if (ls.isC2x())
+    config.language.c_std = c_stdt::c23;
+#endif
+  else if (ls.isC17())
+    config.language.c_std = c_stdt::c17;
+  else if (ls.isC11())
+    config.language.c_std = c_stdt::c11;
+  else if (ls.isC99())
+    config.language.c_std = c_stdt::c99;
+  else
+    config.language.c_std = c_stdt::c89;
+}
+
 bool clang_c_languaget::typecheck(contextt &context, const std::string &)
 {
+  set_language_version();
   clang_c_convertert converter(context, AST, "C");
   if (converter.convert())
     return true;
@@ -505,6 +578,9 @@ _Bool __ESBMC_exists(void*, _Bool);
  * 2. Use the invariants to help the following of the loop continue with a simple assumption
  */
 void __ESBMC_loop_invariant(_Bool);
+
+// Violation-witness: seg_idx/wp_idx uniquely identify the call site; constraint is the assumption.
+void __ESBMC_witness_assume(int, int, _Bool);
 
 /* __ESBMC_loop_assigns: specifies memory locations a loop may modify.
  * Used with --loop-frame-rule for frame condition enforcement.

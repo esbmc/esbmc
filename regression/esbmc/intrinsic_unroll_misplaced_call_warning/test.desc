@@ -1,0 +1,5 @@
+CORE
+main.c
+--unwind 6 --verbosity 9
+__ESBMC_unroll at .* is not directly followed by a loop
+^VERIFICATION SUCCESSFUL$

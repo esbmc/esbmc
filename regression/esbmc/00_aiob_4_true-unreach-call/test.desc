@@ -1,4 +1,4 @@
 THOROUGH
 main.c
---incremental-bmc --unlimited-k-steps --floatbv --z3 --no-pointer-check --no-bounds-check --error-label ERROR
+--floatbv --z3 --no-pointer-check --no-bounds-check --error-label ERROR --unwind 48
 ^VERIFICATION SUCCESSFUL$

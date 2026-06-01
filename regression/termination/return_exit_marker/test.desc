@@ -1,0 +1,4 @@
+CORE
+main.c
+--termination --32 --goto-functions-only
+ASSERT 0 // termination per-loop marker\n.*\n.*RETURN: 0

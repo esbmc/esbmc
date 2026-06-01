@@ -1,5 +1,6 @@
 #include <util/message.h>
 #include <goto-symex/goto_trace.h>
+#include <util/cwe_mapping.h>
 #include <util/language.h>
 #include <langapi/language_util.h>
 #include <nlohmann/json.hpp>
@@ -321,10 +322,13 @@ void add_coverage_to_json(const goto_tracet &goto_trace, const namespacet &ns)
               step_data["message"] =
                 step.comment.empty() ? "Assertion check" : step.comment;
               test_entry["status"] = "violation";
+              std::vector<unsigned> cwes = cwe_for(step.comment);
               step_data["assertion"] = {
                 {"violated", true},
                 {"comment", step.comment},
                 {"guard", from_expr(ns, "", step.pc->guard)}};
+              if (!cwes.empty())
+                step_data["assertion"]["cwe"] = cwes;
             }
             else
             {

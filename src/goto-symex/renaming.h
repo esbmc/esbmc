@@ -5,10 +5,12 @@
 #include <boost/functional/hash.hpp>
 #include <util/crypto_hash.h>
 #include <util/expr_util.h>
-#include <util/guard.h>
+#include <irep2/irep2_guard.h>
 #include <util/i2string.h>
 #include <irep2/irep2_expr.h>
 #include <util/std_expr.h>
+
+class namespacet;
 
 namespace renaming
 {
@@ -97,6 +99,10 @@ public:
     current_namest;
   current_namest current_names;
   unsigned int thread_id;
+  // Set externally (alongside thread_id) so rename() / get_ident_name()
+  // can check is_thread_local on globals and route them per-thread
+  // instead of to the shared level1_global bucket (issue #4434, #4433).
+  const namespacet *ns = nullptr;
 
   void rename(expr2tc &expr) override;
   void get_ident_name(expr2tc &symbol) const override;
@@ -115,7 +121,7 @@ public:
 
   void get_original_name(expr2tc &expr) const override
   {
-    renaming_levelt::get_original_name(expr, symbol2t::level0);
+    renaming_levelt::get_original_name(expr, symbol_renaming_level::level0);
   }
 
   unsigned int current_number(const irep_idt &name) const;
@@ -243,7 +249,7 @@ public:
 
   void get_original_name(expr2tc &expr) const override
   {
-    renaming_levelt::get_original_name(expr, symbol2t::level1);
+    renaming_levelt::get_original_name(expr, symbol_renaming_level::level1);
   }
 
   struct valuet

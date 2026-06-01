@@ -1,5 +1,6 @@
 #include <cstdint>
 #include <util/c_types.h>
+#include <util/mp_arith.h>
 #include <cvc5_conv.h>
 
 #define new_ast new_solver_ast<cvc5_smt_ast>
@@ -743,45 +744,6 @@ smt_astt cvc5_convt::mk_bvnot(smt_astt a)
     a->sort);
 }
 
-smt_astt cvc5_convt::mk_bvnxor(smt_astt a, smt_astt b)
-{
-  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
-  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
-  assert(a->sort->get_data_width() == b->sort->get_data_width());
-  return new_ast(
-    slv.mkTerm(
-      cvc5::Kind::BITVECTOR_XNOR,
-      {to_solver_smt_ast<cvc5_smt_ast>(a)->a,
-       to_solver_smt_ast<cvc5_smt_ast>(b)->a}),
-    a->sort);
-}
-
-smt_astt cvc5_convt::mk_bvnor(smt_astt a, smt_astt b)
-{
-  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
-  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
-  assert(a->sort->get_data_width() == b->sort->get_data_width());
-  return new_ast(
-    slv.mkTerm(
-      cvc5::Kind::BITVECTOR_NOR,
-      {to_solver_smt_ast<cvc5_smt_ast>(a)->a,
-       to_solver_smt_ast<cvc5_smt_ast>(b)->a}),
-    a->sort);
-}
-
-smt_astt cvc5_convt::mk_bvnand(smt_astt a, smt_astt b)
-{
-  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
-  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
-  assert(a->sort->get_data_width() == b->sort->get_data_width());
-  return new_ast(
-    slv.mkTerm(
-      cvc5::Kind::BITVECTOR_NAND,
-      {to_solver_smt_ast<cvc5_smt_ast>(a)->a,
-       to_solver_smt_ast<cvc5_smt_ast>(b)->a}),
-    a->sort);
-}
-
 smt_astt cvc5_convt::mk_bvxor(smt_astt a, smt_astt b)
 {
   assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
@@ -1028,7 +990,11 @@ smt_astt cvc5_convt::mk_select(smt_astt a, smt_astt b)
 
 smt_astt cvc5_convt::mk_smt_int(const BigInt &theint)
 {
-  cvc5::Term e = slv.mkInteger(theint.to_int64());
+  // BigInt::to_int64 silently truncates past 64 bits, so for values outside
+  // the int64 range fall back to cvc5::Solver::mkInteger(const std::string&)
+  // which accepts an arbitrary-precision decimal literal. Issue #4642.
+  cvc5::Term e = theint.is_int64() ? slv.mkInteger(theint.to_int64())
+                                   : slv.mkInteger(integer2string(theint, 10));
   return new_ast(e, mk_int_sort());
 }
 

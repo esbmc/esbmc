@@ -14,11 +14,24 @@
 #include <util/message.h>
 #include <util/message/format.h>
 #include <util/prefix.h>
-#include <util/simplify_expr.h>
 #include <util/std_code.h>
 #include <util/std_expr.h>
 #include <util/string_constant.h>
 #include <util/type_byte_size.h>
+
+// Simplify a legacy exprt via the IREP2 simplifier. The legacy CBMC
+// simplifier (util/simplify_expr) is being retired (docs/irep2-migration.md
+// Part II Phase 2.2); these alloc-size sites still operate on exprt, so they
+// round-trip through migrate. Behaviour-equivalent for the constant /
+// typecast-of-constant folds these sites need (typecast2t::do_simplify folds
+// (size_t)C to a constant exactly as the legacy simplifier did).
+static void simplify_via_irep2(exprt &e)
+{
+  expr2tc tmp;
+  migrate_expr(e, tmp);
+  simplify(tmp);
+  e = migrate_expr_back(tmp);
+}
 
 static void get_string_constant(const exprt &expr, std::string &the_string)
 {
@@ -116,8 +129,57 @@ void goto_convertt::get_alloc_size(typet &alloc_type, exprt &alloc_size)
   if (alloc_size.type() != size_type())
   {
     alloc_size.make_typecast(size_type());
-    simplify(alloc_size);
+    simplify_via_irep2(alloc_size);
   }
+}
+
+void goto_convertt::emit_assert_fail_noreturn(
+  const locationt &location,
+  goto_programt &dest)
+{
+  // __assert_fail / __assert_rtn / FreeBSD __assert / _wassert are
+  // __noreturn.  Under --no-assertions the family-specific ASSERT false
+  // is suppressed, leaving symex to fall through past the call --- which
+  // is unsound for end-of-main memory-property walkers (valid-memsafety
+  // / valid-memcleanup spuriously report "forgotten memory" on
+  // post-noreturn paths --- see #4441).
+  //
+  // Gate the noreturn truncation on --memory-leak-check: it is the
+  // property set whose end-of-main walker is sensitive to fall-through
+  // past noreturn calls.  Other --no-assertions clients
+  // (--data-races-check-only, --overflow-check, plain --no-assertions)
+  // intentionally treat the assertion as fully suppressed and need the
+  // call to remain a no-op --- otherwise the implicit ASSUME false
+  // silently turns user assert(cond) into assume(cond), pruning paths
+  // where cond is false and hiding bugs that manifest on those paths
+  // (e.g. SV-COMP no-data-race qw2004-2 / mcslock --- see #4442 review).
+  if (!config.options.get_bool_option("memory-leak-check"))
+    return;
+
+  // Mirror abort()'s body in src/c2goto/library/stdlib.c: only invoke
+  // the leak walker when abnormal-termination leak checks are enabled.
+  // --no-abnormal-memory-leak is what SV-COMP's valid-memsafety wrapper
+  // sets to keep leaks-on-abort/__assert_fail out of the verdict;
+  // valid-memcleanup leaves it unset, so the walker fires there.
+  if (!config.options.get_bool_option("no-abnormal-memory-leak"))
+  {
+    const symbolt *s = context.find_symbol("c:@F@__ESBMC_memory_leak_checks");
+    if (s != nullptr)
+    {
+      code_function_callt call;
+      call.function() = symbol_expr(*s);
+      call.location() = location;
+      do_function_call(
+        call.lhs(), call.function(), call.arguments(), location, dest);
+    }
+  }
+
+  // ASSUME false truncates the post-noreturn path so the end-of-main
+  // walker sees only paths that genuinely reached the end of main.
+  goto_programt::targett a = dest.add_instruction(ASSUME);
+  a->guard = gen_false_expr();
+  a->location = location;
+  a->location.user_provided(true);
 }
 
 void goto_convertt::do_printf(
@@ -302,7 +364,7 @@ void goto_convertt::do_realloc(
 
   // Use conditional expression: (ptr == NULL) ? malloc(size) : realloc(ptr, size)
   if_exprt conditional_expr(is_null, malloc_expr, realloc_expr);
-  simplify(conditional_expr);
+  simplify_via_irep2(conditional_expr);
 
   goto_programt::targett t_n = dest.add_instruction(ASSIGN);
 
@@ -357,7 +419,7 @@ void goto_convertt::do_cpp_new(
   if (alloc_size.type() != size_type())
   {
     alloc_size.make_typecast(size_type());
-    simplify(alloc_size);
+    simplify_via_irep2(alloc_size);
   }
 
   exprt new_expr("sideeffect", rhs.type());
@@ -401,7 +463,7 @@ void goto_convertt::cpp_new_initializer(
   }
   else
   {
-    initializer = (code_expressiont &)rhs.initializer();
+    initializer = static_cast<const code_expressiont &>(rhs.initializer());
 
     if (!initializer.op0().get_bool("constructor"))
     {
@@ -519,7 +581,7 @@ void goto_convertt::do_function_call_symbol(
     abort();
   }
 
-  if (!symbol->type.is_code())
+  if (!symbol->get_type().is_code())
   {
     log_error(
       "Function `{}' type mismatch: expected code", id2string(identifier));
@@ -527,7 +589,7 @@ void goto_convertt::do_function_call_symbol(
 
   // If the symbol is not nil, i.e., the user defined the expected behavior of
   // the builtin function, we should honor the user function and call it
-  if (symbol->value.is_not_nil() && symbol->value.has_operands())
+  if (symbol->get_value().is_not_nil() && symbol->get_value().has_operands())
   {
     // insert function call
     code_function_callt function_call;
@@ -1031,15 +1093,17 @@ void goto_convertt::do_function_call_symbol(
     std::string description = "assertion ";
     get_string_constant(arguments[0], description);
 
-    if (options.get_bool_option("no-assertions"))
-      return;
-
-    goto_programt::targett t = dest.add_instruction(ASSERT);
-    t->guard = gen_false_expr();
-    t->location = function.location();
-    t->location.user_provided(true);
-    t->location.property("assertion");
-    t->location.comment(description);
+    if (!options.get_bool_option("no-assertions"))
+    {
+      goto_programt::targett t = dest.add_instruction(ASSERT);
+      t->guard = gen_false_expr();
+      t->location = function.location();
+      t->location.user_provided(true);
+      t->location.property("assertion");
+      t->location.comment(description);
+    }
+    else
+      emit_assert_fail_noreturn(function.location(), dest);
     // we ignore any LHS
   }
   else if (config.ansi_c.target.is_freebsd() && base_name == "__assert")
@@ -1055,15 +1119,17 @@ void goto_convertt::do_function_call_symbol(
     std::string description = "assertion ";
     get_string_constant(arguments[3], description);
 
-    if (options.get_bool_option("no-assertions"))
-      return;
-
-    goto_programt::targett t = dest.add_instruction(ASSERT);
-    t->guard = gen_false_expr();
-    t->location = function.location();
-    t->location.user_provided(true);
-    t->location.property("assertion");
-    t->location.comment(description);
+    if (!options.get_bool_option("no-assertions"))
+    {
+      goto_programt::targett t = dest.add_instruction(ASSERT);
+      t->guard = gen_false_expr();
+      t->location = function.location();
+      t->location.user_provided(true);
+      t->location.property("assertion");
+      t->location.comment(description);
+    }
+    else
+      emit_assert_fail_noreturn(function.location(), dest);
     // we ignore any LHS
   }
   else if (base_name == "_wassert")
@@ -1079,15 +1145,17 @@ void goto_convertt::do_function_call_symbol(
     std::string description = "assertion ";
     get_string_constant(arguments[0], description);
 
-    if (options.get_bool_option("no-assertions"))
-      return;
-
-    goto_programt::targett t = dest.add_instruction(ASSERT);
-    t->guard = gen_false_expr();
-    t->location = function.location();
-    t->location.user_provided(true);
-    t->location.property("assertion");
-    t->location.comment(description);
+    if (!options.get_bool_option("no-assertions"))
+    {
+      goto_programt::targett t = dest.add_instruction(ASSERT);
+      t->guard = gen_false_expr();
+      t->location = function.location();
+      t->location.user_provided(true);
+      t->location.property("assertion");
+      t->location.comment(description);
+    }
+    else
+      emit_assert_fail_noreturn(function.location(), dest);
     // we ignore any LHS
   }
   else if (base_name == "operator new")
@@ -1349,9 +1417,9 @@ void goto_convertt::do_function_call_symbol(
   {
     symbolt new_symbol;
     new_symbol.name = "__ESBMC_unexpected";
-    new_symbol.type = arguments[0].type();
+    new_symbol.set_type(arguments[0].type());
     new_symbol.id = "c:@F@" + id2string(new_symbol.name);
-    new_symbol.value = arguments[0].op0().op0();
+    new_symbol.set_value(arguments[0].op0().op0());
     new_name(new_symbol);
     return;
   }

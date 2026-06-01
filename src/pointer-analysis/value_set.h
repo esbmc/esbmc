@@ -654,9 +654,14 @@ public:
   /** Some crazy static analysis tool. */
   unsigned location_number;
   /** Object to assign numbers to objects -- i.e., the numbers in the map of
-   *  a @ref object_mapt. Static and bad. */
-  static object_numberingt object_numbering;
-  static object_number_numberingt obj_numbering_refset;
+   *  a @ref object_mapt.
+   *
+   *  thread_local so concurrent symex threads (--k-induction-parallel)
+   *  don't race on the same hash_numbering. Numbers only need to be
+   *  consistent within a single goto_symex state's lifetime, and each
+   *  symex thread owns its own state. */
+  static thread_local object_numberingt object_numbering;
+  static thread_local object_number_numberingt obj_numbering_refset;
 
   /** Storage for all the value sets for all the variables in the program. See
    *  @ref entryt for the format of the string used as an index. */

@@ -1,5 +1,12 @@
+/// \file solidity_convert_constructor.cpp
+/// \brief Constructor conversion for the Solidity frontend.
+///
+/// Handles parsing of explicit Solidity constructors and generation of
+/// implicit default constructors for contracts that lack one. Manages
+/// constructor parameter conversion, state variable initialization
+/// ordering, and base contract constructor chaining for inheritance.
+
 #include <solidity-frontend/solidity_convert.h>
-#include <solidity-frontend/solidity_template.h>
 #include <solidity-frontend/typecast.h>
 #include <util/arith_tools.h>
 #include <util/bitvector.h>
@@ -9,11 +16,7 @@
 #include <util/mp_arith.h>
 #include <util/std_expr.h>
 #include <util/message.h>
-#include <regex>
-#include <optional>
-
 #include <fstream>
-#include <iostream>
 
 // parse the explicit ctor, or add the implicit ctor
 bool solidity_convertert::get_constructor(
@@ -95,13 +98,13 @@ bool solidity_convertert::add_implicit_constructor(
   auto &sym = *move_symbol_to_context(symbol);
 
   code_blockt body_exprt = code_blockt();
-  sym.value = body_exprt;
+  sym.set_value(body_exprt);
 
   // add this pointer
   get_function_this_pointer_param(
     contract_name, id, debug_modulename, location_begin, type);
 
-  sym.type = type;
+  sym.set_type(type);
   return false;
 }
 
@@ -253,6 +256,13 @@ bool solidity_convertert::get_unbound_function(
     // 2.1 construct if-then-else statement
     const auto methods = funcSignatures[c_name];
 
+    // --focus-function: when the caller is the target contract and a focus
+    // function is set, restrict the dispatch loop to only that function.
+    // Other contracts (e.g., cross-contract targets reached from inside the
+    // focus function) keep their full nondet dispatch.
+    const bool focus_applies = !focus_func.empty() && tgt_cnt_set.size() == 1 &&
+                               c_name == *tgt_cnt_set.begin();
+
     for (const auto &method : methods)
     {
       // we only handle public (and external) function
@@ -266,8 +276,16 @@ bool solidity_convertert::get_unbound_function(
       if (func_name == c_name)
         // skip constructor
         continue;
-      if (func_name == "receive" || func_name == "fallback")
-        // skip receive and fallback
+      // Dispatch fallback() and receive() as ordinary harness branches.
+      // Skipping them used to hide assertion violations inside their bodies
+      // (e.g. `assert(msg.sender == address(0))` would be unreachable because
+      // the body was never invoked). The generic dispatch below is sound: the
+      // harness entry already seeds msg_sender/msg_value to nondet values,
+      // so the body is exercised under arbitrary caller state, which is the
+      // correct over-approximation for both low-level entry points.
+      if (focus_applies && func_name != focus_func)
+        // focus-function mode: skip all non-focus functions on the target
+        // contract to avoid unnecessary verification overhead.
         continue;
 
       // then: function_call
@@ -321,8 +339,8 @@ bool solidity_convertert::get_unbound_function(
     // no params
     h_type.make_ellipsis();
 
-    added_sym.type = h_type;
-    added_sym.value = func_body;
+    added_sym.set_type(h_type);
+    added_sym.set_value(func_body);
     h_sym = added_sym;
   }
 
@@ -428,6 +446,9 @@ bool solidity_convertert::move_initializer_to_ctor(
     return true;
   }
   symbolt &sym = *context.find_symbol(ctor_id);
+  // Read-modify-set: many inserts into sym.value.operands() below; restored
+  // via sym.set_value(...) before each return.
+  exprt sym_value = sym.get_value();
 
   // get this pointer
   exprt base;
@@ -452,12 +473,12 @@ bool solidity_convertert::move_initializer_to_ctor(
         "\t@@@ initializing symbol {} in the constructor",
         comp.name().as_string());
 
-      bool is_state = comp.type().get("#sol_state_var") == "1";
+      bool is_state = get_sol_state_var(comp.type());
       if (!is_state)
       {
         // auxiliary local variable we created
         exprt tmp = *it;
-        sym.value.operands().insert(sym.value.operands().begin(), tmp);
+        sym_value.operands().insert(sym_value.operands().begin(), tmp);
         continue;
       }
       if (is_aux_ctor)
@@ -475,10 +496,10 @@ bool solidity_convertert::move_initializer_to_ctor(
         abort();
       }
       symbolt *symbol = context.find_symbol(comp.identifier());
-      exprt rhs = symbol->value;
+      exprt rhs = symbol->get_value();
       exprt _assign;
       if (
-        lhs.type().get("#sol_type") == "STRING" &&
+        get_sol_type(lhs.type()) == SolidityGrammar::SolType::STRING &&
         rhs.get("#zero_initializer") != "1" && rhs.id() != "string-constant")
       {
         // p = NULL;
@@ -499,7 +520,7 @@ bool solidity_convertert::move_initializer_to_ctor(
       convert_expression_to_code(_assign);
 
       // insert before the sym.value.operands
-      sym.value.operands().insert(sym.value.operands().begin(), _assign);
+      sym_value.operands().insert(sym_value.operands().begin(), _assign);
 
       // we might need to insert some expression
       // due to the convert_type_expr and get_string_assignment
@@ -508,7 +529,7 @@ bool solidity_convertert::move_initializer_to_ctor(
         for (auto &op : ctor_frontBlockDecl.operands())
         {
           convert_expression_to_code(op);
-          sym.value.operands().insert(sym.value.operands().begin(), op);
+          sym_value.operands().insert(sym_value.operands().begin(), op);
         }
         ctor_frontBlockDecl.clear();
       }
@@ -517,13 +538,15 @@ bool solidity_convertert::move_initializer_to_ctor(
     {
       exprt tmp = *it;
       convert_expression_to_code(tmp);
-      sym.value.operands().insert(sym.value.operands().begin(), tmp);
+      sym_value.operands().insert(sym_value.operands().begin(), tmp);
     }
   }
 
   // insert parent ctor call in the front
+  sym.set_value(sym_value);
   if (move_inheritance_to_ctor(based_contracts, contract_name, ctor_id, sym))
     return true;
+  sym_value = sym.get_value();
 
   if (is_aux_ctor)
   {
@@ -531,7 +554,7 @@ bool solidity_convertert::move_initializer_to_ctor(
     code_labelt label;
     label.set_label("__ESBMC_HIDE");
     label.code() = code_skipt();
-    sym.value.operands().insert(sym.value.operands().begin(), label);
+    sym_value.operands().insert(sym_value.operands().begin(), label);
   }
 
   // _sol_init_
@@ -539,8 +562,9 @@ bool solidity_convertert::move_initializer_to_ctor(
   get_library_function_call_no_args(
     "_sol_init_", "sol:@F@_sol_init_", empty_typet(), locationt(), init_call);
   convert_expression_to_code(init_call);
-  sym.value.operands().insert(sym.value.operands().begin(), init_call);
+  sym_value.operands().insert(sym_value.operands().begin(), init_call);
 
+  sym.set_value(std::move(sym_value));
   return false;
 }
 
@@ -577,6 +601,10 @@ bool solidity_convertert::move_inheritance_to_ctor(
     return true;
   }
   exprt this_expr = symbol_expr(*context.find_symbol(this_id));
+
+  // Read-modify-set: mutate sym.value operands via this local, then write back
+  // before each return.
+  exprt sym_value = sym.get_value();
 
   // As we are handling the constructor
   const std::string old_fname = current_functionName;
@@ -670,10 +698,10 @@ bool solidity_convertert::move_inheritance_to_ctor(
           contract_name, c_name, c_args_list_node, added_ctor_symbol);
 
         // copy value e.g.  this.data = X.data
-        struct_typet type_complete =
-          to_struct_type(context.find_symbol(prefix + contract_name)->type);
+        struct_typet type_complete = to_struct_type(
+          context.find_symbol(prefix + contract_name)->get_type());
         struct_typet c_type_complete =
-          to_struct_type(context.find_symbol(prefix + c_name)->type);
+          to_struct_type(context.find_symbol(prefix + c_name)->get_type());
 
         exprt lhs;
         exprt rhs;
@@ -695,7 +723,7 @@ bool solidity_convertert::move_inheritance_to_ctor(
               lhs = member_exprt(this_expr, comp.name(), comp.type());
               rhs = member_exprt(
                 symbol_expr(added_ctor_symbol), c_comp.name(), c_comp.type());
-              if (comp.type().get("#sol_type") == "STRING")
+              if (get_sol_type(comp.type()) == SolidityGrammar::SolType::STRING)
                 // it have been initialized so should have no dereference failure
                 get_string_assignment(lhs, rhs, _assign);
               else
@@ -706,8 +734,8 @@ bool solidity_convertert::move_inheritance_to_ctor(
               }
 
               convert_expression_to_code(_assign);
-              sym.value.operands().insert(
-                sym.value.operands().begin(), _assign);
+              sym_value.operands().insert(
+                sym_value.operands().begin(), _assign);
               break;
             }
           }
@@ -715,13 +743,14 @@ bool solidity_convertert::move_inheritance_to_ctor(
 
         // insert ctor call
         code_declt dl(symbol_expr(added_ctor_symbol));
-        dl.operands().push_back(added_ctor_symbol.value);
-        sym.value.operands().insert(sym.value.operands().begin(), dl);
+        dl.operands().push_back(added_ctor_symbol.get_value());
+        sym_value.operands().insert(sym_value.operands().begin(), dl);
       }
     }
   }
 
   current_functionName = old_fname;
+  sym.set_value(std::move(sym_value));
   return false;
 }
 
@@ -823,7 +852,7 @@ const nlohmann::json &solidity_convertert::find_constructor_ref(int contract_id)
            ittr != ast_nodes.end();
            ++ittr)
       {
-        if ((*ittr)["kind"] == "constructor")
+        if ((*ittr).contains("kind") && (*ittr)["kind"] == "constructor")
           return *ittr;
       }
     }
@@ -851,7 +880,7 @@ solidity_convertert::find_constructor_ref(const std::string &contract_name)
            ittr != ast_nodes.end();
            ++ittr)
       {
-        if ((*ittr)["kind"] == "constructor")
+        if ((*ittr).contains("kind") && (*ittr)["kind"] == "constructor")
           return *ittr;
       }
     }

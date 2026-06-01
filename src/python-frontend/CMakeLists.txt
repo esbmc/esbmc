@@ -13,6 +13,18 @@
 add_library(pythonfrontend STATIC
             python_language.cpp
             python_converter.cpp
+            converter/converter_binop.cpp
+            converter/converter_class.cpp
+            converter/converter_compare.cpp
+            converter/converter_dunder.cpp
+            converter/converter_expr.cpp
+            converter/converter_funcall.cpp
+            converter/converter_funcdef.cpp
+            converter/converter_stmt.cpp
+            converter/converter_symbols.cpp
+            converter/converter_types.cpp
+            converter/converter_unop.cpp
+            converter/converter_util.cpp
             python_class.cpp
             python_class_builder.cpp
             python_consteval.cpp
@@ -26,19 +38,25 @@ add_library(pythonfrontend STATIC
             pythonastgen.c
             module_manager.cpp
             module_locator.cpp
+            python_annotation/annotation_intrinsics.cpp
+            python_annotation/annotation_parser.cpp
+            python_annotation/annotation_utils.cpp
             symbol_id.cpp
             type_handler.cpp
             cmath_lowering_policy.cpp
             complex_handler.cpp
             complex_handler_utils.cpp
-            function_call_expr.cpp
+            function_call/builtins.cpp
+            function_call/expr.cpp
+            function_call/str_conv.cpp
             numpy_call_expr.cpp
-            function_call_builder.cpp
-            string_builder.cpp
-            string_handler.cpp
-            string_handler_utils.cpp
+            function_call/builder.cpp
+            string/string_builder.cpp
+            string/string_handler.cpp
+            string/string_method_handler.cpp
+            string/string_handler_utils.cpp
             exception_utils.cpp
-            char_utils.cpp
+            string/char_utils.cpp
             math_guard_utils.cpp
             parse_float.cpp
             tuple_handler.cpp

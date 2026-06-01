@@ -35,7 +35,8 @@ expr2tc build_lhs(smt_convt &smt_conv, const expr2tc &lhs)
     break;
   }
 
-  renaming::renaming_levelt::get_original_name(new_lhs, symbol2t::level0);
+  renaming::renaming_levelt::get_original_name(
+    new_lhs, symbol_renaming_level::level0);
   return new_lhs;
 }
 
@@ -45,7 +46,8 @@ expr2tc build_rhs(smt_convt &smt_conv, const expr2tc &rhs)
     return rhs;
 
   auto new_rhs = smt_conv.get(rhs);
-  renaming::renaming_levelt::get_original_name(new_rhs, symbol2t::level0);
+  renaming::renaming_levelt::get_original_name(
+    new_rhs, symbol_renaming_level::level0);
   return new_rhs;
 }
 
@@ -56,6 +58,14 @@ void build_goto_trace(
   const bool &is_compact_trace)
 {
   unsigned step_nr = 0;
+
+  // The solver model is fixed for the duration of trace construction
+  // (no further solve / context change happens until we return), so
+  // memoise l_get() results. Guard ASTs recur across thousands of SSA
+  // steps and each l_get bottoms out in an O(formula) solver
+  // get_value(); the cache collapses repeated queries to one per
+  // distinct AST.
+  smt_convt::model_cache_scopet model_cache(smt_conv);
 
   for (auto const &SSA_step : target.SSA_steps)
   {

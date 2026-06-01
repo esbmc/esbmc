@@ -292,6 +292,34 @@ public:
    *  @return A three-valued return val, of the assignment to a. */
   virtual tvt l_get(smt_astt a);
 
+  /** Model-value cache.
+   *
+   *  Each l_get() bottoms out in the backend's get_value(), which for
+   *  some solvers (notably Bitwuzla) re-runs preprocessing over the
+   *  queried term on every call — O(formula) per query. Trace
+   *  construction queries the same guard ASTs thousands of times, so
+   *  caching the result collapses that to one query per distinct AST.
+   *
+   *  The cache is only valid while the solver model is stable (between
+   *  a SAT result and the next dec_solve / context change). It is
+   *  therefore opt-in: a caller that knows the model is fixed for a
+   *  scope wraps that scope in a model_cache_scopet, which activates
+   *  the cache on entry and flushes + deactivates it on exit. Outside
+   *  such a scope l_get() is uncached, so no staleness is possible. */
+  struct model_cache_scopet
+  {
+    smt_convt &conv;
+    explicit model_cache_scopet(smt_convt &c) : conv(c)
+    {
+      conv.l_get_cache_active = true;
+    }
+    ~model_cache_scopet()
+    {
+      conv.l_get_cache.clear();
+      conv.l_get_cache_active = false;
+    }
+  };
+
   /** @} */
 
   /** @{
@@ -316,9 +344,6 @@ public:
   virtual smt_astt mk_neg(smt_astt a);
   virtual smt_astt mk_bvneg(smt_astt a);
   virtual smt_astt mk_bvnot(smt_astt a);
-  virtual smt_astt mk_bvnxor(smt_astt a, smt_astt b);
-  virtual smt_astt mk_bvnor(smt_astt a, smt_astt b);
-  virtual smt_astt mk_bvnand(smt_astt a, smt_astt b);
   virtual smt_astt mk_bvxor(smt_astt a, smt_astt b);
   virtual smt_astt mk_bvor(smt_astt a, smt_astt b);
   virtual smt_astt mk_bvand(smt_astt a, smt_astt b);
@@ -436,6 +461,10 @@ public:
   smt_astt get_single_min_subnormal();
   // Returns SMT AST representing single precision maximum normal value (~3.4028234663852886e+38)
   smt_astt get_single_max_normal();
+  // Returns SMT AST for the integer-encoding sentinel for double +∞: max_normal+1
+  smt_astt get_double_inf_sentinel();
+  // Returns SMT AST for the integer-encoding sentinel for single +∞: max_normal+1
+  smt_astt get_single_inf_sentinel();
   // Returns SMT AST for the double precision relative error bound under
   // round-to-nearest: half machine epsilon = 2^-53 ~ 1.11e-16
   smt_astt get_double_eps_rel();
@@ -793,10 +822,14 @@ public:
   /** Round a fixedbv to an integer. */
   smt_astt
   round_fixedbv_to_int(smt_astt a, unsigned int width, unsigned int towidth);
+  /** Round an SMT integer to the nearest representable float/double using
+   *  IEEE 754 round-to-nearest-even. Used for int->fp casts under --ir-ieee.
+   *  source_width is the bit-width of the source integer type. */
+  smt_astt round_int_to_fp(
+    smt_astt int_val,
+    const floatbv_type2t &fbv_type,
+    unsigned int source_width);
 
-  /** Extract a type definition (i.e., a struct_union_data object) from a type.
-   * This method abstracts the fact that a pointer type is, in fact, a tuple. */
-  const struct_union_data &get_type_def(const type2tc &type) const;
   /** Prep call for creating a tuple array */
   smt_astt tuple_array_create_despatch(const expr2tc &expr, smt_sortt domain);
 
@@ -888,6 +921,13 @@ public:
   std::mutex smt_cache_mutex;
   /** A cache of converted type2tc's to smt sorts */
   smt_sort_cachet sort_cache;
+
+  /** Model-value cache for l_get(). Active only within a
+   *  model_cache_scopet; see the doc on l_get() above. Keyed by the
+   *  boolean smt_ast pointer (solver ASTs are hash-consed, so identical
+   *  pointer ⇒ identical term ⇒ identical model value). */
+  std::unordered_map<smt_astt, tvt> l_get_cache;
+  bool l_get_cache_active = false;
   /** Pointer_logict object, which contains some code for formatting how
    *  pointers are displayed in counter-examples. This is a list so that we
    *  can push and pop data when context push/pop operations occur. */
@@ -901,6 +941,8 @@ public:
   smt_sortt boolean_sort;
   /** Whether we are encoding expressions in integer mode or not. */
   bool int_encoding;
+  /** Whether --ir-ieee mode is active (integer encoding with IEEE float semantics). */
+  bool ir_ieee;
   /** A namespace containing all the types in the program. Used to resolve the
    *  rare case where we're doing some pointer arithmetic and need to have the
    *  concrete type of a pointer. */

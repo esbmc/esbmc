@@ -1,6 +1,7 @@
 #include <python-frontend/json_utils.h>
 #include <python-frontend/numpy_call_expr.h>
 #include <python-frontend/python_converter.h>
+#include <python-frontend/python_int_overflow.h>
 #include <python-frontend/symbol_id.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
@@ -126,6 +127,8 @@ static numeric_value extract_value(const nlohmann::json &arg)
     throw std::runtime_error("Invalid JSON: missing value");
 
   auto value = arg["value"];
+  if (value.is_boolean())
+    return make_int_value(value.get<bool>() ? 1 : 0);
   if (value.is_number_integer())
     return make_int_value(value.get<int64_t>());
   if (value.is_number_float())
@@ -320,7 +323,7 @@ void numpy_call_expr::broadcast_check(const nlohmann::json &operands) const
 
       // Retrieve the current operand's array shape.
       std::vector<int> current_shape =
-        converter_.type_handler_.get_array_type_shape(s->type);
+        converter_.type_handler_.get_array_type_shape(s->get_type());
 
       // For subsequent operands, compare shapes using broadcasting rules.
       if (!is_first_operand)
@@ -348,12 +351,26 @@ void numpy_call_expr::broadcast_check(const nlohmann::json &operands) const
 template <typename T>
 T get_constant_value(const nlohmann::json &node)
 {
+  // Bignum literal (issue #4642): a tagged Constant has a null `value`, and
+  // node["value"].get<T>() below would raise an opaque nlohmann type_error.
+  // Surface the curated overflow diagnostic instead so the user sees the
+  // same message they get from get_literal.
+  auto reject_bigint = [](const nlohmann::json &c) {
+    if (c.contains("_bigint"))
+      throw python_int_overflow_excp(
+        "Python int overflow: literal " + c["_bigint"].get<std::string>() +
+        " does not fit in 64-bit int. ESBMC approximates Python int as a "
+        "fixed-width bitvector; arbitrary-precision int support is tracked in "
+        "issue #4642.");
+  };
   if (node["_type"] == "Constant")
   {
+    reject_bigint(node);
     return node["value"].get<T>();
   }
   else if (node["_type"] == "UnaryOp" && node["operand"]["_type"] == "Constant")
   {
+    reject_bigint(node["operand"]);
     std::string op_type = node["op"]["_type"];
     T val = node["operand"]["value"].get<T>();
 
@@ -753,6 +770,19 @@ exprt numpy_call_expr::create_expr_from_call()
         operation == "add" || operation == "subtract" ||
         operation == "multiply" || operation == "divide")
       {
+        // Empty-list x empty-list currently has no stable umath lowering in
+        // this frontend path; reject explicitly instead of allowing internal
+        // backend failures.
+        if (
+          lhs.contains("elts") && rhs.contains("elts") &&
+          lhs["elts"].is_array() && rhs["elts"].is_array() &&
+          lhs["elts"].empty() && rhs["elts"].empty())
+        {
+          throw std::runtime_error(
+            "TypeError: numpy operation on two empty arrays is not supported "
+            "yet");
+        }
+
         code_function_callt call =
           to_code_function_call(to_code(function_call_expr::get()));
         typet size = type_handler_.get_typet(lhs["elts"]);
@@ -933,20 +963,20 @@ exprt numpy_call_expr::get()
             if (is_unsigned)
             {
               exprt folded = from_integer(BigInt(wrapped_bits), t);
-              folded.set("#cformat", std::to_string(wrapped_bits));
+              folded.cformat(std::to_string(wrapped_bits));
               return folded;
             }
             else
             {
               exprt folded = from_integer(BigInt(wrapped_signed), t);
-              folded.set("#cformat", std::to_string(wrapped_signed));
+              folded.cformat(std::to_string(wrapped_signed));
               return folded;
             }
           }
           else
           {
             exprt folded = from_double(final_value, t);
-            folded.set("#cformat", std::to_string(final_value));
+            folded.cformat(std::to_string(final_value));
             return folded;
           }
         }
@@ -995,8 +1025,7 @@ exprt numpy_call_expr::get()
           auto length = value_str.length();
           expr.value(value_str.substr(length - dtype_size));
           value_str = expr.value().as_string();
-          expr.set(
-            "#cformat", std::to_string(std::stoll(value_str, nullptr, 2)));
+          expr.cformat(std::to_string(std::stoll(value_str, nullptr, 2)));
         }
       }
     }

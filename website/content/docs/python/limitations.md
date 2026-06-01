@@ -7,65 +7,54 @@ weight: 4
 
 ## Control Flow and Loops
 
-- `for` loops support direct iteration over `range()`, lists, and strings. Iteration over tuples and generators is not yet supported.
-- Comprehensions (list, dict, set, generator) are not supported.
-- Iteration over dictionaries via `d.keys()`, `d.values()`, and `d.items()` is supported inside `for` loops (see [Supported Features — Dictionaries](./supported-features#dictionaries)).
-
-## Context Managers
-
-- Only the non-exceptional execution path is modelled: `__enter__` is called before the body and `__exit__` is called after, but exception propagation and suppression via the `__exit__` return value are not yet supported.
+- `for` loops support direct iteration over `range()`, lists, strings (including the result of a `str(...)` call, e.g. `for digit in str(n)`), tuples, and generators (functions using `yield` and generator expressions).
+- `for ... else` is supported: the `else` clause is lowered into a did-not-break flag, so it runs only when the loop completes without `break` (a `break` inside a nested loop stays bound to that inner loop). `while ... else` is not yet supported.
+- List, set, and generator comprehensions are supported. Dictionary comprehensions are accepted by the parser but produce a dictionary whose subsequent key lookups raise `KeyError`.
+- Iteration over dictionaries via `d.keys()`, `d.values()`, and `d.items()` is supported inside `for` loops (see [Supported Features — Dictionaries](./supported-features#dictionaries)). The destructuring form `for u, v in d:` over a dict with tuple keys is supported only for **local dict literals**; the same form over a dict received as a function parameter is not yet handled.
 
 ## Lists
 
-- String slicing does not support a step value (e.g., `s[::2]` is not supported).
-- `list.sort()` does not support the `key` or `reverse` keyword arguments.
-- `sorted()` does not support the `key` or `reverse` keyword arguments.
+- `list.sort()` does not support the `key` keyword argument; `reverse` is supported.
+- `sorted()` does not support the `key` keyword argument; `reverse` is supported.
 
 ## Sets
 
-- Set methods (`.add()`, `.discard()`, `.remove()`, `.update()`, `.issubset()`, `.issuperset()`, `.symmetric_difference()`) are not supported; use binary operators (`-`, `&`, `|`) instead.
-- Set ordering operators (`<`, `<=`, `>`, `>=` for subset/superset relations) are not supported.
-- `frozenset` is not supported.
+- Set methods `.issubset()`, `.issuperset()`, and `.symmetric_difference()` are not supported; use the equivalent binary operators (`<=`, `>=`, `^`) instead.
 
 ## Dictionaries
 
 - Supported operations are: literals, subscript access/assignment, `del`, `in`/`not in`, equality, iteration over `keys()`/`values()`/`items()`, `update()`, `get()`, `setdefault()`, `pop()`, and `popitem()`. Other methods (e.g., `copy()`) are not yet implemented.
 
-## Tuples
-
-- Tuple indexing requires constant indices; variable indices (e.g., `t[i]` where `i` is a variable) are not supported.
-- Tuple iteration (`for item in my_tuple:`) is not yet supported.
-- Tuple methods `.count()` and `.index()` are not yet supported.
-- Tuple concatenation (`+`) and repetition (`*`) are not yet supported.
-- Tuple slicing is not yet supported.
-
 ## Complex Numbers
 
-- The `complex()` constructor does not support string arguments (e.g., `complex("1+2j")` is not supported).
+- The `complex()` constructor accepts string arguments only when the string is a compile-time constant (e.g., `complex("1+2j")` is folded by the frontend). Constructing from a runtime string is rejected with the error `complex() does not support non-literal string arguments`.
 - `cmath.polar()` and `cmath.rect()` rely on the `atan2` model; results may differ from CPython in edge cases involving signed zeros and NaN.
 
 ## Built-in Functions
 
-- `min()` and `max()` support two-argument form and single-list form only; the `key` and `default` keyword arguments are not supported.
-- `any()` and `all()` currently support only list literals as arguments; other iterable types are not supported.
-- `sum()` supports `int` and `float` element types only; the optional `start` argument is not supported.
-- `sorted()` supports `int`, `float`, and `str` element types only; `key` and `reverse` keyword arguments are not supported.
+- `min()` and `max()` support two-argument form and single-list form only; the `key` keyword argument is not supported (`default` is supported).
+- `any()` and `all()` currently support only list literals as arguments. `any()` rejects other iterables with a parse-time error; `all()` may trigger a dereference failure on non-list iterables.
+- `sum()` supports `int` and `float` element types only.
+- `sorted()` supports `int`, `float`, and `str` element types only; the `key` keyword argument is not supported (`reverse` is supported).
 - `input()` is modelled as a nondeterministic string with a maximum length of 256 characters (under-approximation).
-- `print()` evaluates all arguments for side effects but does not produce actual output during verification.
-- `enumerate()` supports standard usage patterns but may have limitations with complex nested iterables or advanced parameter combinations.
+- `print()` evaluates each argument expression once (so safety checks and call side effects reach the GOTO program) but produces no actual output during verification.
+- `enumerate()` supports the iterable + `start` keyword forms; nested or unusually-shaped iterables are not exercised by the regression suite and may surface edge cases.
 
 ## Lambda Expressions
 
 - Return type inference is naive and defaults to `double`.
-- Higher-order and nested lambda expressions are not supported.
 - Parameter types are assumed to be `double` for simplicity.
 
 ## F-Strings
 
 - Complex expressions inside f-strings may have limited support.
-- Only basic integer (`:d`, `:i`) and float (`:.Nf`) format specs are supported; advanced format specs (e.g., string alignment `:>10`, `:<5`) are not.
-- Nested f-strings are not supported.
 - Custom format specifications for user-defined types are not supported.
+
+## Strings
+
+- Most `str.*()` methods now degrade to a sound nondeterministic over-approximation when the receiver is not a compile-time constant (see [Supported Features — Strings](./supported-features#strings)). A growing set have precise runtime operational models: the case transforms `swapcase`, `upper`, `lower`, `capitalize`, `title` (which cap the receiver at ~255 characters, asserting on longer input — `upper` truncates instead); the predicates `isupper`, `islower`, `isalpha`, `isdigit`, `isalnum`, `isspace`; `count`; and `find`/`rfind`. `str.join` likewise has a precise model (bounded to a 511-character result) when its iterable is a variable whose initialiser cannot be folded (e.g. a `List[str]` parameter), but falls back to a nondet `char *` when the iterable is a non-foldable expression such as `sorted(...)`, a comprehension, or a function-call result. Other methods (`casefold`, `isnumeric`, `isidentifier`, `removeprefix`, `removesuffix`, `center`, `ljust`, `rjust`, `zfill`, `expandtabs`, `partition`, `format`, `format_map`, `splitlines`, etc.) return a nondet value of the appropriate shape, so assertions on their specific functional result will report `VERIFICATION FAILED` on symbolic input.
+- `partition()` on a non-constant receiver returns `("", "", "")` — the same shape Python uses when the separator is not found.
+- `splitlines()` on a non-constant receiver returns an empty list.
 
 ## Union and Any Types
 
@@ -78,19 +67,24 @@ weight: 4
 ## Regular Expressions (`re` module)
 
 - Only `re.match()`, `re.search()`, and `re.fullmatch()` are supported.
-- Match objects do not expose group-capture methods (`.group()`, `.groups()`, `.span()`).
+- Group-capture methods (`.group()`, `.groups()`, `.span()`) are rewritten by the parser into direct calls to internal helpers, and only the `(\d+)` pattern is recognised precisely; everything else returns a nondeterministic value.
+- The result of `re.match` / `re.search` / `re.fullmatch` is a `bool`, not an `Optional[Match]`: `if m:` works, `if m is None:` does not.
 - Complex patterns beyond the explicitly supported constructs exhibit nondeterministic behavior.
 - Not supported: lookahead/lookbehind assertions, backreferences, named groups, conditional patterns, Unicode property escapes.
 
 ## Random Module
 
-- `random.choice()`, `random.shuffle()`, `random.sample()`, `random.seed()`, and other functions beyond `random()`, `uniform()`, `randint()`, `getrandbits()`, and `randrange()` are not yet supported.
+- Functions beyond `random()`, `uniform()`, `randint()`, `getrandbits()`, `randrange()`, `choice()`, `shuffle()`, `sample()`, and `seed()` are not yet supported.
+- `random.shuffle(lst)` is an under-approximation that leaves the list untouched.
+- `random.sample(population, k)` is an under-approximation that returns the first `k` elements of `population` rather than `k` distinct nondeterministic indices.
+- `random.seed(a)` is a no-op; the model is stateless, so seeding cannot make subsequent calls deterministic.
 
 ## Collections Module
 
-- `defaultdict`: Only basic subscript access/assignment is supported. The `__missing__` hook, type-factory calls (e.g., `defaultdict(list)`), and methods beyond `__getitem__`/`__setitem__` are not supported.
-- `Counter`: Only `__getitem__`, `__setitem__`, `values()`, and truthiness are supported. `most_common()`, `elements()`, `subtract()`, `update()`, and arithmetic operators on `Counter` are not supported.
-- `OrderedDict`, `deque`, `namedtuple`, `ChainMap`, and other `collections` types are not supported.
+- `defaultdict`: subscript access/assignment and the common type-factory forms are supported — `defaultdict(list)` (with `.append()` on the materialised list), the built-in scalar factories `defaultdict(int)` / `float` / `bool` / `str`, and nullary `lambda` factories whose body is a constant or built-in constructor (e.g. `defaultdict(lambda: float('inf'))`). On an unannotated dict the value type is also inferred from a constant literal subscript assignment (`d[k] = 5`). The `__missing__` hook and other methods are not.
+- `Counter`: only `__getitem__`, `__setitem__`, `values()`, and truthiness are supported. `most_common()` accepts the call but its result is unusable in any subsequent expression — comparisons trip a frontend "Unsupported comparison" error ([#4665](https://github.com/esbmc/esbmc/issues/4665)). `elements()`, `subtract()`, and arithmetic operators are not supported.
+- `Counter.update(...)` / `dict.update(...)` accept only the single-positional-argument form; the keyword-argument form (`c.update(a=1)`) is rejected at parse time even though it is valid CPython.
+- `OrderedDict` and `deque` support construction and basic indexing / append / `__setitem__`. `namedtuple`, `ChainMap`, and other `collections` types are not supported.
 
 ## Datetime Module
 
@@ -114,7 +108,8 @@ weight: 4
 
 ## NumPy Module
 
-- Arrays are modelled as plain Python lists; array shapes, dtypes, multi-dimensional indexing (`a[i, j]`), and broadcasting are not supported.
+- Arrays are modelled with a restricted subset: `.shape` is available for modelled arrays, 2D indexing (`a[i, j]`) is supported via chained indexing, and scalar broadcasting in direct binary operators supports `a + n` and `a * n`. General NumPy broadcasting rules, full dtype semantics, and higher-dimensional indexing remain unsupported.
+- Numeric-array arithmetic outside the supported subset is still rejected with `TypeError: arithmetic on numeric arrays is not supported (numpy broadcasting is not modelled)` to avoid SMT backend aborts (see [#4668](https://github.com/esbmc/esbmc/issues/4668)).
 - Most NumPy functions beyond those listed in [Supported Features — NumPy](./supported-features#numpy-module-numpy) are not available.
 - Several math stub functions (e.g., `np.sin`, `np.sqrt`) return constant placeholder values rather than computing the real result; these are suitable only for type-inference testing, not numerical verification.
 - `numpy.linalg.det` is a 2-scalar stub; general matrix operations are not supported.
@@ -126,11 +121,31 @@ weight: 4
 ## Class Attributes
 
 - Type inference for class attributes requires values with clear, determinable types; complex expressions may require explicit type annotations.
+- Recovering a self-referential attribute's type from constructor arguments (the linked-list / tree pattern, e.g. `self.successor = successor` set via `Node(2, a)`) is scoped to the module currently being processed. When the class is imported from another module (`from node import Node`), the module-level instances in the importing file are not visible while `__init__` is processed, so the type is not recovered.
 
 ## Missing Return Detection
 
 - Does not analyze return statements inside lambda expressions within the main function body.
 
+## Concurrency
+
+- **`Lock` model is invisible to `--deadlock-check`** ([#4581](https://github.com/esbmc/esbmc/issues/4581)). `threading.Lock.acquire` lowers to `__ESBMC_atomic_begin / __ESBMC_assume / __ESBMC_atomic_end`, mirroring `pthread_mutex_lock_noassert`. The deadlock checker only inspects the pthread mutex wait graph, so reverse-order lock acquisition between two Python threads is *not* reported as a deadlock — ESBMC explores all interleavings and reports `VERIFICATION SUCCESSFUL`.
+- **`Thread(args=(instance,))` value-copies object arguments** ([#4583](https://github.com/esbmc/esbmc/issues/4583)). When a `Thread` target receives a class instance with non-trivial attributes (e.g. a `threading.Lock`), the args-capture struct copies the descriptor by value and breaks attribute dereference inside the trampoline body. Workaround: share state via module-level globals instead of instance attributes passed through `args=`.
+- **Symex does not interleave at Python module-global accesses** ([#4584](https://github.com/esbmc/esbmc/issues/4584)). `--data-races-check` correctly flags W/W races on a module global, but symex's per-statement scheduler does not insert interleaving points at function-internal reads/writes of these globals. A classic split read-modify-write race (`tmp = counter; counter = tmp + 1` from two threads) reports `VERIFICATION SUCCESSFUL` instead of finding the schedule where both threads read `counter == 0` before either writes. The C equivalent of the same program is correctly reported as `VERIFICATION FAILED`.
+- **Thread shapes refused at parse time** with explicit errors:
+  - `Thread` subclassing with `run` override
+  - Lambda or runtime-variable `target=`
+  - Positional argument forms (`Thread(f, (a, b))`)
+  - `args=` bound to a variable instead of a tuple literal (`Thread(target=f, args=payload)`)
+  - `daemon=`, `name=`, `kwargs=`, `group=` keyword arguments
+  - `Thread` construction inside loops or comprehensions
+  - `Thread` reassignment within the same scope
+  - `Thread` as a class attribute (`class C: t = Thread(...)`)
+  - `target` defined after the caller in source order
+  - `from threading import *`
+- **Other `threading` primitives are not supported**: `RLock`, `Semaphore`, `Condition`, `Event`, `Barrier`, `Timer` are refused at parse time. `queue.Queue` is also unsupported and blocks the existing `regression/python/concurrency_fail` example.
+- **The CPython Global Interpreter Lock (GIL) is not modelled** ([#4579](https://github.com/esbmc/esbmc/issues/4579)). Translated programs execute under sequentially-consistent POSIX semantics rather than GIL-serialised bytecode execution, so the analysis over-approximates the set of feasible interleavings compared to actual CPython execution. This preserves safety but may produce spurious concurrency counterexamples.
+
 ## Module System
 
-- Built-in variable support is limited to `__name__`; `__file__`, `__doc__`, `__package__`, and other built-ins are not yet supported.
+- Built-in variable support is limited to `__name__` and `__file__`; `__doc__`, `__package__`, and other built-ins are not yet supported.

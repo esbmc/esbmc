@@ -14,6 +14,41 @@ using ::strtod;
 using ::strtof;
 using ::strtold;
 
+using ::abort;
+using ::abs;
+using ::atexit;
+using ::atof;
+using ::atoi;
+using ::atol;
+using ::atoll;
+using ::bsearch;
+using ::calloc;
+using ::div;
+using ::exit;
+using ::free;
+using ::getenv;
+using ::labs;
+using ::ldiv;
+using ::llabs;
+using ::lldiv;
+using ::malloc;
+using ::mblen;
+using ::mbstowcs;
+using ::mbtowc;
+using ::posix_memalign;
+using ::qsort;
+using ::rand;
+using ::random;
+using ::realloc;
+using ::srand;
+using ::system;
+using ::wcstombs;
+using ::wctomb;
+
+using ::div_t;
+using ::ldiv_t;
+using ::lldiv_t;
+
 #if __cplusplus >= 201703L
 using ::aligned_alloc;
 #endif

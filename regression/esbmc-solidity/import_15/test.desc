@@ -1,4 +1,4 @@
 THOROUGH
 contract.solast
---sol contract.sol --incremental-bmc --no-standard-checks --contract A --base-k-step 2 --bound
+--sol contract.sol --unwind 3 --no-unwinding-assertions --no-standard-checks --contract A --bound --z3
 ^VERIFICATION FAILED$

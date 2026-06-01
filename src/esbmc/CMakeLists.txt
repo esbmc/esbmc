@@ -2,10 +2,10 @@
 if(ENABLE_SOLIDITY_FRONTEND)
   # we have set minimium LLVM version to 11
   if(LLVM_VERSION_MAJOR STREQUAL "14" OR LLVM_VERSION_MAJOR STREQUAL "15")
-    message(FATAL_ERROR 
-        "Unsupported LLVM version (${LLVM_VERSION_MAJOR}). 
-         LLVM 14 and 15 have incomplete or unstable support for ExtInt and BitInt features, 
-         which are required for the Solidity frontend to function properly. 
+    message(FATAL_ERROR
+        "Unsupported LLVM version (${LLVM_VERSION_MAJOR}).
+         LLVM 14 and 15 have incomplete or unstable support for ExtInt and BitInt features,
+         which are required for the Solidity frontend to function properly.
          Please use LLVM 11-13 for stable ExtInt support or LLVM 16+ for stable BitInt support.")
   endif()
   set(SOLIDITY_FRONTEND_TARGETS solidityfrontend)
@@ -38,7 +38,7 @@ add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.c
   VERBATIM
 )
 
-add_executable (esbmc main.cpp esbmc_parseoptions.cpp bmc.cpp globals.cpp document_subgoals.cpp show_vcc.cpp options.cpp ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.c)
+add_executable(esbmc main.cpp esbmc_parseoptions.cpp bmc.cpp globals.cpp document_subgoals.cpp show_vcc.cpp options.cpp ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.c)
 target_include_directories(esbmc
     PRIVATE ${CMAKE_BINARY_DIR}/src
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
