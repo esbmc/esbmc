@@ -210,6 +210,60 @@ static bool try_extract_scalar_2d_list(
   return true;
 }
 
+static bool is_square_matrix(
+  const std::vector<std::vector<scalar_value>> &values,
+  std::size_t &n)
+{
+  n = values.size();
+  if (n == 0)
+    return false;
+  for (const auto &row : values)
+  {
+    if (row.size() != n)
+      return false;
+  }
+  return true;
+}
+
+static scalar_value
+determinant_2x2(const std::vector<std::vector<scalar_value>> &m)
+{
+  const auto a = m[0][0].value;
+  const auto b = m[0][1].value;
+  const auto c = m[1][0].value;
+  const auto d = m[1][1].value;
+  const auto det = a * d - b * c;
+  const bool complex_out = m[0][0].is_complex || m[0][1].is_complex ||
+                           m[1][0].is_complex || m[1][1].is_complex;
+  return complex_out ? make_complex_scalar(det.real(), det.imag())
+                     : make_real_scalar(det.real());
+}
+
+static scalar_value
+determinant_3x3(const std::vector<std::vector<scalar_value>> &m)
+{
+  const auto a = m[0][0].value;
+  const auto b = m[0][1].value;
+  const auto c = m[0][2].value;
+  const auto d = m[1][0].value;
+  const auto e = m[1][1].value;
+  const auto f = m[1][2].value;
+  const auto g = m[2][0].value;
+  const auto h = m[2][1].value;
+  const auto i = m[2][2].value;
+
+  const auto det =
+    a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
+  bool complex_out = false;
+  for (const auto &row : m)
+  {
+    for (const auto &v : row)
+      complex_out = complex_out || v.is_complex;
+  }
+  return complex_out ? make_complex_scalar(det.real(), det.imag())
+                     : make_real_scalar(det.real());
+}
+
 static bool is_complex_function(const std::string &function)
 {
   return function == "real" || function == "imag" || function == "conj" ||
@@ -759,7 +813,7 @@ exprt numpy_call_expr::create_expr_from_call()
     if (var["_type"] == "Name")
     {
       var = json_utils::find_var_decl(
-        var["id"], function_id_.get_function(), converter_.ast());
+        var["id"], converter_.current_function_name(), converter_.ast());
       if (!var.contains("value") || !var["value"].is_object())
         return;
 
@@ -781,6 +835,47 @@ exprt numpy_call_expr::create_expr_from_call()
   if (call_["args"].size() == 1)
   {
     const std::string &function = function_id_.get_function();
+    if (function == "det")
+    {
+      nlohmann::json arg = call_["args"][0];
+      resolve_var(arg);
+      if (
+        arg.is_object() && arg.contains("_type") && arg["_type"] == "Call" &&
+        arg.contains("func") && arg["func"].is_object() &&
+        ((arg["func"].contains("_type") && arg["func"]["_type"] == "Name" &&
+          arg["func"].contains("id") && arg["func"]["id"] == "array") ||
+         (arg["func"].contains("_type") &&
+          arg["func"]["_type"] == "Attribute" && arg["func"].contains("attr") &&
+          arg["func"]["attr"] == "array")) &&
+        arg.contains("args") && arg["args"].is_array() && !arg["args"].empty())
+      {
+        arg = arg["args"][0];
+      }
+
+      std::vector<std::vector<scalar_value>> matrix;
+      if (!try_extract_scalar_2d_list(arg, matrix))
+      {
+        throw std::runtime_error(
+          "TypeError: numpy.linalg.det currently supports only constant 2D "
+          "numeric arrays");
+      }
+
+      std::size_t n = 0;
+      if (!is_square_matrix(matrix, n))
+      {
+        throw std::runtime_error(
+          "TypeError: numpy.linalg.det requires a square 2D matrix");
+      }
+
+      if (n == 2)
+        return converter_.get_expr(to_json_constant(determinant_2x2(matrix)));
+      if (n == 3)
+        return converter_.get_expr(to_json_constant(determinant_3x3(matrix)));
+
+      throw std::runtime_error(
+        "TypeError: numpy.linalg.det supports only 2x2 and 3x3 matrices");
+    }
+
     if (is_complex_function(function))
     {
       const auto &arg = call_["args"][0];
