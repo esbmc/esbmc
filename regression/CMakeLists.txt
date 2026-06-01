@@ -350,6 +350,16 @@ set(_slow_regression_tests
     # verdict instead of ctest hard-killing the run.
     "regression/quixbugs/next_permutation"
     "regression/quixbugs/next_permutation_fail"
+    # breadth_first_search(_fail) used to fast-fail with
+    # "NameError: name 'Queue' is not defined" because aliased deque imports
+    # were not resolved. With PR #5008 the alias fix and popleft/appendleft
+    # support land, so ESBMC now reaches the real BFS symex (deque + set +
+    # 6-node graph), which does not converge under --incremental-bmc due to
+    # the __memcpy_impl loop in the list OM (string.c:278). These stay
+    # KNOWNBUG; the larger inner timeout lets testing_tool record the KNOWNBUG
+    # verdict instead of ctest hard-killing the run.
+    "regression/quixbugs/breadth_first_search"
+    "regression/quixbugs/breadth_first_search_fail"
     # github_4435 was a soundness false alarm on the SV-COMP libvsync
     # bounded_mpmc_check_full benchmark; the underlying deref unit
     # mismatch is fixed by PR #4939, but the full benchmark
