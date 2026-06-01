@@ -617,6 +617,20 @@ std::string python_annotation<Json>::get_argument_type(const Json &arg)
       !var_node.empty() && var_node.contains("value") &&
       !var_node["value"].is_null())
     {
+      // A name bound to an *empty* list literal loses its element type. This
+      // is how list comprehensions lower (`tmp = []; tmp.append(elt)`), so
+      // recover `list[T]` from the first append before falling back to the
+      // bare `list` the empty literal would otherwise yield (issue #5022).
+      const Json &value = var_node["value"];
+      if (
+        value.contains("_type") && value["_type"] == "List" &&
+        (!value.contains("elts") || value["elts"].empty()))
+      {
+        std::string recovered = recover_list_type_from_appends(var_name);
+        if (!recovered.empty())
+          return recovered;
+      }
+
       std::string inferred_type = get_argument_type(var_node["value"]);
       if (!inferred_type.empty())
         return inferred_type;
@@ -825,6 +839,36 @@ python_annotation<Json>::get_list_type_from_literal(const Json &list_arg)
 
   // Return the full generic type notation
   return "list[" + element_type + "]";
+}
+
+template <class Json>
+std::string python_annotation<Json>::recover_list_type_from_appends(
+  const std::string &var_name)
+{
+  // Look for `<var_name>.append(arg)` inside the enclosing function. The
+  // comprehension lowering emits the empty-list init and its appends in the
+  // same function body, so prefer that scope; fall back to the module body
+  // for module-level comprehensions (where no current function name is set).
+  const std::string &scope = get_current_func_name();
+  const Json &module_body = ast_["body"];
+  Json func =
+    scope.empty() ? Json() : json_utils::find_function(module_body, scope);
+  const Json &body =
+    (!func.empty() && func.contains("body")) ? func["body"] : module_body;
+
+  Json append_arg = find_first_append_arg(body, var_name);
+  if (append_arg.empty())
+    return "";
+
+  // Only commit to a parameterised list when the element type resolves to a
+  // concrete type. An unresolved ("") or dynamic ("Any") element keeps the
+  // permissive bare `list` so heterogeneous/object lists are unaffected
+  // (mirrors the jpl_1 / #3239 guard in infer_type).
+  std::string elem_type = get_argument_type(append_arg);
+  if (elem_type.empty() || elem_type == "Any")
+    return "";
+
+  return "list[" + elem_type + "]";
 }
 
 template <class Json>
