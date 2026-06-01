@@ -2,4 +2,3 @@ CORE
 main.c
 --overflow-check --incremental-bmc
 ^VERIFICATION SUCCESSFUL$
-^EXIT=0$

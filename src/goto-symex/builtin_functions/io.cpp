@@ -257,8 +257,7 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
     //    returned value (see GitHub #4976-#4979).
     const bool sound_bound = format_is_constant && printf_formatter.bounded;
     if (
-      sound_bound &&
-      printf_formatter.min_outlen == printf_formatter.max_outlen)
+      sound_bound && printf_formatter.min_outlen == printf_formatter.max_outlen)
     {
       symex_assign(code_assign2tc(
         lhs,
