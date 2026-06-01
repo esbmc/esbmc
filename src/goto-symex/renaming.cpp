@@ -20,20 +20,17 @@ unsigned renaming::level2t::current_number(const name_record &symbol) const
 
 unsigned int renaming::level1t::current_number(const irep_idt &name) const
 {
-  current_namest::const_iterator it = current_names.find(name_record(name));
-  if (it == current_names.end())
-    return 0;
-  return it->second;
+  const unsigned *it = current_names.find(name_record(name));
+  return it ? *it : 0;
 }
 
 void renaming::level1t::get_ident_name(expr2tc &sym) const
 {
   symbol2t &symbol = to_symbol2t(sym);
 
-  current_namest::const_iterator it =
-    current_names.find(name_record(to_symbol2t(sym)));
+  const unsigned *it = current_names.find(name_record(to_symbol2t(sym)));
 
-  if (it == current_names.end())
+  if (it == nullptr)
   {
     // can not find; it's a global symbol.
     symbol.rlevel = symbol_renaming_level::level1_global;
@@ -41,7 +38,7 @@ void renaming::level1t::get_ident_name(expr2tc &sym) const
   }
 
   symbol.rlevel = symbol_renaming_level::level1;
-  symbol.level1_num = it->second;
+  symbol.level1_num = *it;
   symbol.thread_num = thread_id;
 }
 
@@ -86,16 +83,15 @@ void renaming::level1t::rename(expr2tc &expr)
     if (sym.rlevel != symbol_renaming_level::level0)
       return;
 
-    const current_namest::const_iterator it =
-      current_names.find(name_record(sym));
+    const unsigned *it = current_names.find(name_record(sym));
 
-    if (it != current_names.end())
+    if (it != nullptr)
     {
       expr = symbol2tc(
         sym.type,
         sym.thename,
         symbol_renaming_level::level1,
-        it->second,
+        *it,
         0,
         thread_id,
         0);

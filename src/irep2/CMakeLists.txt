@@ -5,5 +5,5 @@ add_library(irep2
   irep2_guard.cpp
 )
 
-target_link_libraries(irep2 PUBLIC fmt::fmt bigint immer PRIVATE crypto_hash)
+target_link_libraries(irep2 PUBLIC fmt::fmt bigint immer)
 

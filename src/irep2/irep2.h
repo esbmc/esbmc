@@ -39,7 +39,6 @@
 #include <type_traits>
 #include <utility>
 #include <util/compiler_defs.h>
-#include <util/crypto_hash.h>
 #include <util/irep_idt.h>
 #include <util/irep.h>
 
@@ -669,16 +668,6 @@ public:
    */
   list_of_memberst tostring(unsigned int indent) const;
 
-  /** Perform hash operation accumulating into parameter.
-   *  Feeds data as appropriate to the type of the expression into the
-   *  parameter, to be hashed. Like crc, but for some other kind of hash
-   *  scenario.
-   *  @see cmp
-   *  @see crc
-   *  @param hash Object to accumulate hash data into.
-   */
-  void hash(crypto_hash &hash) const;
-
   /** Clone method. Self explanatory.
    *  @return New container, containing a duplicate of this object.
    */
@@ -829,16 +818,6 @@ public:
    *  @return list of string pairs, of form fieldname:value
    */
   list_of_memberst tostring(unsigned int indent) const;
-
-  /** Perform hash operation accumulating into parameter.
-   *  Feeds data as appropriate to the type of the expression into the
-   *  parameter, to be hashed. Like crc, but for some other kind of hash
-   *  scenario.
-   *  @see cmp
-   *  @see crc
-   *  @param hash Object to accumulate hash data into.
-   */
-  void hash(crypto_hash &hash) const;
 
   /** Fetch a sub-operand.
    *  These can come out of any field that is an expr2tc, or contains them.

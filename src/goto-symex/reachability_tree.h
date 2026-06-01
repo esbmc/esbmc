@@ -10,7 +10,6 @@
 
 #include <unordered_map>
 #include <unordered_set>
-#include <util/crypto_hash.h>
 #include <util/message.h>
 #include <util/options.h>
 
@@ -325,7 +324,7 @@ protected:
   /** Whether partial-order-reduction is enabled */
   bool por;
   /** Set of state hashes we've discovered */
-  std::set<crypto_hash> hit_hashes;
+  std::set<std::size_t> hit_hashes;
   /** Flag as to whether we're picking interleaving directions explicitly.
    *  Corresponds to the --interactive-ileaves option. */
   bool interactive_ileaves;

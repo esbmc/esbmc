@@ -280,22 +280,6 @@ size_t type2t::crc() const
   std::unreachable();
 }
 
-void type2t::hash(crypto_hash &h) const
-{
-  switch (type_id)
-  {
-#define IREP2_TYPE(kind, _)                                                    \
-  case kind##_id:                                                              \
-    esbmct::generic_hash_type(static_cast<const kind##_type2t &>(*this), h);   \
-    return;
-#include <irep2/type_kinds.inc>
-#undef IREP2_TYPE
-  case end_type_id:
-    break;
-  }
-  std::unreachable();
-}
-
 list_of_memberst type2t::tostring(unsigned int indent) const
 {
   switch (type_id)
