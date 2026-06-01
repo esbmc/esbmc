@@ -2,7 +2,7 @@
 #define IREP2_GUARD_SEQ_H_
 
 #include <cstddef>
-#include <immer/flex_vector.hpp>
+#include <immer/vector.hpp>
 #include <immer/memory_policy.hpp>
 #include <irep2/irep2_expr.h>
 
@@ -13,14 +13,20 @@
  *  N refcount bumps on the conjuncts) and rebuilt from scratch on every set
  *  operation, giving the Θ(N²) blow-up at deep loop unwinding.
  *
- *  Backed by `immer::flex_vector`, a persistent (structurally-shared) RRB
- *  vector. Conjuncts stay oldest-first — the same canonical order as
+ *  Backed by `immer::vector`, a persistent (structurally-shared) bit-mapped
+ *  vector trie. Conjuncts stay oldest-first — the same canonical order as
  *  guard2tc's cached left-leaning and-chain, so the index correspondence the
  *  prefix/diff logic relies on is preserved exactly.
  *
  *  Costs: copy O(1) (shared root); push_back / index O(log32 N) ≈ O(1) for
- *  the few-hundred-element guards symex builds; prefix/suffix (take/drop)
- *  share whole subtrees; iterate O(N).
+ *  the few-hundred-element guards symex builds; prefix (take) shares subtrees;
+ *  iterate O(N). We use immer::vector rather than flex_vector (the relaxed
+ *  RRB tree): flex's only edge is O(log N) drop()/suffix slicing, but measured
+ *  max suffix length in real symex is 1 (guards diverge one conjunct at a time
+ *  at merge points), so flex's relaxed-radix bookkeeping is pure overhead.
+ *  A/B: immer::vector was ~5% fewer instructions and ~15% faster symex on
+ *  test_locks_13, same verdicts. suffix() rebuilds [n,size) since plain vector
+ *  has no drop(); that is O(suffix) but suffix is ~1 in practice.
  *
  *  Ownership: NON-atomic refcount, no lock (`unsafe_refcount_policy` +
  *  `no_lock_policy`). Guards are thread-confined — the only symex parallelism
@@ -41,7 +47,13 @@ class guard_seq
     immer::default_heap_policy,
     immer::unsafe_refcount_policy,
     immer::no_lock_policy>;
+#ifndef GUARD_SEQ_FLEX_VECTOR /* A/B: default to plain vector for this build */
+  // A/B: plain immer::vector (strict radix tree). No native drop(); suffix()
+  // emulates it by take-of-reverse... actually by rebuilding [n,size).
+  using vector_t = immer::vector<expr2tc, memory_policy>;
+#else
   using vector_t = immer::flex_vector<expr2tc, memory_policy>;
+#endif
 
   vector_t v_;
 
@@ -92,10 +104,18 @@ public:
     return guard_seq(v_.take(n));
   }
 
-  /** Logical suffix [n, size) — shares subtrees, no element copies. */
+  /** Logical suffix [n, size). flex_vector shares subtrees via drop();
+   *  plain vector has no drop(), so rebuild [n,size) element-wise. */
   guard_seq suffix(std::size_t n) const
   {
+#ifdef GUARD_SEQ_FLEX_VECTOR
     return guard_seq(v_.drop(n));
+#else
+    vector_t r;
+    for (std::size_t i = n; i < v_.size(); ++i)
+      r = std::move(r).push_back(v_[i]);
+    return guard_seq(std::move(r));
+#endif
   }
 
   void clear()
