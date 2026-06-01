@@ -1,4 +1,7 @@
 version=4
-opts="filenamemangle=s/.+\/v(\d[^/]*)\.tar\.gz/esbmc_$1.orig.tar.gz/,\
-repacksuffix=+dfsg,uversionmangle=s/(\d)[_\.\-]?(alpha|beta|rc)/\1~\2/" \
-  https://github.com/esbmc/esbmc/tags .*/v(\d[\d.]+)\.tar\.gz
+opts="mode=git,pgpmode=none,\
+filenamemangle=s/(.+)/esbmc_$1.orig.tar.gz/,\
+repacksuffix=+dfsg,\
+dversionmangle=s/\+dfsg//;s/\.0$//" \
+  https://github.com/esbmc/esbmc.git \
+  refs/tags/v(\d[\d.]*)$
