@@ -1,5 +1,6 @@
-esbmc (8.3.0+dfsg-2) noble; urgency=medium
+esbmc (8.3.0+dfsg-2) unstable; urgency=medium
 
+  * Initial release for Debian (Closes: #1138660).
   * Drop Ubuntu 22.04 (Jammy) support.  ESBMC 8.3.0 uses std::unreachable()
     (C++23, <utility>), which requires GCC >= 12 or an equivalent standard
     library.  Ubuntu 22.04 ships GCC 11 (libstdc++-11), which does not
