@@ -47,13 +47,7 @@ class guard_seq
     immer::default_heap_policy,
     immer::unsafe_refcount_policy,
     immer::no_lock_policy>;
-#ifndef GUARD_SEQ_FLEX_VECTOR /* A/B: default to plain vector for this build */
-  // A/B: plain immer::vector (strict radix tree). No native drop(); suffix()
-  // emulates it by take-of-reverse... actually by rebuilding [n,size).
   using vector_t = immer::vector<expr2tc, memory_policy>;
-#else
-  using vector_t = immer::flex_vector<expr2tc, memory_policy>;
-#endif
 
   vector_t v_;
 
@@ -104,18 +98,16 @@ public:
     return guard_seq(v_.take(n));
   }
 
-  /** Logical suffix [n, size). flex_vector shares subtrees via drop();
-   *  plain vector has no drop(), so rebuild [n,size) element-wise. */
+  /** Logical suffix [n, size). immer::vector has no drop(), so rebuild
+   *  [n,size) element-wise. O(suffix), but the suffix length in symex guard
+   *  subtraction is ~1 in practice (guards diverge one conjunct at a time at
+   *  merge points), so this is cheaper than flex_vector's relaxed-radix drop. */
   guard_seq suffix(std::size_t n) const
   {
-#ifdef GUARD_SEQ_FLEX_VECTOR
-    return guard_seq(v_.drop(n));
-#else
     vector_t r;
     for (std::size_t i = n; i < v_.size(); ++i)
       r = std::move(r).push_back(v_[i]);
     return guard_seq(std::move(r));
-#endif
   }
 
   void clear()
