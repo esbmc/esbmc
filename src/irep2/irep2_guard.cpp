@@ -16,12 +16,21 @@ const expr2t *expr_ptr(const expr2tc &expr)
 
 std::size_t common_pointer_prefix_size(const guard2tc &g1, const guard2tc &g2)
 {
+  // Walk both lists with iterators rather than indexed [] access: immer
+  // iterators cache the tree path so advancing is amortised O(1), whereas
+  // each operator[] is an O(log N) descent — indexed here would make the
+  // common-prefix scan O(N log N) per merge.
   std::size_t prefix_size = 0;
   const std::size_t min_size =
     std::min(g1.guard_list.size(), g2.guard_list.size());
-  while (prefix_size < min_size &&
-         same_pointer(g1.guard_list[prefix_size], g2.guard_list[prefix_size]))
+  auto it1 = g1.guard_list.begin();
+  auto it2 = g2.guard_list.begin();
+  while (prefix_size < min_size && same_pointer(*it1, *it2))
+  {
     ++prefix_size;
+    ++it1;
+    ++it2;
+  }
   return prefix_size;
 }
 
@@ -257,9 +266,17 @@ guard2tc &operator-=(guard2tc &g1, const guard2tc &g2)
   std::size_t prefix_size = 0;
   const std::size_t min_size =
     std::min(g1.guard_list.size(), g2.guard_list.size());
-  while (prefix_size < min_size &&
-         same_pointer(g1.guard_list[prefix_size], g2.guard_list[prefix_size]))
-    ++prefix_size;
+  {
+    // Iterator walk (amortised O(1)/step) instead of O(log N) indexed [].
+    auto it1 = g1.guard_list.begin();
+    auto it2 = g2.guard_list.begin();
+    while (prefix_size < min_size && same_pointer(*it1, *it2))
+    {
+      ++prefix_size;
+      ++it1;
+      ++it2;
+    }
+  }
 
   if (prefix_size != 0)
   {
