@@ -1,7 +1,7 @@
 # Provides the header-only immer library as the `immer` interface target.
 #
-# immer::flex_vector is a persistent (immutable, structurally-shared) RRB
-# vector: O(1) copy, O(log32 N) index/append, O(N) iteration. guard2tc's
+# immer::vector is a persistent (immutable, structurally-shared) bit-mapped
+# vector trie: O(1) copy, O(log32 N) index/append, O(N) iteration. guard2tc's
 # conjunct list uses it so guard copies (constant in symex) are O(1) instead
 # of O(N) deep vector copies — the residual quadratic at deep loop unwinding.
 #

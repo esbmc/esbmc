@@ -13,7 +13,7 @@
  *  stack is snapshotted (every per-branch merge_statet, every state fork).
  *  With a std::unordered_map that copy is O(N) buckets + N entries; backing
  *  it with immer::map (a HAMT) makes the copy O(1) structural sharing, the
- *  same win guard_seq's flex_vector gives the conjunct list.
+ *  same win guard_seq's immer::vector gives the conjunct list.
  *
  *  Ownership: non-atomic refcount, no lock — guards/renaming run in the
  *  single-threaded symex phase (the only parallelism, --parallel-solving,

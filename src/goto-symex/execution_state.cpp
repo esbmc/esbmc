@@ -1355,7 +1355,10 @@ std::size_t
 execution_statet::state_hashing_level2t::generate_l2_state_hash() const
 {
   // Combine each (variable, value-hash) pair into one size_t fingerprint.
-  // current_hashes is an ordered map, so iteration order is deterministic.
+  // current_hashes is an ordered map, so iteration order is stable within a
+  // run (the order tracks irep_idt intern indices, so the fingerprint is a
+  // valid intra-run dedup key but is not reproducible across runs — same as
+  // the former SHA-1-over-this-map, so no behavioural change).
   // Mixing the key as well as the value makes the fingerprint sensitive to
   // *which* variable holds a value (not just the multiset of value hashes),
   // which tightens interleaving dedup — fewer false collisions, less
