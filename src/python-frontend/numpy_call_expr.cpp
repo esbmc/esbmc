@@ -127,6 +127,8 @@ static numeric_value extract_value(const nlohmann::json &arg)
     throw std::runtime_error("Invalid JSON: missing value");
 
   auto value = arg["value"];
+  if (value.is_boolean())
+    return make_int_value(value.get<bool>() ? 1 : 0);
   if (value.is_number_integer())
     return make_int_value(value.get<int64_t>());
   if (value.is_number_float())
@@ -768,6 +770,19 @@ exprt numpy_call_expr::create_expr_from_call()
         operation == "add" || operation == "subtract" ||
         operation == "multiply" || operation == "divide")
       {
+        // Empty-list x empty-list currently has no stable umath lowering in
+        // this frontend path; reject explicitly instead of allowing internal
+        // backend failures.
+        if (
+          lhs.contains("elts") && rhs.contains("elts") &&
+          lhs["elts"].is_array() && rhs["elts"].is_array() &&
+          lhs["elts"].empty() && rhs["elts"].empty())
+        {
+          throw std::runtime_error(
+            "TypeError: numpy operation on two empty arrays is not supported "
+            "yet");
+        }
+
         code_function_callt call =
           to_code_function_call(to_code(function_call_expr::get()));
         typet size = type_handler_.get_typet(lhs["elts"]);
