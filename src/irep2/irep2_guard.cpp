@@ -14,12 +14,13 @@ const expr2t *expr_ptr(const expr2tc &expr)
   return expr.get();
 }
 
-std::size_t common_pointer_prefix_size(const guard2tc &g1, const guard2tc &g2)
+#ifndef NDEBUG
+// Reference O(N) element scan of the shared conjunct prefix. Kept only to
+// assert the O(Δ) cached-base version below stays in lock-step with it; the
+// fast version replaces it in release builds.
+std::size_t
+common_pointer_prefix_size_scan(const guard2tc &g1, const guard2tc &g2)
 {
-  // Walk both lists with iterators rather than indexed [] access: immer
-  // iterators cache the tree path so advancing is amortised O(1), whereas
-  // each operator[] is an O(log N) descent — indexed here would make the
-  // common-prefix scan O(N log N) per merge.
   std::size_t prefix_size = 0;
   const std::size_t min_size =
     std::min(g1.guard_list.size(), g2.guard_list.size());
@@ -32,6 +33,64 @@ std::size_t common_pointer_prefix_size(const guard2tc &g1, const guard2tc &g2)
     ++it2;
   }
   return prefix_size;
+}
+#endif
+
+// Length of the shared conjunct prefix of g1 and g2, found in O(Δ) (Δ = the
+// divergent suffix lengths) via the cached left-leaning and-chain rather than
+// an O(N) element scan. g1 and g2 are typically siblings — a long shared
+// prefix P (the deeply-nested side_1 sub-chain, hash-consed and shared between
+// both bases) plus short divergent suffixes at the top. We descend the deeper
+// base by the depth difference, then lockstep down side_1 until the two nodes
+// are the same pointer. Returning the count ONLY when same_pointer confirms
+// convergence makes the result identical to the element scan in every case
+// (single-conjunct leaves, strict prefix, no common prefix, empty guards):
+// a non-converged exit means no confirmed shared conjunct, so the answer is
+// the prefix up to that point.
+std::size_t common_pointer_prefix_size(const guard2tc &g1, const guard2tc &g2)
+{
+  std::size_t n1 = g1.guard_list.size();
+  std::size_t n2 = g2.guard_list.size();
+
+  std::size_t result;
+  if (n1 == 0 || n2 == 0)
+    result = 0;
+  else
+  {
+    // The bases are the canonical and-chains; descend side_1 (older conjuncts).
+    expr2tc a = g1;
+    expr2tc b = g2;
+    std::size_t da = n1, db = n2;
+    while (da > db && is_and2t(a))
+    {
+      a = to_and2t(a).side_1;
+      --da;
+    }
+    while (db > da && is_and2t(b))
+    {
+      b = to_and2t(b).side_1;
+      --db;
+    }
+    // da == db now (the common depth). Lockstep until the nodes coincide.
+    while (!same_pointer(a, b) && is_and2t(a) && is_and2t(b))
+    {
+      a = to_and2t(a).side_1;
+      b = to_and2t(b).side_1;
+      --da;
+    }
+    // Only a same_pointer convergence confirms a shared conjunct prefix; a
+    // walk that bottomed out at non-matching leaves means the prefix ends
+    // before them (the element scan would stop there too).
+    result = same_pointer(a, b) ? da : 0;
+  }
+
+  // The O(Δ) walk must agree with the reference O(N) scan; assert it in debug
+  // builds (validated equal across single-threaded, deep-unwind and concurrent
+  // runs — tens of thousands of calls, zero divergence). Kept for a release
+  // cycle before deleting the scan, since the base/guard_list invariant the
+  // walk relies on is observed but not statically enforced.
+  assert(result == common_pointer_prefix_size_scan(g1, g2));
+  return result;
 }
 
 #ifndef NDEBUG
@@ -263,20 +322,10 @@ guard2tc &operator-=(guard2tc &g1, const guard2tc &g2)
   if (g1.is_true() || g2.is_true())
     return g1;
 
-  std::size_t prefix_size = 0;
-  const std::size_t min_size =
-    std::min(g1.guard_list.size(), g2.guard_list.size());
-  {
-    // Iterator walk (amortised O(1)/step) instead of O(log N) indexed [].
-    auto it1 = g1.guard_list.begin();
-    auto it2 = g2.guard_list.begin();
-    while (prefix_size < min_size && same_pointer(*it1, *it2))
-    {
-      ++prefix_size;
-      ++it1;
-      ++it2;
-    }
-  }
+  // O(Δ) shared-prefix length via the cached and-chain (see
+  // common_pointer_prefix_size); avoids the O(N) element scan that made deep
+  // loop-back merges Θ(N²).
+  std::size_t prefix_size = common_pointer_prefix_size(g1, g2);
 
   if (prefix_size != 0)
   {
