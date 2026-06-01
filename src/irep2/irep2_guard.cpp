@@ -14,6 +14,20 @@ const expr2t *expr_ptr(const expr2tc &expr)
   return expr.get();
 }
 
+// Pointer-keyed membership set over a guard's divergent suffix [from, size).
+// Used by both operator-= and operator|= to test conjunct identity against
+// the other guard's suffix; node identity (the hash-consed pointer) is the
+// cheap key, matching common_pointer_prefix_size's same_pointer semantics.
+std::unordered_set<const expr2t *>
+suffix_pointer_set(const guard2tc &g, std::size_t from)
+{
+  std::unordered_set<const expr2t *> s;
+  s.reserve(g.guard_list.size() - from);
+  for (std::size_t i = from; i < g.guard_list.size(); ++i)
+    s.insert(expr_ptr(g.guard_list[i]));
+  return s;
+}
+
 #ifndef NDEBUG
 // Reference O(N) element scan of the shared conjunct prefix. Kept only to
 // assert the O(Δ) cached-base version below stays in lock-step with it; the
@@ -342,10 +356,8 @@ guard2tc &operator-=(guard2tc &g1, const guard2tc &g2)
       return g1;
     }
 
-    std::unordered_set<const expr2t *> g2_suffix;
-    g2_suffix.reserve(g2.guard_list.size() - prefix_size);
-    for (std::size_t i = prefix_size; i < g2.guard_list.size(); ++i)
-      g2_suffix.insert(expr_ptr(g2.guard_list[i]));
+    std::unordered_set<const expr2t *> g2_suffix =
+      suffix_pointer_set(g2, prefix_size);
 
     std::unordered_set<expr2tc, irep2_hash> g2_suffix_exprs;
     bool built_g2_suffix_exprs = false;
@@ -472,10 +484,8 @@ guard2tc &operator|=(guard2tc &g1, const guard2tc &g2)
         return g1;
       }
 
-      std::unordered_set<const expr2t *> g2_suffix;
-      g2_suffix.reserve(g2.guard_list.size() - prefix_size);
-      for (std::size_t i = prefix_size; i < g2.guard_list.size(); ++i)
-        g2_suffix.insert(expr_ptr(g2.guard_list[i]));
+      std::unordered_set<const expr2t *> g2_suffix =
+        suffix_pointer_set(g2, prefix_size);
 
       // Working sets over the divergent suffix (size Δ), built as plain
       // vectors so the hash-set bookkeeping stays simple.
