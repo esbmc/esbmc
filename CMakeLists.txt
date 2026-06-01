@@ -110,8 +110,6 @@ include(SetupLocalLLVM)
 
 include(ExternalDependencies)
 
-include(SetupMimalloc)
-
 include(SetupImmer)
 
 # Optimization
