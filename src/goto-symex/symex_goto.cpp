@@ -108,14 +108,38 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
 
   // Violation-witness: steer branch direction if the current waypoint is a
   // branching at this location.  Skip backward GOTOs (loop back edges).
+  //
+  // 'follow' waypoints are consumed once (advance after match).
+  // 'avoid' waypoints are persistent: the constraint applies at every
+  // encounter of the same branch (e.g. every loop iteration).  When the
+  // execution moves past the avoided location, peek at the next waypoint in
+  // the segment so the cursor can transition to it.
   if (
     validate_witness && forward &&
     cur_state->cur_seg < cur_state->witness_segs.size())
   {
     const auto &seg = cur_state->witness_segs[cur_state->cur_seg];
-    if (cur_state->cur_wp < seg.size())
+    size_t wp_idx = cur_state->cur_wp;
+
+    // If the current waypoint is a persistent 'avoid' that does not match
+    // this location, peek at the next waypoint to enable the transition.
+    if (
+      wp_idx < seg.size() &&
+      seg[wp_idx].type == waypoint::branching &&
+      seg[wp_idx].action == waypoint::avoid)
     {
-      const waypoint &wp = seg[cur_state->cur_wp];
+      const auto &loc = cur_state->source.pc->location;
+      const waypoint &avoid_wp = seg[wp_idx];
+      if (
+        avoid_wp.line_id.empty() || avoid_wp.line_id != loc.get_line() ||
+        (!avoid_wp.function_id.empty() &&
+         avoid_wp.function_id != loc.get_function()))
+        ++wp_idx;
+    }
+
+    if (wp_idx < seg.size())
+    {
+      const waypoint &wp = seg[wp_idx];
       if (wp.type == waypoint::branching)
       {
         const auto &loc = cur_state->source.pc->location;
@@ -131,7 +155,15 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
             new_guard_true = true;
           else
             new_guard_false = true;
-          cur_state->advance_witness_position();
+          // 'avoid': persistent — do not advance; constraint reapplies on
+          // every future encounter of the same location.
+          // 'follow': consumed once — advance past wp_idx (updating cur_wp
+          // first handles the case where we peeked past an avoid above).
+          if (!is_avoid)
+          {
+            cur_state->cur_wp = wp_idx;
+            cur_state->advance_witness_position();
+          }
         }
       }
     }
