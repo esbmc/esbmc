@@ -219,12 +219,9 @@ void guard2tc::build_guard_expr()
     return;
   }
 
-  // Iterate (O(N)) rather than index (immer operator[] is O(log N)).
-  auto it = guard_list.begin();
-  expr2tc arg1 = *it++;
-  expr2tc res = and2tc(arg1, *it++);
-  for (const auto end = guard_list.end(); it != end; ++it)
-    res = and2tc(res, *it);
+  expr2tc res = and2tc(guard_list[0], guard_list[1]);
+  for (std::size_t i = 2; i < guard_list.size(); ++i)
+    res = and2tc(res, guard_list[i]);
   expr2tc::operator=(res);
 }
 
@@ -279,34 +276,26 @@ guard2tc &operator-=(guard2tc &g1, const guard2tc &g2)
       return g1;
     }
 
-    // Walk the divergent suffixes with offset iterators over the existing
-    // lists: immer iterators are random-access, so begin()+prefix_size is one
-    // O(log N) seek then O(1) per step — no new tree root allocated (unlike a
-    // suffix()/drop() slice), and no O(N log N) per-element operator[].
-    const auto g1_end = g1.guard_list.end();
-    const auto g2_begin = g2.guard_list.begin() + prefix_size;
-    const auto g2_end = g2.guard_list.end();
-
     std::unordered_set<const expr2t *> g2_suffix;
     g2_suffix.reserve(g2.guard_list.size() - prefix_size);
-    for (auto it = g2_begin; it != g2_end; ++it)
-      g2_suffix.insert(expr_ptr(*it));
+    for (std::size_t i = prefix_size; i < g2.guard_list.size(); ++i)
+      g2_suffix.insert(expr_ptr(g2.guard_list[i]));
 
     std::unordered_set<expr2tc, irep2_hash> g2_suffix_exprs;
     bool built_g2_suffix_exprs = false;
 
     guard_seq diff;
-    for (auto it = g1.guard_list.begin() + prefix_size; it != g1_end; ++it)
+    for (std::size_t i = prefix_size; i < g1.guard_list.size(); ++i)
     {
-      const expr2tc &c = *it;
+      const expr2tc &c = g1.guard_list[i];
       if (g2_suffix.find(expr_ptr(c)) != g2_suffix.end())
         continue;
 
       if (!built_g2_suffix_exprs)
       {
         g2_suffix_exprs.reserve(g2.guard_list.size() - prefix_size);
-        for (auto jt = g2_begin; jt != g2_end; ++jt)
-          g2_suffix_exprs.insert(*jt);
+        for (std::size_t j = prefix_size; j < g2.guard_list.size(); ++j)
+          g2_suffix_exprs.insert(g2.guard_list[j]);
         built_g2_suffix_exprs = true;
       }
 
@@ -417,27 +406,18 @@ guard2tc &operator|=(guard2tc &g1, const guard2tc &g2)
         return g1;
       }
 
-      // Offset iterators over the existing lists (random-access immer
-      // iterators, one O(log N) seek then O(1)/step) — no slice root
-      // allocated, no O(N log N) operator[]. Consumed before g1.guard_list
-      // is reassigned below.
-      const auto g1_suffix_begin = g1.guard_list.begin() + prefix_size;
-      const auto g1_end = g1.guard_list.end();
-      const auto g2_suffix_begin = g2.guard_list.begin() + prefix_size;
-      const auto g2_end = g2.guard_list.end();
-
       std::unordered_set<const expr2t *> g2_suffix;
       g2_suffix.reserve(g2.guard_list.size() - prefix_size);
-      for (auto it = g2_suffix_begin; it != g2_end; ++it)
-        g2_suffix.insert(expr_ptr(*it));
+      for (std::size_t i = prefix_size; i < g2.guard_list.size(); ++i)
+        g2_suffix.insert(expr_ptr(g2.guard_list[i]));
 
       // Working sets over the divergent suffix (size Δ), built as plain
       // vectors so the hash-set bookkeeping stays simple.
       std::vector<expr2tc> common_suffix;
       std::vector<expr2tc> new_g1_list;
-      for (auto it = g1_suffix_begin; it != g1_end; ++it)
+      for (std::size_t i = prefix_size; i < g1.guard_list.size(); ++i)
       {
-        const expr2tc &c = *it;
+        const expr2tc &c = g1.guard_list[i];
         if (g2_suffix.erase(expr_ptr(c)))
           common_suffix.push_back(c);
         else
@@ -448,9 +428,9 @@ guard2tc &operator|=(guard2tc &g1, const guard2tc &g2)
         return g1;
 
       std::vector<expr2tc> new_g2_list;
-      for (auto it = g2_suffix_begin; it != g2_end; ++it)
-        if (g2_suffix.count(expr_ptr(*it)))
-          new_g2_list.push_back(*it);
+      for (std::size_t i = prefix_size; i < g2.guard_list.size(); ++i)
+        if (g2_suffix.count(expr_ptr(g2.guard_list[i])))
+          new_g2_list.push_back(g2.guard_list[i]);
 
       g1.set_guard_list_and_base(
         g1.guard_list.prefix(prefix_size), prefix_expr);

@@ -22,28 +22,24 @@
  *  the few-hundred-element guards symex builds; prefix/suffix (take/drop)
  *  share whole subtrees; iterate O(N).
  *
- *  Ownership: immer's default (atomic-refcounted) memory policy. Guards are
- *  in practice thread-confined — the only symex parallelism
+ *  Ownership: NON-atomic refcount, no lock (`unsafe_refcount_policy` +
+ *  `no_lock_policy`). Guards are thread-confined — the only symex parallelism
  *  (`--parallel-solving`) forks threads to *solve* an already-built equation,
  *  while the guard set-algebra runs in the single-threaded symex phase, and
  *  the conjunct list is never stored in the equation (only the expr2tc base
- *  is). A non-atomic refcount would therefore be sound today, but it would be
- *  load-bearing on "symex never parallelizes"; the ATOMIC refcount removes
- *  that latent-race footgun.
- *
- *  We keep the atomic refcount but drop the spinlock: immer's *default*
- *  memory policy pairs the atomic refcount with `spinlock_policy`, which
- *  takes a test_and_set lock around tree operations to make immer's
- *  *transient* (batch-mutation) API safe to share across threads. We never
- *  share a transient across threads, and the lock measured as a 2× symex
- *  regression (it fires on every node visit in the hot rrbtree descent). So
- *  the policy is atomic `refcount_policy` + `no_lock_policy`: thread-safe
- *  refcounting, no per-operation lock. */
+ *  is, and that is an atomic irep_container). So a non-atomic refcount is
+ *  sound. NOTE: this is load-bearing on "symex is not parallelized" — if that
+ *  ever changes, switch to `refcount_policy` (atomic; measured ~10-15% slower
+ *  here, not the 2× the value-returning accessors below cost). immer's
+ *  *default* policy additionally pairs the atomic refcount with
+ *  `spinlock_policy` (a test_and_set lock around every tree op for the
+ *  transient API); we never share transients across threads, so `no_lock` is
+ *  used regardless of refcount choice. */
 class guard_seq
 {
   using memory_policy = immer::memory_policy<
     immer::default_heap_policy,
-    immer::refcount_policy,
+    immer::unsafe_refcount_policy,
     immer::no_lock_policy>;
   using vector_t = immer::flex_vector<expr2tc, memory_policy>;
 
@@ -65,19 +61,22 @@ public:
     return v_.empty();
   }
 
-  // Value-returning, not reference-returning: a reference into immer storage
-  // is only valid until the next push_back/clear replaces the root. Returning
-  // by value (an expr2tc copy = one refcount bump) makes it impossible for a
-  // caller to hold a dangling element ref across a guard mutation.
-  expr2tc operator[](std::size_t i) const
+  // Reference-returning into immer storage. The reference is valid only
+  // until the next push_back()/clear() replaces the root — callers must not
+  // stash an element reference across a guard mutation. (Value-returning was
+  // measured at ~2x symex: an expr2tc copy is an atomic refcount bump, and
+  // the -=/|=/build_guard_expr/== loops access elements O(N) times per merge,
+  // so the per-access copy dominates.) All internal call sites read the
+  // reference before any mutation; this is the documented precondition.
+  const expr2tc &operator[](std::size_t i) const
   {
     return v_[i];
   }
-  expr2tc front() const
+  const expr2tc &front() const
   {
     return v_.front();
   }
-  expr2tc back() const
+  const expr2tc &back() const
   {
     return v_.back();
   }
