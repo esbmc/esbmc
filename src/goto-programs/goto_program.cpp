@@ -210,21 +210,25 @@ void goto_programt::instructiont::output_instruction(
     break;
 
   case LOOP_INVARIANT:
+  {
     out << "LOOP_INVARIANT";
-    for (const auto &invariant : loop_invariants)
+    const std::list<expr2tc> invariants = get_loop_invariants();
+    for (const auto &invariant : invariants)
     {
       out << " " << from_expr(ns, identifier, invariant);
     }
-    if (!loop_assigns_targets.empty())
+    const std::list<expr2tc> assigns = get_loop_assigns_targets();
+    if (!assigns.empty())
     {
       out << " ASSIGNS:";
-      for (const auto &target : loop_assigns_targets)
+      for (const auto &target : assigns)
       {
         out << " " << from_expr(ns, identifier, target);
       }
     }
     out << "\n";
     break;
+  }
 
   default:
     throw "unknown statement";

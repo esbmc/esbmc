@@ -1056,6 +1056,41 @@ private:
   /// (e.g. $input_str$N or a variable aliasing it) to its $input_len$N symbol ID
   std::unordered_map<std::string, std::string> input_str_to_len_sym_;
 
+  /// Straight-line dynamic-retyping support (#4770, #4774). Maps the original
+  /// (first-typed) symbol ID of a variable to the symbol that currently holds
+  /// its value after an incompatible numeric<->string reassignment. Loads of
+  /// the variable (and the LHS of a later reassignment) are redirected through
+  /// this map so they observe the new type. Only populated for retypes at
+  /// block_nesting_ == 1 (an unconditional top-level statement), where there is
+  /// no control-flow join that could make the runtime type ambiguous.
+  std::unordered_map<std::string, std::string> retype_aliases_;
+
+  /// Flow-sensitive class tracking (#4771/#4772). Maps a straight-line lvalue
+  /// access path -- "v" for a Name `v`, "v.attr" for an `obj.attr` lvalue -- to
+  /// the class (struct tag, without the "tag-" prefix) most recently assigned
+  /// to it at the current program point, last-write-wins. Only written for
+  /// unconditional top-level (block_nesting_ == 1) assignments and cleared on
+  /// entry to any nested/conditional body, so a class is never carried across a
+  /// control-flow join. Read in converter_expr to resolve nested attribute
+  /// access on a field the usage-site scanner left as any_type().
+  std::unordered_map<std::string, std::string> flow_class_map_;
+
+  /// Canonicalise a Name / `Name.attr` AST node into a flow_class_map_ key.
+  /// Returns "" for any other shape (e.g. subscript, nested attribute base).
+  std::string flow_lvalue_path(const nlohmann::json &node) const;
+
+  /// Class name of an assignment RHS for flow_class_map_: a `Cls(...)` call to a
+  /// known class, or a Name already tracked in flow_class_map_. Else "".
+  std::string flow_rhs_class(const nlohmann::json &rhs) const;
+
+  /// Nesting depth of get_block() invocations. The module/imported-module body
+  /// is depth 1; every nested body (function, if/while/for, try/except) is
+  /// deeper because those bodies are converted through get_block() too. Gates
+  /// straight-line retyping to depth 1 only: a retype inside any nested or
+  /// conditionally-executed body cannot be modelled by a single static type,
+  /// so it is left to the existing fallback instead of being renamed.
+  unsigned block_nesting_ = 0;
+
   function_call_cache function_call_cache_;
 
   std::vector<std::string> global_declarations;

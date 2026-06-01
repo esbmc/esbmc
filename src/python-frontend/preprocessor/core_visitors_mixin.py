@@ -217,10 +217,15 @@ class CoreVisitorsMixin:
             self.list_literal_values.pop(target_id, None)
 
         if isinstance(node.value, ast.Dict):
+            self.dict_literal_vars.add(target_id)
             if self._has_heterogeneous_keys(node.value):
                 self.het_dict_literals[target_id] = node.value
             if self._has_heterogeneous_values(node.value):
                 self.het_value_dict_literals[target_id] = node.value
+        else:
+            # Reassigned to a non-dict: stop treating the name as a dict so a
+            # later list(name)/sorted(name) is not rewritten incorrectly.
+            self.dict_literal_vars.discard(target_id)
 
         if isinstance(node.value, ast.Call):
             self._track_call_result_bindings(target_id, node)
@@ -651,8 +656,65 @@ class CoreVisitorsMixin:
             return self._handle_single_target_assign(node)
         return self._handle_multi_target_assign(node)
 
+    def _is_known_dict_name(self, name):
+        """True when `name` is reliably known to be bound to a dict.
+
+        Only an explicit ``dict``/``Dict`` annotation or a tracked dict-literal
+        binding qualifies, so the list(d)/sorted(d) rewrite never fires on a
+        list/set/other iterable.
+        """
+        ann = self.variable_annotations.get(name)
+        if isinstance(ann, ast.Subscript) and isinstance(ann.value, ast.Name):
+            if ann.value.id in ("dict", "Dict"):
+                return True
+            # An annotation for a different generic (list[...], set[...], ...)
+            # means the name was rebound away from a dict; do not treat a stale
+            # dict-literal binding as a dict.
+            return False
+        return name in self.dict_literal_vars
+
+    def _maybe_rewrite_dict_to_list_call(self, node):
+        """Rewrite list(d) -> d.keys() and sorted(d, ...) -> sorted(d.keys(), ...).
+
+        The bare list()/sorted() builtins reinterpret the dict struct as a list
+        (wrong length, unsound subscript). Routing through d.keys() reuses the
+        correctly-typed dict-keys list path. Only fires for names reliably known
+        to be dicts. (GitHub #4790)
+        """
+        if not (isinstance(node.func, ast.Name) and node.func.id in ("list", "sorted")):
+            return None
+        if not node.args or (node.keywords and node.func.id == "list"):
+            return None
+        first = node.args[0]
+        if not (isinstance(first, ast.Name) and self._is_known_dict_name(first.id)):
+            return None
+
+        keys_call = ast.Call(func=ast.Attribute(value=ast.Name(id=first.id, ctx=ast.Load()),
+                                                attr="keys",
+                                                ctx=ast.Load()),
+                             args=[],
+                             keywords=[])
+        ast.copy_location(keys_call, node)
+        ast.fix_missing_locations(keys_call)
+
+        if node.func.id == "list":
+            # list(d) yields the keys list; d.keys() is exactly that. Note this
+            # aliases the dict's keys member rather than copying it, so mutating
+            # the result also mutates the dict — acceptable here because the
+            # pre-fix relabeling was outright unsound, and the common uses
+            # (len/iteration/indexing/sorted) are read-only.
+            return self.visit(keys_call)
+
+        # sorted(d, key=..., reverse=...) -> sorted(d.keys(), key=..., reverse=...)
+        node.args[0] = keys_call
+        self.generic_visit(node)
+        return node
+
     def visit_Call(self, node):  # pylint: disable=too-many-locals,too-many-branches,too-many-statements,import-outside-toplevel,no-else-raise
         self._invalidate_list_literals_for_call(node)
+        rewritten_dict_list = self._maybe_rewrite_dict_to_list_call(node)
+        if rewritten_dict_list is not None:
+            return rewritten_dict_list
         rewritten_newtype = self._maybe_rewrite_newtype_call(node)
         if rewritten_newtype is not None:
             return rewritten_newtype
@@ -679,31 +741,38 @@ class CoreVisitorsMixin:
         return node
 
     def visit_FunctionDef(self, node):  # pylint: disable=too-many-branches,too-many-statements
-        node = self._rewrite_humaneval_20_none_sentinel(node)
+        # dict-literal bindings are local to a scope: snapshot on entry and
+        # restore on exit so a dict named `d` in one function does not make a
+        # same-named plain parameter in another function look like a dict.
+        saved_dict_vars = set(self.dict_literal_vars)
+        try:
+            node = self._rewrite_humaneval_20_none_sentinel(node)
 
-        if (len(node.args.args) == 1 and len(node.body) == 1
-                and isinstance(node.body[0], ast.Return)
-                and isinstance(node.body[0].value, ast.Name)
-                and node.body[0].value.id == node.args.args[0].arg):
-            self._identity_functions.add(node.name)
+            if (len(node.args.args) == 1 and len(node.body) == 1
+                    and isinstance(node.body[0], ast.Return)
+                    and isinstance(node.body[0].value, ast.Name)
+                    and node.body[0].value.id == node.args.args[0].arg):
+                self._identity_functions.add(node.name)
 
-        self._resolve_and_store_function_annotations(node)
-        node, is_generator = self._prepare_generator_function(node)
-        self._record_function_param_types(node)
-        qualified_name = self._build_qualified_function_name(node)
+            self._resolve_and_store_function_annotations(node)
+            node, is_generator = self._prepare_generator_function(node)
+            self._record_function_param_types(node)
+            qualified_name = self._build_qualified_function_name(node)
 
-        self.functionParams[qualified_name] = [i.arg for i in node.args.args]
-        self.functionKwonlyParams[qualified_name] = [i.arg for i in node.args.kwonlyargs]
+            self.functionParams[qualified_name] = [i.arg for i in node.args.args]
+            self.functionKwonlyParams[qualified_name] = [i.arg for i in node.args.kwonlyargs]
 
-        if len(node.args.defaults) < 1 and len(node.args.kw_defaults) < 1:
+            if len(node.args.defaults) < 1 and len(node.args.kw_defaults) < 1:
+                self.generic_visit(node)
+                if is_generator:
+                    self.generator_func_defs[node.name] = list(node.body)
+                return node
+            return_nodes = self._store_function_defaults(node, qualified_name)
+
             self.generic_visit(node)
             if is_generator:
                 self.generator_func_defs[node.name] = list(node.body)
-            return node
-        return_nodes = self._store_function_defaults(node, qualified_name)
-
-        self.generic_visit(node)
-        if is_generator:
-            self.generator_func_defs[node.name] = list(node.body)
-        return_nodes.append(node)
-        return return_nodes
+            return_nodes.append(node)
+            return return_nodes
+        finally:
+            self.dict_literal_vars = saved_dict_vars

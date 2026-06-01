@@ -93,7 +93,7 @@ python_converter::create_normalized_self_key(const std::string &class_tag)
 typet python_converter::clean_attribute_type(const typet &attr_type)
 {
   typet clean_type = attr_type;
-  clean_type.remove("#member_name");
+  type_utils::remove_member_name(clean_type);
   clean_type.remove("#location");
   clean_type.remove("#identifier");
   return clean_type;
@@ -239,28 +239,36 @@ typet python_converter::infer_attr_type_from_usage(
       conflicted_vars.insert(name);
     }
   };
-  for (const auto &stmt : module_body)
-  {
-    auto [t, v] = tgt_val(stmt);
-    if (
-      !t || !v || !t->is_object() || t->value("_type", "") != "Name" ||
-      !t->contains("id") || !v->is_object())
-      continue;
-    const std::string &vk = v->value("_type", "");
-    const std::string var_name = (*t)["id"].get<std::string>();
-    if (vk == "Call")
+  // (Re)build var_to_class/conflicted_vars from the statements in `body`.
+  // Used for the module body and, in the function-body fallback below, for
+  // each top-level function body in turn (locals must not leak across scopes).
+  auto populate_var_map = [&](const nlohmann::json &body) {
+    var_to_class.clear();
+    conflicted_vars.clear();
+    for (const auto &stmt : body)
     {
-      const auto &f = (*v)["func"];
-      if (f.is_object() && f.value("_type", "") == "Name" && f.contains("id"))
-        record_var(var_name, f["id"].get<std::string>());
+      auto [t, v] = tgt_val(stmt);
+      if (
+        !t || !v || !t->is_object() || t->value("_type", "") != "Name" ||
+        !t->contains("id") || !v->is_object())
+        continue;
+      const std::string &vk = v->value("_type", "");
+      const std::string var_name = (*t)["id"].get<std::string>();
+      if (vk == "Call")
+      {
+        const auto &f = (*v)["func"];
+        if (f.is_object() && f.value("_type", "") == "Name" && f.contains("id"))
+          record_var(var_name, f["id"].get<std::string>());
+      }
+      else if (vk == "Name" && v->contains("id"))
+      {
+        auto alias_it = var_to_class.find(v->at("id").get<std::string>());
+        if (alias_it != var_to_class.end())
+          record_var(var_name, alias_it->second);
+      }
     }
-    else if (vk == "Name" && v->contains("id"))
-    {
-      auto alias_it = var_to_class.find(v->at("id").get<std::string>());
-      if (alias_it != var_to_class.end())
-        record_var(var_name, alias_it->second);
-    }
-  }
+  };
+  populate_var_map(module_body);
 
   // Resolve a class name to a pointer-to-struct type. Uses symbol_typet so
   // the struct is resolved lazily via ns.follow() at use time — capturing
@@ -455,6 +463,41 @@ typet python_converter::infer_attr_type_from_usage(
           return ctor_unified;
       }
     }
+  }
+
+  // Fallback: `<local>.<attr> = <rhs>` inside an ordinary top-level function,
+  // where `<local>` is a function-local instance of class_name (e.g.
+  // `def setup(): n1 = Node(1); n1.next = Node(2)`). The earlier scans only
+  // cover module-level and `self.` assignments, so an attribute written only
+  // via a local in a helper stayed any_type() — and a nested read of it
+  // (`x.attr.field`) then aborted in converter_expr ("Cannot resolve nested
+  // attribute"). Each function is scanned with
+  // its own var-map (locals never leak across functions), and the result is
+  // unified across all functions so conflicting assignments collapse to
+  // any_type() — same soundness rule as the module/method scans. Runs last
+  // because it rebuilds var_to_class, which the fallbacks above still rely on.
+  {
+    typet fn_unified;
+    for (const auto &fn : module_body)
+    {
+      if (
+        !fn.is_object() || fn.value("_type", "") != "FunctionDef" ||
+        !fn.contains("body") || !fn["body"].is_array())
+        continue;
+      populate_var_map(fn["body"]);
+      typet r = scan(fn["body"], [&](const std::string &name) {
+        auto it = var_to_class.find(name);
+        return it != var_to_class.end() && it->second == class_name;
+      });
+      if (unset(r))
+        continue;
+      if (unset(fn_unified))
+        fn_unified = r;
+      else if (fn_unified != r)
+        return typet();
+    }
+    if (!unset(fn_unified))
+      return fn_unified;
   }
 
   return typet();

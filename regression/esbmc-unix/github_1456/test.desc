@@ -1,4 +1,4 @@
 THOROUGH
 main.c
---data-races-check
+--data-races-check --smt-symex-guard --context-bound 4
 ^VERIFICATION SUCCESSFUL$

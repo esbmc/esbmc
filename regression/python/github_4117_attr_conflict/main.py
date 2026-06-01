@@ -1,14 +1,11 @@
-# Known limitation: when an attribute is assigned values of different
-# classes within the same scope, the usage-site scanner refuses to
-# commit to either type (returns no type info → any_type()). Before the
-# refusal was added, the scanner silently adopted whichever class it
-# saw first, which could produce unsound results when the runtime
-# object turned out to be the other class.
-#
-# An ideal frontend would model this as a union type or emit a
-# diagnostic; we conservatively give up and rely on any_type() fallback,
-# which then fails at nested-attribute access rather than verifying
-# against the wrong layout.
+# Flow-sensitive class tracking (#4771): when an attribute is assigned values
+# of different classes at unconditional top-level scope, the usage-site scanner
+# still refuses to commit a single static type (the field stays any_type()), but
+# flow_class_map_ records the LAST write per lvalue and the nested-attribute
+# read casts the base to that class. So `n1.next` resolves to the Other instance
+# last assigned, matching CPython, instead of aborting on the any_type() field.
+# The tracking is gated to straight-line depth-1 code and cleared across
+# control-flow joins, so a class is never adopted unsoundly.
 
 class Node:
     def __init__(self, v):

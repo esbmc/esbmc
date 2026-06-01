@@ -1353,11 +1353,8 @@ exprt string_handler::handle_string_membership(
   return not_equal;
 }
 
-std::string string_handler::ensure_string_function_symbol(
-  const std::string &function_name,
-  const typet &return_type,
-  const std::vector<typet> &arg_types,
-  const locationt &location)
+std::string
+string_handler::ensure_string_function_symbol(const std::string &function_name)
 {
   symbol_id func_id;
   func_id.set_prefix("c:");
@@ -1365,24 +1362,20 @@ std::string string_handler::ensure_string_function_symbol(
 
   std::string func_symbol_id = func_id.to_string();
 
+  // The operational-model library is linked before conversion runs, so a
+  // registered model already has its body in the symbol table here. A missing
+  // symbol therefore means the model is absent from the goto allowlist; fail
+  // loudly rather than fabricate a body-less declaration that symex would
+  // silently treat as an unconstrained nondet value. Models defined under
+  // src/c2goto/library/python/ register automatically via
+  // scripts/gen_python_c_models.py; external dependencies are listed in
+  // python_c_extern_deps in src/c2goto/cprover_library.cpp.
   if (find_cached_symbol(func_symbol_id) == nullptr)
-  {
-    code_typet code_type;
-    code_type.return_type() = return_type;
-
-    for (const auto &arg_type : arg_types)
-    {
-      code_typet::argumentt arg;
-      arg.type() = arg_type;
-      code_type.arguments().push_back(arg);
-    }
-
-    symbolt symbol = converter_.create_symbol(
-      "", function_name, func_symbol_id, location, code_type);
-
-    converter_.add_symbol(symbol);
-    symbol_cache_[func_symbol_id] = find_cached_symbol(func_symbol_id);
-  }
+    throw std::runtime_error(
+      "Python operational model '" + function_name +
+      "' is dispatched but not registered (no body in the symbol table). "
+      "Define it under src/c2goto/library/python/ or add it to "
+      "python_c_extern_deps in src/c2goto/cprover_library.cpp.");
 
   return func_symbol_id;
 }

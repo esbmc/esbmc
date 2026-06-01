@@ -482,7 +482,16 @@ exprt function_call_expr::build_constant_from_arg() const
     if (first_arg["_type"] == "Name")
     {
       const symbolt *sym = lookup_python_symbol(first_arg["id"]);
-      if (sym && sym->get_value().is_constant())
+      // The compile-time fast path below decodes the symbol's stored value as
+      // a string; it is only valid for constant *string* symbols. For numeric
+      // symbols (int/float/bool) extract_string_from_symbol misreads the value
+      // — an int 65 decodes to the character 'A' (rejected as non-digit) and a
+      // float yields no string at all — so int(x) wrongly folds to 0. Route
+      // numeric symbols through the general numeric conversion instead, which
+      // truncates floats toward zero and treats ints as identity. (GitHub #4770)
+      if (
+        sym && sym->get_value().is_constant() &&
+        type_utils::is_string_type(sym->get_type()))
       {
         if (base_expr.is_nil())
         {
@@ -1312,6 +1321,15 @@ bool function_call_expr::is_dict_method_call() const
     method_name != "update")
     return false;
 
+  // A receiver that resolves to a non-dict object (e.g. a class instance whose
+  // own method shadows the same-named dict method, such as queue.Queue.get())
+  // must defer to instance-method dispatch. Real dicts carry the
+  // "__python_dict__" struct tag; class instances carry "tag-<Class>". An
+  // unresolved or genuinely dict-typed receiver is left to the dict handler, so
+  // existing dict dispatch is unchanged. Mirrors the list guard for pop below.
+  if (receiver_is_non_dict_object())
+    return false;
+
   // For "pop", which exists on both list and dict, treat as dict.pop() when
   // the receiver does not resolve to a list symbol.
   if (method_name == "pop")
@@ -1323,6 +1341,43 @@ bool function_call_expr::is_dict_method_call() const
   }
 
   return true;
+}
+
+bool function_call_expr::receiver_is_non_dict_object() const
+{
+  const auto &recv = call_["func"]["value"];
+  if (recv["_type"] != "Name" || !recv.contains("id"))
+    return false;
+
+  // Resolve the receiver name in function then module scope. This mirrors
+  // lookup_python_symbol but is kept warning-free: is_dict_method_call is a
+  // discriminator, so a miss here must stay silent (a genuine dict whose
+  // receiver does not resolve through these scopes still defers to the dict
+  // handler below — the safe direction).
+  const std::string var_name = recv["id"].get<std::string>();
+  const std::string filename = function_id_.get_filename();
+  const symbolt *sym = converter_.find_symbol(
+    "py:" + filename + "@F@" + converter_.current_function_name() + "@" +
+    var_name);
+  if (!sym)
+    sym = converter_.find_symbol("py:" + filename + "@" + var_name);
+  if (!sym)
+    return false;
+
+  typet t = sym->get_type();
+  if (t.is_pointer())
+    t = t.subtype();
+  if (t.id() == "symbol")
+    t = converter_.ns.follow(t);
+
+  // Only a positively-resolved non-dict struct defers to instance dispatch; an
+  // unresolved or "__python_dict__"-tagged receiver stays with the dict handler.
+  // list/set receivers also resolve to a (non-dict) struct here, but their
+  // dict-overlapping methods (pop/copy/update) are claimed by the list/set
+  // discriminators earlier in the dispatch table, so they never reach this.
+  if (!t.is_struct())
+    return false;
+  return to_struct_type(t).tag().as_string() != "__python_dict__";
 }
 
 exprt function_call_expr::handle_dict_method() const

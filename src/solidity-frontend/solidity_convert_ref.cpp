@@ -64,7 +64,7 @@ bool solidity_convertert::get_var_decl_ref(
   bool is_global_static_mapping =
     (get_sol_type(type) == SolidityGrammar::SolType::MAPPING &&
      type.is_array()) ||
-    type.get_bool("#sol_mapping_array") || is_dynarray_state_var;
+    get_sol_mapping_array(type) || is_dynarray_state_var;
 
   if (context.find_symbol(id) != nullptr)
     new_expr = symbol_expr(*context.find_symbol(id));
@@ -307,7 +307,7 @@ bool solidity_convertert::get_esbmc_builtin_ref(
   {
     assert(context.find_symbol(id) != nullptr);
     new_expr = symbol_expr(*context.find_symbol(id));
-    new_expr.type().set("#sol_name", blt_name);
+    set_sol_name(new_expr.type(), blt_name);
   }
   else
   {
@@ -318,7 +318,7 @@ bool solidity_convertert::get_esbmc_builtin_ref(
     return_type = bool_t;
     convert_type.return_type() = return_type;
     type = convert_type;
-    type.set("#sol_name", blt_name);
+    set_sol_name(type, blt_name);
 
     new_expr = exprt("symbol", type);
     new_expr.identifier(id);
@@ -471,7 +471,7 @@ bool solidity_convertert::get_sol_builtin_ref(
           // mapping array: return the auxiliary _length variable
           if (
             solt == SolidityGrammar::SolType::DYNARRAY &&
-            base_t.get_bool("#sol_mapping_array"))
+            get_sol_mapping_array(base_t))
           {
             assert(base.is_symbol());
             std::string len_id =
@@ -483,7 +483,7 @@ bool solidity_convertert::get_sol_builtin_ref(
           // dynarray state var: return the auxiliary _dynarray_len variable
           else if (
             solt == SolidityGrammar::SolType::DYNARRAY && base.is_symbol() &&
-            base.type().get_bool("#sol_dynarray_state"))
+            get_sol_dynarray_state(base.type()))
           {
             assert(base.is_symbol());
             std::string len_id =
@@ -508,7 +508,7 @@ bool solidity_convertert::get_sol_builtin_ref(
           else
           {
             // static array:  uint[2] arr; arr.length = 2;
-            std::string arr_size = base_t.get("#sol_array_size").as_string();
+            std::string arr_size = get_sol_array_size(base_t);
             assert(!arr_size.empty());
             new_expr = constant_exprt(
               integer2binary(string2integer(arr_size), bv_width(uint_type())),
@@ -549,7 +549,7 @@ bool solidity_convertert::get_sol_builtin_ref(
 
         if (
           solt == SolidityGrammar::SolType::DYNARRAY &&
-          base_t.get_bool("#sol_mapping_array"))
+          get_sol_mapping_array(base_t))
         {
           // mapping(K=>V)[]: push increments length, pop decrements.
           assert(base.is_symbol());
@@ -581,7 +581,7 @@ bool solidity_convertert::get_sol_builtin_ref(
         }
         else if (
           solt == SolidityGrammar::SolType::DYNARRAY && base.is_symbol() &&
-          base.type().get_bool("#sol_dynarray_state"))
+          get_sol_dynarray_state(base.type()))
         {
           // Dynarray state var: write element at len, then increment len
           assert(base.is_symbol());

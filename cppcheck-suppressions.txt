@@ -13,3 +13,14 @@ unusedLabel:src/c2goto/library/*
 unusedLabel:src/c2goto/library/libm/*
 unusedLabel:src/c2goto/library/python/*
 unusedLabel:src/c2goto/library/solidity/*
+
+# CUDA operational-model headers. driver_types.h (struct cudaDeviceProp) and
+# vector_types.h (int4/float4/uchar3/... with their x/y/z/w fields) mirror the
+# NVIDIA CUDA runtime ABI verbatim so user CUDA code and ESBMC's
+# cuda_runtime_api.h model compile and lay out identically. cppcheck's
+# unusedStructMember fires on every field because nothing *inside* these headers
+# reads them — but they are the public CUDA API surface verified programs use.
+# Removing or renaming any field would break the model. Same rationale as the
+# libc/libm model exclusions in .codacy.yaml.
+unusedStructMember:src/cpp/library/CUDA/driver_types.h
+unusedStructMember:src/cpp/library/CUDA/vector_types.h

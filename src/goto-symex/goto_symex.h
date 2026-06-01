@@ -464,6 +464,9 @@ protected:
     reachability_treet &art);
   /** Perform terminate_thread; Record thread as terminated. */
   void intrinsic_terminate_thread(reachability_treet &art);
+  /** Perform init_thread_local; seeds each `__thread`-qualified global
+   *  to its static initializer in the active thread's renaming scope. */
+  void intrinsic_init_thread_local(reachability_treet &art);
   /** Really atomic start/end - atomic blocks that just disable ileaves. */
   void intrinsic_really_atomic_begin(reachability_treet &art);
   /** Really atomic start/end - atomic blocks that just disable ileaves. */

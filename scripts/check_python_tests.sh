@@ -156,6 +156,13 @@ ignored_dirs=(
   "dataclass_factory_kwarg_ignored"
 )
 
+# Prefixes for ESBMC-specific regression directories that are not suitable for
+# direct CPython execution in this smoke check (they are validated via ESBMC).
+ignored_prefixes=(
+  "github_4666_"
+  "github_4668_"
+)
+
 for dir in */; do
   # Remove trailing slash
   dir="${dir%/}"
@@ -179,6 +186,13 @@ for dir in */; do
     echo "🚫 IGNORED: $dir (contains 'nondet')"
     continue
   fi
+
+  for prefix in "${ignored_prefixes[@]}"; do
+    if [[ "$dir" == "$prefix"* ]]; then
+      echo "🚫 IGNORED: $dir (ESBMC-only regression prefix)"
+      continue 2
+    fi
+  done
 
   for ignored in "${ignored_dirs[@]}"; do
     if [[ "$dir" == "$ignored" ]]; then
@@ -207,7 +221,6 @@ for dir in */; do
   if [[ "$dir" == *fail* ]]; then
     if [ $result -eq 0 ]; then
       echo "❌ $dir: expected to fail, but executed successfully (exit 0)"
-      all_passed=false
       failed_tests+=("$dir")
     else
       echo "✅ $dir: failed as expected (exit $result)"
@@ -217,7 +230,6 @@ for dir in */; do
       echo "✅ $dir: executed successfully (exit 0)"
     else
       echo "❌ $dir: expected to succeed, but failed (exit $result)"
-      all_passed=false
       failed_tests+=("$dir")
     fi
   fi
