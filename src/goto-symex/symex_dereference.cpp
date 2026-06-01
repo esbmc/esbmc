@@ -80,9 +80,8 @@ void symex_dereference_statet::get_value_set(
       // add each object to the resulting assume statement.
       for (auto it = value_set.begin(); it != value_set.end(); ++it)
       {
-        // note that the set of objects are always encoded as object_descriptor.
         if (!is_object_descriptor2t(*it))
-          return;
+          continue;
 
         const object_descriptor2t &obj = to_object_descriptor2t(*it);
 

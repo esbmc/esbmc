@@ -510,6 +510,18 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     cmdline.isset("validate-correctness-witness"))
     options.set_option("k-induction", true);
 
+  // Default-enable --add-symex-value-sets whenever k-induction is active.
+  // Both the IS pointer-invariant strengthening (symex_assign.cpp) and the
+  // deref-time assume (symex_dereference.cpp) require this flag.  Test
+  // options.get_bool_option (not cmdline.isset) so that paths that set
+  // k-induction implicitly — --loop-invariant and
+  // --validate-correctness-witness — are also covered.
+  if (
+    options.get_bool_option("k-induction") ||
+    cmdline.isset("k-induction-parallel") ||
+    cmdline.isset("inductive-step"))
+    options.set_option("add-symex-value-sets", true);
+
   // Default-enable the vacuity probe under --loop-invariant-check (the
   // standalone Hoare-rewrite mode). A loop invariant that implies the guard
   // makes the post-loop continuation unreachable; without this probe every

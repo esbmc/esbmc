@@ -360,23 +360,38 @@ void goto_symext::symex_assign(
   // symex-time value-set analysis has accumulated so far (e.g. the
   // chain of `dynamic_N_value` symbols allocated by prior loop
   // iterations).
-  value_setst::valuest is_ptr_havoc_pre_values;
   expr2tc is_ptr_havoc_lhs;
+  std::string is_ptr_havoc_l1_name;
+  value_sett::object_mapt is_ptr_havoc_pre_object_map;
   if (
     inductive_step && cur_state->source.pc->inductive_step_instruction &&
     is_symbol2t(lhs) && is_pointer_type(lhs->type) && is_sideeffect2t(rhs) &&
     to_sideeffect2t(rhs).kind == sideeffect2t::allockind::nondet &&
     options.get_bool_option("add-symex-value-sets"))
   {
-    // Query the value-set using a freshly-renamed copy (the API wants
-    // a renamed pointer expression), but remember the unrenamed lhs
-    // for the assume — goto_symext::assume() renames again, and using
-    // the unrenamed form lets it pick up the post-havoc rename so the
-    // assume binds the *fresh* nondet symbol, not the pre-havoc one.
+    // Remember the unrenamed lhs for the assume: goto_symext::assume()
+    // renames again, so the unrenamed form picks up the post-havoc SSA
+    // name and the assume binds the *fresh* nondet symbol.
     is_ptr_havoc_lhs = lhs;
-    expr2tc lhs_for_query = lhs;
-    cur_state->rename(lhs_for_query);
-    cur_state->value_set.get_value_set(lhs_for_query, is_ptr_havoc_pre_values);
+
+    // Snapshot the raw object_map via the L1 key so we can restore
+    // it after the assignment.  The IS-havoc wipes the entry to {unknown};
+    // without restoring it the deref-time --add-symex-value-sets assume
+    // finds {unknown}, emits no constraint, and dereferences fall back to
+    // invalid_object — producing spurious counterexamples.
+    // Use level1.rename (not the full L1+L2 rename) because the value-set
+    // is keyed by L1 names; get_value_set with a L2 name misses the entry.
+    expr2tc l1_lhs = lhs;
+    cur_state->top().level1.rename(l1_lhs);
+    if (is_symbol2t(l1_lhs))
+    {
+      is_ptr_havoc_l1_name = to_symbol2t(l1_lhs).get_symbol_name();
+      // Read-only lookup: do NOT use get_entry() here — it inserts an empty
+      // entry if none exists, which would pollute the value-set map.
+      auto it = cur_state->value_set.values.find(is_ptr_havoc_l1_name);
+      if (it != cur_state->value_set.values.end())
+        is_ptr_havoc_pre_object_map = it->second.object_map;
+    }
   }
 
   replace_nondet(lhs);
@@ -427,13 +442,14 @@ void goto_symext::symex_assign(
   guard2tc g(guard); // NOT the state guard!
   symex_assign_rec(lhs, original_lhs, rhs, expr2tc(), g, hidden_ssa);
 
-  // Re-assert the pre-havoc points-to set on the freshly-nondet
-  // pointer. See the snapshot above for the rationale. The disjunct
-  // construction mirrors the per-dereference assume in
-  // symex_dereference.cpp: SAME-OBJECT for non-NULL candidates, a
-  // plain equality with NULL, and `unknown`/`invalid` entries abort
-  // the constraint (a partial set would be unsound).
-  if (!is_nil_expr(is_ptr_havoc_lhs) && !is_ptr_havoc_pre_values.empty())
+  // Re-assert the pre-havoc points-to set on the freshly-nondet pointer.
+  // Build the SAME-OBJECT disjunction directly from the pre-havoc object_map
+  // (keyed by L1 name) rather than from get_value_set(L2-renamed expr).
+  // get_value_set with a L2-renamed expression misses entries keyed by L1
+  // names and falls back to {unknown}, which makes the assume abort even
+  // when the pointer has concrete candidates. Using get_entry(L1-name)
+  // directly avoids this.
+  if (!is_nil_expr(is_ptr_havoc_lhs) && !is_ptr_havoc_pre_object_map.empty())
   {
     expr2tc or_accuml;
     auto add_disjunct = [&or_accuml](const expr2tc &eq) {
@@ -441,42 +457,44 @@ void goto_symext::symex_assign(
     };
 
     bool aborted = false;
-    for (const auto &v : is_ptr_havoc_pre_values)
+    for (const auto &entry : is_ptr_havoc_pre_object_map)
     {
-      if (is_unknown2t(v) || is_invalid2t(v))
-      {
-        aborted = true;
-        break;
-      }
-      if (!is_object_descriptor2t(v))
+      const expr2tc &obj = value_sett::object_numbering[entry.first];
+      if (is_unknown2t(obj) || is_invalid2t(obj))
       {
         aborted = true;
         break;
       }
 
-      const object_descriptor2t &obj = to_object_descriptor2t(v);
       expr2tc obj_ptr;
-      if (is_null_object2t(obj.object))
+      if (is_null_object2t(obj))
       {
         type2tc nullptrtype = pointer_type2tc(is_ptr_havoc_lhs->type);
         obj_ptr = symbol2tc(nullptrtype, "NULL");
       }
-      else if (is_unknown2t(obj.offset))
+      else if (!entry.second.offset_is_set || entry.second.offset == 0)
       {
-        obj_ptr = address_of2tc(is_ptr_havoc_lhs->type, obj.object);
+        obj_ptr = address_of2tc(is_ptr_havoc_lhs->type, obj);
       }
       else
       {
         obj_ptr = add2tc(
           is_ptr_havoc_lhs->type,
-          address_of2tc(is_ptr_havoc_lhs->type, obj.object),
-          obj.offset);
+          address_of2tc(is_ptr_havoc_lhs->type, obj),
+          gen_ulong(entry.second.offset.to_int64()));
       }
       add_disjunct(same_object2tc(is_ptr_havoc_lhs, obj_ptr));
     }
 
     if (!aborted && or_accuml)
+    {
       assume(or_accuml);
+      // Restore the value-set entry so deref-time --add-symex-value-sets
+      // builds correct SAME-OBJECT constraints rather than seeing {unknown}
+      // and falling back to invalid_object.
+      cur_state->value_set.get_entry(is_ptr_havoc_l1_name, "").object_map =
+        is_ptr_havoc_pre_object_map;
+    }
   }
 }
 
