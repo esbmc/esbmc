@@ -305,6 +305,26 @@ static scalar_value apply_complex_binary(
   throw std::runtime_error("Unsupported Numpy complex binary function");
 }
 
+static bool has_complex(const std::vector<scalar_value> &values)
+{
+  for (const auto &v : values)
+  {
+    if (v.is_complex)
+      return true;
+  }
+  return false;
+}
+
+static bool has_complex(const std::vector<std::vector<scalar_value>> &values)
+{
+  for (const auto &row : values)
+  {
+    if (has_complex(row))
+      return true;
+  }
+  return false;
+}
+
 static bool try_extract_numeric_1d_list(
   const nlohmann::json &list_node,
   std::vector<numeric_value> &values)
@@ -740,8 +760,20 @@ exprt numpy_call_expr::create_expr_from_call()
     {
       var = json_utils::find_var_decl(
         var["id"], function_id_.get_function(), converter_.ast());
+      if (!var.contains("value") || !var["value"].is_object())
+        return;
+
       if (var["value"]["_type"] == "Call")
-        var = var["value"]["args"][0];
+      {
+        if (var["value"].contains("args") && !var["value"]["args"].empty())
+          var = var["value"]["args"][0];
+        else
+          var = var["value"];
+      }
+      else
+      {
+        var = var["value"];
+      }
     }
   };
 
@@ -1050,31 +1082,17 @@ exprt numpy_call_expr::create_expr_from_call()
       function == "add" || function == "subtract" || function == "multiply" ||
       function == "divide")
     {
-      exprt lhs_expr = converter_.get_expr(lhs);
-      exprt rhs_expr = converter_.get_expr(rhs);
-      if (is_complex_type(lhs_expr.type()) || is_complex_type(rhs_expr.type()))
-      {
-        std::string op = function == "add"        ? "Add"
-                         : function == "subtract" ? "Sub"
-                         : function == "multiply" ? "Mult"
-                                                  : "Div";
-        return converter_.get_complex_handler().handle_binary_op(
-          op, lhs_expr, rhs_expr, call_);
-      }
-    }
-
-    if (
-      function == "add" || function == "subtract" || function == "multiply" ||
-      function == "divide")
-    {
       scalar_value lhs_scalar;
       scalar_value rhs_scalar;
       if (
         try_extract_scalar_constant(lhs, lhs_scalar) &&
         try_extract_scalar_constant(rhs, rhs_scalar))
       {
-        return converter_.get_expr(to_json_constant(
-          apply_complex_binary(function, lhs_scalar, rhs_scalar)));
+        if (lhs_scalar.is_complex || rhs_scalar.is_complex)
+        {
+          return converter_.get_expr(to_json_constant(
+            apply_complex_binary(function, lhs_scalar, rhs_scalar)));
+        }
       }
 
       std::vector<scalar_value> lhs_1d;
@@ -1083,17 +1101,21 @@ exprt numpy_call_expr::create_expr_from_call()
         try_extract_scalar_1d_list(lhs, lhs_1d) &&
         try_extract_scalar_1d_list(rhs, rhs_1d))
       {
-        if (lhs_1d.size() != rhs_1d.size())
-          throw std::runtime_error("operands could not be broadcast together");
-        nlohmann::json out;
-        out["_type"] = "List";
-        out["elts"] = nlohmann::json::array();
-        for (std::size_t i = 0; i < lhs_1d.size(); ++i)
+        if (has_complex(lhs_1d) || has_complex(rhs_1d))
         {
-          out["elts"].push_back(to_json_constant(
-            apply_complex_binary(function, lhs_1d[i], rhs_1d[i])));
+          if (lhs_1d.size() != rhs_1d.size())
+            throw std::runtime_error(
+              "operands could not be broadcast together");
+          nlohmann::json out;
+          out["_type"] = "List";
+          out["elts"] = nlohmann::json::array();
+          for (std::size_t i = 0; i < lhs_1d.size(); ++i)
+          {
+            out["elts"].push_back(to_json_constant(
+              apply_complex_binary(function, lhs_1d[i], rhs_1d[i])));
+          }
+          return converter_.get_expr(out);
         }
-        return converter_.get_expr(out);
       }
 
       std::vector<std::vector<scalar_value>> lhs_2d;
@@ -1102,32 +1124,37 @@ exprt numpy_call_expr::create_expr_from_call()
         try_extract_scalar_2d_list(lhs, lhs_2d) &&
         try_extract_scalar_2d_list(rhs, rhs_2d))
       {
-        if (lhs_2d.size() != rhs_2d.size())
-          throw std::runtime_error("operands could not be broadcast together");
-        nlohmann::json out;
-        out["_type"] = "List";
-        out["elts"] = nlohmann::json::array();
-        for (std::size_t r = 0; r < lhs_2d.size(); ++r)
+        if (has_complex(lhs_2d) || has_complex(rhs_2d))
         {
-          if (lhs_2d[r].size() != rhs_2d[r].size())
+          if (lhs_2d.size() != rhs_2d.size())
             throw std::runtime_error(
               "operands could not be broadcast together");
-          nlohmann::json row;
-          row["_type"] = "List";
-          row["elts"] = nlohmann::json::array();
-          for (std::size_t c = 0; c < lhs_2d[r].size(); ++c)
+          nlohmann::json out;
+          out["_type"] = "List";
+          out["elts"] = nlohmann::json::array();
+          for (std::size_t r = 0; r < lhs_2d.size(); ++r)
           {
-            row["elts"].push_back(to_json_constant(
-              apply_complex_binary(function, lhs_2d[r][c], rhs_2d[r][c])));
+            if (lhs_2d[r].size() != rhs_2d[r].size())
+              throw std::runtime_error(
+                "operands could not be broadcast together");
+            nlohmann::json row;
+            row["_type"] = "List";
+            row["elts"] = nlohmann::json::array();
+            for (std::size_t c = 0; c < lhs_2d[r].size(); ++c)
+            {
+              row["elts"].push_back(to_json_constant(
+                apply_complex_binary(function, lhs_2d[r][c], rhs_2d[r][c])));
+            }
+            out["elts"].push_back(row);
           }
-          out["elts"].push_back(row);
+          return converter_.get_expr(out);
         }
-        return converter_.get_expr(out);
       }
 
       if (
         try_extract_scalar_1d_list(lhs, lhs_1d) &&
-        try_extract_scalar_constant(rhs, rhs_scalar))
+        try_extract_scalar_constant(rhs, rhs_scalar) &&
+        (has_complex(lhs_1d) || rhs_scalar.is_complex))
       {
         nlohmann::json out;
         out["_type"] = "List";
@@ -1139,7 +1166,8 @@ exprt numpy_call_expr::create_expr_from_call()
       }
       if (
         try_extract_scalar_constant(lhs, lhs_scalar) &&
-        try_extract_scalar_1d_list(rhs, rhs_1d))
+        try_extract_scalar_1d_list(rhs, rhs_1d) &&
+        (lhs_scalar.is_complex || has_complex(rhs_1d)))
       {
         nlohmann::json out;
         out["_type"] = "List";
@@ -1151,7 +1179,8 @@ exprt numpy_call_expr::create_expr_from_call()
       }
       if (
         try_extract_scalar_2d_list(lhs, lhs_2d) &&
-        try_extract_scalar_constant(rhs, rhs_scalar))
+        try_extract_scalar_constant(rhs, rhs_scalar) &&
+        (has_complex(lhs_2d) || rhs_scalar.is_complex))
       {
         nlohmann::json out;
         out["_type"] = "List";
@@ -1170,7 +1199,8 @@ exprt numpy_call_expr::create_expr_from_call()
       }
       if (
         try_extract_scalar_constant(lhs, lhs_scalar) &&
-        try_extract_scalar_2d_list(rhs, rhs_2d))
+        try_extract_scalar_2d_list(rhs, rhs_2d) &&
+        (lhs_scalar.is_complex || has_complex(rhs_2d)))
       {
         nlohmann::json out;
         out["_type"] = "List";
