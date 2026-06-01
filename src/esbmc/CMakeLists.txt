@@ -54,9 +54,21 @@ target_link_libraries(esbmc ${OLD_FRONTEND_TARGETS} ${SOLIDITY_FRONTEND_TARGETS}
                             nlohmann_json::nlohmann_json)
 # mimalloc (when ENABLE_MIMALLOC resolved to a target): MI_OVERRIDE makes it
 # replace the global allocator for the whole executable, speeding the
-# allocation-heavy symex path. Link last so its malloc/operator new override
-# wins. MIMALLOC_TARGET is empty if mimalloc was requested but unavailable.
-if(MIMALLOC_TARGET)
+# allocation-heavy symex path. MIMALLOC_TARGET is empty if mimalloc was
+# requested but unavailable.
+if(MIMALLOC_TARGET STREQUAL "mimalloc-obj")
+  # Fully-static build: add mimalloc's object file to the link AND allow
+  # multiple definitions. glibc's static malloc.o defines malloc/free/realloc
+  # as *strong* symbols (and gets force-pulled by other libs), so neither
+  # archive ordering nor object-file preference avoids the clash — only
+  # --allow-multiple-definition lets the link succeed, taking mimalloc's
+  # definition (linked first) and dropping libc's. This is the standard
+  # workaround for overriding malloc under -static glibc.
+  target_sources(esbmc PRIVATE $<TARGET_OBJECTS:mimalloc-obj>)
+  target_link_options(esbmc PRIVATE LINKER:--allow-multiple-definition)
+elseif(MIMALLOC_TARGET)
+  # Shared/dynamic libc: the archive override interposes fine. Link last so its
+  # malloc/operator new override wins.
   target_link_libraries(esbmc ${MIMALLOC_TARGET})
 endif()
 target_link_directories(esbmc PUBLIC "${CVC_LINK_DIR}")

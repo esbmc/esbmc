@@ -31,10 +31,14 @@ endif()
 
 if(DOWNLOAD_DEPENDENCIES)
    include(FetchContent)
-   # mimalloc build knobs: only the static lib, no tests/objects, and
-   # MI_OVERRIDE so it replaces malloc/operator new for whatever links it.
+   # mimalloc build knobs + MI_OVERRIDE so it replaces malloc/operator new for
+   # whatever links it. For fully-static builds (-static) we link mimalloc's
+   # single object file rather than the archive: with -static the linker pulls
+   # malloc/operator new from libc.a/libstdc++.a as strong symbols and an
+   # archive's definitions lose (multiple-definition error), but an object file
+   # linked first wins. This is mimalloc's documented static-override recipe.
    set(MI_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-   set(MI_BUILD_OBJECT OFF CACHE BOOL "" FORCE)
+   set(MI_BUILD_OBJECT ${BUILD_STATIC} CACHE BOOL "" FORCE)
    set(MI_BUILD_SHARED OFF CACHE BOOL "" FORCE)
    set(MI_BUILD_STATIC ON CACHE BOOL "" FORCE)
    set(MI_OVERRIDE ON CACHE BOOL "" FORCE)
@@ -42,8 +46,15 @@ if(DOWNLOAD_DEPENDENCIES)
       GIT_REPOSITORY https://github.com/microsoft/mimalloc.git
       GIT_TAG v2.1.7)
    fetchcontent_makeavailable(mimalloc)
-   set(MIMALLOC_TARGET mimalloc-static)
-   message(STATUS "[mimalloc] using downloaded mimalloc-static")
+   if(BUILD_STATIC)
+      # Object form ($<TARGET_OBJECTS:mimalloc-obj>) must be linked first;
+      # the esbmc target handles that ordering.
+      set(MIMALLOC_TARGET mimalloc-obj)
+      message(STATUS "[mimalloc] using downloaded mimalloc-obj (static build)")
+   else()
+      set(MIMALLOC_TARGET mimalloc-static)
+      message(STATUS "[mimalloc] using downloaded mimalloc-static")
+   endif()
 else()
    # No download requested: use a system mimalloc if present. Default-ON, so
    # do NOT hard-fail when it is missing — just build without it (the global
