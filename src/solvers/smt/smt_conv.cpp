@@ -3835,6 +3835,15 @@ void smt_convt::print_model()
 
 tvt smt_convt::l_get(smt_astt a)
 {
+  if (l_get_cache_active)
+  {
+    auto it = l_get_cache.find(a);
+    if (it != l_get_cache.end())
+      return it->second;
+    tvt res = get_bool(a) ? tvt(true) : tvt(false);
+    l_get_cache.emplace(a, res);
+    return res;
+  }
   return get_bool(a) ? tvt(true) : tvt(false);
 }
 

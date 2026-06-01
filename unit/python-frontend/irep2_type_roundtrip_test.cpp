@@ -3,7 +3,10 @@
 
 #include <python-frontend/type_handler.h>
 #include <python-frontend/type_utils.h>
+#include <python-frontend/python_converter.h>
+#include <python-frontend/global_scope.h>
 #include <util/config.h>
+#include <util/context.h>
 #include <util/migrate.h>
 #include <util/c_types.h>
 #include <util/python_types.h>
@@ -74,6 +77,13 @@ TEST_CASE(
     code_typet code_type; // Callable
     code_type.return_type() = empty_typet();
     require_irep2_stable(pointer_typet(code_type));
+
+    // Pointer-to-value and pointer-to-symbol: the shapes the list/annotation
+    // builders emit, migrated in Phase 4.3 to pointer_type2tc + lower_to_seam.
+    require_irep2_stable(pointer_typet(long_long_int_type()));
+    require_irep2_stable(pointer_typet(empty_typet()));
+    require_irep2_stable(
+      pointer_typet(symbol_typet("tag-struct __ESBMC_PyListObj")));
   }
 
   SECTION("array kinds (str / bytes / type)")
@@ -173,4 +183,188 @@ TEST_CASE(
   REQUIRE(type_utils::get_cpp_type(back).empty());
   REQUIRE(
     type_utils::get_cpp_type(tagged) == "char"); // unchanged on the seam node
+}
+
+TEST_CASE(
+  "Phase 4.3: elementary get_typet outputs are byte-identical (IREP2-internal)",
+  "[python-frontend][irep2][phase4.3]")
+{
+  cmdlinet cmdline;
+  REQUIRE_FALSE(config.set(cmdline));
+
+  contextt context;
+  global_scope gs;
+  const nlohmann::json ast = {
+    {"_type", "Module"},
+    {"body", nlohmann::json::array()},
+    {"filename", "test.py"},
+    {"type_ignores", nlohmann::json::array()}};
+  python_converter converter(context, &ast, gs);
+  const type_handler &th = converter.get_type_handler();
+
+  // The elementary family now builds type2tc internally and lowers at the
+  // seam; the legacy typet reaching create_symbol must be byte-identical to the
+  // direct legacy builder it replaced.
+  REQUIRE(th.get_typet(std::string("int")) == long_long_int_type());
+  REQUIRE(
+    th.get_typet(std::string("GeneralizedIndex")) == long_long_int_type());
+  REQUIRE(th.get_typet(std::string("uint")) == long_long_uint_type());
+  REQUIRE(th.get_typet(std::string("uint64")) == long_long_uint_type());
+  REQUIRE(th.get_typet(std::string("Epoch")) == long_long_uint_type());
+  REQUIRE(th.get_typet(std::string("bool")) == bool_type());
+  REQUIRE(th.get_typet(std::string("uint256")) == uint256_type());
+  REQUIRE(th.get_typet(std::string("BLSFieldElement")) == uint256_type());
+
+  // str/size==1: an 8-bit char carrying #cpp_type "char", re-attached at the
+  // seam (F-P5) since IREP2 cannot carry it. Both the bit-vector and the
+  // re-attached hint must match the legacy builder byte-for-byte.
+  typet expected_char = char_type();
+  type_utils::set_cpp_type(expected_char, "char");
+  const typet got_char = th.get_typet(std::string("str"), 1);
+  REQUIRE(got_char == expected_char);
+  REQUIRE(type_utils::get_cpp_type(got_char) == "char");
+}
+
+TEST_CASE(
+  "Phase 4.3: float get_typet output is byte-identical (IREP2-internal)",
+  "[python-frontend][irep2][phase4.3]")
+{
+  cmdlinet cmdline;
+  REQUIRE_FALSE(config.set(cmdline));
+
+  contextt context;
+  global_scope gs;
+  const nlohmann::json ast = {
+    {"_type", "Module"},
+    {"body", nlohmann::json::array()},
+    {"filename", "test.py"},
+    {"type_ignores", nlohmann::json::array()}};
+  python_converter converter(context, &ast, gs);
+  const type_handler &th = converter.get_type_handler();
+
+  // The float family now builds double_type2() internally and lowers at the
+  // seam; the legacy typet reaching create_symbol must be byte-identical to the
+  // double_type() builder it replaced. double_type2() honours the same
+  // use_fixed_for_float config branch as double_type() (c_types.cpp), so the
+  // result matches in both floatbv and fixedbv modes.
+  REQUIRE(th.get_typet(std::string("float")) == double_type());
+}
+
+TEST_CASE(
+  "Phase 4.3: build_array output is byte-identical (IREP2-internal)",
+  "[python-frontend][irep2][phase4.3]")
+{
+  cmdlinet cmdline;
+  REQUIRE_FALSE(config.set(cmdline));
+
+  contextt context;
+  global_scope gs;
+  const nlohmann::json ast = {
+    {"_type", "Module"},
+    {"body", nlohmann::json::array()},
+    {"filename", "test.py"},
+    {"type_ignores", nlohmann::json::array()}};
+  python_converter converter(context, &ast, gs);
+  const type_handler &th = converter.get_type_handler();
+
+  // build_array now constructs array_type2tc internally (element type migrated
+  // in, size a platform word-width unsignedbv constant) and lowers at the seam.
+  // The legacy array_typet reaching create_symbol must be byte-identical to the
+  // direct array_typet(sub_type, constant_exprt) builder it replaced — for both
+  // the char backing of str/bytes/type and the int backing of bytearrays.
+  auto legacy_array = [](const typet &sub, size_t n) {
+    return array_typet(sub, from_integer(n, size_type()));
+  };
+
+  REQUIRE(th.build_array(char_type(), 0) == legacy_array(char_type(), 0));
+  REQUIRE(th.build_array(char_type(), 10) == legacy_array(char_type(), 10));
+  REQUIRE(
+    th.build_array(long_long_int_type(), 4) ==
+    legacy_array(long_long_int_type(), 4));
+  // A large size exercises the BigInt size path.
+  REQUIRE(
+    th.build_array(char_type(), 100000) == legacy_array(char_type(), 100000));
+}
+
+TEST_CASE(
+  "Phase 4.3: pointer-family builders are byte-identical (IREP2-internal)",
+  "[python-frontend][irep2][phase4.3]")
+{
+  cmdlinet cmdline;
+  REQUIRE_FALSE(config.set(cmdline));
+
+  contextt context;
+  global_scope gs;
+  const nlohmann::json ast = {
+    {"_type", "Module"},
+    {"body", nlohmann::json::array()},
+    {"filename", "test.py"},
+    {"type_ignores", nlohmann::json::array()}};
+  python_converter converter(context, &ast, gs);
+  const type_handler &th = converter.get_type_handler();
+
+  // NoneType / Optional: get_typet now builds the pointer-width unsigned integer
+  // IREP2-internal (unsignedbv_type2tc) and lowers at the seam. The legacy
+  // result must be byte-identical to the pointer_type() helper it replaced.
+  REQUIRE(th.get_typet(std::string("NoneType")) == pointer_type());
+  REQUIRE(th.get_typet(std::string("Optional")) == pointer_type());
+
+  // The list/annotation pointer sites (get_list_type) build pointer_type2tc and
+  // lower at the seam, but require a populated symbol table to reach directly;
+  // the full regression suite exercises them. Here we pin the *pattern* those
+  // sites use is byte-identical to the pointer_typet constructor it replaced:
+  // pointer-to-value (migrated subtype) and pointer-to-symbol (native subtype).
+  auto lowered_ptr = [](const type2tc &sub) {
+    return migrate_type_back(pointer_type2tc(sub));
+  };
+  REQUIRE(
+    lowered_ptr(migrate_type(long_long_int_type())) ==
+    pointer_typet(long_long_int_type()));
+  REQUIRE(
+    lowered_ptr(migrate_type(empty_typet())) == pointer_typet(empty_typet()));
+  REQUIRE(
+    lowered_ptr(symbol_type2tc("tag-struct __ESBMC_PyListObj")) ==
+    pointer_typet(symbol_typet("tag-struct __ESBMC_PyListObj")));
+}
+
+TEST_CASE(
+  "Phase 4.3: Callable function-pointer is IREP2-equivalent to legacy",
+  "[python-frontend][irep2][phase4.3]")
+{
+  cmdlinet cmdline;
+  REQUIRE_FALSE(config.set(cmdline));
+
+  contextt context;
+  global_scope gs;
+  const nlohmann::json ast = {
+    {"_type", "Module"},
+    {"body", nlohmann::json::array()},
+    {"filename", "test.py"},
+    {"type_ignores", nlohmann::json::array()}};
+  python_converter converter(context, &ast, gs);
+  const type_handler &th = converter.get_type_handler();
+
+  // Callable builds a pointer to a generic no-argument code type via
+  // code_type2tc + lower_to_seam. This is the one pointer/function-family case
+  // that is *not* raw byte-identical to the legacy pointer_typet(code_typet):
+  // the legacy source never touches code_typet::arguments(), so it has no
+  // `arguments` sub, whereas migrate_type_back always writes an (empty) one.
+  //
+  // The contract that matters is the harness's level-(1) IREP2 contract (see
+  // file header): migrate_type canonicalises the empty arguments list, so the
+  // IREP2 type symex consumes is *identical* to the legacy form's. The leftover
+  // empty `arguments` sub on the lowered typet is normalised by goto-convert
+  // (verified GOTO-identical end-to-end), so behaviour is unchanged.
+  code_typet legacy_code;
+  legacy_code.return_type() = empty_typet();
+  const typet legacy = pointer_typet(legacy_code);
+  const typet migrated = th.get_typet(std::string("Callable"));
+
+  // (1) Identical IREP2 representation — the type that reaches symex.
+  REQUIRE(migrate_type(migrated) == migrate_type(legacy));
+
+  // (2) IREP2-round-trip stable (the lossless-cache contract).
+  REQUIRE(
+    migrate_type(migrate_type_back(migrate_type(migrated))) ==
+    migrate_type(migrated));
 }

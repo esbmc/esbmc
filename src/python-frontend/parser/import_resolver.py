@@ -112,6 +112,7 @@ def _is_imported_model(module_name: str) -> bool:
         "typing",
         "time",
         "threading",
+        "queue",
     }
     return module_name in models
 

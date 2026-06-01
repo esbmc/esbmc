@@ -308,6 +308,12 @@ private:
   bool is_dict_method_call() const;
   exprt handle_dict_method() const;
 
+  // True when the Name receiver positively resolves to a non-dict object type
+  // (a class instance, identified by a struct tag other than "__python_dict__").
+  // Used to stop dict-named methods (get/pop/keys/...) from shadowing a class's
+  // own same-named method (e.g. queue.Queue.get()).
+  bool receiver_is_non_dict_object() const;
+
   // Dict class method detection (e.g. dict.fromkeys([1, 2, 3]))
   bool is_dict_class_method_call() const;
 
