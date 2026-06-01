@@ -2,6 +2,15 @@ Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: esbmc
 Upstream-Contact: ESBMC Development Team <esbmc@esbmc.org>
 Source: https://github.com/esbmc/esbmc
+Files-Excluded:
+ regression/csmith/csmith05/core
+ regression/esbmc-cpp/qt/report.html
+ regression/esbmc-cpp/qt/QLinkedList/*/QLinkedList_*
+ regression/esbmc-cpp/qt/QLinkedList/*/list_*
+ regression/esbmc-cpp/qt/QList/*/list_*
+ regression/esbmc-cpp/qt/QVector/*/list_*
+ regression/esbmc-cpp/qt/*/.DS_Store
+ regression/esbmc-cpp/qt/QHash/*/*.pro.user
 
 Files: *
 Copyright: 2001-2011 Daniel Kroening, Edmund Clarke,

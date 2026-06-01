@@ -1,6 +1,11 @@
-esbmc (8.3.0-1) noble; urgency=medium
+esbmc (8.3.0+dfsg-1) noble; urgency=medium
 
   * New upstream release 8.3.0.
+  * Repack upstream tarball as +dfsg: exclude prebuilt Qt test binaries
+    (regression/esbmc-cpp/qt/), macOS .DS_Store and .pro.user artefacts,
+    and a stale core dump (regression/csmith/csmith05/core) that have no
+    corresponding source in the repository.  Files-Excluded added to
+    debian/copyright; debian/watch updated with repacksuffix=+dfsg.
   * Fix ExternalDependencies.cmake: gate fmt, nlohmann-json and yaml-cpp
     FetchContent behind DOWNLOAD_DEPENDENCIES=ON; add find_package() fallback
     so DOWNLOAD_DEPENDENCIES=OFF (used in distro builds) uses installed system
@@ -8,7 +13,7 @@ esbmc (8.3.0-1) noble; urgency=medium
   * Extend LLVM/Clang Build-Depends and runtime Depends alternatives to cover
     versions 21 and 22 (cmake MAX_SUPPORTED_LLVM_VERSION_MAJOR is now 22).
   * Fix debian/copyright: update ESBMC upstream copyright year to 2026;
-    correct Files glob for bundled ast2json from parser.py to
+    correct Files glob for bundled ast2json to
     src/python-frontend/libs/ast2json/*.
 
  -- Weiqi Wang <lukewang19@icloud.com>  Sun, 01 Jun 2026 00:00:00 +0000
