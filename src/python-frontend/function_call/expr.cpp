@@ -2475,18 +2475,35 @@ function_call_expr::get_dispatch_table()
              type_error.has_value())
 
            return *type_error;
-         // Domain check for sqrt: operand must be >= 0
-         exprt double_operand = arg_expr;
-         if (!arg_expr.type().is_floatbv())
+         // Domain check for sqrt: operand must be >= 0.
+         exprt domain_check;
+         if (arg_expr.type().is_pointer())
          {
-           double_operand =
-             exprt("typecast", type_handler_.get_typet("float", 0));
-           double_operand.copy_to_operands(arg_expr);
+           // A pointer-typed ("any") operand -- e.g. an unannotated parameter
+           // bound to a dynamic-list element (#2848) -- has no numeric value,
+           // so typecasting it to float builds an FP op over a pointer sort
+           // that aborts the SMT backend (get_significand_width; see
+           // humaneval/39). Its sign is unknown, so guard the domain error
+           // with a nondet condition: both the math-domain-error path and the
+           // normal path stay reachable (sound), while handle_sqrt below
+           // over-approximates the result as nondet.
+           domain_check =
+             side_effect_expr_nondett(type_handler_.get_typet("bool", 0));
          }
+         else
+         {
+           exprt double_operand = arg_expr;
+           if (!arg_expr.type().is_floatbv())
+           {
+             double_operand =
+               exprt("typecast", type_handler_.get_typet("float", 0));
+             double_operand.copy_to_operands(arg_expr);
+           }
 
-         exprt zero = gen_zero(type_handler_.get_typet("float", 0));
-         exprt domain_check = exprt("<", type_handler_.get_typet("bool", 0));
-         domain_check.copy_to_operands(double_operand, zero);
+           exprt zero = gen_zero(type_handler_.get_typet("float", 0));
+           domain_check = exprt("<", type_handler_.get_typet("bool", 0));
+           domain_check.copy_to_operands(double_operand, zero);
+         }
 
          // Create the exception raise as a code expression
          exprt raise_expr =
@@ -2509,7 +2526,7 @@ function_call_expr::get_dispatch_table()
          // Add the guard to the current block
          converter_.current_block->copy_to_operands(guard);
 
-         // Now compute sqrt (only reached if operand >= 0)
+         // Now compute sqrt (>= 0 enforced above for numeric operands).
          exprt sqrt_result =
            converter_.get_math_handler().handle_sqrt(arg_expr, call_);
 
