@@ -1,3 +1,12 @@
+esbmc (8.3.0+dfsg-4) unstable; urgency=medium
+
+  * Fix debian/watch: switch to mode=git to bypass GitHub's JavaScript-
+    rendered tags page; use dversionmangle to strip +dfsg and .0 suffix
+    from the Debian version for comparison with upstream's 2-part tags
+    (e.g. v8.3).  uscan now correctly reports the package as up to date.
+
+ -- Weiqi Wang <lukewang19@icloud.com>  Mon, 01 Jun 2026 22:00:00 +0100
+
 esbmc (8.3.0+dfsg-3) unstable; urgency=medium
 
   * Fix debian/watch: correct filenamemangle to produce upstream-expected
