@@ -22,7 +22,7 @@ Build-Depends: debhelper-compat (= 13),
                libc6-dev (>= 2.17),
                linux-libc-dev,
                python3-dev
-Standards-Version: 4.7.0
+Standards-Version: 4.7.4
 Homepage: https://esbmc.org
 Vcs-Browser: https://github.com/esbmc/esbmc
 Vcs-Git: https://github.com/esbmc/esbmc.git

@@ -1,3 +1,12 @@
+esbmc (8.3.0+dfsg-3) unstable; urgency=medium
+
+  * Fix debian/watch: correct filenamemangle to produce upstream-expected
+    filename format; add uversionmangle for pre-release tags; fix regex to
+    require the leading 'v' tag prefix so uscan can locate upstream versions.
+  * Bump Standards-Version to 4.7.4 (no changes required).
+
+ -- Weiqi Wang <lukewang19@icloud.com>  Mon, 01 Jun 2026 21:26:09 +0100
+
 esbmc (8.3.0+dfsg-2) unstable; urgency=medium
 
   * Initial release for Debian (Closes: #1138660).
@@ -10,7 +19,7 @@ esbmc (8.3.0+dfsg-2) unstable; urgency=medium
     source with a toolchain from the ubuntu-toolchain-r PPA (GCC >= 12) or
     upgrade to Ubuntu 24.04 (Noble).
 
- -- Weiqi Wang <lukewang19@icloud.com>  Sun, 01 Jun 2026 00:00:00 +0000
+ -- Weiqi Wang <lukewang19@icloud.com>  Mon, 01 Jun 2026 20:23:00 +0100
 
 esbmc (8.3.0+dfsg-1) noble; urgency=medium
 
