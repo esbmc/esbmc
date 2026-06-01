@@ -106,6 +106,116 @@ static bool try_extract_numeric_1d_list(
   return true;
 }
 
+static bool try_extract_numeric_2d_list(
+  const nlohmann::json &list_node,
+  std::vector<std::vector<numeric_value>> &values)
+{
+  if (
+    !list_node.is_object() || !list_node.contains("_type") ||
+    list_node["_type"] != "List" || !list_node.contains("elts"))
+    return false;
+
+  values.clear();
+  values.reserve(list_node["elts"].size());
+  for (const auto &row : list_node["elts"])
+  {
+    std::vector<numeric_value> row_values;
+    if (!try_extract_numeric_1d_list(row, row_values))
+      return false;
+    values.push_back(row_values);
+  }
+  return true;
+}
+
+static bool is_supported_numpy_unary_math(const std::string &function)
+{
+  return function == "sin" || function == "cos" || function == "exp" ||
+         function == "sqrt" || function == "arctan";
+}
+
+static double apply_numpy_unary_math(const std::string &function, double value)
+{
+  if (function == "sin")
+    return std::sin(value);
+  if (function == "cos")
+    return std::cos(value);
+  if (function == "exp")
+    return std::exp(value);
+  if (function == "sqrt")
+    return std::sqrt(value);
+  if (function == "arctan")
+    return std::atan(value);
+
+  throw std::runtime_error("Unsupported Numpy unary function: " + function);
+}
+
+static exprt fold_numpy_unary_constant_list(
+  python_converter &converter,
+  const std::string &function,
+  const nlohmann::json &arg)
+{
+  std::vector<numeric_value> values_1d;
+  if (try_extract_numeric_1d_list(arg, values_1d))
+  {
+    nlohmann::json out;
+    out["_type"] = "List";
+    out["elts"] = nlohmann::json::array();
+    for (const auto &value : values_1d)
+    {
+      nlohmann::json elem;
+      elem["_type"] = "Constant";
+      elem["value"] = apply_numpy_unary_math(function, to_double(value));
+      out["elts"].push_back(elem);
+    }
+    return converter.get_expr(out);
+  }
+
+  std::vector<std::vector<numeric_value>> values_2d;
+  if (try_extract_numeric_2d_list(arg, values_2d))
+  {
+    nlohmann::json out;
+    out["_type"] = "List";
+    out["elts"] = nlohmann::json::array();
+    for (const auto &row_values : values_2d)
+    {
+      nlohmann::json row;
+      row["_type"] = "List";
+      row["elts"] = nlohmann::json::array();
+      for (const auto &value : row_values)
+      {
+        nlohmann::json elem;
+        elem["_type"] = "Constant";
+        elem["value"] = apply_numpy_unary_math(function, to_double(value));
+        row["elts"].push_back(elem);
+      }
+      out["elts"].push_back(row);
+    }
+    return converter.get_expr(out);
+  }
+
+  throw std::runtime_error("Unsupported Numpy call: " + function);
+}
+
+static nlohmann::json unwrap_list_like_node(const nlohmann::json &node)
+{
+  if (!node.is_object() || !node.contains("_type"))
+    return {};
+
+  if (node["_type"] == "List")
+    return node;
+
+  if (
+    node.contains("value") && node["value"].is_object() &&
+    node["value"].contains("_type"))
+  {
+    auto nested = unwrap_list_like_node(node["value"]);
+    if (!nested.is_null() && nested.is_object())
+      return nested;
+  }
+
+  return {};
+}
+
 static numeric_value extract_value(const nlohmann::json &arg)
 {
   if (!arg.contains("_type"))
@@ -422,6 +532,18 @@ exprt numpy_call_expr::create_expr_from_call()
     else if (arg_type == "List")
     {
       const std::string &operation = function_id_.get_function();
+      if (is_supported_numpy_unary_math(operation))
+      {
+        exprt folded = fold_numpy_unary_constant_list(
+          converter_, operation, call_["args"][0]);
+        if (converter_.current_lhs)
+        {
+          converter_.current_lhs->type() = folded.type();
+          converter_.update_symbol(*converter_.current_lhs);
+        }
+        return folded;
+      }
+
       if (operation == "transpose")
       {
         // Constant-fold transpose for fully constant 2D numeric lists.
@@ -516,15 +638,29 @@ exprt numpy_call_expr::create_expr_from_call()
     {
       auto arg = call_["args"][0];
       resolve_var(arg);
+      nlohmann::json list_arg = unwrap_list_like_node(arg);
 
       // Handle calls with arrays as parameters; e.g. np.ceil([1, 2, 3])
-      if (arg["_type"] == "List")
+      if (!list_arg.is_null() && list_arg.is_object())
       {
+        const std::string &function = function_id_.get_function();
+        if (is_supported_numpy_unary_math(function))
+        {
+          exprt folded =
+            fold_numpy_unary_constant_list(converter_, function, list_arg);
+          if (converter_.current_lhs)
+          {
+            converter_.current_lhs->type() = folded.type();
+            converter_.update_symbol(*converter_.current_lhs);
+          }
+          return folded;
+        }
+
         // Constant-fold np.ceil for concrete 1D numeric lists.
-        if (function_id_.get_function() == "ceil")
+        if (function == "ceil")
         {
           std::vector<numeric_value> input_values;
-          if (try_extract_numeric_1d_list(arg, input_values))
+          if (try_extract_numeric_1d_list(list_arg, input_values))
           {
             nlohmann::json out;
             out["_type"] = "List";
@@ -555,7 +691,7 @@ exprt numpy_call_expr::create_expr_from_call()
 
         code_function_callt call =
           to_code_function_call(to_code(function_call_expr::get()));
-        typet t = type_handler_.get_list_type(arg);
+        typet t = type_handler_.get_list_type(list_arg);
 
         // In a call like result = np.ceil(v), the type of 'result' is only known after processing the argument 'v'.
         // At this point, we have the argument's type information, so we update the type of the LHS expression accordingly.
