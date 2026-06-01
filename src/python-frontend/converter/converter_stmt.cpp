@@ -1440,6 +1440,45 @@ void python_converter::preregister_global_variables(
   }
 }
 
+std::string python_converter::flow_lvalue_path(const nlohmann::json &node) const
+{
+  if (!node.is_object())
+    return "";
+  const std::string k = node.value("_type", "");
+  if (k == "Name" && node.contains("id") && node["id"].is_string())
+    return node["id"].get<std::string>();
+  if (
+    k == "Attribute" && node.contains("attr") && node["attr"].is_string() &&
+    node.contains("value") && node["value"].is_object() &&
+    node["value"].value("_type", "") == "Name" &&
+    node["value"].contains("id") && node["value"]["id"].is_string())
+    return node["value"]["id"].get<std::string>() + "." +
+           node["attr"].get<std::string>();
+  return "";
+}
+
+std::string python_converter::flow_rhs_class(const nlohmann::json &rhs) const
+{
+  if (!rhs.is_object())
+    return "";
+  const std::string k = rhs.value("_type", "");
+  if (
+    k == "Call" && rhs.contains("func") && rhs["func"].is_object() &&
+    rhs["func"].value("_type", "") == "Name" && rhs["func"].contains("id") &&
+    rhs["func"]["id"].is_string())
+  {
+    const std::string cls = rhs["func"]["id"].get<std::string>();
+    return json_utils::is_class(cls, *ast_json) ? cls : std::string();
+  }
+  if (k == "Name" && rhs.contains("id") && rhs["id"].is_string())
+  {
+    auto it = flow_class_map_.find(rhs["id"].get<std::string>());
+    if (it != flow_class_map_.end())
+      return it->second;
+  }
+  return "";
+}
+
 void python_converter::get_var_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
@@ -1470,6 +1509,41 @@ void python_converter::get_var_assign(
 
   const auto &target = (ast_node.contains("targets")) ? ast_node["targets"][0]
                                                       : ast_node["target"];
+
+  // Flow-sensitive class tracking (#4771/#4772): at an unconditional top-level
+  // (depth-1) assignment, record the class most recently assigned to the target
+  // lvalue ("v" or "v.attr"), last-write-wins. Read back in converter_expr to
+  // resolve nested attribute access on a field the usage-site scanner left as
+  // any_type(). Depth-1 gating + clearing on nested-body entry (get_block) keep
+  // it from adopting a class across a control-flow join.
+  if (
+    block_nesting_ == 1 && ast_node.contains("value") &&
+    !ast_node["value"].is_null())
+  {
+    const std::string path = flow_lvalue_path(target);
+    if (!path.empty())
+    {
+      // Rebinding a bare variable `v` makes its previously-tracked attributes
+      // (`v.attr`) refer to the old object; drop them so a later `v.attr` read
+      // can't reuse a stale class.
+      if (path.find('.') == std::string::npos)
+      {
+        const std::string prefix = path + ".";
+        for (auto it = flow_class_map_.begin(); it != flow_class_map_.end();)
+        {
+          if (it->first.rfind(prefix, 0) == 0)
+            it = flow_class_map_.erase(it);
+          else
+            ++it;
+        }
+      }
+      const std::string cls = flow_rhs_class(ast_node["value"]);
+      if (!cls.empty())
+        flow_class_map_[path] = cls;
+      else
+        flow_class_map_.erase(path);
+    }
+  }
 
   // Handle forward references
   if (
@@ -3116,6 +3190,12 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
   // bodies, if/while/for bodies, try/except handlers -- is converted through a
   // deeper get_block(), so this single guard covers them all.
   block_nesting_guard nesting_guard(block_nesting_);
+
+  // Entering any nested/conditional body (function, if/while/for, try/except):
+  // straight-line flow-sensitive class tracking is no longer valid here, so
+  // drop the map rather than risk adopting a class across a control-flow join.
+  if (block_nesting_ >= 2)
+    flow_class_map_.clear();
 
   code_blockt block, *old_block = current_block;
   current_block = &block;

@@ -498,6 +498,26 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         }
 
         exprt resolved = resolve_member_on_base(base_expr, attr_name);
+
+        // Flow-sensitive class tracking (#4771/#4772): the usage-site scanner
+        // left this attribute as any_type() (void*) because it was assigned
+        // values of different classes; resolve_member_on_base can't find the
+        // field on a void* base. If the base lvalue was last assigned a known
+        // class at an unconditional top-level point, cast the base to that
+        // class's struct and retry, so last-write-wins layout is used here.
+        if (resolved.is_nil())
+        {
+          const std::string bp = flow_lvalue_path(element["value"]);
+          auto it =
+            bp.empty() ? flow_class_map_.end() : flow_class_map_.find(bp);
+          if (it != flow_class_map_.end())
+          {
+            exprt cast = typecast_exprt(
+              base_expr, gen_pointer_type(symbol_typet("tag-" + it->second)));
+            resolved = resolve_member_on_base(cast, attr_name);
+          }
+        }
+
         if (!resolved.is_nil())
         {
           expr = resolved;
