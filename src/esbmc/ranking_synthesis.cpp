@@ -395,6 +395,18 @@ prefix_defst scan_prefix_defs(
   prefix_defst out;
   auto end_it = body.instructions.end();
   std::set<unsigned> justified_targets;
+  // Loop heads in this function are always justified targets on a
+  // forward walk: their only "extra" incoming edge is the back-edge,
+  // and the back-edge fires only after we've already entered the loop
+  // body. On the dominator path from function entry, hitting a loop
+  // head from the forward direction is exactly the path we want to
+  // take. Mark all of them up front. This includes the containing
+  // outer loop when we analyse a nested inner — the outer head
+  // dominates the inner head and must be traversable, not treated as
+  // an unjustified merge.
+  if (skip)
+    for (const auto &kv : skip->by_head_locnum)
+      justified_targets.insert(kv.first);
 
   for (auto it = body.instructions.begin(); it != head;)
   {
@@ -404,10 +416,20 @@ prefix_defst scan_prefix_defs(
     // from function entry to the analysed loop's head — only the
     // loop's entry and exit are. The loop's modified set invalidates
     // any tracked defs for variables it could have written.
+    //
+    // A loop is "earlier" iff its back-edge lies strictly before the
+    // analysed loop's head. Loops whose back is at-or-past the head
+    // are NOT earlier — they're either the analysed loop itself
+    // (already excluded by the driver) or they CONTAIN the analysed
+    // loop. Skipping past a containing loop's back would jump RIGHT
+    // OVER the analysed loop's head, walking the iterator off the
+    // dominator path.
     if (skip)
     {
       auto skip_it = skip->by_head_locnum.find(it->location_number);
-      if (skip_it != skip->by_head_locnum.end())
+      if (
+        skip_it != skip->by_head_locnum.end() &&
+        skip_it->second.back->location_number < head->location_number)
       {
         for (const irep_idt &n : skip_it->second.modified)
           out.defs.erase(n);
@@ -1959,10 +1981,16 @@ bool reaches_head(
     // analysed loop's head; only the loop's entry and exit are. Walking
     // its body would loop indefinitely or follow inner edges that
     // aren't relevant to dominator reachability.
+    //
+    // "Earlier" means back-edge strictly before the analysed head:
+    // see the matching guard in scan_prefix_defs. Containing loops
+    // must NOT be skipped (their back is past `head`).
     if (skip)
     {
       auto skip_it = skip->by_head_locnum.find(it->location_number);
-      if (skip_it != skip->by_head_locnum.end())
+      if (
+        skip_it != skip->by_head_locnum.end() &&
+        skip_it->second.back->location_number < head->location_number)
       {
         stack.push_back(std::next(skip_it->second.back));
         continue;
@@ -2015,6 +2043,11 @@ prefix_seedst collect_seeds(
   // Targets we've justified by an earlier accepted IF jump (so meeting one
   // of them mid-sweep is not a soundness break).
   std::set<unsigned> justified_targets;
+  // Loop heads are auto-justified on a forward walk; see the matching
+  // initialisation in scan_prefix_defs for the soundness argument.
+  if (loop_skip)
+    for (const auto &kv : loop_skip->by_head_locnum)
+      justified_targets.insert(kv.first);
   // Pending IF-derived atoms: free-vars set so a later assign to one of
   // those vars can invalidate the atom before it reaches the head.
   struct pending_atom
@@ -2051,10 +2084,15 @@ prefix_seedst collect_seeds(
     // about. The loop's body is not on the dominator path; only its
     // entry and exit are. Variables the loop modifies invalidate both
     // pending atoms and constant seeds referencing them.
+    //
+    // "Earlier" means back-edge strictly before the analysed head;
+    // see the matching guard in scan_prefix_defs.
     if (loop_skip)
     {
       auto skip_it = loop_skip->by_head_locnum.find(it->location_number);
-      if (skip_it != loop_skip->by_head_locnum.end())
+      if (
+        skip_it != loop_skip->by_head_locnum.end() &&
+        skip_it->second.back->location_number < head->location_number)
       {
         invalidate_pending_by(skip_it->second.modified);
         it = std::next(skip_it->second.back);
@@ -3006,6 +3044,18 @@ tvt try_prove_termination_by_ranking(
     for (const auto &loop : loops.get_loops())
     {
       // Skip map for this loop: every OTHER loop in the function.
+      // The single map serves two consumers:
+      //   - prefix walkers (scan_prefix_defs, reaches_head,
+      //     collect_seeds) accept loops whose back-edge is strictly
+      //     before the analysed loop's head; entries that violate
+      //     this are filtered IN THE WALKER (see scan_prefix_defs).
+      //   - the body parser's inner-loop summary block accepts loops
+      //     whose head lies strictly inside (analysed.head,
+      //     analysed.back); entries that violate this are filtered
+      //     IN THE PARSER (see the summary block in recognize_loop).
+      // Including loops irrelevant to one consumer is safe as long
+      // as that consumer filters; the consumer-side guard is the
+      // source of truth.
       loop_skipt skip;
       auto cur_head = loop.get_original_loop_head();
       for (const auto &kv : all_loops.by_head_locnum)
