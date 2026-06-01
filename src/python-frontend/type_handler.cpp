@@ -451,23 +451,31 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   if (ast_type == "object")
     return any_type();
 
-  // NoneType — represents Python's None value
-  // Use a pointer type to void to represent None/null properly
+  // NoneType — represents Python's None value, modelled as a pointer-width
+  // unsigned integer (the legacy pointer_type() helper). Built IREP2-internal
+  // and lowered at the seam (Phase 4.3, Part IV §5).
   if (ast_type == "NoneType")
-    return pointer_type();
+    return lower_to_seam(unsignedbv_type2tc(config.ansi_c.pointer_width()));
 
   // Optional[T] - when type string is just "Optional" without inner type
-  // This can occur during type inference. Return pointer type as placeholder.
+  // This can occur during type inference. Same pointer-width unsigned integer
+  // placeholder as NoneType, lowered at the seam.
   if (ast_type == "Optional")
-    return pointer_type();
+    return lower_to_seam(unsignedbv_type2tc(config.ansi_c.pointer_width()));
 
   // Callable: represents function/callable types
-  // Return a pointer to a generic code type (function pointer)
+  // Return a pointer to a generic no-argument code type (function pointer),
+  // built IREP2-internal and lowered at the seam (Phase 4.3, Part IV §5). Empty
+  // argument/name vectors satisfy code_type2t's args.size()==argument_names
+  // .size() invariant (irep2_type.h).
   if (ast_type == "Callable")
   {
-    code_typet code_type;
-    code_type.return_type() = empty_typet();
-    return pointer_typet(code_type);
+    const type2tc code_t = code_type2tc(
+      std::vector<type2tc>{},
+      get_empty_type(),
+      std::vector<irep_idt>{},
+      /*ellipsis=*/false);
+    return lower_to_seam(pointer_type2tc(code_t));
   }
 
   // Python float type: IEEE 754 double-precision mapping
@@ -938,7 +946,9 @@ typet type_handler::get_list_type(const nlohmann::json &list_value) const
       }
       else
         t = empty_typet();
-      return pointer_typet(t);
+      // Phase 4.3 (Part IV §5): build the pointer type IREP2-internal and lower
+      // at the seam. The pointee arrives as a legacy typet, so migrate it in.
+      return lower_to_seam(pointer_type2tc(migrate_type(t)));
     }
 
     // Check if the nested structure exists before accessing
@@ -950,7 +960,8 @@ typet type_handler::get_list_type(const nlohmann::json &list_value) const
       assert(type_ann == "list" || type_ann == "List");
       typet t =
         get_typet(list_value["annotation"]["slice"]["id"].get<std::string>());
-      return pointer_typet(t);
+      // Phase 4.3 (Part IV §5): pointer built IREP2-internal, lowered at seam.
+      return lower_to_seam(pointer_type2tc(migrate_type(t)));
     }
   }
 
@@ -1041,7 +1052,9 @@ const typet type_handler::get_list_type() const
   const char *list_type_id = "tag-struct __ESBMC_PyListObj";
   list_type_symbol = converter_.symbol_table().find_symbol(list_type_id);
   assert(list_type_symbol);
-  return pointer_typet(symbol_typet(list_type_symbol->id));
+  // Phase 4.3 (Part IV §5): pointer-to-symbol built IREP2-internal (symbol type
+  // constructed natively, no legacy round-trip) and lowered at the seam.
+  return lower_to_seam(pointer_type2tc(symbol_type2tc(list_type_symbol->id)));
 }
 
 typet type_handler::get_list_element_type() const
