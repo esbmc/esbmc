@@ -917,38 +917,271 @@ bool recognize_loop(
           return false;
         if (inner.modified_vars.size() != inner.modified.size())
           return false; // some modified entry wasn't a plain symbol
+
+        // Attempt monotone-counter refinement before falling back to
+        // pure havoc. The refinement matches the conservative shape:
+        //
+        //   while (c > 0) { v_1 := v_1 ± 1; ... v_n := v_n ± 1; }
+        //
+        // where every modified scalar v_i has exactly one assign of
+        // the form `v_i := v_i + k_i` with k_i in {-1, +1} on a
+        // single straight-line body path, the anchor c is one of the
+        // v_i with k_c = -1, the guard is strict (`>`) so the exit
+        // value is exactly 0 (no underflow for any signed/unsigned
+        // BV width ≥ 1), no calls/non-exempt-memory writes appear
+        // in the body, and every body write is in the rewritten-
+        // scalar namespace. Under those checks the inner runs
+        // exactly N = max(0, pre_c) iterations and each v_i ends
+        // at v_i_pre + N * k_i exactly. All-or-nothing: any failure
+        // skips the refinement and falls through to pure havoc
+        // (this is the safe direction — a less precise summary
+        // never causes wrong-true).
+        std::vector<assignt> refined_assigns;
+        bool refined = false;
+        do
+        {
+          // 1. Extract `c > 0` from the inner's stored IR guard.
+          //    The IR may store the exit guard either pre-simplified
+          //    as `c <= 0` or in its `!(c > 0)` shape; accept both.
+          if (is_nil_expr(inner.guard))
+            break;
+          expr2tc anchor_orig;
+          {
+            expr2tc g = inner.guard;
+            // Peel a top-level NOT to recover the positive form
+            // (the continue-condition), then match `c > 0`.
+            if (is_not2t(g))
+            {
+              expr2tc pos = to_not2t(g).value;
+              if (is_greaterthan2t(pos))
+              {
+                const greaterthan2t &gt = to_greaterthan2t(pos);
+                if (
+                  is_constant_int2t(gt.side_2) &&
+                  to_constant_int2t(gt.side_2).value == 0)
+                  anchor_orig = gt.side_1;
+              }
+            }
+            else if (is_lessthanequal2t(g))
+            {
+              const lessthanequal2t &le = to_lessthanequal2t(g);
+              if (
+                is_constant_int2t(le.side_2) &&
+                to_constant_int2t(le.side_2).value == 0)
+                anchor_orig = le.side_1;
+            }
+          }
+          if (is_nil_expr(anchor_orig))
+            break;
+          // 2. Walk the inner body and collect per-scalar steps.
+          //    Body is [it+1, inner.back) — i.e. everything between
+          //    the head IF and the back-edge GOTO. Single straight-
+          //    line path: only assigns/skips/locations/DECLs/DEADs
+          //    allowed. No calls, no IFs, no other GOTOs.
+          //
+          //    The modified-set is built FROM the body, not from
+          //    inner.modified_vars (which is empty when all writes
+          //    are through derefs). We require every assign to be
+          //    representable in the rewritten-scalar namespace —
+          //    each lhs must either already be a symbol, OR be a
+          //    dereference present in the outer recognizer's
+          //    deref_map (so subst_parallel rewrites it to a fresh
+          //    scalar). Any other shape (member, index, byte-op)
+          //    causes the detector to bail. Codex flagged this as
+          //    the most common wrong-true vector: a missed write
+          //    through a deref the outer didn't track.
+          std::map<irep_idt, int> steps;        // rewritten-name → ±1
+          std::map<irep_idt, expr2tc> var_orig; // rewritten-name → orig lhs
+          bool ok = true;
+          for (auto bp = std::next(it); bp != inner.back; ++bp)
+          {
+            if (
+              bp->is_skip() || bp->is_location() || bp->type == DEAD ||
+              bp->type == DECL)
+              continue;
+            if (!bp->is_assign())
+            {
+              ok = false;
+              break;
+            }
+            const code_assign2t &a = to_code_assign2t(bp->code);
+            expr2tc lhs_s = deref_map.empty()
+                              ? a.target
+                              : subst_parallel(a.target, deref_map);
+            expr2tc rhs_s = deref_map.empty()
+                              ? a.source
+                              : subst_parallel(a.source, deref_map);
+            // After substitution every write must land on a plain
+            // symbol — otherwise we have an unexempt deref / member
+            // / index write that the refinement can't model.
+            if (!is_symbol2t(lhs_s))
+            {
+              ok = false;
+              break;
+            }
+            const irep_idt &lname = to_symbol2t(lhs_s).thename;
+            // RHS shape: lname + k or lname - k with k literal 1.
+            int step = 0;
+            if (is_add2t(rhs_s))
+            {
+              const add2t &ad = to_add2t(rhs_s);
+              if (
+                is_symbol2t(ad.side_1) &&
+                to_symbol2t(ad.side_1).thename == lname &&
+                is_constant_int2t(ad.side_2) &&
+                to_constant_int2t(ad.side_2).value == 1)
+                step = 1;
+              else if (
+                is_symbol2t(ad.side_2) &&
+                to_symbol2t(ad.side_2).thename == lname &&
+                is_constant_int2t(ad.side_1) &&
+                to_constant_int2t(ad.side_1).value == 1)
+                step = 1;
+            }
+            else if (is_sub2t(rhs_s))
+            {
+              const sub2t &sb = to_sub2t(rhs_s);
+              if (
+                is_symbol2t(sb.side_1) &&
+                to_symbol2t(sb.side_1).thename == lname &&
+                is_constant_int2t(sb.side_2) &&
+                to_constant_int2t(sb.side_2).value == 1)
+                step = -1;
+            }
+            if (step == 0)
+            {
+              ok = false;
+              break;
+            }
+            // Exactly one update per scalar on the body path.
+            if (steps.count(lname))
+            {
+              ok = false;
+              break;
+            }
+            steps[lname] = step;
+            // Preserve the ORIGINAL (pre-substitution) lhs so the
+            // emitted ASSIGNs use the same namespace the rest of
+            // the body parser does — apply_body / subst_parallel
+            // downstream then handle the rewriting consistently.
+            var_orig[lname] = a.target;
+          }
+          if (!ok)
+            break;
+          if (steps.empty())
+            break;
+          // 3. Anchor must be among the body-modified scalars with
+          //    step -1. Compute anchor_name in the rewritten-scalar
+          //    namespace (same as `steps`).
+          expr2tc anchor_rewritten = deref_map.empty()
+                                       ? anchor_orig
+                                       : subst_parallel(anchor_orig, deref_map);
+          if (!is_symbol2t(anchor_rewritten))
+            break;
+          const irep_idt &anchor_name = to_symbol2t(anchor_rewritten).thename;
+          auto anchor_step_it = steps.find(anchor_name);
+          if (anchor_step_it == steps.end() || anchor_step_it->second != -1)
+            break;
+          // 4. Build the refined assigns.
+          //    For each body-modified scalar v_i with step k_i:
+          //      v_i := ite(anchor_pre > 0, v_i_pre + N * k_i, v_i_pre)
+          //    where N = anchor_pre. The pre-state captures use
+          //    location-salted fresh symbols (distinct from any
+          //    other Phase 2b emission's symbols).
+          char salt[64];
+          std::snprintf(
+            salt, sizeof(salt), "$rank_nest_pre$%u$", it->location_number);
+          // Determine the anchor's rewritten BV type by looking up
+          // its original lhs in var_orig and substituting.
+          expr2tc anchor_orig_lhs = var_orig[anchor_name];
+          expr2tc anchor_s = deref_map.empty()
+                               ? anchor_orig_lhs
+                               : subst_parallel(anchor_orig_lhs, deref_map);
+          type2tc anchor_t = anchor_s->type;
+          // Pre-capture: seed pre_sym := v_orig for every modified
+          // scalar. The capture assigns must come first so the
+          // subsequent ITE-RHS can read pre_sym.
+          std::map<irep_idt, expr2tc> pre_map;
+          for (const auto &kv : steps)
+          {
+            const irep_idt &name = kv.first;
+            expr2tc v_orig_lhs = var_orig[name];
+            expr2tc v_s = deref_map.empty()
+                            ? v_orig_lhs
+                            : subst_parallel(v_orig_lhs, deref_map);
+            std::string pre_name = std::string(salt) + id2string(name);
+            expr2tc pre_sym = symbol2tc(v_s->type, pre_name);
+            pre_map[name] = pre_sym;
+            assignt seed;
+            seed.lhs = pre_sym;
+            seed.rhs = v_orig_lhs; // capture the current (pre-inner) value
+            refined_assigns.push_back(std::move(seed));
+          }
+          expr2tc anchor_pre = pre_map[anchor_name];
+          expr2tc zero_t = constant_int2tc(anchor_t, BigInt(0));
+          expr2tc pos_pre = greaterthan2tc(anchor_pre, zero_t);
+          for (const auto &kv : steps)
+          {
+            const irep_idt &name = kv.first;
+            int k = kv.second;
+            expr2tc v_orig_lhs = var_orig[name];
+            expr2tc v_s = deref_map.empty()
+                            ? v_orig_lhs
+                            : subst_parallel(v_orig_lhs, deref_map);
+            expr2tc v_pre = pre_map[name];
+            // Width-match anchor_pre to v_s's BV width.
+            expr2tc anchor_cast =
+              (anchor_t == v_s->type)
+                ? anchor_pre
+                : expr2tc(typecast2tc(v_s->type, anchor_pre));
+            expr2tc rhs_post;
+            if (k == 1)
+              rhs_post = add2tc(v_s->type, v_pre, anchor_cast);
+            else
+              rhs_post = sub2tc(v_s->type, v_pre, anchor_cast);
+            expr2tc rhs_ite = if2tc(v_s->type, pos_pre, rhs_post, v_pre);
+            assignt up;
+            up.lhs = v_orig_lhs;
+            up.rhs = rhs_ite;
+            refined_assigns.push_back(std::move(up));
+          }
+          refined = true;
+        } while (false);
+
         block_t b;
         b.is_span = true;
-        // Emit a havoc assign per modified symbol: `v := fresh`.
-        // Each fresh symbol's name is salted with the inner's head
-        // location_number so summaries of distinct inner loops never
-        // alias their havoc symbols.
-        for (const auto &kv : inner.modified_vars)
+        if (refined)
         {
-          const expr2tc &v = kv.second;
-          // `modified_vars` is populated only with symbol2t entries
-          // (see the entry point); kept as `assert`-equivalent via
-          // the `size != modified.size()` check above.
-          char buf[64];
-          std::snprintf(
-            buf, sizeof(buf), "$rank_nest$%u$", it->location_number);
-          std::string sym_name =
-            std::string(buf) + id2string(to_symbol2t(v).thename);
-          expr2tc fresh = symbol2tc(v->type, sym_name);
-          assignt a;
-          a.lhs = v;
-          a.rhs = fresh;
-          b.span.push_back(std::move(a));
+          // Use the refined relations. The post-condition `!G_inner`
+          // is implied by `anchor := ite(pre>0, 0, pre)` (in both
+          // branches anchor <= 0), so we omit it: keeping it would
+          // be redundant but harmless. We omit to keep the path's
+          // cond simpler for the solver.
+          b.span = std::move(refined_assigns);
         }
-        // The post-summary path condition is the inner's exit
-        // guard: the inner's head IF is `IF !G_inner THEN GOTO
-        // exit`, so the stored guard is `!G_inner` — exactly the
-        // condition that holds when execution falls out of the
-        // inner loop. (The body parser elsewhere stores raw IR
-        // guards; we keep that convention here so subsequent
-        // apply_body / simplify steps see the same shape.)
-        if (!is_nil_expr(inner.guard))
-          b.summary_cond = inner.guard;
+        else
+        {
+          // Fall back to pure havoc + raw `!G_inner` path-cond.
+          for (const auto &kv : inner.modified_vars)
+          {
+            const expr2tc &v = kv.second;
+            // `modified_vars` is populated only with symbol2t entries
+            // (see the entry point); kept as `assert`-equivalent via
+            // the `size != modified.size()` check above.
+            char buf[64];
+            std::snprintf(
+              buf, sizeof(buf), "$rank_nest$%u$", it->location_number);
+            std::string sym_name =
+              std::string(buf) + id2string(to_symbol2t(v).thename);
+            expr2tc fresh = symbol2tc(v->type, sym_name);
+            assignt a;
+            a.lhs = v;
+            a.rhs = fresh;
+            b.span.push_back(std::move(a));
+          }
+          if (!is_nil_expr(inner.guard))
+            b.summary_cond = inner.guard;
+        }
         blocks.push_back(std::move(b));
         // Advance past the inner's back-edge. The back-edge GOTO is
         // typically followed by the exit-target label, which is
