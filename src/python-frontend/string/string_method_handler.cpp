@@ -787,14 +787,35 @@ exprt string_handler::handle_string_startswith(
   exprt str_addr = get_array_base_address(str_expr);
   exprt prefix_addr = get_array_base_address(prefix_expr);
 
-  // Calculate prefix length: len(prefix_expr) - 1 (exclude null terminator)
-  const array_typet &prefix_type = to_array_type(prefix_expr.type());
-  exprt prefix_len = prefix_type.size();
+  // Calculate the prefix length (excluding the null terminator).
+  // A string literal is lowered to a char array carrying a static size, but a
+  // symbolic str (e.g. a function parameter) is a char* with no static size,
+  // so to_array_type() would abort on it. Use strlen() for the pointer case,
+  // mirroring handle_string_endswith().
+  exprt actual_len;
+  if (prefix_expr.type().is_array())
+  {
+    const array_typet &prefix_type = to_array_type(prefix_expr.type());
+    exprt prefix_len = prefix_type.size();
 
-  // Subtract 1 for null terminator
-  exprt one = from_integer(1, prefix_len.type());
-  exprt actual_len("-", prefix_len.type());
-  actual_len.copy_to_operands(prefix_len, one);
+    // Subtract 1 for null terminator
+    exprt one = from_integer(1, prefix_len.type());
+    actual_len = exprt("-", prefix_len.type());
+    actual_len.copy_to_operands(prefix_len, one);
+  }
+  else
+  {
+    symbolt *strlen_symbol = find_cached_c_function_symbol("c:@F@strlen");
+    if (!strlen_symbol)
+      throw std::runtime_error("strlen function not found for startswith()");
+
+    side_effect_expr_function_callt prefix_strlen_call;
+    prefix_strlen_call.function() = symbol_expr(*strlen_symbol);
+    prefix_strlen_call.arguments() = {prefix_addr};
+    prefix_strlen_call.location() = location;
+    prefix_strlen_call.type() = size_type();
+    actual_len = prefix_strlen_call;
+  }
 
   // Find strncmp symbol
   symbolt *strncmp_symbol = find_cached_c_function_symbol("c:@F@strncmp");
@@ -813,7 +834,17 @@ exprt string_handler::handle_string_startswith(
   exprt equal("=", bool_type());
   equal.copy_to_operands(strncmp_call, zero);
 
-  return equal;
+  // Python treats the empty string as a prefix of every string, so
+  // s.startswith("") is always True. Guard this case explicitly: it keeps the
+  // result correct for a symbolic empty prefix and is robust to strncmp(_,_,0),
+  // which the operational model evaluates to a non-zero value.
+  exprt is_empty("=", bool_type());
+  is_empty.copy_to_operands(actual_len, gen_zero(actual_len.type()));
+
+  exprt result("or", bool_type());
+  result.copy_to_operands(is_empty, equal);
+
+  return result;
 }
 
 exprt string_handler::handle_string_endswith(
