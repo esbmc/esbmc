@@ -75,6 +75,18 @@ static void optimize_expression(expr2tc &expr, const interval_domaint &state)
     return;
   }
 
+  // An overflow2t requires its operand to remain a binary arithmetic operation
+  // (add/sub/mul/...). Collapsing a singleton operand into a constant breaks
+  // both backmigration (migrate.cpp) and SMT overflow encoding, which read the
+  // operand's two sub-expressions. Optimise only the arithmetic operands'
+  // leaves; keep the operation node intact. (Mirrors gcse.cpp.)
+  if (is_overflow2t(expr))
+  {
+    to_overflow2t(expr).operand->Foreach_operand(
+      [&state](expr2tc &e) { optimize_expression(e, state); });
+    return;
+  }
+
   if (interval_domaint::enable_wrapped_intervals)
     optimize_expr_interval<wrapped_interval>(expr, state);
   else
