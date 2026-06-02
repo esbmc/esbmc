@@ -518,8 +518,7 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   // --validate-correctness-witness — are also covered.
   if (
     options.get_bool_option("k-induction") ||
-    cmdline.isset("k-induction-parallel") ||
-    cmdline.isset("inductive-step"))
+    cmdline.isset("k-induction-parallel") || cmdline.isset("inductive-step"))
     options.set_option("add-symex-value-sets", true);
 
   // Default-enable the vacuity probe under --loop-invariant-check (the
