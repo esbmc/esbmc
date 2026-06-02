@@ -1598,7 +1598,17 @@ int esbmc_parseoptionst::do_bmc_strategy(
   // pop4). Use this as a shortcut: if it exceeds the next sequential k,
   // jump to it directly instead of stepping through intermediate
   // values. The FC will close at exactly that k.
-  uint64_t fc_hint = learn_k_from_goto_bounds(goto_functions);
+  //
+  // NOT applied under `--termination`: termination's win condition is
+  // the inductive step proving UNSAT at SMALL k (markers unreachable
+  // from havoced state), and skipping past intermediate k values
+  // hides those wins. E.g. on the noop-cycle pattern, IS proves
+  // non-termination at k=3 via `inject_noop_cycle_assumes`, but if
+  // the hint jumps the loop from k=3 to k=5 we never run IS at k=3
+  // and miss the proof.
+  uint64_t fc_hint = options.get_bool_option("termination")
+                       ? 0
+                       : learn_k_from_goto_bounds(goto_functions);
   bool hint_consumed = false;
 
   // Trying all bounds from 1 to "max_k_step" in "k_step_inc".
