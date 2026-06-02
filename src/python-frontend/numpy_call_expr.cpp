@@ -12,6 +12,7 @@
 #include <util/std_expr.h>
 #include <util/std_code.h>
 
+#include <algorithm>
 #include <cmath>
 #include <complex>
 #include <limits>
@@ -32,6 +33,14 @@ struct scalar_value
   bool is_complex = false;
   std::complex<double> value = {0.0, 0.0};
 };
+
+static bool
+try_extract_scalar_constant(const nlohmann::json &node, scalar_value &out);
+static bool is_complex_annotated_constant(const nlohmann::json &node);
+static scalar_value apply_complex_binary(
+  const std::string &function,
+  const scalar_value &lhs,
+  const scalar_value &rhs);
 
 static numeric_value make_int_value(int64_t value)
 {
@@ -379,6 +388,273 @@ static bool has_complex(const std::vector<std::vector<scalar_value>> &values)
   return false;
 }
 
+static bool is_list_node(const nlohmann::json &node)
+{
+  return node.is_object() && node.contains("_type") &&
+         node["_type"] == "List" && node.contains("elts") &&
+         node["elts"].is_array();
+}
+
+static std::string format_shape(const std::vector<std::size_t> &shape)
+{
+  std::ostringstream oss;
+  oss << "(";
+  for (std::size_t i = 0; i < shape.size(); ++i)
+  {
+    if (i != 0)
+      oss << ", ";
+    oss << shape[i];
+  }
+  if (shape.size() == 1)
+    oss << ",";
+  oss << ")";
+  return oss.str();
+}
+
+static bool
+get_literal_shape(const nlohmann::json &node, std::vector<std::size_t> &shape)
+{
+  shape.clear();
+
+  if (!is_list_node(node))
+  {
+    scalar_value dummy;
+    return try_extract_scalar_constant(node, dummy);
+  }
+
+  const auto &elts = node["elts"];
+  shape.push_back(elts.size());
+
+  if (elts.empty())
+    return true;
+
+  std::vector<std::size_t> child_shape;
+  if (!get_literal_shape(elts[0], child_shape))
+    return false;
+
+  for (std::size_t i = 1; i < elts.size(); ++i)
+  {
+    std::vector<std::size_t> current_shape;
+    if (
+      !get_literal_shape(elts[i], current_shape) ||
+      current_shape != child_shape)
+      return false;
+  }
+
+  shape.insert(shape.end(), child_shape.begin(), child_shape.end());
+  return true;
+}
+
+enum class scalar_kind
+{
+  int_like,
+  float_like,
+  complex_like
+};
+
+static scalar_kind get_scalar_kind(const nlohmann::json &node)
+{
+  if (
+    node.contains("_type") && node["_type"] == "UnaryOp" &&
+    node.contains("operand") && node["operand"].is_object())
+  {
+    return get_scalar_kind(node["operand"]);
+  }
+
+  if (is_complex_annotated_constant(node))
+    return scalar_kind::complex_like;
+  if (node.contains("value") && node["value"].is_number_float())
+    return scalar_kind::float_like;
+  return scalar_kind::int_like;
+}
+
+static nlohmann::json make_numeric_constant_json(
+  const scalar_value &value,
+  scalar_kind kind,
+  bool force_float)
+{
+  nlohmann::json out;
+  out["_type"] = "Constant";
+  if (kind == scalar_kind::complex_like)
+  {
+    out["value"] = 0.0;
+    out["esbmc_type_annotation"] = "complex";
+    out["real_value"] = value.value.real();
+    out["imag_value"] = value.value.imag();
+    return out;
+  }
+
+  if (kind == scalar_kind::float_like || force_float)
+    out["value"] = value.value.real();
+  else
+    out["value"] = static_cast<int64_t>(std::llround(value.value.real()));
+  return out;
+}
+
+static bool apply_numpy_binary_to_scalars(
+  const std::string &function,
+  const nlohmann::json &lhs,
+  const nlohmann::json &rhs,
+  nlohmann::json &out)
+{
+  scalar_value lhs_scalar;
+  scalar_value rhs_scalar;
+  if (
+    !try_extract_scalar_constant(lhs, lhs_scalar) ||
+    !try_extract_scalar_constant(rhs, rhs_scalar))
+    return false;
+
+  const scalar_kind lhs_kind = get_scalar_kind(lhs);
+  const scalar_kind rhs_kind = get_scalar_kind(rhs);
+  const bool wants_complex = lhs_kind == scalar_kind::complex_like ||
+                             rhs_kind == scalar_kind::complex_like;
+  const bool wants_float =
+    wants_complex || lhs_kind == scalar_kind::float_like ||
+    rhs_kind == scalar_kind::float_like || function == "divide";
+
+  scalar_value result;
+  if (wants_complex)
+    result = apply_complex_binary(function, lhs_scalar, rhs_scalar);
+  else
+  {
+    const double left = lhs_scalar.value.real();
+    const double right = rhs_scalar.value.real();
+    double folded = 0.0;
+
+    if (function == "add")
+      folded = left + right;
+    else if (function == "subtract")
+      folded = left - right;
+    else if (function == "multiply")
+      folded = left * right;
+    else if (function == "divide")
+    {
+      if (right == 0.0)
+        throw std::runtime_error("ZeroDivisionError: division by zero");
+      folded = left / right;
+    }
+    else if (function == "power")
+      folded = std::pow(left, right);
+    else
+      return false;
+
+    result = wants_float ? make_real_scalar(folded)
+                         : make_real_scalar(std::llround(folded));
+  }
+
+  out = make_numeric_constant_json(
+    result,
+    wants_complex
+      ? scalar_kind::complex_like
+      : (wants_float ? scalar_kind::float_like : scalar_kind::int_like),
+    wants_float && !wants_complex);
+  return true;
+}
+
+static bool compute_broadcast_shape(
+  const std::vector<std::size_t> &lhs_shape,
+  const std::vector<std::size_t> &rhs_shape,
+  std::vector<std::size_t> &result_shape)
+{
+  const std::size_t lhs_rank = lhs_shape.size();
+  const std::size_t rhs_rank = rhs_shape.size();
+  const std::size_t result_rank = std::max(lhs_rank, rhs_rank);
+
+  result_shape.assign(result_rank, 1);
+
+  for (std::size_t i = 0; i < result_rank; ++i)
+  {
+    const std::size_t lhs_dim = (i < result_rank - lhs_rank)
+                                  ? 1
+                                  : lhs_shape[i - (result_rank - lhs_rank)];
+    const std::size_t rhs_dim = (i < result_rank - rhs_rank)
+                                  ? 1
+                                  : rhs_shape[i - (result_rank - rhs_rank)];
+
+    if (lhs_dim != rhs_dim && lhs_dim != 1 && rhs_dim != 1)
+      return false;
+
+    result_shape[i] = std::max(lhs_dim, rhs_dim);
+  }
+
+  return true;
+}
+
+static bool fetch_broadcast_leaf(
+  const nlohmann::json &node,
+  const std::vector<std::size_t> &shape,
+  const std::vector<std::size_t> &result_indices,
+  nlohmann::json &leaf)
+{
+  if (!is_list_node(node))
+  {
+    scalar_value scalar;
+    if (!try_extract_scalar_constant(node, scalar))
+      return false;
+    leaf = node;
+    return true;
+  }
+
+  const std::size_t offset = result_indices.size() - shape.size();
+  const nlohmann::json *current = &node;
+
+  for (std::size_t axis = 0; axis < shape.size(); ++axis)
+  {
+    const std::size_t result_axis = axis + offset;
+    const std::size_t index =
+      shape[axis] == 1 ? 0 : result_indices[result_axis];
+    current = &(*current)["elts"][index];
+  }
+
+  leaf = *current;
+  return true;
+}
+
+static bool build_broadcast_literal_result(
+  const std::string &function,
+  const nlohmann::json &lhs,
+  const std::vector<std::size_t> &lhs_shape,
+  const nlohmann::json &rhs,
+  const std::vector<std::size_t> &rhs_shape,
+  const std::vector<std::size_t> &result_shape,
+  std::vector<std::size_t> &indices,
+  std::size_t depth,
+  nlohmann::json &out)
+{
+  if (depth == result_shape.size())
+  {
+    nlohmann::json lhs_leaf;
+    nlohmann::json rhs_leaf;
+    if (
+      !fetch_broadcast_leaf(lhs, lhs_shape, indices, lhs_leaf) ||
+      !fetch_broadcast_leaf(rhs, rhs_shape, indices, rhs_leaf))
+      return false;
+    return apply_numpy_binary_to_scalars(function, lhs_leaf, rhs_leaf, out);
+  }
+
+  out["_type"] = "List";
+  out["elts"] = nlohmann::json::array();
+  for (std::size_t i = 0; i < result_shape[depth]; ++i)
+  {
+    indices.push_back(i);
+    nlohmann::json child;
+    if (!build_broadcast_literal_result(
+          function,
+          lhs,
+          lhs_shape,
+          rhs,
+          rhs_shape,
+          result_shape,
+          indices,
+          depth + 1,
+          child))
+      return false;
+    out["elts"].push_back(child);
+    indices.pop_back();
+  }
+  return true;
+}
+
 static bool try_extract_numeric_1d_list(
   const nlohmann::json &list_node,
   std::vector<numeric_value> &values)
@@ -717,44 +993,64 @@ bool is_broadcastable(
   return true;
 }
 
+bool is_broadcastable(
+  const std::vector<std::size_t> &shape1,
+  const std::vector<std::size_t> &shape2)
+{
+  std::vector<int> lhs(shape1.begin(), shape1.end());
+  std::vector<int> rhs(shape2.begin(), shape2.end());
+  return is_broadcastable(lhs, rhs);
+}
+
 void numpy_call_expr::broadcast_check(const nlohmann::json &operands) const
 {
-  std::vector<int> previous_shape;
+  std::vector<std::size_t> previous_shape;
   bool is_first_operand = true;
-  symbol_id sid = converter_.create_symbol_id();
 
   for (const auto &op : operands)
   {
-    if (op["_type"] == "Name")
+    std::vector<std::size_t> current_shape;
+    if (op.is_object() && op.contains("_type"))
     {
-      sid.set_object(op["id"].get<std::string>());
-      symbolt *s = converter_.find_symbol(sid.to_string());
-      assert(s);
-
-      // Retrieve the current operand's array shape.
-      std::vector<int> current_shape =
-        converter_.type_handler_.get_array_type_shape(s->get_type());
-
-      // For subsequent operands, compare shapes using broadcasting rules.
-      if (!is_first_operand)
+      const std::string type = op["_type"].get<std::string>();
+      if (type == "Name")
       {
-        if (!is_broadcastable(previous_shape, current_shape))
-        {
-          std::ostringstream oss;
-          oss << "operands could not be broadcast together with shapes (";
-          oss << previous_shape[0] << ",) (";
-          oss << current_shape[0] << ",)";
-          throw std::runtime_error(oss.str());
-        }
+        symbol_id sid = converter_.create_symbol_id();
+        sid.set_object(op["id"].get<std::string>());
+        symbolt *s = converter_.find_symbol(sid.to_string());
+        assert(s);
+        const auto dims =
+          converter_.type_handler_.get_array_type_shape(s->get_type());
+        current_shape.assign(dims.begin(), dims.end());
       }
-      else
+      else if (is_list_node(op))
       {
-        is_first_operand = false;
+        if (!get_literal_shape(op, current_shape))
+          current_shape.clear();
       }
-
-      // Update previous_shape for the next iteration.
-      previous_shape = current_shape;
+      else if (type == "Constant" || type == "UnaryOp")
+      {
+        scalar_value scalar;
+        if (try_extract_scalar_constant(op, scalar))
+          current_shape.clear();
+      }
     }
+
+    if (!is_first_operand)
+    {
+      if (!is_broadcastable(previous_shape, current_shape))
+      {
+        throw std::runtime_error(
+          "operands could not be broadcast together with shapes " +
+          format_shape(previous_shape) + " " + format_shape(current_shape));
+      }
+    }
+    else
+    {
+      is_first_operand = false;
+    }
+
+    previous_shape = current_shape;
   }
 }
 
@@ -1175,8 +1471,19 @@ exprt numpy_call_expr::create_expr_from_call()
 
     if (
       function == "add" || function == "subtract" || function == "multiply" ||
-      function == "divide")
+      function == "divide" || function == "power")
     {
+      if (
+        lhs["_type"] == "List" && rhs["_type"] == "List" &&
+        lhs.contains("elts") && rhs.contains("elts") &&
+        lhs["elts"].is_array() && rhs["elts"].is_array() &&
+        lhs["elts"].empty() && rhs["elts"].empty())
+      {
+        throw std::runtime_error(
+          "TypeError: numpy operation on two empty arrays is not supported "
+          "yet");
+      }
+
       scalar_value lhs_scalar;
       scalar_value rhs_scalar;
       if (
@@ -1311,6 +1618,41 @@ exprt numpy_call_expr::create_expr_from_call()
           out["elts"].push_back(row);
         }
         return converter_.get_expr(out);
+      }
+
+      if (lhs["_type"] == "List" && rhs["_type"] == "List")
+      {
+        std::vector<std::size_t> lhs_shape;
+        std::vector<std::size_t> rhs_shape;
+        std::vector<std::size_t> result_shape;
+        if (
+          get_literal_shape(lhs, lhs_shape) &&
+          get_literal_shape(rhs, rhs_shape) &&
+          compute_broadcast_shape(lhs_shape, rhs_shape, result_shape) &&
+          result_shape.size() <= 2)
+        {
+          nlohmann::json folded;
+          std::vector<std::size_t> indices;
+          if (build_broadcast_literal_result(
+                function,
+                lhs,
+                lhs_shape,
+                rhs,
+                rhs_shape,
+                result_shape,
+                indices,
+                0,
+                folded))
+          {
+            exprt result_expr = converter_.get_expr(folded);
+            if (converter_.current_lhs)
+            {
+              converter_.current_lhs->type() = result_expr.type();
+              converter_.update_symbol(*converter_.current_lhs);
+            }
+            return result_expr;
+          }
+        }
       }
     }
 
@@ -1496,22 +1838,60 @@ exprt numpy_call_expr::create_expr_from_call()
             "yet");
         }
 
-        code_function_callt call =
-          to_code_function_call(to_code(function_call_expr::get()));
-        typet size = type_handler_.get_typet(lhs["elts"]);
-        typet t = converter_.get_static_array(lhs, size).type();
+        std::vector<std::size_t> lhs_shape;
+        std::vector<std::size_t> rhs_shape;
+        if (
+          !get_literal_shape(lhs, lhs_shape) ||
+          !get_literal_shape(rhs, rhs_shape))
+        {
+          throw std::runtime_error(
+            "TypeError: numpy elementwise operations require literal arrays "
+            "in this path");
+        }
+
+        std::vector<std::size_t> result_shape;
+        if (!compute_broadcast_shape(lhs_shape, rhs_shape, result_shape))
+        {
+          throw std::runtime_error(
+            "operands could not be broadcast together with shapes " +
+            format_shape(lhs_shape) + " " + format_shape(rhs_shape));
+        }
+
+        if (result_shape.size() > 2)
+        {
+          throw std::runtime_error(
+            "TypeError: numpy elementwise operations currently support up to "
+            "2D arrays");
+        }
+
+        auto as_dim =
+          [](const std::vector<std::size_t> &shape, std::size_t axis) {
+            if (shape.empty())
+              return from_integer(1, int_type());
+            if (shape.size() == 1)
+              return from_integer(
+                axis == 0 ? 1 : static_cast<int>(shape[0]), int_type());
+            return from_integer(
+              static_cast<int>(axis < shape.size() ? shape[axis] : 1),
+              int_type());
+          };
+
+        const nlohmann::json &reference =
+          lhs_shape.size() >= rhs_shape.size() ? lhs : rhs;
+        typet size = type_handler_.get_typet(reference["elts"]);
+        typet t = converter_.get_static_array(reference, size).type();
 
         converter_.current_lhs->type() = t;
         converter_.update_symbol(*converter_.current_lhs);
+
+        code_function_callt call =
+          to_code_function_call(to_code(function_call_expr::get()));
         auto &args = call.arguments();
         args.push_back(address_of_exprt(*converter_.current_lhs));
-
-        std::vector<int> shape = type_handler_.get_array_type_shape(t);
-        exprt m = shape.size() < 2 ? gen_one(int_type())
-                                   : from_integer(shape[0], int_type());
-        exprt n = from_integer(shape.back(), int_type());
-        args.push_back(m);
-        args.push_back(n);
+        args.push_back(as_dim(lhs_shape, 0));
+        args.push_back(as_dim(lhs_shape, 1));
+        args.push_back(as_dim(rhs_shape, 0));
+        args.push_back(as_dim(rhs_shape, 1));
 
         return call;
       }
@@ -1534,17 +1914,13 @@ exprt numpy_call_expr::get()
   // Create array from numpy.array()
   if (function == "array")
   {
-    // Check for 3D+ arrays and reject them early
     int array_dims = type_handler_.get_array_dimensions(call_["args"][0]);
-
     if (array_dims >= 3)
     {
       throw std::runtime_error(
-        "ESBMC does not support 3D or higher dimensional arrays. "
-        "Found " +
+        "ESBMC does not support 3D or higher dimensional arrays. Found " +
         std::to_string(array_dims) +
-        "D array creation. "
-        "Please use 1D or 2D arrays only.");
+        "D array creation. Please use 1D or 2D arrays only.");
     }
 
     typet size = type_handler_.get_typet(call_["args"][0]["elts"]);
