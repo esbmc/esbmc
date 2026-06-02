@@ -1752,8 +1752,15 @@ int esbmc_parseoptionst::do_bmc_strategy(
       // gate is needed.
       if (k_step > 1)
       {
-        tvt is_res =
-          is_inductive_step_violated(options, goto_functions, k_step);
+        // The termination branch doesn't use the dynamic FC-hint
+        // mechanism (k-induction's optimisation for symbolic
+        // bounds), but the signature change to is_inductive_step_-
+        // violated requires us to pass an out-param. Discard the
+        // hint here — adopting it for the termination path is a
+        // separate design question.
+        uint64_t unused_hint = 0;
+        tvt is_res = is_inductive_step_violated(
+          options, goto_functions, k_step, unused_hint);
         // Symex may have set disable-inductive-step mid-run (function
         // pointers, recursion, concurrency). The IS UNSAT result is
         // then a vacuous "0 VCCs to falsify" and not a real
