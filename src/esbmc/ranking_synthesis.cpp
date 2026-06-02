@@ -980,6 +980,20 @@ bool recognize_loop(
   out.head = loop.get_original_loop_head();
   out.back = loop.get_original_loop_exit();
 
+  // Step past leading ASSUME / skip / location / decl / dead
+  // instructions to find the actual loop-head IF. --interval-analysis
+  // inserts ASSUME(bounds) at the back-edge target via insert_swap,
+  // so the natural loop's head iterator can point at an ASSUME rather
+  // than the IF. The ASSUMEs are extra facts about modified variables
+  // and don't change the loop's control-flow shape from the
+  // recogniser's POV; just skip past them.
+  while (out.head != out.back &&
+         (out.head->is_skip() || out.head->type == LOCATION ||
+          out.head->type == DECL || out.head->type == DEAD ||
+          out.head->is_assume()))
+    ++out.head;
+  if (out.head == out.back)
+    return false;
   if (!out.head->is_goto())
     return false;
   if (is_nil_expr(out.head->guard) || is_true(out.head->guard))
