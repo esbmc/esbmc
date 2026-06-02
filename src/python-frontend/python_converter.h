@@ -1011,6 +1011,11 @@ private:
 
   contextt &symbol_table_;
   const nlohmann::json *ast_json;
+  /// The entry-point module AST, captured at construction. `ast_json` is
+  /// temporarily swapped to imported modules during conversion (see with_ast),
+  /// so this retains a stable handle to the top-level module whose body holds
+  /// the constructor call sites used by cross-module attribute-type inference.
+  const nlohmann::json *entry_ast_;
   const global_scope &global_scope_;
   type_handler type_handler_;
   string_builder *string_builder_;

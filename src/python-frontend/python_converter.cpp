@@ -62,6 +62,7 @@ python_converter::python_converter(
   const global_scope &gs)
   : symbol_table_(_context),
     ast_json(ast),
+    entry_ast_(ast),
     global_scope_(gs),
     type_handler_(*this),
     string_builder_(new string_builder(*this, &string_handler_)),
