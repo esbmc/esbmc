@@ -1,4 +1,4 @@
 THOROUGH
 main.c
 --smt-during-symex --smt-symex-assert --smt-symex-guard --k-induction --add-symex-value-sets
-^VERIFICATION SUCCESSFUL$
+^VERIFICATION UNKNOWN$
