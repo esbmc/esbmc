@@ -2930,3 +2930,195 @@ larger than Part IV's frontend-only scope:
 #   then: ctest -R 'regression/python/.*(arith|np_|math)' --timeout 60   # ~277/432 abort
 grep -n 'migrate_expr' src/util/migrate.cpp | head        # recursive; no resolved-type guard
 ```
+
+# Part V — Python frontend → **100 % IREP2** (the deep-pin program)
+
+> **Status: forward plan / costed path — not started, and deliberately
+> out of Part IV's scope.** Part IV (§§1–16.1) is the *frontend-scoped,
+> behaviour-preserving* plan and its honest conclusion is "encapsulate and
+> IREP2-internalise what the resolved-type / control-flow invariants allow;
+> stay legacy at the seam by design" (§16.1 go/stop). Part V answers a
+> *different* question the user posed — **"what would it take to make the
+> Python frontend 100 % IREP2?"** — and the answer is a **repo-wide
+> pipeline program**, not a frontend sweep. This part exists so that the cost
+> and shape of that program are on record; **read §V.1 before treating any
+> of it as actionable.** Every anchor is a snapshot at the revision this lands
+> on (Part IV's drift caveat applies); re-run the cited command before acting.
+
+## V.1 What "100 %" means, and why it is not a frontend task
+
+**Definition (the acceptance bar for the whole program):**
+1. `git grep -P '\b([A-Za-z_]*(exprt|typet|codet)|irept)\b' -- src/python-frontend`
+   → **~0** (modulo unavoidable boundary glue, explicitly enumerated at close).
+2. The converter writes the symbol table **only** via `set_type(type2tc)` /
+   `set_value(expr2tc)` (`symbol.h:49-67`, the B2 IREP2 setters) carrying
+   **fully-IREP2** values — `grep -rn 'set_type(\|set_value(' src/python-frontend
+   | grep -vc 2tc` → **0**.
+3. Function **bodies** are IREP2; `goto_convert` consumes them without a
+   `migrate_*` back-hop (today: legacy at `goto_convert_functions.cpp:116`,
+   `to_code(symbol.get_value())`).
+4. No `#`-attribute escape hatch on a legacy `irept` survives into a shared
+   downstream pass (F-P5).
+
+**Why this is structurally a pipeline program, not frontend work.** The Python
+converter's output is consumed by **shared, still-legacy** passes. You cannot
+hand them IREP2 until they are IREP2-native, and they are not Python's to own.
+The four walls (all *proven and merged* in Part IV §16/§16.1, and re-anchored
+here) sit **outside** `src/python-frontend`:
+
+| Wall | Statement | Anchor (re-verify) | Owner |
+|---|---|---|---|
+| **W1 (P1)** | IREP2 has the **flat goto-level** code kinds (`code_block`/`assign`/`decl`/`return`/`goto`/`skip`/`dead`/`free`/`expression`) but **no structured CF kinds** (`ifthenelse`/`while`/`for`/`switch`/`break`/`continue`/`label`); `goto_convert` reads the body as **legacy** `codet`. | `grep 'IREP2_EXPR(code' src/irep2/expr_kinds.inc`; `goto_convert_functions.cpp:116` | shared (all frontends) |
+| **W2 (P2 / F-P10 / F-P11)** | `member2t`/`index2t` assert a **resolved** struct/array source (`irep2_expr.h:1502`/`:1576`); the converter runs **before** `clang_cpp_adjust` follows `symbol`-typed bases; `migrate_expr` recurses into the assert (§16.1). | §16, §16.1 | shared (`clang_cpp_adjust`) |
+| **W3 (F-P5)** | `#cpp_type`/`#member_name`/`#cformat` are read off **legacy** nodes by `clang_cpp_adjust_expr.cpp:464`, `cpp_expr2string.cpp:138-140`, `goto2c/expr2c.cpp:169-174`. | §15.2 | shared |
+| **W4** | The counterexample C/C++ printer consumes `#cpp_type`/`#cformat` (Part II 2.7, "out of scope"). | Part II §2.7 | shared |
+
+> **The reframing (load-bearing):** *"Make the Python frontend 100 % IREP2"*
+> ≡ *"Make ESBMC's frontend→goto pipeline IREP2-native, then flip Python
+> last."* This is **finishing** the repo-wide IREP2 migration (#4715) through
+> `goto_convert` and `clang_cpp_adjust` — the boundaries B1/P1/P2 that Parts I
+> and III closed **on purpose** because they are shared and high-blast-radius.
+> Part V is therefore an **umbrella-issue proposal**, and the Python flip
+> (Phase V.3) is its smallest, last step.
+
+## V.2 The phased program
+
+Ordered by dependency. Phases V.1k (keystone), V.2, V.4, V.5 are **shared
+infrastructure** — they change C, C++, CUDA, Solidity, and Java/Kotlin lowering,
+not just Python. Each phase holds Part IV's universal gate **plus `esbmc-cpp`**
+(the C++ suite) wherever it touches the shared clang-cpp/goto passes.
+
+### Phase V.0 — Goal, harness, baseline
+Pin the §V.1 acceptance bar. Stand up the dual-solver (Bitwuzla + Z3),
+asserts-build, verdict + matched-text gate over the full `regression/python`
+strata **and** the operational-model `.py` corpus (§3.1), plus `esbmc-cpp` as a
+shared-pass backstop. Snapshot the census.
+*Accept:* harness reproduces today's verdicts/text; census tooling agreed; the
+4 walls each have a live reproducer (the §16/§16.1 asserts).
+
+### Phase V.1k — Resolve-then-build (removes W2) — **the keystone**
+*Nothing in the converter's expression construction can migrate before this
+(§16.1).* Introduce IREP2-native type resolution so that, at construction time,
+`member`/`index`/general operands carry **resolved** struct/array types and
+`migrate_expr`/`member2tc`/`index2tc` no longer abort. Two designs to prototype
+and compare head-to-head before committing:
+- **(a) pre-construction resolver** in the frontend (follow `symbol` types
+  before the converter builds nodes), or
+- **(b) IREP2-native `clang_cpp_adjust`** (a Python-specific adjuster the
+  converter feeds, replacing the legacy round-trip).
+
+**Proof obligation (non-negotiable):** the resolved type must equal what
+today's `clang_cpp_adjust` + `goto_convert` produce — prove by round-trip
+equivalence over the corpus on an asserts build. *Accept:* a representative
+member/subscript expression builds `member2tc`/`index2tc` **in the converter**
+with **zero** `irep2_expr.h:1502/1576` aborts across the whole suite; verdict +
+text unchanged.
+**Investigation gap (resolve first):** map exactly where/how `clang_cpp_adjust`
+resolves Python attribute/element types today (`grep -rn 'follow\|#cpp_type'
+src/clang-cpp-frontend/clang_cpp_adjust*`); decide whether that resolution can
+run pre-construction soundly, or whether construction must move below adjust
+(which makes the converter an adjust client — design implication for (a) vs (b)).
+
+### Phase V.1a — Type construction → `type2tc` end-to-end (extends Phase 4.3)
+Finish what Phase 4.3 deferred: the tuple/optional **struct** builders (§15.7
+F-P5 seam cases) and any remaining `type_handler` families, now written
+straight into the symbol table via `set_type(type2tc)` rather than
+`lower_to_seam`. Depends on V.2 (struct components carry `#member_name`/
+`#access`, which must by then ride IREP2). *Accept:* `type_handler` constructs
+no legacy `typet`; symbol types are IREP2 at write; verdict + text unchanged.
+
+### Phase V.2 — IREP2-native attribute carriage (removes W3)
+Move `#cpp_type`/`#member_name`/`#cformat` off `irept` onto a **typed IREP2
+companion keyed by symbol id** (the §5.1 pattern — *not* a generic string-map,
+which re-introduces the escape hatch IREP2 abolished). Teach the three external
+consumers (`clang_cpp_adjust_expr`, `cpp_expr2string`, `goto2c/expr2c`) to read
+the IREP2 form. *Accept:* the legacy-attribute reads are gone; verdict + text
+unchanged on **both** `python` and `esbmc-cpp` (these consumers serve C++ too).
+*Risk:* highest shared blast radius after V.4.
+
+### Phase V.3 — IREP2 expression construction in the converter (Phase 4.4/4.5, for real)
+With W2/W3 removed, flip every converter idiom to typed factories — the ~842
+`symbol_expr`, member/index/typecast/deref/const, and the RP13 operand surgery
+in the OM handlers (`python_list`/`dict`/`set`) — and write `set_value(expr2tc)`.
+This is the Part IV §7.2 file-by-file work, now **unblocked**. *Accept:* legacy
+expression-builder census in `src/python-frontend` → 0 except body shells;
+verdict + text unchanged; asserts cross-check silent. *This is the
+"comparatively mechanical" bulk — but only after V.1k.*
+
+### Phase V.4 — IREP2 structured CF + IREP2-aware `goto_convert` (removes W1)
+Add the missing structured CF code kinds to IREP2 (`code_ifthenelse2t`,
+`code_while2t`, `code_for2t`, `code_switch2t`, `code_break2t`,
+`code_continue2t`, `code_label2t`) and teach `goto_convert` /
+`goto_convert_functions` to consume IREP2 bodies (or migrate at a thinner,
+IREP2-side seam). The converter then emits IREP2 bodies and
+`goto_convert_functions.cpp:116` no longer back-migrates. *Accept:* a Python
+body round-trips as IREP2 through goto-convert with **byte-identical GOTO
+output**; **all** frontends still pass. *The biggest, riskiest phase — it
+changes every frontend's body lowering; stage behind a feature flag and migrate
+frontends one at a time.*
+
+### Phase V.5 — IREP2-native counterexample printer (removes W4)
+Part II Phase 2.7: an IREP2 C/C++ printer so traces / `test.desc`-matched text
+are produced without the legacy printer reading `#cpp_type`/`#cformat`.
+*Accept:* counterexample text byte-identical where `test.desc` pins it (Q-P1:
+the `index < l->size` gate and the coverage/diagnostic families), with the
+legacy printer out of the Python path.
+
+### Phase V.6 — Flip & verify
+Switch `create_symbol`/`add_symbol`/`update_symbol` fully to IREP2 writes;
+delete residual legacy construction and now-dead includes (C-Dead discharge per
+removed branch); census → ~0; whole-suite dual-solver + asserts + `esbmc-cpp`
+parity. *Accept:* §V.1 bar met; verdict + text parity; go/stop recorded with
+the final surviving boundary-glue enumerated.
+
+## V.3 Dependencies
+
+```
+V.0 ─► V.1k ─┬─► V.1a ─┐
+             ├─► V.2 ──┼─► V.3 ─► V.6
+             │         │
+   (parallel shared)   │
+        V.4 ───────────┤   (bodies + goto-convert)
+        V.5 ───────────┘   (text parity)
+```
+V.1k is the unlock for all converter construction (V.1a/V.2/V.3). V.4 and V.5
+are parallel shared tracks that also gate the final flip (bodies, text). V.6 is
+the last step.
+
+## V.4 Risk register (Part V-specific; extends Part IV §9)
+
+| # | Area | Risk | Sev | Mitigation |
+|---|---|---|---|---|
+| RV1 | scope/process | Reopens B1/P1/P2 — boundaries Parts I & III closed as shared and risky. Multi-quarter, multi-engineer, dozens of PRs across all frontends. | **critical** | Run as its own umbrella issue, **not** under Part IV; feature-flag V.4; migrate frontends one at a time. |
+| RV2 | soundness | V.1k's resolved type ≠ what `adjust`+goto-convert produce → silent verdict drift on attribute/subscript-heavy programs. | **critical** | The V.1k proof obligation (corpus round-trip equivalence, asserts-on) is a hard gate; do not proceed to V.3 until discharged. |
+| RV3 | soundness | V.2/V.4 touch shared clang-cpp/goto passes → C++/CUDA/Solidity verdict regressions, not just Python. | high | Gate **every** V.2/V.4 commit on `esbmc-cpp` + a Solidity stratum, not only `python`. |
+| RV4 | compatibility | V.4 changes GOTO-binary lowering → on-disk `.goto` format drift (Part I B4). | high | Require byte-identical GOTO output per phase; pin the serialized format; old binaries must still load. |
+| RV5 | text parity | V.5 printer divergence breaks `test.desc`-matched counterexample text. | med | Q-P1 gate (§15.6): the one `index < l->size` pretty-print + coverage/diagnostic families held invariant. |
+
+## V.5 Validation
+
+Part IV §10 gate, escalated: dual-solver (Bitwuzla + Z3) verdict + matched-text
+parity, asserts build (live `migrate.cpp` cross-check), over the full
+`regression/python` strata **and** the model `.py` corpus — **plus** `esbmc-cpp`
+(and a Solidity/CUDA stratum) for any phase that touches shared passes (V.2,
+V.4, V.5). GOTO-output byte-identity is an additional V.4 gate. Respect the
+5-minute per-run cap by stratifying; full suite at phase boundaries.
+
+## V.6 Honest estimate and recommendation
+
+**Estimate.** This is effectively *completing* the repo-wide IREP2 migration
+(#4715) through `goto_convert` and `clang_cpp_adjust` — **multi-quarter,
+multi-engineer, dozens of PRs**, with the Python-specific flip (V.3) being the
+smallest and last step. It is **not** reachable by continuing the Part IV
+frontend sweep.
+
+**Recommendation.** Parts I and III concluded these pins stay closed *because*
+they are shared and risky; §16.1's go/stop reached the same verdict for Part IV.
+Unless ESBMC commits to the **repo-wide "IREP2-native frontend→goto pipeline"
+initiative** as a first-class program (Phases V.1k/V.2/V.4/V.5 as shared
+infrastructure under their own umbrella issue), the defensible target remains
+Part IV's: **IREP2-internal where the resolved-type/CF invariants allow, legacy
+at the seam by design.** If the initiative *is* greenlit, **Phase V.1k
+(resolve-then-build) is the mandatory first spike** — it is the keystone, its
+proof obligation (RV2) is the highest-value question to settle, and every other
+converter phase is blocked on it.
