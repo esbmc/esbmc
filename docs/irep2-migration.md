@@ -1516,7 +1516,7 @@ the census row with the §2 commands before trusting it.
 | 4.1 | Attribute-access encapsulation (`#cpp_type`/`#cformat`/`#member_name`) | **LANDED** | Typed accessors `type_utils::{set,get}_cpp_type`, `{set,remove}_member_name` (`type_utils.h:174-196`); `#cformat` routed through `irept::cformat()`. Raw `.set("#`/`.get("#` in `src/python-frontend` reduced to **2 each** (the accessor bodies). PR #4990 (commit `a99fc39171`). |
 | 4.2 | Enabling infrastructure (§6 factories, dead-but-tested) | **LANDED (#4997)** | Both expression-side helpers shipped dead-but-tested in PR #4997 (commit `f621558a3a`, 2026-05-31), **after** the prior reconcile that marked this row PARTIAL — see the §0.1 correction note: `symbol_expr2tc(const symbolt&)` and `side_effect_function_call2tc(return_type, function, arguments)` in `src/util/migrate.{h,cpp}` (decls `migrate.h:48-70`, defs `migrate.cpp:433,441`), each proven `==` to `migrate_expr` of the legacy form by round-trip unit tests `unit/util/migrate.test.cpp:225,246`. The `lower_to_seam` type seam (`type_handler.cpp:46-52`) shipped earlier with the 4.3 commits. **Phase 4.4's gating prerequisite is therefore satisfied — 4.4 is unblocked.** |
 | 4.3 | **Type** construction → `type2tc` (internal, lowered at seam) | **LANDED for elementary/float/array/pointer/NoneType-Optional/Callable**; struct families deferred | `type_handler.cpp` builders return `type2tc` then `lower_to_seam(...)`: int 492, uint 508, bool 512, uint256 546, float 486, str/char 587-589, NoneType/Optional 458/464, `build_array` 392, Callable 473-478, list pointees 951/964/1057. PRs #5000 (elementary), #5001 (float), #5002 (array), #5018 (Callable), + pointer-family commit `4ebe00eb2c`. Tuple/Optional **struct** builders are F-P5 seam cases deferred to 4.5 (§15.7). `python_int_typet` width logic **unchanged** (F-P7/RP4). |
-| 4.4 | **Expression** construction → `expr2tc` (internal) | **IN PROGRESS — file 1 (`converter_unop.cpp`) complete** | Unblocked by #4997. **File 1 done:** the `not`-on-string subtree landed in #5041 (`strlen(base)==0`) and the dict/list `not`-truthiness comparisons in #5045 (`size==0`, removing a `copy_to_operands` site), each built with `symbol_expr2tc` + `side_effect_function_call2tc`/`equality2tc` + `gen_zero(type2tc)` and lowered with one `migrate_expr_back`, gated dual-solver with the asserts cross-check silent (`unary_not_string{,_fail}`, `list_not_truthiness{,_fail}`, `dict40/43`). **File 2 (`converter_expr.cpp`) hit the §16 wall:** its attribute/subscript construction (`member2t`/`index2t`) is **blocked at the converter stage** by resolved-type asserts (F-P10/RP14) — migrate only assert-free / resolved-type subtrees per the refined §16 rule. Per-file guide in §7.2; subtree-not-site rule in §7.2.3; worked examples in §7.2.5. Dominant remaining risk RP13 (OM handlers). |
+| 4.4 | **Expression** construction → `expr2tc` (internal) | **IN PROGRESS — file 1 (`converter_unop.cpp`) complete** | Unblocked by #4997. **File 1 done:** the `not`-on-string subtree landed in #5041 (`strlen(base)==0`) and the dict/list `not`-truthiness comparisons in #5045 (`size==0`, removing a `copy_to_operands` site), each built with `symbol_expr2tc` + `side_effect_function_call2tc`/`equality2tc` + `gen_zero(type2tc)` and lowered with one `migrate_expr_back`, gated dual-solver with the asserts cross-check silent (`unary_not_string{,_fail}`, `list_not_truthiness{,_fail}`, `dict40/43`). **General construction blocked (§16.1, F-P11):** files 2 (`converter_expr.cpp`) and 4 (`converter_binop.cpp`) both hit the resolved-type asserts via independent routes — direct `member2t`/`index2t` construction *and* `migrate_expr` of operands that contain unresolved member/index sub-expressions (an integer-arith trial aborted ~277/432 tests). The migrate-forward/back-migrate recipe is therefore feasible **only for fully synthetic, concrete-typed operands** (file-1 subtrees); general user-expression construction can't migrate until `adjust` resolves types (P2, out of scope). **Recommendation: declare 4.4 complete-as-feasible at the file-1 (synthetic-operand) level** — the same "encapsulate, stay legacy at the seam" end-state Part III reached for Solidity (§16.1 go/stop table). Per-file guide §7.2; subtree-not-site rule §7.2.3. |
 | 4.5 | The legacy body seam (one documented `migrate_expr_back` hand-off) | **REMAINING** | Not started. Absorbs the tuple/optional struct builders (§15.7) and `#cpp_type`/`#member_name` re-attachment (F-P5). |
 | 4.6 | Tighten, census, go/stop decision | **REMAINING** | Not started. |
 
@@ -2864,4 +2864,69 @@ guess.
 grep -n 'type_id == type2t::struct_id' src/irep2/irep2_expr.h   # member2t assert (~1502)
 grep -n 'is_array_type(source)\|is_vector_type(source)' src/irep2/irep2_expr.h  # index2t assert (~1576)
 grep -rlE 'import numpy|np\.array' regression/python/*/main.py | wc -l           # 0 — no numpy coverage
+```
+
+### 16.1 The deeper wall — `migrate_expr` of a converter-stage operand recurses into the assert (F-P11)
+
+> Discovered executing Phase 4.4 on `converter_binop.cpp` (file 4 arithmetic),
+> 2026-06-02, via a **second independent route** to the §16 assert — which is
+> what promotes this from a per-file quirk to a **general feasibility limit on
+> Phase 4.4**.
+
+**F-P11 — you cannot `migrate_expr` an arbitrary converter-stage operand.** The
+§16 finding is broader than "don't build `member2t`/`index2t`." The standard
+Phase 4.4 recipe (§7.2.3) is *migrate the legacy operands forward, compose the
+typed node, back-migrate once*. But `migrate_expr` is **recursive**: migrating
+an operand that **is or contains** a `member`/`index` access over a still-`symbol`
+type builds `member2t`/`index2t` **inside the migration** and trips the same
+`irep2_expr.h:1502`/`:1576` assert. At the converter stage (pre-`adjust`) those
+unresolved member/index sub-expressions are pervasive — `self.x`, `obj.attr`,
+`a[i]` are ordinary operands of arithmetic, comparison, and assignment.
+
+**Evidence (reproduced, then reverted).** Migrating **integer `Add`/`Sub`/`Mult`**
+in `build_binary_expression` (`converter_binop.cpp:1383`) — assert-free
+`add2tc`/`sub2tc`/`mul2tc` over operands first coerced to a common bitvector
+type, the *safest possible* arithmetic migration — aborted **277 of 432**
+arithmetic/numpy tests. The abort was **not** in the arith node (which is
+assert-free) but in `migrate_expr(lhs)` / `migrate_expr(rhs)` when an operand
+carried an unresolved member access (e.g. `regression/python/math-sqrt-any-typed`:
+a `self`-attribute operand), firing the identical `member2t … line 1502`. A
+trivial `7 + 3` smoke test passed — masking the problem until the corpus ran.
+
+**Why the file-1 subtrees were safe and general construction is not.** The
+`converter_unop.cpp` truthiness subtrees (#5041/#5045) migrated cleanly because
+**every operand was a fully synthetic, concrete-typed value** — `strlen(...)` /
+`__ESBMC_list_size(...)` results, `size_type` symbols, freshly-built constants —
+never a member/index access over a Python object. `migrate_expr` of those never
+reaches a `member2t`/`index2t`. General-expression construction has no such
+guarantee.
+
+**Consequence — the migratable surface at the converter stage is small and
+specific.** A converter-stage construction is safely migratable **only when
+every operand it migrates forward is synthetic and concrete-typed** (OM-call
+results, sizes, constants). Any construction whose operands can be arbitrary
+user sub-expressions — i.e. the bulk of Phase 4.4 (the 842 `symbol_expr`, 121
+`member`, the arithmetic/comparison builders) — **cannot** use the
+migrate-forward/back-migrate recipe until types are resolved. Type resolution
+happens in `clang_cpp_adjust` (P2), which Part IV holds **out of scope**.
+
+**Go/stop recommendation (this is the §4.6/§12 decision point).** Phase 4.4's
+"build expression construction in IREP2 internally" goal is **feasible only for
+synthetic-operand subtrees**, which file 1 has now exhausted in the unary path.
+The honest end-state mirrors Part III's Solidity outcome (§14): **the frontend
+stays legacy at the construction stage by design**, because IREP2's
+resolved-type invariants cannot be met before `adjust`. Two forward paths, both
+larger than Part IV's frontend-only scope:
+
+| Path | What | Scope |
+|---|---|---|
+| (i) Resolve-then-build | Run type resolution (follow symbol types) **before** construction, so operands migrate cleanly | Moves/duplicates `adjust`-stage work into the converter — a real architectural change, **P2-class**, out of Part IV scope. Must prove the resolved type equals what `adjust`+goto-convert produce. |
+| (ii) Stop at file 1 | Declare Phase 4.4 complete-as-feasible: synthetic-operand subtrees migrated (`converter_unop`), general construction stays legacy at the seam | **Recommended.** Behaviour-preserving, matches the merged shape, and is the same "encapsulate, stay legacy at the seam" conclusion Part III reached for Solidity. |
+
+**Re-verify:**
+```sh
+# integer-arith migration in build_binary_expression aborts the corpus, not just one test:
+#   reproduce by mapping Add/Sub/Mult -> add2tc/sub2tc/mul2tc over migrate_expr(lhs/rhs),
+#   then: ctest -R 'regression/python/.*(arith|np_|math)' --timeout 60   # ~277/432 abort
+grep -n 'migrate_expr' src/util/migrate.cpp | head        # recursive; no resolved-type guard
 ```
