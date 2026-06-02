@@ -302,8 +302,61 @@ exprt python_converter::get_lambda_expr(const nlohmann::json &element)
   return lambda_handler_->get_lambda_expr(element);
 }
 
+exprt python_converter::get_named_expr(const nlohmann::json &element)
+{
+  // PEP 572 walrus `(target := value)`: assign value to target, then evaluate
+  // to the assigned value. Lower to a plain assignment emitted into the current
+  // block and read the target back, so the existing assignment machinery
+  // (symbol creation, type inference, flow tracking) is reused unchanged.
+  const nlohmann::json &target = element["target"];
+
+  // No block to emit into (e.g. a type-inference pre-pass): evaluate the value
+  // without binding rather than dropping a half-formed declaration.
+  if (!current_block)
+    return get_expr(element["value"]);
+
+  nlohmann::json assign = nlohmann::json::object();
+  assign["_type"] = "Assign";
+  assign["targets"] = nlohmann::json::array({target});
+  assign["value"] = element["value"];
+  copy_location_fields_from_decl(element, assign);
+
+  // get_var_assign mutates converter state (current_lhs, is_converting_rhs,
+  // is_converting_lhs, current_element_type); save/restore so the enclosing
+  // expression conversion is unaffected. flow_class_map_ is intentionally
+  // persistent (flow tracking) and left as get_var_assign updates it.
+  exprt *saved_lhs = current_lhs;
+  bool saved_rhs = is_converting_rhs;
+  bool saved_lhs_flag = is_converting_lhs;
+  typet saved_elem_type = current_element_type;
+  get_var_assign(assign, *current_block);
+  current_lhs = saved_lhs;
+  is_converting_rhs = saved_rhs;
+  is_converting_lhs = saved_lhs_flag;
+  current_element_type = saved_elem_type;
+
+  return get_expr(target);
+}
+
 exprt python_converter::get_expr(const nlohmann::json &element)
 {
+  // Walrus operator `(target := value)` — assign as a side effect, evaluate to
+  // the bound value. Handled before the type switch since NamedExpr is not in
+  // the expression-type map.
+  if (element.is_object() && element.value("_type", "") == "NamedExpr")
+    return get_named_expr(element);
+
+  // A walrus in a ternary branch (`a if c else b`) is evaluated conditionally,
+  // but get_named_expr binds unconditionally. Refuse with a clean diagnostic
+  // here (before type inference) rather than return an unsound verdict. The
+  // ternary test is always evaluated, so a walrus there stays supported.
+  if (
+    element.is_object() && element.value("_type", "") == "IfExp" &&
+    ((element.contains("body") && contains_named_expr(element["body"])) ||
+     (element.contains("orelse") && contains_named_expr(element["orelse"]))))
+    throw std::runtime_error(
+      "Walrus operator ':=' in a conditional expression is not supported");
+
   exprt expr;
 
   ExpressionType type = get_expression_type(element);

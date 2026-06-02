@@ -23,6 +23,14 @@
 
 exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
 {
+  // `and`/`or` short-circuit: a later operand may not execute. get_named_expr
+  // emits a walrus binding unconditionally, so a walrus inside any operand
+  // would bind even when Python would skip it. Refuse with a clean diagnostic
+  // rather than return an unsound verdict.
+  if (element.contains("values") && contains_named_expr(element["values"]))
+    throw std::runtime_error(
+      "Walrus operator ':=' in a boolean (and/or) operand is not supported");
+
   std::string op(element["op"]["_type"].get<std::string>());
   exprt logical_expr(
     python_frontend::map_operator(op, bool_type()), bool_type());
