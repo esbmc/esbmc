@@ -65,6 +65,13 @@ struct ranking_loopt
   // additional invariant facts conjoined into `inv` during the
   // discharge of ranking obligations.
   std::vector<expr2tc> body_assumes;
+  // Substitution map: `*p` (loop-invariant dereference) → fresh scalar
+  // symbol. Used by the supporting-invariant synthesiser to rewrite
+  // prefix instructions of the form `*p = c` into a synthetic scalar
+  // seed `fresh_p_scalar = c`, so seed-based bounds (`fresh_p >= c`)
+  // are visible to the invariant fixpoint exactly as they would be for
+  // a scalar-typed `p`.
+  std::map<expr2tc, expr2tc> deref_map;
 };
 
 /// A table of "other loops in this function" plus their modified sets.
@@ -1147,6 +1154,9 @@ bool recognize_loop(
     return false;
   out.guard =
     deref_map.empty() ? pos_guard : subst_parallel(pos_guard, deref_map);
+  // Stash the map so the supporting-invariant synthesiser can rewrite
+  // prefix `*p = c` assigns into seed constraints on the fresh scalar.
+  out.deref_map = deref_map;
 
   if (!out.back->is_goto() || !out.back->is_backwards_goto())
     return false;
@@ -2418,7 +2428,8 @@ bool reaches_head(
 prefix_seedst collect_seeds(
   const goto_programt &body,
   goto_programt::const_targett head,
-  const loop_skipt *loop_skip = nullptr)
+  const loop_skipt *loop_skip = nullptr,
+  const std::map<expr2tc, expr2tc> *deref_map = nullptr)
 {
   prefix_seedst seeds;
   // Targets we've justified by an earlier accepted IF jump (so meeting one
@@ -2528,6 +2539,33 @@ prefix_seedst collect_seeds(
     if (it->is_assign())
     {
       const code_assign2t &a = to_code_assign2t(it->code);
+      // Prefix assignment through a loop-invariant pointer: `*p = c`
+      // where `*p` is in the recogniser's deref_map. Treat as if the
+      // fresh scalar were assigned -- the synthesiser sees a seed
+      // constraint for the substituted scalar exactly as it would
+      // for a scalar-typed `p`.
+      if (
+        deref_map != nullptr && is_dereference2t(a.target) &&
+        !touches_memory(a.source))
+      {
+        auto map_it = deref_map->find(a.target);
+        if (map_it != deref_map->end() && is_symbol2t(map_it->second))
+        {
+          const irep_idt &fname = to_symbol2t(map_it->second).thename;
+          if (is_constant_int2t(a.source))
+            seeds.constants[fname] = to_constant_int2t(a.source).value;
+          else
+            seeds.constants.erase(fname);
+          pending.erase(
+            std::remove_if(
+              pending.begin(),
+              pending.end(),
+              [&](const pending_atom &p) { return p.free_vars.count(fname); }),
+            pending.end());
+          ++it;
+          continue;
+        }
+      }
       if (touches_memory(a.target) || touches_memory(a.source))
         return {};
       if (!is_symbol2t(a.target))
@@ -2626,7 +2664,7 @@ expr2tc synthesize_invariant(
   const namespacet &ns,
   const loop_skipt *loop_skip = nullptr)
 {
-  prefix_seedst seeds = collect_seeds(body, rl.head, loop_skip);
+  prefix_seedst seeds = collect_seeds(body, rl.head, loop_skip, &rl.deref_map);
   if (seeds.constants.empty() && seeds.path_atoms.empty())
     return gen_true_expr();
 
