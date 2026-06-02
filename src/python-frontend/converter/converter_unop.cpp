@@ -75,11 +75,14 @@ exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
     size_call.location() = location;
     current_block->copy_to_operands(size_call);
 
-    // Return comparison: size == 0 (empty dict is truthy for 'not')
-    exprt is_empty("=", bool_type());
-    is_empty.copy_to_operands(symbol_expr(size_result), gen_zero(size_type()));
+    // Return comparison: size == 0 (empty dict is truthy for 'not'). Phase 4.4:
+    // build the returned comparison in IREP2 and lower once at the return. The
+    // size_decl/size_call statements above stay legacy — their operands feed
+    // legacy code_*t shells, so moving them in isolation buys nothing (P1).
+    expr2tc is_empty2 = equality2tc(
+      symbol_expr2tc(size_result), gen_zero(migrate_type(size_type())));
+    exprt is_empty = migrate_expr_back(is_empty2);
     is_empty.location() = location;
-
     return is_empty;
   }
 
@@ -152,11 +155,13 @@ exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
     size_call.location() = location;
     current_block->copy_to_operands(size_call);
 
-    // Return comparison: size == 0 (empty list is falsy, so 'not list' is true when empty)
-    exprt is_empty =
-      equality_exprt(symbol_expr(size_result), gen_zero(size_type()));
+    // Return comparison: size == 0 (empty list is falsy, so 'not list' is true
+    // when empty). Phase 4.4: build in IREP2, lower once at the return; the
+    // size_decl/size_call statements above stay legacy (P1).
+    expr2tc is_empty2 = equality2tc(
+      symbol_expr2tc(size_result), gen_zero(migrate_type(size_type())));
+    exprt is_empty = migrate_expr_back(is_empty2);
     is_empty.location() = location;
-
     return is_empty;
   }
 
