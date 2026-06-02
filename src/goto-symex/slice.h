@@ -101,7 +101,14 @@ public:
    */
   bool run(symex_target_equationt::SSA_stepst &eq) override
   {
+    // The slicer object is reused across equations (e.g. incremental-bmc /
+    // k-induction run it once per produced formula). Each formula must be
+    // sliced independently, so clear all per-equation state up front.
+    // (Previously only `sliced` was reset, leaking `depends` across equations.)
     sliced = 0;
+    depends.clear();
+    collected_cache.clear();
+
     fine_timet algorithm_start = current_time();
     for (auto &step : boost::adaptors::reverse(eq))
     {
@@ -122,9 +129,11 @@ public:
    */
   std::unordered_set<std::string> depends;
 
-  /**
- * Hold a map of array symbols and indexes. All other indexes can be cut */
-  std::unordered_map<std::string, std::unordered_set<size_t>> indexes;
+  /// BLACK set (two-color DFS in collect_dependencies): nodes already fully
+  /// collected into #depends. Persists across steps so the shared guard
+  /// and-chain prefix is walked once overall (Θ(N²) -> O(N)). Collection is
+  /// purely monotone (depends.insert only), so the memo is unconditional.
+  std::unordered_set<const expr2t *> collected_cache;
 
   static expr2tc get_nondet_symbol(const expr2tc &expr);
 
@@ -159,15 +168,10 @@ protected:
   const bool slice_nondet;
 
   /**
-   * Collect every symbol of \expr into #depends (and array constant-index
-   * accesses into #indexes). Mutating "reverse-taint" accumulation.
-   *
-   * Walked with an explicit worklist instead of recursion so a deep
-   * left-leaning guard and-chain (thousands deep at high unwind) can't
-   * overflow the stack. (A whole-run node-identity memo was tried to also
-   * cut the Θ(N²) re-walk of shared chains, but it is unsound: depends.erase
-   * at an assignment's definition means a shared node can legitimately need
-   * re-collecting earlier in the reverse pass, which the memo would skip.)
+   * Collect every symbol of \expr into #depends (mutating "reverse-taint"
+   * accumulation). Walked with an explicit, memoised worklist — see the
+   * implementation for the two-color DFS that keeps this O(N) and stack-safe
+   * over deep guard and-chains.
    *
    * @param expr expression whose symbols are added to #depends
    */
