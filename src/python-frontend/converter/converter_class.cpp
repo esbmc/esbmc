@@ -337,11 +337,55 @@ typet python_converter::infer_attr_type_from_usage(
   if (!unset(t))
     return t;
 
+  // Cross-module inference sources. A class and the code that constructs it can
+  // live in different modules: e.g. `Node` is defined in node.py while the calls
+  // `n2 = Node(2, n1)` are in the importing main.py. The struct type is built
+  // while converting the *defining* module, where the call sites are not the
+  // current module_body. Gather every reachable module body — the entry module
+  // (entry_ast_), every imported module (module_ast_pool_), and the current
+  // module — deduplicated by address, so both the class definition and its
+  // constructor call sites are visible regardless of which module is current.
+  // Without this, an imported class's __init__-parameter attributes stay
+  // any_type() and nested reads inside functions abort ("Cannot resolve nested
+  // attribute"), e.g. quixbugs detect_cycle's `node.successor.successor`.
+  std::vector<const nlohmann::json *> module_bodies;
+  auto add_body = [&](const nlohmann::json &mod) {
+    if (!mod.is_object() || !mod.contains("body") || !mod["body"].is_array())
+      return;
+    const nlohmann::json *b = &mod["body"];
+    for (const auto *seen : module_bodies)
+      if (seen == b)
+        return;
+    module_bodies.push_back(b);
+  };
+  add_body(*ast_json);
+  if (entry_ast_)
+    add_body(*entry_ast_);
+  for (const auto &kv : module_ast_pool_)
+    add_body(kv.second);
+
+  // Locate the class definition across all reachable modules. Accept only an
+  // unambiguous single definition; if two modules define the same class name,
+  // don't guess (return null → attribute falls back to any_type()).
+  auto resolve_class_def = [&]() -> nlohmann::json {
+    nlohmann::json found;
+    for (const auto *b : module_bodies)
+    {
+      nlohmann::json c = json_utils::find_class(*b, class_name);
+      if (c.is_null())
+        continue;
+      if (!found.is_null() && found != c)
+        return nlohmann::json(); // defined in 2+ modules — don't guess
+      found = std::move(c);
+    }
+    return found;
+  };
+
   // Fallback: `self.<attr> = <rhs>` inside the class's own methods. Unify
   // across all methods so that two methods assigning different classes to
   // the same attribute fall back to any_type() rather than returning
   // whichever is encountered first.
-  const auto &cls_node = json_utils::find_class(module_body, class_name);
+  const nlohmann::json cls_node = resolve_class_def();
   if (!cls_node.is_null() && cls_node.contains("body"))
   {
     typet unified;
@@ -432,38 +476,48 @@ typet python_converter::infer_attr_type_from_usage(
           }
         }
       }
-      // 4. Scan module-level constructor calls and unify arg-K's type.
+      // 4. Scan top-level constructor calls across every reachable module and
+      // unify arg-K's type. A call's Name arguments (e.g. `n1` in
+      // `Node(2, n1)`) resolve against the var-map of the module the call lives
+      // in, so rebuild var_to_class per body before scanning it.
       if (param_idx >= 0)
       {
         typet ctor_unified;
-        for (const auto &stmt : module_body)
+        for (const auto *b : module_bodies)
         {
-          auto [t, v] = tgt_val(stmt);
-          if (!v || !v->is_object() || v->value("_type", "") != "Call")
-            continue;
-          const auto &f = (*v)["func"];
-          if (
-            !f.is_object() || f.value("_type", "") != "Name" ||
-            f.value("id", "") != class_name)
-            continue;
-          if (!v->contains("args") || !(*v)["args"].is_array())
-            continue;
-          const auto &call_args = (*v)["args"];
-          if (param_idx >= static_cast<int>(call_args.size()))
-            continue;
-          typet arg_t = infer_rhs(call_args[param_idx]);
-          if (unset(arg_t))
-            continue;
-          if (unset(ctor_unified))
-            ctor_unified = arg_t;
-          else if (ctor_unified != arg_t)
-            return typet();
+          populate_var_map(*b);
+          for (const auto &stmt : *b)
+          {
+            auto [t, v] = tgt_val(stmt);
+            if (!v || !v->is_object() || v->value("_type", "") != "Call")
+              continue;
+            const auto &f = (*v)["func"];
+            if (
+              !f.is_object() || f.value("_type", "") != "Name" ||
+              f.value("id", "") != class_name)
+              continue;
+            if (!v->contains("args") || !(*v)["args"].is_array())
+              continue;
+            const auto &call_args = (*v)["args"];
+            if (param_idx >= static_cast<int>(call_args.size()))
+              continue;
+            typet arg_t = infer_rhs(call_args[param_idx]);
+            if (unset(arg_t))
+              continue;
+            if (unset(ctor_unified))
+              ctor_unified = arg_t;
+            else if (ctor_unified != arg_t)
+              return typet();
+          }
         }
         if (!unset(ctor_unified))
           return ctor_unified;
       }
     }
   }
+  // Note: var_to_class now reflects the last body scanned above. The only
+  // remaining consumer (the function-local fallback) re-populates it per
+  // function, so this leftover state is never observed.
 
   // Fallback: `<local>.<attr> = <rhs>` inside an ordinary top-level function,
   // where `<local>` is a function-local instance of class_name (e.g.
@@ -672,6 +726,22 @@ void python_converter::get_attributes_from_self(
             infer_tuple_struct_from_value(stmt["value"], param_annotations);
         if (type.is_nil() || type.is_empty())
           type = type_handler_.get_typet(annotated_type);
+      }
+      else if (annotated_type == "Any")
+      {
+        // An `Any`-typed attribute carries no static shape, so a later nested
+        // read (`obj.attr.field`) cannot resolve. The per-module annotator
+        // assigns `Any` to a `self.x = <param-defaulting-to-None>` attribute of
+        // an *imported* class (the entry module's annotator would have written
+        // `NoneType` and gone through the usage-inference path below). Recover
+        // the same way: if every construction/assignment of this attribute
+        // across all reachable modules agrees on one class, adopt it; on any
+        // conflict infer_attr_type_from_usage returns unset and we keep Any.
+        typet from_usage =
+          infer_attr_type_from_usage(current_class_name_, attr_name);
+        type = (from_usage.id().as_string().empty() || from_usage.is_nil())
+                 ? type_handler_.get_typet(annotated_type)
+                 : from_usage;
       }
       else
       {
