@@ -315,6 +315,15 @@ __ESBMC_HIDE:;
   return nondet_int();
 }
 
+int fseeko(FILE *stream, off_t offset, int whence)
+{
+__ESBMC_HIDE:;
+  // Sound over-approximation: fseeko may succeed (0) or fail (-1), matching
+  // the fseek model. A nondet return constrains neither outcome, so it cannot
+  // hide a real bug or introduce a false alarm. See #2797.
+  return nondet_int();
+}
+
 long ftell(FILE *stream)
 {
 __ESBMC_HIDE:;
