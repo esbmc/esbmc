@@ -979,7 +979,9 @@ private:
     const std::string &member_name);
 
   /// Handle Optional value access
-  exprt unwrap_optional_if_needed(const exprt &expr);
+  exprt unwrap_optional_if_needed(
+    const exprt &expr,
+    const nlohmann::json &element = nlohmann::json());
 
   // =========================================================================
   // Dunder method dispatch for user-defined struct types

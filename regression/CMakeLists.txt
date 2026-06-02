@@ -323,6 +323,14 @@ set(_slow_regression_tests
     "regression/humaneval/humaneval_129"
     "regression/humaneval/humaneval_153"
     "regression/humaneval/humaneval_161"
+    # humaneval_90 used to fast-crash with the member2t assertion
+    # ("source->type->type_id == struct_id ...") when next_smallest()'s
+    # inline optional comparison (None | int == 2) was lowered. With the
+    # materialise-before-member fix the crash is gone and ESBMC reaches the
+    # real sorted(set(lst)) symex, which does not converge under the default
+    # budget. It stays KNOWNBUG; the larger inner timeout lets testing_tool
+    # record the KNOWNBUG verdict instead of ctest hard-killing the run.
+    "regression/humaneval/humaneval_90"
     # humaneval_158 used to fast-abort with "__ESBMC_list_size ... got empty,
     # expected pointer" when find_max()'s inline sorted(words)[0] subscript was
     # lowered. With the materialise-the-call fix the abort is gone and ESBMC
