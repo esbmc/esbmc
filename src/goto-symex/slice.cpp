@@ -7,33 +7,63 @@ static bool no_slice(const symbol2t &sym)
          config.no_slice_ids.count(sym.get_symbol_name());
 }
 
-template <bool Add>
-bool symex_slicet::get_symbols(const expr2tc &expr)
+// Does this node short-circuit as arr_symbol[constant_index]? If so, record
+// the watched index and report that operands must NOT be recursed (the full
+// array symbol is intentionally not added — only the constant index is
+// tracked; a later symbolic index falls through to the general symbol case).
+static bool collect_index_shortcut(
+  const expr2tc &expr,
+  std::unordered_map<std::string, std::unordered_set<size_t>> &indexes)
 {
-  bool res = false;
+  if (!is_index2t(expr))
+    return false;
+  const index2t &index = to_index2t(expr);
+  if (
+    !is_symbol2t(index.source_value) || !is_constant_number(index.index) ||
+    to_constant_int2t(index.index).value.is_negative())
+    return false;
+  const symbol2t &s = to_symbol2t(index.source_value);
+  const constant_int2t &i = to_constant_int2t(index.index);
+  indexes[s.get_symbol_name()].insert(i.as_ulong());
+  return true;
+}
 
-  /* Array slicer, extract dependencies of the form arr_symbol[constant_index]
-     Needs to come before the symbols as it short circuits.
-     This should be safe as if some symbolic index is eventually added, it will go to the next case. So the full symbol will go to the dependency tree
-   */
-  if (is_index2t(expr))
+void symex_slicet::collect_dependencies(const expr2tc &expr)
+{
+  // Explicit worklist (not recursion): guard and-chains are left-leaning and
+  // can be thousands deep, which would overflow the stack on a recursive walk.
+  std::vector<expr2tc> worklist{expr};
+  while (!worklist.empty())
   {
-    const index2t &index = to_index2t(expr);
-    if (
-      is_symbol2t(index.source_value) && is_constant_number(index.index) &&
-      !to_constant_int2t(index.index).value.is_negative())
-    {
-      const symbol2t &s = to_symbol2t(index.source_value);
-      const constant_int2t &i = to_constant_int2t(index.index);
-      if constexpr (Add)
-        return indexes[s.get_symbol_name()].insert(i.as_ulong()).second;
-    }
-  }
+    expr2tc cur = std::move(worklist.back());
+    worklist.pop_back();
+    if (is_nil_expr(cur))
+      continue;
+    // Array slicer: arr_symbol[constant_index] records only the watched index
+    // and does not descend (matches the original short-circuit).
+    if (collect_index_shortcut(cur, indexes))
+      continue;
 
-  // Recursively look if any of the operands has a inner symbol
+    cur->foreach_operand([&worklist](const expr2tc &e) {
+      if (!is_nil_expr(e))
+        worklist.push_back(e);
+    });
+
+    if (is_symbol2t(cur))
+      depends.insert(to_symbol2t(cur).get_symbol_name());
+  }
+}
+
+bool symex_slicet::depends_on_tracked(const expr2tc &expr)
+{
+  // Read-only query; not memoised (depends mutates across steps). Only ever
+  // called on shallow exprs (SSA lhs symbol / assume cond), so recursion is
+  // safe. No array short-circuit here: the original Add=false path fell
+  // through to the operands for index2t.
+  bool res = false;
   expr->foreach_operand([this, &res](const expr2tc &e) {
     if (!is_nil_expr(e))
-      res |= get_symbols<Add>(e);
+      res |= depends_on_tracked(e);
     return res;
   });
 
@@ -41,29 +71,26 @@ bool symex_slicet::get_symbols(const expr2tc &expr)
     return res;
 
   const symbol2t &s = to_symbol2t(expr);
-  if constexpr (Add)
-    res |= depends.insert(s.get_symbol_name()).second;
-  else
-    res |= no_slice(s) || depends.find(s.get_symbol_name()) != depends.end();
-  return res;
+  return res || no_slice(s) ||
+         depends.find(s.get_symbol_name()) != depends.end();
 }
 
 void symex_slicet::run_on_assert(symex_target_equationt::SSA_stept &SSA_step)
 {
-  get_symbols<true>(SSA_step.guard);
-  get_symbols<true>(SSA_step.cond);
+  collect_dependencies(SSA_step.guard);
+  collect_dependencies(SSA_step.cond);
 }
 
 void symex_slicet::run_on_assume(symex_target_equationt::SSA_stept &SSA_step)
 {
   if (!slice_assumes)
   {
-    get_symbols<true>(SSA_step.guard);
-    get_symbols<true>(SSA_step.cond);
+    collect_dependencies(SSA_step.guard);
+    collect_dependencies(SSA_step.cond);
     return;
   }
 
-  if (!get_symbols<false>(SSA_step.cond))
+  if (!depends_on_tracked(SSA_step.cond))
   {
     // we don't really need it
     SSA_step.ignore = true;
@@ -79,8 +106,8 @@ void symex_slicet::run_on_assume(symex_target_equationt::SSA_stept &SSA_step)
   else
   {
     // If we need it, add the symbols to dependency
-    get_symbols<true>(SSA_step.guard);
-    get_symbols<true>(SSA_step.cond);
+    collect_dependencies(SSA_step.guard);
+    collect_dependencies(SSA_step.cond);
   }
 }
 
@@ -90,7 +117,7 @@ void symex_slicet::run_on_assignment(
   assert(is_symbol2t(SSA_step.lhs));
   // TODO: create an option to ignore nondet symbols (test case generation)
 
-  if (!get_symbols<false>(SSA_step.lhs))
+  if (!depends_on_tracked(SSA_step.lhs))
   {
     // Should we add nondet to the dependency list (mostly for test cases)?
     if (!slice_nondet)
@@ -122,7 +149,7 @@ void symex_slicet::run_on_assignment(
       if (it != indexes.end())
       {
         // Found an array in the dependency list! Its guard should be added to the dependency list
-        get_symbols<true>(SSA_step.guard);
+        collect_dependencies(SSA_step.guard);
 
         // Is this updating a watched index?
         if (it->second.count(rhs_index.as_ulong()) > 0)
@@ -132,7 +159,7 @@ void symex_slicet::run_on_assignment(
           indexes[rhs_symbol.get_symbol_name()].erase(rhs_index.as_ulong());
 
           // Finally, the update_value becomes a dependency as well
-          get_symbols<true>(with.update_value);
+          collect_dependencies(with.update_value);
         }
         else
         {
@@ -152,8 +179,8 @@ void symex_slicet::run_on_assignment(
     // We might be trying to initialize an array in a weird way
     if (it != indexes.end())
     {
-      get_symbols<true>(SSA_step.guard);
-      get_symbols<true>(SSA_step.rhs);
+      collect_dependencies(SSA_step.guard);
+      collect_dependencies(SSA_step.rhs);
       return;
     }
 
@@ -167,8 +194,8 @@ void symex_slicet::run_on_assignment(
   }
   else
   {
-    get_symbols<true>(SSA_step.guard);
-    get_symbols<true>(SSA_step.rhs);
+    collect_dependencies(SSA_step.guard);
+    collect_dependencies(SSA_step.rhs);
 
     // Remove this symbol as we won't be seeing any references to it further
     // into the history.
@@ -180,7 +207,7 @@ void symex_slicet::run_on_renumber(symex_target_equationt::SSA_stept &SSA_step)
 {
   assert(is_symbol2t(SSA_step.lhs));
 
-  if (!get_symbols<false>(SSA_step.lhs))
+  if (!depends_on_tracked(SSA_step.lhs))
   {
     // we don't really need it
     SSA_step.ignore = true;

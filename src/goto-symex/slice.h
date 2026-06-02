@@ -159,15 +159,30 @@ protected:
   const bool slice_nondet;
 
   /**
-   * Recursively explores the operands of an expression \expr
-   * If a symbol is found, then it is added into the #depends
-   * member if `Add` is true, otherwise returns true.
+   * Collect every symbol of \expr into #depends (and array constant-index
+   * accesses into #indexes). Mutating "reverse-taint" accumulation.
    *
-   * @param expr expression to extract every symbol
-   * @return true if at least one symbol was found
+   * Walked with an explicit worklist instead of recursion so a deep
+   * left-leaning guard and-chain (thousands deep at high unwind) can't
+   * overflow the stack. (A whole-run node-identity memo was tried to also
+   * cut the Θ(N²) re-walk of shared chains, but it is unsound: depends.erase
+   * at an assignment's definition means a shared node can legitimately need
+   * re-collecting earlier in the reverse pass, which the memo would skip.)
+   *
+   * @param expr expression whose symbols are added to #depends
    */
-  template <bool Add>
-  bool get_symbols(const expr2tc &expr);
+  void collect_dependencies(const expr2tc &expr);
+
+  /**
+   * Read-only: does \expr reference a tracked dependency (a symbol in #depends
+   * or a no_slice symbol)? Used only on shallow exprs (an SSA lhs symbol, or an
+   * assume cond), never the deep guard, so it stays recursive and is NOT
+   * memoised — #depends mutates across steps, so a node-memo would be unsound.
+   *
+   * @param expr expression to test
+   * @return true if \expr touches the tracked dependency set
+   */
+  bool depends_on_tracked(const expr2tc &expr);
 
   /**
    * Remove unneeded assumes from the formula
