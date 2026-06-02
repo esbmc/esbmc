@@ -113,6 +113,10 @@ bool collect_callee_branch_guards(
       it->is_skip() || it->type == LOCATION || it->type == DECL ||
       it->type == DEAD)
       continue;
+    // Tolerate ASSUMEs from --interval-analysis. They constrain
+    // modified-set values but don't affect the branch structure.
+    if (it->is_assume())
+      continue;
     if (it->is_return())
     {
       // The trailing fall-through RETURN. Must be the last meaningful
@@ -124,7 +128,7 @@ bool collect_callee_branch_guards(
       {
         if (
           j->is_skip() || j->type == LOCATION || j->type == DECL ||
-          j->type == DEAD || j->type == END_FUNCTION)
+          j->type == DEAD || j->type == END_FUNCTION || j->is_assume())
         {
           ++j;
           continue;
@@ -167,6 +171,8 @@ bool collect_callee_branch_guards(
           k->is_skip() || k->type == LOCATION || k->type == DECL ||
           k->type == DEAD)
           continue;
+        if (k->is_assume())
+          continue; // ASSUME from --interval-analysis; doesn't fire the branch
         if (k->is_assign())
         {
           if (touches_memory_or_sideeffect(to_code_assign2t(k->code).source))
@@ -238,7 +244,18 @@ bool recognize_eca_main_loop(
 {
   goto_programt::const_targett head = loop.get_original_loop_head();
   goto_programt::const_targett back = loop.get_original_loop_exit();
-  if (!head->is_goto() || !is_constant_false(head->guard))
+  // Step past any leading ASSUME / skip / location / decl / dead
+  // instructions to find the `while(1)` head IF. --interval-analysis
+  // inserts an ASSUME(bounds) at the back-edge target via insert_swap,
+  // so the natural loop's head iterator points at the ASSUME rather
+  // than the IF. Skipping past it doesn't change the loop's shape
+  // from this recogniser's POV — the ASSUME is an extra fact about
+  // modified variables that doesn't alter control flow.
+  while (head != back &&
+         (head->is_skip() || head->type == LOCATION || head->type == DECL ||
+          head->type == DEAD || head->is_assume()))
+    ++head;
+  if (head == back || !head->is_goto() || !is_constant_false(head->guard))
     return false;
   if (!back->is_goto() || !back->is_backwards_goto())
     return false;
@@ -250,6 +267,10 @@ bool recognize_eca_main_loop(
     if (
       it->is_skip() || it->type == LOCATION || it->type == DECL ||
       it->type == DEAD)
+      continue;
+    // Tolerate ASSUMEs (from --interval-analysis). They constrain
+    // modified-set values but don't alter the loop's control flow.
+    if (it->is_assume())
       continue;
     if (it->is_assign())
     {
@@ -267,44 +288,102 @@ bool recognize_eca_main_loop(
       it->is_goto() && !is_true(it->guard) && !it->is_backwards_goto() &&
       it->targets.size() == 1)
     {
-      // Input-validation IF: guard = !(input != v1 && ... && input != vn).
-      // Peel the outer not, then flatten the && conjunction; every
-      // conjunct must be `input != const`.
-      if (!is_not2t(it->guard))
-        return false;
-      expr2tc cond = to_not2t(it->guard).value;
-      std::vector<expr2tc> conjuncts;
-      std::function<void(const expr2tc &)> flatten = [&](const expr2tc &e) {
-        if (is_and2t(e))
-        {
-          flatten(to_and2t(e).side_1);
-          flatten(to_and2t(e).side_2);
-        }
-        else
-          conjuncts.push_back(e);
-      };
-      flatten(cond);
-      if (conjuncts.empty())
-        return false;
+      // Input-validation IF. Two semantically equivalent shapes:
+      //   (a) original C: `IF !(input != v1 && ... && input != vn) GOTO call`
+      //   (b) interval-rewritten: `IF input == v1 || ... || input == vn GOTO call`
+      // Both shapes mean "take-jump iff input ∈ {v1,...,vn}"; collect
+      // the valid input values from whichever form is present.
       expr2tc the_input;
-      for (const expr2tc &c : conjuncts)
+      bool ok = true;
+      if (is_not2t(it->guard))
       {
-        if (!is_notequal2t(c))
+        expr2tc cond = to_not2t(it->guard).value;
+        std::vector<expr2tc> conjuncts;
+        std::function<void(const expr2tc &)> flatten = [&](const expr2tc &e) {
+          if (is_and2t(e))
+          {
+            flatten(to_and2t(e).side_1);
+            flatten(to_and2t(e).side_2);
+          }
+          else
+            conjuncts.push_back(e);
+        };
+        flatten(cond);
+        if (conjuncts.empty())
           return false;
-        const notequal2t &neq = to_notequal2t(c);
-        expr2tc lhs = neq.side_1, rhs = neq.side_2;
-        if (is_constant_int2t(lhs) && is_symbol2t(rhs))
-          std::swap(lhs, rhs);
-        if (!is_symbol2t(lhs) || !is_constant_int2t(rhs))
-          return false;
-        if (is_nil_expr(the_input))
-          the_input = lhs;
-        else if (
-          !is_symbol2t(the_input) ||
-          to_symbol2t(the_input).thename != to_symbol2t(lhs).thename)
-          return false;
-        values.push_back(to_constant_int2t(rhs).value);
+        for (const expr2tc &c : conjuncts)
+        {
+          if (!is_notequal2t(c))
+          {
+            ok = false;
+            break;
+          }
+          const notequal2t &neq = to_notequal2t(c);
+          expr2tc lhs = neq.side_1, rhs = neq.side_2;
+          if (is_constant_int2t(lhs) && is_symbol2t(rhs))
+            std::swap(lhs, rhs);
+          if (!is_symbol2t(lhs) || !is_constant_int2t(rhs))
+          {
+            ok = false;
+            break;
+          }
+          if (is_nil_expr(the_input))
+            the_input = lhs;
+          else if (
+            !is_symbol2t(the_input) ||
+            to_symbol2t(the_input).thename != to_symbol2t(lhs).thename)
+          {
+            ok = false;
+            break;
+          }
+          values.push_back(to_constant_int2t(rhs).value);
+        }
       }
+      else
+      {
+        std::vector<expr2tc> disjuncts;
+        std::function<void(const expr2tc &)> flatten = [&](const expr2tc &e) {
+          if (is_or2t(e))
+          {
+            flatten(to_or2t(e).side_1);
+            flatten(to_or2t(e).side_2);
+          }
+          else
+            disjuncts.push_back(e);
+        };
+        flatten(it->guard);
+        if (disjuncts.empty())
+          return false;
+        for (const expr2tc &d : disjuncts)
+        {
+          if (!is_equality2t(d))
+          {
+            ok = false;
+            break;
+          }
+          const equality2t &eq = to_equality2t(d);
+          expr2tc lhs = eq.side_1, rhs = eq.side_2;
+          if (is_constant_int2t(lhs) && is_symbol2t(rhs))
+            std::swap(lhs, rhs);
+          if (!is_symbol2t(lhs) || !is_constant_int2t(rhs))
+          {
+            ok = false;
+            break;
+          }
+          if (is_nil_expr(the_input))
+            the_input = lhs;
+          else if (
+            !is_symbol2t(the_input) ||
+            to_symbol2t(the_input).thename != to_symbol2t(lhs).thename)
+          {
+            ok = false;
+            break;
+          }
+          values.push_back(to_constant_int2t(rhs).value);
+        }
+      }
+      if (!ok)
+        return false;
       if (
         is_nil_expr(input_sym) || !is_symbol2t(the_input) ||
         to_symbol2t(input_sym).thename != to_symbol2t(the_input).thename)
