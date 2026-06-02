@@ -145,10 +145,11 @@ class CoreVisitorsMixin:
                 and not getattr(node, "keywords", [])):
             return False
         arg = node.args[0]
-        if (node.func.id == "sorted" and isinstance(arg, ast.Call)
-                and isinstance(arg.func, ast.Name) and arg.func.id == "list"
-                and len(arg.args) == 1 and not getattr(arg, "keywords", [])):
-            arg = arg.args[0]
+        if node.func.id == "sorted":
+            if (isinstance(arg, ast.Call) and isinstance(arg.func, ast.Name)
+                    and arg.func.id == "list" and len(arg.args) == 1
+                    and not getattr(arg, "keywords", [])):
+                arg = arg.args[0]
         return (isinstance(arg, ast.Call)
                 and isinstance(arg.func, ast.Attribute)
                 and arg.func.attr in ("items", "keys", "values")

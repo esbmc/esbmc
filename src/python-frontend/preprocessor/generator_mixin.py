@@ -1442,10 +1442,11 @@ class GeneratorMixin:
             return None, None
         wrapper = node.func.id
         arg = node.args[0]
-        if (wrapper == "sorted" and isinstance(arg, ast.Call)
-                and isinstance(arg.func, ast.Name) and arg.func.id == "list"
-                and len(arg.args) == 1 and not getattr(arg, "keywords", [])):
-            arg = arg.args[0]
+        if wrapper == "sorted":
+            if (isinstance(arg, ast.Call) and isinstance(arg.func, ast.Name)
+                    and arg.func.id == "list" and len(arg.args) == 1
+                    and not getattr(arg, "keywords", [])):
+                arg = arg.args[0]
         if isinstance(arg, ast.Name) and arg.id in self.dict_items_vars:
             return self.dict_items_vars[arg.id], wrapper
         dict_expr = self._get_dict_expr_from_items_call(arg)
@@ -1504,10 +1505,11 @@ class GeneratorMixin:
             return None, None
         wrapper = node.func.id
         inner = node.args[0]
-        if (wrapper == "sorted" and isinstance(inner, ast.Call)
-                and isinstance(inner.func, ast.Name) and inner.func.id == "list"
-                and len(inner.args) == 1 and not getattr(inner, "keywords", [])):
-            inner = inner.args[0]
+        if wrapper == "sorted":
+            if (isinstance(inner, ast.Call) and isinstance(inner.func, ast.Name)
+                    and inner.func.id == "list" and len(inner.args) == 1
+                    and not getattr(inner, "keywords", [])):
+                inner = inner.args[0]
         if not (isinstance(inner, ast.Call) and isinstance(inner.func, ast.Attribute)
                 and inner.func.attr == attr and not inner.args
                 and not getattr(inner, "keywords", [])):
