@@ -458,8 +458,12 @@ public:
   /** Delete the value set for the given variable name and suffix. */
   void del_var(const std::string &id, const std::string &suffix)
   {
-    std::string index = id2string(id) + suffix;
-    values.erase(index);
+    if (suffix.empty())
+    {
+      values.erase(id);
+      return;
+    }
+    values.erase(concat_key(id, suffix));
   }
 
   /** Look up the value set for the given variable name and suffix. */
@@ -472,12 +476,35 @@ public:
    *  given entryt. */
   entryt &get_entry(const entryt &e)
   {
-    std::string index = id2string(e.identifier) + e.suffix;
+    // The map key is `identifier + suffix`. The suffix is empty on the
+    // overwhelming majority of calls (every plain l1 variable; suffixes
+    // only appear for array/struct-member pointer tracking), so avoid
+    // building the concatenated temporary string in that case and key
+    // directly off the identifier.
+    if (e.suffix.empty())
+    {
+      std::pair<valuest::iterator, bool> r =
+        values.insert(std::pair<irep_idt, entryt>(e.identifier, e));
+      return r.first->second;
+    }
 
-    std::pair<valuest::iterator, bool> r =
-      values.insert(std::pair<irep_idt, entryt>(index, e));
+    std::pair<valuest::iterator, bool> r = values.insert(
+      std::pair<irep_idt, entryt>(concat_key(e.identifier, e.suffix), e));
 
     return r.first->second;
+  }
+
+  /** Compose the `identifier + suffix` map key into a single pre-sized
+   *  buffer, avoiding the temporary that `id2string(id) + suffix` allocates
+   *  for the (less common) array/struct-member pointer case. */
+  static std::string
+  concat_key(const std::string &id, const std::string &suffix)
+  {
+    std::string key;
+    key.reserve(id.size() + suffix.size());
+    key = id;
+    key += suffix;
+    return key;
   }
 
   /** Add a value set for each variable in the given list. */

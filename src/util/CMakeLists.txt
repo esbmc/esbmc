@@ -12,10 +12,6 @@ target_include_directories(filesystem
     )
 target_link_libraries(filesystem PUBLIC ${Boost_LIBRARIES})
 
-add_library(crypto_hash crypto_hash.cpp)
-target_include_directories(crypto_hash PUBLIC ${Boost_INCLUDE_DIRS})
-target_link_libraries(crypto_hash PUBLIC ${Boost_LIBRARIES})
-
 add_library(string_pool string_pool.cpp)
 
 add_library(usr_utils usr_utils.cpp)

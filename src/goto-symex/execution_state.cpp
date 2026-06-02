@@ -1118,36 +1118,29 @@ bool execution_statet::can_execution_continue() const
   return true;
 }
 
-crypto_hash execution_statet::generate_hash() const
+std::size_t execution_statet::generate_hash() const
 {
   auto l2 = std::dynamic_pointer_cast<state_hashing_level2t>(state_level2);
   assert(l2 != nullptr);
 
-  crypto_hash state = l2->generate_l2_state_hash();
-  std::string str = state.to_string();
-
+  // State fingerprint for interleaving dedup: combine the L2 value hash with
+  // each thread's program-counter location. A size_t structural hash (the
+  // same family irep2 uses for hash-consing) replaces the former Boost SHA-1;
+  // a collision only over-prunes interleavings, the same risk class crc()
+  // already carries tool-wide.
+  std::size_t h = l2->generate_l2_state_hash();
   for (const auto &it : threads_state)
-  {
-    goto_programt::const_targett pc = it.source.pc;
-    int id = pc->location_number;
-    std::stringstream s;
-    s << id;
-    str += "!" + s.str();
-  }
-
-  crypto_hash h;
-  h.ingest(str.c_str(), str.size());
-  h.fin();
+    esbmct::hash_combine(h, it.source.pc->location_number);
 
   return h;
 }
 
-crypto_hash execution_statet::update_hash_for_assignment(const expr2tc &rhs)
+std::size_t execution_statet::update_hash_for_assignment(const expr2tc &rhs)
 {
-  crypto_hash h;
-  rhs->hash(h);
-  h.fin();
-  return h;
+  // irep2's cached structural hash (crc) — an atomic size_t on the node,
+  // populated by hash-consing — replaces the former per-assignment SHA-1
+  // walk of the whole RHS tree, which dominated the --state-hashing path.
+  return rhs->crc();
 }
 
 void execution_statet::print_stack_traces(unsigned int indent) const
@@ -1346,38 +1339,35 @@ void execution_statet::state_hashing_level2t::make_assignment(
   const expr2tc &const_value,
   const expr2tc &assigned_value)
 {
-  //  crypto_hash hash;
-
   renaming::level2t::make_assignment(lhs_sym, const_value, assigned_value);
 
   // If there's no body to the assignment, don't hash.
   if (!is_nil_expr(assigned_value))
   {
     // XXX - consider whether to use l1 names instead. Recursion, reentrancy.
-    crypto_hash hash = owner->update_hash_for_assignment(assigned_value);
+    std::size_t hash = owner->update_hash_for_assignment(assigned_value);
     std::string orig_name = to_symbol2t(lhs_sym).thename.as_string();
     current_hashes[orig_name] = hash;
   }
 }
 
-crypto_hash
+std::size_t
 execution_statet::state_hashing_level2t::generate_l2_state_hash() const
 {
-  unsigned int total;
-  size_t hash_sz = sizeof(crypto_hash::hash);
-
-  uint8_t *data = static_cast<uint8_t *>(
-    alloca(current_hashes.size() * hash_sz * sizeof(uint8_t)));
-
-  total = 0;
+  // Combine each (variable, value-hash) pair into one size_t fingerprint.
+  // current_hashes is an ordered map, so iteration order is stable within a
+  // run (the order tracks irep_idt intern indices, so the fingerprint is a
+  // valid intra-run dedup key but is not reproducible across runs — same as
+  // the former SHA-1-over-this-map, so no behavioural change).
+  // Mixing the key as well as the value makes the fingerprint sensitive to
+  // *which* variable holds a value (not just the multiset of value hashes),
+  // which tightens interleaving dedup — fewer false collisions, less
+  // over-pruning.
+  std::size_t h = 0;
   for (const auto &current_hashe : current_hashes)
   {
-    memcpy(&data[total * hash_sz], current_hashe.second.hash, hash_sz);
-    total++;
+    esbmct::hash_combine(h, current_hashe.first);
+    esbmct::hash_combine(h, current_hashe.second);
   }
-
-  crypto_hash c;
-  c.ingest(data, total * hash_sz);
-  c.fin();
-  return c;
+  return h;
 }

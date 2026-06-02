@@ -404,15 +404,26 @@ def _add_test(test_case, executor):
                 + str(test_case.generate_run_argument_list(*executor.tool))
             )
 
-            if BENCHMARK_BRINGUP:
-                if os.environ.get("LOG_DIR") is None:
+            # Write a per-test log to LOG_DIR/<suite>_<test> whenever LOG_DIR
+            # is set. Used by --benchbringup workflows and stand-alone via
+            # `LOG_DIR=/tmp/logs ctest ...` for A/B-comparing two builds
+            # (interleaving counts, symex time, VCCs, etc).
+            #
+            # The filename embeds the parent directory (the test suite) so
+            # name collisions like k-induction/vogal_bug vs k-induction-
+            # parallel/vogal_bug don't overwrite each other.
+            log_dir = os.environ.get("LOG_DIR")
+            if log_dir is not None or BENCHMARK_BRINGUP:
+                if log_dir is None:
                     raise RuntimeError("environment variable LOG_DIR is not defined")
-                assert os.path.isdir(os.environ["LOG_DIR"])
-                destination = os.environ["LOG_DIR"] + "/" + test_case.name
-                f = open(destination, "a")
-                f.write("ESBMC args: " + test_case.test_args + "\n\n")
-                f.write(output_to_validate)
-                f.close()
+                os.makedirs(log_dir, exist_ok=True)
+                suite = os.path.basename(os.path.dirname(test_case.test_dir))
+                destination = os.path.join(log_dir, f"{suite}_{test_case.name}")
+                # Overwrite on every run — accumulating across ctest invocations
+                # would corrupt downstream stat-counting (e.g. summing VCCs).
+                with open(destination, "w") as f:
+                    f.write("ESBMC args: " + test_case.test_args + "\n\n")
+                    f.write(output_to_validate)
 
             matches_regex = True
             for regex in test_case.test_regex:

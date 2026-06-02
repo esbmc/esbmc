@@ -39,7 +39,6 @@
 #include <type_traits>
 #include <utility>
 #include <util/compiler_defs.h>
-#include <util/crypto_hash.h>
 #include <util/irep_idt.h>
 #include <util/irep.h>
 
@@ -669,16 +668,6 @@ public:
    */
   list_of_memberst tostring(unsigned int indent) const;
 
-  /** Perform hash operation accumulating into parameter.
-   *  Feeds data as appropriate to the type of the expression into the
-   *  parameter, to be hashed. Like crc, but for some other kind of hash
-   *  scenario.
-   *  @see cmp
-   *  @see crc
-   *  @param hash Object to accumulate hash data into.
-   */
-  void hash(crypto_hash &hash) const;
-
   /** Clone method. Self explanatory.
    *  @return New container, containing a duplicate of this object.
    */
@@ -830,16 +819,6 @@ public:
    */
   list_of_memberst tostring(unsigned int indent) const;
 
-  /** Perform hash operation accumulating into parameter.
-   *  Feeds data as appropriate to the type of the expression into the
-   *  parameter, to be hashed. Like crc, but for some other kind of hash
-   *  scenario.
-   *  @see cmp
-   *  @see crc
-   *  @param hash Object to accumulate hash data into.
-   */
-  void hash(crypto_hash &hash) const;
-
   /** Fetch a sub-operand.
    *  These can come out of any field that is an expr2tc, or contains them.
    *  No particular numbering order is promised.
@@ -937,6 +916,22 @@ public:
 inline bool is_nil_expr(const expr2tc &exp)
 {
   return exp.get() == nullptr;
+}
+
+/** Node-identity test: true iff `a` and `b` refer to the very same
+ *  hash-consed node. This is *not* a value comparison — use `operator==`
+ *  for structural equality, which additionally walks the trees when the
+ *  pointers differ (two distinct nodes can still be structurally equal if
+ *  hash-consing did not unify them). `same_pointer` is the O(1) identity
+ *  check; reach for it only when you specifically want "is this literally
+ *  the same object", e.g. fast-path short-circuits over hash-consed
+ *  conjuncts. The underlying pointer is already public via get(); this
+ *  just names the comparison so call sites stop hand-rolling
+ *  `a.get() == b.get()`. */
+template <class T>
+inline bool same_pointer(const irep_container<T> &a, const irep_container<T> &b)
+{
+  return a.get() == b.get();
 }
 
 inline bool is_nil_type(const type2tc &t)

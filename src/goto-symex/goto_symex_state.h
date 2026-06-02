@@ -12,7 +12,6 @@
 #include <stack>
 #include <string>
 #include <unordered_set>
-#include <util/crypto_hash.h>
 #include <irep2/irep2_guard.h>
 #include <util/i2string.h>
 #include <irep2/irep2.h>
