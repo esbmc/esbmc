@@ -3235,6 +3235,56 @@ assert) is proven low-risk (A); the adjuster needs no inference of its own (B);
 and the first cut is cleanly Python-scoped (C). V.1k is ready to move from
 spike to a built **(b)** pilot, gated by the 20-test fixture.
 
+#### V.1k breakthrough — the separate adjuster is **not needed pre-V.4**; the relaxed assert alone unblocks V.3
+
+> Recorded in the §15.1 / §16.1 honesty spirit: building the step-1 relaxation
+> exposed that a large part of the design-(b) scope above is **unnecessary at the
+> V.3 stage**. The (b) adjuster is real, but it belongs to **V.4+**, not V.1k.
+
+While starting the (b) pilot, an architectural check changed the plan:
+`clang_cpp_adjust` operates on **legacy `codet`** symbol values
+(`adjust_code(codet&)`), and `goto_convert` migrates to IREP2 **after** adjust
+(`goto_convert_functions.cpp:116`). So a *separate* IREP2-native adjuster has no
+IREP2 to operate on until function **bodies** are IREP2 — which is **V.4**
+(removes P1/W1). A separate adjuster therefore **cannot run pre-V.4**.
+
+That prompted a simpler hypothesis, **confirmed empirically**: with the step-1
+assert relaxation, the converter builds `member2t` directly over the
+(symbol-typed) base permitted by the relaxation and **back-migrates once** — and
+because `migrate_expr_back(member2tc(migrate_type(t), migrate_expr(base), name))`
+is the **exact IREP2 round-trip** of `member_exprt(base, name, t)`, the legacy
+node handed to the body is **byte-identical**. The **existing**
+`clang_cpp_adjust` + `goto_convert` then resolves the symbol source exactly as
+today. No converter-side `ns.follow`, **no separate adjuster**.
+
+**Evidence.** Migrating four `member_exprt` sites in `converter_expr.cpp`
+(attribute / optional / enum / struct access) to this round-trip form passed
+**536/536** attr/class/nested/dataclass/enum/optional/tuple/math tests on an
+asserts build — including every family the design-(a) `ns.follow` prototype
+regressed (round 2). The contrast is the whole lesson:
+
+| Approach | What it does to the type | Result |
+|---|---|---|
+| (a) `ns.follow` in converter | **changes** the base type (early resolution) → diverges from adjust | 20/488 regressions |
+| round-trip (this) | **changes nothing** — exact IREP2 round-trip of the legacy node | 0 regressions |
+
+**The §16.1 wall was only the construction assert.** Once step 1 removes it,
+member/index construction in the converter is just the same
+build-IREP2-then-back-migrate pattern file 1 used for non-member expressions
+(#5041/#5045) — behaviour-preserving, with resolution left exactly where it is.
+
+**Plan correction (supersedes the (b) scope above for the V.3 horizon):**
+- **V.3 (converter builds IREP2 member/index)** is unblocked by **step 1 alone**
+  (the relaxed assert) + the round-trip pattern. It does **not** need the (b)
+  adjuster. First V.3 member commit: `converter_expr.cpp` 4 sites, behaviour-
+  preserving (536/536).
+- **The (b) IREP2-native adjuster moves to V.4+**: it is required only once
+  bodies are IREP2 and resolution must move off the legacy `clang_cpp_adjust`
+  pass (then it also retires W3). The 20-test fixture remains its acceptance
+  set *at that point*; pre-V.4 those tests are already green via the round-trip.
+- **Net simplification:** V.1k's deliverable is the **assert relaxation**, not an
+  adjuster. The keystone was smaller than the (b) scope assumed.
+
 ### Phase V.1a — Type construction → `type2tc` end-to-end (extends Phase 4.3)
 Finish what Phase 4.3 deferred: the tuple/optional **struct** builders (§15.7
 F-P5 seam cases) and any remaining `type_handler` families, now written
