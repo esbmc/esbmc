@@ -331,6 +331,13 @@ set(_slow_regression_tests
     # budget. It stays KNOWNBUG; the larger inner timeout lets testing_tool
     # record the KNOWNBUG verdict instead of ctest hard-killing the run.
     "regression/humaneval/humaneval_90"
+    # humaneval_158 used to fast-abort with "__ESBMC_list_size ... got empty,
+    # expected pointer" when find_max()'s inline sorted(words)[0] subscript was
+    # lowered. With the materialise-the-call fix the abort is gone and ESBMC
+    # reaches the real sorted-with-key symex, which does not converge under the
+    # default budget. It stays KNOWNBUG; the larger inner timeout lets
+    # testing_tool record the KNOWNBUG verdict instead of ctest hard-killing.
+    "regression/humaneval/humaneval_158"
     "regression/quixbugs/flatten_fail"
     "regression/quixbugs/next_palindrome"
     "regression/quixbugs/pascal"
