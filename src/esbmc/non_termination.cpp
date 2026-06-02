@@ -65,6 +65,103 @@ bool is_constant_false(const expr2tc &guard)
   return false;
 }
 
+/// Recognise a set-membership predicate `s ∈ {v1, ..., vn}` on a
+/// single symbol @p s and constant integer values. Two semantically
+/// equivalent shapes are accepted:
+///
+///   (a) `!(s != v1 && ... && s != vn)` — the C-source shape:
+///       a logical-OR of equalities, expressed via De Morgan on a
+///       conjunction of disequalities.
+///   (b) `s == v1 || ... || s == vn` — the form interval analysis
+///       and other simplifiers tend to produce.
+///
+/// On success, @p out_symbol holds @p s (each disjunct must reference
+/// the same symbol) and @p out_values receives the list of constants
+/// in source order. Returns false if the predicate isn't recognisable
+/// — wrong top-level shape, mixed symbols across operands, an operand
+/// that isn't `s OP const`, or an empty operand list.
+///
+/// The two shapes denote the same set; structural recognisers that
+/// care about "which value the input takes" should call this once
+/// rather than hard-coding either form.
+bool extract_value_set_membership(
+  const expr2tc &guard,
+  expr2tc &out_symbol,
+  std::vector<BigInt> &out_values)
+{
+  if (is_nil_expr(guard))
+    return false;
+
+  std::vector<expr2tc> atoms;
+  bool
+    atom_is_neq; // true ⇒ shape (a) (atoms are !=), false ⇒ (b) (atoms are ==)
+
+  if (is_not2t(guard))
+  {
+    expr2tc inner = to_not2t(guard).value;
+    atom_is_neq = true;
+    std::function<void(const expr2tc &)> flatten = [&](const expr2tc &e) {
+      if (is_and2t(e))
+      {
+        flatten(to_and2t(e).side_1);
+        flatten(to_and2t(e).side_2);
+      }
+      else
+        atoms.push_back(e);
+    };
+    flatten(inner);
+  }
+  else
+  {
+    atom_is_neq = false;
+    std::function<void(const expr2tc &)> flatten = [&](const expr2tc &e) {
+      if (is_or2t(e))
+      {
+        flatten(to_or2t(e).side_1);
+        flatten(to_or2t(e).side_2);
+      }
+      else
+        atoms.push_back(e);
+    };
+    flatten(guard);
+  }
+  if (atoms.empty())
+    return false;
+
+  out_values.clear();
+  out_symbol = expr2tc();
+  for (const expr2tc &a : atoms)
+  {
+    expr2tc lhs, rhs;
+    if (atom_is_neq)
+    {
+      if (!is_notequal2t(a))
+        return false;
+      lhs = to_notequal2t(a).side_1;
+      rhs = to_notequal2t(a).side_2;
+    }
+    else
+    {
+      if (!is_equality2t(a))
+        return false;
+      lhs = to_equality2t(a).side_1;
+      rhs = to_equality2t(a).side_2;
+    }
+    if (is_constant_int2t(lhs) && is_symbol2t(rhs))
+      std::swap(lhs, rhs);
+    if (!is_symbol2t(lhs) || !is_constant_int2t(rhs))
+      return false;
+    if (is_nil_expr(out_symbol))
+      out_symbol = lhs;
+    else if (
+      !is_symbol2t(out_symbol) ||
+      to_symbol2t(out_symbol).thename != to_symbol2t(lhs).thename)
+      return false;
+    out_values.push_back(to_constant_int2t(rhs).value);
+  }
+  return true;
+}
+
 /// Collect IF guards from a callee body that we treat as "branch
 /// guards": top-level forward IFs whose THEN-branch ends in a transfer
 /// out (RETURN or a FUNCTION_CALL to a noreturn function like exit /
@@ -280,101 +377,11 @@ bool recognize_eca_main_loop(
       it->is_goto() && !is_true(it->guard) && !it->is_backwards_goto() &&
       it->targets.size() == 1)
     {
-      // Input-validation IF. Two semantically equivalent shapes:
-      //   (a) original C: `IF !(input != v1 && ... && input != vn) GOTO call`
-      //   (b) interval-rewritten: `IF input == v1 || ... || input == vn GOTO call`
-      // Both shapes mean "take-jump iff input ∈ {v1,...,vn}"; collect
-      // the valid input values from whichever form is present.
+      // Input-validation IF: `IF (input ∈ {v1,...,vn}) GOTO call`.
+      // Accept the membership predicate in any of these equivalent
+      // shapes the frontend / interval simplifier may produce.
       expr2tc the_input;
-      bool ok = true;
-      if (is_not2t(it->guard))
-      {
-        expr2tc cond = to_not2t(it->guard).value;
-        std::vector<expr2tc> conjuncts;
-        std::function<void(const expr2tc &)> flatten = [&](const expr2tc &e) {
-          if (is_and2t(e))
-          {
-            flatten(to_and2t(e).side_1);
-            flatten(to_and2t(e).side_2);
-          }
-          else
-            conjuncts.push_back(e);
-        };
-        flatten(cond);
-        if (conjuncts.empty())
-          return false;
-        for (const expr2tc &c : conjuncts)
-        {
-          if (!is_notequal2t(c))
-          {
-            ok = false;
-            break;
-          }
-          const notequal2t &neq = to_notequal2t(c);
-          expr2tc lhs = neq.side_1, rhs = neq.side_2;
-          if (is_constant_int2t(lhs) && is_symbol2t(rhs))
-            std::swap(lhs, rhs);
-          if (!is_symbol2t(lhs) || !is_constant_int2t(rhs))
-          {
-            ok = false;
-            break;
-          }
-          if (is_nil_expr(the_input))
-            the_input = lhs;
-          else if (
-            !is_symbol2t(the_input) ||
-            to_symbol2t(the_input).thename != to_symbol2t(lhs).thename)
-          {
-            ok = false;
-            break;
-          }
-          values.push_back(to_constant_int2t(rhs).value);
-        }
-      }
-      else
-      {
-        std::vector<expr2tc> disjuncts;
-        std::function<void(const expr2tc &)> flatten = [&](const expr2tc &e) {
-          if (is_or2t(e))
-          {
-            flatten(to_or2t(e).side_1);
-            flatten(to_or2t(e).side_2);
-          }
-          else
-            disjuncts.push_back(e);
-        };
-        flatten(it->guard);
-        if (disjuncts.empty())
-          return false;
-        for (const expr2tc &d : disjuncts)
-        {
-          if (!is_equality2t(d))
-          {
-            ok = false;
-            break;
-          }
-          const equality2t &eq = to_equality2t(d);
-          expr2tc lhs = eq.side_1, rhs = eq.side_2;
-          if (is_constant_int2t(lhs) && is_symbol2t(rhs))
-            std::swap(lhs, rhs);
-          if (!is_symbol2t(lhs) || !is_constant_int2t(rhs))
-          {
-            ok = false;
-            break;
-          }
-          if (is_nil_expr(the_input))
-            the_input = lhs;
-          else if (
-            !is_symbol2t(the_input) ||
-            to_symbol2t(the_input).thename != to_symbol2t(lhs).thename)
-          {
-            ok = false;
-            break;
-          }
-          values.push_back(to_constant_int2t(rhs).value);
-        }
-      }
-      if (!ok)
+      if (!extract_value_set_membership(it->guard, the_input, values))
         return false;
       if (
         is_nil_expr(input_sym) || !is_symbol2t(the_input) ||
