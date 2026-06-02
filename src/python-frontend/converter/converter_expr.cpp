@@ -1233,32 +1233,27 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       slice["_type"] == "Tuple")
     {
       if (
-        slice.contains("elts") && slice["elts"].is_array() &&
-        slice["elts"].size() == 2)
-      {
-        const auto &row_idx_raw = slice["elts"][0];
-        const auto &col_idx_raw = slice["elts"][1];
-        const nlohmann::json row_idx = normalize_bool_index_node(row_idx_raw);
-        const nlohmann::json col_idx = normalize_bool_index_node(col_idx_raw);
-        const bool has_slice_dim =
-          (row_idx.contains("_type") && row_idx["_type"] == "Slice") ||
-          (col_idx.contains("_type") && col_idx["_type"] == "Slice");
-        if (has_slice_dim)
-          throw_numpy_multidim_index_error(*this, element);
+        !slice.contains("elts") || !slice["elts"].is_array() ||
+        slice["elts"].empty())
+        throw_numpy_multidim_index_error(*this, element);
 
-        python_list list(*this, element);
-        exprt row = list.index(array, row_idx);
-        if (contains_cpp_throw(row))
+      python_list list(*this, element);
+      exprt current = array;
+      for (const auto &index_node : slice["elts"])
+      {
+        const nlohmann::json normalized_index =
+          normalize_bool_index_node(index_node);
+        current = list.index(current, normalized_index);
+        if (contains_cpp_throw(current))
         {
-          expr = row;
+          expr = current;
           break;
         }
-
-        expr = list.index(row, col_idx);
-        break;
       }
 
-      throw_numpy_multidim_index_error(*this, element);
+      if (expr.is_nil())
+        expr = current;
+      break;
     }
 
     // Handle object subscripting through __getitem__:
